@@ -1,0 +1,459 @@
+GELİR İşlemleri
+Bağışlar, Yardımlar
+Veli Tarafından Yapılan Dönem Bağışları
+  ISLEM: Veli Tarafından Yapılan Dönem Bağışları
+    - Dönem başlarında okul aile birliğine veliler tarafından yapılan bağışların kaydedildiği
+Okula Yapılan Ayni Bağışlar
+  ISLEM: Okula Yapılan Ayni Bağışlar
+    - Mobilya Bağışı
+    - Hizmet Bağışı
+    - Araç-Gereç Bağışı
+    - Onarım Malzemesi Bağışı
+    - Altyapı Hizmeti Bağışı
+    - Asfaltlama-Betonlama Hizmeti Bağışı
+    - Oyun Parkı Malzemeleri Bağışı
+    - Spor Etkinlik Alanı Yapım Bağışı
+    - Bank Bağışı
+    - Kamelya Bağışı
+    - Malzeme Bağışı
+    - Boya Badana Malzemeleri Bağışı
+    - Kırtasiye Malzemesi Bağışı
+    - Bahçe Düzenlemesi Hizmeti Bağışı
+Okula Yapılan Nakdi Yardımlar
+  ISLEM: Okula Yapılan Nakdi Yardımlar
+    - Altyapı Hizmetleri Yardımı
+    - Araç-Gereç Alım Yardımı
+    - Asfaltlama-Betonluma Yardımı
+    - Bahçe Düzenlemesi Yardımı
+    - Bank Alım Yardımı
+    - Boya Badana Giderleri Yardımı
+    - Hizmet Alım Yardımı
+    - Kamelya Alım Yardımı
+    - Kırtasiye Malzemesi Alım Yardımı
+    - Malzeme Alımı Yardımı
+    - Mobilya Alım Yardımı
+    - Onarım Malzemesi Alım Yardımı
+    - Oyun Parkı Yardımı
+    - Spor Etkinlik Alanı Yardımı
+    - Spor Kulübü Yardımı
+    - Temizlik Giderleri Yardımı
+    - Ulaşım Hizmetleri Yardımı
+Öğrenciye Yapılan Ayni Bağışlar
+  ISLEM: Öğrenciye Yapılan Ayni Bağışlar
+    - Giyecek Bağışı
+Öğrenciye Yapılan Nakdi Yardımlar
+  ISLEM: Öğrenciye Yapılan Nakdi Yardımlar
+    - Giyecek Alım Yardımı
+    - Ulaşım Ücreti Yardımı
+Diğer Bağışlar ve Yardımlar
+  ISLEM: Diğer Bağışlar ve Yardımlar
+    - Gezi ve Taşıma Servisi Katkısı
+    - Kontör Ücreti Yardımı
+    - Okul Aile Birliği Katkısı
+    - Servis Şirketi Bağışı
+    - İnternet Erişim Katkısı
+İşletilebilir Alan Gelirleri
+İşletilebilir Alan Gelirleri
+  ISLEM: İşletilebilir Alan Gelirleri
+    - Fitness salonu işletme geliri
+    - Güzellik salonu işletme geliri
+    - Halı saha işletme geliri
+    - Kafeterya işletme geliri
+    - Kantin işletme geliri
+    - Konferans-toplantı salonu işletme
+    - Kuaför işletme geliri
+    - Kuru temizleme dükkanı işletme
+    - Okul bahçesindeki çay bahçesi
+    - Otopark işletme geliri
+    - Spor salonu işletme geliri
+    - Yüzme havuzu işletme geliri
+    - Çok amaçlı salon işletme geliri
+Kira Gelirleri
+Kira Gelirleri
+  ISLEM: Kira Gelirleri
+    - ATM kirası
+    - Fitness salonu kira geliri
+    - Güzellik salonu kira geliri
+    - Halı saha kira geliri
+    - Kafeterya kira geliri
+    - Kantin kira geliri
+    - Konferans-toplantı salonu kira
+    - Kuaför kira geliri
+    - Kuru temizleme dükkanı kira geliri
+    - Okul bahçesindeki çay bahçesi kira
+    - Otopark kira geliri
+    - Spor salonu kira geliri
+    - Yüzme havuzu kira geliri
+    - Çok amaçlı salon kira geliri
+Etkinlik ve Organizasyon Gelirleri
+Etkinlik Gelirleri
+  ISLEM: Etkinlik Gelirleri
+    - Dayanışma Yemeği Davetiye Geliri
+    - Defile Geliri
+    - Etüt Dersi Ücreti
+    - Kermes Geliri
+    - Rozet, eşofman, tişört satış geliri
+    - Sosyal Aktivite Dersi Ücreti
+    - Çay Günü Geliri
+    - Öğrenci Gezi Ücreti
+Organizasyon Gelirleri
+  ISLEM: Organizasyon Gelirleri
+    - Dayanışma Yemeği Davetiye
+    - Defile Geliri
+    - Etüt Dersi Ücreti
+    - Kermes Geliri
+    - Rozet, eşofman, tişört satış geliri
+    - Sosyal Aktivite Dersi Ücreti
+    - Çay Günü Geliri
+    - Öğrenci Etkinlikleri Ücreti
+Faiz Gelirleri
+  ISLEM: Faiz Gelirleri
+    - Banka Faiz Gelirleri
+Pay Aktarım Gelirleri
+  ISLEM: Pay Aktarım Gelirleri
+    - MEB Aktarım Gelirleri
+Gider İşlemleri
+Personel Gider ve Ödemeleri
+  ISLEM: Personel Gider ve Ödemeleri
+    - Hizmetli Personel Ek Ödemeleri
+    - Personel Bone Alım Giderleri
+    - Personel Galoş Alım Giderleri
+    - Personel Maaş Farkı Ödemeleri
+    - Personel Maske Alım Giderleri
+    - Personel Sosyal Güvenlik Gideri
+    - Personel Ulaşım Giderleri
+    - Personel Üniforma Alım Giderleri
+    - Personel İş Önlüğü Alım Giderleri
+    - Personel Maaş Ödemeleri
+Kırtasiye ve Büro Malzemesi Alımları
+Kırtasiye Malzemesi Alımları
+  ISLEM: Kırtasiye Malzemesi Alımları
+    - Defter Alımı
+    - Disket - CD Alımı
+    - Kalem - Silgi Alımı
+    - Klasör - Dosya Alımı
+    - Toner - Mürekkep Alımı
+    - Toplu İğne - Ataç Alımı
+    - Zımba Teli Alımı
+Büro Malzemeleri Alımları
+  ISLEM: Büro Malzemesi Alımları
+    - Cetvel Alımı
+    - Kalem Alımı
+    - Makas Alımı
+    - Zımba - Delgeç Alımı
+Eğitim Araçları ve Materyal Alımları
+  ISLEM: Eğitim Araçları ve Materyal Alımları
+    - Ansiklopedi Alımı
+    - Bilimsel Kitaplar Alımı
+    - Dünya Aleti Alımı
+    - Harita Alımı
+    - Hikaye Kitabı Alımı
+    - Kitap Alımı
+    - Matematik Seti Alımı
+Yayın ve Basım Giderleri
+  ISLEM: Yayın ve Basım Giderleri
+    - Antetli Kağıt Basım Gideri
+    - Broşür Basım Gideri
+    - Dergi Basım Gideri
+    - Duyuru Basım Gideri
+Basılı Yayın ve Matbu Evrak Alımları
+  ISLEM: Basılı Yayın ve Matbu Evrak Alımları
+    - Antetli Kağıt Alımı
+    - Davetiye Alımı
+    - Makbuz Alımı
+    - Resmi Defter Alımı
+Temizlik Malzemeleri Alımları
+Temizlik Malzemeleri Alımı
+  ISLEM: Temizlik Malzemeleri Alımı
+    - Deterjan Alımı
+    - Paspas Alımı
+    - Sabun Alımı
+    - Temizlik Bezi Alımı
+    - Temizlik Kovası Alımı
+Enerji Alımları
+Isınma ve Yakacak Giderleri
+  ISLEM: Isınma ve Yakacak Giderleri
+    - Doğalgaz Alımı
+    - Fuel-Oil Alımı
+    - Kömür Alımı
+    - Odun Alımı
+Ulaşım Araçları Yakıt Giderleri
+  ISLEM: Ulaşım Araçları Yakıt Giderleri
+    - Benzin Alımı
+    - LPG Alımı
+    - Mazot Alımı
+Yiyecek ve İçecek Alımları
+Yiyecek ve İçecek Alımı
+  ISLEM: Yiyecek ve İçecek Alımı
+    - Dayanıklı Yiyecek Malzemesi Alımı
+    - Meyve Alımı
+    - Sebze Alımı
+    - Yemeklik Yağ Alımı
+    - Çay-Kahve Alımı
+    - İçme Suyu Alımı
+Mal ve Malzemesi Alımları
+Spor Malzemeleri Alımı
+  ISLEM: Spor Malzemeleri Alımı
+    - File Alımı
+    - Minder Alımı
+    - Pota Alımı
+    - Spor Setleri Alımı
+    - Top Alımı
+Etkinlik Mal Alımı Gideri
+  ISLEM: Etkinlik Mal Alım Gideri
+    - Bardak Alımı
+    - Bayrak Alımı
+    - Eşofman Alımı
+    - Folklor Elbisesi Alımı
+    - Masa örtüsü Alımı
+    - Mezuniyet Cübbesi Alımı
+    - Perde Alımı
+    - Peçete Alımı
+    - Rozet Alımı
+    - Süsleme Malzemeleri Alımı
+    - Tabak Alımı
+    - Tiyatro Kostümü Alımı
+    - Tişört Alımı
+    - Tören Bastonu Alımı
+    - Çatal Kaşık Takımı Alımı
+Ödül Giderleri
+  ISLEM: Ödül Giderleri
+    - Aksesuar Alımı
+    - Altın Alımı
+    - Kupa - Madalya Alımı
+Müzik Malzemeleri Alımı
+  ISLEM: Müzik Malzemeleri Alımı
+    - Davul Alımı
+    - Flüt Alımı
+    - Zil Alımı
+Laboratuar Malzemeleri Alımı
+  ISLEM: Laboratuar Malzemeleri Alımı
+    - Laboratuar Malzemesi Alımı
+Bahçe Düzenlemesi Giderleri
+  ISLEM: Bahçe Düzenlemesi Giderleri
+    - Bahçe Oturma Alanı Gideri (Kamelya)
+    - Bahçe Oturma Malzemeleri Alım Gideri (Bank)
+    - Spor Alanı Gideri
+    - Çocuk Parkı Gideri
+Hizmet Alımları
+Güvenlik Giderleri
+  ISLEM: Güvenlik Giderleri
+    - Alarm Sistemi
+    - Güvenlik Personeli Hizmeti Alımı
+İşçi ve Taşıma Hizmetleri Satın Alımı
+  ISLEM: İşçi ve Taşıma Hizmetleri Satın Alımı
+    - Taşıma Hizmeti Alım Gideri
+    - İşçi Hizmeti Alım Gideri
+Etkinlik-Organizasyon için Hizmet Satın Alma Gideri
+  ISLEM: Etkinlik-Organizasyon için Hizmet Satın Alma
+    - Gideri Defile Hazırlık Hizmetleri Alımı
+    - Gezi Ulaşım Servis Hizmetleri Alımı
+    - Özel Bale Dersi Hizmeti Alımı
+    - Özel Drama Dersi Hizmeti Alımı
+    - Özel Müzik Dersi Hizmeti Alımı
+    - Özel Tiyatro Dersi Hizmeti Alımı
+Genel Giderler
+İletişim Giderleri
+  ISLEM: İletişim Giderleri
+    - Fatura Giderleri
+    - Kontör Giderleri
+    - Pul Giderleri
+    - Telefon Abonelik Giderleri
+    - Telgraf Giderleri
+    - Zarf Giderleri
+    - İnternet Abonelik Giderleri
+    - İnternet Fatura Giderleri
+Bina Sigortası Giderleri
+  ISLEM: Bina Sigortası Giderleri
+    - Bina Sigortası Ödemesi
+Tanıtım ve Temsil Ağırlama Giderleri
+  ISLEM: Tanıtım ve Temsil Ağırlama Giderleri
+    - Hediye Gideri
+    - Kırtasiye Harcamaları
+    - Yemek Gideri
+    - Çiçek - Çelenk Gideri
+Demirbaş Alımları
+Okul için Demirbaş Alımı
+  ISLEM: Okul için Demirbaş Alımı
+    - Abaküs Alımı
+    - Akıllı Tahta Alımı
+    - Bilgisayar Donanımı  Alımı
+    - Faks Cihazı
+    - Fotokopi Makinesi Alımı
+    - Görüntü Sistemleri
+    - Kapı İsimliği Alımı
+    - Masa Alımı
+    - Okul Tabelası Alımı
+    - Ses Sistemi
+    - Slayt Makinesi
+    - Sıra Alımı
+    - Tahta Alımı
+    - Telefon
+    - Yazıcı Alımı
+    - Çay-Kahve Makinesi Alımı
+    - Öğretmen Dolabı Alımı
+Okul Aile Birliği için Demirbaş Alımı
+  ISLEM: Okul Aile Birliği için Demirbaş Alımı
+    - Bilgisayar Donanımı Alımı
+    - Dijital Fotoğraf Makinesi Alımı
+    - Faks Cihazı Alımı
+    - Fotokopi Makinesi Alımı
+    - Görüntü Sistemleri Alımı
+    - Ses Sistemi Alımı
+    - Slayt Makinesi Alımı
+    - Telefon Alımı
+    - Yazıcı Alımı
+    - Çay-Kahve Makinesi Alımı
+Dayanıklı Tüketim Malzemesi Alımları
+Mefruşat Giderleri
+  ISLEM: Mefruşat Giderleri
+    - Kumaş Alımı
+    - Masa örtüsü Alımı
+    - Nevresim Alımı
+    - Perde Alımı
+Bilişim Araçları Alımı
+  ISLEM: Bilişim Araçları Alımı
+    - Bilgisayar Donanımı Alımı
+    - Faks Cihazı Alımı
+    - Fotokopi Makinesi Alımı
+    - Görüntü Sistemleri Alımı
+    - Ses Sistemi Alımı
+    - Slayt Makinesi Alımı
+    - Telefon Alımı
+    - Yazıcı Alımı
+Mutfak Gereçleri Alımı
+  ISLEM: Mutfak Gereçleri Alımı
+    - Buzdolabı Alımı
+    - Damacana Alımı
+    - Fırın Alımı
+    - Ocak Alımı
+    - Sebil Alımı
+    - Tabak Alımı
+    - Tencere Alımı
+Bakım Onarım Giderleri
+Bilişim Araçları Bakım Onarım Giderleri
+  ISLEM: Bilişim Araçları Bakım Onarım Giderleri
+    - Bilgisayar Donanımı Onarımı
+    - Faks Cihazı Onarımı
+    - Fotokopi Makinesi Onarımı
+    - Görüntü Sistemleri Onarımı
+    - Ses Sistemi Onarımı
+    - Slayt Makinesi Onarımı
+    - Telefon Onarımı
+    - Yazıcı Onarımı
+Araç Bakım Onarım Giderleri
+  ISLEM: Araç Bakım Onarım Giderleri
+    - DÖSE Aracı Onarımı
+    - OAB Aracı Onarımı
+    - Okul Aracı Onarımı
+    - Pansiyon İşletmesi Aracı Onarımı Pansiyon İşletmesi adına kayıtlı ulaşım aracı onarımı
+Mutfak Araçları Bakım Onarımı
+  ISLEM: Mutfak Araçları Bakım Onarımı
+    - Buzdolabı Onarımı
+    - Fırın Onarımı
+    - Ocak Onarımı
+    - Tüp gaz Onarımı
+Genel Okul Onarımları
+  ISLEM: Genel Okul Onarımları
+    - Atatürk Köşesi Onarımı
+    - Dolap Onarımı
+    - Kapı Onarımı
+    - Masa Onarımı
+    - Pencere Onarımı
+    - Sıra Onarımı
+    - Yangın Söndürme Cihazı Onarımı
+    - Zemin Onarımı
+Çatı Onarımı
+  ISLEM: Çatı Onarımı
+    - Ahşap Levha Alımı
+    - Kiremit Alımı
+    - Metal Levha Alımı
+    - Yalıtım Malzemesi Alımı
+    - İzolasyon Malzemesi Alımı
+Boya-Badana İşlemleri Malzeme Alımı
+  ISLEM: Boya-Badana İşlemleri Malzeme Alımı
+    - Alçı Malzemesi Alımı
+    - Dış Mekan Boyaları Alımı
+    - Fırça Alımı
+    - Rulo Alımı
+    - Sıva Maddeleri Alımı
+    - İç Mekan Boyaları Alımı
+Kalorifer Tesisatı Onarımları
+  ISLEM: Kalorifer Tesisatı Onarımları
+    - Abonelik Giderleri
+    - Boru Tesisatı Onarımı
+    - Kazan Onarımı
+    - Petek Onarımı
+Elektrik Tesisatı Onarımları
+  ISLEM: Elektrik Tesisatı Onarımları
+    - Aydınlatma Grupları Onarımı
+    - Elektrik Prizi Alımı
+    - Elektrik Prizi Onarımı
+    - Elektrik Sigortası Malzemesi Alımı Elektrik Sigortası Malzemesi Alımı için kullanılacak
+    - Kablo Kanalı Onarımı
+    - Kablo Tesisatı Onarımı
+Su Tesisatı Bakım Onarım Giderleri
+  ISLEM: Su Tesisatı Bakım Onarım Giderleri
+    - Klozet Onarımı
+    - Lavabo Onarımı
+    - Su Boruları Tesisatı Onarımı
+    - Çeşme Onarımı
+Asfalt ve Betonlama Giderleri
+  ISLEM: Asfalt ve Betonlama Giderleri
+    - Asfaltlama Giderleri
+    - Betonlama Giderleri
+Kütüphane Yapımı
+  ISLEM: Kütüphane Yapımı
+    - Okul İçerisinde Kütüphane Alanı Yapılması
+Öğrenci, Hane Halkı ve Diğer Yardımlar
+Öğrenci Kırtasiye Yardımı
+  ISLEM: Öğrenci Kırtasiye Yardımı
+    - Cetvel Yardımı
+    - Defter Yardımı
+    - Kalem Yardımı
+    - Kalemtıraş Yardımı
+    - Kaynak Kitap Yardımı
+    - Okul Çantası Yardımı
+    - Silgi Yardımı
+Yarışma-Proje Giderleri
+  ISLEM: Yarışma Proje Giderleri
+    - Proje Destek Harcamaları
+Öğrenci Temel Gıda Yardımı
+  ISLEM: Öğrenci Temel Gıda Yardımı
+    - Bulgur Yardımı
+    - Fasulye Yardımı
+    - Nohut Yardımı
+    - Pirinç Yardımı
+    - Tuz Yardımı
+    - Un Yardımı
+    - Yağ Yardımı
+    - Çay Yardımı
+    - Şeker Yardımı
+Nakdi Yardım
+  ISLEM: Nakdi Yardım
+    - Nakit Para Yardımı
+    - Otobüs Kartı - Bileti Yardımı
+Öğrenci Giyim Yardımı
+  ISLEM: Öğrenci Giyim Yardımı
+    - Ayakkabı - Bot Yardımı
+    - Eşofman Takımı Yardımı
+    - Kaban-Manto-Palto Yardımı
+    - Okul Forması Yardımı
+    - Sivil Kıyafet Yardımı
+Yemek Yardımı
+  ISLEM: Yemek Yardımı
+    - Akşam Yemeği Yardımı
+    - Sabah Kahvaltısı Yardımı
+    - Öğlen Yemeği Yardımı
+Diğer Okul ve Okul Aile Birliklerine Yardım
+  ISLEM: Diğer Okul ve Okul Aile Birliklerine Yardım
+    - Diğer Okul Aile Birliklerine Yardım
+    - Kardeş Okula Yapılan Yardım
+Kurumlara Yapılan Aktarım ve Ödemeler
+  ISLEM: Kurumlara Yapılan Aktarım ve Ödemeler
+    - Vergi Ödemeleri
+    - MEB Transferleri
+    - Diğer Kurumlara Aktarımlar
+Uluslar arası Fon Giderleri
+  ISLEM: Uluslar arası Fon Giderleri
+    - Fon Katkı Payı

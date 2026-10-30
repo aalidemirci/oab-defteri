@@ -1,0 +1,44 @@
+# Gerçek veri asla depoya girmez (KVKK + birliğin mali kayıtları)
+# Banka hesap özetleri, TEFBİS çıktıları, e-Okul listeleri, katılım cetvelleri,
+# makbuz ve karar defteri taramaları bu desenlere takılır.
+data/raw/
+backend/data/
+media/
+*.xlsx
+*.XLSX
+*.xls
+*.XLS
+*.csv
+*.CSV
+*.sqlite3
+*.db
+*.odbak
+# Uydurma deneme verisi de depoya girmez: veri dosyası biçimidir, gerçeğiyle karışabilir.
+deneme-verisi/
+# İstisnalar İSİM İSİM yazılır, joker kullanılmaz (bkz. Kütüphane Defteri .gitignore notu).
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/vitest-sonuc.json
+
+# Paketleme çıktıları
+build/
+dist/
+packaging/windows/dll/*.dll
+packaging/windows/MicrosoftEdgeWebView2Setup.exe
+
+# Ortam
+.env
+.DS_Store
+Thumbs.db
