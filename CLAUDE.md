@@ -86,7 +86,7 @@ Açık: birlik personelinin doğrudan mı firma üzerinden mi çalıştığı (K
 
 | Faz | Durum |
 |---|---|
-| F0 Keşif tamamlama + genel tasarım + mevzuat | başlamadı |
+| F0 Keşif tamamlama + genel tasarım + mevzuat | sürüyor — F0-1 korpus, F0-6 OYS envanteri, F0-7 iskelet envanteri tamam (31.10.2026); ilerleme planın §1.7'sinde |
 | F1 İskelet + çekirdek + organlar + kural paketi | başlamadı |
 
 Sapmalar ve tasarımda yazmayan kararlar faz bittikçe "F<n> ekleri (tarih)" satırıyla
