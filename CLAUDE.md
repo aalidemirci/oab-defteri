@@ -52,10 +52,14 @@ siteyi ve evrakı kapsar.
    kural dosyasındadır; her birlik dönemi kendi kural sürümüyle hesaplanır.
 3. **Uyarı + gerekçe, sert engel değil** (OYS kullanıcı kararı 4): program doğrusunu
    gösterir, sapma gerekçesiyle kayda geçer. Sert engel yalnız hesap bütünlüğünde
-   (toplamlar, numara tekilliği, kapanmış dönem, yeter sayı hesabı).
+   (toplamlar, numara tekilliği, kapanmış dönem, yeter sayı hesabı) ve mevzuatın hukuken
+   geçersiz saydığı işlemlerde: kantin kiralamasında suç ya da hısımlık engeli olan
+   isteklinin kabulü, mülki amir onayı (OLUR) olmadan kesinleştirme (kullanıcı kararı
+   31.10.2026). Eksik belge, taksit sayısı, puan sınırı gibi sapmalar uyarı + gerekçedir.
 4. **Kayıt silinmez, ters kayıtla düzeltilir;** kapanan dönem kilitlenir; her değişiklik
    denetim izine yazılır.
-5. **KVKK.** T.C. kimlik numarası varsayılan kapalı (K9); veli verisi en aza; duyuru ve
+5. **KVKK.** T.C. kimlik numarası varsayılan kapalı (K9); veli verisi en aza (e-Okul'dan
+   yalnız veli adı ve öğrencinin sınıfı alınır, dönem kapanışında silinir — T5); duyuru ve
    ilan çıktılarında kişi adı yok; gerçek veri, banka özeti, TEFBİS çıktısı, e-Okul
    listesi depoya girmez (`.gitignore` önler, sızıntı denetimi F1'de kapıya girer).
 6. **Terimler Yönetmeliğinkidir:** "Denetleme Kurulu" (Denetim Kurulu değil), "muhasip",
@@ -66,21 +70,26 @@ siteyi ve evrakı kapsar.
 8. **Yayın işleri** (GitHub deposu, etiket, push, site, indirme alanı) dışa açıktır,
    kullanıcı onaylı adımlardır.
 
-## 3. Kararlar (31.10.2026, ön değerlendirme §9)
+## 3. Kararlar (31.10.2026 — ön değerlendirme §9 ve F0 soruları; ayrıntı planın §1.8'inde)
 
 | # | Karar |
 |---|---|
 | K1 | Gelir-gider **işlem düzeyinde** (banka hareketiyle eşlenir) |
-| K2 | Okulda **tek bilgisayar**, rol bazlı yerel hesaplar (MY, başkan, muhasip, sekreter; DK ve müdür salt okur) |
-| K3 | Bordro **yok**; personel için özlük, yıllık izin kaydı, kıdem karşılığı (sürüm 2) |
+| K2 | Okulda **tek bilgisayar**, rol bazlı yerel hesaplar (MY, başkan, muhasip, sekreter). DK her şeyi okur, **yalnız denetim modülüne yazar**; müdür her şeyi okur, **yalnız kendi yazılarını** (harcama talebi, md. 27/3 uyarısı, yeni okulda genel kurul daveti) yazar |
+| K3 | Bordro **yok**; personel için özlük, yıllık izin kaydı, kıdem karşılığı (sürüm 2). Çalıştırma biçimi **okula göre**: okul kartında doğrudan işveren / hizmet alımı seçilir, personel modülü yalnız doğrudan işverende açılır |
 | K4 | **Kantin ve servis ilk sürümde** (birliğin ve okulun evrakı ve takibi; komisyon kararının yerine geçmez) |
 | K5 | Makbuz **basılmaz**; ciltli koçan envanteri ve yaprak kaydı |
-| K6 | TEFBİS: giriş listesi + Excel çıktısıyla mutabakat; **otomatik giriş yok** (öneri; sorulmadı) |
+| K6 | TEFBİS: giriş listesi + Excel çıktısıyla mutabakat; **otomatik giriş yok** (kullanıcı teyidi 31.10.2026) |
 | K7 | Lisans **PolyForm Noncommercial 1.0.0**; kamuya "kaynağı açık" diye tanıtılır |
 | K8 | Ad **OAB Defteri**; site `okulapp.org/oab-defteri` |
 | K9 | Bağışçının T.C. kimlik no'su **varsayılan kapalı**, ayardan açılır (şifreli, maskeli) |
-
-Açık: birlik personelinin doğrudan mı firma üzerinden mi çalıştığı (K3'ün kapsamını belirler).
+| T1 | **Kişisel hesaplar** (Argon2id); veri anahtarı her hesap için ayrı sarılır, kurtarma anahtarı yönetici kipinde |
+| T2 | Evrak: **tek içerik, iki çizici** — Word python-docx, PDF ailenin WeasyPrint hattı; LibreOffice/Word gerekmez |
+| T3 | Birlik dönemi **genel kuruldan genel kurula**; ders yılı ve TEFBİS dönemiyle eşlem tablosu |
+| T4 | **Basit hesap planı** (banka, kasa, şartlı bağış alt hesabı), TEFBİS işlem tipine eşlemli; çift taraflı muhasebe değil |
+| T5 | e-Okul'dan **personel** (ad-soyad, görev) ve **veli listesi** (yalnız veli adı + öğrencinin sınıfı; katılım cetveli için) |
+| T6 | Çarpı **programı kapatır**; tepsi yok |
+| — | Kantin arz bedeli vadesi: sözleşmedeki **ayın 10'u** (EK-2 md. 7) esas, Yönetmelikteki **20'si** (md. 17/1) üst sınır; iki tarih kural paketinde |
 
 ## 4. Faz durumu
 
