@@ -1,6 +1,6 @@
 """Kapalı günler uçları — liste/ekle, sil, resmî ve dini tatilleri tohumla (tasarım §5.1).
 
-Ailenin `Holiday` görünümlerinden UYARLANDI; `views.py`'den ayrı dosyada
+Aile iskeletinden AYNEN alındı (tasarım §12.B); `views.py`'den ayrı dosyada
 durur (F1 dosya sahipliği). İnce görünümler: okuma `selectors`, yazma
 `services.calendar`. Hata gövdesi `{code, message, fields}` sözleşmesindedir;
 servisin Django `ValidationError`'ı `od_exception_handler`'da 400'e çevrilir.

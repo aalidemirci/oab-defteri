@@ -1,10 +1,10 @@
 # =============================================================================
 # backend/pyproject.toml — araç yapılandırması (ruff, mypy, pytest)
 # =============================================================================
-# Ailenin backend/pyproject.toml dosyası referans alındı;
-# aynı ruff kuralları/satır uzunluğu + mypy strict + django-stubs. Kapsam kapısı
-# `--cov=apps --cov=shared` (config hariç — görev brifi; kaynak `--cov=config` da
-# ekliyordu, burada config yalnız statik ayar/URL/wsgi, iş mantığı barındırmıyor).
+# Aile iskeletinin backend/pyproject.toml dosyası referans alındı (tasarım §12.B:
+# `testpaths` ve `--cov=katalog` çıktı); aynı ruff kuralları/satır uzunluğu + mypy
+# strict + django-stubs. Kapsam kapısı `--cov=apps --cov=shared` (config hariç:
+# config yalnız statik ayar/URL/wsgi, iş mantığı barındırmıyor).
 # =============================================================================
 
 [tool.ruff]

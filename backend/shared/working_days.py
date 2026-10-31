@@ -1,6 +1,7 @@
 """Kapalı gün aritmetiği — takvime bağlı süre hesaplarının ortak çekirdeği (tasarım §5.1).
 
-Aile iskeletinden UYARLANDI (`SCHOOL_BREAK`, `next_open_day`). Modül yalnız
+Aile iskeletinden AYNEN alındı (tasarım §12.B; `SCHOOL_BREAK` ve `next_open_day`
+iskeletin kendi uyarlamasıdır). Modül yalnız
 takvim aritmetiğidir: bir gün kapalı mı, kapalıysa izleyen ilk açık gün hangisi.
 Bir sürenin nasıl sayılacağı (gün mü, iş günü mü, son gün kayar mı) bu modülün
 işi DEĞİLDİR; süreyi koyan kural paketinin maddesi söyler (CLAUDE.md §2 altın
@@ -11,8 +12,8 @@ kural 1-2). OAB'de bu çekirdeğe dayanacak iş günü süreleri tasarım §5.1
 İKİ AYRI KAPALI GÜN KURALI (bu ayrım kullanıcı metnine de yansır):
 
 1. **Hafta sonu, resmî tatil, dini bayram, idari izin — her zaman kapalı.**
-   İdari izin (`OTHER`) kanunen tatil sayılmaz ama o gün personel izinlidir;
-   aynı DAVRANIŞA (her zaman kapalı) bağlandı. Bu, programın kuralıdır, mevzuat
+   İdari izin (`OTHER`) de aynı DAVRANIŞA (her zaman kapalı) bağlandı; günün
+   hukuki niteliği hakkında program hüküm koymaz. Bu, programın kuralıdır, mevzuat
    dayanağı değildir: kullanıcı metninde mevzuat gereği diye sunulmaz
    (tasarım §3.3).
 2. **Öğrenciye kapalı gün (ara tatil, yarıyıl — `SCHOOL_BREAK`) — bayrakla.**

@@ -4,7 +4,7 @@
 denetiminin sözleşmesidir — küme değişirse FE `SetupStatus` tipi ve
 `desktop/server.py` birlikte gözden geçirilir.
 
-Kod kapısı (tasarım §14 F1b; §4.4.5): sihirbaz parola adımı olmadan
+Kural (tasarım §4.4.5; sihirbaz adımları plan §2.2): sihirbaz parola adımı olmadan
 ilerlemez ve `setup/complete/` eksik adımda Türkçe 400 (`kurulum_eksik`) ile
 HANGİ adımın eksik olduğunu söyler — her dal ayrı testtedir.
 
@@ -218,7 +218,7 @@ class TestSetupComplete:
     def test_kurulum_suresince_sure_islemez_tamamlaninca_sayaclar_sifirdan_baslar(
         self, client: APIClient
     ) -> None:
-        """Karar 2-1: sihirbazda geçen süre yönetici kipini düşürmez; bitince tam süre."""
+        """Tasarım §13 D15: sihirbazda geçen süre yönetici kipini düşürmez; bitince tam süre."""
         saat = SahteSaat()
         KIP._reset_for_tests(saat=saat)
         assert KIP.durum() == "yonetici"

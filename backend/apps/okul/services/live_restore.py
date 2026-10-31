@@ -58,7 +58,7 @@ def list_backups() -> dict[str, Any]:
 
     `backup_dir` yanıtta bilinçli olarak vardır: kullanıcı elle aldığı bir
     yedeği nereye koyacağını ya da dosyaların nerede durduğunu buradan görür
-    (tek kullanıcılı yerel program — yol kişisel veri değildir).
+    (tek bilgisayarda çalışan yerel program — yol kişisel veri değildir).
     """
     dizin = app_password.backup_dir()
     satirlar: list[dict[str, Any]] = []

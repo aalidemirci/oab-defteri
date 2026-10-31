@@ -1,12 +1,14 @@
 // Kapalı Günler paneli (genel tasarım §5.1 `Holiday`). Takvim yılına göre
 // listeler: resmî tatil, dini bayram, öğrenciye kapalı gün (ara tatil, yarıyıl) ve
 // idari izin. Kapalı günler iş günü hesabının takvimidir: mevzuatta iş günüyle
-// verilen süreler (ör. elden alınan bağışın bankaya yatırılması, OAB Yön. md. 16/3)
-// ve yarıyıla bağlı hesaplar (kantinde yarıyıl ayının yarım kirası, EK-2 md. 4)
-// bu kayıtlara dayanır (genel tasarım §5.1, §6.4; hesaplar kendi fazlarında gelir,
-// bugün çağıranı yoktur). Ara tatil ve yarıyılın bir sürenin hesabına girip girmediğini
-// o sürenin kuralı belirler (`shared/working_days`); bu yüzden "öğrenciye kapalı gün"
-// diye ayrı tutulur ve tek başına "tatil" denmez (sözlük).
+// verilen süreler (ör. elden alınan bağışın bankaya yatırılması, OAB Yön. md. 16/3;
+// servis onayı ve tebliği, Servis U-E md. 8/5-6) bu kayıtlara dayanır (genel tasarım
+// §5.1 `Holiday`, §6.4; hesaplar kendi fazlarında gelir, bugün çağıranı yoktur).
+// Kantinde yarıyıl ayının yarım kirası (EK-2 md. 4) bu kayıtlardan değil, ders
+// yılının dönemlerinden okunur (§5.1 `SchoolTerm`). Ara tatil ve yarıyılın bir
+// sürenin hesabına girip girmediğini o sürenin kuralı belirler (`shared/working_days`);
+// bu yüzden "öğrenciye kapalı gün" diye ayrı tutulur ve tek başına "tatil" denmez
+// (docs/sozluk.md §1 "Kapalı gün").
 //
 // Yeniden kullanım (sihirbazın ders yılı adımı): `yil` + `onYilChange` ile yıl
 // dışarıdan denetlenir, `yillar` seçiciyi sınırlar (ör. ders yılının iki takvim
@@ -211,10 +213,10 @@ export default function KapaliGunlerPaneli({
           <>
             <h2 className="text-title-medium text-on-surface">Kapalı Günler</h2>
             <p className="mt-1 text-body-medium text-on-surface-variant">
-              Kapalı günler, mevzuatta iş günüyle verilen sürelerin ve yarıyıla bağlı hesapların
-              takvimidir. Hafta sonu, resmî tatil, dini bayram ve idari izin her zaman kapalıdır.
-              Ara tatil ve yarıyıl öğrenciye kapalı gün olarak ayrı tutulur; bir sürenin hesabına
-              girip girmediğini o sürenin kuralı belirler.
+              Kapalı günler, mevzuatta iş günüyle verilen sürelerin takvimidir. Program hafta
+              sonunu, resmî tatili, dini bayramı ve idari izni her zaman kapalı sayar. Ara tatil ve
+              yarıyıl öğrenciye kapalı gün olarak ayrı tutulur; bir sürenin hesabına girip
+              girmediğini o sürenin kuralı belirler.
             </p>
           </>
         )}

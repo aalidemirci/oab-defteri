@@ -16,8 +16,8 @@
 // (doğrulama kipinde anahtar ekrandan kalkar, yoksa ekrandan kopyalanırdı). İki grup
 // istemcide tutunca bellekteki TAM anahtar `security/recovery-key/confirm/`'a gider:
 // sunucu onu kurtarma sarmalına karşı doğrulayıp güvenlik dosyasına "saklandı"
-// damgası yazar (aile iskeletinin doğrulama deseni, tasarım §4.4.3; kurulum damgasız
-// tamamlanmaz). `onDogrulama(true)` ancak sunucu damgayı yazınca bildirilir; hata
+// damgası yazar (`kurtarma.dogrulandi`, aile iskeletinin doğrulama deseni, tasarım
+// §4.4.4; kurulum damgasız tamamlanmaz, §4.4.5). `onDogrulama(true)` ancak sunucu damgayı yazınca bildirilir; hata
 // olursa ileti ve "Yeniden dene" çıkar.
 //
 // GÖZETİMSİZ EKRAN (tasarım §4.4.3, §13 D15): kurulum bitene kadar kip süreyle düşmez

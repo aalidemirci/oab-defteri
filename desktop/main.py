@@ -11,7 +11,7 @@
     6. Bütünlük denetimi .................... bozuk veriyle pencere AÇILMAZ
     7. Günlük yedek + 14 gün rotasyonu ...... `Connection.backup()`; yalnız şifreli
        `.odbak`. Yönetici parolası kurulmadan (ilk açılış) yedek atlanır; bugünün
-       yedeği alınmadıysa rotasyon da koşmaz (tasarım §4.4.7)
+       yedeği alınmadıysa rotasyon da koşmaz (tasarım §4.2 adım 7; yedekler §4.4.7)
     8. Göç öncesi yedek + `migrate --no-input`
     9. Gömülü sunucu (waitress, 127.0.0.1, boş port) + sağlık denetimi
    10. Çıkış kancası backend'e kaydolur (`masaustu_kanca`, §4.2 adım 10); `od-gunluk`
@@ -296,7 +296,7 @@ def gunluk_yedek_isi(
     açık kalma saati uykuyu sayar); saat ileri sıçramışsa kesim gerçek süreye
     göre konur. "En çok 14 gün" saklama sözü (§4.4.7) bozulmaz: hiçbir
     yedek gerçek yaşı 14 günü aştığı hâlde tutulmaz. Açılıştaki rotasyon
-    (`prepare_data`) çapasızdır, F1'deki gibi kalır.
+    (`prepare_data`) çapasızdır, aile iskeletindeki gibi kalır.
     """
     capa: list[tuple[date, float]] = []
 

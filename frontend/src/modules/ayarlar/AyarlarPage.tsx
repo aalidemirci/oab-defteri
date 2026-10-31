@@ -337,7 +337,8 @@ function SchoolTermEditor({ year }: { year: SchoolYear }) {
       <p className="text-body-small text-on-surface-variant">
         1. dönem ders yılı başlangıcında, 2. dönem ders yılı bitişinde sonlanır. Aradaki boşluk
         yarıyıl tatilidir; yarıyıla bağlı hesaplar (ör. kantinde yarıyıl ayının kirası) bu tarihlere
-        dayanır. Yarıyılı Kapalı Günler sekmesinde öğrenciye kapalı gün olarak da ekleyin.
+        dayanır. Yarıyılı Kapalı Günler sekmesinde öğrenciye kapalı gün olarak da ekleyin; iş
+        günüyle verilen süreler o takvime bakar.
       </p>
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <TextField

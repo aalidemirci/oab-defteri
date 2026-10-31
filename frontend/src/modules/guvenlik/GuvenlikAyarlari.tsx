@@ -170,7 +170,7 @@ export default function GuvenlikAyarlari() {
                 to="/kurulum"
                 className="inline-flex items-center gap-1.5 text-label-large font-medium text-primary underline-offset-4 hover:underline"
               >
-                Kurulum sihirbazına git
+                Kurulum Sihirbazı&apos;nı aç
                 <Icon name="arrow_forward" size="sm" />
               </Link>
             </>

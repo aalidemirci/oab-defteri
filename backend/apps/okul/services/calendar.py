@@ -1,6 +1,6 @@
 """Kapalı günler — tohumlama, elle ekleme/silme ve kapalı dönem kaynağı (tasarım §5.1 `Holiday`).
 
-Aile iskeletinden UYARLANDI (tasarım §12.B):
+Aile iskeletinden AYNEN alındı (tasarım §12.B):
 
 - Tohumlama TAKVİM YILINA göredir ve yılın bütün sabit resmî tatilleri yazılır
   (ders yılı dışındakiler — 15 Temmuz, 30 Ağustos — dahil): süre hesabı yaz

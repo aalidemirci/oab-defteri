@@ -29,9 +29,9 @@ on:
   push:
     tags:
       - "v*"
-  # Her PR'da, YOL SÜZGECİ OLMADAN koşar (01.10.2026). "Linux paketi" ve "Windows
+  # Her PR'da, YOL SÜZGECİ OLMADAN koşar (aile iskeletinin 01.10.2026 kararı). "Linux paketi" ve "Windows
   # paketi" main'in ZORUNLU kontrolleridir: süzgeç iş akışını başlatmazsa kontrol
-  # hiç raporlanmaz ve PR birleşemez (yalnız frontend/ değiştiren PR böyle takıldı;
+  # hiç raporlanmaz ve PR birleşemez (ailede yalnız frontend/ değiştiren PR böyle takıldı;
   # süzgeçte frontend/ yoktu, oysa arayüz pakete girer). Süzgecin yerine iş
   # düzeyinde "atla" koşulu da KONMAZ: atlanan iş zorunlu kontrolde başarılı
   # sayılır, paket derlenmeden birleştirme açılırdı. Bedel: belge ya da betik

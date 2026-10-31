@@ -548,7 +548,7 @@ class TestInterruptedTransition:
             app_password.read_state()
 
     def test_cozme_gecisi_yoktur(self) -> None:
-        """Tasarım §5.3: parolasız dal söküldü — çözme geçişi ve kaldırma işlevi yok."""
+        """Parolasız dal aile iskeletinde söküldü (OAB'de parola zorunlu, tasarım §4.4.5)."""
         for ad in ("disable", "_run_decrypt_pass", "TRANSITION_DECRYPTING", "_archive_state"):
             assert not hasattr(app_password, ad), ad
         for ad in ("plaintext_writes", "writes_encrypted"):
@@ -629,7 +629,7 @@ class TestSecurityApi:
         assert resp.json()["locked"] is False
 
     def test_kaldirma_ucu_yoktur(self, client: APIClient) -> None:
-        """Tasarım §5.3: `security/disable/` söküldü; yol ne adla ne adresle çözülür."""
+        """`security/disable/` aile iskeletinde söküldü; yol ne adla ne adresle çözülür."""
         with pytest.raises(NoReverseMatch):
             reverse("security-disable")
         resp = client.post("/api/v1/security/disable/", {"password": TEST_PAROLA}, format="json")

@@ -20,8 +20,9 @@
 // adımlar (`missing_steps`) backend'in `setup/complete/` kapısıyla AYNI hesaptır;
 // sihirbaz ilk EKSİK adımdan açılır. Parola kurulmadan ve kurtarma anahtarı
 // doğrulanmadan ilerlenemez (İleri kapalı, adım rayı tıklanmaz); kapı backend'de de
-// vardır (eksik adımda 400 `kurulum_eksik`). Damgasız eski kurulumda (bu kuraldan
-// önce tamamlanmış) ray kilitlenmez; 1. adım yalnız uyarır.
+// vardır (eksik adımda 400 `kurulum_eksik`). Kurulum tamamlandıktan sonra anahtar
+// damgasız kalmışsa (yenilenip doğrulanmamış anahtar) ray kilitlenmez; 1. adım yalnız
+// uyarır.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
@@ -731,8 +732,9 @@ function TakvimAdimi({
           <p className="mt-1 text-body-medium text-on-surface-variant">
             Ders yılı kaydedilince iki takvim yılının resmî ve dini tatilleri kendiliğinden eklenir.
             Ara tatil ve yarıyılı “öğrenciye kapalı gün” olarak girin. Kapalı günler, mevzuatta iş
-            günüyle verilen sürelerin ve yarıyıla bağlı hesapların takvimidir. Kapalı günleri daha
-            sonra Ayarlar → Kapalı Günler'den de düzenleyebilirsiniz.
+            günüyle verilen sürelerin takvimidir; ara tatil ve yarıyılın bir sürenin hesabına girip
+            girmediğini o sürenin kuralı belirler. Kapalı günleri daha sonra Ayarlar → Kapalı
+            Günler'den de düzenleyebilirsiniz.
           </p>
           <div className="mt-4">
             <KapaliGunlerPaneli

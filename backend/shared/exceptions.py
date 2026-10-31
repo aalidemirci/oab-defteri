@@ -1,4 +1,4 @@
-"""Standart API hata yanıtı — `{code, message, fields}` sözleşmesi (tasarım §4.3).
+"""Standart API hata yanıtı — `{code, message, fields}` sözleşmesi (aile iskeletinden; ret kodları tasarım §2.3.1).
 
 Aile iskeletinden uyarlandı: AccessLog/yetki-reddi bölümleri KALDIRILDI
 (bugün hesapsız program — kişiler arasındaki ayrım kiple yapılır, §4.4); gövde

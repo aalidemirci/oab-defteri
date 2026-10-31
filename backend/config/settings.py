@@ -221,6 +221,6 @@ REST_FRAMEWORK = {
     "UNAUTHENTICATED_USER": None,
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
     "PAGE_SIZE": 25,
-    # `{code, message, fields}` hata sözleşmesi (tasarım §4.3; FE lib/api.ts bunu bekler).
+    # `{code, message, fields}` hata sözleşmesi (aile iskeletinden; FE lib/api.ts bunu bekler).
     "EXCEPTION_HANDLER": "shared.exceptions.od_exception_handler",
 }

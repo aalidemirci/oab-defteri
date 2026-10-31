@@ -3,9 +3,11 @@ satır ayrıştırma + normalize.
 
 Aile iskeletinden alındı (iskelet bunu atalarının veli listesi kalıbından
 sadeleştirmişti): TCKN, veli (anne/baba ad-telefon, Veli Kim) ve doğum tarihi
-sütunları YOKTUR — program bu verileri toplamaz (tasarım §3.4). e-Okul sınıf/okul
-listesi ihracının ya da uygulama şablonunun şu üçlüsü yeter: Sınıf/Şube · Okul No ·
-Ad-Soyad.
+sütunları YOKTUR; bu ayrıştırıcı onları okumaz. OAB T.C. kimlik no'yu ve telefonu
+tutmaz (tasarım §3.4); veli adını ve öğrencinin sınıfını ayrı e-Okul veli listesinden
+alır (T5, §8.4). Bu modül F1b 5. adımda veli listesi ayrıştırıcısına döner (§12.B).
+e-Okul sınıf/okul listesi ihracının ya da uygulama şablonunun şu üçlüsü yeter:
+Sınıf/Şube · Okul No · Ad-Soyad.
 
 e-Okul sınıf listesindeki **"Cinsiyeti"** ve "Pansiyon Durum" sütunları
 OKUNMAZ (veri en aza indirme — tasarım §3.4): eşleme sözlüğünde karşılıkları

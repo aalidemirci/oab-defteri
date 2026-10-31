@@ -86,7 +86,7 @@ kapi "frontend: typecheck" fe_typecheck frontend "npm run typecheck"
 kapi "frontend: eslint" fe_eslint frontend "npx eslint src"
 kapi "frontend: prettier --check" fe_prettier frontend "npx prettier --check src"
 
-# Ön yüz lisans listesi (tasarım §11.4): Vite çıktısına GERÇEKTEN giren npm
+# Ön yüz lisans listesi (tasarım §11 "npm" halkası, §11.3): Vite çıktısına GERÇEKTEN giren npm
 # paketleri THIRD_PARTY_LICENSES'taki npm kayıtlarıyla ad ve sürümde aynı olmalı. Depo
 # testi (`test_lisans_kapisi.py`) yalnız package.json'daki doğrudan bağımlılıkları görür;
 # bir sürüm yükseltmesiyle çıktıya giren GEÇİŞLİ paket ya da tipten çalışma anına geçen

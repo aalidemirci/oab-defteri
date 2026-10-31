@@ -55,7 +55,7 @@ ISO zaman damgası) atomik yazar. Damga sarmalla birlikte yaşar: yenilemede
 yeni kurtarma bölümü damgasız yazılır. DB'de alan yoktur (migration gerekmez);
 `recovery_key_confirmed()` ve `status()` damgayı okur.
 
-KURTARMA ANAHTARINI YENİLEME (aynı kararın 3. maddesi):
+KURTARMA ANAHTARINI YENİLEME (aile iskeletinden; OAB'de tasarım §13 D14):
 `renew_recovery_key(password=…)` yalnız kilit açıkken çalışır, yönetici
 parolasını bellekteki anahtara karşı doğrular, YENİ anahtar ve YENİ tuzla aynı
 DEK'i sarmalar. Önceki `guvenlik.json` önce
@@ -959,8 +959,9 @@ def start_handover(*, current_password: str, new_password: str) -> str:
     doğrulanır (damga eklenir, görev devri damgası korunur). DEK DEĞİŞMEZ: kayıtlar,
     kör indeks, yedek anahtarı ve kip etkilenmez. Sonuç (tasarım §13 D14): ESKİ parola ya da
     ESKİ anahtar, eski bir güvenlik başlığıyla (devirden önceki yedek, arşivlenen dosya)
-    birlikte DEK'i verir — devirden SONRA alınan yedekleri de açar (modül başlığı);
-    görev devri notu bunu açıkça yazar.
+    birlikte DEK'i verir — devirden SONRA alınan yedekleri de açar (modül başlığı).
+    Aile iskeletinde görev devri notu bunu açıkça yazardı; OAB'de o belge yoktur
+    (tasarım §12.B).
     """
     with _state_lock:
         state = _require_state()

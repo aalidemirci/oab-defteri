@@ -14,9 +14,9 @@
 // değiştiği için `localStorage` açılışlar arasında taşınmaz. İşaretler kişisel
 // veri içermez (madde + tarih).
 //
-// Kurtarma anahtarının saklandığı sunucuda doğrulanmamışsa (damgasız eski kurulum
-// ya da yenilenip doğrulanmamış anahtar; genel tasarım §4.4.5) kartın başında
-// uyarı ve Güvenlik ayarlarına bağlantı durur.
+// Kurtarma anahtarının saklandığı sunucuda doğrulanmamışsa (kurulumdan sonra
+// yenilenip doğrulanmamış anahtar; `kurtarma.dogrulandi`, genel tasarım §4.4.4)
+// kartın başında uyarı ve Ayarlar → Güvenlik'e bağlantı durur.
 
 import { Link } from "react-router-dom";
 
@@ -56,7 +56,7 @@ export const YOL_HARITASI_MADDELERI: readonly MaddeTanimi[] = [
     anahtar: "kapali_gunler",
     baslik: "Öğrenciye kapalı günleri girin (ara tatil, yarıyıl)",
     aciklama:
-      "Resmî ve dini tatiller kurulumda eklendi. Ara tatil ve yarıyıl tarihlerini de girin: kapalı günler, iş günüyle verilen sürelerin ve yarıyıla bağlı hesapların (ör. kantinde yarıyıl ayının kirası) takvimidir.",
+      "Resmî ve dini tatiller kurulumda eklendi. Ara tatil ve yarıyıl tarihlerini de öğrenciye kapalı gün olarak girin. Kapalı günler iş günüyle verilen sürelerin takvimidir; ara tatil ve yarıyılın bir sürenin hesabına girip girmediğini o sürenin kuralı belirler.",
     bag: { to: "/ayarlar?tab=kapali-gunler", etiket: "Kapalı Günler'e git" },
   },
   {
@@ -64,7 +64,7 @@ export const YOL_HARITASI_MADDELERI: readonly MaddeTanimi[] = [
     baslik: "Kurtarma anahtarını müdürlükte kapalı zarfta saklayın",
     aciklama:
       "Kurtarma anahtarı çıktısını zarfa koyup kapatın ve müdürlükte kilitli dolapta saklayın. PDF dosyasını bu bilgisayarda bırakmayın.",
-    bag: { to: "/ayarlar?tab=guvenlik", etiket: "Güvenlik ayarları" },
+    bag: { to: "/ayarlar?tab=guvenlik", etiket: "Ayarlar → Güvenlik'i aç" },
   },
 ];
 
@@ -146,14 +146,14 @@ export default function BaslangicYolHaritasi({
             <div className="min-w-0">
               <p>
                 <strong>{DOGRULANMADI_BASLIGI}.</strong> Parola unutulursa kayıtlara yalnız kurtarma
-                anahtarıyla ulaşılır. Anahtarı sakladıysanız Güvenlik ayarlarında doğrulayın;
+                anahtarıyla ulaşılır. Anahtarı sakladıysanız Ayarlar → Güvenlik&apos;te doğrulayın;
                 kaydedemediyseniz aynı yerden yenisini üretin.
               </p>
               <Link
                 to="/ayarlar?tab=guvenlik"
                 className="mt-1 inline-flex items-center gap-1 text-label-large font-medium underline-offset-4 hover:underline"
               >
-                Güvenlik ayarları
+                Ayarlar → Güvenlik&apos;i aç
                 <Icon name="arrow_forward" size="sm" />
               </Link>
             </div>

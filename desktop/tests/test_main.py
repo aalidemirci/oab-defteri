@@ -642,8 +642,8 @@ def test_autotest_kipi_gercek_acilisi_dogrular(tmp_path: Path) -> None:
 
 @pytest.mark.slow
 def test_parola_kurulmadan_ikinci_acilista_gunluk_yedek_atlanir(tmp_path: Path) -> None:
-    """Tasarım §4.4.7: ilk açılışta `yedekleme.json` (ve kişi verisi) yokken günlük
-    yedek ATLANIR; düz kopya hiçbir koşulda yazılmaz. İlk yedek, yönetici parolası
+    """Tasarım §4.2 adım 7 (yedek kabı §4.4.7): ilk açılışta `yedekleme.json` (ve kişi
+    verisi) yokken günlük yedek ATLANIR; düz kopya hiçbir koşulda yazılmaz. İlk yedek, yönetici parolası
     kurulduktan sonraki açılışta şifreli alınır."""
     for _ in range(2):
         sonuc = subprocess.run(  # noqa: S603 — sabit argümanlar, kabuk yok
@@ -687,7 +687,8 @@ def _autotest_sureci(tmp_path: Path) -> subprocess.Popen[str]:
 def test_zorla_sonlandirmada_isaret_eksik_kalir_ve_sonraki_acilis_uyarir(
     tmp_path: Path,
 ) -> None:
-    """F0 kapısı (T15): öldürülen süreç işareti yazamaz; sonraki açılış bunu görür."""
+    """Temiz kapanış işareti (T15; tasarım §4.2 adım 3): öldürülen süreç işareti
+    yazamaz; sonraki açılış bunu görür."""
     ilk = _autotest_sureci(tmp_path)
     assert ilk.wait(timeout=300) == EXIT_OK
     isaret = tmp_path / "data" / MARKER_FILE_NAME

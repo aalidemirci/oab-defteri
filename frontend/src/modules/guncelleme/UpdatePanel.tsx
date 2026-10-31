@@ -173,9 +173,9 @@ export default function UpdatePanel() {
               // Pardus/Linux: uygulama içi indirme Windows kurulum dosyasını verirdi —
               // burada çalışmaz. Güncelleme paketle yapılır (tasarım TK6: `.deb`, `.tar.gz`).
               <p className="mt-2 text-body-small">
-                Pardus ve Linux’ta güncelleme paketle yapılır: yeni sürümün <code>.deb</code> (ya da{" "}
-                <code>.tar.gz</code>) dosyasını indirme sayfasından alıp eski sürümün üzerine kurun.
-                Verileriniz kurulum klasörünün dışında tutulduğu için korunur.
+                Pardus ve Linux&apos;ta güncelleme paketle yapılır: yeni sürümün <code>.deb</code>{" "}
+                (ya da <code>.tar.gz</code>) dosyasını indirme sayfasından alıp eski sürümün üzerine
+                kurun. Verileriniz kurulum klasörünün dışında tutulduğu için korunur.
               </p>
             ) : (
               <>

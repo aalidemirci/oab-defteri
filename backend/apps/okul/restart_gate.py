@@ -23,8 +23,8 @@ from collections.abc import Callable
 from django.http import HttpRequest, HttpResponse, JsonResponse
 
 API_PREFIX = "/api/"
-# Kapının geçirdiği TEK yol: Çık (tasarım §4.2 — "yeniden başlat gerektiğinde
-# parolasız"). Kapının tek çıkışı programı kapatmaktır; pencere süslemesi olmayan
+# Kapının geçirdiği TEK yol: Çık (tasarım §4.2: "her oturum durumunda parolasız";
+# §4.5: "yeniden başlat" ekranının çıkış yolu). Kapının tek çıkışı programı kapatmaktır; pencere süslemesi olmayan
 # Linux masaüstünde bu uç o çıkışın kendisidir (TB13).
 CIKIS_YOLU = "/api/v1/app/quit/"
 

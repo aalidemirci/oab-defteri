@@ -74,7 +74,7 @@ describe("BaslangicYolHaritasi", () => {
     const uyari = screen.getByText(/Kurtarma anahtarı doğrulanmadı/).closest("div");
     expect(uyari).not.toBeNull();
     expect(
-      within(uyari as HTMLElement).getByRole("link", { name: /Güvenlik ayarları/ }),
+      within(uyari as HTMLElement).getByRole("link", { name: /Ayarlar → Güvenlik'i aç/ }),
     ).toHaveAttribute("href", "/ayarlar?tab=guvenlik");
   });
 

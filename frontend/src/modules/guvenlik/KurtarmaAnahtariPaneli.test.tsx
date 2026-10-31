@@ -2,7 +2,8 @@
 // olarak kaydet ve elle yaz yolları sunulur; devam, sakladığı kopyadan rastgele
 // İKİ grubun geri yazdırılmasıyla doğrulanır (doğrulama kipinde anahtar ekrandan
 // kalkar); iki grup tutunca TAM anahtar sunucuda doğrulanıp "saklandı" damgası
-// yazılır (tasarım §4.4.3) ve `onDogrulama(true)` ancak o zaman gelir. Anahtar
+// yazılır (`kurtarma.dogrulandi`, tasarım §4.4.4) ve `onDogrulama(true)` ancak o zaman
+// gelir. Anahtar
 // ve okul adı uydurmadır.
 
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";

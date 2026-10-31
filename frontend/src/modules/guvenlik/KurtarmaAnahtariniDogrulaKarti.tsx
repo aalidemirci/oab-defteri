@@ -1,4 +1,4 @@
-// "Kurtarma Anahtarını Doğrula" kartı (aile iskeletinin doğrulama deseni; tasarım §4.4.3).
+// "Kurtarma Anahtarını Doğrula" kartı (aile iskeletinin doğrulama deseni; tasarım §4.4.4 `kurtarma.dogrulandi`).
 //
 // Anahtar ekranda değilken (sihirbaz yeniden açıldı, pencere kapanıp açıldı ya da
 // yenilenen anahtar doğrulanmadan kaldı) saklandığını doğrulamanın yolu: kullanıcı

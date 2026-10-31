@@ -1,4 +1,4 @@
-"""Masaüstü kancaları — backend ile masaüstü kabuğu arasındaki TEK kanal (tasarım §4.2).
+"""Masaüstü kancaları — backend ile masaüstü kabuğu arasındaki TEK kanal (tasarım §4.1).
 
 Program tek süreçtir: Django (yönetim API'si) ve masaüstü kabuğunun iş
 parçacıkları (`od-gunluk`, `od-kanal`) aynı süreçte koşar. Backend masaüstüne

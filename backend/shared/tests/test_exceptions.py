@@ -1,4 +1,4 @@
-"""`{code, message, fields}` hata sözleşmesi testleri (tasarım §11 — FE api.ts eşi).
+"""`{code, message, fields}` hata sözleşmesi testleri (aile iskeletinden — FE api.ts eşi).
 
 Sözleşme aileden AYNEN devralındı; burada SABİTLENİR. FE `lib/api.ts`
 `ApiError`'ı bu üç alandan kurar — alan adları değişirse arayüz hata

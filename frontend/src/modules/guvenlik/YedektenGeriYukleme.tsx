@@ -137,10 +137,10 @@ export default function YedektenGeriYukleme({ kayipKipi = false }: YedektenGeriY
             </p>
           )}
           <p className="mt-2 text-body-small text-on-surface-variant">
-            Program hiç açılmıyorsa (bozuk veritabanı) bu ekrana ulaşamazsınız; o durumda Windows’ta
-            Başlat menüsündeki “OAB Defteri — Yedekten Geri Yükle” kısayolunu, Pardus/Linux’ta
-            uçbirimden <span className="font-mono">oab-defteri --geri-yukle</span> komutunu
-            kullanın.
+            Program hiç açılmıyorsa (bozuk veritabanı) bu ekrana ulaşamazsınız; o durumda
+            Windows&apos;ta Başlat menüsündeki “OAB Defteri — Yedekten Geri Yükle” kısayolunu,
+            Pardus/Linux&apos;ta uçbirimden{" "}
+            <span className="font-mono">oab-defteri --geri-yukle</span> komutunu kullanın.
           </p>
 
           {liste === null && listeHata === null ? (

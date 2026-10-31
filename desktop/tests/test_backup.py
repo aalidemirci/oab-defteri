@@ -286,8 +286,8 @@ def test_serialize_olmayan_sqlite_ile_yedek_alinir(
 
 
 def test_ilk_acilista_yedek_anahtari_yokken_gunluk_yedek_atlanir(tmp_path: Path) -> None:
-    """Tasarım §4.4.7: yönetici parolası kurulmadan (yedekleme.json yok, kişi verisi
-    de yok) günlük yedek ATLANIR; düz kopya YAZILMAZ."""
+    """Tasarım §4.2 adım 7 (yedek kabı §4.4.7): yönetici parolası kurulmadan
+    (yedekleme.json yok, kişi verisi de yok) günlük yedek ATLANIR; düz kopya YAZILMAZ."""
     db = tmp_path / "db.sqlite3"
     _db_olustur(db, parola_kurulu=False)
 

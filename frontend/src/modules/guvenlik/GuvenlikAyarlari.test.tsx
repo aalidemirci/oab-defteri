@@ -3,7 +3,7 @@
 // kurulum sihirbazının ilk adımında kurulur; burada sihirbaza bağlantı durur),
 // kurtarma anahtarı çıktısını elindeki anahtarla yeniden alma kartı (katalog dışı
 // program belgesi, tasarım §9.7) ve kurtarma anahtarının doğrulanması/yenilenmesi
-// (aile iskeletinin doğrulama deseni; tasarım §4.4.3).
+// (aile iskeletinin doğrulama deseni; tasarım §4.4.4; yenileme §13 D14).
 
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -101,7 +101,7 @@ describe("GuvenlikAyarlari", () => {
     ekranaBas();
     expect(await screen.findByText("Yönetici parolası kurulmadı.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /parolasını kur/i })).toBeNull();
-    expect(screen.getByRole("link", { name: /Kurulum sihirbazına git/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Kurulum Sihirbazı'nı aç/ })).toHaveAttribute(
       "href",
       "/kurulum",
     );

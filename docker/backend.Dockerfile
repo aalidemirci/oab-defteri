@@ -1,9 +1,10 @@
 # =============================================================================
 # docker/backend.Dockerfile — OAB Defteri backend (geliştirme imajı)
 # =============================================================================
-# Ailenin backend/Dockerfile'ı referans alınmıştır ancak WeasyPrint 63, cairo/
+# Aile iskeletinin docker/backend.Dockerfile'ı alınmıştır; o dosya iş mantığının
+# kaynağı olan sunucu uygulamasının imajını referans alır. Ancak WeasyPrint 63, cairo/
 # gdk-pixbuf KULLANMAZ (53. sürümden itibaren saf-Python render motoruna geçti);
-# bu yüzden kaynağın libpangocairo-1.0-0 / libgdk-pixbuf-2.0-0 mirası BURAYA
+# bu yüzden o imajın libpangocairo-1.0-0 / libgdk-pixbuf-2.0-0 mirası BURAYA
 # TAŞINMADI — yalnız pango metin dizilimi + harfbuzz + fontconfig + DejaVu.
 # =============================================================================
 

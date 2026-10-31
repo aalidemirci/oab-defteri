@@ -19,7 +19,7 @@ tasarımının §5.1 ve §12.B'sindedir (öğrenci ve kütüphane alanları F1b'
   aktiftir: ayrılış havuz alanlarını aynı kayıtta temizler.
 - `ClassSection`: şube kataloğu — ders yılı içinde görülen (seviye, şube)
   çiftleri; içe aktarma sonrası tohumlanır.
-- `Holiday`: ailenin tatil tablosu, UYARLANARAK — + `SCHOOL_BREAK` türü
+- `Holiday`: aile iskeletinden AYNEN (tasarım §5.1) — `SCHOOL_BREAK` türüyle
   ("öğrenciye kapalı gün"); kapalı gün aritmetiğinin veri kaynağıdır
   (`shared.working_days`; OAB'de iş günü hesabı, tasarım §5.1).
 - Sınıf seviyeleri OKUL İÇİ SABİTTİR (`normalize.GRADE_LEVELS`, 1-12); hazırlık
@@ -240,7 +240,7 @@ class HolidayKind(models.TextChoices):
 
 
 class Holiday(BaseModel):
-    """Kapalı gün aralığı (ailenin `Holiday`'i — UYARLA; tasarım §5.1).
+    """Kapalı gün aralığı (aile iskeletinden AYNEN; tasarım §5.1).
 
     Ders yılına BAĞLANMAZ (aile kalıbı): kapalı gün sorusu tarih kapsamasıyla
     cevaplanır. Tek günlük kayıtta başlangıç ve bitiş aynı gündür.
