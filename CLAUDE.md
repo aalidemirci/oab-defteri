@@ -2,11 +2,12 @@
 
 > Her oturumda otomatik yüklenir. Amaç: projeyi ilk kez gören bir ajanın işi doğru
 > okuması ve **kasıtlı kararları kusur sanmaması**. Şu an proje **planlama**
-> aşamasındadır; kod yoktur. Ana belgeler:
+> aşamasındadır; kod yoktur. **Ana referans genel tasarımdır:**
+> [`docs/tasarim/2026-10-31-genel-tasarim.md`](docs/tasarim/2026-10-31-genel-tasarim.md)
+> (taslak v1, denetim bekliyor). Diğerleri:
 > [`docs/kesif/2026-10-31-on-degerlendirme.md`](docs/kesif/2026-10-31-on-degerlendirme.md)
-> (neden, ne, kararlar) ve [`docs/plan/2026-10-31-f0-f1-plani.md`](docs/plan/2026-10-31-f0-f1-plani.md)
-> (ilk iki fazın işleri ve kapıları). F0'da yazılacak genel tasarım belgesi
-> (`docs/tasarim/`) gelince ana referans o olur.
+> (neden, ne, kararlar), [`docs/plan/2026-10-31-f0-f1-plani.md`](docs/plan/2026-10-31-f0-f1-plani.md)
+> (ilk iki fazın işleri ve kapıları), [`docs/mevzuat/`](docs/mevzuat/BENIOKU.md) (kanonik mevzuat).
 >
 > Depo dili **Türkçe**: yorumlar, commit mesajları, testler, belgeler ve kullanıcıya
 > görünen bütün metinler. Tanımlayıcılar (sınıf, alan, uç adları) İngilizcedir; OYS'den
@@ -75,7 +76,7 @@ siteyi ve evrakı kapsar.
 | # | Karar |
 |---|---|
 | K1 | Gelir-gider **işlem düzeyinde** (banka hareketiyle eşlenir) |
-| K2 | Okulda **tek bilgisayar**, rol bazlı yerel hesaplar (MY, başkan, muhasip, sekreter). DK her şeyi okur, **yalnız denetim modülüne yazar**; müdür her şeyi okur, **yalnız kendi yazılarını** (harcama talebi, md. 27/3 uyarısı, yeni okulda genel kurul daveti) yazar |
+| K2 | Okulda **tek bilgisayar**, rol bazlı yerel hesaplar (MY, başkan, muhasip, sekreter). DK her şeyi okur, **yalnız denetim modülüne yazar** (md. 14/5 olağanüstü genel kurul çağrısı dâhil); müdür her şeyi okur, **yalnız kendi yazılarını** (harcama talebi, md. 27/3 uyarısı, yeni okulda genel kurul daveti, olağanüstü genel kurul çağrısı) yazar |
 | K3 | Bordro **yok**; personel için özlük, yıllık izin kaydı, kıdem karşılığı (sürüm 2). Çalıştırma biçimi **okula göre**: okul kartında doğrudan işveren / hizmet alımı seçilir, personel modülü yalnız doğrudan işverende açılır |
 | K4 | **Kantin ve servis ilk sürümde** (birliğin ve okulun evrakı ve takibi; komisyon kararının yerine geçmez) |
 | K5 | Makbuz **basılmaz**; ciltli koçan envanteri ve yaprak kaydı |
@@ -95,7 +96,7 @@ siteyi ve evrakı kapsar.
 
 | Faz | Durum |
 |---|---|
-| F0 Keşif tamamlama + genel tasarım + mevzuat | sürüyor — F0-1 korpus, F0-6 OYS envanteri, F0-7 iskelet envanteri tamam (31.10.2026); ilerleme planın §1.7'sinde |
+| F0 Keşif tamamlama + genel tasarım + mevzuat | sürüyor — korpus, envanterler, kullanıcı kararları, saha notu tamam; genel tasarım taslak v1 (31.10.2026); sırada tasarım denetimi (F0-9). İlerleme planın §1.7'sinde |
 | F1 İskelet + çekirdek + organlar + kural paketi | başlamadı |
 
 Sapmalar ve tasarımda yazmayan kararlar faz bittikçe "F<n> ekleri (tarih)" satırıyla
