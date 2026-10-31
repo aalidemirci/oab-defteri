@@ -735,7 +735,7 @@ def test_teklifin_deposu_guncelleme_deposu_ve_deb_iletisim_adresiyle_ayni() -> N
     updates = (REPO / "backend" / "apps" / "okul" / "services" / "updates.py").read_text(
         encoding="utf-8"
     )
-    varsayilan = re.search(r'"OD_UPDATE_REPOSITORY",\s*"([^"]+)"', updates)
+    varsayilan = re.search(r'^VARSAYILAN_DEPO = "([^"]+)"$', updates, re.MULTILINE)
     assert varsayilan, "updates.py'de varsayılan depo bulunamadı (desen değişti mi?)"
     assert f"https://github.com/{varsayilan.group(1)}" == L.DEPO_ADRESI
     assert f"{L.DEPO_ADRESI}/issues" == L.KAYNAK_TEKLIF_ADRESI

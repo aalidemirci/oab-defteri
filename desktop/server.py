@@ -11,9 +11,9 @@ arayıp sonra ona bağlanmak yarış koşulu yaratırdı).
 `DEFAULT_HOST` dışında bir adres verilirse kurulmaz (§4.1 değişmezi, koruma testi
 §5.10-1). Yerel erişim sigortası ayrıca `session_guard.SessionTokenMiddleware`'dedir.
 
-Ağ Kataloğu ayrı bir dinleyicidir (desktop/katalog_server.py): kendi waitress
-örneği ve Django'dan bağımsız WSGI uygulamasıyla çalışır; yönetim API'si hiçbir
-koşulda ağa açılmaz (tasarım §2.2 T3, §4.1 değişmezleri).
+Program ağ servisi sunmaz: yönetim sunucusu yalnız 127.0.0.1'de, rastgele portta
+ve oturum belirteciyle dinler; hiçbir port okul ağına açılmaz. Dış istek yalnız
+kullanıcının başlattığı güncelleme denetiminden çıkar (tasarım §4.1 değişmezleri).
 
 waitress istek (erişim) logu üretmez; `logging_setup` bunu ayrıca susturur.
 """

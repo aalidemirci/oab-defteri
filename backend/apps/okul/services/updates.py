@@ -28,6 +28,7 @@ import ssl
 import sys
 import threading
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -35,7 +36,23 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-GITHUB_REPOSITORY = os.environ.get("OD_UPDATE_REPOSITORY", "aalidemirci/oab-defteri").strip()
+#: Programın yayımlandığı depo (kapı testi lisans dizinindeki teklif adresiyle eşitler).
+VARSAYILAN_DEPO = "aalidemirci/oab-defteri"
+
+
+def guncelleme_deposu(environ: Mapping[str, str], *, paketli: bool) -> str:
+    """Güncelleme denetiminin deposu (tasarım §4.1, §4.3 tehdit 16, §13 D51).
+
+    `OD_UPDATE_REPOSITORY` yalnız geliştirme ve testte okunur. Paketli yapıda
+    (`sys.frozen`) OKUNMAZ: kullanıcı ortamındaki bir değişken denetimi başka bir
+    depoya yönlendirip kurucunun SHA-256 özetini o deponun yayımıyla doğrulatamasın.
+    """
+    if paketli:
+        return VARSAYILAN_DEPO
+    return environ.get("OD_UPDATE_REPOSITORY", "").strip() or VARSAYILAN_DEPO
+
+
+GITHUB_REPOSITORY = guncelleme_deposu(os.environ, paketli=bool(getattr(sys, "frozen", False)))
 GITHUB_API_VERSION = "2026-03-10"
 LATEST_RELEASE_URL = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/releases/latest"
 RELEASE_LIST_URL = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/releases?per_page=10"

@@ -196,7 +196,7 @@ describe("UpdatePanel", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
-  it("açıklama elle denetleme yolunu söyler; 'tek istek' demez (iki kapı vardır)", () => {
+  it("açıklama elle denetleme yolunu söyler; 'tek istek' demez", () => {
     renderPanel();
 
     // Hizmetin adı yalnız ulaşılamama iletisinde ve Hakkında'da geçer (sözlük "Sürüm").

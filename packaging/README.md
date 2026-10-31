@@ -1,11 +1,16 @@
 # packaging/ — paket üretimi
 
 Kullanıcıya yönelik kurulum kılavuzu: **`docs/kurulum.md`**.
-Bu dosya paketi ÜRETEN kişi içindir. Hat kardeş proje KS'den devralındı
-(tasarım §12 AYNEN/UYARLA); OAB Defteri adıyla CI paket hattı F4'ten
-(24.09.2026) bu yana her faz PR'ında yeşildir (Linux .deb + debian:11/12
-kurulum provası, Windows setup.exe + portable.zip). Kurucular sahada henüz
-çalıştırılmadı (`docs/saha-kabulu.md`).
+Bu dosya paketi ÜRETEN kişi içindir. Hat aile iskeletinden devralındı (KS →
+Kütüphane iskeleti; tasarım §12 AYNEN/UYARLA). Aile iskeletinde CI paket hattı
+F4'ten (24.09.2026) bu yana her faz PR'ında yeşildi (Linux .deb + debian:11/12
+kurulum provası, Windows setup.exe + portable.zip). **OAB Defteri adıyla paket
+hattı henüz koşmadı;** kurucular sahada çalıştırılmadı.
+
+Program ağ servisi sunmaz: yönetim sunucusu yalnız `127.0.0.1`'de, rastgele portta
+ve oturum belirteciyle dinler; hiçbir port okul ağına açılmaz. Dış istek yalnız
+kullanıcının başlattığı güncelleme denetiminden çıkar. Paketler bu yüzden güvenlik
+duvarı kuralı, servis tanımı ya da otomatik başlatma kaydı bırakmaz (tasarım §4.1).
 
 ## Dosya haritası
 
@@ -121,10 +126,10 @@ kalmalıdır. Buradan türetilenler:
 * artefakt dosya adları,
 * `v*` etiketi ile GitHub Release (ön-sürüm eki taşıyan etiket "prerelease").
 
-**İlk sürüm beta'dır** (F12, kullanıcı kararı 3 — 27.09.2026): `VERSION`
-`2026.10.0-beta.1`'e hazırlandı (`.deb` `2026.10.0~beta.1`, Windows sürüm
-kaynağı `2026.10.0.0`). Etiketi (`v2026.10.0-beta.1`) F12 birleşince ana oturum
-**kullanıcı onayıyla** atar. Güncelleme denetimi kararlı sürüm kullanan okula
+**OAB Defteri'nin sürümü** bugün `VERSION`'daki ön-sürümdür; ilk yayımın sürümü ve
+etiketi henüz belirlenmedi — etiketi ana oturum **kullanıcı onayıyla** atar (yayın
+işi, altın kural 8). (Aile iskeletinde ilk sürüm beta'ydı; bu paragrafın geri kalanı
+oradan gelen ve OAB'de de geçerli olan kuraldır.) Güncelleme denetimi kararlı sürüm kullanan okula
 ön-sürüm ÖNERMEZ; beta kullanıcısı sonraki betayı ve kararlı sürümü alır
 (`updates.offered`). Yayın adımlarının kendisi (etiket ↔ VERSION kapısı, `~` →
 `.`, pre-release işareti, R2'nin secret'sız atlanması ve `r2-yukle.sh` ile

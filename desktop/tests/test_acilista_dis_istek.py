@@ -1,9 +1,9 @@
 """Açılışta dış istek YOK (T11; CLAUDE.md §3; F11 kod kapısı) — gerçek süreç, ağ tuzağıyla.
 
-Dış istek yalnız kullanıcının başlattığı iki kapıdan çıkar (güncelleme denetimi ve
-varsayılan kapalı ISBN künye sorgusu). Program açılırken — ilk açılışta da, yönetici
-parolası kurulmuş, günlük yedeğin alındığı, göç denetiminin ve Ağ Kataloğu öz
-sınamasının koştuğu olağan açılışta da — dışarı TEK bağlantı, TEK ad çözümü, TEK
+Program ağ servisi sunmaz; dış istek yalnız kullanıcının başlattığı güncelleme
+denetiminden çıkar (tasarım §4.1). Program açılırken — ilk açılışta da, yönetici
+parolası kurulmuş, günlük yedeğin alındığı ve göç denetiminin koştuğu olağan
+açılışta da — dışarı TEK bağlantı, TEK ad çözümü, TEK
 `urlopen` çıkmaz. `desktop.tests.ag_tuzagi` soket katmanını programdan önce değiştirir
 ve her dış denemeyi kaydeder; kayıt boş kalmalıdır.
 

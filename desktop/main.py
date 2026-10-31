@@ -1,6 +1,7 @@
 """OAB Defteri masaüstü başlatıcısı — açılış ve kapanış sırası (tasarım §4.2).
 
-    1. Veri dizinleri (exe DIŞINDA) + günlük yapılandırması
+    1. Veri dizinleri (exe DIŞINDA) + günlük yapılandırması; Linux'ta önce
+       `umask 077`, dizinler 0700 (§4.5, §13 D52)
     2. Tek-instance kilidi ................. ikinci kopya pencere AÇMAZ; bayraksız
        normal açılışsa çalışan kopyanın penceresini öne getirip 0 ile çıkar
     3. Temiz kapanış işareti okunur ve silinir (T15) + tek kopya kanalı kurulur
@@ -82,6 +83,7 @@ from desktop.paths import (
     ENV_APP_HOME,
     AppPaths,
     check_sync_hazard,
+    gizli_kipleri_uygula,
     resolve_app_paths,
     resolve_backend_dir,
 )
@@ -388,6 +390,8 @@ def run(argv: Sequence[str] | None = None) -> int:
     ham = list(sys.argv[1:] if argv is None else argv)
     args = build_parser().parse_args(ham)
     paths = resolve_paths(args)
+    # Linux: umask 077 dizinlerden ve günlükten ÖNCE (tasarım §4.5, §13 D52).
+    gizli_kipleri_uygula()
     paths.ensure()
     configure_logging(paths.logs, echo=args.autotest)
 

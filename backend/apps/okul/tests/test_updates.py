@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import runpy
 import sys
 import time
 from collections.abc import Iterable
@@ -1175,3 +1176,29 @@ def test_sertifika_dogrulanamazsa_ag_engeli_denmez(monkeypatch: pytest.MonkeyPat
     with pytest.raises(updates.UpdateError) as hata:
         updates.latest_release(force=True)
     assert str(hata.value) == updates.ULASILAMADI_MESAJI
+
+
+# --------------------------------------------------------------------------- #
+# Güncelleme deposu paketli yapıda ortamdan okunmaz — tasarım §4.1, §13 D51
+# --------------------------------------------------------------------------- #
+
+
+def test_guncelleme_deposu_paketli_yapida_ortamdan_okunmaz() -> None:
+    ortam = {"OD_UPDATE_REPOSITORY": "baska/depo"}
+
+    assert updates.guncelleme_deposu(ortam, paketli=True) == updates.VARSAYILAN_DEPO
+    assert updates.guncelleme_deposu(ortam, paketli=False) == "baska/depo"
+    assert updates.guncelleme_deposu({}, paketli=False) == updates.VARSAYILAN_DEPO
+    bos = {"OD_UPDATE_REPOSITORY": "  "}
+    assert updates.guncelleme_deposu(bos, paketli=False) == updates.VARSAYILAN_DEPO
+
+
+def test_modul_paketli_yapida_ortam_degiskenine_bakmaz(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Modülün kendisi (modül düzeyi sabitler) `sys.frozen` iken yüklenir."""
+    monkeypatch.setenv("OD_UPDATE_REPOSITORY", "baska/depo")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+
+    degerler = runpy.run_path(updates.__file__)
+
+    assert degerler["GITHUB_REPOSITORY"] == updates.VARSAYILAN_DEPO
+    assert f"/repos/{updates.VARSAYILAN_DEPO}/" in degerler["LATEST_RELEASE_URL"]

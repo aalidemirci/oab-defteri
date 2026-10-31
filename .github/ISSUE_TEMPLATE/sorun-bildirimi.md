@@ -6,8 +6,9 @@ labels: ''
 assignees: ''
 ---
 
-> **Kişisel veri paylaşmayın.** Gerçek öğrenci ya da personel adı, okul
-> numarası, kart numarası, veritabanı dosyası, yedek dosyası, günlük dosyası
+> **Kişisel veri paylaşmayın.** Gerçek veli adı ve öğrencinin sınıfı, birlik
+> üyesi ya da personel adı ve görevi, banka hesap özeti ya da hesap numarası,
+> TEFBİS ya da e-Okul çıktısı, veritabanı dosyası, yedek dosyası, günlük dosyası
 > ve gerçek veri içeren ekran görüntüsü bu alana **yazılmaz**. Sorunu uydurma
 > veriyle anlatın. Güvenlik açıkları için `SECURITY.md`.
 

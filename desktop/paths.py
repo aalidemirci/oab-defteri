@@ -29,6 +29,14 @@ ENV_APP_HOME = "OD_APP_HOME"
 # Django kodunun bulunduğu dizin (paket içinde exe'nin yanında).
 ENV_BACKEND_DIR = "OD_BACKEND_DIR"
 
+#: Linux/POSIX'te dosya kipleri (tasarım §4.5, §4.3 tehdit 22, §13 D52): aynı
+#: bilgisayardaki başka yerel hesap birliğin verisini, günlüğünü, yedeğini okuyamasın.
+#: Açılışta `umask 077` → yeni dosyalar 0600, yeni dizinler 0700; programın dizinleri
+#: ayrıca 0700'e çekilir (eski kurulumdan kalan geniş kipler de daralır). Windows'ta
+#: `%LOCALAPPDATA%` zaten hesaba özeldir; kip uygulanmaz.
+GIZLI_UMASK = 0o077
+DIZIN_KIPI = 0o700
+
 DB_FILE_NAME = "db.sqlite3"
 LOCK_FILE_NAME = "instance.lock"
 VERSION_STAMP_FILE_NAME = "surum.json"
@@ -75,10 +83,19 @@ class AppPaths:
         """Pencere motorunun profil dizini — önbellekte (silinebilir, veri değil)."""
         return self.cache / "webview"
 
-    def ensure(self) -> None:
-        """Dizinleri oluşturur; var olanlara dokunmaz."""
+    def ensure(self, *, platform: str | None = None) -> None:
+        """Dizinleri oluşturur; POSIX'te hepsini 0700'e çeker (içeriklerine dokunmaz)."""
+        posix = not (sys.platform if platform is None else platform).startswith("win")
         for directory in (self.root, self.data, self.backups, self.logs, self.cache):
             directory.mkdir(parents=True, exist_ok=True)
+            if posix:
+                directory.chmod(DIZIN_KIPI)
+
+
+def gizli_kipleri_uygula(*, platform: str | None = None) -> None:
+    """POSIX'te süreç `umask`'ını 077 yapar (açılışın ilk adımı; §4.2 adım 1)."""
+    if not (sys.platform if platform is None else platform).startswith("win"):
+        os.umask(GIZLI_UMASK)
 
 
 def _home(environ: Mapping[str, str]) -> Path:

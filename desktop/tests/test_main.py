@@ -1044,3 +1044,32 @@ def test_eski_duz_yedek_donusturucusu_yok() -> None:
 
     assert not hasattr(backup, "encrypt_legacy_backups")
     assert not hasattr(main_mod, "encrypt_legacy_backups")
+
+
+def test_acilista_umask_dizinlerden_ve_gunlukten_once(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """§4.2 adım 1, §13 D52: Linux'ta `umask 077` veri dizinleri ve günlük açılmadan önce."""
+    sira: list[str] = []
+
+    class _Dur(Exception):
+        pass
+
+    class _Yerlesim:
+        logs = tmp_path
+
+        def ensure(self) -> None:
+            sira.append("dizinler")
+
+    def gunluk(*_args: Any, **_kwargs: Any) -> None:
+        sira.append("gunluk")
+        raise _Dur
+
+    monkeypatch.setattr(main_mod, "resolve_paths", lambda _args: _Yerlesim())
+    monkeypatch.setattr(main_mod, "gizli_kipleri_uygula", lambda: sira.append("umask"))
+    monkeypatch.setattr(main_mod, "configure_logging", gunluk)
+
+    with pytest.raises(_Dur):
+        main_mod.run([])
+
+    assert sira == ["umask", "dizinler", "gunluk"]

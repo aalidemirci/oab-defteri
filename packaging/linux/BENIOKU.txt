@@ -2,6 +2,11 @@ OAB Defteri — Taşınabilir Linux/Pardus Sürümü
 ==================================================
 
 Bu arşiv, yönetici (root) yetkisi gerektirmeden kurulabilen sürümdür.
+
+Program ağ servisi sunmaz: yönetim sunucusu yalnız 127.0.0.1'de, rastgele
+portta ve oturum belirteciyle dinler; hiçbir port okul ağına açılmaz. Dış
+istek yalnız kullanıcının başlattığı güncelleme denetiminden çıkar.
+
 Yönetici yetkiniz varsa .deb paketini tercih edin (menü kaydı ve bağımlılık
 kurulumu otomatik yapılır).
 

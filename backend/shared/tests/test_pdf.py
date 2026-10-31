@@ -1,16 +1,20 @@
 """`shared.pdf` — WeasyPrint'in tek kapısı (19.09.2026 çöküş tanısı).
 
-Sabitlenen üç şey: (1) basımlar süreç genelinde SIRAYLA koşar — eşzamanlı basım
+Sabitlenen dört şey: (1) basımlar süreç genelinde SIRAYLA koşar — eşzamanlı basım
 Pango/fontconfig katmanında yerel belleği bozuyordu; (2) yazı tipi yapılandırması
 belgeler arasında PAYLAŞILIR; (3) uygulama kodunda WeasyPrint'e bu kapı dışından
-gidilmez — yeni bir PDF yolu kilidi sessizce atlayamasın.
+gidilmez — yeni bir PDF yolu kilidi sessizce atlayamasın; (4) WeasyPrint yalnız
+`data:` ve paket içi `file:` kaynağı okur, belgedeki `http(s)` adresi ağ tuzağını
+tetiklemez (tasarım §4.1, §13 D47).
 """
 
 from __future__ import annotations
 
 import re
+import socket
 import threading
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +43,7 @@ def test_ayni_anda_en_fazla_bir_basim(monkeypatch: pytest.MonkeyPatch) -> None:
     durum = {"etkin": 0, "en_cok": 0, "cagri": 0}
 
     class SahteHTML:
-        def __init__(self, string: str) -> None:
+        def __init__(self, string: str, **_kwargs: Any) -> None:
             self.string = string
 
         def write_pdf(self, **_kwargs: Any) -> bytes:
@@ -96,3 +100,70 @@ def test_weasyprint_yalniz_shared_pdf_kapisindan() -> None:
         "WeasyPrint'e shared.pdf.html_to_pdf dışından gidiliyor (eşzamanlı basım "
         f"kilidini atlar — 19.09.2026 çöküşü): {ihlaller}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Ağsız kaynak okuyucu (url_fetcher) — tasarım §4.1, §13 D47
+# --------------------------------------------------------------------------- #
+
+#: TEST-NET-2 (RFC 5737): hiçbir gerçek sunucuya ait değildir.
+_DIS_ADRES = "198.51.100.7"
+
+
+@pytest.fixture
+def ag_tuzagi(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[str]]:
+    """Ad çözümü ve bağlantı denemesini kaydeder ve düşürür; kayıt boş kalmalıdır."""
+    denemeler: list[str] = []
+
+    def tuzak(*args: Any, **_kwargs: Any) -> Any:
+        denemeler.append(repr(args[:2]))
+        raise OSError("ağ tuzağı: dış istek denendi")
+
+    monkeypatch.setattr(socket, "getaddrinfo", tuzak)
+    monkeypatch.setattr(socket, "create_connection", tuzak)
+    monkeypatch.setattr(socket.socket, "connect", tuzak)
+    yield denemeler
+
+
+def test_url_fetcher_ag_tuzagi(ag_tuzagi: list[str]) -> None:
+    """Belgedeki ve CSS'teki `http(s)` adresleri çizilmez; tek bağlantı denenmez."""
+    html = (
+        f'<link rel="stylesheet" href="https://{_DIS_ADRES}/s.css">'
+        f'<style>@import url("http://{_DIS_ADRES}/i.css");'
+        f"p {{ background: url(http://{_DIS_ADRES}/b.png) }}</style>"
+        f'<p>Türkçe metin</p><img src="http://{_DIS_ADRES}/x.png">'
+        '<img src="file://sunucu/paylasim/x.png">'
+    )
+
+    belge = pdf.html_to_pdf(html)
+
+    assert belge.startswith(b"%PDF-")
+    assert ag_tuzagi == []
+
+
+def test_okuyucu_yalniz_data_ve_paket_ici_dosyayi_acar(
+    ag_tuzagi: list[str], tmp_path: Path
+) -> None:
+    okuyucu = pdf.url_okuyucu()
+
+    yanit = okuyucu.fetch("data:text/plain;base64,T0FC")
+    assert yanit.read() == b"OAB"
+    yanit.close()
+    sablon = pdf.PAKET_KOKU / "templates" / "documents" / "base.html"
+    yanit = okuyucu.fetch(sablon.as_uri())
+    assert yanit.read().lstrip().startswith(b"<")
+    yanit.close()
+
+    disari = tmp_path / "paket-disi.css"
+    disari.write_text("p {}", encoding="utf-8")
+    for adres in (
+        f"http://{_DIS_ADRES}/x.png",
+        f"https://{_DIS_ADRES}/x.png",
+        f"ftp://{_DIS_ADRES}/x.png",
+        "file://sunucu/paylasim/x.png",
+        disari.as_uri(),
+        pdf.PAKET_KOKU.as_uri() + "/../../etc/passwd",
+    ):
+        with pytest.raises(pdf.DisKaynakReddi):
+            okuyucu.fetch(adres)
+    assert ag_tuzagi == []

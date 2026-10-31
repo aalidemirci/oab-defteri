@@ -1,8 +1,10 @@
-"""Dış istek yalnız kullanıcının başlattığı İKİ kapıdan çıkar (T11; F11 kod kapısı).
+"""Program ağ servisi sunmaz; dış istek TEK kapıdan çıkar (tasarım §4.1, T11).
 
-CLAUDE.md §3: (1) güncelleme denetimi — "Şimdi denetle" düğmesiyle, GitHub'dan
-(kullanıcı kararı 27.09.2026); (2) ISBN ile künye sorgusu — varsayılan kapalı.
-**Açılışta ağ yok, telemetri yok.** Bu dosya kuralı KAYNAK düzeyinde kilitler; açılış
+Program ağ servisi sunmaz: yönetim sunucusu yalnız 127.0.0.1'de, rastgele portta ve
+oturum belirteciyle dinler; hiçbir port okul ağına açılmaz. Dış istek yalnız
+kullanıcının başlattığı güncelleme denetiminden çıkar — "Şimdi denetle" düğmesiyle,
+GitHub'dan (kullanıcı kararı 27.09.2026). Aile iskeletinin ikinci kapısı (ISBN künye
+sorgusu) OAB'de yoktur. **Açılışta ağ yok, telemetri yok.** Bu dosya kuralı KAYNAK düzeyinde kilitler; açılış
 zincirinin kendisi `desktop/tests/test_acilista_dis_istek.py`'de gerçek süreçte ve
 ağ çağrıları tuzaklanmış hâlde koşar.
 
@@ -12,10 +14,8 @@ ağ çağrıları tuzaklanmış hâlde koşar.
    gerekçesiyle durur. Yeni bir modül ağ istemcisi import ederse test düşer:
    ekleyen, bunun bir dış istek kapısı olup olmadığına bilinçli karar verir.
 2. **Güncelleme modülünün istek atan işlevlerini** yalnız güncelleme uçları çağırır
-   (`apps/okul/views.py`). Başka modüller (`ag_belgeleri`: bilgi notunun hedefleri;
-   `kunye/istemci`: User-Agent sürümü) yalnız sabitleri ve sürüm okuyucuyu kullanır.
-   Masaüstü kabuğu (açılış, gün değişimi kapısı, tepsi) güncelleme modülünü hiç
-   import etmez.
+   (`apps/okul/views.py`). Masaüstü kabuğu (açılış, gün değişimi kapısı) güncelleme
+   modülünü hiç import etmez.
 
 Tarama `ast` iledir: yorumdaki "socket" sözcüğü sayılmaz, import ağacı sayılır.
 """
@@ -117,8 +117,8 @@ def test_ag_istemcisi_import_eden_moduller_kapali_listededir() -> None:
 
     izinsiz = {yol: sorted(ad) for yol, ad in bulunan.items() if yol not in IZINLI}
     assert izinsiz == {}, (
-        "Ağ istemcisi import eden yeni modül: dış istek yalnız kullanıcının başlattığı iki "
-        f"kapıdan çıkar (CLAUDE.md §3). {izinsiz}"
+        "Ağ istemcisi import eden yeni modül: dış istek yalnız kullanıcının başlattığı "
+        f"güncelleme denetiminden çıkar (tasarım §4.1). {izinsiz}"
     )
     # Liste bayatlamasın: izinli her modül gerçekten ağ istemcisi kullanıyor.
     assert set(IZINLI) == set(bulunan), sorted(set(IZINLI) ^ set(bulunan))
@@ -152,7 +152,7 @@ def _updates_kullanimi(agac: ast.AST) -> tuple[bool, set[str]]:
 
 
 def test_guncelleme_denetimini_yalniz_guncelleme_uclari_cagirir() -> None:
-    """Açılış, gün değişimi kapısı, tepsi ya da belge üreticisi denetim BAŞLATMAZ."""
+    """Açılış, gün değişimi kapısı ya da belge üreticisi denetim BAŞLATMAZ."""
     kullananlar: dict[str, set[str]] = {}
     for yol in _kaynaklar():
         goreli = _goreli(yol)
@@ -170,16 +170,15 @@ def test_guncelleme_denetimini_yalniz_guncelleme_uclari_cagirir() -> None:
         assert adlar <= izinli, f"{goreli}: {sorted(adlar - izinli)}"
 
 
-def test_masaustu_kabugu_guncelleme_ya_da_kunye_modulu_import_etmez() -> None:
-    """Açılış zinciri ve `od-gunluk` (gün değişimi kapısı) masaüstündedir: iki kapı orada yok."""
+def test_masaustu_kabugu_guncelleme_modulunu_import_etmez() -> None:
+    """Açılış zinciri ve `od-gunluk` (gün değişimi kapısı) masaüstündedir: dış istek kapısı
+    orada yok."""
     kok = _depo_koku()
     for yol in (kok / "desktop").glob("*.py"):
         adlar = _importlar(ast.parse(yol.read_text(encoding="utf-8")))
         yasak = {
             ad
             for ad in adlar
-            if ad.startswith("apps.okul.services.updates")
-            or ad == "apps.okul.services.updates"
-            or ad.startswith("apps.kutuphane.kunye")
+            if ad.startswith("apps.okul.services.updates") or ad == "apps.okul.services.updates"
         }
         assert not yasak, f"{yol.name}: {sorted(yasak)}"

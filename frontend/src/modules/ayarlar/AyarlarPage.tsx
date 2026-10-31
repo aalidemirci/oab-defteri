@@ -116,9 +116,9 @@ export default function AyarlarPage() {
         <div>
           <h1 className="od-page-title">Ayarlar</h1>
           <p className="od-page-description">
-            Ders yılı, kapalı günler, şube kataloğu, okul künyesi, yönetici parolası, yedekler,
-            güncelleme ve Ağ Kataloğu burada yönetilir. Okul künyesi programın bastığı evrakın
-            antedinde kullanılır.
+            Ders yılı, kapalı günler, şube kataloğu, okul künyesi, yönetici parolası, yedekler ve
+            güncelleme burada yönetilir. Okul künyesi programın bastığı evrakın antedinde
+            kullanılır.
           </p>
         </div>
       </div>

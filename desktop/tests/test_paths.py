@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
+import os
+import stat
+import sys
 from pathlib import Path
 
 import pytest
 
 from desktop import paths as paths_mod
-from desktop.paths import AppPaths, check_sync_hazard, resolve_app_paths, resolve_backend_dir
+from desktop.paths import (
+    APP_DIR_NAME_WINDOWS,
+    DIZIN_KIPI,
+    AppPaths,
+    check_sync_hazard,
+    gizli_kipleri_uygula,
+    resolve_app_paths,
+    resolve_backend_dir,
+)
 
 
 def test_windows_yerlesimi_localappdata_altinda() -> None:
@@ -135,3 +146,62 @@ def test_app_paths_degistirilemez(tmp_path: Path) -> None:
         result.root = tmp_path  # type: ignore[misc]
 
     assert isinstance(result, AppPaths)
+
+
+# --------------------------------------------------------------------------- #
+# Linux dizin ve dosya kipleri — tasarım §4.5, §4.3 tehdit 22, §13 D52
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="POSIX dosya kipleri")
+def test_linux_dizin_ve_dosya_kipleri(tmp_path: Path) -> None:
+    """umask 077 → yeni dosya 0600, yeni dizin 0700; programın dizinleri 0700'e çekilir."""
+    eski_umask = os.umask(0o022)
+    try:
+        yerlesim = resolve_app_paths(environ={"HOME": str(tmp_path)}, platform="linux")
+        # Eski kurulumdan kalan geniş kipli dizin de daraltılır.
+        yerlesim.data.mkdir(parents=True)
+        yerlesim.data.chmod(0o755)
+
+        gizli_kipleri_uygula(platform="linux")
+        yerlesim.ensure(platform="linux")
+
+        for dizin in (
+            yerlesim.root,
+            yerlesim.data,
+            yerlesim.backups,
+            yerlesim.logs,
+            yerlesim.cache,
+        ):
+            assert stat.S_IMODE(dizin.stat().st_mode) == DIZIN_KIPI, dizin
+        gizli = yerlesim.data / "guvenlik.json"
+        gizli.write_text("{}", encoding="utf-8")
+        assert stat.S_IMODE(gizli.stat().st_mode) == 0o600
+        alt = yerlesim.backups / "alt"
+        alt.mkdir()
+        assert stat.S_IMODE(alt.stat().st_mode) == 0o700
+    finally:
+        os.umask(eski_umask)
+
+
+def test_windowsta_kip_uygulanmaz(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """`%LOCALAPPDATA%` hesaba özeldir: Windows'ta umask ve chmod çağrılmaz."""
+    cagrilar: list[str] = []
+
+    def sahte_umask(kip: int) -> int:
+        cagrilar.append(f"umask {kip:o}")
+        return 0
+
+    def sahte_chmod(yol: Path, kip: int) -> None:
+        cagrilar.append(f"chmod {yol} {kip:o}")
+
+    monkeypatch.setattr(os, "umask", sahte_umask)
+    monkeypatch.setattr(Path, "chmod", sahte_chmod)
+
+    gizli_kipleri_uygula(platform="win32")
+    resolve_app_paths(environ={"LOCALAPPDATA": str(tmp_path)}, platform="win32").ensure(
+        platform="win32"
+    )
+
+    assert cagrilar == []
+    assert (tmp_path / APP_DIR_NAME_WINDOWS / "data").is_dir()

@@ -1,10 +1,11 @@
 # =============================================================================
 # .github/workflows/paketleme.yml — Windows + Linux paket üretimi (tasarım §14 F12)
 # =============================================================================
-# Hat KS'den devralındı; orada 29.08.2026'da uçtan uca YEŞİLDİ (Linux .deb +
-# debian:11/12 kurulum provası + Windows setup.exe/portable.zip; iki platformda
-# Türkçe PDF duman testi gömülü DejaVu ile geçti). OAB Defteri adıyla
-# henüz koşmadı; ilk koşunun çek-listesi packaging/windows/NOTLAR.md'de.
+# Hat aile iskeletinden devralındı (KS → Kütüphane iskeleti); KS'de 29.08.2026'da
+# uçtan uca YEŞİLDİ (Linux .deb + debian:11/12 kurulum provası + Windows
+# setup.exe/portable.zip; iki platformda Türkçe PDF duman testi gömülü DejaVu ile
+# geçti), Kütüphane iskeletinde F4-F11 boyunca her PR'da yeşil kaldı. OAB Defteri
+# adıyla henüz koşmadı; ilk koşunun çek-listesi packaging/windows/NOTLAR.md'de.
 #
 # Akış:
 #   arayuz          → frontend/dist artefaktı (bir kez derlenir, iki paket işi indirir)

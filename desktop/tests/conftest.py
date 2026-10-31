@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import faulthandler
 import logging
+import os
+import sys
 from collections.abc import Iterator
 
 import django
@@ -32,6 +34,20 @@ def pytest_configure(config: pytest.Config) -> None:
 @pytest.fixture(autouse=True)
 def _faulthandler_etkisiz(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(faulthandler, "enable", lambda *args, **kwargs: None)
+
+
+@pytest.fixture(autouse=True)
+def _umask_korunur() -> Iterator[None]:
+    """`main.run()` açılışta POSIX umask'ını 077 yapar (§13 D52); sonraki testlere sızmasın."""
+    if sys.platform.startswith("win"):
+        yield
+        return
+    onceki = os.umask(0o022)
+    os.umask(onceki)
+    try:
+        yield
+    finally:
+        os.umask(onceki)
 
 
 @pytest.fixture

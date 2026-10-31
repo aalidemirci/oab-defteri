@@ -53,7 +53,10 @@ describe("CikisDugmesi", () => {
 
     await kullanici.click(screen.getByRole("button", { name: "Çık" }));
     const diyalog = screen.getByRole("dialog");
-    expect(diyalog).toHaveTextContent("Ağ Kataloğu da kapanır");
+    // T6: çarpı programı kapatır; aile iskeletinin "yalnız gizler" ve Ağ Kataloğu
+    // cümleleri yoktur.
+    expect(diyalog).toHaveTextContent("Pencerenin çarpısı da programı aynı biçimde kapatır.");
+    expect(diyalog).not.toHaveTextContent(/Ağ Kataloğu|gizler/);
     expect(within(diyalog).queryByLabelText(/Yönetici parolası/)).toBeNull();
     await kullanici.click(within(diyalog).getByRole("button", { name: "Çık" }));
 

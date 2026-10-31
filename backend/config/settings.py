@@ -3,10 +3,10 @@
 OYS'nin (Okul Yönetim Sistemi) çok-kullanıcılı/ağ-merkezli ayar dosyasının
 (config/settings/{base,dev,prod}.py) aksine burada TEK dosya yeterli: program tek
 bilgisayarda çalışır ve bu ayarların sürdüğü YÖNETİM sunucusu yalnız 127.0.0.1'i
-dinler (girişsiz yüzey bu varsayıma dayanır). Yerel ağa açılan tek yüzey salt-okur
-Ağ Kataloğu'dur; o Django istek zincirini, bu ayarların MIDDLEWARE/URLconf'unu
-ve ORM'yi KULLANMAYAN ayrı bir dinleyicidir (desktop/katalog_server.py — tasarım
-§4.1, §5). Sırlar `django-environ` OLMADAN doğrudan `os.environ` üzerinden okunur
+dinler (girişsiz yüzey bu varsayıma dayanır). Program ağ servisi sunmaz: yönetim
+sunucusu yalnız 127.0.0.1'de, rastgele portta ve oturum belirteciyle dinler; hiçbir
+port okul ağına açılmaz. Dış istek yalnız kullanıcının başlattığı güncelleme
+denetiminden çıkar (tasarım §4.1). Sırlar `django-environ` OLMADAN doğrudan `os.environ` üzerinden okunur
 (bağımlılık yüzeyi küçük tutulur).
 """
 
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -52,10 +53,24 @@ SECRET_KEY = os.environ.get(
 # ortamı docker-compose.yml'de OD_DEBUG=1 ile açar.
 DEBUG = _bool_env("OD_DEBUG", False)
 
-# Vite geliştirme proxy'si Docker Compose ağında servise ``backend`` adıyla
-# ulaşır (frontend/vite.config.ts). Üretim masaüstü sunucusu yine yalnız
-# 127.0.0.1'e bağlanır; bu ad yalnız kapalı geliştirme ağı içindir.
-ALLOWED_HOSTS = ["127.0.0.1", "localhost", "backend"]
+# Kabul edilen Host adları (tasarım §4.1, §4.3 tehdit 2, §13 D46). Masaüstü kabuğu
+# açılışta `OD_SESSION_TOKEN` verir: o zaman YALNIZ loopback adları kabul edilir
+# (DNS rebinding'e karşı). Vite geliştirme proxy'si Docker Compose ağında servise
+# ``backend`` adıyla ulaşır (frontend/vite.config.ts); bu ad yalnız belirteç BOŞKEN
+# (geliştirme, test) eklenir. Koşul oturum belirteci middleware'iyle aynıdır (aşağıda).
+LOOPBACK_HOSTLARI = ("127.0.0.1", "localhost")
+GELISTIRME_HOSTU = "backend"
+
+
+def izinli_hostlar(environ: Mapping[str, str]) -> list[str]:
+    """`ALLOWED_HOSTS`: loopback adları; belirteç boşsa geliştirme ağının servis adı da."""
+    hostlar = list(LOOPBACK_HOSTLARI)
+    if not environ.get("OD_SESSION_TOKEN"):
+        hostlar.append(GELISTIRME_HOSTU)
+    return hostlar
+
+
+ALLOWED_HOSTS = izinli_hostlar(os.environ)
 
 # ---------------------------------------------------------------------------
 # Uygulamalar
@@ -144,9 +159,9 @@ DATABASES = {
             ),
             "transaction_mode": "IMMEDIATE",
         },
-        # Test veritabanı DOSYA TABANLIDIR (tasarım §5.3 "Test ortamı", UY-10):
-        # Ağ Kataloğu veritabanını ayrı bir `mode=ro` bağlantısıyla açar ve
-        # bellek içi test veritabanını göremez. Dosya sistemin geçici
+        # Test veritabanı DOSYA TABANLIDIR (aile iskeletinden; orada gerekçe, ayrı
+        # `mode=ro` bağlantı açan ve F1a-2'de sökülen ağ kataloğuydu — ayar aynen
+        # korunur, bellek içi VT'ye geçiş ayrı karardır). Dosya sistemin geçici
         # dizinindedir: her `docker compose run` kabının kendi /tmp'si vardır,
         # paralel koşular aynı dosyayı paylaşmaz; depoya ve veri dizinine
         # (`backend/data/`) hiçbir şey yazılmaz.

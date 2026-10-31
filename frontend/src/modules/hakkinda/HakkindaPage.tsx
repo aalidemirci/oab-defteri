@@ -150,19 +150,13 @@ export default function HakkindaPage() {
             <h2 className="text-title-large font-semibold text-on-surface">Teknik Bilgiler</h2>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-body-medium text-on-surface-variant">
               <li>
-                Program çevrimdışı çalışır; veriler yalnız bu bilgisayarda tutulur. Program açılışta
-                internete çıkmaz. Dış istek yalnız sizin başlattığınız iki durumda gider: Ayarlar →
-                Güncelleme'de “Şimdi denetle” düğmesine bastığınızda yayımlanan son sürümü
-                GitHub&apos;dan soran anonim denetim ve — ayarlardan açtıysanız — bir kitabın
-                numarasından künye getiren ISBN sorgusu. İkincisi varsayılan olarak kapalıdır ve
-                dışarı yalnız kitabın numarasını gönderir. Hiçbir durumda kişisel veri dışarı
-                çıkmaz, Ağ Kataloğu ise internete hiç çıkmaz.
-              </li>
-              <li>
-                Ağ Kataloğu (varsayılan olarak kapalı) okul ağındaki bilgisayarlara ve tahtalara
-                yalnız künye, raf yeri ve nüshanın rafta ya da ödünçte olduğu bilgisini salt okur
-                sunar. Kişisel veri göstermez: üye, ödünç alan, iade tarihi ve ödünç geçmişi hiçbir
-                sayfasında yoktur; arama kaydedilmez, erişim günlüğü tutulmaz.
+                Program çevrimdışı çalışır; veriler yalnız bu bilgisayarda tutulur. Program ağ
+                servisi sunmaz: yönetim sunucusu yalnız 127.0.0.1&apos;de, rastgele portta ve oturum
+                belirteciyle dinler; hiçbir port okul ağına açılmaz. Dış istek yalnız kullanıcının
+                başlattığı güncelleme denetiminden çıkar: Ayarlar → Güncelleme&apos;de “Şimdi
+                denetle” düğmesine bastığınızda yayımlanan son sürümü GitHub&apos;dan soran anonim
+                denetim. Program açılışta internete çıkmaz; hiçbir durumda kişisel veri dışarı
+                çıkmaz.
               </li>
               <li>
                 Öğrenci, öğretmen ve diğer personelin ad-soyadları ile öğrencilerin okul numaraları

@@ -3,8 +3,9 @@
 # =============================================================================
 # `backend`/`frontend` servisleri yalnız test/geliştirme amaçlıdır; compose port
 # AÇMAZ, komutlar `docker compose run --rm backend|frontend ...` ile çalıştırılır.
-# Not: paketli program ağ servisi sunmaz; yönetim sunucusu masaüstü kabuğunda
-# açılır ve yalnız 127.0.0.1'de dinler (tasarım §4.1).
+# Not: Program ağ servisi sunmaz: yönetim sunucusu yalnız 127.0.0.1'de, rastgele
+# portta ve oturum belirteciyle dinler; hiçbir port okul ağına açılmaz. Dış istek
+# yalnız kullanıcının başlattığı güncelleme denetiminden çıkar (tasarım §4.1).
 # =============================================================================
 
 name: oab-defteri

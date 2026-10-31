@@ -2,7 +2,9 @@
 
 OAB Defteri okul-aile birliğinin işlerini okulun bilgisayarında yürüten,
 çevrimdışı bir masaüstü programıdır. Kayıtlar okulun bilgisayarında kalır.
-OAB Defteri ağ servisi sunmaz; yalnız 127.0.0.1'de dinler.
+Program ağ servisi sunmaz: yönetim sunucusu yalnız `127.0.0.1`'de, rastgele portta
+ve oturum belirteciyle dinler; hiçbir port okul ağına açılmaz. Dış istek yalnız
+kullanıcının başlattığı güncelleme denetiminden çıkar.
 
 ## Açık bildirimi
 
@@ -18,10 +20,12 @@ ayrıntıyı kamuya açık paylaşmamanızı rica ederim.
 
 ## Bildirimlere kişisel veri koymayın
 
-Bu program öğrenci ve personel verisi işler. Issue'lara, tartışmalara ve
-e-postalara **gerçek ad, okul numarası, kart numarası, veritabanı dosyası,
-yedek dosyası (`.odbak`), günlük dosyası ve gerçek veri içeren ekran
-görüntüsü koymayın**. Sorunu uydurma veriyle anlatın; gerekiyorsa verinin
+Bu program okul-aile birliğinin kayıtlarını işler: veli adı ve öğrencinin
+sınıfı, birlik organlarındaki ve personeldeki kişilerin adı ve görevi, birliğin
+mali kayıtları. Issue'lara, tartışmalara ve e-postalara **gerçek veli, öğrenci
+ya da personel adı, sınıf listesi, banka hesap özeti ya da hesap numarası,
+TEFBİS ya da e-Okul çıktısı, veritabanı dosyası, yedek dosyası (`.odbak`),
+günlük dosyası ve gerçek veri içeren ekran görüntüsü koymayın**. Sorunu uydurma veriyle anlatın; gerekiyorsa verinin
 biçimini tarif edin.
 
 ## Kapsam

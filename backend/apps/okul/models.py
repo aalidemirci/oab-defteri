@@ -1,7 +1,9 @@
 """`okul` modelleri — kurum künyesi, ders yılı/dönemler, kapalı günler, kişi sicilleri, şube kataloğu, içe aktarma.
 
-KS'den alındı (KS bunu DD'nin `apps/okul/models.py` kalıbından türetmişti);
-OAB Defteri için sadeleştirildi (tasarım §6.1, §12):
+Aile iskeletinden alındı (KS bunu DD'nin `apps/okul/models.py` kalıbından türetmişti;
+Kütüphane iskeleti kendi tasarımının §6.1 ve §12'sine göre sadeleştirdi). OAB'deki
+yeri ve değişecek alanları OAB tasarımının §12.B'sindedir (öğrenci ve kütüphane
+alanları F1b'de düşer):
 
 - `Student`: yalnız ad-soyad + okul no + sınıf/şube + durum + ayrılış tarihi.
   TCKN, veli ve cinsiyet alanları YOKTUR (tasarım §6.1 — en iyi KVKK önlemi
@@ -106,8 +108,8 @@ class SchoolConfig(BaseModel):
         "bilgisayarın demirbaş no'su", max_length=64, blank=True, default=""
     )
     yol_haritasi = models.JSONField("başlangıç yol haritası işaretleri", default=dict, blank=True)
-    # F5 (tasarım §6.1, §5.1): Ağ Kataloğunun "Hakkında" sayfasında gösterilir
-    # (`od_katalog_okul` görünümü). Serbest metin; kişisel veri İÇERMEZ.
+    # Aile iskeletinden kalan alan: okunduğu ağ kataloğu F1a-2'de söküldü; alan
+    # F1b'de göçle düşer (tasarım §12.B). Serbest metin; kişisel veri İÇERMEZ.
     kutuphane_saatleri = models.TextField(
         "kütüphane saatleri", max_length=500, blank=True, default=""
     )

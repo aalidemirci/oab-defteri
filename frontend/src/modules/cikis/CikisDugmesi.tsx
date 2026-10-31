@@ -126,10 +126,7 @@ export function CikisDiyalogu({ open, onClose, parolaIle }: CikisDiyaloguProps) 
           </>
         ) : (
           <>
-            <p>
-              Program kapanır; Ağ Kataloğu da kapanır. Pencerenin çarpısı programı kapatmaz, yalnız
-              gizler.
-            </p>
+            <p>Program kapanır. Pencerenin çarpısı da programı aynı biçimde kapatır.</p>
             {hata && (
               <p role="alert" className="text-body-medium text-error">
                 {hata}

@@ -72,17 +72,21 @@ describe("HakkindaPage", () => {
     expect(screen.queryByText(/fotoğraf/i)).not.toBeInTheDocument();
   });
 
-  it("dış isteğin iki kapıdan çıktığını söyler (açılışta istek yok, ISBN sorgusu kapalı)", () => {
+  it("ağ servisi sunmadığını ve dış isteğin tek kapıdan çıktığını söyler (tasarım §4.1)", () => {
     render(<HakkindaPage />);
 
-    expect(screen.getByText(/Program açılışta internete çıkmaz\./)).toBeInTheDocument();
-    expect(screen.getByText(/“Şimdi denetle” düğmesine bastığınızda/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Program ağ\s+servisi sunmaz: yönetim sunucusu yalnız 127\.0\.0\.1'de/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/hiçbir port okul ağına açılmaz/)).toBeInTheDocument();
+    expect(screen.getByText(/Program açılışta internete çıkmaz;/)).toBeInTheDocument();
+    expect(screen.getByText(/“Şimdi\s+denetle” düğmesine bastığınızda/)).toBeInTheDocument();
     // Kullanıcı kararı (27.09.2026): denetimin hedefi GitHub'dır (T11).
-    expect(screen.getByText(/son sürümü\s+GitHub'dan soran anonim denetim/)).toBeInTheDocument();
-    // U13 (tasarım §8.5): ikinci kapı ve varsayılan kapalı olduğu yazılı olmalı.
-    expect(screen.getByText(/ISBN sorgusu/)).toBeInTheDocument();
-    expect(screen.getByText(/varsayılan olarak kapalıdır/)).toBeInTheDocument();
-    expect(screen.getByText(/kişisel veri dışarı çıkmaz/)).toBeInTheDocument();
+    expect(screen.getByText(/son sürümü GitHub'dan soran anonim\s+denetim/)).toBeInTheDocument();
+    expect(screen.getByText(/kişisel veri dışarı\s+çıkmaz/)).toBeInTheDocument();
+    // Aile iskeletinin ikinci kapısı (ISBN künye sorgusu) ve Ağ Kataloğu yoktur.
+    expect(screen.queryByText(/ISBN/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Ağ Kataloğu/)).not.toBeInTheDocument();
   });
 
   it("üçüncü taraf kartı LGPL kitaplıkların telif bildirimini ve lisans dosyalarını verir", () => {
@@ -107,14 +111,5 @@ describe("HakkindaPage", () => {
     }
     // Sözlük: "kurucu" / "yükleyici" kullanıcı metninde geçmez.
     expect(screen.queryByText(/kurucu|yükleyici/i)).not.toBeInTheDocument();
-  });
-
-  it("Ağ Kataloğunun kişisel veri göstermediğini söyler (sözlük: bunu Hakkında söyler)", () => {
-    render(<HakkindaPage />);
-
-    expect(screen.getByText(/Ağ Kataloğu \(varsayılan olarak kapalı\)/)).toHaveTextContent(
-      "Kişisel veri göstermez",
-    );
-    expect(screen.getByText(/Ağ Kataloğu ise\s+internete hiç çıkmaz/)).toBeInTheDocument();
   });
 });
