@@ -25,11 +25,11 @@ import SaklamaKartlari from "../saklama/SaklamaKartlari";
 import RaporKartlari from "../raporlar/RaporKartlari";
 import SayimKarti from "../sayim/SayimKarti";
 import type { RoadmapManualItem, SetupStatus } from "../okul/api";
-import DolasimKartlari from "../uyelik/DolasimKartlari";
 import { ILISIK_LISTESI_ADRESI, ILISIK_LISTESI_BASLIGI } from "../yil/api";
 import YilAkisiKartlari from "../yil/YilAkisiKartlari";
 import AyrilisHavuzuKarti from "./AyrilisHavuzuKarti";
 import BaslangicYolHaritasi from "./BaslangicYolHaritasi";
+import SonOturumKarti from "./SonOturumKarti";
 
 export default function PanelPage() {
   const snackbar = useSnackbar();
@@ -92,9 +92,8 @@ export default function PanelPage() {
           onGizle={() => void gizle()}
         />
       )}
-      {/* F6: beklenmedik kapanışta "Son Oturumu Kontrol Edin" ve gecikme varsa
-          "Gecikmiş Ödünçler" (yalnız sayı; liste yönetici kipinde — A11, T15). */}
-      <DolasimKartlari />
+      {/* T15 (§13 D4): beklenmedik kapanıştan sonra "Son Oturumu Kontrol Edin". */}
+      <SonOturumKarti />
       {/* Havuz boşsa görünmez; yalnız sayı okunur (F1 eki 7). */}
       <AyrilisHavuzuKarti />
       {/* F7: yıl sonu (Mayıs-Haziran) ve yıl başı pencerelerinde kart; yalnız sayı (§8.3). */}

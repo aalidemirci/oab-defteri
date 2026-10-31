@@ -1,7 +1,7 @@
 """Kök URL yapılandırması — tüm API `/api/v1/` altında (kebab-case, çoğul kaynak).
 
 Sonda SPA catch-all durur: masaüstü penceresi kök URL'yi açar ve istemci-tarafı
-rotalar (`/katalog/12` gibi) sunucuda tanımlı DEĞİLDİR — hepsi `index.html`'e
+rotalar (`/ayarlar` gibi) sunucuda tanımlı DEĞİLDİR — hepsi `index.html`'e
 düşer, gerisini React yönlendiricisi çözer. `api/` ve `static/` ön ekleri dışarıda
 bırakılır; aksi hâlde var olmayan bir API ucu 404 yerine HTML döner ve istemci onu
 JSON sanar.
@@ -15,7 +15,6 @@ from django.urls import URLPattern, URLResolver, include, path, re_path
 
 urlpatterns: list[URLPattern | URLResolver] = [
     path("api/v1/", include("apps.okul.urls")),
-    path("api/v1/", include("apps.kutuphane.urls")),
 ]
 
 

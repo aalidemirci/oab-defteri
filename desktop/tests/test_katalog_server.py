@@ -1210,36 +1210,6 @@ def test_autotest_gercek_acilista_katalogu_kaldirir(tmp_path: Path) -> None:
 # ------------------------------------------------------ koruma testleri §5.10-1
 
 
-@pytest.mark.parametrize("host", [TUM_ARAYUZ, "", "localhost", "192.168.1.5", "::"])
-def test_yonetim_sunucusu_yalniz_varsayilan_hostu_kabul_eder(host: str) -> None:
-    assert DEFAULT_HOST == "127.0.0.1"
-
-    with pytest.raises(ValueError, match="127.0.0.1"):
-        BackgroundServer(_uygulama({}, ("200 OK", b"")), host=host)
-
-
-def test_yonetim_sunucusu_varsayilan_hostla_kurulur() -> None:
-    sunucu = BackgroundServer(_uygulama({}, ("200 OK", b"")), host=DEFAULT_HOST)
-
-    assert sunucu.base_url.startswith("http://127.0.0.1:")
-
-
-def test_main_yonetim_sunucusunu_host_vermeden_kurar() -> None:
-    agac = ast.parse((DESKTOP_DIR / "main.py").read_text(encoding="utf-8"))
-    cagrilar = [
-        dugum
-        for dugum in ast.walk(agac)
-        if isinstance(dugum, ast.Call)
-        and isinstance(dugum.func, ast.Name)
-        and dugum.func.id == "BackgroundServer"
-    ]
-
-    assert cagrilar, "main.py yönetim sunucusunu kurmuyor (desen değişti mi)"
-    for cagri in cagrilar:
-        assert not any(k.arg == "host" for k in cagri.keywords)
-        assert len(cagri.args) == 1  # yalnız uygulama; host konumsal da verilmez
-
-
 # Taranan üretim kaynakları: masaüstü kabuğu, paket giriş noktası, backend ayarları
 # ve katalog paketi. Testler kapsam dışıdır (bu dosya adresi bilerek yazar).
 _TARANAN_KOKLER = (
@@ -1293,19 +1263,6 @@ def test_tum_arayuz_adresi_yalniz_katalog_sunucusunda_gecer() -> None:
     assert bulunan == []
 
 
-def test_yonetim_sunucusu_kaynaginda_tum_arayuz_adresi_hic_gecmez() -> None:
-    """`server.py`'de yorum dahil hiçbir yerde geçmez (ham metin taraması)."""
-    assert TUM_ARAYUZ not in (DESKTOP_DIR / "server.py").read_text(encoding="utf-8")
-
-
-def test_tum_arayuz_taramasi_muafiyet_disini_yakalar() -> None:
-    """Tarayıcının kendisi: muaf atama geçer; başka ad, dosya ya da belge dizesi yakalanır."""
-    kaynak = '"""0.0.0.0 belgede"""\nX = "0.0.0.0"\n_EMPTY_VERSIONS = {"", "0.0.0.0"}\n'
-
-    assert _tum_arayuz_metinleri("desktop/window.py", kaynak) == [1, 2]
-    assert _tum_arayuz_metinleri("desktop/main.py", kaynak) == [1, 2, 3]
-
-
 def test_katalog_sunucusunda_tum_arayuz_adresi_yalniz_sabit_olarak_gecer() -> None:
     """`0.0.0.0` yalnız TEK bir sabitte yazılıdır; kullanım yerleri sabite atıf yapar."""
     kaynak = (DESKTOP_DIR / "katalog_server.py").read_text(encoding="utf-8")
@@ -1345,22 +1302,6 @@ def test_tum_arayuz_sabiti_yalniz_katalog_sunucusunda_kullanilir() -> None:
 
     assert kullanim, "sabit hiç kullanılmıyor (dinleme kipi bağlanmamış)"
     assert set(kullanim) == {"desktop/katalog_server.py"}
-
-
-def test_diger_tum_arayuz_bicimleri_uretim_kaynaginda_yok() -> None:
-    """IPv6 `::`, boş host ve `INADDR_ANY` de tüm arayüzlere bağlanır."""
-    bulunan: list[str] = []
-    for dosya in _uretim_kaynaklari():
-        for dugum in ast.walk(ast.parse(dosya.read_text(encoding="utf-8"))):
-            if isinstance(dugum, ast.Constant) and dugum.value in {"::", "::0"}:
-                bulunan.append(f"{dosya.name}:{dugum.lineno}")
-            if isinstance(dugum, ast.Attribute) and dugum.attr in {"INADDR_ANY", "IN6ADDR_ANY"}:
-                bulunan.append(f"{dosya.name}:{dugum.lineno}")
-            if isinstance(dugum, ast.keyword) and dugum.arg == "host":
-                if isinstance(dugum.value, ast.Constant) and dugum.value.value == "":
-                    bulunan.append(f"{dosya.name}:{dugum.value.lineno}")
-
-    assert bulunan == []
 
 
 def test_autotest_kipinde_katalog_kalkmazsa_6_doner(

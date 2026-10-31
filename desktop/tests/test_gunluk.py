@@ -182,7 +182,7 @@ def test_gercek_bakim_kapisi_ile_is_uçusta_sayilir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2] / "backend"))
-    from katalog.bakim import BakimKapisi
+    from shared.bakim import BakimKapisi
 
     kapi_nesnesi = BakimKapisi()
     goruldu: list[int] = []
@@ -192,6 +192,46 @@ def test_gercek_bakim_kapisi_ile_is_uçusta_sayilir(
     assert kapi.tik() == ["sayac"]
     assert goruldu == [1]
     assert kapi_nesnesi.ucusta == 0
+
+
+def test_geri_yukleme_surerken_gun_isi_baslamaz(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§13 D3: canlı geri yükleme ortak kapıyı kapatınca günlük yedek başlamaz;
+    kapı açılınca (geri yükleme başarısız) iş bir sonraki tikte koşar."""
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2] / "backend"))
+    from shared import bakim
+
+    kapi_nesnesi = bakim.BakimKapisi()
+    monkeypatch.setattr(bakim, "KAPI", kapi_nesnesi)
+    cagrilar: list[str] = []
+    # `bakim_girisi` verilmez: varsayılan giriş ortak kapıdır (`shared.bakim.KAPI`).
+    kapi = _kapi(tmp_path, _Gun(date(2026, 9, 24)), bakim_girisi=None)
+    kapi.kaydet("gunluk-yedek", lambda: _ekle(cagrilar, "yedek"))
+
+    assert kapi_nesnesi.bakima_al(bekleme_sn=0.1) is True  # geri yükleme başladı
+    assert kapi.tik() == []
+    assert cagrilar == []
+    assert "gunluk-yedek" not in kapi.damgalar()
+
+    kapi_nesnesi.bakimdan_cik()
+    assert kapi.tik() == ["gunluk-yedek"]
+    assert cagrilar == ["yedek"]
+
+
+def test_bakim_kapisi_bulunamazsa_is_izinli_sayilmaz(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Aile iskeletindeki sessiz "her zaman izinli" düşüşü yoktur (§13 D3)."""
+    import sys
+
+    monkeypatch.setitem(sys.modules, "shared.bakim", None)  # içe aktarma ImportError verir
+    cagrilar: list[str] = []
+    kapi = _kapi(tmp_path, _Gun(date(2026, 9, 24)), bakim_girisi=None)
+    kapi.kaydet("gunluk-yedek", lambda: _ekle(cagrilar, "yedek"))
+
+    assert kapi.tik() == []
+    assert cagrilar == []
 
 
 def test_her_isten_sonra_is_parcaciginin_baglantilari_kapatilir(tmp_path: Path) -> None:

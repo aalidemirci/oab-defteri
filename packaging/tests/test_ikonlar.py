@@ -89,8 +89,8 @@ def test_ico_her_boyutu_kendi_karesiyle_tasir() -> None:
         assert kare.tobytes() == _png(boyut).tobytes(), f".ico {boyut} px ≠ PNG kesimi"
 
 
-def test_tepsinin_okudugu_kare_en_buyuk_boyuttur() -> None:
-    """`desktop/tray.py::load_icon_image` `.ico`'yu açar: Pillow en büyük kareyi verir."""
+def test_pencere_simgesinin_okudugu_kare_en_buyuk_boyuttur() -> None:
+    """`desktop/qt_kurulum.py::load_icon_image` `.ico`'yu açar: Pillow en büyük kareyi verir."""
     with Image.open(ICO) as ico:
         assert ico.size == (256, 256)
         assert ico.convert("RGBA").tobytes() == _png(256).tobytes()
@@ -224,12 +224,12 @@ def test_linux_yuzeyleri_hicolor_boyutlarini_depodan_kurar() -> None:
     """`.deb` (build.sh) ve taşınabilir arşiv (kur.sh) aynı boyutları kurar; tema adı tek.
 
     Pencere simgesi de bu temadan gelir: `prepare_qt_application` uygulamaya
-    `QIcon.fromTheme(THEME_ICON_NAME)` atar (davranış testi `desktop/tests/test_tray.py`).
+    `QIcon.fromTheme(THEME_ICON_NAME)` atar (davranış testi `desktop/tests/test_qt_kurulum.py`).
     """
     tema_adi = "oab-defteri"
-    tepsi = _metin("desktop/tray.py")
-    assert f'THEME_ICON_NAME: Final = "{tema_adi}"' in tepsi
-    assert "app.setWindowIcon(_qt_icon(qt, icon_path))" in tepsi
+    qt_kurulum = _metin("desktop/qt_kurulum.py")
+    assert f'THEME_ICON_NAME: Final = "{tema_adi}"' in qt_kurulum
+    assert "app.setWindowIcon(_qt_icon(qt, icon_path))" in qt_kurulum
     assert re.search(
         rf"^Icon={tema_adi}$", _metin("packaging/linux/oab-defteri.desktop"), re.M
     )

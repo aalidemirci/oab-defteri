@@ -14,8 +14,8 @@ koşar, her işin son çalıştığı günü damga dosyasında tutar ve günü e
   Bir iş `False` döner ya da istisna yükseltirse damgası yazılmaz ve bir saat
   sonra yeniden denenir (ör. yönetici parolası kurulmadan yedek alınamaz).
   Tarih YEREL gündür (`date.today()`, `Europe/Istanbul`); saat taklit edilebilir.
-* **Bakım kapısı** (§5.3): her iş ortak bakım kapısından geçer
-  (`katalog.bakim.KAPI.is_()`); geri yükleme sürerken iş başlamaz, başlamış iş
+* **Bakım kapısı** (§13 D3): her iş ortak bakım kapısından geçer
+  (`shared.bakim.KAPI.is_()`); geri yükleme sürerken iş başlamaz, başlamış iş
   bitene dek geri yükleme bekler. İş bitince bu iş parçacığının Django
   bağlantıları kapatılır: açık kalan bir bağlantı Windows'ta geri yüklemedeki
   dosya takasını bozardı.
@@ -52,7 +52,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Iterator
-from contextlib import AbstractContextManager, contextmanager, nullcontext
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -244,11 +244,15 @@ def acik_kalma_saati(platform: str = sys.platform) -> float:
 
 
 def varsayilan_bakim_girisi() -> BakimKapisiGirisi:
-    """Ortak bakım kapısı (`katalog.bakim.KAPI.is_`); yoksa her zaman izinli."""
-    try:
-        from katalog.bakim import KAPI
-    except ImportError:
-        return lambda: nullcontext(True)
+    """Ortak bakım kapısı (`shared.bakim.KAPI.is_`; tasarım §13 D3).
+
+    Düşüş yolu YOKTUR: kapı bulunamazsa iş "her zaman izinli" sayılmaz, hata
+    yükselir ve iş bir saat sonra yeniden denenir (geri yükleme ile gün işleri
+    dışlaşmadan iş koşmaz). İçe aktarma çağrı anındadır: backend dizini
+    `sys.path`'e `prepare_django` ile girer.
+    """
+    from shared.bakim import KAPI
+
     return KAPI.is_
 
 
@@ -378,8 +382,9 @@ class GunDegisimiKapisi:
         return biten
 
     def _calistir(self, is_: IsKaydi) -> bool:
-        giris = self._bakim_girisi or varsayilan_bakim_girisi()
         try:
+            # Kapı bulunamazsa (ImportError) iş koşmaz; bir saat sonra yeniden denenir.
+            giris = self._bakim_girisi or varsayilan_bakim_girisi()
             with giris() as izin:
                 if not izin:
                     logger.info("Gün değişimi işi bakım nedeniyle ertelendi: %s", is_.ad)

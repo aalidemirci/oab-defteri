@@ -30,38 +30,8 @@ yüzden çıkışta `icon.stop()` ŞARTTIR: çağrılmazsa pencere kapansa da s�
 kalır, mutex'ler bırakılmaz ve kurucu 30 sn bekleyip "tepsiden Çık'ı seçin"
 der. Menü geri çağrıları o iş parçacığında koşar.
 
-**Linux — Qt `QSystemTrayIcon` (PySide6).** Qt arayüz nesneleri yalnız
-`QApplication`'ın iş parçacığında yaşar ve `webview.start()` ana iş parçacığını
-Qt olay döngüsüyle tutar. Tepsi bu yüzden ANA iş parçacığında, `webview.start`'tan
-ÖNCE kurulur. pywebview 5.3.2'nin Qt arka ucu uygulamayı `QApplication.instance()
-or QApplication(sys.argv)` ile alır (`platforms/qt.py`: `setup_app` ve
-`create_window`; kaynaktan doğrulandı): burada kurulan örnek aynen kullanılır.
-Üç kural:
-
-- **Bağlayıcı PySide6'dır** (LGPLv3; GPLv3'lü PyQt5'ten 23.09.2026'da çıkıldı —
-  `packaging/requirements-paketleme.txt` başlığı). pywebview bağlayıcıya `qtpy`
-  üzerinden ulaşır ve qtpy kurulu ilk bağlayıcıyı seçer; seçim `QT_API` ile
-  `load_qt` içinde, ilk `import qtpy`'den önce sabitlenir.
-- `QtWebEngineWidgets`, `QApplication` kurulmadan ÖNCE içe aktarılmalıdır: bu
-  import `Qt::AA_ShareOpenGLContexts` özniteliğini kurar. Sonraya kalırsa Qt
-  "Attribute Qt::AA_ShareOpenGLContexts must be set before QCoreApplication is
-  created" uyarısı basar ve OpenGL bağlam paylaşımı kurulmaz. `load_qt` sırayı
-  uygular.
-- `setQuitOnLastWindowClosed(False)`: pencere gizliyken kapanan bir iletişim
-  kutusu "son pencere kapandı" sayılıp programı sonlandırmasın. pywebview son
-  pencere gerçekten kapanınca döngüyü kendisi bitirir (`_app.exit()`).
-
-Uygulamanın pencere simgesi de burada atanır (`prepare_qt_application`); tepsi
-kurulamasa da pencere program simgesini taşır.
-
-`isSystemTrayAvailable()` yanlışsa (tepsisiz GNOME) tepsi kurulmaz; pencere
-çarpıda küçültülür (`WindowController`, okulzili yedeği).
-
-**Linux oturum kapanışı.** Oturum kapanırken süreç SIGTERM alır; varsayılan
-davranış sessiz ölümdür ve temiz kapanış işareti (T15) yazılmazdı — Windows'taki
-`install_session_end_passthrough`'un karşılığı yoktu. Qt döngüsü C++'ta
-beklerken Python sinyal işleyicisi koşamaz; kısa aralıklı bir `QTimer` yorumlayıcıya
-sıra verir ve işaretlenen istek "Çık" yoluna çevrilir.
+**Linux.** Tepsi yoktur; Qt kurulumu ve SIGTERM köprüsü `desktop/qt_kurulum.py`'ye
+ayrıldı (tasarım §13 D1). Bu modülün tamamı F1a-2'nin söküm adımında kalkar (T6).
 
 Tepsi kurulamazsa program yine çalışır; neden günlüğe yazılır.
 """
@@ -69,22 +39,17 @@ Tepsi kurulamazsa program yine çalışır; neden günlüğe yazılır.
 from __future__ import annotations
 
 import importlib
-import io
 import logging
-import os
-import signal
 import sys
 import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from types import FrameType, MappingProxyType, SimpleNamespace
-from typing import TYPE_CHECKING, Any, Final, Protocol
+from types import MappingProxyType
+from typing import Any, Final, Protocol
 
+from desktop.qt_kurulum import load_icon_image
 from desktop.window import app_icon_path
-
-if TYPE_CHECKING:
-    from PIL import Image
 
 logger = logging.getLogger("oab_defteri.tepsi")
 
@@ -92,15 +57,6 @@ MENU_SHOW: Final = "Pencereyi aç"
 MENU_QUIT: Final = "Çık"
 TRAY_NAME: Final = "oab-defteri"
 TRAY_TITLE: Final = "OAB Defteri"
-#: .deb'in kurduğu hicolor tema ikonu (packaging/linux/build.sh).
-THEME_ICON_NAME: Final = "oab-defteri"
-_FALLBACK_ICON_COLOR: Final = "#1f4e79"
-_FALLBACK_ICON_SIZE: Final = 64
-#: SIGTERM'in Qt döngüsünde fark edilme aralığı.
-_SIGNAL_POLL_MS: Final = 500
-#: Linux Qt bağlayıcısı (LGPLv3). Python paketi ve qtpy'nin `QT_API` değeri.
-QT_PACKAGE: Final = "PySide6"
-QT_BINDING: Final = "pyside6"
 
 
 MENU_KATALOG_AC: Final = "Ağ Kataloğunu aç"
@@ -362,20 +318,6 @@ def _guarded(text: str, action: Callable[[], None]) -> Callable[..., None]:
     return run
 
 
-def load_icon_image(icon_path: Path | None) -> Image.Image:
-    """Tepsi simgesi: uygulama ikonu (.ico'nun en büyük boyutu) ya da düz renk yedek."""
-    from PIL import Image
-
-    if icon_path is not None:
-        try:
-            with Image.open(icon_path) as source:
-                return source.convert("RGBA")
-        except OSError:
-            logger.warning("Tepsi ikonu okunamadı: %s", icon_path, exc_info=True)
-    size = (_FALLBACK_ICON_SIZE, _FALLBACK_ICON_SIZE)
-    return Image.new("RGBA", size, _FALLBACK_ICON_COLOR)
-
-
 class NullTray:
     """Tepsi yok (desteklenmeyen platform)."""
 
@@ -501,196 +443,6 @@ class PystrayTray:
             logger.warning("Sistem tepsisi kapatılamadı.", exc_info=True)
 
 
-def load_qt() -> SimpleNamespace:
-    """PySide6 sınıfları; `QtWebEngineWidgets` `QApplication`'dan ÖNCE yüklenir (modül belgesi).
-
-    Bağlayıcı seçimi burada sabitlenir: qtpy kararını ilk `import qtpy` anında
-    verir ve o an pywebview'ın Qt arka ucu yüklenirken gelir — tepsi ondan önce
-    kurulduğu için değişken burada yazılabilir. `setdefault`, dışarıdan verilmiş
-    bir seçimi ezmez (sahada teşhis için).
-    """
-    os.environ.setdefault("QT_API", QT_BINDING)
-    importlib.import_module(f"{QT_PACKAGE}.QtWebEngineWidgets")
-    qt_core = importlib.import_module(f"{QT_PACKAGE}.QtCore")
-    qt_gui = importlib.import_module(f"{QT_PACKAGE}.QtGui")
-    qt_widgets = importlib.import_module(f"{QT_PACKAGE}.QtWidgets")
-    return SimpleNamespace(
-        QApplication=qt_widgets.QApplication,
-        QSystemTrayIcon=qt_widgets.QSystemTrayIcon,
-        QMenu=qt_widgets.QMenu,
-        QIcon=qt_gui.QIcon,
-        QPixmap=qt_gui.QPixmap,
-        QTimer=qt_core.QTimer,
-    )
-
-
-def prepare_qt_application(qt: Any, icon_path: Path | None = None) -> Any:
-    """pywebview'ın da kullanacağı tek `QApplication` örneği (ana iş parçacığında).
-
-    **Pencere simgesi.** pywebview'a `icon=` verilmez; Qt penceresi simgesini
-    `QApplication.windowIcon()`'dan alır. Burada atanmazsa pencerenin simgesi
-    boş kalır ve X11'de `_NET_WM_ICON` yazılmaz: simgeyi pencereden okuyan
-    masaüstlerinde (XFCE görev listesi, Alt+Tab) genel simge görünür. Tema
-    simgesi hicolor 16…256'yı, yani elle çizilmiş 16/24/32'yi de verir (tasarım
-    §14.1 F12 ekleri L-1). Simge atanamazsa program sürer, günlüğe yazılır.
-    """
-    app = qt.QApplication.instance()
-    if app is None:
-        # pywebview `platforms/qt.py` içe aktarılırken aynısını yapar (bazı
-        # dağıtımlarda geçersiz stil uyarısı); uygulama artık ondan ÖNCE kurulduğu
-        # için değişken burada, kurulumdan önce yazılır.
-        os.environ["QT_STYLE_OVERRIDE"] = ""
-        app = qt.QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False)
-    try:
-        # QIcon/QPixmap uygulama örneği kurulmadan yaratılamaz: sıra bu.
-        app.setWindowIcon(_qt_icon(qt, icon_path))
-    except Exception:  # noqa: BLE001 — simgesiz pencere de açılır
-        logger.warning("Pencere simgesi atanamadı.", exc_info=True)
-    return app
-
-
-def _qt_icon(qt: Any, icon_path: Path | None) -> Any:
-    """Tema ikonu (.deb) → yoksa .ico Pillow ile PNG'ye çevrilir (Qt'nin ico eklentisi gerekmez)."""
-    themed = qt.QIcon.fromTheme(THEME_ICON_NAME)
-    if not themed.isNull():
-        return themed
-    buffer = io.BytesIO()
-    load_icon_image(icon_path).save(buffer, format="PNG")
-    pixmap = qt.QPixmap()
-    pixmap.loadFromData(buffer.getvalue(), "PNG")
-    return qt.QIcon(pixmap)
-
-
-SignalInstaller = Callable[..., Any]
-
-
-class QtTray:
-    """Linux tepsisi (Qt, ana iş parçacığı) + SIGTERM → "Çık" köprüsü."""
-
-    def __init__(
-        self,
-        actions: TrayActions,
-        *,
-        icon_path: Path | None = None,
-        qt_loader: Callable[[], Any] = load_qt,
-        signal_installer: SignalInstaller = signal.signal,
-    ) -> None:
-        self._actions = actions
-        self._icon_path = icon_path
-        self._qt_loader = qt_loader
-        self._install_signal = signal_installer
-        self._qt: Any | None = None
-        self._tray: Any | None = None
-        self._menu: Any | None = None
-        self._timer: Any | None = None
-        self._previous_sigterm: Any | None = None
-        self._termination_requested = threading.Event()
-        self._qt_eylemleri: dict[str, Any] = {}
-
-    @property
-    def available(self) -> bool:
-        return self._tray is not None
-
-    def start(self) -> bool:
-        try:
-            qt = self._qt_loader()
-            app = prepare_qt_application(qt, self._icon_path)
-        except Exception:  # noqa: BLE001 — Qt yoksa pencere de açılmaz; hata orada söylenir
-            logger.warning("Qt yüklenemedi; sistem tepsisi kurulmadı.", exc_info=True)
-            return False
-        self._qt = qt
-        self._watch_termination(qt)
-        if not qt.QSystemTrayIcon.isSystemTrayAvailable():
-            logger.warning(
-                "Masaüstünde sistem tepsisi yok; pencere çarpıda küçültülecek, program kapanmayacak."
-            )
-            return False
-        try:
-            tray = qt.QSystemTrayIcon(_qt_icon(qt, self._icon_path), app)
-            tray.setToolTip(TRAY_TITLE)
-            menu = qt.QMenu()
-            eylemler: dict[str, Any] = {}
-            for oge in menu_durumu(self._actions):
-                eylem = menu.addAction(oge.metin)
-                eylem.triggered.connect(_guarded(oge.kod, _komut_eylemi(self._actions, oge.kod)))
-                eylemler[oge.kod] = eylem
-            self._qt_eylemleri = eylemler
-            self.menuyu_guncelle()
-            # Qt menüyü her açılışta yeniden çizebilir: kip ve katalog durumu o an okunur.
-            menu.aboutToShow.connect(self.menuyu_guncelle)
-            tray.setContextMenu(menu)
-            tray.activated.connect(self._on_activated)
-            tray.show()
-        except Exception:  # noqa: BLE001 — tepsisiz de çalışılır
-            logger.warning("Sistem tepsisi kurulamadı; program tepsisiz sürüyor.", exc_info=True)
-            return False
-        # Menü nesnesi Python tarafında tutulmazsa çöp toplayıcı onu siler.
-        self._tray, self._menu = tray, menu
-        logger.info("Sistem tepsisi hazır.")
-        return True
-
-    def menuyu_guncelle(self, *_sinyal: object) -> None:
-        """Menü açılırken: kip matrisine göre metin, görünürlük ve tıklanabilirlik."""
-        try:
-            for oge in menu_durumu(self._actions):
-                eylem = self._qt_eylemleri.get(oge.kod)
-                if eylem is None:
-                    continue
-                eylem.setText(oge.metin)
-                eylem.setVisible(oge.gorunur)
-                eylem.setEnabled(oge.etkin)
-        except Exception:  # noqa: BLE001 — menü eski hâliyle kalır
-            logger.warning("Tepsi menüsü güncellenemedi.", exc_info=True)
-
-    def _on_activated(self, reason: Any) -> None:
-        tray_class = self._qt.QSystemTrayIcon if self._qt is not None else None
-        if tray_class is not None and reason in (tray_class.Trigger, tray_class.DoubleClick):
-            _guarded(MENU_SHOW, _komut_eylemi(self._actions, KOMUT_PENCERE))()
-
-    # ------------------------------------------------------------ SIGTERM köprüsü
-
-    def _watch_termination(self, qt: Any) -> None:
-        try:
-            self._previous_sigterm = self._install_signal(signal.SIGTERM, self._on_sigterm)
-        except (ValueError, OSError):  # ana iş parçacığı dışında kurulamaz
-            logger.warning("SIGTERM işleyicisi kurulamadı.", exc_info=True)
-            return
-        timer = qt.QTimer()
-        timer.timeout.connect(self.poll_termination)
-        timer.start(_SIGNAL_POLL_MS)
-        self._timer = timer
-
-    def _on_sigterm(self, _signum: int, _frame: FrameType | None) -> None:
-        self._termination_requested.set()
-
-    def poll_termination(self) -> None:
-        """Qt zamanlayıcısından: SIGTERM geldiyse "Çık" yolunu çalıştırır."""
-        if not self._termination_requested.is_set():
-            return
-        self._termination_requested.clear()
-        logger.info("Oturum kapanıyor (SIGTERM); program düzenli kapanıyor.")
-        _guarded(MENU_QUIT, self._actions.quit)()
-
-    def stop(self) -> None:
-        tray, self._tray = self._tray, None
-        self._menu = None
-        timer, self._timer = self._timer, None
-        if timer is not None:
-            timer.stop()
-        if self._previous_sigterm is not None:
-            try:
-                self._install_signal(signal.SIGTERM, self._previous_sigterm)
-            except (ValueError, OSError):
-                pass
-            self._previous_sigterm = None
-        if tray is not None:
-            try:
-                tray.hide()
-            except Exception:  # noqa: BLE001 — çıkış sürmeli
-                logger.warning("Sistem tepsisi gizlenemedi.", exc_info=True)
-
-
 def start_tray(
     actions: TrayActions,
     *,
@@ -699,16 +451,13 @@ def start_tray(
 ) -> Tray:
     """Platforma uygun tepsiyi kurar. Nesne her durumda döner; `available` sonucu söyler.
 
-    Linux'ta tepsi kurulamasa da nesne SIGTERM köprüsünü taşır: `stop()` ŞART.
+    Windows'ta `stop()` ŞART (pystray iş parçacığı daemon değildir).
     """
     path = icon_path if icon_path is not None else app_icon_path()
-    tray: PystrayTray | QtTray
-    if platform == "win32":
-        tray = PystrayTray(actions, icon_path=path)
-    elif platform.startswith("linux"):
-        tray = QtTray(actions, icon_path=path)
-    else:
+    if platform != "win32":
+        # Linux'ta Qt kurulumu ve SIGTERM köprüsü `desktop/qt_kurulum.py`'dedir.
         logger.info("Bu platformda sistem tepsisi yok (%s).", platform)
         return NullTray()
+    tray = PystrayTray(actions, icon_path=path)
     tray.start()
     return tray

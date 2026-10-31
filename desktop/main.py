@@ -57,7 +57,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
-from desktop import guvenlik_duvari
+from desktop import guvenlik_duvari, qt_kurulum
 from desktop.backup import (
     daily_backup,
     encrypt_legacy_backups,
@@ -322,13 +322,16 @@ def run_window_session(
 ) -> None:
     """Tepsi + kanal + pencere; "Çık" gelene dek bloklar (ANA iş parçacığında).
 
-    Tepsi pencereden ÖNCE kurulur: Linux'ta Qt tepsisi ana iş parçacığında ve
-    `webview.start`'tan önce kurulmak zorundadır (desktop/tray.py). Çıkışta
+    Linux'ta Qt uygulaması ana iş parçacığında ve `webview.start`'tan önce
+    kurulmak zorundadır (desktop/qt_kurulum.py); tepsi de pencereden önce. Çıkışta
     kanal ve tepsi her durumda kapatılır; `icon.stop()` atlanırsa süreç asılı
     kalırdı. Arayüzdeki Çık (`POST app/quit/`) aynı denetçiye bağlıdır
     (`masaustu_kanca`); tepsisiz Linux masaüstünün çıkış yolu odur (TB13).
     """
     controller = WindowController(platform=platform)
+    # Linux: Qt uygulaması ve SIGTERM köprüsü pencereden ÖNCE, ana iş parçacığında
+    # (§4.2 adım 11; tepsiden ayrıldı — §13 D1).
+    qt = qt_kurulum.hazirla(controller.request_quit) if platform.startswith("linux") else None
     tray = start_tray(tepsi_eylemleri(controller, kontrol), platform=platform)
     controller.tray_available = tray.available
     _kancalari_kaydet(cikis=cikis_kancasi(controller))
@@ -345,6 +348,8 @@ def run_window_session(
         if channel is not None:
             channel.close()
         tray.stop()
+        if qt is not None:
+            qt.durdur()
     logger.info("Pencere kapandı; program düzenli kapanıyor.")
 
 

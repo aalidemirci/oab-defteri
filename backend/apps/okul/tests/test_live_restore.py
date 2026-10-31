@@ -31,9 +31,9 @@ from django.db import connections
 from rest_framework.test import APIClient
 
 from apps.okul import restart_gate
-from apps.okul.services import app_password, live_restore
+from apps.okul.services import app_password, backup_restore, live_restore
 from conftest import TEST_PAROLA
-from shared import crypto
+from shared import bakim, crypto
 
 PAROLA = "Deneme-Parola-1"
 LISTE_URL = "/api/v1/backups/"
@@ -274,3 +274,67 @@ def test_takas_oncesi_baglantilar_kapatilir(
     assert cagrildi == ["kapat"]
     assert sonuc["restart_required"] is True
     assert restart_gate.restart_required() is True
+
+
+# ---------------------------------------------------------------------------
+# Ortak bakım kapısı (tasarım §4.1, §13 D3)
+# ---------------------------------------------------------------------------
+def test_bakim_kapisi_takastan_once_kapanir_ve_basarida_kapali_kalir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ortam: dict[str, Path]
+) -> None:
+    """Geri yükleme sürerken gün işi (günlük yedek) başlamaz; başarıda kapı program
+    yeniden açılana dek kapalı kalır."""
+    kapi = bakim.BakimKapisi()
+    monkeypatch.setattr(bakim, "KAPI", kapi)
+    ortam["db"].write_bytes(_sqlite_baytlari(tmp_path, "eski"))
+    gorulen: list[bool] = []
+    asil = backup_restore.restore_database
+
+    def izleyen(*args: Any, **kwargs: Any) -> Any:
+        gorulen.append(kapi.bakimda)  # takas anında kapı kapalı mı?
+        with kapi.is_() as izin:  # bu sırada gelen gün işi başlamaz
+            gorulen.append(izin)
+        return asil(*args, **kwargs)
+
+    monkeypatch.setattr(backup_restore, "restore_database", izleyen)
+    (ortam["yedekler"] / "gunluk.odbak").write_bytes(
+        _sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni"))[0]
+    )
+
+    live_restore.restore_and_require_restart(name="gunluk.odbak", password=PAROLA)
+
+    assert gorulen == [True, False]
+    assert kapi.bakimda is True
+
+
+def test_basarisiz_geri_yuklemede_bakim_kapisi_yeniden_acilir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ortam: dict[str, Path]
+) -> None:
+    kapi = bakim.BakimKapisi()
+    monkeypatch.setattr(bakim, "KAPI", kapi)
+    ortam["db"].write_bytes(_sqlite_baytlari(tmp_path, "eski"))
+    (ortam["yedekler"] / "gunluk.odbak").write_bytes(
+        _sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni"))[0]
+    )
+
+    yanit = APIClient().post(
+        GERI_YUKLE_URL, {"name": "gunluk.odbak", "password": "Yanlis-Parola-9"}, format="json"
+    )
+
+    assert yanit.status_code == 400
+    assert kapi.bakimda is False  # hedefe dokunulmadı; gün işleri yeniden koşabilir
+
+
+def test_yedek_adi_gecersizse_bakim_kapisina_dokunulmaz(
+    monkeypatch: pytest.MonkeyPatch, ortam: dict[str, Path]
+) -> None:
+    """Ad doğrulaması kapıdan önce: yanlış tıklama gün işlerini durdurmaz."""
+    kapi = bakim.BakimKapisi()
+    monkeypatch.setattr(bakim, "KAPI", kapi)
+
+    yanit = APIClient().post(
+        GERI_YUKLE_URL, {"name": "../disari.odbak", "password": PAROLA}, format="json"
+    )
+
+    assert yanit.status_code == 400
+    assert kapi.bakimda is False

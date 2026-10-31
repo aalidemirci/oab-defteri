@@ -1,17 +1,22 @@
-"""Gömülü sunucu testleri (tasarım §4.1 — 127.0.0.1 + boş port, erişim logu YOK)."""
+"""Gömülü sunucu testleri (tasarım §4.1 — 127.0.0.1 + boş port, erişim logu YOK).
+
+Dosyanın sonundaki koruma testleri "yalnız 127.0.0.1" değişmezini kilitler (§13 D2).
+"""
 
 from __future__ import annotations
 
+import ast
 import socket
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from desktop.errors import ServerStartError
-from desktop.server import BackgroundServer, check_health, find_free_port
+from desktop.server import DEFAULT_HOST, BackgroundServer, check_health, find_free_port
 
 
 class _SahteSunucu:
@@ -199,3 +204,142 @@ def test_urlopen_hata_kodunu_yutmaz() -> None:
     """Yardımcı: 403 bir istisna değil, sonuç olarak dönmeli."""
     with pytest.raises(urllib.error.URLError):
         urllib.request.urlopen("http://127.0.0.1:1/", timeout=1)
+
+
+# ------------------------------------------------------ koruma testleri (§4.1, §13 D2)
+#
+# "Yalnız 127.0.0.1" değişmezi: yönetim sunucusu başka host kabul etmez, `main.py`
+# host vermez ve tüm arayüz adresi (`0.0.0.0`) hiçbir üretim kaynağında geçmez (tek
+# muafiyet `window.py`'deki WebView2 sürüm damgası). Aile iskeletinde bu testler ağ
+# kataloğu testlerindeydi; katalogla birlikte silinmesinler diye buraya taşındı.
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+BACKEND_DIR = REPO_ROOT / "backend"
+DESKTOP_DIR = REPO_ROOT / "desktop"
+
+# Testler tüm arayüz adresini bilerek yazar (reddedildiğini sınamak için); ruff S104
+# uyarısı tek yerde susturulur.
+TUM_ARAYUZ = "0.0.0.0"  # noqa: S104
+
+
+def _bos_uygulama(
+    environ: dict[str, Any], start_response: Callable[..., Any]
+) -> Iterable[bytes]:
+    start_response("200 OK", [("Content-Length", "0")])
+    return [b""]
+
+
+@pytest.mark.parametrize("host", [TUM_ARAYUZ, "", "localhost", "192.168.1.5", "::"])
+def test_yonetim_sunucusu_yalniz_varsayilan_hostu_kabul_eder(host: str) -> None:
+    assert DEFAULT_HOST == "127.0.0.1"
+
+    with pytest.raises(ValueError, match="127.0.0.1"):
+        BackgroundServer(_bos_uygulama, host=host)
+
+
+def test_yonetim_sunucusu_varsayilan_hostla_kurulur() -> None:
+    sunucu = BackgroundServer(_bos_uygulama, host=DEFAULT_HOST)
+
+    assert sunucu.base_url.startswith("http://127.0.0.1:")
+
+
+def test_main_yonetim_sunucusunu_host_vermeden_kurar() -> None:
+    agac = ast.parse((DESKTOP_DIR / "main.py").read_text(encoding="utf-8"))
+    cagrilar = [
+        dugum
+        for dugum in ast.walk(agac)
+        if isinstance(dugum, ast.Call)
+        and isinstance(dugum.func, ast.Name)
+        and dugum.func.id == "BackgroundServer"
+    ]
+
+    assert cagrilar, "main.py yönetim sunucusunu kurmuyor (desen değişti mi)"
+    for cagri in cagrilar:
+        assert not any(k.arg == "host" for k in cagri.keywords)
+        assert len(cagri.args) == 1  # yalnız uygulama; host konumsal da verilmez
+
+
+# Taranan üretim kaynakları: masaüstü kabuğu, paket giriş noktası ve backend (ayarlar,
+# uygulamalar, ortak modüller). Testler kapsam dışıdır (bu dosya adresi bilerek yazar).
+_TARANAN_KOKLER = (
+    DESKTOP_DIR,
+    REPO_ROOT / "packaging" / "pyinstaller",
+    BACKEND_DIR / "config",
+    BACKEND_DIR / "apps",
+    BACKEND_DIR / "shared",
+)
+# Bilinçli istisna: `window.py`'deki "0.0.0.0" bir IP değil, kaldırılmış WebView2
+# çalışma zamanının bıraktığı sürüm damgasıdır. Muafiyet ATAMA adıyla verilir;
+# aynı dosyaya eklenecek başka bir kullanım yine yakalanır.
+_MUAF_ATAMALAR = {("desktop/window.py", "_EMPTY_VERSIONS")}
+# Geçici: ağ kataloğu dinleyicisi F1a-2'nin söküm adımında kalkar; muafiyet de onunla.
+_MUAF_DOSYALAR = {"desktop/katalog_server.py"}
+
+
+def _uretim_kaynaklari() -> Iterator[Path]:
+    for kok in _TARANAN_KOKLER:
+        for dosya in sorted(kok.rglob("*.py")):
+            parcalar = dosya.relative_to(REPO_ROOT).parts
+            if "tests" in parcalar or "migrations" in parcalar:
+                continue
+            yield dosya
+
+
+def _tum_arayuz_metinleri(goreli: str, kaynak: str) -> list[int]:
+    """Kaynakta "0.0.0.0" içeren metin sabitlerinin (belge dizeleri dahil) satırları."""
+    agac = ast.parse(kaynak)
+    muaf: set[int] = set()
+    for dugum in ast.walk(agac):
+        if isinstance(dugum, ast.Assign | ast.AnnAssign) and dugum.value is not None:
+            hedefler = dugum.targets if isinstance(dugum, ast.Assign) else [dugum.target]
+            if any(isinstance(h, ast.Name) and (goreli, h.id) in _MUAF_ATAMALAR for h in hedefler):
+                muaf.update(id(alt) for alt in ast.walk(dugum.value))
+    return sorted(
+        dugum.lineno
+        for dugum in ast.walk(agac)
+        if isinstance(dugum, ast.Constant)
+        and isinstance(dugum.value, str)
+        and TUM_ARAYUZ in dugum.value
+        and id(dugum) not in muaf
+    )
+
+
+def test_tum_arayuz_adresi_hicbir_uretim_kaynaginda_gecmez() -> None:
+    bulunan: list[str] = []
+    for dosya in _uretim_kaynaklari():
+        goreli = dosya.relative_to(REPO_ROOT).as_posix()
+        if goreli in _MUAF_DOSYALAR:
+            continue
+        kaynak = dosya.read_text(encoding="utf-8")
+        bulunan.extend(f"{goreli}:{no}" for no in _tum_arayuz_metinleri(goreli, kaynak))
+
+    assert bulunan == []
+
+
+def test_yonetim_sunucusu_kaynaginda_tum_arayuz_adresi_hic_gecmez() -> None:
+    """`server.py`'de yorum dahil hiçbir yerde geçmez (ham metin taraması)."""
+    assert TUM_ARAYUZ not in (DESKTOP_DIR / "server.py").read_text(encoding="utf-8")
+
+
+def test_tum_arayuz_taramasi_muafiyet_disini_yakalar() -> None:
+    """Tarayıcının kendisi: muaf atama geçer; başka ad, dosya ya da belge dizesi yakalanır."""
+    kaynak = '"""0.0.0.0 belgede"""\nX = "0.0.0.0"\n_EMPTY_VERSIONS = {"", "0.0.0.0"}\n'
+
+    assert _tum_arayuz_metinleri("desktop/window.py", kaynak) == [1, 2]
+    assert _tum_arayuz_metinleri("desktop/main.py", kaynak) == [1, 2, 3]
+
+
+def test_diger_tum_arayuz_bicimleri_uretim_kaynaginda_yok() -> None:
+    """IPv6 `::`, boş host ve `INADDR_ANY` de tüm arayüzlere bağlanır."""
+    bulunan: list[str] = []
+    for dosya in _uretim_kaynaklari():
+        for dugum in ast.walk(ast.parse(dosya.read_text(encoding="utf-8"))):
+            if isinstance(dugum, ast.Constant) and dugum.value in {"::", "::0"}:
+                bulunan.append(f"{dosya.name}:{dugum.lineno}")
+            if isinstance(dugum, ast.Attribute) and dugum.attr in {"INADDR_ANY", "IN6ADDR_ANY"}:
+                bulunan.append(f"{dosya.name}:{dugum.lineno}")
+            if isinstance(dugum, ast.keyword) and dugum.arg == "host":
+                if isinstance(dugum.value, ast.Constant) and dugum.value.value == "":
+                    bulunan.append(f"{dosya.name}:{dugum.value.lineno}")
+
+    assert bulunan == []

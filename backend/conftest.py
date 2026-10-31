@@ -16,7 +16,8 @@ OTOMATİK FİXTÜR `guvenlik_ortami` (her teste uygulanır, DB İSTEMEZ):
 * Anahtar yüklüdür (`crypto.load_key(TEST_DEK)`); test sonunda düşürülür.
 * Kademeli yanlış parola gecikmesi sıfırlanır ve `FAILURE_DELAYS=(0.0,)`
   (gerçek `sleep` yok; davranışı ayrı test kendisi kurar).
-* "Yeniden başlat" kapısı (`restart_gate`) sıfırlanır.
+* "Yeniden başlat" kapısı (`restart_gate`) sıfırlanır; ortak bakım kapısı
+  (`shared.bakim.KAPI`) test sonunda yeniden açılır.
 
 DB'deki parmak izi (`SchoolConfig.app_password_hash`) bu fixtürce YAZILMAZ
 (DB istemez): varsayılan ortam "dosya var, parmak izi boş" hâlidir. İlk kilit
@@ -104,7 +105,7 @@ def guvenlik_ortami(
 
     from apps.okul import restart_gate
     from apps.okul.services import app_password
-    from shared import crypto
+    from shared import bakim, crypto
 
     guvenlik_dizini = tmp_path_factory.mktemp("od-guvenlik")
     yedek_dizini = tmp_path_factory.mktemp("od-yedek")
@@ -126,6 +127,8 @@ def guvenlik_ortami(
     app_password._reset_failures()
     restart_gate._reset_for_tests()
     _kip_sifirla()
+    # Başarılı canlı geri yükleme bakım kapısını süreç boyunca kapalı bırakır (§13 D3).
+    bakim.KAPI.bakimdan_cik()
 
 
 @pytest.fixture

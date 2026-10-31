@@ -41,8 +41,12 @@ from django.utils import timezone
 
 from apps.okul import masaustu_kanca, restart_gate
 from apps.okul.services import app_password, backup_restore
+from shared import bakim
 
 logger = logging.getLogger("oab_defteri.restore")
+
+#: Uçuştaki gün işinin bitmesi için en çok bekleme (sn).
+BAKIM_BEKLEME_SN = 10.0
 
 
 class LiveRestoreError(ValueError):
@@ -104,10 +108,12 @@ def restore_and_require_restart(
         kaynak = gecici
     else:
         kaynak = _resolve_named(name)
-    # Ağ Kataloğu takastan ÖNCE bakım kapısına alınır (§5.3, GA-4/UY-8): yeni
-    # istekler veritabanına dokunmadan 503 alır, uçuştaki istekler biter,
-    # dinleyici ve kanallar kapanır, gün değişimi işleri bakım kilidinde bekler.
-    # Masaüstü dışında (kanca yok) etkisizdir.
+    # Ortak bakım kapısı takastan ÖNCE kapanır (§4.1, §13 D3): yeni gün işi
+    # (günlük yedek) başlamaz, uçuştaki iş bitene dek beklenir. Süre dolarsa kapı
+    # yine kapalı kalır; takas, iş parçacığının açık bağlantısı varsa Windows'ta
+    # erişim hatasıyla düşer ve hedefe dokunulmaz (çekirdek garantisi).
+    if not bakim.KAPI.bakima_al(bekleme_sn=BAKIM_BEKLEME_SN):
+        logger.warning("Bakım kapısı: uçuştaki gün işi süresinde bitmedi.")
     masaustu_kanca.katalog_bakima_al()
     try:
         # Takas öncesi TÜM bağlantılar kapatılır; sonraki istekler zaten
@@ -120,13 +126,14 @@ def restore_and_require_restart(
             recovery_key=recovery_key or None,
         )
     except BaseException:
-        # Hedefe dokunulmadı (çekirdek garantisi): katalog eski hâline döner.
+        # Hedefe dokunulmadı (çekirdek garantisi): gün işleri yeniden koşabilir.
+        bakim.KAPI.bakimdan_cik()
         masaustu_kanca.katalog_bakimdan_cik()
         raise
     finally:
         if gecici is not None:
             gecici.unlink(missing_ok=True)
-    # Başarı: katalog program yeniden açılana dek KAPALI kalır (§5.3-5).
+    # Başarı: bakım kapısı program yeniden açılana dek KAPALI kalır.
     # Bellekteki DEK eski veritabanına aittir; düşürülür. Kapı kurulunca kilit
     # ekranı dahil tüm API kesilir — tek çıkış programı kapatıp yeniden açmaktır.
     app_password.lock()

@@ -19,6 +19,12 @@ urlpatterns = [
     # Arayüzden düzenli çıkış (tasarım §4.2-4, TB13). Görevli kipinde gövdede yönetici
     # parolası ister; kilit ve yeniden başlat kapıları bu yolu geçirir (views_app).
     path("app/quit/", views_app.AppQuitView.as_view(), name="app-quit"),
+    # Son oturum kartı (T15, §13 D4) — yönetici kipinde; görevli kipinde kapalı.
+    path(
+        "dashboard/last-session/",
+        views_app.SonOturumView.as_view(),
+        name="dashboard-last-session",
+    ),
     # Kurulum sihirbazı
     path("setup/status/", views.SetupStatusView.as_view(), name="setup-status"),
     path("setup/school-config/", views.SchoolConfigView.as_view(), name="setup-school-config"),

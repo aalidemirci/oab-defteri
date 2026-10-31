@@ -102,7 +102,7 @@ def gui_backend_for(platform: str) -> str:
     if platform == "darwin":
         return "cocoa"
     # Pardus/Linux: pywebview'ın Qt arka ucu (PySide6 + QtWebEngine; bağlayıcı
-    # `desktop/tray.py::load_qt` içinde `QT_API` ile sabitlenir).
+    # `desktop/qt_kurulum.py::load_qt` içinde `QT_API` ile sabitlenir).
     return "qt"
 
 

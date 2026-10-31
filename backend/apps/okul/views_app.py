@@ -38,7 +38,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.okul import masaustu_kanca, restart_gate
+from apps.okul import masaustu_kanca, restart_gate, son_oturum
 from apps.okul.kip import GOREVLI, KIP
 from apps.okul.services import app_password
 
@@ -81,3 +81,19 @@ class AppQuitView(APIView):
             )
         logger.info("Arayüzden çıkış istendi; program düzenli kapanıyor.")
         return Response({"durum": "kapaniyor"}, status=status.HTTP_202_ACCEPTED)
+
+
+class SonOturumView(APIView):
+    """`GET/POST /api/v1/dashboard/last-session/` — son oturum kartı (T15, §13 D4).
+
+    GET kişisiz özeti döndürür (`unexpected_shutdown`, `process_started_at`); POST
+    kartı bu oturum için kapatır ("Kontrol ettim") ve güncel özeti döndürür.
+    Görevli kipinin izin listesinde değildir (varsayılan kapalı, `kip_izinleri`).
+    """
+
+    def get(self, request: Request) -> Response:
+        return Response(son_oturum.ozet())
+
+    def post(self, request: Request) -> Response:
+        son_oturum.onayla()
+        return Response(son_oturum.ozet())

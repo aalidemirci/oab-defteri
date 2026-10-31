@@ -1,4 +1,4 @@
-"""Açılış orkestrasyonu testleri (tasarım §4.2 açılış sırası).
+"""Açılış ve kapanış orkestrasyonu testleri (tasarım §4.2 açılış ve kapanış sırası).
 
 Buradaki testler Django'yu çalıştırmaz — sıra ve karar mantığı sahte adımlarla
 doğrulanır. Gerçek uçtan uca açılış (migrate + waitress + belirteç koruması)
@@ -8,9 +8,13 @@ doğrulanır. Gerçek uçtan uca açılış (migrate + waitress + belirteç koru
 from __future__ import annotations
 
 import os
+import sqlite3
 import subprocess
 import sys
+import threading
 import time
+from contextlib import closing
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +23,7 @@ import pytest
 from desktop import main as main_mod
 from desktop import restore as restore_mod
 from desktop.clean_shutdown import ENV_PREVIOUS_SESSION, MARKER_FILE_NAME
+from desktop.django_bootstrap import is_parcacigi_baglantisiyla, wal_checkpoint
 from desktop.errors import (
     EXIT_ALREADY_RUNNING,
     EXIT_DATABASE_CORRUPT,
@@ -429,9 +434,37 @@ def pencere_oturumu(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         if kayit.get("pencere_hatasi"):
             raise RuntimeError("pencere motoru çöktü")
 
+    class _SahteQt:
+        def durdur(self) -> None:
+            sira.append("qt-dur")
+
+    def qt_hazirla(cikis: Any) -> _SahteQt:
+        sira.append("qt-hazirla")
+        kayit["qt_cikis"] = cikis
+        return _SahteQt()
+
     monkeypatch.setattr(main_mod, "start_tray", tepsi)
     monkeypatch.setattr(main_mod, "open_window", pencere)
+    monkeypatch.setattr(main_mod.qt_kurulum, "hazirla", qt_hazirla)
     return kayit
+
+
+def test_linuxta_qt_kurulumu_pencereden_once_ve_cikista_durdurulur(
+    tmp_path: Path, pencere_oturumu: dict[str, Any]
+) -> None:
+    """§4.2 adım 11, §13 D1: Qt uygulaması ve SIGTERM köprüsü pencereden önce kurulur;
+    SIGTERM düzenli kapanışa (pencere denetçisinin Çık'ı) bağlanır."""
+    main_mod.run_window_session("http://127.0.0.1:1/", tmp_path, None, platform="linux")
+
+    assert pencere_oturumu["sira"].index("qt-hazirla") < pencere_oturumu["sira"].index("pencere")
+    assert pencere_oturumu["sira"][-1] == "qt-dur"
+    assert pencere_oturumu["qt_cikis"] == pencere_oturumu["denetci"].request_quit
+
+
+def test_windowsta_qt_kurulmaz(tmp_path: Path, pencere_oturumu: dict[str, Any]) -> None:
+    main_mod.run_window_session("http://127.0.0.1:1/", tmp_path, None, platform="win32")
+
+    assert "qt-hazirla" not in pencere_oturumu["sira"]
 
 
 def test_tepsi_pencereden_once_kurulur_cikista_kanal_ve_tepsi_kapanir(
@@ -441,7 +474,7 @@ def test_tepsi_pencereden_once_kurulur_cikista_kanal_ve_tepsi_kapanir(
 
     main_mod.run_window_session("http://127.0.0.1:1/", tmp_path, kanal, platform="linux")
 
-    assert pencere_oturumu["sira"] == ["tepsi", "pencere", "tepsi-dur"]
+    assert pencere_oturumu["sira"] == ["qt-hazirla", "tepsi", "pencere", "tepsi-dur", "qt-dur"]
     assert kanal.kapatildi is True
     denetci = pencere_oturumu["denetci"]
     assert denetci.tray_available is True
@@ -460,7 +493,7 @@ def test_pencere_hatasinda_da_tepsi_durdurulur(
     with pytest.raises(RuntimeError):
         main_mod.run_window_session("http://127.0.0.1:1/", tmp_path, kanal, platform="linux")
 
-    assert pencere_oturumu["sira"][-1] == "tepsi-dur"
+    assert pencere_oturumu["sira"][-2:] == ["tepsi-dur", "qt-dur"]
     assert kanal.kapatildi is True
 
 
@@ -721,3 +754,179 @@ def test_gunluge_ogrenci_arama_sorgusu_dusmez(tmp_path: Path) -> None:
     assert "setup/status" not in sonuc.stderr
     assert "Forbidden" not in sonuc.stderr
     assert "Logging error" not in sonuc.stderr
+
+# ------------------------------------------------- Çık kancası (§4.2, TB13)
+
+
+def test_arayuzden_cik_yanittan_sonra_ayri_is_parcaciginda_kapanisi_baslatir() -> None:
+    goruldu: list[str] = []
+    olay = threading.Event()
+
+    class _Denetci:
+        def request_quit(self) -> None:
+            goruldu.append(threading.current_thread().name)
+            olay.set()
+
+    kanca = main_mod.cikis_kancasi(_Denetci())  # type: ignore[arg-type]
+    baslangic = time.monotonic()
+    kanca()  # HTTP isteği iş parçacığı: hemen döner
+    assert time.monotonic() - baslangic < 0.1
+    assert goruldu == []
+
+    assert olay.wait(5)
+    assert goruldu == ["od-cikis"]
+
+
+# ------------------------------------------------------------ WAL (TB14)
+
+
+def test_kapanista_wal_checkpoint_wal_dosyasini_bosaltir(tmp_path: Path) -> None:
+    db = tmp_path / "db.sqlite3"
+    with closing(sqlite3.connect(db)) as yazar:
+        yazar.execute("PRAGMA journal_mode=WAL")
+        yazar.execute("PRAGMA wal_autocheckpoint=0")
+        yazar.execute("CREATE TABLE odunc (id INTEGER PRIMARY KEY, barkod TEXT)")
+        yazar.executemany("INSERT INTO odunc (barkod) VALUES (?)", [(str(i),) for i in range(200)])
+        yazar.commit()
+        wal = db.with_name("db.sqlite3-wal")
+        assert wal.stat().st_size > 0  # işlenmiş sayfalar hâlâ WAL'de
+
+        assert wal_checkpoint(db) is True
+
+        assert wal.stat().st_size == 0  # TRUNCATE: WAL ana dosyaya aktarıldı ve kırpıldı
+    with closing(sqlite3.connect(db)) as okur:
+        assert okur.execute("SELECT COUNT(*) FROM odunc").fetchone()[0] == 200
+
+
+def test_wal_checkpoint_veritabani_yoksa_sessiz(tmp_path: Path) -> None:
+    assert wal_checkpoint(tmp_path / "yok.sqlite3") is False
+
+
+def test_wal_checkpoint_okuyucu_varken_kismi_kalir_ve_cikisi_durdurmaz(tmp_path: Path) -> None:
+    db = tmp_path / "db.sqlite3"
+    with closing(sqlite3.connect(db)) as yazar, closing(sqlite3.connect(db)) as okur:
+        yazar.execute("PRAGMA journal_mode=WAL")
+        yazar.execute("PRAGMA wal_autocheckpoint=0")
+        yazar.execute("CREATE TABLE t (x)")
+        yazar.commit()
+        okur.execute("BEGIN")
+        okur.execute("SELECT * FROM t").fetchall()  # okuma işlemi açık: anlık görüntü tutuluyor
+        yazar.execute("INSERT INTO t VALUES (1)")
+        yazar.commit()
+
+        assert wal_checkpoint(db) is False
+        okur.execute("COMMIT")
+
+
+# ----------------------------------------------------- iş parçacığı bağlantısı
+
+
+class _Baglanti:
+    def __init__(self) -> None:
+        self.connection: object | None = None
+        self.in_atomic_block = False
+        self.kapatildi = 0
+
+    def close(self) -> None:
+        self.kapatildi += 1
+
+
+def test_is_parcacigi_baglantisi_yalniz_kendi_actigini_kapatir(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tepsi ve `od-gunluk` bağlantı bırakırsa Windows'ta geri yükleme takası düşer."""
+    sahte = _Baglanti()
+    monkeypatch.setattr("django.db.connections", {"default": sahte})
+
+    assert is_parcacigi_baglantisiyla(lambda: 42) == 42
+    assert sahte.kapatildi == 1  # çağrının açtığı (önceden yoktu) kapatıldı
+
+    sahte.connection = object()  # HTTP isteği iş parçacığı: bağlantı önceden açık
+    is_parcacigi_baglantisiyla(lambda: None)
+    assert sahte.kapatildi == 1  # isteğin bağlantısına dokunulmadı
+
+
+# ------------------------------------------------------ gün değişimi işleri
+
+
+def test_gunluk_yedek_isi_yedek_alinmazsa_rotasyon_kosmaz(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    olaylar: list[str] = []
+    monkeypatch.setattr(main_mod, "daily_backup", lambda *a, **k: None)
+    monkeypatch.setattr(main_mod, "rotate_backups", lambda *a, **k: olaylar.append("rotasyon"))
+
+    assert main_mod.gunluk_yedek_isi(paths, bugun=lambda: date(2026, 9, 24))() is False
+    assert olaylar == []
+
+    monkeypatch.setattr(main_mod, "daily_backup", lambda *a, **k: tmp_path / "gunluk.odbak")
+    assert main_mod.gunluk_yedek_isi(paths, bugun=lambda: date(2026, 9, 24))() is True
+    assert olaylar == ["rotasyon"]
+
+
+def _sahte_gunluk_yedek(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Günlük yedeği yalnız dosya adıyla taklit eder (şifreleme `test_backup.py`'dedir)."""
+    from desktop.backup import DAILY_PREFIX
+    from desktop.backup_crypto import BACKUP_SUFFIX
+
+    def yedek(db: Path, klasor: Path, *, today: date) -> Path:
+        klasor.mkdir(parents=True, exist_ok=True)
+        hedef = klasor / f"{DAILY_PREFIX}-{today.isoformat()}{BACKUP_SUFFIX}"
+        hedef.write_bytes(b"x")
+        return hedef
+
+    monkeypatch.setattr(main_mod, "daily_backup", yedek)
+
+
+def test_saat_ileri_sicrarsa_oturum_ici_rotasyon_gecmis_yedekleri_silmez(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bulgu: tepside açık programda saat 14 günden fazla ileri sıçrarsa bütün günlük
+    yedekler silinirdi. Rotasyon gerçek geçen süreye (uyku dahil açık kalma saati) göre
+    kesilir; "en çok 14 gün" saklama sözü (TB8) bozulmaz."""
+    from desktop.backup import DAILY_PREFIX
+    from desktop.backup_crypto import BACKUP_SUFFIX
+
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    paths.ensure()
+    _sahte_gunluk_yedek(monkeypatch)
+    gun = [date(2026, 9, 24)]
+    saat = [1_000.0]
+    is_ = main_mod.gunluk_yedek_isi(paths, bugun=lambda: gun[0], saat=lambda: saat[0])
+    for i in range(1, 10):  # geçmiş dokuz günün yedekleri
+        onceki = date(2026, 9, 24) - timedelta(days=i)
+        (paths.backups / f"{DAILY_PREFIX}-{onceki.isoformat()}{BACKUP_SUFFIX}").write_bytes(b"x")
+
+    assert is_() is True  # çapa: 24.09, saat 1000
+    gun[0] = date(2026, 10, 30)  # saat bir saat içinde 36 gün ileri sıçradı
+    saat[0] += 3_600
+    assert is_() is True
+
+    kalan = sorted(p.name for p in paths.backups.glob(f"{DAILY_PREFIX}-*{BACKUP_SUFFIX}"))
+    assert f"{DAILY_PREFIX}-2026-09-15{BACKUP_SUFFIX}" in kalan  # geçmiş yedekler duruyor
+    assert f"{DAILY_PREFIX}-2026-10-30{BACKUP_SUFFIX}" in kalan
+    assert len(kalan) == 11
+
+
+def test_gercekten_gecen_gunlerde_rotasyon_olagan_calisir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Uyku dahil saat de ilerlediyse (tatilde uykuda kalan bilgisayar) kesim olağandır."""
+    from desktop.backup import DAILY_PREFIX
+    from desktop.backup_crypto import BACKUP_SUFFIX
+
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    paths.ensure()
+    _sahte_gunluk_yedek(monkeypatch)
+    gun = [date(2026, 9, 24)]
+    saat = [1_000.0]
+    is_ = main_mod.gunluk_yedek_isi(paths, bugun=lambda: gun[0], saat=lambda: saat[0])
+    assert is_() is True
+
+    gun[0] = date(2026, 10, 30)
+    saat[0] += 36 * 86_400
+    assert is_() is True
+
+    kalan = sorted(p.name for p in paths.backups.glob(f"{DAILY_PREFIX}-*{BACKUP_SUFFIX}"))
+    assert kalan == [f"{DAILY_PREFIX}-2026-10-30{BACKUP_SUFFIX}"]  # 24.09 kesimden eski
