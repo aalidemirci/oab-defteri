@@ -1957,8 +1957,8 @@ def test_inno_lisans_dosyasi_bom_ile_yazilir() -> None:
 
 def test_lisans_dizini_depo_sizinti_kapisindan_gecer() -> None:
     """Üretilen metinler depoya girer: KVKK kapısının (depo_sizintisi) kurallarından
-    geçmeli — veri dosyası biçimi yok, TCKN sağlamasına uyan sayı yok."""
+    geçmeli — veri dosyası biçimi yok, TCKN ya da IBAN sağlamasına uyan değer yok."""
     depo_sizintisi: Any = _yukle(REPO / "packaging" / "depo_sizintisi.py", "od_depo_sizintisi")
     yollar = [f"THIRD_PARTY_LICENSES/{p.name}" for p in sorted(LISANSLAR.iterdir())]
     assert all(re.search(r"\.(txt|json)$", y) for y in yollar), yollar
-    assert depo_sizintisi.denetle(REPO, yollar) == ([], [])
+    assert depo_sizintisi.denetle(REPO, yollar) == ([], [], [], [])

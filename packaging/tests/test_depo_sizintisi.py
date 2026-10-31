@@ -1,9 +1,10 @@
 """`packaging/depo_sizintisi.py` — depo sızıntı kapısının davranış testleri.
 
-Sağlamalı örnek numara ÇALIŞMA ANINDA üretilir, kaynağa düz yazılmaz: aksi
-hâlde betik kendi test dosyasını tarayıp bulgu verirdi (kapı kendi kendini
+Sağlamalı örnek numara ve IBAN ÇALIŞMA ANINDA üretilir, kaynağa düz yazılmaz:
+aksi hâlde betik kendi test dosyasını tarayıp bulgu verirdi (kapı kendi kendini
 kırardı) — ve deponun içinde gerçek biçimde duran bir numara, uydurma bile
-olsa, tam olarak engellemeye çalıştığımız şeydir.
+olsa, tam olarak engellemeye çalıştığımız şeydir. Yasaklı ad testlerindeki ad
+uydurmadır ve yalnız geçici dizine yazılan listede durur.
 """
 
 from __future__ import annotations
@@ -25,6 +26,20 @@ def _saglamali_numara(ilk_dokuz: str = "123456789") -> str:
     cift = hane[1] + hane[3] + hane[5] + hane[7]
     onuncu = (tek * 7 - cift) % 10
     return f"{ilk_dokuz}{onuncu}{(sum(hane) + onuncu) % 10}"
+
+
+def _saglamali_iban(bban: str = "0001200345678901234567") -> str:
+    """mod-97 sağlamasına UYAN uydurma TR IBAN'ı (denetim haneleri hesaplanır).
+
+    `bban`: 5 hane banka kodu + 1 ayrılmış hane + 16 hane hesap numarası.
+    """
+    sayi = int("".join(str(int(k, 36)) for k in bban + "TR00"))
+    return f"TR{98 - sayi % 97:02d}{bban}"
+
+
+def _gruplu(iban: str) -> str:
+    """Bankaların yazımı: dörtlü gruplar, aralarında boşluk."""
+    return " ".join(iban[i : i + 4] for i in range(0, len(iban), 4))
 
 
 # --------------------------------------------------------------------------- #
@@ -60,6 +75,8 @@ def test_bicimsiz_degerler_elenir(deger: str) -> None:
         "bir/yer/ogrenciler.xlsx",
         "bir/yer/kayit.csv",
         "yedek/okul.odbak",
+        "evrak/karar-ornegi.docx",  # doldurulmuş evrak (D9)
+        "evrak/CETVEL.ODS",
         "backend/data/od.sqlite3",
         "backend/data/media/ek.txt",
         "media/ekran.txt",
@@ -97,10 +114,11 @@ def test_metinde_gecen_numara_satiriyla_raporlanir(tmp_path: Path) -> None:
     numara = _saglamali_numara()
     kok = _depo_kur(tmp_path, {"docs/not.md": f"ilk satır\nöğrenci {numara} kaydı\n"})
 
-    riskli, tckn = depo_sizintisi.denetle(kok, ["docs/not.md"])
+    bulgular = depo_sizintisi.denetle(kok, ["docs/not.md"])
 
-    assert riskli == []
-    assert tckn == ["docs/not.md:2"]
+    assert bulgular.riskli == []
+    assert bulgular.tckn == ["docs/not.md:2"]
+    assert bulgular.iban == [] and bulgular.yasakli_ad == []
 
 
 def test_ikili_ve_muaf_dosyalar_taranmaz(tmp_path: Path) -> None:
@@ -113,9 +131,9 @@ def test_ikili_ve_muaf_dosyalar_taranmaz(tmp_path: Path) -> None:
         },
     )
 
-    _, tckn = depo_sizintisi.denetle(kok, ["frontend/package-lock.json", "docs/kapak.pdf"])
+    bulgular = depo_sizintisi.denetle(kok, ["frontend/package-lock.json", "docs/kapak.pdf"])
 
-    assert tckn == []
+    assert bulgular.tckn == []
 
 
 def test_cikti_numaranin_kendisini_BASMAZ(
@@ -152,3 +170,114 @@ def test_bos_liste_hata_verir(tmp_path: Path) -> None:
     liste.write_bytes(b"")
 
     assert depo_sizintisi.main(["--kok", str(tmp_path), "--liste", str(liste)]) == 2
+
+
+# --------------------------------------------------------------------------- #
+# IBAN (TR + 24 hane, mod-97) — tasarım §13 D9
+# --------------------------------------------------------------------------- #
+
+
+def test_saglamali_iban_gecerli_sayilir() -> None:
+    iban = _saglamali_iban()
+    assert depo_sizintisi.iban_gecerli_mi(iban) is True
+    assert depo_sizintisi.iban_gecerli_mi(_gruplu(iban)) is True
+    assert depo_sizintisi.iban_gecerli_mi(iban.lower()) is True
+
+
+def test_saglamasi_bozuk_ya_da_bicimsiz_iban_elenir() -> None:
+    iban = _saglamali_iban()
+    bozuk = f"TR{(int(iban[2:4]) + 1) % 100:02d}{iban[4:]}"
+    assert depo_sizintisi.iban_gecerli_mi(bozuk) is False
+    assert depo_sizintisi.iban_gecerli_mi(iban[:-1]) is False  # 25 karakter
+    assert depo_sizintisi.iban_gecerli_mi(f"DE{iban[2:]}") is False  # yalnız TR aranır
+
+
+def test_metindeki_iban_satiriyla_raporlanir(tmp_path: Path) -> None:
+    """Dörtlü gruplarla yazılmış IBAN da bulunur; rastgele 24 hane bulgu değildir."""
+    iban = _saglamali_iban()
+    bozuk = f"TR{(int(iban[2:4]) + 1) % 100:02d}{iban[4:]}"
+    kok = _depo_kur(
+        tmp_path,
+        {
+            "docs/odeme.md": f"talimat\nalıcı hesabı: {_gruplu(iban)}\n",
+            "docs/rastgele.md": f"kod {bozuk}\n",
+        },
+    )
+
+    bulgular = depo_sizintisi.denetle(kok, ["docs/odeme.md", "docs/rastgele.md"])
+
+    assert bulgular.iban == ["docs/odeme.md:2"]
+    assert bulgular.tckn == []
+
+
+def test_cikti_ibanin_kendisini_BASMAZ(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    iban = _saglamali_iban()
+    kok = _depo_kur(tmp_path, {"docs/ozet.md": f"{iban}\n"})
+    liste = tmp_path / "liste"
+    liste.write_bytes(b"docs/ozet.md\0")
+
+    kod = depo_sizintisi.main(["--kok", str(kok), "--liste", str(liste)])
+
+    cikti = capsys.readouterr().out
+    assert kod == 1
+    assert "IBAN olabilecek değer: docs/ozet.md:1" in cikti
+    assert iban[4:] not in cikti
+
+
+# --------------------------------------------------------------------------- #
+# Depo dışındaki yasaklı adlar listesi — tasarım §13 D42
+# --------------------------------------------------------------------------- #
+
+#: Uydurma ad: gerçek hiçbir firmaya ya da kişiye ait değildir.
+_UYDURMA_AD = "Kuzgunkaya Örnek Taşımacılık"
+
+
+def test_yasakli_ad_listesi_yoksa_tarama_atlanir_ve_kapi_gecer(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    kok = _depo_kur(tmp_path, {"README.md": f"# {_UYDURMA_AD}\n"})
+    liste = tmp_path / "liste"
+    liste.write_bytes(b"README.md\0")
+
+    kod = depo_sizintisi.main(["--kok", str(kok), "--liste", str(liste)])
+
+    cikti = capsys.readouterr().out
+    assert kod == 0
+    assert "yasaklı ad taraması atlandı" in cikti
+    assert depo_sizintisi.YASAKLI_ADLAR_DOSYASI in cikti
+
+
+def test_yasakli_ad_katlanmis_metinde_bulunur_ve_basilmaz(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Büyük harfli Türkçe yazım ("İ"/"I") ve fazladan boşluk adı gizlemez."""
+    kok = _depo_kur(
+        tmp_path,
+        {
+            "docs/servis.md": "giriş\nTaşımacı: KUZGUNKAYA   ÖRNEK TAŞIMACILIK\n",
+            "docs/temiz.md": "taşımacının tespiti\n",
+            depo_sizintisi.YASAKLI_ADLAR_DOSYASI: f"# yorum satırı\n\n{_UYDURMA_AD}\n",
+        },
+    )
+    liste = tmp_path / "liste"
+    liste.write_bytes(b"docs/servis.md\0docs/temiz.md\0")
+
+    kod = depo_sizintisi.main(["--kok", str(kok), "--liste", str(liste)])
+
+    cikti = capsys.readouterr().out
+    assert kod == 1
+    assert "yasaklı listedeki bir ad: docs/servis.md:2" in cikti
+    assert "docs/temiz.md" not in cikti
+    assert "kuzgunkaya" not in cikti.casefold()
+    assert "atlandı" not in cikti
+
+
+def test_yasakli_adlar_dosyasi_yorum_ve_bos_satiri_atlar(tmp_path: Path) -> None:
+    dosya = tmp_path / "adlar.txt"
+    dosya.write_text(f"# yorum\n\n  {_UYDURMA_AD}  \nIŞIK\n", encoding="utf-8")
+
+    assert depo_sizintisi.yasakli_adlari_oku(dosya) == [
+        "kuzgunkaya örnek taşimacilik",
+        "işik",
+    ]
+    assert depo_sizintisi.yasakli_adlari_oku(tmp_path / "yok.txt") is None

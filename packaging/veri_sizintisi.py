@@ -31,12 +31,26 @@ from pathlib import Path
 from typing import BinaryIO
 
 # .odbak: programın yedek kapsayıcısı (parolasız kurulumda DÜZ SQLite baytları taşır).
+# .docx/.ods: doldurulmuş ya da imzalı evrak (tasarım §13 D9).
 # Küme depo kapısının `depo_sizintisi.RISKLI_UZANTILAR` kümesiyle AYNIDIR (F12 düzeltme
 # turu: paket kapısı .csv, .db ve .xlsm'yi geçiriyordu — e-Okul ya da kişi dökümü
 # CSV'si backend/apps altına düşse pakete girerdi). Eşitliği test sınar; meşru bir
-# paket içeriği bu uzantıyı taşırsa ADIYLA muaf tutulur (joker yok).
+# paket içeriği bu uzantıyı taşırsa ADIYLA muaf tutulur (joker yok). Bilinen ilk aday:
+# F1a-3'te python-docx'in `Document()` varsayılan şablonu (`docx/templates/default.docx`;
+# tasarım §11 B10) pakete girer ve burada adıyla muaf tutulmalıdır.
 YASAK_UZANTILAR = frozenset(
-    {".sqlite", ".sqlite3", ".db", ".xls", ".xlsx", ".xlsm", ".csv", ".odbak"}
+    {
+        ".sqlite",
+        ".sqlite3",
+        ".db",
+        ".xls",
+        ".xlsx",
+        ".xlsm",
+        ".csv",
+        ".odbak",
+        ".docx",
+        ".ods",
+    }
 )
 # Medya DATA_DIR altındadır (paket içi yolu backend/data/media/...): ("data","media")
 # çifti onu, ("backend","data") çifti geliştirme veri dizininin tamamını yakalar.
