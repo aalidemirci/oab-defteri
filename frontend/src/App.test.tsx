@@ -404,29 +404,26 @@ describe("App — kabuk gezinmesi", () => {
     "/ag-doktoru",
     "/gecikmis-oduncler",
     "/yil-sonu",
-  ])(
-    "kaldırılan rota %s hiçbir sayfa açmaz; üst çubuk program adını gösterir",
-    async (yol) => {
-      // Yönlendiricinin "eşleşen rota yok" uyarısı beklenen sonuçtur: yakalanır
-      // ve kanıt olarak denetlenir (test çıktısını da kirletmez).
-      const uyari = vi.spyOn(console, "warn").mockImplementation(() => {});
-      try {
-        ekranaBas(yol);
-        // Kabuk yüklenir (gezinme durur); kilit ve kurulum kapıları geçilince
-        // iskelet kalkar ama rota eşleşmediği için sayfa başlığı yoktur.
-        await screen.findByRole("navigation", { name: "Ana gezinme" });
-        await waitFor(() => expect(okulApiMock.getSetupStatus).toHaveBeenCalled());
-        await waitFor(() => expect(screen.queryByText("Yükleniyor…")).not.toBeInTheDocument());
-        expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
-        expect(within(ustCubuk()).getAllByText("OAB Defteri").length).toBeGreaterThan(0);
-        expect(uyari).toHaveBeenCalledWith(
-          expect.stringContaining(`No routes matched location "${yol}"`),
-        );
-      } finally {
-        uyari.mockRestore();
-      }
-    },
-  );
+  ])("kaldırılan rota %s hiçbir sayfa açmaz; üst çubuk program adını gösterir", async (yol) => {
+    // Yönlendiricinin "eşleşen rota yok" uyarısı beklenen sonuçtur: yakalanır
+    // ve kanıt olarak denetlenir (test çıktısını da kirletmez).
+    const uyari = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      ekranaBas(yol);
+      // Kabuk yüklenir (gezinme durur); kilit ve kurulum kapıları geçilince
+      // iskelet kalkar ama rota eşleşmediği için sayfa başlığı yoktur.
+      await screen.findByRole("navigation", { name: "Ana gezinme" });
+      await waitFor(() => expect(okulApiMock.getSetupStatus).toHaveBeenCalled());
+      await waitFor(() => expect(screen.queryByText("Yükleniyor…")).not.toBeInTheDocument());
+      expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+      expect(within(ustCubuk()).getAllByText("OAB Defteri").length).toBeGreaterThan(0);
+      expect(uyari).toHaveBeenCalledWith(
+        expect.stringContaining(`No routes matched location "${yol}"`),
+      );
+    } finally {
+      uyari.mockRestore();
+    }
+  });
 });
 
 describe("App — açılışta dış istek yok", () => {

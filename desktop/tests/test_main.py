@@ -21,6 +21,7 @@ from typing import Any
 import pytest
 
 from desktop import main as main_mod
+from desktop import qt_kurulum as qt_kurulum_mod
 from desktop import restore as restore_mod
 from desktop.clean_shutdown import ENV_PREVIOUS_SESSION, MARKER_FILE_NAME
 from desktop.django_bootstrap import is_parcacigi_baglantisiyla, wal_checkpoint
@@ -428,7 +429,7 @@ def pencere_oturumu(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         return _SahteQt()
 
     monkeypatch.setattr(main_mod, "open_window", pencere)
-    monkeypatch.setattr(main_mod.qt_kurulum, "hazirla", qt_hazirla)
+    monkeypatch.setattr(qt_kurulum_mod, "hazirla", qt_hazirla)
     return kayit
 
 
@@ -739,6 +740,7 @@ def test_gunluge_ogrenci_arama_sorgusu_dusmez(tmp_path: Path) -> None:
     assert "setup/status" not in sonuc.stderr
     assert "Forbidden" not in sonuc.stderr
     assert "Logging error" not in sonuc.stderr
+
 
 # ------------------------------------------------- Çık kancası (§4.2, TB13)
 

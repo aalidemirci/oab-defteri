@@ -84,9 +84,7 @@ describe("YedektenGeriYukleme", () => {
     await screen.findByText("gunluk-2026-09-01.odbak");
 
     // docs/kurulum.md §5.1 ile aynı: Windows kısayolu + Pardus/Linux komutu.
-    expect(
-      screen.getByText(/“OAB Defteri — Yedekten Geri Yükle” kısayolunu/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/“OAB Defteri — Yedekten Geri Yükle” kısayolunu/)).toBeInTheDocument();
     expect(screen.getByText("oab-defteri --geri-yukle")).toBeInTheDocument();
   });
 

@@ -337,5 +337,3 @@ def _bekle(kosul: Any, sure: float = 5.0) -> None:
     while not kosul() and time.monotonic() < son:
         time.sleep(0.01)
     assert kosul()
-
-

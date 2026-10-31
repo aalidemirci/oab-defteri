@@ -20,9 +20,7 @@ describe("GorevliEkrani", () => {
   it("başlık ve açıklama görünür; masa işleri sökülmüştür", () => {
     render(<GorevliEkrani onGecti={vi.fn()} />);
 
-    expect(
-      screen.getByRole("heading", { level: 1, name: GOREVLI_EKRANI_BASLIGI }),
-    ).toBeVisible();
+    expect(screen.getByRole("heading", { level: 1, name: GOREVLI_EKRANI_BASLIGI })).toBeVisible();
     expect(screen.getByText(GOREVLI_EKRANI_METNI)).toBeInTheDocument();
     for (const ad of [
       /Doğrulama okutmasını aç/,

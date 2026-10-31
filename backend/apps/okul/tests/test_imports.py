@@ -238,6 +238,7 @@ class TestEokulDosyasi:
         # Sayaç dipnotu ('Toplam Personel Sayısı: 4') personel olarak yazılmadı.
         assert not any("Sayısı" in p.full_name for p in Personnel.objects.all())
 
+
 @pytest.mark.django_db
 class TestImportApi:
     def test_onizleme_ve_aktarma_uclari(self, aktif_yil: SchoolYear) -> None:

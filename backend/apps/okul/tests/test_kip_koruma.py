@@ -42,13 +42,13 @@ from apps.okul.kip_middleware import (
     KipMiddleware,
 )
 from apps.okul.services import app_password
+from apps.okul.tests.api_gezgini import SAGLIK_YOLU, api_desenleri
 from apps.okul.tests.kip_ortak import (
     DOGRU_PAROLA,
     SahteSaat,
     kurulum_durumunu_yaz,
     sahte_dogrulayici,
 )
-from apps.okul.tests.api_gezgini import SAGLIK_YOLU, api_desenleri
 
 pytestmark = pytest.mark.django_db
 

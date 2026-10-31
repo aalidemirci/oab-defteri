@@ -51,5 +51,3 @@ def gunluk(veri_koku: Path) -> str:
     """Programın günlük dosyası (yoksa boş)."""
     yol = veri_koku / "logs" / "uygulama.log"
     return yol.read_text(encoding="utf-8") if yol.is_file() else ""
-
-

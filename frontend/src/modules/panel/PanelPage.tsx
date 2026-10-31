@@ -69,8 +69,7 @@ export default function PanelPage() {
           Genel Bakış
         </h1>
         <p className="mt-2 text-body-medium text-on-surface-variant">
-          Okul-aile birliğinin işlerini yürüttüğü yerel araç. Veriler yalnız bu bilgisayarda
-          durur.
+          Okul-aile birliğinin işlerini yürüttüğü yerel araç. Veriler yalnız bu bilgisayarda durur.
         </p>
       </header>
       {durum && !durum.roadmap.hidden && (

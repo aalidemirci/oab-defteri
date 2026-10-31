@@ -165,9 +165,7 @@ def test_tar_gz_arsivindeki_kullanici_durum_dosyasi_bulunur(tmp_path: Path) -> N
         )
     )
 
-    assert ARSIVDEKI_YASAKLAR(arsiv) == [
-        "oab-defteri-2026.10.0-beta.1/uygulama/guvenlik.json"
-    ]
+    assert ARSIVDEKI_YASAKLAR(arsiv) == ["oab-defteri-2026.10.0-beta.1/uygulama/guvenlik.json"]
 
 
 def test_deb_kabindaki_veri_arsivi_okunur(tmp_path: Path) -> None:

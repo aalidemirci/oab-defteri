@@ -222,9 +222,7 @@ DESKTOP_DIR = REPO_ROOT / "desktop"
 TUM_ARAYUZ = "0.0.0.0"  # noqa: S104
 
 
-def _bos_uygulama(
-    environ: dict[str, Any], start_response: Callable[..., Any]
-) -> Iterable[bytes]:
+def _bos_uygulama(environ: dict[str, Any], start_response: Callable[..., Any]) -> Iterable[bytes]:
     start_response("200 OK", [("Content-Length", "0")])
     return [b""]
 

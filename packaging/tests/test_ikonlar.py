@@ -230,9 +230,7 @@ def test_linux_yuzeyleri_hicolor_boyutlarini_depodan_kurar() -> None:
     qt_kurulum = _metin("desktop/qt_kurulum.py")
     assert f'THEME_ICON_NAME: Final = "{tema_adi}"' in qt_kurulum
     assert "app.setWindowIcon(_qt_icon(qt, icon_path))" in qt_kurulum
-    assert re.search(
-        rf"^Icon={tema_adi}$", _metin("packaging/linux/oab-defteri.desktop"), re.M
-    )
+    assert re.search(rf"^Icon={tema_adi}$", _metin("packaging/linux/oab-defteri.desktop"), re.M)
 
     for betik in ("packaging/linux/build.sh", "packaging/linux/kur.sh"):
         metin = _metin(betik)

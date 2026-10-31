@@ -23,9 +23,7 @@ export default function KilavuzPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <header>
-        <p className="text-label-medium font-semibold tracking-wide text-primary">
-          OAB Defteri
-        </p>
+        <p className="text-label-medium font-semibold tracking-wide text-primary">OAB Defteri</p>
         <h1 className="mt-1 text-headline-medium font-semibold tracking-tight text-on-surface">
           Kullanım Kılavuzu
         </h1>

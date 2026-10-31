@@ -33,10 +33,7 @@ import SifreliYedekleme from "./SifreliYedekleme";
 import YedektenGeriYukleme from "./YedektenGeriYukleme";
 import { guvenlikApi } from "./api";
 import type { GuvenlikDurumu } from "./api";
-import {
-  bekleyenKurtarmaAnahtariniYaz,
-  useBekleyenKurtarmaAnahtari,
-} from "./bekleyenAnahtar";
+import { bekleyenKurtarmaAnahtariniYaz, useBekleyenKurtarmaAnahtari } from "./bekleyenAnahtar";
 import { kilitOlayiYayinla } from "./GuvenlikKapisi";
 import {
   DOGRULANMADI_BASLIGI,

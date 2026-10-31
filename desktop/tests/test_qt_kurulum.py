@@ -375,9 +375,7 @@ def test_qt_yukleyici_webengine_i_once_ice_aktarir(monkeypatch: pytest.MonkeyPat
 
 def test_qt_yukleyici_baglayiciyi_pyside6_ye_sabitler(monkeypatch: pytest.MonkeyPatch) -> None:
     """qtpy kurulu ilk bağlayıcıyı seçer; seçim `QT_API` ile ilk import'tan önce sabitlenir."""
-    monkeypatch.setattr(
-        qt_kurulum, "importlib", SimpleNamespace(import_module=_qt_modulu_taklidi)
-    )
+    monkeypatch.setattr(qt_kurulum, "importlib", SimpleNamespace(import_module=_qt_modulu_taklidi))
 
     qt_kurulum.load_qt()
 
@@ -389,9 +387,7 @@ def test_qt_yukleyici_disaridan_verilen_baglayiciyi_ezmez(
 ) -> None:
     """Sahada teşhis için elle verilmiş `QT_API` korunur (`setdefault`)."""
     monkeypatch.setenv("QT_API", "pyqt6")
-    monkeypatch.setattr(
-        qt_kurulum, "importlib", SimpleNamespace(import_module=_qt_modulu_taklidi)
-    )
+    monkeypatch.setattr(qt_kurulum, "importlib", SimpleNamespace(import_module=_qt_modulu_taklidi))
 
     qt_kurulum.load_qt()
 

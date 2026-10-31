@@ -24,18 +24,23 @@ VERI = Path(__file__).resolve().parent / "veri"
 PERSONEL_LISTESI = VERI / "eokul_personel_listesi.xls"
 
 _KURUM_BASLIGI = (
-    "T.C.
-ÖRNEK VALİLİĞİ
-Örnek İlçe / Örnek Anadolu Lisesi Müdürlüğü
-"
+    "T.C.\n"
+    "ÖRNEK VALİLİĞİ\n"
+    "Örnek İlçe / Örnek Anadolu Lisesi Müdürlüğü\n"
     "AL - {sinif}. Sınıf / {sube} Şubesi (ALANI YOK) Sınıf Listesi "
 )
 # Uydurma adlar — gerçek hiçbir kişiye ait değildir. I ve İ şubeleri bilerek yan yana.
 _SUBE_OGRENCILERI: dict[str, list[tuple[int, str, str, str]]] = {
-    "I": [(13, "ALTAY", "GÖKMEN", "Erkek"), (19, "NAZLI SU", "IŞIKÇI", "Kız"),
-          (204, "BERKAY", "ÖZDEMİRCİ", "Erkek")],
-    "İ": [(7, "ELİF NAZ", "ÇINARLI", "Kız"), (88, "TUNAHAN", "ŞAHBAZ", "Erkek"),
-          (145, "İREM", "ULUDAĞLI", "Kız")],
+    "I": [
+        (13, "ALTAY", "GÖKMEN", "Erkek"),
+        (19, "NAZLI SU", "IŞIKÇI", "Kız"),
+        (204, "BERKAY", "ÖZDEMİRCİ", "Erkek"),
+    ],
+    "İ": [
+        (7, "ELİF NAZ", "ÇINARLI", "Kız"),
+        (88, "TUNAHAN", "ŞAHBAZ", "Erkek"),
+        (145, "İREM", "ULUDAĞLI", "Kız"),
+    ],
 }
 
 
@@ -61,7 +66,16 @@ def _sinif_listesi_matrisi() -> list[list[Any]]:
         yaz({0: _KURUM_BASLIGI.format(sinif=10, sube=sube)})
         yaz({0: "Sınıf Öğretmeni: ", 7: "Sınıf Başkanı:"})
         yaz({0: "Sınıf Müdür Yrd: KEREM DALGIÇ", 7: "Sınıf Başkan Yrd:"})
-        yaz({0: "S.No", 1: "Öğrenci No", 3: "Adı", 7: "Soyadı", 11: "Cinsiyeti", 13: "Pansiyon Durum"})
+        yaz(
+            {
+                0: "S.No",
+                1: "Öğrenci No",
+                3: "Adı",
+                7: "Soyadı",
+                11: "Cinsiyeti",
+                13: "Pansiyon Durum",
+            }
+        )
         for i, (no, ad, soyad, cinsiyet) in enumerate(ogrenciler, start=1):
             yaz({0: i, 1: no, 3: ad, 7: soyad, 11: cinsiyet})
         kiz = sum(1 for o in ogrenciler if o[3] == "Kız")
@@ -113,8 +127,10 @@ class TestXlsOkuma:
             read_sheet(tam[: int(len(tam) * oran)])
 
     def test_ortasi_bozulmus_dosya_turkce_hata(self) -> None:
+        # Personel örneği küçüktür (5.632 bayt); bozulan bölge çalışma kitabı akışının
+        # ortasına denk gelir (silinen sınıf listesi örneğinde 3000. bayttı).
         tam = bytearray(PERSONEL_LISTESI.read_bytes())
-        tam[3000:3200] = b"\xff" * 200
+        tam[1024:1224] = b"\xff" * 200
         with pytest.raises(ParserError, match="Excel 97-2003"):
             read_sheet(bytes(tam))
 

@@ -5,9 +5,7 @@ export default function HakkindaPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <header>
-        <p className="text-label-medium font-semibold tracking-wide text-primary">
-          OAB Defteri
-        </p>
+        <p className="text-label-medium font-semibold tracking-wide text-primary">OAB Defteri</p>
         <h1 className="mt-1 text-headline-medium font-semibold tracking-tight text-on-surface">
           Hakkında ve Lisans
         </h1>
@@ -26,8 +24,8 @@ export default function HakkindaPage() {
           <div>
             <h2 className="text-title-large font-semibold text-on-surface">Program</h2>
             <p className="mt-2 text-body-medium text-on-surface-variant">
-              OAB Defteri, okul kütüphanesinin kayıtlarını bu bilgisayarda tutan çevrimdışı
-              bir masaüstü programıdır.
+              OAB Defteri, okul kütüphanesinin kayıtlarını bu bilgisayarda tutan çevrimdışı bir
+              masaüstü programıdır.
             </p>
             <p className="mt-3 rounded-shape-md bg-tertiary-container px-4 py-3 text-body-medium text-on-tertiary-container">
               Program okulun kütüphane işlerini yürüttüğü yerel araçtır; Bakanlıkça belirlenen

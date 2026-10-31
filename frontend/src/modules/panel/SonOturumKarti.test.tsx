@@ -89,7 +89,9 @@ describe("Son oturum kartı", () => {
       unexpected_shutdown: true,
       process_started_at: BASLANGIC,
     });
-    vi.spyOn(panelApi, "kontrolEttim").mockRejectedValue(new ApiError(500, "sunucu_hatasi", "Sunucu hatası"));
+    vi.spyOn(panelApi, "kontrolEttim").mockRejectedValue(
+      new ApiError(500, "sunucu_hatasi", "Sunucu hatası"),
+    );
 
     bas();
     await userEvent.click(await screen.findByRole("button", { name: /Kontrol ettim/ }));

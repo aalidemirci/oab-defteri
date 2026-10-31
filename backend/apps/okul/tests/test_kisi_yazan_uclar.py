@@ -175,13 +175,10 @@ def test_parolasizken_kisi_yazan_her_uc_yazma_yontemiyle_409_doner(parolasiz: Pa
             assert yanit.json() == PAROLA_GEREKLI_GOVDESI, (ad, yontem)
             denenen += 1
     # 2 liste (POST) + 2 ayrıntı (PUT/PATCH/DELETE) + 4 içe aktarma (POST)
-    # + 2 ayrılış (POST) + 1 birleştirme (POST) + 1 havuz kararı (POST)
-    # + F6 üyelik: liste (POST), ayrıntı (DELETE), kartı yenile, sonlandır, istek listesi (POST)
-    # + F6 kart basım işareti ve geri alma (POST)
-    # + F6 dolaşım masası: ödünç ver ve iade al (POST)
-    # + F7: toplu teslim ve geri alma (POST), dosya açma (POST), not (PATCH), çözüm (POST)
-    # + F11: saklama tetiği (POST)
-    assert denenen == 2 + 2 * 3 + 4 + 2 + 1 + 1 + 5 + 2 + 2 + 2 + 3 + 1
+    # + 2 ayrılış (POST) + 1 birleştirme (POST) + 1 havuz kararı (POST).
+    # Aile iskeletinin kütüphane uçları (üyelik, kart basımı, dolaşım masası,
+    # teslim, saklama tetiği) F1a-2'de söküldü.
+    assert denenen == 2 + 2 * 3 + 4 + 2 + 1 + 1
     assert not Student.all_objects.exists()
 
 

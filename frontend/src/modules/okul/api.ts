@@ -117,8 +117,7 @@ export interface ActiveSchoolYearSummary {
 }
 
 /** Başlangıç Yol Haritası'nda kullanıcının işaretlediği maddeler (backend tek kaynak). */
-export type RoadmapManualItem =
-  "kurtarma_zarfi" | "parola_paylasimi";
+export type RoadmapManualItem = "kurtarma_zarfi" | "parola_paylasimi";
 
 export interface RoadmapState {
   /** İşaretlenen madde → işaretlendiği gün (ISO). */

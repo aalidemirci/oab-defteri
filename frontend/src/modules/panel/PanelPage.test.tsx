@@ -78,9 +78,10 @@ describe("Genel Bakış", () => {
     await screen.findByRole("heading", { name: "Başlangıç Yol Haritası" });
 
     expect(screen.getByRole("heading", { level: 1, name: "Genel Bakış" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /Öğretmen ve diğer personel sicili/ }),
-    ).toHaveAttribute("href", "/kisiler");
+    expect(screen.getByRole("link", { name: /Öğretmen ve diğer personel sicili/ })).toHaveAttribute(
+      "href",
+      "/kisiler",
+    );
     expect(
       screen.getByRole("link", { name: /Ders yılı, şubeler, okul bilgileri/ }),
     ).toHaveAttribute("href", "/ayarlar");

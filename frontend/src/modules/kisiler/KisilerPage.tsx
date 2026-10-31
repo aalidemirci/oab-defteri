@@ -52,11 +52,7 @@ import type { SayfaHatasi } from "./ortak";
 const PAGE_SIZE = 25;
 
 // TAB_KEYS[0] varsayılan sekmedir (useTabParam fallback) — başa yeni anahtar EKLEME.
-const TAB_KEYS = [
-  "ogrenciler",
-  "personel",
-  "havuz",
-] as const;
+const TAB_KEYS = ["ogrenciler", "personel", "havuz"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
 // Sözlük: "personel" tek başına öğretmen anlamında kullanılmaz; üye türleri

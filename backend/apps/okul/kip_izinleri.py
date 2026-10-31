@@ -140,7 +140,6 @@ IZIN_LISTESI: tuple[IzinKurali, ...] = (
             "parolası gerekir — kaza önleyicidir (CLAUDE.md §2-4)"
         ),
     ),
-
 )
 
 _KURALLAR: dict[tuple[str, str], IzinKurali] = {

@@ -478,10 +478,9 @@ function PersonelBolumu({
             <span>
               “Olası aynı kişi” sütunundaki kayıt listede yeni adla görünen aynı kişi olabilir (ör.
               soyadı değişimi). Öyleyse ayrıldı diye işaretlemeyin; “Birleştir” ile eski kaydın
-              bağlarını yeni kayda taşıyın. Adaylar yalnız ad benzerliğine göre listelenir
-              — her satır neden aday olduğunu yazar; okula yeni gelen bir adaş da burada
-              görünebilir. Birleştirmeden önce aynı kişi olduğunu doğrulayın; birleştirme geri
-              alınamaz.
+              bağlarını yeni kayda taşıyın. Adaylar yalnız ad benzerliğine göre listelenir — her
+              satır neden aday olduğunu yazar; okula yeni gelen bir adaş da burada görünebilir.
+              Birleştirmeden önce aynı kişi olduğunu doğrulayın; birleştirme geri alınamaz.
             </span>
           </p>
         )}
