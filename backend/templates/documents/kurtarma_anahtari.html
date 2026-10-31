@@ -1,5 +1,6 @@
 {% extends "documents/base.html" %}
-{% comment %}Kurtarma anahtarı çıktısı (E14; tasarım §6.3-1). Bağlam
+{% comment %}Kurtarma anahtarı belgesi: programın kendi güvenlik belgesi, katalog
+dışıdır, E-kodu almaz (tasarım §9.7, §12.B; saklama yeri kullanıcı kararı D3). Bağlam
 apps/okul/services/recovery_key_document.py'den gelir: antet, `document_title`,
 `issued_on` (gg.aa.yyyy, yerel gün), `asset_no` (bilgisayarın demirbaş no'su;
 boşsa elle doldurulacak çizgi) ve `key_groups` (numaralı dörtlü gruplar).
@@ -37,7 +38,7 @@ harf (WeasyPrint TR "i" tuzağı). Belge tek sayfadır (sayfa bütçesi testi).{
   <table class="info">
     <tr><td class="label">Düzenlenme tarihi</td><td>{{ issued_on }}</td></tr>
     <tr><td class="label">Bilgisayarın demirbaş no'su</td><td>{% if asset_no %}{{ asset_no }}{% else %}……………………………………{% endif %}</td></tr>
-    <tr><td class="label">Program</td><td>OAB Defteri — okulun kütüphane işlerini yürüttüğü yerel araç</td></tr>
+    <tr><td class="label">Program</td><td>OAB Defteri — okul-aile birliğinin işlerini okulun bilgisayarında yürüten çevrimdışı masaüstü programı</td></tr>
   </table>
 
   <div class="key-box">
@@ -60,22 +61,25 @@ harf (WeasyPrint TR "i" tuzağı). Belge tek sayfadır (sayfa bütçesi testi).{
     <div class="section-title">NE İŞE YARAR?</div>
     <p class="para">Yönetici parolası unutulursa kilit ekranında “Parolamı unuttum” seçilir, bu
     anahtar girilir ve yeni parola belirlenir. Yedekten geri yüklemede de parolanın yerine
-    kullanılabilir. Parola değiştirilse de anahtar değişmez; bu kâğıt geçerli kalır. Anahtar
-    kaybolur ve parola da unutulursa şifreli kayıtlar (öğrenci, öğretmen ve diğer personelin
-    adları, okul numaraları) hiçbir yolla açılamaz.</p>
+    kullanılabilir. Parola değiştirildiğinde anahtar değişmez. Anahtar Ayarlar → Güvenlik'ten
+    yenilenirse yeni çıktı alınır; eski kâğıt yenilemeden önceki yedekleri açtığı için atılmaz,
+    “Eski anahtar” diye işaretlenip saklanır. Anahtar kaybolur ve parola da unutulursa
+    şifreli kayıtlar (kişi kayıtlarındaki ad, soyad ve numara) hiçbir yolla açılamaz.</p>
   </div>
 
   <div class="section">
     <div class="section-title">NASIL SAKLANIR?</div>
     <ol class="advice">
       <li>Bu kâğıdı zarfa koyup zarfı kapatın; üstüne “OAB Defteri kurtarma anahtarı” ve
-        tarihi yazın. Zarfı müdürlükte, kilitli dolapta saklayın.</li>
-      <li>Yönetici parolası en az iki görevlendirilmiş kişide bulunsun: biri okuldan ayrılsa ya da
-        parolayı unutsa da kayıtlara erişim sürer.</li>
+        tarihi yazın. Zarfı okul müdürlüğünde, kilitli dolapta saklayın. Zarf veliye geçmez:
+        birlik yönetimi değişse de müdürlükte kalır, devir-teslimde yalnız durumu yazılır.</li>
+      <li>Yönetici parolası kimseyle paylaşılmaz (MEB Bilgi ve Sistem Güvenliği Yönergesi md. 7/2,
+        9/2-e). Parolayı bilen kişi okuldan ayrılır ya da parolayı unutursa yeni parola bu
+        anahtarla belirlenir.</li>
       <li>Anahtarı bilgisayarda, e-postada, mesajlaşma uygulamasında ya da fotoğraf olarak
         saklamayın. Bu çıktının PDF dosyasını kaydettiyseniz dosyayı bu bilgisayarda bırakmayın;
         USB belleğe alıp zarfla birlikte saklayın.</li>
-      <li>Çıktıyı kütüphane masasında, panoda ya da ortak klasörlerde bırakmayın.</li>
+      <li>Çıktıyı masada, yazıcıda, panoda ya da ortak klasörlerde bırakmayın.</li>
     </ol>
   </div>
 

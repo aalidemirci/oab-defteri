@@ -1,4 +1,4 @@
-// Genel Bakış'ta "Şifreli Yedeği USB Belleğe Alın" kartı (F11; tasarım §16 risk 13).
+// Genel Bakış'ta "Şifreli Yedeği USB Belleğe Alın" kartı (tasarım §4.3 tehdit 18, §16 R6).
 //
 // Otomatik yedekler bu bilgisayardadır: disk bozulur, bilgisayar değişir ya da program
 // yeniden kurulursa onlar da gider. Okulun elinde kalan tek kopya, Ayarlar → Güvenlik'ten
@@ -19,7 +19,7 @@ import Icon from "../../ui/Icon";
 import { guvenlikApi } from "./api";
 import type { DisYedekDurumu } from "./api";
 
-/** Kartın adı (sözlük §4.5) — başlık ve testler buradan okur. */
+/** Kartın adı (docs/sozluk.md §4) — başlık ve testler buradan okur. */
 export const DIS_YEDEK_KARTI_BASLIGI = "Şifreli Yedeği USB Belleğe Alın";
 /** Güvenlik sekmesinin adresi (yedek indirme kartı orada). */
 export const GUVENLIK_ADRESI = "/ayarlar?tab=guvenlik";

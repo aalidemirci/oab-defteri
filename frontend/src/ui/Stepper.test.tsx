@@ -1,5 +1,5 @@
 // Tur 108 — Stepper primitifi: render + durum işaretleri + aria-current. RTL + Vitest.
-// 18.09.2026: `onSelect` ile tamamlanmış adımlar tıklanabilir/klavyeyle seçilebilir.
+// Aile iskeletinde 18.09.2026: `onSelect` ile tamamlanmış adımlar tıklanabilir/klavyeyle seçilebilir.
 
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

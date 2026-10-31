@@ -10,7 +10,7 @@
 //    kapı durumu sunucudan yeniden okur.
 // 2. Parola hiç kurulmamışsa kapı içeriği gösterir: kullanıcıyı sihirbazın parola
 //    adımına İÇTEKİ `KurulumKapisi` götürür (parola kurulmadan kurulum kapısı
-//    açılmaz). Bu kapı "parolasız kip" sunmaz; o dal yoktur (tasarım §6.3).
+//    açılmaz). Bu kapı "parolasız kip" sunmaz; o dal yoktur (tasarım §4.4.3).
 // 3. FAIL-OPEN'dır: durum ucu okunamazsa içeri alır. Gerçek kapı BACKEND'dedir
 //    (`apps.okul.lock_middleware` → 423 `locked` / `guvenlik_dosyasi_kayip`) —
 //    burada ikinci kez kilitlemek, uç hatasında kullanıcıyı kilit ekranına

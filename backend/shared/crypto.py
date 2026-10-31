@@ -1,41 +1,41 @@
 """Zorunlu yönetici parolası — anahtar tutucu, Argon2id türetme, şifreli alanlar, kör indeks.
 
-Tasarım §4.3, §6.3 (U9, T14). SQLCipher ve "kapanışta dosyayı şifrele"
-reddedildi; seçilen yol OYS'nin (Okul Yönetim Sistemi) sahada test edilmiş
-`shared/fields.py` Fernet alan şifrelemesidir. Bu dosya o alanı bu programın
-gerçeklerine uyarlar. OYS'den FARKLAR:
+Tasarım §4.3, §4.4.4, §5.3. SQLCipher ve "kapanışta dosyayı şifrele"
+reddedildi; seçilen yol ailenin sahada denenmiş `shared/fields.py` Fernet alan
+şifrelemesidir. Bu dosya o alanı bu programın gerçeklerine uyarlar. KAYNAKTAN
+FARKLAR:
 
-1. **Anahtar ayardan değil, ÇALIŞMA ZAMANINDAN gelir.** OYS'de anahtar
+1. **Anahtar ayardan değil, ÇALIŞMA ZAMANINDAN gelir.** Kaynakta anahtar
    `settings.FIELD_ENCRYPTION_KEY` (.env) ile sabittir; burada yönetici
    parolasından (ya da kurtarma anahtarından) çözülen veri anahtarıdır (DEK) ve
    programın kilidi açılana kadar YOKTUR. Bu yüzden `lru_cache`'li Fernet
    KULLANILAMAZ — anahtar süreç ömrü içinde yüklenir, boşaltılır, değişir.
-2. **Parolasız kip YOKTUR (fail-closed, §6.3-3).** Yönetici parolası
+2. **Parolasız kip YOKTUR (fail-closed, §5.3).** Yönetici parolası
    zorunludur; kurulum sihirbazının ilk adımıdır ve parola kurulmadan kişi
    yazan her uç 409 döner. Anahtar bellekte değilken `EncryptedTextField`
    boş olmayan bir değeri YAZMAZ, `KeyMissingError` yükseltir: kilitliyken ya
-   da parola hiç kurulmamışken kişi adı düz metin olarak diske düşemez. KS'deki
-   "parolasız kipte alanlar DÜZ yazılır" dalı ve onun geçiş aracı
-   (`plaintext_writes`) F1'de söküldü (§6.3-6).
-3. **Kör indeks VARDIR (T14 — KS'nin "BLIND INDEX YOKTUR" kararından BİLİNÇLİ
-   sapma).** Okul no ve kart no da şifrelendiği için (U9) kart okutma, e-Okul
-   eşleştirmesi ve iptal kart denetimi tam eşleşmeyle `blind_index()`
-   değerinden yapılır; teklik kısıtı indekse konur. Anahtar DEK'ten HKDF ile
-   türediği için parola değişimi indeksi bozmaz. Normalleştirme çağıranın
-   işidir (ör. `apps/okul/normalize.py`); bu modül yalnız HMAC'i hesaplar.
+   da parola hiç kurulmamışken kişi adı düz metin olarak diske düşemez. Ailenin
+   eski "parolasız kipte alanlar DÜZ yazılır" dalı ve onun geçiş aracı
+   (`plaintext_writes`) aile iskeletinde sökülmüştü; OAB'de yoktur.
+3. **Kör indeks VARDIR (§5.3 — ailenin eski "BLIND INDEX YOKTUR" kararından
+   BİLİNÇLİ sapma).** Okul no da şifrelendiği için e-Okul eşleştirmesi tam
+   eşleşmeyle `blind_index()` değerinden yapılır; teklik kısıtı indekse konur.
+   Anahtar DEK'ten HKDF ile türediği için parola değişimi indeksi bozmaz.
+   Normalleştirme çağıranın işidir (ör. `apps/okul/normalize.py`); bu modül
+   yalnız HMAC'i hesaplar.
 
 ANAHTARIN BELLEKTEKİ YERİ: anahtar süreç genelinde, bu modülün `_holder`
 nesnesinde tutulur ve kilit açıldıktan sonra kilitlenene dek bellekte kalır.
-Gerekçe: yönetim yüzeyi yalnız 127.0.0.1'de ve tek masaya hizmet eder
+Gerekçe: yönetim yüzeyi yalnız 127.0.0.1'de ve tek bilgisayara hizmet eder
 (`desktop/session_guard.py`); anahtarı bağlayacağımız bir kullanıcı oturumu
-yoktur, masadaki kişi ayrımı kiple yapılır (§4.4). Anahtarı her istekte yeniden
-türetmek Argon2id maliyetini (~0,2 sn) her tıklamaya yayardı. Kilitleme =
-programı kapatmak VEYA açık "Kilitle" eylemi (`POST /security/lock/` →
+bugün yoktur, kişiler arasındaki ayrım kiple yapılır (§4.4). Anahtarı her
+istekte yeniden türetmek Argon2id maliyetini (~0,2 sn) her tıklamaya yayardı.
+Kilitleme = programı kapatmak VEYA açık "Kilitle" eylemi (`POST /security/lock/` →
 `unload_key()`). Her yükleme ve boşaltma `key_epoch()` sayacını artırır; kip
 katmanı yeni bir kilit açılışını buradan anlar. Anahtar diske YAZILMAZ,
 loglanmaz, hata mesajında yankılanmaz.
 
-ŞİFRELİ ALANDA DB ARAMASI YOKTUR (U9): Fernet her şifrelemede farklı token
+ŞİFRELİ ALANDA DB ARAMASI YOKTUR (§5.3): Fernet her şifrelemede farklı token
 ürettiği için şifreli alan üzerinde DB tarafı filtre/LIKE/sıralama çalışmaz
 (`Student.objects.filter(first_name=…)` daima boş döner). Ad temelli arama,
 sıralama ve teklik selector katmanında Python ile; kimlik eşleştirmesi kör
@@ -168,7 +168,7 @@ def key_fingerprint(data_key: bytes) -> str:
     return "v1:" + hmac.new(data_key, b"od-anahtar-parmak-izi", sha256).hexdigest()
 
 
-# Kör indeks anahtarının HKDF bağlamı (tasarım §6.3, T14). Değişirse bütün
+# Kör indeks anahtarının HKDF bağlamı (tasarım §5.3). Değişirse bütün
 # kör indeks sütunları yeniden hesaplanmalıdır — sabit, sürüm ekiyle değişir.
 BLIND_INDEX_INFO = b"od-kor-indeks"
 
@@ -183,7 +183,7 @@ def _derive_blind_index_key(data_key: bytes) -> bytes:
 class KeyMissingError(RuntimeError):
     """Veri anahtarı bellekte değilken şifreli alana boş olmayan değer yazılmak istendi.
 
-    Fail-closed (§6.3-3): parola kurulmamışken ya da program kilitliyken kişi
+    Fail-closed (§5.3): parola kurulmamışken ya da program kilitliyken kişi
     verisi düz metin olarak diske düşmez, işlem bu hatayla durur.
     `shared.exceptions.od_exception_handler` bunu 409 `parola_gerekli`
     yanıtına çevirir (parola kuruluysa kilitli durum zaten ara katmanda 423
@@ -200,7 +200,7 @@ class KeyMissingError(RuntimeError):
 class _KeyHolder:
     """Çalışma zamanı anahtar durumu (süreç geneli, iş parçacığı güvenli).
 
-    `waitress` istekleri birden çok iş parçacığında karşılar; durum tek masaya
+    `waitress` istekleri birden çok iş parçacığında karşılar; durum tek bilgisayara
     ait olduğu için süreç geneli tutulur, kilitle korunur. Kör indeks anahtarı
     yüklemede BİR KEZ türetilir ve anahtarla birlikte düşer.
     """
@@ -293,7 +293,7 @@ def blind_index(normalized: str) -> str:
 
     Belirlenimcidir: aynı DEK ve aynı değer daima aynı indeksi verir; bu yüzden
     tam eşleşme ve teklik kısıtı DB'de çalışır. Normalleştirme ÇAĞIRANIN
-    işidir (okul no, kart no için ayrı kurallar vardır). Boş dize `""` döner
+    işidir (ör. okul no için `normalize_student_number`). Boş dize `""` döner
     ("veri yok" hâli DB'de de boş görünür, kısmi teklik kısıtları buna
     dayanır). Anahtar bellekte değilse `KeyMissingError`.
     """
@@ -333,7 +333,7 @@ class EncryptedTextField(models.TextField):  # type: ignore[type-arg]  # Any dav
             return ""
         fernet = _holder.fernet()
         if fernet is None:
-            # Fail-closed (§6.3-3): düz metin yazmak yerine dur.
+            # Fail-closed (§5.3): düz metin yazmak yerine dur.
             raise KeyMissingError()
         return fernet.encrypt(text.encode("utf-8")).decode("ascii")
 
@@ -350,7 +350,7 @@ class EncryptedTextField(models.TextField):  # type: ignore[type-arg]  # Any dav
         except (InvalidToken, UnicodeEncodeError, UnicodeDecodeError):
             # Yarım kalmış geçişten düz satır veya anahtar uyuşmazlığı.
             # UnicodeEncodeError: Fernet token'ı daima ASCII'dir; Türkçe harf
-            # içeren değer tanım gereği düz metindir (OYS Tur 522 dersi).
+            # içeren değer tanım gereği düz metindir (ailenin sahada öğrendiği ders).
             return cast("str | None", value)
 
 
@@ -360,7 +360,7 @@ class EncryptedCharField(EncryptedTextField):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         # Şifreli token düz metinden uzundur → DB sütunu TEXT kalır; max_length
         # YALNIZ doğrulama amaçlıdır. Atama super SONRASINDA: `Field.__init__`
-        # kendi (None) değeriyle ezer (OYS F52 dersi).
+        # kendi (None) değeriyle ezer (aileden gelen ders).
         max_length = kwargs.pop("max_length", None)
         super().__init__(*args, **kwargs)
         self.max_length = max_length

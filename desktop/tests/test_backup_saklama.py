@@ -1,4 +1,4 @@
-"""Saklama tetiğinin yedek kuralları (F11 — tasarım §6.4 "Çalışma biçimi" ve "Yedeklerdeki kalıntı").
+"""Saklama tetiğinin yedek kuralları (aile iskeletinden; OAB'de tasarım §4.4.7 ve §5.4).
 
 - `pre-anonim-<tarih>-<saat>.odbak` tetikten ÖNCE alınır, şifrelidir ve rotasyonda
   günlük yedekler gibi **14 gün** tutulur; aynı gün ikinci tetik ayrı dosya alır.
@@ -93,7 +93,7 @@ def test_tetik_anindan_eski_pre_migrate_silinir(tmp_path: Path) -> None:
 
 
 def test_ada_gore_silme_yalniz_pre_migrate_adlarina_dokunur(tmp_path: Path) -> None:
-    """F11 düzeltme turu: gün değişimi kapısı silinemeyenleri ADIYLA yeniden dener.
+    """Aile iskeletinin düzeltmesi: gün değişimi kapısı silinemeyenleri ADIYLA yeniden dener.
 
     Dosya zamanına bakılmaz; yol ayırıcısı taşıyan ya da `pre-migrate-*.odbak` biçiminde
     olmayan ada dokunulmaz; klasörde olmayan ad beklemede kalmaz.

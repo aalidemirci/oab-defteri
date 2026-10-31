@@ -1,4 +1,5 @@
-"""Windows adlı çekirdek nesneleri — mutex ve olaylar tek yerde (tasarım §2.3, §4.2-1/5).
+"""Windows adlı çekirdek nesneleri — mutex ve olaylar tek yerde (tasarım §2.3; §4.2 adım 2
+ve "Kurucu ve kaldırıcı").
 
 Program iki tür adlı nesne açar:
 
@@ -22,8 +23,9 @@ kalkar. Bu yüzden nesneler yalnız gereken hakla şu dört alıcıya açılır:
 Mutex'lere yalnız `SYNCHRONIZE` (varlık denetimi), olaylara ek olarak
 `EVENT_MODIFY_STATE` (sinyal) verilir. Bu, başka bir etkileşimli kullanıcının
 programın penceresini açtırabilmesi ya da onu kapattırabilmesi demektir; tek
-etkisi kesintidir, veri yoluna açılmaz (Çık koruması zaten kaza önleyicidir,
-§4.2-4). Tanımlayıcı kurulamazsa varsayılanla devam edilir ve günlüğe yazılır.
+etkisi kesintidir, veri yoluna açılmaz (programı kapatmak veriye erişim vermez;
+Görev Yöneticisi de süreci her durumda kapatabilir). Tanımlayıcı kurulamazsa
+varsayılanla devam edilir ve günlüğe yazılır.
 
 Windows dışında işlevler etkisizdir (`None`/`False` döner). Gerçek gövdeler
 platform dalındadır: Docker'daki mypy onları görmez, `--platform win32` ile

@@ -1,6 +1,6 @@
 """İçe aktarma servisi — okul-no upsert, dry-run paritesi, idempotency, şube tohumu.
 
-DD test kalıbından KS'ye uyarlandı: TCKN/veli senaryoları kalktı; upsert
+Aile test kalıbından uyarlandı: TCKN/veli senaryoları kalktı; upsert
 anahtarı okul numarası, şube tohumu ClassSection'a yazar.
 """
 
@@ -37,7 +37,7 @@ def _metin(*satirlar: str) -> str:
 
 
 def _indeks(numara: str) -> str:
-    """Okul no şifrelidir (T14): DB'de kör indeksle aranır, düz numarayla değil."""
+    """Okul no şifrelidir (tasarım §5.3): DB'de kör indeksle aranır, düz numarayla değil."""
     return student_number_blind_index(numara)
 
 
@@ -84,7 +84,7 @@ class TestStudentCommit:
         assert rapor.already_imported is True  # aynı hash — uyarı, engel değil
 
     def test_cinsiyet_sutunu_okunmaz(self, aktif_yil: SchoolYear) -> None:
-        """e-Okul listesindeki "Cinsiyeti" sütunu aktarımı bozmaz ama OKUNMAZ (§6.1)."""
+        """e-Okul listesindeki "Cinsiyeti" sütunu aktarımı bozmaz ama OKUNMAZ (§3.4)."""
         rapor = import_service.commit_students_text(
             text="\n".join(
                 [
@@ -117,7 +117,7 @@ class TestStudentCommit:
     def test_ayrilmis_ogrenci_ayni_numarayla_donerse_yeniden_aktiflesir(
         self, aktif_yil: SchoolYear
     ) -> None:
-        """EK-21: ayrılmış (canlı, saklanan) kayıt aynı numarayla dönerse yeni kayıt AÇILMAZ."""
+        """Ayrılmış (canlı, saklanan) kayıt aynı numarayla dönerse yeni kayıt AÇILMAZ."""
         eski = Student.objects.create(
             first_name="ESKİ",
             last_name="ÖĞRENCİ",

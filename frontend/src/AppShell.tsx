@@ -97,7 +97,7 @@ function SidebarContent({
       )}
       <nav aria-label="Ana gezinme" className="flex flex-1 flex-col gap-1.5 px-3 py-2">
         {/* Görevli kipinde rotalar zaten görevli ekranına düşer (KipKapisi);
-            bağlantılar gösterilmez ki masadaki görevli boşuna tıklamasın. */}
+            bağlantılar gösterilmez ki görevli kipindeki kullanıcı boşuna tıklamasın. */}
         {(gorevli ? [] : NAV_ITEMS).map((item) => (
           <NavLink
             key={item.to}
@@ -224,7 +224,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               ve kip okunamazsa boştur. */}
           <div className="ml-auto flex min-w-0 items-center gap-1">
             <KipGostergesi />
-            {/* Çık (tasarım §4.2-4): her durumda görünür; pencerenin çarpısıyla
+            {/* Çık (tasarım §4.2 "Kapanış"): her durumda görünür; pencerenin çarpısıyla
                 aynı düzenli kapanış yoludur (T6, tepsi yoktur). Görevli kipinde
                 yönetici parolası ister. */}
             <CikisDugmesi />
@@ -233,7 +233,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
         <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-5 lg:px-7 lg:py-6">
           <div className="mx-auto w-full max-w-[100rem]">
-            {/* Güncelleme bandı açılışta DENETİM YAPMAZ (tasarım T11): yalnız
+            {/* Güncelleme bandı açılışta DENETİM YAPMAZ (tasarım TK4): yalnız
                 Ayarlar → Güncelleme'deki elle denetimin sonucunu gösterir.
                 Açılışta `/updates/` isteği çıkmadığı `App.test.tsx`'te sabittir.
                 Görevli kipinde gizlidir: indirme yönetici işidir (§4.4). */}

@@ -10,10 +10,10 @@ function renderAt(initial: string) {
     <MemoryRouter initialEntries={[initial]}>
       <Routes>
         <Route
-          path="/katalog/eser"
-          element={<ModuleHeader backTo="/katalog" moduleLabel="Katalog" title="Eser Ayrıntısı" />}
+          path="/kisiler/kisi"
+          element={<ModuleHeader backTo="/kisiler" moduleLabel="Kişiler" title="Kişi Ayrıntısı" />}
         />
-        <Route path="/katalog" element={<div>KATALOG ANA SAYFASI</div>} />
+        <Route path="/kisiler" element={<div>KİŞİLER ANA SAYFASI</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -21,15 +21,15 @@ function renderAt(initial: string) {
 
 describe("ModuleHeader", () => {
   it("başlık ve modül adını basar", () => {
-    renderAt("/katalog/eser");
-    expect(screen.getByRole("heading", { name: "Eser Ayrıntısı" })).toBeInTheDocument();
-    expect(screen.getByText("Katalog")).toBeInTheDocument();
+    renderAt("/kisiler/kisi");
+    expect(screen.getByRole("heading", { name: "Kişi Ayrıntısı" })).toBeInTheDocument();
+    expect(screen.getByText("Kişiler")).toBeInTheDocument();
   });
 
   it("geri butonu modül köküne gider (erişilebilir ad ile)", async () => {
-    renderAt("/katalog/eser");
-    const back = screen.getByRole("link", { name: "Katalog ana sayfasına dön" });
+    renderAt("/kisiler/kisi");
+    const back = screen.getByRole("link", { name: "Kişiler ana sayfasına dön" });
     await userEvent.click(back);
-    expect(screen.getByText("KATALOG ANA SAYFASI")).toBeInTheDocument();
+    expect(screen.getByText("KİŞİLER ANA SAYFASI")).toBeInTheDocument();
   });
 });

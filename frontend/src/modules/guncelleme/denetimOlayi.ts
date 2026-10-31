@@ -1,6 +1,6 @@
 // "Güncelleme denetlendi" olayı — Ayarlar → Güncelleme'deki elle denetimin
 // sonucunu kabuktaki banda taşır. Program açılışta denetim YAPMAZ (tasarım
-// T11: MEB ağında dış istekler engelli olabilir). Program ağ servisi sunmaz:
+// TK4; MEB ağında dış istekler engelli olabilir). Program ağ servisi sunmaz:
 // yönetim sunucusu yalnız 127.0.0.1'de, rastgele portta ve oturum belirteciyle
 // dinler; hiçbir port okul ağına açılmaz. Dış istek yalnız kullanıcının başlattığı
 // güncelleme denetiminden çıkar — "Şimdi denetle" düğmesi (tasarım §4.1). Bant

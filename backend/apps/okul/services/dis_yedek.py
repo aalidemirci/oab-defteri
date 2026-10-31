@@ -1,4 +1,4 @@
-"""Dış yedek hatırlatması (tasarım §16 risk 13; F11 bakım kolu).
+"""Dış yedek hatırlatması (tasarım §16 R6, §4.3 tehdit 18; aile iskeletinden).
 
 **Sorun.** Program her gün şifreli bir yedek alır, ama o yedekler aynı diskte
 durur: disk bozulur, bilgisayar çalınır ya da yeniden kurulursa otomatik
@@ -13,8 +13,7 @@ tarihini tutar ve belli bir süre geçince Genel Bakış'a kart düşürür.
    veritabanında olsaydı, eski bir yedeği geri yüklemek son dış yedeğin tarihini
    de geri sarardı (ya da yeni bilgisayara taşınan veritabanı "dış yedek alındı"
    derdi, oysa yeni diskte hiç kopya yoktur).
-2. Model alanı gerekmez: göç yoktur, `SchoolConfig` şişmez (F11'de model ve göç
-   saklama kolunundur).
+2. Model alanı gerekmez: göç yoktur, `SchoolConfig` şişmez.
 3. Dosya kişisel veri taşımaz: yalnız bir zaman damgası ve bir gün sayısı.
 
 **Hangi olay "dış yedek" sayılır?** Kullanıcının istediği şifreli yedeğin
@@ -33,7 +32,8 @@ yedek indirme"yi söyler ve dosyanın USB belleğe alınmasını ister (dürüst
 
 Dosya okunamazsa ya da bozuksa hiç indirme yokmuş gibi davranılır (hatırlatma
 tarafında hata yapmak kayıptan iyidir); yazma hatası indirmeyi DURDURMAZ, yalnız
-günlüğe olay düşer. Tarihler yerel gündür (`timezone.localdate`, CLAUDE.md §2-9).
+günlüğe olay düşer. Tarihler yerel gündür (`timezone.localdate`; saat dilimi
+`Europe/Istanbul`).
 """
 
 from __future__ import annotations

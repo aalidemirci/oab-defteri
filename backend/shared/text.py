@@ -1,12 +1,12 @@
-"""Türkçe metin yardımcıları (OYS shared/text.py'den UYARLA — F6).
+"""Türkçe metin yardımcıları (ailenin `shared/text.py`'sinden UYARLA).
 
-CLAUDE.md kuralı: TR metne çıplak `.upper()/.lower()` uygulanmaz — Python
+Kural (tasarım §9.1 madde 4): TR metne çıplak `.upper()/.lower()` uygulanmaz — Python
 'i'.upper() 'I' basar (noktasız), 'İ' değil. `tr_upper` GÖRÜNTÜLEME amaçlı
 güvenli büyük harfe çevirmedir (eşleştirme için `apps.okul.normalize`
 yardımcıları kullanılır). Diğer Türkçe harfler (ğ→Ğ, ş→Ş, ö→Ö, ü→Ü, ç→Ç,
 ı→I) Python upper()'ında zaten doğrudur; tek istisna 'i'dir.
 
-`tr_lower` / `tr_title` (KS, 20.09.2026): Türkçe küçük harf ve başlık biçiminin
+`tr_lower` / `tr_title` (aile iskeletinden): Türkçe küçük harf ve başlık biçiminin
 TEK uygulamasıdır; uygulamalar kendi kopyasını yazmaz.
 """
 

@@ -17,7 +17,7 @@ Bu kapı YALNIZ kilit açık ve kip görevliyken devreye girer:
   (ör. kip sürelerini değiştiren bir PUT) görevli kipinde parolasız açık
   kalır ve dolaşan test onu atladığı için hiçbir test kırılmazdı (denetim
   bulgusu). Diğer yöntemler olağan izin listesi yolundan geçer (fail-closed).
-* Güvenlik dosyası kayıpken (GA-2) bu kapı kesmez: kip durumu o an
+* Güvenlik dosyası kayıpken (§4.3 tehdit 8) bu kapı kesmez: kip durumu o an
   `guvenlik_dosyasi_kayip`'tır, görevli değil (`KIP.durum()`), ve neyin açık
   kalacağına kilit kapısı karar verir (yedek listesi + geri yükleme = kayıp
   kilidinin çıkış yolu). Anahtar bellekteyken dosya kaybolup kip görevliye
@@ -28,7 +28,7 @@ Bu kapı YALNIZ kilit açık ve kip görevliyken devreye girer:
 Etkinlik: `X-OD-Etkinlik` başlığı taşıyan ve kesilmeyen her `/api/` isteği
 `KIP.etkinlik()` çağırır (yönetici kipinin boşta sayacını tazeler). Tembel süre
 dolumu `gorevli_mi()` içinde, etkinlikten ÖNCE uygulanır: süresi dolmuş
-yönetici kipi geç gelen başlıklı bir istekle dirilmez (§5.10-14). Başlığı
+yönetici kipi geç gelen başlıklı bir istekle dirilmez (§4.4.3). Başlığı
 yalnız ön yüz, kullanıcı etkileşiminden hemen sonra gönderir (`lib/api.ts`);
 durum ve pano sorguları göndermez.
 """

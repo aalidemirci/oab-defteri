@@ -2,8 +2,8 @@
 // "Ayrılış kararı bekliyor") ve Ayrılış Havuzu'nun adresi. Sayfa (KisilerPage),
 // aktarım paneli (AktarimPaneli) ve Ayrılış Havuzu (AyrilisHavuzu) paylaşır.
 //
-// Hata bandı ve `hataOku` F2'de `ui/ErrorBand`'e taşındı (katalog ekranları da
-// aynı iki durumu taşıyor); buradan yeniden dışa verilir, çağrı yerleri değişmedi.
+// Hata bandı ve `hataOku` aile iskeletinde `ui/ErrorBand`'e taşındı; buradan yeniden
+// dışa verilir, çağrı yerleri değişmedi.
 
 import { formatDate } from "../../lib/format";
 import Icon from "../../ui/Icon";

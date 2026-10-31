@@ -7,14 +7,16 @@ sicil ekranının elle ekleme/düzeltme/ayrılış/silme yolu sabitlenir:
   (`save(update_fields=…)` `auto_now` alanını kendiliğinden yazmaz).
 - Elle giriş içe aktarmayla AYNI katlamadan geçer: şube harfi Türkçe büyütülür
   ('i' → 'İ'), seviye okul içi sabite (1-12 + hazırlık bayrağı) karşı doğrulanır.
-- Okul no teklik iletisi servisten gelir (kör indeks, T14).
-- AYRILIŞ KAYDI SİLMEZ (F1 eki 7, kullanıcı kararı 22.09.2026): ayrılış
+- Okul no teklik iletisi servisten gelir (kör indeks, tasarım §5.3).
+- AYRILIŞ KAYDI SİLMEZ (aile iskeletinden; tasarım §5.1): ayrılış
   LEFT / `is_active=False` + `left_at` yazar, havuzdan çıkarır, kancaları koşar;
-  kayıt üyelik ve yükümlülükten bağımsız olarak KALIR (eski "hiç üye olmamış ve
-  yükümlülüksüz → katı sil" dalı kalktı; bu testler o davranışı tersine sabitler).
+  kayıt bağdan ve yükümlülükten bağımsız olarak KALIR (ailenin eski "bağsız ve
+  yükümlülüksüz → katı sil" dalı aile iskeletinde kalkmıştı; bu testler o davranışı
+  tersine sabitler).
 - Kullanıcı silmesi ("Sil" düğmesi) kuralı korunur: açık yükümlülükte gerekçeyle
-  reddedilir, üye olmuş kişide ayrılış yoluna yönlendirir, aksi hâlde katı siler.
-  F1'de kayıtlı denetim yoktur: yollar SAHTE kayıtlı denetimlerle sınanır.
+  reddedilir, birlik kayıtlarına bağlı kişide ayrılış yoluna yönlendirir, aksi
+  hâlde katı siler. Bugün kayıtlı denetim yoktur (OAB modelleri F1c'den itibaren
+  kaydeder): yollar SAHTE kayıtlı denetimlerle sınanır.
 
 Tüm ad ve numaralar uydurmadır (KVKK).
 """
@@ -47,7 +49,7 @@ def client() -> APIClient:
 
 @pytest.fixture(autouse=True)
 def bos_kayit_defterleri(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Her test boş kayıt defterleriyle başlar (F6/F7 kayıtları testleri etkilemesin)."""
+    """Her test boş kayıt defterleriyle başlar (uygulamaların kayıtları testleri etkilemesin)."""
     for ad in (
         "_obligation_checks",
         "_membership_checks",
@@ -60,7 +62,7 @@ def bos_kayit_defterleri(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def uye_olmus(monkeypatch: pytest.MonkeyPatch) -> Iterator[set[tuple[str, int]]]:
-    """Sahte üyelik denetimi: kümeye eklenen (model, pk) "hiç üye olmuş" sayılır."""
+    """Sahte bağ denetimi: kümeye eklenen (model, pk) birlik kayıtlarına bağlı sayılır."""
     uyeler: set[tuple[str, int]] = set()
     persons.register_membership_check(lambda kisi: (type(kisi).__name__, kisi.pk) in uyeler)
     yield uyeler
@@ -68,11 +70,11 @@ def uye_olmus(monkeypatch: pytest.MonkeyPatch) -> Iterator[set[tuple[str, int]]]
 
 @pytest.fixture
 def acik_yukumluluk(monkeypatch: pytest.MonkeyPatch) -> Iterator[set[tuple[str, int]]]:
-    """Sahte yükümlülük denetimi: kümedekilerin "açık ödüncü" vardır (gerekçe adsız)."""
+    """Sahte yükümlülük denetimi: kümedekilerin açık yükümlülüğü vardır (gerekçe adsız)."""
     borclular: set[tuple[str, int]] = set()
 
     def _denetim(kisi: persons.Person) -> list[str]:
-        return ["Açık ödünç var."] if (type(kisi).__name__, kisi.pk) in borclular else []
+        return ["Kapanmamış kayıt var."] if (type(kisi).__name__, kisi.pk) in borclular else []
 
     persons.register_obligation_check(_denetim)
     yield borclular
@@ -237,7 +239,7 @@ def test_personel_guncelleme_dokunulmayan_alani_ezmez() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Ayrılış yolu (§6.1, F1 eki 7) — kayıt SİLİNMEZ
+# Ayrılış yolu (tasarım §5.1) — kayıt SİLİNMEZ
 # ---------------------------------------------------------------------------
 
 
@@ -306,7 +308,7 @@ def test_ayrilis_havuzdaki_kisiyi_havuzdan_cikarir() -> None:
 def test_ayrilis_kancasi_kisiyle_ve_left_olarak_cagrilir(
     uye_olmus: set[tuple[str, int]],
 ) -> None:
-    """Kanca (F6: üyeliği sonlandırır) kişiyi alır; kayıt o anda LEFT'tir."""
+    """Kanca kişiyi alır; kayıt o anda LEFT'tir."""
     gorulen: list[tuple[str, int, str]] = []
 
     def _kanca(kisi: persons.Person) -> None:
@@ -358,7 +360,7 @@ def test_ayrilan_ogrencinin_numarasi_yeni_ogrenciye_verilebilir() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Kullanıcı silmesi ("Sil" düğmesi — bilinçli eylem; kural F1 eki 7'de değişmedi)
+# Kullanıcı silmesi ("Sil" düğmesi — bilinçli eylem; ayrılış havuzu bunu değiştirmez)
 # ---------------------------------------------------------------------------
 
 
@@ -400,7 +402,7 @@ def test_silme_acik_yukumlulukte_gerekceyle_reddedilir(
     with pytest.raises(ValidationError) as hata:
         persons.delete_student(ogrenci)
 
-    assert hata.value.messages == ["Kayıt silinemez: Açık ödünç var."]
+    assert hata.value.messages == ["Kayıt silinemez: Kapanmamış kayıt var."]
     assert Student.objects.filter(pk=ogrenci.pk).exists()
 
 
@@ -414,6 +416,7 @@ def test_silme_uye_olmus_kisiyi_ayrilis_yoluna_yonlendirir(
         persons.delete_personnel(kisi)
 
     assert hata.value.messages == [persons.MEMBER_DELETE_MESSAGE]
+    assert persons.MEMBER_DELETE_MESSAGE.startswith("Bu kişi birlik kayıtlarına bağlı;")
     assert "Ayrıldı olarak işaretle" in persons.MEMBER_DELETE_MESSAGE
     assert Personnel.objects.filter(pk=kisi.pk).exists()
 
@@ -606,7 +609,7 @@ def test_api_silme_acik_yukumlulukte_400_ve_gerekce(
     yanit = client.delete(f"{OGRENCI_URL}{ogrenci.pk}/")
 
     assert yanit.status_code == 400
-    assert yanit.json()["message"] == "Kayıt silinemez: Açık ödünç var."
+    assert yanit.json()["message"] == "Kayıt silinemez: Kapanmamış kayıt var."
     assert Student.objects.filter(pk=ogrenci.pk).exists()
 
 
@@ -687,7 +690,7 @@ def test_api_personel_ekleme_duzeltme_ayrilis_ve_silme(
     assert [p["id"] for p in _sonuclar(client.get(PERSONEL_URL))] == [kisi_id]
     assert _sonuclar(client.get(PERSONEL_URL, {"only_active": "true"})) == []
 
-    # Üye olmuş kişi silinemez: ayrılış yoluna yönlendirilir.
+    # Birlik kayıtlarına bağlı kişi silinemez: ayrılış yoluna yönlendirilir.
     sil = client.delete(f"{PERSONEL_URL}{kisi_id}/")
     assert sil.status_code == 400
     assert sil.json()["message"] == persons.MEMBER_DELETE_MESSAGE

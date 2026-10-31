@@ -1,4 +1,4 @@
-"""Dış yedek hatırlatması (F11; tasarım §16 risk 13) — servis ve `backups/external/` ucu.
+"""Dış yedek hatırlatması (tasarım §16 R6) — servis ve `backups/external/` ucu.
 
 Kanıtlanan maddeler:
 

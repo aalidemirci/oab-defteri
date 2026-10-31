@@ -1,11 +1,11 @@
-"""Kip durum makinesi (U5, tasarım §4.4, T16) — birim testleri.
+"""Kip durum makinesi (aile iskeletinden; tasarım §4.4) — birim testleri.
 
 Varsayılan test ortamı (kök `conftest.py`): yönetici parolası kurulu + kilit
 açık. Saat taklit edilir (`SahteSaat`); parola doğrulaması `verify_password`
 sözleşmesine göre taklit edilir (gerçek doğrulama `test_kip_uclari.py`'de).
 
 Bu dosyada kurulum TAMAMLANMIŞ başlanır (`kurulum_tamamlanmis`, otomatik):
-kurulum bitene kadar süreler kipi düşürmez (F1 eki, karar 2-1); o davranış
+kurulum bitene kadar süreler kipi düşürmez (tasarım §13 D15); o davranış
 `TestKurulumSurerken` sınıfındadır.
 """
 
@@ -290,7 +290,7 @@ class TestSureler:
         kip.durum()
         saat.ilerlet(90)
         assert kip.durum() == YONETICI
-        sureler[0] = KipSureleri(bosta_sn=60, mutlak_sn=MUTLAK)  # ayar değişti (F6)
+        sureler[0] = KipSureleri(bosta_sn=60, mutlak_sn=MUTLAK)  # ayar değişti
         assert kip.durum() == GOREVLI
 
 
@@ -298,7 +298,7 @@ class TestSureler:
 
 
 class TestKurulumSurerken:
-    """Kurulum bitene kadar süreler kipi düşürmez (F1 eki, 22.09.2026 kararı 2-1)."""
+    """Kurulum bitene kadar süreler kipi düşürmez (tasarım §13 D15)."""
 
     @pytest.fixture(autouse=True)
     def kurulum_suruyor(self, kurulum_tamamlanmis: None) -> None:

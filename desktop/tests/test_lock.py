@@ -113,7 +113,8 @@ def test_mutex_adlari_kurucuyla_ayni() -> None:
 
     assert APP_MUTEX_NAMES == ("OABDefteri", r"Global\OABDefteri")
     assert r"ProgramMutexleri = 'OABDefteri,Global\OABDefteri';" in iss
-    # AppMutex KULLANILMAZ (tasarım §2.3, §4.2-5): kaldırıcı olayı göndermeden beklerdi.
+    # AppMutex KULLANILMAZ (tasarım §2.3, §4.2 "Kurucu ve kaldırıcı"): kaldırıcı olayı
+    # göndermeden beklerdi.
     assert not any(satir.startswith("AppMutex=") for satir in iss.splitlines())
 
 
@@ -200,7 +201,7 @@ def test_sinyal_ulasmazsa_false(tmp_path: Path) -> None:
 
 
 def test_acquire_sinyal_gondermez_hata_firlatir(tmp_path: Path) -> None:
-    """GA-11: sinyal kilide gömülmez — `acquire` her kipte AlreadyRunningError verir."""
+    """§4.2 adım 2: sinyal kilide gömülmez — `acquire` her kipte AlreadyRunningError verir."""
     kaynak = (Path(__file__).resolve().parents[1] / "lock.py").read_text(encoding="utf-8")
     govde = kaynak.split("    def acquire(self) -> None:", 1)[1].split("\n    def ", 1)[0]
 

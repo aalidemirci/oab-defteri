@@ -15,7 +15,7 @@ Ortam değişkenleri:
 BİLİNÇLİ SEÇİM — backend KAYNAK OLARAK paketlenir
 --------------------------------------------------------------------------
 Alışılmış yol `collect_submodules('apps')` ile Django uygulamalarını donmuş
-arşive gömmektir. BURADA BAŞKA YOL SEÇİLDİ (KS'den devralındı): `backend/`
+arşive gömmektir. BURADA BAŞKA YOL SEÇİLDİ (aile iskeletinden devralındı): `backend/`
 ağacı KAYNAK DOSYA olarak pakete kopyalanır, çalışma anında
 `desktop.django_bootstrap` `sys.path`'e ekler. Gerekçeler:
 
@@ -126,7 +126,7 @@ binaries: list[tuple[str, str]] = []
 binaries += collect_dynamic_libs("webview")
 
 
-# LİSANS BEYANI (F12 düzeltme turu, 27.09.2026 Qt'li Linux derlemesi): pywebview
+# LİSANS BEYANI (aile iskeletinin düzeltme turu, 27.09.2026 Qt'li Linux derlemesi): pywebview
 # `webview/lib/` altında Microsoft'un WebView2 SDK DLL'lerini ve bir Android arşivini
 # (`pywebview-android.jar`) taşır. SDK yalnız Windows'ta kullanılır (lisans listesi onu
 # "yalnız Windows" diye bildirir); Android arşivi hiçbir pakette kullanılmaz. Süzgeçsiz
@@ -191,7 +191,7 @@ hiddenimports += collect_submodules("pypdf")
 # eder; lxml ve typing_extensions onun geçişlileridir (tasarım §11 B10-B12).
 hiddenimports += collect_submodules("docx")
 hiddenimports += ["lxml", "lxml.etree", "typing_extensions"]
-# LİSANS KAPISI (F12, 27.09.2026 yerel derlemesi): pywebview kendi PyInstaller
+# LİSANS KAPISI (aile iskeletinin 27.09.2026 yerel derlemesi): pywebview kendi PyInstaller
 # kancasını (`webview.__pyinstaller.hook-webview`) paketinin İÇİNDE taşır; süzgeçsiz
 # `collect_submodules` onu da toplar, kanca `PyInstaller.utils.hooks`'u import
 # ettiği için PyInstaller'ın derleme kodu (GPL-2.0+, önyükleyici istisnası DIŞINDA)
@@ -301,7 +301,7 @@ excludes = [
     "PyQt5",
     "PyQt6",
     "PySide2",
-    # LİSANS KAPISI (F12, 27.09.2026 yerel Linux derlemesi): stdlib `readline`
+    # LİSANS KAPISI (aile iskeletinin 27.09.2026 yerel Linux derlemesi): stdlib `readline`
     # eklentisi Linux'ta GNU readline'a (libreadline.so.8, GPL-3.0) bağlıdır ve
     # Django `shell`, pdb, cmd ile code'un KOŞULLU import'u yüzünden pakete
     # giriyordu. Program etkileşimli kabuk açmaz; o import'ların hepsi
@@ -335,7 +335,7 @@ a = Analysis(  # noqa: F821 — PyInstaller global'i
 )
 
 # ---------------------------------------------------------------------------
-# pyphen heceleme sözlükleri (LİSANS KAPISI, F12): pyinstaller-hooks-contrib'in
+# pyphen heceleme sözlükleri (LİSANS KAPISI, tasarım §11.4): pyinstaller-hooks-contrib'in
 # `hook-pyphen` kancası pyphen'in BÜTÜN veri dosyalarını toplar. Sözlükler
 # LibreOffice'ten gelir ve tek tek lisanslıdır; bir kısmı yalnız GPL'dir (gl,
 # pt_PT, ro_RO). Evrak Türkçedir, şablonlar `hyphens: auto` kullanmaz ve
@@ -398,7 +398,7 @@ if WINDOWS:
     )
 
 # ---------------------------------------------------------------------------
-# Qt'nin yalnız GPL'li modülleri (LİSANS KAPISI, F12 düzeltme turu): PyInstaller'ın
+# Qt'nin yalnız GPL'li modülleri (LİSANS KAPISI, aile iskeletinin düzeltme turu): PyInstaller'ın
 # PySide6 kancaları QtWebEngine'in Quick/Qml bağımlılığı üzerinden BÜTÜN QML
 # modüllerini ve eklentilerini toplar; aralarında Qt'nin açık kaynak sürümünde yalnız
 # GPL-3.0 ile sunulan modüller vardır (Charts, Data Visualization, Graphs, Quick 3D,

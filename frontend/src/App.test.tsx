@@ -1,12 +1,12 @@
-// Kabuk + yönlendirme testi (DD App.test.tsx kalıbından).
+// Kabuk + yönlendirme testi (aile iskeletinin kalıbı).
 // Pinlenen davranışlar: (1) kurulum kapısı — `setup_completed=false` iken her rota
 // sihirbaza düşer, `true` iken Genel Bakış açılır, durum okunamazsa kapı FAIL-OPEN;
 // (2) kabuk gezinmesi (Genel Bakış/Kişiler/Ayarlar/Kılavuz + Hakkında) ve
 // kopyalanmayan modüllerin bağlantı ve rotalarının iskelete sızmaması;
 // (3) açılışta güncelleme denetimi YOK — kabuk açılırken `/updates/` isteği
-// çıkmaz (tasarım T11); (4) M3 token bütünlüğü — kaynakta kullanılan
-// şekil/opaklık sınıflarının Tailwind çıktısında gerçekten üretildiği (DD F4-D5
-// bulgu 14/15 dersi); (5) kip (tasarım §4.4) — yönetici kipinde üst çubukta kip
+// çıkmaz (tasarım TK4); (4) M3 token bütünlüğü — kaynakta kullanılan
+// şekil/opaklık sınıflarının Tailwind çıktısında gerçekten üretildiği (aile
+// iskeletinin dersi); (5) kip (tasarım §4.4) — yönetici kipinde üst çubukta kip
 // göstergesi, görevli kipinde rotaların yerine görevli ekranı ve gezinmesiz
 // kabuk; kip okunamazsa FAIL-OPEN.
 
@@ -470,8 +470,8 @@ describe("App — açılışta dış istek yok", () => {
 // --- M3 token bütünlüğü ------------------------------------------------------
 // Tailwind JIT, ölçekte KARŞILIĞI OLMAYAN bir token için sessizce hiç kural
 // üretmez: `rounded-shape-full` ya da `bg-on-surface/8` yazılınca derleme
-// patlamaz, sınıf yok sayılır ve kusur ancak gözle fark edilir (DD F4-D5 bulgu
-// 14: köşeli gezinme sekmeleri, bulgu 15: hover geri bildirimi hiç oluşmaması).
+// patlamaz, sınıf yok sayılır ve kusur ancak gözle fark edilir (aile iskeletinde
+// görüldü: köşeli gezinme sekmeleri, hiç oluşmayan hover geri bildirimi).
 // Bu test gerçek Tailwind çıktısını üretip kaynakta kullanılan her şekil ve
 // opaklık token'ının CSS'te GERÇEKTEN yer aldığını doğrular.
 

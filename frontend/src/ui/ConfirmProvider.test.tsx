@@ -22,7 +22,7 @@ function Harness({ onResult }: { onResult: (ok: boolean) => void }) {
   );
 }
 
-// İkinci doğrulama isteyen çağrı (TB18): geri alınamayan birleştirme.
+// İkinci doğrulama isteyen çağrı (tasarım §13 D30): geri alınamayan birleştirme.
 function AckHarness({ onResult }: { onResult: (ok: boolean) => void }) {
   const confirm = useConfirm();
   return (

@@ -1,12 +1,12 @@
-// Kontrollü (useState tabanlı) formlar için alan-bazlı doğrulama + hata gösterimi
-// (Tur 191, Talep 1f). OYS form mimarisi standardı: form değerleri bileşenin kendi
+// Kontrollü (useState tabanlı) formlar için alan-bazlı doğrulama + hata gösterimi.
+// Form mimarisi (aile iskeleti): form değerleri bileşenin kendi
 // state'inde kalır; bu hook yalnız `alan → hata mesajı` haritasını yönetir ve onu
 // iki kaynaktan doldurur:
 //   1) İSTEMCİ: `validate(zodSchema, values)` — boş/geçersiz zorunlu alanlar.
-//   2) SUNUCU: `applyApiError(err)` — backend `{fields}` hatası (CLAUDE.md §7).
+//   2) SUNUCU: `applyApiError(err)` — backend `{fields}` hatası.
 // Bileşen her alana `error={errors.<alan>}` geçer → TextField/Select/Autocomplete
 // kırmızı çerçeve + hata metni gösterir. RHF zorunluluğu yoktur (mevcut kontrollü
-// bileşen ekosistemiyle düşük-sürtünme; bkz. Tur 191 mimari kararı).
+// bileşen ekosistemiyle düşük sürtünme).
 
 import { useCallback, useState } from "react";
 import type { ZodType } from "zod";

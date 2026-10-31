@@ -1,4 +1,4 @@
-"""Uygulama sürümü + veri sürüm damgası (tasarım §4.2; F11: eski exe yeni DB'yi AÇMAZ).
+"""Uygulama sürümü + veri sürüm damgası (tasarım §4.2 adım 5: eski exe yeni DB'yi AÇMAZ).
 
 **Karar — damga TABLO değil DOSYA:** veri dizinindeki `surum.json`.
 Gerekçe: (1) veritabanı açılamadığında/bozukken bile okunabilir, yani sürüm
@@ -10,7 +10,7 @@ migration gerekmez ve Django'nun şema karşılaştırmasına gölge düşürmez
 Damga her başarılı `migrate` sonrası yazılır. Damgadaki sürüm çalışan programdan
 YENİYSE program açılmaz: eski sürüm, yeni şemayı tanımadığı için veriyi bozardı.
 
-**İkinci hat (F11):** damga yoksa kapı açık kalırdı — ve geri yükleme damgayı
+**İkinci hat (aile iskeletinden):** damga yoksa kapı açık kalırdı — ve geri yükleme damgayı
 SİLER (yedeğin hangi sürümle alındığı bilinmez). Daha yeni bir sürümün yedeği eski
 programa geri yüklenince veritabanının göç kaydı konuşur:
 `ensure_no_unknown_migrations` programın tanımadığı uygulanmış göç varsa aynı
@@ -117,7 +117,7 @@ def write_version_stamp(path: Path, app_version: str) -> None:
 
 
 def ensure_no_unknown_migrations(unknown: Sequence[str], app_version: str) -> None:
-    """Veritabanında bu programın tanımadığı göç varsa açılışı durdurur (F11, ikinci hat).
+    """Veritabanında bu programın tanımadığı göç varsa açılışı durdurur (ikinci hat).
 
     Damga (`surum.json`) yoksa `ensure_stamp_compatible` geçer — geri yükleme
     damgayı siler (`backup_restore.restore_database`), çünkü yedeğin hangi sürümle
@@ -127,7 +127,7 @@ def ensure_no_unknown_migrations(unknown: Sequence[str], app_version: str) -> No
     Çıkış kodu ve başlık sürüm damgasıyla AYNIDIR (`SchemaTooNewError`, 4).
 
     Göç adları YALNIZ günlüğe (`uygulama.log`) yazılır; kullanıcı iletisi sade Türkçedir
-    (27.09.2026 ana oturum kararı — sözlük §2 "iç kimlikler yüzeye çıkmaz" ve "Eski
+    (aile iskeletinin 27.09.2026 kararı — sözlük §2 "iç kimlikler yüzeye çıkmaz" ve "Eski
     program, yeni veri" satırı: kullanıcı metninde şema, migration, göç geçmez). Tanı
     için BTR günlüğe bakar; iletinin ipucu günlük dosyasını anar. Günlüğe bütün adlar
     yazılır (ileti kutusu taşması kaygısı günlükte yoktur).

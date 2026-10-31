@@ -1,7 +1,7 @@
 """Yedekten geri yükleme çekirdeği (services.backup_restore) testleri.
 
-Yedekler YALNIZ X25519+AES-GCM kapsayıcısıdır (tasarım §6.3-6; düz yedek dalı
-söküldü): düz SQLite dosyası reddedilir. Çekirdeğin sözleşmesi gereği testler
+Yedekler YALNIZ X25519+AES-GCM kapsayıcısıdır (tasarım §4.4.7; düz yedek dalı
+söküldü, §13 D29): düz SQLite dosyası reddedilir. Çekirdeğin sözleşmesi gereği testler
 ORM'e HİÇ dokunmaz — geri yükleme bozuk bir veritabanıyla da çalışabilmelidir
 (`django_db` işareti bilinçli olarak yoktur).
 
@@ -70,7 +70,7 @@ def _sifreli_kapsayici(icerik: bytes, dek: bytes, durum: dict[str, Any] | None) 
 
 
 # ---------------------------------------------------------------------------
-# Düz yedek dalı yok (§6.3-6) + dosya takası
+# Düz yedek dalı yok (§13 D29) + dosya takası
 # ---------------------------------------------------------------------------
 def test_duz_sqlite_dosyasi_reddedilir_ve_hedefe_dokunulmaz(
     tmp_path: Path, veri_dizini: Path
@@ -114,7 +114,7 @@ def test_yedek_geri_yuklenir_eski_dosya_ve_wal_kenara_alinir(
     assert not (veri_dizini / "db.sqlite3-shm").exists()
     # Damga artık geri yüklenen veriyi tarif etmiyor → silinir (eksik damga engel değil).
     assert not (veri_dizini / "surum.json").exists()
-    # Saklama tetiği yaşı adın damgasından okur (27.09.2026 kullanıcı kararı): adı üreten ile
+    # Saklama tetiği yaşı adın damgasından okur (aile iskeletinin kullanıcı kararı): adı üreten ile
     # okuyan aynı biçimi konuşur; damga geri yüklemenin yerel anıdır, eşler aynı damgayı taşır.
     damga = backup_restore.old_database_stamp(sonuc.old_db_path.name)
     assert damga is not None
@@ -140,7 +140,7 @@ def test_hedef_yokken_calisir_ve_basibos_wal_temizlenir(tmp_path: Path, veri_diz
 
 
 # ---------------------------------------------------------------------------
-# Kenara alınan veritabanının akıbeti (saklama tetiği, 27.09.2026 kullanıcı kararı)
+# Kenara alınan veritabanının akıbeti (14 günlük rotasyon — tasarım §4.4.7)
 # ---------------------------------------------------------------------------
 ESKI_AD = "db-onceki-2026-09-01-101010.sqlite3"
 

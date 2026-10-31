@@ -1,10 +1,10 @@
 // Sunucu-taraflı oto-kayıt hook'u (Tur 147) — KVKK: localStorage YOK.
 //
-// useFormDraft'tan FARKI: taslak istemcide (localStorage) DEĞİL,
-// değişen alanlar doğrudan SUNUCUYA yazılır (AuditLog'a düşer). EK-1 anlatısı
-// (sağlık/aile ekonomik durumu/psikososyal özet) ÖZEL NİTELİKLİ KVKK verisidir
-// (CLAUDE.md §5 — "TCKN gibi hassas alanlar hiç yazılmaz"); bu yüzden bu form
-// için istemci-tarafı taslak yasak, sunucu-tarafı debounce'lu kayıt kullanılır.
+// Taslak istemcide (localStorage) DEĞİL, değişen alanlar doğrudan SUNUCUYA
+// yazılır. Uzun serbest metin alanları (karar metni, Denetleme Kurulu bulgusu,
+// gerekçe) kişisel veri taşıyabilir; tarayıcı deposunda şifresiz kalırdı
+// (tasarım §4.2; CLAUDE.md §2 madde 5). Bu yüzden istemci-tarafı taslak yasak,
+// sunucu-tarafı debounce'lu kayıt kullanılır.
 //
 // Davranış:
 //   - notifyChange(changed) değişen alanları biriktirir (pending) ve debounce başlatır.
@@ -16,10 +16,10 @@
 //     en iyi çabayla (fire-and-forget) yazılır.
 //
 // Kullanım:
-//   const autosave = useAutosave<DecisionNarrativeBody>({
-//     save: (changed) => kayitApi.updateNotes(kayitId, changed),
+//   const autosave = useAutosave<TaslakGovdesi>({
+//     save: (changed) => taslakApi.guncelle(taslakId, changed),
 //   });
-//   onChange → autosave.notifyChange({ health_status: value });
+//   onChange → autosave.notifyChange({ metin: value });
 //   manuel tam kayıt sonrası → autosave.markSaved();
 //   kapanışta → await autosave.flush();
 

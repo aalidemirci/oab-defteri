@@ -62,7 +62,7 @@ describe("Button", () => {
     expect(screen.getByRole("button").className).toMatch(/w-full/);
   });
 
-  it("merkezî .state-layer örtü span'i içerir (M3 §7.5, Tur 313)", () => {
+  it("merkezî .state-layer örtü span'i içerir (M3 state layer)", () => {
     const { container } = render(<Button>X</Button>);
     const layer = container.querySelector('[aria-hidden="true"]');
     expect(layer).not.toBeNull();

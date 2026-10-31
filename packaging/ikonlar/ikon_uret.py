@@ -31,7 +31,7 @@ da ana çizimden aynı kuralla üretilir.
 
 **okulapp.org proje görseli** (site deposunda `public/oab-defteri.png`,
 başlıkta 42 px) varsayılan koşuda YAZILMAZ: site ayrı depodur ve kendi alanına
-yalnız site adımında yazılır (`docs/site-icerigi.md` §7). Ölçüsü programın
+yalnız site adımında yazılır (ortak yayın alanı, tasarım §17). Ölçüsü programın
 türediği kardeş sınav programının site görseliyle aynıdır (256 px, 15 px saydam
 pay; görünür kutu 15..241), kaynağı yine depodaki ana çizimdir:
 

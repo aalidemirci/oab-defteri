@@ -2,12 +2,11 @@
 # OAB Defteri — Backend Python bağımlılıkları
 # Python 3.12+ / Django 5.x
 # =============================================================================
-# Pinler OYS'nin (Okul Yönetim Sistemi) backend/requirements.txt dosyasından
-# türetildi (görev brifi) — ortak parçalar (Django, DRF, WeasyPrint, cryptography,
-# argon2-cffi, openpyxl, Pillow, pypdf) AYNI sürümde tutuldu. Tek kullanıcılı
-# masaüstü uygulama olduğundan OYS'nin sunucu/ağ-merkezli bağımlılıkları (Postgres,
-# Redis, Celery, Sentry, Google OAuth, SimpleJWT, django-axes/cors/csp, structlog,
-# django-environ, python-magic) BİLİNÇLİ OLARAK alınmadı.
+# Pinler aile iskeletinden devralındı (ortak parçalar: Django, DRF, WeasyPrint,
+# cryptography, argon2-cffi, openpyxl, Pillow, pypdf). Tek bilgisayarda çalışan
+# çevrimdışı masaüstü uygulama olduğundan sunucu/ağ-merkezli bağımlılıklar
+# (Postgres, Redis, Celery, Sentry, Google OAuth, SimpleJWT, django-axes/cors/csp,
+# structlog, django-environ, python-magic) BİLİNÇLİ OLARAK alınmadı.
 
 # ---------- Çekirdek ----------
 Django==5.1.15
@@ -25,14 +24,18 @@ openpyxl==3.1.5                # Excel içe/dışa aktarma (.xlsx — üretim + 
 xlrd==2.0.1                    # e-Okul .xls ihraçlarını okuma
 
 # ---------- Görüntü İşleme ----------
-Pillow==12.3.0                 # ek/fotoğraf normalize (thumbnail, EXIF)
+# WeasyPrint evraktaki raster görselleri Pillow ile çözer (spec `hiddenimports`);
+# Linux'ta pencere simgesini `desktop/qt_kurulum.py` Pillow ile okur.
+Pillow==12.3.0
 
 # ---------- PDF Üretimi ----------
 # WeasyPrint 63 cairo/gdk-pixbuf KULLANMAZ (53+ saf-Python render motoru) — Docker
 # imajındaki sistem paketleri buna göre minimal tutuldu (docker/backend.Dockerfile).
 weasyprint==68.0
 
-# ---------- PDF Okuma / Bölme ----------
+# ---------- PDF Okuma ----------
+# `--pdf-duman` üretilen PDF'i geri okuyup doğrular (packaging/pyinstaller/giris.py);
+# evrak testleri de PDF metnini bununla okur.
 pypdf==6.14.2
 
 # ---------- Word Üretimi ----------
@@ -45,11 +48,11 @@ lxml==6.1.3
 typing_extensions==4.16.0
 
 # ---------- Masaüstü Uygulama Altyapısı ----------
-# NOT (F9 temizliği): `filetype` ve `platformdirs` F0 brifinden geldi ama hiç
-# bağlanmadı — soru PDF doğrulaması %PDF imzası + A4 ölçüsüyle (services.py),
-# dizin çözümü saf os.environ ile (desktop/paths.py) yapılıyor. K7 hiddenimports
-# listesi gerçek bağımlılık kümesiyle senkron kalsın diye ikisi de düşürüldü;
-# MIME doğrulaması gerekirse `filetype` kullanıldığı fazda spec'le birlikte döner.
+# NOT (aile iskeletinden): `filetype` ve `platformdirs` alınmadı — dizin çözümü
+# saf os.environ ile (desktop/paths.py) yapılıyor. Spec'in hiddenimports listesi
+# gerçek bağımlılık kümesiyle senkron kalsın diye kullanılmayan bağımlılık
+# tutulmaz; MIME doğrulaması gerekirse `filetype` kullanıldığı fazda spec'le
+# birlikte gelir.
 # whitenoise: statik dosyaları ayrı bir web sunucusu olmadan servis eder (masaüstü
 # uygulamada nginx yok).
 whitenoise==6.12.0

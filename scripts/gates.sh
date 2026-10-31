@@ -4,10 +4,11 @@
 # =============================================================================
 # Test + lint + biçim + tip kontrolünü sırayla Docker konteynerinde çalıştırır.
 # Herhangi biri kırmızı olursa betik durur (`set -e`). Her faz sonunda yeşil
-# olmalıdır (tasarım §14.1); CI'da .github/workflows/kapilar.yml aynen koşar.
-# Betik KS'den devralındı; kapı sırası ve nöbetçi deseni aynen korunur.
+# olmalıdır (tasarım §14; CLAUDE.md §2, altın kural 7); CI'da
+# .github/workflows/kapilar.yml aynen koşar.
+# Betik aile iskeletinden devralındı; kapı sırası ve nöbetçi deseni aynen korunur.
 #
-# Kanıt deseni (KS, 29.08.2026): geliştirme makinesinde `docker compose run`
+# Kanıt deseni (aile iskeletinde, 29.08.2026): geliştirme makinesinde `docker compose run`
 # zincirinin çıkış kodunu aralıklı olarak yuttuğu gözlendi (vitest, mypy ve
 # prettier adımlarında birer kez). Bu yüzden her adım çıkış koduna EK olarak pozitif
 # kanıt üretir: komut konteyner İÇİNDE başarılıysa nöbetçi satırı
@@ -85,7 +86,7 @@ kapi "frontend: typecheck" fe_typecheck frontend "npm run typecheck"
 kapi "frontend: eslint" fe_eslint frontend "npx eslint src"
 kapi "frontend: prettier --check" fe_prettier frontend "npx prettier --check src"
 
-# Ön yüz lisans listesi (F12 düzeltme turu, TB28): Vite çıktısına GERÇEKTEN giren npm
+# Ön yüz lisans listesi (tasarım §11.4): Vite çıktısına GERÇEKTEN giren npm
 # paketleri THIRD_PARTY_LICENSES'taki npm kayıtlarıyla ad ve sürümde aynı olmalı. Depo
 # testi (`test_lisans_kapisi.py`) yalnız package.json'daki doğrudan bağımlılıkları görür;
 # bir sürüm yükseltmesiyle çıktıya giren GEÇİŞLİ paket ya da tipten çalışma anına geçen
@@ -105,7 +106,7 @@ echo "== frontend: vitest =="
 # basılırdı; rapor bu durumu da yakalar). npm sarmalayıcısı zincirden çıkarıldı.
 # Rapor yoksa ya da success:true değilse kapı kırmızıdır (fail-closed).
 #
-# Kapsam eşiği (19.09.2026): eşikler `frontend/vitest.config.ts`te yaşar; vitest
+# Kapsam eşiği (aile iskeletinden): eşikler `frontend/vitest.config.ts`te yaşar; vitest
 # eşik altında "does not meet" basıp 1 döner. JSON raporunun `success` alanı
 # yalnız TESTLERİ söyler, eşiği söylemez — bu yüzden kapsam için de iki yönlü
 # kanıt aranır: özet satırı ÜRETİLMİŞ olmalı (kapsam gerçekten ölçüldü) ve eşik

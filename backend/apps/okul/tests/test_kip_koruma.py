@@ -1,6 +1,6 @@
-"""Kip koruma testleri — tasarım §5.10-8 (F1 iskeleti) ve §5.10-14.
+"""Kip koruma testleri — izin listesi (aile iskeletinden; tasarım §4.4) ve boşta dönüş (§4.4.3).
 
-§5.10-8: görevli kipinde izin listesi dışındaki BÜTÜN `/api/` uçları, her
+İzin listesi: görevli kipinde izin listesi dışındaki BÜTÜN `/api/` uçları, her
 yöntemde 403 `kip_yetkisiz` döner. Uç listesi ELLE TUTULMAZ: URL desenleri
 çalışma anında dolaşılır (`apps/okul/tests/api_gezgini.py`; dönüştürücüler örnek
 değerle doldurulur). Eklenen her yeni uç bu teste kendiliğinden girer ve izin
@@ -8,7 +8,7 @@ listesine bilinçli eklenmedikçe kapalıdır. Aile iskeletinin kütüphane masa
 kuralları ve testleri uygulamayla birlikte söküldü (F1a-2); parametre
 denetçisi mekanizması burada sınanır.
 
-§5.10-14: `X-OD-Etkinlik` başlığı olmayan periyodik istekler yönetici kipini
+Boşta dönüş: `X-OD-Etkinlik` başlığı olmayan periyodik istekler yönetici kipini
 canlı tutmaz; başlıklı istekler tutar; mutlak süre dolunca görevli kipine
 inilir ve yükseltme yönetici parolası ister.
 """
@@ -93,14 +93,14 @@ def gorevli() -> Iterator[None]:
     assert KIP.durum() == "gorevli", "dolaşma sırasında kip değişti"
 
 
-# ============================================================ §5.10-8 izin listesi
+# ============================================================ izin listesi
 
 
 def test_izin_listesi_anlik_goruntuyle_sabittir() -> None:
     """Listeye uç eklemek bilinçli bir karardır: bu anlık görüntü de güncellenir."""
     assert sorted((k.uc, k.yontem) for k in IZIN_LISTESI) == [
-        # Çık (F5, §4.2-4): görevli kipinde gövdede yönetici parolası ister, parolasız
-        # istek görünümde 403 alır (test_cikis_ucu.py, §5.10-18).
+        # Çık (tasarım §4.2): görevli kipinde gövdede yönetici parolası ister, parolasız
+        # istek görünümde 403 alır (test_cikis_ucu.py; aile kuralı).
         ("app-quit", "POST"),
         ("security-lock", "POST"),
         ("security-mode", "GET"),
@@ -179,7 +179,7 @@ def test_api_uc_adlari_tekildir() -> None:
     """Denetim bulgusu: izin listesi URL ADIYLA eşleşir ve dolaşan test ada göre atlar.
     uygulamaların URL'leri aynı düz ad uzayındadır; izin listesindeki
     bir adı taşıyan ikinci bir desen (kopyala-yapıştır) görevli kipinde sessizce açılır,
-    dolaşan test de yeşil kalırdı. §5.10-8 kanıtı bu tekliğe dayanır."""
+    dolaşan test de yeşil kalırdı. İzin listesinin kanıtı bu tekliğe dayanır."""
     sayac = Counter(ad for _, _, ad in _api_uclari())
     ciftler = sorted(ad for ad, adet in sayac.items() if adet > 1)
     assert ciftler == []
@@ -253,7 +253,7 @@ def test_saglik_yolu_hicbir_durumda_kip_kapisinda_kesilmez(
 
 
 def test_kayip_kilidinin_cikis_yollari_gorevli_kipinde_de_acik(parmak_izi_yazili: str) -> None:
-    """Güvenlik dosyası kayıp kilidi (GA-2) ile kip kapısının kesişimi.
+    """Güvenlik dosyası kayıp kilidi (§4.3 tehdit 8) ile kip kapısının kesişimi.
 
     Anahtar bellekteyken `guvenlik.json` kaybolur ve kip görevliye inmiştir (ör.
     kullanıcı kayıp ekranında 3 dk'dan uzun kaldı). Bu durumda kip geçişi
@@ -294,17 +294,17 @@ def test_kilitliyken_kilit_kapisi_once_keser(kilitli: None) -> None:
 
 
 def test_parametre_denetcisi_yanlis_derse_istek_kesilir() -> None:
-    """F6'nın `override_reason` kuralı bu mekanizmayla yazılacak."""
+    """Parametre denetçisi gövdedeki yasaklı anahtarı görünce isteği keser (uç adları örnektir)."""
     istek = RequestFactory().post("/api/v1/x/", {"override_reason": "gerekçe"})
     kurallar = (
-        IzinKurali("odunc", "POST", parametre=lambda r: "override_reason" not in r.POST),
-        IzinKurali("iade", "POST"),
+        IzinKurali("uc-a", "POST", parametre=lambda r: "override_reason" not in r.POST),
+        IzinKurali("uc-b", "POST"),
     )
 
-    assert izinli_mi("odunc", "POST", istek, kurallar=kurallar) is False
-    assert izinli_mi("odunc", "POST", RequestFactory().post("/"), kurallar=kurallar) is True
-    assert izinli_mi("iade", "post", istek, kurallar=kurallar) is True
-    assert izinli_mi("iade", "GET", istek, kurallar=kurallar) is False
+    assert izinli_mi("uc-a", "POST", istek, kurallar=kurallar) is False
+    assert izinli_mi("uc-a", "POST", RequestFactory().post("/"), kurallar=kurallar) is True
+    assert izinli_mi("uc-b", "post", istek, kurallar=kurallar) is True
+    assert izinli_mi("uc-b", "GET", istek, kurallar=kurallar) is False
     assert izinli_mi(None, "POST", istek, kurallar=kurallar) is False
 
 
@@ -345,14 +345,14 @@ def test_ad_alanli_uc_adi_cozulur() -> None:
     assert kip_middleware.uc_adi("/api/v1/boyle-bir-uc-yok/") is None
 
 
-# ============================================================ §5.10-14 boşta dönüş
+# ============================================================ boşta dönüş (§4.4.3)
 
 
 @pytest.fixture
 def saat() -> SahteSaat:
-    """§5.10-14 testleri kurulumu TAMAMLANMIŞ ortamda koşar.
+    """Boşta dönüş testleri kurulumu TAMAMLANMIŞ ortamda koşar.
 
-    Kurulum bitene kadar süreler kipi düşürmez (F1 eki, karar 2-1); o davranış
+    Kurulum bitene kadar süreler kipi düşürmez (tasarım §13 D15); o davranış
     `test_kurulum_surerken_basliksiz_istekler_yonetici_kipini_dusurmez`'dedir.
     """
     kurulum_durumunu_yaz(tamam=True)
@@ -438,9 +438,9 @@ def test_mutlak_sure_dolunca_gorevliye_iner_ve_parola_istenir(
 
 
 def test_kurulum_surerken_basliksiz_istekler_yonetici_kipini_dusurmez(saat: SahteSaat) -> None:
-    """Sihirbazda kurtarma anahtarı ekrandayken süre dolup görevliye inilmez (karar 2-1).
+    """Sihirbazda kurtarma anahtarı ekrandayken süre dolup görevliye inilmez (§13 D15).
 
-    Kurulum tamamlanınca (`setup/complete/`) aynı §5.10-14 kuralı işlemeye başlar.
+    Kurulum tamamlanınca (`setup/complete/`) aynı boşta dönüş kuralı işlemeye başlar.
     """
     kurulum_durumunu_yaz(tamam=False)
     client = Client()
@@ -460,7 +460,7 @@ def test_kurulum_surerken_basliksiz_istekler_yonetici_kipini_dusurmez(saat: Saht
 
 
 def test_kisa_sureli_ayarla_da_ayni_kural(saat: SahteSaat) -> None:
-    """Süre sağlayıcısı değişirse (F6 ayarı) kapı yeni süreyle karar verir."""
+    """Süre sağlayıcısı değişirse (ayar) kapı yeni süreyle karar verir."""
     KIP._reset_for_tests(saat=saat, sureler=lambda: KipSureleri(bosta_sn=60, mutlak_sn=120))
     client = Client()
     assert _kip(client) == "yonetici"

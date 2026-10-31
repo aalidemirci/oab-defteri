@@ -6,8 +6,8 @@ import { dosyaAdi, saveBlob } from "./download";
 
 describe("dosyaAdi", () => {
   it("belge + kapsam + tarihten okunur dosya adı kurar (Türkçe harf korunur)", () => {
-    expect(dosyaAdi(["Sayım Tutanağı", "2026-2027", "16.11.2026"], "pdf")).toBe(
-      "Sayım-Tutanağı_2026-2027_16.11.2026.pdf",
+    expect(dosyaAdi(["Genel Kurul Toplantı Tutanağı", "2026-2027", "16.11.2026"], "pdf")).toBe(
+      "Genel-Kurul-Toplantı-Tutanağı_2026-2027_16.11.2026.pdf",
     );
   });
 

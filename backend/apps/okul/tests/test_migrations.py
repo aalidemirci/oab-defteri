@@ -1,8 +1,8 @@
 """`okul` göç ağacının genel koruma testleri.
 
-Göç ağacı F0'da temizlenmiş modellerden `0001_initial` ile yeniden başladı (KS'nin
-0001-0013 göçleri zil/vardiya/küme/zümre/fotoğraf/cinsiyet/çizelge alanlarını
-taşıyordu; tasarım §6.2 "migration ağacı 0001'den başlar"). Buradaki testler iki
+Göç ağacı F0'da temizlenmiş modellerden `0001_initial` ile yeniden başladı (aile
+iskeletinin atasındaki 0001-0013 göçleri zil/vardiya/küme/zümre/fotoğraf/cinsiyet/çizelge
+alanlarını taşıyordu). Buradaki testler iki
 şeyi sabitler:
 
 - Modellerde yapılan ve göçe dökülmemiş değişiklik YOKTUR (masaüstü açılışı

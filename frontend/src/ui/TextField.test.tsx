@@ -13,9 +13,9 @@ describe("TextField", () => {
   it("etiket alana bağlıdır ve yazılan değer onChange'e ulaşır", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(<TextField label="Eser adı" value="" onChange={onChange} />);
+    render(<TextField label="Toplantı yeri" value="" onChange={onChange} />);
 
-    await user.type(screen.getByLabelText("Eser adı"), "A");
+    await user.type(screen.getByLabelText("Toplantı yeri"), "A");
 
     expect(onChange).toHaveBeenCalledTimes(1);
   });
@@ -29,12 +29,12 @@ describe("TextField", () => {
 
   it("hata metni alert olarak duyurulur ve alana bağlanır", () => {
     render(
-      <TextField label="Nüsha sayısı" error="Nüsha sayısı 1-50 arasında olmalı." defaultValue="" />,
+      <TextField label="Toplantı saati" error="Saat ss:dd biçiminde yazılmalı." defaultValue="" />,
     );
 
-    const alan = screen.getByLabelText("Nüsha sayısı");
+    const alan = screen.getByLabelText("Toplantı saati");
     const hata = screen.getByRole("alert");
-    expect(hata).toHaveTextContent("Nüsha sayısı 1-50 arasında olmalı.");
+    expect(hata).toHaveTextContent("Saat ss:dd biçiminde yazılmalı.");
     expect(alan).toHaveAttribute("aria-invalid", "true");
     expect(alan).toHaveAttribute("aria-describedby", hata.id);
   });

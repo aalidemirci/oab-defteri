@@ -1,8 +1,8 @@
-// Hakkında sayfası testleri: üst yazı, konum notu (tasarım §3 — program
-// "yerel araç"tır, Bakanlık otomasyon sistemindeki kaydın yerine geçmez),
-// şifreleme yöntemi adlarının YALNIZ bu sayfada geçmesi (docs/sozluk.md §1 —
-// ayar ekranları "güçlü şifrelemeyle korunur" der) ve dış isteğin yalnız elle
-// güncelleme denetimi olduğu (tasarım T11).
+// Hakkında sayfası testleri: üst yazı, program tanımı ve konum notu (CLAUDE.md §1,
+// tasarım §3.1 — program karar defterinin ve TEFBİS'in yerine geçmez, bunlara
+// girilecek metni ve listeyi hazırlar), şifreleme yöntemi adlarının YALNIZ bu
+// sayfada geçmesi (docs/sozluk.md §1 — ayar ekranları "güçlü şifrelemeyle korunur"
+// der) ve dış isteğin yalnız elle güncelleme denetimi olduğu (tasarım TK4).
 
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
@@ -24,9 +24,8 @@ describe("HakkindaPage", () => {
   });
 
   it("geliştirici kartı: kardeş programlarla aynı biçimde ad ve e-posta (unvan ve kurum yok)", () => {
-    // 29.09.2026 kullanıcı kararı (tasarım §14.1 F12 ekleri İA-1): iletişim, kardeş
-    // programların Hakkında sayfasındaki biçimde verilir — ad + e-posta; unvan ve kurum adı
-    // herkese açık tanıtımda geçmez.
+    // Kullanıcı kuralı: iletişim, aile programlarının Hakkında sayfasındaki biçimde
+    // verilir — ad + e-posta; unvan ve kurum adı herkese açık tanıtımda geçmez.
     render(<HakkindaPage />);
 
     expect(screen.getByRole("heading", { level: 2, name: "Geliştirici" })).toBeInTheDocument();
@@ -50,17 +49,28 @@ describe("HakkindaPage", () => {
     }
   });
 
-  it("konum notu: yerel araçtır, Bakanlık otomasyon sistemindeki kaydın yerine geçmez", () => {
-    render(<HakkindaPage />);
+  it("program kartı: tanım ve konum notu — karar defterinin ve TEFBİS'in yerine geçmez", () => {
+    const { container } = render(<HakkindaPage />);
 
-    expect(screen.getByRole("heading", { level: 2, name: "Program" })).toBeInTheDocument();
+    const baslik = screen.getByRole("heading", { level: 2, name: "Program" });
     expect(
       screen.getByText(
-        "Program okulun kütüphane işlerini yürüttüğü yerel araçtır; Bakanlıkça belirlenen otomasyon sistemindeki kaydın yerine geçmez.",
+        "OAB Defteri, okul-aile birliğinin işlerini okulun bilgisayarında yürüten çevrimdışı bir masaüstü programıdır.",
       ),
     ).toBeInTheDocument();
-    // Program kendine "otomasyon sistemi" adını vermez (docs/sozluk.md §1).
-    expect(screen.queryByText(/kütüphane otomasyon sistemi/i)).not.toBeInTheDocument();
+    // Konum notu CLAUDE.md §1 ve Kullanım Kılavuzu'ndaki "Programın Konumu" ile aynıdır.
+    expect(
+      screen.getByText(
+        "Program karar defterinin ve TEFBİS'in yerine geçmez. Karar defterine kararlar el ile yazılır ve defter noter tasdiklidir; birliğin gelir-gider kayıtlarını TEFBİS'e okul idaresi girer. Program bunlara girilecek metni ve listeyi hazırlar, tutarlılığı denetler.",
+      ),
+    ).toBeInTheDocument();
+    // Simge logonun motifidir (okul çatısı altında aile); aile iskeletinin kitap simgesi kalmadı.
+    const kart = baslik.parentElement?.parentElement;
+    expect(kart?.querySelector(".material-symbols-outlined")).toHaveTextContent("family_restroom");
+    // Program kendine "otomasyon sistemi" adını vermez (docs/sozluk.md §1); aile
+    // iskeletinin kütüphane tanımı sayfada kalmaz.
+    expect(container.textContent).not.toMatch(/otomasyon sistemi/i);
+    expect(container.textContent).not.toMatch(/kütüphane|local_library/i);
   });
 
   it("teknik bilgiler kartı şifreleme yöntemlerini adıyla verir; fotoğraf şifrelemesi anlatılmaz", () => {
@@ -81,7 +91,7 @@ describe("HakkindaPage", () => {
     expect(screen.getByText(/hiçbir port okul ağına açılmaz/)).toBeInTheDocument();
     expect(screen.getByText(/Program açılışta internete çıkmaz;/)).toBeInTheDocument();
     expect(screen.getByText(/“Şimdi\s+denetle” düğmesine bastığınızda/)).toBeInTheDocument();
-    // Kullanıcı kararı (27.09.2026): denetimin hedefi GitHub'dır (T11).
+    // Denetimin hedefi GitHub'dır (tasarım TK4).
     expect(screen.getByText(/son sürümü GitHub'dan soran anonim\s+denetim/)).toBeInTheDocument();
     expect(screen.getByText(/kişisel veri dışarı\s+çıkmaz/)).toBeInTheDocument();
     // Aile iskeletinin ikinci kapısı (ISBN künye sorgusu) ve Ağ Kataloğu yoktur.
@@ -90,7 +100,7 @@ describe("HakkindaPage", () => {
   });
 
   it("üçüncü taraf kartı LGPL kitaplıkların telif bildirimini ve lisans dosyalarını verir", () => {
-    // LGPL-3.0 §4(c) (F12 düzeltme turu): çalışırken telif bildirimi gösteren program,
+    // LGPL-3.0 §4(c) (lisans kümesi: tasarım §11.4): çalışırken telif bildirimi gösteren program,
     // LGPL kitaplığın bildirimini de gösterir ve GPL/LGPL metinlerine yönlendirir.
     render(<HakkindaPage />);
 
@@ -109,7 +119,7 @@ describe("HakkindaPage", () => {
     ]) {
       expect(screen.getByText(dosya)).toBeInTheDocument();
     }
-    // Sözlük: "kurucu" / "yükleyici" kullanıcı metninde geçmez.
+    // Sözlük (docs/sozluk.md §1): "kurucu" / "yükleyici" kullanıcı metninde geçmez.
     expect(screen.queryByText(/kurucu|yükleyici/i)).not.toBeInTheDocument();
   });
 });

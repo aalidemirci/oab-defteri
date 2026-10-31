@@ -1,9 +1,9 @@
 # =============================================================================
 # backend/pyproject.toml — araç yapılandırması (ruff, mypy, pytest)
 # =============================================================================
-# OYS'nin (Okul Yönetim Sistemi) backend/pyproject.toml dosyası referans alındı;
+# Ailenin backend/pyproject.toml dosyası referans alındı;
 # aynı ruff kuralları/satır uzunluğu + mypy strict + django-stubs. Kapsam kapısı
-# `--cov=apps --cov=shared` (config hariç — görev brifi; OYS `--cov=config` da
+# `--cov=apps --cov=shared` (config hariç — görev brifi; kaynak `--cov=config` da
 # ekliyordu, burada config yalnız statik ayar/URL/wsgi, iş mantığı barındırmıyor).
 # =============================================================================
 

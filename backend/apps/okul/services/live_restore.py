@@ -21,7 +21,7 @@ Masaüstü kardeşi `desktop/restore.py` bozuk-veritabanı senaryosudur (pencere
 hiç açılmadan `--geri-yukle`); bu modül programın AÇILABİLDİĞİ senaryo içindir
 (yanlış veri girişi sonrası eski güne dönme; güvenlik dosyası kayıp kilidinden
 çıkış — iki uç da o kilitte açıktır, `lock_middleware`). Yedekler daima
-şifrelidir (düz yedek dalı yok, §6.3-6); parola ya da kurtarma anahtarı
+şifrelidir (düz yedek dalı yok, §13 D29); parola ya da kurtarma anahtarı
 gerekir. Parola/kurtarma anahtarı yalnız parametre olarak akar; hiçbir günlük
 satırına ve hata metnine yazılmaz.
 """

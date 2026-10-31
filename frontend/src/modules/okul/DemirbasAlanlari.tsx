@@ -1,7 +1,7 @@
-// "Bu bilgisayar okul demirbaşıdır" onayı + bilgisayarın demirbaş no'su (tasarım §3,
-// §6.1; sözlük: "Demirbaş" yalnız bilgisayar için kullanılır). Kurulum sihirbazının
-// okul adımı ve Ayarlar → Okul Bilgileri aynı bileşeni kullanır. Onay kurulumu
-// tamamlamanın koşuludur (backend `services/setup.py::missing_school_fields`).
+// "Bu bilgisayar okul demirbaşıdır" onayı + bilgisayarın demirbaş no'su (genel tasarım
+// §4.5 "Hesap ve bilgisayar"; sözlük: "Demirbaş" yalnız bilgisayar için kullanılır).
+// Kurulum sihirbazının okul adımı ve Ayarlar → Okul Bilgileri aynı bileşeni kullanır.
+// Onay kurulumu tamamlamanın koşuludur (backend `services/setup.py::missing_school_fields`).
 
 import TextField from "../../ui/TextField";
 

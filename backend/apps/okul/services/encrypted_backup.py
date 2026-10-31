@@ -41,7 +41,7 @@ def create_encrypted_backup() -> tuple[bytes, str]:
     except (OSError, sqlite3.Error) as exc:
         raise EncryptedBackupError("Şifreli yedek oluşturulamadı.") from exc
 
-    # F11 (§16 risk 13): dış yedek hatırlatmasının saati bu indirmeyle sıfırlanır.
+    # Tasarım §16 R6: dış yedek hatırlatmasının saati bu indirmeyle sıfırlanır.
     # Kayıt veri dizinindeki dosyadadır ve hata yükseltmez (`dis_yedek` modül başlığı).
     dis_yedek.indirme_kaydet()
     timestamp = datetime.now().astimezone().strftime("%Y-%m-%d-%H%M%S")

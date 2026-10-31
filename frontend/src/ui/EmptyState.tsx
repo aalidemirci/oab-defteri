@@ -1,5 +1,5 @@
-// M3 boş-durum bileşeni (Faz 1a): merkezî ikon + başlık + destek metni + opsiyonel
-// birincil eylem. Ölü-alanlı tek-satır boş kartların (frontend-m3.md C2) yerine geçer;
+// M3 boş-durum bileşeni: merkezî ikon + başlık + destek metni + opsiyonel
+// birincil eylem. Ölü-alanlı tek-satır boş kartların yerine geçer;
 // `compact` varyantı satır-içi "kayıt yok" metinleri içindir. Yalnız M3 token'ları.
 
 import type { ReactNode } from "react";

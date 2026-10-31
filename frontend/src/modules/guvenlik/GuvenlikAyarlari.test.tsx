@@ -1,8 +1,9 @@
 // Güvenlik ayarları testi: dürüst KVKK metni, parola değiştirme akışı, "Parolayı
-// kaldır" ve "Parolayı kur" eylemlerinin OLMAMASI (tasarım §6.3 — parola yalnız
+// kaldır" ve "Parolayı kur" eylemlerinin OLMAMASI (tasarım §4.4.3 — parola yalnız
 // kurulum sihirbazının ilk adımında kurulur; burada sihirbaza bağlantı durur),
-// kurtarma anahtarı çıktısını elindeki anahtarla yeniden alma kartı (E14) ve
-// kurtarma anahtarının doğrulanması/yenilenmesi (F1 eki, 22.09.2026 kararı 2).
+// kurtarma anahtarı çıktısını elindeki anahtarla yeniden alma kartı (katalog dışı
+// program belgesi, tasarım §9.7) ve kurtarma anahtarının doğrulanması/yenilenmesi
+// (aile iskeletinin doğrulama deseni; tasarım §4.4.3).
 
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -47,7 +48,7 @@ const PAROLASIZ = {
   protected_fields: ["ad", "soyad"],
 };
 const PAROLALI = { ...PAROLASIZ, password_set: true, recovery_key_confirmed: true };
-/** Anahtarı doğrulanmamış kurulum (karardan önce tamamlanmış ya da yenilenmiş anahtar). */
+/** Anahtarı doğrulanmamış kurulum (yenilenmiş ve henüz doğrulanmamış anahtar). */
 const DOGRULANMAMIS = { ...PAROLALI, recovery_key_confirmed: false };
 const YENI_ANAHTAR = "YENI-ANAH-TARD-EFGH-JKLM-NOPQ-RSTU-VWXY";
 
@@ -113,7 +114,7 @@ describe("GuvenlikAyarlari", () => {
     ekranaBas();
 
     expect(await screen.findByText("Kişisel veri alanları şifreli.")).toBeInTheDocument();
-    // Kart başlığı durumla DEĞİŞMEZ (sözlük §4.6): yol tarifi hep aynı addır.
+    // Kart başlığı durumla DEĞİŞMEZ (docs/sozluk.md §4.6): yol tarifi hep aynı addır.
     expect(
       screen.getByRole("heading", { name: "Yönetici Parolası ve Şifreleme" }),
     ).toBeInTheDocument();
@@ -291,8 +292,7 @@ describe("GuvenlikAyarlari", () => {
     expect(await screen.findByText("Yönetici parolası değiştirildi.")).toBeInTheDocument();
   });
 
-  // Parola pencereleri açılınca parola alanı odaktadır (`ui/Dialog` `initialFocusRef`;
-  // tasarım §14.1 F6 ekleri 23).
+  // Parola pencereleri açılınca parola alanı odaktadır (`ui/Dialog` `initialFocusRef`).
   it("parola değiştirme penceresi açılınca “Mevcut parola” alanı odaktadır", async () => {
     const kullanici = userEvent.setup();
     guvenlik.durum.mockResolvedValue(PAROLALI);

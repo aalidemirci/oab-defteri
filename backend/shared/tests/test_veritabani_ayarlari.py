@@ -1,8 +1,9 @@
-"""SQLite bağlantı ayarlarının koruma testi (tasarım T15).
+"""SQLite bağlantı ayarlarının koruma testi (tasarım §4.3 tehdit 18).
 
 `synchronous=FULL` bilinçli bir karardır: WAL + NORMAL kipi elektrik
-kesintisinde son işlemleri geri alabilir; dolaşım masasında bu "kitap çıktı,
-kaydı yok" demektir. Ayar sessizce NORMAL'e dönerse bu test kırılır.
+kesintisinde son işlemleri geri alabilir; bu, girilmiş bir gelir-gider kaydının
+ya da karar taslağının sessizce kaybolması demektir. Ayar sessizce NORMAL'e
+dönerse bu test kırılır.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ def test_synchronous_full() -> None:
 
 @pytest.mark.django_db
 def test_secure_delete_acik() -> None:
-    """Tasarım §6.3-5: silinen/güncellenen içerik serbest sayfada okunur kalmaz."""
+    """Tasarım §5.3 (`secure_delete=ON`): silinen/güncellenen içerik serbest sayfada okunur kalmaz."""
     with connection.cursor() as cursor:
         cursor.execute("PRAGMA secure_delete")
         (deger,) = cursor.fetchone()

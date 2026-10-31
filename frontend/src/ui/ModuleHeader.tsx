@@ -8,11 +8,11 @@ import { Link } from "react-router-dom";
 import Icon from "./Icon";
 
 interface ModuleHeaderProps {
-  /** Modül kökü rotası (ör. "/katalog"). */
+  /** Modül kökü rotası (ör. "/kisiler"). */
   backTo: string;
-  /** Modül adı (ör. "Katalog") — geri linkinde ve erişilebilir adda kullanılır. */
+  /** Modül adı (ör. "Kişiler") — geri linkinde ve erişilebilir adda kullanılır. */
   moduleLabel: string;
-  /** Sayfa başlığı (ör. "Eser Ayrıntısı"). */
+  /** Sayfa başlığı (ör. "Kişi Ayrıntısı"). */
   title: string;
   /** Sağda opsiyonel eylemler (yıl seçici, "Yeni …" butonu vb.). */
   actions?: ReactNode;

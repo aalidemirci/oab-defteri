@@ -1,4 +1,4 @@
-"""İndirilebilir içe aktarma şablonları (tasarım §4.7/2).
+"""İndirilebilir içe aktarma şablonları (aile iskeletinden; OAB'de tasarım §8.4).
 
 Başlıklar parser sinonimleriyle bire bir tanınır — ayrı bir "şablon kod yolu"
 YOKTUR; kullanıcı şablonu doldurup aynı import ucuna yükler.
@@ -18,7 +18,7 @@ STUDENT_TEMPLATE_HEADERS: tuple[str, ...] = (
     "Öğrenci Soyadı",
 )
 
-#: Personel şablonunda unvan ve branş sütunu YOKTUR (tasarım §6.1, V2-01). "Üye
+#: Personel şablonunda unvan ve branş sütunu YOKTUR (tasarım §8.4). "Üye
 #: Türü" yalnız "Öğretmen" ya da "Diğer personel" değerini bekler; ayrıştırıcı onu
 #: e-Okul'un "Görevi" sütunuyla aynı yoldan üye türüne çevirir, metnini saklamaz.
 PERSONNEL_TEMPLATE_HEADERS: tuple[str, ...] = ("Adı", "Soyadı", "Üye Türü")

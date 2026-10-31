@@ -1,7 +1,7 @@
-"""`apps.okul.normalize` — saf normalize ediciler (sınıf/şube + ad bölme; KS'den alındı).
+"""`apps.okul.normalize` — saf normalize ediciler (sınıf/şube + ad bölme; aile iskeletinden).
 
 TCKN/telefon/tarih/cinsiyet normalize edicileri yoktur — program o verileri
-toplamaz (tasarım §6.1).
+toplamaz (tasarım §3.4).
 """
 
 from __future__ import annotations
@@ -149,12 +149,12 @@ class TestSplitFullName:
         assert normalize.split_full_name(None) == ("", "")
 
     def test_ham_birakilir_title_case_uygulanmaz(self) -> None:
-        """TR büyük harf tuzağı: görüntü biçimi başka katmanda (CLAUDE.md §2)."""
+        """TR büyük harf tuzağı: görüntü biçimi başka katmanda."""
         assert normalize.split_full_name("emre can yılmaz") == ("emre can", "yılmaz")
 
 
 class TestStudentNumber:
-    """Okul no'nun kör indeks normalleştirmesi (T14): aynı numara aynı değere iner."""
+    """Okul no'nun kör indeks normalleştirmesi (§5.3): aynı numara aynı değere iner."""
 
     def test_bastaki_sifirlar_atilir(self) -> None:
         assert normalize.normalize_student_number("0123") == "123"

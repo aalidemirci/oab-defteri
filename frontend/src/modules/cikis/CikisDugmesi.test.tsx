@@ -1,4 +1,4 @@
-// Çık (tasarım §4.2-4, §5.10-18, TB13): üst çubuktaki düğme her durumda görünür;
+// Çık (tasarım §4.2, §4.5): üst çubuktaki düğme her durumda görünür;
 // yönetici kipinde ve kilitliyken parolasız onay, görevli kipinde yönetici
 // parolası. Sunucu parola isterse (kip bu arada değişti) diyalog parola alanına
 // geçer. Tepsi yoktur (T6): diyalog yalnız düğmeyle açılır.
@@ -130,7 +130,7 @@ describe("CikisDugmesi", () => {
   });
 
   // `autoFocus` ortak Dialog'un panel odağına yeniliyordu; parola alanı
-  // `initialFocusRef` ile odaklanır (tasarım §14.1 F6 ekleri 23).
+  // `initialFocusRef` ile odaklanır (`ui/Dialog` başlığındaki İLK ODAK notu).
   it("görevli kipinde açılışta parola alanı odaktadır", async () => {
     const kullanici = userEvent.setup();
     kip.durum.mockResolvedValue(ozet("gorevli"));

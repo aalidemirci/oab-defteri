@@ -1,6 +1,6 @@
 """Zorunlu yönetici parolası — kurma, açma, doğrulama, değiştirme, kurtarma.
 
-Tasarım §4.3, §4.4 (kilit), §6.3. `shared.crypto` kriptografik ilkelleri
+Tasarım §4.3, §4.4 (kilit), §4.4.4. `shared.crypto` kriptografik ilkelleri
 (Argon2id türetme, zarf sarmalama, şifreli alanlar, kör indeks) sağlar; bu
 modül BÜTÜN AKIŞI yönetir:
 
@@ -10,11 +10,12 @@ modül BÜTÜN AKIŞI yönetir:
     ├── kurtarma: {tuz, sarmal(DEK)}     └── okul_schoolconfig
     └── gecis: TAMAM|SIFRELENIYOR            └── app_password_hash = parmak izi
 
-**Yönetici parolası zorunludur ve parolasız dal YOKTUR** (§6.3-6: KS'deki
-"parolayı kaldır" akışı, çözme geçişi ve düz yedekler F1'de söküldü). Kurulum
-sihirbazının ilk adımı parola + kurtarma anahtarıdır; parola kurulmadan kişi
-yazan uçlar 409 `parola_gerekli` döner (`apps/okul/permissions.py`,
-`require_password_set`), şifreli alan anahtarsız yazmaz (`KeyMissingError`).
+**Yönetici parolası zorunludur ve parolasız dal YOKTUR** (ailenin eski
+"parolayı kaldır" akışı ve çözme geçişi aile iskeletinde sökülmüştü; düz yedek
+kalıntıları OAB'de de söküldü — tasarım §13 D29). Kurulum sihirbazının ilk
+adımı parola + kurtarma anahtarıdır; parola kurulmadan kişi yazan uçlar 409
+`parola_gerekli` döner (`apps/okul/permissions.py`, `require_password_set`),
+şifreli alan anahtarsız yazmaz (`KeyMissingError`).
 
 **DEK (veri anahtarı) hiçbir yerde açık durmaz**; iki kez sarmalanır: bir kez
 paroladan türetilen anahtarla, bir kez de yazdırılabilir kurtarma anahtarından
@@ -23,7 +24,7 @@ bir kez üretilir ve hiç değişmez: parola değişimi de kurtarma anahtarını
 yenilenmesi de yalnız ilgili sarmalı yeniler; kör indeks, yedek anahtarı
 (`yedekleme.json`) ve eski yedekler geçerli kalır.
 
-FAIL-CLOSED DURUM SORGUSU (GA-2, §4.3): "parola kurulu mu?" sorusunun cevabı
+FAIL-CLOSED DURUM SORGUSU (§4.3 tehdit 8): "parola kurulu mu?" sorusunun cevabı
 güvenlik dosyasının VARLIĞI **ya da** DB'deki anahtar parmak izidir. Kilitliyken
 `guvenlik.json` silinir ya da yeniden adlandırılırsa program "parolasız"a
 dönmez: parmak izi dolu + dosya yok = **güvenlik dosyası kayıp** kilidi
@@ -34,34 +35,35 @@ başlıksız yedek almaz). Bu durumda yalnız durum uçları ve yedekten geri
 yükleme açıktır (`lock_middleware`); geri yükleme `guvenlik.json`'u yedeğin
 kurtarma başlığından yeniden yazar, bozuk dosyayı arşivler
 (`backup_restore._ensure_state_file`). `enable()` bu durumda reddeder.
-Tek istisna (F1-E): dosya kullanılamıyor AMA parmak izi boş ve şifreli alan
+Tek istisna: dosya kullanılamıyor AMA parmak izi boş ve şifreli alan
 taşıyan bütün tablolar boşsa korunacak veri yoktur; "güvenlik dosyasını sıfırla
 ve kuruluma dön" yolu dosyayı arşivleyip ilk açılış hâline döner
 (`state_reset_available`, `reset_unusable_state`).
 
-KURTARMA ANAHTARI ÇIKTISI (E14): `verify_recovery_key` anahtarı kurtarma
-sarmalına VE bellekteki anahtara karşı doğrular (yanlışta kademeli gecikme);
-yalnız o zaman PDF basılır (`services.recovery_key_document`). Anahtar
-sunucuda saklanmaz, hiçbir günlüğe ve hata iletisine yazılmaz.
+KURTARMA ANAHTARI BELGESİ (katalog dışı program belgesi, tasarım §9.7):
+`verify_recovery_key` anahtarı kurtarma sarmalına VE bellekteki anahtara karşı
+doğrular (yanlışta kademeli gecikme); yalnız o zaman PDF basılır
+(`services.recovery_key_document`). Anahtar sunucuda saklanmaz, hiçbir günlüğe
+ve hata iletisine yazılmaz.
 
-KURTARMA ANAHTARININ DOĞRULANMASI (F1 eki, 22.09.2026 kullanıcı kararı 2):
-kurulum, anahtarın saklandığı doğrulanmadan tamamlanmaz. Sihirbaz iki grubu
-istemcide denetledikten sonra bellekteki TAM anahtarı gönderir;
+KURTARMA ANAHTARININ DOĞRULANMASI (tasarım §4.4.4 `kurtarma.dogrulandi`,
+§4.4.5): kurulum, anahtarın saklandığı doğrulanmadan tamamlanmaz.
+Sihirbaz iki grubu istemcide denetledikten sonra bellekteki TAM anahtarı gönderir;
 `confirm_recovery_key` onu `verify_recovery_key` kuralıyla doğrular ve
 `guvenlik.json`'un kurtarma bölümüne doğrulama damgasını (`kurtarma.dogrulandi`,
 ISO zaman damgası) atomik yazar. Damga sarmalla birlikte yaşar: yenilemede
 yeni kurtarma bölümü damgasız yazılır. DB'de alan yoktur (migration gerekmez);
 `recovery_key_confirmed()` ve `status()` damgayı okur.
 
-KURTARMA ANAHTARINI YENİLEME (aynı kararın 3. maddesi; F11 görev devrinin bu
-parçası F1'e çekildi): `renew_recovery_key(password=…)` yalnız kilit açıkken
-çalışır, yönetici parolasını bellekteki anahtara karşı doğrular, YENİ anahtar
-ve YENİ tuzla aynı DEK'i sarmalar. Önceki `guvenlik.json` önce
+KURTARMA ANAHTARINI YENİLEME (aynı kararın 3. maddesi):
+`renew_recovery_key(password=…)` yalnız kilit açıkken çalışır, yönetici
+parolasını bellekteki anahtara karşı doğrular, YENİ anahtar ve YENİ tuzla aynı
+DEK'i sarmalar. Önceki `guvenlik.json` önce
 `guvenlik-arsiv-<damga>.json` olarak KOPYALANIR (silinmez; `guvenlik.json` hiçbir
 an yok olmaz, yarıda kesilen yenileme dosyayı kayıp hâline düşürmez), sonra yeni
 durum atomik yazılır. Yeni anahtar yanıtla BİR KEZ döner. DEK değişmediği için
 kayıtlar, kör indeks ve yedek anahtarı aynen kalır; bunun iki sonucu vardır ve
-arayüz ile kılavuz ikisini de söyler:
+arayüz (Ayarlar → Güvenlik'teki yenileme metni) ikisini de söyler:
 
 * her yedek, alındığı anın `guvenlik.json`'unu başlığında taşır
   (`backup_crypto.recovery_metadata`/`usable_recovery_header`): yenilemeden
@@ -74,19 +76,19 @@ arayüz ile kılavuz ikisini de söyler:
   arşivlenen dosya eski anahtarla açılmaya devam eder. Yenilemenin amacı
   kaydedilemeyen ya da kaybolan kâğıdın yerine yenisini koymaktır.
 
-GÖREV DEVRİ (F11, §4.4 SU-25): `start_handover(current_password=…, new_password=…)`
+GÖREV DEVRİ (aile iskeletinden): `start_handover(current_password=…, new_password=…)`
 parolayı ve kurtarma anahtarını TEK atomik yazımda yeniler (önce arşive kopya,
 yenilemeyle aynı sıra); kurtarma bölümü doğrulama damgasız ve görev devri
-damgasıyla (`HANDOVER_FIELD`) yazılır. Yeni anahtar doğrulanınca Görev devri notu
-(E18, `apps.kutuphane.gorev_devri`) basılabilir. DEK döndürülmez (TB17, TB23 —
-v1 dışında). Sonucu yalnız "eski yedekler eski parolayla açılır" DEĞİLDİR (F11
-düzeltme turu, testli): eski parola ya da eski anahtar, eski bir güvenlik başlığıyla
+damgasıyla (`HANDOVER_FIELD`) yazılır. Aile iskeletinde yeni anahtar doğrulanınca
+bir görev devri notu basılırdı; OAB'de o belge ve bu işlevi çağıran uç yoktur
+(yerine hesap geçişi gelir, tasarım §12.B). DEK döndürülmez (tasarım §13 D14;
+OAB'de DEK yenilemesi TK12 ile F4'te gelir). Sonucu yalnız "eski yedekler eski
+parolayla açılır" DEĞİLDİR (testli): eski parola ya da eski anahtar, eski bir güvenlik başlığıyla
 (eski yedeğin içindeki, arşiv dosyası, `pre-parola-*` yedeği) DEK'i verir; yedek
 anahtar çifti DEK'ten türediği için (`backup_crypto.private_key_from_data_key`)
 devirden SONRA alınan yedekler de açılır ve arşiv dosyası `guvenlik.json` yerine
 konursa güncel veritabanı da. Görev devri, görevi devredenin bu bilgisayara ve
-yedeklere erişimi kesildiğinde anlam taşır; not, kılavuz ve kurulum belgesi bunu
-söyler ve masa hesabının parolasının değiştirilmesini ister.
+yedeklere erişimi kesildiğinde anlam taşır.
 
 Güvenlik dosyasını değiştiren işlemler (doğrulama damgası, yenileme, görev devri,
 parola değişimi, kurtarmayla parola yenileme, yarım geçişin tamamlanması) süreç içi
@@ -94,7 +96,7 @@ bir kilitle sıralanır: oku-değiştir-yaz arasına başka bir yazım girip onu
 
 NEDEN GÜVENLİK DOSYASI VERİ DİZİNİNDE, DB'DE DEĞİL?
   * Yedekler (`backups/gunluk-*.odbak`) X25519 + AES-256-GCM kapsayıcılarıdır;
-    DB kopyası tek başına ad, okul no ve kart no açmaz.
+    DB kopyası tek başına şifreli alanları (ad, okul no) açmaz.
   * DB'de yalnız anahtarın PARMAK İZİ durur; yanlış eşleşme (başka kurulumun
     güvenlik dosyası) sessizce bozuk çözme yerine açık ret üretir.
 
@@ -167,13 +169,15 @@ TRANSITION_ENCRYPTING = "SIFRELENIYOR"
 
 MIN_PASSWORD_LENGTH = 8
 
-#: Kurtarma bölümündeki doğrulama damgası (ISO zaman damgası; F1 eki, karar 2).
-#: Sarmalla birlikte yaşar: yenilenen kurtarma bölümü damgasız yazılır.
+#: Kurtarma bölümündeki doğrulama damgası (ISO zaman damgası; tasarım §4.4.4
+#: `kurtarma.dogrulandi`). Sarmalla birlikte yaşar: yenilenen kurtarma bölümü damgasız
+#: yazılır.
 RECOVERY_CONFIRMED_FIELD = "dogrulandi"
-#: Kurtarma bölümündeki görev devri damgası (ISO zaman damgası; F11, §4.4 SU-25):
+#: Kurtarma bölümündeki görev devri damgası (ISO zaman damgası; aile iskeletinden):
 #: bu kurtarma sarmalı bir görev devrinde (parola + anahtar birlikte) üretildi.
 #: Sarmalla birlikte yaşar: sonraki "Kurtarma anahtarını yenile" bölümü damgasız
-#: yazar, görev devri notu (E18) ancak damga + doğrulama varken basılır.
+#: yazar. Aile iskeletinde görev devri notu ancak damga + doğrulama varken
+#: basılırdı; OAB'de o belge yoktur (modül başlığı, GÖREV DEVRİ).
 HANDOVER_FIELD = "gorev_devri"
 #: Kenara alınan güvenlik dosyalarının ad öneki (`guvenlik-arsiv-<damga>.json`);
 #: geri yükleme (`backup_restore._ensure_state_file`) ve `recovery_metadata`
@@ -201,7 +205,7 @@ FAILURE_DELAYS: tuple[float, ...] = (0.0, 0.0, 1.0, 2.0, 4.0)
 _failed_attempts = 0
 
 # Kullanıcıya görünen iletiler (sözlük: "yönetici parolası"). Ara katman ve
-# arayüz aynı metni kullanır (sözleşme §2). `PASSWORD_REQUIRED_MESSAGE`'ın tek
+# arayüz aynı metni kullanır. `PASSWORD_REQUIRED_MESSAGE`'ın tek
 # kaynağı `shared.exceptions`'tır (409 gövdesi oradan kurulur).
 SECURITY_FILE_MISSING_MESSAGE = (
     "Güvenlik dosyası (guvenlik.json) bulunamadı ya da okunamıyor. Kayıtlar açılamaz. "
@@ -505,7 +509,7 @@ def _state_file_usable(path: Path) -> bool:
 
 
 def security_file_missing() -> bool:
-    """Güvenlik dosyası kayıp mı? (GA-2 kayıp kilidi)
+    """Güvenlik dosyası kayıp mı? (kayıp kilidi; tasarım §4.3 tehdit 8)
 
     İki hâl aynı kilide düşer:
 
@@ -528,8 +532,8 @@ def security_file_missing() -> bool:
 def _encrypted_rows_exist() -> bool:
     """Şifreli alan taşıyan herhangi bir tabloda (silinmişler dahil) satır var mı?
 
-    Liste elle tutulmaz (`encrypted_field_map`): F6'da gelen üyelik/ödünç
-    tabloları da kendiliğinden kapsanır.
+    Liste elle tutulmaz (`encrypted_field_map`): F1c'den itibaren gelen OAB
+    modellerinin şifreli tabloları da kendiliğinden kapsanır.
     """
     for model, _ in encrypted_field_map():
         manager = getattr(model, "all_objects", model._default_manager)
@@ -564,7 +568,7 @@ def _data_backups_exist() -> bool:
 
 
 def state_reset_available() -> bool:
-    """ "Güvenlik dosyasını sıfırla ve kuruluma dön" yolu açık mı? (F1-E, GA-2 eki)
+    """ "Güvenlik dosyasını sıfırla ve kuruluma dön" yolu açık mı? (§4.3 tehdit 8)
 
     DÖRT koşul birden (biri eksikse yol görünmez, uç 409 döner):
 
@@ -736,7 +740,7 @@ def _build_state(data_key: bytes, *, password: str, recovery_key: str) -> dict[s
 def enable(*, password: str) -> str:
     """Yönetici parolasını kurar; TEK SEFERLİK kurtarma anahtarını döndürür.
 
-    Yalnız ilk kurulumda çalışır (§6.3-4): güvenlik dosyası yokken, DB'de
+    Yalnız ilk kurulumda çalışır (§4.4.5): güvenlik dosyası yokken, DB'de
     parmak izi boşken VE kişi tabloları (silinmişler dahil) boşken. Parmak izi
     doluysa ya parola zaten kurulmuştur ya da güvenlik dosyası kaybolmuştur;
     ikisinde de yeni bir anahtar üretmek eski kayıtları okunamaz bırakırdı.
@@ -843,7 +847,7 @@ def _check_recovery_key(state: dict[str, Any], recovery_key: str) -> None:
 
 @sensitive_variables("recovery_key")
 def verify_recovery_key(recovery_key: str) -> list[str]:
-    """Kurtarma anahtarını doğrular; anahtarın dörtlü gruplarını döndürür (E14 çıktısı).
+    """Kurtarma anahtarını doğrular; anahtarın dörtlü gruplarını döndürür (belge için).
 
     İki denetim: anahtar `guvenlik.json`'daki KURTARMA SARMALINI açmalı (yanlış
     yazılmış anahtarın kâğıda basılmasını önler) VE çıkan DEK bellekteki
@@ -860,7 +864,7 @@ def verify_recovery_key(recovery_key: str) -> list[str]:
 
 @sensitive_variables("recovery_key")
 def confirm_recovery_key(recovery_key: str) -> None:
-    """Anahtarın saklandığını doğrular ve damgayı `guvenlik.json`'a yazar (F1 eki, karar 2).
+    """Anahtarın saklandığını doğrular ve damgayı `guvenlik.json`'a yazar (tasarım §4.4.4).
 
     Sihirbaz (ve Ayarlar → Güvenlik) iki grubu istemcide denetledikten sonra
     TAM anahtarı gönderir. Doğrulama `verify_recovery_key` ile aynı kuraldır:
@@ -936,7 +940,7 @@ HANDOVER_SAME_PASSWORD_MESSAGE = (
 
 @sensitive_variables("current_password", "new_password", "yeni", "veri_anahtari", "yeni_anahtar")
 def start_handover(*, current_password: str, new_password: str) -> str:
-    """Görev devri (§4.4, SU-25; F11): parola ve kurtarma anahtarı TEK yazımda yenilenir.
+    """Görev devri (aile iskeletinden): parola ve kurtarma anahtarı TEK yazımda yenilenir.
 
     Yalnız kilit açıkken: mevcut parola `verify_password` kuralıyla (sarmal +
     bellekteki anahtarın parmak izi) doğrulanır; yanlışsa "Parola hatalı." +
@@ -953,7 +957,7 @@ def start_handover(*, current_password: str, new_password: str) -> str:
 
     Yeni anahtar yanıtla BİR KEZ döner; saklandığı `confirm_recovery_key` ile
     doğrulanır (damga eklenir, görev devri damgası korunur). DEK DEĞİŞMEZ: kayıtlar,
-    kör indeks, yedek anahtarı ve kip etkilenmez. Sonuç (TB17, TB23): ESKİ parola ya da
+    kör indeks, yedek anahtarı ve kip etkilenmez. Sonuç (tasarım §13 D14): ESKİ parola ya da
     ESKİ anahtar, eski bir güvenlik başlığıyla (devirden önceki yedek, arşivlenen dosya)
     birlikte DEK'i verir — devirden SONRA alınan yedekleri de açar (modül başlığı);
     görev devri notu bunu açıkça yazar.

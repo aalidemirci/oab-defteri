@@ -5,7 +5,7 @@
 //
 // Akış: günlük yedek listesinden seçim YA DA elden getirilen .odbak dosyası →
 // yönetici parolası veya kurtarma anahtarı (yedekler DAİMA şifrelidir; düz yedek
-// dalı yok, tasarım §6.3) → onay → POST /backups/restore/. Başarıda backend
+// dalı yok, tasarım TK8, §4.4.7) → onay → POST /backups/restore/. Başarıda backend
 // "yeniden başlat" kapısını kurar (tüm API 503 döner); kart olayı yayınlar ve
 // YenidenBaslatEkrani arayüzü örter. Parola/kurtarma anahtarı yalnız istek
 // gövdesinde taşınır, hiçbir yere yazılmaz.

@@ -1,7 +1,7 @@
 """Ortak temel model ve soft-delete altyapısı.
 
-OYS'nin (Okul Yönetim Sistemi) `shared/models.py` dosyasından türetilmiştir.
-OYS'deki `created_by`/`deleted_by` FK alanları BİLİNÇLİ OLARAK ÇIKARILDI: bu
+Ailenin `shared/models.py` dosyasından türetilmiştir.
+Kaynaktaki `created_by`/`deleted_by` FK alanları BİLİNÇLİ OLARAK ÇIKARILDI: bu
 program tek kullanıcılı bir masaüstü uygulamasıdır, "kim yaptı" bilgisi anlamsız
 (tek kullanıcı var). `created_at/updated_at/deleted_at` + soft-delete davranışı
 (`SoftDeleteManager`/`AllObjectsManager` + `delete()/hard_delete()/restore()`)

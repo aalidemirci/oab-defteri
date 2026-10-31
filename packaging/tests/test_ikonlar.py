@@ -1,7 +1,8 @@
 """Program simgesi: kesimler, `.ico` ve simgenin göründüğü yüzeyler.
 
-Logo 29.09.2026 kullanıcı kararıyla "Raf ve etiket"tir (tasarım §14.1 F12 ekleri
-L-1; teknik borç TB4 kapandı). Üretim iki betiktir (`packaging/ikonlar/`):
+Logo 31.10.2026 kullanıcı kararıyla "Okul çatısı ve aile"dir (plan §2.2 F1b adım 0,
+genel tasarım §13 D31; aileden gelen raf ve kitap logosunun yerine). Üretim iki
+betiktir (`packaging/ikonlar/`):
 `logo_uret.py` ana çizimi (1024) ve elle çizilmiş 16/24/32 kesimlerini yazar,
 `ikon_uret.py` 48 ve üstünü ana çizimden türetir ve `.ico`'yu kurar. Çıktılar
 depodadır; paket derlemesi ikon üretmez, bu testler depodaki dosyaların
@@ -10,6 +11,7 @@ depodadır; paket derlemesi ikon üretmez, bu testler depodaki dosyaların
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import re
 import sys
@@ -137,7 +139,7 @@ def test_site_gorseli_ana_cizimden_kardes_olcusuyle_turer(tmp_path: Path) -> Non
     """okulapp.org görseli depodaki ana çizimden: 256 px, 15 px pay (kardeşin ölçüsü).
 
     Site ayrı depodur; betik varsayılan koşuda onu yazmaz, `--site` ile yalnız
-    verilen dosyaya yazar (`docs/site-icerigi.md` §7).
+    verilen dosyaya yazar (ortak yayın alanı, tasarım §17).
     """
     hedef = IKON.write_site_image(tmp_path / "oab-defteri.png")
     goruntu = _ac(hedef)
@@ -174,9 +176,9 @@ def test_kenar_boslugu_kurali_butun_boyutlarda_aynidir() -> None:
 
 
 def test_butun_simgeler_yeni_logodur() -> None:
-    """Baskın opak renk cilt laciverti, safran raf/etiket var; geçici logonun renkleri yok.
+    """Baskın opak renk cilt laciverti, safran çatı ve taban var; geçici logonun renkleri yok.
 
-    Küçültülmüş kesimlerde ince safran raf komşu renklerle harmanlanır; bu yüzden
+    Küçültülmüş kesimlerde ince safran çatı ve taban komşu renklerle harmanlanır; bu yüzden
     safran kanal başına en çok 24 birim sapmayla aranır.
     """
     safran = LOGO.SAFRAN[:3]
@@ -187,6 +189,22 @@ def test_butun_simgeler_yeni_logodur() -> None:
             max(abs(r - s) for r, s in zip(renk, safran, strict=True)) <= 24 for renk in opak
         ), ad
         assert not set(opak) & ESKI_GECICI_LOGO_RENKLERI, ad
+
+
+#: Aileden kimlik çevirisiyle gelen "Raf ve etiket" logosunun dosya özetleri (F1a'da
+#: `oab-defteri-*` adıyla taşınan, kardeş programınkiyle bayt bayt aynı dosyalar).
+AILE_LOGOSU_OZETLERI = {
+    "oab-defteri-16.png": "3e6654ba87b311366c747ca6d93d4049c699d1d1a80940fa37933392aa9b0090",
+    "oab-defteri-32.png": "6f7fb8f9733be97b924a2af5f65525ee35d365c01e0ac668991420c8d68d9f99",
+    "oab-defteri-256.png": "cef539e5750cd2e56e17e919b179e728a56e93fe6c4e049ec58be57c5a2e6917",
+    "oab-defteri-logo.png": "63b8073a7e261d610d91750fe7dc5936a92cfebd34bd2ae0283935d6ec451dd3",
+}
+
+
+def test_simge_aileden_gelen_raf_logosu_degil() -> None:
+    """D31 (31.10.2026 kullanıcı kararı): program kendi logosunu taşır, aileninkini değil."""
+    for ad, ozet in AILE_LOGOSU_OZETLERI.items():
+        assert hashlib.sha256((IKONLAR / ad).read_bytes()).hexdigest() != ozet, ad
 
 
 # ---------------------------------------------------------- simgenin yüzeyleri

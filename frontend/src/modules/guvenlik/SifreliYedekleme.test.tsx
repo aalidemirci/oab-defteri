@@ -22,7 +22,7 @@ vi.mock("../../lib/download", () => ({ saveBlob: mocks.saveBlob }));
 
 import SifreliYedekleme from "./SifreliYedekleme";
 
-/** Dış yedek hatırlatmasının sunucu özeti (F11) — varsayılan: hiç indirme yok. */
+/** Dış yedek hatırlatmasının sunucu özeti — varsayılan: hiç indirme yok. */
 const HIC_INDIRILMEDI = {
   last_download: null,
   reminder_days: 30,
@@ -38,7 +38,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-it("son indirme tarihini gösterir; indirme sonrası tarih yeniden okunur (F11)", async () => {
+it("son indirme tarihini gösterir; indirme sonrası tarih yeniden okunur", async () => {
   mocks.postBlob.mockResolvedValue(new Blob(["x"]));
   render(
     <SnackbarProvider>
@@ -63,7 +63,7 @@ it("son indirme tarihini gösterir; indirme sonrası tarih yeniden okunur (F11)"
   ).toBeInTheDocument();
 });
 
-it("hatırlatma süresi seçilince sunucuya yazılır (F11)", async () => {
+it("hatırlatma süresi seçilince sunucuya yazılır", async () => {
   mocks.put.mockResolvedValue({ ...HIC_INDIRILMEDI, reminder_days: 60 });
   render(
     <SnackbarProvider>
@@ -80,7 +80,7 @@ it("hatırlatma süresi seçilince sunucuya yazılır (F11)", async () => {
   expect(await screen.findByText("Hatırlatma süresi kaydedildi.")).toBeInTheDocument();
 });
 
-it("hatırlatma süresi dolunca kartta ne yapılacağı yazar; dolmadıysa kalan gün (F11)", async () => {
+it("hatırlatma süresi dolunca kartta ne yapılacağı yazar; dolmadıysa kalan gün", async () => {
   mocks.get.mockResolvedValue({
     ...HIC_INDIRILMEDI,
     last_download: "2026-08-01T10:00:00+03:00",

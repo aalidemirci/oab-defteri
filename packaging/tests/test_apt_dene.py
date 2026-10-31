@@ -64,7 +64,7 @@ def test_ilk_denemede_gecen_komut_yeniden_denenmez(tmp_path: Path) -> None:
 
 
 def test_gecici_404_sonrasi_kurtarir(tmp_path: Path) -> None:
-    """KS'deki gerçek vaka: v2026.9.0-beta.5 koşusu 404 aldı, aynı commit sonra geçti."""
+    """Aile iskeletindeki gerçek vaka: v2026.9.0-beta.5 koşusu 404 aldı, aynı commit sonra geçti."""
     sonuc = _kos(tmp_path, basarili_deneme=3)
 
     assert sonuc.returncode == 0

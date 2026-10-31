@@ -1,4 +1,4 @@
-"""Eski program yeni veriyi AÇMAZ (tasarım §4.2; F11 kod kapısı) — uçtan uca.
+"""Eski program yeni veriyi AÇMAZ (tasarım §4.2 adım 5) — uçtan uca.
 
 İki hat:
 
@@ -38,7 +38,7 @@ def test_taninmayan_goc_yoksa_gecer() -> None:
 def test_taninmayan_goc_acilisi_durdurur_ve_iletisi_turkcedir(
     od_gunlugu: list[logging.LogRecord],
 ) -> None:
-    """27.09.2026 ana oturum kararı: göç adları kullanıcı iletisine GİRMEZ (sözlük §2 iç
+    """Aile iskeletinin 27.09.2026 kararı: göç adları kullanıcı iletisine GİRMEZ (sözlük §2 iç
     kimlikler; "Eski program, yeni veri" satırı — kullanıcı metninde göç/migration geçmez),
     yalnız günlüğe yazılır; ileti sade Türkçedir ve günlük dosyasını anar."""
     with pytest.raises(SchemaTooNewError) as hata:
@@ -64,7 +64,7 @@ def test_taninmayan_goc_acilisi_durdurur_ve_iletisi_turkcedir(
 def test_cok_sayida_taninmayan_goc_iletiyi_tasirmaz_gunluge_hepsi_yazilir(
     od_gunlugu: list[logging.LogRecord],
 ) -> None:
-    adlar = [f"kutuphane.{9000 + i}_gelecek" for i in range(12)]
+    adlar = [f"okul.{9000 + i}_gelecek" for i in range(12)]
     with pytest.raises(SchemaTooNewError) as hata:
         ensure_no_unknown_migrations(adlar, "2026.9.0")
 

@@ -1,12 +1,13 @@
 // Doğrulanmayı bekleyen kurtarma anahtarı — ROTA AĞACININ DIŞINDA, modül belleğinde.
 //
 // Neden bileşen durumunda değil: anahtar sunucuda saklanmaz ve bir daha
-// gösterilemez (tasarım §6.3-1 "saklama zorunlu"). Sihirbaz sayfası anahtar
-// ekrandayken sökülebilir: "Görevli kipine geç" ya da Ctrl+Shift+G KipKapisi'nde
-// rotaların yerine görevli ekranını koyar; "Kilitle" kilit ekranını getirir; üst
-// menüden bir bağlantıya tıklamak da KurulumKapisi üzerinden sihirbazı sıfırdan
-// açar. (Kurulum sürerken boşta ve mutlak süre kipi DÜŞÜRMEZ — backend `kip.py`,
-// F1 eki karar 2-1; kurulumdan sonra yenilenen anahtarda süre yine bu yola girer.)
+// gösterilemez; kurulum, anahtarın saklandığı doğrulanmadan bitmez (tasarım §4.4.3).
+// Sihirbaz sayfası anahtar ekrandayken sökülebilir: "Görevli kipine geç" ya da
+// Ctrl+Shift+G KipKapisi'nde rotaların yerine görevli ekranını koyar; "Kilitle" kilit
+// ekranını getirir; üst menüden bir bağlantıya tıklamak da KurulumKapisi üzerinden
+// sihirbazı sıfırdan açar. (Kurulum sürerken boşta ve mutlak süre kipi DÜŞÜRMEZ —
+// backend `kip.py`, tasarım §13 D15; kurulumdan sonra yenilenen anahtarda süre yine
+// bu yola girer.)
 // Anahtar bileşen durumunda dursaydı bu yolların her biri onu sessizce silerdi.
 // Burada tutulan anahtar sihirbaz (ya da Ayarlar → Güvenlik) yeniden açılınca geri
 // gelir; iki grup yeniden doğrulanmadan ilerlenemez.

@@ -1,4 +1,5 @@
-// Kurtarma anahtarının istemci tarafı yardımcıları (tasarım §6.3-1, E14).
+// Kurtarma anahtarının istemci tarafı yardımcıları (tasarım §4.4.3; anahtarın PDF'i
+// katalog dışı program belgesidir, E-kodu yoktur — tasarım §9.7).
 //
 // Anahtar SUNUCUDA SAKLANMAZ: kurulumda bir kez gösterilir; "saklandı mı"
 // doğrulaması (iki grubu geri yazdırma) bu yüzden istemcide yapılır. Normalleştirme
@@ -19,7 +20,7 @@ import { guvenlikApi } from "./api";
 /** Anahtar dörtlü gruplardan oluşur (backend `RECOVERY_GROUP_SIZE`). */
 export const GRUP_UZUNLUGU = 4;
 
-/** Belgenin adı (sözlük §2: E14 "Kurtarma anahtarı çıktısı"). */
+/** Belgenin kullanıcıya görünen adı — katalog dışı program belgesi (tasarım §9.7). */
 export const KURTARMA_CIKTISI_BELGE_ADI = "Kurtarma Anahtarı Çıktısı";
 
 export function kurtarmaAnahtariniNormallestir(deger: string): string {

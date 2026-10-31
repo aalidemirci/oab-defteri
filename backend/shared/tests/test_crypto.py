@@ -1,4 +1,4 @@
-"""`shared.crypto` birim testleri — fail-closed alan, kör indeks (T14), anahtar sayacı.
+"""`shared.crypto` birim testleri — fail-closed alan, kör indeks (tasarım §5.3), anahtar sayacı.
 
 DB istemez: alan davranışı `get_prep_value` üzerinden, kör indeks doğrudan
 sınanır. Varsayılan ortam `backend/conftest.py`'dedir (anahtar `TEST_DEK` yüklü).
@@ -22,7 +22,7 @@ _ALAN = crypto.EncryptedCharField("ad", max_length=100)
 
 
 # ---------------------------------------------------------------------------
-# Fail-closed şifreli alan (§6.3-3)
+# Fail-closed şifreli alan (§5.3)
 # ---------------------------------------------------------------------------
 def test_anahtar_yokken_bos_olmayan_deger_yazilmaz(kilitli: Path) -> None:
     with pytest.raises(crypto.KeyMissingError):
@@ -54,7 +54,7 @@ def test_key_missing_error_runtime_error_alt_sinifidir() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Kör indeks (T14)
+# Kör indeks (§5.3)
 # ---------------------------------------------------------------------------
 def test_kor_indeks_belirlenimci_ve_64_haneli() -> None:
     ilk = crypto.blind_index("1234")

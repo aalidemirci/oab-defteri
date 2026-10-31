@@ -1,4 +1,4 @@
-// Ayrılış Havuzu (F1 eki 7): e-Okul aktarımı kimseyi ayırmaz; listede bulunmayanlar
+// Ayrılış Havuzu (genel tasarım §5.1): e-Okul aktarımı kimseyi ayırmaz; listede bulunmayanlar
 // burada karar bekler. Öğrenci ve personel ayrı listelerde; tek tek ve toplu
 // "Ayrıldı olarak işaretle" (onay diyaloğu, kayıt silinmez) ve "Aktif kalsın"
 // (onaysız, havuzdan çıkar); yıl sonu için sınıf süzgeci; personelde "olası aynı kişi"
@@ -322,7 +322,7 @@ describe("AyrilisHavuzu — olası aynı kişi", () => {
     );
     const onay = await screen.findByRole("dialog", { name: "Bu iki kayıt aynı kişi mi?" });
     expect(within(onay).getByText(/havuzdaki kayıt silinir/)).toBeInTheDocument();
-    // Diyalog iki kaydı ayırt eden bilgiyi ve gerekçeyi yazar (TB18).
+    // Diyalog iki kaydı ayırt eden bilgiyi ve gerekçeyi yazar (§13 D30).
     expect(within(onay).getByText(/adı aynı, soyadı farklı/)).toBeInTheDocument();
     expect(within(onay).getByText(/sicile eklendi 22\.09\.2026/)).toBeInTheDocument();
 

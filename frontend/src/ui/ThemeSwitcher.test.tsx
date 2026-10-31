@@ -42,7 +42,7 @@ describe("ThemeSwitcher", () => {
     expect(btn.className).toContain("w-[var(--od-control-height)]");
   });
 
-  it("merkezî .state-layer örtü span'ı içerir (M3 §7.5, Tur 313)", () => {
+  it("merkezî .state-layer örtü span'ı içerir (M3 state layer)", () => {
     const { container } = render(<ThemeSwitcher />);
     const layer = container.querySelector('[aria-hidden="true"]');
     expect(layer).not.toBeNull();

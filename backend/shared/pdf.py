@@ -1,14 +1,13 @@
-"""WeasyPrint ile PDF üretiminin TEK kapısı (19.09.2026 çöküş tanısı).
+"""WeasyPrint ile PDF üretiminin TEK kapısı (aile iskeletinin 19.09.2026 çöküş tanısı).
 
 WeasyPrint'in C katmanı (Pango, fontconfig, FreeType) aynı süreçte AYNI ANDA
-iki belge dizildiğinde yerel belleği bozabiliyor. 19.09.2026'da paketlenmiş
-program "Tümünü indir" sırasında `libpangoft2` içinde erişim ihlaliyle kapandı
-(Pango NULL yazı tipi döndürdü; Python istisnası olmadığı için günlüğe iz
+iki belge dizildiğinde yerel belleği bozabiliyor. Aile iskeletinde 19.09.2026'da
+paketlenmiş program toplu indirme sırasında `libpangoft2` içinde erişim ihlaliyle
+kapandı (Pango NULL yazı tipi döndürdü; Python istisnası olmadığı için günlüğe iz
 düşmedi). Aynı DLL'ler ve gerçek evrak şablonlarıyla Windows'ta koşulan tanıda
 iki iş parçacığının eşzamanlı basımı yığın bozulmasıyla (0xC0000374) düştü,
 sıralı basım hiç düşmedi. Gömülü sunucu (waitress) altı iş parçacığıyla çalışır
-ve salon evrakı, kitapçık bandı, takvim PDF'i birbirinden bağımsız isteklerdir:
-kilit yoksa çakışabilirler — en uzunu "Tümünü indir"dir.
+ve her evrak isteği ötekinden bağımsızdır: kilit yoksa çakışabilirler.
 
 Bu modül üç şey yapar:
 

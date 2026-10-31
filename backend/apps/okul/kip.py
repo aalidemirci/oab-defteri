@@ -1,16 +1,16 @@
-"""Kip durumu — görevli kipi / yönetici kipi (U5, tasarım §4.4, T16).
+"""Kip durumu — görevli kipi / yönetici kipi (aile iskeletinden; tasarım §4.4, TK14).
 
-Masadaki kişi ayrımı hesapla değil KİPLE yapılır. Kilit açıkken program iki
+Kişiler arasındaki ayrım bugün hesapla değil KİPLE yapılır. Kilit açıkken program iki
 kipten birindedir: **yönetici kipi** (her şey açık) ya da **görevli kipi**
 (yalnız izin listesindeki uçlar açık — `kip_izinleri`, ara katman
 `kip_middleware`). Kip durumu süreç içi TEK nesnedir (`KIP`): KipMiddleware
-ve kip uçları aynı nesneyi okur (T16; ikinci bir durum kaynağı açılmaz).
+ve kip uçları aynı nesneyi okur (ikinci bir durum kaynağı açılmaz).
 
 Durumlar (API ve arayüz bu dizeleri kullanır):
 
 * ``kurulum``  — yönetici parolası kurulmamış (`app_password.is_password_set()` yanlış).
 * ``guvenlik_dosyasi_kayip`` — parmak izi DB'de dolu ama `guvenlik.json` yok,
-  ya da dosya var ama kullanılamıyor (§4.3 GA-2,
+  ya da dosya var ama kullanılamıyor (§4.3 tehdit 8,
   `app_password.security_file_missing`); kilidi açmak mümkün değildir.
 * ``kilitli``  — parola kurulu, anahtar bellekte değil.
 * ``yonetici`` — kilit açık, yönetici kipi.
@@ -41,21 +41,24 @@ GÖREVLİ'ye iner:
 
 * boşta süre: ``son_etkinlik + bosta_sn`` — `son_etkinlik` yalnız kullanıcı
   eylemi taşıyan isteklerde (`X-OD-Etkinlik` başlığı) `etkinlik()` ile tazelenir;
-  durum ve pano sorguları tazelemez (§5.10-14);
+  durum ve pano sorguları tazelemez (§4.4.3 "Boşta kilit");
 * mutlak süre: ``yonetici_baslangic + mutlak_sn`` — etkinlikten bağımsızdır,
   dolunca yönetici parolası yeniden sorulur.
 
 Kalan süre sıfıra ulaştığı anda kip iner (fail-closed: sınır anı görevli
 sayılır). Saat enjekte edilebilir; varsayılan `UykuyuSayanSaat`tir.
 
-İki süre ayarlanabilir (§4.4, GA-9): F7'den beri `kip_sureleri()` kütüphanenin
-kaydettiği kaynaktan (`LibraryPolicy.idle_minutes` / `admin_max_minutes`)
-okur; değer süreç içinde önbelleğe alınır ve ayar yazılınca boşaltılır, yani
-sıcak yolda veritabanı sorgusu yoktur (F2 ekleri 1'in kaygısı).
+İki süre ayarlanabilir (§4.4): `kip_sureleri()` kayıtlı bir süre
+kaynağından okur (`sure_kaynagini_kaydet`); değer süreç içinde önbelleğe alınır
+ve ayar yazılınca boşaltılır, yani sıcak yolda veritabanı sorgusu yoktur. Aile
+iskeletinde kaynağı kütüphane ayarı kaydediyordu; OAB'de bugün kayıtlı kaynak
+yoktur ve koddaki varsayılanlar (`VARSAYILAN_SURELER`: 3 / 30 dk) geçer
+(tasarım §13 D11: oturumun boşta süresi F1b'de ayardan gelir, TK14).
 
-KURULUM BİTENE KADAR SÜRELER KİPİ DÜŞÜRMEZ (F1 eki, 22.09.2026 kullanıcı kararı
-2-1). Sihirbazın ilk adımında kurtarma anahtarı ekrandadır; boşta süre dolup
-görevli kipine inmek kullanıcıyı anahtar saklanmadan ekrandan atıyordu.
+KURULUM BİTENE KADAR SÜRELER KİPİ DÜŞÜRMEZ (aile iskeletinin F1 eki, 22.09.2026
+kullanıcı kararı 2-1; OAB'de tasarım §13 D15). Sihirbazın ilk adımında kurtarma
+anahtarı ekrandadır; boşta süre dolup görevli kipine inmek kullanıcıyı anahtar
+saklanmadan ekrandan atıyordu.
 `SchoolConfig.setup_completed` yanlışken tembel dolum uygulanmaz. Veritabanına
 iki yerden sorulur: süre dolacağı anda (sıcak yol) ve kip özetinde (geri sayım
 gösterilecek mi?). Soru UCUZDUR ve TÜKENİR: olumlu yanıt `_kurulum_tamam_mi`
@@ -117,7 +120,7 @@ GUVENLIK_DOSYASI_KAYIP: Final = "guvenlik_dosyasi_kayip"
 YONETICI: Final = "yonetici"
 GOREVLI: Final = "gorevli"
 
-# §4.4 varsayılanları (GA-9, KM-2): boşta 3 dk, mutlak 30 dk.
+# Aile iskeletinin varsayılanları (tasarım §13 D11): boşta 3 dk, mutlak 30 dk.
 VARSAYILAN_BOSTA_DK: Final = 3
 VARSAYILAN_MUTLAK_DK: Final = 30
 
@@ -137,12 +140,12 @@ VARSAYILAN_SURELER: Final = KipSureleri(
 )
 
 # ---------------------------------------------------------------------------
-# Süre kaynağı (F7 — "Devreden": `LibraryPolicy.idle_minutes` / `admin_max_minutes`)
+# Süre kaynağı (aile iskeletinden; OAB'de bugün kayıtlı kaynak yok — tasarım §13 D11)
 # ---------------------------------------------------------------------------
 #: Kayıtlı süre kaynağı: `(boşta_dk, mutlak_dk)` ya da `None` (ayar satırı yok).
 #: Bağımlılık yönü <uygulama> → okul'dur (`services.persons` kayıt defterleriyle
-#: aynı kalıp): okul kütüphane modellerini import etmez, kütüphane kendi
-#: sağlayıcısını `AppConfig.ready` içinde buraya kaydeder.
+#: aynı kalıp): okul başka uygulamanın modellerini import etmez, ayarın sahibi
+#: olan uygulama kendi sağlayıcısını `AppConfig.ready` içinde buraya kaydeder.
 type SureKaynagi = Callable[[], tuple[int, int] | None]
 
 _sure_kilidi = threading.Lock()
@@ -168,7 +171,7 @@ def sure_onbellegini_bosalt() -> None:
 def _gecerli_sureler(dakikalar: object) -> KipSureleri | None:
     """Kaynağın değerini denetler: pozitif tam sayılar ve boşta ≤ mutlak; değilse None.
 
-    Aralık sınırlarının sahibi ayarın kendisidir (`LibraryPolicy` doğrulayıcıları
+    Aralık sınırlarının sahibi ayarın kendisidir (ayar modelinin doğrulayıcıları
     ve DB kısıtı); burada yalnız anlamsız değer (sıfır, eksi, boşta > mutlak)
     süre olarak KULLANILMAZ — kip kapısı varsayılanlara döner (fail-closed değil
     ama güvenli: varsayılanlar tasarımın kısa süreleridir).
@@ -184,11 +187,11 @@ def _gecerli_sureler(dakikalar: object) -> KipSureleri | None:
 
 
 def kip_sureleri() -> KipSureleri:
-    """Yönetici kipi sürelerinin sağlayıcısı (§4.4; F7'de `LibraryPolicy`'ye bağlandı).
+    """Yönetici kipi sürelerinin sağlayıcısı (§4.4; kaynak `sure_kaynagini_kaydet` ile).
 
     Kip nesnesi sağlayıcıyı HER değerlendirmede çağırır (ara katmanın sıcak yolu):
     veritabanı bu yüzden YALNIZ ilk çağrıda ve ayar değiştikten sonra bir kez
-    okunur (süreç içi önbellek; F2 ekleri 1'in "sıcak yol sorgusu" kaygısı). Ayar
+    okunur (süreç içi önbellek; sıcak yolda sorgu olmasın). Ayar
     yazan servis önbelleği boşaltır (`sure_onbellegini_bosalt`), yani ayar
     değişikliği yeniden başlatma istemez. Geri yükleme süreci yeniden başlatır
     (`restart_gate`), önbellek de onunla sıfırlanır.
@@ -295,7 +298,7 @@ class UykuyuSayanSaat:
 
 
 class KipDurumu:
-    """Süreç içi kip durumu (T16). İş parçacığı güvenlidir (RLock).
+    """Süreç içi kip durumu (tek nesne). İş parçacığı güvenlidir (RLock).
 
     `saat`, `sureler` ve `kurulum_tamam` testte taklit edilir; üretimde
     varsayılanlar kullanılır (saat verilmezse her nesneye yeni bir
@@ -428,7 +431,7 @@ class KipDurumu:
         """Kullanıcı eylemi: yönetici kipindeyse boşta sayacını tazeler.
 
         Önce süre dolumu uygulanır: süresi dolmuş yönetici kipi, geç gelen bir
-        etkinlikle DİRİLMEZ (§5.10-14). Görevli ya da kilitliyken etkisizdir.
+        etkinlikle DİRİLMEZ (§4.4.3). Görevli ya da kilitliyken etkisizdir.
         """
         with self._kilit:
             if not crypto.is_unlocked():
@@ -520,5 +523,5 @@ def _dakika(saniye: int) -> int:
     return saniye // 60
 
 
-# Süreç içi TEK kip nesnesi (T16).
+# Süreç içi TEK kip nesnesi.
 KIP = KipDurumu()

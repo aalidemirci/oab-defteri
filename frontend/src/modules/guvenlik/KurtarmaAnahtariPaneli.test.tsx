@@ -1,8 +1,8 @@
-// Kurtarma anahtarı paneli (E14 akışı): anahtar gruplarıyla GÖRÜNÜR; yazdır, PDF
+// Kurtarma anahtarı paneli: anahtar gruplarıyla GÖRÜNÜR; yazdır, PDF
 // olarak kaydet ve elle yaz yolları sunulur; devam, sakladığı kopyadan rastgele
 // İKİ grubun geri yazdırılmasıyla doğrulanır (doğrulama kipinde anahtar ekrandan
 // kalkar); iki grup tutunca TAM anahtar sunucuda doğrulanıp "saklandı" damgası
-// yazılır (F1 eki, karar 2) ve `onDogrulama(true)` ancak o zaman gelir. Anahtar
+// yazılır (tasarım §4.4.3) ve `onDogrulama(true)` ancak o zaman gelir. Anahtar
 // ve okul adı uydurmadır.
 
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -230,7 +230,7 @@ describe("KurtarmaAnahtariPaneli", () => {
   });
 
   it("gözetimsiz ekranda (5 dk) anahtar gizlenir, “Anahtarı göster” geri getirir", () => {
-    // TB19: kurulum bitene kadar kip süreyle düşmez; anahtar ekranda süresiz durmasın.
+    // Tasarım §13 D15: kurulum bitene kadar kip süreyle düşmez; anahtar ekranda süresiz durmasın.
     // Sahte zamanlayıcı kullanıldığı için tıklama `fireEvent` ile yapılır (userEvent'in
     // kendi gecikme zamanlayıcısı sahte saatle kilitleniyor).
     etkinlikSaatleriniSifirla();

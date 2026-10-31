@@ -1,7 +1,7 @@
 # =============================================================================
 # OAB Defteri — Geliştirme / Test bağımlılıkları
 # =============================================================================
-# YALNIZ geliştirme + test için. Pinler OYS'nin requirements-dev.txt'inden
+# YALNIZ geliştirme + test için. Pinler ailenin requirements-dev.txt'inden
 # AYNEN alındı (görev brifi).
 
 # Çekirdek bağımlılıklar — dev her zaman bunları da içerir.

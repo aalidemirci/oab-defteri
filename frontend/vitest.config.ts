@@ -3,8 +3,8 @@ import react from "@vitejs/plugin-react";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 
-// Vitest yapılandırması — OYS `frontend/vitest.config.ts`'ten UYARLANMIŞTIR
-// (Görev 3). `__OYS_VERSION__` define'ı yok (vite.config.ts'te de kaldırıldı).
+// Vitest yapılandırması — aile iskeletinden uyarlandı. Sürüm gömme `define`'ı
+// yok (vite.config.ts'te de yok).
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -24,10 +24,11 @@ export default defineConfig({
       reporter: ["text", "html", "json", "lcov"],
       include: ["src/**/*.{ts,tsx}"],
       exclude: ["src/**/*.test.{ts,tsx}", "src/test/**", "src/main.tsx", "src/vite-env.d.ts"],
-      // Kapı eşikleri (scripts/gates.sh `--coverage` ile koşar). 19.09.2026 ölçümü:
-      // satır %89,5 · dal %84,9 · işlev %63,2. Eşik, ölçümün birkaç puan ALTINDADIR
-      // (backend'de %75 eşik / %92 ölçüm ile aynı mantık): amaç testsiz büyük bir
-      // modülün sessizce girmesini yakalamak, her PR'da puan kovalamak değil.
+      // Kapı eşikleri (scripts/gates.sh `--coverage` ile koşar). Aile iskeletindeki
+      // 19.09.2026 ölçümü: satır %89,5 · dal %84,9 · işlev %63,2. Eşik, ölçümün
+      // birkaç puan ALTINDADIR (backend'de %75 eşik / %92 ölçüm ile aynı mantık): amaç
+      // testsiz büyük bir modülün sessizce girmesini yakalamak, her PR'da puan
+      // kovalamak değil.
       // İşlev oranı düşüktür çünkü satır içi olay işleyicileri ayrı işlev sayılır.
       thresholds: { lines: 82, statements: 82, branches: 78, functions: 55 },
     },

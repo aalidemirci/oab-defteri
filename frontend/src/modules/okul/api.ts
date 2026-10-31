@@ -1,9 +1,10 @@
 // `okul` modülü API istemcisi — kurum künyesi/kurulum, ders yılı + dönemler,
 // kapalı günler, kişi sicilleri (öğrenci + personel; ayrılış ve birleştirme), şube
 // kataloğu, toplu içe aktarma (e-Okul mutabakatı dahil) ve şablon indirme uçları.
-// Backend `apps/okul/{urls,views,serializers}.py` ile BİREBİR. TCKN, veli,
-// cinsiyet, fotoğraf, unvan ve branş alanları YOKTUR — o veriler hiç toplanmaz
-// (tasarım §6.1).
+// Backend `apps/okul/{urls,views,serializers}.py` ile BİREBİR. Bugün TCKN, veli,
+// cinsiyet, fotoğraf, unvan ve branş alanları YOKTUR. OAB'nin işleme envanteri
+// genel tasarım §3.4'tedir (veli adı ve öğrencinin sınıfı T5 ile gelir; personelde
+// unvan ve branş alınmaz, §5.1).
 
 import { api } from "../../lib/api";
 import { getGradeLevels as fetchGradeLevels } from "../../lib/gradeLevels";
@@ -54,8 +55,8 @@ export interface SchoolTermConfigurationBody {
 export type HolidayKind = "OFFICIAL" | "RELIGIOUS" | "SCHOOL_BREAK" | "OTHER";
 
 /**
- * Tür adları (sözlük): ara tatil ve yarıyıl kanunen tatil DEĞİLDİR — "öğrenciye
- * kapalı gün" diye ayrı adlandırılır, tek başına "tatil" denmez.
+ * Tür adları (sözlük): ara tatil ve yarıyıl "öğrenciye kapalı gün" diye ayrı
+ * adlandırılır, tek başına "tatil" denmez.
  */
 export const HOLIDAY_KIND_TR: Record<HolidayKind, string> = {
   SCHOOL_BREAK: "Öğrenciye kapalı gün",
@@ -116,8 +117,11 @@ export interface ActiveSchoolYearSummary {
   terms_ready: boolean;
 }
 
-/** Başlangıç Yol Haritası'nda kullanıcının işaretlediği maddeler (backend tek kaynak). */
-export type RoadmapManualItem = "kurtarma_zarfi" | "parola_paylasimi";
+/**
+ * Başlangıç Yol Haritası'nda kullanıcının işaretlediği maddeler (backend tek kaynak:
+ * `ROADMAP_MANUAL_ITEMS`). Parola paylaşımı maddesi yoktur: parola paylaşılmaz.
+ */
+export type RoadmapManualItem = "kurtarma_zarfi";
 
 export interface RoadmapState {
   /** İşaretlenen madde → işaretlendiği gün (ISO). */
@@ -164,7 +168,7 @@ export const SCHOOL_LEVEL_TR: Record<SchoolLevel, string> = {
   ORTAOGRETIM: "Ortaöğretim (lise)",
 };
 
-/** Kısa okul adının üst sınırı (etiket ve kartlarda basılır). */
+/** Kısa okul adının üst sınırı (backend `SchoolConfig.kisa_ad` ile aynı). */
 export const KISA_AD_EN_COK = 24;
 
 /** Kurum künyesi — evrak antedi buradan çözülür (`setup_completed` salt-okunur). */
@@ -176,7 +180,7 @@ export interface SchoolConfig {
   /** Açıksa sınıf düzeylerine Hazırlık (0) eklenir. */
   has_prep_class: boolean;
   kademe: SchoolLevel | "";
-  /** Etiket ve kartlarda basılan kısa okul adı (en çok 24 karakter). */
+  /** Kısa okul adı (en çok 24 karakter; bugün hiçbir çıktıda kullanılmaz). */
   kisa_ad: string;
   /** "Bu bilgisayar okul demirbaşıdır" onayı (kurulumda zorunlu). */
   demirbas_onayi: boolean;
@@ -288,7 +292,7 @@ export interface LeavePoolStudent {
 }
 
 /**
- * Eşleşme gerekçesi — backend `name_match.MatchReason` ile birebir (TB18).
+ * Eşleşme gerekçesi — backend `name_match.MatchReason` ile birebir (§13 D30).
  * "Adı aynı" adaşı da yakalar; kullanıcı bunu ancak gerekçeyi görürse anlar.
  */
 export type SimilarReason = "ayni_ad_soyad" | "ad_ayni_soyad_farkli" | "yazim_farki";
@@ -471,7 +475,7 @@ export interface SimilarPair {
   existing_id: number;
   existing_name: string;
   new_id: number | null;
-  /** Çiftin neden kurulduğu (TB18); eski raporlarda boş olabilir. */
+  /** Çiftin neden kurulduğu (§13 D30); eski raporlarda boş olabilir. */
   reason: SimilarReason | "";
 }
 
@@ -660,7 +664,7 @@ export const okulApi = {
   updateStudent: (id: number, body: Partial<StudentWriteBody>): Promise<Student> =>
     api.patch<Student>(`/students/${id}/`, body),
 
-  /** Hiç üye olmamış ve açık işlemi olmayan öğrencinin kaydını siler (yoksa 400). */
+  /** Açık yükümlülüğü ve birlik kaydına bağı olmayan öğrencinin kaydını siler (varsa 400). */
   deleteStudent: (id: number): Promise<void> => api.del<void>(`/students/${id}/`),
 
   /** "Ayrıldı olarak işaretle" — ayrılış yolu; kayıt SİLİNMEZ, ayrılmış kayıt döner. */

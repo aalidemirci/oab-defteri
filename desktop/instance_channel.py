@@ -1,4 +1,5 @@
-"""Tek kopya kanalı — ikinci açılış sinyali ve kapatma olayı (tasarım §4.2-1, §4.2-5).
+"""Tek kopya kanalı — ikinci açılış sinyali ve kapatma olayı (tasarım §4.2 adım 2,
+§4.2 "Kurucu ve kaldırıcı").
 
 Çalışan program iki komut dinler:
 

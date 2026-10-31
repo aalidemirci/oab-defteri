@@ -1,4 +1,4 @@
-"""Temiz kapanış işareti testleri (tasarım T15, §4.2-6)."""
+"""Temiz kapanış işareti testleri (tasarım T15, §4.2 adım 3)."""
 
 from __future__ import annotations
 

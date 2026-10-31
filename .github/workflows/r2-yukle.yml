@@ -3,15 +3,16 @@
 # =============================================================================
 # paketleme.yml'in `yayin` işi R2'ye Release'in hemen ardından kendisi yükler.
 # Bu iş yalnız o adım ATLANDIĞINDA ya da kırıldığında kullanılır — ör. Cloudflare
-# secret'ları Release'ten sonra eklendiyse (v2026.10.0-beta.1 böyle çıktı).
+# secret'ları Release'ten sonra eklendiyse.
 # Paketler yeniden üretilmez: Release'teki dosyalar indirilir ve AYNI betikle
 # (packaging/r2-yukle.sh) yüklenir; betik yüklemeden önce SHA256SUMS.txt'yi
-# doğrular. Emsal DD hattındaki aynı adlı iş akışıdır.
+# doğrular. İş akışı aile iskeletinden devralındı.
 #
 # Elle: Actions → "R2'ye yükle" → Run workflow → etiket = v<VERSION>.
 # Secret'lar ve izinleri: packaging/README.md "R2 secret'ları". Burada kimlik
 # ZORUNLUDUR (R2_KIMLIK_ZORUNLU=1): yoksa iş kırmızı biter, hiçbir şey yüklemeden
-# yeşil bitmez. Yayın işleri dışa açıktır ve kullanıcı onaylıdır (CLAUDE.md §6).
+# yeşil bitmez. Yayın işleri dışa açıktır ve kullanıcı onaylıdır (CLAUDE.md §2,
+# altın kural 8).
 # =============================================================================
 name: R2'ye yükle
 
@@ -19,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       etiket:
-        description: "Yüklenecek Release etiketi (ör. v2026.10.0-beta.1)"
+        description: "Yüklenecek Release etiketi (ör. v2026.11.0-alpha.1)"
         required: true
         type: string
 
@@ -50,7 +51,7 @@ jobs:
           case "${ETIKET}" in
             v2*) ;;
             *)
-              echo "::error::Etiket 'v' ile başlamalı (ör. v2026.10.0-beta.1): '${ETIKET}'"
+              echo "::error::Etiket 'v' ile başlamalı (ör. v2026.11.0-alpha.1): '${ETIKET}'"
               exit 1
               ;;
           esac

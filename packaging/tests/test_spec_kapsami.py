@@ -3,7 +3,7 @@
 Backend pakete KAYNAK olarak kopyalanır; PyInstaller statik çözümleyicisi orayı
 taramaz (spec docstring'i). Yeni bir üçüncü taraf bağımlılık spec'e elle
 eklenmek ZORUNDADIR — unutulursa paket geliştirmede çalışır, sahada çöker
-(hiddenimports tuzağı). Bu test unutmayı kapıya bağlar (KS'den devralındı).
+(hiddenimports tuzağı). Bu test unutmayı kapıya bağlar (aile iskeletinden devralındı).
 
 İkinci zincir masaüstüdür (tasarım §4.5, denetim UY-6): yalnız kabuğun
 gerektirdiği Windows paketleri `packaging/requirements-paketleme.txt`'te
@@ -172,7 +172,7 @@ def test_runtime_modules_requirements_ile_senkron() -> None:
     `test_her_backend_bagimliligi_spec_kapsaminda` yalnız spec metnine bakar —
     statiktir, modülün pakete gerçekten girdiğini kanıtlamaz. `--bagimlilik-duman`
     kipi bunu paketlenmiş ikilide import ederek kanıtlar; bu test de listenin
-    requirements.txt ile birlikte büyümesini zorunlu kılar (KS'de `xlrd`
+    requirements.txt ile birlikte büyümesini zorunlu kılar (ailede `xlrd`
     eklendiğinde onu paket içinde sınayan hiçbir kapı yoktu).
     """
     beklenen = {DAGITIM_IMPORT_ESLEME[d] for d in _gereksinimler()}
@@ -219,8 +219,8 @@ PAKETLEME_IMPORT_ESLEME = {
 #: deseni de bu kümeye bağlıdır.
 LINUX_DUMAN_DISI = {"qtpy", "pyside6"}
 
-# Lisans kapısı (GPL'li Qt bağlayıcısı, readline, THIRD_PARTY_LICENSES) F12'de
-# `test_lisans_kapisi.py`'ye taşındı ve orada genişletildi.
+# Lisans kapısı (GPL'li Qt bağlayıcısı, readline, THIRD_PARTY_LICENSES)
+# `test_lisans_kapisi.py`'dedir.
 
 _PAKET_SATIRI = re.compile(
     r'^([A-Za-z0-9_.\-]+)==(\S+?)\s*(?:;\s*sys_platform\s*==\s*"([^"]+)")?\s*$'
@@ -389,10 +389,10 @@ def test_evrak_duman_kipi_hedefi_tani_dosyasina_yazar(
 
 def test_pdf_duman_hedefi_bosluklu_yolu_birlestirir() -> None:
     """PowerShell 5.1 `Start-Process -ArgumentList` öğeleri tırnaklamadan birleştirir:
-    boşluklu masa hesabı yolu iki öğeye bölünür (F12 düzeltme turu, protokol §2.5)."""
+    boşluklu Windows hesabı yolu iki öğeye bölünür (aile iskeletinin düzeltmesi)."""
     smoke_target = _GIRIS["_smoke_target"]
-    bolunmus = ["--pdf-duman", r"C:\Users\Kütüphane", r"Masası\Desktop\pdf-duman.pdf"]
-    assert smoke_target(bolunmus) == Path(r"C:\Users\Kütüphane Masası\Desktop\pdf-duman.pdf")
+    bolunmus = ["--pdf-duman", r"C:\Users\Müdür", r"Yardımcısı\Desktop\pdf-duman.pdf"]
+    assert smoke_target(bolunmus) == Path(r"C:\Users\Müdür Yardımcısı\Desktop\pdf-duman.pdf")
     assert smoke_target(["--pdf-duman", "a", "b.pdf", "--autotest"]) == Path("a b.pdf")
 
 
@@ -407,7 +407,7 @@ def _tanilama_ortami(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, fn: Any) -
 def test_duman_kipi_stderr_yokken_tani_dosyasina_yazar(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """F12 düzeltme turu: duman kipleri günlük kurulmadan koşar ve penceresiz exe'de
+    """Aile iskeletinin düzeltmesi: duman kipleri günlük kurulmadan koşar ve penceresiz exe'de
     stderr `None`'dır — tanı çıktısı `logs/tanilama.log`'a da yazılır."""
     run = _GIRIS["run"]
     dosya = _tanilama_ortami(monkeypatch, tmp_path, run)
@@ -429,7 +429,7 @@ def test_pdf_duman_kipi_hedefi_tani_dosyasina_yazar(
     run = _GIRIS["run"]
     dosya = _tanilama_ortami(monkeypatch, tmp_path, run)
     monkeypatch.setitem(run.__globals__, "run_pdf_smoke", lambda _hedef: 8)
-    assert run(["--pdf-duman", "hedef/Kütüphane", "Masası/pdf.pdf"]) == 8
+    assert run(["--pdf-duman", "hedef/Müdür", "Yardımcısı/pdf.pdf"]) == 8
     metin = dosya.read_text(encoding="utf-8")
-    assert "Hedef PDF: hedef/Kütüphane Masası/pdf.pdf" in metin
+    assert "Hedef PDF: hedef/Müdür Yardımcısı/pdf.pdf" in metin
     assert "Çıkış kodu: 8" in metin

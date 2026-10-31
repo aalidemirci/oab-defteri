@@ -1,4 +1,4 @@
-"""Açılışta dış istek YOK (T11; CLAUDE.md §3; F11 kod kapısı) — gerçek süreç, ağ tuzağıyla.
+"""Açılışta dış istek YOK (tasarım TK4) — gerçek süreç, ağ tuzağıyla.
 
 Program ağ servisi sunmaz; dış istek yalnız kullanıcının başlattığı güncelleme
 denetiminden çıkar (tasarım §4.1). Program açılırken — ilk açılışta da, yönetici
@@ -9,8 +9,8 @@ ve her dış denemeyi kaydeder; kayıt boş kalmalıdır.
 
 `--autotest` gün değişimi kapısını (`od-gunluk`) kurmadan döner; kapının arka plan
 işleri (günlük yedek ve backend'in kaydettiği işler) aynı tuzak altında AYRICA bir
-kez koşar (`test_gun_degisimi_kapisinin_isleri_disari_istek_atmaz`, F11 düzeltme
-turu).
+kez koşar (`test_gun_degisimi_kapisinin_isleri_disari_istek_atmaz`; aile iskeletinin
+düzeltmesi).
 
 Kaynak düzeyindeki eşi `backend/apps/okul/tests/test_dis_istek_kapilari.py`'dir (ağ
 istemcisi import eden modüllerin kapalı listesi; güncelleme denetimini yalnız
@@ -73,7 +73,7 @@ def test_acilista_disari_hic_istek_cikmaz(tmp_path: Path) -> None:
 
 
 def test_gun_degisimi_kapisinin_isleri_disari_istek_atmaz(tmp_path: Path) -> None:
-    """F11 düzeltme turu: `--autotest` gün değişimi kapısını (`od-gunluk`) kurmadan döner;
+    """Aile iskeletinin düzeltmesi: `--autotest` gün değişimi kapısını (`od-gunluk`) kurmadan döner;
     gerçek açılışta kapı ilk tikte kayıtlı arka plan işlerini çalıştırır. Kapı burada
     GERÇEK işleriyle (yerleşik günlük yedek + backend'in kaydettiği bütün işler) aynı ağ
     tuzağı altında bir kez koşar; kayıt boş kalmalı.

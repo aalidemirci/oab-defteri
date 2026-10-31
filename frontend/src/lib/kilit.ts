@@ -2,7 +2,7 @@
 // arayüz ayağı. Oturum ortasında bir istek 423 `locked` ya da
 // `guvenlik_dosyasi_kayip` alırsa program arayüzün haberi olmadan kilitlenmiş
 // (başka yoldan kilit, ör. yönetim komutu) ya da güvenlik dosyası
-// kaybolmuştur (tasarım §4.3; kapı anahtar bellekteyken de kapanır). `lib/api.ts`
+// kaybolmuştur (tasarım §4.4.3; kapı anahtar bellekteyken de kapanır). `lib/api.ts`
 // bu kodları görünce olayı yayınlar; güvenlik kapısı
 // (`modules/guvenlik/GuvenlikKapisi`) dinler ve durumu yeniden okur, böylece
 // ilgili ekran (kilit ya da "Güvenlik dosyası bulunamadı ya da okunamıyor") hemen görünür.

@@ -220,7 +220,7 @@ def test_akis_sir_verilmezse_her_yedekte_sorar(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Düz yedek dalı yok (tasarım §6.3-6): her geri yükleme sır ister."""
+    """Düz yedek dalı yok (tasarım §4.4.7, §13 D29): her geri yükleme sır ister."""
     paths = _paths(tmp_path)
     yedek = paths.backups / "gunluk.odbak"
     yedek.write_bytes(MAGIC + b"\x00" * 64)
@@ -345,7 +345,7 @@ def _gomulu_durum(dek: bytes, parola: str) -> bytes:
 def test_geri_yukleme_kipi_gercek_akista_calisir(tmp_path: Path) -> None:
     """Gerçek zincir: kilit → prepare_django → çekirdek → dosya değişimi (pencere YOK).
 
-    Veri klasöründe `guvenlik.json` YOKTUR (GA-2 güvenlik dosyası kayıp senaryosu):
+    Veri klasöründe `guvenlik.json` YOKTUR (tehdit 8, güvenlik dosyası kayıp senaryosu):
     geri yükleme dosyayı yedeğin kurtarma başlığından yeniden yazar.
     """
     from desktop.backup_crypto import encrypt_bytes, private_key_from_data_key

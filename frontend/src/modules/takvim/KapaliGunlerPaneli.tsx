@@ -1,9 +1,12 @@
-// Kapalı Günler paneli (F1; tasarım §6.1 Holiday, §9-5). Takvim yılına göre
+// Kapalı Günler paneli (genel tasarım §5.1 `Holiday`). Takvim yılına göre
 // listeler: resmî tatil, dini bayram, öğrenciye kapalı gün (ara tatil, yarıyıl) ve
-// idari izin. İade tarihi kapalı güne denk gelirse izleyen ilk açık güne kayar;
-// ara tatil ve yarıyıl kanunen tatil DEĞİLDİR, bu yüzden "öğrenciye kapalı gün"
-// diye ayrı tutulur ve tek başına "tatil" denmez (sözlük). Kaydırma kullanıcıya
-// hiçbir yerde "Md. 18 gereği" diye sunulmaz.
+// idari izin. Kapalı günler iş günü hesabının takvimidir: mevzuatta iş günüyle
+// verilen süreler (ör. elden alınan bağışın bankaya yatırılması, OAB Yön. md. 16/3)
+// ve yarıyıla bağlı hesaplar (kantinde yarıyıl ayının yarım kirası, EK-2 md. 4)
+// bu kayıtlara dayanır (genel tasarım §5.1, §6.4; hesaplar kendi fazlarında gelir,
+// bugün çağıranı yoktur). Ara tatil ve yarıyılın bir sürenin hesabına girip girmediğini
+// o sürenin kuralı belirler (`shared/working_days`); bu yüzden "öğrenciye kapalı gün"
+// diye ayrı tutulur ve tek başına "tatil" denmez (sözlük).
 //
 // Yeniden kullanım (sihirbazın ders yılı adımı): `yil` + `onYilChange` ile yıl
 // dışarıdan denetlenir, `yillar` seçiciyi sınırlar (ör. ders yılının iki takvim
@@ -73,7 +76,7 @@ const TUR_ROZETI: Record<HolidayKind, string> = {
 
 const TUR_ACIKLAMASI: Record<HolidayKind, string> = {
   SCHOOL_BREAK:
-    "Ara tatil ve yarıyıl. Kanunen tatil değildir, mesai sürer; iade tarihinin bu günlerden sonraya kayması okulun tercihidir.",
+    "Ara tatil ve yarıyıl. Resmî tatilden ayrı tutulur; bir sürenin hesabına girip girmediğini o sürenin kuralı belirler.",
   RELIGIOUS: "Diyanet takvimindeki kesin tarihi girin.",
   OFFICIAL:
     "Resmî tatiller “Resmî ve dini tatilleri ekle” düğmesiyle gelir; burayı yalnız listede olmayan bir tatil için kullanın.",
@@ -175,7 +178,7 @@ export default function KapaliGunlerPaneli({
   const sil = async (h: Holiday) => {
     const ok = await confirm({
       title: "Kapalı gün silinsin mi?",
-      message: `“${h.name}” (${tarihAraligi(h)}) listeden kalkar. Bundan sonra hesaplanan iade tarihlerinde bu günler açık gün sayılır.`,
+      message: `“${h.name}” (${tarihAraligi(h)}) listeden kalkar. Bundan sonraki süre hesaplarında bu günler kapalı gün sayılmaz.`,
       confirmLabel: "Sil",
     });
     if (!ok) return;
@@ -208,9 +211,10 @@ export default function KapaliGunlerPaneli({
           <>
             <h2 className="text-title-medium text-on-surface">Kapalı Günler</h2>
             <p className="mt-1 text-body-medium text-on-surface-variant">
-              İade tarihi kapalı bir güne denk gelirse izleyen ilk açık güne kayar. Hafta sonu,
-              resmî tatil, dini bayram ve idari izin her zaman kapalıdır. Ara tatil ve yarıyıl
-              kanunen tatil değildir; bunlar öğrenciye kapalı gün olarak ayrı tutulur.
+              Kapalı günler, mevzuatta iş günüyle verilen sürelerin ve yarıyıla bağlı hesapların
+              takvimidir. Hafta sonu, resmî tatil, dini bayram ve idari izin her zaman kapalıdır.
+              Ara tatil ve yarıyıl öğrenciye kapalı gün olarak ayrı tutulur; bir sürenin hesabına
+              girip girmediğini o sürenin kuralı belirler.
             </p>
           </>
         )}

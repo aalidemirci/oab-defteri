@@ -1,6 +1,6 @@
-"""Gün değişimi kapısı (T9, §5.10-17) ve bakım kapısı (§13 D3).
+"""Gün değişimi kapısı (tasarım TK19) ve bakım kapısı (§13 D3).
 
-§5.10-17: program 3 gün kapanmadan açık kalır; her gün bir yedek alınır (saat
+TK19: program 3 gün kapanmadan açık kalır; her gün bir yedek alınır (saat
 taklidiyle). Taklit iki katmanlıdır: GÜN sağlayıcı elle ilerletilir, kapı saatte
 bir tetiklenir. Yedek GERÇEKTİR (şifreli `.odbak`, `desktop.backup`) ve rotasyon
 da koşar. Aile iskeletindeki IP denetimi ve uyku engeli ağ kataloğuyla söküldü.
@@ -53,7 +53,7 @@ def _kapi(tmp_path: Path, gun: _Gun, **kw: Any) -> GunDegisimiKapisi:
     return GunDegisimiKapisi(damga_yolu=tmp_path / "data" / gunluk.DAMGA_DOSYASI, bugun=gun, **kw)
 
 
-# ------------------------------------------------------------ §5.10-17
+# ------------------------------------------------------------ TK19
 
 
 def test_uc_gun_acik_kalan_program_her_gun_bir_yedek_alir(tmp_path: Path) -> None:
@@ -82,7 +82,7 @@ def test_uc_gun_acik_kalan_program_her_gun_bir_yedek_alir(tmp_path: Path) -> Non
 
 
 def test_yedek_alinamazsa_damga_yazilmaz_ve_saatte_bir_yeniden_denenir(tmp_path: Path) -> None:
-    """Yönetici parolası kurulmadan yedek atlanır; rotasyon da koşmaz (GA-2)."""
+    """Yönetici parolası kurulmadan yedek atlanır; rotasyon da koşmaz (§4.3 tehdit 8)."""
     paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
     paths.ensure()
     _db_olustur(paths.db_path, parola_kurulu=False)

@@ -1,4 +1,4 @@
-// Generic salt-okunur tablo (Faz 1a — oab/parts.tsx'ten ui/'a terfi, frontend-m3.md M5).
+// Generic salt-okunur tablo (ortak kit).
 // Heterojen listeler için tek kaynak; tıklanabilir satır (ClickableRow) + satıra özgü
 // erişilebilir ad. Yalnız M3 token'ları (ham renk/px yok).
 

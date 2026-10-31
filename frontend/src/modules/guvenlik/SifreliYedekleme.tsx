@@ -1,8 +1,8 @@
 // Elle şifreli yedek kartı (Güvenlik sekmesi). Metin kullanıcı dilindedir:
 // şifreleme algoritmalarının adı (teknik ayrıntı) burada geçmez — yalnız
-// Hakkında sayfası ve kurulum belgesi anar (docs/sozluk.md §1). Dosya adındaki
-// tarih YEREL tarihtir (`todayIso`): `toISOString()` UTC verir, gece yarısına
-// yakın alınan yedeğe bir önceki günün tarihini yazardı (CLAUDE.md §2).
+// Hakkında sayfası anar (docs/sozluk.md §1). Dosya adındaki tarih YEREL tarihtir
+// (`todayIso`): `toISOString()` UTC verir, gece yarısına yakın alınan yedeğe bir
+// önceki günün tarihini yazardı (saat dilimi Europe/Istanbul — CLAUDE.md başlık notu).
 
 import { useCallback, useEffect, useState } from "react";
 
@@ -36,7 +36,7 @@ const SURE_SECENEKLERI = [7, 14, 30, 60, 90].map((gun) => ({
 export default function SifreliYedekleme({ parolaKurulu }: { parolaKurulu: boolean }) {
   const snackbar = useSnackbar();
   const [calisiyor, setCalisiyor] = useState(false);
-  // F11 dış yedek hatırlatması: son indirme tarihi (sunucu, indirmeyle yazar) + süre.
+  // Dış yedek hatırlatması: son indirme tarihi (sunucu, indirmeyle yazar) + süre.
   const [disYedek, setDisYedek] = useState<DisYedekDurumu | null>(null);
 
   const disYedegiOku = useCallback(() => {

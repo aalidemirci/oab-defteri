@@ -1,4 +1,4 @@
-"""Geri yükleme provasının ALT SÜREÇ betiği — gerçek ayarlar, gerçek veritabanı (F11).
+"""Geri yükleme provasının ALT SÜREÇ betiği — gerçek ayarlar, gerçek veritabanı.
 
 Masaüstü testleri asgari Django ayarlarıyla koşar (`conftest.py`); temiz makinede
 geri yükleme provası ise gerçek şemayı, gerçek şifrelemeyi ve gerçek yedek
@@ -19,8 +19,8 @@ Komutlar:
 * `sihirbaz --data-dir B --parola P2` — yeni bilgisayarda kurucunun "programı
   çalıştır" kutusuyla açılan programda sihirbazın BAŞKA bir parolayla kurulması
   (göç + parola + doğrulanmış anahtar, kişi verisi yok). Geri yüklemeden önce
-  yabancı bir güvenlik dosyası, yedek anahtarı ve boş veritabanı bırakır (F11
-  düzeltme turu).
+  yabancı bir güvenlik dosyası, yedek anahtarı ve boş veritabanı bırakır (aile
+  iskeletinin düzeltmesi).
 * `gun-kapisi --data-dir A --parola P` — gün değişimi kapısını (`od-gunluk`) gerçek
   işleriyle bir kez çalıştırır: yerleşik günlük yedek + backend'in kayıtlı bütün
   işleri. Ağ tuzağı altında koşar (açılışta dış istek yok testinin kapıyı da
@@ -30,7 +30,7 @@ Aile iskeletinin katalog, üyelik, ödünç ve verilmiş kart defteri adımları
 kütüphane uygulamasıyla birlikte söküldü (F1a-2); OAB'nin kayıtları geldikçe
 özete eklenir.
 
-Bütün veriler UYDURMADIR (CLAUDE.md §2-12). Argon2 ucuz profille kurulur: parametreler
+Bütün veriler UYDURMADIR (CLAUDE.md §2, altın kural 5). Argon2 ucuz profille kurulur: parametreler
 güvenlik dosyasına yazılır ve yedeğin başlığıyla taşınır; algoritma aynıdır.
 """
 

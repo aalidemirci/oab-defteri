@@ -132,7 +132,8 @@ class RoadmapUpdateSerializer(serializers.Serializer[dict[str, Any]]):
 class RecoveryKeyRequestSerializer(serializers.Serializer[dict[str, Any]]):
     """Gövdesinde kurtarma anahtarı taşıyan güvenlik uçlarının ortak gövdesi.
 
-    `security/recovery-key/pdf/` (E14 çıktısı) ve `security/recovery-key/confirm/`
+    `security/recovery-key/pdf/` (kurtarma anahtarı belgesi; katalog dışı program
+    belgesi, tasarım §9.7) ve `security/recovery-key/confirm/`
     (saklandığının doğrulanması) kullanır. Anahtar yalnız gövdede taşınır. Üst
     sınır bir savunmadır (anahtar 32 karakter + 7 tire); sınır aşımı iletisi
     değeri yankılamaz.
@@ -184,7 +185,7 @@ class SchoolTermConfigurationSerializer(serializers.Serializer[dict[str, Any]]):
 
 
 # ---------------------------------------------------------------------------
-# Kapalı günler (F1-D; tasarım §6.1 Holiday, §9-5)
+# Kapalı günler (tasarım §5.1 `Holiday`)
 # ---------------------------------------------------------------------------
 
 # `Any` değerli: DRF stub'ı `str | _StrPromise` ister, `dict` değişmez (invariant) türdür.
@@ -269,11 +270,11 @@ class HolidaySeedRequestSerializer(serializers.Serializer[dict[str, Any]]):
 
 
 class PersonnelSerializer(serializers.ModelSerializer[Personnel]):
-    """Personel sicili. Unvan ve branş YOKTUR (V2-01).
+    """Personel sicili. Unvan ve branş YOKTUR (tasarım §8.4).
 
     `is_active` ve `left_at` salt okunurdur: ayrılış yalnız `personnel/<pk>/leave/`
     ayrılış yolundan ya da ayrılış havuzu kararından geçer (kancalar; kayıt
-    silinmez — tasarım §6.1, F1 eki 7); gövdeyle gönderilen değer yok sayılır.
+    silinmez — tasarım §5.1 `Personnel`); gövdeyle gönderilen değer yok sayılır.
     `leave_candidate_since` salt okunurdur: doluysa kişi ayrılış havuzunda karar
     bekliyor demektir (yalnız e-Okul aktarımı yazar).
     """
@@ -350,16 +351,16 @@ class ClassSectionSerializer(serializers.ModelSerializer[ClassSection]):
 class StudentSerializer(serializers.ModelSerializer[Student]):
     """Öğrenci sicili.
 
-    Okul no şifreli + kör indekslidir (T14). Teklik kısıtı kör indekstedir;
+    Okul no şifreli + kör indekslidir (tasarım §5.3). Teklik kısıtı kör indekstedir;
     Türkçe teklik iletisi SERVİSTEN gelir (`persons.ensure_student_number_free`).
     Alan elle tanımlanır (`validators=[]`): DRF tek alanlı kısıttan otomatik
-    UniqueValidator türetmesin (CLAUDE.md §3 tuzağı; şifreli sütunda zaten
+    UniqueValidator türetmesin (DRF'nin bilinen tuzağı; şifreli sütunda zaten
     çalışmazdı).
 
     `status` ve `left_at` salt okunurdur: ayrılış `students/<pk>/leave/`
     ayrılış yolundan ya da ayrılış havuzu kararından, yeniden aktifleşme e-Okul
     aktarımından geçer. `leave_candidate_since` salt okunurdur: doluysa öğrenci
-    ayrılış havuzunda karar bekliyor demektir (F1 eki 7).
+    ayrılış havuzunda karar bekliyor demektir.
     """
 
     full_name = serializers.CharField(read_only=True)
@@ -409,13 +410,13 @@ class StudentSerializer(serializers.ModelSerializer[Student]):
 class ImportRequestSerializer(serializers.Serializer[dict[str, Any]]):
     """İçe aktarma girdisi: Excel dosyası (e-Okul .xls / şablon .xlsx) VEYA pano metni.
 
-    Mutabakat seçeneği (tasarım §8.3; önizleme ve uygulama AYNI kodu koşar,
+    Mutabakat seçeneği (aile iskeletinden; önizleme ve uygulama AYNI kodu koşar,
     ikisi de kabul eder):
 
     - `full_list` (öğrenci): "Bu dosya okulun tam listesidir" onayı. Verilmezse
-      karşılaştırma YALNIZ dosyada bulunan şubelerle yapılır (EK-21).
+      karşılaştırma YALNIZ dosyada bulunan şubelerle yapılır (aile deseni; tasarım §8.4).
 
-    Aktarım kimseyi ayırmaz (F1 eki 7): listede olmayanlar ayrılış havuzuna
+    Aktarım kimseyi ayırmaz: listede olmayanlar ayrılış havuzuna
     girer, karar `leave-pool/resolve/` ile verilir. Eski personel seçeneği
     `mark_left_ids` KALDIRILDI; gönderilirse yok sayılır.
     """
@@ -447,7 +448,7 @@ class PersonnelMergeSerializer(serializers.Serializer[dict[str, Any]]):
 
 
 # ---------------------------------------------------------------------------
-# Ayrılış havuzu (F1 eki 7; tasarım §6.1, §8.3) — AD İÇERİR: yalnız yönetim yüzeyi
+# Ayrılış havuzu (tasarım §5.1 `Personnel`, §13 D30) — AD İÇERİR: yalnız yönetim yüzeyi
 # ---------------------------------------------------------------------------
 
 
@@ -494,7 +495,7 @@ class LeavePoolPersonnelSerializer(serializers.ModelSerializer[Personnel]):
     `personnel/<id>/merge/ {into_id: aday}` ile yapılır (havuzdaki kişi kaynaktır).
     Her aday `reason` (eşleşme gerekçesi, `MatchReason` kodu), `member_kind` ve
     `created_on` (sicile eklendiği gün) taşır: ekran adayın NEDEN aday olduğunu
-    yazar, onay diyaloğu iki kaydı ayırt eden bilgiyi gösterir (TB18).
+    yazar, onay diyaloğu iki kaydı ayırt eden bilgiyi gösterir (§13 D30).
     """
 
     full_name = serializers.CharField(read_only=True)

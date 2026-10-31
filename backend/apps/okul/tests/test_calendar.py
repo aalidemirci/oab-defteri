@@ -1,6 +1,6 @@
 """Kapalı günler — model kısıtları, tohumlama fikirdeşliği ve DB'den kapalı gün kaynağı.
 
-Sabitlenen sözleşmeler (tasarım §6.1 Holiday, §9-5):
+Sabitlenen sözleşmeler (tasarım §5.1 `Holiday`):
 
 - Kayıt kısıtları DB'dedir: bitiş başlangıçtan önce olamaz, tür listedendir,
   "tahmini" yalnız dini bayramda olur, (ad, başlangıç) canlı kayıtta tekildir.
@@ -104,7 +104,7 @@ class TestTohumlama:
         assert sonuc.religious_available is True
         resmi = Holiday.objects.filter(kind=HolidayKind.OFFICIAL)
         assert resmi.count() == 7
-        # Yaz tatilleri de yazılır (DD ders yılı dışını atlıyordu; iade tarihi yazın da hesaplanır).
+        # Ders yılı dışındaki tatiller de yazılır (süre hesabı yaz aylarında da yapılır).
         assert set(resmi.values_list("start_date", flat=True)) >= {
             date(2026, 7, 15),
             date(2026, 8, 30),
@@ -258,7 +258,7 @@ class TestElleEkleme:
 
 
 class TestKapaliGunKaynagi:
-    def test_tohumlanan_bayram_iade_tarihini_kaydirir(self) -> None:
+    def test_tohumlanan_bayram_acik_gunu_kaydirir(self) -> None:
         calendar_service.seed_holidays(2026)
         # Kurban Bayramı 27-30 Mayıs 2026 (Çarşamba-Cumartesi) → 1 Haziran Pazartesi.
         assert next_open_day(date(2026, 5, 27)) == date(2026, 6, 1)

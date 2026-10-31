@@ -1,15 +1,15 @@
 """Ad-soyad eşleştirme yardımcıları — e-Okul aktarımı ve ayrılış havuzu ortak kullanır.
 
-Ad-soyad ŞİFRELİDİR (U3): eşleştirme DB'de değil, çözülmüş değerlerle Python'da
+Ad-soyad ŞİFRELİDİR (tasarım §5.3): eşleştirme DB'de değil, çözülmüş değerlerle Python'da
 yapılır. Anahtar `excel_ogrenci.normalize_header`'dır (Türkçe harfleri ASCII'ye
 katlar, küçük harf, tek boşluk) — aynı katlama iki tarafa da uygulanır.
 
-"Olası aynı kişi" (tasarım §8.3, EK-20): ad aynı soyad farklı (soyadı değişimi)
+"Olası aynı kişi" (tasarım §13 D30, §8.4): ad aynı soyad farklı (soyadı değişimi)
 YA DA normalize ad-soyad düzenleme uzaklığı ≤ 2 (küçük yazım farkı). Aktarım
 önizlemesi yeni satır ↔ listede olmayan kayıt için, ayrılış havuzu havuzdaki
 kişi ↔ sonradan açılan kayıt için aynı kuralı koşar (tek kaynak burası).
 
-Kural DEĞİL, GEREKÇE eklendi (TB18): aday satırı neden aday olduğunu söylesin.
+Kural DEĞİL, GEREKÇE eklendi (§13 D30): aday satırı neden aday olduğunu söylesin.
 "Adı aynı" adaşı da yakalar; kullanıcı bunu ancak gerekçeyi görürse anlar. Kural
 gevşetilmedi — soyadı değişiminde soyadlar tamamen farklıdır, soyad yakınlığı
 aramak kuralı işlevsiz bırakırdı.

@@ -6,7 +6,7 @@
 @tailwind utilities;
 
 /* ---------------------------------------------------------------------------
-   Material Design 3 renk şemaları (CLAUDE.md §7.5).
+   Material Design 3 renk şemaları.
    Kurumsal mavi tohumdan türetilmiş tonal palet. Kanallar (RGB) → Tailwind
    opaklık modifiyeleri (state layer) çalışsın.
    Tema: `data-theme="dark"` <html>'e konunca alternatif token set devreye girer.
@@ -160,7 +160,7 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Material Design 3 hareket (motion) token'ları (Tur 311, öneri §1).
+   Material Design 3 hareket (motion) token'ları.
    Tema-bağımsız (açık/koyu fark etmez) → tek :root. Tailwind
    transitionTimingFunction / transitionDuration bunları okur:
    `ease-standard`, `ease-emphasized-decelerate`, `duration-short-3`,
@@ -173,7 +173,7 @@
   --md-easing-standard-decelerate: cubic-bezier(0, 0, 0, 1);
   --md-easing-standard-accelerate: cubic-bezier(0.3, 0, 1, 1);
   /* M3 `emphasized` gerçekte iki-parçalı bir spring yolu; tek cubic-bezier ile
-     basitleştirilince `standard` eğrisine eşittir (öneri §1 notu). Vurgulu
+     basitleştirilince `standard` eğrisine eşittir. Vurgulu
      giriş/çıkış için decelerate/accelerate varyantları kullanılır. */
   --md-easing-emphasized: cubic-bezier(0.2, 0, 0, 1);
   --md-easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
@@ -195,9 +195,9 @@
   --md-duration-long-4: 600ms;
 }
 
-/* M3 state layer opaklıkları (Tur 313, öneri §3). Tüm interaktif örtülerin tek
-   doğruluk kaynağı; `.state-layer` bileşen sınıfı bunları okur. ADR değerleri
-   (CLAUDE.md §5 / frontend-m3.md): hover %8, focus %12, pressed %12. */
+/* M3 state layer opaklıkları. Tüm interaktif örtülerin tek doğruluk kaynağı;
+   `.state-layer` bileşen sınıfı bunları okur. Değerler: hover %8, focus %12,
+   pressed %12. */
 :root {
   --md-state-hover: 0.08;
   --md-state-focus: 0.12;
@@ -255,7 +255,7 @@
   }
 }
 
-/* M3 state layer (Tur 313, öneri §3) — merkezî örtü deseni. Etkileşimli, `group
+/* M3 state layer — merkezî örtü deseni. Etkileşimli, `group
    relative overflow-hidden` (yuvarlak köşeli kaplar parent overflow ile kırpılır;
    parent'ta overflow yoksa örtüye `rounded-*` eklenir) bir kabın İÇİNE konan
    dekoratif `<span class="state-layer" aria-hidden="true" />`. Kabın hover /
@@ -326,7 +326,7 @@
     opacity: var(--md-state-pressed);
   }
 
-  /* M3 "scrollable tabs" (Tur 315, Ek A) — native kaydırma çubuğunu gizle; taşmayı
+  /* M3 "scrollable tabs" — native kaydırma çubuğunu gizle; taşmayı
      kenar solmasıyla (edge fade) bildir. Çubuk gizleme TÜM eksenlerde. */
   .scrollbar-none {
     scrollbar-width: none; /* Firefox */
@@ -340,7 +340,7 @@
      çubuğun yerine M3 token'lı ince çubuk. Tema-agnostik: renk CSS değişkeninden
      (rgb kanalları) okunduğu için açık/koyu otomatik. `scrollbar-gutter: stable`
      → çubuk belirip kaybolurken içerik yatay zıplamaz. Ham renk/px yok; yalnız
-     --md-outline / --md-outline-variant token'ları (§7.5 kırmızı çizgi). */
+     --md-outline / --md-outline-variant token'ları. */
   .scrollbar-thin {
     scrollbar-width: thin; /* Firefox */
     scrollbar-color: rgb(var(--md-outline-variant)) transparent;

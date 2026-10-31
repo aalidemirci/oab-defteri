@@ -2,7 +2,7 @@
 # =============================================================================
 # kaldir.sh — Taşınabilir kurulumu kaldırır (VERİLER SİLİNMEZ)
 # =============================================================================
-# Program dosyalarını, kısayolu ve ikonları siler. Kütüphane kayıtları, yedekler
+# Program dosyalarını, kısayolu ve ikonları siler. Birlik kayıtları, yedekler
 # ve günlükler ev dizinindeki veri klasöründe KALIR:
 #
 #     ~/.local/share/oab-defteri     (veritabanı + yedekler)

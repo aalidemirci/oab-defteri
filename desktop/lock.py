@@ -8,7 +8,7 @@ Yöntem işletim sistemine göre değişir ama sözleşme aynıdır: bir dosya a
 üzerine paylaşımsız kilit konur. Kilit süreç ölünce (çökme dahil) işletim sistemi
 tarafından bırakılır — bayat PID dosyası sorunu yaşanmaz.
 
-**`acquire()` hata fırlatmaya devam eder** (§4.2-1, denetim GA-11). İkinci
+**`acquire()` hata fırlatmaya devam eder** (§4.2 adım 2). İkinci
 açılışta pencereyi öne getirme ayrı yardımcıdadır (`signal_running_instance`) ve
 yalnız bayraksız normal açılışta çağrılır (`desktop/main.py`). Sinyal kilide
 gömülseydi `--geri-yukle` kısayolu hiçbir şey yapmadan 0 koduyla çıkar,
@@ -17,8 +17,9 @@ kullanıcı geri yüklemenin yapıldığını sanardı.
 **Mutex'ler (yalnız Windows).** Kilide EK olarak `OABDefteri` ve
 `Global\\OABDefteri` açılır (§2.3). Tek-instance güvencesi onlardan GELMEZ;
 kurucu ve kaldırıcı programı `OABDefteri.Kapat` olayıyla kapattıktan sonra
-ikisinin de kaybolmasını bekler (§4.2-5; Inno `AppMutex` kullanılmaz). `Global\\`
-biçimi başka bir Windows oturumunda (hızlı kullanıcı değiştirme) çalışan kopyayı
+ikisinin de kaybolmasını bekler (§4.2 "Kurucu ve kaldırıcı"; Inno `AppMutex`
+kullanılmaz). `Global\\` biçimi başka bir Windows oturumunda (hızlı kullanıcı
+değiştirme) çalışan kopyayı
 da görünür kılar. Güvenlik tanımlayıcısının gerekçesi `desktop/win32_objects.py`.
 
 Mutex tanıtıcıları `release()`'te KAPATILMAZ: süreç tamamen bitene dek yaşarlar
@@ -176,7 +177,7 @@ def is_instance_running(lock_path: Path) -> bool:
     """Bu veri dizinini kullanan bir kopya çalışıyor mu? (kilidi alıp hemen bırakır)
 
     Kilidi kendisi tutmayan teşhis kipleri içindir (`--pdf-duman`): çalışan kopya
-    varsa 2 koduyla çıkarlar (§4.2-1). Mutex açmaz.
+    varsa 2 koduyla çıkarlar (§4.2 adım 2). Mutex açmaz.
     """
     probe = SingleInstanceLock(lock_path, platform="")
     try:
@@ -192,7 +193,7 @@ def signal_running_instance(
     *,
     sender: Callable[[Path, str], bool] | None = None,
 ) -> bool:
-    """Çalışan kopyadan penceresini göstermesini ister; ulaştıysa `True` (§4.2-1).
+    """Çalışan kopyadan penceresini göstermesini ister; ulaştıysa `True` (§4.2 adım 2).
 
     YALNIZ bayraksız normal açılışta çağrılır. `False` dönerse (çalışan kopya
     kanal kurmamış, ör. `--autotest`) çağıran "zaten çalışıyor" iletisine düşer.

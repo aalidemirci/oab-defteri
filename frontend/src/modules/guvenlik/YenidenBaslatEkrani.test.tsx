@@ -19,7 +19,7 @@ describe("YenidenBaslatEkrani", () => {
     expect(ekran).toHaveTextContent("Programı kapatıp yeniden açın");
     expect(ekran).toHaveTextContent("db-onceki-");
     // Örtüyü kapatan düğme yok: tek çıkış programı yeniden başlatmaktır. Tek düğme
-    // programdan çıkıştır (TB13: pencere süslemesi olmayan masaüstünün çıkış yolu).
+    // programdan çıkıştır (tasarım §4.5: pencere süslemesi olmayan masaüstünün çıkış yolu).
     expect(screen.getAllByRole("button")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Programdan çık" })).toBeInTheDocument();
   });

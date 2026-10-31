@@ -1,13 +1,13 @@
-// Ayrılış Havuzu (Kişiler → `?tab=havuz`) — tasarım §6.1, §8.3, F1 eki 7.
+// Ayrılış Havuzu (Kişiler → `?tab=havuz`) — genel tasarım §5.1 `Personnel`, §8.4.
 //
-// Kullanıcı kararı (22.09.2026): e-Okul aktarımı kimseyi ayırmaz ve silmez. Listede
+// Aile iskeletinden gelen kullanıcı kararı: e-Okul aktarımı kimseyi ayırmaz ve silmez. Listede
 // bulunmayan aktif öğrenci ve personel burada bekler; durumları aktif kalır. Karar
 // yöneticinindir, tek tek ya da toplu:
 //   - "Ayrıldı olarak işaretle" (onay diyaloğu): okuldan ayrılmış sayılır, kaydı
 //     SİLİNMEZ (geçmişi izlenebilsin), "Ayrıldı · gg.aa.yyyy" rozetiyle kalır.
 //   - "Aktif kalsın": yalnız havuzdan çıkar; sonraki listede yine yoksa geri gelir.
 // Yıl sonu mezunları sınıf süzgeciyle seçilip toplu ayrılır. Personelde "olası aynı
-// kişi" (ör. soyadı değişimi) adayları EŞLEŞME GEREKÇESİYLE gösterilir (TB18: aday ad
+// kişi" (ör. soyadı değişimi) adayları EŞLEŞME GEREKÇESİYLE gösterilir (§13 D30: aday ad
 // benzerliğiyle bulunur, adaş olabilir); "Birleştir" geri alınamadığı için onay
 // diyaloğu iki kaydı ayırt eden bilgiyi yazar ve ikinci bir doğrulama kutusu ister.
 //
@@ -178,7 +178,7 @@ export default function AyrilisHavuzu({ onDegisti }: { onDegisti?: () => void })
     await uygula(tur, "keep", kimlikler);
   };
 
-  // Birleştirme GERİ ALINAMAZ ve aday yalnız ad benzerliğiyle bulunur (TB18):
+  // Birleştirme GERİ ALINAMAZ ve aday yalnız ad benzerliğiyle bulunur (§13 D30):
   // diyalog iki kaydı ayırt eden bilgiyi ve eşleşme gerekçesini yazar, onay
   // düğmesi kullanıcı "aynı kişi" kutusunu işaretlemeden açılmaz.
   const birlestir = async (kisi: LeavePoolPersonnel, aday: LeavePoolSimilar) => {
@@ -548,7 +548,7 @@ function PersonelBolumu({
                                 Birleştir
                               </Button>
                             </div>
-                            {/* Neden aday? Kural adı yeterli sayar; adaş da buraya düşer (TB18). */}
+                            {/* Neden aday? Kural adı yeterli sayar; adaş da buraya düşer (§13 D30). */}
                             <p className="text-body-small text-on-surface-variant">
                               Neden aday: {benzerlikGerekcesi(aday.reason)} ·{" "}
                               {MEMBER_KIND_TR[aday.member_kind]}, sicile eklendi{" "}

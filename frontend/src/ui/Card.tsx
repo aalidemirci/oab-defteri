@@ -1,4 +1,4 @@
-// M3 kart (CLAUDE.md §7.5): surface-container-low yüzey (M3 elevated card resting
+// M3 kart: surface-container-low yüzey (M3 elevated card resting
 // seviyesi), shape-lg köşe, opsiyonel elevation. Tonal elevation: yükselen yüzey daha
 // yüksek surface-container seviyesinde oturur (gölgeye değil, tona yaslanır — Tur 312).
 

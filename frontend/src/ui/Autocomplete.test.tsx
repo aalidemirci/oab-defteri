@@ -1,4 +1,4 @@
-// Autocomplete — ARIA 1.2 combobox sözleşmesi (18.09.2026 değerlendirmesi):
+// Autocomplete — ARIA 1.2 combobox sözleşmesi (aile iskeletinin 18.09.2026 değerlendirmesi):
 // rol ve durum öznitelikleri SARMALAYICI div'de değil, odağı alan INPUT'tadır.
 // Seçim/klavye davranışı da burada sabitlenir (bileşenin ilk birim testi).
 
@@ -144,9 +144,9 @@ describe("Autocomplete — ARIA 1.2 combobox", () => {
   });
 
   it("görsel etiket yokken erişilebilir ad ariaLabel'dan gelir", () => {
-    renderAlan({ label: "", ariaLabel: "5/A sınıf kitaplığı için öğretmen seçin" });
+    renderAlan({ label: "", ariaLabel: "Toplantıya katılacak öğretmeni seçin" });
     expect(
-      screen.getByRole("combobox", { name: "5/A sınıf kitaplığı için öğretmen seçin" }),
+      screen.getByRole("combobox", { name: "Toplantıya katılacak öğretmeni seçin" }),
     ).toBeInTheDocument();
   });
 });

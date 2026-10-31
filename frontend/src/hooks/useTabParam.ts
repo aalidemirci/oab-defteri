@@ -2,15 +2,14 @@ import { useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 
 /**
- * Sekme seçimini URL query parametresinde tutar (ADR-0046 §2).
+ * Sekme seçimini URL query parametresinde tutar.
  *
- * Amaç derin-link: "/program?tab=validation" gibi bağlantılar paylaşılabilir ve
- * sayfa yenilendiğinde seçim korunur. Doğrulama panellerinin `/ders-yapisi`'ye
- * yönlendirmesi de bu kancaya dayanır.
+ * Amaç derin-link: "/ayarlar?tab=guvenlik" gibi bir bağlantı ekranı doğrudan o
+ * sekmede açar ve sayfa yenilendiğinde seçim korunur.
  *
  * - Geçersiz/eksik değer sessizce `fallback`'e düşer (kırık bağlantı hata üretmez).
  * - Varsayılan sekmede parametre URL'den SİLİNİR — adres çubuğu gereksiz
- *   şişmez, "/program" ile "/program?tab=program" aynı ekranı gösterir.
+ *   şişmez, "/ayarlar" ile "/ayarlar?tab=ders-yillari" aynı ekranı gösterir.
  * - Geçiş `replace` ile yazılır: sekme gezinmesi tarayıcı geçmişini doldurmaz,
  *   geri tuşu kullanıcıyı bir önceki SAYFAYA götürür.
  */

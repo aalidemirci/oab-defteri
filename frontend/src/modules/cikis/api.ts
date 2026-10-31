@@ -1,4 +1,4 @@
-// Çık — arayüzden düzenli kapanış (tasarım §4.2-4, §5.10-18, TB13).
+// Çık — arayüzden düzenli kapanış (tasarım §4.2, §4.5).
 //
 // Pencerenin çarpısı da programı kapatır (T6, tasarım §4.5); pencere süslemesi
 // olmayan Linux masaüstünde programdan çıkmanın yolu bu uçtur. Backend

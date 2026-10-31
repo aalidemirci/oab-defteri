@@ -1,4 +1,4 @@
-// Türkçe görüntü biçimlendirme (CLAUDE.md §2): tarih gg.aa.yyyy, sayı binlik nokta /
+// Türkçe görüntü biçimlendirme: tarih gg.aa.yyyy (CLAUDE.md giriş bölümü), sayı binlik nokta /
 // ondalık virgül. Depolama/giriş ISO 8601 (yyyy-aa-gg) kalır — yalnızca GÖRÜNTÜ.
 
 /** ISO tarihi (yyyy-mm-dd) → gg.aa.yyyy. Geçersizse olduğu gibi döner. */

@@ -38,7 +38,9 @@ biçimini tarif edin.
 
 ## Bilinen ve kabul edilmiş riskler
 
-Program tek kullanıcılı ve çevrimdışıdır; tehdit modeli ve kabul edilmiş
-kalan riskler `docs/teknik-borc.md` ile tasarım belgesinin §4.3 bölümünde
-açıkça yazılıdır. Oradaki bir kalemi bildirmeden önce gerekçesini okuyun;
-gerekçenin kendisinin yanlış olduğunu düşünüyorsanız yazın.
+Program okulun tek bilgisayarında çalışan, çevrimdışı bir programdır; tehdit
+modeli ve kabul edilmiş kalan riskler genel tasarım belgesinin
+(`docs/tasarim/2026-10-31-genel-tasarim.md`) §4.3 "Tehdit modeli" ve §13
+"Devralınan kusurlar" bölümlerinde açıkça yazılıdır. Oradaki bir kalemi
+bildirmeden önce gerekçesini okuyun; gerekçenin kendisinin yanlış olduğunu
+düşünüyorsanız yazın.

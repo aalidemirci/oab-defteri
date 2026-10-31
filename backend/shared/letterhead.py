@@ -1,4 +1,4 @@
-"""Resmî evrak antedi (letterhead) — OYS shared/letterhead.py'den UYARLA (F6).
+"""Resmî evrak antedi (letterhead) — ailenin `shared/letterhead.py`'sinden UYARLA.
 
 documents/base.html ortak resmî antedi kullanır:
 
@@ -6,7 +6,7 @@ documents/base.html ortak resmî antedi kullanır:
     <İLÇE> KAYMAKAMLIĞI          (kurum satırı TAMAMI büyük harf)
     <Okul Adı> Müdürlüğü          (birim satırı — Resmî Yazışma Usulü)
 
-KS uyarlaması: OYS'deki ``settings.OYS_*`` env geri-düşüşleri atıldı — kimlik
+Aile iskeletindeki uyarlama: kaynaktaki ortam değişkeni geri-düşüşleri atıldı — kimlik
 tek kaynaktan (``apps.okul.models.SchoolConfig``) çözülür ve buraya parametre
 olarak geçer; ``shared`` (altyapı) katmanı model import etmez (katman kuralı
 korunur). İlçe boşsa antette yer-tutucu noktalar görünür.

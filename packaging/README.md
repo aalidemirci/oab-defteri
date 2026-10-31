@@ -1,11 +1,17 @@
 # packaging/ — paket üretimi
 
-Kullanıcıya yönelik kurulum kılavuzu: **`docs/kurulum.md`**.
-Bu dosya paketi ÜRETEN kişi içindir. Hat aile iskeletinden devralındı (KS →
-Kütüphane iskeleti; tasarım §12 AYNEN/UYARLA). Aile iskeletinde CI paket hattı
-F4'ten (24.09.2026) bu yana her faz PR'ında yeşildi (Linux .deb + debian:11/12
-kurulum provası, Windows setup.exe + portable.zip). **OAB Defteri adıyla paket
-hattı henüz koşmadı;** kurucular sahada çalıştırılmadı.
+Bu dosya paketi ÜRETEN kişi içindir. Kullanıcıya yönelik kurulum anlatımı
+programın Kılavuz'una yazılır (kurulum bölümü F1c kapısındadır, tasarım §14);
+taşınabilir Linux arşivinin kullanıcı notu `linux/BENIOKU.txt`'dir.
+
+Hat aile iskeletinden devralındı (tasarım §12.B AYNEN/UYARLA) ve orada her faz
+PR'ında yeşildi. Bu dizindeki ve kapı testlerindeki 31.10.2026'dan önceki tarihli
+notlar (CI koşuları, doğrulama turları, kararlar) aile iskeletinde yaşanmıştır.
+**OAB Defteri adıyla** F1a'da CI'da yeşil geçti (plan §2.1 "F1a durumu"): Linux .deb +
+.tar.gz, debian:11/12/13 kurulum provası, Windows setup.exe + portable.zip;
+`--bagimlilik-duman`, `--pdf-duman`, `--evrak-duman`, `--autotest`.
+Kurucuların iki kipi ve kapatma yolu henüz elle sınanmadı
+(`packaging/windows/NOTLAR.md`); saha kabulü F7'dedir.
 
 Program ağ servisi sunmaz: yönetim sunucusu yalnız `127.0.0.1`'de, rastgele portta
 ve oturum belirteciyle dinler; hiçbir port okul ağına açılmaz. Dış istek yalnız
@@ -27,7 +33,7 @@ packaging/
 │   └── fonts.paket.conf         paket içi fontconfig — spec bunu (Windows)
 │                                `_internal/etc/fonts/fonts.conf` adıyla koyar
 ├── fontlar/                     DejaVu Sans 4 kesim + lisans (pakete gömülür)
-├── ikonlar/                     program simgesi ("Raf ve etiket", 29.09.2026) — çıktılar
+├── ikonlar/                     program simgesi ("Okul çatısı ve aile", 31.10.2026) — çıktılar
 │   │                            depodadır, derleme ikon üretmez
 │   ├── logo_uret.py             ana çizim (1024) + elle çizilmiş 16/24/32 kesimleri
 │   └── ikon_uret.py             48+ kesimler, .ico (her boyut kendi karesiyle),
@@ -36,7 +42,7 @@ packaging/
 ├── depo_sizintisi.py            depoda kişisel veri denetimi (KVKK kapısı)
 ├── veri_sizintisi.py            dağıtım paketinde kişisel veri denetimi
 │                                (paket dizini + son arşivler .zip/.deb/.tar.gz)
-├── lisanslar/                   üçüncü taraf lisansları (F12, TB28)
+├── lisanslar/                   üçüncü taraf lisansları (tasarım §11.4)
 │   ├── lisanslar.py             `uret` (depodaki THIRD_PARTY_LICENSES/),
 │   │                            `paket` (derleme sonrası lisans kapısı),
 │   │                            `deb-copyright` (DEP-5)
@@ -57,7 +63,7 @@ packaging/
     ├── build.ps1                DLL kapanışı + PyInstaller + duman testi + Inno
     ├── dll_kapanisi.py          ntldd/objdump ile WeasyPrint DLL kapanışı
     ├── paket_kapanisi.py        paketin statik DLL kapanışı (PE içe aktarmaları)
-    ├── oab-defteri.iss    Inno Setup (yönetici kurulumu — U4)
+    ├── oab-defteri.iss          Inno Setup (kullanıcı başına ya da yönetici kipi — TK7)
     └── NOTLAR.md                DOĞRULANMAMIŞ varsayımlar + ilk koşu çek-listesi
 ```
 
@@ -84,14 +90,19 @@ bilinçli olarak `python:3.12-bullseye`'dır: glibc 2.31 = Pardus 21 tabanı.
 Windows paketi **ancak bir Windows makinede veya CI'da** üretilebilir.
 Adımlar ve doğrulanmamış varsayımlar: `packaging/windows/NOTLAR.md`.
 
-Kurucu **yönetici kurulumudur** (tasarım §2.1 U4): Program Files'a kurulur,
-her kurulum ve güncelleme UAC'de yönetici kimliği ister. Güvenlik duvarı
-kuralı ve otomatik başlatma görevi kurucunun isteğe bağlı görevleridir (F5;
-tasarım §4.5, §5.7). Lisans sayfası `LICENSE.txt`, üçüncü taraf lisansları
-`{app}\THIRD_PARTY_LICENSES\` (F12). Kurucu ve kaldırıcı `AppMutex` KULLANMAZ: `[Code]` içindeki
+Kurucu iki kipi sunar (tasarım §2.2 TK7: `PrivilegesRequired=lowest` +
+`PrivilegesRequiredOverridesAllowed=dialog`). **Kullanıcı başına kurulum**
+(`%LOCALAPPDATA%\Programs`, yönetici kimliği istemez) programı kendi Windows
+hesabında tek başına kullanan senaryo içindir. Ortak "OAB" Windows hesabı
+kullanılacaksa kurulum **yönetici kipinde** yapılır: Program Files'a kurulur,
+program dosyaları standart kullanıcıya salt okunur kalır (tasarım §4.3 tehdit 20);
+bedeli, her kurulum ve güncellemede UAC'nin yönetici kimliği istemesidir. Kurucu
+güvenlik duvarı kuralı, otomatik başlatma kaydı ya da tepsi görevi bırakmaz
+(tasarım §2.2 TK3, TK5). Lisans sayfası `LICENSE.txt`, üçüncü taraf lisansları
+`{app}\THIRD_PARTY_LICENSES\`. Kurucu ve kaldırıcı `AppMutex` KULLANMAZ: `[Code]` içindeki
 `InitializeSetup`/`InitializeUninstall` çalışan programa `OABDefteri.Kapat`
 olayını gönderir ve iki mutex serbest kalana dek en çok 30 sn bekler (tasarım
-§4.2-5; doğrulama çek-listesi `packaging/windows/NOTLAR.md`).
+§4.2 "Kurucu ve kaldırıcı"; doğrulama çek-listesi `packaging/windows/NOTLAR.md`).
 
 ## Duman testleri
 
@@ -146,8 +157,8 @@ yüklenmesi) ve sonradan yükleme işi (`r2-yukle.yml`) sahte `gh`/`npx` ile
 Linux tarafındaki her `apt-get install`, `packaging/linux/apt_dene.sh` içindeki
 `apt_dene` sarmalından geçer: başarısızlıkta `/var/lib/apt/lists/*` silinir ve
 artan beklemeyle üç kez denenir. Debian 11 güvenlik deposu tarihli arşive
-sabitlenir (bullseye LTS 31.08.2026'da bitti). Gerekçeler ve KS'deki vakalar
-betiğin başlığındadır; davranış `packaging/tests/test_apt_dene.py` ile
+sabitlenir (bullseye LTS 31.08.2026'da bitti). Gerekçeler ve aile iskeletindeki
+vakalar betiğin başlığındadır; davranış `packaging/tests/test_apt_dene.py` ile
 sabitlenir.
 
 ## Yayın hattı (etiket push'undan sonra)
@@ -171,8 +182,9 @@ görünüyorsa paketleri de oradadır). Davranışı sahte `gh`/`npx` ile
 
 **Boyut sınırı.** wrangler `r2 object put` tek parçada en çok 300 MiB yükler
 (Cloudflare "Upload objects": "up to 315 MB"). Sınırı aşan bir paket varken betik
-yine HİÇBİR dosya yüklemez. `v2026.10.0-beta.1`'in en büyüğü Linux arşiviydi
-(247.424.211 bayt, ~236 MiB). Paket sınırı aşarsa yükleme çok parçalı S3 yoluna
+yine HİÇBİR dosya yüklemez. Aile iskeletinin ilk betasında en büyük paket Linux
+arşiviydi (247.424.211 bayt, ~236 MiB); OAB'nin Linux paketi aynı Qt zincirini
+taşır. Paket sınırı aşarsa yükleme çok parçalı S3 yoluna
 (rclone ya da `aws s3`, R2 S3 erişim anahtarlarıyla) taşınmalıdır; bu bugün
 betikte yoktur.
 
@@ -187,11 +199,11 @@ R2 adımı iki depo secret'ı ister:
 
 *Object Read & Write* YETMEZ: wrangler `r2 object put` Cloudflare REST API'siyle
 çalışır ve object-düzeyi token REST'te 403 (kod 10000 "Authentication error")
-ile reddedilir. DD hattında 28.09.2026'da tam böyle kırıldı ve Admin Read &
-Write token'la uçtan uca yeşil doğrulandı; KS belgeleri de aynı gün düzeltildi
-(Cloudflare: developers.cloudflare.com/r2/platform/troubleshooting). Kova
-(`okulapp-indirme`) kardeş programlarla ortaktır, önek ayrımı kovanın içindedir:
-DD'nin kullandığı token ve hesap kimliği burada da geçerlidir.
+ile reddedilir. Aile iskeletinin hattında 28.09.2026'da tam böyle kırıldı ve
+Admin Read & Write token'la uçtan uca yeşil doğrulandı (Cloudflare:
+developers.cloudflare.com/r2/platform/troubleshooting). Kova (`okulapp-indirme`)
+kardeş programlarla ortaktır, önek ayrımı kovanın içindedir: kardeş programların
+kullandığı token ve hesap kimliği burada da geçerlidir.
 
 Tanımlı değilse yayın işindeki adım, sürüme ve dizine bakmadan uyarı basıp ATLANIR
 (secret'ı olmayan bir çatalda da sürüm çıkabilmeli; betik kimliği ilk denetler);
@@ -206,17 +218,17 @@ gh secret set CLOUDFLARE_API_TOKEN  --repo aalidemirci/oab-defteri
 gh secret list --repo aalidemirci/oab-defteri   # yalnız adlar ve tarihler görünür
 ```
 
-GitHub secret'ları geri okunamaz: DD deposundaki değer oradan kopyalanamaz,
+GitHub secret'ları geri okunamaz: kardeş depodaki değer oradan kopyalanamaz,
 token'ın saklandığı yerden alınır. Elde yoksa Cloudflare panelinde R2 → API
 token'larını yönet → **yeni** token (izin Admin Read & Write; secret'a yazılan,
 oluşturulunca bir kez gösterilen *Token value*'dur, S3 erişim anahtarları
-değil). Var olan token'ı yeniden üretmek ("roll") DD'nin kopyasını geçersiz
-kılar. Hesap kimliği panelde R2 genel bakış sayfasında görünür.
+değil). Var olan token'ı yeniden üretmek ("roll") kardeş depolardaki kopyaları
+geçersiz kılar. Hesap kimliği panelde R2 genel bakış sayfasında görünür.
 
 ### R2 adımı atlandıysa ya da kırıldıysa
 
 Paketleri yeniden üretmeye gerek yok: Actions → **R2'ye yükle** → "Run
-workflow" → **etiket** = `v<VERSION>` (ör. `v2026.10.0-beta.1`). İş
+workflow" → **etiket** = `v<VERSION>` (ör. `v2026.11.0-alpha.1`). İş
 (`.github/workflows/r2-yukle.yml`) var olan Release'in dosyalarını
 `gh release download` ile indirir ve aynı betikle yükler. Burada kimlik
 **zorunludur**: secret yoksa iş kırmızı biter, hiçbir şey yüklemeden yeşil
@@ -227,8 +239,7 @@ gh workflow run r2-yukle.yml --repo aalidemirci/oab-defteri -f etiket=v<VERSION>
 ```
 
 Elle tetiklenen iş akışı GitHub'da yalnız varsayılan dalda (`main`) bulunduğunda
-görünür. İlk beta (`v2026.10.0-beta.1`) secret'lar tanımlanmadan çıktı; R2'ye bu
-yolla yüklenir. Yüklemeden sonra beş dosya için
+görünür. Yüklemeden sonra beş dosya için
 `curl -sI https://indir.okulapp.org/oab-defteri/<ad>` → 200 ve
 `Content-Length` Release'teki boyutla aynı olmalıdır (özet dosyasının adı
 `SHA256SUMS-<sürüm>.txt`).
@@ -237,17 +248,16 @@ yolla yüklenir. Yüklemeden sonra beş dosya için
 
 Yükleme sonrası elle kalan iş, `okulapp.org` deposundaki
 `src/data/od-release.json` dosyasını güncellemektir (tasarım §17 — ortak yayın
-alanı kuralları). Program güncellemeyi GitHub Release'ten denetler; R2'deki
-paketler elle indirme içindir ve program oraya istek atmaz, bu yüzden bir
-`manifest.json` üretilmez (tasarım §2.2 T11 v4, 27.09.2026 kullanıcı kararı).
+alanı kuralları; dosya ve sayfa ilk kez F7'de açılır). Program güncellemeyi GitHub
+Release'ten denetler; R2'deki paketler elle indirme içindir ve program oraya istek
+atmaz, bu yüzden bir `manifest.json` üretilmez (tasarım §2.2 TK4).
 
 Sitedeki İndir düğmeleri `od-release.json` `"available": true` iken basılır. Bu
 bayrak, beş adres 200 dönüp `Content-Length` Release'teki boyutla tutmadan `true`
-yapılmaz: site dalı R2'den önce birleşirse canlıda kırık İndir düğmesi çıkardı
-(30.09.2026: sürüm verisi dolduruldu, bayrak R2 yüklemesine dek `false`).
+yapılmaz: site dalı R2'den önce birleşirse canlıda kırık İndir düğmesi çıkardı.
 
 Etiket, push ve R2 yüklemesi dışa açık işlerdir; **kullanıcı onaylı adımlardır**
-(tasarım §14.1).
+(altın kural 8; tasarım §14, §17).
 
 ## İki dil kuralı
 
@@ -274,7 +284,7 @@ ediyorsa dört halka birlikte güncellenir:
 Testler halkalardan biri eksikse kırılır. Gerekçe ve ayrıntı spec dosyasının
 başındaki açıklamada.
 
-**Beşinci adım — lisans listesi (F12, TB28).** Python ya da npm bağımlılığı
+**Beşinci adım — lisans listesi (tasarım §11.4).** Python ya da npm bağımlılığı
 eklenince, çıkınca ya da sürümü değişince `bash packaging/lisanslar/uret.sh`
 koşulur (Docker, ağ gerekir) ve `THIRD_PARTY_LICENSES/` farkı gözden geçirilip
 işlenir. `packaging/tests/test_lisans_kapisi.py` her pini, çalışma zamanı
@@ -282,7 +292,7 @@ kapanışını ve `frontend/package.json` bağımlılıklarını listeyle karş�
 derlemede `lisanslar.py paket` listede olmayan dağıtımı pakette bulursa
 derlemeyi durdurur. Lisansı yalnız GPL olan bileşen pakete giremez.
 
-## Lisanslar ve THIRD_PARTY_LICENSES (F12)
+## Lisanslar ve THIRD_PARTY_LICENSES (tasarım §11.4)
 
 Programın lisansı PolyForm Noncommercial 1.0.0'dır (`LICENSE`). Pakete giren
 her üçüncü taraf bileşenin adı, sürümü, lisansı ve lisans METNİ depo kökündeki
@@ -300,10 +310,11 @@ dosyaları. Dizin **elle yazılmaz**, `packaging/lisanslar/uret.sh` üretir:
    verilir. Python çalışma zamanı, DejaVu, WebView2 SDK (NuGet'teki lisans),
    Evergreen önyükleyicisi notu, Qt ile ayrı kitaplık olarak gelen ICU 73.2
    (lisans metni ICU'nun etiketinden) ve Qt kitaplıklarına derlenmiş üçüncü taraf
-   kodun (Chromium dahil) bildirim adresleri elle tanımlı bileşenlerdir. Beta'da
-   Qt/Chromium bildirimleri adresle verilir (KULLANICI KARARI 28.09.2026, KB-3 (a));
-   kararlı sürümden önce üretici bildirim METNİNİ Qt 6.8.3 kaynak arşivindeki
-   `qt_attribution.json` dosyalarından üretir (KB-3 (b), `docs/teknik-borc.md` TB28).
+   kodun (Chromium dahil) bildirim adresleri elle tanımlı bileşenlerdir. Ön
+   sürümlerde Qt/Chromium bildirimleri adresle verilir (aile iskeletinin kullanıcı
+   kararı, 28.09.2026, KB-3 (a)); kararlı sürümden önce üretici bildirim METNİNİ Qt
+   6.8.3 kaynak arşivindeki `qt_attribution.json` dosyalarından üretir (KB-3 (b);
+   tasarım §11.4, §13 D18: F7 paketlemesinden önce).
 
 **Derlemede** (`build.ps1`, `build.sh`, PyInstaller'dan hemen sonra)
 `lisanslar.py paket`: dizini ve `LICENSE.txt`'yi paket köküne koyar (Windows'ta
@@ -321,7 +332,8 @@ dosyaları (Windows'ta MSYS2 paket veritabanından, Linux'ta dpkg +
 `THIRD_PARTY_LICENSES/yerel-kutuphaneler/` altına, pakette gerçekten bulunan
 bileşenlerin listesi `paket-icerigi.txt`'ye yazılır.
 
-27.09.2026 yerel Linux derlemesinin bulguları (hepsi giderildi, denetim artık
+Aile iskeletinin 27.09.2026 yerel Linux derlemesinin bulguları (hepsi giderildi,
+denetim artık
 yakalar): stdlib `readline` eklentisi GPL-3.0'lı `libreadline.so.8`'i pakete
 taşıyordu (spec `excludes`); pywebview'ın kendi PyInstaller kancası
 `collect_submodules("webview")` ile toplanıp PyInstaller'ın GPL-2.0+ derleme
@@ -332,16 +344,17 @@ etiketiyle (PySide6_Addons: "LGPL-3.0-only OR GPL-…") değerlendiriyordu: pake
 açık kaynak sürümünde YALNIZ GPL-3.0 ile sunulan modüllerini (Charts, Data
 Visualization, Graphs, Quick 3D, Quick Timeline, Virtual Keyboard, Wayland Compositor;
 22 kitaplık, QML eklentileri ve `QtDataVisualization` bağlayıcısı, ~29 MB) taşıyordu.
-**F12 düzeltme turu (28.09.2026):** spec bunları `lisanslar.qt_gpl_suz` ile ayıklar (ada
+**Düzeltme turu (aile iskeletinde, 28.09.2026):** spec bunları `lisanslar.qt_gpl_suz` ile ayıklar (ada
 göre ve DT_NEEDED kapanışıyla — örneğin Virtual Keyboard'un giriş eklentisi ve Quick 3D'nin
 profil eklentisi adında modül adı taşımaz); `lisanslar.py paket` aynı kuralı paketin
 diskteki hâlinde dosya düzeyinde sınar, `kap-ici-test.sh` kurulu pakette bir kez daha
 arar. Program bu modüllerin hiçbirini kullanmaz (pencere QtWebEngineWidgets'tır). Qt'nin
 LGPL'li modülleri pakette kalır. Windows tarafı (MSYS2 veritabanı ve SPDX lisans
-değerlendirmesi, BOM'lu lisans sayfası, pip kısıt dosyası) ilk CI koşusunda doğrulanır
+değerlendirmesi, BOM'lu lisans sayfası, pip kısıt dosyası) CI'da doğrulanır
 (`packaging/windows/NOTLAR.md` W21-W26).
 
-**İlk CI Windows koşusunun bulguları (29.09.2026, PR #9; hepsi giderildi, denetim artık
+**Aile iskeletinin ilk CI Windows koşusunun bulguları (29.09.2026; hepsi giderildi,
+denetim artık
 yakalar):** (A) PyInstaller 6.11 Universal CRT adlarını `_win_includes` listesinde tutar ve
 python312.dll'in bağımlılığını PATH'te bulduğu ilk kopyadan toplar — koşucunun PATH'indeki
 Temurin JDK'sından `ucrtbase.dll` + 42 `api-ms-win-*.dll` girdi. UCRT Windows 10/11'in
@@ -424,7 +437,8 @@ yakalamaz.
 
 ### Lisans: PySide6 LGPLv3 (Linux)
 
-**Neden PyQt5 değil.** Linux paketi 23.09.2026'ya kadar PyQt5 + PyQtWebEngine
+**Neden PyQt5 değil.** Aile iskeletinin Linux paketi 23.09.2026'ya kadar PyQt5 +
+PyQtWebEngine
 gömüyordu; ikisi de **GPLv3**'tür. GPLv3 dağıtılan bütüne ek kısıtlama
 konmasını yasaklar, bu ürünün lisansı (PolyForm Noncommercial, depo kökündeki
 `LICENSE`) ise ticari kullanımı kısıtlar — ikisi aynı pakette birlikte
@@ -447,7 +461,7 @@ yapısı gereği karşılar:
 * PySide6'nın kendi sürümü, `PySide6/__init__.py` ile `Qt/lib/` içindeki
   `.so` adlarından okunabilir; pin `requirements-paketleme.txt`'tedir.
 
-**F12'de uygulandı (27.09.2026).** **Tekerleklerin içinde lisans METNİ yoktur**
+**Aile iskeletinde uygulandı (27.09.2026).** **Tekerleklerin içinde lisans METNİ yoktur**
 (denetlendi, 23.09.2026): `PySide6-Essentials`, `PySide6-Addons` ve `shiboken6`
 dağıtımları lisansı yalnız üstveride bildirir —
 `License: LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only`. Üçlü lisanstan
@@ -460,11 +474,11 @@ metni pystray'in dağıtımından alıyordu; tepsi söküldü, tasarım §11 B18
 qtpy'nin MIT metni kendi tekerleğindendir. Önceki taslakta anılan
 "Qt LGPL Exception" metni Qt 5'in LGPL-2.1 seçeneğine aitti; Qt 6 LGPL-2.1
 sunmadığı için eklenmedi. Dizin paket köküne `lisanslar.py paket` ile kopyalanır.
-Kullanıcıya dönük metin `docs/kurulum.md`'de bir cümleyle durur:
+Kullanıcıya dönük metin taşınabilir Linux arşivinin notunda (`linux/BENIOKU.txt`)
+bir cümleyle durur:
 
-> Programın Linux sürümü, pencereyi çizen Qt kütüphanelerini LGPLv3 lisansıyla
-> birlikte dağıtır. Kütüphane dosyaları kurulum klasöründe ayrı dosyalar
-> hâlindedir; isteyen kendi sürümüyle değiştirebilir.
+> Pencereyi çizen kütüphaneler programla birlikte, LGPLv3 lisansıyla dağıtılır;
+> kurulum klasöründe ayrı dosyalar hâlinde durur ve değiştirilebilir.
 
 **PySide6'nın kaynağı pakete GİRMEZ** (Qt 6.8.3 kaynak arşivi yüzlerce MB'dir).
 Tekerlekler Qt Company'nin yayımladığı hâlleriyle, **değiştirilmeden** dağıtılır;
@@ -475,18 +489,18 @@ sunucuda durmasına izin verir ama erişilebilirliğini dağıtanın yükümlül
 sayar ve nesne kodunun yanında açık yönlendirme ister: Release notu
 (`.github/workflows/paketleme.yml`) `BENIOKU.txt`'ye ve Qt/PySide6 kaynak adreslerine
 yönlendirir (`test_surum_yolu.py` sürümü lisans listesiyle eşitler). §6(b)'nin yazılı
-teklifi yalnız fiziksel taşıyıcıyla dağıtımı kapsar (KB-1 düzeltme turu, 29.09.2026 —
-tasarım F12 ekleri DT-7). **KULLANICI KARARI (28.09.2026, KB-1 — tasarım §14.1 F12 ekleri karar turu
-KT-1):** beta için `BENIOKU.txt`'de **yazılı teklif** vardır — üreticinin metni
+teklifi yalnız fiziksel taşıyıcıyla dağıtımı kapsar (aile iskeletinin KB-1 düzeltme
+turu, 29.09.2026). **Aile iskeletinin kullanıcı kararı (28.09.2026, KB-1; OAB'de plan
+§2.1 "F1a ekleri"):** ön sürümler için `BENIOKU.txt`'de **yazılı teklif** vardır — üreticinin metni
 (`lisanslar.py::_yazili_teklif`; kapsadığı LGPL bileşenler `bilesenler.json`'dan
 türer, Windows'taki LGPL-2.1'li MSYS2 DLL'leri dahil): her sürüm, beta dahil, yayımdan
 itibaren en az üç yıl; istek yolu deponun Issues sayfası (`DEPO_ADRESI`, güncelleme
 denetiminin deposuyla aynı — kapı testli) ya da geliştiricinin e-posta adresi
-(`ILETISIM_EPOSTA`, Hakkında ekranı ve `LICENSE` ile aynı — kapı testli; **29.09.2026
-kullanıcı kararı**, tasarım F12 ekleri İA-2); kişi adı, unvan, kurum adı yazılmaz.
+(`ILETISIM_EPOSTA`, Hakkında ekranı ve `LICENSE` ile aynı — kapı testli; aile
+iskeletinin **29.09.2026 kullanıcı kararı**); kişi adı, unvan, kurum adı yazılmaz.
 Metin `uret.sh` ile üretilir; kapı testi depodaki `BENIOKU.txt`'nin üreticinin çıktısıyla
 birebir aynı olduğunu sınar. **Kararlı sürümden önce** Windows'un MSYS2 kaynak arşivleri
-Release'e ayrı bir "kaynak" paketi olarak konur (KB-1 (b); `docs/teknik-borc.md` TB28).
+Release'e ayrı bir "kaynak" paketi olarak konur (KB-1 (b); tasarım §11.4, §13 D18).
 Kararda Qt kaynağının (~1 GB) aynalanması yoktur: Qt için download.qt.io adresi ve yazılı
 teklif geçerlidir.
 

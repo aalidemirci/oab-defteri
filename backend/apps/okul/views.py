@@ -1,15 +1,15 @@
 """`okul` API uçları — İNCE view'lar (View → Service → Model; ORM selectors'ta).
 
-Hesapsız program (settings AllowAny; masadaki kişi ayrımı kiple yapılır,
-§4.4). Tek izin sınıfı kişi yazan uçlardadır: yönetici parolası kurulmadan
+Hesapsız program (settings AllowAny; kişiler arasındaki ayrım bugün kiple
+yapılır, §4.4). Tek izin sınıfı kişi yazan uçlardadır: yönetici parolası kurulmadan
 yazma yöntemleri 409 `parola_gerekli` döner (`permissions.RequiresAdminPassword`,
-§6.3-2). Hata gövdesi `shared.exceptions.od_exception_handler` ile
+tasarım §5.3). Hata gövdesi `shared.exceptions.od_exception_handler` ile
 `{code, message, fields}` sözleşmesine çevrilir; parser hataları
 ValidationError olarak yükseltilir.
 
-KS'den alındı (KS'de DD kalıbından budanmıştı: tatil/sınıf-sorumlusu/yıl-devri
-uçları yok). Zil/vardiya/şube kümesi/zümre/fotoğraf/cinsiyet uçları Kütüphane
-Defteri'ne alınmadı (tasarım §6.1, §12 ALMA).
+Aile iskeletinden alındı. Kapalı gün uçları ayrı dosyadadır (`views_calendar`);
+sınıf-sorumlusu ve yıl-devri uçları yoktur. Zil/vardiya/şube kümesi/zümre/
+fotoğraf/cinsiyet uçları aile iskeletine de alınmamıştı.
 """
 
 from __future__ import annotations
@@ -105,9 +105,8 @@ class GradeLevelsView(APIView):
     """`GET /api/v1/grade-levels/` — UI seçicileri için geçerli öğrenim seviyeleri.
 
     Liste okul içi sabitten gelir (`SchoolConfig.grade_levels`): 1-12, hazırlık
-    bayrağı açıksa başta 0 (Hazırlık). Kademe (`SchoolConfig.kademe`, F1)
-    seviyeleri KISITLAMAZ; Md. 19 bedeli ve sınıf kitaplığı kuralları F6/F7'de
-    ona bağlanır.
+    bayrağı açıksa başta 0 (Hazırlık). Kademe (`SchoolConfig.kademe`)
+    seviyeleri KISITLAMAZ.
     """
 
     def get(self, request: Request) -> Response:
@@ -134,7 +133,7 @@ class SchoolConfigView(APIView):
 class SetupCompleteView(APIView):
     """`POST setup/complete/` — yalnız üç adım da tamamsa (parola, okul, ders yılı).
 
-    1. adım kurtarma anahtarı doğrulanmadan tamam sayılmaz (F1 eki, karar 2).
+    1. adım kurtarma anahtarı doğrulanmadan tamam sayılmaz (tasarım §4.4.5).
     Kurulum sürerken kip süreleri işlemez; tamamlanınca iki sayaç sıfırdan başlar
     (`kip.KipDurumu.sureleri_yeniden_baslat`).
     """
@@ -292,12 +291,12 @@ class PersonnelDetailView(generics.RetrieveUpdateDestroyAPIView[Personnel]):
 
 
 # ---------------------------------------------------------------------------
-# Ayrılış ve birleştirme (tasarım §6.1 unutma kancası, §8.3 mutabakat)
+# Ayrılış ve birleştirme (tasarım §5.1 `Personnel`, §13 D30)
 # ---------------------------------------------------------------------------
 class StudentLeaveView(APIView):
     """`POST students/<pk>/leave/` — "Ayrıldı olarak işaretle" (ayrılış yolu).
 
-    Kayıt SİLİNMEZ (F1 eki 7): LEFT + `left_at`, havuzdaysa havuzdan çıkar.
+    Kayıt SİLİNMEZ: LEFT + `left_at`, havuzdaysa havuzdan çıkar.
     Yanıt ayrılmış öğrenci kaydıdır. Toplu karar `leave-pool/resolve/`'dadır.
     """
 
@@ -457,13 +456,13 @@ class PersonnelTemplateView(APIView):
 
 
 # ---------------------------------------------------------------------------
-# Yönetici parolası / kilit (tasarım §4.3, §4.4, §6.3)
+# Yönetici parolası / kilit (tasarım §4.3, §4.4.3, §4.4.4)
 # ---------------------------------------------------------------------------
 # Bu uçlar `apps.okul.lock_middleware.AppLockMiddleware` tarafından KİLİT
 # KAPISINDAN MUAFTIR (`/api/v1/security/` ön eki) — kilidi açmanın tek yolu
 # bunlardır. Güvenlik dosyası kayıpken yalnız durum ucu açıktır. Parolalar
 # YALNIZ istek gövdesinde taşınır; hiçbir yanıtta, günlükte veya hata
-# mesajında yankılanmaz. Parolayı kaldırma ucu YOKTUR (§6.3-6).
+# mesajında yankılanmaz. Parolayı kaldırma ucu YOKTUR (parola zorunludur; tasarım §5.3).
 class AppPasswordRequestSerializer(serializers.Serializer[dict[str, Any]]):
     password = serializers.CharField(trim_whitespace=False)
 
@@ -538,7 +537,7 @@ class SecurityRecoverView(APIView):
 
 
 class SecurityRecoveryKeyPdfView(APIView):
-    """`POST /api/v1/security/recovery-key/pdf/` `{recovery_key}` — E14 PDF'i.
+    """`POST /api/v1/security/recovery-key/pdf/` `{recovery_key}` — kurtarma anahtarı belgesi.
 
     Anahtar `guvenlik.json`'daki kurtarma sarmalını açmıyorsa (ya da bellekteki
     anahtara ait değilse) 400 + kademeli gecikme; açıyorsa PDF. Kişi yazmaz.
@@ -570,7 +569,7 @@ class SecurityRecoveryKeyConfirmView(APIView):
 
     Sihirbaz (ya da Ayarlar → Güvenlik) iki grubu istemcide denetledikten sonra
     TAM anahtarı gönderir; anahtar kurtarma sarmalını açıyor ve bellekteki
-    anahtara aitse `guvenlik.json`'a doğrulama damgası yazılır (F1 eki, karar 2).
+    anahtara aitse `guvenlik.json`'a doğrulama damgası yazılır (tasarım §4.4.4).
     Yanlışsa 400 + kademeli gecikme. Kişi yazmaz. Kilitliyken kilit kapısı keser
     (`LOCKED_DENIED_PATHS`), görevli kipinde kapalıdır (izin listesinde yok).
     Yanıt güncel güvenlik durumudur (`recovery_key_confirmed: true`).
@@ -724,7 +723,7 @@ class BackupRestoreView(APIView):
 
 
 # ---------------------------------------------------------------------------
-# GitHub Release tabanlı uygulama güncellemesi (F8 — DD updates.py AYNEN)
+# GitHub Release tabanlı uygulama güncellemesi (aile iskeletinden AYNEN)
 # ---------------------------------------------------------------------------
 class UpdateStatusView(APIView):
     """GitHub'daki son kararlı sürümü çalışan sürümle karşılaştırır."""

@@ -1,4 +1,4 @@
-// Güncelleme paneli testleri: denetim YALNIZ düğmeyle (tasarım T11 — sekme
+// Güncelleme paneli testleri: denetim YALNIZ düğmeyle (tasarım TK4 — sekme
 // açılınca istek yok), kullanıcı dili ("yayımlanan son sürüm", "kurulum
 // dosyası" — GitHub/Release/kurucu/SHA jargonu yok), doğrulanmış indirme,
 // sonucun kabuk bandına yayınlanması ve çevrimdışı hata bandı.
@@ -163,7 +163,7 @@ describe("UpdatePanel", () => {
     renderPanel();
     await denetle();
 
-    // Kullanıcı kararı (27.09.2026): ileti dürüsttür ve indirme alanını önerir.
+    // Tasarım TK4: ulaşılamazsa ileti dürüsttür ve elle indirme alanını önerir.
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "GitHub'a ulaşılamadı; okul ağında engellenmiş olabilir. Yeni sürümü " +
         "indir.okulapp.org'dan elle denetleyebilirsiniz.",

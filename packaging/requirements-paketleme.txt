@@ -29,10 +29,10 @@ pywebview==5.3.2
 pythonnet==3.0.5 ; sys_platform == "win32"
 
 # ---------- Linux/Pardus: Qt WebEngine (PySide6) ----------
-# KS kararı (K17): WebKitGTK/PyGObject yolu ELENDİ (typelib paketleme + Pardus
+# Aile kararı: WebKitGTK/PyGObject yolu ELENDİ (typelib paketleme + Pardus
 # 21/23 ABI oynaklığı).
 #
-# LİSANS — PyQt5 DEĞİL PySide6 (23.09.2026 yayın denetimi kararı). PyQt5 ve
+# LİSANS — PyQt5 DEĞİL PySide6 (aile iskeletinin 23.09.2026 yayın denetimi kararı). PyQt5 ve
 # PyQtWebEngine GPLv3'tür; GPLv3 dağıtılan bütüne EK KISITLAMA konmasını
 # yasaklar, bu ürünün lisansı (PolyForm Noncommercial) ise ticari kullanımı
 # kısıtlar — ikisi aynı pakette dağıtılamaz. PySide6 LGPLv3'tür: kütüphane

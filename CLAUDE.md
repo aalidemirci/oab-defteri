@@ -7,7 +7,8 @@
 > (taslak v2, bağımsız denetimden geçti — [denetim](docs/kesif/2026-10-31-tasarim-denetimi.md)). Diğerleri:
 > [`docs/kesif/2026-10-31-on-degerlendirme.md`](docs/kesif/2026-10-31-on-degerlendirme.md)
 > (neden, ne, kararlar), [`docs/plan/2026-10-31-f0-f1-plani.md`](docs/plan/2026-10-31-f0-f1-plani.md)
-> (ilk iki fazın işleri ve kapıları), [`docs/mevzuat/`](docs/mevzuat/BENIOKU.md) (kanonik mevzuat).
+> (ilk iki fazın işleri ve kapıları), [`docs/mevzuat/`](docs/mevzuat/BENIOKU.md) (kanonik mevzuat),
+> [`docs/sozluk.md`](docs/sozluk.md) (arayüz sözlüğü ve yazım kuralları; kullanıcıya görünen her metin uyar).
 >
 > Depo dili **Türkçe**: yorumlar, commit mesajları, testler, belgeler ve kullanıcıya
 > görünen bütün metinler. Tanımlayıcılar (sınıf, alan, uç adları) İngilizcedir; OYS'den
@@ -103,7 +104,7 @@ siteyi ve evrakı kapsar.
 | Faz | Durum |
 |---|---|
 | F0 Keşif tamamlama + genel tasarım + mevzuat | **tamam (31.10.2026)** — korpus, envanterler, kullanıcı kararları, saha notu, genel tasarım taslak v2, bağımsız denetim (129 bulgu işlendi); kullanıcı "F0 tamam" dedi. Ayrıntı planın §1.7'sinde |
-| F1 İskelet + çekirdek + organlar + kural paketi | **sürüyor** — F1a (aile iskeleti) **tamam (31.10.2026)**: kapı CI'da ve Windows'ta elle geçti, ekler planın §2.1'inde. Sıradaki **F1b** (güvenlik çekirdeği, kurulum, okul kartı, roller); ilk işleri yeni logo ve görünen kütüphane metinleri (kullanıcı kararı 31.10.2026) |
+| F1 İskelet + çekirdek + organlar + kural paketi | **sürüyor** — F1a (aile iskeleti) **tamam (31.10.2026)**: kapı CI'da ve Windows'ta elle geçti, ekler planın §2.1'inde. **F1b** (güvenlik çekirdeği, kurulum, okul kartı, roller) sürüyor: 0. adım (yeni logo "okul çatısı ve aile", görünen kütüphane metinleri, sözlük, ölü atıflar) **tamam (01.11.2026)**, ekleri planın §2.2'sinde; sıradaki 1. adım hesaplar ve denetim izi |
 
 Sapmalar ve tasarımda yazmayan kararlar faz bittikçe "F<n> ekleri (tarih)" satırıyla
 plan/tasarım belgesine işlenir.

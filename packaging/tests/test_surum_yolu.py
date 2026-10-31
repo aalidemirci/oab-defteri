@@ -1,7 +1,8 @@
-"""Beta sürüm yolu (F12, kullanıcı kararı 3 — 27.09.2026).
+"""Sürüm ve yayın yolu (aile iskeletinden; packaging/README.md "Sürüm").
 
-İlk sürüm bir BETA etiketidir (`v2026.10.0-beta.1`); etiketi ana oturum kullanıcı
-onayıyla atar, bu dal yalnız hazırlar. Burada sabitlenenler:
+`VERSION` bugün bir ön sürümdür; ilk yayımın sürümü ve etiketi henüz belirlenmedi.
+Etiketi ana oturum kullanıcı onayıyla atar (altın kural 8), bu dal yalnız hazırlar.
+Burada sabitlenenler:
 
 * `VERSION` CalVer + ön-sürüm ekidir ve paket adlarına doğru dönüşür (.deb `~`,
   Windows sürüm kaynağı yalnız sayı, güncelleme denetiminin kurucu deseni);
@@ -16,8 +17,8 @@ onayıyla atar, bu dal yalnız hazırlar. Burada sabitlenenler:
   dosya yüklemez.
 
 Yayın işi yalnız `v*` etiketinde, `r2-yukle.yml` yalnız elle koştuğu için PR
-kapıları onları hiç çalıştırmaz (KS'nin ilk etiket koşusu tam böyle bir satırdan
-kırıldı); bu test o boşluğu kapatır. Güncelleme denetiminin kararlı kullanıcıya
+kapıları onları hiç çalıştırmaz (aile iskeletinin ilk etiket koşusu tam böyle bir
+satırdan kırıldı); bu test o boşluğu kapatır. Güncelleme denetiminin kararlı kullanıcıya
 beta önermemesi `backend/apps/okul/tests/test_updates.py`'dedir (iki
 `version_key` kopyası dahil).
 """
@@ -115,8 +116,8 @@ def _sahte_arac(dizin: Path, ad: str) -> Path:
 def test_version_calver_ve_on_surum_eki() -> None:
     """VERSION CalVer'dır; ek yalnız alpha/beta/rc + numara (README "Sürüm").
 
-    Sabit değere KİLİTLENMEZ (F12 düzeltme turu): her sürüm artırımında kapı kırmızı
-    olurdu. İlk betanın `2026.10.0-beta.1` olduğu tasarım §14.1 "F12 ekleri"ndedir.
+    Sabit değere KİLİTLENMEZ (aile iskeletinin düzeltme turu): her sürüm artırımında
+    kapı kırmızı olurdu.
     """
     assert re.fullmatch(r"20\d\d\.(1[0-2]|[1-9])\.\d+(-(alpha|beta|rc)\.\d+)?", VERSION), VERSION
 
@@ -157,7 +158,7 @@ def test_debian_siralamasi_alfa_beta_rc_kesin() -> None:
 
 def test_inno_appid_degismez() -> None:
     """AppId değişirse beta → kararlı yükseltme yerinde yapılmaz, yan yana kurulur
-    (tasarım §2.3). Değer kardeş kurucuların (Kütüphane dâhil) hiçbiriyle aynı değildir;
+    (tasarım §2.3). Değer aile kurucularının (doğrudan ata dâhil) hiçbiriyle aynı değildir;
     F1a-1'de `uuid.uuid4()` ile üretildi (31.10.2026)."""
     iss = (REPO / "packaging" / "windows" / "oab-defteri.iss").read_text(encoding="utf-8")
     assert re.findall(r"^AppId=(.+)$", iss, flags=re.MULTILINE) == [
@@ -239,8 +240,11 @@ def test_release_on_surum_etiketini_pre_release_isaretler(
     assert ("--prerelease" in argumanlar) is on_surum
     notlar = argumanlar[argumanlar.index("--notes") + 1]
     assert notlar.startswith("Ön sürümdür. ") is on_surum
-    # KB-1 düzeltme turu (29.09.2026): ağdan dağıtımda LGPL-3.0 bileşenleri için GPL-3.0
-    # md. 6(d) — nesne kodunun yanında kaynağa açık yönlendirme. Qt/PySide6 sürümü lisans
+    # Not depodaki belgelere yönlendirmez: Release'i indiren kişinin elinde yalnız paketler
+    # vardır (var olmayan bir `docs/kurulum.md`'ye gidiyordu; F1b adım 0).
+    assert "docs/" not in notlar
+    # Aile iskeletinin KB-1 düzeltme turu (29.09.2026): ağdan dağıtımda LGPL-3.0
+    # bileşenleri için GPL-3.0 md. 6(d) — nesne kodunun yanında kaynağa açık yönlendirme. Qt/PySide6 sürümü lisans
     # listesindekiyle aynı olmalı (sürüm yükselince not da güncellenir).
     bilesenler = json.loads(
         (REPO / "THIRD_PARTY_LICENSES" / "bilesenler.json").read_text(encoding="utf-8")
@@ -350,7 +354,7 @@ def test_r2_yuklemesi_tek_betikte() -> None:
 
 
 def test_r2_izni_admin_read_write_yazilir() -> None:
-    """Object Read & Write YETMEZ (wrangler REST API; DD hattı, 28.09.2026): yorum ve
+    """Object Read & Write YETMEZ (wrangler REST API; aile hattı, 28.09.2026): yorum ve
     belgeler doğru izni söyler, yanlış izni gerekli diye önermez."""
     for yol in (
         R2_BETIGI,

@@ -1,8 +1,9 @@
-"""`POST app/quit/` — arayüzden düzenli çıkış (tasarım §4.2-4, §5.10-18, TB13).
+"""`POST app/quit/` — arayüzden düzenli çıkış (tasarım §4.2 "Kapanış", §4.5).
 
-§5.10-18: görevli kipinde parolasız `app/quit/` 403 döner, parolalı istek
-düzenli kapanışı başlatır. Kapanışın kendisi masaüstü kancasıdır
-(`masaustu_kanca.cikis_iste`); burada kancanın çağrılıp çağrılmadığı sınanır.
+Aile iskeletinin kip kuralı (kip F1b'nin 1. adımında oturuma döner): görevli kipinde
+parolasız `app/quit/` 403 döner, parolalı istek düzenli kapanışı başlatır. Kapanışın
+kendisi masaüstü kancasıdır (`masaustu_kanca.cikis_iste`); burada kancanın çağrılıp
+çağrılmadığı sınanır.
 Pencere, yönetim sunucusu ve WAL checkpoint sırası masaüstü testlerindedir
 (`desktop/tests/test_main.py`). İstekler tam ara katman zincirinden geçer
 (oturum → yeniden başlat → kilit → kip).
@@ -60,7 +61,7 @@ def _govde(resp: Any) -> dict[str, Any]:
     return veri
 
 
-# ------------------------------------------------------------ §5.10-18
+# ------------------------------------------------- görevli kipi (aile kuralı)
 
 
 def test_gorevli_kipinde_parolasiz_cikis_403_ve_kapanis_baslamaz(

@@ -14,8 +14,8 @@ YANLIS_PAROLA = "Yanlis-Parola-9"
 def kurulum_durumunu_yaz(*, tamam: bool) -> None:
     """`SchoolConfig.setup_completed`'ı doğrudan yazar (DB gerekir).
 
-    Kurulum bitene kadar süreler kipi düşürmez (F1 eki, karar 2-1); süre
-    testleri (§5.10-14) kurulumu tamamlanmış ortamda koşar, kurulum sırasındaki
+    Kurulum bitene kadar süreler kipi düşürmez (tasarım §13 D15); süre
+    testleri (§4.4.3) kurulumu tamamlanmış ortamda koşar, kurulum sırasındaki
     davranış ayrı testlerdedir. Sihirbaz kapısı (`setup/complete/`) burada
     atlanır: kip testleri yalnız bayrağı okur.
     """

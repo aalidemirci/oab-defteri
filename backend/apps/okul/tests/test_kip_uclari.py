@@ -1,4 +1,4 @@
-"""Kip uçları (`security/mode/*`) — uçtan uca davranış (U5, tasarım §4.4).
+"""Kip uçları (`security/mode/*`) — uçtan uca davranış (aile iskeletinden; tasarım §4.4).
 
 İstekler tam ara katman zincirinden geçer (restart → kilit → kip). Kip tekili
 her testte sıfırlanır (kök `conftest.py`).

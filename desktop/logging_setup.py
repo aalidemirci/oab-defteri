@@ -1,6 +1,6 @@
 """Uygulama günlüğü — erişim logu KAPALI, PII yazılmaz.
 
-KS F2 denetim bulgusu #20: `?search=<öğrenci adı>` gibi sorgu dizeleri istek
+Aile iskeletinin denetim bulgusu: `?search=<öğrenci adı>` gibi sorgu dizeleri istek
 loglarına düşerse, kişisel veri düz metin olarak diske yazılır. Gömülü sunucuda
 erişim logu üretmenin hiçbir faydası yok (tek kullanıcı, tek makine), zararı var
 → waitress/Django istek günlükçüleri susturulur.
@@ -93,7 +93,7 @@ def configure_logging(
 def enable_crash_log(log_dir: Path, app_version: str) -> Path:
     """Yerel (C katmanı) çöküşte Python yığınını `logs/cokme.log`a yazdırır.
 
-    19.09.2026 çöküş tanısı: PDF motorunun (WeasyPrint → Pango) C katmanındaki
+    Aile iskeletinin 19.09.2026 çöküş tanısı: PDF motorunun (WeasyPrint → Pango) C katmanındaki
     erişim ihlali süreci ANINDA kapattı; Python istisnası olmadığı için
     `uygulama.log`a hiçbir şey düşmedi ve hangi belgenin basıldığı
     bilinemedi. `faulthandler` o anda bütün iş parçacıklarının Python yığınını

@@ -1,4 +1,4 @@
-// Güvenlik dosyası kayıp ekranı (tasarım §4.3 — kilitliyken guvenlik.json
+// Güvenlik dosyası kayıp ekranı (tasarım §4.3 tehdit 8 — kilitliyken guvenlik.json
 // silinir, yeniden adlandırılır ya da içi boşaltılır/bozulur; backend ikisini
 // aynı `security_file_missing` durumuyla bildirir). Program "parolasız"a DÖNMEZ; backend bu
 // durumda veri uçlarını 423 `guvenlik_dosyasi_kayip` ile keser ve yalnız durum

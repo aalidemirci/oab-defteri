@@ -3,8 +3,8 @@
 # kap-ici-test.sh — TEMİZ bir Debian kabında .deb kurulum provası
 # =============================================================================
 # `test-kurulum.sh` tarafından debian:11, debian:12 ve debian:13 kaplarının İÇİNDE
-# çalıştırılır (tasarım §14 F12 "Pardus'ta aynı zincir" — Pardus 21 bullseye,
-# Pardus 23 bookworm, Pardus 25 trixie tabanlıdır).
+# çalıştırılır (tasarım §14 F1a kapısı: `.deb` Debian 11/12/13'te kurulur ve
+# açılır — Pardus 21 bullseye, Pardus 23 bookworm, Pardus 25 trixie tabanlıdır).
 #
 # Sınananlar:
 #   1. dpkg -i + apt-get -f install ile bağımlılıkların gerçekten çözülmesi
@@ -50,7 +50,7 @@ test -L /usr/bin/oab-defteri
 test -f /usr/share/applications/oab-defteri.desktop
 test -f /usr/share/icons/hicolor/48x48/apps/oab-defteri.png
 
-echo "== lisans dosyaları (DEP-5 copyright, THIRD_PARTY_LICENSES — F12, TB28)"
+echo "== lisans dosyaları (DEP-5 copyright, THIRD_PARTY_LICENSES — tasarım §11.4)"
 DOC=/usr/share/doc/oab-defteri
 test -f "$DOC/copyright"
 grep -q '^Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/' "$DOC/copyright"

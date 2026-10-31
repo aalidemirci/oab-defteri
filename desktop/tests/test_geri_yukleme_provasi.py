@@ -1,4 +1,5 @@
-"""Temiz makinede geri yükleme provası (F11 kod kapısı; tasarım §16 risk 13, §14.1 F11).
+"""Temiz makinede geri yükleme provası (aile iskeletinden; OAB'de tasarım §14 F1b kapısı:
+şifreli yedek geri yüklenir).
 
 Bilgisayar değişir, disk bozulur, program yeniden kurulur: okulun elinde kalan,
 kullanıcının indirip USB belleğe aldığı şifreli yedektir. Prova GERÇEK süreçlerle
@@ -12,7 +13,7 @@ koşar (`desktop.main`, gerçek göç, gerçek şifreleme, gerçek yedek kapsay�
    AYNI anahtarla açılır → kişi kayıtları birebir aynıdır.
 3. **Daha yeni sürümün yedeği eski programda açılmaz**: geri yükleme sürüm damgasını
    siler; veritabanının göç kaydı eski programı 4 koduyla durdurur.
-4. **Sihirbazı başka parolayla doldurulmuş yeni bilgisayar** (F11 düzeltme turu):
+4. **Sihirbazı başka parolayla doldurulmuş yeni bilgisayar** (aile iskeletinin düzeltmesi):
    kurucunun sonunda açılan programda parola kurulmuşsa geri yükleme yabancı güvenlik
    dosyasını ve boş veritabanını kenara alır; veri yine birebir aynıdır.
 
@@ -90,7 +91,7 @@ def test_sihirbazda_baska_parola_kurulmus_yeni_bilgisayara_geri_yukleme(
     güvenlik dosyası, yedek anahtarı, geçiş yedeği ve boş veritabanı oluşur. Eski yedeğin
     geri yüklenmesi yine aynı veriyi verir: yabancı güvenlik dosyası "guvenlik-arsiv"
     adıyla, boş veritabanı "db-onceki" adıyla kenara alınır, güvenlik dosyası ve yedek
-    anahtarı yedeğin başlığından yazılır (F11 düzeltme turu; kurulum §7 madde 3)."""
+    anahtarı yedeğin başlığından yazılır (aile iskeletinin düzeltmesi)."""
     yeni = tmp_path / "sihirbazi-doldurulmus"
     betik("sihirbaz", "--data-dir", str(yeni), "--parola", "Sihirbaz-Baska-Parola-3")
     yabanci = (yeni / "data" / "guvenlik.json").read_bytes()

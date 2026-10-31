@@ -1,7 +1,7 @@
 // Kip sorgusu — kip göstergesi (AppShell üst çubuğu) ve kip kapısı (App) aynı
 // react-query önbelleğini paylaşır; tek istek, tek doğruluk kaynağı.
 //
-// Yoklama periyodiktir ve `X-OD-Etkinlik` TAŞIMAZ (tasarım §4.4, §5.10-14):
+// Yoklama periyodiktir ve `X-OD-Etkinlik` TAŞIMAZ (tasarım §4.4.3):
 // zamanlayıcıyla giden istek yönetici kipini canlı tutmamalıdır. Kip, arayüzün
 // haberi olmadan da değişebilir (süre sunucuda dolar); bunu üç yol yakalar:
 // periyodik yoklama, 403 `kip_yetkisiz` olayı (`lib/kip.ts`) ve kilitleme olayı.

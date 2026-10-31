@@ -1,19 +1,18 @@
 """Personel Excel'ini okuma: başlık tespiti, esnek sütun eşleme, satır ayrıştırma.
 
-OYS `apps/core/excel_personel.py` dosyasından SADELEŞTİRİLEREK alındı: e-posta ve
+Ailenin `excel_personel.py` dosyasından SADELEŞTİRİLEREK alındı: e-posta ve
 Rol/Kapsam çiftleri KALDIRILDI — programda personel hesabı yoktur. Fuzzy başlık
 eşleme kalıbı (excel_ogrenci deseni) aynen korunur.
 
-UNVAN VE BRANŞ SAKLANMAZ (tasarım §6.1, V2-01): bir branşta çoğu zaman 1-3
-öğretmen olduğundan branş, öğretmenin okuma geçmişini kişiye bağlar. Bu yüzden:
+UNVAN VE BRANŞ SAKLANMAZ (tasarım §5.1 `Personnel`, §8.4): bir branşta çoğu
+zaman 1-3 öğretmen olduğundan branş, öğretmeni kişiye bağlar. Bu yüzden:
 
 - **Branş sütunu hiç okunmaz** — eşleme sözlüğünde karşılığı yoktur.
 - **"Görevi/Unvan" sütunu** (ya da şablondaki "Üye Türü") YALNIZ üye türünü
   (öğretmen / diğer personel) seçmek için satır ayrıştırılırken geçici okunur.
   Metin `ParsedPersonnelRow`'a GİRMEZ; yalnız sınıflama sonucu girer, dolayısıyla
-  rapora, `ImportRun.report`'a ve günlüğe de ulaşamaz. (Tasarım §6.1'in "bu
-  sütunları okumaz" ifadesinden bilinçli, küçük sapma: saklanan veri aynıdır —
-  F1 eki.)
+  rapora, `ImportRun.report`'a ve günlüğe de ulaşamaz (tasarım §8.4: "Görevi"
+  yalnız tür için geçici okunur).
 
 Şablon: | Adı | Soyadı | Üye Türü |. e-Okul OOK01001R1: | ADI SOYADI | GÖREVİ | … |.
 Eski birleşik ``Ad Soyad`` biçimi de geriye uyum için kabul edilir.

@@ -3,10 +3,11 @@
 İnce servis katmanı — doğrulama serializer'da (seviye kümesi, şube katlaması,
 mükerrer denetimi), yazma burada. Toplu tohum `imports._ensure_class_sections`.
 
-SİLME ENGELİ KAYIT DEFTERİ (F7). Şube silmesi yumuşak silmedir; `PROTECT`
-yumuşak silmede tetiklenmez (CLAUDE.md §3). Başka bir uygulamanın şubeye bağlı
-açık kaydı varsa (F7: sınıf kitaplığına açık teslim ya da şube tesliminden
-doğan çözülmemiş kayıp/hasar dosyası) silme gerekçeyle reddedilir.
+SİLME ENGELİ KAYIT DEFTERİ (aile iskeletinden). Şube silmesi yumuşak silmedir;
+`PROTECT` yumuşak silmede tetiklenmez (Django'nun `on_delete` kuralı yalnız
+gerçek DELETE'te çalışır). Başka bir uygulamanın şubeye bağlı açık kaydı varsa
+silme gerekçeyle reddedilir; bugün kayıtlı denetim yoktur (şube kataloğu OAB'ye
+alınmaz, T5 ile F1b'de sökülür — tasarım §5.1).
 Bağımlılık yönü <uygulama> → okul'dur (`services.persons` kalıbı): uygulama kendi
 denetimini `AppConfig.ready` içinde `register_delete_check` ile kaydeder.
 """
@@ -48,7 +49,7 @@ def create_class_section(**fields: Any) -> ClassSection:
 
 @transaction.atomic
 def delete_class_section(section: ClassSection) -> None:
-    """Şubeyi yumuşak siler; açık kaydı varsa (ör. açık teslim) gerekçeyle reddeder (400)."""
+    """Şubeyi yumuşak siler; bağlı açık kaydı varsa gerekçeyle reddeder (400)."""
     gerekceler = delete_obstacles(section)
     if gerekceler:
         raise ValidationError("Şube silinemez: " + " ".join(gerekceler))

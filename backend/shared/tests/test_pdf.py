@@ -1,4 +1,4 @@
-"""`shared.pdf` — WeasyPrint'in tek kapısı (19.09.2026 çöküş tanısı).
+"""`shared.pdf` — WeasyPrint'in tek kapısı (aile iskeletinin 19.09.2026 çöküş tanısı).
 
 Sabitlenen dört şey: (1) basımlar süreç genelinde SIRAYLA koşar — eşzamanlı basım
 Pango/fontconfig katmanında yerel belleği bozuyordu; (2) yazı tipi yapılandırması
@@ -98,7 +98,7 @@ def test_weasyprint_yalniz_shared_pdf_kapisindan() -> None:
                     ihlaller.append(f"{goreli}:{satir}")
     assert ihlaller == [], (
         "WeasyPrint'e shared.pdf.html_to_pdf dışından gidiliyor (eşzamanlı basım "
-        f"kilidini atlar — 19.09.2026 çöküşü): {ihlaller}"
+        f"kilidini atlar — ailedeki 19.09.2026 çöküşü): {ihlaller}"
     )
 
 

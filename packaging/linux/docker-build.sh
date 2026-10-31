@@ -2,7 +2,8 @@
 # =============================================================================
 # packaging/linux/docker-build.sh — Linux paketlerini Docker içinde üretir
 # =============================================================================
-# Host'a hiçbir şey kurulmaz (tasarım §1: geliştirme yalnız Docker'da).
+# Host'a hiçbir şey kurulmaz (aile kuralı: derleme, test ve lint Docker'da;
+# CLAUDE.md §2, altın kural 7).
 # Derleme kabı BİLİNÇLİ olarak `python:3.12-bullseye`'dır: glibc 2.31 = Pardus
 # 21 tabanı.
 # Daha yeni bir tabanda derlenen paket Pardus 21'de açılmaz.

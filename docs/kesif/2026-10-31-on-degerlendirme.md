@@ -383,8 +383,8 @@ Dönem geçişi bir **iş akışıdır**: genel kurulda seçilenler girilir → 
   + PDF (baskı). Yazı ve ekleri ayrı dosya.
 - **Kural paketi:** oranlar, süreler, çarpanlar, sınırlar kodda değil **sürümlü bir kural dosyasında**; her dönem kendi
   kural sürümüyle hesaplanır. Mevzuat değişince yeni paket, eski dönemler bozulmaz.
-- **Dil:** sade Türkçe; ailenin sözlüğü (`docs/sozluk.md`) bağlayıcı; "Denetleme Kurulu" (Denetim Kurulu değil), "muhasip"
-  gibi Yönetmelik terimleri.
+- **Dil:** sade Türkçe; programın arayüz sözlüğü ([`docs/sozluk.md`](../sozluk.md); kalıbı ailenin sözlüğüdür)
+  bağlayıcı; "Denetleme Kurulu" (Denetim Kurulu değil), "muhasip" gibi Yönetmelik terimleri.
 
 ---
 

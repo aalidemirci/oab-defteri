@@ -1,28 +1,28 @@
 """Ana marka logosunu ve elle çizilmiş küçük ikon kesimlerini üretir.
 
-Tasarım — "Raf ve etiket" (29.09.2026 kullanıcı kararı; tasarım §14.1 F12 ekleri
-L-1): cilt laciverti, köşeleri yuvarlatılmış bir karo üzerinde safran bir raf;
-rafta yan yana duran üç kalın kitap sırtı (farklı yükseklikte) ve en uzun sırta
-yaslanmış dördüncü kitap. En uzun sırtta safran bir sırt etiketi ve üzerinde kısa
-barkod çizgileri durur: programın katalog, etiket ve barkod işine gönderme. Sırt
-bantları zemin rengindedir (negatif boşluk); gölge, degrade ve metin yoktur.
-Yaslanan kitap küçük boyutlarda da kalır: o olmadan üç dik çubuk bir sütun
-grafiği gibi okunur, rafı "raf" yapan imdir.
+Tasarım — "Okul çatısı ve aile" (31.10.2026 kullanıcı kararı; plan §2.2 F1b
+adım 0, genel tasarım §13 D31): cilt laciverti, köşeleri yuvarlatılmış bir karo
+üzerinde safran bir çatı (kalın, uçları yuvarlak bir ters V) ve aynı safranla bir
+taban; çatının altında, tabana basan üç yalın figür — iki yetişkin ve aralarında
+daha kısa bir çocuk. Okul ile ailenin bir çatı altında buluşması: okul-aile
+birliği. Figürler yuvarlak bir baş ve üstü yuvarlatılmış bir gövdedir; gölge,
+degrade ve metin yoktur. Karo, palet ve kenar boşluğu kuralı ailenin öteki
+programlarıyla aynıdır; motif yalnız bu programındır (aileden gelen raf ve kitap
+logosu F1b'de değişti).
 
 Palet okulapp.org'daki program paletidir: cilt laciverti #1c3259 (karo), safran
-#eea23f (raf, etiket), kâğıt #f1f3f8 (sırtlar); gök mavisi #8fb4ee yalnız ikinci
-sırt tonudur.
+#eea23f (çatı, taban), kâğıt #f1f3f8 (yetişkinler); gök mavisi #8fb4ee çocuktur.
 
 Çıktılar (bu dizine; depoya COMMIT EDİLİR):
 
 * ``oab-defteri-logo.png`` — 1024×1024 ana çizim, saydam kenar boşluklu.
   48 px ve üstü kesimleri ``ikon_uret.py`` bundan türetir.
 * ``oab-defteri-16.png``, ``-24.png``, ``-32.png`` — ÖLÇEKLENMEZ: piksel
-  ızgarasına oturtulmuş ayrı ve sade çizimlerdir. 16'da iki sırt, safran etiket
-  bandı, merdiven biçiminde yaslanan kitap ve safran raf; 24'te üç sırt, barkod
-  yok; 32'de etiketin içinde bir ince bir kalın barkod çizgisi (iki eş çizgi "II"
-  okunuyordu). Dikdörtgenler tam piksele oturduğu için keskindir. ``ikon_uret.py``
-  bunları olduğu gibi ``.ico``'ya koyar.
+  ızgarasına oturtulmuş ayrı ve sade çizimlerdir. Figürler tam piksele oturan
+  dikdörtgenlerdir (başın ve gövde omzunun köşesi bir piksel kırpılır), taban
+  düz bir banttır. Çatı 16'da elle dizilmiş iki piksel kalınlığında bir
+  merdivendir (çokgen orada bulanık bir leke olur); 24 ve 32'de yumuşatılmış iki
+  koldur. ``ikon_uret.py`` bunları olduğu gibi ``.ico``'ya koyar.
 
 Kenar boşluğu (bütün boyutlarda tek kural; ``ikon_uret.py`` 48+ için aynısını
 uygular, ``packaging/tests/test_ikonlar.py`` sınar): karo, tuvalin kenarına
@@ -33,13 +33,10 @@ küçültür (Microsoft Learn, "Construct your Windows app's icon" → Icon scal
 ölçek %125'te görev çubuğu 30 px'i elle çizilmiş 32'den, %150'de 36 px'i ana
 çizimden (48) alır, Başlat sabitlemesi %100'de 32'yi, %125'te 48'i kullanır.
 Pardus'un hicolor temasında da menü 24/32'yi, uygulama ızgarası 48 ve üstünü
-seçer. İki aile yan yana geçtiği için doluluğu aynı olmalıdır; eski düzende
-elle çizilmiş karolar tuvali kenara dek dolduruyor, ana çizim %8 boşlukla ~%86
-kalıyordu ve 32 → 48 geçişinde karo gözle görülür biçimde küçülüyordu. Tek
-istisna 16'dır: 1 px boşluk çizim alanının %23'ünü götürür ve onaylanan 16
-kesimi rafı karonun iki kenarına dek (x = 1..15) yayar; 16'nın ölçekli komşusu
-olan 20 px (%125'te başlık çubuğu ve bağlam menüsü) 24'ten küçültülür, fark 20
-px'te ~1,7 px'tir.
+seçer. İki aile yan yana geçtiği için doluluğu aynı olmalıdır. Tek istisna
+16'dır: 1 px boşluk çizim alanının %23'ünü götürür; 16 kesimi karoyu tuvalin
+kenarına dek doldurur. 16'nın ölçekli komşusu olan 20 px (%125'te başlık çubuğu
+ve bağlam menüsü) 24'ten küçültülür.
 
 Çalıştırma (depo kökünden, Docker içinde — host'a kurulum YASAK):
 
@@ -61,124 +58,110 @@ KENAR = 1024
 SS = 4  # süper örnekleme katsayısı (yumuşak kenar için)
 
 Renk = tuple[int, int, int, int]
-Kutu = tuple[float, float, float, float]
+Nokta = tuple[float, float]
 
 # --- Palet ------------------------------------------------------------------
-LACIVERT: Renk = (0x1C, 0x32, 0x59, 255)  # cilt laciverti: karo, bantlar, barkod
-SAFRAN: Renk = (0xEE, 0xA2, 0x3F, 255)  # raf ve sırt etiketi
-KAGIT: Renk = (0xF1, 0xF3, 0xF8, 255)  # açık sırtlar
-GOK: Renk = (0x8F, 0xB4, 0xEE, 255)  # ikinci sırt tonu
+LACIVERT: Renk = (0x1C, 0x32, 0x59, 255)  # cilt laciverti: karo
+SAFRAN: Renk = (0xEE, 0xA2, 0x3F, 255)  # çatı ve taban
+KAGIT: Renk = (0xF1, 0xF3, 0xF8, 255)  # yetişkinler
+GOK: Renk = (0x8F, 0xB4, 0xEE, 255)  # çocuk
 
 ZEMIN = LACIVERT
-BANT = LACIVERT
-BARKOD = LACIVERT
-ETIKET = SAFRAN
-RAF = SAFRAN
-#: Soldan sağa: üç ayakta sırt + yaslanan kitap.
-KITAPLAR: tuple[Renk, Renk, Renk, Renk] = (KAGIT, GOK, KAGIT, GOK)
+CATI = SAFRAN
+TABAN = SAFRAN
+#: Soldan sağa: yetişkin, çocuk, yetişkin.
+FIGUR_RENKLERI: tuple[Renk, Renk, Renk] = (KAGIT, GOK, KAGIT)
+RENKLER: dict[str, Renk] = {
+    "zemin": ZEMIN,
+    "cati": CATI,
+    "taban": TABAN,
+    "kagit": KAGIT,
+    "gok": GOK,
+}
 
 # --- 1024 geometrisi (px) -----------------------------------------------------
 ZEMIN_PAY = math.ceil(KENAR / 32)  # kenar boşluğu kuralı (başlık): 32 px
 ZEMIN_YARICAP = 197  # karo kenarının ~%20,5'i (küçük kesimlerle aynı oran)
 
-#: Ayakta duran sırtlar: (genişlik, yükseklik); raf üstü y = 0'a oturur.
-SIRTLAR = ((128, 430), (108, 350), (164, 520))
-SIRT_ARASI = 16
-ETIKETLI_SIRT = 2  # barkod etiketi bu sırtta (en uzunu)
-YASLANAN = (116, 420)  # genişlik, yükseklik
-YASLANMA_ACISI = 19  # derece; üst uç sola, komşu sırta
 
-KITAP_YARICAP = 18
-BANT_KALINLIK = 22
-BANT_UST = 46  # sırtın tepesinden üst bandın üstüne
-BANT_ALT = 64  # sırtın dibinden alt bandın üstüne
+@dataclass(frozen=True)
+class Figur:
+    """Taban üstüne basan figür: yerel x merkezi, gövde (genişlik, yükseklik), baş yarıçapı."""
 
-ETIKET_PAY_YAN = 20
-ETIKET_ALT = 58  # sırtın dibinden etiketin altına
-ETIKET_YUKSEKLIK = 170
-ETIKET_YARICAP = 14
-BARKOD_PAY_YAN = 16
-BARKOD_PAY_DIKEY = 22
-#: Code128'i andıran çizgi/boşluk genişlikleri (modül cinsinden), çizgiyle başlar.
-BARKOD_DESEN = (2, 1, 1, 2, 3, 1, 1, 1, 2, 2, 1, 1, 3, 1, 2)
+    merkez_x: float
+    govde: tuple[float, float]
+    bas_yaricap: float
 
-RAF_KALINLIK = 50
-RAF_TASMA = 44  # rafın kitapların dışına taşması
-RAF_YARICAP = 18
-OPTIK_KAYMA = 10  # grubun kütle merkezi aşağıda durduğu için hafif yukarı
+
+#: Grup yerel koordinatta kurulur: x = 0 karo ortası, y = 0 taban üstü (yukarı eksi).
+FIGURLER: tuple[Figur, Figur, Figur] = (
+    Figur(merkez_x=-198, govde=(176, 250), bas_yaricap=66),
+    Figur(merkez_x=0, govde=(132, 176), bas_yaricap=52),
+    Figur(merkez_x=198, govde=(176, 250), bas_yaricap=66),
+)
+BAS_BOSLUK = 20  # başın altı ile gövdenin üstü arası
+
+TABAN_YARIM_GENISLIK = 330
+TABAN_KALINLIK = 52
+TABAN_YARICAP = 18
+
+CATI_YARIM_GENISLIK = 312  # tepe ile kol ucu arası, yatay (kolun orta çizgisi)
+CATI_YUKSEKLIK = 214  # tepe ile kol ucu arası, dikey
+CATI_KALINLIK = 78
+CATI_BOSLUK = 52  # çatının alt yüzü ile yetişkin başı arasındaki en kısa uzaklık
+OPTIK_KAYMA = 6  # grubun kütle merkezi aşağıda durduğu için hafif yukarı
 
 
 def _s(*degerler: float) -> tuple[int, ...]:
     return tuple(round(d * SS) for d in degerler)
 
 
-def _dondur(px: float, py: float, a: float, b: float, aci: float) -> tuple[float, float]:
-    """Yerel noktayı (a sağa, b aşağı) pivotun çevresinde saat yönünün tersine döndürür."""
-    t = math.radians(aci)
-    return (px + a * math.cos(t) + b * math.sin(t), py - a * math.sin(t) + b * math.cos(t))
+def _kol(ciz: ImageDraw.ImageDraw, a: Nokta, b: Nokta, kalinlik: float, renk: Renk) -> None:
+    """İki nokta arası, uçları yuvarlak kalın çizgi (süper örneklenmiş tuvalde)."""
+    (ax, ay), (bx, by) = a, b
+    uzunluk = math.hypot(bx - ax, by - ay)
+    nx, ny = -(by - ay) / uzunluk * kalinlik / 2, (bx - ax) / uzunluk * kalinlik / 2
+    ciz.polygon(
+        [
+            _s(ax + nx, ay + ny),
+            _s(bx + nx, by + ny),
+            _s(bx - nx, by - ny),
+            _s(ax - nx, ay - ny),
+        ],
+        fill=renk,
+    )
+    r = kalinlik / 2
+    for x, y in (a, b):
+        ciz.ellipse(_s(x - r, y - r, x + r, y + r), fill=renk)
 
 
-# --- Ana çizim (1024) -----------------------------------------------------------
-def _kitap(ciz: ImageDraw.ImageDraw, kutu: Kutu, renk: Renk, *, etiketli: bool) -> None:
-    """Tek kitap sırtı: gövde + üst bant + (alt bant ya da barkodlu sırt etiketi)."""
-    x0, y0, x1, y1 = kutu
-    ciz.rounded_rectangle(_s(x0, y0, x1, y1), radius=KITAP_YARICAP * SS, fill=renk)
-    ust = y0 + BANT_UST
-    ciz.rectangle(_s(x0, ust, x1, ust + BANT_KALINLIK), fill=BANT)
-    if not etiketli:
-        alt = y1 - BANT_ALT
-        ciz.rectangle(_s(x0, alt, x1, alt + BANT_KALINLIK), fill=BANT)
-        return
+def _cati_tepesi(figur: Figur, ust: float) -> float:
+    """Yetişkin başını `CATI_BOSLUK` kadar açıkta bırakan en alçak çatı tepesi (yerel y).
 
-    ex0, ex1 = x0 + ETIKET_PAY_YAN, x1 - ETIKET_PAY_YAN
-    ey1 = y1 - ETIKET_ALT
-    ey0 = ey1 - ETIKET_YUKSEKLIK
-    ciz.rounded_rectangle(_s(ex0, ey0, ex1, ey1), radius=ETIKET_YARICAP * SS, fill=ETIKET)
-    bx0, bx1 = ex0 + BARKOD_PAY_YAN, ex1 - BARKOD_PAY_YAN
-    by0, by1 = ey0 + BARKOD_PAY_DIKEY, ey1 - BARKOD_PAY_DIKEY
-    modul = (bx1 - bx0) / sum(BARKOD_DESEN)
-    x = bx0
-    for sira, genislik in enumerate(BARKOD_DESEN):
-        if sira % 2 == 0:
-            ciz.rectangle(_s(x, by0, x + genislik * modul, by1), fill=BARKOD)
-        x += genislik * modul
+    Kolun alt yüzü ile başın merkezi arasındaki uzaklık baş yarıçapı + boşluk
+    olmalıdır; kolun orta çizgisi bundan yarım kalınlık kadar yukarıdadır.
+    """
+    egim = CATI_YUKSEKLIK / CATI_YARIM_GENISLIK
+    aci = math.atan(egim)
+    bas_y = ust - BAS_BOSLUK - figur.bas_yaricap
+    gereken = figur.bas_yaricap + CATI_BOSLUK + CATI_KALINLIK / 2
+    # Orta çizgi: y = tepe + |x| * egim; noktanın doğruya dik uzaklığı = (bas_y - y) * cos(aci).
+    return bas_y - abs(figur.merkez_x) * egim - gereken / math.cos(aci)
 
 
 @dataclass(frozen=True)
 class _Yerlesim:
-    ayakta: tuple[Kutu, ...]
-    yaslanan_pivot: tuple[float, float]  # yaslanan kitabın sol alt köşesi
-    raf: Kutu
+    ofset: Nokta  # yerel → tuval
+    cati_tepe_y: float  # yerel
 
 
 def _yerlesim() -> _Yerlesim:
-    """Grubu yerel koordinatta kurar (raf üstü y = 0) ve tuvale ortalar."""
-    ayakta: list[Kutu] = []
-    x = 0.0
-    for genislik, yukseklik in SIRTLAR:
-        ayakta.append((x, -yukseklik, x + genislik, 0.0))
-        x += genislik + SIRT_ARASI
-    sag_yuz = ayakta[-1][2]
-
-    w, h = YASLANAN
-    t = math.radians(YASLANMA_ACISI)
-    r = KITAP_YARICAP
-    # Sol üst köşe yayının en sol noktası komşu sırtın sağ yüzüne değsin.
-    px = sag_yuz + r - r * math.cos(t) + (h - r) * math.sin(t)
-    # Sol alt köşe yuvarlak olduğu için dönen kitap raftan kalkar; geri indirilir.
-    py = r * (math.sin(t) + math.cos(t) - 1)
-    donmus = [_dondur(px, py, a, b, YASLANMA_ACISI) for a, b in ((0, 0), (w, 0), (w, -h), (0, -h))]
-
-    raf_x0 = -RAF_TASMA
-    raf_x1 = max(p[0] for p in donmus) + RAF_TASMA
-    min_y = min(min(k[1] for k in ayakta), min(p[1] for p in donmus))
-    ox = KENAR / 2 - (raf_x0 + raf_x1) / 2
-    oy = KENAR / 2 - (min_y + RAF_KALINLIK) / 2 - OPTIK_KAYMA
-    return _Yerlesim(
-        ayakta=tuple((a + ox, b + oy, c + ox, d + oy) for a, b, c, d in ayakta),
-        yaslanan_pivot=(px + ox, py + oy),
-        raf=(raf_x0 + ox, oy, raf_x1 + ox, RAF_KALINLIK + oy),
-    )
+    yetiskin = FIGURLER[0]
+    tepe = _cati_tepesi(yetiskin, -yetiskin.govde[1])
+    ust = tepe - CATI_KALINLIK / 2
+    alt = TABAN_KALINLIK
+    oy = KENAR / 2 - (ust + alt) / 2 - OPTIK_KAYMA
+    return _Yerlesim(ofset=(KENAR / 2, oy), cati_tepe_y=tepe)
 
 
 def buyuk() -> Image.Image:
@@ -196,94 +179,126 @@ def buyuk() -> Image.Image:
         fill=ZEMIN,
     )
     yer = _yerlesim()
+    ox, oy = yer.ofset
 
-    # Raf önce: kitaplar üstüne oturur.
-    ciz.rounded_rectangle(_s(*yer.raf), radius=RAF_YARICAP * SS, fill=RAF)
-    for sira, kutu in enumerate(yer.ayakta):
-        _kitap(ciz, kutu, KITAPLAR[sira], etiketli=sira == ETIKETLI_SIRT)
+    # Çatı: tepeden iki kol.
+    tepe = (ox, oy + yer.cati_tepe_y)
+    for yon in (-1, 1):
+        uc = (ox + yon * CATI_YARIM_GENISLIK, oy + yer.cati_tepe_y + CATI_YUKSEKLIK)
+        _kol(ciz, tepe, uc, CATI_KALINLIK, CATI)
 
-    # Yaslanan kitap: ayrı katmanda dik çizilir, sol alt köşesi çevresinde döner.
-    katman = Image.new("RGBA", tuval.size, (0, 0, 0, 0))
-    px, py = yer.yaslanan_pivot
-    w, h = YASLANAN
-    _kitap(ImageDraw.Draw(katman), (px, py - h, px + w, py), KITAPLAR[3], etiketli=False)
-    katman = katman.rotate(
-        YASLANMA_ACISI, resample=Image.Resampling.BICUBIC, center=(px * SS, py * SS)
+    # Taban.
+    ciz.rounded_rectangle(
+        _s(ox - TABAN_YARIM_GENISLIK, oy, ox + TABAN_YARIM_GENISLIK, oy + TABAN_KALINLIK),
+        radius=TABAN_YARICAP * SS,
+        fill=TABAN,
     )
-    tuval.alpha_composite(katman)
+
+    # Figürler: gövdenin üstü yarım daire (omuz), altı tabana düz basar.
+    for figur, renk in zip(FIGURLER, FIGUR_RENKLERI, strict=True):
+        w, h = figur.govde
+        x0, x1 = ox + figur.merkez_x - w / 2, ox + figur.merkez_x + w / 2
+        ciz.rounded_rectangle(
+            _s(x0, oy - h, x1, oy),
+            radius=w / 2 * SS,
+            fill=renk,
+            corners=(True, True, False, False),
+        )
+        r = figur.bas_yaricap
+        by = oy - h - BAS_BOSLUK - r
+        bx = ox + figur.merkez_x
+        ciz.ellipse(_s(bx - r, by - r, bx + r, by + r), fill=renk)
     return tuval.resize((KENAR, KENAR), Image.Resampling.BOX)
 
 
 # --- Elle çizilmiş küçük kesimler (piksel ızgarası) -------------------------------
 # Koordinatlar tam sayı ve yarı açıktır: (x0, y0, x1, y1) → [x0, x1) × [y0, y1).
-# Yaslanan kitap tek eğik öğedir: 24 ve 32'de yumuşatılmış bir çokgendir; 16'da
-# çokgen bulanık bir leke oluyordu, orada elle dizilmiş, iki piksel genişliğinde
-# bir merdivendir. 16'da orta sırt ve barkod düşer, 24'te barkod düşer.
-@dataclass(frozen=True)
-class _EgikKitap:
-    sag_yuz: float  # yaslandığı sırtın sağ yüzü (x)
-    genislik: float
-    yukseklik: float
-    aci: float
+# Satır parçası (y, x0, x1) tek satırdır. Renk adları `RENKLER` anahtarlarıdır.
+Dikdortgen = tuple[int, int, int, int, str]
+Satir = tuple[int, int, int, str]
 
 
 @dataclass(frozen=True)
 class KucukCizim:
     karo: tuple[int, int, int, int]  # kenar boşluğu kuralı (başlık)
     yaricap: float
-    raf: tuple[int, int, int, int]
-    #: (x0, y0, x1, y1, KITAPLAR sırası)
-    sirtlar: tuple[tuple[int, int, int, int, int], ...]
-    bantlar: tuple[tuple[int, int, int, int], ...]
-    etiket: tuple[int, int, int, int]
-    barkod: tuple[tuple[int, int, int, int], ...] = ()
-    #: 16 için: (satır, x0, x1) — elle dizilmiş merdiven
-    yaslanan_pikseller: tuple[tuple[int, int, int], ...] = ()
-    yaslanan: _EgikKitap | None = None
+    #: Tam piksele oturan parçalar (taban, gövdeler, başlar).
+    dikdortgenler: tuple[Dikdortgen, ...]
+    #: Elle dizilmiş satırlar (16'nın çatısı, kırpılmış köşeler).
+    satirlar: tuple[Satir, ...] = ()
+    #: Yumuşatılmış çatı: (tepe, sol uç, sağ uç, kalınlık) — piksel cinsinden, 24 ve 32.
+    cati: tuple[Nokta, Nokta, Nokta, float] | None = None
+
+
+def _figur(
+    x0: int, x1: int, ust: int, alt: int, bas: tuple[int, int], renk: str
+) -> tuple[Satir, ...]:
+    """Omuzlu gövde, bir satır boşluk ve üstünde ortalanmış baş.
+
+    Gövde [x0, x1) genişliğinde, [ust, alt) satırlarındadır; ilk satırı iki yandan bir
+    piksel içeridedir (omuz). Baş (genişlik, yükseklik) gövdenin ortasındadır; dört ya da
+    daha geniş başın ilk ve son satırı iki yandan birer piksel içeridedir (yuvarlak baş).
+    Üç piksellik baş kırpılmaz: kırpılınca artı işaretine (sağlık haçı) dönüyordu.
+    """
+    satirlar: list[Satir] = [(ust, x0 + 1, x1 - 1, renk)]
+    satirlar += [(y, x0, x1, renk) for y in range(ust + 1, alt)]
+    genislik, yukseklik = bas
+    bx0 = x0 + (x1 - x0 - genislik) // 2
+    bx1 = bx0 + genislik
+    bas_ust = ust - 1 - yukseklik
+    for i in range(yukseklik):
+        kirp = 1 if i in (0, yukseklik - 1) and genislik >= 4 else 0
+        satirlar.append((bas_ust + i, bx0 + kirp, bx1 - kirp, renk))
+    return tuple(satirlar)
 
 
 KUCUK: dict[int, KucukCizim] = {
     16: KucukCizim(
         karo=(0, 0, 16, 16),
         yaricap=3.5,
-        raf=(1, 12, 15, 13),
-        sirtlar=((2, 5, 5, 12, 0), (6, 3, 9, 12, 2)),
-        bantlar=((2, 6, 5, 7), (6, 4, 9, 5)),
-        etiket=(6, 7, 9, 9),
-        yaslanan_pikseller=(
-            (5, 9, 11),
-            (6, 9, 11),
-            (7, 10, 12),
-            (8, 10, 12),
-            (9, 11, 13),
-            (10, 11, 13),
-            (11, 12, 14),
+        dikdortgenler=((1, 13, 15, 14, "taban"),),
+        satirlar=(
+            # Çatı: iki piksel kalın merdiven, tepe 1. satırda.
+            (1, 7, 9, "cati"),
+            (2, 6, 10, "cati"),
+            (3, 5, 7, "cati"),
+            (3, 9, 11, "cati"),
+            (4, 4, 6, "cati"),
+            (4, 10, 12, "cati"),
+            (5, 3, 5, "cati"),
+            (5, 11, 13, "cati"),
+            (6, 2, 4, "cati"),
+            (6, 12, 14, "cati"),
+            # Yetişkinler: 2×2 baş, bir satır boşluk, üç satır gövde (omuz kırpık).
+            *((y, 4, 6, "kagit") for y in (7, 8, 10)),
+            *((y, 3, 7, "kagit") for y in (11, 12)),
+            *((y, 10, 12, "kagit") for y in (7, 8, 10)),
+            *((y, 9, 13, "kagit") for y in (11, 12)),
+            # Çocuk: 2×2 baş yetişkinlerinkinden bir satır aşağıda, iki satır gövde.
+            *((y, 7, 9, "gok") for y in (8, 9, 11, 12)),
         ),
     ),
     24: KucukCizim(
         karo=(1, 1, 23, 23),
         yaricap=4.5,
-        raf=(3, 17, 22, 19),
-        sirtlar=((4, 7, 7, 17, 0), (8, 9, 10, 17, 1), (11, 5, 15, 17, 2)),
-        bantlar=((4, 8, 7, 9), (4, 15, 7, 16), (8, 10, 10, 11), (8, 15, 10, 16), (11, 6, 15, 7)),
-        etiket=(11, 11, 15, 15),
-        yaslanan=_EgikKitap(sag_yuz=15, genislik=2.8, yukseklik=9.8, aci=19),
+        dikdortgenler=((3, 19, 21, 21, "taban"),),
+        satirlar=(
+            *_figur(4, 9, 13, 19, (3, 3), "kagit"),
+            *_figur(10, 14, 15, 19, (2, 2), "gok"),
+            *_figur(15, 20, 13, 19, (3, 3), "kagit"),
+        ),
+        cati=((12, 3.2), (3.0, 9.0), (21.0, 9.0), 2.2),
     ),
     32: KucukCizim(
         karo=(1, 1, 31, 31),
         yaricap=6.5,
-        raf=(3, 23, 29, 25),
-        sirtlar=((5, 10, 9, 23, 0), (10, 13, 13, 23, 1), (14, 7, 20, 23, 2)),
-        bantlar=(
-            (5, 11, 9, 12),
-            (5, 20, 9, 21),
-            (10, 14, 13, 15),
-            (10, 20, 13, 21),
-            (14, 8, 20, 9),
+        dikdortgenler=((4, 25, 28, 27, "taban"),),
+        satirlar=(
+            *_figur(5, 12, 17, 25, (5, 4), "kagit"),
+            *_figur(13, 19, 20, 25, (4, 4), "gok"),
+            *_figur(20, 27, 17, 25, (5, 4), "kagit"),
         ),
-        etiket=(14, 15, 20, 21),
-        barkod=((15, 16, 16, 20), (17, 16, 19, 20)),
-        yaslanan=_EgikKitap(sag_yuz=20, genislik=3.6, yukseklik=13.0, aci=19),
+        cati=((16, 4.4), (3.4, 12.6), (28.6, 12.6), 2.8),
     ),
 }
 
@@ -294,9 +309,8 @@ def kucuk(boyut: int) -> Image.Image:
     tuval = Image.new("RGBA", (boyut * SS, boyut * SS), (0, 0, 0, 0))
     ciz = ImageDraw.Draw(tuval)
 
-    def dik(kutu: tuple[int, ...], renk: Renk) -> None:
-        x0, y0, x1, y1 = kutu[:4]
-        ciz.rectangle((x0 * SS, y0 * SS, x1 * SS - 1, y1 * SS - 1), fill=renk)
+    def dik(x0: int, y0: int, x1: int, y1: int, renk: str) -> None:
+        ciz.rectangle((x0 * SS, y0 * SS, x1 * SS - 1, y1 * SS - 1), fill=RENKLER[renk])
 
     kx0, ky0, kx1, ky1 = cizim.karo
     ciz.rounded_rectangle(
@@ -304,30 +318,14 @@ def kucuk(boyut: int) -> Image.Image:
         radius=round(cizim.yaricap * SS),
         fill=ZEMIN,
     )
-    dik(cizim.raf, RAF)
-    for sirt in cizim.sirtlar:
-        dik(sirt, KITAPLAR[sirt[4]])
-    for bant in cizim.bantlar:
-        dik(bant, BANT)
-    dik(cizim.etiket, ETIKET)
-    for cizgi in cizim.barkod:
-        dik(cizgi, BARKOD)
-
-    for satir, x0, x1 in cizim.yaslanan_pikseller:
-        dik((x0, satir, x1, satir + 1), KITAPLAR[3])
-    if cizim.yaslanan is not None:
-        egik = cizim.yaslanan
-        # Sol üst köşe komşu sırta değsin; sol alt köşe raf üstünde.
-        px = egik.sag_yuz + egik.yukseklik * math.sin(math.radians(egik.aci))
-        py = cizim.raf[1]
-        koseler = (
-            (0, -egik.yukseklik),
-            (egik.genislik, -egik.yukseklik),
-            (egik.genislik, 0),
-            (0, 0),
-        )
-        noktalar = [_dondur(px, py, a, b, egik.aci) for a, b in koseler]
-        ciz.polygon([(x * SS, y * SS) for x, y in noktalar], fill=KITAPLAR[3])
+    if cizim.cati is not None:
+        tepe, sol, sag, kalinlik = cizim.cati
+        for uc in (sol, sag):
+            _kol(ciz, tepe, uc, kalinlik, CATI)
+    for x0, y0, x1, y1, renk in cizim.dikdortgenler:
+        dik(x0, y0, x1, y1, renk)
+    for y, x0, x1, renk in cizim.satirlar:
+        dik(x0, y, x1, y + 1, renk)
     return tuval.resize((boyut, boyut), Image.Resampling.BOX)
 
 

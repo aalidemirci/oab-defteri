@@ -1,4 +1,4 @@
-// Kip göstergesi — AppShell üst çubuğunda (U5, tasarım §4.4).
+// Kip göstergesi — AppShell üst çubuğunda (tasarım §4.4).
 //
 // Yönetici kipinde: kip adı + görsel geri sayım + "Görevli kipine geç" +
 // "Kilitle". Görevli kipinde: kip adı + "Yönetici kipine geç" (parola
@@ -94,7 +94,7 @@ export default function KipGostergesi() {
 
   const yonetici = durum === "yonetici";
   // Yönetici kipinde kalan süre boşsa kurulum sürüyordur: süreler işlemez (backend
-  // `kip.py`, F1 eki karar 2-1) ve geri sayım gösterilmez.
+  // `kip.py`; tasarım §4.4.3) ve geri sayım gösterilmez.
   const sureAskida = yonetici && ozet?.bosta_kalan_sn === null;
   const ipucu = !ozet
     ? ""

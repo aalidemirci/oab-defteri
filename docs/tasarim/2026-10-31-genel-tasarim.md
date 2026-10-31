@@ -3756,7 +3756,7 @@ alındı.*
 | `apps/okul/views_pool.py`, `selectors.py`, `serializers.py`, `views.py`, `urls.py` | Öğrenci dalları sökülür; personel ayrılış havuzu kalır | F1b |
 | `apps/okul/management/commands/` | `app_password`, `restore_backup`: `--parola` → `--hesap` + parola; rol denetimi `restore.py` ile aynı | F1b |
 | `apps/okul/tests/` | `test_cikis_ucu`, `test_dis_istek_kapilari` (izinli listeden katalog ve künye satırları çıkar), `test_imports`, `test_kip_koruma` → `test_rol_koruma` (+ hücre başına anlık görüntü testi), `test_kisi_yazan_uclar` | F1a-2, F1b |
-| `templates/documents/aydinlatma_metni.html` | KVKK md. 10 asgari unsur kalıbı; içerik §3.4 | sonra |
+| `templates/documents/aydinlatma_metni.html` | **Silindi** (F1b 0. adım): hiçbir yerden çağrılmıyordu, içeriği ailenindi. OAB'nin aydınlatma metni E04'tür (§3.4): metni F1b 5. adımda içe aktarma ekranına, belgesi F2'de (plan §2.2) | F1b |
 | `frontend/` yapılandırma, `public/app-logo.png` | `package.json` adı; `tailwind.config.js` `--od-*`; `vitest.config.ts` eşiği (82/82/78/55) aynen; logo | F1a-1 |
 | `frontend/src/` kökü | `App.tsx` rotaları (≈20 ALMA sayfası), `AppShell` gezinmesi, `index.css` `--od-*`, `KurulumKapisi` | F1a-2 |
 | `frontend/src/lib/` | `api.ts` (`X-OD-Etkinlik`), `kilit.ts` (kilitlenmede ve kilit açılışında sorgu önbelleği ve modül belleği sıfırlanır: pencere içeriği yeniden yüklenir; Vitest; §4.4.3, §13 D53), `kip.ts` → `oturum.ts`, `restart.ts` (olaylar), `mevzuat.ts` (Yönetmelik adı), `format.ts` (`formatAccessionNo` çıkar), `gradeLevels.ts` (T5) | F1a-1, F1a-2, F1b |

@@ -1,5 +1,5 @@
 // M3 tema değiştirici — Top App Bar'a yerleştirilir. Açık/karanlık ikon arasında
-// geçiş yapar; tercih localStorage'a yazılır (CLAUDE.md §7.5).
+// geçiş yapar; tercih localStorage'a yazılır.
 //
 // Erişilebilirlik: yoğunluğa duyarlı hedef, aria-label, görünür focus halkası.
 

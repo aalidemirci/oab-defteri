@@ -102,7 +102,8 @@ def test_acilis_sirasi_tasarimla_birebir(tmp_path: Path, izlenen_adimlar: list[s
         "gunluk-yedek",
         "rotasyon",
         "django-hazirla",
-        # F11 ikinci hat: damga silinmişse (geri yükleme) tanınmayan göç eski programı durdurur.
+        # İkinci hat (§4.2 adım 5): damga silinmişse (geri yükleme) tanınmayan göç
+        # eski programı durdurur.
         "taninmayan-goc",
         "goc-surumu",
         "bekleyen-goc-var-mi",
@@ -116,7 +117,7 @@ def test_gunluk_yedek_alinmadiysa_rotasyon_kosmaz(
     tmp_path: Path, izlenen_adimlar: list[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Yedek atlandıysa (parola yok, anahtar bozuk, guvenlik.json kayıp) eski yedekler
-    silinmez: kayıp kilidinden çıkış yolu onlardır (GA-2)."""
+    silinmez: kayıp kilidinden çıkış yolu onlardır (§4.3 tehdit 8)."""
 
     def yedek_atlandi(*args: Any, **kwargs: Any) -> None:
         izlenen_adimlar.append("gunluk-yedek")
@@ -242,7 +243,7 @@ def test_kilit_cikista_birakilir(
     assert sahte_calisma["servis"] == 2
 
 
-# ------------------------------------------------- ikinci açılış (§4.2-1, GA-11)
+# --------------------------------------------- ikinci açılış (§4.2 adım 2)
 
 
 def test_bayraksiz_ikinci_acilis_pencereyi_one_getirip_sifirla_cikar(
@@ -641,7 +642,7 @@ def test_autotest_kipi_gercek_acilisi_dogrular(tmp_path: Path) -> None:
 
 @pytest.mark.slow
 def test_parola_kurulmadan_ikinci_acilista_gunluk_yedek_atlanir(tmp_path: Path) -> None:
-    """Tasarım §6.3-6: ilk açılışta `yedekleme.json` (ve kişi verisi) yokken günlük
+    """Tasarım §4.4.7: ilk açılışta `yedekleme.json` (ve kişi verisi) yokken günlük
     yedek ATLANIR; düz kopya hiçbir koşulda yazılmaz. İlk yedek, yönetici parolası
     kurulduktan sonraki açılışta şifreli alınır."""
     for _ in range(2):
@@ -713,7 +714,7 @@ def test_zorla_sonlandirmada_isaret_eksik_kalir_ve_sonraki_acilis_uyarir(
 
 @pytest.mark.slow
 def test_gunluge_ogrenci_arama_sorgusu_dusmez(tmp_path: Path) -> None:
-    """Erişim logu kapalı: istek yolu ne dosyaya ne de konsola düşmeli (KS F2 #20).
+    """Erişim logu kapalı: istek yolu ne dosyaya ne de konsola düşmeli (aile denetim bulgusu).
 
     `OD_DEBUG=1` ile koşar: Django'nun konsol handler'ı ancak DEBUG açıkken
     yayın yapar, yani sızıntı bu kipte görünür hale gelir.
@@ -772,8 +773,8 @@ def test_kapanista_wal_checkpoint_wal_dosyasini_bosaltir(tmp_path: Path) -> None
     with closing(sqlite3.connect(db)) as yazar:
         yazar.execute("PRAGMA journal_mode=WAL")
         yazar.execute("PRAGMA wal_autocheckpoint=0")
-        yazar.execute("CREATE TABLE odunc (id INTEGER PRIMARY KEY, barkod TEXT)")
-        yazar.executemany("INSERT INTO odunc (barkod) VALUES (?)", [(str(i),) for i in range(200)])
+        yazar.execute("CREATE TABLE islem (id INTEGER PRIMARY KEY, tutar TEXT)")
+        yazar.executemany("INSERT INTO islem (tutar) VALUES (?)", [(str(i),) for i in range(200)])
         yazar.commit()
         wal = db.with_name("db.sqlite3-wal")
         assert wal.stat().st_size > 0  # işlenmiş sayfalar hâlâ WAL'de
@@ -782,7 +783,7 @@ def test_kapanista_wal_checkpoint_wal_dosyasini_bosaltir(tmp_path: Path) -> None
 
         assert wal.stat().st_size == 0  # TRUNCATE: WAL ana dosyaya aktarıldı ve kırpıldı
     with closing(sqlite3.connect(db)) as okur:
-        assert okur.execute("SELECT COUNT(*) FROM odunc").fetchone()[0] == 200
+        assert okur.execute("SELECT COUNT(*) FROM islem").fetchone()[0] == 200
 
 
 def test_wal_checkpoint_veritabani_yoksa_sessiz(tmp_path: Path) -> None:
@@ -871,7 +872,7 @@ def test_saat_ileri_sicrarsa_oturum_ici_rotasyon_gecmis_yedekleri_silmez(
 ) -> None:
     """Bulgu: günlerce açık kalan programda saat 14 günden fazla ileri sıçrarsa bütün günlük
     yedekler silinirdi. Rotasyon gerçek geçen süreye (uyku dahil açık kalma saati) göre
-    kesilir; "en çok 14 gün" saklama sözü (TB8) bozulmaz."""
+    kesilir; "en çok 14 gün" saklama sözü (§4.4.7) bozulmaz."""
     from desktop.backup import DAILY_PREFIX
     from desktop.backup_crypto import BACKUP_SUFFIX
 

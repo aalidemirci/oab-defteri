@@ -1,4 +1,4 @@
-"""Kurtarma anahtarını yenileme (F1 eki, 22.09.2026 kullanıcı kararı 2-3).
+"""Kurtarma anahtarını yenileme (aile iskeletinden; OAB'de tasarım §13 D14).
 
 `POST security/recovery-key/renew/ {password}`. Kanıtlanan maddeler:
 
@@ -11,8 +11,8 @@
   `guvenlik.json` `guvenlik-arsiv-<damga>.json` olarak saklanır;
 * yedekler: yenilemeden SONRA alınan yedek yeni başlığı taşır; ÖNCE alınmış yedek
   güncel güvenlik dosyası yokken yalnız eski anahtarla açılır, bu bilgisayarda
-  (güncel dosya yerindeyken) yeni anahtarla da açılır — kılavuz ve
-  `docs/kurulum.md` bu davranışı anlatır;
+  (güncel dosya yerindeyken) yeni anahtarla da açılır — Ayarlar → Güvenlik'teki
+  yenileme metni bu davranışı anlatır;
 * anahtar hiçbir günlüğe düşmez; görevli kipinde 403, kilitliyken 423.
 """
 

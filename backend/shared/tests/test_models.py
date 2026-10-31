@@ -4,7 +4,7 @@
 `apps.okul` hâlâ boş iskelet (modeller F1'de gelir), bu
 yüzden burada `django.test.utils.isolate_apps` ile testin ömrü kadar var olan
 GEÇİCİ somut bir model tanımlanır ve `schema_editor` ile tablosu açılıp/kapatılır.
-Davranış OYS'den AYNEN devralındığı için burada SABİTLENİR, değiştirilmez.
+Davranış aileden AYNEN devralındığı için burada SABİTLENİR, değiştirilmez.
 """
 
 from __future__ import annotations

@@ -1,7 +1,8 @@
 // Kilit ekranı — yönetici parolası kuruluyken programın ilk yüzü (tasarım §4.4).
-// OYS'de karşılığı YOK (orada Google/JWT girişi vardır); bu ekran hesapsız
-// programın kilit kapısıdır: kimlik doğrulamaz, yalnız kayıtların şifresini
-// çözecek anahtarı belleğe aldırır. Açılış yönetici kipine götürür.
+// Aile iskeletinden gelir ve bugün hesapsız programın kilit kapısıdır: kimlik
+// doğrulamaz, yalnız kayıtların şifresini çözecek anahtarı belleğe aldırır.
+// Açılış yönetici kipine götürür. (Hesap seçimi F1b'nin 1. adımında gelir —
+// plan §2.2, tasarım §4.4.3.)
 //
 // İki yol sunar: parola VE (parola unutulduysa) kurtarma anahtarı. İkincisi
 // yeni parola belirlemeyi de zorunlu kılar — kurtarma bir kerelik giriş değil,

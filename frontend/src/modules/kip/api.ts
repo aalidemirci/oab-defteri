@@ -12,7 +12,7 @@ export interface KipOzeti {
   durum: KipAdi;
   /**
    * Boşta kalınırsa görevli kipine inmeye kalan saniye (yalnız yönetici kipinde). Yönetici
-   * kipinde `null` ise kurulum sürüyordur: süreler işlemez (F1 eki, karar 2-1).
+   * kipinde `null` ise kurulum sürüyordur: süreler işlemez (tasarım §4.4.3).
    */
   bosta_kalan_sn: number | null;
   /** Etkinlikten bağımsız mutlak süreden kalan saniye (yalnız yönetici kipinde; kurulumda `null`). */
@@ -26,7 +26,7 @@ export interface KipOzeti {
 export const kipApi = {
   /**
    * Kip özeti. Varsayılan olarak `X-OD-Etkinlik` GÖNDERMEZ: periyodik yoklama
-   * yönetici kipini canlı tutmamalıdır (§5.10-14). `etkinlik: true` yalnız
+   * yönetici kipini canlı tutmamalıdır (tasarım §4.4.3). `etkinlik: true` yalnız
    * gerçek bir etkileşimin hemen ardından verilir (etkinlik nabzı, `useKip`).
    */
   durum: (etkinlik = false) => api.get<KipOzeti>("/security/mode/", { etkinlik }),
