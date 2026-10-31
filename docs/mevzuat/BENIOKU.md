@@ -107,6 +107,9 @@ Kısmi dosyalar kaynak tam metinden betikle kesildi; frontmatter'ları yeniden y
 | 1475 sayılı Kanun md. 14 (kıdem tazminatı) | Personel modülüyle (sürüm 2, F8+) |
 | TEFBİS'e ilişkin SGB yazıları (31.12.2010/7729, 11.03.2016/2866395, 02.12.2019/23883563) | Metinleri bulunamadı (ön değerlendirme §2.5); bulunursa `bilgi/` |
 | Okul kantini satış listesi (Bilim Kurulu tutanağı), Okul Gıdası Tebliği | Programın kapsamında değil; gerekirse F5'te |
+| Genelge 2020/8'de A-1/a ve A-1/b için `<a id>` çapaları | **Bekliyor** (F1c'den önce): metin korpusta var, çapası yok; eklenince kantin denetim komisyonundaki birlik temsilcisine dair iki kural pakete girer (genel tasarım §6.4, denetim MA-7) |
+| KVKK Kurulu kararları: VERBİS kayıt istisnası (2018/32, 2018/87, 2023/1154, 2025/1572) ve özel nitelikli veride "yeterli önlemler" (KVKK md. 6/4) | **Bekliyor** → `bilgi/` (kvkk.gov.tr tam metinleri; genel tasarım §3.4, denetim KM-3, KM-9) |
+| 01.12.2023 öncesi EK-2 kira sözleşmesi metni | İsteğe bağlı: o tarihten önce imzalanmış kantin sözleşmeleri için (genel tasarım §6.4, DOĞRULANMADI-16) |
 
 ## 7. Kaynak korpusta görülen kusurlar (bilgi için)
 
