@@ -1,0 +1,61 @@
+# =============================================================================
+# .github/workflows/kapilar.yml — kalite kapıları (test + lint + tip + KVKK)
+# =============================================================================
+# KS'den devralındı ve F0'dan itibaren koşar (tasarım §1). KS'de 18.09.2026'ya
+# dek yalnız paketleme iş akışı vardı; test/lint kapısı tümüyle yerel
+# `scripts/gates.sh` koşusuna bağlıydı ve `frontend/src` değişikliği HİÇBİR
+# koşuyu tetiklemiyordu. Bu iş akışı yerel kapı betiğini OLDUĞU GİBİ koşar —
+# ikinci bir komut listesi tutulmaz (iki doğruluk kaynağı zamanla ayrışır).
+# Betik Docker ister; GitHub'ın Ubuntu koşucusunda `docker compose` hazırdır.
+#
+# Kapsam: KVKK depo denetimi → backend pytest (kapsam eşiği) → ruff → mypy →
+# masaüstü/paketleme testleri → frontend tsc/eslint/prettier/vitest.
+# Paket ÜRETİMİ ayrı iş akışıdır (paketleme.yml) ve yalnız ilgili yollar
+# değişince koşar; bu iş akışı her PR'da ve main'e her push'ta koşar.
+# =============================================================================
+name: Kapılar
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Gecelik koşu ölçüm kapısını (F3: 10.000 satır, süre + tepe bellek; F5: 10.000
+  # eserde katalog sayfaları) ve ağ provasını (F5: ikinci bilgisayardan arama,
+  # 50 istemcili yük) da işletir; her PR'da koşmak zinciri dakikalarca uzatırdı.
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+    inputs:
+      yavas:
+        description: "Ölçüm kapısını ve ağ provasını da koş (10.000 kayıt, 50 istemci)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Aynı dalda art arda gelen push'larda eski koşu iptal edilir.
+concurrency:
+  group: kapilar-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kapilar:
+    name: scripts/gates.sh
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Backend imajını derle
+        run: docker compose build backend
+
+      - name: Ön yüz bağımlılıkları
+        # Kapı betiği node_modules'u hazır bekler (yerelde bir kez kurulur).
+        run: docker compose run --rm -T frontend npm ci
+
+      - name: Kapı zinciri
+        env:
+          # Ölçüm kapısı yalnız gecelik koşuda ve elle tetiklemede açılır.
+          OD_YAVAS: ${{ (github.event_name == 'schedule' || inputs.yavas) && '1' || '0' }}
+        run: bash scripts/gates.sh

@@ -1,0 +1,119 @@
+// Hakkında sayfası testleri: üst yazı, konum notu (tasarım §3 — program
+// "yerel araç"tır, Bakanlık otomasyon sistemindeki kaydın yerine geçmez),
+// şifreleme yöntemi adlarının YALNIZ bu sayfada geçmesi (docs/sozluk.md §1 —
+// ayar ekranları "güçlü şifrelemeyle korunur" der) ve dış isteğin yalnız elle
+// güncelleme denetimi olduğu (tasarım T11).
+
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+
+import HakkindaPage from "./HakkindaPage";
+
+describe("HakkindaPage", () => {
+  it("üst yazı konumu, geliştiriciyi, iletişim bilgilerini ve kullanım koşullarını sayar", () => {
+    render(<HakkindaPage />);
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Hakkında ve Lisans" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Programın konumu, geliştiricisi, iletişim bilgileri ve kullanım koşulları.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("geliştirici kartı: kardeş programlarla aynı biçimde ad ve e-posta (unvan ve kurum yok)", () => {
+    // 29.09.2026 kullanıcı kararı (tasarım §14.1 F12 ekleri İA-1): iletişim, kardeş
+    // programların Hakkında sayfasındaki biçimde verilir — ad + e-posta; unvan ve kurum adı
+    // herkese açık tanıtımda geçmez.
+    render(<HakkindaPage />);
+
+    expect(screen.getByRole("heading", { level: 2, name: "Geliştirici" })).toBeInTheDocument();
+    expect(screen.getByText("Ahmet Ali DEMİRCİ")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /aalidemirci@gmail\.com/ })).toHaveAttribute(
+      "href",
+      "mailto:aalidemirci@gmail.com",
+    );
+    expect(
+      screen.getByText(/talep, öneri, hata bildirimi ve şikâyetlerinizi bu e-posta adresine/),
+    ).toBeInTheDocument();
+    // KVKK: destek iletisine kişi verisi girmez; okulun kayıtları için başvuru okula yapılır.
+    expect(screen.getByText(/İletinize öğrenci, veli ya da personel bilgisi/)).toHaveTextContent(
+      "başvurular okul müdürlüğüne yapılır",
+    );
+    const kart = screen.getByRole("heading", { level: 2, name: "Geliştirici" }).parentElement;
+    const kartMetni = kart?.textContent ?? "";
+    expect(kartMetni).toContain("Ahmet Ali DEMİRCİ");
+    for (const unvanYaDaKurum of [/öğretmen/i, /müdür yardımcısı/i, /lisesi/i, /ortaokulu/i]) {
+      expect(kartMetni).not.toMatch(unvanYaDaKurum);
+    }
+  });
+
+  it("konum notu: yerel araçtır, Bakanlık otomasyon sistemindeki kaydın yerine geçmez", () => {
+    render(<HakkindaPage />);
+
+    expect(screen.getByRole("heading", { level: 2, name: "Program" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Program okulun kütüphane işlerini yürüttüğü yerel araçtır; Bakanlıkça belirlenen otomasyon sistemindeki kaydın yerine geçmez.",
+      ),
+    ).toBeInTheDocument();
+    // Program kendine "otomasyon sistemi" adını vermez (docs/sozluk.md §1).
+    expect(screen.queryByText(/kütüphane otomasyon sistemi/i)).not.toBeInTheDocument();
+  });
+
+  it("teknik bilgiler kartı şifreleme yöntemlerini adıyla verir; fotoğraf şifrelemesi anlatılmaz", () => {
+    render(<HakkindaPage />);
+
+    expect(screen.getByRole("heading", { level: 2, name: "Teknik Bilgiler" })).toBeInTheDocument();
+    expect(screen.getByText(/X25519 ve AES-256-GCM/)).toBeInTheDocument();
+    expect(screen.getByText(/Argon2id/)).toBeInTheDocument();
+    expect(screen.queryByText(/fotoğraf/i)).not.toBeInTheDocument();
+  });
+
+  it("dış isteğin iki kapıdan çıktığını söyler (açılışta istek yok, ISBN sorgusu kapalı)", () => {
+    render(<HakkindaPage />);
+
+    expect(screen.getByText(/Program açılışta internete çıkmaz\./)).toBeInTheDocument();
+    expect(screen.getByText(/“Şimdi denetle” düğmesine bastığınızda/)).toBeInTheDocument();
+    // Kullanıcı kararı (27.09.2026): denetimin hedefi GitHub'dır (T11).
+    expect(screen.getByText(/son sürümü\s+GitHub'dan soran anonim denetim/)).toBeInTheDocument();
+    // U13 (tasarım §8.5): ikinci kapı ve varsayılan kapalı olduğu yazılı olmalı.
+    expect(screen.getByText(/ISBN sorgusu/)).toBeInTheDocument();
+    expect(screen.getByText(/varsayılan olarak kapalıdır/)).toBeInTheDocument();
+    expect(screen.getByText(/kişisel veri dışarı çıkmaz/)).toBeInTheDocument();
+  });
+
+  it("üçüncü taraf kartı LGPL kitaplıkların telif bildirimini ve lisans dosyalarını verir", () => {
+    // LGPL-3.0 §4(c) (F12 düzeltme turu): çalışırken telif bildirimi gösteren program,
+    // LGPL kitaplığın bildirimini de gösterir ve GPL/LGPL metinlerine yönlendirir.
+    render(<HakkindaPage />);
+
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Üçüncü Taraf Bileşenler" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/GNU Kısıtlı Genel Kamu Lisansı\s+\(LGPL-3\.0\)/)).toBeInTheDocument();
+    expect(screen.getByText(/pystray — Copyright © 2016-2022 Moses Palmér/)).toBeInTheDocument();
+    expect(screen.getByText(/Qt 6 ve PySide6 — Copyright © The Qt/)).toBeInTheDocument();
+    for (const dosya of [
+      "THIRD_PARTY_LICENSES",
+      "BENIOKU.txt",
+      "LGPL-3.0-metni.txt",
+      "GPL-3.0-metni.txt",
+    ]) {
+      expect(screen.getByText(dosya)).toBeInTheDocument();
+    }
+    // Sözlük: "kurucu" / "yükleyici" kullanıcı metninde geçmez.
+    expect(screen.queryByText(/kurucu|yükleyici/i)).not.toBeInTheDocument();
+  });
+
+  it("Ağ Kataloğunun kişisel veri göstermediğini söyler (sözlük: bunu Hakkında söyler)", () => {
+    render(<HakkindaPage />);
+
+    expect(screen.getByText(/Ağ Kataloğu \(varsayılan olarak kapalı\)/)).toHaveTextContent(
+      "Kişisel veri göstermez",
+    );
+    expect(screen.getByText(/Ağ Kataloğu ise\s+internete hiç çıkmaz/)).toBeInTheDocument();
+  });
+});

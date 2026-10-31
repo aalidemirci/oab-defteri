@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=OAB Defteri
+GenericName=Okul Kütüphanesi Programı
+GenericName[tr]=Okul Kütüphanesi Programı
+Comment=Okul kütüphanesinin kataloğunu, ödünç ve iadesini, sayımını yürütür
+Comment[tr]=Okul kütüphanesinin kataloğunu, ödünç ve iadesini, sayımını yürütür
+Exec=/usr/bin/oab-defteri
+Icon=oab-defteri
+Terminal=false
+Categories=Office;Education;
+Keywords=kutuphane;katalog;odunc;iade;kitap;sayim;okul;
+Keywords[tr]=kütüphane;katalog;ödünç;iade;kitap;sayım;okul;
+StartupNotify=true
+StartupWMClass=oab-defteri

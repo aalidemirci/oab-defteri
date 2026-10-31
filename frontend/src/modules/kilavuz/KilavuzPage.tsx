@@ -1,0 +1,5080 @@
+// Kullanım Kılavuzu — statik içerik, çevrimdışı. Kabuk ve bileşen deseni KS'nin
+// kılavuzundan (Adim/Ipucu/Mevzuat/Ekran); içerik yeniden yazıldı (tasarım §12):
+// her fazın "kılavuz bölümü" iş kalemiyle (§14.1) bölümler özelliklerle birlikte
+// eklenir. Kalıp HakkindaPage'den: max-w-4xl kap, üstbaşlık üçlüsü, bölüm başına
+// Card + 44px ikon rozeti. Ekranlara `Link` ile atlanır; sayfa içi bağlantılar
+// yalnız "Bu kılavuzda" listesindeki bölüm çapalarıdır.
+//
+// F1 bölümleri, kullanıcının iş sırasıyla: ilk kurulum (parola + kurtarma anahtarı,
+// okul bilgileri, ders yılı ve kapalı günler) → başlangıç yol haritası → görevli ve
+// yönetici kipi → kişiler ve e-Okul mutabakatı → kapalı günler ve iade tarihi →
+// katalog Excel şablonu → yedek ve güvenlik dosyası → Ağ Kataloğu (BTR görüşmesi).
+//
+// F2 bölümü "Katalog", kapalı günlerle Excel şablonunun arasına girer: eser/nüsha
+// ayrımı, bölümler, sınıflama kodu ve yer numarası, ISBN, barkod ve kayıt no,
+// ödünç verilmeyen kaynaklar, edinim yolları ve bağış ön kaydı, Kütüphane
+// Politikası.
+//
+// F3 iki bölüm ekler ve sıra SAHADAKİ iş sırasıdır (tasarım §8.1, S8 cevabı):
+// "Hızlı Kayıt" kataloğun HEMEN ardından gelir, çünkü okulda hazır liste yoktur
+// ve katalog kitap kitap kurulur; "Katalog Excel Şablonu" ile "İçe Aktarma" ondan
+// sonra, liste yolu olarak anlatılır. Yapay zekâ köprüsü İçe Aktarma bölümünün
+// SONUNDA ve uyarılarıyla durur: okulun kitap listesi dışarı çıkar, asıl yol
+// Excel'dir, künye eksiği için ISBN yolu daha güvenlidir (§8.2 U13 eki).
+//
+// İki geçiş yolu ("önce liste" / "önce etiket", §8.1 tablosu) Hızlı Kayıt
+// bölümünün BAŞINDA karşılaştırılır: kullanıcı hangi yolu izleyeceğine, ekranlar
+// anlatılmadan önce karar verir. Yolların adı kullanıcı dilindedir; "yöntem A/B"
+// iç adlandırması kılavuza girmez.
+//
+// F4 bölümü "Etiketler" Hızlı Kayıt'ın hemen ardından gelir: önce etiket yolu
+// (okulun asıl yolu) boş barkod etiketleriyle başlar, liste yolu da içe
+// aktarmadan sonra etikete döner. Bölümün sırası kullanıcının iş sırasıdır:
+// etiket türleri → nereye yapıştırılır (sırtı dar kitapta ön kapak, koruyucu
+// bant — §7.2, SU-13) → tabaka seçimi ve satın alma (QR kararı tabakayı
+// belirler, satın alma ondan sonra — SU-12, S4) → kalibrasyon adım adım
+// (kalibrasyon sayfasının kendi talimatıyla aynı dil: sağa ve aşağı artı) →
+// basım kuyruğu ve basım sırası (D20) → "PDF'i almak basıldı saymaz" ve geri
+// alma (D10) → yapıştırma ve doğrulama okutması → önce etiket yolu adım adım
+// (ayır → bas → yapıştır → Hızlı Kayıt'ta künye + etiket → sırt → iptal) →
+// etiketi olmayan kitap. Kâğıt ölçüsünün kısa adı yazılmaz (iç kod denetimi
+// onu kod sanar); ölçüler milimetreyle yazılır.
+//
+// Sırtı dar kitapta köşe (üst/alt) bilinçli olarak dayatılmaz: tasarım yalnız
+// "ön kapağa" der; kılavuz sırta yakın köşeyi ve bütün ince kitaplarda AYNI
+// köşeyi önerir. Bozulan boş etiket için iki ayrı yol vardır ve kılavuz ikisini
+// ayırır: etiket eldeyse aynı numaranın yenisi basılır (bozuğu atılır),
+// kaybolduysa numara iptal edilir — kaybolan etiket bir kitapta çıkabilir.
+//
+// Metin kuralları (docs/sozluk.md — bağlayıcı): düğme, sekme ve alan adları
+// ekrandaki metinle BİREBİR yazılır (depodan doğrulandı; test bir kısmını ekran
+// sabitlerinden kilitler). İç kodlar (F1, U5, E14…) geçmez. Program kendini
+// "yerel araç" diye tanıtır. Kaydırılmış iade tarihi Yönetmelik hükmü gibi
+// sunulmaz: hafta sonu/tatil kaydırması TBK 93'e KIYASEN, ara tatil/yarıyıl
+// kaydırması okulun tercihidir (CLAUDE.md §2-6); idari izin/diğer günlerindeki
+// kaydırma dayanaksız program kuralıdır, TBK 93 maddesinin altında anılmaz.
+//
+// F5 iki bölüm yazar: "Tepsi, Çıkış ve Gün Değişimi" (yedek bölümünün ardında —
+// pencerenin çarpısı gizler, Çık görevli kipinde yönetici parolası ister ve
+// tepsiden seçilince onay sormaz, tepsi menüsü kipe göre değişir, kurulum sırasında
+// program kendiliğinden kapanır (F12: kullanıcı metninde "kurucu" değil "kurulum
+// dosyası/penceresi" — sözlük §1 "Kurulum ve kaldırma"), oturum açılınca başlatma, program günlerce açık kalsa da gün
+// değişince yedek alınır ve adres denetlenir, Ağ Kataloğu açıkken yalnız boşta
+// uyku engellenir) ve "Ağ Kataloğu". İkincisinin sırası kullanıcının sorusunun
+// sırasıdır: ne olduğu → neyi gösterip neyi ASLA göstermediği (kişisel veri yok,
+// "Ödünçte" görünür ama kimde olduğu görünmez) → BTR'yle yapılacaklar (ağ keşfi,
+// sabit adres, gerekirse PYS talebi, bilgi notu, okul ağından erişim sınaması —
+// hem kataloğun kendisi hem programın iki dış adresi) → açma adımları (ekrandaki
+// "Ağ Kataloğunu Açmadan Önce" kartının adımlarıyla aynı adlar) → Ağ Doktoru'nun
+// beş kartı → afiş ve yer imleri (ETAP her öğretmene ayrı hesap açtığı için
+// kullanıcı başına yer imi yetmez; politika dosyası) → tahta kipi → adres
+// değişirse → port → Pardus.
+//
+// F6 iki bölüm yazar ve ikisi de Etiketler'in ardından gelir (kitaplar önce
+// kataloglanır ve etiketlenir, sonra ödünç verilir): "Üyelik, Kart ve Belgeler" ile
+// "Dolaşım Masası". Üyelik bölümü AYDINLATMA METNİYLE açılır, çünkü metin e-Okul
+// aktarımından önce duyurulur (tasarım §3; KVKK 10/1 "elde edilmesi sırasında");
+// Kişiler bölümü de buna ipucuyla bağlanır. Sonra üyelik isteğe bağlıdır (Md. 16/1,
+// 17/1 — yalnız "üye olmak koşuluyla" / "üye olmak isteyen" parçaları alıntılanır,
+// çünkü maddelerin geri kalanı Bakanlığın sistemini anar) → istek listesi → kart
+// basımı (PDF basıldı saymaz) → kartı yenile ve sonlandırma → gecikme ve pusula
+// (dağıtım kuralı §9-13'ün cümlesi) → masa kartı (KVKK 12/1) → düzensiz kapanış.
+// Dolaşım bölümü masadaki işin sırasıyladır: kim alabilir → ödünç ver → süre ve
+// ödünç sınırı (Md. 18/1'in ilk ve son cümlesi, arası "…") → iade tarihinin kayması
+// İKİ AYRI kuraldır ve Yönetmeliğe bağlanmaz ("Md. 18 gereği" denmez) → gecikme
+// engeli ve gerekçeli istisna → iade → başka üyedeki kitap → kart ve etiket
+// iletileri → okutma kutusu → görevli kipinde masa (gördüğü, görmediği, gizlilik) →
+// kartsız ödünç (Md. 23/1-a'dan sapma) → yönetici kipinde masa. Ekran ve düğme adları
+// `modules/dolasim` ve `modules/uyelik` sabitlerinden; iletiler sunucudan
+// (`services/circulation.py`, `services/masa.py`, `selectors_dolasim.py`) birebir.
+// "uzatma", "ceza", "okuma geçmişi", "okuduğu kitap" kılavuzda geçmez (sözlük §1);
+// gecikmenin karşılığı "para alınmaz, süre değişmez, pusulayla hatırlatılır"dır.
+//
+// F7 dört bölüm yazar ve dördü de Dolaşım Masası'nın ardından gelir (masadaki
+// günlük işin yan kolları, sonra ders yılının iki ucu):
+// - "Sınıf Kitaplığına ve Öğretmene Teslim" (U11, tasarım §9-11): teslim ÖDÜNÇ
+//   DEĞİLDİR (sayı sınırı, 15 gün ve üyelik yok) → teslim etmek adım adım (tek işlem:
+//   bir kitap reddedilirse hiçbiri) → teslimdeki kitap ("Sınıf kitaplığında", kime
+//   teslim edildiği ağda ve görevliye görünmez; "beklenen dönüş geçti" gecikme
+//   değildir) → geri alma (sekme, masadaki öneri, görevli kipi) → teslim listesi
+//   (şubede TMY 23/6'ya kıyasen notu) → sayımdaki yeri kısaca (AT-1; TMY 32/5'e
+//   kıyasen, sayım kurulu seçer — sayım ekranı F9).
+// - "Kayıp, Hasar ve Onarım" (D3, Md. 19): kayıp bildirmek (ödünç/teslim "Kayba
+//   dönüştü", "Bulundu" yeniden açmaz) → hasar dosyası → çözümler (düğmeler sunucunun
+//   listesinden; bedel yolları YALNIZ ortaöğretimde, Md. 19/1 birebir) → program
+//   tahsilat yapmaz ve disiplin sürecini başlatmaz (OKY 164/1-g yalnız atıf: maddenin
+//   metni kılavuzun yasak sözcüğünü taşır) → tutanak → onarım.
+// - "İlişik Listesi" (§8.3, §9-8): açık iş tanımı, sıra (son sınıf → ayrılan →
+//   diğer), sınıf kitaplıkları, basılı liste (kaynak adı yok, dipnot) ve "Kütüphaneden
+//   ilişiği yoktur" belgesi. Belge karne ya da diploma ön koşulu DEĞİLDİR; kılavuz bunu
+//   tek bir olumsuz cümleyle söyler (test "karne"/"diploma"nın başka yerde geçmediğini
+//   sınar) ve Md. 18/1'in ikinci ve üçüncü cümlesini alıntılar — üçüncü cümlenin ortası
+//   Bakanlığın sistemini andığı için "…" ile atlanır.
+// - "Yıl Sonu ve Yıl Başı" (§8.3): Genel Bakış kartlarının pencereleri
+//   (`services/yil_akislari.py`), yıl sonunun ve yıl başının dörder adımı (adım rayındaki
+//   adlarla), yeni ders yılında sınıf kitaplıkları. `year_rollover` yok; kılavuz "yıl
+//   devri" sözcüğünü kullanmaz (sözlük §4.13).
+// Kip sürelerinin ayarı Kipler bölümündedir (Ayarlar → Kütüphane Politikası →
+// Yönetici Kipi Süreleri). Ekran adları `modules/teslim`, `modules/kayip`,
+// `modules/yil` sabitlerinden; sunucu iletileri `services/deliveries.py`,
+// `services/loss_damage.py`, `ilisik_belgeleri.py` ve `teslim_belgeleri.py`'den
+// birebir (sözlük §4.12, §4.13; sunucu tarafı `test_teslim_ilisik_kilavuz_metinleri.py`).
+// "zayi", "telef", "zimmet", "emanet", "borç", "ilişik kesme", "tahsil edildi" ve
+// "yıl devri" kılavuzda geçmez.
+//
+// F8 iki bölüm yazar ve ikisi de Yıl Sonu ve Yıl Başı'nın ardından gelir (ayıklama
+// kılavuzun takviminde Ağustos'un bakım işidir, rapor ders yılının sonudur):
+// - "Ayıklama ve Nadir Eserler" (Md. 12, tasarım §10 E7): ne ayıklanır (Md. 12/1 alıntısı) →
+//   "Ayıklama kayıttan düşme değildir" (sözlük: ayıklama ≠ kayıttan düşme; komisyon kararı
+//   ile harcama yetkilisinin onayı iki ayrı adım) → "Seçim ve Ayıklama Komisyonu ve
+//   kararları" (Md. 10/1 alıntısı; üç karar türü ve neye bağlandıkları; bağış kararı ve
+//   toplu kataloglama özetle, adımları Katalog bölümünde; kataloglama taşınır kaydı değildir
+//   — TMY 16/1; hurdaya ayırmayı değerlendiren TMY 28/1 komisyonu ayrı komisyondur) →
+//   gerekçeden TMY yoluna sade dille (E7 tablosu; 27/1 · 5/8 · 27/3, 28/1 · 28/4, 24 · 24/2 ·
+//   31; 10/1-b devredilir, hurdaya ayrılamaz; imha yalnız 28/5 bağlamında) → teklif adım adım
+//   (ekrandaki adlarla) → konamayan kitaplar ve kayıp nüshanın önerisi → belgeler ("imha"
+//   yalnız İmha tutanağının adında ve 28/5 bağlamında) → el yazması ve nadir eserler (Md.
+//   12/2 alıntısı; Genel Müdürlük md. 4/1-c; adımlar ekrandaki adlarla).
+// - "Yıl Sonu Raporu" (Md. 12/1 ve Uygulama Kılavuzu 2.4 alıntısı, E9): hazırla → alanlar
+//   ("Kişi adı yazmayın.") → basım (resmî yazı düzeni, ad basılmaz) → sonlandır/geri al;
+//   rapor kişisizdir ve eşik "Çok okunanlar için en az üye sayısı"dır.
+// Katalog bölümündeki "sonraki sürüm" sözleri kalktı: nadir eser ve ayıklama kararı artık
+// işliyor; bağış kararına bağış ön kayıt listesi, edinim tarihinin kuralı ve katalogdaki
+// karşılık seçimi eklendi. Adlar `modules/ayiklama` ve `modules/kutuphane/BagisPaneli`
+// sabitlerinden. Komisyonun bileşimi yazılmaz, yalnız Md. 4/1-ı'ya gönderilir: bentteki
+// "zümre" sözcüğü kılavuzun kalıntı taramasına takılır. Kayıp nüshanın kaydını sayım
+// kapatır; F9'dan beri o cümleler Sayım bölümüne gönderir ("sonraki bir sürümde" sözü kalktı).
+// 25.09.2026 kullanıcı kararları (tasarım F8 ekleri 13, 14, 34, 35): Katalog bölümüne
+// "Bağış değerlendirme sonucu" ve TMY'de "bağış kabul tutanağı" olmadığını söyleyen TEK
+// olumsuz cümle (test yasak listesinde yalnız bu cümleye izin verir), birim fiyatın 13/2-c
+// açıklaması; Kayıp, Hasar ve Onarım'a "Bulundu (bedel teslim alınmıştı)" ve kayıttan
+// düşülmüş nüshada "Sayım fazlası" yolu; Ayıklama'da kayıp ve hasar önerisinin ayıklamaya
+// konmadığı (iki bilgi kutusu); Yıl Sonu Raporu'na ekranın dönem uyarısı.
+//
+// F9 bölümü "Sayım" Yıl Sonu Raporu'nun ardından gelir (TMY 32/1: yıl sonlarında sayım). Sıra
+// kullanıcının sorusunun sırasıdır: sayımı kim yapar (md. 32/1, 32/2; program sayımı mali yıla
+// bağlar) → iki AYRI seçenek (TMY 32/3 durdurması — md. 32/3'ün ilk cümlesi alıntı; kapsadığı ve
+// kapsamadığı işler `services/tmy_kapisi.py`'deki listeyle birebir: kayıpta bedelin iki adımı,
+// hasarda öneri yazmayan çözümler, onarım, teslim, ödünç ve iade durmaz; sayım için hizmet arası
+// — okul kararı, TMY'ye dayandırılmaz: ödünç md. 13/1'in giriş-çıkış hâllerinden değildir, md.
+// 23/4'e göre ödünç takip sistemiyle izlenir; tutanağın "Dayanak" sütunu en fazla 32/3'ün ikinci
+// cümlesini anar) ve iadenin hiç durmaması (Yönetmelik md. 23/1-c, alıntısız: fıkra kılavuzun
+// yasak sözcüğünü taşır) → ödünçteki ve teslimdeki kitap (kurulun seçicileri ve seçenekleri
+// `CountBasis`; md. 32/5'e kıyasen, 23/4; 32/5'in metni kalıntı taramasına takılan bir sözcük
+// taşıdığı için alıntılanmaz) → sayım adım adım (ekrandaki adlarla) → onayda ne olur (32/7;
+// 27/1; 10/1-e TAKDİR diliyle — "onaylanabilir … harcama yetkilisi değerlendirir", F8 ekleri
+// 27; 27/3; 17/1 ilk cümle alıntı, ikinci cümle sade) → sayım fazlası → Sayım tutanağı ve eki
+// (10/1-g, 32/8; 34/1 alıntı; cetveli program düzenlemez, TKYS'de düzenlenir — 32/9 kurul
+// düzenler ve kurul ile taşınır kayıt yetkilisi imzalar; 10/1-ğ "Gelecek Yıla Devir" = "Sayımda
+// Bulunan Miktar") → iptal → sayımdan önce dosyaları gözden geçirme ipucu. "imha" bu bölümde
+// geçmez (yalnız Ayıklama'da — test). Dolaşım Masası, Kipler, Katalog (edinim), Kayıp ve Hasar
+// ile Ayıklama bölümlerine birer cümlelik gönderme eklendi. Adlar `modules/sayim` sabitlerinden;
+// "sayım kilidi" ve "dondurma" kılavuzda geçmez (sözlük §1). Sunucu tarafı
+// `test_sayim_kilavuz_metinleri.py` (atıflar fıkranın metninde, adlar koddan).
+// 25.09.2026 kararları (tasarım F9 ekleri 24-27, K1-K7): sayım okutması görevli kipinde de
+// açıktır (Kipler ve Sayım bölümleri); hizmet arası yeni teslimi de durdurur ve masada
+// açılışta görünür (Dolaşım Masası, Teslimler, Sayım); kayıp dosyasında "Bulundu" durdurmanın
+// kapsamında değildir (Kayıp ve Hasar, Sayım); onarımdaki nüsha için kurulun seçimi, sınıf
+// kitaplığında "Kayda göre alınır" yok; programa aktarım durdurma süresince kapalı ama TMY'ye
+// dayanmaz (İçe Aktarma, Sayım); ekin gelecek yıla devrinden onayda hasarla düşülen çıkarılır.
+//
+// F10 bölümleri "Raporlar ve Çok Okunanlar" ile "Dökümler ve Dışa Aktarım" İçe Aktarma'nın
+// ardından gelir. Raporlar bölümü: dört sekme (adlar `modules/raporlar/api.ts::RAPOR_SEKMELERI`),
+// istatistik (dönem kuralı yıl sonu raporununki; kişisizlik notu ve eşik altı "—"; konu kırılımı
+// yok) → Md. 7/1 alıntısı ve Genel Bakış'ın bilgi kartı (yalnız bilgi, yorum yok; yalnız "Kitap"
+// türü) → çok okunanlar (15/1-ğ kısmi alıntı; en az k FARKLI üye, 3-10, varsayılan 5; sayı yok;
+// dönem listesi Ağ Kataloğu vitrininde, ay listesi afişte; "Yeniden hesapla") → Ayın Kitapları
+// afişi (Kılavuz 6.2 ALINTISIZ: metni kılavuzun yasakladığı bir sözcük taşır) → okuma ödülü iç
+// çıktısı (Kılavuz 7 son maddesi birebir; öneridir; iç kullanım; sayı ve okul no yok; ödünç ≠
+// okuma; Kılavuz 7'nin ders başarısı önerisini program yapmaz — profil yasağı). Metinler ekran
+// sabitleriyle `KilavuzPage.test.tsx`'te, alıntılar backend sabitleriyle
+// `test_rapor_metinleri.py`'de eşitlenir.
+// Kılavuz turu (26.09.2026): istatistikte küçük grupların NEDEN gizlendiği (KVKK md. 6/1'e
+// alıntısız atıf: kimin hangi kitabı aldığı inanç, düşünce ya da sağlık hakkında fikir
+// verebilir; tasarım §3 "ödünç verisi md. 6'ya kayabilir"), çok okunanlarda pencere başına en
+// çok on eser (`populer.EN_COK_SIRA`) ve kapanan pencerenin bir daha yazılmaması, afişin
+// asılabilir olması (kişi bilgisi yok) ile iç çıktının asılmaması arasındaki ayrım.
+// "Dökümler ve Dışa Aktarım" bölümü: dışa aktarım (docs/disa-aktarim.md ile çelişmez: kişisel
+// veri yok, Bilgi sayfasındaki şema sürümü, Numara Sayaçları, geri yüklemede numara yeniden
+// kullanılmaz, ödünçteki ve teslimdeki nüsha "Rafta" açılır; yedek DEĞİLDİR) → Bakanlık
+// sistemine geçişte taşınabilirlik (o sistemin veri alma biçimi bilinmiyor — tasarım §3; dosya
+// ona doğrudan yüklenecek biçim diye sunulmaz; kişi kayıtları dosyaya girmez, program hiçbir
+// yere göndermez) → alfabetik katalog dökümü (Md. 11/1 birebir; eksen adları
+// `katalog_dokumu.AXES`) → Taşınır Kütüphane Defteri dökümü (TMY 9/1-ç birebir; ciltletilmemiş
+// süreli yayın girmez — 10/1-a-4, 15/4 alıntısız; programa aktarımın giriş tarihi notu) →
+// yönetim hesabı cetveli hazırlığı (34/3-a birinci cümle birebir; 34/2-c ve 34/3-a ikinci cümle
+// alıntısız; yalnız yıl sonu işaretli ve onaylanmış sayım) → kişi dökümü (KVKK 11/1 a-b bentleri
+// birebir, 13/2 alıntısız; okul no kör indeksle tam eşleşme, aday seçimi, indirme adında ad
+// yok) → "Bakanlık sistemi kullanımda" ayarı (varsayılan kapalı, yalnız hatırlatma; konum dili).
+// Kılavuz Bakanlığın sistemini sözlüğün kısa adıyla ("Bakanlık sistemi") ve YALNIZ bu bölümde
+// anar; öbür bölümlerde yalnız ayarın adı geçer (künye getirmenin konum dili bozulmasın — test).
+// Yeni bilgisayara taşıma, Yedek bölümünün alt başlığıdır (docs/kurulum.md §7'nin özeti; geri
+// yükleme aracı yedek klasöründeki dosyaları listeler — `desktop/restore.py`). Kişiler (Ayrılış
+// Havuzu), İlişik Listesi ve Katalog (Kütüphane Politikası) bölümleri ayara birer cümleyle
+// gönderir.
+// Tamamlama turu (26.09.2026): okuma ödülünün seçicileri (sıra sınırları
+// `raporlar/api.ts::ODUL_SIRA_*`; eşitler yüzünden çıktı sıra sayısından uzun olabilir —
+// `selectors_okuma_odulu.adaylar`), yönetim hesabı kartının yalnız yıl sonu sayımlarını
+// listelemesi, İçe Aktarma'da reddedilen numaraların üç durumu (docs/disa-aktarim.md), taşımada
+// kurucu görevi ve port kuralı (docs/kurulum.md §7 madde 3 ve 6), yazarsız eserin döküm başlığı
+// (`katalog_dokumu.YAZARSIZ`).
+//
+// F11 üç bölüm yazar ve Yedek bölümünü genişletir (tasarım §6.4 BAĞLAYICI, §4.4, §10 E18, T11;
+// 27.09.2026 kullanıcı kararları):
+// - "Saklama ve Anonimleştirme" Dökümler'in ardından, Yedek'in önündedir (kayıtların ömrü, sonra
+//   kopyaların ömrü). Sıra kullanıcının sorusunun sırasıdır: neden (KVKK 4/2-d birebir, 7/1
+//   alıntısız; ödünç kaydının amacı kitabın dönüşünü izlemektir) → anonimleştirme ≠ silme →
+//   süreler (§6.4'ün her satırı; varsayılanlar `LibraryPolicy`'den, 1-10 yıl; ayrılan kişi 2 yıl
+//   — karar 2) → ne kalır (Saklama ekranının "Ne Kalır" kartıyla aynı) → onay (ekran adları
+//   `modules/saklama` sabitlerinden; altı ay; görev devri notunun sayısı) → yedeklerde kalan
+//   (pre-anonim 14 gün, tetikte pre-migrate ve 14 günden eski db-onceki silinir — db-onceki
+//   27.09.2026 kullanıcı kararı, yaş adındaki geri yükleme tarihinden; elle konan dosyaya
+//   program dokunmaz — `desktop/backup.py::rotate_backups` yalnız kendi adlarını yönetir;
+//   USB'deki yedeğin kuralı Yedek bölümünde) → resmî belgelerin izi ve ibare (§6.2 metni
+//   birebir).
+// - Yedek bölümüne "USB bellekteki yedekler" (§6.4 "dış kopyalar okulun elindedir; kural
+//   kılavuzda yazılıdır"): okulun sorumluluğu (Yönerge 10/5), İndirilenler'de kopya bırakmama,
+//   önerilen düzen (son iki yedek — okul müdürlüğü başka düzen belirleyebilir), saklama işleminden
+//   ve görev devrinden sonra yeni yedek + eskilerin silinmesi, kayıp bellekte bildirim (KVKK 12/5,
+//   alıntısız; kararı okul müdürlüğü verir) ve "Geri yükleme provası" (program kendi denetiminde
+//   sınar; okul isterse başka bir demirbaş bilgisayarda, kurtarma anahtarıyla, sonra siler).
+// - "Görev Devri" (üç adım, ekrandaki alan adlarıyla; TB17/TB23 dürüst dille; KVKK 12/4, Yönerge
+//   6/4 ve 10/3 alıntısız) ve "Güncelleme" (yalnız "Şimdi denetle"; hedef GitHub — sözlük "Sürüm"
+//   satırı kılavuzun bu bölümünde hizmetin adını anmaya izin verir; ulaşılamama iletisi sunucunun
+//   `updates.ULASILAMADI_MESAJI`'yla birebir; program indir.okulapp.org'a istek atmaz).
+// "İmha" F11 bölümlerinde geçmez (sözlük §1 "Silme ve imha"): okulun kendi kopyaları "silinir",
+// kâğıt "yırtılarak yok edilir". Sunucu tarafı `test_bakim_kilavuz_metinleri.py` (atıflar fıkranın
+// metninde, süreler ve adlar koddan).
+//
+// Ad kaynakları: tepsi menüsü `desktop/tray.py` sabitleri, durum satırı
+// `desktop/katalog_kontrol.py::tepsi_satiri`, adres uyarısı `ip_denetle`,
+// kurucu görevleri `packaging/windows/oab-defteri.iss` [Tasks], Ağ
+// Doktoru ve Ayarlar → Ağ Kataloğu ekranların kaynağı (`modules/agkatalogu`),
+// kataloğun kendi sayfa adları `backend/katalog/sablonlar`. Tepsiden seçilen Çık
+// yönetici kipinde ve kilitliyken ONAY SORMADAN kapatır
+// (`tepsi_eylemleri.quit = request_quit`); üst çubuktaki Çık sorar. Çok okunanlar
+// listesi F10'dan beri her gün hesaplanır (`services/populer.py`); Ağ Kataloğu bölümü listenin
+// eşik geçilince dolduğunu söyler ve Raporlar bölümüne gönderir. "rezervasyon" sözcüğü sözlükte
+// yasak olduğu için DHCP'deki sabit
+// adres "sabit adres ayırma" diye anlatılır.
+//
+// Mevzuat atıfları yalnız `docs/mevzuat/`'taki tam metinlerden alınır; alıntılar
+// BİREBİR, madde numarası uydurulmaz: Yönerge 11/6, 11/8, 11/12, 11/22 (yalnız
+// ilk cümlesi) ve 11/23 (meb-bilgi-ve-sistem-guvenligi-yonergesi.md; atıf
+// haritası docs/mevzuat/BENIOKU.md §3.3), Yönetmelik 7/1 (ilk cümle), 10/1 (ilk iki cümle),
+// 10/3, 10/5, 11/1, 12/1 (ayıklama: ortası "…"; yıl sonu raporu: ilk cümle), 12/2, 14/1-a,
+// 15/1-ğ (başı "…"), 16/1, 17/1 (yalnız "üye olmak isteyen" parçası), 18/1, 19/1 ve 23/1-a
+// (meb-okul-kutuphaneleri-yonetmeligi.md), Uygulama Kılavuzu 2.4 ve 7 (son maddenin ilk
+// cümlesi; 6.2 alıntısız) (…-uygulama-kilavuzu.md), TBK 93 (6098-…-md92-93.md), KVKK 10/1 (yalnız "elde
+// edilmesi sırasında" parçası), 11/1 (giriş ile a ve b bentleri, sonu "…") ve 12/1
+// (6698-kvkk.md); Taşınır Mal Yönetmeliği 9/1-ç, 17/1 (ilk cümle), 32/3 (ilk cümle), 34/1
+// (ikinci cümle) ve 34/3-a (birinci cümle). Alıntısız atıflar: Yönetmelik 4/1-c,
+// 4/1-ı, 10/1-b, 10/4, 23/1-c; KVKK 6/1 ve 13/2; Taşınır Mal Yönetmeliği 5/8, 10/1-a-4,
+// 10/1-e, 10/1-g, 10/1-ğ, 13/1, 15/4, 16/1, 17/1 (ikinci cümle), 23/4, 23/6, 24, 24/2, 27/1,
+// 27/3, 28 (1, 4, 5), 31, 32/1, 32/2, 32/3 (ikinci cümle), 32/5, 32/6, 32/7, 32/8, 32/9, 34/2-c
+// ve 34/3-a (ikinci cümle) (tasinir-mal-yonetmeligi.md;
+// 23/6 ve 32/5'in metni kılavuzun kalıntı taramasına takılan bir sözcük taşır) ve
+// Ortaöğretim Kurumları Yönetmeliği 164/1-g (…-ilgili-maddeler.md). F11: KVKK 4/2-d (birebir),
+// 7/1, 12/4 ve 12/5 (alıntısız); Yönerge 6/4, 10/3 ve 10/5 (alıntısız; 10/5 sade aktarım).
+// F10 alıntıları sunucu
+// tarafında `test_rapor_metinleri.py` ve `test_dokum_metinleri.py` belge sabitleriyle, bütün F10
+// atıfları (alıntılı ve alıntısız) `test_rapor_dokum_kilavuz_metinleri.py` ile atıf yapılan
+// fıkranın metninde aranır.
+
+import { useEffect } from "react";
+import type { ReactNode } from "react";
+import { Link, useLocation } from "react-router-dom";
+
+import { YONERGE, YONETMELIK } from "../../lib/mevzuat";
+
+import Card from "../../ui/Card";
+import Icon from "../../ui/Icon";
+
+/** Bölümler (çapa → başlık + ikon), sayfadaki sırasıyla. Başlıklar Başlık Düzenindedir. */
+const BOLUMLER = {
+  "ilk-kurulum": { baslik: "İlk Kurulum", ikon: "checklist" },
+  "yol-haritasi": { baslik: "Başlangıç Yol Haritası", ikon: "flag" },
+  kipler: { baslik: "Görevli Kipi ve Yönetici Kipi", ikon: "admin_panel_settings" },
+  kisiler: { baslik: "Kişiler ve e-Okul Listeleri", ikon: "group" },
+  "kapali-gunler": { baslik: "Kapalı Günler", ikon: "event_busy" },
+  katalog: { baslik: "Katalog", ikon: "menu_book" },
+  "hizli-kayit": { baslik: "Hızlı Kayıt", ikon: "bolt" },
+  etiketler: { baslik: "Etiketler", ikon: "label" },
+  uyelik: { baslik: "Üyelik, Kart ve Belgeler", ikon: "badge" },
+  dolasim: { baslik: "Dolaşım Masası", ikon: "sync_alt" },
+  teslim: { baslik: "Sınıf Kitaplığına ve Öğretmene Teslim", ikon: "outbox" },
+  "kayip-hasar": { baslik: "Kayıp, Hasar ve Onarım", ikon: "healing" },
+  ilisik: { baslik: "İlişik Listesi", ikon: "fact_check" },
+  "yil-akislari": { baslik: "Yıl Sonu ve Yıl Başı", ikon: "event_upcoming" },
+  ayiklama: { baslik: "Ayıklama ve Nadir Eserler", ikon: "inventory" },
+  "yil-sonu-raporu": { baslik: "Yıl Sonu Raporu", ikon: "summarize" },
+  sayim: { baslik: "Sayım", ikon: "inventory_2" },
+  "katalog-sablonu": { baslik: "Katalog Excel Şablonu", ikon: "table_view" },
+  "ice-aktarma": { baslik: "İçe Aktarma", ikon: "upload_file" },
+  raporlar: { baslik: "Raporlar ve Çok Okunanlar", ikon: "bar_chart" },
+  dokumler: { baslik: "Dökümler ve Dışa Aktarım", ikon: "description" },
+  saklama: { baslik: "Saklama ve Anonimleştirme", ikon: "auto_delete" },
+  yedek: { baslik: "Yedek ve Güvenlik Dosyası", ikon: "backup" },
+  "gorev-devri": { baslik: "Görev Devri", ikon: "swap_horiz" },
+  guncelleme: { baslik: "Güncelleme", ikon: "system_update" },
+  "tepsi-ve-cikis": { baslik: "Tepsi, Çıkış ve Gün Değişimi", ikon: "power_settings_new" },
+  "ag-katalogu": { baslik: "Ağ Kataloğu", ikon: "lan" },
+} as const;
+
+type BolumId = keyof typeof BOLUMLER;
+
+/** "Bu kılavuzda" listesi — bölüm çapaları ve başlıklar tek kaynaktan (test de okur). */
+export const KILAVUZ_BOLUMLERI: ReadonlyArray<{ id: BolumId; baslik: string }> = (
+  Object.keys(BOLUMLER) as BolumId[]
+).map((id) => ({ id, baslik: BOLUMLER[id].baslik }));
+
+/**
+ * Kılavuz bölümü — ikon rozeti + başlık + içerik. `scroll-mt-24`: "Bu kılavuzda"
+ * bağlantısıyla gelindiğinde başlık yapışkan üst çubuğun altında kalmasın.
+ */
+function Bolum({ id, children }: { id: BolumId; children: ReactNode }) {
+  const tanim = BOLUMLER[id];
+  return (
+    <section id={id} aria-labelledby={`${id}-baslik`} className="scroll-mt-24">
+      <Card className="p-5 sm:p-6">
+        <div className="flex items-start gap-4">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-shape-md bg-primary-container text-on-primary-container">
+            <Icon name={tanim.ikon} size="xl" />
+          </span>
+          <div className="min-w-0 flex-1 space-y-3 text-body-medium text-on-surface-variant">
+            <h2 id={`${id}-baslik`} className="text-title-large font-semibold text-on-surface">
+              {tanim.baslik}
+            </h2>
+            {children}
+          </div>
+        </div>
+      </Card>
+    </section>
+  );
+}
+
+/** Bölüm içi alt başlık. */
+function AltBaslik({ children }: { children: ReactNode }) {
+  return <h3 className="pt-1 text-title-small font-semibold text-on-surface">{children}</h3>;
+}
+
+/** Vurgulu ipucu kutusu (tertiary yüzey — gövde metninden ayrışır). */
+function Ipucu({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-start gap-2 rounded-shape-md bg-tertiary-container px-4 py-3 text-body-medium text-on-tertiary-container">
+      <Icon name="lightbulb" size="lg" className="mt-0.5 shrink-0" />
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+/** Mevzuat alıntısı — birebir metin + kaynak adı ve madde (docs/mevzuat'tan). */
+function Mevzuat({ kaynak, children }: { kaynak: string; children: ReactNode }) {
+  return (
+    <figure className="rounded-shape-md border-l-4 border-outline bg-surface-container px-4 py-3">
+      <blockquote className="text-body-medium text-on-surface">{children}</blockquote>
+      <figcaption className="mt-1 text-body-small text-on-surface-variant">{kaynak}</figcaption>
+    </figure>
+  );
+}
+
+/** Ekran bağlantısı — kılavuzdan doğrudan ilgili sayfaya (ya da sekmeye) atlar. */
+function Ekran({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <Link
+      to={to}
+      className="font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    >
+      {children}
+    </Link>
+  );
+}
+
+/** Klavye kısayolu. */
+function Tus({ children }: { children: ReactNode }) {
+  return (
+    <kbd className="rounded-shape-xs border border-outline-variant bg-surface-container px-1.5 py-0.5 font-mono text-label-medium text-on-surface">
+      {children}
+    </kbd>
+  );
+}
+
+/** Dosya yolu, komut ya da dosya adı. */
+function Kod({ children }: { children: ReactNode }) {
+  return <code className="break-all font-mono text-body-small text-on-surface">{children}</code>;
+}
+
+/**
+ * Başka bir ekrandan çapalı adresle gelindiğinde (ör. yol haritasındaki BTR
+ * maddesi → `/kilavuz#ag-katalogu`) ilgili bölüme kaydırır.
+ *
+ * Tarayıcı çapayı YALNIZ gerçek gezinmede kendisi uygular; SPA'da rota
+ * değiştiğinde adresteki `#` yok sayılır, sayfa tepede açılırdı. Sayfa içi
+ * "Bu kılavuzda" bağlantıları düz `<a href="#...">` olduğu için onları
+ * tarayıcı zaten kaydırır; bu etki onları bozmaz (aynı hedefe kaydırır).
+ */
+function useCapayaKaydir(): void {
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash) return;
+    const hedef = document.getElementById(decodeURIComponent(hash.slice(1)));
+    // jsdom ve eski gömülü motorlarda yok olabilir; kaydırma kritik değildir.
+    hedef?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, [hash]);
+}
+
+export default function KilavuzPage() {
+  useCapayaKaydir();
+  return (
+    <div className="mx-auto max-w-4xl space-y-5">
+      <header>
+        <p className="text-label-medium font-semibold tracking-wide text-primary">
+          OAB Defteri
+        </p>
+        <h1 className="mt-1 text-headline-medium font-semibold tracking-tight text-on-surface">
+          Kullanım Kılavuzu
+        </h1>
+        <p className="mt-2 text-body-medium text-on-surface-variant">
+          Programı ilk kez kuran bir okul için iş sırasıyla anlatım. OAB Defteri, okulun
+          kütüphane işlerini yürüttüğü yerel araçtır: çevrimdışı çalışır, veriler yalnız bu
+          bilgisayarda durur. Kılavuz, programa yeni özellikler geldikçe genişler.
+        </p>
+      </header>
+
+      <Card className="p-5 sm:p-6">
+        <nav aria-label="Kılavuz bölümleri">
+          <p className="text-label-large font-semibold text-on-surface">Bu kılavuzda</p>
+          <ol className="mt-2 grid list-decimal gap-x-8 gap-y-1 pl-5 text-body-medium sm:grid-cols-2">
+            {KILAVUZ_BOLUMLERI.map((b) => (
+              <li key={b.id}>
+                <a
+                  href={`#${b.id}`}
+                  className="font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  {b.baslik}
+                </a>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      </Card>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="ilk-kurulum">
+        <p>
+          Program ilk açıldığında <strong>Kurulum Sihirbazı</strong> gelir. Üç adım tamamlanıp
+          “Kurulumu tamamla” denmeden diğer ekranlar açılmaz. Sihirbaz her açılışta ilk eksik
+          adımdan başlar.
+        </p>
+
+        <AltBaslik>1. Yönetici parolası ve kurtarma anahtarı</AltBaslik>
+        <p>
+          Yönetici parolası zorunludur ve bu adım atlanamaz. Öğrenci, öğretmen ve diğer personelin
+          ad-soyadları ile öğrencilerin okul numaraları bu parolayla açılan bir anahtarla
+          şifrelenir; parola kurulmadan kişi kaydı yapılamaz. Parolayı iki kez yazıp “Yönetici
+          parolasını kur” düğmesine basın. Parola en az 8 karakterdir; kurulduktan sonra
+          kaldırılamaz, yalnız değiştirilebilir.
+        </p>
+        <p>
+          Parola kurulunca <strong>kurtarma anahtarı</strong> bir kez gösterilir. Parola unutulursa
+          kayıtlara erişmenin tek yolu budur ve program anahtarı saklamaz. Anahtarı üç yoldan
+          biriyle saklayın:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>“Yazdır”: yazıcıdan yalnız anahtarın bulunduğu alan çıkar.</li>
+          <li>
+            “PDF olarak kaydet”: okul adı, tarih ve bilgisayarın demirbaş no&apos;suyla birlikte
+            kurtarma anahtarı çıktısı hazırlanır.
+          </li>
+          <li>
+            Kâğıda elle yazmak: grupları sırasıyla, büyük harfle yazın. Anahtarda 0, 1, 8 ve 9
+            rakamları yoktur; O ve I her zaman harftir.
+          </li>
+        </ul>
+        <p>
+          Sonra “Sakladım, doğrula” düğmesine basın. Anahtar ekrandan kalkar; sakladığınız kopyaya
+          bakarak istenen iki grubu yazarsınız. İki grup tuttuğunda program anahtarın saklandığını
+          kaydeder; <strong>kurulum bu doğrulama yapılmadan tamamlanmaz</strong>. Doğrulama bitmeden
+          “Devam” düğmesi açılmaz; kopyaya yeniden bakmanız gerekirse “Anahtarı yeniden göster”i
+          kullanın. Bu sırada görevli kipine geçer ya da kilitlerseniz anahtar kaybolmaz: yönetici
+          kipine döndüğünüzde sihirbaz anahtarı yeniden gösterir ve doğrulamayı yeniden ister.
+          Kurulum bitene kadar program kendiliğinden görevli kipine geçmez (boşta ve mutlak süre
+          kurulum tamamlanınca işlemeye başlar), ama programı kapatırsanız anahtar gider: kapanan
+          programda anahtar yeniden gösterilemez. Beş dakika hiçbir işlem yapılmazsa anahtar ekranda
+          gizlenir (“Anahtarı göster” ile geri gelir): masadan kalktığınızda ekranda açık kalmasın
+          diyedir, anahtar kaybolmaz.
+        </p>
+        <p>
+          Anahtar ekranda değilken (ör. program kapandı ya da kurtarma anahtarını kaydedemediniz)
+          sihirbazın 1. adımı iki yol sunar:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Kurtarma Anahtarını Doğrula:</strong> kâğıttaki ya da PDF&apos;teki anahtarın
+            tamamını yazın. Anahtar doğruysa saklandığı kaydedilir ve kuruluma devam edersiniz.
+          </li>
+          <li>
+            <strong>Kurtarma Anahtarını Yenile:</strong> anahtarı kaydedemediyseniz yönetici
+            parolasını girip yeni bir anahtar üretin. Yeni anahtar bir kez gösterilir; onu da
+            saklayıp doğrularsınız. Yenilemeden sonra zarftaki eski anahtar bu bilgisayarda kilidi
+            açmaz, ama eski yedekler için gerekebilir (bkz. Yedek ve Güvenlik Dosyası bölümü).
+          </li>
+        </ul>
+        <Ipucu>
+          <p>
+            Kurtarma anahtarının çıktısını bir zarfa koyup kapatın ve müdürlükte kilitli dolapta
+            saklayın. PDF dosyasını USB belleğe aldıktan sonra bu bilgisayarda (ör. İndirilenler
+            klasöründe) bırakmayın. Yönetici parolası en az iki görevlendirilmiş kişide bulunsun
+            (ör. kütüphaneden sorumlu öğretmen ile sorumlu müdür yardımcısı): parolayı bilen tek
+            kişi okuldan ayrılırsa ya da parolayı unutursa kayıtlara yalnız kurtarma anahtarıyla
+            ulaşılır.
+          </p>
+        </Ipucu>
+        <p>
+          Elle yazdığınız anahtarın temiz bir çıktısını sonradan{" "}
+          <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran>&apos;teki “Kurtarma anahtarı
+          çıktısı” kartından alabilirsiniz: anahtarı yazıp “PDF olarak kaydet”e basın. Program
+          anahtarı doğrular; yanlış yazılmış anahtar basılmaz. Aynı ekranda “Kurtarma Anahtarını
+          Yenile” kartı da vardır: anahtar kaybolursa yenisini oradan üretirsiniz. Kurtarma anahtarı
+          doğrulanmamışsa Genel Bakış&apos;taki Başlangıç Yol Haritası ve Güvenlik ekranı uyarı
+          gösterir.
+        </p>
+
+        <AltBaslik>2. Okul bilgileri</AltBaslik>
+        <p>
+          Okul adı, programın bastığı evrakın antedinin ilk satırıdır. <strong>Kademe</strong>{" "}
+          (İlkokul, Ortaokul ya da Ortaöğretim (lise)) ve <strong>kısa ad</strong> zorunludur. Kısa
+          ad kitap etiketlerinde basılır, en çok 24 karakterdir; üye kartında okulun tam adı yazar.
+          Kademe iki yerde kullanılır: kayıp ve hasar dosyalarındaki bedel seçenekleri yalnız
+          ortaöğretimde sunulur, yıl sonunda son sınıf da kademeden belirlenir. İl, ilçe ve okul
+          müdürü evrakta kullanılır; “Hazırlık sınıfı” alanında “Var” seçilirse sınıf düzeylerine
+          Hazırlık eklenir.
+        </p>
+        <p>
+          “Bu bilgisayar okul demirbaşıdır.” onayı zorunludur: program yalnız okulun demirbaşı olan
+          bilgisayara kurulur. Dayanağı Bilgi ve Sistem Güvenliği Yönergesi&apos;nin iki hükmüdür:
+        </p>
+        <Mevzuat kaynak={`${YONERGE}, md. 11/8`}>
+          “Kullanıcılar, kişisel bilişim kaynaklarını kurum ağında sistem yöneticisinden izin
+          almadan kullanamaz.”
+        </Mevzuat>
+        <Mevzuat kaynak={`${YONERGE}, md. 11/23`}>
+          “Bakanlığa ait gizli ya da açık her türlü veri Bakanlık sistemleri üzerinde barındırılır.
+          Herhangi bir bulut depolama sistemine veri aktarılmaz.”
+        </Mevzuat>
+        <p>
+          Bilgisayarın demirbaş no&apos;su isteğe bağlıdır: taşınır kaydındaki numara yazılır,
+          kurtarma anahtarı çıktısında da basılır. Bilgileri girip “Kaydet ve devam et”e basın.
+        </p>
+
+        <AltBaslik>3. Ders yılı ve kapalı günler</AltBaslik>
+        <p>
+          “Yeni ders yılı” formuna ders yılının adını (ör. 2026-2027), başlangıç ve bitiş
+          tarihlerini, 1. dönemin bitişini ve 2. dönemin başlangıcını yazıp “Ders yılını kaydet ve
+          aktifleştir” düğmesine basın. Aynı anda yalnız bir ders yılı aktif olabilir; şube kataloğu
+          ve e-Okul aktarımı aktif ders yılına bağlanır. Yarıyıl tatili 1. dönemin bitişiyle 2.
+          dönemin başlangıcı arasında kalır.
+        </p>
+        <p>
+          Ders yılı kaydedilince iki takvim yılının resmî tatilleri ve dini bayramları kendiliğinden
+          eklenir. Programda bir yılın dini bayram tarihleri yoksa uyarı çıkar; o tarihleri Diyanet
+          takvimine bakarak “Dini bayram” türünde elle eklersiniz. Ara tatil ve yarıyılı “Öğrenciye
+          kapalı gün” türünde siz girersiniz (bkz. Kapalı Günler bölümü).
+        </p>
+        <p>
+          “Kurulumu tamamla” dediğinizde program Genel Bakış ile açılır. Bir adım eksikse program
+          hangi adımın ve hangi bilginin eksik olduğunu yazar. Okul bilgilerini, ders yıllarını ve
+          kapalı günleri sonradan <Ekran to="/ayarlar?tab=okul">Ayarlar → Okul Bilgileri</Ekran>,
+          Ders Yılları ve Kapalı Günler sekmelerinden değiştirebilirsiniz. Sihirbazı yeniden açmak
+          için Ayarlar sayfasının altındaki “Kurulum Sihirbazı” kartını kullanın.
+        </p>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="yol-haritasi">
+        <p>
+          Kurulumdan sonra <Ekran to="/">Genel Bakış</Ekran>&apos;taki “Başlangıç Yol Haritası”
+          kartı, programı okulda kullanmaya başlamak için sıradaki yedi işi gösterir. Her madde
+          ilgili ekrana bağlanır:
+        </p>
+        <ol className="list-decimal space-y-1 pl-5">
+          <li>e-Okul öğrenci listesini aktarmak,</li>
+          <li>öğretmen ve diğer personel listesini aktarmak,</li>
+          <li>öğrenciye kapalı günleri (ara tatil, yarıyıl) girmek,</li>
+          <li>katalog Excel şablonunu indirip doldurmaya başlamak,</li>
+          <li>kurtarma anahtarını müdürlükte kapalı zarfta saklamak,</li>
+          <li>yönetici parolasını en az iki görevlendirilmiş kişiyle paylaşmak,</li>
+          <li>Ağ Kataloğu için bilişim teknolojileri rehber öğretmeniyle (BTR) görüşmek.</li>
+        </ol>
+        <p>
+          İlk üç madde yapıldığında kendiliğinden işaretlenir; şablon maddesi şablonu indirdiğinizde
+          işaretlenir. Program diğerlerinin yapıldığını bilemez: yaptıkça “Yapıldı” kutusunu siz
+          işaretlersiniz. İşaretler programda saklanır. Bütün maddeler tamamlanınca “Kartı gizle”
+          düğmesi çıkar. Kurtarma anahtarının saklandığı doğrulanmadıysa kart gizlenmez: uyarı
+          kartın başındadır ve gözden kaçmamalıdır.
+        </p>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="kipler">
+        <p>
+          Program kişi ayrımını kullanıcı hesabıyla değil <strong>kiple</strong> yapar. Yönetici
+          parolası kurulduktan sonra program her açılışta “Kayıtlar kilitli” ekranıyla açılır;
+          yönetici parolasını yazıp “Aç” düğmesine basınca yönetici kipi başlar. Kipin adı ve kip
+          düğmeleri üst çubuktadır.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Yönetici kipi</strong> kütüphane yöneticisi (kütüphaneci ya da kütüphaneden
+            sorumlu öğretmen) içindir. Bütün ekranlar açıktır: Kişiler, Ayarlar, e-Okul aktarımı,
+            yedek.
+          </li>
+          <li>
+            <strong>Görevli kipi</strong> masadaki görevli (öğrenci görevli ya da personel) içindir.
+            Menüdeki bağlantılar gizlenir, ekranda “Görevli Kipi” sayfası durur. Yönetici işleri bu
+            kipte kapalıdır; program onları arka planda da reddeder. Sayfada Dolaşım Masası durur:
+            görevli ödünç verir, iade alır, kitabın durumuna ve katalogda bir kitaba bakabilir (bkz.
+            “Dolaşım Masası” bölümü). Görevli, kitaplara yapıştırılan etiketleri bu sayfadaki
+            “Doğrulama okutmasını aç” düğmesiyle okutup doğrulayabilir; etiket basmak, basım
+            işaretini geri almak ve “Doğrulanmamış Etiketler” listesi yönetici kipindedir. Sınıf
+            kitaplığından ya da öğretmenden dönen kitapları da “Teslimden geri al” düğmesiyle açılan
+            bölümde okutarak geri alabilir. Süren bir sayım varken sayfada “Sayım okutmasını aç”
+            düğmesi de durur: görevli kitapların etiketini açılan “Sayım Okutması” bölümünde okutur,
+            ekranda yalnız okutmanın sonucu, barkod ve kitabın adı görünür (bkz. “Sayım” bölümü).
+            Teslim vermek, kayıp ve hasar dosyaları, İlişik Listesi ve sayımın okutma dışındaki
+            bütün işleri (başlatma, ilerleme, sayım fazlasının kararı, tamamlama, onay) yönetici
+            kipindedir.
+          </li>
+        </ul>
+
+        <AltBaslik>Kipler arasında geçiş</AltBaslik>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            Yönetici kipinden görevli kipine “Görevli kipine geç” düğmesiyle ya da{" "}
+            <Tus>Ctrl+Shift+G</Tus> kısayoluyla geçilir; parola istenmez.
+          </li>
+          <li>
+            Görevli kipinden çıkmak için “Yönetici kipine geç” düğmesine basıp yönetici parolasını
+            yazın.
+          </li>
+          <li>
+            Yönetici kipi <strong>3 dakika</strong> işlem yapılmazsa ya da açıldıktan en geç{" "}
+            <strong>30 dakika</strong> sonra kendiliğinden kapanır; program görevli kipine geçer.
+            Üst çubuktaki geri sayım kalan süreyi gösterir. Çalışmayı sürdürüyor olsanız da 30
+            dakika dolunca parola yeniden sorulur.
+          </li>
+          <li>
+            Bu iki süre varsayılandır ve{" "}
+            <Ekran to="/ayarlar?tab=politika">Ayarlar → Kütüphane Politikası</Ekran>&apos;ndaki
+            “Yönetici Kipi Süreleri” bölümünden değiştirilir: “İşlem yapılmazsa kapanma süresi
+            (dakika)” 1 ile 15, “En uzun açık kalma süresi (dakika)” 5 ile 120 dakika arasındadır ve
+            ilki ikincisini aşamaz. Değişiklik bir sonraki işlemden itibaren geçerlidir, programı
+            yeniden başlatmak gerekmez. Süreleri kısa tutun: açık bırakılan yönetici kipi, masadaki
+            görevliye kişisel veri gösterir.
+          </li>
+          <li>
+            “Kilitle” her kipte parolasızdır: kayıtların anahtarı bellekten silinir ve “Kayıtlar
+            kilitli” ekranı gelir. Açmak için yönetici parolası gerekir. “Kilitle” düğmesi Ayarlar →
+            Güvenlik&apos;te de vardır.
+          </li>
+        </ul>
+        <Ipucu>
+          <p>
+            Masadan kalkarken görevli çalışmayı sürdürecekse “Görevli kipine geç”i, kimse
+            çalışmayacaksa “Kilitle”yi seçin. Pencerenin çarpı düğmesi programı ne kapatır ne
+            kilitler: program saatin yanındaki simge alanında (tepside) çalışmayı sürdürür. Görevli
+            kipi masadaki görevlinin yönetici ekranlarına ulaşmasını önler, bilgisayarın kendisini
+            korumaz; masa için yönetici yetkisi olmayan ayrı bir kütüphane masası Windows hesabı
+            önerilir.
+          </p>
+        </Ipucu>
+
+        <AltBaslik>Parolayı unutursanız</AltBaslik>
+        <p>
+          Kilit ekranında “Parolamı unuttum”u seçin, kurtarma anahtarını ve yeni parolayı yazıp
+          “Kurtar ve aç” düğmesine basın. Bu işlem kurtarma anahtarını DEĞİŞTİRMEZ: zarftaki kâğıt,
+          siz <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran>&apos;teki “Kurtarma
+          Anahtarını Yenile” kartını kullanana kadar geçerli kalır. Yeni parolayı, parolayı bilen
+          öbür görevlendirilmiş kişiye de bildirin.
+        </p>
+
+        <AltBaslik>Parolayı değiştirmek</AltBaslik>
+        <p>
+          <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran>&apos;te “Parolayı değiştir”
+          düğmesine basın; mevcut parolayı ve yeni parolayı iki kez yazıp “Uygula”yı seçin. Parolayı
+          bilen biri görevden ayrılırsa parolayı değiştirin. Parola değiştikten sonra eski yedekler,
+          alındıkları dönemdeki parolayla ya da kurtarma anahtarıyla açılır.
+        </p>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="kisiler">
+        <p>
+          <Ekran to="/kisiler">Kişiler</Ekran> sayfasının ilk üç sekmesi kişi kayıtlarını tutar:
+          “Öğrenciler”, “Öğretmenler ve Diğer Personel” ve “Ayrılış Havuzu”. Sonraki üç sekme
+          (“Üyeler”, “Üyelik İstek Listesi”, “Kart Basımı”) kütüphane üyeliği içindir ve “Üyelik,
+          Kart ve Belgeler” bölümünde anlatılır. Program T.C. kimlik numarası, veli bilgisi,
+          cinsiyet, unvan ve branş tutmaz. Öğrencide ad, soyad, okul no, sınıf ve şube; öğretmen ve
+          diğer personelde ad, soyad ve üye türü tutulur. Kişi kaydı için yönetici parolasının
+          kurulmuş olması gerekir.
+        </p>
+        <Ipucu>
+          <p>
+            <strong>Aktarım kimseyi okuldan ayırmaz ve kimsenin kaydını silmez.</strong> Listede
+            bulunmayan öğrenci ve personel “Ayrılış Havuzu” sekmesine eklenir, durumları aktif
+            kalır. Ayrılıp ayrılmadıklarına siz karar verirsiniz; böylece iade edilmemiş kitabı olan
+            kişi kayıp olmaz.
+          </p>
+        </Ipucu>
+        <Ipucu>
+          <p>
+            <strong>
+              e-Okul listelerini aktarmadan önce kütüphane aydınlatma metnini duyurun.
+            </strong>{" "}
+            Metin <Ekran to="/kisiler?tab=uyeler">Kişiler → Üyeler</Ekran> sekmesinin altındaki
+            “Üyelik Belgeleri” bölümünden basılır; öğrencilere ve personele hangi bilgilerin neden
+            tutulduğunu ve kimin gördüğünü anlatır (bkz. “Üyelik, Kart ve Belgeler” bölümü).
+          </p>
+        </Ipucu>
+
+        <AltBaslik>Öğrenci listesi</AltBaslik>
+        <p>
+          e-Okul&apos;da Öğrenci İşlemleri → Raporlar → <strong>OOG01001R020</strong> — Sınıf/Şube
+          Öğrenci Listesi raporunu Excel olarak indirin ve dosyayı değiştirmeden “Öğrenciler”
+          sekmesinin altındaki aktarım paneline yükleyin. e-Okul dosyası .XLS uzantısıyla iner; şube
+          blokları ve sayaç satırları kendiliğinden çözülür, cinsiyet ve pansiyon sütunları okunmaz.
+          e-Okul raporu yerine “Şablon indir” ile programın şablonunu (sınıf, okul numarası, ad,
+          soyad) doldurabilir ya da tabloyu Excel&apos;den kopyalayıp “Ya da tabloyu yapıştırın”
+          alanına yapıştırabilirsiniz.
+        </p>
+        <p>
+          Aktarım iki aşamalıdır. “Önizle” hiçbir kaydı yazmaz: şube bazında kaç öğrencinin yeni,
+          güncellenen, değişmeyen ve ayrılış havuzuna eklenecek olduğunu gösterir. “Aktar” düğmesi
+          önizlemeden sonra açılır.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            Öğrenciler okul numarasıyla eşleştirilir. Dosyada yeni şubesiyle görünen öğrenci
+            ayrılmaz, kaydı güncellenir; ayrılış havuzunda bekliyorsa havuzdan kendiliğinden çıkar.
+            Ayrıldı olarak duran bir öğrenci aynı numara ve aynı adla listeye dönerse kaydı yeniden
+            aktif olur; numara adı farklı bir öğrenciye verilmişse eski kayıt olduğu gibi kalır ve
+            yeni kayıt açılır.
+          </li>
+          <li>
+            Karşılaştırma varsayılan olarak <strong>yalnız dosyada bulunan şubelerle</strong>{" "}
+            yapılır. Tek bir şubenin listesini yüklemek diğer şubelere dokunmaz; dosyadaki bir
+            şubede kayıtlı olup dosyada bulunmayan öğrenci ayrılış havuzuna eklenir.{" "}
+            <strong>
+              Başka bir şubeye geçtiği için bu dosyada bulunmayan öğrenci de havuza eklenir.
+            </strong>{" "}
+            Bu yüzden yeni ders yılı başında ya da şube değişikliklerinden sonra listeyi şube şube
+            yüklemeyin: okulun bütün şubelerini içeren listeyi tek dosyada yükleyin. (Şube şube
+            yüklerseniz de kimse ayrılmaz; öğrenci yeni şubesinin listesi gelene kadar havuzda
+            bekler.)
+          </li>
+          <li>
+            “Bu dosya okulun tam listesidir” kutusunu yalnız okulun bütün şubelerini içeren dosyada
+            işaretleyin: işaretlenirse dosyada hiç bulunmayan şubelerdeki öğrenciler de ayrılış
+            havuzuna eklenir.
+          </li>
+          <li>
+            Bir satır atlanırsa (ad ya da sınıf okunamadıysa) o satırdaki okul numarasına sahip
+            öğrenci havuza eklenmez. Okul numarası boş bir öğrenci satırı kimin olduğu bilinemediği
+            için o şubeden kimseyi havuza eklemez. Önizleme bu satırları numarasıyla gösterir.
+          </li>
+        </ul>
+
+        <AltBaslik>Öğretmen ve diğer personel listesi</AltBaslik>
+        <p>
+          e-Okul&apos;da Kurum İşlemleri → Raporlar → <strong>OOK01001R1</strong> — Personel Listesi
+          raporunu Excel olarak indirip “Öğretmenler ve Diğer Personel” sekmesindeki panele
+          değiştirmeden yükleyin. Ad-soyad okunur; görev sütunu yalnız <strong>üye türünü</strong>{" "}
+          (Öğretmen ya da Diğer personel) belirlemek için kullanılır ve saklanmaz, branş hiç
+          okunmaz. Görevi tanınmayan satırlar için önizlemede üye türünü denetleme uyarısı çıkar; bu
+          satırlar öğretmen olarak açılır, gerekirse kişiyi düzenleyip “Diğer personel”i seçin.
+          Ödünç sayı sınırı üye türüne göre uygulanır.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            Kişiler ad-soyadla eşleştirilir. Kayıtta olup listede bulunmayanlar ayrılış havuzuna
+            eklenir; kimse kendiliğinden ayrılmaz.
+          </li>
+          <li>
+            <strong>Olası aynı kişi:</strong> listedeki yeni bir ad kayıttaki bir kişiye benziyorsa
+            (ör. soyadı değişimi) önizleme ikisini birlikte gösterir. Bu kişiyi ayrıldı diye
+            işaretlemeyin; aktardıktan sonra “Birleştir” düğmesine basın (aynı düğme “Ayrılış
+            Havuzu” sekmesinde de vardır). Eski kaydın kütüphane bağları yeni kayda taşınır ve eski
+            kayıt silinir. Benzerlik yalnız addan hesaplanır: okula yeni gelen bir adaş da eş olarak
+            görünebilir. Her satır <strong>neden aday olduğunu</strong> yazar (“adı aynı, soyadı
+            farklı”, “ad-soyadında küçük yazım farkı” gibi); havuzda ayrıca adayın üye türü ve
+            sicile eklendiği gün görünür. Birleştirme geri alınamadığı için onay kutusunu
+            işaretlemeden düğme açılmaz: kutuyu yalnız iki kaydın aynı kişiye ait olduğundan
+            eminseniz işaretleyin.
+          </li>
+        </ul>
+
+        <AltBaslik>Ayrılış Havuzu</AltBaslik>
+        <p>
+          <Ekran to="/kisiler?tab=havuz">Kişiler → Ayrılış Havuzu</Ekran> aktarımda listede
+          bulunmayan kişileri toplar. Havuzdaki kişinin durumu <strong>aktif kalır</strong>: hiçbir
+          kayıt kendiliğinden ayrılmış sayılmaz, silinmez. Her kişi için iki seçenek vardır:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>“Ayrıldı olarak işaretle”</strong> (onay ister): kişi okuldan ayrılmış sayılır
+            ve seçicilerden düşer. Kaydı silinmez; sicilde “Ayrıldı · gg.aa.yyyy” rozetiyle kalır,
+            iade etmediği kitap varsa izlenebilir (bkz. İlişik Listesi bölümü). Sonraki bir e-Okul
+            listesinde yeniden görünürse kaydı yeniden aktif olur. Ayrılışın üzerinden iki yıl
+            geçince (süre Kütüphane Politikası&apos;ndadır) kayıt, kütüphaneyle açık işi yoksa,
+            onayınızla silinmek üzere Ayarlar → Saklama&apos;ya düşer (bkz. Saklama ve
+            Anonimleştirme).
+          </li>
+          <li>
+            <strong>“Aktif kalsın”</strong>: kişi havuzdan çıkar, hiçbir şey değişmez. Bir sonraki
+            listede yine bulunmazsa havuza yeniden girer.
+          </li>
+        </ul>
+        <p>
+          Satırlar tek tek ya da toplu seçilebilir; “Sınıf” süzgeci yıl sonunda mezun şubeleri bir
+          kerede işaretlemeye yarar. Her satırda kişinin havuza hangi gün ve hangi aktarımla girdiği
+          yazar. Genel Bakış&apos;taki “Ayrılış Havuzu” kartı bekleyen kişi sayısını gösterir ve
+          buraya getirir. Ayarlar → Kütüphane Politikası&apos;nda “Bakanlık sistemi kullanımda”
+          açıksa ekranın üstünde, ayrılan kişinin kaydını orada da güncellemenizi hatırlatan bir not
+          durur; kişiyi Öğrenciler ya da Öğretmenler ve Diğer Personel sekmesinde düzenleme
+          penceresinden “Ayrıldı olarak işaretle” ile ayırdığınızda da onay penceresi aynı
+          hatırlatmayı yazar (bkz. Dökümler ve Dışa Aktarım).
+        </p>
+        <Ipucu>
+          <p>
+            Ayrılan kişilerin kayıtları bu sürümde programda kalır. Kayıtların ne kadar süre
+            saklanacağı ve otomatik silinmesi sonraki sürümlerde gelecek; o zamana kadar gereksiz
+            bulduğunuz bir kaydı düzenleme penceresindeki “Sil” ile kaldırabilirsiniz. Bu yalnız hiç
+            kütüphane üyesi olmamış kişinin kaydında yapılabilir: üye olmuş kişinin kaydı, ödünç
+            kayıtları izlenebilsin diye silinmez. Kendisine kitap teslim edilmiş öğretmenin kaydı da
+            aynı nedenle silinmez.
+          </p>
+        </Ipucu>
+
+        <AltBaslik>Elle kayıt ve ayrılış</AltBaslik>
+        <p>
+          Tek kişi eklemek için “Öğrenci ekle” ya da “Kişi ekle” düğmesini kullanın; düzenlemek için
+          listedeki satıra tıklayın. Okuldan ayrılan kişi için düzenleme penceresindeki “Ayrıldı
+          olarak işaretle”yi seçin: kişi seçicilerden düşer, kaydı silinmez ve “Ayrıldı ·
+          gg.aa.yyyy” rozetiyle kalır. “Sil” yalnız yanlış girilmiş kayıtlar içindir.
+        </p>
+        <p>
+          Okul numarası şifreli saklandığı için arama numaranın tamamıyla yapılır; numaranın bir
+          parçasıyla arama yapılamaz. Öğrenci aktarımında görülen şubeler{" "}
+          <Ekran to="/ayarlar?tab=subeler">Ayarlar → Şubeler</Ekran>&apos;e kendiliğinden eklenir.
+        </p>
+        <Ipucu>
+          <p>
+            e-Okul listeleri kişisel veri içerir. Dosyayı bu bilgisayara şifreli bir taşıyıcıyla
+            (ör. parolalı USB bellek) getirin ve aktarım biter bitmez silin; İndirilenler klasörünü
+            ve Geri Dönüşüm Kutusu&apos;nu da denetleyin. Listeyi e-postayla göndermeyin, ortak
+            klasörde bırakmayın.
+          </p>
+        </Ipucu>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="kapali-gunler">
+        <p>
+          <Ekran to="/ayarlar?tab=kapali-gunler">Ayarlar → Kapalı Günler</Ekran> kütüphanenin kapalı
+          olduğu günleri takvim yılına göre listeler. Dört tür vardır, her biri rozetle gösterilir:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Resmî tatil</strong> ve <strong>Dini bayram</strong>: “Resmî ve dini tatilleri
+            ekle” düğmesi seçili yılın tatillerini ekler; düğmeye yeniden basmak aynı kaydı ikinci
+            kez eklemez.
+          </li>
+          <li>
+            <strong>Öğrenciye kapalı gün</strong>: ara tatil ve yarıyıl. Kanunen tatil değildir,
+            okulda mesai sürer; bu yüzden tatillerden ayrı tutulur.
+          </li>
+          <li>
+            <strong>İdari izin / diğer</strong>: personelin de izinli olduğu, kütüphanenin kapalı
+            kaldığı günler.
+          </li>
+        </ul>
+        <p>
+          “tahmini” rozetli dini bayram tarihleri hesapla bulunmuştur ve bir gün kayabilir. Diyanet
+          takvimi kesinleşince kontrol edin; tarih farklıysa kaydı silip doğru tarihle “Dini bayram”
+          türünde yeniden ekleyin. Programda tarihi hiç bulunmayan yıllarda dini bayramları aynı
+          yolla elle girersiniz.
+        </p>
+        <p>
+          Ara tatil ve yarıyılı “Kapalı Gün Ekle” formuyla girin: adı (ör. Yarıyıl tatili), türü
+          “Öğrenciye kapalı gün”, başlangıç ve bitiş tarihini yazıp “Ekle”ye basın; bitiş boş
+          bırakılırsa tek gün sayılır. Ders yılı kurulum sihirbazında ya da Ayarlar → Ders
+          Yılları&apos;nda kaydedilip aktifleştirilince iki takvim yılının tatilleri kendiliğinden
+          eklenir. Bir yılın tatilleri yine de eksikse o yılı seçip “Resmî ve dini tatilleri ekle”yi
+          kullanın.
+        </p>
+
+        <AltBaslik>İade tarihindeki anlamı</AltBaslik>
+        <Mevzuat kaynak={`${YONETMELIK}, md. 18/1`}>
+          “Bir kitabı ödünç alma süresi on beş gündür.”
+        </Mevzuat>
+        <p>
+          Kapalı günler ödünçte iade tarihinin hesabında kullanılır. İade tarihi, ödünç verildiği
+          günden on beş gün sonrasıdır; o gün kapalı bir güne denk gelirse iade tarihi izleyen ilk
+          açık güne kayar. Kaydırmanın dayanağı günün türüne göre değişir:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Hafta sonu, resmî tatil ve dini bayram</strong> her zaman kapalıdır. Yönetmelik,
+            sürenin son günü tatile rastlarsa ne olacağını söylemez; program Türk Borçlar
+            Kanunu&apos;ndaki genel kuralı kıyasen uygular.
+          </li>
+          <li>
+            <strong>İdari izin ve diğer kapalı günler</strong> de her zaman kapalı sayılır. Bu bir
+            mevzuat hükmü değil, programın kuralıdır: idari izin kanunda tatil sayılmaz, ama
+            kütüphane o gün kapalı olduğu için kitap iade edilemez.
+          </li>
+          <li>
+            <strong>Öğrenciye kapalı günlerde</strong> (ara tatil, yarıyıl) kaydırma bir mevzuat
+            hükmü değil, okulun tercihidir: öğrenciler bu günlerde okulda olmadığı için kitabı iade
+            edemez.
+          </li>
+        </ul>
+        <Mevzuat kaynak="Türk Borçlar Kanunu, md. 93">
+          “İfa zamanı veya sürenin son günü, kanunlarda tatil olarak kabul edilen bir güne
+          rastlarsa, kendiliğinden bu günü izleyen ve tatil olmayan ilk güne geçer.”
+        </Mevzuat>
+        <p>
+          Kapalı bir günü silerseniz bundan sonra hesaplanan iade tarihlerinde o gün açık gün
+          sayılır.
+        </p>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="katalog">
+        <p>
+          Kenar çubuğundaki <Ekran to="/katalog">Katalog</Ekran> kütüphanenin künye ve nüsha
+          kayıtlarını tutar. Sayfanın iki sekmesi vardır: “Eserler” ve “Nüshalar”.
+        </p>
+
+        <AltBaslik>Eser ve nüsha</AltBaslik>
+        <p>
+          <strong>Eser</strong> künyedir: kaynak adı, yazar, yayınevi, konu, ISBN, sınıflama.{" "}
+          <strong>Nüsha</strong> rafta duran kitabın kendisidir. Aynı kitaptan beş tane aldıysanız
+          bir eser ve beş nüsha olur; her nüshanın kendi barkodu ve kayıt numarası vardır, her biri
+          ayrı ödünç verilir. Künye bir kez yazılır, nüshalar ona bağlanır.
+        </p>
+        <p>
+          “Eserler” sekmesinde arama kaynak adı, yazar, konu ve ISBN üzerinde çalışır; yazmayı
+          bırakınca sonuç kendiliğinden gelir. Büyük-küçük harf farkı aranmaz: “şiir” ile “ŞİİR”,
+          “İnce” ile “ince” aynı sonucu verir. Düzeltme işareti (şapka) de aranmaz: “rüzgar” yazınca
+          “Rüzgâr Gibi Geçti” bulunur. Ama <strong>“ı” ile “i” ayrı harflerdir</strong>: “ılık” ile
+          “ILIK” “Ilık Sular”ı getirir, “ilik” ise “İlik Nakli”ni — Türkçede bunlar iki ayrı harftir
+          ve program onları birleştirmez. “Sırala” kutusunda üç katalog ekseni vardır — “Kaynak
+          adına göre”, “Yazar adına göre”, “Konuya göre” — ve bir de “En yeni eklenen”. Üç eksen
+          Yönetmelikteki katalog düzenidir; sıralama Türkçe alfabeye göre yapılır, Ç ve Ş harfleri
+          listenin sonuna atılmaz.
+        </p>
+        <Mevzuat kaynak={`${YONETMELIK}, md. 11/1`}>
+          “Kataloglar; yazar adı, kaynak adı ve konularına göre alfabetik olarak düzenlenir.”
+        </Mevzuat>
+        <p>
+          “Nüshalar” sekmesi fiziksel eksendir: barkodun tamamını yazarak tek kitabı bulursunuz
+          (numaranın bir parçasıyla arama yapılmaz), bölüme ve duruma göre süzersiniz. Üç kutu
+          listeyi daraltır: “Yalnız ödünç verilebilenler”, “Yalnız etiketlenmemişler” (barkod
+          etiketi basılmamış nüshalar) ve “Kayıttan düşülenleri gizle”. Listeler sayfalıdır; bir
+          süzgeci değiştirince ilk sayfaya dönülür.
+        </p>
+        <p>
+          Yeni künye “Eser ekle” düğmesiyle açılır. Listede bir satıra tıklamak{" "}
+          <strong>Eser Ayrıntısı</strong> sayfasını getirir: künye kartı, “Künyeyi düzenle” ve “Sil”
+          düğmeleri, altında da o eserin nüshaları. Nüsha “Nüsha ekle” ile açılır; “Nüsha sayısı”na
+          birden büyük bir sayı yazarsanız aynı künyeden o kadar nüsha tek işlemde açılır (bir
+          seferde en çok 50) ve her biri ayrı numara alır. “Eski kayıt no” yalnız tek nüsha açarken
+          yazılır, çünkü her kitabın damgası başkadır.
+        </p>
+        <Ipucu>
+          <p>
+            Bu ekran tek tek kayıt içindir. Kitabı elinize alıp ISBN barkodunu okutarak girmek için{" "}
+            <Ekran to="/katalog/hizli-kayit">Katalog → Hızlı Kayıt</Ekran>, hazır bir listeyi
+            topluca almak için <Ekran to="/katalog/ice-aktarma">Katalog → İçe Aktarma</Ekran>{" "}
+            ekranını kullanın. İkisi de aşağıda anlatılır; iki bağlantı da Katalog sayfasının sağ
+            üstündedir.
+          </p>
+        </Ipucu>
+
+        <AltBaslik>Bölümler</AltBaslik>
+        <p>
+          Bölüm, kütüphanenin konu bölümüdür (Edebiyat, Tarih, Başvuru gibi). Serbest metin değil,
+          kontrollü bir listedir: <Ekran to="/ayarlar?tab=bolumler">Ayarlar → Bölümler</Ekran>
+          &apos;den “Bölüm ekle” ile tanımlanır, eser ve nüsha formlarında seçilir. Böylece
+          “Edebiyat”, “edebiyat” ve “EDEBİYAT” tek bölüme düşer; raf etiketleri ve ağdaki dizinler
+          tutarlı kalır.
+        </p>
+        <p>
+          Her bölümün isteğe bağlı bir Dewey Onlu Sınıflama (DOS) aralığı (“DOS aralığı başı” ve
+          “DOS aralığı sonu”, ör. 800-899), bir “Kısa tarif”i ve bir “Sıra” numarası vardır; küçük
+          sıra numarası önce gelir, eşitlikte ad sırası uygulanır. Aralık yalnız bilgilendirmedir:
+          aralığın dışında kalan bir eseri de o bölüme koyabilirsiniz, program engellemez. İçinde
+          eser ya da nüsha bulunan bölüm silinemez; önce kayıtları başka bir bölüme taşıyın.
+        </p>
+
+        <AltBaslik>Sınıflama kodu ve yer numarası</AltBaslik>
+        <p>
+          “Sınıflama kodu” kitabın DOS kodudur (ör. 813.54). “Yer numarası” sırt etiketine basılacak
+          numaradır ve kitabın rafta duracağı yeri söyler. Boş bırakırsanız program onu sınıflama
+          kodu ile yazar soyadının ilk üç harfinden üretir: “813.54 STE”. Soyad, “Yazar(lar)”
+          alanındaki ilk adın son sözcüğü sayılır; bileşik soyadlarda bu sezgi yanılabilir, bu
+          yüzden alan elle değiştirilebilir bırakılmıştır. Yazarı “Ad Soyad” sırasıyla yazın, birden
+          çok yazarı virgülle ayırın. Aynı eserin bütün nüshaları aynı yer numarasını taşır.
+        </p>
+        <p>
+          “Sınıflama kaynağı” kodun nereden geldiğini söyler: “Katalogdan bulundu”, “Tahmini” ya da
+          “Elle girildi”. “Tahmini” işaretli kodları raf düzenini kurarken gözden geçirin.
+        </p>
+
+        <AltBaslik>ISBN</AltBaslik>
+        <p>
+          ISBN kitabın künye sayfasında yazan numaradır; tireli yazabilirsiniz, program tireleri
+          atar. On haneli bir numara yazarsanız 13 haneli karşılığı da hesaplanır ve ikisi birden
+          aramaya girer: elinizdeki eski numarayla da arama yapabilirsiniz. Numaranın son hanesi
+          (sağlama hanesi) tutmuyorsa ya da uzunluk 10 ile 13&apos;ten başkaysa{" "}
+          <strong>kayıt engellenmez</strong>: numara olduğu gibi saklanır, ekranda “ISBN uyarısı”
+          bandı durur. Saha verisi bozuk olabilir; uyarıyı görünce kitabın künye sayfasından
+          denetleyin. Aynı ISBN&apos;li birden çok künye bulunabilir, program buna da karışmaz.
+        </p>
+        <Ipucu>
+          <p>
+            Kitabın arkasındaki çizgili kod ISBN barkodudur, kütüphane etiketi değildir: 13
+            hanelidir ve 978 ya da 979 ile başlar. Dolaşım Masası&apos;nda ISBN barkodu okutulursa
+            program “Bu ISBN barkodu. Kitabın kütüphane etiketini okutun.” der. “Nüshalar”
+            sekmesindeki “Barkod” kutusu da yalnız kütüphane etiketini arar: ISBN barkodu
+            okutursanız liste boş kalır.
+          </p>
+        </Ipucu>
+
+        <AltBaslik>Barkod ve kayıt no</AltBaslik>
+        <p>
+          Her nüsha açıldığında programdan iki numara alır: <strong>barkod</strong> ve{" "}
+          <strong>kayıt no</strong>. İkisi de aynı sayaçtan doğar ve aynı sayıdır. Barkod on
+          hanedir, ilk dört hane nüshanın açıldığı yıl, kalan altı hane o yılın sıra numarasıdır;
+          etikette ve ekranda “2026-000123” diye yazılır. Kayıt no aynı sayının düz hâlidir
+          (2026000123) ve Taşınır Kütüphane Defteri dökümünde bu sayı kullanılır. Numaraları siz
+          girmezsiniz ve değiştiremezsiniz; nüsha penceresinde barkod, kayıt no ile barkod etiketi,
+          sırt etiketi ve etiket doğrulaması tarihleri yalnız bilgi satırıdır. Tarihleri Etiketler
+          ekranı yazar: basım tarihini “Basıldı olarak işaretle”, doğrulama tarihini doğrulama
+          okutması.
+        </p>
+        <p>
+          <strong>Bir numara asla yeniden kullanılmaz.</strong> Yanlış açılmış bir nüshayı
+          silerseniz numarası boşta kalır, başka bir kitaba verilmez: taşınır kayıtları ve eski
+          defterler geriye doğru okunabilir kalmalıdır. Bu yüzden nüsha penceresindeki “Sil” yalnız
+          veri giriş hatası içindir. Bir ayıklama teklifine ya da el yazması ve nadir eserler
+          listesine girmiş nüsha da silinmez. Ayıklanan, kaybolan ya da devredilen kitap silinmez:
+          kaybolan kitap için kayıp bildirilir (bkz. Kayıp, Hasar ve Onarım bölümü); ayıklanan kitap
+          Ayıklama ekranında kayıttan düşülür ya da devredilir ve kayıt defterinde kalır (bkz.
+          Ayıklama ve Nadir Eserler bölümü).
+        </p>
+        <p>
+          Kitabın üzerinde eski bir damga ya da defter numarası varsa “Eski kayıt no” alanına yazın;
+          programın verdiği numarayla karışmaz. Taşınır kaydındaki karşılığı biliyorsanız Taşınır
+          Kayıt ve Yönetim Sistemi (TKYS) kodunu “TKYS kodu” alanına yazabilirsiniz; program bu kodu
+          doğrulamaz. Bu alan hiçbir işlemde zorunlu değildir: okulunuz TKYS’de nüsha bazında kayıt
+          tutmuyorsa boş bırakın.
+        </p>
+
+        <AltBaslik>Ödünç verilmeyen kaynaklar</AltBaslik>
+        <p>
+          Bir nüshanın ödünç verilip verilemeyeceği tek yerden belirlenir. Nüsha penceresindeki iki
+          kutu doğrudan Yönetmelikten gelir: “Danışma kaynağı (ödünç verilmez)” ve “Piyasada mevcudu
+          yok (ödünç verilmez)”. Üçüncüsü kaynak türüdür: “Süreli yayın” türündeki eserin nüshaları
+          ödünç verilmez (“Ciltli süreli yayın” kutusu ciltlenmiş yıllıkları işaretler).
+        </p>
+        <Mevzuat kaynak={`${YONETMELIK}, md. 16/1`}>
+          “Ancak; a) Danışma kaynakları, b) Piyasada mevcudu bulunmayan kitaplar, c) Süreli
+          yayınlar, ödünç verilmez.”
+        </Mevzuat>
+        <p>
+          Listelerde bu nüshalar gerekçesiyle görünür: “Ödünç verilmez — kütüphanede okunur.”,
+          “Piyasada mevcudu yok — ödünç verilmez.”, “Süreli yayın — ödünç verilmez.” Gerekçe kişisel
+          veri taşımaz; masada öğrencinin de gördüğü ekranda durabilir.
+        </p>
+        <p>
+          Danışma kaynağı kütüphanede okunan, dışarı çıkmayan kaynaktır.{" "}
+          <strong>Ders kitapları da danışma dermesindedir</strong>: ders kitabı nüshalarında bu
+          kutuyu işaretleyin.
+        </p>
+        <Mevzuat kaynak={`${YONETMELIK}, md. 14/1-a`}>
+          “Danışma dermesi oluşturulur. Burada ders kitapları, ansiklopediler, sözlükler, atlaslar,
+          yıllıklar, rehberler, bibliyografyalar, kataloglar, listeler ve benzerleri bulundurulur.”
+        </Mevzuat>
+        <p>
+          “El yazması / nadir eser” kutusu ödünç verilebilirliği değiştirmez; bu nüshalar ayıklanmaz
+          ve Nadir Eserler ekranında Genel Müdürlüğe gönderilecek listede toplanır (bkz. Ayıklama ve
+          Nadir Eserler bölümü). Kaynak türleri: Kitap, Süreli yayın, Görsel-işitsel materyal,
+          E-kitap, E-veri tabanı. E-kitap ve e-veri tabanında nüsha açılmaz — bu türlerde “Nüsha
+          ekle” düğmesi yerine “E-kitap ve e-veri tabanında nüsha açılmaz.” yazar.
+        </p>
+
+        <AltBaslik>Edinimler ve bağışlar</AltBaslik>
+        <p>
+          Kütüphaneye giren her nüsha bir <strong>edinim partisine</strong> bağlıdır: kaynağın
+          nereden ve ne zaman geldiğinin kaydıdır. Katalog sayfasının sağ üstündeki{" "}
+          <Ekran to="/katalog/edinimler">Edinimler ve Bağışlar</Ekran> bağlantısı üç sekme açar:
+          “Edinim Partileri”, “Bağış Ön Kayıtları” ve “Komisyon Kararları”.
+        </p>
+        <p>
+          Parti “Edinim ekle” ile açılır. “Edinim yolu” seçenekleri: Bakanlık gönderimi, Satın alma,
+          Bağış, Değişim, Sayım fazlası (kayda giriş), Mevcut koleksiyon (programa aktarım). İlk
+          dördü Yönetmeliğin saydığı yollardır; son ikisi kayıt içi girişlerdir — sayımda çıkan
+          fazlanın kayda alınması ve raftaki eski koleksiyonun programa aktarılmasıdır. Sayım
+          fazlası kitaplar sayım onaylanınca kendiliğinden bir “Sayım fazlası (kayda giriş)”
+          edinimiyle kayda girer (bkz. Sayım bölümü). Sayımda TMY 32/3 durdurması sürerken edinim
+          partisi açılmaz ve yeni nüsha kaydedilmez; Edinimler ve Bağışlar, Hızlı Kayıt ve Eser
+          Ayrıntısı ekranlarında “TMY 32/3 durdurması sürüyor” bandı durur. Programa aktarım taşınır
+          girişi değildir ama durdurma sürerken o da yapılmaz; iletisi Taşınır Mal Yönetmeliğine
+          dayanmaz: “Sayım sürerken programa aktarım yapılamaz; sayım bitince aktarın.” İçe Aktarma
+          ekranında ve Hızlı Kayıt&apos;ta “Mevcut koleksiyon (programa aktarım)” edinimi seçiliyken
+          bant “Sayım sürüyor” der.
+        </p>
+        <Mevzuat kaynak={`${YONETMELIK}, md. 10/5`}>
+          “Kütüphane kaynakları; Bakanlıktan gönderilen kaynaklar ile satın alma, bağış ve imkânlara
+          göre değişim yoluyla sağlanır.”
+        </Mevzuat>
+        <p>
+          “Kaynak notu”na bağışçı, satıcı ya da partinin açıklaması yazılır; kişi adı yazdıysanız
+          şifreli saklanır ve yönetici parolası kurulmadan kaydedilemez. “Birim fiyat” isteğe
+          bağlıdır, ondalık ayracı nokta ile yazılır.
+        </p>
+        <p>
+          <strong>Bağış kataloğa doğrudan girmez.</strong> Okula bağış geldiğinde “Bağış ön kaydı
+          ekle” ile bir ön kayıt açın ve kitapları “Kalem ekle” ile tek tek yazın. Bu aşamada nüsha
+          açılmaz, numara verilmez; liste günler içinde tamamlanabilir, yanlış yazılan kalem “Çıkar”
+          ile listeden alınır.
+        </p>
+        <Mevzuat kaynak={`${YONETMELIK}, md. 10/3`}>
+          “Okul kütüphanesine bağışlanacak kitaplar, bu Yönetmelik çerçevesinde Seçim ve Ayıklama
+          Komisyonu tarafından değerlendirilir.”
+        </Mevzuat>
+        <p>
+          Komisyon toplanınca kararını “Komisyon Kararları” sekmesinde “Karar ekle” ile yazın:
+          “Karar türü”, “Karar tarihi”, “Karar sayısı”, “Başkan adı” ve “Katılımcılar”. Karar
+          türleri “Kaynak seçimi”, “Bağış değerlendirme” ve “Ayıklama”dır; bağış ancak bir bağış
+          değerlendirme kararıyla kataloglanır, ayıklama teklifi ile el yazması ve nadir eserler
+          listesi ancak bir “Ayıklama” kararına bağlanır. Başkan adı ile katılımcılar kişi adıdır ve
+          şifreli saklanır. Komisyona sunulacak bağış ön kayıt listesini ön kaydın penceresinden
+          “Önizle” ya da “PDF&apos;i indir” ile basın; listenin “Kabul / Ret” sütunu komisyonda
+          doldurulur. Karardan sonra ön kayda dönüp “Komisyon kararını uygula” düğmesine basın:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>Kabul edilen kalemleri işaretli bırakın.</li>
+          <li>
+            İşareti kaldırdığınız her kalem için “Ret gerekçesi” zorunludur: okul bağışçıya ne
+            olduğunu buradan söyleyebilir.
+          </li>
+          <li>
+            “Edinim tarihi” boş bırakılırsa komisyon kararının tarihi ile bağışın geliş tarihinden
+            geç olanı kullanılır; tarih karardan ve gelişten önce, bugünden sonra olamaz.
+          </li>
+          <li>
+            Kabul edilen kitap katalogda zaten varsa kalemin altında “Katalogdaki karşılığı”
+            seçicisi çıkar. Birebir eşleşmede nüshalar var olan esere eklenir (istenirse “Yeni eser
+            aç”); yalnız benzeyen eser varsa ancak “… eserine nüsha ekle” seçilirse eklenir.
+          </li>
+          <li>
+            “Kararı uygula” dediğinizde kabul edilenler tek işlemde kataloglanır — künyeleri açılır,
+            nüshaları numaralanır. Reddedilenler gerekçesiyle kayıtta kalır.
+          </li>
+          <li>
+            “Birim fiyat” bağışta bağışçının belgesindeki değer ya da değer tespit komisyonunun
+            belirlediği değerdir (Taşınır Mal Yönetmeliği md. 13/2-c); program değer tespit
+            komisyonunun tutanağını üretmez.
+          </li>
+        </ul>
+        <p>
+          Karar uygulandıktan sonra ön kaydın penceresinde{" "}
+          <strong>Bağış değerlendirme sonucu</strong> basılır (“Önizle”, “PDF&apos;i indir”): kabul
+          edilen ve reddedilen kaynaklar, ret gerekçeleri, komisyon kararının tarihi ve sayısı,
+          edinim tarihi. Çıktı taşınır kayıt yetkilisinin Varlık İşlem Fişine dayanak ve bağışçıya
+          bilgi içindir; bağışçının adını taşır, kişisel veri içeren bir belge gibi saklayın.
+          Taşınır Mal Yönetmeliği&apos;nde “bağış kabul tutanağı” diye bir belge yoktur: bağışlanan
+          kaynağı taşınır kayıt yetkilisi Varlık İşlem Fişi düzenleyerek kayda alır ve fişin bir
+          nüshasını bağışçıya verir (Taşınır Mal Yönetmeliği md. 16/1). Program bu fişi ve Taşınır
+          Geçici Alındısını üretmez; resmî giriş kaydı TKYS&apos;de yapılır.
+        </p>
+        <p>
+          Bu işlem <strong>geri alınamaz</strong>; onay penceresi kaç kalemin kabul, kaç kalemin ret
+          edileceğini yazar. Bağış geri verildiyse ya da liste yanlış girildiyse ön kayıt “İptal et”
+          ile kapatılır ve gerekçe kaydın notlarına yazılır. Bir edinime, bağış ön kaydına, ayıklama
+          teklifine ya da nadir eserler listesine bağlanmış komisyon kararının türü değiştirilemez,
+          kaydı da silinemez: listede “Kullanımda” rozetiyle ve onu kullanan kayıtların sayısıyla
+          görünür. Komisyonun başkanlığı ve karar türlerinin neye bağlandığı Ayıklama ve Nadir
+          Eserler bölümündedir.
+        </p>
+
+        <AltBaslik>Kütüphane Politikası</AltBaslik>
+        <p>
+          <Ekran to="/ayarlar?tab=politika">Ayarlar → Kütüphane Politikası</Ekran> ödünç kurallarını
+          tutar; kurallar ödünç verilirken Dolaşım Masası&apos;nda uygulanır (bkz. Dolaşım Masası
+          bölümü).
+        </p>
+        <p>
+          <strong>Ödünç süresi burada bir ayar değildir ve değiştirilemez.</strong> Yönetmelik
+          süreyi belirlemiştir; panel bunu yalnız bilgi satırı olarak gösterir.
+        </p>
+        <Mevzuat kaynak={`${YONETMELIK}, md. 18/1`}>
+          “Bir kitabı ödünç alma süresi on beş gündür.”
+        </Mevzuat>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>“Ödünç Sınırları”:</strong> Yönetmelik öğrenciye bir defasında en fazla üç,
+            öğretmene en fazla beş kitap der. Sayıları okul daha düşük tutabilir, bu üst değerlerin
+            üstüne çıkamaz.
+          </li>
+          <li>
+            <strong>“Diğer personele ödünç verilir”:</strong> Yönetmelik ödünç servisinde öğrenci
+            ile öğretmeni sayar, diğer personeli saymaz. Seçeneği açarsanız “Müdürlük kararı tarihi”
+            ve “Müdürlük kararı sayısı” zorunludur: okul bu kararı kendi sorumluluğunda alır.
+          </li>
+          <li>
+            <strong>“Gecikmiş kitabı olana yeni ödünç verilmez”:</strong> okulun tercihidir;
+            kapatılabilir. Açıkken istisnası yalnız yönetici kipinde ve gerekçeyle yapılır (bkz.
+            Dolaşım Masası bölümü).
+          </li>
+          <li>
+            <strong>“İade tarihi öğrenciye kapalı günlerde kaydırılır”:</strong> ara tatil ve
+            yarıyıl için geçerlidir ve okulun tercihidir (bkz. Kapalı Günler). Resmî tatil, dini
+            bayram ve hafta sonu kaydırması bu ayardan bağımsızdır, her zaman uygulanır.
+          </li>
+          <li>
+            <strong>“Yıl sonu son ödünç tarihi”</strong> ve{" "}
+            <strong>“Son sınıflar için son ödünç tarihi”:</strong> bu tarihlerden sonra yeni ödünç
+            verilmez. İkincisi isteğe bağlıdır, mezun olacak sınıflar için daha erken bir tarih
+            yazmanızı sağlar.
+          </li>
+          <li>
+            <strong>“Çok okunanlar için en az üye sayısı”:</strong> bir eser çok okunanlar listesine
+            ancak en az bu kadar farklı üye ödünç aldıysa girer; sayı hiçbir yerde gösterilmez. 3
+            ile 10 arasında ayarlanır (varsayılan 5). Aynı sayı istatistikte ve yıl sonu raporunda
+            küçük grupların gizlenme eşiğidir (bkz. Raporlar ve Çok Okunanlar).
+          </li>
+          <li>
+            <strong>“Bakanlık sistemi kullanımda”:</strong> varsayılan olarak kapalıdır ve yalnız
+            hatırlatma açar; hiçbir kaydı değiştirmez (bkz. Dökümler ve Dışa Aktarım).
+          </li>
+          <li>
+            <strong>Saklama süreleri:</strong> üyelik sonlandıktan, ödünç iade edildikten, kayıp ya
+            da hasar dosyası kapandıktan, teslim geri alındıktan ve kişi okuldan ayrıldıktan kaç yıl
+            sonra kaydın silineceğini ya da kişiyle bağının koparılacağını belirler. Süresi dolan
+            kayıtlar kendiliğinden silinmez; siz onaylayana dek{" "}
+            <Ekran to="/ayarlar?tab=saklama">Ayarlar → Saklama</Ekran>&apos;da beklerler (bkz.
+            Saklama ve Anonimleştirme). Kütüphane aydınlatma metni süreleri buradan alır.
+          </li>
+        </ul>
+        <Ipucu>
+          <p>
+            Ödünç kaydı bir başarı ya da okuma ölçüsü değildir: öğrenci bazlı ödünç sayısı öğretmene
+            ya da e-Okul&apos;a aktarılmaz, program not ya da başarı bilgisi tutmaz. Çok okunanlar
+            listesi de sayı göstermez, yalnız sırayı verir.
+          </p>
+        </Ipucu>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="hizli-kayit">
+        <p>Raftaki kitapları programa geçirmenin iki yolu vardır; kılavuz ikisini de anlatır:</p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Önce liste:</strong> kitaplar Excel&apos;de yazılır, dosya programa aktarılır,
+            sonra etiketler basılıp raf raf yapıştırılır. Elinizde hazır bir liste varsa (eski bir
+            defter, bir bağış listesi ya da başka bir okuldan gelen dosya) bu yol hızlıdır; aşağıda
+            Katalog Excel Şablonu ve İçe Aktarma bölümlerinde anlatılır.
+          </li>
+          <li>
+            <strong>Önce etiket:</strong> boş barkod etiketleri önceden basılıp kitaplara
+            yapıştırılır; kitap elde ISBN okutulur, künye yazılır ve kitaptaki etiket okutularak
+            nüsha o numarayla açılır. <strong>Okulun asıl yolu budur</strong>, çünkü okulda hazır
+            bir kitap listesi yoktur ve katalog kitap kitap kurulur. Bu yolun ekranı{" "}
+            <Ekran to="/katalog/hizli-kayit">Katalog → Hızlı Kayıt</Ekran>&apos;tır.
+          </li>
+        </ul>
+        <p>
+          İki yol birbirini dışlamaz: listesi olan bölümleri aktarıp gerisini kitap kitap
+          girebilirsiniz. Etiketler iki yolda da{" "}
+          <Ekran to="/katalog/etiketler">Katalog → Etiketler</Ekran> ekranından basılır; önce etiket
+          yolunun adımları aşağıdaki Etiketler bölümünde sırasıyla anlatılır.
+        </p>
+        <Ipucu>
+          <p>
+            Geçiş dönemindeki kural: ödünç istenen etiketsiz bir kitap masaya geldiğinde onu
+            bekletmeyin, Hızlı Kayıt&apos;ta “Etiket yok — yeni numara ver” seçeneğiyle o an
+            kaydedip çıkan “Etiketini bas” düğmesiyle tek etiketini basın. Dönüşüm bitene kadar
+            kâğıt defter açık kalır, bittiğinde kapatılır.
+          </p>
+        </Ipucu>
+
+        <AltBaslik>Kitabı okutmak</AltBaslik>
+        <p>
+          Ekran açıldığında imleç “ISBN barkodu” kutusundadır. Kitabın arka kapağındaki ISBN
+          barkodunu okutun; okuyucunuz yoksa numarayı yazıp <Tus>Enter</Tus>&apos;a ya da “Künyeyi
+          getir” düğmesine basın. Nüsha açıldıktan sonra künye ve nüsha alanları boşalır ve imleç
+          yeniden bu kutuya döner, böylece sıradaki kitabı doğrudan okutabilirsiniz; edinim ve bölüm
+          seçiminiz korunur, çünkü aynı parti arka arkaya girilir. Yanlış bir kayda başladıysanız
+          “Formu temizle” deyin.
+        </p>
+        <p>
+          Program ne okuttuğunuzu tanır: kütüphane etiketi ya da üye kartı okutulursa kayıt
+          başlamaz, “Bu bir kütüphane etiketi. Hızlı kayıtta kitabın arka kapağındaki ISBN barkodu
+          okutulur.” der. “Kitaptaki etiketi okutun” seçiliyken bu kutuya etiket okutursanız program
+          önce ISBN barkodunu okutmanızı, etiketi de “Kütüphane etiketi” kutusuna okutmanızı söyler.
+        </p>
+        <AltBaslik>Künye nereden gelir</AltBaslik>
+        <p>
+          <strong>ISBN ile künye getirme</strong> açıksa program numarayı iki dış katalogda arar ve
+          künye <strong>önerisi</strong> getirir: önce Kültür ve Turizm Bakanlığı&apos;nın halk
+          kütüphaneleri kataloğuna, orada bulunamazsa Open Library&apos;ye bakar. Öneri bir kaynak
+          ve tarih etiketiyle (“Bakanlık kataloğu, 23.09.2026”) ve “Dış kaynaktan alındı,
+          doğrulayın” rozetiyle gelir. Her alanın yanında bir kutu vardır: işaretini kaldırdığınız
+          alan forma yazılmaz, “Seçilenleri forma yaz” dediğinizde yalnız işaretlediğiniz alanlar
+          dolar ve dolu bir alanın üzerine sessizce yazılmaz.
+        </p>
+        <p>
+          <strong>Gelen künyeyi kitabın künye sayfasından doğrulayın.</strong> Bu kayıtlar başka
+          kurumların kataloglarından gelir, okulun kendi kaydı değildir ve hatalı olabilir: Open
+          Library&apos;nin Türkçe kayıtlarında düşen harfler, yanlış yayın tarihleri ve yazar
+          sanılmış çevirmenler görülmüştür. <strong>Çevirmen alanı dışarıdan doldurulmaz</strong>:
+          kaynaklar çevirmeni yazardan ayırmadığı için çeviri eserlerde çevirmeni siz yazarsınız.
+          Aynı numarayla birden çok kayıt bulunursa program kaç kayıt bulduğunu yazar ve en
+          ayrıntılısını getirir.
+        </p>
+        <p>
+          Bir numara ikinci kez sorulduğunda program dışarıya çıkmaz, ilk gelen künyeyi gösterir ve
+          “daha önce sorulduğu için yeniden sorulmadı” der. Gelen künye bozuk ya da eksikse
+          <strong> “Yeniden getir”</strong> deyin: program o numarayı kaynağa yeniden sorar. Form
+          doluysa gelen alanlar kendiliğinden yazılmaz; hangilerini istediğinizi işaretleyip
+          “Seçilenleri forma yaz” dersiniz.
+        </p>
+        <p>
+          Ayar <Ekran to="/ayarlar?tab=politika">Ayarlar → Kütüphane Politikası</Ekran> ekranının
+          “Künye Getirme” bölümündedir: “ISBN ile künye getirme açık” anahtarı{" "}
+          <strong>varsayılan olarak kapalıdır</strong> ve kaynak seçenekleri o anahtar açılmadan
+          işaretlenemez. Kapalıyken program bu iş için hiçbir bağlantı kurmaz; künyeyi elle yazmak
+          her koşulda tam işlevlidir. Açtığınızda dışarıya yalnız numaranın kendisi gider: okul adı,
+          kitap listesi, kişi bilgisi ya da kitabın kütüphane barkodu gönderilmez. İnternet yoksa ya
+          da adres kapalıysa program aksamaz, “İnternetten getirilemedi, elle girebilirsiniz.” der.
+        </p>
+        <Ipucu>
+          <p>
+            Kütüphane masasında internet yoksa ayarı kapalı bırakın. Künye eksiğini dosyayla da
+            kapatabilirsiniz:{" "}
+            <Ekran to="/katalog/ice-aktarma?tab=cevrimdisi">
+              Katalog → İçe Aktarma → Çevrimdışı Künye
+            </Ekran>{" "}
+            (aşağıda anlatılır). Kurum bilgisayarına telefon ya da mobil modem bağlayarak internet
+            alınmaz.
+          </p>
+        </Ipucu>
+        <AltBaslik>Aynı kitabın ikinci nüshası</AltBaslik>
+        <p>
+          Okuttuğunuz numara katalogda zaten varsa program bunu söyler ve “Bu esere nüsha ekle”
+          düğmesini gösterir; düğmeye bastığınızda künye formu kapanır, çünkü künye yeniden
+          yazılmaz. Aynı kitabı ikinci kez kataloglamayın: künye tektir, her kitap onun bir
+          nüshasıdır. Bu arama yerel kataloğunuzda yapılır, dışarıya bir şey sorulmaz.
+        </p>
+        <p>
+          Sonra “Nüsha” bölümünde edinimi, nüsha sayısını, bölümü ve gerekiyorsa eski kayıt
+          numarasını yazıp “Nüshayı aç” deyin; ders kitabı gibi ödünç verilmeyecek bir kaynaksa
+          “Danışma kaynağı (ödünç verilmez)” kutusunu işaretleyin. Barkod ve kayıt numarasını
+          program verir; numara asla yeniden kullanılmaz. Açılan nüshanın etiketi Etiketler → Basım
+          Kuyruğu&apos;nda bekler; kitap elinizdeyse kayıttan sonra çıkan “Etiketini bas” düğmesiyle
+          hemen basabilirsiniz. Etiket bekleyenleri{" "}
+          <Ekran to="/katalog?tab=nushalar">Katalog → Nüshalar</Ekran> sekmesinde “Yalnız
+          etiketlenmemişler” kutusuyla da görürsünüz.
+        </p>
+        <AltBaslik>Kitaptaki etiketi okutmak</AltBaslik>
+        <p>
+          Kitaplara önceden basılmış boş barkod etiketi yapıştırdıysanız “Kitabın etiketi” kartında{" "}
+          <strong>“Kitaptaki etiketi okutun”</strong> seçili olsun; bağlanmamış boş etiket varken
+          ekran bu seçenekle açılır. Bu yolda her etiket tek bir nüshadır, “Nüsha sayısı” sorulmaz.
+          ISBN okutulduktan sonra imleç “Kütüphane etiketi” kutusuna geçer. Künye eksikse önce onu
+          tamamlayın, sonra kitaba yapıştırdığınız etiketi bu kutuya okutun: okuyucunun gönderdiği
+          Enter kaydı bitirir, nüsha o numarayla açılır, barkod etiketi okutulmuş sayılır ve yalnız
+          sırt etiketi basılmayı bekler. Katalogda aynı ISBN&apos;li eser varsa imleç önce ISBN
+          kutusunda kalır: “Bu esere nüsha ekle” deyin, imleç etiket kutusuna geçer, sonra etiketi
+          okutun. Etiketi künyeyi tamamlamadan okuttuysanız kod kutuda seçili kalır; künyeyi
+          tamamlayıp etiketi yeniden okutunca eski kod silinir, yenisi yazılır.
+        </p>
+        <p>
+          Program etiketi eseri açmadan önce denetler: numara boş barkod aralığından değilse, başka
+          bir kitaba bağlıysa ya da iptal edildiyse nedenini söyler ve eser açılmaz. Etiket zaten
+          kayıtlı bir nüshanınsa elinizdeki kitap büyük olasılıkla o nüshadır: kitabı yeniden
+          kaydetmeyin; başka bir kitapsa etiketi sökün ve boş bir etiket yapıştırın. Kitapta etiket
+          yoksa <strong>“Etiket yok — yeni numara ver”</strong> seçeneğine geçin. Kayıttan sonra
+          çıkan “Sırt etiketini bas” düğmesi o kitabın sırt etiketini hemen basmanızı sağlar; önce
+          etiket yolunun bütün adımları aşağıdaki Etiketler bölümündedir.
+        </p>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="etiketler">
+        <p>
+          <Ekran to="/katalog/etiketler">Katalog → Etiketler</Ekran> ekranı kitapların sırt ve
+          barkod etiketlerini basar, basılanı kayda geçirir ve yapıştırılan etiketi okutarak
+          doğrular. Beş sekmesi vardır: Basım Kuyruğu, Basım Geçmişi, Boş Barkod Aralığı, Doğrulama
+          Okutması, Şablonlar ve Kalibrasyon. Sayfanın üstündeki sayaçlar (“Sırt etiketi bekleyen”,
+          “Barkod etiketi bekleyen”, “Doğrulanmamış etiket”, “Bağlanmamış boş etiket”) tıklanınca
+          ilgili sekmeyi açar. Basıldı olarak işaretlenmemiş bir basım partisi varsa sayaçların
+          üstünde uyarı durur.
+        </p>
+
+        <AltBaslik>Etiket türleri</AltBaslik>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Sırt etiketi</strong> kitabın rafta nereye döneceğini söyler. Yer numarasının
+            boşlukla ayrılmış parçaları alt alta basılır: “813.54 STE” iki satır olur; cilt ya da
+            nüsha bilgisini yer numarasının sonuna yazarsanız (“894.3533 ALİ 2. cilt”) üçüncü satıra
+            geçer. Altında okulun kısa adı yazar. Yer numarası çıkarılamayan kitabın sırtına çizgi
+            (—) basılır; böyle bir kitabın sırt etiketini künyesi tamamlandıktan sonra basın.
+          </li>
+          <li>
+            <strong>Barkod etiketi</strong> masada okutulan kütüphane etiketidir: barkodu, okunur
+            numarası (“2026-000123”), yer numarasını, kısaltılmış kaynak adını ve okulun kısa adını
+            taşır.
+          </li>
+          <li>
+            <strong>Boş barkod etiketi</strong> önce etiket yolunda, kitap kataloğa girmeden
+            basılır: üzerinde yalnız barkod, okunur numara ve okulun kısa adı vardır, kitaba ait
+            bilgi yoktur.
+          </li>
+        </ul>
+        <p>
+          Okulun kısa adı <Ekran to="/ayarlar?tab=okul">Ayarlar → Okul Bilgileri</Ekran>
+          &apos;ndeki “Kısa ad” alanından gelir; en çok 24 karakterdir. Etiket basmadan önce bu
+          alanı doldurun.
+        </p>
+
+        <AltBaslik>Etiket nereye yapıştırılır</AltBaslik>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            Sırt etiketini bütün kitaplarda sırtın alt kenarından aynı yüksekliğe yapıştırın: rafta
+            yer numaraları bir hizada okunur.
+          </li>
+          <li>
+            Sırtı dar kitaplarda (ince çocuk kitapları, broşürler) sırt etiketi sırta sığmaz; onu ön
+            kapağa, sırta yakın köşeye yapıştırın. Bütün ince kitaplarda aynı köşeyi kullanın ki
+            etiket her kitapta aynı yerde aransın.
+          </li>
+          <li>
+            Barkod etiketini de bütün kitaplarda aynı yere yapıştırın; kitabın ISBN barkodunun ve
+            kapak yazısının üstüne gelmesin. Önce etiket yolunda Hızlı Kayıt&apos;ta ISBN barkodu da
+            okutulur.
+          </li>
+        </ul>
+        <Ipucu>
+          <p>
+            Etiketlerin üzerine şeffaf koruyucu bant yapıştırmanızı öneririz: en çok sırt etiketi
+            aşınır, elden ele geçen kitapta barkod da okunmaz hâle gelir. Bandı yapıştırdıktan sonra
+            doğrulama okutmasını yapın; bant parlayıp okuyucuyu şaşırtıyorsa bunu hemen görürsünüz.
+          </p>
+        </Ipucu>
+
+        <AltBaslik>Etiket tabakası seçimi ve satın alma</AltBaslik>
+        <p>
+          Program yaygın tabakaların hazır şablonlarıyla gelir: 38,1 × 21,2 mm ölçüsünde 65&apos;li
+          tabaka (varsayılan; barkod etiketi ve sırt etiketi için aynı tabaka), 48,5 × 25,4 mm
+          ölçüsünde 44&apos;lü ve 52,5 × 29,7 mm ölçüsünde 40&apos;lı tabaka. Şablonların listesi
+          Şablonlar ve Kalibrasyon sekmesindedir.
+        </p>
+        <Ipucu>
+          <p>
+            <strong>Tabaka almadan önce QR kararını verin.</strong> Barkodun yanına QR eklemek
+            isteğe bağlıdır ve varsayılan olarak kapalıdır. QR 65&apos;li tabakanın etiketine
+            sığmaz; QR istenirse 44&apos;lü ya da 40&apos;lı tabaka alınır ve bir tabakaya daha az
+            etiket düşer. QR yalnız barkod numarasını taşır, adres taşımaz. Çizgili barkodu her
+            okuyucu okur, QR&apos;ı okumak için iki boyutlu (2D) okuyucu gerekir; okuyucu
+            alacaksanız ikisini de okuyan iki boyutlu bir USB okuyucu önerilir.
+          </p>
+        </Ipucu>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Kâğıt boyu:</strong> program etiketleri 210 × 297 mm&apos;lik sayfaya dizer; bu
+            boydan başka tabaka almayın.
+          </li>
+          <li>
+            <strong>Kaç tabaka:</strong> her kitaba bir barkod ve bir sırt etiketi gider. 65&apos;li
+            tabakayla 1.000 kitap için 16 barkod ve 16 sırt tabakası gerekir; bozulan etiketler için
+            pay bırakın.
+          </li>
+          <li>
+            <strong>Sırt etiketinin tabakası:</strong> raftaki kitapların sırt genişliğine bakarak
+            seçin; yazı sırtın genişliğine sığmalıdır. Hazır sırt şablonu barkod tabakasıyla aynı
+            65&apos;li tabakadır. Başka bir sırt tabakası alır ve iki etiketi birlikte basmak
+            isterseniz o tabakanın satır ve sütun sayısı barkod tabakasınınkiyle aynı olmalıdır:
+            “Sırt etiketi tabakası” seçicisi yalnız böyle tabakaları listeler. Düzeni tutmayan bir
+            sırt tabakasında iki etiketi ayrı basın: önce “Barkod etiketi”, sonra “Sırt etiketi”
+            içeriğiyle, aynı süzgeç ve basım sırasıyla; etiketler yine aynı kitap sırasıyla çıkar.
+          </li>
+          <li>
+            <strong>Farklı ölçüde tabaka:</strong> Şablonlar ve Kalibrasyon sekmesinde “Yeni şablon”
+            deyip tabaka kutusundaki üretici ölçülerini yazın: etiket genişliği ve yüksekliği, üst
+            ve sol kenar boşluğu, sütun ve satır aralığı, satır ve sütun sayısı. Şablon kartındaki
+            “QR&apos;a uygun” rozeti QR&apos;ın sığdığını, “Barkod bu etikete sığmaz” rozeti
+            tabakanın barkod etiketi için küçük olduğunu gösterir.
+          </li>
+          <li>
+            44&apos;lü şablonun kenar boşlukları yaklaşıktır (adında “yaklaşık ölçü” yazar); ilk
+            basımdan önce kalibrasyon sayfasıyla denetleyin. 40&apos;lı tabaka kâğıdın kenarına
+            kadar uzanır; yazıcıların çoğu ise kâğıdın kenarından 4-5 milimetreyi basamaz. Program
+            bu yüzden dış sütun ve satırlardaki etiketlerde barkodu, QR&apos;ı ve yazıyı sayfa
+            kenarından en az 5 mm içeride basar: içerik o etiketlerde kenardan biraz içeri kayar.
+            Yazıcınızın basamadığı kenar 5 mm&apos;den genişse (yazıcının kılavuzunda “basılamayan
+            alan” diye geçer) 40&apos;lı tabaka yerine kenar boşluklu bir tabaka seçin.
+          </li>
+        </ul>
+
+        <AltBaslik>Kalibrasyon</AltBaslik>
+        <p>
+          Her yazıcı kâğıdı biraz kaydırarak basar ve bu kayma iki yazıcıda farklıdır. Kalibrasyon
+          kaymayı ölçüp basıma uygular; her şablon ve yazıcı çifti için bir kez, ilk etiket
+          basımından önce düz kâğıtla yapılır:
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            <Ekran to="/katalog/etiketler?tab=sablonlar">
+              Etiketler → Şablonlar ve Kalibrasyon
+            </Ekran>
+            &apos;da kullanacağınız şablonun “Kalibrasyon” düğmesine basın. “Sayfaya uygulanacak
+            kayma” seçicisi “— yok —” kalsın; “PDF&apos;i indir” deyip kalibrasyon sayfasını düz
+            kâğıda <strong>gerçek boyutta (%100)</strong> yazdırın. Sayfanın ortasındaki çizgi 100
+            mm olmalıdır; değilse yazdırma penceresinde “sayfaya sığdır” seçeneğini kapatıp yeniden
+            yazdırın.
+          </li>
+          <li>
+            Çıktıyı etiket tabakasının üstüne koyup ışığa tutun. Dört köşe etiketinin birer dikey ve
+            yatay kenarında milimetre cetveli vardır; cetvelin 0 çizgisi basılı çerçevedir. Etiketin
+            gerçek kenarının cetvelde düştüğü değeri okuyun: cetvelin sağ ve alt tarafı artı, sol ve
+            üst tarafı eksidir. Yazıcı kâğıdın kenarından birkaç milimetreyi basamadığı için kâğıt
+            kenarına yakın cetvel etiketin iç kenarına, yan etiketle arasındaki kesime konur; okuma
+            kuralı aynıdır. Etiketler arasında boşluk olan tabakada bu cetvelde yan etiketin kesimi
+            de görünür: cetvelin 0 çizgisindeki çerçeveye ait kesimi okuyun.
+          </li>
+          <li>
+            “Yeni yazıcı kalibrasyonu” deyin ve “Yazıcı adı”na yazıcıyı tanıyacağınız bir ad yazın.
+            Okuduğunuz değerleri işaretleriyle “Okunan yatay değer” ve “Okunan dikey değer”
+            kutularına yazıp “Kaymaya ekle” deyin: değerler “Yatay kayma (mm)” ve “Dikey kayma (mm)”
+            alanlarına eklenir. Artı değer sağa ve aşağı, eksi değer sola ve yukarı kaydırır;
+            ondalık için virgül de nokta da kullanılabilir. Sonra “Kaydet” deyin.
+          </li>
+          <li>
+            Kayıttan sonra “Sayfaya uygulanacak kayma” seçicisinde bu yazıcı seçili gelir; sayfayı
+            yeniden indirip basın. Etiketlerin kenarı cetvelde 0&apos;a oturuyorsa kalibrasyon
+            tamamdır. Oturmuyorsa “Kayıtlı yazıcılar” listesinde yazıcının “Düzenle” düğmesine basıp
+            yeni okuduğunuz değeri yine “Kaymaya ekle” ile ekleyin.
+          </li>
+        </ol>
+        <p>
+          Dört köşede okunan değer aynı değilse sorun kayma değil ölçektir: yazıcı sayfayı
+          küçültüyor ya da büyütüyordur; yazdırma ayarında ölçeklemeyi kapatın. Kayma en çok 10 mm
+          olabilir; daha büyük bir fark çıkarsa yazdırma penceresinde kâğıt boyunu (210 × 297 mm) ve
+          ölçeği denetleyin, sonra şablonun ölçülerini tabakanın kutusundaki ölçülerle
+          karşılaştırın.
+        </p>
+        <p>
+          Etiket basarken “Yazıcı (kalibrasyon)” seçicisinde o an kullandığınız yazıcıyı seçin.
+          Şablonun tek kayıtlı yazıcısı varsa kendiliğinden seçilir; “— yok —” seçiliyse etiketler
+          kaymasız basılır. Etiketi başka bir yazıcıda (ör. idarenin yazıcısında) basacaksanız o
+          yazıcıyı da ayrıca kalibre edin: bir yazıcının kayması başka yazıcıya uymaz.
+        </p>
+
+        <AltBaslik>Basım kuyruğu ve basım sırası</AltBaslik>
+        <p>
+          Açılan her nüsha kendiliğinden Basım Kuyruğu&apos;na girer; etiketi basıldı olarak
+          işaretlenince kuyruktan çıkar. “Etiket içeriği” seçicisi ne basılacağını söyler: “Sırt ve
+          barkod etiketi” iki etiketi de basılmamış nüshaları, “Barkod etiketi” ve “Sırt etiketi”
+          yalnız o etiketi basılmamış nüshaları gösterir. Kuyruğu “Bölüm”, “Edinim partisi”, “Boş
+          barkod aralığı” ve kayıt tarihine göre süzebilirsiniz. İçe Aktarma&apos;nın sonucundaki
+          “Bu partinin etiketlerini bas” düğmesi kuyruğu o edinim partisine süzülmüş açar.
+        </p>
+        <p>“Basım sırası” üç türlüdür:</p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Yer numarası</strong> (varsayılan): etiketler raftaki sırayla çıkar, raf raf
+            yapıştırılır. Yer numarası olmayan nüshalar sona düşer.
+          </li>
+          <li>
+            <strong>İçe aktarma sırası</strong>: nüshaların kayda girdiği sıradır. Excel aktarımında
+            dosyanın satır sırası, Hızlı Kayıt&apos;ta kitapların masadan geçtiği sıradır.
+          </li>
+          <li>
+            <strong>Barkod</strong>: numara sırası.
+          </li>
+        </ul>
+        <p>
+          “Sırt ve barkod etiketi” birlikte basılırken PDF&apos;te önce sırt tabakaları, sonra
+          barkod tabakaları gelir. İkisi aynı sıra ve hücre düzeninde çıkar: iki tabakanın aynı
+          hücresi aynı kitabındır, barkod etiketindeki kaynak adı sırt etiketinin hangi kitaba
+          gideceğini gösterir. Bir partiye en çok 1.300 nüsha girer; kuyruk daha uzunsa kalanlar
+          kuyrukta kalır ve bir sonraki parti kaldığı yerden devam eder.
+        </p>
+
+        <AltBaslik>Basmak ve “Basıldı olarak işaretle”</AltBaslik>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            Basım Kuyruğu&apos;nda basılacak nüshaları seçin; seçim yapmazsanız süzgece uyan kuyruk
+            seçilen sırayla basılır.
+          </li>
+          <li>
+            “Basım Ayarları”nda “Etiket şablonu”nu ve “Yazıcı (kalibrasyon)”u seçin. Kısmen
+            kullanılmış bir tabakaya basacaksanız tabakanın küçük resminde ilk boş hücreye tıklayın
+            ya da numarasını “Başlangıç hücresi” kutusuna yazın: hücreler satır satır, soldan sağa
+            sayılır ve ondan önceki hücreler boş bırakılır. Ekran kaç etiket ve kaç tabaka
+            basılacağını yazar.
+          </li>
+          <li>
+            “Basım partisini hazırla” deyin. Hazırlanan partinin kartında “Önizle” ile bakın,
+            “PDF&apos;i indir” ile alıp gerçek boyutta (%100) yazdırın.
+          </li>
+          <li>
+            Tabakayı denetleyin. Etiketler hücrelere düzgün oturduysa “Basıldı olarak işaretle”
+            deyin ve onaylayın; nüshalar kuyruktan çıkar.
+          </li>
+        </ol>
+        <p>
+          <strong>PDF&apos;i almak “basıldı” saymaz.</strong> “Önizle” ve “PDF&apos;i indir” hiçbir
+          işarete dokunmaz; PDF&apos;i istediğiniz kadar yeniden alabilirsiniz. Yazıcı sıkışır,
+          kâğıt ters takılır ya da PDF hiç yazdırılmazsa nüshalar kuyrukta kalır; işaretlenmeyen
+          parti Basım Geçmişi&apos;nde “Basım onayı bekliyor” olarak durur ve nüshaları kuyrukta
+          “Onay bekleyen partide” rozetiyle görünür. Aynı etiketi iki kez basmamak için yeni parti
+          hazırlamadan önce o partiyi işaretleyin; hiç basmadıysanız “Partiden vazgeç” deyin.
+        </p>
+        <p>
+          Bir tabaka sonradan hatalı çıktıysa{" "}
+          <Ekran to="/katalog/etiketler?tab=gecmis">Etiketler → Basım Geçmişi</Ekran>&apos;nde
+          partinin satırına tıklayıp “Basım işaretini geri al” deyin: nüshaların işareti bu basımdan
+          önceki hâline döner (etiketi ilk kez basılan nüshalar kuyruğa geri gelir), parti iz olarak
+          kalır. Okutularak doğrulanmış etiketlerin işareti korunur, çünkü o etiketler kitabın
+          üzerindedir: sırt ve barkod etiketi partisinde barkodu okutulmuş nüshanın sırt işareti de
+          korunur ve nüsha hiçbir kuyruğa dönmez. Partideki nüshaların etiketi sonradan başka bir
+          partiyle yeniden basıldıysa ve o parti hâlâ basılmış görünüyorsa program önce o partinin
+          işaretini geri almanızı ister.
+        </p>
+        <p>
+          Partideki bir nüsha sonradan silinir ya da kayıttan düşülürse partinin PDF&apos;i yine
+          alınır: o nüshanın hücresi boş kalır, sonraki etiketler kaymaz. “Nüshaları göster”
+          listesinde böyle nüshanın yanında “PDF&apos;te hücresi boş kalır” yazar; “Basıldı olarak
+          işaretle” ona dokunmaz, “Yeniden bas” onu yeni partiye almaz.
+        </p>
+        <p>
+          “Yeniden bas” aynı nüshaları aynı sırayla yeni bir partide basar; yalnız bozulan içeriği
+          (ör. yalnız barkod etiketini), başka bir şablonu, yazıcıyı ya da başlangıç hücresini
+          seçebilirsiniz. Yeni parti de aynı kuralla işaretlenir. Barkod etiketi içeren bir parti
+          basıldı olarak işaretlenince o nüshaların doğrulaması sıfırlanır: yeni etiket henüz
+          okutulmamıştır. “Nüshaları göster” partinin nüshalarını tabakadaki sırasıyla listeler.
+        </p>
+
+        <AltBaslik>Yapıştırma ve doğrulama okutması</AltBaslik>
+        <p>
+          Etiketleri raf raf yapıştırın: yer numarası sırasında basılan tabaka raftaki sırayı izler.
+          Sonra <Ekran to="/katalog/etiketler?tab=dogrulama">Etiketler → Doğrulama Okutması</Ekran>
+          &apos;nı açın ve yapıştırdığınız her barkod etiketini “Kütüphane etiketi” kutusuna okutun.
+          Okunan etiket doğrulanır; kutu her okutmadan sonra boşalır ve imleç kutuda kalır,
+          kitapları arka arkaya okutabilirsiniz. Yanlış bir şey okutursanız program söyler: kitabın
+          ISBN barkodu, üye kartı, henüz bir kitaba bağlanmamış ya da numarası iptal edilmiş boş
+          etiket ve basıldı olarak işaretlenmemiş nüsha ayrı iletilerle ayrılır. Okutmayı masadaki
+          görevli de yapabilir: görevli kipinde “Görevli Kipi” sayfasındaki “Doğrulama okutmasını
+          aç” düğmesiyle açılır, “Okutmayı bitir” ile kapanır; ekranda yalnız okutulan etiketin
+          numarası ve kaynak adı görünür, yönetici işi gerektiren etiket için görevliye kitabı
+          ayırıp kütüphane yöneticisine göstermesi söylenir.
+        </p>
+        <p>
+          Doğrulama barkod etiketi içindir; sırt etiketinde barkod yoktur, okutulmaz. Önce etiket
+          yolunda kaydedilen kitapların barkod etiketi kayıt sırasında okutulduğu için doğrulanmış
+          sayılır. Okutulmayan etiketler “Doğrulanmamış Etiketler” listesinde kalır; listede kalan
+          kitabın etiketi ya yapıştırılmamıştır ya da okunmuyordur. Önce kitabı bulup etiketini
+          yeniden okutmayı deneyin. Etiket yoksa ya da bozuksa etiketini Basım Geçmişi&apos;nden
+          yeniden basın. “Yeniden bas” partideki bütün nüshaların etiketini basar ve yeni parti
+          işaretlenince o nüshaların hepsi doğrulanmamış sayılır; numara değişmediği için
+          kitaplardaki eski etiketleri okutmak onları yeniden doğrular.
+        </p>
+        <Ipucu>
+          <p>
+            Okutma kutusu odakta değilse ekranda uyarı çıkar; “Kutuya dön” deyin. Okuyucu klavye
+            gibi yazar: imleç başka bir yazı kutusundayken okuttuğunuz kod oraya yazılır. İmleç
+            hiçbir yazı kutusunda değilse okutulan kod kendiliğinden okutma kutusuna gider.
+          </p>
+        </Ipucu>
+
+        <AltBaslik>Önce etiket yolu adım adım</AltBaslik>
+        <p>
+          Okulun asıl yolu budur: kitaplar kataloğa girmeden önce boş barkod etiketleri basılıp
+          kitaplara yapıştırılır, künye kitap elde girilir.
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            <strong>Numara ayırın.</strong>{" "}
+            <Ekran to="/katalog/etiketler?tab=bos-barkod">Etiketler → Boş Barkod Aralığı</Ekran>
+            &apos;nda “Numara Ayır” kartının “Adet” kutusuna kaç etiket istediğinizi yazın
+            (tabakanın katları kâğıt israfını önler; bir seferde en çok 1.300). “Açıklama”ya
+            etiketlerin nerede kullanılacağını yazabilirsiniz (ör. hangi raf; kişi adı yazmayın).
+            “Numara ayır” deyip onaylayın. Numaralar kütüphanenin tek sayacından sırayla alınır;
+            ayrılan numara başka hiçbir kitaba verilmez.
+          </li>
+          <li>
+            <strong>Basın.</strong> Ayırdığınız aralık “Seçilen Aralık” kartında açılır (sonra da
+            listede satırına tıklayarak açarsınız). Şablonu, yazıcıyı ve başlangıç hücresini seçip
+            “PDF&apos;i indir” deyin ve gerçek boyutta (%100) yazdırın; tabaka düzgünse “Basıldı
+            olarak işaretle” deyin. PDF yalnız bağlanmamış ve iptal edilmemiş numaraların etiketini
+            basar. Aralıktan hiçbir etiket kitaba bağlanmadıysa basım işareti geri alınabilir.
+          </li>
+          <li>
+            <strong>Yapıştırın.</strong> Etiketleri raf başında kitaplara, bütün kitaplarda aynı
+            yere ve ISBN barkodunu örtmeden yapıştırın.
+          </li>
+          <li>
+            <strong>Kaydedin.</strong>{" "}
+            <Ekran to="/katalog/hizli-kayit">Katalog → Hızlı Kayıt</Ekran>&apos;ta “Kitabın etiketi”
+            kartında “Kitaptaki etiketi okutun” seçiliyken kitabın ISBN barkodunu okutun ve künyeyi
+            tamamlayın. Sonra kitaba yapıştırdığınız etiketi “Kütüphane etiketi” kutusuna okutun:
+            okuyucunun gönderdiği Enter kaydı bitirir, nüsha o numarayla açılır ve barkod etiketi
+            okutulmuş sayılır. Bu yüzden “Nüsha” kartındaki edinim ve bölüm etiketi okutmadan önce
+            seçili olsun; seçim kitaptan kitaba korunur. Raftaki eski kitaplar için edinimi önceden{" "}
+            <Ekran to="/katalog/edinimler">Edinimler ve Bağışlar</Ekran>&apos;da “Mevcut koleksiyon
+            (programa aktarım)” yoluyla açın. Aynı kitaptan birden çok nüsha varsa her birini kendi
+            etiketiyle ayrı ayrı kaydedin.
+          </li>
+          <li>
+            <strong>Sırt etiketlerini basın.</strong> Bu kitapların sırt etiketleri Basım
+            Kuyruğu&apos;nda “Sırt etiketi” içeriğiyle birikir. Aralığın kartındaki “Sırt
+            etiketlerini bas” bağlantısı kuyruğu o aralığa süzülmüş açar. Kitaplar masadan
+            geçtikleri sırayla duruyorsa “İçe aktarma sırası”nı, rafa yer numarasıyla dizildiyse
+            “Yer numarası”nı seçin. Sırt etiketinde barkod yoktur: yer numarasına bakarak doğru
+            kitaba yapıştırın.
+          </li>
+          <li>
+            <strong>Kullanılmayanları iptal edin.</strong> Bozulan etiket elinizdeyse numarasını
+            aralığın “Numaralar” tablosunda seçip PDF&apos;i yeniden alın: yalnız o numaranın
+            etiketi basılır, bozuk etiketi atın. Kaybolan ya da artan etiketlerin numaralarını seçip
+            “Seçilenleri iptal et” deyin; bütün kitaplar kaydedildikten sonra kalanlar için
+            “Bağlanmamış bütün numaraları iptal et” düğmesi vardır. Onay penceresinde “Bu
+            numaraların etiketlerinin kitaplara yapıştırılmadığını denetledim.” kutusunu
+            işaretlemeden iptal düğmesi açılmaz. İptal geri alınmaz ve numara sayaca dönmez;
+            kaybolan etiket bir gün bir kitapta çıkar da okutulursa program numaranın iptal
+            edildiğini söyler: etiketi sökün ve kitaba başka bir boş etiket yapıştırın.
+          </li>
+        </ol>
+        <Ipucu>
+          <p>
+            Bağlanmamış görünen bir numaranın etiketi rafta bir kitaba yapıştırılmış, kitap henüz
+            kaydedilmemiş olabilir. Toplu iptali yalnız o aralığın bütün kitapları Hızlı
+            Kayıt&apos;tan geçtikten sonra yapın.
+          </p>
+        </Ipucu>
+
+        <AltBaslik>Etiketi olmayan kitap</AltBaslik>
+        <p>
+          Masaya etiketsiz bir kitap gelirse Hızlı Kayıt&apos;ta “Etiket yok — yeni numara ver”
+          seçeneğiyle kaydedin: program sayaçtan yeni numara verir. Kayıttan sonra çıkan “Etiketini
+          bas” düğmesi aynı ekranda “Etiket Basımı” kartını açar: “Etiket içeriği”ni, şablonu ve
+          başlangıç hücresini seçip “Basım partisini hazırla” deyin, PDF&apos;i yazdırıp “Basıldı
+          olarak işaretle” deyin. Kısmen kullanılmış tabakada ilk boş hücreyi seçmeniz yeterlidir.
+        </p>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* F6 — üyelik, üye kartı, gecikme belgeleri, aydınlatma metni ve masa kartı.
+          Ekran adları `modules/uyelik` (UyelerSekmesi, IstekListesi, KartBasimi,
+          GecikmisOdunclerPage, DolasimKartlari) ve docs/sozluk.md §1 "Üyelik yönetimi",
+          "Kart basımı", "İade hatırlatma", "Üyelik belgeleri" satırlarıyla ve §4.11 ile
+          birebirdir. Aydınlatma metni bölümün BAŞINDADIR: e-Okul aktarımından önce
+          duyurulur (tasarım §3; KVKK md. 10/1 "elde edilmesi sırasında"). Pusulanın dağıtım
+          kuralı tasarım §9-13'ün cümlesidir. */}
+      <Bolum id="uyelik">
+        <p>
+          Ödünç almak için üye olmak gerekir; üyelik isteğe bağlıdır ve kimse kendiliğinden üye
+          olmaz. Yönetmelik ödünç verme servisinden öğrenci ve öğretmenin “üye olmak koşuluyla”
+          yararlanacağını söyler ve üyeliği “üye olmak isteyen” kişiye bağlar (md. 16/1 ve 17/1).
+          e-Okul listesini aktarmak da üyelik açmaz. Üyelik ekranları{" "}
+          <Ekran to="/kisiler?tab=uyeler">Kişiler → Üyeler</Ekran>,{" "}
+          <Ekran to="/kisiler?tab=uyelik-istekleri">Kişiler → Üyelik İstek Listesi</Ekran> ve{" "}
+          <Ekran to="/kisiler?tab=kart-basimi">Kişiler → Kart Basımı</Ekran> sekmeleridir; hepsi
+          yalnız yönetici kipinde açılır.
+        </p>
+
+        <AltBaslik>Önce aydınlatma metni</AltBaslik>
+        <p>
+          Kişiler → Üyeler sekmesinin altındaki “Üyelik Belgeleri” bölümünden kütüphane aydınlatma
+          metnini basın ve e-Okul listelerini programa aktarmadan önce öğrencilere ve personele
+          duyurun. 6698 sayılı Kişisel Verilerin Korunması Kanunu bilgilendirmenin kişisel verilerin
+          “elde edilmesi sırasında” yapılmasını ister (md. 10/1); bu programda o an listelerin
+          aktarılmasıdır. Listeleri daha önce aktardıysanız metni şimdi duyurun.
+        </p>
+        <p>
+          Metindeki okul adı, ilçe ve müdür adı{" "}
+          <Ekran to="/ayarlar?tab=okul">Ayarlar → Okul Bilgileri</Ekran>&apos;nden gelir. “Başvuru
+          adresi” ve “E-posta ya da telefon” alanlarına yazdıklarınız yalnız o basıma yazılır,
+          programda saklanmaz; boş bırakırsanız elle doldurulacak satır basılır. Metin hangi
+          bilgilerin tutulduğunu, masadaki öğrenci görevliler dahil kimin neyi gördüğünü ve
+          kayıtların ne kadar saklandığını açıkça söyler: süreleri Kütüphane Politikası&apos;ndan
+          alır, süresi dolan kaydın onayınızla silindiğini ya da kişiyle bağının koparıldığını yazar
+          (bkz. Saklama ve Anonimleştirme).
+        </p>
+
+        <AltBaslik>Üyelik açmak</AltBaslik>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            Öğrenciler için Üyelik İstek Listesi&apos;nde şubeyi seçin. Şubedeki öğrenciler sınıf
+            listesi sırasıyla gelir; zaten üye olanın kutusu kapalıdır.
+          </li>
+          <li>
+            Üye olmak isteyenleri işaretleyin, gerekirse “Üyelik isteği tarihi”ni değiştirin ve
+            “Seçilenleri üye yap” deyin; onay penceresinde “Üyelik aç”ı seçin. Seçim bu arada
+            değişmişse (biri üye olmuş ya da okuldan ayrılmışsa) hiçbir üyelik açılmaz; liste
+            yenilenir, yeniden seçersiniz.
+          </li>
+          <li>
+            Öğretmen ve diğer personel için Üyeler sekmesinde “Personele üyelik aç” deyin. Diğer
+            personele üyelik, Kütüphane Politikası&apos;nda diğer personele ödünç müdürlük kararıyla
+            açıldıysa açılır.
+          </li>
+        </ol>
+        <p>
+          Her üyeye sekiz haneli bir kart numarası verilir. Numara rastgeledir ve hiçbir zaman başka
+          birine yeniden verilmez; üyelik silinse de, kart yenilense de, yedekten geri yükleme
+          yapılsa da. Geri yüklenen yedekten sonra verilen kartlar geri yüklemede kaybolan
+          üyeliklere aittir: masada “Bu kart tanınmadı — kütüphane yöneticisine yönlendirin.” der; o
+          üyelere üyeliği yeniden açıp yeni kart basın.
+        </p>
+
+        <AltBaslik>Üye kartını basmak</AltBaslik>
+        <p>
+          Yeni üyenin kartı Kart Basımı sekmesinde “Kart Basımı Bekleyen” listesine düşer. Kart 85 ×
+          54 mm&apos;dir, bir sayfaya 10 kart basılır. Kartta okulun adı, üyenin adı, üye türü ve
+          barkodlu kart numarası vardır; sınıf yazmaz, çünkü sınıf her yıl değişir. Öğrenci ve
+          öğretmen kartının altındaki kısa not, kartın Yönetmeliğin 20. maddesinde öngörülen
+          kullanıcı kartının okulca düzenlenen yerel karşılığı olduğunu söyler; Yönetmelik kullanıcı
+          kartını öğretmene ve öğrenciye öngörür. Diğer personelin kartında madde atfı yoktur, not
+          “Okulca düzenlenen yerel üye kartıdır; diğer personele ödünç okul müdürlüğü kararıyla
+          verilir.” der. Şube seçerseniz kartlar sınıf listesi sırasıyla çıkar ve dağıtırken
+          aranmaz.
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            Kartları seçin; “Yazıcı (kalibrasyon)”, başlangıç hücresi ve “Kesim çizgisi bas”
+            seçeneğini ayarlayın. Düz kâğıda ya da kartona basıp keserken kesim çizgisini açık
+            bırakın, önceden kesilmiş kart tabakasında kapatın.
+          </li>
+          <li>
+            “Önizle” ya da “PDF&apos;i indir” ile yazdırın. Sayfayı gerçek boyutta (%100) yazdırın.
+          </li>
+          <li>
+            Kartlar düzgün çıktıysa “Basıldı olarak işaretle” deyin. PDF&apos;i almak kartı basılmış
+            saymaz; işaretlenmeyen kart kuyrukta kalır. İşaret “Kartı Basılmış” listesinden “Basım
+            işaretini geri al” ile geri alınır; kart numarası değişmez.
+          </li>
+        </ol>
+        <Ipucu>
+          Kart şablonunun kaydırması etiketlerdeki gibi yazıcı kalibrasyonuyla düzeltilir: Kart
+          Basımı sekmesinin altındaki “Yazıcı kalibrasyonunu göster” düğmesiyle kalibrasyon
+          sayfasını basın ve okuduğunuz kaymayı o yazıcıya kaydedin.
+        </Ipucu>
+
+        <AltBaslik>Kartı yenilemek, üyeliği sonlandırmak</AltBaslik>
+        <p>
+          Kart kaybolursa ya da bozulursa Üyeler sekmesinde üyeyi açıp “Kartı yenile” deyin; onay
+          penceresi “Kart yenilensin mi?” diye sorar. Üyeye yeni numara verilir, yeni kart basım
+          kuyruğuna girer; eski kart iptal edilir ve masada okutulunca “İptal edilmiş kart —
+          kütüphane yöneticisine yönlendirin.” iletisi çıkar. Açık ödünçler üyelikte kalır. Yeni
+          kart basılana kadar üyeye yönetici kipinde “Kartsız ödünç” ile ödünç verebilirsiniz (bkz.
+          Dolaşım Masası bölümü).
+        </p>
+        <p>
+          “Üyeliği sonlandır” nedeni listeden seçmeyi ister: “Üyenin isteği” ya da “Yanlış kayıt”.
+          Açık ödüncü olan üyelik sonlandırılamaz; önce iadeyi alın. Sonlandırmak kaydı ve ödünç
+          geçmişini silmez. Okuldan ayrılan kişi Kişiler ekranında “Ayrıldı olarak işaretle” ile
+          işlenir: üyeliği kendiliğinden sonlanır, iade etmediği kitap açık ödünç olarak izlenir.
+          Yanlışlıkla açılmış ve hiç ödünç kaydı olmayan üyelik “Üyeliği sil” ile silinir.
+        </p>
+
+        <AltBaslik>Gecikmiş ödünçler ve iade hatırlatma pusulası</AltBaslik>
+        <p>
+          İade tarihi geçmiş ödünç varsa Genel Bakış&apos;ta “Gecikmiş Ödünçler” kartı yalnız sayıyı
+          gösterir; liste kartın açtığı Gecikmiş Ödünçler sayfasındadır ve yalnız yönetici kipinde
+          açılır. Program gecikme için para almaz ve ödünç süresini değiştirmez; hatırlatma kişiye
+          özel pusulayla yapılır.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            Pusulayı Gecikmiş Ödünçler sayfasında basarsınız: kişileri işaretleyin ya da “Şube”
+            süzgecini seçin; kişi seçmezseniz pusula süzgeçteki herkese basılır. Tek bir üyenin
+            pusulası, gecikmesi varsa Üyelik penceresinden de basılır.
+          </li>
+          <li>
+            İade hatırlatma pusulası tek kişiliktir; bir sayfada üç pusula vardır. Kesme çizgisinden
+            kesin, sağ bölümü katlama çizgisinden sola, yazılı yüz içe gelecek biçimde katlayın:
+            dışta “KİŞİYE ÖZELDİR” ibaresi, kişinin adı ve sınıfı (personelde üye türü), katlama
+            yönergesi ve “Kişinin kendisine elden verilir; sınıfta okunmaz.” notu kalır.
+            Kütüphanenin adı ve gecikmiş kaynaklar içte kalır; kâğıdın kütüphaneden geldiği dıştan
+            anlaşılmaz.
+          </li>
+          <li>
+            Pusulayı kütüphane yöneticisi ya da sınıf rehber öğretmeni dağıtır. Sınıfta okunmaz,
+            öğrenci görevliye dağıttırılmaz. Personelin pusulasını kütüphane yöneticisi verir.
+          </li>
+          <li>
+            Gecikmiş ödünç listesi her sayfasında “Kişisel veri içerir — asılmaz, çoğaltılmaz.”
+            dipnotunu taşır. Liste panoya asılmaz, yalnız iadeyi izlemek için kullanılır.
+          </li>
+        </ul>
+
+        <AltBaslik>Masa kartı</AltBaslik>
+        <p>
+          Masa kartı, kütüphane masasında görev yapan öğrenci ve personel için tek sayfalık kullanım
+          ve gizlilik uyarısıdır; aydınlatma metniyle aynı “Üyelik Belgeleri” bölümünden basılır.
+          Görevliye göreve başlamadan verin ve masada görünür bir yerde tutun. Kart masada nasıl
+          çalışılacağını, ekranda görülen adların ve bilgilerin kimseyle paylaşılmayacağını, ekranın
+          fotoğrafının çekilmeyeceğini ve masa boş kalırken “Kilitle”ye basılacağını anlatır.
+          Görevliyi böyle bilgilendirmek, okulun kişisel verileri korumak için alması gereken idari
+          önlemlerdendir:
+        </p>
+        <Mevzuat kaynak="6698 sayılı Kişisel Verilerin Korunması Kanunu, md. 12/1">
+          “Veri sorumlusu; a) Kişisel verilerin hukuka aykırı olarak işlenmesini önlemek, b) Kişisel
+          verilere hukuka aykırı olarak erişilmesini önlemek, c) Kişisel verilerin muhafazasını
+          sağlamak, amacıyla uygun güvenlik düzeyini temin etmeye yönelik gerekli her türlü teknik
+          ve idari tedbirleri almak zorundadır.”
+        </Mevzuat>
+
+        <AltBaslik>Program düzgün kapanmazsa</AltBaslik>
+        <p>
+          Elektrik kesilir ya da program zorla kapatılırsa son işlemler kayda geçmemiş olabilir.
+          Sonraki açılışta Genel Bakış&apos;ta “Son Oturumu Kontrol Edin” kartı çıkar ve kayda
+          geçmiş son ödünç ve iadeleri listeler. Masada verildiğini ya da alındığını bildiğiniz bir
+          kitap listede yoksa işlemi yeniden yapın, sonra “Kontrol ettim” deyin.
+        </p>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* F6 — Dolaşım Masası. Sıra masadaki işin sırasıdır: kim alabilir → ödünç ver →
+          süre ve ödünç sınırı (Md. 18/1'in iki cümlesi; kaydırma İKİ AYRI kuraldır ve
+          Yönetmeliğe bağlanmaz — "Md. 18 gereği" denmez) → gecikme engeli ve gerekçeli
+          istisna → iade → başka üyedeki kitap → kart ve etiket iletileri → okutma kutusu →
+          görevli kipinde masa (gördüğü, görmediği, gizlilik) → kartsız ödünç (Md. 23/1-a'dan
+          sapma) → yönetici kipinde masa. Ekran adları `modules/dolasim` sabitlerinden,
+          iletiler `services/circulation.py` ve `services/masa.py`'den birebir (sözlük §4.10).
+          Md. 18/1'in orta cümleleri Bakanlığın sistemini adıyla andığı için alıntıda "…" ile
+          atlanır (kılavuzda o ad geçmez). */}
+      <Bolum id="dolasim">
+        <p>
+          Ödünç ve iade <Ekran to="/dolasim">Dolaşım Masası</Ekran>&apos;ndan yapılır. Görevli
+          kipinde aynı masa “Görevli Kipi” sayfasında durur; masadaki görevli ödünç verir ve iade
+          alır, yönetici işlerine ulaşamaz. Masada tek bir okutma kutusu vardır: “Üye kartı ya da
+          kütüphane etiketi”. Kutu kendiliğinden odaklanır; okuyucu kodun sonuna Enter gönderir,
+          elle yazdığınız numarayı da Enter ile gönderirsiniz.
+        </p>
+
+        <AltBaslik>Kim ödünç alabilir</AltBaslik>
+        <p>
+          Aktif üyeliği olan öğrenci ve öğretmen ödünç alır. Diğer personel, Kütüphane
+          Politikası&apos;ndaki “Diğer personele ödünç verilir” seçeneği müdürlük kararıyla
+          açıldıysa alır. Üyeliği sonlanmış kişiye (“Üyelik sonlanmış — ödünç verilemez.”) ve
+          okuldan ayrılmış kişiye (“Üye okuldan ayrılmış — ödünç verilemez.”) ödünç verilmez; ikisi
+          de ellerindeki kitabı iade edebilir. “Yıl sonu son ödünç tarihi” geçtiyse yeni ödünç
+          verilmez, iade alınmaya devam eder. Görevli kipinde bu ileti tarih yazmaz (“Yıl sonu son
+          ödünç tarihi geçti — yeni ödünç verilmez. İade alınabilir.”): son sınıflara ayrı tarih
+          tanımlıysa tarih, kartın sahibinin son sınıfta olduğunu gösterirdi. Sayım için hizmet
+          arası sürerken de yeni ödünç verilmez, iade alınır: okutma kutusunun üstünde “Sayım için
+          hizmet arası — yeni ödünç ve teslim yapılamıyor. İade ve teslimden geri alma açık.” şeridi
+          durur (iki kipte de masa açılırken çıkar; bkz. Sayım bölümü).
+        </p>
+
+        <AltBaslik>Ödünç vermek</AltBaslik>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            Üye kartını okutun. Ekranda üyenin adı ve kalan ödünç hakkı görünür; sınıf yazmaz. Bir
+            kartla yalnız kartın sahibine ödünç verilir.
+          </li>
+          <li>
+            Kitabın kütüphane etiketini okutun; birden çok kitabı arka arkaya okutabilirsiniz. Her
+            kitap için “Ödünç verildi.” iletisi ve iade tarihi çıkar. Kitabın arka kapağındaki ISBN
+            barkodunu değil, kütüphane etiketini okutun.
+          </li>
+          <li>
+            İşiniz bitince “Bitti” düğmesine basın. Başka bir üyenin kartını okuttuğunuzda da, 60
+            saniye işlem yapmadığınızda da üye bağlamı kendiliğinden kapanır.
+          </li>
+        </ol>
+
+        <AltBaslik>Ödünç süresi ve ödünç sınırı</AltBaslik>
+        <Mevzuat kaynak={`${YONETMELIK}, md. 18/1`}>
+          “Bir kitabı ödünç alma süresi on beş gündür. … Öğrencilere bir defasında en fazla üç,
+          öğretmenlere en fazla beş kitap ödünç verilebilir.”
+        </Mevzuat>
+        <p>
+          Ödünç süresi on beş gündür ve değiştirilemez; programda bir ayar değildir, sonradan da
+          değişmez. İade tarihi, ödünç verildiği günden on beş gün sonrasıdır. O gün kapalı bir güne
+          rastlarsa iade tarihi izleyen ilk açık güne kayar. Bu kayma Yönetmelikten gelmez; iki ayrı
+          kuraldır ve dayanakları farklıdır (bkz. Kapalı Günler bölümü):
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Hafta sonu, resmî tatil ve dini bayram</strong> her zaman atlanır: Yönetmelik bu
+            durumu düzenlemez, program Türk Borçlar Kanunu&apos;ndaki genel kuralı kıyasen uygular.
+            İdari izin ve diğer kapalı günler de her zaman atlanır; bu programın kuralıdır.
+          </li>
+          <li>
+            <strong>Ara tatil ve yarıyıl</strong> (öğrenciye kapalı günler) yalnız Kütüphane
+            Politikası&apos;ndaki “İade tarihi öğrenciye kapalı günlerde kaydırılır” seçeneği açıksa
+            atlanır. Bu okulun tercihidir, mevzuatta dayanağı yoktur.
+          </li>
+        </ul>
+        <p>
+          İade tarihi dönemin sonunu aşarsa ödünçte uyarı çıkar (“… Süre kısaltılmaz.”); süre yine
+          on beş gündür.
+        </p>
+        <p>
+          Kayma yalnız Kapalı Günler&apos;e girilmiş günlere bakar. Bir ders yılını
+          aktifleştirdiğinizde (kurulum sihirbazında ya da Ayarlar → Ders Yılları&apos;nda) o ders
+          yılının iki takvim yılına resmî tatiller ve dini bayramlar kendiliğinden eklenir. İade
+          tarihinin düştüğü yılın resmî tatilleri ya da dini bayramları yine de eksikse ödünçte
+          uyarı çıkar (“… Kapalı Günler&apos;de eksik; iade tarihi bir tatile rastlamış olabilir.
+          …”): eksik günleri Ayarlar → Kapalı Günler&apos;den ekleyin.
+        </p>
+        <p>
+          Üyenin elindeki kitap sayısı Kütüphane Politikası&apos;ndaki ödünç sınırına ulaşınca yeni
+          ödünç verilmez; ekranda “Ödünç sınırı dolu (en çok 3 kitap).” gibi bir ileti çıkar. Sınır
+          öğrenciye en çok 3, öğretmene en çok 5&apos;tir; okul daha düşük tutabilir, diğer
+          personelin sınırını okul belirler. Ödünç verilmeyen bir kaynak (danışma kaynağı, piyasada
+          mevcudu olmayan eser, süreli yayın) okutulunca gerekçesi yazar, ör. “Ödünç verilmez —
+          kütüphanede okunur.” Ödünç sınırı ve ödünç verilmeyen kaynaklar hiçbir kipte istisna
+          almaz.
+        </p>
+
+        <AltBaslik>Gecikme engeli ve gerekçeli istisna</AltBaslik>
+        <p>
+          Kütüphane Politikası&apos;nda “Gecikmiş kitabı olana yeni ödünç verilmez” açıksa (okulun
+          tercihidir), iade tarihi geçmiş kitabı olan üyeye yeni ödünç verilmez. Görevli kipinde
+          ekranda yalnız “Ödünç verilemiyor — kütüphane yöneticisine yönlendirin.” yazar. Yönetici
+          kipinde ileti “Üyenin gecikmiş ödüncü var. Önce iade alın ya da gerekçeli istisnayla ödünç
+          verin.” olur ve “Gerekçeli istisna” penceresi açılır:
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            “Gerekçe” listesinden birini seçin: “Ders ya da ödev için gerekli”, “Gecikmenin geçerli
+            bir mazereti var”, “Gecikmiş kaynağın iadesi için görüşüldü” ya da “Diğer”.
+          </li>
+          <li>“Açıklama” zorunludur. Açıklamaya sağlık ya da aile bilgisi yazmayın.</li>
+          <li>
+            “Gerekçeyle ödünç ver” deyin. İstisna, gerekçesi ve açıklamasıyla ödünç kaydına geçer.
+          </li>
+        </ol>
+        <p>
+          Pencere hangi kitap için açıldığını en üstte yazar (“Kitap: …”). Pencere açıkken
+          okuttuğunuz kitaplar kaybolmaz: sıraya girer ve pencere kapanınca okuttuğunuz sırayla
+          işlenir; her kitap için pencere yeniden açılır. Pencere açıkken üye bağlamının 60
+          saniyelik süresi işlemez.
+        </p>
+        <p>
+          Gerekçeli istisna yalnız gecikme engeli içindir ve yalnız yönetici kipinde yapılır; ödünç
+          sınırı ve ödünç verilmeyen kaynaklar için yoktur. Gecikme için para alınmaz, ödünç süresi
+          değişmez; gecikmiş kitap kişiye özel pusulayla hatırlatılır (bkz. Üyelik, Kart ve Belgeler
+          bölümü).
+        </p>
+
+        <AltBaslik>İade almak</AltBaslik>
+        <p>
+          Üye kartı okutmadan kitabın kütüphane etiketini okutun: kitap ödünçteyse iadesi alınır
+          (“İade alındı.”). Kitap ödünçte değilse program durumunu söyler: “Rafta — ödünç değil.”,
+          “Kayıp kaydında.”, “Onarımda.”, “Sınıf kitaplığında.” İade hiçbir durumda kilitlenmez:
+          üyeliği sonlanmış ya da okuldan ayrılmış kişinin kitabı da, gecikmiş kitap da, sayım
+          sürerken gelen kitap da, kart okutma durdurulmuşken gelen kitap da iade edilir. Üye
+          bağlamı açıkken iade almak için önce “Bitti” deyin; bağlam açıkken okutulan kitap o üyeye
+          ödünç verilmek istenir.
+        </p>
+        <p>
+          Sınıf kitaplığına ya da öğretmene teslim edilmiş bir kitap ödünçte değildir; okutulunca
+          “Sınıf kitaplığında.” iletisinin altında “Teslimden geri al” düğmesi çıkar ve kitap
+          teslimden geri alınır (bkz. Sınıf Kitaplığına ve Öğretmene Teslim bölümü).
+        </p>
+
+        <AltBaslik>Kitap başka bir üyedeyse</AltBaslik>
+        <p>
+          Üye bağlamı açıkken üyenin zaten aldığı kitabı okutursanız program “Bu kitap zaten bu
+          üyede. İade alınsın mı?” diye sorar; “İade al” iadeyi alır. Başka bir üyede görünen kitabı
+          okutursanız “Bu kitap başka bir üyede. Önce iade alınsın mı?” sorusu çıkar; “İade al ve
+          ödünç ver” önce iadeyi alır, sonra kitabı karttaki üyeye verir ve “Kitap başka bir üyenin
+          ödüncündeydi; iadesi alındı. Durumu kütüphane yöneticisine bildirin.” uyarısını gösterir.
+          Bu, kitabın iadesi alınmadan elden ele geçtiğini gösterir; görevli durumu kütüphane
+          yöneticisine bildirir. Görevli kipinde önceki üyenin kim olduğu gösterilmez. İşlem
+          yapmayacaksanız “Vazgeç” deyin. “İade al ve ödünç ver”e bastıktan sonra iade sürerken
+          başka bir kart okutulursa kitap o yeni üyeye verilmez; ekranda “İade alındı; üye bağlamı
+          bu arada değiştiği için kitap ödünç verilmedi.” yazar.
+        </p>
+        <p>
+          Üyeliği sonlanmış, okuldan ayrılmış, ödünç sınırı dolmuş, gecikmiş kitabı olan ya da yıl
+          sonu tarihi geçmiş bir üyenin kartı okutulduktan sonra okutulan kitapta ret iletisinin
+          altında “Kitap iade için getirildiyse iadesi alınabilir.” yazar. Üye kitabı geri
+          getirdiyse “İade al” deyin; iade alınır, ödünç verilmez.
+        </p>
+
+        <AltBaslik>Kart ve etiket iletileri</AltBaslik>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            “İptal edilmiş kart — kütüphane yöneticisine yönlendirin.”: kartı yenilenmiş, üyeliği
+            silinmiş ya da kaydı birleştirilmiş kişinin eski kartıdır ve hiçbir kipte kullanılamaz.
+          </li>
+          <li>
+            “Bu kart tanınmadı — kütüphane yöneticisine yönlendirin.”: numara kart biçimindedir ama
+            programda böyle bir kart yoktur.
+          </li>
+          <li>
+            “Kart numarası hatalı. Kartı yeniden okutun.”: numara okunurken ya da yazılırken
+            bozulmuştur.
+          </li>
+          <li>
+            “Bu ISBN barkodu. Kitabın kütüphane etiketini okutun.”: kitabın arka kapağındaki barkod
+            okutulmuştur.
+          </li>
+          <li>
+            Henüz bir kitaba bağlanmamış boş barkod etiketi ya da numarası iptal edilmiş etiket
+            okutulursa program bunu söyler. Görevli kipinde “Kitabı ayırın ve kütüphane yöneticisine
+            gösterin.” yazar; kütüphane yöneticisi kitabı Hızlı Kayıt&apos;ta kaydeder (bkz.
+            Etiketler bölümü).
+          </li>
+        </ul>
+
+        <AltBaslik>Okutma kutusu</AltBaslik>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            Sonucu beklemeden okutmaya devam edebilirsiniz: okutmalar sıraya girer ve okuttuğunuz
+            sırayla işlenir, hiçbiri kaybolmaz. Sırada bekleyen okutma varsa kutunun altında sayısı
+            yazar.
+          </li>
+          <li>
+            Her okutmada kısa bir ses çıkar ve kutunun çerçevesi renk değiştirir: başarıda ince,
+            uyarıda orta, hatada iki kalın ses; “Yalnız durum sor” ile bakılan kitapta iki kısa ses
+            (ödünç verilmediği sesten de anlaşılsın diye). Ses “Okuma sesi açık” düğmesiyle
+            kapatılabilir; bu tercih bu bilgisayarda saklanır.
+          </li>
+          <li>
+            Bir pencere açıkken (ör. gerekçeli istisna) okuttuğunuz kodlar kaybolmaz: sıraya girer
+            ve pencere kapanınca işlenir. Pencerede bir yazı alanına yazarken okutma yapmayın; kod o
+            alana yazılır.
+          </li>
+          <li>
+            İmleç kutudan çıkarsa (ör. bir Windows bildirimi odağı çalarsa) kutunun altında uyarı
+            çıkar; “Kutuya dön” düğmesi ya da bir rakam tuşu imleci geri getirir.
+          </li>
+          <li>
+            “Yalnız durum sor” işaretliyken okutulan kitabın yalnız durumu gösterilir; ödünç ve iade
+            yapılmaz. Üye kartı okutulunca işaret kendiliğinden kalkar (“Yalnız durum sor”
+            kapatıldı: üye kartı okutuldu.), çünkü kart okutmak ödünç vermek içindir.
+          </li>
+        </ul>
+
+        <AltBaslik>Görevli kipinde masa</AltBaslik>
+        <p>
+          Masadaki görevli çoğu zaman bir öğrencidir. Ekran ona işini yapmaya yetecek kadarını
+          gösterir; program bunu arka planda da uygular, gösterilmeyen bilgi görevlinin ekranına hiç
+          gelmez.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            Görevli üyenin yalnız adını ve kalan ödünç hakkını görür; sınıfı ve açık ödünçleri
+            görünmez. Gecikmiş kitabı olan üyeye ödünç verilmek istenirse ekranda yalnız “Ödünç
+            verilemiyor — kütüphane yöneticisine yönlendirin.” yazar; hangi kitabın kaç gün
+            geciktiği görevliye gösterilmez. Kişisel olmayan nedenler (ödünç sınırının dolması,
+            kaynağın ödünç verilmemesi) yazılır.
+          </li>
+          <li>
+            İade alınan kitabın kimden geldiği ve gecikip gecikmediği görevli ekranında görünmez.
+            “Yalnız durum sor” ile bakılan kitabın kimde olduğu da görünmez. Ekrandaki son işlemler
+            listesinde üye adı yazmaz.
+          </li>
+          <li>
+            Üye listesi, ödünç geçmişi, gecikmiş ödünçler, gerekçeli istisna ve kartsız ödünç
+            yönetici kipindedir. Kartı yanında olmayan üyeyi görevli kütüphane yöneticisine
+            yönlendirir.
+          </li>
+          <li>
+            Görevli “Katalogda ara” ile bir kitabın katalogda olup olmadığına, yer numarasına ve
+            nüshalarının rafta olup olmadığına bakabilir; kitabın kimde olduğu görünmez. “Dolaşım
+            masasına dön” masaya getirir.
+          </li>
+          <li>
+            Art arda beş geçersiz kart (iptal edilmiş, tanınmayan ya da numarası hatalı) okutulursa
+            ya da on dakika içinde beş tanınmayan veya iptal edilmiş kart okutulursa (araya geçerli
+            bir kart girse de) kart okutma durur ve okutma kutusunun üstünde “Kart okutma
+            durduruldu” şeridi çıkar. Kütüphane yöneticisi şeritteki alana yönetici parolasını yazıp
+            “Kart okutmayı aç” deyince kart okutma sürer; görevli kipinden çıkılmaz. Bu sırada da
+            iade alınabilir: şerit dururken okutulan kitabın iadesi alınır. Önlem, kart numaralarını
+            deneyerek ad öğrenmeye karşıdır.
+          </li>
+          <li>
+            Gecikmiş kitabı olan ya da ödünç sınırı dolmuş üyede, okutulan kitap kimde olursa olsun
+            aynı ret iletisi çıkar; görevli barkod deneyerek üyenin elindeki kitapları öğrenemez.
+            Kartı okutulan üyenin kendi kitabı okutulursa “Bu kitap zaten bu üyede. İade alınsın
+            mı?” sorusu çıkabilir; masadaki kitabın kimde olduğu bu kadarıyla görünür.
+          </li>
+          <li>
+            Gizlilik: görevliye göreve başlamadan masa kartını verin (bkz. Üyelik, Kart ve Belgeler
+            bölümü). Görevli ekranda gördüğü adları kimseyle paylaşmaz, ekranın fotoğrafını çekmez;
+            masayı boş bırakacaksa “Kilitle”ye basar.
+          </li>
+        </ul>
+
+        <AltBaslik>Kartsız ödünç</AltBaslik>
+        <p>
+          Olağan yol kartın okutulmasıdır. Yönetmelik, ödünç verilebilmesi için yapılacakların ilki
+          olarak kartın görevliye verilmesini sayar:
+        </p>
+        <Mevzuat kaynak={`${YONETMELIK}, md. 23/1-a`}>
+          “a) Öğrenci, öğretmen kartını kütüphane görevlisine verir.”
+        </Mevzuat>
+        <p>
+          Kartı yanında olmayan üyeye yalnız yönetici kipinde ödünç verilir. “Kartsız ödünç”
+          düğmesine basın, “Okul no ya da ad” alanına okul numarasının tamamını ya da adı yazıp
+          “Ara” deyin, listeden üyeyi seçin, gerekçeyi seçin (“Kart yanında değil”, “Kart kayıp —
+          yenilenecek”, “Kart henüz basılmadı”, “Kart okunmuyor”) ve “Üyeyi aç” deyin. Üye
+          bağlamında “Kartsız ödünç — gerekçe: …” şeridi durur; kitapları her zamanki gibi
+          okutursunuz. Bu yolla verilen ödünç kaydında kartsız ödünç işareti ve gerekçesi durur.
+          Kart kaybolduysa üyenin kartını da yenileyin.
+        </p>
+
+        <AltBaslik>Yönetici kipinde masa</AltBaslik>
+        <p>
+          Yönetici kipinde üye bağlamında üyenin türü, sınıfı ve açık ödünçleri iade tarihleriyle
+          görünür; iade alınınca kitabın kimden geldiği ve kaç gün geciktiği yazılır; “Yalnız durum
+          sor” kitabın kimde olduğunu ve iade tarihini de gösterir. Açık ödünçlerin her satırında
+          “Kayıp bildir” kısayolu durur (bkz. Kayıp, Hasar ve Onarım bölümü). Bunlar kişisel
+          veridir: ekranı masadaki görevliye açık bırakmayın, masadan kalkarken “Görevli kipine
+          geç”i ya da “Kilitle”yi seçin. Sayfanın sağ üstündeki “Teslimler” ve “Kayıp ve Hasar”
+          bağlantıları masanın yan ekranlarını açar.
+        </p>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* F7 — Toplu teslim (U11, tasarım §9-11). Adlar `modules/teslim` sabitlerinden
+          (TESLIMLER_BASLIGI, TESLIM_ET_DUGMESI, ZATEN_LISTEDE, GERI_ALMA_BASLIGI,
+          BEKLENEN_DONUS_GECTI) ve masanın önerisinden (`dolasim/DolasimMasasi`);
+          iletiler `services/deliveries.py`'den birebir. Sayımdaki yer (AT-1) yalnız
+          kısaca: sayım ekranı F9'dadır. */}
+      <Bolum id="teslim">
+        <p>
+          Kütüphane bir şubenin sınıf kitaplığına ya da bir öğretmene toplu kitap verebilir. Bu{" "}
+          <strong>teslimdir, ödünç değildir</strong>: ödünç sınırı ve on beş günlük süre uygulanmaz,
+          üyelik gerekmez, teslim edilen kitaplar teslim alanın ödünç hakkından düşmez. Teslim
+          yalnız etkin ders yılının bir şubesine ya da bir öğretmene yapılır; diğer personele teslim
+          yapılmaz. Ekran <Ekran to="/dolasim/teslimler">Dolaşım Masası → Teslimler</Ekran>
+          &apos;dir: Dolaşım Masası sayfasının sağ üstündeki “Teslimler” bağlantısıyla açılır ve
+          yalnız yönetici kipinde çalışır. Üç sekmesi vardır: “Teslim Kayıtları”, “Yeni Teslim” ve
+          “Geri Alma”.
+        </p>
+
+        <AltBaslik>Teslim etmek</AltBaslik>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            <Ekran to="/dolasim/teslimler?tab=yeni">Teslimler → Yeni Teslim</Ekran>&apos;in “Teslim
+            Alan” kartında “Sınıf kitaplığı” ya da “Öğretmen”i seçin. “Şube” listesinde yalnız etkin
+            ders yılının şubeleri vardır. Öğretmen listesinde diğer personel de görünür ama
+            seçilemez (“diğer personele teslim yapılmaz”).
+          </li>
+          <li>
+            “Teslim tarihi” bugündür; geçmiş bir tarih de yazabilirsiniz. “Beklenen dönüş (isteğe
+            bağlı)” boş bırakılırsa ders yılının son günü yazılır. “Belge no (isteğe bağlı)” boş
+            bırakılırsa program yıl ve sıra numarasıyla yeni bir numara verir (ör. 2026/1);
+            kullanılmış bir numara yeniden verilmez.
+          </li>
+          <li>
+            “Teslim Edilecek Kitaplar” kartında kitapların kütüphane etiketini “Kütüphane etiketi”
+            kutusuna okutun. Rafta duran her kitap listeye girer; aynı kitabı ikinci kez okutursanız
+            “Bu kitap zaten listede.” yazar. Ödünçte, teslimde, onarımda ya da kayıp kaydındaki
+            kitap listeye girmez; iletide kitabın numarası, adı ve gerekçesi yazar (ör. “Ödünçte —
+            teslim edilemez.”). Reddedilen kitaplar, sonraki okutmalar başarılı olsa da “Listeye
+            girmeyen kitaplar” listesinde kalır; hızlı okutmada hangi kitabın listeye girmediğini
+            oradan görürsünüz. Yanlış okuttuğunuz kitabı satırındaki “Çıkar” ile, bütün listeyi
+            “Listeyi boşalt” ile kaldırırsınız. Okutmadan önce kutunun odakta olduğuna bakın: odak
+            “Şube” listesindeyken okutulan kod listeye girmez, şube seçimini de değiştirebilir;
+            ekran bu durumda uyarır ve “Kutuya dön” düğmesini gösterir.
+          </li>
+          <li>
+            “Teslim et”e basın. Onay penceresi kaç kitabın kime teslim edileceğini sorar (ör. “12
+            kitap 9/A sınıf kitaplığına teslim edilsin mi?”). Teslim tek işlemdir: listedeki bir
+            kitap bu arada teslim edilemez olduysa (ör. o sırada masada ödünç verildiyse) hiçbir
+            teslim yapılmaz, ekranda “Listedeki bazı kitaplar teslim edilemiyor; hiçbir teslim
+            yapılmadı.” ve kitap kitap gerekçeler yazar. O kitapları listeden çıkarıp yeniden
+            deneyin.
+          </li>
+          <li>
+            Teslim yapılınca sonuç kartında belge no ve teslim listesinin “Önizle” ve “PDF&apos;i
+            indir” düğmeleri durur. Listeyi basın, teslim alana imzalatın ve saklayın. “Yeni teslim”
+            yeni bir liste açar.
+          </li>
+        </ol>
+        <p>
+          Ödünç verilmeyen kaynaklar da teslim edilebilir: teslim ödünç olmadığı için danışma
+          kaynağı ya da süreli yayın sınıf kitaplığında durabilir. Tek teslimde en çok 500 kitap
+          olur.
+        </p>
+
+        <AltBaslik>Teslimdeki kitap</AltBaslik>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            Teslimdeki kitap katalogda, Ağ Kataloğunda ve masada “Sınıf kitaplığında” görünür;
+            öğretmene teslim edilen kitap da öyle. Kime teslim edildiği Ağ Kataloğunda ve görevli
+            ekranında görünmez. Kitap geri alınana kadar ödünç verilmez: bir kitap aynı anda ya bir
+            üyede ödünçtedir ya da teslimdedir.
+          </li>
+          <li>
+            “Teslim Kayıtları” sekmesi açık teslimleri gösterir. “Durum” süzgeciyle geri alınan ve
+            kayba dönüşen teslimleri de görürsünüz; “Teslim alan” ve “Belge no” listeyi daraltır.
+            Satırdaki belge no&apos;ya tıklayınca liste o belgeye süzülür ve o belgenin teslim
+            listesi yeniden basılabilir.
+          </li>
+          <li>
+            Beklenen dönüşü geçen açık teslimde “beklenen dönüş geçti” rozeti çıkar. Bu bir gecikme
+            değildir: teslimde hatırlatma pusulası da engel de yoktur, rozet yalnız kitapları geri
+            istemeyi hatırlatır.
+          </li>
+          <li>
+            Teslim edilen bir kitap kaybolursa satırdaki “Kayıp bildir” ile kayıp dosyası açılır ve
+            teslim “Kayba dönüştü” olarak kapanır (bkz. Kayıp, Hasar ve Onarım bölümü).
+          </li>
+          <li>
+            Açık teslim kütüphaneyle açık iştir: açık teslimi olan öğretmen İlişik Listesi&apos;nde
+            görünür. Açık teslimi olan şube silinemez (“Bu şubede … açık teslim var; önce geri
+            alın.”); şube tesliminden doğan çözülmemiş kayıp/hasar dosyası da şubeyi silinmekten
+            korur (“Bu şubenin tesliminden doğan … çözülmemiş kayıp/hasar dosyası var; önce dosyayı
+            çözün.”). Personel kayıtları birleştirilirken açık teslimi olan kayıt yalnız üye türü
+            “Öğretmen” olan kayda birleştirilir; teslim diğer personele geçmez.
+          </li>
+        </ul>
+
+        <AltBaslik>Geri almak</AltBaslik>
+        <p>
+          Kitaplar dönünce{" "}
+          <Ekran to="/dolasim/teslimler?tab=geri-alma">Teslimler → Geri Alma</Ekran>&apos;da “Geri
+          Alınan Kitapları Okutun” kartındaki “Kütüphane etiketi” kutusuna okutun. Okutulan kitabın
+          teslimi kapanır, kitap rafa döner ve “Geri alındı.” yazar; satırda teslim alan, belge no
+          ve teslim tarihi de görünür. Teslimde olmayan kitapta “Bu kitap teslimde değil (…).”,
+          ödünçteki kitapta “Bu kitap teslimde değil (Ödünçte). İade için dolaşım masasını
+          kullanın.” iletisi çıkar. İş bitince aynı sekmedeki “Geri alma dökümü” kartından bu
+          ekranda geri alınan kitapların dökümünü basın ve teslim listesiyle birlikte saklayın.
+          Kitaplar görevli kipinde, masada ya da başka bir gün geri alındıysa dökümü Teslim
+          Kayıtları&apos;ndan alın: belge no&apos;ya tıklayınca çıkan kartın “Geri alma dökümü”
+          bölümü o belgenin bütün kitaplarını durumlarıyla (geri alındı, teslimde, kayba dönüştü)
+          basar. Geri alma, iade gibi, hiçbir durumda kilitlenmez.
+        </p>
+        <p>
+          Geri alma masada da yapılır: üye kartı okutmadan teslimdeki bir kitabı okutursanız “Sınıf
+          kitaplığında.” iletisinin altında “Kitap sınıf kitaplığından ya da öğretmenden geri
+          geldiyse teslimden geri alınabilir.” yazar; “Teslimden geri al” düğmesi kitabı geri alır.
+          Öneri kitabın kime teslim edildiğini söylemez.
+        </p>
+        <p>
+          Görevli kipinde masadaki görevli, Görevli Kipi sayfasındaki “Teslimden geri al” düğmesiyle
+          açılan “Teslimden Geri Alma” bölümünde kitapları okutarak geri alabilir; “Okutmayı bitir”
+          masaya döndürür. Görevlinin ekranında yalnız kitabın numarası ve kaynak adı görünür;
+          teslim alanın kim olduğu ve belgeler görünmez. Teslim vermek, teslim kayıtları ve teslim
+          listeleri yönetici kipindedir.
+        </p>
+
+        <AltBaslik>Teslim listesi</AltBaslik>
+        <p>
+          Teslim listesi teslimin belgesidir: belge no, teslim alan, teslim tarihi, beklenen dönüş
+          ve kitap sayısı ile kitapların barkodu, kaynak adı ve yazarı; imza yerleri “Teslim eden —
+          Kütüphane yöneticisi” ile “Teslim alan — Sınıf kitaplığı sorumlusu” ya da “Teslim alan —
+          Öğretmen”dir. Şubeye yapılan teslimin listesine, listenin ortak kullanım alanına verilen
+          taşınırlar için düzenlenen Dayanıklı Taşınırlar Listesinin işlevini gördüğü notu basılır
+          (Taşınır Mal Yönetmeliği md. 23/6&apos;ya kıyasen). Bir şubede o an teslimde olan bütün
+          kitapların listesi İlişik Listesi sayfasındaki “Sınıf Kitaplıkları” kartından basılır.
+        </p>
+
+        <AltBaslik>Sayımdaki yeri</AltBaslik>
+        <p>
+          Teslimdeki kitabın sayımda nasıl sayılacağına sayım kurulu karar verir (ayrıntı Sayım
+          bölümünde). Sınıf kitaplığındaki kitaplar ortak kullanım alanındaki taşınırlar gibi
+          yerinde sayılır ya da sayımdan önce toplanır (Taşınır Mal Yönetmeliği md. 32/5&apos;e
+          kıyasen); yerinde sayımda şubenin teslim listesi Dayanıklı Taşınırlar Listesi yerine
+          kullanılır, toplanamayan kitap sınıf kitaplığında aranır. Sınıf kitaplığındaki kitap kayda
+          göre alınmaz. Öğretmene teslim edilen kitap için TKYS&apos;de Taşınır Teslim Belgesi
+          düzenlendiyse kitap kayda göre alınır; düzenlenmediyse yine aynı maddeye kıyasen işlem
+          yapılır. Sayımda “Sayım için hizmet arası” seçildiyse sayım süresince yeni teslim
+          yapılmaz: Yeni Teslim sekmesinin üstünde masadakiyle aynı şerit durur ve “Teslim et”
+          kapalıdır. Teslimden geri alma hiçbir durumda durmaz.
+        </p>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* F7 — Kayıp, hasar ve onarım (Md. 19, D3; tasarım §9-9). Adlar `modules/kayip`
+          sabitlerinden (KAYIP_BASLIGI, HASAR_BASLIGI, COZUM_TR, BEDEL_YOK_NOTU,
+          SORUMLU_NOTU_YARDIMI, TUTANAK_ADI, NUSHA_ISLEMLERI_BASLIGI, OKULUN_ACIK_ISI_ETIKETI)
+          ve masadan (KAYIP_BILDIRILDI). Çözüm düğmeleri ekranda sunucunun listesinden
+          kurulur; kılavuz bedel yollarının YALNIZ ortaöğretimde göründüğünü ve bedelin iki
+          adımını (25.09.2026 kullanıcı kararı) söyler. Md. 19/1 birebir. */}
+      <Bolum id="kayip-hasar">
+        <p>
+          Kaybolan ya da hasar gören kitap için bir <strong>dosya</strong> açılır: kayıp dosyası ya
+          da hasar dosyası. Dosyalar{" "}
+          <Ekran to="/dolasim/kayip-hasar">Dolaşım Masası → Kayıp ve Hasar</Ekran> ekranındadır:
+          Dolaşım Masası sayfasının sağ üstündeki “Kayıp ve Hasar” bağlantısıyla açılır, yalnız
+          yönetici kipinde çalışır ve kişisel veri içerir. “Görünüm” süzgeci çözülmemiş dosyaları
+          (varsayılan) ya da bütün dosyaları, “Tür” süzgeci kayıp ya da hasar dosyalarını gösterir.
+          Bütün dosyalarda “Çözüm” süzgeci de çıkar; bedel çözümleri orada yalnız ortaöğretimde
+          görünür. Bir kitabın aynı anda tek çözülmemiş dosyası olur.
+        </p>
+
+        <AltBaslik>Kayıp bildirmek</AltBaslik>
+        <p>
+          Kayıp dört yerden bildirilir ve her yerde aynı pencere açılır: bu ekranın sağ üstündeki
+          “Kayıp bildir”, Dolaşım Masası&apos;nda üyenin açık ödünçlerindeki “Kayıp bildir” (yalnız
+          yönetici kipinde), Teslimler → Teslim Kayıtları&apos;nda açık teslimin “Kayıp bildir”i ve
+          Eser Ayrıntısı&apos;nda nüsha penceresinin “Kayıp, Hasar ve Onarım” bölümü. Kayıp kitap
+          çoğu zaman elde olmadığı için bildirimi kitabın zaten seçili olduğu bu kısayollardan
+          yapmak kolaydır.
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            Pencere “Kayıp bildirilsin mi?” diye sorar. Kitap önceden seçilmemişse numarasını
+            “Kütüphane etiketi” kutusuna yazıp Enter&apos;a basın; program kitabın durumunu ve
+            ödünçteyse kimde olduğunu gösterir.
+          </li>
+          <li>
+            “Tespit tarihi”ni yazın. Kitap ödünçteyse sorumlu, kitabı ödünç alan üyedir ve üye
+            sorulmaz; değilse “Sorumlu üye (isteğe bağlı)” alanında üyeyi seçebilir ya da boş
+            bırakabilirsiniz. Teslimdeki kitapta üye seçerseniz dosya o üyeye bağlanır; boş
+            bırakırsanız teslim alana (öğretmene ya da sınıf kitaplığına). İlişik Listesi ve
+            “Kütüphaneden ilişiği yoktur” belgesi dosyayı aynı kişiye yazar. “Sorumlu notu (isteğe
+            bağlı)”na üye olmayan sorumluyu ya da kısa bir açıklama yazın; sağlık ya da aile bilgisi
+            yazmayın.
+          </li>
+          <li>
+            “Kayıp bildir”e basın. Nüsha “Kayıp” olur ve kayıp dosyası açılır. Kitap ödünçteyse
+            ödünç, teslimdeyse teslim “Kayba dönüştü” olarak kapanır.
+          </li>
+        </ol>
+        <p>
+          Kayba dönüşen ödünç artık ödünç sınırına ve gecikmeye sayılmaz: masada “Kayıp bildirildi;
+          ödünç kayba dönüştü ve kayıp dosyası açıldı.” yazar ve üyenin kalan ödünç hakkı yeniden
+          hesaplanır. Üyenin kütüphaneyle açık işi artık ödünç değil dosyadır; dosya çözülene (ya da
+          ortaöğretimde bedel teslim alınana) kadar İlişik Listesi&apos;nde kalır. Üyelik
+          penceresinin Ödünç Kaydı bölümünde bu ödünç “kayba dönüştü” diye görünür. Kayıp bildirimi
+          geri alınmaz: kitap sonradan bulunursa dosyada “Bulundu” seçilir, kapanan ödünç ya da
+          teslim yeniden açılmaz. Onarımdaki kitap için kayıp bildirilemez; önce onarımdan dönüşünü
+          işleyin. Kitabın çözülmemiş bir hasar dosyası varsa (hasar dosyası kitabı dolaşımdan
+          çıkarmadığı için kitap ödünçte, teslimde ya da rafta kaybolabilir) kayıp yine bildirilir:
+          hasar dosyası “Kayba dönüştü” olarak kapanır ve kayıp dosyası açılır. Hasar dosyasının
+          sorumlusu ve notu o dosyada kalır.
+        </p>
+
+        <AltBaslik>Hasar dosyası açmak</AltBaslik>
+        <p>
+          Hasar gören kitap için “Hasar dosyası aç” deyin; pencere “Hasar dosyası açılsın mı?” diye
+          sorar, alanları kayıp penceresiyle aynıdır. Kitap kütüphanede olmalıdır: ödünçteki kitabın
+          önce iadesini alın, teslimdeki kitabı önce geri alın. Hasar dosyası kitabı dolaşımdan
+          çıkarmaz; kitap okunamayacak durumdaysa “Nüshayı onarıma da gönder” kutusunu işaretleyin.
+        </p>
+
+        <AltBaslik>Dosyayı çözmek</AltBaslik>
+        <p>
+          Listedeki satıra tıklamak “Kayıp dosyası” ya da “Hasar dosyası” penceresini açar: nüsha,
+          nüsha durumu, tespit tarihi, sorumlu üye ve çözüm. Sorumlu notunu burada değiştirip “Notu
+          kaydet” dersiniz. “Çözüm” bölümünde yalnız o dosyada seçilebilecek çözümlerin düğmeleri
+          durur:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>“Bulundu”</strong> (yalnız kayıp dosyasında): kitap rafa döner, dosya kapanır.
+          </li>
+          <li>
+            <strong>“Aynısı temin edildi”</strong>: kaynağın aynısı getirildi; nüsha rafa döner,
+            dosya kapanır. Kayıp kitabın yerine gelen kitap aynı numarayla rafa girer; etiketini
+            Etiketler ekranından yeniden basın.
+          </li>
+          <li>
+            <strong>“Onarıldı”</strong> (yalnız hasar dosyasında): kitap onarıldı; onarımdaysa rafa
+            döner, dosya kapanır.
+          </li>
+          <li>
+            <strong>“Kayıttan düşme önerildi”</strong>: dosya kapanır ve nüsha için kayıttan düşme
+            önerilir. Nüshanın durumu değişmez; kayıttan düşme Taşınır Mal Yönetmeliğine göre
+            yapılan ayrı bir işlemdir. Kayıp ve hasarlı kitap ayıklamaya konmaz: kaydı sayımda,
+            kayıp/hasar tutanağına dayanarak harcama yetkilisinin onayıyla kapanır (Sayım bölümü).
+            Öneri kayıttan düşme değildir: kayıp dosyası bu çözümle kapandıktan sonra kitap
+            bulunursa dosya penceresinde “Bulundu” düğmesi durur; öneri geri alınır ve kitap rafa
+            döner.
+          </li>
+        </ul>
+        <p>
+          Dosyanın çözüm durumu “Kayba dönüştü” de olabilir; bu bir düğme değildir. Hasar dosyası
+          açık kitap kaybolunca kayıp bildirimi hasar dosyasını bu durumla kapatır.
+        </p>
+        <p>
+          Her çözüm onaydan geçer: pencerenin başlığı ““…” işlensin mi?” olur, gövdesi sonucu
+          anlatır; “İşle” çözümü kaydeder, “Vazgeç” geri döner. Kapanan dosya yeniden açılmaz; tek
+          istisna, kayıttan düşme önerisiyle kapanan kayıp dosyasında kitabın bulunmasıdır (nüsha
+          henüz kayıttan düşülmemişse). Nüsha sayımda kayıttan düşülmüşse bulunan kitap o dosyadan
+          rafa dönmez: pencere “Sayım fazlası (kayda giriş)” yoluyla açılan bir edinimle, Eser
+          Ayrıntısı&apos;nda “Nüsha ekle” diyerek yeni nüsha olarak kaydetmenizi söyler; eski kayıt
+          kayıttan düşülmüş olarak kalır. Dosya açıkken nüsha sayımda kayıttan düşüldüyse pencerede
+          bulunma çözümü yoktur; aynısı temin edilir ya da bedelle alınırsa dosya kapanır ve alınan
+          kitap Eser Ayrıntısı&apos;nda “Nüsha ekle” diyerek yeni nüsha olarak kaydedilir.
+        </p>
+        <p>
+          Sayımda TMY 32/3 durdurması sürerken kayıp bildirilemez ve dosyalar yalnız durdurmanın
+          kapsamadığı adımlarla ilerler: kayıp dosyasında kitabın bulunması (“Bulundu”, “Bulundu
+          (bedel teslim alınmıştı)”) ve bedelin iki adımı, hasar dosyasında kayıttan düşme önerisi
+          yazmayan çözümler. Kayıptaki kitabın rafa dönüşü taşınır giriş ve çıkışı değildir: nüsha
+          kayıttan düşülmediyse kayıtta zaten vardır. Sayfada “TMY 32/3 durdurması sürüyor” bandı
+          durur. Bulunan kayıp kitabı sayım sürerken okutabilirsiniz, sayım onaylanınca dosyası
+          kapanır. Sayım tamamlandıktan sonra getirilen kayıp kitap okutulamaz: onaydan önce dosyada
+          “Bulundu”yu seçin; onay kalemi yeniden denetler ve kitabı kayıttan düşmez (bkz. Sayım
+          bölümü).
+        </p>
+
+        <AltBaslik>Bedel yalnız ortaöğretimde</AltBaslik>
+        <p>
+          Kaybolan ya da hasar gören kaynağın bedelini Yönetmelik yalnız ortaöğretim için söyler:
+        </p>
+        <Mevzuat kaynak={`${YONETMELIK}, md. 19/1`}>
+          “Ortaöğretim okul kütüphanelerinde hasara uğratılan veya kaybedilen kaynak ilgili kişiden
+          temin edilir, temin edilememesi hâlinde o günkü piyasa bedeli, hasara uğratan veya
+          kaybeden kişiden alınır. Kaynak bedeli ile mevcudu varsa aynısı yoksa kaybedilenin kaydı
+          silinerek başka eser satın alınır.”
+        </Mevzuat>
+        <p>
+          Bu yüzden bedel seçenekleri yalnız okulun kademesi{" "}
+          <Ekran to="/ayarlar?tab=okul">Ayarlar → Okul Bilgileri</Ekran>&apos;nde “Ortaöğretim
+          (lise)” seçiliyse görünür. İlkokul ve ortaokulda dosya penceresinde “Bedel seçenekleri
+          yalnız ortaöğretim okullarında sunulur (Yönetmelik Md. 19). …” notu durur ve dosya
+          yukarıdaki çözümlerle kapanır. Ortaöğretimde beş çözüm daha vardır; ilk ikisi bedelin iki
+          adımıdır:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>“Bedel belirlendi”</strong>: pencere “O günkü piyasa bedeli (TL)”ni sorar
+            (kuruşu virgülle yazabilirsiniz: 125,50). Bedel dosyaya kaydedilir ve{" "}
+            <strong>dosya açık kalır</strong>: kişinin kütüphaneyle açık işi sürer, İlişik
+            Listesi&apos;nde kalır ve “Kütüphaneden ilişiği yoktur” belgesi basılmaz. Bedel yanlış
+            yazıldıysa “Bedel belirlendi”yi yeniden seçip düzeltin.
+          </li>
+          <li>
+            <strong>“Bedel teslim alındı”</strong>: kişiden bedelin teslim alındığı kaydedilir.
+            Kişinin kütüphaneyle açık işi biter: İlişik Listesi&apos;nden çıkar ve “Kütüphaneden
+            ilişiği yoktur” belgesi basılabilir. Dosya ise okulun açık işi olarak açık kalır:
+            “Çözülmemiş dosyalar”da satırın altında “Okulun açık işi” yazar. Bu adım geri alınmaz ve
+            kaydedilen bedel artık değişmez.
+          </li>
+          <li>
+            <strong>“Bedelle aynısı alındı”</strong>: teslim alınan bedelle kaynağın aynısı alındı;
+            nüsha rafa döner, dosya kapanır.
+          </li>
+          <li>
+            <strong>“Bedelle başka eser alındı”</strong>: aynısı bulunamadı, bedelle başka bir eser
+            alındı; dosya kapanır ve bu nüsha için kayıttan düşme önerilir. Alınan eseri katalogda
+            ayrıca kaydedin. Yönetmelik bu durumda kaybedilenin kaydının silinmesini ister; kayıt
+            sayımda kayıttan düşülünce silinmiş olur. O güne dek kitap bulunursa dosya penceresinde
+            “Bulundu (bedel teslim alınmıştı)” düğmesi durur: öneri geri alınır, kitap rafa döner,
+            bedelle alınan eser de kayıtta kalır.
+          </li>
+          <li>
+            <strong>“Bulundu (bedel teslim alınmıştı)”</strong> (yalnız kayıp dosyasında): bedel
+            teslim alındıktan sonra kitap bulundu; nüsha rafa döner, dosya kapanır, kaydedilen bedel
+            ve tarihleri dosyada kalır.
+          </li>
+        </ul>
+        <p>
+          Adımlar sırayla görünür: “Bedel teslim alındı” bedel belirlendikten sonra, son üçü bedel
+          teslim alındıktan sonra. Bedeli teslim alınmış dosyada yalnız “Bedelle aynısı alındı” ve
+          “Bedelle başka eser alındı” düğmeleri, kayıp dosyasında bir de “Bulundu (bedel teslim
+          alınmıştı)” durur; okulun kademesi sonradan değişse de bu düğmeler kalır. Kitap bedelden
+          sonra bulunduğunda pencere şunu da yazar: “Teslim alınan bedelin kişiye iadesi ya da başka
+          kaynak alımında kullanılması okul yönetiminin kararıdır; program para tutmaz.”
+        </p>
+        <Ipucu>
+          <p>
+            <strong>Program tahsilat yapmaz.</strong> Para almaz, belge kesmez; kaydedilen bedel
+            yalnız dosyanın bilgisidir ve basılı tutanakta “(kayıt)” diye yazar. “Bedel teslim
+            alındı” da yalnız bir kayıttır. Program disiplin sürecini de başlatmaz ve dosyayı
+            kimseye bildirmez. Kütüphaneden alınan kitabı eksik vermek ya da kötü kullanmak
+            Ortaöğretim Kurumları Yönetmeliği&apos;nde (md. 164/1-g) bir disiplin konusudur; o süreç
+            okulun işidir, programın değil.
+          </p>
+        </Ipucu>
+
+        <AltBaslik>Kayıp/hasar tutanağı</AltBaslik>
+        <p>
+          Dosya penceresinin altındaki “Kayıp/hasar tutanağı” bölümünden tutanak basılır (“Önizle”,
+          “PDF&apos;i indir”). Tutanakta okulun anteti, kaynağın bilgileri (kaynak adı, yazar,
+          barkod, kayıt no), ilgili kişi ile ödünç ya da teslim bilgisi, çözüm ve üç imza yeri
+          vardır: kütüphane yöneticisi, ilgili kişi ve okul müdürü. Ortaöğretimde tutanağa piyasa
+          bedeli iki adımın tarihleriyle (“Bedel belirlendi”, “Bedel teslim alındı”); Yönetmeliğin
+          19. maddesinin ilk cümlesi ve “Bu tutanak bir ödeme ya da tahsilat belgesi değildir.” notu
+          da basılır. Tutanak kişinin adını taşır; kişisel veri içeren bir belge gibi saklayın.
+        </p>
+
+        <AltBaslik>Onarım</AltBaslik>
+        <p>
+          Yıpranan kitap hasar dosyası açılmadan da onarıma gönderilebilir. Eser Ayrıntısı&apos;nda
+          nüshanın satırına tıklayın; “Nüshayı düzenle” penceresindeki “Kayıp, Hasar ve Onarım”
+          bölümünde “Onarıma gönder” deyin ve “Nüsha onarıma gönderilsin mi?” sorusunu onaylayın.
+          Nüsha “Onarımda” olur ve dönene kadar ödünç verilmez; masada okutulunca “Onarımda.” yazar,
+          Ağ Kataloğunda “Onarımda” görünür. Kitap dönünce aynı yerden “Onarımdan dön” deyin (“Nüsha
+          onarımdan dönsün mü?”): onarım kaydı kapanır, nüsha rafa döner.
+        </p>
+        <p>
+          Hasar dosyası açıksa aynı iki düğme dosya penceresinin “Onarım” bölümünde de vardır.
+          Onarımdan dönüş hasar dosyasını kendiliğinden kapatmaz: kitap onarıldıysa dosyada
+          “Onarıldı”yı ayrıca seçin. Nüsha penceresindeki bölüm nüshanın durumunu da söyler:
+          teslimdeyse kime ve hangi belge no ile teslim edildiğini, çözülmemiş dosyası varsa dosyayı
+          (“Dosyayı göster” dosyayı açar). Duruma göre “Onarıma gönder”, “Onarımdan dön”, “Hasar
+          dosyası aç” ve “Kayıp bildir” düğmeleri çıkar; çözülmemiş hasar dosyası olan kitapta da
+          “Kayıp bildir” durur. Kayıp kitapta son dosya, kapanmış olsa da gösterilir: kayıttan düşme
+          önerisiyle kapanmışsa kitap bulununca “Bulundu” (bedelle başka eser alınmışsa “Bulundu
+          (bedel teslim alınmıştı)”) oradan seçilir.
+        </p>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* F7 — İlişik (tasarım §8.3, §9-8, §10). Adlar `modules/yil` sabitlerinden
+          (ILISIK_LISTESI_BASLIGI, KAPSAM_SECENEKLERI, ILISIK_BELGESI_ADI,
+          ILISIK_LISTESI_ADI, LISTE_DIPNOTU); ret iletisi `ilisik_belgeleri.NOT_CLEAR_MESSAGE`.
+          Belge karne ya da diploma ön koşulu DEĞİLDİR: iki sözcük yalnız bu olumsuz
+          cümlede geçer. Md. 18/1'in ikinci cümlesi ve üçüncü cümlenin baş ve son parçası
+          birebir; üçüncü cümlenin ortası Bakanlığın sistemini andığı için "…". */}
+      <Bolum id="ilisik">
+        <p>
+          <Ekran to="/ilisik-listesi">İlişik Listesi</Ekran> kütüphaneyle açık işi olan kişileri
+          gösterir: iade edilmemiş ödüncü, geri alınmamış teslimi ya da çözülmemiş kayıp/hasar
+          dosyası olan öğrenci ve personel. Okuldan ayrılmış kişiler de listededir: ayrılış kaydı
+          silmez, açık iş izlenmeye devam eder. Sayfa Genel Bakış&apos;taki “İlişik Listesi”
+          kartından açılır ve yalnız yönetici kipinde çalışır; sağ üstünde “Yıl Sonu” ve “Yıl Başı”
+          bağlantıları vardır. Liste kişisel veri içerir. Ayarlar → Kütüphane Politikası&apos;nda
+          “Bakanlık sistemi kullanımda” açıksa sayfanın üstündeki not, ilişik ve iade işlemlerinin
+          kaydını orada da güncellemenizi hatırlatır (bkz. Dökümler ve Dışa Aktarım).
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            Sıra: önce son sınıflar, sonra okuldan ayrılanlar (ayrılmış ya da Ayrılış
+            Havuzu&apos;nda karar bekleyen), sonra diğerleri. Son sınıf, okulun kademesinin son
+            sınıfıdır: ilkokulda 4, ortaokulda 8, ortaöğretimde 12. sınıf. Kademe seçilmemişse son
+            sınıf belirlenemez.
+          </li>
+          <li>
+            Süzgeçler: “Kapsam” (“Bütün kişiler”, “Son sınıflar”, “Okuldan ayrılanlar”, “Son
+            sınıflar ve okuldan ayrılanlar”, “Diğerleri”), “Şube” ve “Ara”. Arama adla ya da okul
+            numarasının tamamıyla yapılır.
+          </li>
+          <li>
+            Her satırda durum rozeti (“Son sınıf”, “Ayrıldı · gg.aa.yyyy” ya da “Ayrılış kararı
+            bekliyor”) ve açık işler tek tek yazar: ödünç (gecikmişse gün sayısıyla), teslim (belge
+            no ile), kayıp ya da hasar dosyası (çözüm durumuyla). “Bedel belirlendi” durumundaki
+            dosya da açık iştir; “Bedel teslim alındı” durumundaki dosya ise kişinin açık işi
+            değildir (dosya okulun açık işi olarak Kayıp ve Hasar ekranında kalır).
+          </li>
+        </ul>
+        <p>
+          Şubelere teslim edilen kitaplar kişiye bağlı değildir; “Sınıf Kitaplıkları” kartında şube
+          şube ayrı durur, son sınıf şubeleri önce gelir. Her şubenin o an teslimde olan
+          kitaplarının teslim listesi buradan basılır. Önceki ders yılının şubesinde kalmış teslim
+          “önceki ders yılı” notuyla görünür.
+        </p>
+        <p>
+          “İlişik Listesi” kartı süzgeçteki kişilerin toplu listesini basar. Basılı listede kaynak
+          adı ve okul numarası yoktur; yalnız barkod, tarih ve belge no vardır. Her sayfanın dibinde
+          “Kişisel veri içerir — asılmaz, çoğaltılmaz.” dipnotu durur: liste panoya asılmaz. Kişiden
+          kitabı geri istemek için tek kişilik iade hatırlatma pusulası kullanılır (bkz. Yıl Sonu ve
+          Yıl Başı bölümü).
+        </p>
+
+        <AltBaslik>“Kütüphaneden ilişiği yoktur” belgesi</AltBaslik>
+        <p>
+          Kütüphaneyle açık işi olmayan kişiye bu belge basılır. Sayfanın altındaki “Kütüphaneden
+          İlişiği Yoktur Belgesi” kartında “Kişi” alanına adı ya da okul numarasının tamamını yazıp
+          “Ara” deyin; yalnız açık işi olmayan kişiler seçilebilir. Birden çok kişi seçebilirsiniz,
+          her kişiye bir sayfa basılır. Seçilenlerden birinin bile bu arada açık işi doğduysa hiçbir
+          belge basılmaz ve “Seçilenlerden N kişinin iade edilmemiş kaynağı, geri alınmamış teslimi
+          ya da çözülmemiş kayıp/hasar dosyası var; belge basılmadı. İlişik listesine bakın.” yazar;
+          ileti kimsenin adını yazmaz. Son sınıfların belgeleri Yıl Sonu ekranından toplu basılır.
+        </p>
+        <p>
+          Belgede okulun anteti, tarih, kişinin bilgileri, okul kütüphanesinin kayıtlarına göre
+          kişinin iade edilmemiş ödünç kaynağı ve kayıp ya da hasar nedeniyle kendisinden beklenen
+          bir işlem (personelde geri alınmamış teslimi de) bulunmadığını söyleyen cümle ve kütüphane
+          yöneticisi ile okul müdürünün imza yerleri vardır. Alttaki not, belgenin okulun kütüphane
+          işlerini yürüttüğü yerel araçtaki kayıtlara göre düzenlendiğini söyler.
+        </p>
+        <Ipucu>
+          <p>
+            <strong>Bu belge karne ya da diploma almanın ön koşulu değildir</strong>; buna dayanak
+            yoktur ve program belgeyi bu amaçla sunmaz. Yönetmelik iade edilmeyen kitabın takibini
+            kütüphane yöneticisine verir ve okuldan ayrılan öğrencinin ve öğretmenin aldığı kitabın
+            iadesinin sağlanmasını ister; bunu bir belgeye bağlamaz. Kitabı geri istemenin yolu
+            kişiye özel pusula ve görüşmedir.
+          </p>
+        </Ipucu>
+        <Mevzuat kaynak={`${YONETMELIK}, md. 18/1`}>
+          “Kütüphaneye iadesi yapılmayan kitapların takibi kütüphaneci veya kütüphaneden sorumlu
+          öğretmen tarafından yapılır. Öğrencilerin ve öğretmenlerin okuldan ayrılması sebebiyle …
+          alınan ödünç kitabın kütüphaneye iadesi sağlanır.”
+        </Mevzuat>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* F7 — Yıl sonu ve yıl başı (tasarım §8.3). Adım adları `modules/yil`
+          ekranlarının adım rayından; pencereler `services/yil_akislari.py`'den (yıl sonu
+          1 Mayıs - 30 Haziran ya da bitiş + 14 gün; yıl başı 15 Ağustos - 31 Ekim ya da
+          başlangıcın çevresi). `year_rollover` YOK; "yıl devri" sözcüğü kullanılmaz. */}
+      <Bolum id="yil-akislari">
+        <p>
+          Ders yılının iki ucundaki işler iki adım adım ekranda sıraya konur:{" "}
+          <Ekran to="/yil-sonu">Yıl Sonu</Ekran> (Mayıs-Haziran) ve{" "}
+          <Ekran to="/yil-basi">Yıl Başı</Ekran> (Ağustos-Ekim). İkisi de yalnız yönetici kipinde
+          açılır. Adım rayında bir adıma tıklayarak ya da “Geri” ve “Devam” düğmeleriyle
+          ilerlersiniz; tamamlanan adımlar işaretlenir.
+        </p>
+        <p>
+          Genel Bakış&apos;ta tarih penceresinde kart çıkar. “Yıl Sonu” kartı 1 Mayıs&apos;tan 30
+          Haziran&apos;a kadar (ders yılı daha geç biterse bitişten iki hafta sonrasına dek) görünür
+          ve yalnız sayıları yazar. “Yıl Başı” kartı 15 Ağustos&apos;tan 31 Ekim&apos;e kadar (ders
+          yılının başlangıcı bu aralığa uymuyorsa başlangıcın çevresinde) ve adımlar bitmemişken
+          görünür. İki ekran her zaman İlişik Listesi sayfasının sağ üstünden de açılır.
+        </p>
+
+        <AltBaslik>Yıl sonu</AltBaslik>
+        <p>
+          Mezunlar Haziran&apos;da okuldan ayrılır; Eylül&apos;de kitap toplamak çoğu zaman mümkün
+          olmaz. Toplama bu yüzden Mayıs&apos;ta başlar ve son sınıflar önce gelir.
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            <strong>Son Ödünç Tarihleri.</strong> “Yıl sonu son ödünç tarihi”ni ve isteğe bağlı
+            olarak daha erken bir “Son sınıflar için son ödünç tarihi”ni yazıp “Kaydet” deyin.
+            Bunlar Ayarlar → Kütüphane Politikası&apos;ndaki alanların aynısıdır. Tarihten sonra
+            yeni ödünç verilmez, iade alınmaya devam eder. Geçen yılın tarihi yeni ders yılında
+            uygulanmaz; ekran bunu “… önceki ders yılına ait; bu yıl uygulanmaz.” diye yazar.
+          </li>
+          <li>
+            <strong>Kitap Toplama.</strong> “Toplanacak kitaplar” tablosu açık ödüncü ya da teslimi
+            olan kişileri son sınıflar önce gelecek biçimde listeler; “Kapsam” ve “Şube” listeyi
+            daraltır. “İade Hatırlatma Pusulası” kartından pusula basılır: kişi seçerseniz yalnız
+            onlara, seçmezseniz süzgeçteki ödüncü olan herkese. Yıl sonu pusulası kişinin bütün açık
+            ödünçlerini yazar, gecikmemişler dahil. “Son getirme günü”nü yazarsanız pusulaya “en geç
+            … tarihine kadar” diye basılır; tarih kaydedilmez. Pusula tek kişiliktir, katlanır ve
+            gecikme pusulası gibi dağıtılır (bkz. Üyelik, Kart ve Belgeler bölümü). Aynı adımdaki
+            “Sınıf Kitaplıkları” kartı şubelerdeki teslimleri gösterir; o kitapları Teslimler → Geri
+            Alma&apos;da okutarak geri alın.
+          </li>
+          <li>
+            <strong>Son Sınıflar ve Ayrılanlar.</strong> Açık ödüncü, teslimi ya da çözülmemiş
+            kayıp/hasar dosyası olan son sınıf öğrencileri ile okuldan ayrılan ya da ayrılış kararı
+            bekleyen kişiler listelenir; bu listenin ilişik listesi “Önizle” ve “PDF&apos;i indir”
+            ile basılır. Altında yalnız son sınıf şubelerinin sınıf kitaplıkları durur.
+          </li>
+          <li>
+            <strong>İlişik ve Belgeler.</strong> Mezuniyetten önce açık işi olmayan son sınıf
+            öğrencilerinin “Kütüphaneden ilişiği yoktur” belgeleri toplu basılır: “Son sınıf şubesi”
+            seçicisinde bir şube seçin ya da “Bütün son sınıflar”da bırakın. Tek seferde en çok 150
+            belge basılır; fazlaysa şube şube basın. Açık işi olan öğrenci bu basıma girmez; o
+            öğrenciler İlişik Listesi&apos;nde görünür.
+          </li>
+          <li>
+            <strong>Yıl Sonu Raporu.</strong> Adım rapor ekranına götürür (“Yıl Sonu Raporu&apos;nu
+            aç”); rapor sonlandırılınca adım tamamlanmış sayılır (bkz. Yıl Sonu Raporu bölümü).
+          </li>
+        </ol>
+
+        <AltBaslik>Yıl başı</AltBaslik>
+        <p>
+          Yıl Başı ekranı kayıt yazmaz: her adım durumu gösterir ve işin yapıldığı ekrana götürür.
+          Programda yeni yıla geçiş için ayrı bir işlem yoktur; sınıf atlama ve mezunların ayrılışı
+          e-Okul aktarımı ve Ayrılış Havuzu kararıyla olur.
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            <strong>Ders Yılı.</strong> Yeni ders yılını Ayarlar → Ders Yılları&apos;ndan ekleyip
+            etkinleştirin (“Ders Yılları&apos;nı aç”). Şubeler, teslimler ve iade tarihi uyarıları
+            etkin ders yılına bağlıdır; ders yılı etkinleşince iki takvim yılının resmî tatilleri ve
+            dini bayramları kendiliğinden eklenir. Okulun kademesi seçilmemişse ekran uyarır, çünkü
+            son sınıf kademeden belirlenir.
+          </li>
+          <li>
+            <strong>e-Okul Listeleri.</strong> Yeni öğrenci listesini okulun bütün şubelerini içeren
+            tek dosyayla, sonra personel listesini aktarın (“Öğrencileri aç”, “Öğretmenler ve Diğer
+            Personel&apos;i aç”); ekran bu ders yılı için aktarım yapılıp yapılmadığını gösterir.
+            Sınıf atlayan öğrencinin şubesi aktarımda güncellenir. Aktarım kimseyi ayırmaz ve
+            kimsenin kaydını silmez.
+          </li>
+          <li>
+            <strong>Ayrılış Havuzu.</strong> Yeni listede bulunmayan kişiler (mezunlar, nakil
+            gidenler, ayrılan personel) havuzda karar bekler. Okuldan ayrılanları “Ayrıldı olarak
+            işaretle”yin, okulda kalanları “Aktif kalsın” ile havuzdan çıkarın (“Ayrılış
+            Havuzu&apos;nu aç”). Ayrılanların üyeliği sonlanır; iade etmedikleri kitaplar ve
+            teslimleri İlişik Listesi&apos;ne düşer, kayıtları silinmez.
+          </li>
+          <li>
+            <strong>Kapalı Günler.</strong> Ara tatil ve yarıyılı “Öğrenciye kapalı gün” türünde
+            girin (“Kapalı Günler&apos;i aç”). Resmî tatil ya da dini bayram günleri eksikse ekran
+            uyarır; “Resmî ve dini tatilleri ekle” ile ekleyin.
+          </li>
+        </ol>
+        <p>
+          Geçen ders yılının yıl sonu son ödünç tarihi hâlâ kayıtlıysa ekran bunun bu yıl
+          uygulanmadığını söyler; isterseniz Kütüphane Politikası&apos;ndan silebilirsiniz.
+        </p>
+        <Ipucu>
+          <p>
+            Yeni ders yılında sınıf kitaplıklarını da gözden geçirin. Teslim yalnız etkin ders
+            yılının şubesine yapılır; geçen yılın şubesinde kalan teslimler İlişik Listesi&apos;nin
+            “Sınıf Kitaplıkları” kartında “önceki ders yılı” notuyla görünür. Bu kitapları Teslimler
+            → Geri Alma&apos;da okutarak geri alın; sınıf kitaplığında kalacaklarsa yeni şubeye
+            yeniden teslim edin.
+          </p>
+        </Ipucu>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="ayiklama">
+        <p>
+          Yıpranan, bilimsel değeri kalmayan, kurumun düzeyine uygun olmayan ya da Yönetmeliğin 10.
+          maddesindeki ölçütlere uygun olmayan kaynaklar ayıklanır. İş Katalog sayfasının sağ
+          üstündeki <Ekran to="/katalog/ayiklama">Ayıklama</Ekran> bağlantısından yürür ve yalnız
+          yönetici kipinde açılır.
+        </p>
+        <Mevzuat kaynak={`${YONETMELIK}, md. 12/1`}>
+          “Seçim ve Ayıklama Komisyonu tarafından aşağıda belirtilen nedenlerle ayıklanmasına karar
+          verilen kaynaklar, bir tutanakla tespit edilerek … Taşınır Mal Yönetmeliği hükümlerine
+          göre kayıtlardan düşümü yapılır. 10 uncu maddenin birinci fıkrasının (b) bendine uygun
+          olmayan kaynaklar uygun okullara veya kurumlara devredilir.”
+        </Mevzuat>
+
+        <AltBaslik>Ayıklama kayıttan düşme değildir</AltBaslik>
+        <p>
+          Ayıklama Seçim ve Ayıklama Komisyonunun kararıdır; kayıttan düşme ve devir ise harcama
+          yetkilisinin onayıyla yapılan taşınır işlemidir. Komisyon bir kaynağın ayıklanmasına karar
+          verir; kaynak taşınır kayıtlarından ancak harcama yetkilisi onaylayınca çıkar (Taşınır Mal
+          Yönetmeliği md. 10/1-e, 28/4) ya da başka bir okula veya kuruma devredilir. Programda bu
+          yüzden iki ayrı adım vardır: “Komisyon kararı” ve “Harcama yetkilisi onayı”. Nüshanın
+          durumu yalnız teklif uygulanınca değişir; o güne dek kitap rafta kalır ve ödünç
+          verilebilir. Ayıklanan ya da devredilen nüsha silinmez: katalogdan ve Ağ Kataloğundan
+          çıkar, kayıt defterinde kalır.
+        </p>
+
+        <AltBaslik>Seçim ve Ayıklama Komisyonu ve kararları</AltBaslik>
+        <Mevzuat kaynak={`${YONETMELIK}, md. 10/1`}>
+          “Kütüphane kaynaklarının tespiti ve seçimi için Seçim ve Ayıklama Komisyonu, ilçe millî
+          eğitim şube müdürü başkanlığında kurulur. Şube müdürünün katılamadığı durumlarda okul
+          müdürü komisyona başkanlık eder.”
+        </Mevzuat>
+        <p>
+          Komisyonun kimlerden oluştuğu Yönetmeliğin 4. maddesinin (ı) bendinde sayılır. Program
+          komisyonu kurmaz ve üye listesi tutmaz: komisyonun her kararı Edinimler ve Bağışlar →
+          Komisyon Kararları sekmesinde “Karar ekle” ile kaydedilir; kararın “Başkan adı” ve
+          “Katılımcılar” alanları kişi adıdır ve şifreli saklanır. “Karar türü” kararın neye
+          bağlanacağını belirler ve karar kullanılmaya başlayınca değiştirilemez:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Kaynak seçimi</strong>: bağış dışındaki edinim partilerine isteğe bağlı olarak
+            bağlanır.
+          </li>
+          <li>
+            <strong>Bağış değerlendirme</strong>: okula bağışlanan kitaplar komisyonca
+            değerlendirilir (md. 10/3). Bağış ön kaydının “Komisyon kararını uygula” penceresinde bu
+            türdeki karar seçilip “Kararı uygula” denince kabul edilen kitaplar tek işlemde
+            kataloglanır — künyeleri açılır, nüshaları numaralanır; katalogda zaten bulunan kitabın
+            nüshaları var olan esere eklenir. Reddedilenler gerekçesiyle kayıtta kalır. Adımlar
+            Katalog bölümünün “Edinimler ve bağışlar” kısmındadır.
+          </li>
+          <li>
+            <strong>Ayıklama</strong>: ayıklama teklifi ve el yazması ve nadir eserler listesi
+            yalnız bu türdeki karara bağlanır.
+          </li>
+        </ul>
+        <p>
+          Kataloglama taşınır kaydı değildir: bağışı taşınır kaydına taşınır kayıt yetkilisi alır;
+          Varlık İşlem Fişi düzenler ve bir nüshasını bağışçıya verir (Taşınır Mal Yönetmeliği md.
+          16/1). Hurdaya ayırmada kaynağı değerlendiren komisyon da Seçim ve Ayıklama Komisyonu
+          değildir: onu harcama yetkilisi belirler (Taşınır Mal Yönetmeliği md. 28/1) ve üyeleri
+          teklifin onayında “Komisyon üyeleri” alanına yazılır.
+        </p>
+
+        <AltBaslik>Gerekçe ve Taşınır Mal Yönetmeliği yolu</AltBaslik>
+        <p>
+          Her kaleme Md. 12/1&apos;deki gerekçelerden biri seçilir; kaynağın Taşınır Mal
+          Yönetmeliği&apos;ndeki yolu (“TMY yolu”) gerekçeye göre kendiliğinden gelir:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Aşırı kullanımdan yıpranmış</strong> (md. 12/1-a): “Kullanılmaz hâle gelme
+            nedeniyle kayıttan düşme (TMY 27/1)”. Yıpranarak kullanılamaz hâle gelen kaynak Kayıttan
+            Düşme Teklif ve Onay Tutanağı ve Varlık İşlem Fişiyle kayıtlardan çıkarılır. Olağan
+            kullanımdan doğan yıpranmada kimseden sorumluluk aranmaz (TMY md. 5/8); kusur olup
+            olmadığını harcama yetkilisi değerlendirir (TMY md. 27/3). Ekonomik ömrü bittiyse
+            “Hurdaya ayırma nedeniyle kayıttan düşme (TMY 28)” seçilebilir.
+          </li>
+          <li>
+            <strong>Bilimsel değeri kalmamış</strong> (md. 12/1-b) ve{" "}
+            <strong>10. maddedeki ölçütlere uygun değil</strong> (md. 12/1-ç): “Hurdaya ayırma
+            nedeniyle kayıttan düşme (TMY 28)”. Kaynağı, harcama yetkilisinin belirlediği ve biri
+            işin uzmanı en az üç kişilik bir komisyon değerlendirir; hurdaya ayrılmasına karar
+            verilen kaynak harcama yetkilisinin onayıyla kayıtlardan çıkarılır (TMY md. 28/1, 28/4).
+            İkinci gerekçede “Uyulmayan ölçüt” de seçilir. Md. 10/4&apos;e aykırı kitap okul
+            kütüphanelerinde, sınıf kitaplıklarında ve gezici kütüphanelerde bulundurulamaz; program
+            bu gerekçedeki kaynağı devir yoluna bağlamaz.
+          </li>
+          <li>
+            <strong>Kurumun düzeyine uygun değil</strong> (md. 12/1-c; öğrencilerin yaş ve gelişim
+            düzeyine uygunsuzluk da buradadır): kayıttan düşülmez, devredilir. “Başka bir MEB
+            okuluna devir (TMY 24/2)” Millî Eğitim Bakanlığına bağlı başka bir okula, yani aynı kamu
+            idaresinin başka bir harcama birimine devirdir; “Başka bir kamu idaresine bedelsiz devir
+            (TMY 31)” Bakanlık dışında, kaynağa ihtiyacı olan bir kamu idaresine devirdir. Çıkış
+            Varlık İşlem Fişiyle yapılır (TMY md. 24). “Devralacak okul ya da kurum” onaydan önce
+            yazılmış olmalıdır; komisyon kararından sonra da düzeltilebilir.
+          </li>
+        </ul>
+        <p>
+          Devir yalnız bu gerekçeyle yapılır; bu gerekçedeki kaynak da yalnız devredilir.
+          Yönetmelik, yaş ve gelişim düzeyine uygun olmayan kaynağın (md. 10/1-b) uygun okullara
+          veya kurumlara devredileceğini söyler; program bu kaynağı kurumun düzeyine uygun olmayan
+          kaynakla aynı gerekçede toplar. Yaş ve gelişim düzeyine uygun olmayan kaynak “10.
+          maddedeki ölçütlere uygun değil” gerekçesiyle hurdaya ayrılamaz: ölçüt listesinde bu
+          seçenek yoktur.
+        </p>
+        <p>
+          Ayıklanan kitap kendiliğinden imha edilmez: imha yalnız hurdaya ayırma yolunda, hurdaya
+          ayırmayı değerlendiren komisyon ekonomik değeri olmadığına ya da imha edilmesi gerektiğine
+          karar verirse harcama yetkilisinin onayıyla yapılır ve bunun için ayrıca bir imha tutanağı
+          düzenlenir (TMY md. 28/5). İmha kararı kalem kalem verilir: kararın kapsamadığı hurdaya
+          ayırma kalemi İmha tutanağına girmez. Hurdaya ayrılan ve ekonomik değeri olan kitaplar
+          hakkında 7330 sayılı Kanun hükümleri uygulanır (TMY md. 28/8); bu iş taşınır kayıt
+          yetkilisinindir.
+        </p>
+
+        <AltBaslik>Teklif adım adım</AltBaslik>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            <strong>Taslak.</strong> “Yeni teklif” etkin ders yılına bir teklif açar. “Kalem ekle”
+            penceresinde gerekçeyi seçin; nüshaları “Aday Nüshalar” listesinden işaretleyin ya da
+            kitapların kütüphane etiketlerini “Kütüphane etiketleri” kutusuna okutun. Aynı gerekçe
+            ve yol, pencerede seçilen bütün nüshalara verilir. Kalem “Düzenle” ile değiştirilir,
+            “Çıkar” ile tekliften alınır. Ayıklama teklif listesini basıp komisyona götürün.
+          </li>
+          <li>
+            <strong>Komisyona sunuldu.</strong> “Komisyona sun” kalem listesini kilitler.
+          </li>
+          <li>
+            <strong>Komisyon kararı.</strong> Komisyonun kararını Edinimler ve Bağışlar → Komisyon
+            Kararları&apos;nda “Ayıklama” türüyle yazın, sonra teklifte “Komisyon kararını bağla”.
+            Komisyonun ayıklanmasına karar vermediği kalemi “Komisyon ayıklanmasına karar vermedi”
+            ile işaretleyip gerekçesini yazın; kalem silinmez, Ayıklama tutanağında ayrı tabloda
+            görünür. Teklif sürerken el yazması ya da nadir eser olarak işaretlenen kalem (tabloda
+            “Nadir eser — ayıklanamaz” rozeti) ayıklanamaz; komisyon onu da bu seçenekle işaretler.
+            Ayıklama tutanağını basıp komisyona imzalatın.
+          </li>
+          <li>
+            <strong>Harcama yetkilisi onayı.</strong> İmzalı belgelerden sonra “Harcama yetkilisinin
+            onayını işle”: “Harcama yetkilisinin adı” (şifreli saklanır), “Onay tarihi” (imzalı
+            belgenin tarihi; komisyon kararından önce ve bugünden sonra olamaz) ve “Komisyon
+            üyeleri” (kayıttan düşmeyi değerlendiren komisyon; satır başına bir kişi). Hurdaya
+            ayırma yolunda komisyon zorunludur ve en az üç kişidir (TMY md. 28/1); biri işin
+            uzmanıdır, onu ilk satıra yazın (belgede “Komisyon üyesi (işin uzmanı)” diye basılır).
+            Yalnız yıpranan kaynaklar düşülüyorsa komisyon isteğe bağlıdır: durumu belgeleyen
+            tutanak varsa harcama yetkilisi komisyon kurulmadan onaylayabilir (TMY md. 10/1-e);
+            Ayıklama tutanağının bu tutanak sayılıp sayılmayacağını harcama yetkilisi değerlendirir.
+            Komisyon imhaya karar verdiyse “İmha kararı verildi” işaretlenir; kutu yalnız hurdaya
+            ayırma kalemi olan teklifte çıkar ve açılan listede imha kararının kapsamadığı kalemin
+            işareti kaldırılır. Harcama yetkilisinin onaylamadığı kalem “Onaylanmadı” ile
+            gerekçesiyle işaretlenir; o kalem kayıttan düşülmez ya da devredilmez.
+          </li>
+          <li>
+            <strong>Uygulandı.</strong> “Uygula” nüshaları tek işlemde “Ayıklandı (kayıttan
+            düşüldü)” ya da “Devredildi” yapar; onay penceresindeki “Harcama yetkilisinin onayını ve
+            belgelerin imzalandığını denetledim.” kutusu işaretlenmeden düğme etkinleşmez. Nüshalar
+            katalogdan ve Ağ Kataloğundan çıkar, kayıt defterinde kalır. İşlem geri alınamaz.
+            Uygulama her kalemi yeniden denetler: bu arada ödünç verilen ya da kaybolan bir kitap
+            varsa hiçbir nüshaya dokunulmaz. Sayımda TMY 32/3 durdurması sürerken teklif
+            uygulanamaz; teklifte “TMY 32/3 durdurması sürüyor” bandı durur (bkz. Sayım bölümü).
+          </li>
+        </ol>
+        <p>
+          Sunulmuş, kararı bağlanmış ya da onaylanmış teklif “Teklifi geri çek” ile taslağa döner;
+          bağlanan karar, onay ve dışarıda bırakma işaretleri silinir, kalemler kalır. Aynı karar
+          ancak kalemler o kararın kapsadığı kalemlerin içinde kaldıysa yeniden bağlanır: yeni
+          kalem, değişen gerekçe ya da yol, ya da komisyonun ayıklanmasına karar vermediği bir kalem
+          için yeni komisyon kararı gerekir. Uygulanmamış teklif “İptal et” ile kapanır; iptal geri
+          alınmaz ve nüshalara dokunmaz.
+        </p>
+
+        <AltBaslik>Ayıklamaya konamayan kitaplar</AltBaslik>
+        <p>
+          Yalnız raftaki nüsha ayıklanır. Ödünçteki kitap önce iade alınır, sınıf kitaplığındaki
+          önce teslimden geri alınır, onarımdaki önce onarımdan döner. Çözülmemiş kayıp/hasar
+          dosyası olan, el yazması ya da nadir eser olan ve süren başka bir teklifte bulunan nüsha
+          konamaz. Seçilenlerden biri konamıyorsa pencere o kitabın numarasını ve nedenini yazar ve
+          hiçbir nüsha eklenmez.
+        </p>
+        <p>
+          Kayıp ve Hasar&apos;da kayıttan düşme önerisiyle kapanan dosyaların kitapları da
+          ayıklamaya konmaz. Kayıp ve hasar, Md. 12/1&apos;in ayıklama gerekçelerinden değildir: bu
+          kitapların kaydı sayımda, kayıp/hasar tutanağına dayanarak kapanır ve bunun için Seçim ve
+          Ayıklama Komisyonu kararı gerekmez (Sayım bölümü). “Kalem ekle” penceresinin altında iki
+          bilgi kutusu bu kitapları gerekçesiyle yazar: “Kayıp nüshaların kayıttan düşme önerileri”
+          ve “Hasar dosyalarının kayıttan düşme önerileri”. Bu kitaplar aday listesinde yoktur;
+          numarasını okutursanız pencere “Hasar dosyasında kayıttan düşme önerilen nüsha ayıklamaya
+          konmaz (Md. 12/1 gerekçelerinden değildir); sayımda kayıttan düşülür.” yazar.
+        </p>
+
+        <AltBaslik>Ayıklama belgeleri</AltBaslik>
+        <p>
+          Teklifin “Ayıklama Belgeleri” kartında belgeler Taşınır Mal Yönetmeliği yoluna göre
+          basılır; henüz basılamayan belgenin yanında nedeni yazar (ör. “Komisyon kararı
+          bağlandıktan sonra basılır.”).
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Ayıklama teklif listesi</strong>: komisyona sunulan liste — gerekçe ve önerilen
+            yol, teklif edenin imzası.
+          </li>
+          <li>
+            <strong>Ayıklama tutanağı</strong>: Md. 12/1&apos;in tutanağı — komisyonun ayıklanmasına
+            karar verdiği ve vermediği kaynaklar, komisyon başkanının ve üyelerinin imzası.
+          </li>
+          <li>
+            <strong>Kayıttan düşme teklif listesi</strong>: Kayıttan Düşme Teklif ve Onay Tutanağına
+            esas hazırlık — TMY 27/1 ve 28 yolundaki kaynaklar ayrı tablolarda, “Komisyon
+            üyeleri”nin imza satırları (hurdaya ayırmada üye yazılmamışsa üç boş satır) ve harcama
+            yetkilisinin “OLUR”u.
+          </li>
+          <li>
+            <strong>İmha tutanağı</strong>: yalnız onayda imha kararı işaretlenmişse (TMY md. 28/5);
+            imha tarihi, yeri ve yöntemi imha sırasında elle yazılır.
+          </li>
+          <li>
+            <strong>Devir listesi</strong>: devredilecek kaynaklar ve devralacak okul ya da kurum;
+            “Excel&apos;i indir” ile Excel dosyası olarak da alınır.
+          </li>
+        </ul>
+        <Ipucu>
+          <p>
+            Kayıttan Düşme Teklif ve Onay Tutanağı ve Varlık İşlem Fişi resmî taşınır belgeleridir
+            ve TKYS&apos;de düzenlenir. Programın çıktıları onların hazırlığıdır; taşınır kayıt
+            yetkilisine verin.
+          </p>
+        </Ipucu>
+
+        <AltBaslik>El yazması ve nadir eserler</AltBaslik>
+        <p>
+          El yazması ve nadir eser ayıklanmaz: Seçim ve Ayıklama Komisyonu bunları tespit eder ve
+          listesi Genel Müdürlüğe gönderilir. Yönetmelikte Genel Müdürlük, Destek Hizmetleri Genel
+          Müdürlüğüdür (md. 4/1-c).
+        </p>
+        <Mevzuat kaynak={`${YONETMELIK}, md. 12/2`}>
+          “Seçim ve Ayıklama Komisyonu tarafından tespit edilen el yazmaları ve nadir eserler
+          listesi, Genel Müdürlüğe gönderilir.”
+        </Mevzuat>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            Nüshayı Eser Ayrıntısı&apos;nda nüsha penceresindeki “El yazması / nadir eser” kutusuyla
+            işaretleyin. İşaretli nüsha hiçbir ayıklama teklifine konamaz.
+          </li>
+          <li>
+            Katalog sayfasının sağ üstündeki{" "}
+            <Ekran to="/katalog/nadir-eserler">Nadir Eserler</Ekran> ekranında, “Listeler”
+            sekmesinde “Yeni liste” ile bir liste açın. Listenin penceresinde “Bildirilmemiş Nadir
+            Eserler”den eserleri seçip “Seçilenleri listeye ekle”; yanlış eklenen eser “Çıkar” ile
+            listeden alınır.
+          </li>
+          <li>
+            Komisyonun “Ayıklama” türündeki kararını “Komisyon kararı” seçicisinden seçip “Kararı
+            kaydet”. Karar bağlanınca listedeki nüshaların nadir eser olduğu komisyonun tespitidir
+            ve işaretleri kaldırılamaz. El yazması ve nadir eserler listesini “Önizle” ya da
+            “PDF&apos;i indir” ile basın; karar bağlanmamışsa listenin imza satırları boş çıkar.
+          </li>
+          <li>
+            Liste gönderilince “Genel Müdürlüğe Gönderim” bölümünde “Gönderim tarihi”ni (komisyon
+            kararından önce ve bugünden sonra olamaz) ve isteğe bağlı olarak gönderme yazısının
+            sayısını yazıp “Gönderildi olarak işaretle”: gönderilmiş liste değişmez ve içindeki
+            nüshanın işareti kaldırılamaz. Bu işaret geri alınmaz.
+          </li>
+        </ol>
+        <p>
+          “Nadir Eser İşaretli Nüshalar” sekmesi işaretli nüshaları ve Genel Müdürlüğe bildirilip
+          bildirilmediklerini (“Bildirildi” / “Bildirilmedi”) gösterir; “Yalnız bildirilmemişler”
+          kutusu listeyi daraltır. Genel Müdürlüğe bildirilmemiş nüshanın işareti, nüsha kararı
+          bağlanmış bir listede değilse veri giriş hatası olarak kaldırılabilir; kararı bağlanmış
+          listedeyse önce nüshayı listeden çıkarın. Bir listedeki nüsha silinemez.
+        </p>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="yil-sonu-raporu">
+        <p>
+          Ders yılı sonunda kütüphanenin durumu okul müdürlüğüne raporlanır. Rapor{" "}
+          <Ekran to="/yil-sonu-raporu">Yıl Sonu Raporu</Ekran> ekranında hazırlanır; ekran Genel
+          Bakış&apos;taki “Yıl Sonu Raporu” kartından (yıl sonu penceresinde, rapor sonlandırılana
+          dek) ve Yıl Sonu ekranının son adımından açılır. Yalnız yönetici kipinde çalışır.
+        </p>
+        <Mevzuat kaynak={`${YONETMELIK}, md. 12/1`}>
+          “Her ders yılı sonunda kütüphane kaynakları, kütüphaneci veya görevlendirilen öğretmen
+          tarafından gözden geçirilir ve tespit edilen hususlar raporla okul müdürlüğüne
+          bildirilir.”
+        </Mevzuat>
+        <Mevzuat kaynak={`${YONETMELIK} Uygulama Kılavuzu, 2.4`}>
+          “Her eğitim öğretim yılı sonunda kütüphanedeki kitap durumu, kazandırılan ve ayıklanan
+          kaynaklar okul yönetimine raporlanır.”
+        </Mevzuat>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            “Raporu hazırla” etkin ders yılının raporunu açar; her ders yılının tek raporu vardır.
+          </li>
+          <li>
+            “Sayı”, “Tarih” ve “Tespit edilen hususlar”ı yazıp “Kaydet” deyin. Tespit alanına
+            kaynakların durumunu ve önerilerinizi yazın; kişi adı yazmayın.
+          </li>
+          <li>
+            Yıl sonu kütüphane raporunu “Önizle” ile denetleyin. Rapor “OKUL MÜDÜRLÜĞÜNE” yazılan
+            resmî yazı düzenindedir; imza satırında ad basılmaz, rapor elle imzalanır.
+          </li>
+          <li>
+            “Raporu sonlandır” sayıları o günkü hâliyle dondurur; yeniden basılan rapor aynı
+            sayıları taşır. Kaydedilmemiş değişiklikler önce kaydedilir; onay penceresi raporun
+            dönemini yazar. Düzeltme gerekirse “Sonlandırmayı geri al”.
+          </li>
+        </ol>
+        <p>
+          Raporun bölümleri: tespit edilen hususlar (onarım, hasar ve kayıp sayılarıyla), koleksiyon
+          özeti, yıl içinde kazandırılan kaynaklar (edinim yoluna göre), ayıklanan ve devredilen
+          kaynaklar, ödünç istatistiği. Sonlandırılmamış rapor “TASLAK” ibaresiyle basılır. Sayılar
+          ders yılının başından bir sonraki ders yılının başına dek sayılır. Sonraki ders yılı henüz
+          tanımlanmamışsa dönem ders yılının sonunda (ya da bugün) biter: yaz aylarında yapılacak
+          ayıklamanın da rapora girmesi için raporu yeni ders yılı tanımlandıktan sonra sonlandırın
+          ya da sonlandırmayı geri alıp yeniden sonlandırın. Ekran da bunu hatırlatır: “Raporu yeni
+          ders yılı tanımlandıktan sonra sonlandırmanız önerilir; Haziran&apos;da sonlandırırsanız
+          yaz aylarındaki işler (ör. Ağustos&apos;taki ayıklama) bu rapora girmez. …”
+        </p>
+        <p>
+          Kazandırılan kaynaklar Yönetmeliğin 10. maddesinin beşinci fıkrasındaki yollardan
+          (Bakanlıktan gönderilen, satın alma, bağış ve değişim) gelen nüshalardır (md. 10/5).
+          Mevcut koleksiyonun programa aktarımı ve sayım fazlasının kayda alınması ayrı satırda
+          “kayıt içi giriş” olarak yazılır ve kazandırılan sayılmaz.
+        </p>
+        <Ipucu>
+          <p>
+            Rapor kişisizdir: kişisel veri içermez, üye bazında hiçbir bilgi taşımaz, adlı sıralama
+            ve şube ile konu kırılımı yapmaz; imza satırında bile ad yoktur. Üye türü ve sınıf
+            düzeyi kırılımında, eşikten az farklı üyenin ödünç aldığı grubun sayısı gösterilmez
+            (“—”); gizlenen sayı toplamdan çıkarılarak bulunamasın diye gerekirse bir grup daha
+            gizlenir. Rapor tarihindeki aktif üye sayısı ödünç verisi olmadığı için eşiksiz yazılır.
+            Eşik Kütüphane Politikası&apos;ndaki “Çok okunanlar için en az üye sayısı”dır. Program
+            “Tespit edilen hususlar” alanına yazılanı denetleyemez: oraya öğrenci, öğretmen ya da
+            personel adı yazmayın.
+          </p>
+        </Ipucu>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="sayim">
+        <p>
+          Kütüphane materyali taşınırdır: yıl sonlarında ve harcama yetkilisinin gerekli gördüğü
+          durum ve zamanlarda sayılır (Taşınır Mal Yönetmeliği md. 32/1). Sayımı, harcama
+          yetkilisinin ya da görevlendirdiği kişinin başkanlığında, taşınır kayıt yetkilisinin de
+          katıldığı en az üç kişilik <strong>sayım kurulu</strong> yapar (md. 32/2). Program
+          okutmayı, sonuçları ve Sayım tutanağını hazırlar; ekran Katalog sayfasının sağ üstündeki{" "}
+          <Ekran to="/katalog/sayim">Sayım</Ekran> bağlantısıyla açılır. Sayım ekranı yalnız
+          yönetici kipinde açılır. Kitaplar görevli kipinde de okutulur: sayım sürerken Görevli Kipi
+          sayfasındaki “Sayım okutmasını aç” düğmesi okutma bölümünü açar; görevlinin ekranında
+          yalnız okutmanın sonucu, barkod ve kitabın adı görünür. Sayımı başlatmak, ilerlemesine
+          bakmak, sayım fazlasına karar vermek, tamamlamak ve onaylamak yönetici kipindedir.
+          Onaylanmamış bir sayım varken Genel Bakış&apos;taki “Sayım” kartı sayımın durumunu,
+          bulunan kitap sayısını ve süren seçenekleri gösterir; kartın “Sayım&apos;ı aç” bağlantısı
+          sayımı açar.
+        </p>
+        <p>
+          Program sayımı bir mali yıla bağlar: taslaktaki “Mali yıl (isteğe bağlı)” boş bırakılırsa
+          sayımın başladığı yıl yazılır ve tutanağın ekindeki sayılar o yılın 1 Ocak-31 Aralık
+          dönemi için hesaplanır. Ders yılı sonundaki Yıl Sonu ekranı sayım değildir.
+        </p>
+
+        <AltBaslik>İki ayrı seçenek</AltBaslik>
+        <p>
+          Sayımı başlatmadan önce “Sayım Sırasındaki Seçenekler” kartında iki seçenek ayrı ayrı
+          işaretlenir ya da boş bırakılır. İkisi birbirinden bağımsızdır ve Sayım tutanağında ayrı
+          satırlarda yazılır; iade üçüncü satırdadır.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>“TMY 32/3 durdurması”</strong> isteğe bağlıdır:
+            <Mevzuat kaynak="Taşınır Mal Yönetmeliği, md. 32/3">
+              “Sayım süresince, hizmetin aksamaması ve bozulabilecek nitelikteki taşınırlar için
+              gerekli tedbirlerin alınması kaydıyla, taşınır giriş ve çıkışları sayım kurulunun
+              talebi üzerine harcama yetkilisince durdurulabilir.”
+            </Mevzuat>
+            Seçerseniz “Kurulun talep tarihi”ni, durdurmayı yapan harcama yetkilisinin adını
+            (“Harcama yetkilisinin adı”; şifreli saklanır) ve “Durdurma tarihi”ni yazarsınız; üçü de
+            zorunludur. Durdurma sürerken şu işler yapılamaz: edinim ve yeni nüsha kaydı (Hızlı
+            Kayıt, içe aktarma ve bağış kataloglaması dahil), kayıttan düşme ve devir (onaylanmış
+            ayıklama teklifinde “Uygula”), kayıp bildirimi ve kayıp/hasar dosyası çözümü. Bu işlerin
+            ekranlarında (Edinimler ve Bağışlar, Hızlı Kayıt, Eser Ayrıntısı, Ayıklama, Kayıp ve
+            Hasar) “TMY 32/3 durdurması sürüyor” bandı durur; Hızlı Kayıt&apos;ta “Nüshayı aç”
+            düğmesi kapalıdır ve okutulan boş etiket bağlanamaz. Raftaki eski koleksiyonun programa
+            aktarımı taşınır girişi değildir ama durdurma sürerken o da yapılmaz; iletisi Taşınır
+            Mal Yönetmeliğine dayanmaz: “Sayım sürerken programa aktarım yapılamaz; sayım bitince
+            aktarın.” İçe Aktarma ekranında ve Hızlı Kayıt&apos;ta “Mevcut koleksiyon (programa
+            aktarım)” edinimi seçiliyken bant “Sayım sürüyor” der. Durmayanlar: kayıp dosyasında
+            kitabın bulunması (“Bulundu”, “Bulundu (bedel teslim alınmıştı)”) ve bedelin iki adımı
+            (“Bedel belirlendi”, “Bedel teslim alındı”); hasar dosyasında kayıttan düşme önerisi
+            yazmayan çözümler (“Onarıldı”, “Aynısı temin edildi”, “Bedelle aynısı alındı”); onarıma
+            gönderme ve onarımdan dönüş; teslim ve teslimden geri alma. Durdurma ödüncü ve iadeyi
+            kapsamaz. Yeni ödünç ve teslim yalnız “Sayım için hizmet arası” seçildiyse durur.
+            Kayıptaki kitabın rafa dönüşü taşınır giriş ve çıkışı değildir: nüsha kayıttan
+            düşülmediyse kayıtta zaten vardır, bu yüzden kayıp dosyası durdurma sürerken de
+            “Bulundu” ile kapatılır. Bulunan kitabı sayım sürerken okutabilirsiniz; sayım
+            onaylanınca dosyası kapanır. Sayım tamamlandıktan sonra okutma kapanır: o arada
+            getirilen kayıp kitap için onaydan önce kayıp dosyasında “Bulundu”yu seçin (onay
+            penceresi kayıtta kayıp görünen noksanlar için uyarır); onay kalemi yeniden denetler ve
+            kitabı kayıttan düşmez. Seçilmez ve onaylanırsa kitap “Kayıp (kayıttan düşüldü)” olur.
+          </li>
+          <li>
+            <strong>“Sayım için hizmet arası”</strong> okulun kararıdır ve yeni ödüncü ve yeni
+            teslimi durdurur: masada ödünç verilmez, sınıf kitaplığına ve öğretmene teslim yapılmaz;
+            iade alınır, teslimden geri alınır. İsterseniz “Okul kararı (isteğe bağlı)” alanına
+            kararın tarihini ve sayısını yazın. Taşınır Mal Yönetmeliğine dayanmaz: ödünç,
+            yönetmeliğin saydığı giriş ve çıkış hâllerinden değildir (md. 13/1); okuyucuya verilen
+            kütüphane materyali Taşınır Teslim Belgesi düzenlenmeden ödünç takip sistemiyle izlenir
+            (md. 23/4). Tutanağın “Dayanak” sütununda “Okul kararı” yazar; yanında yalnız, sayım
+            yapılırken gerekli önlemleri almanın sayım kurulunun görevi olduğu anılır (md. 32/3,
+            ikinci cümle). Dolaşım Masası&apos;nda ve Teslimler → Yeni Teslim&apos;de “Sayım için
+            hizmet arası — yeni ödünç ve teslim yapılamıyor. İade ve teslimden geri alma açık.”
+            şeridi durur; şerit iki kipte de ekran açılırken çıkar, Yeni Teslim&apos;de “Teslim et”
+            kapalıdır. Hizmet arası kalkınca şerit de dakika içinde kalkar (masada ilk başarılı
+            ödünçte hemen). Hizmet arası teslimden geri almayı durdurmaz.
+          </li>
+          <li>
+            <strong>İade hiçbir durumda durmaz</strong> (Yönetmelik Md. 23/1-c): iki seçenekte de ve
+            sayım tamamlandıktan sonra da iade alınır; teslimden geri alma da durmaz. Sayım
+            sırasında iade edilen, teslimden geri alınan, kayıp dosyasında bulunan ya da aynısı
+            temin edilen ya da onarımdan dönen kitap bulunmuş sayılır; sayım başlamadan önce (aynı
+            gün de olsa) onarımdan dönen kitap ise okutulmalıdır.
+          </li>
+        </ul>
+        <p>
+          Seçilen seçenekler sayım başlayınca başlar, sayım tamamlandıktan sonra da sürer ve ancak
+          harcama yetkilisinin onayıyla ya da sayımın iptaliyle kalkar. Sayım ekranının “Seçenekler”
+          bölümünde süren seçeneğin yanında “Sürüyor” yazar.
+        </p>
+
+        <AltBaslik>Ödünçteki, teslimdeki ve onarımdaki kitaplar</AltBaslik>
+        <p>
+          Sayım kurulu “Ödünçteki, Teslimdeki ve Onarımdaki Nüshalar” kartında dört seçici için
+          karar verir: “Ödünçteki nüsha” ve “Öğretmene teslim edilen nüsha” için “Sayımdan önce
+          toplanır” ya da “Kayda göre alınır”; “Sınıf kitaplığına teslim edilen nüsha” için “Yerinde
+          sayılır” ya da “Sayımdan önce toplanır”; “Onarımdaki nüsha” için “Sayımdan önce geri
+          alınır” ya da “Kayda göre alınır — onarımda”. “Kaydet” dedikten sonra seçimin dayanağı
+          seçicinin altında yazar ve Sayım tutanağına geçer.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Ödünçteki kitap</strong> ödünç takip sistemiyle izlenir (md. 23/4); toplanmayan
+            kitap 32/5&apos;e kıyasen kayda göre alınır.
+          </li>
+          <li>
+            <strong>Sınıf kitaplığındaki kitaplar</strong> ortak kullanım alanındaki taşınırlar gibi
+            yerinde sayılır (md. 32/5&apos;in birinci cümlesine kıyasen); o zaman şubenin teslim
+            listesi Dayanıklı Taşınırlar Listesi yerine kullanılır. Sınıf kitaplığındaki kitap kayda
+            göre alınmaz: 32/5&apos;in birinci cümlesi ortak kullanım alanındaki taşınırın
+            sayılmasını öngörür; sayılmaksızın kayıt esas almak yalnız ikinci cümlededir ve kamu
+            görevlilerine teslim belgesiyle verilen taşınır içindir. “Sayımdan önce toplanır”
+            seçilirse geri alınamayan kitap sınıf kitaplığında yerinde aranır; bulunmazsa noksandır.
+          </li>
+          <li>
+            <strong>Öğretmene teslim edilen kitap</strong> için TKYS&apos;de Taşınır Teslim Belgesi
+            düzenlendiyse kitap md. 32/5&apos;in ikinci cümlesiyle kayda göre alınır;
+            düzenlenmediyse 32/5&apos;e kıyasen işlem yapılır (md. 23/4).
+          </li>
+          <li>
+            <strong>Onarımdaki kitap</strong> onarımcıda olabilir. “Sayımdan önce geri alınır”
+            seçilirse kitaplar sayımdan önce onarımdan geri alınır ve kütüphanede okutulur; geri
+            alınamayan kitap kayda göre alınır ve kalemde “Onarımdan geri alınamadı; kayda göre
+            alındı.” yazar. “Kayda göre alınır — onarımda” seçilirse okutulmayan onarımdaki kitap
+            kayda göre alınır. İki seçim de sayım kurulunun kararıdır: Taşınır Mal Yönetmeliğinde
+            onarıma gönderilmiş taşınırın sayımına ilişkin doğrudan hüküm yoktur. Tutanağın
+            “Dayanak” sütunu bunu yazar; onarımda kayda göre alınanlar sonuçlarda ayrı satırdadır.
+            Sayım sırasında onarıma gönderilen (sayım başladığında rafta olan) kitap okutulmazsa
+            noksan çıkar.
+          </li>
+        </ul>
+        <p>
+          “Sayımdan önce toplanır” seçilirse kitaplar sayımdan önce geri çağrılır; sayım sırasında
+          iade edilen, teslimden geri alınan ya da onarımdan dönen kitap bulunmuş sayılır.
+          Ödünçteki, öğretmendeki ya da onarımdaki kitap noksan sayılmaz: toplanamayan kitap kayda
+          göre alınır ve kalemde “Toplanamadı; kayda göre alındı.” yazar. Sınıf kitaplığında
+          bulunmayan kitap noksandır; onayda kayıttan düşülür ve teslimi “Kayba dönüştü” ile
+          kapanır. Tutanak ödünçteki ve teslimdeki kitapları yalnız sayıyla gösterir.
+        </p>
+
+        <AltBaslik>Sayım adım adım</AltBaslik>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            Sayım listesinde “Yeni sayım” ile taslak açın. Aynı anda tek sayım yürütülür:
+            onaylanmamış bir sayım varken düğmenin yerinde “Süren sayımı aç” durur. “Sayım Kurulu”
+            kartına “Kurul başkanı”nı (harcama yetkilisi ya da görevlendirdiği kişi), “Taşınır kayıt
+            yetkilisi”ni ve “Kurul üyeleri”ni (satır başına bir kişi) yazın. Kurul en az üç farklı
+            kişidir. Adlar şifreli saklanır ve yalnız Sayım tutanağına basılır.
+          </li>
+          <li>
+            “Sayım Sırasındaki Seçenekler” kartında iki seçeneği işaretleyin ya da boş bırakın;
+            “Ödünçteki, Teslimdeki ve Onarımdaki Nüshalar” kartında kurulun seçimini işaretleyin ve
+            “Kaydet”e basın.
+          </li>
+          <li>
+            “Sayımı başlat”: “Sayım başlatılsın mı?” penceresi seçtiğiniz seçeneklerin sonucunu
+            yazar. Başlatınca o anki kayıtlar sayımın anlık görüntüsü olur. Sayım sürerken yapılan
+            değişiklikler onu değiştirmez; sayım başladıktan sonra kayda giren kitap bu sayımda
+            sayılmaz. Kurul ve seçenekler bundan sonra değişmez.
+          </li>
+          <li>
+            “Kitapları Okutun” kartında “Kütüphane etiketi” kutusuna rafta ve onarımda duran
+            kitapların, “Yerinde sayılır” seçildiyse sınıf kitaplıklarındaki kitapların da etiketini
+            okutun. Okuyucuyla arka arkaya okutabilirsiniz: kodlar sırayla işlenir, hiçbiri
+            kaybolmaz; ekranda bir pencere açıkken (sayım fazlası, onay kutusu) okutulan kod da
+            bekletilir ve pencere kapanınca işlenir. Aynı kitabı ikinci kez okutmak zararsızdır (“Bu
+            kitap bu sayımda zaten okutuldu.”). Kayıtta ödünçte ya da teslimde görünen kitap
+            kütüphanede çıkarsa ileti onu bulunmuş yazar ve iadesini almanızı ya da teslimden geri
+            almanızı söyler. ISBN barkodu ve üye kartı kabul edilmez; üye kartının numarası sayıma
+            yazılmaz. Onarımcıdaki kitap okutulamaz; kurulun seçimine göre kayda göre alınır
+            (yukarıda). “Bölümlere Göre İlerleme” bölüm bölüm ve yerinde sayılan sınıf kitaplığı
+            sınıf kitaplığı kaç kitabın bulunduğunu gösterir. Okutmayı masadaki görevli de
+            yapabilir: görevli kipinde Görevli Kipi sayfasındaki “Sayım okutmasını aç” düğmesi aynı
+            okutmayı açar; görevlinin ekranında ilerleme ve sayım fazlası kartı yoktur, yanlış
+            okutulan kodu yönetici bu ekranda görür ve çıkarır.
+          </li>
+          <li>
+            “Sayımı tamamla”: okutulmayan kitaplar sınıflanır (ödünçte ve teslimde olan kayda göre
+            alınır, sayım sırasında kütüphaneye dönen bulunmuş sayılır). Bulunamayan kitap varsa
+            ikinci sayım başlar ve “İkinci Sayım: Bulunamayan Nüshalar” listesindeki kitaplar bir
+            kez daha aranır (md. 32/6). “İkinci sayımı tamamla”dan sonra yine bulunamayanlar
+            “Noksan” olarak yazılır. Tamamlanan sayımda “Sonuçlar” ve “Kalemler” bölümleri durur;
+            “Kalemler” açılışta noksanları gösterir, “Sonuç” süzgeci ve “Ara” kutusuyla öbür
+            kalemlere bakılır. Sırada işlenmeyi bekleyen okutma varken tamamlama düğmesi kapalıdır.
+          </li>
+          <li>
+            “Sayım Belgeleri” kartından Sayım tutanağını basın (“Önizle” · “PDF&apos;i indir” ·
+            “Excel&apos;i indir”); sayım kurulu ve harcama yetkilisi imzalar. Kararı bekleyen sayım
+            fazlası varken tutanağın sayıları kesin değildir (başlığın altındaki not ve ekteki
+            “Gelecek yıla devir” bunu söyler); tutanağı kararlardan sonra imzaya basın.
+          </li>
+          <li>
+            “Harcama yetkilisinin onayını işle”: “Sayım onaylansın mı?” penceresinde “Harcama
+            yetkilisinin adı”nı ve imzalı tutanağın tarihini (“Onay tarihi”; sayımın tamamlandığı
+            günden önce ve bugünden sonra olamaz) yazın. Harcama yetkilisinin onaylamadığı noksan ya
+            da hasar önerisi kalemini “Onaylanmadı” ile işaretleyip gerekçesini yazın (kişi adı
+            yazmayın: gerekçe tutanağa basılır); o kalem kayıttan düşülmez. Pencere, kayıtta kayıp
+            görünen noksanlar için uyarır (kitap sayım tamamlandıktan sonra getirildiyse önce kayıp
+            dosyasında “Bulundu”yu seçin) ve sayım sırasında onarıma gönderilen noksanlar için
+            uyarır (kitap onarımcıdaysa “Onaylanmadı” ile işaretleyin). “Harcama yetkilisinin
+            imzaladığı sayım tutanağını denetledim.” kutusunu işaretleyip “Onayla”ya basın. Onay
+            geri alınmaz.
+          </li>
+        </ol>
+
+        <AltBaslik>Onayda ne olur</AltBaslik>
+        <p>
+          Onay tek işlemdir. Önce seçilen durdurma ve hizmet arası kalkar, sonra kalemler işlenir:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            Noksan kitap “Sayım noksanı (kayıttan düşüldü)” olur; kayıtta kayıp görünen noksan kitap
+            “Kayıp (kayıttan düşüldü)” olur. Noksan için Kayıttan Düşme Teklif ve Onay Tutanağı ve
+            Varlık İşlem Fişi, fazla için Varlık İşlem Fişi düzenlettirilerek kayıtların sayım
+            sonuçlarıyla uygunluğu sağlanır (md. 32/7); bu belgeler TKYS&apos;de düzenlenir.
+          </li>
+          <li>
+            Onayda her noksan yeniden denetlenir: sayım tamamlandıktan sonra iade edilen, bulunan,
+            ödünç verilen ya da durumu başka türlü değişen kitap düşülmez; kalemde “Onayda durumu
+            değişmişti — düşülmedi” yazar.
+          </li>
+          <li>
+            Hasar dosyasında kayıttan düşme önerilen ve sayımda bulunan kitap “Hasar (kayıttan
+            düşüldü)” olur: kullanılamaz hâle gelen taşınır olarak kayıtlardan çıkarılır (TMY 27/1);
+            durumu kayıp/hasar tutanağı belgeler. Bu kitaplar ayıklamaya konmaz. Önerisi olan kitap
+            sayımda bulunamazsa noksandır.
+          </li>
+          <li>
+            Durumu belgeleyen tutanak varsa Kayıttan Düşme Teklif ve Onay Tutanağı komisyon
+            kurulmadan harcama yetkilisince onaylanabilir (TMY md. 10/1-e); Sayım tutanağının ve
+            kayıp/hasar tutanağının o belge sayılıp sayılmayacağını harcama yetkilisi değerlendirir.
+            Kasıt, kusur, ihmal ya da tedbirsizlik olup olmadığını da harcama yetkilisi
+            değerlendirir (md. 27/3).
+          </li>
+          <li>
+            Sınıf kitaplığında bulunmayan kitabın teslimi “Kayba dönüştü” ile kapanır; onarımdaki
+            kitap kayıttan düşülürse onarım kaydı kapanır.
+          </li>
+          <li>
+            Kayıtta kayıp görünüp sayımda okutulan kitabın kayıp dosyası “Bulundu” ile (bedel teslim
+            alınmışsa “Bulundu (bedel teslim alınmıştı)” ile) kapanır ve kitap rafa döner; kalemde
+            “Kayıp kaydı kapandı” yazar.
+          </li>
+          <li>
+            Sayım fazlası tek bir “Sayım fazlası (kayda giriş)” edinimiyle kayda alınır:
+            <Mevzuat kaynak="Taşınır Mal Yönetmeliği, md. 17/1">
+              “Yapılan sayım sonucunda fazla bulunan taşınırlar, Varlık İşlem Fişi düzenlenerek
+              kayıtlara alınır.”
+            </Mevzuat>
+            Eski bir kaydın (kayıttan düşülmüş, devredilmiş ya da silinmiş) etiketini taşıyan kitap
+            yeni numara alır: numara asla yeniden kullanılmaz. Hiçbir kitaba bağlanmamış boş etiket
+            o numarayla bağlanır; numarası iptal edilmiş etiketi taşıyan kitap yeni numara alır ve
+            eski etiket sökülür. Yeni numara alan kitabın etiketi Etiketler ekranındaki Basım
+            Kuyruğu&apos;ndan basılır. Kayda esas değer, aynı nitelikte son bir yıl içinde girişi
+            yapılan taşınır varsa onun değeri, yoksa değer tespit komisyonunca belirlenecek değerdir
+            (md. 17/1, ikinci cümle); program değer yazmaz.
+          </li>
+          <li>
+            Harcama yetkilisinin onaylamadığı kalem kayıtta kalır; kalemde “Onaylanmadı” ve
+            gerekçesi yazar.
+          </li>
+          <li>
+            Kayıttan düşülen kitap katalogdan ve Ağ Kataloğundan çıkar, kayıt defterinde kalır.
+          </li>
+        </ul>
+
+        <AltBaslik>Sayım fazlası</AltBaslik>
+        <p>
+          Okutulan kod sayımın anlık görüntüsünde yoksa kitap “Sayım Fazlası” kartına düşer:
+          kayıttan düşülmüş, devredilmiş ya da silinmiş bir kaydın etiketi, hiçbir kitaba
+          bağlanmamış ya da numarası iptal edilmiş etiket ya da programın etiket biçiminde olmayan
+          bir kod. Harf içeren kod (ör. eski bir sistemin etiketi) okutulmaz ve yazılmaz; o kitabı
+          “Etiketsiz kitap ekle” ile yazın. Sayım başladıktan sonra kayda giren kitap fazla
+          değildir, bu sayımda sayılmaz. Etiketi olmayan kitap için “Etiketsiz kitap ekle”yi
+          kullanın. Onaydan önce her fazla kitap için “Eseri seç” ile kayda alınacağı eseri seçin
+          (eser katalogda yoksa önce Katalog&apos;da açın) ya da “Kayda alınmayacak” deyip
+          gerekçesini yazın (kütüphaneye ait olmayan ya da kayıttan çıkmış kitap). Kararı verilmemiş
+          fazla varken onay işlenmez; kartın “Göster” seçicisiyle yalnız kararı bekleyenler
+          listelenir. Sayım fazlası olarak okutulan boş etiket sayım sürerken Hızlı Kayıt&apos;ta
+          bağlanırsa kitap kayda girmiştir: kartta “Sayım sırasında kayda girdi” yazar ve onay onu
+          yeniden kayda almaz. Yanlış okutulan kod sayım sürerken “Çıkar” ile listeden kalkar.
+        </p>
+
+        <AltBaslik>Sayım tutanağı ve eki</AltBaslik>
+        <p>
+          Sayım tutanağı kütüphane materyalinin nüsha düzeyindeki dökümüdür. Taşınır kodu
+          düzeyindeki resmî Sayım Tutanağı (md. 10/1-g), Kayıttan Düşme Teklif ve Onay Tutanağı ve
+          Varlık İşlem Fişi TKYS&apos;de düzenlenir. Tutanak sayım kurulunu, tarihleri, iki seçeneği
+          ve iadeyi ayrı satırlarda, sonuçları (kayıtlara göre miktar, bulunan, kayda göre alınan,
+          fazla, sayımda bulunan miktar, noksan), ödünçteki, teslimdeki ve onarımdaki kitap için
+          kurulun seçimini ve dayanağını, bölümlere göre sayımı, noksanın kayıttan düşme teklifini,
+          hasar önerilerini, kayıtta kayıp görünüp bulunan kitapları ve sayım fazlasını gösterir.
+          “Kayıp/hasar tutanağı” sütunu kayıp ya da hasar dosyası olan kalemde dosyanın tespit
+          tarihini yazar; o kayıp/hasar tutanağı sayım tutanağına eklenir.
+        </p>
+        <p>
+          Tutanak taslakta basılmaz. Sayım sürerken “TASLAK” ibaresiyle ara döküm olarak basılır;
+          tamamlanınca kurulun imzasına ve harcama yetkilisinin “OLUR”una hazırdır; onaydan sonra
+          harcama yetkilisinin onaylamadığı ve onayda durumu değişen kalemler de yazılır. İptal
+          edilmiş sayımın tutanağı basılmaz. Excel dosyası tutanağın sayılarını, bütün kalemleri ve
+          eki ayrı sayfalarda verir.
+        </p>
+        <p>
+          Ödünç alanın ve teslim alanın kimliği tutanağa yazılmaz: tutanağın sayım fazlası ve
+          noksanına ilişkin sayfaları Varlık İşlem Fişine eklenir ve muhasebe birimine gönderilir
+          (TMY md. 10/1-g, 32/8).
+        </p>
+        <p>
+          Tutanağın ekinde, yeni sayfada “Taşınır Sayım ve Döküm Cetveline aktarılacak sayılar” yer
+          alır: önceki yıldan devir, yıl içinde giren (edinim yoluna göre; programa aktarım ayrı
+          satırda — raftaki eski koleksiyonun programa girişi yıl içinde girenlere katılmaz), yıl
+          içinde çıkan (nüsha durumuna göre), kayda göre yıl sonu, gelecek yıla devir, aradaki fark,
+          sayım fazlası ve noksanı; ödünçteki, teslimdeki ve onarımdaki kitabın sayılışı ayrı
+          tablodadır. Gelecek yıla devir sayımda bulunan miktardır; sayımda bulunup onayda hasar
+          nedeniyle kayıttan düşülen kitap sayımın kendi çıkışı olduğu için ondan çıkarılır ve
+          altında ayrı satırda yazar (tutanağın “Sayımda bulunan miktar”ı değişmez). Hasar önerisi
+          onaylanmadan ekteki gelecek yıla devir yazılmaz. Excel dosyasında bu sayılar sayı
+          hücresidir. Cetvel yıl sonu hesabı için düzenlenir (md. 10/1-ğ, 32/9): yıl sonu sayımında
+          taslaktaki “Yıl sonu sayımı” kutusunu işaretleyin (işaret sayım onaylanana dek sayımın
+          ayrıntısında da değiştirilebilir). Bir mali yılın tek yıl sonu sayımı olur: aynı yıl için
+          ikinci işaret kabul edilmez (iptal edilmiş sayım sayılmaz). İşaretsiz sayım, harcama
+          yetkilisinin gerekli gördüğü ara sayımdır (md. 32/1): ekinin başlığı “Ara sayım — sayılar
+          cetvele aktarılmaz” olur; gelecek yıla devir, ona göre hesaplanan fark ve cetvelin
+          sütununa ilişkin not ara sayımın ekinde yoktur. Ekin kayda dayanan sayıları belgenin
+          düzenlendiği günkü kayıtlardan hesaplanır; sayımdan sonra yapılan giriş ve çıkışları da
+          içerir. Raporlar → Dökümler&apos;deki yönetim hesabı cetveli hazırlığı da yalnız işaretli
+          ve onaylanmış sayımdan basılır.
+        </p>
+        <Mevzuat kaynak="Taşınır Mal Yönetmeliği, md. 34/1">
+          “Taşınır mal yönetim hesabında; önceki yıldan devredilen, yılı içinde giren, çıkan ve
+          ertesi yıla devredilen taşınırlar ile yıl sonu sayımında bulunan fazla ve noksanlar
+          gösterilir.”
+        </Mevzuat>
+        <p>
+          Program Taşınır Sayım ve Döküm Cetvelini düzenlemez; ek de “Bu döküm Taşınır Sayım ve
+          Döküm Cetveli değildir; resmî cetvel TKYS&apos;de düzenlenir.” ibaresini taşır. Ekteki
+          sayılar TKYS&apos;deki cetvele aktarılır. Cetveli, kayıtların sayım sonuçlarıyla uygunluğu
+          sağlandıktan sonra sayım kurulu düzenler; sayım kurulu ile taşınır kayıt yetkilisi imzalar
+          (md. 32/9). Cetvelin “Gelecek Yıla Devir” sütunundaki miktar, yıl sonu Sayım Tutanağının
+          “Sayımda Bulunan Miktar” sütunundakine eşit olmalıdır (md. 10/1-ğ).
+        </p>
+
+        <AltBaslik>İptal</AltBaslik>
+        <p>
+          Onaylanmamış sayım her adımda “İptal et” ile kapatılır; “Sayım iptal edilsin mi?”
+          penceresi “İptal gerekçesi (isteğe bağlı)”ni sorar. Seçilen durdurma ve hizmet arası
+          kalkar, nüshalara dokunulmaz, okutmalar iz olarak kalır. Başlatılmamış taslak “Taslağı
+          sil” ile de kaldırılır. Yeni sayım, süren sayım onaylanınca ya da iptal edilince açılır.
+        </p>
+        <Ipucu>
+          <p>
+            Sayımdan önce Kayıp ve Hasar&apos;daki dosyaları gözden geçirin: kayıttan düşülmesini
+            istediğiniz hasarlı kitabın dosyasını “Kayıttan düşme önerildi” ile kapatın; öneri
+            sayımda ancak kitap bulunursa hasar nedeniyle düşülür. TMY 32/3 durdurması seçilecekse
+            bunu sayımı başlatmadan yapın: durdurma sürerken kayıttan düşme önerisi yazılamaz.
+          </p>
+        </Ipucu>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="katalog-sablonu">
+        <p>
+          Çok sayıda kitabı tek tek yazmak yerine listenizi Excel&apos;de hazırlayabilirsiniz;
+          hazırladığınız dosyayı sonra İçe Aktarma ekranından kataloğa alırsınız. Şablonu{" "}
+          <Ekran to="/">Genel Bakış</Ekran>&apos;taki “Katalog Excel Şablonu” kartında (ya da
+          Başlangıç Yol Haritası&apos;nda) “Şablonu indir” düğmesiyle alın; aynı dosya İçe Aktarma
+          ekranının sağ üstündeki “Katalog Excel şablonu” düğmesinden de iner. Dosyanın adı
+          indirildiği günün tarihini taşır.
+        </p>
+        <p>
+          Şablonda üç sayfa vardır: <strong>Katalog</strong> kitapları yazacağınız sayfadır ve
+          program yalnız onu okur; <strong>Sütunlar</strong> her sütuna ne yazılacağını anlatır;{" "}
+          <strong>Örnek</strong> doldurulmuş birkaç satır gösterir, içe aktarılmaz.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            Birinci satırdaki sütun adlarını silmeyin, değiştirmeyin; kullanmadığınız sütunu boş
+            bırakın.
+          </li>
+          <li>
+            Tek zorunlu sütun <strong>Eser Adı</strong>&apos;dır.
+          </li>
+          <li>
+            Bir eserin nüshalarını iki yoldan biriyle yazın: eseri bir kez yazıp{" "}
+            <strong>Nüsha Sayısı</strong>&apos;na kaç tane olduğunu yazın (bir satırda en çok 50) ya
+            da her nüshayı ayrı satıra yazın. Kitapların üzerinde eski kayıt numarası varsa,
+            nüshalar farklı bölümlerde duruyorsa ya da biri danışma kaynağıysa ayrı satır gerekir.
+          </li>
+          <li>
+            <strong>Danışma Kaynağı</strong> sütununa “Evet” yazılan nüsha ödünç verilmez,
+            kütüphanede okunur. Kaynak türü ya da konusu “Ders kitabı” olan eser de danışma kaynağı
+            sayılır.
+          </li>
+          <li>
+            Sınıflama Kodu, ISBN ve Eski Kayıt No sütunları metin biçimindedir; başka bir dosyadan
+            kopyaladığınızda değerlerin sayıya dönüşmediğini denetleyin.
+          </li>
+        </ul>
+        <Ipucu>
+          <p>
+            Listeye kişisel veri yazılmaz: öğrenci, öğretmen ya da bağışçı adı bu dosyaya girmez.
+            Dosyayı Excel çalışma kitabı olarak kaydedin ve çalışırken ara ara yedeğini alın.
+          </p>
+        </Ipucu>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="ice-aktarma">
+        <p>
+          Hazır listeyi kataloğa almak{" "}
+          <Ekran to="/katalog/ice-aktarma">Katalog → İçe Aktarma</Ekran> ekranındadır. Dört sekmesi
+          vardır: <strong>Excel Aktarımı</strong>, <strong>Yapay Zekâ Köprüsü</strong>,{" "}
+          <strong>Çevrimdışı Künye</strong> ve <strong>Aktarım Geçmişi</strong>.
+        </p>
+        <AltBaslik>Excel aktarımı: önce önizleme</AltBaslik>
+        <p>
+          Dosyayı seçip “Önizle” deyin. Önizleme <strong>hiçbir kayıt yazmaz</strong> ama işin
+          kendisini prova eder: ekrandaki sayılar uygulamanın gerçekten yazacağı sayılardır. Üstteki
+          kutular toplamı verir; “Satır listesi”ni açtığınızda her satırın “Durum” sütununda ne
+          olacağı yazar:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Yeni eser</strong> — katalogda karşılığı yok, künye açılacak;
+          </li>
+          <li>
+            <strong>Mevcut esere nüsha</strong> — künye katalogda var, yalnız nüsha eklenecek;
+          </li>
+          <li>
+            <strong>Şüpheli</strong> — katalogdaki bir esere benziyor ama tam eşleşmiyor; bu satır
+            karar bekler;
+          </li>
+          <li>
+            <strong>Aktarılmadı</strong> — satır okunamadı (ör. kaynak adı boş); gerekçesi “Notlar”
+            sütunundadır.
+          </li>
+        </ul>
+        <p>
+          Program iki eksiği tek tek sorar; ikisi de giderilmeden “Uygula” düğmesi açılmaz ve ekran
+          neyin eksik olduğunu yazar:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>“Karar bekleyen satırlar”:</strong> şüpheli her satır için “Yeni eser aç” ya da
+            benzeyen kayıtlardan birini seçersiniz (“… eserine nüsha ekle”). Aynı dosyanın başka bir
+            satırına da bağlayabilirsiniz. Kararları verdikten sonra “Yeniden önizle” deyin.
+          </li>
+          <li>
+            <strong>“Bölüm listesinde bulunmayan değerler”:</strong> dosyadaki “Bölüm” değeri
+            kontrollü listede yoksa karşılığı sorulur; var olan bir bölümü seçer ya da “Yeni bölüm
+            aç” dersiniz. Değer karşılıksız kaldığı sürece aktarım yazmaz — kitabın rafta nerede
+            durduğu bilgisi kaybolmasın.
+          </li>
+        </ul>
+        <p>
+          Önizleme ayrıca tanınmayan sütun başlıklarını, dosyada bulunmayan sütunları,{" "}
+          <strong>ders kitabı olduğu için danışma kaynağı sayılan</strong> satırları (“Danışma
+          Kaynağı” sütunu boş bırakılmış olanlar; bu nüshalar ödünç verilmez) ve sınıflama kodu
+          “tahmini” işaretlenen satırları sayar.
+        </p>
+        <p>
+          Eksik kalmadıysa “Açılacak Edinim Partisi” bölümünde edinim yolunu ve tarihi seçip
+          “Uygula” deyin. Aktarılan bütün nüshalar tek bir edinim partisinden doğar; uygulamadan
+          sonra kaç nüsha açıldığı ve barkodların hangi iki numara arasında olduğu yazılır. Bu
+          nüshaların hiçbiri etiketli değildir: “Bu partinin etiketlerini bas” düğmesi Etiketler →
+          Basım Kuyruğu&apos;nu bu edinim partisine süzülmüş açar. Yer numarası sırasında basıp raf
+          raf yapıştırın (bkz. Etiketler bölümü).
+        </p>
+        <p>
+          Sayımda TMY 32/3 durdurması sürerken içe aktarma yapılmaz; önizleme de reddedilir. Ekranın
+          üstünde “Sayım sürüyor” bandı durur ve “Sayım sürerken programa aktarım yapılamaz; sayım
+          bitince aktarın.” der: programa aktarım taşınır girişi değildir, bu yüzden ileti Taşınır
+          Mal Yönetmeliğine dayanmaz (bkz. Sayım bölümü).
+        </p>
+        <p>
+          Toplu aktarımda program <strong>internetten künye getirmez</strong>: dosyada ne yazıyorsa
+          o aktarılır. Künye eksiğini sonradan Hızlı Kayıt ekranından ya da aşağıdaki Çevrimdışı
+          Künye yolundan tamamlarsınız.
+        </p>
+        <Ipucu>
+          <p>
+            <strong>Aynı dosya ikinci kez uygulanamaz.</strong> Program dosyanın içeriğini tanır ve
+            “Bu dosya … tarihinde zaten aktarıldı” der; yoksa kitaplar kayda iki kez girerdi. Yeni
+            kitaplar için yalnız onları içeren bir dosya hazırlayın.
+          </p>
+        </Ipucu>
+        <AltBaslik>Çevrimdışı künye: dosyayla gidip gelen bilgi</AltBaslik>
+        <p>
+          Kütüphane masasında internet yoksa künye eksiğini dosyayla kapatabilirsiniz. “ISBN
+          listesini indir” deyin: program künyesi eksik eserlerin listesini{" "}
+          <strong>ISBN Künye Listesi</strong> adıyla indirir. Boş hücreleri internete bağlı{" "}
+          <strong>başka bir cihazda</strong> doldurun ve dosyayı aynı sekmedeki “Doldurulmuş dosya”
+          kutusundan geri yükleyin. “Eser No” ve “ISBN” sütunlarını değiştirmeyin: eşleşme o iki
+          sütundan yapılır. Dosyada çevirmen sütunu yoktur; çeviri eserlerde çevirmeni programda
+          elle yazarsınız.
+        </p>
+        <p>
+          Program önce önizleme gösterir ve hiçbir kaydı değiştirmez: her alanın kendi kutusu
+          vardır, <strong>dolu alanlar işaretsiz gelir</strong> — yani mevcut künyenin üzerine
+          sessizce yazılmaz. “Seçilenleri kaydet” dediğinizde yalnız işaretlediğiniz alanlar
+          eserlere yazılır. Dosyaya öğrenci, veli ya da personel bilgisi yazılmaz; dosya yalnız
+          kitap künyesi taşır.
+        </p>
+        <Mevzuat kaynak={`${YONERGE}, md. 11/18`}>
+          “Bakanlık merkez ve taşra teşkilatında tanımı Başkanlık tarafından yapılan MEBNET ağı
+          dışında bir ağ kullanılamaz. Kullanıcı Bakanlık merkez ve taşra teşkilatında bulunan
+          bilgisayarlardan MEBNET ağı dışında cep telefonu, ADSL, VDSL, fiber, mobil modem, kişisel
+          erişim noktası, kablosuz bağlantı alanı cihazı vb. cihazlarını kullanamaz.”
+        </Mevzuat>
+        <p>
+          Bu yüzden “başka cihaz” gerçekten ayrı bir cihazdır: okul bilgisayarına telefon ya da
+          mobil modem bağlayarak internet alınmaz. Dosyayı taşınabilir bellekle taşırken
+          Yönerge&apos;nin taşınabilir bellek kuralları geçerlidir.
+        </p>
+        <AltBaslik>Yapay zekâ köprüsü: isteğe bağlı ve dikkatli kullanılır</AltBaslik>
+        <p>
+          Bu sekme <strong>isteğe bağlıdır</strong>; kullanmadan da katalog kurulur. Dağınık bir
+          listeniz varsa (başlıksız bir tablo, karışık satırlar) köprü sekmesindeki “Komut metni”
+          kutusu işe yarar: “Komutu kopyala” deyip metni kullandığınız araca yapıştırır, listenizi
+          de altına eklersiniz; aracın verdiği metni “Yapay zekâ aracının verdiği JSON” kutusuna
+          yapıştırıp aynı önizlemeden geçirirsiniz.{" "}
+          <strong>Program hiçbir yapay zekâ servisine bağlanmaz</strong> ve bu iş için internete
+          çıkmaz; metni bir yerden bir yere siz taşırsınız.
+        </p>
+        <p>
+          <strong>Listeye kişisel veri yazılmaz:</strong> öğrenci, veli, personel ya da bağışçı adı
+          bu listeye girmez, köprüye yalnız kitapların künye bilgileri verilir.
+        </p>
+        <p>
+          Bu adımda okulun kitap listesi dışarıya çıkar; ekrandaki uyarılar bunu ve Yönerge&apos;yle
+          çatışabileceğini söyler. Asıl yol Excel ile içe aktarmadır; künye eksiğini kapatmak için
+          ISBN ile künye getirme daha güvenlidir, çünkü orada dışarıya yalnız kitabın arka
+          kapağındaki numara çıkar.
+        </p>
+        <p>
+          <strong>Aktarım Geçmişi</strong> sekmesinde hangi dosyanın ne zaman aktarıldığı yazar. Her
+          önizleme de buraya bir satır bırakır; yarım kalan bir denemeyi “Önizlemeyi iptal et” ile
+          düşürebilirsiniz. Uygulanmış aktarım listede kalır: aynı dosyanın ikinci kez uygulanmasını
+          engelleyen iz odur.
+        </p>
+        <p>
+          Excel Aktarımı sekmesindeki <strong>İçe aktarılacak dosya</strong> seçicisi iki türü
+          ayırır: <strong>Excel listesi</strong> (şablon ya da okulun kendi listesi; nüshalara yeni
+          numara verilir) ve <strong>Dışa aktarım dosyası</strong> (programın kendi dışa aktarımı;
+          boş bir kuruluma geri yüklemek içindir). Dışa aktarım dosyasında barkod ve kayıt no
+          korunur, numara sayaçları ilerletilir; edinimler ve bölümler dosyadan kurulur. Barkodu bu
+          kurulumda kayıtlı (silinmiş nüsha dahil), boş barkod aralığında ayrılmış ya da numara
+          sayacının gerisinde kalan (bir kez verilmiş sayılan) satır aktarılmaz ve nedeni önizlemede
+          yazar; hiçbir numara yeniden kullanılmaz. Dışa aktarım dosyası yalnız boş bir kataloga ve
+          bütün satırlarıyla geri yüklenir: katalogda eser varken ya da önizlemede aktarılamayan bir
+          satır varken “Uygula” yapılmaz — aktarılmayan satırın barkodu bu kurulumda bir daha
+          kullanılamazdı; dosyayı düzeltin ya da o satırları dosyadan silip yeniden önizleyin. Dışa
+          aktarım dosyasını “Excel listesi” olarak yüklerseniz program dosyayı tanır ve “Dışa
+          aktarım dosyası”nı seçmenizi ister. Ayrıntı “Dökümler ve Dışa Aktarım” bölümündedir.
+        </p>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="raporlar">
+        <p>
+          <Ekran to="/raporlar">Raporlar</Ekran> ana gezinmededir (Genel Bakış&apos;taki “Raporlar”
+          kartından da açılır) ve yalnız yönetici kipinde çalışır. Dört sekmesi vardır:{" "}
+          <strong>İstatistik</strong>, <strong>Çok Okunanlar</strong>, <strong>Dökümler</strong> ve{" "}
+          <strong>Okuma Ödülü</strong>. Sayfa katalog, üye ve ödünç kayıtlarını değiştirmez.
+          Dökümler sekmesi bir sonraki bölümde anlatılır.
+        </p>
+
+        <AltBaslik>İstatistik</AltBaslik>
+        <p>
+          “Dönem” seçicisinde etkin ders yılı, geçmiş ders yılları ve tarih aralığı vardır. Ders
+          yılının dönemi yıl sonu raporununkiyle aynıdır: ders yılının başından sonraki ders yılının
+          başına dek (yaz aylarındaki işler de girer). Tarih aralığı “Göster” denince uygulanır.
+          Koleksiyon sayıları bugünkü kayıtlardandır; edinim, dolaşım, teslim, kayıp ve hasar,
+          ayıklama ve devir sayıları seçilen dönemin işlemleridir.
+        </p>
+        <p>
+          İstatistik kişisizdir: üye bazında bilgi, adlı sıralama ve konuya göre ödünç dağılımı
+          yoktur. Ödünç kaydı okunan kitabı göstermez. Dolaşımın üye türüne ve sınıf düzeyine göre
+          kırılımında, “Çok okunanlar için en az üye sayısı”ndan az farklı üyenin ödünç aldığı
+          grubun sayısı gösterilmez; yerine “—” yazılır. Gizlenen sayı toplamdan çıkarılarak
+          bulunamasın diye gerektiğinde bir grup daha gizlenir. “Aktif üye (bugün)” sütunu ise
+          eşiksiz yazılır: kaç kişinin üyeliğinin sürdüğü ödünç verisi değildir; tek öğretmen üye
+          varsa “1” görünür, o öğretmenin ödünç sayısı yine gizli kalır. Sınıf düzeyi kaydı olmayan
+          öğrencilerin ödüncü düzey kırılımına girmez. Konuya ya da bölüme göre ödünç kırılımı hiç
+          yoktur.
+        </p>
+        <p>
+          <strong>Küçük gruplar neden gizlenir?</strong> Birkaç kişilik bir grubun sayısı, o
+          kişilerin ne kadar kitap aldığını ele verir; bir kişinin hangi konuda kitap aldığı da onun
+          düşüncesi, inancı ya da sağlığı hakkında fikir verebilir. Kanun bu konulardaki verileri
+          özel nitelikli sayar ve işlenmesini sıkı koşullara bağlar (6698 sayılı Kanun md. 6).
+          Program ödünç kaydını ödünç ve iadenin takibi için tutar; ondan bir kişi ya da küçük bir
+          grup hakkında okuma bilgisi üretmez. Aynı kural yıl sonu raporunda da geçerlidir.
+        </p>
+        <p>
+          İstatistik bir bilgi ekranıdır; okul müdürlüğüne gidecek rapor{" "}
+          <Ekran to="/yil-sonu-raporu">Yıl Sonu Raporu</Ekran>&apos;dur (bkz. Yıl Sonu Raporu
+          bölümü).
+        </p>
+
+        <AltBaslik>Kitap sayısı eşiği</AltBaslik>
+        <Mevzuat kaynak={`${YONETMELIK}, Md. 7/1`}>
+          “Kitap sayısı 10.000&apos;i aşan okul kütüphanelerine bir kütüphaneci atanır.”
+        </Mevzuat>
+        <p>
+          Elde bulunan kitap sayısı bu eşiği aşınca Genel Bakış&apos;ta{" "}
+          <strong>Kitap Sayısı 10.000&apos;i Aştı</strong> kartı görünür. Sayılan, kaynak türü
+          “Kitap” olan ve kayıttan düşülmemiş, devredilmemiş nüshalardır (danışma kitapları dahil);
+          süreli yayın, görsel-işitsel materyal ve dijital kaynak sayılmaz. Kayıp bildirilmiş ama
+          henüz kayıttan düşülmemiş kitap kayıtta durduğu için sayılır; kart kaç tanesinin böyle
+          olduğunu ayrıca yazar. Bu sayım kuralı programındır: Yönetmelik “kitap”ı tanımlamaz. Kart
+          yalnız bilgi verir; program maddenin nasıl uygulanacağı konusunda yorum yapmaz.
+        </p>
+
+        <AltBaslik>Çok okunanlar</AltBaslik>
+        <Mevzuat kaynak={`${YONETMELIK}, Md. 15/1-ğ`}>
+          “…okul kütüphanesinde çok okunan ve okunmasında fayda görülen kitaplar listesini belirli
+          aralıklarla ilan edilerek kitap tanıtımlarına yönelik etkinlikler düzenlenmesini sağlar.”
+        </Mevzuat>
+        <p>
+          Çok okunanlar listesi ödünç kayıtlarından her gün kendiliğinden hesaplanır. Bir eser
+          listeye ancak en az “Çok okunanlar için en az üye sayısı” kadar{" "}
+          <strong>farklı üye</strong> ödünç aldıysa girer: aynı üyenin bir kitabı tekrar tekrar
+          alması onu listeye sokmaz. Sıra farklı üye sayısına göredir; hiçbir yerde sayı
+          gösterilmez, yalnız sıra görünür. Eşik Ayarlar → Kütüphane Politikası&apos;nda 3 ile 10
+          arasında ayarlanır (varsayılan 5).
+        </p>
+        <p>
+          İki liste vardır. <strong>Dönemin Çok Okunanları</strong> ders dönemine göredir ve Ağ
+          Kataloğu vitrininde görünür. <strong>Ayın Kitapları</strong> takvim ayına göredir ve
+          afişin kaynağıdır. Her listede en çok on eser yer alır. Süren dönem ve ay “Sürüyor”, biten
+          “Kapandı” rozetini taşır. Kapanan dönemin ve ayın listesi, kapandıktan sonraki ilk hesapta
+          son hâlini alır ve bir daha değişmez: eşiği sonradan değiştirmek geçmiş listeleri
+          değiştirmez. Eşiği değiştirdiyseniz ya da ay başında afişi basacaksanız{" "}
+          <strong>Yeniden hesapla</strong> ile süren listeleri hemen yenileyebilirsiniz. Genel
+          Bakış&apos;taki <strong>Çok Okunanlar</strong> kartı iki listenin ilk üç eserini gösterir.
+        </p>
+
+        <AltBaslik>Ayın Kitapları afişi</AltBaslik>
+        <p>
+          Uygulama Kılavuzu (6.2), okul girişine ya da kütüphaneye o ay en çok okunan kitapların
+          tanıtıldığı bir “Ayın Kitapları” panosu önerir. <strong>Ayın Kitapları afişi</strong> Çok
+          Okunanlar sekmesindeki Ayın Kitapları kartından “Önizle” ya da “PDF&apos;i indir” ile
+          alınır: tek sayfada sıra, kaynak adı ve yazar. Sayı ve kişi bilgisi yoktur; bu yüzden afiş
+          panoya asılabilir. Süren ayın afişi kartta “Son hesap” diye yazan günün sırasını taşır ve
+          üzerinde “Ay sürüyor — … itibarıyla” yazar; kapanan ayın afişi son hâliyle basılır. Ayın
+          listesi boşsa afiş basılmaz.
+        </p>
+
+        <AltBaslik>Okuma ödülü iç çıktısı</AltBaslik>
+        <Mevzuat kaynak={`${YONETMELIK} Uygulama Kılavuzu, 7`}>
+          “En çok kitap okuyan öğrenciler ödüllendirilerek teşvik sistemi kurulabilir.”
+        </Mevzuat>
+        <p>
+          Bu bir <strong>öneridir</strong>, bağlayıcı değildir: ödül verilip verilmeyeceğine okul
+          karar verir. Okuma Ödülü sekmesindeki <strong>Okuma ödülü iç çıktısı</strong> okulun bu
+          kararına yardım eder. Sıra, dönem içinde ödünç alınıp iade edilmiş farklı eser sayısına
+          göredir: aynı eserin yeniden alınması bir kez sayılır. Eşit olanlar aynı sıradadır ve
+          sınırdaki eşitlerin hepsi girer. Yalnız okuldaki öğrenciler sıralanır. Çıktıda sayı ve
+          okul no yoktur. Ödünç kaydı okunan kitabı göstermez. Kütüphane aydınlatma metni bu çıktıyı
+          ölçütüyle, dayanağıyla ve kimlerin gördüğüyle birlikte ayrıca anlatır.
+        </p>
+        <p>
+          Sekmede “Dönem” (istatistikteki seçicinin aynısı), “Sınıf” (bütün sınıflar ya da bir sınıf
+          düzeyi) ve “Sıra sayısı” (1 ile 50 arası, varsayılan 10) seçilir; çıktı “Önizle” ya da
+          “PDF&apos;i indir” ile alınır. Eşitler aynı sırada olduğu için çıktıdaki öğrenci sayısı
+          sıra sayısından fazla olabilir.
+        </p>
+        <Ipucu>
+          <p>
+            Çıktı <strong>iç kullanım</strong> içindir ve öğrenci adı taşır: asılmaz, çoğaltılmaz,
+            ağda ve velilerle paylaşılmaz. Yalnız yönetici kipinde basılır; adlar ekranda
+            listelenmez, yalnız PDF&apos;te yer alır. Ağ Kataloğu, Genel Bakış, Ayın Kitapları afişi
+            ve yıl sonu raporu adlı sıralama içermez. Kılavuzun aynı bölümü kütüphane kullanımını
+            ders başarısıyla ilişkilendirmeyi de önerir; program not ya da başarı bilgisi tutmaz ve
+            bu ilişkilendirmeyi yapmaz.
+          </p>
+        </Ipucu>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="dokumler">
+        <p>
+          <Ekran to="/raporlar?tab=dokumler">Raporlar → Dökümler</Ekran> sekmesi yönetici kipinde
+          açılır ve hiçbir kayıt yazmaz. Belgeler “Önizle” ve “PDF&apos;i indir” düğmeleriyle,
+          çizelgeler “Excel&apos;i indir” ile alınır; Excel dosyalarında sayılar sayı, tarihler
+          tarih hücresidir.
+        </p>
+
+        <AltBaslik>Dışa aktarım</AltBaslik>
+        <p>
+          <strong>Dışa aktarım dosyasını indir</strong> kataloğun bütün eserlerini ve nüshalarını
+          tek Excel dosyasına yazar: barkod, kayıt no, TKYS kodu, eski kayıt no, durum, edinim yolu
+          ve tarihi, bölüm ve bütün işaretler. Her nüsha bir satırdır; aynı “Eser No”yu taşıyan
+          satırlar aynı eserin nüshalarıdır. Kayıttan düşülmüş ve devredilmiş nüshalar da çıkış
+          tarihleriyle dosyadadır. İlk on altı sütun katalog Excel şablonunun sütunlarıdır; dışa
+          aktarıma özgü sütunlar onlardan sonra gelir.
+        </p>
+        <p>
+          Dosyada kişisel veri yoktur: üye, ödünç, teslim ve kayıp/hasar kayıtları, bağışçı ve
+          komisyon üyelerinin adları dışa aktarıma girmez; komisyon kararının yalnız tarihi ve
+          sayısı yazılır. “Üye Özeti” sayfası üye türüne ve şubeye göre aktif üye sayısıdır; üyelik
+          sayısı ödünç verisi olmadığı için eşiksiz yazılır. Dosyayı başkasına verirken yine de
+          okulun kararıyla verin.
+        </p>
+        <p>
+          Aynı dosya boş bir kuruluma Katalog → İçe Aktarma → “Dışa aktarım dosyası” ile geri
+          yüklenir; kartın <strong>Dışa aktarım dosyasını içe aktar</strong> bağlantısı İçe
+          Aktarma&apos;yı bu seçimle açar. Barkod ve kayıt no korunur ve{" "}
+          <strong>hiçbir numara yeniden kullanılmaz</strong>: dosyanın “Numara Sayaçları” sayfası
+          her yıl için verilmiş son numarayı taşır ve geri yüklemede sayaçlar ona çekilir; böylece
+          silinmiş nüshaların ve bağlanmamış boş etiketlerin numaraları bir daha verilmez. Geri
+          yükleme yalnız boş bir kataloga ve bütün satırlarla yapılır. Edinimin komisyon kararı
+          tarihi ve sayısıyla yeniden kurulur (bağışta bağış değerlendirme, öbür yollarda kaynak
+          seçimi kararı olarak). Ödünçteki ve sınıf kitaplığındaki nüsha geri yüklemede “Rafta”
+          açılır, çünkü ödünç ve teslim kayıtları dosyada yoktur. Dosyanın “Bilgi” sayfası şema
+          sürümünü yazar; program yalnız tanıdığı sürümü geri yükler, tanımadığı sürümde dosyayı
+          programın güncel sürümüyle yeniden dışa aktarmanızı ister.
+        </p>
+        <Ipucu>
+          <p>
+            <strong>Dışa aktarım yedek değildir.</strong> Dosya yalnız kataloğu taşır; üyeler,
+            ödünçler, teslimler, kayıp ve hasar dosyaları, ayıklama teklifleri, sayımlar ve basım
+            partileri dosyada yoktur. Programı bütün kayıtlarıyla başka bir bilgisayara taşımak için
+            şifreli yedek kullanılır (bkz. Yedek ve Güvenlik Dosyası → Yeni bilgisayara taşıma).
+          </p>
+        </Ipucu>
+
+        <AltBaslik>Bakanlık sistemine geçişte katalog</AltBaslik>
+        <p>
+          Dışa aktarım, kataloğun programın dışına her zaman çıkarılabilmesi içindir: okul ileride
+          kütüphane işlerini Bakanlık sistemine ya da başka bir araca taşırsa elinde kitap kitap,
+          nüsha nüsha, barkodu ve kayıt no&apos;suyla eksiksiz bir liste olur. Sütunların sırası ve
+          anlamı sabittir; sütun eklenir ya da anlamı değişirse şema sürümü yükselir. Bakanlık
+          sisteminin veri alma biçimi bu sürümde bilinmediği için dosya o sisteme doğrudan
+          yüklenecek biçimde hazırlanmadı.
+        </p>
+        <p>
+          Üye ve ödünç kayıtları kişisel veri olduğu için dosyaya girmez; program hiçbir kaydı
+          Bakanlık sistemine ya da başka bir yere göndermez. Kütüphane aydınlatma metni, Bakanlık
+          sistemi okulda kullanıma girdiğinde kayıtların okul müdürlüğünce o sisteme
+          aktarılabileceğini söyler; bu aktarım okul müdürlüğünün işidir.
+        </p>
+
+        <AltBaslik>Alfabetik katalog dökümü</AltBaslik>
+        <Mevzuat kaynak={`${YONETMELIK}, Md. 11/1`}>
+          “Kataloglar; yazar adı, kaynak adı ve konularına göre alfabetik olarak düzenlenir.”
+        </Mevzuat>
+        <p>
+          “Eksen” seçicisinde üç sıralama vardır: “Kaynak adına göre”, “Yazar adına göre” (ilk
+          yazarın soyadına göre; “Soyad, Ad” biçiminde, birden çok yazarlı eserde “vd.” eklenir) ve
+          “Konuya göre”. Sıralama Türk alfabesiyledir. Konu dökümünde birden çok konusu olan eser
+          her konu başlığının altında yer alır; konusu yazılmamış eserler sonda “Konusu yazılmamış”
+          başlığıyla, yazarı belli olmayan eserler yazar dökümünün sonunda “Yazarı belli olmayan”
+          başlığıyla durur. Kurum adıyla yazılmış yazar (“Millî Eğitim Bakanlığı”, “Türk Dil Kurumu”
+          gibi, adı “Bakanlığı”, “Kurumu”, “Müdürlüğü”, “Üniversitesi”, “Derneği”, “Vakfı”,
+          “Yayınları” gibi bir sözcükle biten) ters çevrilmez ve adıyla sıralanır. PDF seçilen
+          ekseni, Excel dosyası üç ekseni ayrı sayfalarda taşır; “Bölüm” seçicisiyle büyük
+          koleksiyonda dökümü bölüm bölüm basabilirsiniz — bölümü yazılmamış eserler için seçicideki
+          “Bölümü yazılmamış”ı seçin. Kayıtta nüshası olan eserler ve dijital kaynaklar girer;
+          kayıttan düşülmüş ve devredilmiş nüsha sayılmaz.
+        </p>
+
+        <AltBaslik>Taşınır Kütüphane Defteri dökümü</AltBaslik>
+        <Mevzuat kaynak="Taşınır Mal Yönetmeliği, md. 9/1-ç">
+          “Kütüphane Defteri: Bu defter, kütüphanelerdeki yazma ve basma nadir eserler ile kitap ve
+          kitap dışı materyal için tutulur. Her bir taşınır için ayrı kayıt yapılır.”
+        </Mevzuat>
+        <p>
+          Döküm her nüshayı kayıt no sırasıyla bir satırda gösterir: giriş tarihi ve yolu, künye,
+          TKYS kodu, eski kayıt no, birim fiyat, durum ve kayıttan çıkış tarihi. Kayıttan düşülmüş
+          ve devredilmiş nüsha defterde kalır. Ciltletilmemiş süreli yayın dökümde yoktur: dergi ve
+          gazete gibi süreli yayınlar için Varlık İşlem Fişi düzenlenmez (md. 10/1-a-4), cilt
+          birliği sağlananlar ciltletildikten sonra kayda alınır (md. 15/4). “Kapsam” seçicisiyle
+          yalnız bir yılda girenleri basabilirsiniz. “Mevcut koleksiyon (programa aktarım)”
+          yolundaki nüshaların giriş tarihi programa aktarıldıkları gündür, taşınır kaydındaki asıl
+          giriş tarihi değildir; birim fiyat edinimde yazılan değerdir. Resmî taşınır kaydı Taşınır
+          Kayıt ve Yönetim Sistemi&apos;ndedir (TKYS); döküm onun yerine geçmez.
+        </p>
+
+        <AltBaslik>Yönetim hesabı cetveli hazırlığı</AltBaslik>
+        <p>
+          Taşınır mal yönetim hesabının büyüklükleri (md. 34/1) nüsha sayısıyla ve birim fiyatı
+          kayıtlı nüshaların tutarıyla yazılır; fiyatı kayıtlı olmayan nüshalar ayrı sütunda
+          sayılır. Hazırlık sayım kurulunca onaylanan Taşınır Sayım ve Döküm Cetveline dayanır (md.
+          34/3-a); o cetvel de defter kayıtları sayım sonuçlarıyla uygun hâle getirildikten sonra
+          düzenlenir (md. 32/7, 32/9). Programda kayıtlar sayımın onayıyla uygun hâle gelir: noksan
+          kayıttan düşülür, fazla kayda alınır. Bu yüzden hazırlık yalnız “Yıl sonu sayımı” olarak
+          işaretlenmiş ve onaylanmış sayımdan basılır; resmî cetveller TKYS&apos;dedir. Kartta
+          yalnız yıl sonu sayımları listelenir (iptal edilmiş olanlar listelenmez); henüz
+          onaylanmamış olanın satırında neden basılamadığı yazar. İşaretli sayım yoksa kart,
+          işaretin sayımın ayrıntısında konulacağını söyler.
+        </p>
+        <Mevzuat kaynak="Taşınır Mal Yönetmeliği, md. 34/3-a">
+          “Sayım kurulu tarafından onaylanan Taşınır Sayım ve Döküm Cetveline dayanılarak ilgisine
+          göre Harcama Birimi Taşınır Mal Yönetim Hesabı Cetveli, Müze Yönetim Hesabı Cetveli veya
+          Kütüphane Yönetim Hesabı Cetveli düzenlenir.”
+        </Mevzuat>
+        <p>
+          Kütüphane Yönetim Hesabı Cetveli, kütüphane olarak faaliyet gösteren harcama birimlerinin
+          hesabındadır (md. 34/2-c); kütüphane materyali bulunan idareler gerekli görürse bu cetveli
+          ayrıca düzenleyebilir (md. 34/3-a). Hazırlık bu kararı okula bırakır.
+        </p>
+
+        <AltBaslik>Kişi dökümü</AltBaslik>
+        <Mevzuat kaynak="6698 sayılı Kişisel Verilerin Korunması Kanunu, md. 11/1">
+          “Herkes, veri sorumlusuna başvurarak kendisiyle ilgili; a) Kişisel veri işlenip
+          işlenmediğini öğrenme, b) Kişisel verileri işlenmişse buna ilişkin bilgi talep etme, …”
+        </Mevzuat>
+        <p>
+          Bir öğrenci, öğretmen ya da personel kendisiyle ilgili hangi kayıtların tutulduğunu
+          sorarsa “Kişi Dökümü” kartında “Okul no” ya da “Ad soyad” alanını doldurup “Ara”ya basın
+          (personelde adı yazın). Okul no şifreli saklandığı için numaranın tamamıyla aranır. Aynı
+          okul numarasıyla birden çok kayıt çıkabilir (ayrılan öğrencinin numarası başka öğrenciye
+          verilmiş olabilir); döküm seçtiğiniz kişinin kaydıyla basılır ve yalnız o kişinin üyelik,
+          ödünç, kayıp/hasar ve (öğretmende) teslim kayıtlarını taşır. Başka bir kişinin kaydı aynı
+          belgeye girmez: öğretmene teslim edilen kitabı bir öğrenci kaybettiyse ve dosya öğrencinin
+          üyeliğiyle açıldıysa dosya öğrencinindir, öğretmenin dökümünde yer almaz.
+        </p>
+        <p>
+          Döküm serbest metinle yazılmış adları aramaz: üyeliği olmayan kayıp ya da hasar dosyasının
+          sorumlu notu, komisyon ve sayım kurulu üyeleri, onaylayan ve bağışçı adları dökümde
+          yoktur. Başvuru sahibinin adı bu kayıtlarda geçebiliyorsa ilgili ekranlarda ayrıca bakın;
+          belge de bunu not olarak yazar.
+        </p>
+        <p>
+          Döküm cevabın hazırlığıdır: başvuru en geç otuz gün içinde sonuçlandırılır (md. 13/2) ve
+          cevabı okul müdürlüğü verir. Belge yalnız yönetici kipinde basılır, kişisel veri içerir ve
+          yalnız başvuru sahibine verilir; indirilen dosyanın adında kişinin adı yoktur. Saklama
+          süresi dolup kişiyle bağı koparılmış kayıtlar dökümde görünmez.
+        </p>
+
+        <AltBaslik>“Bakanlık sistemi kullanımda” ayarı</AltBaslik>
+        <p>
+          Okul Bakanlık sistemini de kullanıyorsa{" "}
+          <Ekran to="/ayarlar?tab=politika">Ayarlar → Kütüphane Politikası</Ekran>&apos;nın
+          “Bakanlık Sistemi” bölümündeki <strong>“Bakanlık sistemi kullanımda”</strong> kutusunu
+          işaretleyip kaydedin. Ayar varsayılan olarak kapalıdır ve yalnız hatırlatma açar; hiçbir
+          kaydı değiştirmez. Açıkken Kişiler → Ayrılış Havuzu ekranı ve Kişiler ekranındaki “Ayrıldı
+          olarak işaretle” onayı okuldan ayrılan kişinin, İlişik Listesi ise ilişik ve iade
+          işlemlerinin Bakanlık sistemindeki kaydının da güncellenmesini hatırlatır. Güncellemeyi o
+          sistemde siz yaparsınız: OAB Defteri okulun kütüphane işlerini yürüttüğü yerel
+          araçtır; Bakanlık sistemine bağlanmaz, oraya veri göndermez ve o sistemin yerine geçmez.
+        </p>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="saklama">
+        <p>
+          Kişisel veriler işlendikleri amaç için gerekli süre kadar saklanır; süresi dolan kişi ve
+          üyelik kayıtları silinir, ödünç, kayıp/hasar ve teslim kayıtlarının kişiyle bağı
+          koparılır. Program süresi dolan kayıtları her gün tarar ama{" "}
+          <strong>kendiliğinden hiçbir şey silmez</strong>: silme ve anonimleştirme yalnız sizin
+          onayınızla, <Ekran to="/ayarlar?tab=saklama">Ayarlar → Saklama</Ekran> ekranından yapılır.
+          Ekran da işlem de yalnız yönetici kipindedir.
+        </p>
+        <Mevzuat kaynak="6698 sayılı Kişisel Verilerin Korunması Kanunu, md. 4/2-d">
+          “İlgili mevzuatta öngörülen veya işlendikleri amaç için gerekli olan süre kadar muhafaza
+          edilme.”
+        </Mevzuat>
+        <p>
+          Kanun, işlenmesini gerektiren sebepler ortadan kalkınca kişisel verinin silinmesini, yok
+          edilmesini ya da anonim hâle getirilmesini ister (KVKK md. 7/1). Kütüphanede bu sebep işin
+          kendisidir: ödünç kaydı, kitabın geri gelmesini izlemek için kişiye bağlıdır. Kitap dönüp
+          süre geçince kimin hangi kitabı aldığını tutmak gerekmez; kaç kitabın ödünç verildiği ise
+          okulun sayımı ve istatistiği için gerekir.
+        </p>
+        <p>
+          <strong>Anonimleştirme silme değildir:</strong> kayıt kalır, yalnız kişiyle bağı koparılır
+          ve açıklamaları temizlenir. Ödünç, kayıp/hasar ve teslim kayıtları böylece sayım ve
+          istatistik için kalır; program onları artık kimseye bağlamaz. <strong>Silme</strong>{" "}
+          kaydın kendisini kaldırır: kişinin ve sona ermiş üyeliğin kaydı.
+        </p>
+        <p>
+          Sınırı bilin: kişiyle bağı koparılan kayıt belge no ya da dosya numarasını, barkodu ve
+          tarihleri taşır. Okul arşivindeki ıslak imzalı asıl belge (teslim listesi, kayıp/hasar
+          tutanağı) aynı numarayla kişinin adını taşıdığı için kayıt o asılla eşleştirilebilir; bu
+          yüzden bu kayıtlar için “kişisel veri içermez” denmez. Asılların saklanması arşiv
+          kurallarına tabidir.
+        </p>
+
+        <AltBaslik>Süreler</AltBaslik>
+        <p>
+          Süreler <Ekran to="/ayarlar?tab=politika">Ayarlar → Kütüphane Politikası</Ekran>
+          &apos;nın “Vitrin ve Saklama” bölümündedir (1 ile 10 yıl arası). Süre her kayıt için ayrı
+          işler. Varsayılanlar:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Okuldan ayrılan kişi</strong> (üye olsun ya da olmasın): ayrılıştan 2 yıl sonra
+            kaydı silinir. İade etmediği kaynak, geri alınmamış teslimi ya da kapanmamış kayıp/hasar
+            dosyası olan kişi silinmez; iş kapanınca listeye girer. Süresi henüz dolmamış bir kaydı
+            olan kişi de (ör. üyeliği yakın zamanda sona ermişse) o süre dolana dek bekler.
+          </li>
+          <li>
+            <strong>Sona eren üyelik:</strong> sona ermesinden 2 yıl sonra üyelik kaydı silinir,
+            ödünç ve kayıp/hasar kayıtlarının kişiyle bağı koparılır, gerekçe ve açıklamalar
+            temizlenir. Kişi okulda sürüyorsa kişi kaydı kalır. Açık ödüncü ya da kapanmamış
+            kayıp/hasar dosyası (bedel adımında bekleyen dahil) olan üyelik ve o kayıtların kişiyle
+            bağı iş kapanana dek kalır.
+          </li>
+          <li>
+            <strong>İade edilen ya da kayba dönüşen ödünçler</strong> (üyelik sürse de sona ermiş
+            olsa da): kapandığı ders yılının sonundan 1 yıl sonra kişiyle bağı koparılır. Yaz
+            tatilinde yapılan iade bir sonraki ders yılının sonuna sayılır. Kayıp/hasar dosyasına
+            bağlı ödünç, dosyanın kişiyle bağı koparılana dek bekler ve onunla birlikte koparılır.
+          </li>
+          <li>
+            <strong>Kapanmış kayıp/hasar dosyası:</strong> kapanışından 2 yıl sonra kişiyle bağı ve
+            açıklaması temizlenir.
+          </li>
+          <li>
+            <strong>Öğretmene teslim:</strong> geri alınmasından 2 yıl sonra öğretmenle bağı
+            koparılır. Aynı teslim listesindeki (aynı belge no) kitapların bağı birlikte,
+            sonuncusunun süresi dolunca koparılır; listeden bir kitap hâlâ teslimdeyse ya da açık
+            bir kayıp/hasar dosyasına bağlıysa liste bekler. Sınıf kitaplığına teslim kişiye bağlı
+            değildir, olduğu gibi kalır.
+          </li>
+          <li>
+            <strong>“Bedel belirlendi” ya da “Bedel teslim alındı”da bekleyen dosya</strong>{" "}
+            silinmez: bir yılı geçince Saklama ekranındaki “Bedel Bekleyen Dosyalar” listesine ve
+            Genel Bakış&apos;a düşer. Dosyayı Kayıp ve Hasar ekranından kapatın.
+          </li>
+        </ul>
+
+        <AltBaslik>Ne kalır</AltBaslik>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            Ödünç, kayıp/hasar ve teslim kayıtları kişiyle bağı koparılmış olarak kalır: sayım,
+            istatistik ve yıl sonu raporu onlardan hesaplanır. Bu kayıtlar artık kimseye yazılmaz,
+            kişi dökümünde de görünmez; belge no ya da dosya numarası arşivdeki asılla eşleşebilir.
+          </li>
+          <li>
+            Verilmiş kart numaraları hiçbir zaman yeniden verilmez; üyeliği silinmiş kişinin kartı
+            okutulursa masada “iptal edilmiş kart” denir.
+          </li>
+          <li>
+            Resmî belgelerin ıslak imzalı asılları okul arşivinde, kişisiz izleri programda kalır
+            (aşağıda “Resmî belgeler”).
+          </li>
+          <li>Çok okunanların kapanmış dönemleri ve sonlandırılmış yıl sonu raporu değişmez.</li>
+          <li>
+            Bedeli belirlenmiş ya da teslim alınmış ama kapanmamış kayıp/hasar dosyası silinmez;
+            Saklama ekranındaki “Bedel Bekleyen Dosyalar” listesinde kalır.
+          </li>
+        </ul>
+        <p>
+          Saklama ekranındaki “Ne Kalır” kartı aynı maddeleri aynı sırayla ve yedeklerde kalan
+          kopyaların sayısını gösterir.
+        </p>
+
+        <AltBaslik>Onay</AltBaslik>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            Süresi dolan kayıt bulununca Genel Bakış&apos;ta{" "}
+            <strong>“Saklama Süresi Dolan Kayıtlar”</strong> kartı çıkar; yalnız sayıyı gösterir.
+          </li>
+          <li>
+            Saklama ekranında neyin silineceğini ve neyin kalacağını okuyun. “Süresi Dolan Kayıtlar”
+            kartı iki gruptur: <strong>“Silinecek”</strong> (kişi kaydı, sona ermiş üyelik kaydı) ve{" "}
+            <strong>“Kişiyle bağı koparılacak (kayıt kalır)”</strong>. Adları görmek isterseniz{" "}
+            <strong>“Silinecek kişileri göster”</strong> düğmesine basın: kaydı silinecek kişiler ve
+            kişi kaydı kalıp yalnız üyelik kaydı silinecek kişiler ayrı tablolarda gelir; “Adları
+            gizle” listeyi kapatır.
+          </li>
+          <li>
+            <strong>“Onayla ve uygula”</strong> düğmesiyle açılan pencerede yönetici parolasını
+            yazın, “Bu işlemin geri alınamayacağını anladım” kutusunu işaretleyin ve “Uygula”ya
+            basın.
+          </li>
+        </ol>
+        <p>
+          İşlem tek seferde yapılır: bir adım yapılamazsa hiçbir kayıt değişmez. Siz onaylarken
+          liste değiştiyse işlem uygulanmaz, önizleme yenilenir. Onay{" "}
+          <strong>altı aydan uzun</strong> beklerse Genel Bakış&apos;taki kartta kapatılamayan bir
+          uyarı çıkar; uyarı ancak işlem onaylanınca kalkar. Kütüphane yöneticisi değişirken onay
+          bekleyen kayıtların sayısı görev devri notuna da yazılır; onay görevi devralana kalır.
+        </p>
+
+        <AltBaslik>Yedeklerde kalan kopyalar</AltBaslik>
+        <p>İşlem veritabanını değiştirir; kayıtların eski hâli bir süre daha yedeklerde kalır:</p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            İşlemden hemen önce şifreli bir yedek alınır (<Kod>pre-anonim-…</Kod>); yedek alınamazsa
+            işlem yapılmaz. Bu yedek günlük yedekler gibi 14 gün sonra kendiliğinden silinir. Yanlış
+            bir onay bu süre içinde o yedekten geri yüklenerek geri alınabilir; o yedekten sonra
+            girilen kayıtlar da kalkar.
+          </li>
+          <li>Günlük yedekler 14 günün sonunda kendiliğinden silinir.</li>
+          <li>
+            İşlem, kendinden önce alınmış güncelleme öncesi yedekleri (<Kod>pre-migrate-…</Kod>)
+            hemen siler.
+          </li>
+          {/* 27.09.2026 kullanıcı kararı: tetik, db-onceki dosyalarından tetik anından 14 günden
+              eskilerini eşleriyle siler (pre-anonim ve günlük yedeklerin süresi); elle silme
+              önerisi yalnız daha yenileri içindir. */}
+          <li>
+            İşlem, geri yüklemeden kalan önceki veritabanı dosyalarından (<Kod>db-onceki-…</Kod>) 14
+            günden eski olanları da siler; dosyanın yaşı adındaki geri yükleme tarihinden okunur.
+            Daha yenileri yakın tarihli bir geri yüklemeden dönüş için kalır: artık gerekmiyorlarsa
+            okul müdürlüğünün kararıyla siz silin. Yedek klasörüne elle koyduğunuz dosyalara program
+            dokunmaz: onları da gerekmiyorlarsa siz silin.
+          </li>
+          <li>
+            İndirip USB belleğe aldığınız yedekler programın dışındadır: işlemden sonra yeni bir
+            şifreli yedek alın ve işlemden önce alınmış olanları silin (bkz. Yedek ve Güvenlik
+            Dosyası, “USB bellekteki yedekler”). İşlemden sonra şifreli yedek indirmediyseniz “Son
+            İşlem” kartı bunu hatırlatır.
+          </li>
+        </ul>
+
+        <AltBaslik>Resmî belgeler</AltBaslik>
+        <p>
+          Kayıp/hasar tutanağı, teslim listesi, geri alma dökümü ve “Kütüphaneden ilişiği yoktur”
+          belgesi her üretildiğinde program belgenin kişisiz izini (tür, tarih, belge no ya da dosya
+          numarası) tutar. Islak imzalı asıl nüsha okul arşivindedir. Kişiyle bağı koparılmış bir
+          kayıttan belge yeniden basılırsa kişi adı yazılmaz ve belgenin başında{" "}
+          <strong>“Anonimleştirilmiş kopya — ıslak imzalı asıl nüsha okul arşivindedir”</strong>{" "}
+          yazar.
+        </p>
+        <Ipucu>
+          <p>
+            Kütüphane aydınlatma metni bu süreleri Kütüphane Politikası&apos;ndan alır; süreyi
+            değiştirirseniz metni yeniden basıp duyurun.
+          </p>
+        </Ipucu>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="yedek">
+        <p>
+          Yönetici parolası kurulduktan sonra program her gün o günün şifreli{" "}
+          <strong>günlük yedeğini</strong> alır (aynı gün ikinci yedek almaz) ve son 14 günün
+          yedeklerini saklar. Program yeni bir sürüme güncellendiğinde, veritabanını güncellemeden
+          önce ayrıca bir yedek alır (son beş güncellemenin yedeği kalır). Saklama işleminden hemen
+          önce de bir yedek alınır (bkz. Saklama ve Anonimleştirme). Yedekler güçlü şifrelemeyle
+          korunur; yalnız yönetici parolasıyla ya da kurtarma anahtarıyla açılır.
+        </p>
+        <Ipucu>
+          <p>
+            Program tepside günlerce açık kalsa da <strong>gün değişince</strong> o günün yedeğini
+            alır: program açılışta ve açık kaldığı sürece saatte bir tarihi denetler (bkz. “Tepsi,
+            Çıkış ve Gün Değişimi”). Bilgisayar kapalıyken yedek alınmaz; bilgisayar açıldığında ilk
+            iş o günün yedeğidir.
+          </p>
+        </Ipucu>
+        <p>
+          Otomatik yedekler bu bilgisayardadır; disk bozulursa onlar da gider. Ayda bir{" "}
+          <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran>&apos;teki “Şifreli Veritabanı
+          Yedeği” kartından “Şifreli yedeği indir” düğmesiyle yedek alıp USB belleğe kopyalayın ve
+          belleği bilgisayardan ayrı saklayın. Yedeği bulut depolama hizmetine yüklemeyin (Yönerge
+          md. 11/23).
+        </p>
+
+        <AltBaslik>USB belleğe yedek hatırlatması</AltBaslik>
+        <p>
+          Program son şifreli yedek indirmesinin tarihini tutar. Son indirmeden 30 gün geçince (hiç
+          indirme yoksa yönetici parolası kurulduktan 7 gün sonra) <Ekran to="/">Genel Bakış</Ekran>
+          &apos;ta “Şifreli Yedeği USB Belleğe Alın” kartı çıkar. Süreyi “Şifreli Veritabanı Yedeği”
+          kartındaki “Hatırlatma süresi” seçimiyle 7 ile 90 gün arasında değiştirebilirsiniz.
+          Program dosyanın USB belleğe gerçekten kopyalandığını bilemez; kart yalnız son indirmeyi
+          söyler. Tarih veritabanında değil veri klasöründe durduğu için yedekten geri yükleme onu
+          geri sarmaz: yeni bir bilgisayarda kart, orada ilk şifreli yedek indirilene dek görünür.
+        </p>
+
+        <AltBaslik>USB bellekteki yedekler</AltBaslik>
+        <p>
+          USB belleğe (ya da okulun ağ diskine) aldığınız yedek programın dışındadır: program ona
+          ulaşamaz, onu silemez; saklama işlemi de ona dokunmaz. Onu saklamak ve zamanı gelince
+          silmek okulun sorumluluğundadır: düzeni okul müdürlüğü belirler, bellekteki yedeğin
+          güvenliğini onu kullanan personel sağlar (Yönerge md. 10/5: personel USB bellekteki
+          bilgilerin güvenliğini sağlar, USB ya da harici diske konan önemli veri şifrelenerek
+          saklanır). Yedek zaten şifrelidir; yine de belleği kilitli dolapta, bilgisayardan ayrı
+          saklayın. Önerilen düzen:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            İndirilen yedek bilgisayarın İndirilenler klasörüne düştüyse onu USB belleğe taşıyın; bu
+            bilgisayarda kopya bırakmayın, Geri Dönüşüm Kutusu&apos;nu da denetleyin. Yedeği
+            e-postayla göndermeyin, ortak klasöre koymayın.
+          </li>
+          {/* Kullanıcı kararı (27.09.2026): "son iki yedek" önerisi onaylandı (tasarım §14.1
+              F11 ekleri, karar turu; docs/mevzuat/BENIOKU.md §4). Programın önerisidir, mevzuat
+              hükmü diye sunulmaz. */}
+          <li>
+            USB bellekte son iki yedeği tutun: yenisini aldığınızda daha eskilerini silin. Okul
+            müdürlüğü başka bir düzen belirleyebilir.
+          </li>
+          <li>
+            Saklama işleminden sonra yeni bir şifreli yedek alın ve işlemden önce alınmış USB
+            yedeklerini silin: eski yedekler silinen kayıtları taşımayı sürdürür.
+          </li>
+          <li>
+            Görev devrinden sonra da yeni bir şifreli yedek alın ve devirden önce alınmış USB
+            yedeklerini silin: onlar eski parolayla ve eski kurtarma anahtarıyla açılır, eski
+            parolayla birlikte devirden sonraki yedekleri de açtırır (bkz. Görev Devri).
+          </li>
+          <li>
+            Belleği başka bir işe vermeden ya da elden çıkarmadan önce içindeki yedekleri silin.
+          </li>
+          <li>
+            Bellek kaybolur ya da çalınırsa durumu hemen okul müdürlüğüne bildirin. Yedek
+            şifrelidir; başka bir bilgisayarda ancak alındığı günün yönetici parolasıyla ya da o
+            günün kurtarma anahtarıyla açılır, bugünkü parolayı değiştirmek onu korumaz. Kişisel
+            verilerin kanuni olmayan yollarla başkalarınca elde edilmesi hâlinde yapılacak bildirimi
+            (KVKK md. 12/5) okul müdürlüğü değerlendirir.
+          </li>
+        </ul>
+
+        <AltBaslik>Yedekten geri yükleme</AltBaslik>
+        <p>
+          Yanlış veri girişinden sonra eski bir güne dönmek için Ayarlar → Güvenlik&apos;teki
+          “Yedekten Geri Yükleme” kartında günlük yedeklerden birini seçin ya da elinizdeki yedek
+          dosyasını yükleyin. Yedeğin alındığı dönemdeki yönetici parolasını ya da kurtarma
+          anahtarını yazıp “Geri yükle”ye basın. O yedekten sonra girilen kayıtlar kalkar. Mevcut
+          veritabanı silinmez, veri klasöründe <Kod>db-onceki-…</Kod> adıyla kenara alınır (saklama
+          işlemi bu dosyalardan 14 günden eski olanları siler). İşlemden sonra gelen “Programı
+          kapatıp yeniden açın” ekranındaki “Programdan çık” düğmesiyle (ya da tepsideki simgeden
+          “Çık”ı seçerek) programı kapatın ve yeniden açın; pencerenin çarpı düğmesi programı
+          kapatmaz. Ağ Kataloğu açıksa geri yükleme sırasında kapanır. Program yeniden açılınca Ağ
+          Kataloğunun ayarı geri yüklenen yedekten okunur: yedekte katalog açıksa kendiliğinden
+          kalkar; değilse Ayarlar → Ağ Kataloğu&apos;ndan yeniden açın ve Ağ Doktoru&apos;nda beş
+          denetimin geçtiğini görün (yedekteki port farklıysa güvenlik duvarı kuralı da
+          güncellenmelidir).
+        </p>
+        <p>
+          Program hiç açılmıyorsa Windows&apos;ta Başlat menüsündeki “OAB Defteri — Yedekten
+          Geri Yükle” kısayolunu, Pardus&apos;ta uçbirimden{" "}
+          <Kod>oab-defteri --geri-yukle</Kod> komutunu kullanın. Program tepsideyse önce
+          tepsideki simgeden “Çık”ı seçin.
+        </p>
+
+        <AltBaslik>Yeni bilgisayara taşıma</AltBaslik>
+        <p>
+          Kütüphane bilgisayarı değişirse, yeniden kurulursa ya da diski değişirse programı bütün
+          kayıtlarıyla şifreli yedek taşır. Dışa aktarım dosyası yalnız kataloğu taşır, taşıma için
+          yetmez (bkz. Dökümler ve Dışa Aktarım). Sırasıyla:
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            Eski bilgisayarda <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran>&apos;teki
+            “Şifreli Veritabanı Yedeği” kartından “Şifreli yedeği indir” ile yedek alıp USB belleğe
+            kopyalayın. Yönetici parolasının ya da kurtarma anahtarının elinizde olduğunu
+            doğrulayın: yedek yalnız onlarla açılır. Yedeği taşımadan hemen önce alın.
+          </li>
+          <li>
+            Aynı USB belleğe eski bilgisayarın veri klasöründeki <Kod>verilmis-kartlar.txt</Kod>{" "}
+            dosyasını da kopyalayın. Dosya kişisel veri taşımaz; verilmiş üye kartı numaralarının
+            kişisiz listesidir. Yedekten sonra basılmış bir kartın numarası yeni bilgisayarda başka
+            bir üyeye verilmesin diye gereklidir.
+          </li>
+          <li>
+            Yeni bilgisayarın okul demirbaşı olduğunu doğrulayın, kütüphane masası hesabını açın ve
+            programı o hesapta kurun (Windows&apos;ta kurulum yönetici onayı ister, kimliği BTR
+            girer). Ağ Kataloğu kullanılıyorsa kurulumda “Yerel ağdan katalog taramasına izin ver
+            (güvenlik duvarı kuralı)” seçeneğini işaretli bırakın. Kurulumun sonunda program
+            açılırsa kurulum sihirbazında parola kurmadan kapatın; kurduysanız sorun değil: geri
+            yükleme o kurulumun güvenlik dosyasını <Kod>guvenlik-arsiv-…</Kod>, boş veritabanını{" "}
+            <Kod>db-onceki-…</Kod> adıyla kenara alır.
+          </li>
+          <li>
+            Yedek dosyasını yeni bilgisayarın yedek klasörüne kopyalayın (Windows&apos;ta{" "}
+            <Kod>%LOCALAPPDATA%\OABDefteri\backups</Kod>, Pardus&apos;ta{" "}
+            <Kod>~/.local/share/oab-defteri/backups</Kod>). Program tepsideyse tepsideki
+            simgeden “Çık”ı seçin; Windows&apos;ta Başlat menüsündeki “OAB Defteri — Yedekten
+            Geri Yükle” kısayolunu, Pardus&apos;ta uçbirimden{" "}
+            <Kod>oab-defteri --geri-yukle</Kod> komutunu çalıştırıp bu yedeği seçin. Eski
+            bilgisayardaki yönetici parolası ya da kurtarma anahtarı sorulur. Geri yükleme veri
+            klasörünü oluşturur; programı açmadan önce <Kod>verilmis-kartlar.txt</Kod> dosyasını
+            yeni bilgisayarın veri klasörüne koyun.
+          </li>
+          <li>
+            Programı açın, kilidi eski bilgisayardaki yönetici parolasıyla açın; kitap, üye ve açık
+            ödünç sayılarını eski bilgisayardaki son durumla karşılaştırın. Sayılar tutunca yedek
+            klasörüne kopyaladığınız dosyayı silin: program elle konan dosyaları kendisi silmez, USB
+            bellekteki kopya yeter. Yeni bilgisayardan da bir şifreli yedek indirip USB belleğe
+            alın.
+          </li>
+          <li>
+            Ağ Kataloğu kullanılıyorsa Ağ Doktoru&apos;nda beş denetimin geçtiğini görün. Yedekteki
+            port varsayılandan farklıysa yeni bilgisayarın kuralı varsayılan portla yazılmıştır; Ağ
+            Doktoru&apos;ndaki “Kuralı ekle/güncelle” kuralı ayardaki portla yeniden yazar.
+            BTR&apos;den sabit adres ayırmayı yeni bilgisayarın ağ kartına taşımasını isteyin. Adres
+            değiştiyse katalog afişini yeniden basın ve yer imlerini güncelleyin (bkz. Ağ Kataloğu).
+          </li>
+          <li>
+            Yeni kurulum çalıştıktan sonra eski bilgisayardaki veri klasörünü ve yedekleri silin
+            (programı kaldırmak onları silmez); İndirilenler klasörünü ve Geri Dönüşüm
+            Kutusu&apos;nu da denetleyin. USB bellekteki yedekleri aşağıdaki “USB bellekteki
+            yedekler” düzenine göre saklayın.
+          </li>
+        </ol>
+
+        <AltBaslik>Geri yükleme provası</AltBaslik>
+        <p>
+          Bu akış programın kendi denetimlerinde “temiz bilgisayarda geri yükleme provası” olarak
+          sınanır: boş bir veri klasörüne şifreli yedek geri yüklenir, program açılır, kilit aynı
+          parolayla ve kurtarma anahtarıyla açılır, adlar, okul numaraları, katalog, üyelikler ve
+          açık ödünçler birebir çıkar.
+        </p>
+        <p>
+          Kendi yedeğinizin açıldığını görmek isterseniz (ör. bilgisayar değişmeden önce ya da yılda
+          bir) aynı provayı okulun başka bir demirbaş bilgisayarında yapın. Prova bu bilgisayardaki
+          veriye dokunmaz:
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            Şifreli yedeği indirip USB belleğe alın; kurtarma anahtarının kâğıdını yanınıza alın.
+          </li>
+          <li>
+            Prova bilgisayarında programı kurun ya da (Windows&apos;ta) kurulum yapmadan çalışan
+            taşınabilir sürümü bir klasöre açın.
+          </li>
+          <li>
+            Yedeği o bilgisayarın yedek klasörüne kopyalayıp geri yükleme aracını çalıştırın
+            (taşınabilir sürümde Başlat menüsü kısayolu yoktur: klasördeki programı komut isteminden{" "}
+            <Kod>--geri-yukle</Kod> ile çalıştırın). Parola yerine{" "}
+            <strong>kurtarma anahtarını</strong> yazın; böylece kâğıttaki anahtarın da işlediğini
+            görürsünüz.
+          </li>
+          <li>
+            Programı açın, kilidi yönetici parolasıyla açın; kitap, üye ve açık ödünç sayılarını bu
+            bilgisayardakilerle karşılaştırın. Provada kayıt girmeyin.
+          </li>
+          <li>
+            Programdan “Çık” ile çıkın ve prova bilgisayarındaki veri, yedek ve günlük klasörlerini
+            silin (Windows&apos;ta <Kod>%LOCALAPPDATA%\OABDefteri</Kod>; Pardus&apos;ta{" "}
+            <Kod>~/.local/share/oab-defteri</Kod> ve{" "}
+            <Kod>~/.local/state/oab-defteri</Kod>). Programı kurduysanız kaldırın; kaldırmak
+            bu klasörleri silmez.
+          </li>
+        </ol>
+        <p>
+          Kâğıttaki anahtar yedeği açmazsa kütüphane bilgisayarındaki kayıtlar yerindedir: orada
+          “Kurtarma Anahtarını Yenile” kartından yeni bir anahtar üretip saklayın, yeni bir şifreli
+          yedek alın ve provayı o yedekle tekrarlayın.
+        </p>
+        <Ipucu>
+          <p>
+            Daha yeni bir sürümle alınmış bir yedeği eski sürüm programa geri yüklerseniz program
+            açılmaz ve “Program sürümü eski” iletisini verir: eski program yeni veriyi tanımaz,
+            açsaydı bozardı. Önce programı güncelleyin (bkz. Güncelleme).
+          </p>
+        </Ipucu>
+
+        <AltBaslik>Kurtarma anahtarını yenilerseniz</AltBaslik>
+        <p>
+          Kurtarma anahtarı kaybolduysa ya da kurulumda kaydedilemediyse{" "}
+          <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran>&apos;teki “Kurtarma
+          Anahtarını Yenile” kartından yönetici parolanızı girip yenisini üretirsiniz. Kayıtlar
+          yeniden şifrelenmez, yönetici parolası ve numaralar değişmez; yalnız anahtarın açtığı
+          kilit yenilenir. Yeni anahtar bir kez gösterilir: onu da saklayıp doğrulayın.
+        </p>
+        <p>
+          <strong>Eski kâğıdı hemen atmayın.</strong> Her yedek, alındığı günün güvenlik dosyasını
+          içinde taşır. Yenilemeden önce alınmış bir yedek:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            bu bilgisayarda (güvenlik dosyası yerindeyken) <strong>yeni</strong> kurtarma
+            anahtarıyla ya da güncel yönetici parolasıyla açılır;
+          </li>
+          <li>
+            başka bir bilgisayarda ya da güvenlik dosyası kaybolduğunda yalnız <strong>eski</strong>{" "}
+            kurtarma anahtarıyla (ya da o dönemin yönetici parolasıyla) açılır.
+          </li>
+        </ul>
+        <p>
+          Bu yüzden USB bellekteki eski yedekler duruyorsa eski kâğıdı “Eski anahtar — [tarih]
+          öncesi yedekler için” diye işaretleyip ayrı saklayın. Bu bilgisayarda eski bir yedeği geri
+          yüklerken güncel parolayı ya da yeni anahtarı kullanın: eski anahtarla geri yüklerseniz
+          güvenlik dosyası da yedeğin dönemine döner ve kilidi yeniden eski anahtar açar.
+        </p>
+        <Ipucu>
+          <p>
+            Yenileme, başkasının eline geçmiş bir anahtara karşı koruma değildir: kayıtların
+            anahtarı değişmez; eski yedekler ve veri klasöründe <Kod>guvenlik-arsiv-…</Kod> adıyla
+            saklanan önceki güvenlik dosyası eski anahtarla açılabilir ve onlarla birlikte eski
+            anahtar yenilemeden sonra alınan yedekleri de açtırır. Anahtarın başkasının eline
+            geçtiğini düşünüyorsanız okul müdürlüğünü bilgilendirin, kütüphane masası Windows
+            hesabının parolasını değiştirin ve USB bellekteki yedeklerin kimin elinde olduğunu
+            gözden geçirin; yönetici parolasını değiştirmek tek başına yetmez.
+          </p>
+        </Ipucu>
+
+        <AltBaslik>Güvenlik dosyası bulunamazsa</AltBaslik>
+        <p>
+          Kayıtların anahtarı, veri klasöründeki güvenlik dosyasında (<Kod>guvenlik.json</Kod>)
+          durur. Veri klasörü Windows&apos;ta <Kod>%LOCALAPPDATA%\OABDefteri\data</Kod>,
+          Pardus&apos;ta <Kod>~/.local/share/oab-defteri/data</Kod> klasörüdür. Dosya silinir,
+          adı değişir ya da içi bozulursa (ör. Not Defteri&apos;nde açılıp kaydedilirse) program
+          “Güvenlik dosyası bulunamadı ya da okunamıyor” ekranını gösterir: kayıtlar açılmaz, yeni
+          parola da kurulamaz. Sırasıyla:
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            Dosyanın sağlam bir kopyası varsa (ör. bilgisayar taşınırken alınan veri klasörü)
+            dosyayı veri klasörüne geri koyun ve “Yeniden denetle” düğmesine basın.
+          </li>
+          <li>
+            Kopya yoksa aynı ekrandan bir yedeği geri yükleyin: her yedek güvenlik dosyasını da
+            içinde taşır ve geri yükleme dosyayı yeniden oluşturur.
+          </li>
+          <li>
+            Veritabanında hiç kişi kaydı yoksa ve yedek klasöründe yedek bulunmuyorsa ekranda
+            “Güvenlik dosyasını sıfırla ve kuruluma dön” düğmesi de çıkar. Okunamayan dosya
+            silinmez, “guvenlik-arsiv” adıyla kenara alınır; sihirbaz yönetici parolası adımından
+            açılır ve yeni bir kurtarma anahtarı verilir. Yedek varsa düğme çıkmaz: eski kayıtlar
+            yedektedir, yedekten geri yükleyin.
+          </li>
+        </ol>
+        <p>
+          Bu durumda program eski yedekleri silmez. Güvenlik dosyasını ve veri klasörünü elle
+          düzenlemeyin.
+        </p>
+        <Ipucu>
+          <p>
+            Program kişisel veri alanlarını şifreler, ama bu tam disk şifrelemesi değildir: sınıf ve
+            şube, üye türü ve tarihler şifrelenmez. Bilgisayarın tamamını korumak için
+            Windows&apos;ta BitLocker, Pardus&apos;ta LUKS disk şifrelemesi kullanın.
+          </p>
+        </Ipucu>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* F11 (tasarım §4.4, E18): görev devri tek akıştır. Metin dürüsttür: kayıtların
+          şifreleme anahtarı değişmez; eski parola/anahtar eski bir yedekle ya da arşiv
+          dosyasıyla o anahtarı verir ve devirden SONRAKİ yedekleri de açar (TB17, TB23; F11
+          düzeltme turu — "kilidi artık açmaz" denmez, masa hesabının parolası değişir).
+          Atıflar fıkranın öznesine bağlıdır (KVKK 12/4: veri sorumlusu; Yönerge 6/4:
+          çalışması sona eren kullanıcı, görev değişikliğinde kıyasen). "İmha" denmez
+          (sözlük §1): eski kâğıt "yırtılarak yok edilir". */}
+      <Bolum id="gorev-devri">
+        <p>
+          Kütüphane yöneticisi tayin, görev değişikliği ya da emeklilikle ayrılınca yetki onda
+          kalmamalıdır. <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran>&apos;teki
+          “Görev Devri” kartı (yalnız yönetici kipinde) bunun tek yoludur. Üç adımı vardır:
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            <strong>Parola ve anahtar yenilenir.</strong> Görevi devreden ve görevi devralan
+            birlikte oturur. “Görev devrini başlat”a basın (daha önce görev devri yapılmışsa kart
+            önceki devrin adımlarını tamamlanmış gösterir ve düğmenin adı “Görev devrini yeniden
+            başlat”tır). Açılan pencerede “Mevcut yönetici parolası”nı görevi devreden, “Yeni
+            yönetici parolası”nı ve “Parola (tekrar)”ı görevi devralan yazar; sonra “Parolayı ve
+            anahtarı yenile”ye basın. Yeni parola en az 8 karakterdir ve eskisinden farklı
+            olmalıdır. Program aynı anda yeni bir kurtarma anahtarı üretir; bundan sonra kilidi yeni
+            parola ve yeni anahtar açar (eski parolanın sınırı aşağıda).
+          </li>
+          <li>
+            <strong>Yeni anahtar saklanır.</strong> Anahtar Görev Devri kartının içinde, “Kurtarma
+            Anahtarınız” panelinde bir kez gösterilir: yazdırın, PDF olarak USB belleğe kaydedin ya
+            da elle yazın, sonra iki grubunu geri yazarak doğrulayın (kurulumdaki gibi). Program
+            doğrulamadan kapanır ya da yeniden açılırsa anahtar ekrandan gider: kâğıda yazdıysanız
+            “Kurtarma Anahtarını Doğrula” kartından doğrulayın, yazmadıysanız görev devrini yeniden
+            başlatın.
+          </li>
+          <li>
+            <strong>Görev devri notu basılır.</strong> Doğrulamadan sonra kartta not bölümü açılır.
+            “Görevi devreden (adı soyadı)” ve “Görevi devralan (adı soyadı)” alanlarını doldurup
+            “Görev devri notunu indir”e basın. Adlar programda saklanmaz, yalnız basılan nota
+            yazılır; boş bırakırsanız notta elle doldurulacak çizgi çıkar. Not; teslim edilenleri
+            (yeni parolanın ikinci görevliye kapalı zarfla bildirilmesi, yeni anahtar zarfı,
+            kütüphane masası Windows hesabının değiştirilen parolası, okuyucu ve yazıcı, USB
+            bellekteki yedekler), notun düzenlendiği gündeki açık işlerin kişisiz sayılarını ve eski
+            yedeklerin durumunu yazar. Not son görev devrinin tarihini taşır: yeni bir devirde önce
+            “Görev devrini yeniden başlat”a basın. Üç kişi (görevi devreden, görevi devralan, okul
+            müdürü) imzalar; not müdürlükte saklanır.
+          </li>
+        </ol>
+        <p>
+          Kartın altındaki “Açık işler” listesi görevi devralana kalan işlerin sayılarını gösterir:
+          iade edilmemiş ödünç, geri alınmamış teslim, açık kayıp/hasar dosyası, sonuçlanmamış sayım
+          ya da ayıklama teklifi, onay bekleyen saklama işlemi gibi. Aynı sayılar nota basılır; not
+          kişi ve kitap adı taşımaz.
+        </p>
+        <Ipucu>
+          <p>
+            <strong>Sınırı bilin.</strong> Görev devri kayıtların şifreleme anahtarını değiştirmez;
+            yalnız parolanın ve kurtarma anahtarının açtığı kilit yenilenir. Bütün kayıtların yeni
+            bir anahtarla yeniden şifrelenmesi bu sürümde yoktur. Her yedek alındığı günün güvenlik
+            bilgisini taşır: devirden önce alınmış yedekler (bu bilgisayardaki günlük yedekler 14
+            gün içinde kendiliğinden silinir, güncelleme öncesi yedekler son beş güncellemeye kadar
+            kalır, parola kurulurken alınan yedek kendiliğinden silinmez; USB bellektekiler sizin
+            elinizdedir) ve veri klasöründe <Kod>guvenlik-arsiv-…</Kod> adıyla saklanan önceki
+            güvenlik dosyaları eski parola ve eski kurtarma anahtarıyla açılabilir. Eski parola ya
+            da eski anahtar bunlardan biriyle birlikte kayıtların anahtarını verir; o anahtar
+            devirden sonra alınan yedekleri de, bu bilgisayardaki güncel kayıtları da açar. Görev
+            devri bu yüzden görevi devredenin bu bilgisayara ve yedeklere erişimi kesildiğinde anlam
+            taşır. Kart ve not bu yedeklerin sayısını gösterir.
+          </p>
+        </Ipucu>
+        <p>
+          Kütüphane masası Windows hesabının parolasını da değiştirin ve yeni parolayı görevi
+          devredene vermeyin. Devirden sonra yeni bir şifreli yedek indirip USB belleğe alın ve
+          devirden önce alınmış USB yedeklerini silin (bkz. Yedek ve Güvenlik Dosyası, “USB
+          bellekteki yedekler”).
+        </p>
+        <p>
+          Eski kurtarma anahtarı kâğıdını, devirden önce alınmış yedekler saklandıkça müdürlükte
+          ayrı zarfta “Eski anahtar — [tarih] öncesi yedekler için” diye işaretleyip saklayın; o
+          yedekler kalmayınca kâğıdı yırtarak yok edin: gizli bilgi içeren atık evrak yok edilir
+          (Yönerge md. 10/3). Görevi devreden eski parolayı hiçbir yerde saklamaz ve kimseyle
+          paylaşmaz. Çalışması sona eren kullanıcı bilişim sistemlerinin kullanımına yönelik
+          şifreleri iade eder, erişim hakları kaldırılır (Yönerge md. 6/4); okulda kalan kişinin
+          görev değişikliğinde bu kural kıyasen uygulanır. Kanun, veri sorumlusunun ve veri
+          işleyenlerin öğrendikleri kişisel verileri Kanuna aykırı olarak başkasına
+          açıklayamayacağını ve işleme amacı dışında kullanamayacağını, bunun görevden ayrıldıktan
+          sonra da sürdüğünü söyler (KVKK md. 12/4). Veri sorumlusu okuldur; görevi devreden de
+          görevi sırasında öğrendiği kişisel verileri okulun bu kuralı gereği açıklamaz ve
+          kullanmaz.
+        </p>
+        <p>
+          Yönetici parolasının görevlendirilmiş en az iki kişide bulunması önerilir: devirden sonra
+          yeni parolayı ikinci görevliye de kapalı zarfla bildirin.
+        </p>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* F11 (T11 v4, 27.09.2026 kullanıcı kararı): denetim GitHub'dan, yalnız düğmeyle;
+          ulaşılamama iletisi sunucudakiyle birebir (`updates.ULASILAMADI_MESAJI`). Hizmetin adı
+          bu bölümde açıkça yazılır: program dışarı hangi adrese çıktığını söyler (sözlük "Sürüm"). */}
+      <Bolum id="guncelleme">
+        <p>
+          Yeni sürüm olup olmadığını{" "}
+          <Ekran to="/ayarlar?tab=guncelleme">Ayarlar → Güncelleme</Ekran>&apos;deki “Şimdi denetle”
+          düğmesiyle öğrenirsiniz. Program açılışta ve kendi başına internete çıkmaz; denetim yalnız
+          bu düğmeyle yapılır ve kişisel veri taşımaz. Denetim, programın yayımlandığı GitHub
+          sayfasına sorulur: ekran kurulu sürümü ve yayımlanan son sürümü yan yana gösterir. Yeni
+          sürüm varsa Windows&apos;ta “Doğrula ve indir” kurulum dosyasını yine GitHub&apos;dan,
+          bütünlüğünü doğrulayarak indirir; programı tepsideki simgeden “Çık” ile kapatıp dosyayı
+          çalıştırın (kurulum yönetici onayı ister, kimliği BTR girer). Pardus&apos;ta yeni paket
+          indirme sayfasından alınıp kurulur; kurmadan önce programdan “Çık” ile çıkın, çünkü Pardus
+          paketi açık programı kendiliğinden kapatmaz. Program her sürüm geçişinden önce
+          kendiliğinden bir yedek alır; verileriniz kurulum klasörünün dışında durduğu için korunur.
+        </p>
+        <p>
+          Okul ağında GitHub engellenmiş olabilir. O zaman ekranda şu ileti çıkar: “GitHub&apos;a
+          ulaşılamadı; okul ağında engellenmiş olabilir. Yeni sürümü indir.okulapp.org&apos;dan elle
+          denetleyebilirsiniz.” İletinin altındaki <Kod>okulapp.org/oab-defteri</Kod>{" "}
+          bağlantısı sayfayı tarayıcınızda açar: yeni sürümü orada görürsünüz, kurulum dosyaları{" "}
+          <Kod>indir.okulapp.org</Kod>&apos;dan iner. Program o adrese kendisi istek atmaz. Elle
+          indirilen kurulum dosyasının bütünlüğünü BTR, indirme sayfasındaki özet listesiyle
+          doğrular. Okul ağından GitHub&apos;a erişim istenirse talebi BTR, Ağ Kataloğu bölümündeki
+          erişim sınamasında anlatılan yoldan açar.
+        </p>
+        <Ipucu>
+          <p>
+            Güncellemeden sonra eski sürüm programı yeni veriyle açmaya çalışmayın: program veriyi
+            korumak için açılmaz ve “Program sürümü eski” der. Bu ileti daha yeni bir sürümle
+            alınmış bir yedeği eski programa geri yükleyince de çıkar; çözüm programı
+            güncellemektir.
+          </p>
+        </Ipucu>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="tepsi-ve-cikis">
+        <p>
+          Pencerenin çarpı düğmesi programı kapatmaz: pencere gizlenir, program saatin yanındaki
+          simge alanında (tepside) çalışmayı sürdürür. Ağ Kataloğu açıksa o da hizmet vermeyi
+          sürdürür. Pencereyi yeniden açmak için tepsideki simgeye tıklayın ya da menüsünden
+          “Pencereyi aç”ı seçin.
+        </p>
+
+        <AltBaslik>Programdan çıkmak</AltBaslik>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            Üst çubuktaki “Çık” düğmesi ya da tepsideki simgenin menüsündeki “Çık” programı düzenli
+            kapatır: Ağ Kataloğu kapanır, veritabanı tek dosyada toparlanır. Bilgisayarı kapatmadan
+            önce en güvenli yol budur. Dar pencerede üst çubuktaki düğmenin yalnız simgesi görünür.
+          </li>
+          <li>
+            Yönetici kipinde ve kayıtlar kilitliyken üst çubuktaki “Çık” yalnız “Programdan çıkılsın
+            mı?” diye onay ister; tepsiden seçilen “Çık” bu durumlarda onay sormadan kapatır.
+          </li>
+          <li>
+            Görevli kipinde “Çık” <strong>yönetici parolası</strong> ister: açılan “Programdan çık”
+            penceresinde “Yönetici parolası” alanını doldurup “Çık” düğmesine basın. Tepsiden
+            seçilirse pencere öne gelir ve parola orada sorulur. Bu koruma masadaki görevlinin
+            programı yanlışlıkla kapatmasını önler, bir güvenlik sınırı değildir.
+          </li>
+          <li>
+            Yedekten geri yüklemeden sonra gelen “Programı kapatıp yeniden açın” ekranındaki
+            “Programdan çık” düğmesi parola ve onay sormaz: programın yeniden açılması şarttır.
+          </li>
+          <li>
+            Masaüstünde tepsi yoksa (bazı Pardus masaüstleri) çarpı düğmesi pencereyi küçültür;
+            programdan çıkmanın yolu üst çubuktaki “Çık” düğmesidir.
+          </li>
+          <li>
+            Program açıkken kurulum, güncelleme ya da kaldırma başlatılırsa program kendiliğinden
+            düzenli kapanır. Yarım dakika içinde kapanmazsa kurulum penceresi tepsideki simgeden
+            “Çık”ı seçmenizi ister; program zorla kapatılmaz.
+          </li>
+        </ul>
+
+        <AltBaslik>Tepsi menüsü</AltBaslik>
+        <p>
+          Menüdeki komutlar kipe göre değişir. Her durumda “Pencereyi aç”, Ağ Kataloğunun durum
+          satırı (ör. “Ağ Kataloğu: açık — http://…” ya da “Ağ Kataloğu: kapalı”) ve “Çık” görünür.
+          Yönetici kipinde “Ağ Kataloğunu aç” ya da “Ağ Kataloğunu kapat”, “Görevli kipine geç” ve
+          “Kilitle” de vardır; katalog açıkken durum satırına tıklamak kataloğu bu bilgisayarın
+          tarayıcısında okul ağındaki adresiyle açar. Görevli kipinde yalnız “Kilitle” eklenir ve
+          durum satırı yalnız bilgi verir; ayar değiştiren komutlar görevli kipinde çalışmaz, eski
+          bir menüden seçilseler de reddedilir. Kayıtlar kilitliyken menüde pencere, Ağ Kataloğunun
+          durumu ve “Çık” kalır.
+        </p>
+
+        <AltBaslik>Oturum açılınca başlatma</AltBaslik>
+        <p>
+          Windows kurulumunda “Oturum açılınca OAB Defteri&apos;ni başlat” seçildiyse program,
+          kurulumun başlatıldığı hesapta (kütüphane masası hesabı) oturum açılınca kilit ekranıyla
+          açılır. “Pencereyi açmadan tepside başlat” da seçildiyse pencere açılmaz, program doğrudan
+          tepsiye iner. Windows oturumu açılmadan ne program ne Ağ Kataloğu çalışır: bilgisayar
+          sabah açılınca masa hesabında oturum açın.
+        </p>
+
+        <AltBaslik>Gün değişimi</AltBaslik>
+        <p>
+          Program günlerce kapanmadan açık kalabilir. Günde bir yapılması gereken işler bu yüzden
+          açılışa değil tarihe bağlıdır: program açılışta ve açık kaldığı sürece saatte bir tarihi
+          denetler; gün değiştiyse o günün şifreli yedeğini alır, 14 günden eski yedekleri siler ve
+          bilgisayarın ağ adresini denetler. Aynı denetimde çok okunanlar listesi yenilenir ve
+          saklama süresi dolan kayıtlar taranır; tarama hiçbir kaydı değiştirmez, yalnız Genel
+          Bakış&apos;taki kartı günceller (bkz. Saklama ve Anonimleştirme). Adres değiştiyse Ağ
+          Doktoru&apos;nun “Katalog Durumu” kartında adresin değiştiğini söyleyen ve “Afişi yeniden
+          basın, yer imlerini güncelleyin.” diyen uyarı çıkar (bkz. Ağ Kataloğu bölümü, “Adres
+          değişirse”). Bir iş yapılamazsa (ör. yönetici parolası henüz kurulmadıysa) bir saat sonra
+          yeniden denenir. Yedek için kilidin açılması gerekmez: kayıtlar kilitliyken de alınır.
+          Bilgisayar kapalıyken ya da uykudayken hiçbir iş yapılmaz; program açılınca ilk iş o günün
+          yedeğidir, bilgisayar uykudan uyanırsa yedek en geç bir saat içinde alınır.
+        </p>
+
+        <AltBaslik>Uyku</AltBaslik>
+        <p>
+          Ağ Kataloğu açıkken bilgisayarın boşta kalınca uykuya geçmesi engellenir; böylece
+          tahtalardan gün boyu erişilebilir. Kapağı kapatmak ya da bilgisayarı elle uyutmak
+          engellenmez; bilgisayar uyursa ya da kapanırsa katalog da erişilemez. Bu davranış{" "}
+          <Ekran to="/ayarlar?tab=ag-katalogu">Ayarlar → Ağ Kataloğu</Ekran>&apos;ndaki “Uyku”
+          bölümünde “Ağ Kataloğu açıkken bilgisayar boşta uykuya geçmesin” kutusuyla kapatılır.
+          Katalog kapalıyken uyku hiç engellenmez.
+        </p>
+      </Bolum>
+
+      {/* ------------------------------------------------------------------ */}
+      <Bolum id="ag-katalogu">
+        <p>
+          Ağ Kataloğu, okul ağındaki bilgisayarlardan ve etkileşimli tahtalardan tarayıcıyla kitap
+          aramayı sağlar. Program bu bilgisayarda açıkken katalog okul ağına buradan sunulur:
+          tahtaya ya da öğretmen bilgisayarına bir şey kurulmaz, internet gerekmez; tarayıcının
+          adres çubuğuna kataloğun adresi yazılır. Katalog yalnız okunur: oradan ödünç alınamaz,
+          hiçbir kayıt değiştirilemez. Varsayılan olarak kapalıdır ve yalnız yönetici kipinde
+          açılır.
+        </p>
+
+        <AltBaslik>Neyi gösterir, neyi asla göstermez</AltBaslik>
+        <p>Ağ Kataloğunda görünenler:</p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            künye: kaynak adı, yazar, çevirmen, yayınevi, baskı, yayın yılı, ISBN, konu, dil ve
+            kaynak türü;
+          </li>
+          <li>sınıflama kodu ve DOS ana sınıfı, yer numarası ve bölüm;</li>
+          <li>
+            nüshaların durumu: “Rafta”, “Ödünçte”, “Sınıf kitaplığında” ya da “Onarımda”; danışma
+            kaynaklarında “Ödünç verilmez — kütüphanede okunur”;
+          </li>
+          <li>ana sayfada vitrin: yeni gelenler ve çok okunanlar;</li>
+          <li>
+            kaynak adına, yazara ve konuya göre alfabetik dizinler; okulun adı ve kütüphane
+            saatleri.
+          </li>
+        </ul>
+        <p>
+          <strong>Kişisel veri göstermez.</strong> Ağ Kataloğunun hiçbir sayfasında şunlar yoktur:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>üye listesi; hiçbir kişinin adı, sınıfı, okul numarası ya da kart no&apos;su;</li>
+          <li>
+            kimin hangi kitabı ödünç aldığı, ödünç geçmişi, iade tarihi ve gecikenler: bir nüshanın
+            “Ödünçte” olduğu görünür, kimde olduğu ve ne zaman döneceği görünmez; “Sınıf
+            kitaplığında” olan kitabın hangi şubede ya da hangi öğretmende olduğu da görünmez;
+          </li>
+          <li>
+            kayıp ve hasar kayıtları, bağışçı, fiyat, TKYS kodu, eski kayıt no, komisyon ve sayım
+            kurulu adları;
+          </li>
+          <li>yönetim ekranları, yedek ve dışa aktarım.</li>
+        </ul>
+        <p>
+          Aramalar ve bağlanan bilgisayarların adresleri kaydedilmez. Katalog kişisel veri
+          taşımadığı için kayıtlar kilitliyken de çalışır; internete hiç bağlanmaz. Çok okunanlarda
+          yalnız sıra görünür, sayı gösterilmez; bu liste ödünç kayıtlarından her gün hesaplanan
+          “Dönemin Çok Okunanları”dır ve bir eseri yeterince farklı üye ödünç alınca dolmaya başlar
+          (bkz. Raporlar ve Çok Okunanlar). O zamana dek vitrinde yalnız yeni gelenler görünür.
+        </p>
+        <p>
+          Kataloğun üst menüsünde “Ara”, “Kaynak Adları”, “Yazarlar”, “Konular” ve “Hakkında”
+          bağlantıları vardır. Kataloğun kendi Hakkında sayfası da ziyaretçiye neyi gösterip neyi
+          göstermediğini söyler. Vitrin ve konu dizini{" "}
+          <Ekran to="/ayarlar?tab=ag-katalogu">Ayarlar → Ağ Kataloğu</Ekran>&apos;ndaki “Katalog
+          Sayfaları” bölümünden kapatılabilir; aynı bölüme yazılan kütüphane saatleri kataloğun
+          Hakkında sayfasında ve afişte görünür.
+        </p>
+
+        <AltBaslik>BTR&apos;yle yapılacaklar</AltBaslik>
+        <p>
+          Ağ Kataloğu bu bilgisayardan okul ağına bir port (varsayılan 8765) üzerinden hizmet verir.
+          Bu yüzden okul ağında açılmadan önce bilişim teknolojileri rehber öğretmeninin (BTR)
+          bilgisi alınır: kullanılacak port, güvenlik duvarı kuralı ve bilgisayarın ağ adresinin
+          sabit kalması BTR&apos;yle birlikte belirlenir.
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            <strong>Ağ keşfi.</strong> Kütüphane bilgisayarının ve tahtaların hangi ağ bölümünde
+            olduğunu, bilgisayarın ağ profilini ve BTR&apos;nin tahtalara dosya ya da politika
+            gönderip gönderemediğini (ör. Liderahenk ile) öğrenin; yer imleri bu yolla dağıtılır.
+            Aynı bölümdeki bilgisayarlar kataloğa doğrudan ulaşır. Tahtalar ayrı bir bölümdeyse
+            erişim iki şeye bağlıdır: bölümler arasındaki geçiş (ağ cihazları merkezden yönetilir,
+            bu ayar okulda değiştirilemez) ve tahta tarayıcısının vekil sunucu ayarı (yerel adres
+            için istisnayı BTR tanımlar).
+          </li>
+          <li className="space-y-2">
+            <p>
+              <strong>Sabit adres.</strong> BTR, DHCP&apos;de bu bilgisayarın ağ kartına sabit adres
+              ayırır ya da bunu yetkili birimden ister. Adres değişirse afiş ve yer imleri eski
+              adresi gösterir (bkz. aşağıda “Adres değişirse”). Bilgisayarın adresini siz elle
+              değiştirmeyin:
+            </p>
+            <Mevzuat kaynak={`${YONERGE}, md. 11/6`}>
+              “Bilgisayarlara tahsis edilen IP numarası ve ortam erişim kontrolü adresi (MAC adresi)
+              ile BIOS ayarları Bakanlık tarafından yetkilendirilmiş kişiler dışında
+              değiştirilemez.”
+            </Mevzuat>
+          </li>
+          <li className="space-y-2">
+            <p>
+              <strong>Tahta ağından erişim kapalıysa PYS talebi.</strong> Ağ Doktoru&apos;ndaki “PYS
+              talep metnini kopyala” düğmesi talebi hazırlar: “yerel ağ VLAN düzenlemesi — tek yön”
+              konulu, tahtalardan bu bilgisayara yalnız katalog portuna erişim isteyen, portu ve
+              gerekçesini yazan bir metindir. BTR metni okul müdürünün onayıyla FATİH PYS&apos;ye
+              girer. Talebi “internet ya da site açma” diye yazmayın; başka birime gider. Portları
+              okul değil Bakanlık düzenler, bu yüzden süre okulun elinde değildir:
+            </p>
+            <Mevzuat kaynak={`${YONERGE}, md. 11/22`}>
+              “Başkanlık MEBNET ağında erişime açılacak ve kapanacak portları belirleme ve düzenleme
+              yetkisine sahiptir.”
+            </Mevzuat>
+          </li>
+          <li>
+            <strong>Ağ Hizmeti Bilgi Notu.</strong> Not bilgisayarın demirbaş no&apos;sunu, portu ve
+            gerekçesini, güvenlik duvarı kuralının gerçek değerlerini, neyin sunulup neyin
+            sunulmadığını ve programın giden bağlantılarını yazar. Ağ Doktoru&apos;ndaki “Ağ Hizmeti
+            Bilgi Notu&apos;nu bas” düğmesiyle basılır. BTR ve okul müdürü imzalar, not okulda
+            saklanır. Bu bir izin belgesi değil, bilgi notudur.
+          </li>
+          <li className="space-y-2">
+            <p>
+              <strong>Okul ağından erişim sınaması.</strong> Katalog açıldıktan sonra erişimi başka
+              bir bilgisayardan ve bir tahtadan sınayın: Ağ Doktoru&apos;nun verdiği{" "}
+              <Kod>Test-NetConnection</Kod> komutunu okul ağındaki başka bir Windows bilgisayarda
+              çalıştırın, tahtanın tarayıcısında kataloğun adresini açın. Bilgi notunda ayrıca bu
+              bilgisayardan güncelleme denetiminin ve (açıksa) ISBN ile künye getirmenin adreslerine
+              erişimi sınayan hazır komutlar vardır. Bu adreslerden biri okul ağında kapalıysa
+              erişim talebi Yardım Masası&apos;ndan açılır:
+            </p>
+            <Mevzuat kaynak={`${YONERGE}, md. 11/12`}>
+              “MEBNET ağında kategorisi olmayan ip adresi, içerik veya sitelere erişim izni
+              verilmez. Erişim talepleri Yardım Masası Modülü (yardimmasasi.meb.gov.tr) üzerinden
+              yapılır.”
+            </Mevzuat>
+          </li>
+        </ol>
+
+        <AltBaslik>Açma adımları</AltBaslik>
+        <p>
+          Katalog hiç açılmamışken ve afiş hiç basılmamışken{" "}
+          <Ekran to="/ayarlar?tab=ag-katalogu">Ayarlar → Ağ Kataloğu</Ekran> sekmesinin başında “Ağ
+          Kataloğunu Açmadan Önce” kartı durur. Adımları sırasıyla:
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            <strong>BTR&apos;yle görüşün:</strong> yukarıdaki görüşme. Kartta “Ağ Hizmeti Bilgi
+            Notu&apos;nu bas” düğmesi de vardır.
+          </li>
+          <li>
+            <strong>Güvenlik duvarını hazırlayın:</strong> Windows&apos;ta kurulumda “Yerel ağdan
+            katalog taramasına izin ver (güvenlik duvarı kuralı)” seçildiyse kural hazırdır; kartın
+            “Ağ Doktoru&apos;nu aç” bağlantısıyla Ağ Doktoru&apos;na geçip beş denetimin geçtiğini
+            görün. Geçmiyorsa oradaki “Kuralı ekle/güncelle” düğmesi kuralı yazar; Windows&apos;un
+            yönetici onayını (UAC) ister, kimliği BTR girer. Pardus&apos;ta kuralı BTR açar.
+          </li>
+          <li>
+            <strong>Adresi seçin:</strong> sekmenin “Dinleme” bölümündeki “Katalog hangi ağ
+            bağlantısında açılsın?” sorusunu yanıtlayıp “Kaydet”e basın. Bilgisayarda tek ağ
+            bağlantısı varsa varsayılan “Bu bilgisayarın bütün ağ bağlantılarında” seçeneği
+            yeterlidir. İkinci ağ kartı varsa “Yalnız seçili IP adresinde” seçeneğini ve “IP adresi”
+            listesinden okul ağındaki adresi seçin; katalog yalnız o ağa açılır.
+          </li>
+          <li>
+            <strong>Ağ Kataloğunu açın:</strong> “Ağ Kataloğunu aç” düğmesine basın.
+          </li>
+          <li>
+            <strong>Afişi basın, yer imlerini dağıtın:</strong> Ağ Doktoru&apos;ndaki “Belgeler”
+            kartından (aşağıda). Afiş basılınca kart gizlenir.
+          </li>
+        </ol>
+        <p>
+          Windows&apos;ta güvenlik duvarı denetiminin beş maddesinden biri tutmazsa katalog okul
+          ağına hiç açılmaz; durum “Güvenlik duvarı izni yok” olur ve Ağ Doktoru düzeltme adımını
+          gösterir. Açma kalıcıdır: program yeniden açıldığında katalog da açılır. Yönetici kipinde
+          tepsi menüsündeki “Ağ Kataloğunu aç” ve “Ağ Kataloğunu kapat” komutları da aynı işi görür.
+          Kurulum yapılmadan çalıştırılan (taşınabilir) sürümde Ağ Kataloğu sunulmaz; bu iki
+          platformda da böyledir. Pardus&apos;un taşınabilir arşivinde katalog hiç açılmaz.
+          Windows&apos;un taşınabilir sürümünde güvenlik duvarı kuralı kurulu programın yoluna
+          bağlıdır, katalog varsayılan olarak okul ağına açılmaz; Ağ Doktoru&apos;ndaki “Kuralı
+          ekle/güncelle” kuralı taşınabilir sürümün yoluna yazarsa katalog açılır ve aynı
+          bilgisayardaki kurulu programın kuralının yerini alır. Bu yol önerilmez. Ağ Kataloğu için
+          programı kurun: Windows&apos;ta kurulum dosyasıyla, Pardus&apos;ta <Kod>.deb</Kod>{" "}
+          paketiyle. Pardus&apos;ta taşınabilir sürümü <Kod>./kur.sh</Kod> ile kurduysanız{" "}
+          <Kod>.deb</Kod>&apos;i kurmadan önce arşivdeki <Kod>./kaldir.sh</Kod> ile kaldırın: yoksa
+          menü ve uçbirim taşınabilir sürümü açmayı sürdürür, katalog açılmaz. Verileriniz iki
+          sürümde aynı klasördedir; kaldırma onlara dokunmaz.
+        </p>
+
+        <AltBaslik>Ağ Doktoru</AltBaslik>
+        <p>
+          <Ekran to="/ag-doktoru">Ağ Doktoru</Ekran> menüde yoktur: Ayarlar → Ağ Kataloğu&apos;ndaki
+          “Ağ Doktoru” bağlantısıyla açılır. Ağ Doktoru yalnız yönetici kipinde açılır. Beş kartı
+          vardır:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Katalog Durumu:</strong> durum rozeti, port, dinlenen ağ bağlantısı, katalog
+            adresi (tıklanınca bu bilgisayarın tarayıcısında açılır) ve QR kodu, bugün gösterilen
+            sayfa ve yapılan arama sayısı, son hata ve uyarılar; “Ağ Kataloğunu aç” ya da “Ağ
+            Kataloğunu kapat”, “Yeniden başlat” ve “Yenile” düğmeleri. Kimin neyi aradığı tutulmaz,
+            yalnız günlük sayılar tutulur.
+          </li>
+          <li>
+            <strong>Güvenlik Duvarı:</strong> beş denetimin her biri “Geçti”, “Geçmedi”, “Uyarı” ya
+            da “Denetlenemedi” olarak; kuraldaki uzak adres ve profil, bu bilgisayarın ağ profili
+            (“Genel”, “Özel” ya da “Etki alanı”); “Kuralı ekle/güncelle” ve “Yeniden denetle”
+            düğmeleri. Program için birden çok izin kuralı varsa hepsi listelenir: Windows herhangi
+            birine uyan bağlantıyı kabul eder, biri bütün adreslere açıksa denetim uyarır.
+            Pardus&apos;ta bu kart BTR&apos;nin çalıştıracağı komutu gösterir.
+          </li>
+          <li>
+            <strong>Ağ Bağlantıları:</strong> bu bilgisayarın ağ bağlantıları, adresleri ve ağ
+            profilleri. Varsayılan bağlantı dışında etkin bir bağlantı varsa kataloğun o ağda da
+            erişilebileceği uyarısı çıkar; bilgisayarda IP yönlendirme açıksa o da uyarılır.
+            Bilgisayarın adresi Ayarlar&apos;daki tahta ağı bloklarından birindeyse “Bu bilgisayar
+            öğrenci erişimli ağda” uyarısı çıkar: kütüphane masası hesabında kişisel oturum açmayın,
+            bilgisayardan ayrılırken programı kilitleyin.
+          </li>
+          <li>
+            <strong>Dinleyici Sınaması:</strong> “Dinleyiciyi sına” düğmesi ve başka bilgisayar için
+            hazır sınama komutu.
+          </li>
+          <li>
+            <strong>Belgeler:</strong> “Afişi bas”, “Yer imi dosyalarını üret”, “PYS talep metnini
+            kopyala” ve “Ağ Hizmeti Bilgi Notu&apos;nu bas” düğmeleri; belgelerin hangi adresi
+            taşıyacağı “Belgelerde kullanılacak adres” seçicisinden seçilir.
+          </li>
+        </ul>
+        <p>
+          Pardus&apos;un taşınabilir arşivinde iki ekranda da “Bu taşınabilir sürümde Ağ Kataloğu
+          sunulmaz” bandı durur; “Ağ Kataloğunu aç”, “Yeniden başlat” ve ilk açılış adımları
+          görünmez. Güvenlik Duvarı kartı komut vermez; Dinleyici Sınaması kartında sınama ve başka
+          bilgisayar için komut, Belgeler kartında afiş, yer imleri, PYS talep metni ve bilgi notu
+          yoktur: açılmayacak bir adresi ilan ederlerdi.
+        </p>
+        <p>Durum rozetinin anlamları:</p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Açık:</strong> katalog okul ağında hizmet veriyor; <strong>Kapalı:</strong>{" "}
+            katalog kapatılmış ya da hiç açılmamış.
+          </li>
+          <li>
+            <strong>Güvenlik duvarı izni yok:</strong> beş denetimden biri tutmadı, katalog hiç
+            dinlemiyor; “Güvenlik Duvarı” kartındaki madde neyin düzeltileceğini yazar. Denetim hiç
+            okunamadıysa (ör. bilgisayar açılışta çok yavaşsa) program birkaç dakika arayla, sonra
+            saatte bir kendiliğinden yeniden dener. Katalogu kullanmaktan vazgeçtiyseniz “Ağ
+            Kataloğunu kapat” ile ayarı kapatın; ayar açık kaldıkça program her açılışta yeniden
+            dener.
+          </li>
+          <li>
+            <strong>Açılamadı:</strong> katalog başlatılamadı ya da seçili adres bu bilgisayarda
+            artık yok; “Son hata” nedenini yazar. Pardus&apos;un taşınabilir arşivinde ayar daha
+            önce açılmışsa da bu rozet görünür: katalog orada açılmaz; programı <Kod>.deb</Kod>{" "}
+            paketiyle kurun ya da “Ağ Kataloğunu kapat” ile ayarı kapatın. Bilgisayarda{" "}
+            <Kod>.deb</Kod> de kuruluysa açık olan program taşınabilir sürümdür: ondan çıkın,{" "}
+            <Kod>./kaldir.sh</Kod> ile kaldırın ve programı menüden açın.
+          </li>
+          <li>
+            <strong>Port bekleniyor:</strong> port başka bir program tarafından kullanılıyor;
+            program birkaç dakika boyunca kendiliğinden yeniden dener.
+          </li>
+          <li>
+            <strong>Geri yükleme nedeniyle kapalı:</strong> yedekten geri yükleme yapıldı. Program
+            yeniden açılınca geri yüklenen yedekte Ağ Kataloğu açıksa katalog kendiliğinden kalkar;
+            değilse Ayarlar → Ağ Kataloğu&apos;ndan yeniden açılır.
+          </li>
+        </ul>
+        <p>
+          “Dinleyiciyi sına” düğmesi kataloğun bu bilgisayardaki her ağ bağlantısında yanıt verip
+          vermediğini sınar. Bu sınama güvenlik duvarını ya da ağ bölümlerini kanıtlamaz, çünkü
+          bilgisayarın kendi adresine yapılan bağlantı ağa çıkmaz. Asıl kanıt başka bir
+          bilgisayardan alınır: Ağ Doktoru&apos;nun verdiği <Kod>Test-NetConnection</Kod> komutunu
+          (“Kopyala” ile alınır) okul ağındaki başka bir Windows bilgisayarda PowerShell&apos;de
+          çalıştırın; sonuçta <Kod>TcpTestSucceeded : True</Kod> görülmelidir.
+        </p>
+
+        <AltBaslik>Afiş ve yer imleri</AltBaslik>
+        <p>
+          “Afişi bas” kataloğun adresini büyük ve tek satırda basar; QR kodu küçük ve ikincildir,
+          çünkü okul bilgisayarları ve tahtalar QR okumaz. Afiş tek sayfadır: okulun adını, adresin
+          nasıl yazılacağını, kütüphane saatlerini ve kataloğun kişisel veri göstermediğini yazar.
+          Afiş basılınca program o adresi hatırlar; bilgisayarın adresi sonradan değişirse uyarır.
+        </p>
+        <p>
+          Tahtalarda yer imi tek tek eklenmez: ETAP her öğretmene tahtada ayrı bir hesap açar ve bir
+          hesaba eklenen yer imi öbür öğretmenlerin hesabında görünmez. Bu yüzden kullanıcı başına
+          yer imi yetmez; program tahtanın bütün hesaplarında görünen bir yer imi politika dosyası
+          üretir. “Yer imi dosyalarını üret” tek bir arşiv indirir:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            ETAP/Pardus tahtalar için Chromium&apos;un yer imi politika dosyası (
+            <Kod>/etc/chromium/policies/managed/</Kod> klasörüne konur) ve uygulama menüsü kısayolu
+            (<Kod>/usr/share/applications/</Kod> klasörüne konur);
+          </li>
+          <li>
+            Windows bilgisayarlar için internet kısayolu ve Windows tahtalar için tahta kipinde açan
+            ikinci bir kısayol;
+          </li>
+          <li>
+            her dosyanın nereye ve hangi komutla konacağını yazan açıklama dosyası (
+            <Kod>BENIOKU.txt</Kod>).
+          </li>
+        </ul>
+        <p>
+          Dosyaları tahtalara ve bilgisayarlara BTR dağıtır. Dağıtım yetkisi ağ keşfinde öğrenilir.
+        </p>
+
+        <AltBaslik>Tahta kipi</AltBaslik>
+        <p>
+          Tahtalar için üretilen yer imleri kataloğu tahta kipinde açar: yazılar ve dokunma
+          hedefleri büyür, sayfadan sayfaya geçerken büyük düzen korunur. Ekran klavyesine gerek
+          kalmadan bir kaynağa ulaşmak için üst menüdeki “Kaynak Adları”, “Yazarlar” ve “Konular”
+          dizinleri kullanılır: önce harfe, sonra kaynağa dokunulur; kaynağın sayfası yer numarasını
+          ve nüshaların rafta olup olmadığını gösterir. Dokunmatik ekranlı cihazlarda büyük düzen
+          kendiliğinden de açılır. Yer imini bir tahtaya elle eklerseniz adresin sonuna{" "}
+          <Kod>?tahta=1</Kod> yazın (ör. <Kod>{"http://<IP>:8765/?tahta=1"}</Kod>).
+        </p>
+
+        <AltBaslik>Adres değişirse</AltBaslik>
+        <p>
+          Program her gün, gün değişimi denetiminde bu bilgisayarın ağ adresine bakar. Adres son
+          basılan afişteki adresten farklıysa Ağ Doktoru&apos;nun “Katalog Durumu” kartında “Bu
+          bilgisayarın IP adresi değişti (… → …). Afişi yeniden basın, yer imlerini güncelleyin.”
+          uyarısı çıkar. Sırasıyla:
+        </p>
+        <ol className="list-decimal space-y-1 pl-5">
+          <li>
+            BTR&apos;ye haber verin: sabit adres ayırma yapılmamış ya da bozulmuş olabilir. Adres
+            yeniden değişecekse belgeleri yenilemek kalıcı çözüm değildir.
+          </li>
+          <li>“Afişi bas” ile yeni afişi basıp eskisinin yerine asın; uyarı yeni afişle kalkar.</li>
+          <li>
+            “Yer imi dosyalarını üret” ile yeni arşivi üretip BTR&apos;ye verin; dosyalar eskilerin
+            yerine konur.
+          </li>
+          <li>
+            Ağ Hizmeti Bilgi Notu&apos;nu yeniden basıp imzalatın. Tahta ağından erişim için PYS
+            talebi açıldıysa yeni adresi BTR&apos;ye bildirin.
+          </li>
+        </ol>
+        <p>
+          “Yalnız seçili IP adresinde” seçiliyken seçili adres bilgisayarda kalmazsa: bilgisayarın
+          tek adresi varsa katalog o adreste açılır ve aynı uyarıyı verir; birden çok adresi varsa
+          katalog açılmaz, adresi Ayarlar → Ağ Kataloğu&apos;nun “Dinleme” bölümünden yeniden seçin.
+          Kütüphane bilgisayarı değişirse sabit adres ayırma yeni bilgisayarın ağ kartına taşınır.
+        </p>
+
+        <AltBaslik>Port</AltBaslik>
+        <p>
+          Varsayılan port 8765&apos;tir ve çoğu okulda değiştirmek gerekmez. Ayarlar → Ağ
+          Kataloğu&apos;ndaki “Portu değiştir” Windows&apos;ta güvenlik duvarı kuralını da yeni
+          portla yazar ve yönetici onayı (UAC) ister; onay verilmezse port değişmez. Port değişince
+          afişi yeniden basın, yer imlerini ve Ağ Hizmeti Bilgi Notu&apos;nu yenileyin; PYS talebi
+          açıldıysa yeni portu BTR&apos;ye bildirin.
+        </p>
+
+        <AltBaslik>Pardus</AltBaslik>
+        <p>
+          Pardus&apos;ta program güvenlik duvarı kuralı açmaz; paket hazır bir tanım bırakır. Ağ
+          Doktoru&apos;nun “Güvenlik Duvarı” kartı bilgisayardaki güvenlik duvarını ve BTR&apos;nin
+          çalıştıracağı komutu gösterir; komut “Kopyala” ile alınır. Komut katalogu yalnız bu
+          bilgisayarın yerel ağına ve Ayarlar&apos;daki tahta ağı bloklarına açar (her blok ayrı
+          satırdır); Windows&apos;taki kural gibi bütün adreslere açmaz. Pardus&apos;ta port
+          değiştirilince komut yeni portla yenilenir ve kuralı BTR yeniden açar.
+        </p>
+      </Bolum>
+    </div>
+  );
+}
