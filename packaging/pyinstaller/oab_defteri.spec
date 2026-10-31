@@ -77,10 +77,6 @@ trees = [
     Tree(str(REPO / "backend" / "config"), prefix="backend/config", excludes=_TREE_EXCLUDES),
     Tree(str(REPO / "backend" / "apps"), prefix="backend/apps", excludes=_TREE_EXCLUDES),
     Tree(str(REPO / "backend" / "shared"), prefix="backend/shared", excludes=_TREE_EXCLUDES),
-    # Ağ Kataloğu WSGI (tasarım §4.1): Django uygulaması değildir, apps/ altında
-    # olmadığı için ayrı ağaç. Eksik kalırsa paketli exe'de katalog açılmaz
-    # (--autotest bunu 6 koduyla yakalar).
-    Tree(str(REPO / "backend" / "katalog"), prefix="backend/katalog", excludes=_TREE_EXCLUDES),
     # Evrak şablonları — `--pdf-duman` taban şablonu buradan işleyerek sınar.
     Tree(str(REPO / "backend" / "templates"), prefix="backend/templates", excludes=_TREE_EXCLUDES),
     # Derlenmiş SPA — `frontend/dist` boşsa paket açılır ama beyaz ekran verir;

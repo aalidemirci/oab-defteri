@@ -1,13 +1,9 @@
-"""Gün değişimi kapısı (T9, §5.10-17) ve uyku engelleme (§4.5).
+"""Gün değişimi kapısı (T9, §5.10-17) ve bakım kapısı (§13 D3).
 
-§5.10-17: program 3 gün kapanmadan açık kalır; her gün bir yedek alınır, IP
-denetlenir (saat taklidiyle). Taklit iki katmanlıdır: GÜN sağlayıcı elle
-ilerletilir, kapı saatte bir tetiklenir. Yedek GERÇEKTİR (şifreli `.odbak`,
-`desktop.backup`) ve rotasyon da koşar; IP denetimi gerçek katalog denetçisinin
-(`KatalogKontrol.ip_denetle`) kendisidir, ağ durumu taklittir.
-
-Uyku: Windows'ta `SetThreadExecutionState` iş parçacığına bağlıdır; çağrının
-YALNIZ `od-gunluk`'tan yapıldığı ve kapanışta temizlendiği sınanır.
+§5.10-17: program 3 gün kapanmadan açık kalır; her gün bir yedek alınır (saat
+taklidiyle). Taklit iki katmanlıdır: GÜN sağlayıcı elle ilerletilir, kapı saatte
+bir tetiklenir. Yedek GERÇEKTİR (şifreli `.odbak`, `desktop.backup`) ve rotasyon
+da koşar. Aile iskeletindeki IP denetimi ve uyku engeli ağ kataloğuyla söküldü.
 """
 
 from __future__ import annotations
@@ -23,8 +19,7 @@ from typing import Any
 
 import pytest
 
-from desktop import ag, gunluk
-from desktop import katalog_kontrol as kk
+from desktop import gunluk
 from desktop import main as main_mod
 from desktop.gunluk import GunDegisimiKapisi
 from desktop.paths import ENV_APP_HOME, resolve_app_paths
@@ -61,35 +56,18 @@ def _kapi(tmp_path: Path, gun: _Gun, **kw: Any) -> GunDegisimiKapisi:
 # ------------------------------------------------------------ §5.10-17
 
 
-def test_uc_gun_acik_kalan_program_her_gun_bir_yedek_alir_ve_ip_denetler(tmp_path: Path) -> None:
+def test_uc_gun_acik_kalan_program_her_gun_bir_yedek_alir(tmp_path: Path) -> None:
     paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
     paths.ensure()
     _db_olustur(paths.db_path)
     gun = _Gun(date(2026, 9, 24))
-    agdaki = ["192.168.10.5"]
-    kontrol = kk.KatalogKontrol(
-        ayar_okuyucu=lambda: kk.yapilandirma(acik=False, son_afis_ip="192.168.10.5"),
-        ayar_yazici=None,
-        ag_saglayici=lambda: ag.AgDurumu(
-            arayuzler=(ag.Arayuz("Ethernet", agdaki[0], 24, True),), kaynak="test"
-        ),
-    )
-    ip_denetimleri: list[date] = []
-
-    def ip_denetle() -> bool:
-        ip_denetimleri.append(gun())
-        return kontrol.ip_denetle()
-
     kapi = _kapi(paths.root, gun)
     kapi.kaydet("gunluk-yedek", main_mod.gunluk_yedek_isi(paths, bugun=gun))
-    kapi.kaydet("ip-denetimi", ip_denetle)
 
     # Açılış + 72 saat, saatte bir geçiş (kapının `od-gunluk` döngüsünün yaptığı).
     baslangic = gun.gun
     for saat in range(0, 73):
         gun.gun = baslangic + timedelta(hours=saat) // timedelta(days=1) * timedelta(days=1)
-        if saat == 30:
-            agdaki[0] = "192.168.10.77"  # ikinci gün DHCP adresi değiştirdi
         kapi.tik()
 
     yedekler = sorted(p.name for p in paths.backups.glob("gunluk-*.odbak"))
@@ -99,15 +77,8 @@ def test_uc_gun_acik_kalan_program_her_gun_bir_yedek_alir_ve_ip_denetler(tmp_pat
         "gunluk-2026-09-26.odbak",
         "gunluk-2026-09-27.odbak",
     ]
-    # Her gün bir kez: dört takvim günü (24 → 27) = dört denetim, saatlik geçişler tekrar etmez.
-    assert ip_denetimleri == [date(2026, 9, 24) + timedelta(days=i) for i in range(4)]
-    uyarilar = kontrol.durum()["uyarilar"]
-    assert any("Afişi yeniden basın, yer imlerini güncelleyin." in u for u in uyarilar)
     damga = json.loads((paths.data / gunluk.DAMGA_DOSYASI).read_text(encoding="utf-8"))
-    assert damga == {
-        "surum": 1,
-        "isler": {"gunluk-yedek": "2026-09-27", "ip-denetimi": "2026-09-27"},
-    }
+    assert damga == {"surum": 1, "isler": {"gunluk-yedek": "2026-09-27"}}
 
 
 def test_yedek_alinamazsa_damga_yazilmaz_ve_saatte_bir_yeniden_denenir(tmp_path: Path) -> None:
@@ -344,7 +315,7 @@ def test_ilk_is_hatasi_kapiyi_dusurmez(tmp_path: Path) -> None:
     kapi.kaydet("is", lambda: _ekle(olaylar, "is"))
 
     def patla() -> None:
-        raise RuntimeError("katalog açılamadı")
+        raise RuntimeError("açılış işi başarısız")
 
     kapi.baslat(ilk_is=patla)
     _bekle(lambda: olaylar == ["is"])
@@ -368,161 +339,3 @@ def _bekle(kosul: Any, sure: float = 5.0) -> None:
     assert kosul()
 
 
-# ------------------------------------------------------------------ uyku
-
-
-class _Api:
-    """`SetThreadExecutionState` taklidi: çağıran iş parçacığını kaydeder."""
-
-    def __init__(self) -> None:
-        self.cagrilar: list[tuple[int, str]] = []
-
-    def __call__(self, bayraklar: int) -> int:
-        self.cagrilar.append((bayraklar, threading.current_thread().name))
-        return 1
-
-
-def test_windows_uyku_engeli_yalniz_od_gunluk_tan_ve_kapanista_temizlenir(tmp_path: Path) -> None:
-    api = _Api()
-    gerekli = [False]
-    kapi = _kapi(
-        tmp_path,
-        _Gun(date(2026, 9, 24)),
-        uyku=gunluk.WindowsUyku(api=api),
-        uyku_gerekli=lambda: gerekli[0],
-    )
-
-    kapi.baslat()
-    time.sleep(0.05)
-    assert api.cagrilar == []  # katalog kapalı: engel yok
-
-    gerekli[0] = True  # katalog açıldı; denetçi kapıyı uyandırır
-    kapi.uyandir()
-    _bekle(lambda: len(api.cagrilar) == 1)
-    kapi.durdur()
-
-    engel = gunluk.ES_CONTINUOUS | gunluk.ES_SYSTEM_REQUIRED
-    assert api.cagrilar == [(engel, "od-gunluk"), (gunluk.ES_CONTINUOUS, "od-gunluk")]
-    assert engel == 0x80000001
-
-
-def test_windows_uyku_ayni_duruma_ikinci_kez_cagri_yapmaz() -> None:
-    api = _Api()
-    uyku = gunluk.WindowsUyku(api=api)
-
-    uyku.ayarla(True)
-    uyku.ayarla(True)
-    uyku.ayarla(False)
-    uyku.birak()
-
-    assert [b for b, _ in api.cagrilar] == [0x80000001, 0x80000000]
-
-
-class _Girdi:
-    def __init__(self) -> None:
-        self.kapandi = False
-
-    def close(self) -> None:
-        self.kapandi = True
-
-
-class _Surec:
-    def __init__(self, argv: list[str], **kw: Any) -> None:
-        self.argv = argv
-        self.kw = kw
-        self.stdin = _Girdi()
-        self.sonlandi = False
-
-    def terminate(self) -> None:
-        self.sonlandi = True
-
-    def wait(self, timeout: float) -> int:
-        return 0
-
-
-def test_linux_uyku_systemd_inhibit_yalniz_bosta_kalmayi_engeller() -> None:
-    surecler: list[_Surec] = []
-
-    def popen(argv: list[str], **kw: Any) -> _Surec:
-        surecler.append(_Surec(argv, **kw))
-        return surecler[-1]
-
-    uyku = gunluk.LinuxUyku(which=lambda ad: f"/usr/bin/{ad}", popen=popen)
-
-    uyku.ayarla(True)
-    uyku.ayarla(True)  # ikinci süreç açılmaz
-    assert uyku.engelli is True
-    uyku.ayarla(False)
-
-    (surec,) = surecler
-    assert surec.argv[:3] == ["/usr/bin/systemd-inhibit", "--what=idle", "--mode=block"]
-    assert "sleep" not in " ".join(surec.argv[1:3])  # kullanıcının başlattığı uyku engellenmez
-    assert surec.stdin.kapandi is True  # önce boru kapanır (cat EOF alır)
-    assert surec.sonlandi is True
-    assert uyku.engelli is False
-
-
-def test_linux_uyku_engeli_ana_surecin_omrune_baglidir() -> None:
-    """Bulgu: `sleep infinity` program düzensiz biterse (çöküş, SIGKILL) yetim kalırdı.
-
-    Engelleyici `cat` ile programa ait borudan okur: program ölünce boru kapanır,
-    `cat` EOF alır, systemd-inhibit biter. Süresiz uyku komutu hiç kullanılmaz.
-    """
-    import subprocess
-
-    surecler: list[_Surec] = []
-
-    def popen(argv: list[str], **kw: Any) -> _Surec:
-        surecler.append(_Surec(argv, **kw))
-        return surecler[-1]
-
-    gunluk.LinuxUyku(which=lambda ad: f"/usr/bin/{ad}", popen=popen).ayarla(True)
-
-    (surec,) = surecler
-    assert surec.argv[-1] == "/usr/bin/cat"
-    assert "infinity" not in surec.argv and not any("sleep" in a for a in surec.argv)
-    assert surec.kw["stdin"] is subprocess.PIPE
-    assert surec.kw.get("close_fds", True) is True
-
-
-def test_linux_uyku_engeli_gercek_surecte_boru_kapaninca_biter(tmp_path: Path) -> None:
-    """Gerçek alt süreçle: `systemd-inhibit` yerine geçen sarmal `cat`'i çalıştırır."""
-    import shutil
-    import stat
-    import subprocess
-
-    cat = shutil.which("cat")
-    if cat is None:
-        pytest.skip("cat yok")
-    sarmal = tmp_path / "systemd-inhibit"
-    sarmal.write_text('#!/bin/sh\nfor a; do last="$a"; done\nexec "$last"\n', encoding="utf-8")
-    sarmal.chmod(sarmal.stat().st_mode | stat.S_IEXEC)
-    surecler: list[Any] = []
-
-    def popen(argv: list[str], **kw: Any) -> Any:
-        surecler.append(subprocess.Popen(argv, **kw))  # noqa: S603 — sabit test sarmalı
-        return surecler[-1]
-
-    uyku = gunluk.LinuxUyku(
-        which=lambda ad: str(sarmal) if ad == "systemd-inhibit" else cat, popen=popen
-    )
-    uyku.ayarla(True)
-    (surec,) = surecler
-    assert surec.poll() is None  # boru açıkken engel sürer
-
-    surec.stdin.close()  # ana süreç ölünce olan budur: yazma ucu kapanır
-    assert surec.wait(timeout=5) == 0
-
-
-def test_linux_uyku_systemd_inhibit_yoksa_sessizce_gecer() -> None:
-    uyku = gunluk.LinuxUyku(which=lambda ad: None)
-
-    uyku.ayarla(True)
-
-    assert uyku.engelli is False
-
-
-def test_platforma_gore_uyku_engelleyici() -> None:
-    assert isinstance(gunluk.uyku_engelleyici("win32"), gunluk.WindowsUyku)
-    assert isinstance(gunluk.uyku_engelleyici("linux"), gunluk.LinuxUyku)
-    assert isinstance(gunluk.uyku_engelleyici("darwin"), gunluk.BosUyku)

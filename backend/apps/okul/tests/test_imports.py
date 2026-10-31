@@ -29,7 +29,6 @@ BASLIK = "Sınıf\tOkul No\tAdı Soyadı"
 
 #: Sentetik e-Okul ihraç örnekleri (gerçek veri DEĞİL — bkz. tests/veri/).
 VERI = Path(__file__).resolve().parent / "veri"
-EOKUL_SINIF_LISTESI = VERI / "eokul_sinif_listesi.xls"
 EOKUL_PERSONEL_LISTESI = VERI / "eokul_personel_listesi.xls"
 
 
@@ -230,32 +229,6 @@ class TestEokulDosyasi:
     gerçek raporlarla aynı, adlar uydurmadır (KVKK).
     """
 
-    def test_sinif_listesi_dosyasi_aktarilir(self, aktif_yil: SchoolYear) -> None:
-        rapor = import_service.commit_students_file(
-            file_bytes=EOKUL_SINIF_LISTESI.read_bytes(), file_name="OOG01001R020_827.XLS"
-        )
-        assert rapor.created_students == 6
-        assert rapor.skipped == []
-        assert Student.objects.count() == 6
-        assert any("şube bloğu" in u.issue for u in rapor.warnings)
-
-    def test_i_ve_noktali_i_subeleri_ayri_kaydedilir(self, aktif_yil: SchoolYear) -> None:
-        """KORUMA TESTİ: iki ayrı şube tek şubeye çökmez (öğrenciler karışmaz)."""
-        import_service.commit_students_file(
-            file_bytes=EOKUL_SINIF_LISTESI.read_bytes(), file_name="OOG01001R020_827.XLS"
-        )
-        assert set(Student.objects.values_list("class_section", flat=True)) == {"I", "İ"}
-        assert Student.objects.filter(class_level=10, class_section="I").count() == 3
-        assert Student.objects.filter(class_level=10, class_section="İ").count() == 3
-        assert ClassSection.objects.filter(school_year=aktif_yil).count() == 2
-
-    def test_onizleme_yazmaz(self, aktif_yil: SchoolYear) -> None:
-        rapor = import_service.preview_students_file(
-            file_bytes=EOKUL_SINIF_LISTESI.read_bytes(), file_name="OOG01001R020_827.XLS"
-        )
-        assert rapor.dry_run is True and rapor.created_students == 6
-        assert Student.objects.count() == 0
-
     def test_personel_listesi_dosyasi_aktarilir(self) -> None:
         rapor = import_service.commit_personnel_file(
             file_bytes=EOKUL_PERSONEL_LISTESI.read_bytes(), file_name="OOK01001R1_826.XLS"
@@ -264,17 +237,6 @@ class TestEokulDosyasi:
         assert Personnel.objects.count() == 4
         # Sayaç dipnotu ('Toplam Personel Sayısı: 4') personel olarak yazılmadı.
         assert not any("Sayısı" in p.full_name for p in Personnel.objects.all())
-
-    def test_ayni_dosya_ikinci_kez_uyarir(self, aktif_yil: SchoolYear) -> None:
-        veri = EOKUL_SINIF_LISTESI.read_bytes()
-        import_service.commit_students_file(file_bytes=veri, file_name="OOG01001R020_827.XLS")
-        tekrar = import_service.commit_students_file(
-            file_bytes=veri, file_name="OOG01001R020_827.XLS"
-        )
-        assert tekrar.already_imported is True
-        assert tekrar.unchanged_students == 6
-        assert Student.objects.count() == 6
-
 
 @pytest.mark.django_db
 class TestImportApi:

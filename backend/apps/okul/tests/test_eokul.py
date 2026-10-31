@@ -1,7 +1,10 @@
 """apps.okul.eokul — e-Okul ihraçlarının önişlenmesi (blok düzleştirme, dipnot).
 
 Girdiler SENTETİKTİR: `tests/veri/uret_eokul_ornekleri.py` yerleşimi sıfırdan
-kurar, adların hepsi uydurmadır (KVKK — gerçek ihraç depoya girmez).
+kurar, adların hepsi uydurmadır (KVKK — gerçek ihraç depoya girmez). Öğrenci
+sınıf listesi örneği (`.xls`) T5 gereği F1a-2'de söküldü; blok düzleştirici F1b'nin
+veli listesi ayrıştırıcısına kalacağı için (tasarım §12.B) aynı yerleşim burada
+bellekte kurulur (`_sinif_listesi_matrisi`, xlrd'nin döndürdüğü hücre türleriyle).
 
 Yerleşim referansı 30.08.2026'da iki gerçek raporun incelenmesinden çıkarıldı:
 sınıf/şube bilgisi blok BAŞLIĞINDADIR, sütun olarak yoktur.
@@ -18,26 +21,77 @@ from apps.okul import eokul
 from apps.okul.excel_ogrenci import ParserError, detect_columns, parse_rows, read_sheet
 
 VERI = Path(__file__).resolve().parent / "veri"
-SINIF_LISTESI = VERI / "eokul_sinif_listesi.xls"
 PERSONEL_LISTESI = VERI / "eokul_personel_listesi.xls"
+
+_KURUM_BASLIGI = (
+    "T.C.
+ÖRNEK VALİLİĞİ
+Örnek İlçe / Örnek Anadolu Lisesi Müdürlüğü
+"
+    "AL - {sinif}. Sınıf / {sube} Şubesi (ALANI YOK) Sınıf Listesi "
+)
+# Uydurma adlar — gerçek hiçbir kişiye ait değildir. I ve İ şubeleri bilerek yan yana.
+_SUBE_OGRENCILERI: dict[str, list[tuple[int, str, str, str]]] = {
+    "I": [(13, "ALTAY", "GÖKMEN", "Erkek"), (19, "NAZLI SU", "IŞIKÇI", "Kız"),
+          (204, "BERKAY", "ÖZDEMİRCİ", "Erkek")],
+    "İ": [(7, "ELİF NAZ", "ÇINARLI", "Kız"), (88, "TUNAHAN", "ŞAHBAZ", "Erkek"),
+          (145, "İREM", "ULUDAĞLI", "Kız")],
+}
 
 
 def _matris(yol: Path) -> list[list[Any]]:
     return read_sheet(yol.read_bytes())
 
 
+def _sinif_listesi_matrisi() -> list[list[Any]]:
+    """OOG01001R020 yerleşimi (iki şube bloğu: 10/I ve 10/İ), xlrd'nin okuduğu biçimde.
+
+    xlrd sayıları `float`, boş hücreyi `""` döndürür; satırlar en geniş sütuna (15)
+    tamamlanır.
+    """
+    satirlar: list[list[Any]] = []
+
+    def yaz(hucreler: dict[int, Any]) -> None:
+        satir: list[Any] = [""] * 15
+        for sutun, deger in hucreler.items():
+            satir[sutun] = float(deger) if isinstance(deger, int) else deger
+        satirlar.append(satir)
+
+    for sube, ogrenciler in _SUBE_OGRENCILERI.items():
+        yaz({0: _KURUM_BASLIGI.format(sinif=10, sube=sube)})
+        yaz({0: "Sınıf Öğretmeni: ", 7: "Sınıf Başkanı:"})
+        yaz({0: "Sınıf Müdür Yrd: KEREM DALGIÇ", 7: "Sınıf Başkan Yrd:"})
+        yaz({0: "S.No", 1: "Öğrenci No", 3: "Adı", 7: "Soyadı", 11: "Cinsiyeti", 13: "Pansiyon Durum"})
+        for i, (no, ad, soyad, cinsiyet) in enumerate(ogrenciler, start=1):
+            yaz({0: i, 1: no, 3: ad, 7: soyad, 11: cinsiyet})
+        kiz = sum(1 for o in ogrenciler if o[3] == "Kız")
+        yaz(
+            {
+                0: "Kız Öğrenci Sayısı        :",
+                4: kiz,
+                5: "Erkek Öğrenci Sayısı    :",
+                9: len(ogrenciler) - kiz,
+                11: "Toplam Öğrenci Sayısı    :",
+                14: len(ogrenciler),
+            }
+        )
+    yaz({11: 46261.0, 12: 0.755370370367018, 14: 1})
+    yaz({1: "OOG01001R020"})
+    return satirlar
+
+
 class TestXlsOkuma:
     """e-Okul'un "Excel" düğmesi .xlsx değil, Excel 97-2003 (.xls) üretir."""
 
     def test_xls_kabi_okunur(self) -> None:
-        grid = _matris(SINIF_LISTESI)
+        grid = _matris(PERSONEL_LISTESI)
         assert grid, "BIFF (.xls) matrisi boş döndü"
-        assert any("Sınıf Listesi" in str(h) for satir in grid for h in satir)
+        assert any("Toplam Personel Sayısı" in str(h) for satir in grid for h in satir)
 
     def test_xls_imzasi_taninir(self) -> None:
         from apps.okul.excel_ogrenci import is_legacy_xls
 
-        assert is_legacy_xls(SINIF_LISTESI.read_bytes())
+        assert is_legacy_xls(PERSONEL_LISTESI.read_bytes())
         assert not is_legacy_xls(b"PK\x03\x04 sahte xlsx")
 
     def test_bozuk_xls_turkce_hata(self) -> None:
@@ -54,12 +108,12 @@ class TestXlsOkuma:
         çevrilmezse istek 500 ile düşer, kullanıcı Türkçe açıklamayı görmez ve
         İçe Aktarma Geçmişi'ne FAILED izi yazılmaz.
         """
-        tam = SINIF_LISTESI.read_bytes()
+        tam = PERSONEL_LISTESI.read_bytes()
         with pytest.raises(ParserError, match="Excel 97-2003"):
             read_sheet(tam[: int(len(tam) * oran)])
 
     def test_ortasi_bozulmus_dosya_turkce_hata(self) -> None:
-        tam = bytearray(SINIF_LISTESI.read_bytes())
+        tam = bytearray(PERSONEL_LISTESI.read_bytes())
         tam[3000:3200] = b"\xff" * 200
         with pytest.raises(ParserError, match="Excel 97-2003"):
             read_sheet(bytes(tam))
@@ -124,7 +178,7 @@ class TestDipnot:
 
 class TestSinifListesiDuzlestirme:
     def test_bicim_taninir(self) -> None:
-        assert eokul.sinif_listesi_mi(_matris(SINIF_LISTESI))
+        assert eokul.sinif_listesi_mi(_sinif_listesi_matrisi())
 
     def test_duz_sablon_bicimi_taninmaz(self) -> None:
         duz = [["Sınıf", "Okul No", "Adı Soyadı"], ["10/A", "101", "ALİ VELİ"]]
@@ -132,12 +186,12 @@ class TestSinifListesiDuzlestirme:
 
     def test_satir_sayisi_korunur(self) -> None:
         """Gürültü satırları SİLİNMEZ, boşaltılır — uyarılardaki satır no'su kaymasın."""
-        ham = _matris(SINIF_LISTESI)
+        ham = _sinif_listesi_matrisi()
         duz, _ = eokul.duzlestir_sinif_listesi(ham)
         assert len(duz) == len(ham)
 
     def test_sinif_sutunu_eklenir_ve_ayristirilir(self) -> None:
-        ham = _matris(SINIF_LISTESI)
+        ham = _sinif_listesi_matrisi()
         duz, notlar = eokul.duzlestir_sinif_listesi(ham)
         assert notlar and "2 şube bloğu" in notlar[0]
 
@@ -151,7 +205,7 @@ class TestSinifListesiDuzlestirme:
 
     def test_iki_sube_ayri_kalir(self) -> None:
         """KORUMA TESTİ: 10/I ve 10/İ blokları tek şubeye çökmez."""
-        duz, _ = eokul.duzlestir_sinif_listesi(_matris(SINIF_LISTESI))
+        duz, _ = eokul.duzlestir_sinif_listesi(_sinif_listesi_matrisi())
         rows = parse_rows(duz, detect_columns(duz, scan_limit=30), valid_levels=(10,))
         subeler = {r.class_section for r in rows}
         assert subeler == {"I", "İ"}
@@ -160,7 +214,7 @@ class TestSinifListesiDuzlestirme:
 
     def test_dipnot_ve_ogretmen_satirlari_veri_olmaz(self) -> None:
         """Sayaç dipnotu, sınıf öğretmeni ve rapor kodu satırları öğrenci sayılmaz."""
-        duz, _ = eokul.duzlestir_sinif_listesi(_matris(SINIF_LISTESI))
+        duz, _ = eokul.duzlestir_sinif_listesi(_sinif_listesi_matrisi())
         rows = parse_rows(duz, detect_columns(duz, scan_limit=30), valid_levels=(9, 10, 11, 12))
         adlar = {r.raw_student_name for r in rows}
         assert not any("Öğrenci Sayısı" in ad for ad in adlar)
@@ -168,7 +222,7 @@ class TestSinifListesiDuzlestirme:
         assert all(r.student_number.isdigit() for r in rows)
 
     def test_ad_ve_soyad_ayri_sutunlardan_gelir(self) -> None:
-        duz, _ = eokul.duzlestir_sinif_listesi(_matris(SINIF_LISTESI))
+        duz, _ = eokul.duzlestir_sinif_listesi(_sinif_listesi_matrisi())
         rows = parse_rows(duz, detect_columns(duz, scan_limit=30), valid_levels=(10,))
         kayit = next(r for r in rows if r.student_number == "19")
         assert (kayit.student_first, kayit.student_last) == ("NAZLI SU", "IŞIKÇI")

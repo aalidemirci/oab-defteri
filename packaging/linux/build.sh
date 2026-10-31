@@ -18,10 +18,9 @@
 #      paket dizininde veri sızıntısı denetimi
 #   4. Duman testleri: `--bagimlilik-duman` (hiddenimports) + `--autotest` (çıkış 0)
 #      + `--pdf-duman` (evrak şablonu + Türkçe PDF)
-#   5. .deb sargısı (dpkg-deb; ufw profili + firewalld servis tanımı + DEP-5
-#      copyright dahil)
-#   6. Taşınabilir .tar.gz (+ kur.sh; arşivdeki ikili `--dagitim-duman tasinabilir`)
-#      + son arşivlerde veri sızıntısı denetimi
+#   5. .deb sargısı (dpkg-deb; DEP-5 copyright dahil). Program ağ servisi
+#      sunmaz: güvenlik duvarı profili ya da servis tanımı bırakılmaz
+#   6. Taşınabilir .tar.gz (+ kur.sh) + son arşivlerde veri sızıntısı denetimi
 #   7. SHA256SUMS.txt
 #
 # Ortam değişkenleri:
@@ -212,14 +211,6 @@ mkdir -p "$DOC_DIZINI"
 python "$DEPO/packaging/lisanslar/lisanslar.py" deb-copyright "$DOC_DIZINI/copyright"
 chmod 0644 "$DOC_DIZINI/copyright"
 ln -sf /opt/oab-defteri/THIRD_PARTY_LICENSES "$DOC_DIZINI/THIRD_PARTY_LICENSES"
-# Ağ Kataloğu (tasarım §5.7): ufw uygulama profili ve firewalld servis tanımı
-# bırakılır, kural AÇILMAZ; komutu Ağ Doktoru gösterir.
-mkdir -p "$DEB_AGACI/etc/ufw/applications.d" "$DEB_AGACI/usr/lib/firewalld/services"
-install -m 0644 "$DEPO/packaging/linux/ufw-oab-defteri" \
-    "$DEB_AGACI/etc/ufw/applications.d/oab-defteri"
-install -m 0644 "$DEPO/packaging/linux/firewalld-oab-defteri.xml" \
-    "$DEB_AGACI/usr/lib/firewalld/services/oab-defteri.xml"
-
 for boyut in 16 24 32 48 64 128 256; do
     hedef="$DEB_AGACI/usr/share/icons/hicolor/${boyut}x${boyut}/apps"
     mkdir -p "$hedef"
@@ -254,12 +245,6 @@ cp "$DEPO/packaging/linux/BENIOKU.txt" "$TAR_AGACI/BENIOKU.txt"
 cp "$DEPO/packaging/linux/oab-defteri.desktop" "$TAR_AGACI/"
 mkdir -p "$TAR_AGACI/ikonlar"
 cp "$DEPO/packaging/ikonlar/oab-defteri-"*.png "$TAR_AGACI/ikonlar/"
-
-# KB-2 (28.09.2026): taşınabilir arşivde Ağ Kataloğu açılmaz; ayrımı paketli ikilinin
-# kendisi yapar (`desktop/dagitim.py`). Arşivdeki ikili kendini TAŞINABİLİR saymalı;
-# karşılığı (gerçek dpkg kurulumundan sonra KURULU) `kap-ici-test.sh`'tedir.
-bilgi "duman testi: --dagitim-duman (taşınabilir arşiv)"
-"$TAR_AGACI/uygulama/oab-defteri" --dagitim-duman tasinabilir
 
 tar -czf "$CIKTI/$TAR_ADI" -C "$TAR_KOKU" "oab-defteri-${SURUM}"
 

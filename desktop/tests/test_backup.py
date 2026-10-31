@@ -18,7 +18,6 @@ import pytest
 from desktop import backup as backup_mod
 from desktop.backup import (
     daily_backup,
-    encrypt_legacy_backups,
     pre_migrate_backup,
     rotate_backups,
 )
@@ -63,11 +62,8 @@ def _db_olustur(path: Path, satir_sayisi: int = 3, *, parola_kurulu: bool = True
 def _satir_sayisi(path: Path) -> int:
     content = path.read_bytes()
     restored = path.with_name(path.name + ".restored.sqlite3")
-    if content.startswith(MAGIC):
-        restored.write_bytes(decrypt_bytes(content, _TEST_KEY))
-    else:
-        # Eski düz yedek (yalnız `encrypt_legacy_backups` testlerinin kaynağı).
-        restored.write_bytes(content)
+    assert content.startswith(MAGIC)  # düz yedek hiçbir durumda yazılmaz (§13 D29)
+    restored.write_bytes(decrypt_bytes(content, _TEST_KEY))
     conn = sqlite3.connect(restored)
     try:
         return int(conn.execute("SELECT COUNT(*) FROM ogrenci").fetchone()[0])
@@ -267,23 +263,6 @@ def test_rotasyon_yabanci_dosyalara_dokunmaz(tmp_path: Path) -> None:
     assert (yedekler / "notlar.txt").exists()
 
 
-def test_eski_duz_yedek_sifrelenir_ve_duz_kopya_silinir(tmp_path: Path) -> None:
-    data_dir = tmp_path / "data"
-    ensure_public_config(data_dir, _TEST_KEY)
-    yedekler = tmp_path / "backups"
-    yedekler.mkdir()
-    legacy = yedekler / "gunluk-2026-07-20.sqlite3"
-    _db_olustur(legacy, parola_kurulu=False)
-
-    encrypted = encrypt_legacy_backups(yedekler, data_dir)
-
-    target = yedekler / "gunluk-2026-07-20.odbak"
-    assert encrypted == [target]
-    assert not legacy.exists()
-    assert b"SQLite format 3" not in target.read_bytes()
-    assert _satir_sayisi(target) == 3
-
-
 # ------------------------------------------------ yalnız şifreli (§6.3-6)
 
 
@@ -407,29 +386,6 @@ def test_bosaltilan_guvenlik_json_eski_baslikli_yedekleri_rotasyona_kurban_etmez
     assert alinan is None
     assert sorted(p.name for p in yedekler.glob("*.odbak")) == ["gunluk-2026-09-01.odbak"]
     assert embedded_recovery_metadata(eski.read_bytes()) == _GUVENLIK
-
-
-def test_eski_duz_odbak_yedekleri_parola_kurulunca_sifrelenir(
-    tmp_path: Path,
-) -> None:
-    """Parolasız dal sökülmeden önceki sürümlerden kalmış düz `.odbak` dosyaları,
-    parola kurulduğunda / kilit açıldığında YERİNDE şifreli biçime döner."""
-    db = tmp_path / "db.sqlite3"
-    _db_olustur(db, parola_kurulu=False)
-    yedekler = tmp_path / "backups"
-    yedekler.mkdir()
-    duz = yedekler / "gunluk-2026-07-24.odbak"
-    duz.write_bytes(db.read_bytes())
-    assert duz.read_bytes().startswith(b"SQLite format 3")
-
-    ensure_public_config(tmp_path, _TEST_KEY)
-    encrypted = encrypt_legacy_backups(yedekler, tmp_path)
-
-    assert encrypted == [duz]
-    assert duz.read_bytes().startswith(MAGIC)
-    assert _satir_sayisi(duz) == 3
-    # İkinci çağrı fikirdeş: zaten şifreli dosyaya yeniden dokunulmaz.
-    assert encrypt_legacy_backups(yedekler, tmp_path) == []
 
 
 def test_rotasyon_olmayan_dizinde_patlamaz(tmp_path: Path) -> None:

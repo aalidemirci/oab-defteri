@@ -29,7 +29,7 @@ from rest_framework.test import APIClient
 from apps.okul.models import Student
 from apps.okul.permissions import RequiresAdminPassword
 
-# Kişi (öğrenci/personel; F6'da üyelik) yazan uçlar — izin sınıfını taşımalıdır.
+# Kişi (öğrenci/personel) yazan uçlar — izin sınıfını taşımalıdır.
 # Ayrılış, birleştirme (F1-C) ve ayrılış havuzu kararı (F1 eki 7) da kişi yazar.
 KISI_YAZAN_UCLAR = frozenset(
     {
@@ -45,33 +45,6 @@ KISI_YAZAN_UCLAR = frozenset(
         "import-personnel-preview",
         "import-personnel-commit",
         "leave-pool-resolve",
-        # F6 üyelik: kart no şifreli kişi verisidir; açma, toplu açma (istek
-        # listesi), kartı yenile, sonlandırma ve silme kişi yazar.
-        "library-membership-list",
-        "library-membership-detail",
-        "library-membership-renew-card",
-        "library-membership-terminate",
-        "library-membership-requests",
-        # F6 kart basımı (E2, D10): "Basıldı olarak işaretle" ve geri alma üyelik
-        # satırına yazar.
-        "library-member-card-confirm-print",
-        "library-member-card-revert-print",
-        # F6 dolaşım masası: ödünç ver ve iade al ödünç kaydını (üyeye bağlı kişi
-        # verisi; kartsız ödünç ve istisna gerekçeleri şifreli) yazar.
-        "library-checkout",
-        "library-return",
-        # F7 teslim (U11): toplu teslim öğretmene bağlanır (PROTECT, açık yükümlülük);
-        # geri alma okutması o teslim kaydını kapatır.
-        "library-delivery-list",
-        "library-delivery-take-back",
-        # F7 kayıp/hasar dosyası (Md. 19): üyeliğe bağlanır, sorumlu notu şifrelidir;
-        # açma, not düzeltme ve çözüm kişi yazar.
-        "library-loss-damage-case-list",
-        "library-loss-damage-case-detail",
-        "library-loss-damage-case-resolve",
-        # F11 saklama tetiği (§6.4): süresi dolmuş kişi, üyelik ve bağları siler ya da
-        # anonimleştirir — gövdede yönetici parolası da ister.
-        "library-retention-apply",
     }
 )
 
@@ -83,15 +56,13 @@ DIGER_UCLAR = frozenset(
         "backup-list",
         "backup-restore",
         # F11 bakım kolu: dış yedek hatırlatması veri dizinindeki dosyaya (tarih ve
-        # süre) yazar; görev devri yönetici parolasını ve kurtarma anahtarını yeniler,
-        # görev devri notu (E18) adları yalnız basım anında kullanır — hiçbiri kişi
-        # sicili yazmaz.
+        # süre) yazar — kişi sicili yazmaz.
         "backup-external-reminder",
-        "library-handover",
-        "library-handover-note",
-        "library-handover-start",
         "class-section-detail",
         "class-section-list",
+        # Son oturum kartı (T15, §13 D4): kişisiz özet; POST yalnız süreç içi
+        # "Kontrol ettim" onayıdır, hiçbir kayıt yazmaz.
+        "dashboard-last-session",
         "encrypted-backup-download",
         "grade-levels",
         "holiday-detail",
@@ -99,219 +70,6 @@ DIGER_UCLAR = frozenset(
         "holiday-seed",
         # Havuz listesi yalnız okur (GET); karar ucu yukarıdaki listededir.
         "leave-pool",
-        # Katalog uçları (F2) kişi SİCİLİ yazmaz: eser, nüsha, edinim, bölüm ve
-        # bağış ön kaydı kütüphane kayıtlarıdır. Bağışçı ve komisyon başkanı adı
-        # şifreli alanlardır; parola kurulmadan onlara yazan istek izin sınıfı
-        # OLMADAN da 409 `parola_gerekli` alır (fail-closed, §6.3-3) — kanıt
-        # `apps/kutuphane/tests/test_uc_kapilari.py`.
-        "library-acquisition-detail",
-        "library-acquisition-list",
-        "library-commission-decision-detail",
-        "library-commission-decision-list",
-        "library-copy-bulk",
-        "library-copy-detail",
-        "library-copy-list",
-        # Etiket basım kuyruğu ve boş barkod aralığı (F4-Q): nüsha işaretleri,
-        # basım partileri ve ayrılmış numaralar kitap kaydıdır, kişi sicili
-        # değildir; kişisel veri taşımazlar. Doğrulama okutması (`library-label-verify`
-        # POST) görevli kipinde de açıktır (24.09.2026); öbürleri yönetici kipi işidir.
-        "library-barcode-reservation-cancel",
-        "library-barcode-reservation-check",
-        "library-barcode-reservation-confirm-print",
-        "library-barcode-reservation-detail",
-        "library-barcode-reservation-list",
-        "library-barcode-reservation-pdf",
-        "library-barcode-reservation-revert-print",
-        "library-copy-from-label",
-        "library-label-batch-confirm",
-        "library-label-batch-detail",
-        "library-label-batch-discard",
-        "library-label-batch-list",
-        "library-label-batch-pdf",
-        "library-label-batch-reprint",
-        "library-label-batch-revert",
-        "library-label-queue",
-        "library-label-summary",
-        "library-label-unverified",
-        "library-label-verify",
-        # Etiket motoru (F4-L): şablon, yazıcı kalibrasyonu, kalibrasyon sayfası
-        # ve PDF önizleme. Kişisel veri yok (künye, numara, kısa okul adı);
-        # önizleme hiçbir kayıt yazmaz. Hepsi yönetici kipi işidir.
-        "library-label-calibration",
-        "library-label-calibration-detail",
-        "library-label-calibration-list",
-        "library-label-preview",
-        "library-label-template-detail",
-        "library-label-template-list",
-        # Üyenin ödünç kaydı (F6): yalnız okur (GET); yönetici kipi işidir.
-        "library-membership-loans",
-        # F6 dolaşım masası: kartla üye çözme (POST yalnız kart no URL'ye yazılmasın
-        # diye; okur), nüsha durum sorgusu (GET) ve kart okutma kilidini açma
-        # (yönetici parolasını doğrular) kişi yazmaz. Ödünç ver ve iade üstteki listede.
-        "library-desk-member",
-        "library-desk-copy-status",
-        "library-desk-card-unlock",
-        # F9 (madde 24, 26): masanın kişisiz durumu yalnız okur (hizmet arası, süren sayım).
-        "library-desk-state",
-        # F7: teslim listesine okutmanın ön denetimi yazmaz; onarım kaydı kişisizdir
-        # (nüsha durumu + tarih; serbest metin yok). Hepsi yönetici kipi işidir.
-        "library-delivery-check",
-        "library-copy-send-to-repair",
-        "library-copy-return-from-repair",
-        # F7 ilişik ve yıl akışları (E5, E4 yıl sonu pusulası) ve F7 evrakı (E6, E15):
-        # liste, özet ve PDF uçları yalnız okur; hiçbir kayıt yazmaz. Hepsi yönetici
-        # kipi işidir (§4.4 "ilişik", "kayıp dosyaları", "raporlar" kapalı).
-        "library-clearance",
-        "library-clearance-pdf",
-        "library-clearance-sections",
-        "library-clearance-certificate-pdf",
-        "library-year-end-slip-pdf",
-        "library-year-flows",
-        "library-loss-damage-case-pdf",
-        "library-delivery-pdf",
-        "library-delivery-take-back-report",
-        # F6 evrak ve pano (E2, E4, E13, E19, T15): kuyruk, gecikme listesi ve
-        # son işlemler yalnız okur; PDF uçları kayıt yazmaz; panonun POST'u
-        # yalnız süreç içi "Kontrol ettim" onayıdır. Hepsi yönetici kipi işidir.
-        "library-dashboard-circulation",
-        # F11 saklama (§6.4): durum, silinecek kişiler, bedel listesi ve pano yalnız okur.
-        "library-dashboard-retention",
-        "library-retention",
-        "library-retention-persons",
-        "library-retention-price-reminders",
-        "library-dashboard-recent-transactions",
-        "library-desk-card-pdf",
-        "library-member-card-list",
-        "library-member-card-pdf",
-        "library-member-card-template",
-        "library-overdue-loan-list",
-        "library-overdue-loan-pdf",
-        "library-overdue-slip-pdf",
-        "library-privacy-notice-pdf",
-        "library-donation-intake-cancel",
-        "library-donation-intake-decision",
-        "library-donation-intake-detail",
-        "library-donation-intake-item-detail",
-        "library-donation-intake-items",
-        "library-donation-intake-list",
-        # F8: bağış kalemlerinin katalog eşleşmesi yalnız okur.
-        "library-donation-intake-matches",
-        # F8 ayıklama (Md. 12/1), nadir eserler (Md. 12/2) ve yıl sonu raporu (E9):
-        # kalemler, satırlar ve rapor kişisizdir — kişi SİCİLİ yazılmaz. Teklif
-        # onayındaki harcama yetkilisi ve TMY komisyonu adları şifreli alandır;
-        # parola kurulmadan izin sınıfı OLMADAN da 409 alır (fail-closed) ve servis
-        # `require_password_set` sorar. Hepsi yönetici kipi işidir.
-        "library-weeding-rules",
-        "library-weeding-candidates",
-        "library-weeding-batch-list",
-        "library-weeding-batch-detail",
-        "library-weeding-batch-items",
-        "library-weeding-batch-item-detail",
-        "library-weeding-batch-submit",
-        "library-weeding-batch-withdraw",
-        "library-weeding-batch-decision",
-        "library-weeding-batch-approve",
-        "library-weeding-batch-apply",
-        "library-weeding-batch-cancel",
-        "library-rare-copy-list",
-        "library-rare-works-submission-list",
-        "library-rare-works-submission-detail",
-        "library-rare-works-submission-items",
-        "library-rare-works-submission-item-detail",
-        "library-rare-works-submission-send",
-        "library-annual-review-list",
-        "library-annual-review-detail",
-        "library-annual-review-finalize",
-        "library-annual-review-reopen",
-        # F9 sayım (TMY 32): kalemler kişisizdir — kişi SİCİLİ yazılmaz. Sayım kurulu
-        # ile durduran ve onaylayan harcama yetkilisinin adları şifreli alandır; parola
-        # kurulmadan izin sınıfı OLMADAN da 409 alır (fail-closed) ve servis
-        # `require_password_set` sorar. Hepsi yönetici kipi işidir.
-        "library-stocktake-list",
-        "library-stocktake-state",
-        "library-stocktake-detail",
-        "library-stocktake-start",
-        "library-stocktake-scan",
-        "library-stocktake-items",
-        "library-stocktake-item-detail",
-        "library-stocktake-surplus",
-        "library-stocktake-progress",
-        "library-stocktake-complete",
-        "library-stocktake-approve",
-        "library-stocktake-cancel",
-        "library-stocktake-tmy-34-1",
-        # F9 sayım tutanağı (E10): yalnız okur ve PDF/XLSX üretir; kurul ve harcama
-        # yetkilisi adları şifreli alandan yalnız belgenin kendisine çözülür.
-        "library-stocktake-documents",
-        "library-stocktake-document",
-        # F10-D: dışa aktarım (kişisel veri yok; üye özeti kişisiz sayılar), E17, E11 ve
-        # kişi dökümü (KVKK md. 11) yalnız okur ve PDF/XLSX üretir. Kişi arama POST'tur ama
-        # yazmaz (okul no sorgu dizesine girmesin diye gövdededir). Yönetici kipi işidir.
-        "library-export",
-        "library-export-member-summary",
-        "library-report-documents",
-        "library-report-catalog-listing",
-        "library-report-library-register",
-        "library-report-management-account",
-        "library-report-person-record-search",
-        "library-report-person-record",
-        # F8 belgeleri (E7, E8, E9, E16): yalnız okur ve PDF/XLSX üretir; adlar
-        # şifreli alandan yalnız belgenin kendisine çözülür. Yönetici kipi işidir.
-        "library-weeding-batch-documents",
-        "library-weeding-batch-document",
-        "library-rare-works-submission-pdf",
-        "library-annual-review-pdf",
-        "library-donation-intake-pdf",
-        # Bağış değerlendirme sonucu (F8 ekleri 13, 25.09.2026 kullanıcı kararı): yalnız okur;
-        # bağışçının adı şifreli alandan yalnız belgeye çözülür.
-        "library-donation-intake-result-pdf",
-        # F10-R: istatistik, Md. 7/1 kartı, çok okunanlar ve E12 kişisizdir; "yeniden
-        # hesapla" yalnız `od_katalog_populer`'i (kişisiz sıra) yazar. E20 yalnız okur ve
-        # PDF üretir (adlar şifreli alandan yalnız belgeye çözülür; yönetici kipi).
-        "library-statistics",
-        "library-dashboard-statistics",
-        "library-popular",
-        "library-popular-refresh",
-        "library-popular-poster",
-        "library-reading-award-pdf",
-        # Toplu katalog aktarımı (F3): kitap kaydıdır, kişi sicili değildir.
-        # Önizleme de yazar ve geri sarar; ikisi de yönetici kipi işidir ve
-        # görevli kipi izin listesinde DEĞİLDİR.
-        "library-import-ai-prompt",
-        "library-import-apply",
-        "library-import-preview",
-        "library-import-run-discard",
-        "library-import-run-list",
-        "library-import-template",
-        # Künye getirme uçları (F3, U13) kişi yazmaz: dışarı yalnız ISBN gider,
-        # yanıt da yalnız kitap künyesidir. Üçü de `Work` satırına DOKUNMAZ
-        # (öneri üretirler), yazma kullanıcının kendi `library-work-*` isteğiyle
-        # olur — kanıt `apps/kutuphane/tests/test_kunye_uclari.py`.
-        "library-metadata-lookup",
-        "library-metadata-offline-export",
-        "library-metadata-offline-preview",
-        # Ağ Kataloğu ayarı (F5): port, dinleme kipi, vitrin ve kütüphane
-        # saatleri — kişisel veri yok; yalnız yönetici kipinde yazılır.
-        "library-network-catalog-settings",
-        # Ağ Doktoru (F5, §5.9): durum, denetim, eylemler ve belgeler — kişi
-        # yazmaz; belgeler kişisel veri taşımaz. Afiş yalnız afiş adresini yazar.
-        "library-network-catalog-bookmarks",
-        "library-network-catalog-control",
-        "library-network-catalog-firewall",
-        "library-network-catalog-firewall-rule",
-        "library-network-catalog-info-note",
-        "library-network-catalog-interfaces",
-        "library-network-catalog-listener-test",
-        "library-network-catalog-port",
-        "library-network-catalog-poster",
-        "library-network-catalog-pys-text",
-        "library-network-catalog-status",
-        "library-policy",
-        "library-section-detail",
-        "library-section-list",
-        "library-stats",
-        "library-work-detail",
-        "library-work-list",
         "school-year-activate",
         "school-year-list",
         "school-year-terms",

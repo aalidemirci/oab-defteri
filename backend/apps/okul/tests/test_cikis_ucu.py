@@ -3,7 +3,7 @@
 §5.10-18: görevli kipinde parolasız `app/quit/` 403 döner, parolalı istek
 düzenli kapanışı başlatır. Kapanışın kendisi masaüstü kancasıdır
 (`masaustu_kanca.cikis_iste`); burada kancanın çağrılıp çağrılmadığı sınanır.
-Pencere, tepsi, iki sunucu ve WAL checkpoint sırası masaüstü testlerindedir
+Pencere, yönetim sunucusu ve WAL checkpoint sırası masaüstü testlerindedir
 (`desktop/tests/test_main.py`). İstekler tam ara katman zincirinden geçer
 (oturum → yeniden başlat → kilit → kip).
 """
@@ -210,20 +210,12 @@ def test_kanca_kaydi_verilmeyeni_degistirmez_ve_kaldirilir() -> None:
     cagrilar: list[str] = []
 
     masaustu_kanca.kaydet(cikis=lambda: cagrilar.append("bir"))
-    masaustu_kanca.kaydet(katalog=None)  # çıkış kancası yerinde kalır
+    masaustu_kanca.kaydet()  # verilmeyen kanca değişmez: çıkış kancası yerinde kalır
     assert masaustu_kanca.cikis_iste() is True
     masaustu_kanca.kaldir()
 
     assert masaustu_kanca.cikis_iste() is False
-    assert masaustu_kanca.katalog_kontrolu() is None
     assert cagrilar == ["bir"]
-
-
-def test_katalog_bakim_cagrilari_kanca_yokken_etkisizdir() -> None:
-    masaustu_kanca._reset_for_tests()
-
-    masaustu_kanca.katalog_bakima_al()
-    masaustu_kanca.katalog_bakimdan_cik()
 
 
 def test_gunluk_is_kaydi_ad_ile_tekildir() -> None:

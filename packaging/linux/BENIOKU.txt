@@ -5,16 +5,11 @@ Bu arşiv, yönetici (root) yetkisi gerektirmeden kurulabilen sürümdür.
 Yönetici yetkiniz varsa .deb paketini tercih edin (menü kaydı ve bağımlılık
 kurulumu otomatik yapılır).
 
-AĞ KATALOĞU BU ARŞİVDE SUNULMAZ. Okul ağındaki bilgisayarların ve etkileşimli
-tahtaların kataloğu tarayabildiği Ağ Kataloğu yalnız .deb paketiyle kurulan
-programda açılır. Katalog gerekiyorsa önce bu sürümden çıkıp ./kaldir.sh ile
-kaldırın, sonra .deb paketini kurun. Kaldırmazsanız ./kur.sh'in eklediği menü
-kaydı ve uçbirim kısayolu .deb'inkinin önüne geçer: menü ve oab-defteri
-komutu bu taşınabilir sürümü açmayı sürdürür. Verileriniz iki sürümde aynı
-klasördedir; ./kaldir.sh verilere dokunmaz. Hangi sürümün açıldığını şu komut
-yazar ("kurulu" ya da "tasinabilir"):
-
-    oab-defteri --dagitim-duman
+.deb paketine geçecekseniz önce bu sürümden çıkıp ./kaldir.sh ile kaldırın,
+sonra .deb paketini kurun. Kaldırmazsanız ./kur.sh'in eklediği menü kaydı ve
+uçbirim kısayolu .deb'inkinin önüne geçer: menü ve oab-defteri komutu bu
+taşınabilir sürümü açmayı sürdürür. Verileriniz iki sürümde aynı klasördedir;
+./kaldir.sh verilere dokunmaz.
 
 KURULUM
 -------

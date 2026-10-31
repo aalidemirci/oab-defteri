@@ -1,12 +1,9 @@
-// Ayarlar sayfası (DD kalıbı) — on sekme: ders yılları (dönemlerle), kapalı
-// günler (resmî/dini tatil, öğrenciye kapalı gün; tasarım §6.1 Holiday), şube
-// kataloğu, kütüphane politikası (ödünç sınırları, yıl sonu, saklama — F2),
-// bölümler (katalogun kontrollü listesi — F2), okul bilgileri (evrak antedi,
-// hazırlık sınıfı, kademe, kısa ad, demirbaş onayı ve no), güvenlik (yönetici
-// parolası, kurtarma anahtarı çıktısı, yedek), güncelleme (yalnız elle
-// denetim, tasarım T11) ve Ağ Kataloğu (F5: aç/kapa, port, dinleme kipi, IP,
-// vitrin, kütüphane saatleri, ilk açılış adımları — tasarım §5.2) ve Saklama (F11:
-// süresi dolan kayıtların onaylı silme ve anonimleştirmesi — tasarım §6.4).
+// Ayarlar sayfası (DD kalıbı) — altı sekme: ders yılları (dönemlerle), kapalı
+// günler (resmî/dini tatil, öğrenciye kapalı gün), şubeler, okul bilgileri (evrak
+// antedi, hazırlık sınıfı, kademe, kısa ad, demirbaş onayı ve no), güvenlik
+// (yönetici parolası, kurtarma anahtarı çıktısı, yedek) ve güncelleme (yalnız elle
+// denetim). Aile iskeletinin dört kütüphane paneli (Kütüphane Politikası, Bölümler,
+// Ağ Kataloğu, Saklama) F1a-2'de söküldü.
 
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
@@ -28,11 +25,8 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import type { TabItem } from "../../ui/Tabs";
 import TextField from "../../ui/TextField";
-import AgKataloguPaneli from "../agkatalogu/AgKataloguPaneli";
 import UpdatePanel from "../guncelleme/UpdatePanel";
 import GuvenlikAyarlari from "../guvenlik/GuvenlikAyarlari";
-import BolumlerPaneli from "../kutuphane/BolumlerPaneli";
-import KutuphanePolitikasiPaneli from "../kutuphane/KutuphanePolitikasiPaneli";
 import DemirbasAlanlari from "../okul/DemirbasAlanlari";
 import { KISA_AD_EN_COK, SCHOOL_LEVEL_TR, okulApi } from "../okul/api";
 import type {
@@ -43,7 +37,6 @@ import type {
   SchoolYear,
 } from "../okul/api";
 import { okulBilgileriHatalari } from "../okul/okulBilgileri";
-import SaklamaPaneli from "../saklama/SaklamaPaneli";
 import KapaliGunlerPaneli from "../takvim/KapaliGunlerPaneli";
 import { eksikDiniBayramIletisi, tatilleriTohumla } from "../takvim/tatilTohumu";
 
@@ -52,13 +45,9 @@ const TABS = [
   "ders-yillari",
   "kapali-gunler",
   "subeler",
-  "politika",
-  "bolumler",
   "okul",
   "guvenlik",
   "guncelleme",
-  "ag-katalogu",
-  "saklama",
 ] as const;
 type TabKey = (typeof TABS)[number];
 
@@ -66,13 +55,9 @@ const TAB_ITEMS: TabItem[] = [
   { key: "ders-yillari", label: "Ders Yılları", icon: "calendar_month" },
   { key: "kapali-gunler", label: "Kapalı Günler", icon: "event_busy" },
   { key: "subeler", label: "Şubeler", icon: "meeting_room" },
-  { key: "politika", label: "Kütüphane Politikası", icon: "rule" },
-  { key: "bolumler", label: "Bölümler", icon: "category" },
   { key: "okul", label: "Okul Bilgileri", icon: "apartment" },
   { key: "guvenlik", label: "Güvenlik", icon: "lock" },
   { key: "guncelleme", label: "Güncelleme", icon: "system_update" },
-  { key: "ag-katalogu", label: "Ağ Kataloğu", icon: "lan" },
-  { key: "saklama", label: "Saklama", icon: "auto_delete" },
 ];
 
 /** Backend hatasını alan-bazlı haritaya VEYA genel hata bandına dağıtır. */
@@ -157,13 +142,9 @@ export default function AyarlarPage() {
         )}
         {tab === "kapali-gunler" && <KapaliGunlerPaneli />}
         {tab === "subeler" && <SubelerPanel years={years} yearsLoading={yearsLoading} />}
-        {tab === "politika" && <KutuphanePolitikasiPaneli />}
-        {tab === "bolumler" && <BolumlerPaneli />}
         {tab === "okul" && <OkulBilgileriPanel />}
         {tab === "guvenlik" && <GuvenlikAyarlari />}
         {tab === "guncelleme" && <UpdatePanel />}
-        {tab === "ag-katalogu" && <AgKataloguPaneli />}
-        {tab === "saklama" && <SaklamaPaneli />}
       </div>
 
       <section className="space-y-3">

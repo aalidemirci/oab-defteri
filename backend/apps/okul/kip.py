@@ -91,7 +91,7 @@ kullanılır, süre UZAMAZ.
 Ara katman (sıcak yol) `gorevli_mi()` kullanır: yalnız bellekteki anahtara ve
 bu nesnenin durumuna bakar, güvenlik dosyasına hiç dokunmaz; veritabanına da
 yalnız yukarıdaki dar kapıda (süre dolduğu an, kurulumun bittiği görülene dek)
-gider. Tam durum (`durum()`, `ozet()`) kip uçlarında ve tepside sorulur.
+gider. Tam durum (`durum()`, `ozet()`) kip uçlarında sorulur.
 """
 
 from __future__ import annotations

@@ -4,7 +4,7 @@
 // bulunmayan aktif öğrenci ve personel burada bekler; durumları aktif kalır. Karar
 // yöneticinindir, tek tek ya da toplu:
 //   - "Ayrıldı olarak işaretle" (onay diyaloğu): okuldan ayrılmış sayılır, kaydı
-//     SİLİNMEZ (iade etmediği kitap izlenebilsin), "Ayrıldı · gg.aa.yyyy" rozetiyle kalır.
+//     SİLİNMEZ (geçmişi izlenebilsin), "Ayrıldı · gg.aa.yyyy" rozetiyle kalır.
 //   - "Aktif kalsın": yalnız havuzdan çıkar; sonraki listede yine yoksa geri gelir.
 // Yıl sonu mezunları sınıf süzgeciyle seçilip toplu ayrılır. Personelde "olası aynı
 // kişi" (ör. soyadı değişimi) adayları EŞLEŞME GEREKÇESİYLE gösterilir (TB18: aday ad
@@ -26,7 +26,6 @@ import Icon from "../../ui/Icon";
 import Select from "../../ui/Select";
 import { SkeletonList } from "../../ui/Skeleton";
 import { useSnackbar } from "../../ui/SnackbarProvider";
-import BakanlikHatirlatmasi, { AYRILIS_HATIRLATMASI } from "../kutuphane/BakanlikHatirlatmasi";
 import { MEMBER_KIND_TR, benzerlikGerekcesi, okulApi } from "../okul/api";
 import type {
   LeavePool,
@@ -166,7 +165,7 @@ export default function AyrilisHavuzu({ onDegisti }: { onDegisti?: () => void })
       title: ogrenci
         ? `${formatNumber(kimlikler.length)} öğrenci ayrıldı olarak işaretlensin mi?`
         : `${formatNumber(kimlikler.length)} kişi ayrıldı olarak işaretlensin mi?`,
-      message: `Seçilen ${ogrenci ? "öğrenciler" : "kişiler"} okuldan ayrılmış sayılır ve seçicilerden düşer. Kayıtları silinmez; sicilde “Ayrıldı · gg.aa.yyyy” rozetiyle kalır, iade etmedikleri kitap varsa izlenebilir. Sonraki bir e-Okul listesinde yeniden görünen kişinin kaydı yeniden aktif olur.`,
+      message: `Seçilen ${ogrenci ? "öğrenciler" : "kişiler"} okuldan ayrılmış sayılır ve seçicilerden düşer. Kayıtları silinmez; sicilde “Ayrıldı · gg.aa.yyyy” rozetiyle kalır. Sonraki bir e-Okul listesinde yeniden görünen kişinin kaydı yeniden aktif olur.`,
       confirmLabel: "Ayrıldı olarak işaretle",
     });
     if (!ok) return;
@@ -189,7 +188,7 @@ export default function AyrilisHavuzu({ onDegisti }: { onDegisti?: () => void })
         `Havuzdaki kayıt: “${kisi.full_name}” — ${MEMBER_KIND_TR[kisi.member_kind]}, havuza giriş ${formatDate(kisi.leave_candidate_since)}. ` +
         `Kalacak kayıt: “${aday.full_name}” — ${MEMBER_KIND_TR[aday.member_kind]}, sicile eklendi ${formatDate(aday.created_on)}. ` +
         `Aday yalnız ad benzerliğiyle bulundu (${benzerlikGerekcesi(aday.reason)}); okula yeni gelen bir adaş da olabilir. ` +
-        `Onaylarsanız havuzdaki kaydın kütüphane bağları kalacak kayda taşınır ve havuzdaki kayıt silinir. Bu işlem geri alınamaz.`,
+        `Onaylarsanız havuzdaki kaydın bağları kalacak kayda taşınır ve havuzdaki kayıt silinir. Bu işlem geri alınamaz.`,
       confirmLabel: "Birleştir",
       acknowledgeLabel: "Bu iki kaydın aynı kişi olduğunu doğruladım",
     });
@@ -218,11 +217,9 @@ export default function AyrilisHavuzu({ onDegisti }: { onDegisti?: () => void })
           e-Okul aktarımı kimseyi ayırmaz ve kimsenin kaydını silmez. Listede bulunmayan öğrenci,
           öğretmen ve diğer personel burada bekler; durumları aktif kalır. Okuldan ayrılanlar için
           “Ayrıldı olarak işaretle”yi, okulda kalanlar için “Aktif kalsın”ı seçin. Ayrılan kişinin
-          kaydı silinmez: iade etmediği kitap varsa izlenebilir.
+          kaydı silinmez.
         </p>
       </div>
-
-      <BakanlikHatirlatmasi metin={AYRILIS_HATIRLATMASI} />
 
       {hata && <ErrorBand hata={hata} />}
 
@@ -481,7 +478,7 @@ function PersonelBolumu({
             <span>
               “Olası aynı kişi” sütunundaki kayıt listede yeni adla görünen aynı kişi olabilir (ör.
               soyadı değişimi). Öyleyse ayrıldı diye işaretlemeyin; “Birleştir” ile eski kaydın
-              kütüphane bağlarını yeni kayda taşıyın. Adaylar yalnız ad benzerliğine göre listelenir
+              bağlarını yeni kayda taşıyın. Adaylar yalnız ad benzerliğine göre listelenir
               — her satır neden aday olduğunu yazar; okula yeni gelen bir adaş da burada
               görünebilir. Birleştirmeden önce aynı kişi olduğunu doğrulayın; birleştirme geri
               alınamaz.

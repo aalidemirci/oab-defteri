@@ -108,9 +108,9 @@ def test_program_acikken_geri_yukleme_reddedilir(
     finally:
         ilk.release()
 
-    # Tepside yaşayan program "kapatılmaz", tepsiden Çık'la kapanır (§4.2-1, GA-11).
+    # §4.2 adım 2: ileti tepsiyi anlatmaz (T6); program çarpıyla kapanır.
     assert kod == EXIT_ALREADY_RUNNING
-    assert hatalar == ["Program tepside çalışıyor. Tepsideki simgeden Çık'ı seçip yeniden deneyin."]
+    assert hatalar == ["OAB Defteri açık. Programı kapatıp yeniden deneyin."]
 
 
 def test_yedekler_en_yeniden_eskiye_listelenir(tmp_path: Path) -> None:

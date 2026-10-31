@@ -9,9 +9,9 @@ Program iki tür adlı nesne açar:
   programı düzenli kapatır.
 
 **Güvenlik tanımlayıcısı neden açıkça verilir.** Varsayılan tanımlayıcı nesneye
-yalnız onu açan hesabı ve SYSTEM'i yazar. Önerilen kurulum yolunda (tasarım §4.5)
-kurucu kütüphane masası hesabında başlatılır ve UAC penceresine BTR'nin kimliği
-girilir: yükseltilmiş kurucu BAŞKA BİR HESAPLA çalışır. Varsayılan tanımlayıcıyla
+yalnız onu açan hesabı ve SYSTEM'i yazar. Ortak "OAB" Windows hesabında kurulum
+yönetici kipinde yapılır (tasarım §4.5, TK7): kurucu o hesapta başlatılır ve UAC
+penceresine yönetici kimliği girilir, yükseltilmiş kurucu BAŞKA BİR HESAPLA çalışır. Varsayılan tanımlayıcıyla
 `OpenEventW` ve Inno'nun `CheckForMutexes`'i (`OpenMutex`) erişim reddi alır;
 Inno bunu "mutex yok" diye okur ve program açıkken dosyaların üzerine yazmaya
 kalkar. Bu yüzden nesneler yalnız gereken hakla şu dört alıcıya açılır:

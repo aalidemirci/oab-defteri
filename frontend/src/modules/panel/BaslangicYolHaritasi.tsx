@@ -7,8 +7,8 @@
 // * KENDİLİĞİNDEN tespit edilenler — `setup/status/` sayılarından: öğrenci ve
 //   personel aktarımı (sayı > 0), aktif ders yılında öğrenciye kapalı gün (> 0).
 // * KULLANICININ İŞARETLEDİKLERİ — program bunların yapıldığını bilemez (zarfın
-//   kapatılması, parolanın paylaşılması, BTR görüşmesi). Şablon maddesi indirme
-//   başarılı olunca kendiliğinden işaretlenir, elle de işaretlenebilir.
+//   kapatılması, parolanın paylaşılması). Aile iskeletinin katalog şablonu ve
+//   Ağ Kataloğu (BTR görüşmesi) maddeleri F1a-2'de söküldü.
 // İşaretler `SchoolConfig.yol_haritasi`'nda (backend) durur, tarayıcı
 // depolamasında DEĞİL: yönetim yüzeyi her açılışta rastgele portta dinler, köken
 // değiştiği için `localStorage` açılışlar arasında taşınmaz. İşaretler kişisel
@@ -25,7 +25,6 @@ import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import Icon from "../../ui/Icon";
 import { DOGRULANMADI_BASLIGI } from "../guvenlik/metinler";
-import { useKatalogSablonuIndirme } from "../kutuphane/useKatalogSablonu";
 import type { RoadmapManualItem, SetupStatus } from "../okul/api";
 
 type OtomatikMadde = "ogrenci_aktarimi" | "personel_aktarimi" | "kapali_gunler";
@@ -37,7 +36,7 @@ interface MaddeTanimi {
   bag?: { to: string; etiket: string };
 }
 
-/** Maddeler, sırasıyla (sözlük: "öğrenciye kapalı gün", "kurtarma anahtarı", "BTR"). */
+/** Maddeler, sırasıyla (sözlük: "öğrenciye kapalı gün", "kurtarma anahtarı"). */
 export const YOL_HARITASI_MADDELERI: readonly MaddeTanimi[] = [
   {
     anahtar: "ogrenci_aktarimi",
@@ -61,12 +60,6 @@ export const YOL_HARITASI_MADDELERI: readonly MaddeTanimi[] = [
     bag: { to: "/ayarlar?tab=kapali-gunler", etiket: "Kapalı Günler'e git" },
   },
   {
-    anahtar: "katalog_sablonu",
-    baslik: "Katalog Excel şablonunu indirip doldurmaya başlayın",
-    aciklama:
-      "Kitap listenizi katalog ekranlarını beklemeden bu şablonla Excel'de hazırlayabilirsiniz. Şablonu indirdiğinizde madde kendiliğinden işaretlenir.",
-  },
-  {
     anahtar: "kurtarma_zarfi",
     baslik: "Kurtarma anahtarını müdürlükte kapalı zarfta saklayın",
     aciklama:
@@ -79,15 +72,6 @@ export const YOL_HARITASI_MADDELERI: readonly MaddeTanimi[] = [
     aciklama:
       "Parolayı bilen tek kişi okuldan ayrılır ya da parolayı unutursa kayıtlara yalnız kurtarma anahtarıyla erişilir. Parolayı masadaki görevlilere vermeyin; görevliler görevli kipinde çalışır.",
     bag: { to: "/ayarlar?tab=guvenlik", etiket: "Güvenlik ayarları" },
-  },
-  {
-    anahtar: "btr_gorusmesi",
-    baslik: "Ağ Kataloğu için bilişim teknolojileri rehber öğretmeniyle (BTR) görüşün",
-    aciklama:
-      "Ağ Kataloğu, okul ağındaki bilgisayar ve etkileşimli tahtalardan kitap aramayı sağlar; kişisel veri göstermez. Okul ağında açılmadan önce BTR'nin bilgisi alınır.",
-    // Çapalı adres: kılavuz açılınca doğrudan "Ağ Kataloğu" bölümüne kayar
-    // (KilavuzPage sayfa içi çapayı kendisi uygular).
-    bag: { to: "/kilavuz#ag-katalogu", etiket: "Kılavuz'da okuyun" },
   },
 ];
 
@@ -122,9 +106,6 @@ export default function BaslangicYolHaritasi({
   onIsaretle,
   onGizle,
 }: BaslangicYolHaritasiProps) {
-  const sablon = useKatalogSablonuIndirme(() => {
-    if (!durum.roadmap.marks.katalog_sablonu) onIsaretle("katalog_sablonu", true);
-  });
   const tamamSayisi = YOL_HARITASI_MADDELERI.filter((m) => maddeTamamMi(m.anahtar, durum)).length;
   const toplam = YOL_HARITASI_MADDELERI.length;
   const hepsiTamam = tamamSayisi === toplam;
@@ -216,16 +197,6 @@ export default function BaslangicYolHaritasi({
                         {madde.bag.etiket}
                         <Icon name="arrow_forward" size="sm" />
                       </Link>
-                    )}
-                    {madde.anahtar === "katalog_sablonu" && (
-                      <Button
-                        variant="text"
-                        icon="download"
-                        onClick={() => void sablon.indir()}
-                        disabled={sablon.indiriliyor}
-                      >
-                        Şablonu indir
-                      </Button>
                     )}
                     {otomatik ? (
                       !tamam && (

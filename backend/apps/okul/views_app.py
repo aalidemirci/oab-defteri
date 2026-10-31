@@ -1,10 +1,9 @@
 """Program uçları — `POST app/quit/`: arayüzden düzenli çıkış (tasarım §4.2-4, §5.10-18).
 
-Pencerenin çarpısı programı kapatmaz, tepsiye gizler (U3). "Çık" dört yoldan
-gelir: tepsi menüsü, tek kopya kanalının `kapat` komutu (kurucu), Linux'ta
-oturum kapanışı (SIGTERM) ve bu uç. Uç, tepsisi olmayan Linux masaüstünün TEK
-çıkış yoludur (TB13) ve görevli kipinde tepsideki "Çık"ın da gittiği yerdir:
-pencere öne gelir, arayüz yönetici parolasını sorar, parolayla bu uca gelir.
+Pencerenin çarpısı programı kapatır (T6, tasarım §4.5); tepsi yoktur. Düzenli
+kapanış ayrıca tek kopya kanalının `kapat` komutundan (kurucu), Linux'ta oturum
+kapanışından (SIGTERM) ve bu uçtan gelir. Uç, pencere süslemesi olmayan Linux
+masaüstünün çıkış yoludur (TB13).
 
 Kip kuralı (§4.2-4 tablosu):
 
@@ -21,8 +20,8 @@ Kilit kapısı ve yeniden başlat kapısı bu yolu geçirir (`lock_middleware`,
 `restart_gate`): kilitliyken de programdan çıkılabilmelidir.
 
 Başarıda 202 döner ve kapanış masaüstü kancasıyla (`masaustu_kanca.cikis_iste`)
-AYRI bir iş parçacığında başlar: yanıt önce gönderilir, sonra pencere, tepsi,
-iki sunucu ve WAL checkpoint sırasıyla kapanır (`desktop/main.py`). Kanca yoksa
+AYRI bir iş parçacığında başlar: yanıt önce gönderilir, sonra pencere, yönetim
+sunucusu ve WAL checkpoint sırasıyla kapanır (`desktop/main.py`). Kanca yoksa
 (geliştirme sunucusu) 503 `cikis_kullanilamiyor`.
 
 Parola hiçbir yanıtta, günlükte ya da hata iletisinde yankılanmaz.

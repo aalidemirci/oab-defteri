@@ -39,7 +39,7 @@ from django.conf import settings
 from django.db import connections
 from django.utils import timezone
 
-from apps.okul import masaustu_kanca, restart_gate
+from apps.okul import restart_gate
 from apps.okul.services import app_password, backup_restore
 from shared import bakim
 
@@ -114,7 +114,6 @@ def restore_and_require_restart(
     # erişim hatasıyla düşer ve hedefe dokunulmaz (çekirdek garantisi).
     if not bakim.KAPI.bakima_al(bekleme_sn=BAKIM_BEKLEME_SN):
         logger.warning("Bakım kapısı: uçuştaki gün işi süresinde bitmedi.")
-    masaustu_kanca.katalog_bakima_al()
     try:
         # Takas öncesi TÜM bağlantılar kapatılır; sonraki istekler zaten
         # restart_gate'e takılacağından yeniden açılmaları sorun olmaz.
@@ -128,7 +127,6 @@ def restore_and_require_restart(
     except BaseException:
         # Hedefe dokunulmadı (çekirdek garantisi): gün işleri yeniden koşabilir.
         bakim.KAPI.bakimdan_cik()
-        masaustu_kanca.katalog_bakimdan_cik()
         raise
     finally:
         if gecici is not None:

@@ -8,12 +8,9 @@ sınamasının koştuğu olağan açılışta da — dışarı TEK bağlantı, T
 ve her dış denemeyi kaydeder; kayıt boş kalmalıdır.
 
 `--autotest` gün değişimi kapısını (`od-gunluk`) kurmadan döner; kapının arka plan
-işleri (günlük yedek, çok okunanlar, saklama taraması) aynı tuzak altında AYRICA bir
+işleri (günlük yedek ve backend'in kaydettiği işler) aynı tuzak altında AYRICA bir
 kez koşar (`test_gun_degisimi_kapisinin_isleri_disari_istek_atmaz`, F11 düzeltme
-turu). Kapının Ağ Kataloğu'na bağlı iki işi (IP denetimi, saatlik katalog denetimi)
-katalog denetleyicisi ister ve burada kurulmaz; onlar yerel ağ arayüzlerine bakar
-(`desktop/ag.py`'nin UDP rota sorgusu TEST-NET-1'e gider, paket göndermez) ve kaynak
-düzeyindeki kapalı listenin kapsamındadır.
+turu).
 
 Kaynak düzeyindeki eşi `backend/apps/okul/tests/test_dis_istek_kapilari.py`'dir (ağ
 istemcisi import eden modüllerin kapalı listesi; güncelleme denetimini yalnız
@@ -65,8 +62,8 @@ def test_acilista_disari_hic_istek_cikmaz(tmp_path: Path) -> None:
     assert _tuzakla(kayit, "--autotest", "--data-dir", str(kok)) == EXIT_OK, gunluk(kok)[-3000:]
     assert _kayitlar(kayit) == []
 
-    # Olağan açılış: parola kurulu, kişi ve katalog verisi var — günlük yedek alınır,
-    # göç denetimi ve Ağ Kataloğu öz sınaması koşar.
+    # Olağan açılış: parola kurulu, kişi verisi var — günlük yedek alınır, göç
+    # denetimi koşar.
     betik("hazirla", "--data-dir", str(kok), "--usb", str(tmp_path / "usb"))
     for yedek in (kok / "backups").glob("gunluk-*.odbak"):
         yedek.unlink()  # bugünün yedeği yeniden alınsın
@@ -78,8 +75,8 @@ def test_acilista_disari_hic_istek_cikmaz(tmp_path: Path) -> None:
 def test_gun_degisimi_kapisinin_isleri_disari_istek_atmaz(tmp_path: Path) -> None:
     """F11 düzeltme turu: `--autotest` gün değişimi kapısını (`od-gunluk`) kurmadan döner;
     gerçek açılışta kapı ilk tikte kayıtlı arka plan işlerini çalıştırır. Kapı burada
-    GERÇEK işleriyle (yerleşik günlük yedek + backend'in kaydettiği bütün işler: çok
-    okunanlar, saklama taraması …) aynı ağ tuzağı altında bir kez koşar; kayıt boş kalmalı.
+    GERÇEK işleriyle (yerleşik günlük yedek + backend'in kaydettiği bütün işler) aynı ağ
+    tuzağı altında bir kez koşar; kayıt boş kalmalı.
     Kapıya ileride çalışma anında dış istek atan bir iş eklenirse bu test düşer."""
     kok = tmp_path / "veri"
     kayit = tmp_path / "kayit.jsonl"
@@ -103,7 +100,8 @@ def test_gun_degisimi_kapisinin_isleri_disari_istek_atmaz(tmp_path: Path) -> Non
 
     assert sonuc.returncode == 0, sonuc.stderr[-3000:]
     cikti = json.loads(sonuc.stdout.strip().splitlines()[-1])
-    # Kapı gerçekten iş çalıştırdı (yanlış yeşile karşı): backend işleri kayıtlı ve bitti.
-    assert cikti["backend_is_sayisi"] >= 2
-    assert {"gunluk-yedek", "saklama-taramasi", "cok-okunanlar"} <= set(cikti["biten"]), cikti
+    # Kapı gerçekten iş çalıştırdı (yanlış yeşile karşı): yerleşik yedek ve kayıtlı
+    # backend işlerinin hepsi bitti (aile iskeletinin kütüphane işleri söküldü).
+    assert "gunluk-yedek" in cikti["biten"], cikti
+    assert len(cikti["biten"]) == 1 + cikti["backend_is_sayisi"], cikti
     assert _kayitlar(kayit) == []

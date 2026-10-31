@@ -9,14 +9,10 @@ AYRI süreçte koşar ve sonucunu stdout'un son satırına JSON olarak yazar. To
 Komutlar:
 
 * `hazirla --data-dir A --usb U` — göç, yönetici parolası + kurtarma anahtarı
-  (doğrulanmış), uydurma kişi/katalog/üyelik/ödünç, **dış yedek** (kullanıcının
-  indirdiği şifreli yedek, `encrypted_backup`) U klasörüne; ardından yedekten
-  SONRA bir kart daha verilir (basılıp dağıtılmış sayılır).
+  (doğrulanmış), uydurma kişi kayıtları, **dış yedek** (kullanıcının indirdiği
+  şifreli yedek, `encrypted_backup`) U klasörüne.
 * `dogrula --data-dir B (--parola P | --kurtarma K --yeni-parola P2)` — kilidi
-  açar, özet ve verilmiş kart defterini yazar.
-* `kart-dene --data-dir B --parola P --govde 123456 …` — rastgele gövde yerine
-  verilen gövdeleri sırayla dener; verilen kartı yazar (defter ve `IssuedCard`
-  denetimi gerçek servisten geçer).
+  açar, özeti yazar.
 * `gelecek-yedek --data-dir A --parola P --usb U` — veritabanına programın
   tanımadığı bir göç kaydı yazıp dış yedek alır, sonra kaydı siler (daha yeni bir
   sürümün yedeği; eski-sürüm kapısının geri yükleme yolu).
@@ -27,8 +23,12 @@ Komutlar:
   düzeltme turu).
 * `gun-kapisi --data-dir A --parola P` — gün değişimi kapısını (`od-gunluk`) gerçek
   işleriyle bir kez çalıştırır: yerleşik günlük yedek + backend'in kayıtlı bütün
-  işleri (çok okunanlar, saklama taraması …). Ağ tuzağı altında koşar (F11 düzeltme
-  turu: açılışta dış istek yok testinin kapıyı da kapsaması).
+  işleri. Ağ tuzağı altında koşar (açılışta dış istek yok testinin kapıyı da
+  kapsaması).
+
+Aile iskeletinin katalog, üyelik, ödünç ve verilmiş kart defteri adımları
+kütüphane uygulamasıyla birlikte söküldü (F1a-2); OAB'nin kayıtları geldikçe
+özete eklenir.
 
 Bütün veriler UYDURMADIR (CLAUDE.md §2-12). Argon2 ucuz profille kurulur: parametreler
 güvenlik dosyasına yazılır ve yedeğin başlığıyla taşınır; algoritma aynıdır.
@@ -37,12 +37,9 @@ güvenlik dosyasına yazılır ve yedeğin başlığıyla taşınır; algoritma 
 from __future__ import annotations
 
 import argparse
-import itertools
 import json
 import os
 import sys
-from collections.abc import Iterator
-from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -68,7 +65,6 @@ def _django(veri_koku: str) -> Path:
 
 def _ozet() -> dict[str, Any]:
     """Veri eşitliğinin ölçüsü: şifreli adlar ÇÖZÜLMÜŞ olarak, TR sırasıyla değil pk ile."""
-    from apps.kutuphane.models import Copy, IssuedCard, Loan, LoanStatus, Membership, Work
     from apps.okul.models import Personnel, Student
 
     return {
@@ -77,21 +73,11 @@ def _ozet() -> dict[str, Any]:
             for o in Student.objects.order_by("pk")
         ],
         "personel": [[p.first_name, p.last_name] for p in Personnel.objects.order_by("pk")],
-        "eserler": [[w.title, w.authors] for w in Work.objects.order_by("pk")],
-        "nushalar": [[c.barcode, c.status] for c in Copy.objects.order_by("pk")],
-        "uyelikler": [[m.card_no, m.status] for m in Membership.objects.order_by("pk")],
-        "acik_odunc": [
-            [loan.copy.barcode, loan.membership.card_no if loan.membership else ""]
-            for loan in Loan.objects.filter(status=LoanStatus.OPEN).order_by("pk")
-        ],
-        "verilmis_kart_sayisi": IssuedCard.objects.count(),
     }
 
 
 def hazirla(args: argparse.Namespace) -> dict[str, Any]:
     _django(args.data_dir)  # backend/ sys.path'e ÖNCE girer; `apps` ancak sonra import edilir
-    from apps.kutuphane.models import AcquisitionMethod
-    from apps.kutuphane.services import catalog, circulation, memberships
     from apps.okul.models import MemberKind, Personnel, Student
     from apps.okul.services import app_password, encrypted_backup
     from shared import crypto
@@ -101,7 +87,7 @@ def hazirla(args: argparse.Namespace) -> dict[str, Any]:
     kurtarma = app_password.enable(password=PAROLA)
     app_password.confirm_recovery_key(kurtarma)
 
-    ogrenci = Student.objects.create(
+    Student.objects.create(
         first_name="Deneme Çağla",
         last_name="Öğrenci Işıklı",
         student_number="700123",
@@ -115,19 +101,9 @@ def hazirla(args: argparse.Namespace) -> dict[str, Any]:
         class_level=10,
         class_section="B",
     )
-    ogretmen = Personnel.objects.create(
+    Personnel.objects.create(
         first_name="Deneme Şükrü", last_name="Öğretmenoğlu", member_kind=MemberKind.TEACHER
     )
-    edinim = catalog.create_acquisition(
-        method=AcquisitionMethod.EXISTING_STOCK, date=date(2026, 9, 1)
-    )
-    eser = catalog.create_work(title="Kürk Mantolu Madonna", authors="Sabahattin Ali")
-    ikinci = catalog.create_work(title="İnce Memed", authors="Yaşar Kemal")
-    birinci_nusha = catalog.create_copy(work=eser, acquisition=edinim)
-    catalog.create_copy(work=eser, acquisition=edinim)
-    catalog.create_copy(work=ikinci, acquisition=edinim)
-    uyelik = memberships.create_membership(student=ogrenci)
-    circulation.checkout(copy=birinci_nusha, membership=uyelik)
 
     # Dış yedek: kullanıcının Ayarlar → Güvenlik'ten indirip USB'ye aldığı şifreli yedek.
     icerik, ad = encrypted_backup.create_encrypted_backup()
@@ -135,53 +111,23 @@ def hazirla(args: argparse.Namespace) -> dict[str, Any]:
     usb.mkdir(parents=True, exist_ok=True)
     yedek = usb / ad
     yedek.write_bytes(icerik)
-    beklenen = _ozet()
-
-    # Yedekten SONRA verilen kart: basılıp dağıtılmış sayılır, geri yükleme onu
-    # geri sarsa bile numarası bir daha verilmemeli (F6, `card_ledger`).
-    sonra = memberships.create_membership(personnel=ogretmen)
     return {
         "parola": PAROLA,
         "kurtarma": kurtarma,
         "yedek": str(yedek),
-        "beklenen": beklenen,
-        "kart_once": uyelik.card_no,
-        "kart_sonra": sonra.card_no,
+        "beklenen": _ozet(),
     }
 
 
 def dogrula(args: argparse.Namespace) -> dict[str, Any]:
     _django(args.data_dir)
-    from apps.kutuphane import card_ledger
     from apps.okul.services import app_password
 
     if args.parola:
         app_password.unlock(password=args.parola)
     else:
         app_password.unlock_with_recovery(recovery_key=args.kurtarma, new_password=args.yeni_parola)
-    return {
-        "ozet": _ozet(),
-        "defter_satiri": len(card_ledger.issued_indexes()),
-        "durum": app_password.status(),
-    }
-
-
-def kart_dene(args: argparse.Namespace) -> dict[str, Any]:
-    _django(args.data_dir)
-    from django.db import transaction
-
-    from apps.kutuphane import card_numbers
-    from apps.kutuphane.services import memberships
-    from apps.okul.services import app_password
-
-    app_password.unlock(password=args.parola)
-    govdeler: Iterator[str] = itertools.chain(
-        iter(args.govde), iter(card_numbers.random_body, None)
-    )
-    card_numbers.random_body = lambda: next(govdeler)
-    with transaction.atomic():
-        kart = memberships.issue_card_number()
-    return {"kart": kart}
+    return {"ozet": _ozet(), "durum": app_password.status()}
 
 
 def gelecek_yedek(args: argparse.Namespace) -> dict[str, Any]:
@@ -243,10 +189,6 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--parola", default="")
     d.add_argument("--kurtarma", default="")
     d.add_argument("--yeni-parola", default=YENI_PAROLA)
-    k = alt.add_parser("kart-dene")
-    k.add_argument("--data-dir", required=True)
-    k.add_argument("--parola", required=True)
-    k.add_argument("--govde", nargs="+", required=True)
     g = alt.add_parser("gelecek-yedek")
     g.add_argument("--data-dir", required=True)
     g.add_argument("--parola", required=True)
@@ -261,7 +203,6 @@ def main(argv: list[str] | None = None) -> int:
     islem = {
         "hazirla": hazirla,
         "dogrula": dogrula,
-        "kart-dene": kart_dene,
         "gelecek-yedek": gelecek_yedek,
         "sihirbaz": sihirbaz,
         "gun-kapisi": gun_kapisi,

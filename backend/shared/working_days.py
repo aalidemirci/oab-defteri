@@ -31,8 +31,7 @@ Kaydırılmış tarih kullanıcıya hiçbir yerde "Md. 18 gereği" diye SUNULMAZ
 Katman: çekirdek (`*_in` işlevleri) ORM'sizdir, kapalı dönemleri parametre alır ve
 saf birim testiyle sınanır. Sözleşme işlevleri (`is_closed_day`, `next_open_day`)
 dönem verilmezse `apps.okul.services.calendar.closed_periods_from` ile DB'den okur;
-içe aktarma TEMBELDİR — `shared` açılışta `apps`'e bağlanmaz (katalog uygulaması bu
-modülü hiç import etmez).
+içe aktarma TEMBELDİR — `shared` açılışta `apps`'e bağlanmaz.
 """
 
 from __future__ import annotations

@@ -200,11 +200,11 @@ def mark_setup_completed() -> SchoolConfig:
 # okunur (öğrenci/personel sayısı, aktif ders yılındaki öğrenciye kapalı gün
 # sayısı). Burada yalnız KULLANICININ İŞARETLEDİĞİ maddeler tutulur: program
 # bunların yapıldığını bilemez (zarfın kapatılması, parolanın paylaşılması…).
+# Aile iskeletinin katalog şablonu ve Ağ Kataloğu (BTR görüşmesi) maddeleri
+# kütüphaneyle birlikte söküldü (F1a-2); OAB'nin maddeleri F1b/F1c'de (§12.B).
 ROADMAP_MANUAL_ITEMS: tuple[str, ...] = (
-    "katalog_sablonu",  # katalog Excel şablonunu indirip doldurmaya başla
     "kurtarma_zarfi",  # kurtarma anahtarını müdürlükte kapalı zarfta sakla
     "parola_paylasimi",  # yönetici parolasını en az iki görevlendirilmiş kişiyle paylaş
-    "btr_gorusmesi",  # Ağ Kataloğu için BTR ile görüş (bilgi maddesi)
 )
 
 _ROADMAP_MARKS = "isaretler"

@@ -99,42 +99,6 @@ export interface DisYedekDurumu {
   max_reminder_days: number;
 }
 
-/** Görev devri notundaki (E18) açık işler satırı — kişisiz sayı. */
-export interface AcikIs {
-  key: string;
-  label: string;
-  count: number;
-}
-
-/** `GET /library/handover/` — Görev Devri kartının özeti (kişisel veri yok). */
-export interface GorevDevriDurumu {
-  /** Son görev devrinin (parola + kurtarma anahtarı yenilemesi) anı; yoksa null. */
-  started_at: string | null;
-  /** Yeni kurtarma anahtarının saklandığının doğrulandığı an; yoksa null. */
-  confirmed_at: string | null;
-  /** Görev devri notu basılabilir mi? (devir + doğrulama) */
-  note_available: boolean;
-  open_work: AcikIs[];
-  /** Bu bilgisayarda devirden önce alınmış yedek sayısı (eski parola/anahtarla açılır). */
-  old_backup_count: number;
-  oldest_backup: string;
-  /** Veri klasöründeki arşivlenmiş güvenlik dosyası sayısı. */
-  archive_count: number;
-}
-
-/** `POST /library/handover/start/` yanıtı: durum + TEK SEFERLİK yeni kurtarma anahtarı. */
-export interface GorevDevriBaslatmaSonucu extends GuvenlikDurumu {
-  recovery_key: string;
-  handover: GorevDevriDurumu;
-}
-
-/** Görev devri notunun gövdesi — adlar yalnız basım anında kullanılır, saklanmaz. */
-export interface GorevDevriNotuIstegi {
-  outgoing_name: string;
-  incoming_name: string;
-  note: string;
-}
-
 export const guvenlikApi = {
   durum: () => api.get<GuvenlikDurumu>("/security/status/"),
   kur: (password: string) => api.post<ParolaKurmaSonucu>("/security/enable/", { password }),
@@ -176,17 +140,4 @@ export const guvenlikApi = {
   disYedek: () => api.get<DisYedekDurumu>("/backups/external/", { etkinlik: false }),
   disYedekSuresi: (reminder_days: number) =>
     api.put<DisYedekDurumu>("/backups/external/", { reminder_days }),
-  // Görev devri (F11; tasarım §4.4). Yalnız yönetici kipinde; kilitliyken 423.
-  gorevDevri: () => api.get<GorevDevriDurumu>("/library/handover/"),
-  /**
-   * Parola ve kurtarma anahtarı TEK adımda yenilenir. Yanıttaki YENİ anahtar tek
-   * seferliktir; Güvenlik ekranındaki panelle saklanıp doğrulanır.
-   */
-  gorevDevriBaslat: (current_password: string, new_password: string) =>
-    api.post<GorevDevriBaslatmaSonucu>("/library/handover/start/", {
-      current_password,
-      new_password,
-    }),
-  /** Görev devri notu (PDF). Devir başlatılıp yeni anahtar doğrulanmadıysa 409. */
-  gorevDevriNotu: (istek: GorevDevriNotuIstegi) => api.postBlob("/library/handover/note/", istek),
 };

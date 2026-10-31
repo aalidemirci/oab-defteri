@@ -1,7 +1,7 @@
 // Çık (tasarım §4.2-4, §5.10-18, TB13): üst çubuktaki düğme her durumda görünür;
 // yönetici kipinde ve kilitliyken parolasız onay, görevli kipinde yönetici
 // parolası. Sunucu parola isterse (kip bu arada değişti) diyalog parola alanına
-// geçer. Tepsideki görevli kipi Çık'ı `od:cik-iste` olayıyla diyaloğu açar.
+// geçer. Tepsi yoktur (T6): diyalog yalnız düğmeyle açılır.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
@@ -26,7 +26,6 @@ vi.mock("./api", async (orijinal) => ({
 vi.mock("../kip/api", () => ({ kipApi: kip }));
 
 import CikisDugmesi, { CikisDiyalogu, DogrudanCikisDugmesi } from "./CikisDugmesi";
-import { CIKIS_ISTEK_OLAYI } from "./api";
 
 function ozet(durum: KipAdi) {
   return { durum, bosta_kalan_sn: null, mutlak_kalan_sn: null, bosta_dk: 3, mutlak_dk: 30 };
@@ -146,19 +145,6 @@ describe("CikisDugmesi", () => {
   it("parola isteyen pencere doğrudan açıldığında alan ilk anda odaktadır", () => {
     render(<CikisDiyalogu open onClose={vi.fn()} parolaIle />);
     expect(screen.getByLabelText(/Yönetici parolası/)).toHaveFocus();
-  });
-
-  it("tepsinin od:cik-iste olayı diyaloğu açar", async () => {
-    kip.durum.mockResolvedValue(ozet("gorevli"));
-    bas();
-    expect(screen.queryByRole("dialog")).toBeNull();
-
-    act(() => {
-      window.dispatchEvent(new Event(CIKIS_ISTEK_OLAYI));
-    });
-
-    expect(await screen.findByRole("dialog")).toHaveTextContent("Programdan çık");
-    expect(CIKIS_ISTEK_OLAYI).toBe("od:cik-iste");
   });
 
   it("kilitliyken de görünür ve parolasızdır", async () => {

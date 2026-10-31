@@ -76,7 +76,6 @@ def izlenen_adimlar(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
     monkeypatch.setattr(main_mod, "ensure_stamp_compatible", kaydet("surum-damgasi"))
     monkeypatch.setattr(main_mod, "check_database_integrity", kaydet("butunluk"))
-    monkeypatch.setattr(main_mod, "encrypt_legacy_backups", kaydet("eski-yedekleri-sifrele", []))
     monkeypatch.setattr(
         main_mod, "daily_backup", kaydet("gunluk-yedek", Path("gunluk-2026-09-22.odbak"))
     )
@@ -99,7 +98,6 @@ def test_acilis_sirasi_tasarimla_birebir(tmp_path: Path, izlenen_adimlar: list[s
     assert izlenen_adimlar == [
         "surum-damgasi",  # eski program yeni veriyi açmasın
         "butunluk",  # bozuk veriyle yedek rotasyonu ÇALIŞTIRILMAZ
-        "eski-yedekleri-sifrele",
         "gunluk-yedek",
         "rotasyon",
         "django-hazirla",
@@ -381,7 +379,7 @@ def test_kanal_komutlari_pencere_denetcisine_gider() -> None:
     assert denetci.cagrilar == ["show", "request_quit"]
 
 
-# ------------------------------------------------ tepsi + pencere oturumu
+# ------------------------------------------------ pencere oturumu (T6)
 
 
 class _SahteKanal:
@@ -408,24 +406,10 @@ class _SahteDenetci:
         self.cagrilar.append("request_quit")
 
 
-class _SahteTepsi:
-    def __init__(self, sira: list[str], *, var: bool) -> None:
-        self.sira = sira
-        self.available = var
-
-    def stop(self) -> None:
-        self.sira.append("tepsi-dur")
-
-
 @pytest.fixture
 def pencere_oturumu(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     kayit: dict[str, Any] = {"sira": []}
     sira: list[str] = kayit["sira"]
-
-    def tepsi(eylemler: Any, *, platform: str) -> _SahteTepsi:
-        sira.append("tepsi")
-        kayit["eylemler"] = eylemler
-        return _SahteTepsi(sira, var=True)
 
     def pencere(url: str, *, storage_path: Path, controller: Any, **kw: Any) -> None:
         sira.append("pencere")
@@ -443,7 +427,6 @@ def pencere_oturumu(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         kayit["qt_cikis"] = cikis
         return _SahteQt()
 
-    monkeypatch.setattr(main_mod, "start_tray", tepsi)
     monkeypatch.setattr(main_mod, "open_window", pencere)
     monkeypatch.setattr(main_mod.qt_kurulum, "hazirla", qt_hazirla)
     return kayit
@@ -467,34 +450,38 @@ def test_windowsta_qt_kurulmaz(tmp_path: Path, pencere_oturumu: dict[str, Any]) 
     assert "qt-hazirla" not in pencere_oturumu["sira"]
 
 
-def test_tepsi_pencereden_once_kurulur_cikista_kanal_ve_tepsi_kapanir(
+def test_pencere_oturumu_kanal_ve_qt_koprusunu_cikista_kapatir(
     tmp_path: Path, pencere_oturumu: dict[str, Any]
 ) -> None:
+    """T6: tepsi yoktur; pencere görünür açılır, gizli açılış seçeneği yoktur."""
     kanal = _SahteKanal()
 
     main_mod.run_window_session("http://127.0.0.1:1/", tmp_path, kanal, platform="linux")
 
-    assert pencere_oturumu["sira"] == ["qt-hazirla", "tepsi", "pencere", "tepsi-dur", "qt-dur"]
+    assert pencere_oturumu["sira"] == ["qt-hazirla", "pencere", "qt-dur"]
     assert kanal.kapatildi is True
-    denetci = pencere_oturumu["denetci"]
-    assert denetci.tray_available is True
-    # Tepsi ve kanal aynı denetçiye bağlı: Pencereyi aç / Çık.
-    assert pencere_oturumu["eylemler"].show == denetci.show
-    assert pencere_oturumu["eylemler"].quit == denetci.request_quit
+    assert "hidden" not in pencere_oturumu["pencere_kw"]
 
 
-def test_pencere_hatasinda_da_tepsi_durdurulur(
+def test_pencere_hatasinda_da_kanal_ve_qt_koprusu_kapanir(
     tmp_path: Path, pencere_oturumu: dict[str, Any]
 ) -> None:
-    """`icon.stop()` atlanırsa pystray iş parçacığı süreci asılı bırakırdı."""
     pencere_oturumu["pencere_hatasi"] = True
     kanal = _SahteKanal()
 
     with pytest.raises(RuntimeError):
         main_mod.run_window_session("http://127.0.0.1:1/", tmp_path, kanal, platform="linux")
 
-    assert pencere_oturumu["sira"][-2:] == ["tepsi-dur", "qt-dur"]
+    assert pencere_oturumu["sira"][-1] == "qt-dur"
     assert kanal.kapatildi is True
+
+
+def test_tepsi_bayragi_ve_modulu_yok() -> None:
+    """T6 (§4.5): `--tepside` ve tepsi modülü sökülmüştür."""
+    with pytest.raises(SystemExit):
+        main_mod.build_parser().parse_args(["--tepside"])
+    assert not hasattr(main_mod, "start_tray")
+    assert not (REPO_ROOT / "desktop" / "tray.py").exists()
 
 
 def test_kanaldan_kapat_gelince_pencere_kapanir(
@@ -691,8 +678,6 @@ def _autotest_sureci(tmp_path: Path) -> subprocess.Popen[str]:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         text=True,
-        # Öldürülen süreç katalog portunda TIME_WAIT bırakabilir; boş port seçilir.
-        env={**os.environ, "OD_KATALOG_PORT": "0"},
     )
 
 
@@ -882,7 +867,7 @@ def _sahte_gunluk_yedek(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_saat_ileri_sicrarsa_oturum_ici_rotasyon_gecmis_yedekleri_silmez(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Bulgu: tepside açık programda saat 14 günden fazla ileri sıçrarsa bütün günlük
+    """Bulgu: günlerce açık kalan programda saat 14 günden fazla ileri sıçrarsa bütün günlük
     yedekler silinirdi. Rotasyon gerçek geçen süreye (uyku dahil açık kalma saati) göre
     kesilir; "en çok 14 gün" saklama sözü (TB8) bozulmaz."""
     from desktop.backup import DAILY_PREFIX
@@ -930,3 +915,130 @@ def test_gercekten_gecen_gunlerde_rotasyon_olagan_calisir(
 
     kalan = sorted(p.name for p in paths.backups.glob(f"{DAILY_PREFIX}-*{BACKUP_SUFFIX}"))
     assert kalan == [f"{DAILY_PREFIX}-2026-10-30{BACKUP_SUFFIX}"]  # 24.09 kesimden eski
+
+
+# ------------------------------------------------- kapanış sırası (§4.2, TB14)
+
+
+class _SahteYonetim:
+    """Yönetim `BackgroundServer`'ının yerine geçer; sırayı kaydeder."""
+
+    sira: list[str] = []
+
+    def __init__(self, application: object) -> None:
+        self.base_url = "http://127.0.0.1:54321"
+
+    def start(self) -> str:
+        self.sira.append("yonetim-basla")
+        return self.base_url
+
+    def wait_until_ready(self) -> None:
+        pass
+
+    def stop(self) -> None:
+        self.sira.append("yonetim-dur")
+
+
+class _SahteKapi:
+    def __init__(self, sira: list[str]) -> None:
+        self.sira = sira
+
+    def baslat(self) -> None:
+        self.sira.append("od-gunluk")
+
+    def durdur(self) -> None:
+        self.sira.append("od-gunluk-dur")
+
+
+@pytest.fixture
+def sahte_servis(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
+    """`serve()` çevresini izole eder: Django ve pencere sahte, sıra kayıtlı."""
+    sira: list[str] = []
+    monkeypatch.setattr(_SahteYonetim, "sira", sira)
+    kayit: dict[str, Any] = {
+        "sira": sira,
+        "paths": resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)}),
+    }
+    monkeypatch.setattr(main_mod, "build_wsgi_application", lambda: object())
+    monkeypatch.setattr(main_mod, "assert_session_guard_installed", lambda: None)
+    monkeypatch.setattr(main_mod, "BackgroundServer", _SahteYonetim)
+    monkeypatch.setattr(main_mod, "check_health", lambda url, token: sira.append("saglik"))
+    monkeypatch.setattr(main_mod, "require_window_runtime", lambda: None)
+    monkeypatch.setattr(
+        main_mod, "run_window_session", lambda url, storage, channel, **_: sira.append("pencere")
+    )
+    monkeypatch.setattr(main_mod, "gun_kapisi_kur", lambda paths, **_: _SahteKapi(sira))
+    monkeypatch.setattr(main_mod, "wal_checkpoint", lambda yol: sira.append("wal-checkpoint"))
+    return kayit
+
+
+def test_kapanis_sirasi_gun_kapisi_sunucu_ve_wal_checkpoint(sahte_servis: dict[str, Any]) -> None:
+    kod = main_mod.serve(sahte_servis["paths"], "belirtec", False)
+
+    assert kod == EXIT_OK
+    assert sahte_servis["sira"] == [
+        "yonetim-basla",
+        "saglik",
+        "od-gunluk",  # yönetim ayakta ve korumalı olduktan SONRA
+        "pencere",
+        "od-gunluk-dur",
+        "yonetim-dur",
+        "wal-checkpoint",  # TB14: sunucu durduktan SONRA
+    ]
+
+
+def test_autotest_pencere_ve_gun_kapisi_acmaz_ag_dinleyicisi_kurmaz(
+    sahte_servis: dict[str, Any],
+) -> None:
+    """§13 D5: `--autotest` 1-9 + sağlık denetimidir; katalog adımı yoktur."""
+    kod = main_mod.serve(sahte_servis["paths"], "belirtec", True)
+
+    assert kod == EXIT_OK
+    assert sahte_servis["sira"] == ["yonetim-basla", "saglik", "yonetim-dur", "wal-checkpoint"]
+
+
+def test_pencere_motoru_yoksa_gun_kapisi_kalkmaz(
+    sahte_servis: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def pencere_yok() -> None:
+        raise WebViewUnavailableError("WebView2 yok.")
+
+    monkeypatch.setattr(main_mod, "require_window_runtime", pencere_yok)
+
+    with pytest.raises(WebViewUnavailableError):
+        main_mod.serve(sahte_servis["paths"], "belirtec", False)
+
+    assert sahte_servis["sira"][-2:] == ["yonetim-dur", "wal-checkpoint"]
+    assert "od-gunluk" not in sahte_servis["sira"]
+
+
+def test_pencere_hatasinda_da_gun_kapisi_ve_sunucu_durdurulur(
+    sahte_servis: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def pencere_coktu(url: str, storage: Path, channel: Any, **_: Any) -> None:
+        raise RuntimeError("pencere motoru çöktü")
+
+    monkeypatch.setattr(main_mod, "run_window_session", pencere_coktu)
+
+    with pytest.raises(RuntimeError):
+        main_mod.serve(sahte_servis["paths"], "belirtec", False)
+
+    assert sahte_servis["sira"][-3:] == ["od-gunluk-dur", "yonetim-dur", "wal-checkpoint"]
+
+
+def test_gun_kapisi_yerlesik_isi_gunluk_yedektir(tmp_path: Path) -> None:
+    """Ağ kataloğunun IP denetimi, saatlik denetimi ve uyku engeli sökülmüştür."""
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+
+    kapi = main_mod.gun_kapisi_kur(paths)
+
+    assert kapi.is_adlari[0] == "gunluk-yedek"
+    assert "ip-denetimi" not in kapi.is_adlari
+
+
+def test_eski_duz_yedek_donusturucusu_yok() -> None:
+    """§13 D29: OAB'de düz yedek hiç olmadı; dönüştürücü ve düz kalıplar sökülmüştür."""
+    from desktop import backup
+
+    assert not hasattr(backup, "encrypt_legacy_backups")
+    assert not hasattr(main_mod, "encrypt_legacy_backups")

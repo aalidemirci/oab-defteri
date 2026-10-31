@@ -1,9 +1,8 @@
-"""Pencere denetçisinin F5 davranışları (tasarım §4.2-4, §4.5).
+"""Pencere denetçisinin `loaded` davranışı ve pencere kurulumu (tasarım §4.2, §4.5).
 
-* Görevli kipinde tepsideki Çık: pencere öne gelir ve arayüze `od:cik-iste`
-  olayı gönderilir; arayüz yönetici parolasını sorar (`POST app/quit/`).
-* Tepside gizli açılış (`--tepside`): gizli pencerede `shown` gelmeyebilir;
-  sayfa yüklenince (`loaded`) pencere komut alır, açılışta gelen Çık uygulanır.
+* `shown` olayı bazı arka uçlarda geç gelebilir: sayfa yüklenince (`loaded`)
+  pencere komut alır, açılışta gelen Çık uygulanır.
+* Pencere her zaman görünür kurulur: OAB'de tepsi ve tepside gizli açılış yoktur (T6).
 """
 
 from __future__ import annotations
@@ -41,7 +40,6 @@ class _Pencere:
         )
         self.cagrilar: list[str] = []
         self.native: Any = None
-        self.js: list[str] = []
 
     def show(self) -> None:
         self.cagrilar.append("show")
@@ -49,26 +47,9 @@ class _Pencere:
     def destroy(self) -> None:
         self.cagrilar.append("destroy")
 
-    def evaluate_js(self, kod: str) -> None:
-        self.js.append(kod)
 
-
-def test_gorevli_ciki_pencereyi_one_getirir_ve_arayuze_olay_gonderir() -> None:
+def test_pencere_yuklenince_komut_alir() -> None:
     denetci = WindowController(platform="linux")
-    pencere = _Pencere()
-    denetci.bind(pencere)
-    pencere.events.shown.set()
-
-    denetci.ask_quit_in_spa()
-
-    assert pencere.cagrilar == ["show"]
-    assert pencere.js == ["window.dispatchEvent(new Event('od:cik-iste'))"]
-    assert denetci.quitting is False  # kapanış parolalı istekle başlar
-
-
-def test_gizli_baslayan_pencere_yuklenince_komut_alir() -> None:
-    denetci = WindowController(platform="linux")
-    denetci.tray_available = True
     pencere = _Pencere()
     denetci.bind(pencere)
 
@@ -80,7 +61,7 @@ def test_gizli_baslayan_pencere_yuklenince_komut_alir() -> None:
     assert pencere.cagrilar == ["show"]
 
 
-def test_gizli_pencerede_acilista_gelen_cik_yuklenince_uygulanir() -> None:
+def test_acilista_gelen_cik_yuklenince_uygulanir() -> None:
     denetci = WindowController(platform="linux")
     pencere = _Pencere()
     denetci.bind(pencere)
@@ -90,20 +71,6 @@ def test_gizli_pencerede_acilista_gelen_cik_yuklenince_uygulanir() -> None:
     pencere.events.loaded.set()
 
     assert pencere.cagrilar == ["destroy"]
-
-
-def test_arayuz_olayi_gonderilemezse_program_dusmez() -> None:
-    denetci = WindowController(platform="linux")
-    pencere = _Pencere()
-
-    def patla(kod: str) -> None:
-        raise RuntimeError("pencere hazır değil")
-
-    pencere.evaluate_js = patla  # type: ignore[method-assign]
-    denetci.bind(pencere)
-    pencere.events.shown.set()
-
-    denetci.ask_quit_in_spa()  # yükseltmez
 
 
 class _Webview:
@@ -119,19 +86,10 @@ class _Webview:
         return None
 
 
-def test_tepside_acilista_pencere_gizli_kurulur(tmp_path: Path) -> None:
-    webview = _Webview()
-
-    open_window(
-        "http://127.0.0.1:1/", storage_path=tmp_path, webview=webview, platform="linux", hidden=True
-    )
-
-    assert webview.kw["hidden"] is True
-
-
-def test_olagan_acilista_pencere_gorunur(tmp_path: Path) -> None:
+def test_pencere_gorunur_kurulur(tmp_path: Path) -> None:
+    """T6: tepside gizli açılış (`--tepside`) sökülmüştür; pencere hep görünür açılır."""
     webview = _Webview()
 
     open_window("http://127.0.0.1:1/", storage_path=tmp_path, webview=webview, platform="linux")
 
-    assert webview.kw["hidden"] is False
+    assert webview.kw.get("hidden", False) is False

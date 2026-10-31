@@ -272,8 +272,6 @@ _TARANAN_KOKLER = (
 # çalışma zamanının bıraktığı sürüm damgasıdır. Muafiyet ATAMA adıyla verilir;
 # aynı dosyaya eklenecek başka bir kullanım yine yakalanır.
 _MUAF_ATAMALAR = {("desktop/window.py", "_EMPTY_VERSIONS")}
-# Geçici: ağ kataloğu dinleyicisi F1a-2'nin söküm adımında kalkar; muafiyet de onunla.
-_MUAF_DOSYALAR = {"desktop/katalog_server.py"}
 
 
 def _uretim_kaynaklari() -> Iterator[Path]:
@@ -308,8 +306,6 @@ def test_tum_arayuz_adresi_hicbir_uretim_kaynaginda_gecmez() -> None:
     bulunan: list[str] = []
     for dosya in _uretim_kaynaklari():
         goreli = dosya.relative_to(REPO_ROOT).as_posix()
-        if goreli in _MUAF_DOSYALAR:
-            continue
         kaynak = dosya.read_text(encoding="utf-8")
         bulunan.extend(f"{goreli}:{no}" for no in _tum_arayuz_metinleri(goreli, kaynak))
 

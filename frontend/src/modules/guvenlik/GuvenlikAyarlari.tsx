@@ -2,9 +2,8 @@
 //
 // Eylemler: yönetici parolasını değiştir / "Kilitle" / kurtarma anahtarını doğrula
 // (yalnız doğrulanmamışsa) / kurtarma anahtarını yenile / kurtarma anahtarı
-// çıktısını yeniden al / görev devri (F11: parola + anahtar birlikte; yeni anahtar
-// Görev Devri sihirbazının 2. adımında aynı panelle saklatılır, ardından Görev devri
-// notu — `GorevDevri`). Yönetici parolası zorunludur ve YALNIZ kurulum sihirbazının
+// çıktısını yeniden al. Aile iskeletinin kütüphaneye bağlı Görev Devri kartı F1a-2'de
+// söküldü (OAB devir-teslimi F4'te — tasarım §13 D10). Yönetici parolası zorunludur ve YALNIZ kurulum sihirbazının
 // ilk adımında kurulur (kurtarma anahtarı orada gösterilir ve saklandığı doğrulanır);
 // bu ekranda "parolayı kur" ya da "parolayı kaldır" eylemi YOKTUR (tasarım §6.3).
 // Yenilenen anahtar modül belleğinde bekler (`bekleyenAnahtar`) ve bu ekranda
@@ -26,7 +25,6 @@ import Icon from "../../ui/Icon";
 import { SkeletonList } from "../../ui/Skeleton";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import TextField from "../../ui/TextField";
-import GorevDevri from "./GorevDevri";
 import KurtarmaAnahtariPaneli from "./KurtarmaAnahtariPaneli";
 import KurtarmaAnahtariniDogrulaKarti from "./KurtarmaAnahtariniDogrulaKarti";
 import KurtarmaAnahtariniYenileKarti from "./KurtarmaAnahtariniYenileKarti";
@@ -37,7 +35,6 @@ import { guvenlikApi } from "./api";
 import type { GuvenlikDurumu } from "./api";
 import {
   bekleyenKurtarmaAnahtariniYaz,
-  useBekleyenAnahtarKaynagi,
   useBekleyenKurtarmaAnahtari,
 } from "./bekleyenAnahtar";
 import { kilitOlayiYayinla } from "./GuvenlikKapisi";
@@ -66,7 +63,6 @@ export default function GuvenlikAyarlari() {
   // Yenilenmiş (ya da sihirbazda gösterilmiş) ve henüz doğrulanmamış anahtar.
   const bekleyenAnahtar = useBekleyenKurtarmaAnahtari();
   // Görev devrinin anahtarı Görev Devri sihirbazının 2. adımında saklatılır (üstteki panelde değil).
-  const anahtarKaynagi = useBekleyenAnahtarKaynagi();
 
   const oku = useCallback(() => {
     guvenlikApi
@@ -185,25 +181,12 @@ export default function GuvenlikAyarlari() {
         </div>
       </Card>
 
-      {durum.password_set && bekleyenAnahtar !== null && anahtarKaynagi !== "gorev-devri" && (
+      {durum.password_set && bekleyenAnahtar !== null && (
         <KurtarmaAnahtariPaneli
           anahtar={bekleyenAnahtar}
           onDogrulama={yeniAnahtarDogrulandi}
           dogrulandiMetni="Doğrulandı."
         />
-      )}
-
-      {durum.password_set && bekleyenAnahtar !== null && anahtarKaynagi === "gorev-devri" && (
-        <div
-          role="status"
-          className="flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-4 py-3 text-body-medium text-on-tertiary-container"
-        >
-          <Icon name="key" size="lg" />
-          <span>
-            Görev devrinin yeni kurtarma anahtarı aşağıdaki “Görev Devri” kartında bekliyor.
-            Saklayıp doğrulamadan programı kapatmayın.
-          </span>
-        </div>
       )}
 
       {durum.password_set && bekleyenAnahtar === null && !durum.recovery_key_confirmed && (
@@ -223,17 +206,6 @@ export default function GuvenlikAyarlari() {
       )}
 
       {durum.password_set && <KurtarmaCiktisiKarti />}
-
-      {/* F11 görev devri (§4.4): parola + anahtar birlikte yenilenir; yeni anahtar
-          sihirbazın 2. adımında (kartın içinde) saklanıp doğrulanır; ardından Görev devri
-          notu basılır. */}
-      {durum.password_set && (
-        <GorevDevri
-          anahtarDogrulandi={durum.recovery_key_confirmed}
-          onBasladi={oku}
-          onAnahtarDogrulama={yeniAnahtarDogrulandi}
-        />
-      )}
 
       <SifreliYedekleme parolaKurulu={durum.password_set} />
 

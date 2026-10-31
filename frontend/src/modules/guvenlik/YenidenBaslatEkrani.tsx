@@ -50,11 +50,10 @@ export default function YenidenBaslatEkrani() {
           programın yeniden başlatılması gerekir.
         </p>
         <p className="mt-3 text-body-medium text-on-surface-variant">
-          Pencerenin çarpı düğmesi programı kapatmaz, yalnız gizler: aşağıdaki düğmeyle ya da saatin
-          yanındaki simge alanında (tepside) OAB Defteri simgesine sağ tıklayıp “Çık”ı seçerek
+          Programı kapatıp yeniden açın: aşağıdaki düğmeyle ya da pencerenin çarpı düğmesiyle
           programdan çıkın, sonra programı yeniden açın.
         </p>
-        {/* Çık (F5, TB13): tepsisi olmayan masaüstünde tek çıkış yolu; parolasızdır. */}
+        {/* Çık (TB13): pencere süslemesi olmayan masaüstünde çıkış yolu; parolasızdır. */}
         <DogrudanCikisDugmesi />
         <p className="mt-3 text-body-small text-on-surface-variant">
           Önceki veritabanı silinmedi; veri klasöründe{" "}

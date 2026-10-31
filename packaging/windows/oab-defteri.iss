@@ -3,34 +3,27 @@
 ; =============================================================================
 ;  BU DOSYA BU ORTAMDA DOĞRULANMADI — ilk Windows koşusunda sınanacak.
 ;
-;  Tasarım §2.1 U4 (okulzili deseni):
-;   * PrivilegesRequired=admin → kurucu HER ZAMAN yönetici ister; program
-;     Program Files altına ({autopf}) bütün hesaplar için kurulur. Kurucu
-;     kütüphane masası hesabında başlatılır, UAC penceresine BTR kimliği
-;     girilir (tasarım §4.5). Her güncelleme de yönetici ister (tasarım §16).
-;   * Kurulum dizini standart kullanıcıya SALT OKUNURDUR: program oraya hiçbir
-;     şey yazmaz (veri, günlük ve fontconfig önbelleği %LOCALAPPDATA% altında).
+;  Kurulum yetkisi (tasarım §2.2 TK7, §15 M-1):
+;   * PrivilegesRequired=lowest + PrivilegesRequiredOverridesAllowed=dialog →
+;     kurucu iki seçeneği sunar. Kullanıcı başına kurulum ({autopf} =
+;     %LOCALAPPDATA%\Programs) yalnız programı kendi Windows hesabında tek başına
+;     kullanan senaryo içindir. Ortak "OAB" Windows hesabında kurulum YÖNETİCİ
+;     kipinde yapılır ({autopf} = Program Files): kurulum dizini standart
+;     kullanıcıya salt okunur kalır (tasarım §4.3 tehdit 20). Kılavuz iki
+;     senaryoyu ayrı yazar.
+;   * Program kurulum dizinine hiçbir şey yazmaz (veri, günlük ve fontconfig
+;     önbelleği %LOCALAPPDATA% altında).
 ;   * WebView2 Runtime yoksa gömülü Evergreen kurucusu sessizce çalıştırılır.
 ;   * Kullanıcı verisi kurulum dizininde DEĞİLDİR; kaldırma veriyi silmez.
 ;   * Lisans sayfası LICENSE.txt'dir (PolyForm Noncommercial); üçüncü taraf
 ;     lisansları {app}\THIRD_PARTY_LICENSES\ altına kurulur (F12, TB28).
-;   * Program tepside yaşar (U3): kurucu ve kaldırıcı onu `OABDefteri.Kapat`
-;     adlı olayıyla DÜZENLİ kapatır ve iki mutex'in kaybolmasını bekler
-;     (tasarım §4.2-5; aşağıdaki [Code]). Inno `AppMutex` KULLANILMAZ.
-;   * Güvenlik duvarı (tasarım §5.7, F5): "Yerel ağdan katalog taramasına izin
-;     ver" görevi. İLK KURULUMDA (kural yoksa) önce programın eski gelen
-;     kuralları silinir (Windows Güvenlik Uyarısı'nın bıraktığı "engelle"
-;     kuralları izinden önce gelir), sonra `OAB Defteri Katalog` izin
-;     kuralı eklenir: port HKLM\SOFTWARE\OABDefteri\KatalogPortu'dan (yoksa
-;     8765), remoteip=LocalSubnet, üç profil. GÜNCELLEME KİPİNDE (kural varsa)
-;     silme ve ekleme ATLANIR: değiştirilmiş port ve BTR'nin eklediği bloklar
-;     korunur (EK-29). Kaldırmada kural silinir. netsh ÇIKTISI ayrıştırılmaz,
-;     yalnız çıkış kodu okunur (program içi denetim PowerShell nesneleriyle
-;     yapılır — desktop/guvenlik_duvari.py). Port değişikliğini program UAC
-;     yardımcısıyla yapar (kural + HKLM).
-;   * Otomatik başlatma (tasarım §4.2-3, §4.5): Görev Zamanlayıcı'ya
-;     `runasoriginaluser` ile yazılır (gorev-kur.ps1); isteğe bağlı "tepside
-;     başlat" alt görevi `--tepside` verir. Kaldırmada görev silinir.
+;   * Kurucu ve kaldırıcı açık programı `OABDefteri.Kapat` adlı olayıyla DÜZENLİ
+;     kapatır ve iki mutex'in kaybolmasını bekler (tasarım §4.2; aşağıdaki
+;     [Code]). Inno `AppMutex` KULLANILMAZ.
+;   * Program ağ servisi sunmaz: yönetim sunucusu yalnız 127.0.0.1'de, rastgele
+;     portta ve oturum belirteciyle dinler; hiçbir port okul ağına açılmaz. Bu
+;     yüzden güvenlik duvarı kuralı, otomatik başlatma ve tepsi görevi yoktur
+;     (tasarım §4.1, §4.5 T6).
 ;
 ;  Derleme (build.ps1 çağırır):
 ;    iscc /DAppVersion=2026.9.0 /DNumericVersion=2026.9.0.0 ^
@@ -57,14 +50,6 @@
 #define AppIconSource "..\ikonlar\oab-defteri.ico"
 #define InstalledIconName "oab-defteri-" + AppVersion + ".ico"
 #define WebView2Setup "MicrosoftEdgeWebView2Setup.exe"
-; Kimlik sabitleri (tasarım §2.3) — desktop/guvenlik_duvari.py ile BİREBİR aynı
-; (eşitliği desktop/tests/test_guvenlik_duvari.py denetler).
-#define KuralAdi "OAB Defteri Katalog"
-#define HklmAnahtari "SOFTWARE\OABDefteri"
-#define HklmPortDegeri "KatalogPortu"
-#define VarsayilanKatalogPortu "8765"
-#define GorevAdi "OAB Defteri"
-
 ; Lisanslar (F12, TB28): build.ps1 PyInstaller çıktısının KÖKÜNE LICENSE.txt'yi
 ; (PolyForm Noncommercial, UTF-8 BOM'lu — Inno BOM'suz metni ANSI okur) ve
 ; THIRD_PARTY_LICENSES\ dizinini koyar (packaging/lisanslar/lisanslar.py paket).
@@ -90,10 +75,11 @@ AppPublisher=OAB Defteri
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
-; U4: yönetici kurulumu → {autopf} = Program Files; {group} ve {autodesktop}
-; ortak (bütün hesaplar) Başlat menüsü ve masaüstüdür. Kullanıcıya "yalnız
-; benim için" seçeneği SUNULMAZ (PrivilegesRequiredOverridesAllowed yok).
-PrivilegesRequired=admin
+; TK7: kurucu "yalnız benim için" (kullanıcı başına) ve "bütün kullanıcılar için"
+; (yönetici) seçeneklerini sunar; {autopf}, {group} ve {autodesktop} seçilen kipe
+; göre çözülür (başlıktaki açıklama).
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
 ; Program yalnız Windows 10/11'i hedefler. Paket Windows'un Universal C çalışma zamanını
 ; (ucrtbase.dll, api-ms-win-*.dll) TAŞIMAZ: Windows 10 ve sonrasında işletim sisteminin
 ; bileşenidir (packaging/lisanslar/lisanslar.py UCRT_DLL). Daha eski sürümde kurucu durur.
@@ -121,15 +107,10 @@ Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Masaüstü kısayolu oluştur"; GroupDescription: "Ek kısayollar:"
-; Kural yalnız izin verir; Ağ Kataloğu programda ayrıca açılmadıkça hiçbir port dinlenmez.
-Name: "katalogizni"; Description: "Yerel ağdan katalog taramasına izin ver (güvenlik duvarı kuralı)"; GroupDescription: "Ağ Kataloğu:"; Flags: checkedonce
-Name: "otobaslat"; Description: "Oturum açılınca OAB Defteri'ni başlat"; GroupDescription: "Otomatik başlatma:"; Flags: checkedonce
-Name: "otobaslat\tepside"; Description: "Pencereyi açmadan tepside başlat"; Flags: unchecked dontinheritcheck
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#AppIconSource}"; DestDir: "{app}"; DestName: "{#InstalledIconName}"; Flags: ignoreversion
-Source: "gorev-kur.ps1"; DestDir: "{app}"; Flags: ignoreversion
 ; WebView2 Evergreen kurucusu — build.ps1 indirdiyse pakete girer. Bu blok [Files]
 ; bölümünün SONUNDA kalır: arasına başka bölüm başlığı girerse `Source:` satırı o
 ; bölüme düşer ve ISCC derlemeyi kırar (paket testi bölüm yerleşimini sınar).
@@ -140,11 +121,6 @@ Source: "{#WebView2Setup}"; DestDir: "{app}"; Flags: ignoreversion
 ; (WebView2'siz makinede kurulum biter, program çıkış kodu 7 ile kapanırdı).
 #pragma warning "WebView2 kurucusu (" + WebView2Setup + ") bulunamadı — paket onsuz üretiliyor."
 #endif
-
-[Registry]
-; Güvenlik duvarı kuralının portu (tasarım §5.7). Program portu değiştirince UAC
-; yardımcısı bu değeri de yazar; güncellemede mevcut değer KORUNUR.
-Root: HKLM; Subkey: "{#HklmAnahtari}"; ValueType: dword; ValueName: "{#HklmPortDegeri}"; ValueData: "{#VarsayilanKatalogPortu}"; Flags: createvalueifdoesntexist uninsdeletekey
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\{#InstalledIconName}"; AppUserModelID: "{#AppUserModelId}"
@@ -164,29 +140,15 @@ Type: files; Name: "{app}\oab-defteri-*.ico"
 Filename: "{app}\{#WebView2Setup}"; Parameters: "/silent /install"; \
     StatusMsg: "Microsoft Edge WebView2 bileşeni kuruluyor..."; \
     Check: WebView2Eksik and WebView2KurucusuVar; Flags: waituntilterminated skipifdoesntexist
-; Otomatik başlatma görevi KURUCUYU BAŞLATAN hesaba (kütüphane masası hesabı)
-; yazılır: `runasoriginaluser` (okulzili deseni, tasarım §4.5).
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
-    Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\gorev-kur.ps1"""; \
-    StatusMsg: "Otomatik başlatma ayarlanıyor..."; \
-    Flags: runhidden waituntilterminated runasoriginaluser; Tasks: otobaslat and not otobaslat\tepside
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
-    Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\gorev-kur.ps1"" -Tepside"; \
-    StatusMsg: "Otomatik başlatma ayarlanıyor..."; \
-    Flags: runhidden waituntilterminated runasoriginaluser; Tasks: otobaslat\tepside
 ; Program YÜKSELTİLMİŞ kimlikle açılmamalı: veri, programı çalıştıran hesabın
-; %LOCALAPPDATA%'sına yazılır; UAC'de BTR kimliği girildiyse yükseltilmiş süreç
-; veriyi BTR'nin profiline açardı. `runasoriginaluser` postinstall girdilerinde
+; %LOCALAPPDATA%'sına yazılır; yönetici kurulumunda UAC'ye başka bir kimlik
+; girildiyse yükseltilmiş süreç veriyi o hesabın profiline açardı. `runasoriginaluser` postinstall girdilerinde
 ; zaten varsayılandır; niyet belgelensin diye açıkça yazılır.
 Filename: "{app}\{#AppExeName}"; Description: "{#AppName} programını çalıştır"; \
     Flags: nowait postinstall skipifsilent runasoriginaluser
 
-[UninstallRun]
-; Otomatik başlatma görevi (yükseltilmiş kaldırıcı masa hesabının görevini silebilir).
-Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""{#GorevAdi}"" /F"; Flags: runhidden; RunOnceId: "OdGorevSil"
-
 [Messages]
-turkish.FinishedLabel=Kurulum tamamlandı.%n%nVerileriniz (kütüphane kayıtları ve yedekler) programın kurulduğu klasörde DEĞİL, kullanıcı klasörünüzde saklanır. Programı kaldırsanız bile kayıtlarınız silinmez.
+turkish.FinishedLabel=Kurulum tamamlandı.%n%nVerileriniz (birlik kayıtları ve yedekler) programın kurulduğu klasörde DEĞİL, kullanıcı klasörünüzde saklanır. Programı kaldırsanız bile kayıtlarınız silinmez.
 
 [Code]
 const
@@ -202,8 +164,8 @@ const
 
 // kernel32 — Pascal Script'in kendi işlevleriyle çakışmasın diye `Od` önekli.
 // Program olayı ve mutex'leri Yöneticiler'e açık bir güvenlik tanımlayıcısıyla
-// kurar (desktop/win32_objects.py): UAC'de BTR kimliğiyle yükseltilmiş kurucu
-// masa hesabının nesnelerini böylece açabilir.
+// kurar (desktop/win32_objects.py): yönetici kipinde yükseltilmiş kurucu, programı
+// çalıştıran hesabın nesnelerini böylece açabilir.
 function OdOpenEvent(DesiredAccess: DWORD; InheritHandle: BOOL; Name: String): THandle;
   external 'OpenEventW@kernel32.dll stdcall';
 function OdSetEvent(Event: THandle): BOOL;
@@ -216,8 +178,8 @@ begin
   Result := CheckForMutexes(ProgramMutexleri);
 end;
 
-// Program tepsideyse `Kapat` olayını işaretler; program düzenli kapanır
-// (pencere, tepsi, iki sunucu, temiz kapanış işareti). Olay yoksa (program
+// Program açıksa `Kapat` olayını işaretler; program düzenli kapanır
+// (pencere, yönetim sunucusu, temiz kapanış işareti). Olay yoksa (program
 // başka bir Windows oturumunda ya da henüz açılıyor) yalnız beklenir.
 procedure KapatmaOlayiniGonder;
 var
@@ -251,8 +213,8 @@ begin
 end;
 
 // Kurucu ve kaldırıcının ortak kapısı. Süreç ZORLA sonlandırılmaz: program
-// 30 sn'de kapanmazsa kullanıcıdan tepsiden Çık'ı seçmesi istenir; Yeniden Dene
-// olayı yeniden gönderir, İptal kurulumu/kaldırmayı durdurur.
+// 30 sn'de kapanmazsa kullanıcıdan programı kapatması istenir (tasarım §4.2);
+// Yeniden Dene olayı yeniden gönderir, İptal kurulumu/kaldırmayı durdurur.
 function ProgramiKapat: Boolean;
 begin
   Result := True;
@@ -264,9 +226,8 @@ begin
       Log('Program düzenli kapandı.');
       Exit;
     end;
-    if SuppressibleMsgBox('OAB Defteri hâlâ çalışıyor.' + #13#10#13#10 +
-        'Saatin yanındaki tepsi simgesine sağ tıklayıp Çık''ı seçin, ' +
-        'sonra Yeniden Dene''ye basın.', mbError, MB_RETRYCANCEL, IDCANCEL) <> IDRETRY then
+    if SuppressibleMsgBox('OAB Defteri açık. Programı kapatıp Yeniden Dene''ye basın.',
+        mbError, MB_RETRYCANCEL, IDCANCEL) <> IDRETRY then
     begin
       Log('Program kapanmadı; kullanıcı vazgeçti.');
       Result := False;
@@ -306,81 +267,3 @@ begin
   Result := FileExists(ExpandConstant('{app}\{#WebView2Setup}'));
 end;
 
-// ---------------------------------------------------------------------------
-// Güvenlik duvarı (tasarım §5.7). netsh'in ÇIKTISI yerelleştirilmiştir ve
-// ayrıştırılmaz; yalnız çıkış kodu kullanılır (0 = başarı / kural bulundu).
-// ---------------------------------------------------------------------------
-function Netsh(Parametreler: String): Integer;
-var
-  Kod: Integer;
-begin
-  if not Exec(ExpandConstant('{sys}\netsh.exe'), Parametreler, '', SW_HIDE,
-      ewWaitUntilTerminated, Kod) then
-    Kod := -1;
-  Result := Kod;
-end;
-
-// Kuralın portu HKLM'den (program port değiştirince UAC yardımcısı yazar), yoksa 8765.
-function KatalogPortu: Integer;
-var
-  Deger: Cardinal;
-begin
-  Result := StrToInt('{#VarsayilanKatalogPortu}');
-  if RegQueryDWordValue(HKLM, '{#HklmAnahtari}', '{#HklmPortDegeri}', Deger) then
-    if (Deger >= 1) and (Deger <= 65535) then
-      Result := Deger;
-end;
-
-function KatalogKuraliVar: Boolean;
-begin
-  Result := Netsh('advfirewall firewall show rule name="{#KuralAdi}"') = 0;
-end;
-
-procedure GuvenlikDuvariKuraliniKur;
-var
-  Exe: String;
-begin
-  // Güncelleme kipi: kural varsa silme ve ekleme ATLANIR (EK-29) — değiştirilmiş
-  // port ve BTR'nin eklediği tahta ağı blokları korunur.
-  if KatalogKuraliVar then
-  begin
-    Log('Güvenlik duvarı kuralı zaten var; dokunulmadı (güncelleme kipi).');
-    Exit;
-  end;
-  Exe := ExpandConstant('{app}\{#AppExeName}');
-  // İlk kurulum: eski iletişim kutusunun bıraktığı "engelle" kuralları izinden önce gelir.
-  Netsh('advfirewall firewall delete rule name=all dir=in program="' + Exe + '"');
-  if Netsh('advfirewall firewall add rule name="{#KuralAdi}" dir=in action=allow ' +
-      'program="' + Exe + '" protocol=TCP localport=' + IntToStr(KatalogPortu) +
-      ' remoteip=LocalSubnet profile=domain,private,public enable=yes') = 0 then
-    Log('Güvenlik duvarı kuralı eklendi.')
-  else
-    Log('Güvenlik duvarı kuralı eklenemedi; Ağ Doktoru düzeltme adımını gösterir.');
-end;
-
-procedure OtomatikBaslatmayiKaldir;
-var
-  Kod: Integer;
-begin
-  // Görev seçilmediyse (ya da güncellemede kaldırıldıysa) önceki görev silinir.
-  Exec(ExpandConstant('{sys}\schtasks.exe'), '/Delete /TN "{#GorevAdi}" /F', '',
-    SW_HIDE, ewWaitUntilTerminated, Kod);
-end;
-
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if CurStep = ssPostInstall then
-  begin
-    if WizardIsTaskSelected('katalogizni') then
-      GuvenlikDuvariKuraliniKur;
-    if not WizardIsTaskSelected('otobaslat') then
-      OtomatikBaslatmayiKaldir;
-  end;
-end;
-
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-begin
-  // Kaldırma: kural silinir (tasarım §5.7). Görev [UninstallRun]'da silinir.
-  if CurUninstallStep = usUninstall then
-    Netsh('advfirewall firewall delete rule name="{#KuralAdi}"');
-end;

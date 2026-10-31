@@ -4,15 +4,14 @@ KVKK: Bu betik gerçek bir e-Okul dosyasını OKUMAZ, maskelemez, dönüştürme
 yerleşimi sıfırdan kurar ve tüm adlar UYDURMADIR. Depoya giren tek ikili budur;
 gerçek ihraçlar `.gitignore` ile engellenir (`*.xls`, `*.XLS`).
 
-Yerleşim, 30.08.2026'da gerçek iki rapor incelenerek çıkarıldı:
+Yerleşim gerçek rapor incelenerek çıkarıldı:
 
-* ``OOG01001R020`` (Sınıf/Şube Öğrenci Listesi) — tek sayfada şube şube bloklar;
-  sınıf/şube bilgisi YALNIZ blok başlığındadır. Örnekte bilinçli olarak **I ve İ
-  şubeleri yan yana** durur: Türk alfabesinde ayrı iki harftir ve ASCII'ye
-  katlayan bir normalize edici iki sınıfı tek şubeye çökertir (bkz.
-  `normalize.tr_upper`).
 * ``OOK01001R1`` (Personel Listesi) — düz tablo + ``Toplam Personel Sayısı``
   dipnotu + tarih/saat seri numaralarından oluşan sayfa altı satırı.
+
+Öğrenci sınıf listesi örneği (``OOG01001R020``) T5 gereği F1a-2'de söküldü
+(öğrenci listesi alınmaz); blok yerleşimi `test_eokul.py`'de bellekte kurulur.
+F1b'nin sentetik veli örneği bu betiğe eklenir (tasarım §12.B).
 
 Yeniden üretmek için (xlwt yalnız burada gerekir, projenin bağımlılığı DEĞİLDİR):
 
@@ -32,27 +31,6 @@ except ImportError:  # pragma: no cover — yalnız fixture üretiminde çalış
 
 BURASI = Path(__file__).resolve().parent
 
-KURUM_BASLIGI = (
-    "T.C.\n"
-    "ÖRNEK VALİLİĞİ\n"
-    "Örnek İlçe / Örnek Anadolu Lisesi Müdürlüğü\n"
-    "AL - {sinif}. Sınıf / {sube} Şubesi (ALANI YOK) Sınıf Listesi "
-)
-
-# Uydurma adlar — gerçek hiçbir kişiye ait değildir.
-SUBE_OGRENCILERI: dict[str, list[tuple[int, str, str, str]]] = {
-    "I": [
-        (13, "ALTAY", "GÖKMEN", "Erkek"),
-        (19, "NAZLI SU", "IŞIKÇI", "Kız"),
-        (204, "BERKAY", "ÖZDEMİRCİ", "Erkek"),
-    ],
-    "İ": [
-        (7, "ELİF NAZ", "ÇINARLI", "Kız"),
-        (88, "TUNAHAN", "ŞAHBAZ", "Erkek"),
-        (145, "İREM", "ULUDAĞLI", "Kız"),
-    ],
-}
-
 PERSONEL = [
     ("SELMA YURTSEVEN", "Müdür", "KADROLU", "Tarih"),
     ("KEREM DALGIÇ", "Müdür Yardımcısı", "KADROLU", "Matematik"),
@@ -64,49 +42,6 @@ PERSONEL = [
 def _yaz(sh: xlwt.Worksheet, satir: int, hucreler: dict[int, object]) -> None:
     for sutun, deger in hucreler.items():
         sh.write(satir, sutun, deger)
-
-
-def sinif_listesi(hedef: Path) -> None:
-    """OOG01001R020 yerleşimini kurar (iki şube bloğu: 10/I ve 10/İ)."""
-    wb = xlwt.Workbook(encoding="utf-8")
-    sh = wb.add_sheet("Sheet1")
-    r = 0
-    for sube, ogrenciler in SUBE_OGRENCILERI.items():
-        _yaz(sh, r, {0: KURUM_BASLIGI.format(sinif=10, sube=sube)})
-        _yaz(sh, r + 1, {0: "Sınıf Öğretmeni: ", 7: "Sınıf Başkanı:"})
-        _yaz(sh, r + 2, {0: "Sınıf Müdür Yrd: KEREM DALGIÇ", 7: "Sınıf Başkan Yrd:"})
-        _yaz(
-            sh,
-            r + 3,
-            {
-                0: "S.No",
-                1: "Öğrenci No",
-                3: "Adı",
-                7: "Soyadı",
-                11: "Cinsiyeti",
-                13: "Pansiyon Durum",
-            },
-        )
-        for i, (no, ad, soyad, cinsiyet) in enumerate(ogrenciler, start=1):
-            _yaz(sh, r + 3 + i, {0: i, 1: no, 3: ad, 7: soyad, 11: cinsiyet})
-        kiz = sum(1 for o in ogrenciler if o[3] == "Kız")
-        _yaz(
-            sh,
-            r + 4 + len(ogrenciler),
-            {
-                0: "Kız Öğrenci Sayısı        :",
-                4: kiz,
-                5: "Erkek Öğrenci Sayısı    :",
-                9: len(ogrenciler) - kiz,
-                11: "Toplam Öğrenci Sayısı    :",
-                14: len(ogrenciler),
-            },
-        )
-        r += 5 + len(ogrenciler)
-    # Sayfa altı: tarih/saat seri numaraları + rapor kodu (e-Okul imzası).
-    _yaz(sh, r, {11: 46261.0, 12: 0.755370370367018, 14: 1})
-    _yaz(sh, r + 1, {1: "OOG01001R020"})
-    wb.save(str(hedef))
 
 
 def personel_listesi(hedef: Path) -> None:
@@ -122,6 +57,5 @@ def personel_listesi(hedef: Path) -> None:
 
 
 if __name__ == "__main__":
-    sinif_listesi(BURASI / "eokul_sinif_listesi.xls")
     personel_listesi(BURASI / "eokul_personel_listesi.xls")
     print("Sentetik e-Okul örnekleri üretildi:", BURASI)

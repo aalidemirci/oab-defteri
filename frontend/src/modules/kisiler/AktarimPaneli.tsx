@@ -180,7 +180,7 @@ export default function AktarimPaneli({
       message:
         `Kayıttaki kişi: “${pair.existing_name}” (listede bulunamadı). Listedeki ${pair.row_number}. satır: “${pair.row_name}”. ` +
         `Çift yalnız ad benzerliğiyle kuruldu (${benzerlikGerekcesi(pair.reason)}); okula yeni gelen bir adaş da olabilir. ` +
-        `Onaylarsanız “${pair.existing_name}” kaydının kütüphane bağları “${pair.row_name}” kaydına taşınır ve eski kayıt silinir. Bu işlem geri alınamaz.`,
+        `Onaylarsanız “${pair.existing_name}” kaydının bağları “${pair.row_name}” kaydına taşınır ve eski kayıt silinir. Bu işlem geri alınamaz.`,
       confirmLabel: "Birleştir",
       acknowledgeLabel: "Bu iki kaydın aynı kişi olduğunu doğruladım",
     });
@@ -573,7 +573,7 @@ function PersonelMutabakati({
           <p className="text-body-small text-on-surface-variant">
             {report.dry_run
               ? "Listedeki yeni ad, kayıttaki bir kişiye benziyor (ör. soyadı değişimi). Aktardıktan sonra iki kaydı burada ya da Ayrılış Havuzu'nda birleştirebilirsiniz."
-              : "Birleştirilen eski kaydın kütüphane bağları yeni kayda taşınır ve eski kayıt silinir."}
+              : "Birleştirilen eski kaydın bağları yeni kayda taşınır ve eski kayıt silinir."}
           </p>
           <ul className="space-y-2">
             {report.similar_pairs.map((p) => (

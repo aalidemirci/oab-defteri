@@ -28,8 +28,7 @@ def kos(
         capture_output=True,
         text=True,
         timeout=ZAMAN_ASIMI_SN,
-        # Öldürülen/art arda koşan süreçler katalog portunda TIME_WAIT bırakabilir.
-        env={**os.environ, "OD_KATALOG_PORT": "0", **(ortam or {})},
+        env={**os.environ, **(ortam or {})},
     )
 
 
@@ -54,7 +53,3 @@ def gunluk(veri_koku: Path) -> str:
     return yol.read_text(encoding="utf-8") if yol.is_file() else ""
 
 
-def kart_govdesi(kart_no: str) -> str:
-    """Kart no'nun rastgele gövdesi: `9` + 6 hane + sağlama → ortadaki 6 hane."""
-    assert len(kart_no) == 8 and kart_no.startswith("9"), kart_no
-    return kart_no[1:7]

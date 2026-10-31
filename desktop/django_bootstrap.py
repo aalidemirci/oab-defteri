@@ -124,7 +124,7 @@ def assert_session_guard_installed() -> None:
 
 
 def is_parcacigi_baglantisiyla[T](islem: Callable[[], T]) -> T:
-    """ORM'ye istek DIŞI bir iş parçacığından (tepsi, `od-gunluk`, katalog denetçisi) dokunur.
+    """ORM'ye istek DIŞI bir iş parçacığından (`od-gunluk`, `od-kanal`) dokunur.
 
     Django bağlantıları iş parçacığına özgüdür ve istek dışında kimse onları
     kapatmaz. Uzun ömürlü bir iş parçacığında açık kalan bağlantı Windows'ta

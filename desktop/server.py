@@ -82,8 +82,8 @@ class BackgroundServer:
         server_factory: ServerFactory | None = None,
     ) -> None:
         if host != DEFAULT_HOST:
-            # Yönetim API'si (öğrenci verisi) hiçbir koşulda ağa açılmaz; ağa açılan
-            # tek dinleyici Ağ Kataloğudur (`desktop/katalog_server.py`).
+            # Yönetim API'si (kişi verisi) hiçbir koşulda ağa açılmaz; program ağ
+            # servisi sunmaz (tasarım §4.1).
             raise ValueError(f"Yönetim sunucusu yalnız {DEFAULT_HOST} adresinde dinler.")
         self._app = app
         self._host = host

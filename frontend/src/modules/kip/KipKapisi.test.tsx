@@ -53,7 +53,7 @@ describe("KipKapisi", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Görevli Kipi" })).toBeVisible();
     expect(screen.getByText(GOREVLI_EKRANI_METNI)).toBeInTheDocument();
     expect(GOREVLI_EKRANI_METNI).toBe(
-      "Bu kipte yalnız masa işleri yapılır; yönetici işlemleri için yönetici kipine geçin.",
+      "Bu kipte kayıt işlemi yapılmaz; yönetici işlemleri için yönetici kipine geçin.",
     );
     expect(screen.queryByText("Yönetici içeriği")).toBeNull();
   });

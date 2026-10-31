@@ -8,7 +8,8 @@
 // HİÇ YOKTUR — sicil ad-soyad + okul no + sınıf/şube (personelde üye türü) ile
 // yürür. Okul no şifreli saklanır: arama numaranın tamamıyla yapılır. Sekme URL'de
 // tutulur (`?tab=personel`, `?tab=havuz`): başka ekranlar doğrudan o sekmeye bağlanır.
-// F6: "Üyeler", "Üyelik İstek Listesi" ve "Kart Basımı" sekmeleri `modules/uyelik`tedir.
+// Aile iskeletinin kütüphane üyelik sekmeleri ve "Bakanlık sistemi" hatırlatması
+// F1a-2'de söküldü.
 
 import { useCallback, useEffect, useState } from "react";
 
@@ -42,10 +43,6 @@ import type {
   Student,
   StudentWriteBody,
 } from "../okul/api";
-import IstekListesi from "../uyelik/IstekListesi";
-import KartBasimi from "../uyelik/KartBasimi";
-import UyelerSekmesi from "../uyelik/UyelerSekmesi";
-import { AYRILIS_HATIRLATMASI, useBakanlikSistemi } from "../kutuphane/BakanlikHatirlatmasi";
 import AktarimPaneli from "./AktarimPaneli";
 import AyrilisHavuzu from "./AyrilisHavuzu";
 import { DurumRozeti, ErrorBand, hataOku } from "./ortak";
@@ -59,10 +56,6 @@ const TAB_KEYS = [
   "ogrenciler",
   "personel",
   "havuz",
-  // F6 üyelik (modules/uyelik): üye listesi, şube bazlı istek listesi, kart basımı.
-  "uyeler",
-  "uyelik-istekleri",
-  "kart-basimi",
 ] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
@@ -72,22 +65,10 @@ const TABS: TabItem[] = [
   { key: "ogrenciler", label: "Öğrenciler", icon: "school" },
   { key: "personel", label: "Öğretmenler ve Diğer Personel", icon: "badge" },
   { key: "havuz", label: "Ayrılış Havuzu", icon: "pending_actions" },
-  { key: "uyeler", label: "Üyeler", icon: "badge" },
-  { key: "uyelik-istekleri", label: "Üyelik İstek Listesi", icon: "how_to_reg" },
-  { key: "kart-basimi", label: "Kart Basımı", icon: "print" },
 ];
 
 /** Ayrılış onayının ortak sonucu cümlesi (F1 eki 7: ayrılış kaydı silmez). */
-const AYRILIS_SONUCU =
-  "Kaydı silinmez; sicilde “Ayrıldı · gg.aa.yyyy” rozetiyle kalır, iade etmediği kitap varsa izlenebilir.";
-
-/**
- * "Bakanlık sistemi kullanımda" açıkken ayrılış onayına eklenen hatırlatma (A21, tasarım §9-8 —
- * ayrılışın yolu ayrılmaz: Ayrılış Havuzu da bu tek kişilik yol da hatırlatır; F10 düzeltme turu).
- */
-function bakanlikNotu(acik: boolean): string {
-  return acik ? ` ${AYRILIS_HATIRLATMASI}` : "";
-}
+const AYRILIS_SONUCU = "Kaydı silinmez; sicilde “Ayrıldı · gg.aa.yyyy” rozetiyle kalır.";
 
 export default function KisilerPage() {
   const [active, setActive] = useTabParam<TabKey>("tab", TAB_KEYS, "ogrenciler");
@@ -118,9 +99,6 @@ export default function KisilerPage() {
         {active === "ogrenciler" && <OgrencilerSekmesi />}
         {active === "personel" && <PersonelSekmesi />}
         {active === "havuz" && <AyrilisHavuzu />}
-        {active === "uyeler" && <UyelerSekmesi />}
-        {active === "uyelik-istekleri" && <IstekListesi />}
-        {active === "kart-basimi" && <KartBasimi />}
       </div>
     </div>
   );
@@ -336,7 +314,6 @@ function OgrenciFormDialog({
   const { errors, setFieldError, clearErrors, applyApiError } = useFormErrors();
   const snackbar = useSnackbar();
   const confirm = useConfirm();
-  const bakanlikSistemi = useBakanlikSistemi();
   const aktif = student === null || student.status === "ACTIVE";
 
   const submit = async () => {
@@ -373,7 +350,7 @@ function OgrenciFormDialog({
     // Başlık soru, gövde sonuç (docs/sozluk.md §3); ad yalnız bu onay penceresinde görünür.
     const ok = await confirm({
       title: "Öğrenci ayrıldı olarak işaretlensin mi?",
-      message: `“${student.full_name}” okuldan ayrılmış sayılır ve seçicilerden düşer. ${AYRILIS_SONUCU}${bakanlikNotu(bakanlikSistemi)}`,
+      message: `“${student.full_name}” okuldan ayrılmış sayılır ve seçicilerden düşer. ${AYRILIS_SONUCU}`,
       confirmLabel: "Ayrıldı olarak işaretle",
     });
     if (!ok) return;
@@ -656,7 +633,6 @@ function PersonelFormDialog({
   const { errors, setFieldError, clearErrors, applyApiError } = useFormErrors();
   const snackbar = useSnackbar();
   const confirm = useConfirm();
-  const bakanlikSistemi = useBakanlikSistemi();
   const aktif = personnel === null || personnel.is_active;
 
   const submit = async () => {
@@ -689,7 +665,7 @@ function PersonelFormDialog({
     if (!personnel) return;
     const ok = await confirm({
       title: "Kişi ayrıldı olarak işaretlensin mi?",
-      message: `“${personnel.full_name}” okuldan ayrılmış sayılır ve seçicilerden düşer. ${AYRILIS_SONUCU}${bakanlikNotu(bakanlikSistemi)}`,
+      message: `“${personnel.full_name}” okuldan ayrılmış sayılır ve seçicilerden düşer. ${AYRILIS_SONUCU}`,
       confirmLabel: "Ayrıldı olarak işaretle",
     });
     if (!ok) return;

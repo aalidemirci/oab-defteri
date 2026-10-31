@@ -278,12 +278,9 @@ def test_paket_derlemesi_eski_arayuz_ciktisini_kabul_etmez() -> None:
     )
 
 
-def test_on_yuz_ve_katalog_yuzeyleri() -> None:
-    """Yönetim arayüzü app-logo.png'yi kullanır; Ağ Kataloğu simge isteğini `data:,` ile kapatır."""
+def test_on_yuz_yuzeyi() -> None:
+    """Yönetim arayüzü app-logo.png'yi kullanır (ağ kataloğu yüzeyi F1a-2'de söküldü)."""
     assert '<link rel="icon" type="image/png" href="/app-logo.png" />' in _metin(
         "frontend/index.html"
     )
     assert _metin("frontend/src/AppShell.tsx").count('src="/app-logo.png"') == 2
-    # Katalog bilinçli olarak simgesizdir: yeni uç açılmaz, sayfalar programın değil
-    # okulun adını taşır (tasarım §14.1 F12 ekleri L-1).
-    assert '<link rel="icon" href="data:,">' in _metin("backend/katalog/sablonlar/taban.html")

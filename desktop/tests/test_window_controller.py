@@ -1,9 +1,9 @@
-"""Pencere denetçisi testleri — çarpı = gizle, program yalnız "Çık" ile kapanır (U3, §4.2-4).
+"""Pencere denetçisi testleri — çarpı = çık, onay sorulmaz (T6; tasarım §4.2, §4.5).
 
 pywebview Docker imajında yoktur: pencere ve olayları sahtedir. Sahte olay,
 pywebview 5.3.2'nin `Event.set()` sözleşmesini taklit eder (işleyicilerden biri
-`False` dönerse kapanma iptal). Gerçek pencerede davranış F0 spike'ında elle
-doğrulanır (packaging/windows/NOTLAR.md).
+`False` dönerse kapanma iptal). "Exe açılır, çarpıyla kapanır, çıkış kodu doğru"
+F1a kapısında elle doğrulanır (packaging/windows/NOTLAR.md).
 """
 
 from __future__ import annotations
@@ -15,12 +15,8 @@ from typing import Any
 
 import pytest
 
-from desktop.window import (
-    WindowController,
-    close_reason_name,
-    install_session_end_passthrough,
-    open_window,
-)
+from desktop import window as window_mod
+from desktop.window import WindowController, open_window
 
 
 class _SahteOlay:
@@ -83,10 +79,9 @@ class _SahteWebview:
 
 
 def _bagli(
-    *, tepsi: bool = True, gosterildi: bool = True
+    *, gosterildi: bool = True, platform: str = "linux"
 ) -> tuple[WindowController, _SahtePencere]:
-    denetci = WindowController(platform="linux")
-    denetci.tray_available = tepsi
+    denetci = WindowController(platform=platform)
     pencere = _SahtePencere()
     denetci.bind(pencere)
     if gosterildi:
@@ -97,32 +92,39 @@ def _bagli(
 # ------------------------------------------------------------------ çarpı
 
 
-def test_carpi_pencereyi_gizler_program_kapanmaz() -> None:
-    _, pencere = _bagli(tepsi=True)
+@pytest.mark.parametrize("platform", ["linux", "win32"])
+def test_carpi_programi_kapatir_onay_sormaz(platform: str) -> None:
+    """T6: kapanma iptal edilmez; pencere gizlenmez, küçültülmez (tepsi yok)."""
+    denetci, pencere = _bagli(platform=platform)
 
-    assert pencere.carpiya_bas() is False
-    assert pencere.cagrilar == ["hide"]
-
-
-def test_tepsi_yoksa_carpi_kucultur_kapatmaz() -> None:
-    """okulzili yedeği: gizli pencereyi geri getirecek tepsi yoksa küçültülür."""
-    _, pencere = _bagli(tepsi=False)
-
-    assert pencere.carpiya_bas() is False
-    assert pencere.cagrilar == ["minimize"]
+    assert pencere.carpiya_bas() is True
+    assert pencere.cagrilar == []  # pencereyi kullanıcı kapatıyor: ikinci destroy yok
+    assert denetci.quitting is True
 
 
-def test_gizleme_hatasi_da_pencereyi_kapatmaz() -> None:
-    _, pencere = _bagli()
-    pencere.patlayan = "hide"
+def test_carpidan_sonra_gelen_komutlar_etkisiz() -> None:
+    denetci, pencere = _bagli()
+    pencere.carpiya_bas()
 
-    assert pencere.carpiya_bas() is False
+    denetci.show()
+    denetci.request_quit()
+
+    assert pencere.cagrilar == []
+
+
+def test_tepsi_ve_arayuze_cikis_olayi_yolu_yok() -> None:
+    """T6: tepsi, gizleme ve görevli kipinde arayüze `od:cik-iste` olayı sökülmüştür."""
+    denetci = WindowController(platform="linux")
+
+    assert not hasattr(denetci, "tray_available")
+    assert not hasattr(denetci, "ask_quit_in_spa")
+    assert not hasattr(WindowController, "SPA_QUIT_EVENT")
 
 
 # ------------------------------------------------------------------ Çık
 
 
-def test_program_yalniz_cik_ile_kapanir() -> None:
+def test_cik_pencereyi_kapatir() -> None:
     denetci, pencere = _bagli()
 
     denetci.request_quit()
@@ -164,13 +166,13 @@ def test_kapatma_hatasi_yutulur() -> None:
 # ---------------------------------------------------------- Pencereyi aç
 
 
-def test_pencereyi_ac_gizli_pencereyi_gosterir() -> None:
+def test_pencereyi_ac_pencereyi_one_getirir() -> None:
+    """İkinci açılış (`goster` komutu) çalışan pencereyi öne getirir."""
     denetci, pencere = _bagli()
-    pencere.carpiya_bas()
 
     denetci.show()
 
-    assert pencere.cagrilar == ["hide", "show"]
+    assert pencere.cagrilar == ["show"]
 
 
 def test_pencereyi_ac_kucultulmus_pencereyi_eski_boyutuna_dondurur() -> None:
@@ -252,91 +254,15 @@ class _NetOlayi:
         return self
 
 
-class _KapanisArgs:
-    def __init__(self, neden: Any) -> None:
-        self.CloseReason = neden
-        self.Cancel = True  # pywebview'ın işleyicisi (bizim closing'imiz) iptal etti
-
-
-def _yerel_pencere() -> _SahtePencere:
+def test_windows_oturum_kapanisinda_iptal_yok_ve_ek_isleyici_baglanmaz() -> None:
+    """§4.5: kapanma hiç iptal edilmediği için oturum kapanışında iptali geri alan
+    .NET işleyicisi gereksizleşti; davranış testle sabitlendi, işleyici silindi."""
+    denetci = WindowController(platform="win32")
     pencere = _SahtePencere()
     pencere.native = SimpleNamespace(FormClosing=_NetOlayi())
-    return pencere
-
-
-@pytest.mark.parametrize("neden", ["WindowsShutDown", "TaskManagerClosing", 1, 4])
-def test_windows_oturum_kapanisinda_iptal_geri_alinir(neden: Any) -> None:
-    """İptal edilseydi Windows kapanışı engellenir, işaret yazılmaz, sabah alarm çıkardı."""
-    denetci = WindowController(platform="win32")
-    pencere = _yerel_pencere()
-
-    assert install_session_end_passthrough(pencere, denetci, platform="win32") is True
-    (isleyici,) = pencere.native.FormClosing.isleyiciler
-    args = _KapanisArgs(neden)
-    isleyici(None, args)
-
-    assert args.Cancel is False
-    assert denetci.quitting is True
-
-
-def test_oturum_kapanisinda_pencere_ikinci_kez_kapatilmaya_calisilmaz() -> None:
-    denetci = WindowController(platform="win32")
-    pencere = _yerel_pencere()
     denetci.bind(pencere)
     pencere.events.shown.set()
 
-    pencere.native.FormClosing.isleyiciler[0](None, _KapanisArgs("WindowsShutDown"))
-    denetci.request_quit()
-
-    assert pencere.cagrilar == []  # pencereyi Windows kapatıyor
-
-
-def test_windows_kullanici_kapatmasinda_iptal_korunur() -> None:
-    denetci = WindowController(platform="win32")
-    pencere = _yerel_pencere()
-    install_session_end_passthrough(pencere, denetci, platform="win32")
-
-    args = _KapanisArgs("UserClosing")
-    pencere.native.FormClosing.isleyiciler[0](None, args)
-
-    assert args.Cancel is True
-    assert denetci.quitting is False
-
-
-def test_kapanis_nedeni_adi_cozulur() -> None:
-    assert close_reason_name(_KapanisArgs("CloseReason.WindowsShutDown")) == "WindowsShutDown"
-    assert close_reason_name(_KapanisArgs(4)) == "TaskManagerClosing"
-    assert close_reason_name(SimpleNamespace()) == ""
-
-
-def test_oturum_kapanisi_isleyicisi_windowsta_gosterilince_bir_kez_baglanir() -> None:
-    denetci = WindowController(platform="win32")
-    pencere = _yerel_pencere()
-    denetci.bind(pencere)
-
-    pencere.events.shown.set()
-    pencere.events.shown.set()  # Qt her gösterişte `shown` verir
-
-    assert len(pencere.native.FormClosing.isleyiciler) == 1
-
-
-def test_oturum_kapanisi_isleyicisi_windows_disinda_ya_da_yerel_pencere_yokken_baglanmaz() -> None:
-    linux = WindowController(platform="linux")
-
-    assert install_session_end_passthrough(_yerel_pencere(), linux, platform="linux") is False
-    assert (
-        install_session_end_passthrough(_SahtePencere(), WindowController(), platform="win32")
-        is False
-    )
-
-
-def test_oturum_kapanisi_isleyicisi_baglanamazsa_acilis_surer() -> None:
-    class _Bozuk:
-        @property
-        def FormClosing(self) -> Any:  # .NET adı
-            raise TypeError("pythonnet bağlanamadı")
-
-    pencere = _SahtePencere()
-    pencere.native = _Bozuk()
-
-    assert install_session_end_passthrough(pencere, WindowController(), platform="win32") is False
+    assert pencere.carpiya_bas() is True  # WindowsShutDown da UserClosing da iptal edilmez
+    assert pencere.native.FormClosing.isleyiciler == []
+    assert not hasattr(window_mod, "install_session_end_passthrough")

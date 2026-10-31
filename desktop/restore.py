@@ -42,8 +42,8 @@ from desktop.paths import AppPaths, resolve_backend_dir
 
 logger = logging.getLogger("oab_defteri.restore")
 
-#: Program tepside yaşar (U3): "kapatın" değil, tepsiden Çık (tasarım §4.2-1, GA-11).
-RUNNING_MESSAGE = "Program tepside çalışıyor. Tepsideki simgeden Çık'ı seçip yeniden deneyin."
+#: Tasarım §4.2 adım 2: tepsi anlatılmaz (T6); program çarpıyla ya da Çık ile kapanır.
+RUNNING_MESSAGE = "OAB Defteri açık. Programı kapatıp yeniden deneyin."
 
 # Kendi açtığımız konsol penceresi süreçle birlikte kapanır; sonucu okutmak
 # için çıkışta Enter beklenir. Yalnız AllocConsole başarılıysa True olur.

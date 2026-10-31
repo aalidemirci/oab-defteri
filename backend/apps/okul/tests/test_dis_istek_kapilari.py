@@ -52,24 +52,14 @@ IZINLI: dict[str, str] = {
     "backend/apps/okul/services/updates.py": (
         "Kapı 1: güncelleme denetimi — yalnız 'Şimdi denetle' düğmesiyle (GitHub)"
     ),
-    "backend/apps/kutuphane/kunye/istemci.py": (
-        "Kapı 2: ISBN ile künye sorgusu — ayarla açılır, varsayılan kapalı"
-    ),
     "desktop/server.py": "Yönetim sunucusu ve 127.0.0.1 sağlık denetimi (dışarı çıkmaz)",
-    "desktop/katalog_server.py": "Ağ Kataloğu dinleyicisi ve öz sınaması (gelen bağlantı)",
     "desktop/instance_channel.py": "Tek kopya kanalı (yerel soket / adlı olay)",
-    "desktop/ag.py": "IP adayları: UDP 'connect' rota sorgusudur, paket GÖNDERMEZ",
-    "desktop/main.py": "Katalog adresini kullanıcının komutuyla harici tarayıcıda açma",
 }
 
 #: `updates` modülünü import edebilen modüller ve kullanabilecekleri adlar.
 GUNCELLEME_KULLANICILARI: dict[str, frozenset[str] | None] = {
     # None: güncelleme uçları — modülün tamamı (düğmenin arkası).
     "backend/apps/okul/views.py": None,
-    # Bilgi notu hedefleri kaynaktaki adresten türer (F5 ekleri 15) — istek atmaz.
-    "backend/apps/kutuphane/ag_belgeleri.py": frozenset({"LATEST_RELEASE_URL", "get_app_version"}),
-    # Künye isteğinin User-Agent'ı program sürümünü taşır — istek atmaz.
-    "backend/apps/kutuphane/kunye/istemci.py": frozenset({"get_app_version"}),
 }
 
 

@@ -44,10 +44,7 @@ GLOBAL_APP_MUTEX_NAME: Final = "Global\\OABDefteri"
 APP_MUTEX_NAMES: Final = (APP_MUTEX_NAME, GLOBAL_APP_MUTEX_NAME)
 
 _MESSAGE = "OAB Defteri zaten çalışıyor. Aynı anda yalnızca bir kopya açılabilir."
-_HINT = (
-    "Program tepside çalışıyor olabilir: saatin yanındaki simgeden 'Pencereyi aç'ı "
-    "seçin. Simge görünmüyorsa oturumu kapatıp açın."
-)
+_HINT = "OAB Defteri açık. Programı kapatıp yeniden deneyin."
 
 MutexCreator = Callable[[str], int | None]
 

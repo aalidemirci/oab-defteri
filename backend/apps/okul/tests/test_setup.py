@@ -420,7 +420,7 @@ class TestYolHaritasi:
         assert yanit.status_code == 200, yanit.json()
         assert yanit.json()["hidden"] is True
 
-        yanit = self._isaretle(client, "btr_gorusmesi", done=False)
+        yanit = self._isaretle(client, "parola_paylasimi", done=False)
         assert yanit.json()["hidden"] is False
 
     def _hepsi_tamam(self, client: APIClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -479,7 +479,7 @@ class TestYolHaritasi:
         client.post("/api/v1/setup/roadmap/", {"hidden": True}, format="json")
         yeni_anahtar = app_password.renew_recovery_key(password=TEST_PAROLA)
 
-        yanit = self._isaretle(client, "btr_gorusmesi")
+        yanit = self._isaretle(client, "parola_paylasimi")
 
         assert yanit.json()["hidden"] is False  # arayüz: kart görünür
         assert SchoolConfig.load().yol_haritasi["gizli"] is True  # saklanan: gizli
@@ -489,7 +489,7 @@ class TestYolHaritasi:
     def test_bozuk_ya_da_bilinmeyen_kayit_disari_sizmaz(self) -> None:
         config, _ = SchoolConfig.objects.get_or_create(pk=SchoolConfig.SINGLETON_PK)
         config.yol_haritasi = {
-            "isaretler": {"kurtarma_zarfi": "2026-09-22", "bilinmeyen": "x", "btr_gorusmesi": 5},
+            "isaretler": {"kurtarma_zarfi": "2026-09-22", "bilinmeyen": "x", "parola_paylasimi": 5},
             "gizli": "evet",
         }
         config.save()

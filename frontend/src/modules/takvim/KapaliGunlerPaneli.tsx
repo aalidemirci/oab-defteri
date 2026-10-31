@@ -77,7 +77,7 @@ const TUR_ACIKLAMASI: Record<HolidayKind, string> = {
   RELIGIOUS: "Diyanet takvimindeki kesin tarihi girin.",
   OFFICIAL:
     "Resmî tatiller “Resmî ve dini tatilleri ekle” düğmesiyle gelir; burayı yalnız listede olmayan bir tatil için kullanın.",
-  OTHER: "Personelin de izinli olduğu, kütüphanenin kapalı kaldığı günler.",
+  OTHER: "Personelin de izinli olduğu, okulun kapalı kaldığı günler.",
 };
 
 const TAHMINI_ACIKLAMA =

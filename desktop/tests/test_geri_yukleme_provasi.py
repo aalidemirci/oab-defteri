@@ -5,23 +5,19 @@ kullanıcının indirip USB belleğe aldığı şifreli yedektir. Prova GERÇEK 
 koşar (`desktop.main`, gerçek göç, gerçek şifreleme, gerçek yedek kapsayıcısı):
 
 1. **Eski bilgisayar** (`hazirla`): yönetici parolası + doğrulanmış kurtarma anahtarı,
-   uydurma öğrenci/personel, katalog, üyelik ve açık ödünç; dış yedek USB'ye; yedekten
-   SONRA bir kart daha verilir (basılıp dağıtılmış sayılır).
+   uydurma kişi kayıtları; dış yedek USB'ye.
 2. **Temiz bilgisayar**: boş veri dizininde `--geri-yukle` (parola ya da kurtarma
    anahtarıyla) → güvenlik dosyası yedeğin başlığından yazılır → program açılır
    (`--autotest`: damga, bütünlük, günlük yedek, göç, sunucu) → kilit AYNI parolayla /
-   AYNI anahtarla açılır → kişi adları, okul numaraları, katalog, üyelik ve açık ödünç
-   birebir aynıdır.
-3. **Kart defteri geri sarılmaz** (F6): taşıma kontrol listesi veri klasöründeki
-   `verilmis-kartlar.txt`'yi de taşır; yedekten sonra verilmiş kartın numarası yeni
-   bilgisayarda da bir daha verilmez. Aynı bilgisayarda eski yedeğe dönmek defteri
-   değiştirmez. Defter taşınmazsa güvence yalnız olasılıktır (TB33) — bu sınır da
-   burada sabitlenir, kontrol listesinin gerekçesidir.
-4. **Daha yeni sürümün yedeği eski programda açılmaz**: geri yükleme sürüm damgasını
+   AYNI anahtarla açılır → kişi kayıtları birebir aynıdır.
+3. **Daha yeni sürümün yedeği eski programda açılmaz**: geri yükleme sürüm damgasını
    siler; veritabanının göç kaydı eski programı 4 koduyla durdurur.
-5. **Sihirbazı başka parolayla doldurulmuş yeni bilgisayar** (F11 düzeltme turu):
+4. **Sihirbazı başka parolayla doldurulmuş yeni bilgisayar** (F11 düzeltme turu):
    kurucunun sonunda açılan programda parola kurulmuşsa geri yükleme yabancı güvenlik
    dosyasını ve boş veritabanını kenara alır; veri yine birebir aynıdır.
+
+Aile iskeletinin verilmiş kart defteri sınamaları kütüphane uygulamasıyla söküldü
+(F1a-2).
 """
 
 from __future__ import annotations
@@ -34,11 +30,9 @@ from typing import Any
 import pytest
 
 from desktop.errors import EXIT_OK, EXIT_SCHEMA_TOO_NEW
-from desktop.tests.alt_surec import betik, gunluk, kart_govdesi, program
+from desktop.tests.alt_surec import betik, gunluk, program
 
 pytestmark = pytest.mark.slow
-
-DEFTER = Path("data") / "verilmis-kartlar.txt"
 
 
 @pytest.fixture(scope="module")
@@ -50,7 +44,6 @@ def eski_bilgisayar(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[s
     sonuc["kok"] = kok
     sonuc["usb"] = usb
     assert Path(sonuc["yedek"]).is_file()
-    assert (kok / DEFTER).is_file(), "verilmiş kart defteri yazılmadı"
     yield sonuc
 
 
@@ -64,17 +57,10 @@ def _acilis(hedef: Path) -> None:
     assert sonuc.returncode == EXIT_OK, (sonuc.stderr[-2000:], gunluk(hedef)[-3000:])
 
 
-def _defteri_tasi(eski: Path, yeni: Path) -> None:
-    """Taşıma kontrol listesinin maddesi: `data/verilmis-kartlar.txt` de taşınır."""
-    (yeni / "data").mkdir(parents=True, exist_ok=True)
-    shutil.copy2(eski / DEFTER, yeni / DEFTER)
-
-
 def test_temiz_makinede_parolayla_geri_yukleme_ayni_veriyi_verir(
     eski_bilgisayar: dict[str, Any], tmp_path: Path
 ) -> None:
     yeni = tmp_path / "yeni-bilgisayar"
-    _defteri_tasi(eski_bilgisayar["kok"], yeni)
 
     _geri_yukle(yeni, eski_bilgisayar["yedek"], "--parola", eski_bilgisayar["parola"])
 
@@ -91,7 +77,7 @@ def test_temiz_makinede_parolayla_geri_yukleme_ayni_veriyi_verir(
 
     dogrulama = betik("dogrula", "--data-dir", str(yeni), "--parola", eski_bilgisayar["parola"])
     assert dogrulama["ozet"] == eski_bilgisayar["beklenen"]
-    assert dogrulama["ozet"]["acik_odunc"], "açık ödünç taşınmadı"
+    assert dogrulama["ozet"]["ogrenciler"], "kişi kayıtları taşınmadı"
     assert dogrulama["durum"]["recovery_key_confirmed"] is True
     assert dogrulama["durum"]["locked"] is False
 
@@ -106,7 +92,6 @@ def test_sihirbazda_baska_parola_kurulmus_yeni_bilgisayara_geri_yukleme(
     adıyla, boş veritabanı "db-onceki" adıyla kenara alınır, güvenlik dosyası ve yedek
     anahtarı yedeğin başlığından yazılır (F11 düzeltme turu; kurulum §7 madde 3)."""
     yeni = tmp_path / "sihirbazi-doldurulmus"
-    _defteri_tasi(eski_bilgisayar["kok"], yeni)
     betik("sihirbaz", "--data-dir", str(yeni), "--parola", "Sihirbaz-Baska-Parola-3")
     yabanci = (yeni / "data" / "guvenlik.json").read_bytes()
     yabanci_anahtar = (yeni / "data" / "yedekleme.json").read_bytes()
@@ -137,85 +122,6 @@ def test_temiz_makinede_kurtarma_anahtariyla_acilir_ve_parola_yenilenir(
     # Kurtarma anahtarıyla açılış yeni parola belirler; sonraki açılış onunla yapılır.
     yeni_parola = betik("dogrula", "--data-dir", str(yeni), "--parola", "Prova-Yeni-Parola-2")
     assert yeni_parola["ozet"] == eski_bilgisayar["beklenen"]
-
-
-def test_tasinan_kart_defteri_yedekten_sonraki_karti_korur(
-    eski_bilgisayar: dict[str, Any], tmp_path: Path
-) -> None:
-    """Yedekten SONRA verilen kartın numarası (yedekte yok) yeni bilgisayarda verilmez."""
-    yeni = tmp_path / "yeni-bilgisayar"
-    _defteri_tasi(eski_bilgisayar["kok"], yeni)
-    _geri_yukle(yeni, eski_bilgisayar["yedek"], "--parola", eski_bilgisayar["parola"])
-    _acilis(yeni)
-
-    sonuc = betik(
-        "kart-dene",
-        "--data-dir",
-        str(yeni),
-        "--parola",
-        eski_bilgisayar["parola"],
-        "--govde",
-        kart_govdesi(eski_bilgisayar["kart_sonra"]),  # yalnız taşınan defterde
-        kart_govdesi(eski_bilgisayar["kart_once"]),  # geri yüklenen IssuedCard'da
-        "000001",
-    )
-
-    assert sonuc["kart"] not in {eski_bilgisayar["kart_sonra"], eski_bilgisayar["kart_once"]}
-    assert kart_govdesi(sonuc["kart"]) == "000001"
-
-
-def test_ayni_bilgisayarda_eski_yedege_donus_kart_defterini_geri_sarmaz(
-    eski_bilgisayar: dict[str, Any], tmp_path: Path
-) -> None:
-    kok = tmp_path / "ayni-bilgisayar"
-    shutil.copytree(eski_bilgisayar["kok"], kok)
-    defter_once = (kok / DEFTER).read_bytes()
-
-    _geri_yukle(kok, eski_bilgisayar["yedek"], "--parola", eski_bilgisayar["parola"])
-
-    assert (kok / DEFTER).read_bytes() == defter_once, "geri yükleme defteri değiştirdi"
-    _acilis(kok)
-    # Veritabanı yedeğin anına döndü: yedekten sonraki üyelik geri sarıldı…
-    dogrulama = betik("dogrula", "--data-dir", str(kok), "--parola", eski_bilgisayar["parola"])
-    assert dogrulama["ozet"] == eski_bilgisayar["beklenen"]
-    # …ama o üyeliğin kart numarası bir daha verilmez.
-    sonuc = betik(
-        "kart-dene",
-        "--data-dir",
-        str(kok),
-        "--parola",
-        eski_bilgisayar["parola"],
-        "--govde",
-        kart_govdesi(eski_bilgisayar["kart_sonra"]),
-        "000002",
-    )
-    assert kart_govdesi(sonuc["kart"]) == "000002"
-
-
-def test_defter_tasinmazsa_yedekten_sonraki_kart_korunmaz(
-    eski_bilgisayar: dict[str, Any], tmp_path: Path
-) -> None:
-    """Bilinen sınır (TB33): defter yoksa güvence yalnız olasılıktır (10⁶'lık uzay).
-
-    Kontrol listesinin "verilmis-kartlar.txt dosyasını da taşıyın" maddesinin
-    gerekçesi budur. Bu davranış değişirse (defter yedeğe girerse) test ve TB33
-    birlikte güncellenir.
-    """
-    yeni = tmp_path / "defteri-tasinmamis"
-    _geri_yukle(yeni, eski_bilgisayar["yedek"], "--parola", eski_bilgisayar["parola"])
-    _acilis(yeni)
-
-    sonuc = betik(
-        "kart-dene",
-        "--data-dir",
-        str(yeni),
-        "--parola",
-        eski_bilgisayar["parola"],
-        "--govde",
-        kart_govdesi(eski_bilgisayar["kart_sonra"]),
-    )
-
-    assert sonuc["kart"] == eski_bilgisayar["kart_sonra"]
 
 
 def test_yeni_surumun_yedegi_eski_programda_acilmaz(

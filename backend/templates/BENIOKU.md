@@ -6,6 +6,6 @@ KS'den alındı (KS bunları OYS'den AYNEN taşımıştı):
   `base.html` içine Django `{% include %}` ile gömülür; `text-transform`
   YASAK, DejaVu Sans, `--pr-*` token'ları.
 - `documents/base.html` — ortak resmî evrak tabanı (antet `shared.letterhead`
-  üzerinden). Kütüphane evrakı (tasarım §10) bu tabanı `extends` eder.
+  üzerinden). Programın evrakı (tasarım §9) bu tabanı `extends` eder.
 
 PyInstaller spec bu ağacı pakete kaynak olarak kopyalar.

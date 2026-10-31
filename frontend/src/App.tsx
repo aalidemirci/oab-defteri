@@ -1,46 +1,24 @@
-// OAB Defteri — kök route tanımı. Route ağacı fazlarla büyür (tasarım
-// §14.1): F0 iskeleti kurulum, kişiler, ayarlar, kılavuz ve hakkında
-// ekranlarını taşır; F2 katalog ekranlarını (eser, nüsha, edinim, bağış)
-// ekledi; F3 toplu aktarım ve hızlı kayıt ekranlarını, F4 etiket ekranını,
-// F5 Ağ Doktoru'nu ekledi; F6-F8 dolaşım, teslim, ayıklama, F9 sayım ve F10 Raporlar
-// ekranlarını. Kilit ekranı
-// (GuvenlikKapisi) kurulum kapısından ÖNCE gelir — parola kuruluysa hiçbir
-// veri ekranı (sihirbaz dahil) açılmadan kilit çözülmelidir. Kip kapısı
-// (KipKapisi) en içtedir: görevli kipinde rotaların yerine görevli ekranı
-// durur (tasarım §4.4).
+// OAB Defteri — kök route tanımı. Route ağacı fazlarla büyür (tasarım §14):
+// aile iskeletinden gelen kabuk kurulum, kişiler, ayarlar, kılavuz ve hakkında
+// ekranlarını taşır; OAB ekranları (birlik dönemi, organlar, pano…) F1c'den
+// itibaren eklenir. Aile iskeletinin kütüphane ekranları F1a-2'de söküldü.
+// Kilit ekranı (GuvenlikKapisi) kurulum kapısından ÖNCE gelir — parola kuruluysa
+// hiçbir veri ekranı (sihirbaz dahil) açılmadan kilit çözülmelidir. Kip kapısı
+// (KipKapisi) en içtedir: görevli kipinde rotaların yerine görevli ekranı durur.
 
 import { Route, Routes } from "react-router-dom";
 
 import AppShell from "./AppShell";
 import KurulumKapisi from "./KurulumKapisi";
-import AgDoktoruPage from "./modules/agkatalogu/AgDoktoruPage";
 import AyarlarPage from "./modules/ayarlar/AyarlarPage";
-import DolasimMasasiPage from "./modules/dolasim/DolasimMasasiPage";
 import GuvenlikKapisi from "./modules/guvenlik/GuvenlikKapisi";
 import YenidenBaslatEkrani from "./modules/guvenlik/YenidenBaslatEkrani";
 import HakkindaPage from "./modules/hakkinda/HakkindaPage";
-import KayipHasarPage from "./modules/kayip/KayipHasarPage";
 import KilavuzPage from "./modules/kilavuz/KilavuzPage";
 import KipKapisi from "./modules/kip/KipKapisi";
 import KisilerPage from "./modules/kisiler/KisilerPage";
 import KurulumPage from "./modules/kurulum/KurulumPage";
-import EdinimlerPage from "./modules/kutuphane/EdinimlerPage";
-import EserDetayPage from "./modules/kutuphane/EserDetayPage";
-import EtiketlerPage from "./modules/kutuphane/EtiketlerPage";
-import HizliKayitPage from "./modules/kutuphane/HizliKayitPage";
-import IceAktarmaPage from "./modules/kutuphane/IceAktarmaPage";
-import KatalogPage from "./modules/kutuphane/KatalogPage";
 import PanelPage from "./modules/panel/PanelPage";
-import RaporlarPage from "./modules/raporlar/RaporlarPage";
-import AyiklamaPage from "./modules/ayiklama/AyiklamaPage";
-import NadirEserlerPage from "./modules/ayiklama/NadirEserlerPage";
-import YilSonuRaporuPage from "./modules/ayiklama/YilSonuRaporuPage";
-import SayimPage from "./modules/sayim/SayimPage";
-import TeslimlerPage from "./modules/teslim/TeslimlerPage";
-import GecikmisOdunclerPage from "./modules/uyelik/GecikmisOdunclerPage";
-import IlisikListesiPage from "./modules/yil/IlisikListesiPage";
-import YilBasiPage from "./modules/yil/YilBasiPage";
-import YilSonuPage from "./modules/yil/YilSonuPage";
 
 export default function App() {
   return (
@@ -53,55 +31,12 @@ export default function App() {
           <KipKapisi>
             <Routes>
               <Route path="/" element={<PanelPage />} />
-              {/* Dolaşım Masası (F6, §7.3): ödünç, iade, kartsız ödünç ve istisna.
-                  Görevli kipinde aynı masa görevli ekranındadır (KipKapisi). */}
-              <Route path="/dolasim" element={<DolasimMasasiPage />} />
-              {/* F7: toplu teslim ve geri alma (U11), kayıp/hasar dosyaları (Md. 19, D3).
-                  Menüde yok; Dolaşım Masası'nın sağ üstündeki bağlantılarla açılır.
-                  Yalnız yönetici kipinde (görevli kipinde geri alma okutması görevli
-                  ekranındadır). */}
-              <Route path="/dolasim/teslimler" element={<TeslimlerPage />} />
-              <Route path="/dolasim/kayip-hasar" element={<KayipHasarPage />} />
               {/* Kurulum sihirbazı — kapının izin verdiği tek rota (bkz. KurulumKapisi). */}
               <Route path="/kurulum" element={<KurulumPage />} />
-              {/* Öğrenci + öğretmen sicili ve e-Okul içe aktarma. */}
+              {/* Öğretmen ve diğer personel sicili, e-Okul içe aktarma. */}
               <Route path="/kisiler" element={<KisilerPage />} />
-              {/* Gecikmiş ödünçler, iade hatırlatma pusulası ve toplu liste (F6, E4);
-                  menüde yok, Genel Bakış kartından açılır. Yalnız yönetici kipinde. */}
-              <Route path="/gecikmis-oduncler" element={<GecikmisOdunclerPage />} />
-              {/* F7: İlişik Listesi, Yıl Sonu ve Yıl Başı akışları (§8.3, E5); menüde yok,
-                  Genel Bakış kartlarından açılır. Yalnız yönetici kipinde. */}
-              <Route path="/ilisik-listesi" element={<IlisikListesiPage />} />
-              <Route path="/yil-sonu" element={<YilSonuPage />} />
-              <Route path="/yil-basi" element={<YilBasiPage />} />
-              {/* F8: yıl sonu kütüphane raporu (Md. 12/1, E9); menüde yok, Genel Bakış'ın
-                  yıl sonu kartından ve Yıl Sonu'nun son adımından açılır. */}
-              <Route path="/yil-sonu-raporu" element={<YilSonuRaporuPage />} />
-              {/* Katalog: eser ve nüsha listeleri, eser ayrıntısı, edinimler ve bağışlar. */}
-              <Route path="/katalog" element={<KatalogPage />} />
-              <Route path="/katalog/eser/:id" element={<EserDetayPage />} />
-              <Route path="/katalog/edinimler" element={<EdinimlerPage />} />
-              {/* Toplu katalog aktarımı, yapay zekâ köprüsü ve çevrimdışı künye (F3). */}
-              <Route path="/katalog/ice-aktarma" element={<IceAktarmaPage />} />
-              {/* Kitap elde, ISBN okutarak tek tek giriş (yöntem B, F3). */}
-              <Route path="/katalog/hizli-kayit" element={<HizliKayitPage />} />
-              {/* Sırt ve barkod etiketi, basım kaydı, doğrulama, boş barkod aralığı (F4). */}
-              <Route path="/katalog/etiketler" element={<EtiketlerPage />} />
-              {/* F8: ayıklama (Md. 12/1; TMY yolu, E7) ve nadir eserler (Md. 12/2, E8);
-                  Katalog'un sağ üstünden açılır. Yalnız yönetici kipinde. */}
-              <Route path="/katalog/ayiklama" element={<AyiklamaPage />} />
-              <Route path="/katalog/nadir-eserler" element={<NadirEserlerPage />} />
-              {/* F9: sayım (TMY 32; iki ayrı seçenek — TMY 32/3 durdurması ve sayım için
-                  hizmet arası; E10 sayım tutanağı). Katalog'un sağ üstünden ve Genel
-                  Bakış'ın "Sayım" kartından açılır. Yalnız yönetici kipinde. */}
-              <Route path="/katalog/sayim" element={<SayimPage />} />
-              {/* Ders yılı, şubeler, okul künyesi, güvenlik, güncelleme, Ağ Kataloğu. */}
-              {/* F10: istatistik, çok okunanlar ve afiş, dökümler ve dışa aktarım, kişi dökümü,
-                  okuma ödülü iç çıktısı. Ana gezinmede; yalnız yönetici kipinde. */}
-              <Route path="/raporlar" element={<RaporlarPage />} />
+              {/* Ders yılı, şubeler, okul bilgileri, güvenlik, güncelleme. */}
               <Route path="/ayarlar" element={<AyarlarPage />} />
-              {/* Ağ Doktoru (F5): Ağ Kataloğu denetimi ve belgeleri; yalnız yönetici kipinde. */}
-              <Route path="/ag-doktoru" element={<AgDoktoruPage />} />
               {/* Kullanım kılavuzu (statik içerik, çevrimdışı). */}
               <Route path="/kilavuz" element={<KilavuzPage />} />
               <Route path="/hakkinda" element={<HakkindaPage />} />

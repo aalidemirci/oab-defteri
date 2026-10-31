@@ -1,6 +1,7 @@
-// Genel Bakış: gezinme kartları, "Katalog Excel Şablonu" indirme kartı ve
+// Genel Bakış: gezinme kartları, son oturum kartı, ayrılış havuzu kartı ve
 // "Başlangıç Yol Haritası" (kurulumdan sonra; işaretler backend'de saklanır,
-// bütün maddeler tamamlanınca kart gizlenebilir).
+// bütün maddeler tamamlanınca kart gizlenebilir). Aile iskeletinin kütüphane
+// kartları F1a-2'de söküldü.
 
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -18,25 +19,20 @@ const oapi = vi.hoisted(() => ({
   setRoadmapHidden: vi.fn(),
   getLeavePoolSummary: vi.fn(),
 }));
-const kapi = vi.hoisted(() => ({ catalogTemplate: vi.fn() }));
-const indirme = vi.hoisted(() => ({ saveBlob: vi.fn() }));
+const papi = vi.hoisted(() => ({ sonOturum: vi.fn(), kontrolEttim: vi.fn() }));
 
 vi.mock("../okul/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../okul/api")>()),
   okulApi: oapi,
 }));
-vi.mock("../kutuphane/api", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../kutuphane/api")>()),
-  kutuphaneApi: kapi,
-}));
-vi.mock("../../lib/download", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../lib/download")>()),
-  saveBlob: indirme.saveBlob,
+vi.mock("./api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./api")>()),
+  panelApi: papi,
 }));
 
 import PanelPage from "./PanelPage";
 
-/** Bütün maddeler tamam: aktarımlar yapılmış, kapalı gün girilmiş, dört işaret konmuş. */
+/** Bütün maddeler tamam: aktarımlar yapılmış, kapalı gün girilmiş, iki işaret konmuş. */
 const HEPSI_TAMAM: SetupStatus = {
   ...KURULU_DURUM,
   student_count: 480,
@@ -44,10 +40,8 @@ const HEPSI_TAMAM: SetupStatus = {
   school_break_count: 2,
   roadmap: {
     marks: {
-      katalog_sablonu: "2026-09-22",
       kurtarma_zarfi: "2026-09-22",
       parola_paylasimi: "2026-09-22",
-      btr_gorusmesi: "2026-09-22",
     },
     hidden: false,
   },
@@ -70,6 +64,10 @@ function yolHaritasi(): HTMLElement {
 beforeEach(() => {
   oapi.getSetupStatus.mockResolvedValue(KURULU_DURUM);
   oapi.getLeavePoolSummary.mockResolvedValue({ student_count: 0, personnel_count: 0 });
+  papi.sonOturum.mockResolvedValue({
+    unexpected_shutdown: false,
+    process_started_at: "2026-10-31T09:00:00+03:00",
+  });
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -81,24 +79,36 @@ describe("Genel Bakış", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "Genel Bakış" })).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /Öğrenci, öğretmen ve diğer personel sicili/ }),
+      screen.getByRole("link", { name: /Öğretmen ve diğer personel sicili/ }),
     ).toHaveAttribute("href", "/kisiler");
     expect(
       screen.getByRole("link", { name: /Ders yılı, şubeler, okul bilgileri/ }),
     ).toHaveAttribute("href", "/ayarlar");
-    // F10: Raporlar gezinme kartı (başlık sayfanın h1'i).
-    expect(screen.getByRole("link", { name: /^Raporlar Kişisiz istatistik/ })).toHaveAttribute(
-      "href",
-      "/raporlar",
-    );
   });
 
-  it("Katalog Excel Şablonu kartı indirme düğmesiyle görünür (bir sayfaya gitmez)", async () => {
+  it("kütüphane kartları ve bağlantıları sökülmüştür", async () => {
     bas();
     await screen.findByRole("heading", { name: "Başlangıç Yol Haritası" });
 
-    expect(screen.getByRole("heading", { name: "Katalog Excel Şablonu" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Katalog Excel Şablonu/ })).not.toBeInTheDocument();
+    for (const baslik of ["Katalog Excel Şablonu", "Raporlar", "Sayım", "Gecikmiş Ödünçler"]) {
+      expect(screen.queryByRole("heading", { name: baslik })).toBeNull();
+    }
+    const hedefler = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
+    for (const yol of ["/raporlar", "/ilisik-listesi", "/katalog"]) {
+      expect(hedefler).not.toContain(yol);
+    }
+  });
+
+  it("önceki oturum düzgün kapanmadıysa son oturum kartı görünür", async () => {
+    papi.sonOturum.mockResolvedValue({
+      unexpected_shutdown: true,
+      process_started_at: "2026-10-31T09:00:00+03:00",
+    });
+    bas();
+
+    expect(
+      await screen.findByRole("heading", { name: "Son Oturumu Kontrol Edin" }),
+    ).toBeInTheDocument();
   });
 
   it("ayrılış havuzu boş değilse “N kişi ayrılış kararı bekliyor” kartı havuza bağlanır", async () => {
@@ -131,16 +141,16 @@ describe("Genel Bakış", () => {
 });
 
 describe("Başlangıç Yol Haritası", () => {
-  it("yeni kurulumda yedi madde yapılacak olarak görünür, ilerleme 0/7", async () => {
+  it("yeni kurulumda beş madde yapılacak olarak görünür, ilerleme 0/5", async () => {
     bas();
 
     expect(
       await screen.findByRole("heading", { name: "Başlangıç Yol Haritası" }),
     ).toBeInTheDocument();
     const kart = yolHaritasi();
-    expect(within(kart).getAllByRole("listitem")).toHaveLength(7);
+    expect(within(kart).getAllByRole("listitem")).toHaveLength(5);
     expect(within(kart).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
-    expect(within(kart).getByText(/7 maddeden 0 tanesi tamamlandı/)).toBeInTheDocument();
+    expect(within(kart).getByText(/5 maddeden 0 tanesi tamamlandı/)).toBeInTheDocument();
     expect(within(kart).queryByRole("button", { name: "Kartı gizle" })).toBeNull();
   });
 
@@ -185,52 +195,13 @@ describe("Başlangıç Yol Haritası", () => {
     );
     bas();
 
-    const kutu = await screen.findByRole("checkbox", { name: /BTR\) görüşün — yapıldı/ });
+    const kutu = await screen.findByRole("checkbox", {
+      name: /Yönetici parolasını en az iki görevlendirilmiş kişiyle paylaşın — yapıldı/,
+    });
     await user.click(kutu);
 
     expect(await screen.findByText("Bu işlem görevli kipinde yapılamaz.")).toBeInTheDocument();
     expect(kutu).not.toBeChecked();
-  });
-
-  it("şablon karttan indirilince şablon maddesi kendiliğinden işaretlenir", async () => {
-    const user = userEvent.setup();
-    kapi.catalogTemplate.mockResolvedValue(new Blob(["xlsx"]));
-    oapi.markRoadmapItem.mockResolvedValue({
-      marks: { katalog_sablonu: "2026-09-22" },
-      hidden: false,
-    });
-    bas();
-    await screen.findByRole("heading", { name: "Başlangıç Yol Haritası" });
-
-    // Karttaki düğme (yol haritasının içindeki değil).
-    const kartDugmesi = screen
-      .getAllByRole("button", { name: /Şablonu indir/ })
-      .find((d) => !yolHaritasi().contains(d));
-    expect(kartDugmesi).toBeDefined();
-    await user.click(kartDugmesi as HTMLElement);
-
-    await waitFor(() => expect(oapi.markRoadmapItem).toHaveBeenCalledWith("katalog_sablonu", true));
-    expect(indirme.saveBlob).toHaveBeenCalledTimes(1);
-  });
-
-  it("şablon maddesi yol haritasındaki düğmeyle de indirilir (aynı indirme işlevi)", async () => {
-    const user = userEvent.setup();
-    kapi.catalogTemplate.mockResolvedValue(new Blob(["xlsx"]));
-    oapi.markRoadmapItem.mockResolvedValue({
-      marks: { katalog_sablonu: "2026-09-22" },
-      hidden: false,
-    });
-    bas();
-
-    await user.click(
-      within(await screen.findByRole("region", { name: "Başlangıç Yol Haritası" })).getByRole(
-        "button",
-        { name: /Şablonu indir/ },
-      ),
-    );
-
-    await waitFor(() => expect(oapi.markRoadmapItem).toHaveBeenCalledWith("katalog_sablonu", true));
-    expect(kapi.catalogTemplate).toHaveBeenCalledTimes(1);
   });
 
   it("bütün maddeler tamamsa kart gizlenebilir", async () => {

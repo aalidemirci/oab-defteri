@@ -129,7 +129,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from desktop.backup import database_snapshot, encrypt_legacy_backups
+from desktop.backup import database_snapshot
 from desktop.backup_crypto import (
     BACKUP_SUFFIX,
     BackupCryptoError,
@@ -769,7 +769,6 @@ def enable(*, password: str) -> str:
     onceki_yedek_ayari = yedek_ayar_yolu.read_bytes() if yedek_ayar_yolu.is_file() else None
     try:
         ensure_public_config(_data_dir(), veri_anahtari, replace=True)
-        encrypt_legacy_backups(backup_dir(), _data_dir())
         take_transition_backup("acilis")
     except Exception:  # noqa: BLE001 - başarısız kurulumun iki dosyası birlikte geri alınır
         state_path().unlink(missing_ok=True)
@@ -1124,7 +1123,6 @@ def _adopt_key(state: dict[str, Any], data_key: bytes) -> None:
     # (ör. çapraz-DEK geri yükleme artığı) burada sessizce onarılır; replace=False
     # olsaydı kilit açma her denemede "anahtar eşleşmiyor" hatasıyla düşerdi.
     ensure_public_config(_data_dir(), data_key, replace=True)
-    encrypt_legacy_backups(backup_dir(), _data_dir())
     _reset_failures()
     if gecis != TRANSITION_DONE or not kayitli:
         resume_pending()

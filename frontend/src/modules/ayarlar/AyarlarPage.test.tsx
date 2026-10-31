@@ -46,25 +46,6 @@ vi.mock("../takvim/KapaliGunlerPaneli", () => ({
   default: () => <div>KAPALI GÜNLER PANELİ</div>,
 }));
 
-// Katalog ayarları (F2) da kendi testlerinde; burada yalnız sekme kablolaması.
-vi.mock("../kutuphane/KutuphanePolitikasiPaneli", () => ({
-  default: () => <div>POLİTİKA PANELİ</div>,
-}));
-
-vi.mock("../kutuphane/BolumlerPaneli", () => ({
-  default: () => <div>BÖLÜMLER PANELİ</div>,
-}));
-
-// Ağ Kataloğu (F5) kendi testinde (modules/agkatalogu); burada yalnız sekme kablolaması.
-vi.mock("../agkatalogu/AgKataloguPaneli", () => ({
-  default: () => <div>AĞ KATALOĞU PANELİ</div>,
-}));
-
-// Saklama (F11) kendi testinde (modules/saklama); burada yalnız sekme kablolaması.
-vi.mock("../saklama/SaklamaPaneli", () => ({
-  default: () => <div>SAKLAMA PANELİ</div>,
-}));
-
 import AyarlarPage from "./AyarlarPage";
 
 const AKTIF_YIL: SchoolYear = {
@@ -140,44 +121,43 @@ afterEach(() => {
 });
 
 describe("AyarlarPage — sekmeler", () => {
-  it("on sekme vardır (bu sırayla); kaldırılan sekmeler geri gelmez", async () => {
+  it("altı sekme vardır (bu sırayla); kaldırılan sekmeler geri gelmez", async () => {
     renderPage();
     await screen.findByText("2026-2027");
     expect(screen.getAllByRole("tab").map((t) => t.textContent?.trim())).toEqual([
       expect.stringContaining("Ders Yılları"),
       expect.stringContaining("Kapalı Günler"),
       expect.stringContaining("Şubeler"),
-      // Katalogun ayarları (F2): politika ve bölümler şube kataloğundan sonra,
-      // okul künyesinden önce gelir — ikisi de kütüphanenin kendi kurallarıdır.
-      expect.stringContaining("Kütüphane Politikası"),
-      expect.stringContaining("Bölümler"),
       expect.stringContaining("Okul Bilgileri"),
       expect.stringContaining("Güvenlik"),
       expect.stringContaining("Güncelleme"),
-      // Ağ Kataloğu (F5) sonda: varsayılan kapalı, ilk kurulumun işi değildir.
-      expect.stringContaining("Ağ Kataloğu"),
-      // Saklama (F11) en sonda: süresi dolan kayıtların onayı yılda birkaç kez yapılır.
-      expect.stringContaining("Saklama"),
     ]);
-    for (const ad of [/Ders Saatleri/, /Zümreler/, /Şube Kümeleri/, /Tatiller/]) {
+    for (const ad of [
+      /Ders Saatleri/,
+      /Zümreler/,
+      /Şube Kümeleri/,
+      /Tatiller/,
+      // Aile iskeletinin kütüphane panelleri (F1a-2'de söküldü).
+      /Kütüphane Politikası/,
+      /Bölümler/,
+      /Ağ Kataloğu/,
+      /Saklama/,
+    ]) {
       expect(screen.queryByRole("tab", { name: ad })).toBeNull();
     }
   });
 
-  it("Ağ Kataloğu sekmesi adresle açılır ve paneli gösterir", async () => {
-    renderPage("/ayarlar?tab=ag-katalogu");
-    expect(await screen.findByText("AĞ KATALOĞU PANELİ")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Ağ Kataloğu/ })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-  });
-
-  it("Saklama sekmesi adresle açılır ve paneli gösterir", async () => {
-    renderPage("/ayarlar?tab=saklama");
-    expect(await screen.findByText("SAKLAMA PANELİ")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Saklama/ })).toHaveAttribute("aria-selected", "true");
-  });
+  it.each(["ag-katalogu", "saklama", "politika", "bolumler"])(
+    "sökülen %s sekmesinin adresi Ders Yılları sekmesine düşer",
+    async (sekme) => {
+      renderPage(`/ayarlar?tab=${sekme}`);
+      expect(await screen.findByText("2026-2027")).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: /Ders Yılları/ })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+    },
+  );
 
   it("kaldırılmış bir sekmenin adresi sessizce Ders Yılları sekmesine düşer", async () => {
     renderPage("/ayarlar?tab=zumreler");
@@ -473,21 +453,6 @@ describe("AyarlarPage — kapalı günler", () => {
       "aria-selected",
       "true",
     );
-  });
-
-  it("?tab=politika adresi Kütüphane Politikası sekmesini açar", async () => {
-    renderPage("/ayarlar?tab=politika");
-    expect(await screen.findByText("POLİTİKA PANELİ")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Kütüphane Politikası/ })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-  });
-
-  it("?tab=bolumler adresi Bölümler sekmesini açar", async () => {
-    renderPage("/ayarlar?tab=bolumler");
-    expect(await screen.findByText("BÖLÜMLER PANELİ")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Bölümler/ })).toHaveAttribute("aria-selected", "true");
   });
 
   it("dönem düzenleyicisi yarıyılın kapalı gün olarak girilmesini söyler", async () => {

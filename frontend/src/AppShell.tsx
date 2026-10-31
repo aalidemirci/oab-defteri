@@ -18,18 +18,13 @@ interface NavItem {
   icon: string;
 }
 
-// Gezinme etiketi KISA addır (docs/sozluk.md §4). Ana sayfanın tek adı "Genel
-// Bakış"tır (gezinme + üst çubuk + h1). Kütüphane ekranları (katalog, dolaşım,
-// sayım…) fazlarıyla birlikte eklenir. Liste `App.test.tsx` "kabuk gezinmesi"
-// testiyle sabittir.
+// Gezinme etiketi KISA addır. Ana sayfanın tek adı "Genel Bakış"tır (gezinme +
+// üst çubuk + h1). OAB ekranları (birlik dönemi, organlar…) fazlarıyla birlikte
+// eklenir; aile iskeletinin kütüphane ekranları F1a-2'de söküldü. Liste
+// `App.test.tsx` "kabuk gezinmesi" testiyle sabittir.
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Genel Bakış", icon: "space_dashboard" },
-  // F6: masa işi en sık yapılan iştir; Genel Bakış'ın hemen altında durur.
-  { to: "/dolasim", label: "Dolaşım Masası", icon: "sync_alt" },
   { to: "/kisiler", label: "Kişiler", icon: "group" },
-  { to: "/katalog", label: "Katalog", icon: "menu_book" },
-  // F10: istatistik, çok okunanlar, dökümler ve dışa aktarım (yönetici kipi).
-  { to: "/raporlar", label: "Raporlar", icon: "bar_chart" },
   { to: "/ayarlar", label: "Ayarlar", icon: "settings" },
   { to: "/kilavuz", label: "Kılavuz", icon: "auto_stories" },
 ];
@@ -38,33 +33,9 @@ const NAV_ITEMS: NavItem[] = [
 // Düzeninde tam ad. Bir sayfanın h1'i değişirse burası da değişir; eşlik
 // `App.test.tsx` "üst çubuk başlığı" testiyle korunur.
 const PAGE_TITLES: Array<[prefix: string, title: string]> = [
-  // F7: Dolaşım Masası'nın alt sayfaları köke göre ÖNCE gelir.
-  ["/dolasim/teslimler", "Teslimler"],
-  ["/dolasim/kayip-hasar", "Kayıp ve Hasar"],
-  ["/dolasim", "Dolaşım Masası"],
+  // Sıra anlamlıdır: alt sayfalar köke göre ÖNCE gelir.
   ["/kisiler", "Kişiler"],
-  ["/gecikmis-oduncler", "Gecikmiş Ödünçler"],
-  // F7 (İ kolu): menüde yok; Genel Bakış kartlarından ve birbirlerinin bağlantılarından açılır.
-  ["/ilisik-listesi", "İlişik Listesi"],
-  // F8: "/yil-sonu-raporu" "/yil-sonu" önekine de uyar; önce gelir.
-  ["/yil-sonu-raporu", "Yıl Sonu Raporu"],
-  ["/yil-sonu", "Yıl Sonu"],
-  ["/yil-basi", "Yıl Başı"],
-  // Sıra anlamlıdır: alt sayfalar köke göre ÖNCE gelir ("/katalog/eser/3"
-  // "/katalog" desenine de uyar, önce kendi başlığını bulmalıdır.)
-  ["/katalog/eser", "Eser Ayrıntısı"],
-  ["/katalog/edinimler", "Edinimler ve Bağışlar"],
-  ["/katalog/ice-aktarma", "İçe Aktarma"],
-  ["/katalog/hizli-kayit", "Hızlı Kayıt"],
-  ["/katalog/etiketler", "Etiketler"],
-  ["/katalog/ayiklama", "Ayıklama"],
-  ["/katalog/nadir-eserler", "Nadir Eserler"],
-  // F9: Katalog'un sağ üstünden ve Genel Bakış'ın "Sayım" kartından açılır.
-  ["/katalog/sayim", "Sayım"],
-  ["/katalog", "Katalog"],
-  ["/raporlar", "Raporlar"],
   ["/ayarlar", "Ayarlar"],
-  ["/ag-doktoru", "Ağ Doktoru"],
   ["/kilavuz", "Kullanım Kılavuzu"],
   ["/hakkinda", "Hakkında ve Lisans"],
   ["/kurulum", "Kurulum Sihirbazı"],

@@ -11,8 +11,6 @@
 #   2. `--autotest` → ÇIKIŞ KODU 0 (açılış zinciri: kilit, yedek, göç, sunucu)
 #   3. `--bagimlilik-duman` → üçüncü taraf modüller pakette mi (hiddenimports)
 #   4. `--pdf-duman` → evrak taban şablonundan Türkçe PDF + pypdf ile geri okuma
-#   4b. `--dagitim-duman kurulu` → dpkg ile kurulan program kendini KURULU sayar
-#      (KB-2: taşınabilir arşivde Ağ Kataloğu açılmaz; ölçüt desktop/dagitim.py)
 #   5. Dosya yerleşimi (menü kaydı, ikon, /usr/bin bağlantısı) ve lisanslar
 #      (DEP-5 copyright, THIRD_PARTY_LICENSES, readline ve Qt'nin yalnız GPL'li
 #      modülleri yok, Windows'a özgü pywebview dosyaları yok)
@@ -91,13 +89,6 @@ oab-defteri --bagimlilik-duman
 echo "== --pdf-duman (evrak şablonu + Türkçe PDF + font doğrulaması)"
 oab-defteri --pdf-duman /tmp/duman.pdf
 test -s /tmp/duman.pdf
-
-echo "== --dagitim-duman (KB-2: gerçek dpkg kurulumunda program KURULU sayılır)"
-# Taşınabilir arşivde Ağ Kataloğu açılmaz; ayrım paketli ikilinin sys.executable'ı ile
-# dpkg listesinden yapılır (desktop/dagitim.py). /usr/bin bağlantısından ve /opt'taki
-# dosyadan açılan program ikisi de kurulu sayılmalı; karşılığı build.sh'te.
-oab-defteri --dagitim-duman kurulu
-/opt/oab-defteri/oab-defteri --dagitim-duman kurulu
 
 echo "== --autotest (açılış zinciri; çıkış kodu 0 beklenir)"
 oab-defteri --autotest

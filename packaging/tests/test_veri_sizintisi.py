@@ -241,13 +241,13 @@ def test_iki_platform_esit_kapsamla_denetlenir() -> None:
 
 def test_setup_exe_icerigi_paket_dizini_ve_sabit_uc_dosyadir() -> None:
     """Inno arşivi listelenemez; içeriği `[Files]` kaynaklarıyla sınırlı kalmalı:
-    denetlenmiş paket dizini + depodaki ikon, görev betiği ve WebView2 önyükleyicisi."""
+    denetlenmiş paket dizini + depodaki ikon ve WebView2 önyükleyicisi (görev betiği
+    otomatik başlatmayla birlikte söküldü — tasarım §4.5 T6)."""
     iss = (REPO / "packaging/windows/oab-defteri.iss").read_text(encoding="utf-8")
     dosyalar = iss.split("[Files]", 1)[1].split("\n[", 1)[0]
     kaynaklar = set(re.findall(r'^Source: "([^"]+)"', dosyalar, flags=re.MULTILINE))
     assert kaynaklar == {
         r"{#SourceDir}\*",
         "{#AppIconSource}",
-        "gorev-kur.ps1",
         "{#WebView2Setup}",
     }

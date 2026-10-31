@@ -3,7 +3,7 @@
 Çalışan program iki komut dinler:
 
     goster  → pencere öne gelir (ikinci açılış; ikinci süreç 0 koduyla çıkar)
-    kapat   → düzenli kapanış (kurucu ve kaldırıcı; pencere, iki sunucu, tepsi)
+    kapat   → düzenli kapanış (kurucu ve kaldırıcı; pencere, yönetim sunucusu)
 
 **Windows:** adlı, otomatik sıfırlanan olaylar `OABDefteri.Goster` ve
 `OABDefteri.Kapat` (§2.3). Kurucu `.Kapat`'ı `[Code]` içinden açıp

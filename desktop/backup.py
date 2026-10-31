@@ -52,12 +52,10 @@ from pathlib import Path
 
 from desktop.backup_crypto import (
     BACKUP_SUFFIX,
-    MAGIC,
     BackupCryptoError,
     config_path,
     encrypt_to_path,
     load_public_key,
-    recovery_metadata,
     usable_recovery_header,
 )
 
@@ -74,13 +72,6 @@ _DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 _UNSAFE_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
 logger = logging.getLogger("oab_defteri.backup")
-
-_LEGACY_PATTERNS = (
-    f"{DAILY_PREFIX}-*.sqlite3",
-    f"{PRE_MIGRATE_PREFIX}-*.sqlite3",
-    "pre-parola-*.sqlite3",
-)
-
 
 # CPython `Connection.serialize`i ancak SQLite ≥3.36 (SQLITE_ENABLE_DESERIALIZE)
 # ile derlendiyse sunar; Pardus 21/bullseye tabanının libsqlite3'ü 3.34'tür ve
@@ -146,56 +137,6 @@ def _copy_database(source_path: Path, target_path: Path, *, data_dir: Path | Non
         recovery_header=header,
     )
     return True
-
-
-def _is_encrypted_container(path: Path) -> bool:
-    with path.open("rb") as handle:
-        return handle.read(len(MAGIC)) == MAGIC
-
-
-def encrypt_legacy_backups(backup_dir: Path, data_dir: Path) -> list[Path]:
-    """Eski düz yedekleri atomik olarak şifreli `.odbak` biçimine çevirir.
-
-    Program artık düz yedek yazmaz; bu yordam, parolasız dal sökülmeden önceki
-    geliştirme sürümlerinden kalmış olabilecek düz dosyalar içindir (`*.sqlite3`
-    adlı ya da düz baytlı `.odbak`). Parola kurulduğunda ve kilit her
-    açıldığında çağrılır — diskte düz kopya kalmaz.
-    """
-    if not backup_dir.is_dir():
-        return []
-    try:
-        public_key = load_public_key(data_dir)
-    except BackupCryptoError:
-        return []
-    encrypted: list[Path] = []
-    for pattern in _LEGACY_PATTERNS:
-        for source in sorted(backup_dir.glob(pattern)):
-            target = source.with_suffix(BACKUP_SUFFIX)
-            encrypt_to_path(
-                source.read_bytes(),
-                target,
-                public_key,
-                recovery_header=recovery_metadata(data_dir),
-            )
-            source.unlink()
-            encrypted.append(target)
-    for pattern in (
-        f"{DAILY_PREFIX}-*{BACKUP_SUFFIX}",
-        f"{PRE_MIGRATE_PREFIX}-*{BACKUP_SUFFIX}",
-    ):
-        for source in sorted(backup_dir.glob(pattern)):
-            if _is_encrypted_container(source):
-                continue
-            encrypt_to_path(
-                source.read_bytes(),
-                source,
-                public_key,
-                recovery_header=recovery_metadata(data_dir),
-            )
-            encrypted.append(source)
-    if encrypted:
-        logger.info("%d düz yedek şifreli biçime dönüştürüldü.", len(encrypted))
-    return encrypted
 
 
 def _safe_name(value: str) -> str:

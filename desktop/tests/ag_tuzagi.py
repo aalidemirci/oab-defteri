@@ -10,8 +10,8 @@ altında prova betiği koşar; ör. gün değişimi kapısının işleri):
 * `urllib.request.urlopen`: yerel olmayan her adres kaydedilir ve reddedilir
   (yönetim sunucusunun 127.0.0.1 sağlık denetimi geçer).
 
-İstisna: `192.0.2.0/24` (TEST-NET-1). `desktop/ag.py` IP adaylarını o bloğa UDP
-`connect` ile bulur — UDP'de `connect` paket göndermez, yalnız rota tablosuna bakar.
+Aile iskeletindeki TEST-NET-1 istisnası (ağ kataloğunun IP adayı sorgusu) katalogla
+birlikte söküldü: loopback dışındaki her hedef kaydedilir.
 
 Kayıt `OD_AG_TUZAGI_KAYIT` ortam değişkenindeki dosyaya satır satır JSON olarak
 yazılır. `--kendini-sina` bayrağıyla tuzak kendini sınar (dış bağlantı dener, kaydın
@@ -33,8 +33,6 @@ from urllib.parse import urlsplit
 
 _KAYIT = os.environ.get("OD_AG_TUZAGI_KAYIT", "")
 _YEREL_ADLAR = frozenset({"", "localhost"})
-#: TEST-NET-1 (RFC 5737): `desktop/ag.py`'nin UDP rota sorgusu hedefi — paket gitmez.
-_TEST_NET_1 = ipaddress.ip_network("192.0.2.0/24")
 
 
 def _kaydet(tur: str, hedef: Any) -> None:
@@ -45,7 +43,7 @@ def _kaydet(tur: str, hedef: Any) -> None:
 
 
 def _yerel_mi(host: Any) -> bool:
-    """Loopback, "belirtilmemiş" (dinleme joker adresi — waitress bunu çözer) ya da TEST-NET-1."""
+    """Loopback ya da "belirtilmemiş" (dinleme joker adresi — waitress bunu çözer)."""
     if host is None:
         return True
     ad = host.decode() if isinstance(host, bytes) else str(host)
@@ -57,7 +55,7 @@ def _yerel_mi(host: Any) -> bool:
         return False  # çözülmesi gereken bir ad: dışarı giden DNS sorgusu
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
         ip = ip.ipv4_mapped
-    return ip.is_loopback or ip.is_unspecified or ip in _TEST_NET_1
+    return ip.is_loopback or ip.is_unspecified
 
 
 _ozgun_connect = socket.socket.connect

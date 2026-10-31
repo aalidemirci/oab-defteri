@@ -27,15 +27,13 @@ function madde(metin: RegExp): HTMLElement {
 }
 
 describe("BaslangicYolHaritasi", () => {
-  it("sözleşmedeki yedi madde bu sırayla durur", () => {
+  it("maddeler bu sırayla durur (katalog şablonu ve BTR maddeleri F1a-2'de söküldü)", () => {
     expect(YOL_HARITASI_MADDELERI.map((m) => m.anahtar)).toEqual([
       "ogrenci_aktarimi",
       "personel_aktarimi",
       "kapali_gunler",
-      "katalog_sablonu",
       "kurtarma_zarfi",
       "parola_paylasimi",
-      "btr_gorusmesi",
     ]);
   });
 
@@ -88,17 +86,7 @@ describe("BaslangicYolHaritasi", () => {
       "href",
       "/ayarlar?tab=guvenlik",
     );
-    // Çapalı adres: kılavuzun "Ağ Kataloğu" bölümüne kaydırır.
-    expect(bag(/bilişim teknolojileri rehber öğretmeniyle \(BTR\)/)).toHaveAttribute(
-      "href",
-      "/kilavuz#ag-katalogu",
-    );
-    // Şablon maddesi bir sayfaya değil, şablon indirme işlevine bağlanır.
-    expect(
-      within(madde(/Katalog Excel şablonunu indirip/)).getByRole("button", {
-        name: /Şablonu indir/,
-      }),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Şablonu indir/ })).toBeNull();
   });
 
   it("kendiliğinden tespit edilen maddelerde işaret kutusu yoktur", () => {
@@ -109,7 +97,7 @@ describe("BaslangicYolHaritasi", () => {
         "Yapıldığında kendiliğinden işaretlenir.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole("checkbox")).toHaveLength(4);
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
   });
 
   it("aktarımlar yapılınca maddeler tamamlandı olarak görünür", () => {

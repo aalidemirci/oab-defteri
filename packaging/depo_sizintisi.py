@@ -47,7 +47,6 @@ RISKLI_DIZIN_ONEKLERI = ("backend/data/", "data/raw/", "media/")
 #: Sentetik fixture'lar — adları TEK TEK yazılır (joker YOK; docstring'e bakın).
 MUAF_YOLLAR = frozenset(
     {
-        "backend/apps/okul/tests/veri/eokul_sinif_listesi.xls",
         "backend/apps/okul/tests/veri/eokul_personel_listesi.xls",
     }
 )

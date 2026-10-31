@@ -11,21 +11,15 @@ bulamazsa sessizce eski MSHTML (Internet Explorer) motoruna düşer; React 18 or
 pywebview TEMBEL içe aktarılır: paket kurulu olmayan geliştirme/test ortamında bu
 modül yine de import edilebilir ve testler koşar.
 
-**Çarpı pencereyi gizler, programı kapatmaz** (U3, §4.2-4; `WindowController`).
+**Çarpı programı kapatır, onay sorulmaz** (T6, §4.5; `WindowController`).
 pywebview 5.3.2'nin `closing` olayı pencere motorunun iş parçacığında ESZAMANLI
 koşar (`Event(window, should_lock=True)`) ve işleyicilerden biri `False`
 döndürürse kapanma iptal edilir (winforms `on_closing` → `args.Cancel`, qt
-`closeEvent` → `event.ignore()`). Program yalnız "Çık" ile kapanır: tepsi menüsü
-ya da kurucunun kapatma olayı (`desktop/instance_channel.py`). Tepsi yoksa pencere
-gizlenmez, küçültülür (okulzili yedeği): gizli pencereyi geri getirecek yol
-kalmazdı.
-
-**Windows oturumu kapanırken** WinForms `FormClosing`'i `WindowsShutDown`
-nedeniyle gönderir. Bu kapanma iptal edilseydi program Windows'un kapanışını
-engeller, sonunda zorla sonlandırılır ve temiz kapanış işareti yazılmazdı; her
-sabah yanlış alarm çıkardı. Pencereye ayrıca bağlanan .NET işleyicisi bu iki
-nedeni (oturum kapanışı, Görev Yöneticisi) tanır ve iptali geri alır
-(`install_session_end_passthrough`).
+`closeEvent` → `event.ignore()`). OAB'de tepsi yoktur: işleyici kapanmayı iptal
+etmez, pencere kapanır, `webview.start` döner ve düzenli kapanış sürer
+(`desktop/main.py`). Uzun yazma işi sürerken kapanışı bir kez erteleme F1b'de
+gelir (§4.2). Kapanma hiç iptal edilmediği için Windows oturum kapanışında
+iptali geri alan .NET işleyicisine de gerek kalmadı.
 """
 
 from __future__ import annotations
@@ -270,38 +264,18 @@ class TitleBarApi:
             return False
 
 
-#: Kapanmanın iptal EDİLMEYECEĞİ `FormClosing` nedenleri (System.Windows.Forms.CloseReason).
-SESSION_END_REASONS = frozenset({"WindowsShutDown", "TaskManagerClosing"})
-#: pythonnet enum'u sayı olarak basarsa: WindowsShutDown = 1, TaskManagerClosing = 4.
-_CLOSE_REASON_CODES = {"1": "WindowsShutDown", "4": "TaskManagerClosing"}
-
-
-def close_reason_name(args: Any) -> str:
-    """`FormClosingEventArgs.CloseReason`'ın adı (`"WindowsShutDown"` gibi)."""
-    text = str(getattr(args, "CloseReason", "")).rsplit(".", 1)[-1]
-    return _CLOSE_REASON_CODES.get(text, text)
-
-
 class WindowController:
-    """Pencerenin gizle / göster / çık davranışı (U3, §4.2-4).
+    """Pencerenin göster / çık davranışı (T6, §4.2, §4.5).
 
-    Üç yerden çağrılır: pywebview olayları (pencere iş parçacığı), tepsi menüsü
-    (Windows'ta `pystray` iş parçacığı, Linux'ta Qt ana iş parçacığı) ve tek kopya
-    kanalı (`od-kanal`). Durum bu yüzden kilit altındadır; pywebview çağrıları
-    kilit DIŞINDA yapılır (pencere iş parçacığına sıralanıp bloklayabilirler).
+    İki yerden çağrılır: pywebview olayları (pencere iş parçacığı) ve tek kopya
+    kanalı (`od-kanal`: ikinci açılışta `goster`, kurucunun `kapat`'ı). Arayüzdeki
+    Çık da masaüstü kancasıyla `request_quit`'e gelir. Durum bu yüzden kilit
+    altındadır; pywebview çağrıları kilit DIŞINDA yapılır (pencere iş parçacığına
+    sıralanıp bloklayabilirler).
 
-    Görevli kipinde tepsideki "Çık" doğrudan kapatmaz (§4.2-4): `ask_quit_in_spa`
-    pencereyi öne getirir ve arayüze `od:cik-iste` olayını gönderir; arayüz
-    yönetici parolasını sorar ve `POST app/quit/` ile döner, kapanış yine
-    `request_quit`'ten geçer (masaüstü kancası).
-
-    Pencere tepside GİZLİ başlatılabilir (`--tepside`). Gizli pencerede
-    pywebview'ın `shown` olayı hiç gelmeyebilir; sayfa yüklenince gelen
-    `loaded` olayı da pencereyi "hazır" sayar (göster/kapat komutları işler).
+    pywebview'ın `shown` olayı bazı arka uçlarda geç gelebilir; sayfa yüklenince
+    gelen `loaded` olayı da pencereyi "hazır" sayar (göster/kapat komutları işler).
     """
-
-    #: Tepsideki görevli kipi Çık'ının arayüze gönderdiği olay (frontend `lib/cikis.ts`).
-    SPA_QUIT_EVENT = "od:cik-iste"
 
     def __init__(self, *, platform: str | None = None) -> None:
         self._platform = sys.platform if platform is None else platform
@@ -312,9 +286,6 @@ class WindowController:
         self._destroy_requested = False
         self._minimized = False
         self._maximized = False
-        self._passthrough_installed = False
-        #: Tepsi kurulduysa çarpı gizler; kurulamadıysa küçültür.
-        self.tray_available = False
 
     @property
     def quitting(self) -> bool:
@@ -338,36 +309,24 @@ class WindowController:
     # ------------------------------------------------------------ pywebview olayları
 
     def on_closing(self) -> bool:
-        """Çarpı: `False` kapanmayı iptal eder; yalnız "Çık"tan sonra `True`."""
+        """Çarpı (ya da işletim sisteminin kapatması): program kapanır, iptal YOK (T6).
+
+        Pencere zaten kapanmakta olduğu için ikinci bir `destroy` çağrılmaz.
+        """
         with self._lock:
-            if self._quitting:
-                return True
-            window = self._window
-        if window is None:
-            return True
-        try:
-            if self.tray_available:
-                window.hide()
-                logger.info("Pencere gizlendi; program tepside çalışmaya devam ediyor.")
-            else:
-                window.minimize()
-                logger.info("Sistem tepsisi yok; pencere küçültüldü, program kapanmadı.")
-        except Exception:  # noqa: BLE001 — pencere görünür kalır, kapanmaz
-            logger.warning("Pencere gizlenemedi.", exc_info=True)
-        return False
+            ilk = not self._quitting
+            self._quitting = True
+            self._destroy_requested = True
+        if ilk:
+            logger.info("Pencere kapatıldı; program düzenli kapanıyor.")
+        return True
 
     def _on_shown(self) -> None:
         with self._lock:
             self._shown = True
             window = self._window
             pending_quit = self._quitting
-            install = self._platform == "win32" and not self._passthrough_installed
-            self._passthrough_installed = self._passthrough_installed or install
-        if window is None:
-            return
-        if install:
-            install_session_end_passthrough(window, self, platform=self._platform)
-        if pending_quit:
+        if window is not None and pending_quit:
             self._destroy(window)
 
     def _on_loaded(self) -> None:
@@ -393,10 +352,10 @@ class WindowController:
         with self._lock:
             self._minimized, self._maximized = False, False
 
-    # ------------------------------------------------------- tepsi ve kanal komutları
+    # --------------------------------------------------------------- kanal komutları
 
     def show(self) -> None:
-        """Tepsideki "Pencereyi aç": gizliyse gösterir, küçültülmüşse eski boyutuna döndürür."""
+        """İkinci açılış: pencereyi öne getirir, küçültülmüşse eski boyutuna döndürür."""
         with self._lock:
             window = self._window if self._shown and not self._quitting else None
             minimized, maximized = self._minimized, self._maximized
@@ -409,23 +368,11 @@ class WindowController:
                     window.maximize()
                 else:
                     window.restore()
-        except Exception:  # noqa: BLE001 — tepsi komutu programı düşürmesin
+        except Exception:  # noqa: BLE001 — kanal komutu programı düşürmesin
             logger.warning("Pencere gösterilemedi.", exc_info=True)
 
-    def ask_quit_in_spa(self) -> None:
-        """Görevli kipinde tepsideki Çık: pencere öne gelir, arayüz parolayı sorar (§4.2-4)."""
-        self.show()
-        with self._lock:
-            window = self._window if self._shown and not self._quitting else None
-        if window is None:
-            return
-        try:
-            window.evaluate_js(f"window.dispatchEvent(new Event('{self.SPA_QUIT_EVENT}'))")
-        except Exception:  # noqa: BLE001 — pencere hazır değilse kullanıcı Çık'ı arayüzden seçer
-            logger.warning("Çıkış isteği arayüze iletilemedi.", exc_info=True)
-
     def request_quit(self) -> None:
-        """Tepsideki "Çık": pencereyi gerçekten kapatır; `webview.start` döner, çıkış sürer.
+        """Çık (arayüz, kurucu, SIGTERM): pencereyi kapatır; `webview.start` döner, çıkış sürer.
 
         Pencere henüz gösterilmediyse (komut açılış sırasında geldi) kapanma
         `shown` olayında yapılır; `open_window` başlatmadan önce de bakar.
@@ -436,13 +383,6 @@ class WindowController:
         logger.info("Çıkış istendi; program düzenli kapanıyor.")
         if window is not None:
             self._destroy(window)
-
-    def allow_session_end(self, reason: str) -> None:
-        """Windows oturumu kapanıyor: kapanma iptal edilmez, düzenli çıkış sürer."""
-        with self._lock:
-            self._quitting = True
-            self._destroy_requested = True  # pencereyi Windows kapatıyor
-        logger.info("Windows oturumu kapanıyor (%s); program düzenli kapanıyor.", reason)
 
     def _destroy(self, window: Any) -> None:
         with self._lock:
@@ -455,36 +395,6 @@ class WindowController:
             logger.exception("Pencere kapatılamadı.")
 
 
-def install_session_end_passthrough(
-    window: Any, controller: WindowController, *, platform: str | None = None
-) -> bool:
-    """Windows: oturum kapanışında `FormClosing` iptalini geri alan .NET işleyicisi.
-
-    pywebview'ın kendi işleyicisi (`on_closing` → `closing` olayı → iptal) daha
-    önce bağlandığı için önce o koşar; bu işleyici ondan SONRA koşar ve
-    `WindowsShutDown`/`TaskManagerClosing` nedenlerinde `Cancel`'ı geri alır.
-    """
-    system = sys.platform if platform is None else platform
-    if not system.startswith("win"):
-        return False
-    native = getattr(window, "native", None)
-    if native is None:
-        return False
-
-    def _on_form_closing(_sender: Any, args: Any) -> None:
-        reason = close_reason_name(args)
-        if reason in SESSION_END_REASONS:
-            controller.allow_session_end(reason)
-            args.Cancel = False
-
-    try:
-        native.FormClosing += _on_form_closing
-    except Exception:  # noqa: BLE001 — pythonnet hataları çeşitli; açılış sürer
-        logger.warning("Oturum kapanışı işleyicisi bağlanamadı.", exc_info=True)
-        return False
-    return True
-
-
 def open_window(
     url: str,
     *,
@@ -494,14 +404,11 @@ def open_window(
     platform: str | None = None,
     importer: Callable[[], Any] | None = None,
     controller: WindowController | None = None,
-    hidden: bool = False,
 ) -> None:
     """Pencereyi açar ve kapanana kadar bloklar (pywebview'ın olay döngüsü).
 
-    `controller` verilirse çarpı pencereyi gizler (U3); pencere yalnız
-    `controller.request_quit()` ile kapanır. `hidden`: tepside gizli açılış
-    (`--tepside`; yalnız tepsi kurulduysa verilir, aksi hâlde pencereye dönüş
-    yolu kalmazdı).
+    `controller` verilirse pencere olaylarına bağlanır; çarpı programı kapatır
+    (T6), kanal ve arayüz komutları denetçiden geçer.
     """
     system = sys.platform if platform is None else platform
     module = webview
@@ -530,7 +437,6 @@ def open_window(
         min_size=WINDOW_MIN_SIZE,
         text_select=True,
         js_api=titlebar_api,
-        hidden=hidden,
     )
     titlebar_api.bind_window(window)
     if controller is not None:

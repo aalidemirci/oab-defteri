@@ -3,8 +3,7 @@
 // * Yönetici kipi, kilitli, kurulum: "Programdan çıkılsın mı?" onayı, parolasız.
 // * Görevli kipi: yönetici parolası sorulur (kaza önleyicidir, güvenlik sınırı
 //   değildir — Görev Yöneticisi süreci her durumda kapatabilir).
-// * Tepsideki görevli kipi Çık'ı pencereyi öne getirir ve `od:cik-iste` olayını
-//   gönderir; diyalog bu olayla da açılır.
+// * Pencerenin çarpısı da programı kapatır (T6, tasarım §4.5); tepsi yoktur.
 //
 // Kip bilgisi yalnız hangi soruyu soracağımızı seçer; karar sunucudadır. Sunucu
 // parola isterse (kip bu arada görevliye inmiş olabilir) diyalog parola alanına
@@ -22,7 +21,7 @@ import Button from "../../ui/Button";
 import Dialog from "../../ui/Dialog";
 import TextField from "../../ui/TextField";
 import { useKip } from "../kip/useKip";
-import { CIKIS_ISTEK_OLAYI, CIKIS_PAROLASI_GEREKLI, cikisApi } from "./api";
+import { CIKIS_PAROLASI_GEREKLI, cikisApi } from "./api";
 
 function hataMesaji(err: unknown): string {
   return err instanceof Error && err.message ? err.message : "Programdan çıkılamadı.";
@@ -143,16 +142,10 @@ export function CikisDiyalogu({ open, onClose, parolaIle }: CikisDiyaloguProps) 
   );
 }
 
-/** Üst çubuktaki Çık düğmesi; tepsinin `od:cik-iste` olayını da dinler. */
+/** Üst çubuktaki Çık düğmesi. */
 export default function CikisDugmesi() {
   const [acik, setAcik] = useState(false);
   const gorevli = useKip().ozet?.durum === "gorevli";
-
-  useEffect(() => {
-    const dinleyici = () => setAcik(true);
-    window.addEventListener(CIKIS_ISTEK_OLAYI, dinleyici);
-    return () => window.removeEventListener(CIKIS_ISTEK_OLAYI, dinleyici);
-  }, []);
 
   return (
     <>

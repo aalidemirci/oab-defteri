@@ -110,33 +110,14 @@ def test_bagimlilik_duman_bayragi_ve_cikis_kodu_sozlesmesi() -> None:
     assert _GIRIS["EXIT_IMPORT_SMOKE_FAILED"] == _ERRORS["EXIT_IMPORT_SMOKE_FAILED"] == 10
 
 
-def test_dagitim_duman_bayragi_ve_cikis_kodu_sozlesmesi() -> None:
-    """KB-2 düzeltme turu (29.09.2026): build.sh ve kap-ici-test.sh bu bayrağı çağırır."""
-    assert _GIRIS["DISTRIBUTION_SMOKE_FLAG"] == "--dagitim-duman"
-    assert (
-        _GIRIS["EXIT_DISTRIBUTION_SMOKE_FAILED"] == _ERRORS["EXIT_DISTRIBUTION_SMOKE_FAILED"] == 11
-    )
-    derleme = (REPO / "packaging" / "linux" / "build.sh").read_text(encoding="utf-8")
-    kap = (REPO / "packaging" / "linux" / "kap-ici-test.sh").read_text(encoding="utf-8")
-    # Taşınabilir ağaçtaki ikili TAŞINABİLİR, gerçek dpkg kurulumundan sonra /usr/bin
-    # bağlantısıyla açılan ikili KURULU saymalı.
-    assert '"$TAR_AGACI/uygulama/oab-defteri" --dagitim-duman tasinabilir' in derleme
-    assert "\noab-defteri --dagitim-duman kurulu\n" in kap
-    assert "\n/opt/oab-defteri/oab-defteri --dagitim-duman kurulu\n" in kap
-
-
-def test_dagitim_duman_beklenen_turu_denetler() -> None:
-    """Test süreci paketsizdir (`sys.frozen` yok) → KAYNAK; beklenmeyen tür 11 döner."""
-    fn = _GIRIS["run_distribution_smoke"]
-    assert fn(None) == 0
-    assert fn("kaynak") == 0
-    assert fn("kurulu") == 11
-    assert fn("tasinabilir") == 11
-    assert fn("bilinmeyen") == 11
-    arguman = _GIRIS["_flag_argument"]
-    assert arguman(["--dagitim-duman", "kurulu"], "--dagitim-duman") == "kurulu"
-    assert arguman(["--dagitim-duman"], "--dagitim-duman") is None
-    assert arguman(["--dagitim-duman", "--baska"], "--dagitim-duman") is None
+def test_dagitim_duman_kipi_ve_11_kodu_yok() -> None:
+    """§4.2: `--dagitim-duman` ağ kataloğuyla söküldü; 11 kodu ayrılmıştır (tanımlı sabit yok)."""
+    assert "DISTRIBUTION_SMOKE_FLAG" not in _GIRIS
+    assert "EXIT_DISTRIBUTION_SMOKE_FAILED" not in _ERRORS
+    assert 11 not in {deger for ad, deger in _ERRORS.items() if ad.startswith("EXIT_")}
+    for betik in ("build.sh", "kap-ici-test.sh", "test-kurulum.sh"):
+        metin = (REPO / "packaging" / "linux" / betik).read_text(encoding="utf-8")
+        assert "--dagitim-duman" not in metin, betik
 
 
 def test_bagimlilik_duman_eksik_modulu_yakalar(monkeypatch: pytest.MonkeyPatch) -> None:
