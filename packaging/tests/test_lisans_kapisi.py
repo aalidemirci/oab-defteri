@@ -155,7 +155,10 @@ def test_tepsi_ve_qr_zinciri_lisans_listesinde_yok() -> None:
         assert ad not in PYTHON, ad
     assert L.KAYNAGI_PAKETTE == frozenset()
     assert not any(b.kaynagi_pakette for b in BILESENLER)
-    assert "module_collection_mode" not in SPEC.read_text(encoding="utf-8")
+    # Spec'teki tek toplama kipi python-docx'in `parts` kaynaklarıdır (MIT; dizin yolu
+    # için, B10) — LGPL kaynağı için toplanan bir paket yoktur.
+    kipler = re.findall(r"module_collection_mode=\{([^}]*)\}", SPEC.read_text(encoding="utf-8"))
+    assert kipler == ['"docx.parts": "pyz+py"']
 
 
 # ------------------------------------------------------------ liste eksiksizliği
@@ -303,6 +306,7 @@ BEKLENEN_PYTHON_KUMELERI: dict[str, frozenset[str]] = {
             "djangorestframework",
             "et-xmlfile",
             "fonttools",
+            "lxml",
             "openpyxl",
             "packaging",
             "pillow",
@@ -313,6 +317,7 @@ BEKLENEN_PYTHON_KUMELERI: dict[str, frozenset[str]] = {
             "pyinstaller-hooks-contrib",
             "pypdf",
             "pyphen",
+            "python-docx",
             "pythonnet",
             "pywebview",
             "setuptools",
@@ -343,6 +348,7 @@ BEKLENEN_PYTHON_KUMELERI: dict[str, frozenset[str]] = {
             "djangorestframework",
             "et-xmlfile",
             "fonttools",
+            "lxml",
             "openpyxl",
             "packaging",
             "pillow",
@@ -353,6 +359,7 @@ BEKLENEN_PYTHON_KUMELERI: dict[str, frozenset[str]] = {
             "pyinstaller-hooks-contrib",
             "pypdf",
             "pyphen",
+            "python-docx",
             "pyside6",
             "pyside6-addons",
             "pyside6-essentials",
@@ -633,6 +640,8 @@ def test_her_bilesenin_lisans_metni_var_ve_sahipsiz_dosya_yok() -> None:
 ORTAK_METIN_OZETLERI = {
     "LGPL-3.0-metni.txt": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118",
     "GPL-3.0-metni.txt": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+    # base-files 13.8+deb13u7 `/usr/share/common-licenses/LGPL-2.1` (F1a-3, lxml).
+    "LGPL-2.1-metni.txt": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
 }
 
 
@@ -649,6 +658,24 @@ def test_ortak_lgpl_ve_gpl_metinleri_gercek_surum_3() -> None:
     assert "GNU GENERAL PUBLIC LICENSE" in gpl and "Version 3, 29 June 2007" in gpl
     for ad in ("pyside6", "pyside6-essentials", "pyside6-addons", "shiboken6"):
         assert set(PYTHON[ad].dosyalar) == {"LGPL-3.0-metni.txt", "GPL-3.0-metni.txt"}, ad
+    lgpl21 = (LISANSLAR / "LGPL-2.1-metni.txt").read_text(encoding="utf-8")
+    assert "GNU LESSER GENERAL PUBLIC LICENSE" in lgpl21 and "Version 2.1, February 1999" in lgpl21
+
+
+def test_lxml_statik_bagli_libiconv_lgpl_metni_ve_teklifle_verilir() -> None:
+    """F1a-3 (B11): lxml tekerlekleri GNU libiconv'u (LGPL-2.1) statik bağlar.
+
+    lxml'in kendi `LICENSES.txt`'i bunu söyler ama LGPL-2.1'e yalnız adresle atıf
+    yapar: metin ortak dosyadan eklenir, libiconv yazılı kaynak teklifine girer.
+    """
+    lxml = PYTHON["lxml"]
+    assert "LGPL-2.1-metni.txt" in lxml.dosyalar
+    bildirim = next(ad for ad in lxml.dosyalar if ad.startswith("python-lxml-LICENSES"))
+    metin = (LISANSLAR / bildirim).read_text(encoding="utf-8")
+    assert "**iconv**: LGPL 2.1" in metin
+    benioku = (LISANSLAR / L.BENIOKU_ADI).read_text(encoding="utf-8")
+    teklif = benioku.split(L.TEKLIF_BASLIGI, 1)[1]
+    assert f"lxml {lxml.surum} tekerleklerine statik bağlı GNU libiconv (LGPL-2.1)" in teklif
 
 
 def test_benioku_her_bileseni_ve_lgpl_kaynak_bilgisini_tasir() -> None:

@@ -114,6 +114,10 @@ datas += collect_data_files("weasyprint")  # gömülü CSS'ler (html5_ua.css …
 datas += collect_data_files("pyphen")  # heceleme sözlükleri
 datas += collect_data_files("tinyhtml5")
 datas += collect_data_files("webview")  # js/ (her platform) + Windows: WebView2 DLL'leri
+# python-docx `Document()` varsayılan şablonunu (`docx/templates/default.docx`) ve
+# altlık/biçem XML'lerini paket dizininden DOSYA YOLUYLA okur; eksikse Word evrakı
+# sahada ilk basımda düşer (tasarım §11 B10; `--evrak-duman` sınar).
+datas += collect_data_files("docx")
 
 # ---------------------------------------------------------------------------
 # Windows DLL kapanışı (ntldd/objdump ile üretilir — elle liste YOK)
@@ -183,6 +187,10 @@ hiddenimports += collect_submodules("openpyxl")
 # xlrd alt modüllerini (biffh, compdoc, formula…) kendiliğinden toplamaz.
 hiddenimports += collect_submodules("xlrd")
 hiddenimports += collect_submodules("pypdf")
+# Evrakın Word çizicisi (T2) — backend `shared/docx.py` python-docx'i TEMBEL import
+# eder; lxml ve typing_extensions onun geçişlileridir (tasarım §11 B10-B12).
+hiddenimports += collect_submodules("docx")
+hiddenimports += ["lxml", "lxml.etree", "typing_extensions"]
 # LİSANS KAPISI (F12, 27.09.2026 yerel derlemesi): pywebview kendi PyInstaller
 # kancasını (`webview.__pyinstaller.hook-webview`) paketinin İÇİNDE taşır; süzgeçsiz
 # `collect_submodules` onu da toplar, kanca `PyInstaller.utils.hooks`'u import
@@ -316,6 +324,12 @@ a = Analysis(  # noqa: F821 — PyInstaller global'i
     hooksconfig={},
     runtime_hooks=[str(RUNTIME_HOOK)],
     excludes=excludes,
+    # python-docx altlık, üstlük ve biçem XML'lerini `docx/parts/` altından
+    # `os.path.join(dirname(__file__), "..", "templates", ...)` ile açar. Modüller
+    # yalnız PYZ arşivinde kalırsa `_internal/docx/parts` dizini diskte olmaz; Linux
+    # `parts/..` yolunu çözemez (Windows yolu metin olarak sadeleştirdiği için
+    # geçer). Kaynaklar diske de konur ki dizin var olsun (`--evrak-duman` altlık yazar).
+    module_collection_mode={"docx.parts": "pyz+py"},
     noarchive=False,
     optimize=0,
 )

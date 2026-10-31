@@ -82,6 +82,25 @@ def test_paket_kapisi_depo_kapisinin_riskli_uzantilarini_kapsar() -> None:
     assert MODUL["YASAK_UZANTILAR"] == depo["RISKLI_UZANTILAR"]
 
 
+def test_python_docx_varsayilan_sablonu_yalniz_tam_yoluyla_muaf(tmp_path: Path) -> None:
+    """F1a-3 (B10): `docx/templates/default.docx` pakete girer; başka .docx girmez."""
+    sablon = tmp_path / "_internal" / "docx" / "templates" / "default.docx"
+    for dosya in (
+        sablon,
+        tmp_path / "_internal" / "templates" / "default.docx",
+        tmp_path / "_internal" / "docx" / "templates" / "karar.docx",
+        tmp_path / "_internal" / "backend" / "default.docx",
+    ):
+        dosya.parent.mkdir(parents=True, exist_ok=True)
+        dosya.touch()
+
+    assert YASAK_DOSYALARI_BUL(tmp_path) == [
+        Path("_internal/backend/default.docx"),
+        Path("_internal/docx/templates/karar.docx"),
+        Path("_internal/templates/default.docx"),
+    ]
+
+
 def test_csv_db_ve_xlsm_reddedilir(tmp_path: Path) -> None:
     for ad in ("ogrenciler.csv", "eski.db", "liste.XLSM"):
         dosya = tmp_path / "_internal" / "backend" / "apps" / "okul" / ad

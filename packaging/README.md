@@ -21,7 +21,7 @@ packaging/
 ├── pyinstaller/
 │   ├── oab_defteri.spec   Windows + Linux ORTAK spec
 │   ├── giris.py                 paket giriş noktası + teşhis kipleri
-│   │                            (`--pdf-duman`, `--bagimlilik-duman`)
+│   │                            (`--pdf-duman`, `--evrak-duman`, `--bagimlilik-duman`)
 │   ├── rthook_od.py             çalışma-zamanı kancası (DLL/fontconfig/SPA yolu)
 │   ├── fonts.conf.tmpl          Windows fontconfig şablonu (gömülü DejaVu)
 │   └── fonts.paket.conf         paket içi fontconfig — spec bunu (Windows)
@@ -45,7 +45,7 @@ packaging/
 ├── linux/
 │   ├── docker-build.sh          HOST'tan çalıştırılan sarmalayıcı  ← BURADAN BAŞLA
 │   ├── build.sh                 kap İÇİNDE koşan asıl derleme
-│   ├── test-kurulum.sh          debian:11 + debian:12 kurulum provası
+│   ├── test-kurulum.sh          debian:11 + 12 + 13 kurulum provası
 │   ├── kap-ici-test.sh          prova kabının içinde koşan betik
 │   ├── apt_dene.sh              apt ayna tutarsızlığı sarmalı
 │   ├── debian-control.tmpl      .deb üstverisi (@VERSION@/@SIZE@/@DEPENDS@)
@@ -66,7 +66,7 @@ packaging/
 ```bash
 docker compose run --rm frontend npm run build     # frontend/dist şart ve güncel olmalı
 bash packaging/linux/docker-build.sh               # .deb + .tar.gz
-bash packaging/linux/test-kurulum.sh               # debian:11 + debian:12 provası
+bash packaging/linux/test-kurulum.sh               # debian:11 + 12 + 13 provası
 ```
 
 Hızlı doğrulama derlemesi (PySide6 indirilmez; pencere açılmaz, yalnız
@@ -95,7 +95,7 @@ olayını gönderir ve iki mutex serbest kalana dek en çok 30 sn bekler (tasar�
 
 ## Duman testleri
 
-Paketlenmiş ikili her derlemede iki teşhis kipiyle sınanır (`giris.py`):
+Paketlenmiş ikili her derlemede üç teşhis kipiyle sınanır (`giris.py`):
 
 * `--bagimlilik-duman` — `RUNTIME_MODULES`'ın tamamını, Windows'ta ek olarak
   `DESKTOP_RUNTIME_MODULES`'ı (`clr`) import eder.
@@ -103,6 +103,10 @@ Paketlenmiş ikili her derlemede iki teşhis kipiyle sınanır (`giris.py`):
   (`backend/templates/documents/base.html`) küçük bir Türkçe örnek belge
   üretir; şablon ağacının pakette olduğunu, WeasyPrint zincirini, Türkçe
   harfleri ve gömülü DejaVu fontunu doğrular.
+* `--evrak-duman [dosya.docx]` — evrak hattının Word çizicisini sınar (T2):
+  python-docx'in varsayılan şablonuyla boş belge açar, backend'in örnek
+  belgesini (`shared/evrak.py`) Word'e çizer, geri okur ve gövdenin metin
+  akışını içerik modeliyle karşılaştırır; başarısızsa çıkış 12.
 
 ## Sürüm
 

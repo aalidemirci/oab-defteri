@@ -261,6 +261,14 @@ if ($kod -ne 0) {
 }
 if (-not (Test-Path $pdf)) { throw "PDF üretilmedi: $pdf" }
 
+# Word çizicisi (T2): python-docx varsayılan şablonu + örnek belge + geri okuma. Çıktı
+# geçici dizine yazılır, yayın artefaktlarına girmez.
+Write-Adim "duman testi: --evrak-duman (python-docx + Türkçe Word + içerik modeli)"
+$kod = Invoke-Uygulama $AppExe @("--evrak-duman")
+if ($kod -ne 0) {
+    throw "Evrak duman testi BAŞARISIZ (çıkış $kod). python-docx şablonları (spec collect_data_files) veya backend/shared eksik."
+}
+
 Write-Adim "duman testi: --autotest"
 $gecici = Join-Path ([System.IO.Path]::GetTempPath()) ("od-" + [Guid]::NewGuid().ToString("N"))
 $kod = Invoke-Uygulama $AppExe @("--autotest") @{ "OD_APP_HOME" = $gecici }

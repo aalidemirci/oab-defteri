@@ -7,6 +7,7 @@
 #
 #   debian:11 (bullseye) → Pardus 21 provası
 #   debian:12 (bookworm) → Pardus 23 provası
+#   debian:13 (trixie)   → Pardus 25 provası (tasarım §13 D17)
 #
 # Kullanım (depo kökünden, önce `docker-build.sh` koşmuş olmalı):
 #     bash packaging/linux/test-kurulum.sh
@@ -22,7 +23,7 @@ DEPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CIKTI="$DEPO/dist/cikti"
 SURUMLER=("${@:-}")
 if [ -z "${1:-}" ]; then
-    SURUMLER=(11 12)
+    SURUMLER=(11 12 13)
 fi
 
 if ! ls "$CIKTI"/*.deb >/dev/null 2>&1; then

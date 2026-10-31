@@ -228,8 +228,9 @@ def test_duman_testleri_windowsun_sistem_pathiyle_kosar() -> None:
     assert '$tumOrtam = @{ "PATH" = (Get-SistemPath) }' in uygulama
     assert "[Environment]::SetEnvironmentVariable($anahtar, $eski[$anahtar])" in uygulama
     assert "} finally {" in uygulama
-    # Her duman testi bu yardımcıdan geçer (pencereli exe doğrudan çağrılmaz).
-    assert ps1.count("Invoke-Uygulama $AppExe") == 3
+    # Her duman testi bu yardımcıdan geçer (pencereli exe doğrudan çağrılmaz):
+    # --bagimlilik-duman, --pdf-duman, --evrak-duman, --autotest.
+    assert ps1.count("Invoke-Uygulama $AppExe") == 4
     assert "& $AppExe" not in ps1
 
 

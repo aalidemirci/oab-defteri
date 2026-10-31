@@ -35,9 +35,7 @@ from typing import BinaryIO
 # Küme depo kapısının `depo_sizintisi.RISKLI_UZANTILAR` kümesiyle AYNIDIR (F12 düzeltme
 # turu: paket kapısı .csv, .db ve .xlsm'yi geçiriyordu — e-Okul ya da kişi dökümü
 # CSV'si backend/apps altına düşse pakete girerdi). Eşitliği test sınar; meşru bir
-# paket içeriği bu uzantıyı taşırsa ADIYLA muaf tutulur (joker yok). Bilinen ilk aday:
-# F1a-3'te python-docx'in `Document()` varsayılan şablonu (`docx/templates/default.docx`;
-# tasarım §11 B10) pakete girer ve burada adıyla muaf tutulmalıdır.
+# paket içeriği bu uzantıyı taşırsa ADIYLA muaf tutulur (joker yok, `MUAF_SONLAR`).
 YASAK_UZANTILAR = frozenset(
     {
         ".sqlite",
@@ -66,6 +64,10 @@ YASAK_SONLAR = (".sqlite3-shm", ".sqlite3-wal")
 # taşır; evrak şablonları gibi meşru paket içeriğini uzantı/çift kuralları zaten
 # serbest bırakır).
 YASAK_ADLAR = frozenset({"guvenlik.json", "yedekleme.json", "surum.json"})
+# Yasak uzantı taşıyan meşru paket dosyaları: yolun SON parçaları tam olarak bunlarsa
+# muaftır. python-docx'in `Document()` varsayılan şablonu boş bir belgedir; kitaplık
+# onu paket dizininden dosya yoluyla okur (tasarım §11 B10, spec `collect_data_files`).
+MUAF_SONLAR = frozenset({("docx", "templates", "default.docx")})
 
 
 def guvenli_metin(metin: str, encoding: str | None = None) -> str:
@@ -86,6 +88,8 @@ def yaz(metin: str) -> None:
 def yol_yasak_mi(goreli_yol: Path) -> bool:
     """Bir paket içi yolun kullanıcı verisi olma ihtimalini sınar."""
     parcalar = tuple(parca.casefold() for parca in goreli_yol.parts)
+    if any(parcalar[-len(son) :] == son for son in MUAF_SONLAR):
+        return False
     ciftler = set(zip(parcalar, parcalar[1:], strict=False))
     ad = goreli_yol.name.casefold()
 

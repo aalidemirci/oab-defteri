@@ -47,6 +47,9 @@ DAGITIM_IMPORT_ESLEME = {
     "pypdf": "pypdf",
     "whitenoise": "whitenoise",
     "waitress": "waitress",
+    "python-docx": "docx",
+    "lxml": "lxml",
+    "typing_extensions": "typing_extensions",
 }
 
 _PIN = re.compile(r"^([A-Za-z0-9_.\-]+)==", re.MULTILINE)
@@ -298,7 +301,11 @@ def test_masaustu_modulleri_spec_windows_blogunda_toplanir() -> None:
     spec_metni = SPEC.read_text(encoding="utf-8")
     for yok in ("pystray", "six.moves", "PIL.ImageDraw", "PIL.IcoImagePlugin", "segno"):
         assert yok not in dizeler, yok
-    assert "module_collection_mode" not in spec_metni
+    # Toplama kipi yalnız python-docx'in `parts` kaynakları içindir (B10); tepsinin
+    # kaynak toplama kipi (pystray, LGPL) yoktur.
+    assert re.findall(r"module_collection_mode=\{([^}]*)\}", spec_metni) == [
+        '"docx.parts": "pyz+py"'
+    ]
     assert 'collect_submodules("segno")' not in spec_metni
 
 
@@ -327,6 +334,57 @@ def test_pdf_duman_hedef_dosya_ayristirmasi() -> None:
     varsayilan = smoke_target(["--pdf-duman"])
     assert varsayilan == Path(tempfile.gettempdir()) / "oab-defteri-pdf-duman.pdf"
     assert smoke_target(["--pdf-duman", "--autotest"]) == varsayilan
+
+
+def test_evrak_duman_bayragi_ve_cikis_kodu_sozlesmesi() -> None:
+    assert _GIRIS["EVRAK_SMOKE_FLAG"] == "--evrak-duman"  # build.ps1 / build.sh / kap-ici-test
+    assert _GIRIS["EXIT_EVRAK_SMOKE_FAILED"] == _ERRORS["EXIT_EVRAK_SMOKE_FAILED"] == 12
+    for betik in ("build.sh", "kap-ici-test.sh"):
+        metin = (REPO / "packaging" / "linux" / betik).read_text(encoding="utf-8")
+        assert "--evrak-duman" in metin, betik
+    build_ps1 = (REPO / "packaging" / "windows" / "build.ps1").read_text(encoding="utf-8")
+    assert '"--evrak-duman"' in build_ps1
+
+
+def test_evrak_duman_hedef_dosya_ayristirmasi() -> None:
+    smoke_target = _GIRIS["_smoke_target"]
+    bayrak = "--evrak-duman"
+    assert smoke_target([bayrak, "a", "b.docx", "--autotest"], bayrak) == Path("a b.docx")
+    varsayilan = Path(tempfile.gettempdir()) / "oab-defteri-evrak-duman.docx"
+    assert smoke_target([bayrak], bayrak) == varsayilan
+
+
+def test_evrak_duman_depodaki_backend_ile_gecer(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Gerçek zincir: `Document()` → örnek belge → .docx → geri okuma → akış eşitliği."""
+    # Kip backend'i `sys.path`'e kalıcı ekler; burada önceden eklenir ki test sonunda geri alınsın.
+    monkeypatch.syspath_prepend(str(REPO / "backend"))
+    hedef = tmp_path / "Okul Aile" / "evrak-duman.docx"
+    assert _GIRIS["run_evrak_smoke"](hedef) == 0
+    assert hedef.stat().st_size > 0
+
+
+def test_evrak_duman_ayrisan_akisi_yakalar(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Kapının GERÇEKTEN kapandığı: Word akışı modelden ayrışırsa 12."""
+    monkeypatch.syspath_prepend(str(REPO / "backend"))
+    from shared import evrak
+
+    monkeypatch.setattr(evrak, "metin_akisi", lambda _belge: ["beklenmeyen satır"])
+    assert _GIRIS["run_evrak_smoke"](tmp_path / "evrak-duman.docx") == 12
+
+
+def test_evrak_duman_kipi_hedefi_tani_dosyasina_yazar(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    run = _GIRIS["run"]
+    dosya = _tanilama_ortami(monkeypatch, tmp_path, run)
+    monkeypatch.setitem(run.__globals__, "run_evrak_smoke", lambda _hedef: 12)
+    assert run(["--evrak-duman", "hedef/Okul", "Aile/e.docx"]) == 12
+    metin = dosya.read_text(encoding="utf-8")
+    assert "--evrak-duman" in metin.splitlines()[0]
+    assert "Hedef Word dosyası: hedef/Okul Aile/e.docx" in metin
+    assert "Çıkış kodu: 12" in metin
 
 
 def test_pdf_duman_hedefi_bosluklu_yolu_birlestirir() -> None:

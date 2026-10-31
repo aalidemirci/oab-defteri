@@ -17,7 +17,7 @@
 #   3. PyInstaller onedir + lisans denetimi (THIRD_PARTY_LICENSES pakete) +
 #      paket dizininde veri sızıntısı denetimi
 #   4. Duman testleri: `--bagimlilik-duman` (hiddenimports) + `--autotest` (çıkış 0)
-#      + `--pdf-duman` (evrak şablonu + Türkçe PDF)
+#      + `--pdf-duman` (evrak şablonu + Türkçe PDF) + `--evrak-duman` (Word)
 #   5. .deb sargısı (dpkg-deb; DEP-5 copyright dahil). Program ağ servisi
 #      sunmaz: güvenlik duvarı profili ya da servis tanımı bırakılmaz
 #   6. Taşınabilir .tar.gz (+ kur.sh) + son arşivlerde veri sızıntısı denetimi
@@ -191,6 +191,10 @@ bilgi "duman testi: --bagimlilik-duman (hiddenimports)"
 
 bilgi "duman testi: --pdf-duman (evrak şablonu + Türkçe PDF)"
 "$UYGULAMA" --pdf-duman "$CIKTI/pdf-duman.pdf"
+
+# Word çıktısı geçici dizine yazılır: yayın artefaktlarına (dist/cikti) girmez.
+bilgi "duman testi: --evrak-duman (python-docx + Türkçe Word + içerik modeli)"
+"$UYGULAMA" --evrak-duman
 
 bilgi "duman testi: --autotest"
 GECICI_VERI="$(mktemp -d)"

@@ -25,6 +25,9 @@ EXIT_RESTORE_FAILED = 9
 EXIT_IMPORT_SMOKE_FAILED = 10
 # 11 AYRILMIŞTIR (tasarım §4.2): ailede `--dagitim-duman` kipinin koduydu; ağ kataloğuyla
 # birlikte söküldü. Aile hizası için numara yeniden kullanılmaz.
+# Paket teşhis kipi (`--evrak-duman`): Word çizicisi (python-docx) pakette çalışmıyor
+# ya da çıktısı içerik modelinden ayrışıyor (T2; tasarım §4.2).
+EXIT_EVRAK_SMOKE_FAILED = 12
 
 
 class StartupError(Exception):

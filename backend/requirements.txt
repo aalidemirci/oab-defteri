@@ -35,6 +35,15 @@ weasyprint==68.0
 # ---------- PDF Okuma / Bölme ----------
 pypdf==6.14.2
 
+# ---------- Word Üretimi ----------
+# Evrak hattının Word çizicisi (T2; tasarım §11 B10-B12): tek içerik, iki çizici.
+# Uygulama kodu python-docx'e yalnız shared/docx.py'den gider. lxml ve
+# typing_extensions onun geçişlileridir (Requires-Dist); doğrudan pinlenir ki
+# spec, duman kipi ve lisans kümesi aynı sürüme bağlansın.
+python-docx==1.2.0
+lxml==6.1.3
+typing_extensions==4.16.0
+
 # ---------- Masaüstü Uygulama Altyapısı ----------
 # NOT (F9 temizliği): `filetype` ve `platformdirs` F0 brifinden geldi ama hiç
 # bağlanmadı — soru PDF doğrulaması %PDF imzası + A4 ölçüsüyle (services.py),

@@ -10,7 +10,7 @@
 # Akış:
 #   arayuz          → frontend/dist artefaktı (bir kez derlenir, iki paket işi indirir)
 #   linux           → python:3.12-bullseye kabında onedir + .deb + .tar.gz
-#   linux-kurulum   → temiz debian:11 VE debian:12 kaplarında kurulum provası
+#   linux-kurulum   → temiz debian:11, debian:12 VE debian:13 kaplarında kurulum provası
 #   windows         → msys2 + ntldd + PyInstaller + Türkçe PDF duman testi + Inno
 #   yayin           → v* etiketinde son paketlerde veri sızıntısı denetimi +
 #                     SHA256SUMS.txt + GitHub Release (ön-sürüm eki taşıyan etiket
@@ -104,8 +104,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 11 = bullseye (Pardus 21 tabanı), 12 = bookworm (Pardus 23 tabanı)
-        debian: ["11", "12"]
+        # 11 = bullseye (Pardus 21 tabanı), 12 = bookworm (Pardus 23 tabanı),
+        # 13 = trixie (Pardus 25 tabanı; tasarım §13 D17 — 64 bit zaman geçişinde
+        # adı değişen kitaplıkları `apt-get -f install` çözüyor mu, prova gösterir)
+        debian: ["11", "12", "13"]
     container:
       image: debian:${{ matrix.debian }}
     steps:
@@ -151,7 +153,7 @@ jobs:
         with:
           name: linux-paketleri
           path: paketler
-      - name: Temiz kurulum + --autotest + PDF duman testi
+      - name: Temiz kurulum + --autotest + PDF ve evrak duman testleri
         run: bash packaging/linux/kap-ici-test.sh
         env:
           # kap-ici-test.sh paketleri /paketler altında arar.

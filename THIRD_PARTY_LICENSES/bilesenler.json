@@ -217,6 +217,23 @@
       "aciklama": "PDF yazı tipi alt kümeleme"
     },
     {
+      "ad": "lxml",
+      "surum": "6.1.3",
+      "tur": "python",
+      "platformlar": [
+        "linux",
+        "windows"
+      ],
+      "lisans": "BSD-3-Clause",
+      "dosyalar": [
+        "LGPL-2.1-metni.txt",
+        "python-lxml-LICENSE.txt",
+        "python-lxml-LICENSES.txt"
+      ],
+      "kaynak": "https://pypi.org/project/lxml/6.1.3/",
+      "aciklama": "Word çizicisinin XML katmanı; tekerlek zlib, GNU libiconv (LGPL-2.1), libxml2, libxslt ve libexslt'yi statik bağlar"
+    },
+    {
       "ad": "openpyxl",
       "surum": "3.1.5",
       "tur": "python",
@@ -416,6 +433,21 @@
       "secilen": "LGPL-3.0-only",
       "kaynak": "https://pypi.org/project/PySide6-Essentials/6.8.3/",
       "aciklama": "Qt 6 kitaplıkları"
+    },
+    {
+      "ad": "python-docx",
+      "surum": "1.2.0",
+      "tur": "python",
+      "platformlar": [
+        "linux",
+        "windows"
+      ],
+      "lisans": "MIT",
+      "dosyalar": [
+        "python-python-docx-LICENSE.txt"
+      ],
+      "kaynak": "https://pypi.org/project/python-docx/1.2.0/",
+      "aciklama": "Evrak (Word) üretimi"
     },
     {
       "ad": "pythonnet",

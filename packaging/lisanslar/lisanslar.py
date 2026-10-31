@@ -94,7 +94,12 @@ PAKETLEME_GEREKSINIMLERI = REPO / "packaging" / "requirements-paketleme.txt"
 #: dosyalarından alıyordu; tepsi söküldü (tasarım §11 B18). PySide6/shiboken6 tekerlekleri
 #: lisans metni taşımaz (`BUYUK_DAGITIMLAR`). Dosyaların SHA-256 özetini
 #: `packaging/tests/test_lisans_kapisi.py` sabitler — elle düzenlenmez.
-ORTAK_METIN_DOSYALARI = ("LGPL-3.0-metni.txt", "GPL-3.0-metni.txt")
+#:
+#: LGPL-2.1 metni lxml içindir (F1a-3, tasarım §11 B11): lxml'in resmî tekerlekleri zlib,
+#: GNU libiconv (LGPL-2.1), libxml2, libxslt ve libexslt'yi STATİK bağlar (dağıtımın
+#: `LICENSES.txt`'i, "Binary wheels"); o dosya LGPL-2.1'e yalnız adresle atıf yapar.
+#: Aynı kaynaktan (`/usr/share/common-licenses/LGPL-2.1`, base-files 13.8+deb13u7).
+ORTAK_METIN_DOSYALARI = ("LGPL-3.0-metni.txt", "GPL-3.0-metni.txt", "LGPL-2.1-metni.txt")
 ORTAK_METIN_KAYNAGI = Path(__file__).resolve().parent
 
 UST_BILGI = (
@@ -332,6 +337,10 @@ LISANS_DUZELTMELERI: dict[str, str] = {
     "xlrd": "BSD-3-Clause",
     "zopfli": "Apache-2.0",
     "asgiref": "BSD-3-Clause",
+    # Evrakın Word çizicisi (F1a-3; tasarım §11 B10-B11). İkisi de lisansı yalnız eski
+    # `License` alanında bildirir. lxml'in statik bağlı kitaplıkları `EK_ORTAK_METIN`'de.
+    "python-docx": "MIT",
+    "lxml": "BSD-3-Clause",
     # --- yalnız paket ortamında kurulanlar ---
     "pywebview": "BSD-3-Clause",
     "bottle": "MIT",
@@ -374,6 +383,12 @@ ORTAK_METIN = {
     "pyside6-essentials": ("LGPL-3.0-metni.txt", "GPL-3.0-metni.txt"),
     "pyside6-addons": ("LGPL-3.0-metni.txt", "GPL-3.0-metni.txt"),
     "shiboken6": ("LGPL-3.0-metni.txt", "GPL-3.0-metni.txt"),
+}
+
+#: Kendi lisans dosyalarına EK olarak ortak metin verilen dağıtımlar: tekerleğe statik
+#: bağlı kitaplığın lisansına dağıtım yalnız atıf yapıyorsa metnin kendisi buradan gelir.
+EK_ORTAK_METIN = {
+    "lxml": ("LGPL-2.1-metni.txt",),
 }
 
 #: Lisansı üstveride bildirilen ama dağıtımında lisans dosyası OLMAYANLAR: metin
@@ -429,6 +444,11 @@ ACIKLAMALAR: dict[str, str] = {
     "django": "Uygulama çatısı",
     "djangorestframework": "Yönetim API'si",
     "weasyprint": "Evrak (PDF) üretimi",
+    "python-docx": "Evrak (Word) üretimi",
+    "lxml": (
+        "Word çizicisinin XML katmanı; tekerlek zlib, GNU libiconv (LGPL-2.1), libxml2, "
+        "libxslt ve libexslt'yi statik bağlar"
+    ),
     "openpyxl": "Excel içe/dışa aktarma",
     "xlrd": "e-Okul .xls okuma",
     "cryptography": "Alan şifrelemesi, şifreli yedek",
@@ -484,7 +504,7 @@ _PIP_PLATFORM = {
     "windows": ("win_amd64",),
     "linux": ("manylinux2014_x86_64", "manylinux_2_17_x86_64", "manylinux_2_28_x86_64"),
 }
-_LISANS_ADI = re.compile(r"^(licen[cs]e|copying|notice|copyright)([._-].*)?$", re.IGNORECASE)
+_LISANS_ADI = re.compile(r"^(licen[cs]es?|copying|notice|copyright)([._-].*)?$", re.IGNORECASE)
 _KOD_UZANTILARI = frozenset({".py", ".pyc", ".pyi", ".so", ".pyd", ".dll", ".js", ".json"})
 
 MIT_METNI = """\
@@ -1165,6 +1185,14 @@ def _yazili_teklif(bilesenler: list[Bilesen]) -> list[str]:
             f"  - PySide6 tekerleklerinin taşıdığı Qt {pyside.surum} kitaplıkları",
             "    (yalnız Linux paketi)",
         ]
+    lxml = next((b for b in bilesenler if b.tur == "python" and normal_ad(b.ad) == "lxml"), None)
+    if lxml is not None:
+        # LGPL-2.1 md. 6: statik bağlı kitaplıkta yeniden bağlamaya yetecek kaynak — lxml'in
+        # kendi kaynağı (BSD) ve tekerleği üreten derleme betikleri ile libiconv'un kaynağı.
+        satirlar += [
+            f"  - lxml {lxml.surum} tekerleklerine statik bağlı GNU libiconv (LGPL-2.1)",
+            "    ve onu yeniden bağlamaya yetecek lxml kaynağı (Windows ve Linux paketleri)",
+        ]
     satirlar += [
         "  - paketle gelen LGPL lisanslı sistem kütüphaneleri (Windows'ta MSYS2,",
         "    Linux'ta Debian paketleri; adları ve sürümleri paketteki",
@@ -1256,7 +1284,9 @@ def benioku_metni(bilesenler: list[Bilesen]) -> str:
     satirlar += _yazili_teklif(bilesenler)
     satirlar += [
         "Ortak metinler: LGPL-3.0-metni.txt ve GPL-3.0-metni.txt (LGPL-3.0, GPL-3.0",
-        "metnine atıf yaptığı için ikisi birlikte verilir).",
+        "metnine atıf yaptığı için ikisi birlikte verilir); LGPL-2.1-metni.txt (lxml",
+        "tekerleklerine statik bağlı GNU libiconv için; lxml'in zlib, libxml2, libxslt",
+        "ve libexslt dahil bütün bildirimleri python-lxml-LICENSES.txt'tedir).",
         "",
         "Programın simgeleri projenin kendi üretimidir (packaging/ikonlar); arayüz",
         "simgeleri Material Symbols yazı tipindendir (aşağıdaki tabloda).",
@@ -1338,6 +1368,7 @@ def uret(on_yuz_json: Path, hedef: Path = LISANS_DIZINI) -> list[Bilesen]:
         else:
             eksik.append(f"{bilgi.ad} {bilgi.surum} (lisans dosyası yok)")
             continue
+        adlar += EK_ORTAK_METIN.get(n, ())
         bilesenler.append(
             Bilesen(
                 ad=bilgi.ad,

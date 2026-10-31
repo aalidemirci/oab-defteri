@@ -4,7 +4,7 @@ Normal çalışmada tek işi vardır: `desktop.main.run()`'a devretmek. Kabuğun
 kendisi `desktop/` altındadır ve bu dosyaya bağımlı DEĞİLDİR — depodan
 `python -m desktop.main` ile çalıştırmak da aynı sonucu verir.
 
-Ek olarak paketlenmiş sürümde **iki teşhis kipi** sunar:
+Ek olarak paketlenmiş sürümde **üç teşhis kipi** sunar:
 
     oab-defteri --bagimlilik-duman
 
@@ -45,6 +45,17 @@ Kip hem CI duman testinde hem de sahada "programın PDF üretimi çalışıyor
 mu?" sorusunu tek komutla yanıtlamak için kullanılır. Veritabanına DOKUNMAZ:
 Django ayarları yüklenmez (şablon motoru ayarsız, bağımsız bir `Engine`
 örneğiyle kurulur), veri dizinine yazılmaz.
+
+    oab-defteri --evrak-duman [dosya.docx]
+
+Evrak hattının Word çizicisini sınar (T2; tasarım §4.2, §11 B10): önce
+python-docx'in `Document()`'i paketteki varsayılan şablonla boş belge açar,
+sonra backend'in örnek belgesi (`shared.evrak.ornek_belge`) Word'e çizilir,
+dosyaya yazılır, python-docx ile geri okunur ve gövdenin metin akışı içerik
+modelininkiyle karşılaştırılır; Türkçe örnek ve `tr_upper`'ın ürettiği "İ"
+aranır. Backend kodu pakete kaynak olarak girdiği için (spec `Tree`) kip onu
+programın gerçekte kullandığı dizinden (`resolve_backend_dir`) içe aktarır.
+PDF kipi gibi veritabanına dokunmaz, Django ayarı yüklemez.
 """
 
 from __future__ import annotations
@@ -62,12 +73,14 @@ if str(_REPO_ROOT) not in sys.path:
 
 PDF_SMOKE_FLAG = "--pdf-duman"
 IMPORT_SMOKE_FLAG = "--bagimlilik-duman"
+EVRAK_SMOKE_FLAG = "--evrak-duman"
 
 # `desktop/errors.py` 0-7 arasını kullanıyor; teşhis kipi 8'den devam eder
 # (9 = --geri-yukle; 11 ayrılmış — ailede `--dagitim-duman`, yeniden kullanılmaz).
 # Kodlar `desktop/errors.py` ile İKİZDİR.
 EXIT_PDF_SMOKE_FAILED = 8
 EXIT_IMPORT_SMOKE_FAILED = 10
+EXIT_EVRAK_SMOKE_FAILED = 12
 
 #: Paketin İÇİNDE çalışma anında bulunması ZORUNLU üçüncü taraf modüller.
 #:
@@ -93,6 +106,9 @@ RUNTIME_MODULES: tuple[str, ...] = (
     "pypdf",
     "whitenoise",
     "waitress",
+    "docx",
+    "lxml",
+    "typing_extensions",
 )
 
 #: Yalnız Windows masaüstü kabuğunun ihtiyaç duyduğu modüller (masaüstü zinciri;
@@ -122,16 +138,16 @@ BASE_TEMPLATE_MARKER = "Sayfa"
 # Evrakın ortak taban şablonu (backend/templates altında).
 BASE_TEMPLATE = "documents/base.html"
 
-# Örnek belge taban şablonu genişletir; bütün kurum ve eser adları UYDURMADIR.
+# Örnek belge taban şablonu genişletir; bütün kurum ve belge adları UYDURMADIR.
 _SMOKE_TEMPLATE = """{% extends "documents/base.html" %}
 {% block content %}
   <div class="doc-title">PDF DUMAN TESTİ</div>
   <div class="doc-subtitle">OAB Defteri — paket doğrulama belgesi</div>
   <p class="para">{{ sample }}</p>
   <table class="info">
-    <tr><td class="label">Eser</td><td>Örnek Eser Adı</td></tr>
-    <tr><td class="label">Yazar</td><td>Örnek Yazar</td></tr>
-    <tr><td class="label">Nüsha durumu</td><td>Rafta</td></tr>
+    <tr><td class="label">Belge</td><td>Örnek karar taslağı</td></tr>
+    <tr><td class="label">Birim</td><td>Okul-Aile Birliği</td></tr>
+    <tr><td class="label">Durum</td><td>Taslak</td></tr>
   </table>
   <p class="para">Bu belge paketin PDF üretim zincirini sınar; veritabanına dokunmaz.</p>
 {% endblock %}
@@ -370,15 +386,62 @@ def run_import_smoke(platform: str = sys.platform) -> int:
     return 0
 
 
-def _smoke_target(argv: Sequence[str]) -> Path:
-    """`--pdf-duman` sonrasında dosya yolu verildiyse onu, yoksa geçici dosyayı seçer.
+def run_evrak_smoke(target: Path) -> int:
+    """Örnek belgeyi Word'e çizer, python-docx ile geri okuyup doğrular; 0 = başarılı."""
+    from desktop.paths import resolve_backend_dir
+
+    try:
+        backend = str(resolve_backend_dir())
+    except FileNotFoundError as error:
+        _write(f"HATA: backend kodu pakette bulunamadı ({error}).")
+        return EXIT_EVRAK_SMOKE_FAILED
+    if backend not in sys.path:
+        sys.path.insert(0, backend)
+    from shared import docx as cizici
+    from shared import evrak
+
+    # Paketli ikilide `Document()` varsayılan şablonu dosya yolundan okur (B10).
+    cizici.yeni_belge()
+    belge = evrak.ornek_belge()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(evrak.docx_ciz(belge))
+    if not target.is_file() or target.stat().st_size == 0:
+        _write(f"HATA: Word dosyası üretilemedi ({target}).")
+        return EXIT_EVRAK_SMOKE_FAILED
+
+    akis = cizici.govde_metin_akisi(cizici.ac(target.read_bytes()))
+    beklenen = evrak.metin_akisi(belge)
+    if akis != beklenen:
+        _write("HATA: Word gövdesinin metin akışı içerik modelinden ayrışıyor.")
+        _write(f"  beklenen: {beklenen!r}")
+        _write(f"  okunan:   {akis!r}")
+        return EXIT_EVRAK_SMOKE_FAILED
+    duz_metin = "".join("".join(akis).split())
+    if "".join(TURKISH_SAMPLE.split()) not in duz_metin or "TESTİ" not in duz_metin:
+        _write("HATA: Word metninde Türkçe örnek ya da büyük 'İ' bulunamadı.")
+        return EXIT_EVRAK_SMOKE_FAILED
+
+    _write(f"Evrak duman testi başarılı: {target}")
+    _write(f"İçerik özeti: {evrak.icerik_ozeti(belge)}")
+    return 0
+
+
+#: Duman kiplerinin hedef dosyası verilmezse geçici dizinde kullanılan adlar.
+_VARSAYILAN_HEDEFLER = {
+    PDF_SMOKE_FLAG: "oab-defteri-pdf-duman.pdf",
+    EVRAK_SMOKE_FLAG: "oab-defteri-evrak-duman.docx",
+}
+
+
+def _smoke_target(argv: Sequence[str], flag: str = PDF_SMOKE_FLAG) -> Path:
+    """Bayraktan sonra dosya yolu verildiyse onu, yoksa geçici dosyayı seçer.
 
     Yol, bayraktan sonraki ve `-` ile başlamayan BÜTÜN öğelerin boşlukla birleşimidir:
     PowerShell 5.1'in `Start-Process -ArgumentList` dizisi öğeleri tırnaklamadan
     birleştirir; "C:\\Users\\Okul Aile\\…" yolu iki öğeye bölünür ve ilk öğe
     (`C:\\Users\\Okul`) yazılamadığı için yalancı 8 kodu dönerdi (F12 düzeltme turu).
     """
-    index = list(argv).index(PDF_SMOKE_FLAG)
+    index = list(argv).index(flag)
     parcalar: list[str] = []
     for oge in list(argv)[index + 1 :]:
         if oge.startswith("-"):
@@ -386,7 +449,7 @@ def _smoke_target(argv: Sequence[str]) -> Path:
         parcalar.append(oge)
     if parcalar:
         return Path(" ".join(parcalar))
-    return Path(tempfile.gettempdir()) / "oab-defteri-pdf-duman.pdf"
+    return Path(tempfile.gettempdir()) / _VARSAYILAN_HEDEFLER[flag]
 
 
 def run(argv: Sequence[str] | None = None) -> int:
@@ -408,15 +471,23 @@ def run(argv: Sequence[str] | None = None) -> int:
         _write(f"Çıkış kodu: {kod}")
         return kod
 
+    if EVRAK_SMOKE_FLAG in args:
+        _tanilama_ac(EVRAK_SMOKE_FLAG)
+        kod = _run_evrak_smoke_mode(args)
+        _write(f"Çıkış kodu: {kod}")
+        return kod
+
     from desktop.main import run as run_shell
 
     return run_shell(args)
 
 
-def _run_pdf_smoke_mode(args: Sequence[str]) -> int:
-    """`--pdf-duman` kipi: çalışan kopya denetimi + PDF duman testi."""
-    # Çalışan kopya varken duman testi aynı veri dizinine dokunmasın
-    # (tasarım §4.2 adım 2: bayraklı kipler çalışan kopya bulursa 2 koduyla çıkar).
+def _calisan_kopya_kodu() -> int | None:
+    """Çalışan kopya varsa 2, yoksa `None`.
+
+    Çalışan kopya varken duman testi aynı veri dizinine dokunmasın (tasarım §4.2
+    adım 2: bayraklı kipler çalışan kopya bulursa 2 koduyla çıkar).
+    """
     from desktop.errors import EXIT_ALREADY_RUNNING
     from desktop.lock import is_instance_running
     from desktop.paths import resolve_app_paths
@@ -424,6 +495,14 @@ def _run_pdf_smoke_mode(args: Sequence[str]) -> int:
     if is_instance_running(resolve_app_paths().lock_path):
         _write("HATA: OAB Defteri açık. Programı kapatıp yeniden deneyin.")
         return EXIT_ALREADY_RUNNING
+    return None
+
+
+def _run_pdf_smoke_mode(args: Sequence[str]) -> int:
+    """`--pdf-duman` kipi: çalışan kopya denetimi + PDF duman testi."""
+    kod = _calisan_kopya_kodu()
+    if kod is not None:
+        return kod
     hedef = _smoke_target(args)
     _write(f"Hedef PDF: {hedef}")
     try:
@@ -431,6 +510,20 @@ def _run_pdf_smoke_mode(args: Sequence[str]) -> int:
     except Exception as error:  # noqa: BLE001 — teşhis kipi: her hata rapor edilir
         _write(f"HATA: PDF duman testi çöktü: {error!r}")
         return EXIT_PDF_SMOKE_FAILED
+
+
+def _run_evrak_smoke_mode(args: Sequence[str]) -> int:
+    """`--evrak-duman` kipi: çalışan kopya denetimi + Word duman testi."""
+    kod = _calisan_kopya_kodu()
+    if kod is not None:
+        return kod
+    hedef = _smoke_target(args, EVRAK_SMOKE_FLAG)
+    _write(f"Hedef Word dosyası: {hedef}")
+    try:
+        return run_evrak_smoke(hedef)
+    except Exception as error:  # noqa: BLE001 — teşhis kipi: her hata rapor edilir
+        _write(f"HATA: evrak duman testi çöktü: {error!r}")
+        return EXIT_EVRAK_SMOKE_FAILED
 
 
 def main() -> None:

@@ -2,15 +2,16 @@
 # =============================================================================
 # kap-ici-test.sh — TEMİZ bir Debian kabında .deb kurulum provası
 # =============================================================================
-# `test-kurulum.sh` tarafından debian:11 ve debian:12 kaplarının İÇİNDE
+# `test-kurulum.sh` tarafından debian:11, debian:12 ve debian:13 kaplarının İÇİNDE
 # çalıştırılır (tasarım §14 F12 "Pardus'ta aynı zincir" — Pardus 21 bullseye,
-# Pardus 23 bookworm tabanlıdır).
+# Pardus 23 bookworm, Pardus 25 trixie tabanlıdır).
 #
 # Sınananlar:
 #   1. dpkg -i + apt-get -f install ile bağımlılıkların gerçekten çözülmesi
 #   2. `--autotest` → ÇIKIŞ KODU 0 (açılış zinciri: kilit, yedek, göç, sunucu)
 #   3. `--bagimlilik-duman` → üçüncü taraf modüller pakette mi (hiddenimports)
-#   4. `--pdf-duman` → evrak taban şablonundan Türkçe PDF + pypdf ile geri okuma
+#   4. `--pdf-duman` → evrak taban şablonundan Türkçe PDF + pypdf ile geri okuma;
+#      `--evrak-duman` → örnek belgeden Word + python-docx ile geri okuma
 #   5. Dosya yerleşimi (menü kaydı, ikon, /usr/bin bağlantısı) ve lisanslar
 #      (DEP-5 copyright, THIRD_PARTY_LICENSES, readline ve Qt'nin yalnız GPL'li
 #      modülleri yok, Windows'a özgü pywebview dosyaları yok)
@@ -89,6 +90,10 @@ oab-defteri --bagimlilik-duman
 echo "== --pdf-duman (evrak şablonu + Türkçe PDF + font doğrulaması)"
 oab-defteri --pdf-duman /tmp/duman.pdf
 test -s /tmp/duman.pdf
+
+echo "== --evrak-duman (python-docx + Türkçe Word + içerik modeli)"
+oab-defteri --evrak-duman /tmp/duman.docx
+test -s /tmp/duman.docx
 
 echo "== --autotest (açılış zinciri; çıkış kodu 0 beklenir)"
 oab-defteri --autotest

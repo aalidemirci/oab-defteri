@@ -48,6 +48,8 @@ LGPL-3.0 bileşenleri fiziksel bir taşıyıcıyla dağıtılırsa GPL-3.0 madde
   - shiboken6 6.8.3 (yalnız Linux paketi)
   - PySide6 tekerleklerinin taşıdığı Qt 6.8.3 kitaplıkları
     (yalnız Linux paketi)
+  - lxml 6.1.3 tekerleklerine statik bağlı GNU libiconv (LGPL-2.1)
+    ve onu yeniden bağlamaya yetecek lxml kaynağı (Windows ve Linux paketleri)
   - paketle gelen LGPL lisanslı sistem kütüphaneleri (Windows'ta MSYS2,
     Linux'ta Debian paketleri; adları ve sürümleri paketteki
     paket-icerigi.txt ve yerel-kutuphaneler/ dizinindedir)
@@ -80,7 +82,9 @@ yayımlandığı tarihten başlayarak EN AZ ÜÇ YIL ve o sürüm için destek
 verildiği sürece geçerlidir.
 
 Ortak metinler: LGPL-3.0-metni.txt ve GPL-3.0-metni.txt (LGPL-3.0, GPL-3.0
-metnine atıf yaptığı için ikisi birlikte verilir).
+metnine atıf yaptığı için ikisi birlikte verilir); LGPL-2.1-metni.txt (lxml
+tekerleklerine statik bağlı GNU libiconv için; lxml'in zlib, libxml2, libxslt
+ve libexslt dahil bütün bildirimleri python-lxml-LICENSES.txt'tedir).
 
 Programın simgeleri projenin kendi üretimidir (packaging/ikonlar); arayüz
 simgeleri Material Symbols yazı tipindendir (aşağıdaki tabloda).
@@ -182,6 +186,14 @@ Python kitaplıkları:
       Kaynak   : https://pypi.org/project/fonttools/4.68.0/
       Dosyalar : python-fonttools-LICENSE.external.txt
                  python-fonttools-LICENSE.txt
+  lxml 6.1.3
+      Lisans   : BSD-3-Clause
+      Platform : Windows + Linux
+      Kullanım : Word çizicisinin XML katmanı; tekerlek zlib, GNU libiconv (LGPL-2.1), libxml2, libxslt ve libexslt'yi statik bağlar
+      Kaynak   : https://pypi.org/project/lxml/6.1.3/
+      Dosyalar : LGPL-2.1-metni.txt
+                 python-lxml-LICENSE.txt
+                 python-lxml-LICENSES.txt
   openpyxl 3.1.5
       Lisans   : MIT
       Platform : Windows + Linux
@@ -265,6 +277,12 @@ Python kitaplıkları:
       Kaynak   : https://pypi.org/project/PySide6-Essentials/6.8.3/
       Dosyalar : GPL-3.0-metni.txt
                  LGPL-3.0-metni.txt
+  python-docx 1.2.0
+      Lisans   : MIT
+      Platform : Windows + Linux
+      Kullanım : Evrak (Word) üretimi
+      Kaynak   : https://pypi.org/project/python-docx/1.2.0/
+      Dosyalar : python-python-docx-LICENSE.txt
   pythonnet 3.0.5
       Lisans   : MIT
       Platform : yalnız Windows
