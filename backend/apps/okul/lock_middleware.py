@@ -37,7 +37,7 @@ açılmamışken hassas alanlar zaten okunamaz (şifreli token döner) ve yazıl
    - `GET setup/status/` — açılış sağlık denetimi; yanıtı kişisel veri içermez
      ve istek zaten oturum belirteci gerektirir. Kurulum sihirbazının YAZMA
      uçları kapalı kalır;
-   - `/api/v1/app/quit/` — Çık (parolasız; tepsisiz Linux'ta tek çıkış yolu, TB13).
+   - `/api/v1/app/quit/` — Çık (parolasız; çarpıyla aynı düzenli kapanış, T6).
 
    `/api/v1/updates/` kilitliyken KAPALIDIR (F11 düzeltme turu): sürüm denetimi
    yalnız Ayarlar → Güncelleme'deki "Şimdi denetle" düğmesiyledir (T11 v4) ve o
@@ -75,7 +75,7 @@ ALLOWED_PREFIXES = (
     "/api/v1/setup/status/",
 )
 # Kilitliyken izin verilen TEKİL yollar (tam yol eşleşmesi): Çık (F5, §4.2-4)
-# kilitliyken parolasızdır; tepsisiz Linux'ta tek çıkış yoludur (TB13). Ön ek
+# kilitliyken parolasızdır; çarpıyla aynı düzenli kapanış yoludur (T6). Ön ek
 # değildir: `app/` altına ileride eklenecek bir yol kilit kapısını aşmasın.
 LOCKED_ALLOWED_PATHS = frozenset({"/api/v1/app/quit/"})
 # `security/` ön ekinde olup kilitliyken YİNE DE kesilen uçlar (TAM yol). Kurtarma

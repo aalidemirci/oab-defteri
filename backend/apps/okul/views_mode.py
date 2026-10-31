@@ -15,7 +15,7 @@ programda iki şeye ayrılmıştır (oturum belirteci ve `kip_yetkisiz`); ön y�
 `kip_yetkisiz`'i "kip değişti, göstergeyi yenile" diye okur. 409 +
 `kip_gecisi_gecersiz` bu anlamların hiçbirine karışmaz. Görevli kipinde
 `security/mode/staff/` zaten ara katmanda 403 `kip_yetkisiz` alır (izin
-listesinde yoktur); servis katmanı yine de görevliyken fikirdeştir (tepsi).
+listesinde yoktur); servis katmanı yine de görevliyken fikirdeştir.
 
 Yanlış parola: 400 `validation_error`, ileti "Parola hatalı." (güvenlik
 uçlarıyla aynı biçim; servis kademeli gecikmeyi uygular). Parola hiçbir

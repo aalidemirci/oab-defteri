@@ -10,8 +10,8 @@
 //
 // Klavye kısayolu: Ctrl+Shift+G → görevli kipine geç (yalnız yönetici kipinde;
 // "G" = görevli). Ctrl ya da Alt tek başına seçilmedi: tarayıcı/WebView2
-// kısayollarıyla (Ctrl+G bul, Alt menü) ve barkod okuyucunun düz tuş
-// akışıyla çakışmasın. Kısayol düğmenin ipucunda ve `aria-keyshortcuts`'ta yazar.
+// kısayollarıyla (Ctrl+G bul, Alt menü) çakışmasın (aile iskeletinde barkod
+// okuyucunun düz tuş akışı da gerekçeydi). Kısayol düğmenin ipucunda ve `aria-keyshortcuts`'ta yazar.
 
 import { useCallback, useEffect, useState } from "react";
 

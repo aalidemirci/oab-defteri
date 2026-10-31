@@ -6,11 +6,9 @@
 // koymak kullanıcıyı bayat oturumda çalışmaya davet ederdi — tek çıkış
 // programı gerçekten kapatıp yeniden açmaktır.
 //
-// Metin pencerenin çarpısını ÖNERMEZ: çarpı programı kapatmaz, tepsiye gizler
-// (tepsi yoksa küçültür) — `desktop/window.py::on_closing`; program tepsi
-// menüsündeki "Çık" ile ya da bu ekrandaki "Programdan çık" düğmesiyle
-// (`POST app/quit/`, "yeniden başlat" kapısının geçirdiği tek uç) kapanır
-// (`desktop/tray.py`, tasarım §4.2-4/5; tepsisiz Linux'ta tek yol — TB13).
+// Program bu ekrandaki "Programdan çık" düğmesiyle (`POST app/quit/`, "yeniden
+// başlat" kapısının geçirdiği tek uç) ya da pencerenin çarpısıyla kapanır; ikisi
+// aynı düzenli kapanış yoludur (T6, tasarım §4.5 — tepsi yoktur).
 
 import { useEffect, useState } from "react";
 

@@ -3,9 +3,8 @@
 Masadaki kişi ayrımı hesapla değil KİPLE yapılır. Kilit açıkken program iki
 kipten birindedir: **yönetici kipi** (her şey açık) ya da **görevli kipi**
 (yalnız izin listesindeki uçlar açık — `kip_izinleri`, ara katman
-`kip_middleware`). Kip durumu süreç içi TEK nesnedir (`KIP`): KipMiddleware,
-kip uçları ve F5'te tepsi aynı nesneyi okur (T16; ikinci bir durum kaynağı
-açılmaz).
+`kip_middleware`). Kip durumu süreç içi TEK nesnedir (`KIP`): KipMiddleware
+ve kip uçları aynı nesneyi okur (T16; ikinci bir durum kaynağı açılmaz).
 
 Durumlar (API ve arayüz bu dizeleri kullanır):
 
@@ -441,7 +440,7 @@ class KipDurumu:
     def gorevliye_gec(self) -> KipAdi:
         """Yönetici kipinden görevli kipine geçer (parolasız, §4.4).
 
-        Görevli kipindeyken fikirdeştir (tepsi komutu iki kez gelebilir).
+        Görevli kipindeyken fikirdeştir (istek iki kez gelebilir).
         Kilitli, kurulum ya da kayıp durumunda `KipGecisHatasi` yükseltir.
         """
         with self._kilit:

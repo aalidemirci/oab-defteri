@@ -224,9 +224,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
               ve kip okunamazsa boştur. */}
           <div className="ml-auto flex min-w-0 items-center gap-1">
             <KipGostergesi />
-            {/* Çık (tasarım §4.2-4, TB13): her durumda görünür — tepsisi olmayan
-                Linux masaüstünde programın tek çıkış yolu; görevli kipinde
-                yönetici parolası ister. Tepsinin `od:cik-iste` olayını da dinler. */}
+            {/* Çık (tasarım §4.2-4): her durumda görünür; pencerenin çarpısıyla
+                aynı düzenli kapanış yoludur (T6, tepsi yoktur). Görevli kipinde
+                yönetici parolası ister. */}
             <CikisDugmesi />
           </div>
         </header>

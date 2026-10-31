@@ -1,7 +1,7 @@
 // "Kilit kapısı" olayı — backend kilit kapısının (`apps/okul/lock_middleware`)
 // arayüz ayağı. Oturum ortasında bir istek 423 `locked` ya da
 // `guvenlik_dosyasi_kayip` alırsa program arayüzün haberi olmadan kilitlenmiş
-// (başka yoldan kilit: yönetim komutu, ileride tepsi) ya da güvenlik dosyası
+// (başka yoldan kilit, ör. yönetim komutu) ya da güvenlik dosyası
 // kaybolmuştur (tasarım §4.3; kapı anahtar bellekteyken de kapanır). `lib/api.ts`
 // bu kodları görünce olayı yayınlar; güvenlik kapısı
 // (`modules/guvenlik/GuvenlikKapisi`) dinler ve durumu yeniden okur, böylece
