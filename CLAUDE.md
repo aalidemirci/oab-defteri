@@ -1,12 +1,13 @@
 # CLAUDE.md — OAB Defteri
 
 > Her oturumda otomatik yüklenir. Amaç: projeyi ilk kez gören bir ajanın işi doğru
-> okuması ve **kasıtlı kararları kusur sanmaması**. Şu an proje **planlama**
-> aşamasındadır; kod yoktur. Ana belgeler:
+> okuması ve **kasıtlı kararları kusur sanmaması**. Proje **F1** aşamasındadır (F0
+> 31.10.2026'da kapandı). **Ana referans genel tasarımdır:**
+> [`docs/tasarim/2026-10-31-genel-tasarim.md`](docs/tasarim/2026-10-31-genel-tasarim.md)
+> (taslak v2, bağımsız denetimden geçti — [denetim](docs/kesif/2026-10-31-tasarim-denetimi.md)). Diğerleri:
 > [`docs/kesif/2026-10-31-on-degerlendirme.md`](docs/kesif/2026-10-31-on-degerlendirme.md)
-> (neden, ne, kararlar) ve [`docs/plan/2026-10-31-f0-f1-plani.md`](docs/plan/2026-10-31-f0-f1-plani.md)
-> (ilk iki fazın işleri ve kapıları). F0'da yazılacak genel tasarım belgesi
-> (`docs/tasarim/`) gelince ana referans o olur.
+> (neden, ne, kararlar), [`docs/plan/2026-10-31-f0-f1-plani.md`](docs/plan/2026-10-31-f0-f1-plani.md)
+> (ilk iki fazın işleri ve kapıları), [`docs/mevzuat/`](docs/mevzuat/BENIOKU.md) (kanonik mevzuat).
 >
 > Depo dili **Türkçe**: yorumlar, commit mesajları, testler, belgeler ve kullanıcıya
 > görünen bütün metinler. Tanımlayıcılar (sınıf, alan, uç adları) İngilizcedir; OYS'den
@@ -51,12 +52,22 @@ siteyi ve evrakı kapsar.
 2. **Kural paketi.** Oranlar, süreler, çarpanlar ve sınırlar kodda sabit değil, sürümlü
    kural dosyasındadır; her birlik dönemi kendi kural sürümüyle hesaplanır.
 3. **Uyarı + gerekçe, sert engel değil** (OYS kullanıcı kararı 4): program doğrusunu
-   gösterir, sapma gerekçesiyle kayda geçer. Sert engel yalnız hesap bütünlüğünde
-   (toplamlar, numara tekilliği, kapanmış dönem, yeter sayı hesabı).
+   gösterir, sapma gerekçesiyle kayda geçer. Sert engel yalnız şu hâllerdedir (kullanıcı
+   kararları 31.10.2026): **hesap bütünlüğü** (toplamlar, numara tekilliği, kapanmış dönem,
+   yeter sayı hesabı; programın **kendi hesapladığı** tutarda mevzuat oranı — arz bedeli,
+   pay dağılımı, KDV yok); **hukuken geçersiz işlem** (kantin isteklisinde suç ya da
+   hısımlık engeli; servis tespitinin mülki amir onayı olmadan kesinleşmesi); **kullanıcı
+   kararıyla** (aynı kişi aynı dönemde YK'de ve DK'de olamaz; okul müdürü YK'ye giremez).
+   Kullanıcının belgeden **girdiği** değer (teminat, kira, artış, ay sayısı, EK-3 puanı,
+   taksit) mevzuattan saparsa, eksik belge ve kantinde onay eksikliği uyarı + gerekçedir.
+   Henüz girilmemiş veri "eksik"tir, gerekçe istemez; gerekçe yalnız bilinçli sapmada.
 4. **Kayıt silinmez, ters kayıtla düzeltilir;** kapanan dönem kilitlenir; her değişiklik
    denetim izine yazılır.
-5. **KVKK.** T.C. kimlik numarası varsayılan kapalı (K9); veli verisi en aza; duyuru ve
-   ilan çıktılarında kişi adı yok; gerçek veri, banka özeti, TEFBİS çıktısı, e-Okul
+5. **KVKK.** T.C. kimlik numarası varsayılan kapalı (K9); veli verisi en aza (e-Okul'dan
+   yalnız veli adı ve öğrencinin sınıfı alınır, dönem kapanışında silinir; adlı cetveli
+   yalnız yönetici basar, program saklamaz — T5); duyuru ve ilan çıktılarında kişi adı yok
+   (tek istisna mevzuat gereği taşımacı listesi: ad/unvan, plaka, güzergâh — Servis U-E
+   md. 10/3); gerçek veri, banka özeti, TEFBİS çıktısı, e-Okul
    listesi depoya girmez (`.gitignore` önler, sızıntı denetimi F1'de kapıya girer).
 6. **Terimler Yönetmeliğinkidir:** "Denetleme Kurulu" (Denetim Kurulu değil), "muhasip",
    "birlik", "genel kurul", "tahmini bütçe". Servis evrakında "ihale/teklif/eksiltme"
@@ -66,28 +77,33 @@ siteyi ve evrakı kapsar.
 8. **Yayın işleri** (GitHub deposu, etiket, push, site, indirme alanı) dışa açıktır,
    kullanıcı onaylı adımlardır.
 
-## 3. Kararlar (31.10.2026, ön değerlendirme §9)
+## 3. Kararlar (31.10.2026 — ön değerlendirme §9 ve F0 soruları; ayrıntı planın §1.8'inde)
 
 | # | Karar |
 |---|---|
 | K1 | Gelir-gider **işlem düzeyinde** (banka hareketiyle eşlenir) |
-| K2 | Okulda **tek bilgisayar**, rol bazlı yerel hesaplar (MY, başkan, muhasip, sekreter; DK ve müdür salt okur) |
-| K3 | Bordro **yok**; personel için özlük, yıllık izin kaydı, kıdem karşılığı (sürüm 2) |
+| K2 | Okulda **tek bilgisayar**, rol bazlı yerel hesaplar (MY, başkan, muhasip, sekreter). **Mali kayıtları yalnız muhasip girer** (MY TEFBİS'i muhasibin girişinden sonra yapar). DK her şeyi okur, **yalnız denetim modülüne yazar** (md. 14/5 olağanüstü genel kurul çağrısı dâhil); müdür her şeyi okur, **yalnız kendi yazılarını** (harcama talebi, md. 27/3 uyarısı, yeni okulda genel kurul daveti, olağanüstü genel kurul çağrısı) yazar |
+| K3 | Bordro **yok**; personel için özlük, yıllık izin kaydı, kıdem karşılığı (sürüm 2). Çalıştırma biçimi **okula göre**: okul kartında doğrudan işveren / hizmet alımı seçilir, personel modülü yalnız doğrudan işverende açılır |
 | K4 | **Kantin ve servis ilk sürümde** (birliğin ve okulun evrakı ve takibi; komisyon kararının yerine geçmez) |
 | K5 | Makbuz **basılmaz**; ciltli koçan envanteri ve yaprak kaydı |
-| K6 | TEFBİS: giriş listesi + Excel çıktısıyla mutabakat; **otomatik giriş yok** (öneri; sorulmadı) |
+| K6 | TEFBİS: giriş listesi + Excel çıktısıyla mutabakat; **otomatik giriş yok** (kullanıcı teyidi 31.10.2026) |
 | K7 | Lisans **PolyForm Noncommercial 1.0.0**; kamuya "kaynağı açık" diye tanıtılır |
 | K8 | Ad **OAB Defteri**; site `okulapp.org/oab-defteri` |
 | K9 | Bağışçının T.C. kimlik no'su **varsayılan kapalı**, ayardan açılır (şifreli, maskeli) |
-
-Açık: birlik personelinin doğrudan mı firma üzerinden mi çalıştığı (K3'ün kapsamını belirler).
+| T1 | **Kişisel hesaplar** (Argon2id); veri anahtarı her hesap için ayrı sarılır; kurtarma anahtarı basılıp **okul müdürlüğünde kapalı zarfta** saklanır, veliye geçmez |
+| T2 | Evrak: **tek içerik, iki çizici** — Word python-docx, PDF ailenin WeasyPrint hattı; LibreOffice/Word gerekmez |
+| T3 | Birlik dönemi **genel kuruldan genel kurula**; ders yılı ve TEFBİS dönemiyle eşlem tablosu |
+| T4 | **Basit hesap planı** (banka, kasa, şartlı bağış alt hesabı), TEFBİS işlem tipine eşlemli; çift taraflı muhasebe değil |
+| T5 | e-Okul'dan **personel** (ad-soyad, görev) ve **veli listesi** (yalnız veli adı + öğrencinin sınıfı; katılım cetveli için) |
+| T6 | Çarpı **programı kapatır**; tepsi yok |
+| — | Kantin arz bedeli vadesi: sözleşmedeki **ayın 10'u** (EK-2 md. 7) esas, Yönetmelikteki **20'si** (md. 17/1) üst sınır; iki tarih kural paketinde |
 
 ## 4. Faz durumu
 
 | Faz | Durum |
 |---|---|
-| F0 Keşif tamamlama + genel tasarım + mevzuat | başlamadı |
-| F1 İskelet + çekirdek + organlar + kural paketi | başlamadı |
+| F0 Keşif tamamlama + genel tasarım + mevzuat | **tamam (31.10.2026)** — korpus, envanterler, kullanıcı kararları, saha notu, genel tasarım taslak v2, bağımsız denetim (129 bulgu işlendi); kullanıcı "F0 tamam" dedi. Ayrıntı planın §1.7'sinde |
+| F1 İskelet + çekirdek + organlar + kural paketi | **sürüyor** — F1a (aile iskeleti) başladı (31.10.2026) |
 
 Sapmalar ve tasarımda yazmayan kararlar faz bittikçe "F<n> ekleri (tarih)" satırıyla
 plan/tasarım belgesine işlenir.

@@ -1,0 +1,40 @@
+{% extends "documents/base.html" %}{% comment %}
+Evrak hattının PDF çizicisi (T2; tasarım §9.1, TK17). İçerik `shared/evrak.py`'deki
+modelden gelir; bu şablon yalnız düzeni çizer. Harf dönüşümü YOKTUR (başlık modelde
+`tr_upper` ile büyütülür). Altlık yalnız "OAB Defteri · <kod> · Sayfa n/m"dir (§9);
+içerik eşdeğerliği karşılaştırmasına girmez (UY-18).
+{% endcomment %}
+{% block extra_style %}<style>
+  @page {
+    @bottom-center {
+      content: "OAB Defteri · {{ belge.kod }} · Sayfa " counter(page) "/" counter(pages);
+      font-family: "DejaVu Sans"; font-size: 7.5pt; color: #64748b;
+    }
+  }
+  .letterhead .alt-birim { font-size: 10pt; margin-top: 1pt; }
+  .konum { margin: 10pt 0 0; font-size: 9pt; text-align: justify; line-height: 1.35; }
+  .sig-date { text-align: right; margin-top: 14pt; font-size: 9.5pt; color: var(--pr-label); }
+</style>{% endblock %}
+{% block content %}
+  {% if belge.antet.alt_birim %}<div class="letterhead"><div class="alt-birim">{{ belge.antet.alt_birim }}</div></div>{% endif %}
+  {% for oge in bloklar %}
+    {% if oge.tur == "baslik" %}
+      <div class="doc-title">{{ oge.blok.metin }}</div>
+      {% if oge.blok.alt %}<div class="doc-subtitle">{{ oge.blok.alt }}</div>{% endif %}
+    {% elif oge.tur == "paragraf" %}
+      <p class="para">{{ oge.blok.metin }}</p>
+    {% elif oge.tur == "konum" %}
+      <p class="konum keep-with-next">{{ oge.blok.metin }}</p>
+    {% elif oge.tur == "tablo" %}
+      <table class="doc-table">
+        <thead><tr>{% for baslik in oge.blok.basliklar %}<th>{{ baslik }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for satir in oge.blok.satirlar %}<tr>{% for hucre in satir %}<td>{{ hucre }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+      </table>
+    {% elif oge.tur == "imza" %}
+      {% if oge.blok.tarih %}<div class="sig-date">{{ oge.blok.tarih }}</div>{% endif %}
+      <table class="sig-grid"><tr>
+        {% for sahip in oge.blok.sahipler %}<td><div class="space"></div><div class="line"></div><div class="name">{{ sahip.ad }}</div><div class="role">{{ sahip.gorev }}</div></td>{% endfor %}
+      </tr></table>
+    {% endif %}
+  {% endfor %}
+{% endblock %}

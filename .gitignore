@@ -6,6 +6,8 @@ backend/data/
 media/
 *.xlsx
 *.XLSX
+# e-Okul ihraçları BÜYÜK harfli .XLS uzantısıyla iner (OOG01001R020_827.XLS);
+# yalnız *.xlsx engellemek gerçek listeyi korumasız bırakırdı.
 *.xls
 *.XLS
 *.csv
@@ -13,9 +15,22 @@ media/
 *.sqlite3
 *.db
 *.odbak
+# Evrak çıktıları: doldurulmuş ya da imzalı belge depoya girmez. Programın
+# şablonları (F1a-3'ten itibaren) aşağıda İSİM İSİM istisna edilir.
+*.docx
+*.DOCX
+*.ods
+*.ODS
 # Uydurma deneme verisi de depoya girmez: veri dosyası biçimidir, gerçeğiyle karışabilir.
 deneme-verisi/
-# İstisnalar İSİM İSİM yazılır, joker kullanılmaz (bkz. Kütüphane Defteri .gitignore notu).
+# İstisnalar İSİM İSİM yazılır, joker KULLANILMAZ: `veri/*.xls` deseni o klasöre
+# bırakılan GERÇEK bir e-Okul ihracını da muaf tutar ve KVKK koruması tam orada delinir.
+# Testlerin SENTETİK (uydurma adlı) e-Okul biçim örnekleri:
+!backend/apps/okul/tests/veri/eokul_personel_listesi.xls
+# Öğrenci sınıf listesi örneği ALMA'dır (T5) ve F1a-2'de söküldü; F1b'de sentetik
+# veli örneği gelince istisnası buraya o dosyanın adıyla yazılır (tasarım §12.B).
+# Sızıntı kapısının okuduğu gerçek adlar listesi depo DIŞINDA kalır (tasarım §13 D42).
+.od-yasakli-adlar.txt
 
 # Python
 __pycache__/
@@ -29,16 +44,32 @@ htmlcov/
 # Node / frontend
 node_modules/
 frontend/dist/
+# `vitest run --coverage` html/json/lcov çıktısı (vitest.config.ts reporter);
+# kapı yalnız text-summary basar, elle koşu bu klasörü üretir.
 frontend/coverage/
+# Kapı koşusunun geçici vitest raporu (scripts/gates.sh)
 frontend/vitest-sonuc.json
+# Depo sızıntı kapısının geçici dosya listesi (scripts/gates.sh); depo
+# köküne yazılır çünkü konteyner yalnız orayı görür.
+.od-depo-listesi.tmp
 
 # Paketleme çıktıları
 build/
 dist/
+# dll_kapanisi.py'nin ÜRETİLEN çıktısı — depoda bayat DLL izlemek, spec'in
+# boş klasör korumasını öldürüp eski ikilileri sessizce paketletirdi (LGPL
+# yeniden dağıtımı da kaynak deposunun işi değil).
 packaging/windows/dll/*.dll
+# build.ps1/CI'ın indirdiği WebView2 Evergreen önyükleyicisi
 packaging/windows/MicrosoftEdgeWebView2Setup.exe
 
 # Ortam
 .env
 .DS_Store
 Thumbs.db
+
+# Evrak tasarım denemesi çıktısı (manage.py evrak_ornek) — uydurma veri, depoya girmez
+.ornek-evrak/
+
+# Claude Code yerel oturum ayarları (kişisel, depoya girmez)
+.claude/settings.local.json

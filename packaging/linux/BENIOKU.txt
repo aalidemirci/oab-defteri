@@ -1,0 +1,101 @@
+OAB Defteri — Taşınabilir Linux/Pardus Sürümü
+==================================================
+
+Bu arşiv, yönetici (root) yetkisi gerektirmeden kurulabilen sürümdür.
+
+Program ağ servisi sunmaz: yönetim sunucusu yalnız 127.0.0.1'de, rastgele
+portta ve oturum belirteciyle dinler; hiçbir port okul ağına açılmaz. Dış
+istek yalnız kullanıcının başlattığı güncelleme denetiminden çıkar.
+
+Yönetici yetkiniz varsa .deb paketini tercih edin (menü kaydı ve bağımlılık
+kurulumu otomatik yapılır).
+
+.deb paketine geçecekseniz önce bu sürümden çıkıp ./kaldir.sh ile kaldırın,
+sonra .deb paketini kurun. Kaldırmazsanız ./kur.sh'in eklediği menü kaydı ve
+uçbirim kısayolu .deb'inkinin önüne geçer: menü ve oab-defteri komutu bu
+taşınabilir sürümü açmayı sürdürür. Verileriniz iki sürümde aynı klasördedir;
+./kaldir.sh verilere dokunmaz.
+
+KURULUM
+-------
+    ./kur.sh
+
+Program ev dizininize kurulur:
+    ~/.local/opt/oab-defteri     program dosyaları
+    ~/.local/bin/oab-defteri     uçbirim kısayolu
+
+ÇALIŞTIRMA
+----------
+Menüden "OAB Defteri" ile ya da uçbirimden:
+    oab-defteri
+
+KALDIRMA
+--------
+    ./kaldir.sh
+Verileriniz silinmez.
+
+VERİLERİNİZ NEREDE?
+-------------------
+    ~/.local/share/oab-defteri/data      veritabanı
+    ~/.local/share/oab-defteri/backups   günlük otomatik yedekler
+    ~/.local/state/oab-defteri/logs      günlükler
+
+Program her gün bir yedek alır (açılışta ve açık kaldığı sürece gün
+değişince) ve 14 günden eski yedekleri siler. Bu yedekler bilgisayarın
+kendisindedir: disk bozulursa onlar da gider. Ayda bir Ayarlar → Güvenlik'teki
+"Şifreli yedeği indir" düğmesiyle yedek alıp USB belleğe kopyalayın ve USB'yi
+bilgisayardan ayrı saklayın.
+
+YEDEKTEN GERİ YÜKLEME
+---------------------
+Veritabanı bozulursa (program "Veritabanı bozuk" iletisiyle açılmıyorsa)
+uçbirimden:
+
+    oab-defteri --geri-yukle
+
+Yedekler listelenir ve seçtiğiniz yedek veritabanının yerine konur. Yedekler
+şifrelidir; yönetici parolanız ya da kurtarma anahtarınız sorulur. Mevcut
+(bozuk) dosya silinmez; 'db-onceki-*' adıyla veri klasöründe saklanır.
+
+GEREKLİ SİSTEM PAKETLERİ
+------------------------
+Taşınabilir sürüm, dağıtımın kendi yazı tipi ve metin dizme kütüphanelerini
+kullanır. Eksikse PDF üretimi çalışmaz. Yönetici yetkisiyle:
+
+    sudo apt install libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
+                     libfontconfig1 libglib2.0-0 fonts-dejavu-core
+
+Pardus 21 ve Pardus 23'te bu paketler kurulu gelir.
+
+Program penceresi de dağıtımın birkaç sistem kütüphanesine dayanır. Pencere
+açılmıyorsa ya da boş beyaz kalıyorsa:
+
+    sudo apt install libgl1 libegl1 libxkbcommon0 libxkbcommon-x11-0 \
+                     libxkbfile1 libdbus-1-3 libnss3 libnspr4 libxcomposite1 \
+                     libxdamage1 libxrandr2 libxtst6 libxi6 libasound2 \
+                     libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+                     libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 \
+                     libxcb-xkb1 libxcb-cursor0
+
+.deb paketini kurarsanız bu liste kendiliğinden çözülür; el ile kurmak yalnız
+taşınabilir sürümde gerekir.
+
+Pencereyi çizen kütüphaneler programla birlikte, LGPLv3 lisansıyla dağıtılır;
+kurulum klasöründe ayrı dosyalar hâlinde durur ve değiştirilebilir.
+
+LİSANSLAR
+---------
+Programın lisansı: uygulama/LICENSE.txt (PolyForm Noncommercial 1.0.0).
+Programla dağıtılan üçüncü taraf bileşenler, lisans metinleri, LGPL
+bileşenlerinin kaynak kod adresleri ve kaynak kodu için yazılı teklif:
+uygulama/THIRD_PARTY_LICENSES/BENIOKU.txt
+
+PDF ÜRETİMİ ÇALIŞIYOR MU?
+-------------------------
+    oab-defteri --pdf-duman /tmp/deneme.pdf
+
+Komut 0 ile biterse PDF motoru ve Türkçe karakterler sorunsuzdur.
+
+SORUN GİDERME
+-------------
+Ayrıntılı kılavuz: docs/kurulum.md (çıkış kodları tablosu dahil).

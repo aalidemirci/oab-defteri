@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=OAB Defteri
+GenericName=Okul-Aile Birliği Programı
+GenericName[tr]=Okul-Aile Birliği Programı
+Comment=Okul-aile birliğinin toplantı, karar, gelir-gider ve evrak işlerini yürütür
+Comment[tr]=Okul-aile birliğinin toplantı, karar, gelir-gider ve evrak işlerini yürütür
+Exec=/usr/bin/oab-defteri
+Icon=oab-defteri
+Terminal=false
+Categories=Office;Education;
+Keywords=okul;aile;birlik;oab;genel kurul;karar;gelir;gider;butce;tefbis;
+Keywords[tr]=okul;aile;birlik;oab;genel kurul;karar;gelir;gider;bütçe;tefbis;
+StartupNotify=true
+StartupWMClass=oab-defteri
