@@ -47,7 +47,7 @@
     },
     {
       "ad": "asgiref",
-      "surum": "3.12.1",
+      "surum": "3.13.0",
       "tur": "python",
       "platformlar": [
         "linux",
@@ -57,7 +57,7 @@
       "dosyalar": [
         "python-asgiref-LICENSE.txt"
       ],
-      "kaynak": "https://pypi.org/project/asgiref/3.12.1/"
+      "kaynak": "https://pypi.org/project/asgiref/3.13.0/"
     },
     {
       "ad": "bottle",
@@ -75,7 +75,7 @@
     },
     {
       "ad": "brotli",
-      "surum": "1.2.0",
+      "surum": "1.2.1",
       "tur": "python",
       "platformlar": [
         "linux",
@@ -85,7 +85,7 @@
       "dosyalar": [
         "python-brotli-LICENSE.txt"
       ],
-      "kaynak": "https://pypi.org/project/brotli/1.2.0/"
+      "kaynak": "https://pypi.org/project/brotli/1.2.1/"
     },
     {
       "ad": "cffi",
@@ -202,7 +202,7 @@
     },
     {
       "ad": "fonttools",
-      "surum": "4.65.0",
+      "surum": "4.68.0",
       "tur": "python",
       "platformlar": [
         "linux",
@@ -213,7 +213,7 @@
         "python-fonttools-LICENSE.external.txt",
         "python-fonttools-LICENSE.txt"
       ],
-      "kaynak": "https://pypi.org/project/fonttools/4.65.0/",
+      "kaynak": "https://pypi.org/project/fonttools/4.68.0/",
       "aciklama": "PDF yazı tipi alt kümeleme"
     },
     {
@@ -278,7 +278,7 @@
     },
     {
       "ad": "pycparser",
-      "surum": "3.0",
+      "surum": "3.12",
       "tur": "python",
       "platformlar": [
         "linux",
@@ -288,11 +288,11 @@
       "dosyalar": [
         "python-pycparser-LICENSE.txt"
       ],
-      "kaynak": "https://pypi.org/project/pycparser/3.0/"
+      "kaynak": "https://pypi.org/project/pycparser/3.12/"
     },
     {
       "ad": "pydyf",
-      "surum": "0.12.1",
+      "surum": "0.13.0",
       "tur": "python",
       "platformlar": [
         "linux",
@@ -302,7 +302,7 @@
       "dosyalar": [
         "python-pydyf-LICENSE.txt"
       ],
-      "kaynak": "https://pypi.org/project/pydyf/0.12.1/"
+      "kaynak": "https://pypi.org/project/pydyf/0.13.0/"
     },
     {
       "ad": "pyinstaller",
@@ -321,7 +321,7 @@
     },
     {
       "ad": "pyinstaller-hooks-contrib",
-      "surum": "2026.7",
+      "surum": "2026.9",
       "tur": "python",
       "platformlar": [
         "linux",
@@ -331,7 +331,7 @@
       "dosyalar": [
         "python-pyinstaller-hooks-contrib-LICENSE.txt"
       ],
-      "kaynak": "https://pypi.org/project/pyinstaller-hooks-contrib/2026.7/",
+      "kaynak": "https://pypi.org/project/pyinstaller-hooks-contrib/2026.9/",
       "aciklama": "Yalnız çalışma anı kancaları (rthooks, Apache-2.0) pakete girer; standart kancalar (GPL-2.0+) girmez"
     },
     {
@@ -383,7 +383,7 @@
       ],
       "secilen": "LGPL-3.0-only",
       "kaynak": "https://pypi.org/project/PySide6/6.8.3/",
-      "aciklama": "Linux penceresi ve tepsisi (Qt 6)"
+      "aciklama": "Linux penceresi (Qt 6)"
     },
     {
       "ad": "PySide6-Addons",
@@ -416,22 +416,6 @@
       "secilen": "LGPL-3.0-only",
       "kaynak": "https://pypi.org/project/PySide6-Essentials/6.8.3/",
       "aciklama": "Qt 6 kitaplıkları"
-    },
-    {
-      "ad": "pystray",
-      "surum": "0.19.5",
-      "tur": "python",
-      "platformlar": [
-        "windows"
-      ],
-      "lisans": "LGPL-3.0-or-later",
-      "dosyalar": [
-        "GPL-3.0-metni.txt",
-        "LGPL-3.0-metni.txt"
-      ],
-      "kaynak": "https://pypi.org/project/pystray/0.19.5/",
-      "aciklama": "Windows sistem tepsisi",
-      "kaynagi_pakette": true
     },
     {
       "ad": "pythonnet",
@@ -477,23 +461,8 @@
       "aciklama": "Qt bağlayıcı katmanı"
     },
     {
-      "ad": "segno",
-      "surum": "1.6.1",
-      "tur": "python",
-      "platformlar": [
-        "linux",
-        "windows"
-      ],
-      "lisans": "BSD-3-Clause",
-      "dosyalar": [
-        "python-segno-LICENSE.txt"
-      ],
-      "kaynak": "https://pypi.org/project/segno/1.6.1/",
-      "aciklama": "Etiketteki QR"
-    },
-    {
       "ad": "setuptools",
-      "surum": "84.0.0",
+      "surum": "84.2.1",
       "tur": "python",
       "platformlar": [
         "linux",
@@ -509,9 +478,9 @@
         "python-setuptools-setuptools__vendor_jaraco_context-6.1.0.dist-info_licenses_LICENSE.txt",
         "python-setuptools-setuptools__vendor_jaraco_functools-4.4.0.dist-info_licenses_LICENSE.txt",
         "python-setuptools-setuptools__vendor_more_itertools-10.8.0.dist-info_licenses_LICENSE.txt",
-        "python-setuptools-setuptools__vendor_packaging-26.0.dist-info_licenses_LICENSE.APACHE.txt",
-        "python-setuptools-setuptools__vendor_packaging-26.0.dist-info_licenses_LICENSE.BSD.txt",
-        "python-setuptools-setuptools__vendor_packaging-26.0.dist-info_licenses_LICENSE.txt",
+        "python-setuptools-setuptools__vendor_packaging-26.3.dist-info_licenses_LICENSE.APACHE.txt",
+        "python-setuptools-setuptools__vendor_packaging-26.3.dist-info_licenses_LICENSE.BSD.txt",
+        "python-setuptools-setuptools__vendor_packaging-26.3.dist-info_licenses_LICENSE.txt",
         "python-setuptools-setuptools__vendor_platformdirs-4.4.0.dist-info_licenses_LICENSE.txt",
         "python-setuptools-setuptools__vendor_tomli-2.4.0.dist-info_licenses_LICENSE.txt",
         "python-setuptools-setuptools__vendor_wheel-0.46.3.dist-info_licenses_LICENSE.txt",
@@ -519,7 +488,7 @@
         "python-setuptools-setuptools_config_NOTICE.txt",
         "python-setuptools-setuptools_config__validate_pyproject_NOTICE.txt"
       ],
-      "kaynak": "https://pypi.org/project/setuptools/84.0.0/",
+      "kaynak": "https://pypi.org/project/setuptools/84.2.1/",
       "aciklama": "cffi derleme yardımcısı (çalışma anında kullanılmaz)"
     },
     {
@@ -537,19 +506,6 @@
       "secilen": "LGPL-3.0-only",
       "kaynak": "https://pypi.org/project/shiboken6/6.8.3/",
       "aciklama": "Qt 6 Python bağlayıcısı"
-    },
-    {
-      "ad": "six",
-      "surum": "1.17.0",
-      "tur": "python",
-      "platformlar": [
-        "windows"
-      ],
-      "lisans": "MIT",
-      "dosyalar": [
-        "python-six-LICENSE.txt"
-      ],
-      "kaynak": "https://pypi.org/project/six/1.17.0/"
     },
     {
       "ad": "sqlparse",
@@ -609,7 +565,7 @@
     },
     {
       "ad": "tzdata",
-      "surum": "2026.4",
+      "surum": "2026.6",
       "tur": "python",
       "platformlar": [
         "windows"
@@ -619,7 +575,7 @@
         "python-tzdata-LICENSE.txt",
         "python-tzdata-licenses_LICENSE_APACHE.txt"
       ],
-      "kaynak": "https://pypi.org/project/tzdata/2026.4/",
+      "kaynak": "https://pypi.org/project/tzdata/2026.6/",
       "aciklama": "Windows'ta saat dilimi verisi"
     },
     {

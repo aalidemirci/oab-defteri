@@ -94,7 +94,8 @@ describe("HakkindaPage", () => {
       screen.getByRole("heading", { level: 2, name: "Üçüncü Taraf Bileşenler" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/GNU Kısıtlı Genel Kamu Lisansı\s+\(LGPL-3\.0\)/)).toBeInTheDocument();
-    expect(screen.getByText(/pystray — Copyright © 2016-2022 Moses Palmér/)).toBeInTheDocument();
+    // Aile iskeletinin Windows tepsisi (pystray, LGPL-3.0) OAB'de yoktur (tasarım §11 B18).
+    expect(screen.queryByText(/pystray/)).not.toBeInTheDocument();
     expect(screen.getByText(/Qt 6 ve PySide6 — Copyright © The Qt/)).toBeInTheDocument();
     for (const dosya of [
       "THIRD_PARTY_LICENSES",

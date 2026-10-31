@@ -93,7 +93,6 @@ RUNTIME_MODULES: tuple[str, ...] = (
     "pypdf",
     "whitenoise",
     "waitress",
-    "segno",
 )
 
 #: Yalnız Windows masaüstü kabuğunun ihtiyaç duyduğu modüller (masaüstü zinciri;
@@ -106,17 +105,10 @@ RUNTIME_MODULES: tuple[str, ...] = (
 #: listeyi yalnız Windows'ta import eder; eşleşmeyi
 #: `packaging/tests/test_spec_kapsami.py` platform işaretine göre denetler.
 #:
-#: - `pystray`: import anında platform arka ucunu (`pystray._win32`) ve onun
-#:   `six.moves` bağımlılığını yükler; üst paketi açmak bu zinciri sınar.
-#: - `six`: pystray'in uyumluluk katmanı.
 #: - `clr` (pythonnet): WebView2 köprüsü. Import .NET çalışma zamanını ve
 #:   `Python.Runtime.dll`'i yükler; paketten eksikse pencere HİÇ açılmaz
 #:   (NOTLAR.md W9) ve bunu başka hiçbir duman kipi yakalamaz.
-DESKTOP_RUNTIME_MODULES: tuple[str, ...] = (
-    "pystray",
-    "six",
-    "clr",
-)
+DESKTOP_RUNTIME_MODULES: tuple[str, ...] = ("clr",)
 
 #: `DESKTOP_RUNTIME_MODULES`'ın sınandığı platform (`sys.platform` değeri).
 DESKTOP_PLATFORM = "win32"

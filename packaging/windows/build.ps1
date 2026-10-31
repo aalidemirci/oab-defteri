@@ -206,8 +206,7 @@ if (-not (Test-Path $AppExe)) { throw "Çalıştırılabilir üretilmedi: $AppEx
 # Inno LicenseFile) paket köküne kopyalanır; pakete GERÇEKTEN giren her dosyanın
 # sahibi bulunur (Python dağıtımı → lisans listesi; WeasyPrint DLL'leri → MSYS2
 # paket veritabanı ve paketin share\licenses dosyaları). Listede olmayan dağıtım,
-# sahibi bilinmeyen dosya, pystray kaynağının eksikliği (LGPL), süzülmemiş pyphen
-# sözlükleri, Universal CRT ya da projenin olmayan paket içi fontconfig yapılandırması
+# sahibi bilinmeyen dosya, süzülmemiş pyphen sözlükleri, Universal CRT ya da projenin olmayan paket içi fontconfig yapılandırması
 # derlemeyi durdurur. Veri sızıntısı denetiminden ÖNCE koşar.
 Write-Adim "lisans denetimi (THIRD_PARTY_LICENSES)"
 $Msys2Kok = (Resolve-Path (Join-Path $MingwBin "..\..")).Path
@@ -243,12 +242,6 @@ if ($LASTEXITCODE -ne 0) { throw "Paket kişisel veri denetimi başarısız." }
 # Duman testleri kullanıcının makinesindeki gibi Windows'un varsayılan sistem PATH'iyle
 # koşar (`Invoke-Uygulama`): koşucunun PATH'indeki mingw64\bin, Python ve JDK kopyaları
 # paketten eksik bir DLL'i gizlemesin (dondurulmuş `ctypes.util.find_library` PATH'e bakar).
-# pystray kaynağı pakette mi (LGPLv3 — spec `module_collection_mode`)? Lisans
-# denetimi de arar; burada ikinci sigorta: bağımlılık dumanı pystray'i bu
-# dosyalardan import eder.
-if (-not (Test-Path (Join-Path $AppDir "_internal\pystray\__init__.py"))) {
-    throw "pystray kaynağı pakette yok (_internal\pystray\__init__.py) — LGPL gereği girmeli."
-}
 
 # ÖNCE bağımlılık kapısı: eksik bir hiddenimport'u burada yakalamak, sonraki
 # testlerin anlaşılmaz hatalarını okumaktan ucuzdur (hiddenimports zinciri).

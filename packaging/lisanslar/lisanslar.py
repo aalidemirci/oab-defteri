@@ -8,8 +8,10 @@ Dizin ELLE yazılmaz; bu betik üretir. Üç alt komut:
 ``uret``
     Depodaki `THIRD_PARTY_LICENSES/` dizinini üretir. Geliştirme kabında koşar
     (backend imajı) ve ağ ister: yalnız paket ortamında kurulan dağıtımların
-    (pywebview, pystray, pythonnet, PySide6 …) üstverisi PyPI'dan, lisans
-    dosyaları tekerlek ya da kaynak arşivinden okunur. Kapanış Linux ve Windows
+    (pywebview, pythonnet, PySide6 …) üstverisi PyPI'dan, lisans
+    dosyaları tekerlek ya da kaynak arşivinden okunur. Qt/PySide6 zincirinin
+    ortak LGPL-3.0 ve GPL-3.0 metinleri bu dizindeki sabit dosyalardandır
+    (`ORTAK_METIN_DOSYALARI`). Kapanış Linux ve Windows
     için AYRI çözülür (ortam işaretleri platform platform değerlendirilir; paket
     ortamının derleme araçlarıyla gelen dağıtımları da `KURULUYU_TERCIH_EDEN`
     kuralıyla hesaba katılır). Ön yüz girdisi `on_yuz_paketleri.mjs`'nin JSON
@@ -84,6 +86,16 @@ PLATFORMLAR = ("linux", "windows")
 
 BACKEND_GEREKSINIMLERI = REPO / "backend" / "requirements.txt"
 PAKETLEME_GEREKSINIMLERI = REPO / "packaging" / "requirements-paketleme.txt"
+
+#: Qt/PySide6 zincirine verilen ortak LGPL-3.0 ve GPL-3.0 metinleri (LGPL-3.0, GPL-3.0'ı
+#: atıfla içerdiği için ikisi birlikte). FSF'nin değiştirilmemiş metinleridir; geliştirme
+#: kabının Debian `base-files` paketindeki `/usr/share/common-licenses/LGPL-3` ve `GPL-3`
+#: dosyalarından kopyalandı (31.10.2026). Aile iskeleti bu metni pystray'in `COPYING`
+#: dosyalarından alıyordu; tepsi söküldü (tasarım §11 B18). PySide6/shiboken6 tekerlekleri
+#: lisans metni taşımaz (`BUYUK_DAGITIMLAR`). Dosyaların SHA-256 özetini
+#: `packaging/tests/test_lisans_kapisi.py` sabitler — elle düzenlenmez.
+ORTAK_METIN_DOSYALARI = ("LGPL-3.0-metni.txt", "GPL-3.0-metni.txt")
+ORTAK_METIN_KAYNAGI = Path(__file__).resolve().parent
 
 UST_BILGI = (
     "OAB Defteri ile dağıtılan üçüncü taraf bileşenler. Üretildi: "
@@ -311,7 +323,6 @@ LISANS_DUZELTMELERI: dict[str, str] = {
     "openpyxl": "MIT",
     "pydyf": "BSD-3-Clause",
     "pyphen": "GPL-2.0-or-later OR LGPL-2.1-or-later OR MPL-1.1",
-    "segno": "BSD-3-Clause",
     "sqlparse": "BSD-3-Clause",
     "tinycss2": "BSD-3-Clause",
     "tinyhtml5": "MIT",
@@ -327,8 +338,6 @@ LISANS_DUZELTMELERI: dict[str, str] = {
     "proxy-tools": "MIT",
     "pythonnet": "MIT",
     "clr-loader": "MIT",
-    "pystray": "LGPL-3.0-or-later",
-    "six": "MIT",
     "qtpy": "MIT",
     "tzdata": "Apache-2.0",
     "setuptools": "MIT",
@@ -361,7 +370,6 @@ BUYUK_DAGITIMLAR = frozenset({"pyside6", "pyside6-essentials", "pyside6-addons",
 
 #: Lisans metni dağıtımda bulunmayan ya da ortak metinle verilen dağıtımlar.
 ORTAK_METIN = {
-    "pystray": ("LGPL-3.0-metni.txt", "GPL-3.0-metni.txt"),
     "pyside6": ("LGPL-3.0-metni.txt", "GPL-3.0-metni.txt"),
     "pyside6-essentials": ("LGPL-3.0-metni.txt", "GPL-3.0-metni.txt"),
     "pyside6-addons": ("LGPL-3.0-metni.txt", "GPL-3.0-metni.txt"),
@@ -413,7 +421,9 @@ EK_LISANS_DOSYALARI: dict[str, tuple[str, ...]] = {
 
 #: Kaynak kodu pakete KAYNAK DOSYA olarak giren LGPL dağıtımları (spec
 #: `module_collection_mode`): kullanıcı kütüphaneyi değiştirebilir (LGPLv3 §4).
-KAYNAGI_PAKETTE = frozenset({"pystray"})
+#: Bugün boştur: ailedeki tek üyesi (pystray, Windows tepsisi) OAB'de yoktur
+#: (tasarım §11 B18). Denetim (`paket_dizini_denetimi`) yeni bir üye için yerinde kalır.
+KAYNAGI_PAKETTE: frozenset[str] = frozenset()
 
 ACIKLAMALAR: dict[str, str] = {
     "django": "Uygulama çatısı",
@@ -424,11 +434,9 @@ ACIKLAMALAR: dict[str, str] = {
     "cryptography": "Alan şifrelemesi, şifreli yedek",
     "argon2-cffi": "Yönetici parolası (Argon2id)",
     "waitress": "Yerel sunucular",
-    "segno": "Etiketteki QR",
     "pywebview": "Program penceresi",
     "pythonnet": "Windows pencere motoru köprüsü (WebView2)",
-    "pystray": "Windows sistem tepsisi",
-    "pyside6": "Linux penceresi ve tepsisi (Qt 6)",
+    "pyside6": "Linux penceresi (Qt 6)",
     "pyside6-essentials": "Qt 6 kitaplıkları",
     "pyside6-addons": "Qt 6 WebEngine",
     "shiboken6": "Qt 6 Python bağlayıcısı",
@@ -1225,11 +1233,7 @@ def benioku_metni(bilesenler: list[Bilesen]) -> str:
         "",
         "LGPL LİSANSLI BİLEŞENLER VE KAYNAK KOD",
         "--------------------------------------",
-        "* pystray (yalnız Windows, sistem tepsisi) — LGPL-3.0. Kaynak kodu pakete",
-        "  kaynak dosya olarak girer: kurulum klasöründe _internal\\pystray\\",
-        "  altındadır; kütüphane bu dosyalar değiştirilerek yeniden kullanılabilir.",
-        "  Aynı sürümün kaynak arşivi: https://pypi.org/project/pystray/0.19.5/#files",
-        "* Qt 6 ve PySide6 (yalnız Linux, pencere ve tepsi) — pakete giren Qt",
+        "* Qt 6 ve PySide6 (yalnız Linux, pencere) — pakete giren Qt",
         "  modülleri için The Qt Company'nin sunduğu LGPL-3.0 / GPL-2.0 / GPL-3.0",
         "  seçeneklerinden LGPL-3.0 kullanılır. Qt'nin YALNIZ GPL-3.0 ile sunulan",
         "  modülleri (Charts, Data Visualization, Graphs, Quick 3D, Quick Timeline,",
@@ -1300,12 +1304,8 @@ def uret(on_yuz_json: Path, hedef: Path = LISANS_DIZINI) -> list[Bilesen]:
     bilesenler: list[Bilesen] = []
     eksik: list[str] = []
 
-    pystray = cozulen.get("pystray")
-    if pystray is None:
-        raise SystemExit("HATA: pystray çözümde yok; ortak LGPL/GPL metni üretilemez.")
-    pystray_dosyalari = {PurePosixPath(a).name: v for a, v in pystray.bilgi.dosyalar}
-    dosyalar["LGPL-3.0-metni.txt"] = _metin_coz(pystray_dosyalari["COPYING.LGPL"])
-    dosyalar["GPL-3.0-metni.txt"] = _metin_coz(pystray_dosyalari["COPYING"])
+    for ad in ORTAK_METIN_DOSYALARI:
+        dosyalar[ad] = _metin_coz((ORTAK_METIN_KAYNAGI / ad).read_bytes())
 
     for n, kayit in sorted(cozulen.items()):
         bilgi = kayit.bilgi

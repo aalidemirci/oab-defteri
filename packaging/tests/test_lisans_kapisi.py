@@ -12,7 +12,7 @@ ama lisans metni ve kaynağa erişim bilgisiyle (TB28, CLAUDE.md §2-10).
    bağımlılıkları listede ya da gerekçeyle dışarıda; her bileşenin lisans metni
    var, sahipsiz dosya yok; hiçbir bileşen yalnız GPL değil. Spec'in lisans
    kuralları (GPL'li Qt bağlayıcısı ve readline dışlanır, pyphen sözlükleri
-   süzülür, pystray kaynak olarak toplanır) burada sabitlenir.
+   süzülür) burada sabitlenir.
 2. **Derleme (`lisanslar.py paket`):** paketin GERÇEKTEN içerdiği her dosyanın
    sahibi bulunur; listede olmayan dağıtım ya da GPL'li yerel kütüphane
    derlemeyi durdurur. Mantığı burada sahte TOC/RECORD/pacman verisiyle sınanır.
@@ -25,6 +25,7 @@ Liste bayatlarsa: `bash packaging/lisanslar/uret.sh` (Docker, ağ gerekir).
 from __future__ import annotations
 
 import ast
+import hashlib
 import importlib.metadata as im
 import importlib.util
 import inspect
@@ -146,14 +147,15 @@ def test_pyphen_sozlukleri_spec_ile_denetim_ayni_kumeyi_birakir() -> None:
     assert "python-pyphen-pyphen_dictionaries_README_hyph_en_US.txt" in PYTHON["pyphen"].dosyalar
 
 
-def test_pystray_kaynak_dosya_olarak_toplanir() -> None:
-    """LGPLv3: pystray PYZ bayt kodu değil, `_internal/pystray/*.py` olarak pakete girer."""
-    spec_metni = SPEC.read_text(encoding="utf-8")
-    assert 'module_collection_mode = {"pystray": "py"} if WINDOWS else {}' in spec_metni
-    assert "module_collection_mode=module_collection_mode" in spec_metni
-    pystray = PYTHON["pystray"]
-    assert pystray.kaynagi_pakette is True
-    assert pystray.platformlar == ["windows"]
+def test_tepsi_ve_qr_zinciri_lisans_listesinde_yok() -> None:
+    """Tasarım §11 B9, B18: aile iskeletinin Windows tepsisi (pystray, six) ve etiket QR'ı
+    (segno) söküldü. Listede, kaynağı pakete giren LGPL kümesinde ve spec'te izleri kalmaz;
+    `kaynagi_pakette` denetimi (`paket_dizini_denetimi`) yeni bir üye için yerinde durur."""
+    for ad in ("pystray", "six", "segno"):
+        assert ad not in PYTHON, ad
+    assert L.KAYNAGI_PAKETTE == frozenset()
+    assert not any(b.kaynagi_pakette for b in BILESENLER)
+    assert "module_collection_mode" not in SPEC.read_text(encoding="utf-8")
 
 
 # ------------------------------------------------------------ liste eksiksizliği
@@ -241,7 +243,7 @@ def test_windows_calisma_zamani_kapanisi_listede_windows_isaretli() -> None:
     kurulu olmayan dağıtım (tzdata) yaprak sayılır. Paketleme pinlerinin DOĞRUDAN
     platformları `test_her_paketleme_pini_listede_ayni_surum_ve_platformla`'da; onların
     geçişli zinciri (pywebview → bottle, proxy_tools, typing_extensions; pythonnet →
-    clr_loader → cffi → pycparser; pystray → six, pillow) geliştirme kabında kurulu
+    clr_loader → cffi → pycparser) geliştirme kabında kurulu
     olmadığı için burada gezilemez, `test_python_kumeleri_platform_platform_sabit`'te
     platform kümesi olarak sabittir. Üreticinin mantığı
     `test_uretici_windows_kumesini_ayri_cozer`'de."""
@@ -311,12 +313,9 @@ BEKLENEN_PYTHON_KUMELERI: dict[str, frozenset[str]] = {
             "pyinstaller-hooks-contrib",
             "pypdf",
             "pyphen",
-            "pystray",
             "pythonnet",
             "pywebview",
-            "segno",
             "setuptools",
-            "six",
             "sqlparse",
             "tinycss2",
             "tinyhtml5",
@@ -359,7 +358,6 @@ BEKLENEN_PYTHON_KUMELERI: dict[str, frozenset[str]] = {
             "pyside6-essentials",
             "pywebview",
             "qtpy",
-            "segno",
             "setuptools",
             "shiboken6",
             "sqlparse",
@@ -389,10 +387,10 @@ def test_python_kumeleri_platform_platform_sabit() -> None:
             "doğrulayıp BEKLENEN_PYTHON_KUMELERI'ni bilinçli güncelleyin"
         )
     # Paketleme pinlerinin Windows zinciri: pywebview → bottle, proxy_tools,
-    # typing_extensions; pythonnet → clr_loader → cffi → pycparser; pystray → six, pillow.
+    # typing_extensions; pythonnet → clr_loader → cffi → pycparser.
     for ad in ("bottle", "proxy-tools", "typing-extensions", "cffi", "pycparser", "pillow"):
         assert PYTHON[ad].platformlar == ["linux", "windows"], ad
-    for ad in ("pythonnet", "clr-loader", "pystray", "six", "tzdata"):
+    for ad in ("pythonnet", "clr-loader", "tzdata"):
         assert PYTHON[ad].platformlar == ["windows"], ad
     # Derleme araçlarının pakete girmeyen bağımlılıkları ve koşucu kirliliği listede yok.
     for ad in ("altgraph", "pefile", "pywin32-ctypes", "colorama"):
@@ -569,7 +567,7 @@ def test_secilen_lisans_seceneklerden_biri_ve_gpl_degil() -> None:
         if b.secilen:
             assert b.secilen in L.secenekler(b.lisans), (b.ad, b.secilen, b.lisans)
             assert not L.gpl_yalniz_mi(b.secilen), b.ad
-    # Qt zinciri ve pystray LGPL seçeneğiyle dağıtılır.
+    # Qt zinciri LGPL seçeneğiyle dağıtılır.
     for ad in ("pyside6", "pyside6-essentials", "pyside6-addons", "shiboken6"):
         assert PYTHON[ad].secilen == "LGPL-3.0-only", ad
 
@@ -627,12 +625,29 @@ def test_her_bilesenin_lisans_metni_var_ve_sahipsiz_dosya_yok() -> None:
     assert not (LISANSLAR / L.YEREL_DIZIN_ADI).exists()
 
 
+#: Ortak metinlerin SHA-256 özeti: FSF'nin değiştirilmemiş LGPL-3.0 ve GPL-3.0 metni.
+#: Kaynak `packaging/lisanslar/` altındaki sabit dosyalardır (geliştirme kabının Debian
+#: `base-files` paketindeki `/usr/share/common-licenses/LGPL-3` ve `GPL-3` kopyası,
+#: 31.10.2026). Aile iskeleti metni pystray'in `COPYING` dosyalarından alıyordu; tepsi
+#: söküldü (tasarım §11 B18) ve PySide6/shiboken6 tekerlekleri lisans metni taşımaz.
+ORTAK_METIN_OZETLERI = {
+    "LGPL-3.0-metni.txt": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118",
+    "GPL-3.0-metni.txt": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+}
+
+
 def test_ortak_lgpl_ve_gpl_metinleri_gercek_surum_3() -> None:
+    assert L.ORTAK_METIN_DOSYALARI == tuple(ORTAK_METIN_OZETLERI)
+    for ad, ozet in ORTAK_METIN_OZETLERI.items():
+        kaynak = (L.ORTAK_METIN_KAYNAGI / ad).read_bytes()
+        assert hashlib.sha256(kaynak).hexdigest() == ozet, ad
+        # Lisans dizinindeki kopya kaynağın aynısıdır (üretici yalnız satır sonunu düzler).
+        assert (LISANSLAR / ad).read_bytes() == kaynak, ad
     lgpl = (LISANSLAR / "LGPL-3.0-metni.txt").read_text(encoding="utf-8")
     gpl = (LISANSLAR / "GPL-3.0-metni.txt").read_text(encoding="utf-8")
     assert "GNU LESSER GENERAL PUBLIC LICENSE" in lgpl and "Version 3, 29 June 2007" in lgpl
     assert "GNU GENERAL PUBLIC LICENSE" in gpl and "Version 3, 29 June 2007" in gpl
-    for ad in ("pystray", "pyside6", "pyside6-essentials", "pyside6-addons", "shiboken6"):
+    for ad in ("pyside6", "pyside6-essentials", "pyside6-addons", "shiboken6"):
         assert set(PYTHON[ad].dosyalar) == {"LGPL-3.0-metni.txt", "GPL-3.0-metni.txt"}, ad
 
 
@@ -640,8 +655,8 @@ def test_benioku_her_bileseni_ve_lgpl_kaynak_bilgisini_tasir() -> None:
     metin = (LISANSLAR / L.BENIOKU_ADI).read_text(encoding="utf-8")
     for b in BILESENLER:
         assert f"  {L.benioku_basligi(b)}\n" in metin, b.ad
-    # LGPL kaynağına erişim (TB28): pystray pakette, Qt/PySide6 tam sürüm adresi.
-    assert "_internal\\pystray\\" in metin
+    # LGPL kaynağına erişim (TB28): Qt/PySide6 tam sürüm adresi. Tepsi (pystray) yok, B18.
+    assert "pystray" not in metin
     assert "qt-everywhere-src-6.8.3.tar.xz" in metin
     assert "pyside-setup-everywhere-src-6.8.3.tar.xz" in metin
     assert L.YEREL_DIZIN_ADI in metin
@@ -695,7 +710,7 @@ def test_benioku_lgpl_kaynagi_icin_yazili_teklif_tasir() -> None:
     assert "LGPL-3.0 bileşenleri için GPL-3.0 madde 6(b)" not in tek_satir
     # Pakete giren her LGPL bileşen sürümüyle teklifte; Qt kitaplıkları PySide6'nın sürümüyle.
     lgpl = [b for b in BILESENLER if b.tur == "python" and "LGPL" in b.etkin_lisans]
-    assert {L.normal_ad(b.ad) for b in lgpl} >= {"pystray", "pyside6", "shiboken6"}
+    assert {L.normal_ad(b.ad) for b in lgpl} >= {"pyside6", "shiboken6"}
     for b in lgpl:
         assert f"  - {L.benioku_basligi(b)} (" in teklif, b.ad
     assert f"Qt {PYTHON['pyside6'].surum} kitaplıkları" in teklif
@@ -884,7 +899,10 @@ def _denetle(tmp_path: Path, kaynaklar: list[str], **ek: Any) -> Any:
     calisma = tmp_path / "calisma"
     calisma.mkdir(exist_ok=True)
     varsayilan: dict[str, Any] = {
-        "bilesenler": [_bilesen("Django", "5.1.15"), _bilesen("pystray", "0.19.5", ("windows",))],
+        "bilesenler": [
+            _bilesen("Django", "5.1.15"),
+            _bilesen("pythonnet", "3.0.5", ("windows",)),
+        ],
         "platform": "linux",
         "calisma": calisma,
         "harita": {},
@@ -949,12 +967,12 @@ def test_pyinstaller_yalniz_gomulebilir_dosyalariyla_girer(tmp_path: Path) -> No
 
 def test_surum_ve_platform_farki_yalniz_uyaridir(tmp_path: Path) -> None:
     django = str(tmp_path / "d.py")
-    pystray = str(tmp_path / "p.py")
+    pythonnet = str(tmp_path / "p.py")
     harita = {
         L._normal_yol(django): ("Django", "5.1.16", "django/d.py"),
-        L._normal_yol(pystray): ("pystray", "0.19.5", "pystray/p.py"),
+        L._normal_yol(pythonnet): ("pythonnet", "3.0.5", "pythonnet/p.py"),
     }
-    sonuc = _denetle(tmp_path, [django, pystray], harita=harita)
+    sonuc = _denetle(tmp_path, [django, pythonnet], harita=harita)
     assert sonuc.hatalar == []
     assert len(sonuc.uyarilar) == 2
 
@@ -1442,10 +1460,12 @@ def test_dll_kapanisi_yalniz_mingw_binden_alir_ucrt_almaz(
 
 
 def test_paket_dizini_denetimi_lgpl_kaynagi_ve_sozlukler(tmp_path: Path) -> None:
+    # Bugün `KAYNAGI_PAKETTE` boştur (tepsi söküldü, B18); denetim sahte bir LGPL
+    # bileşenle sınanır.
     bilesenler = [
         L.Bilesen(
-            ad="pystray",
-            surum="0.19.5",
+            ad="ornek-lgpl",
+            surum="1.0",
             tur="python",
             platformlar=["windows"],
             lisans="LGPL-3.0-or-later",
@@ -1457,12 +1477,12 @@ def test_paket_dizini_denetimi_lgpl_kaynagi_ve_sozlukler(tmp_path: Path) -> None
     sozluk.mkdir(parents=True)
     for ad in L.PYPHEN_IZINLI:
         (sozluk / ad).write_text("x", encoding="utf-8")
-    # Linux'ta pystray aranmaz; izinli sözlükler temizdir.
+    # Linux'ta Windows bileşeni aranmaz; izinli sözlükler temizdir.
     assert L.paket_dizini_denetimi(tmp_path, bilesenler, "linux") == []
     hatalar = L.paket_dizini_denetimi(tmp_path, bilesenler, "windows")
-    assert len(hatalar) == 1 and "pystray/__init__.py" in hatalar[0]
-    (tmp_path / "_internal" / "pystray").mkdir()
-    (tmp_path / "_internal" / "pystray" / "__init__.py").write_text("", encoding="utf-8")
+    assert len(hatalar) == 1 and "ornek_lgpl/__init__.py" in hatalar[0]
+    (tmp_path / "_internal" / "ornek_lgpl").mkdir()
+    (tmp_path / "_internal" / "ornek_lgpl" / "__init__.py").write_text("", encoding="utf-8")
     (sozluk / "hyph_gl.dic").write_text("x", encoding="utf-8")
     hatalar = L.paket_dizini_denetimi(tmp_path, bilesenler, "windows")
     assert len(hatalar) == 1 and "pyphen" in hatalar[0]
@@ -1796,10 +1816,10 @@ def test_kisit_dosyasi_platformun_python_surumlerini_verir() -> None:
     satirlar = [s for s in metin.splitlines() if s and not s.startswith("#")]
     assert f"Django=={PYTHON['django'].surum}" in satirlar
     assert f"fonttools=={PYTHON['fonttools'].surum}" in satirlar  # geçişli bağımlılık
-    assert not any(s.lower().startswith("pystray==") for s in satirlar)  # yalnız Windows
+    assert not any(s.lower().startswith("pythonnet==") for s in satirlar)  # yalnız Windows
     assert any(s.lower().startswith("pyside6==") for s in satirlar)
     windows = L.kisitlar_metni(BILESENLER, "windows")
-    assert "pystray==" in windows and "PySide6==" not in windows
+    assert "pythonnet==" in windows and "PySide6==" not in windows
     # npm ve elle bileşenler kısıta girmez.
     assert "react==" not in metin and "DejaVu" not in metin
 
@@ -1914,7 +1934,8 @@ def test_windows_paketi_lisans_denetimini_msys2_ile_kosar() -> None:
     for parca in ("--platform windows", "--dll-dizini $DllDir", "--msys2-kok $Msys2Kok"):
         assert parca in build, parca
     assert 'Join-Path $WorkDir "oab_defteri"' in build
-    assert "_internal\\pystray\\__init__.py" in build
+    # Aile iskeletinin pystray kaynak denetimi söküldü (tasarım §11 B18).
+    assert "pystray" not in build
 
 
 def test_inno_lisans_sayfasi_ve_lisanssiz_derleme_engeli() -> None:

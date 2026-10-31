@@ -11,8 +11,10 @@
 #      ve lisans metinlerini JSON olarak verir (on_yuz_paketleri.mjs).
 #   2. Backend kabı: Python bağımlılık kapanışını iki platform için çözer, lisans
 #      dosyalarını toplar, dizini baştan yazar (lisanslar.py uret). AĞ GEREKİR:
-#      yalnız paket ortamında kurulan dağıtımlar (pywebview, pystray, pythonnet,
-#      PySide6 …) PyPI'dan okunur; WebView2 SDK lisansı NuGet'ten alınır.
+#      yalnız paket ortamında kurulan dağıtımlar (pywebview, pythonnet, PySide6 …)
+#      PyPI'dan okunur; WebView2 SDK lisansı NuGet'ten alınır. Ortak LGPL-3.0 ve
+#      GPL-3.0 metinleri bu dizindeki sabit dosyalardır (lisanslar.py
+#      `ORTAK_METIN_DOSYALARI`).
 #
 # Kullanım (depo kökünden):  bash packaging/lisanslar/uret.sh
 # =============================================================================

@@ -121,10 +121,9 @@ export default function HakkindaPage() {
               ile kullanılır:
             </p>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-body-medium text-on-surface-variant">
-              <li>Windows&apos;ta sistem tepsisi: pystray — Copyright © 2016-2022 Moses Palmér.</li>
               <li>
-                Pardus&apos;ta pencere ve sistem tepsisi: Qt 6 ve PySide6 — Copyright © The Qt
-                Company Ltd. ve katkıda bulunanlar.
+                Pardus&apos;ta pencere: Qt 6 ve PySide6 — Copyright © The Qt Company Ltd. ve katkıda
+                bulunanlar.
               </li>
             </ul>
             <p className="mt-3 text-body-small text-on-surface-variant">

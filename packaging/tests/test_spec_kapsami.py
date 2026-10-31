@@ -47,7 +47,6 @@ DAGITIM_IMPORT_ESLEME = {
     "pypdf": "pypdf",
     "whitenoise": "whitenoise",
     "waitress": "waitress",
-    "segno": "segno",
 }
 
 _PIN = re.compile(r"^([A-Za-z0-9_.\-]+)==", re.MULTILINE)
@@ -182,7 +181,7 @@ def test_runtime_modules_requirements_ile_senkron() -> None:
 
 
 def test_bagimlilik_duman_gercek_listeyle_gelistirme_kabinda_gecer() -> None:
-    """Gerçek `RUNTIME_MODULES` (segno dahil) bayrak yoluyla import edilir → 0.
+    """Gerçek `RUNTIME_MODULES` bayrak yoluyla import edilir → 0.
 
     Geliştirme kabı backend/requirements.txt'i kurar; burada düşen bir modül
     paketli ikilide de düşerdi. Masaüstü modülleri yalnız Windows paket
@@ -190,7 +189,10 @@ def test_bagimlilik_duman_gercek_listeyle_gelistirme_kabinda_gecer() -> None:
     """
     if sys.platform == _GIRIS["DESKTOP_PLATFORM"]:
         pytest.skip("masaüstü modülleri yalnız paket ortamında kurulu")
-    assert "segno" in _GIRIS["RUNTIME_MODULES"]
+    # Liste adıyla değil requirements.txt'le bağlanır (§13 D8): aile sürümü burada
+    # tek bir paketi (segno) adıyla arıyordu; paket sökülünce test anlamsız kalırdı.
+    beklenen = {DAGITIM_IMPORT_ESLEME[d] for d in _gereksinimler()}
+    assert set(_GIRIS["RUNTIME_MODULES"]) == beklenen
     assert _GIRIS["run"](["--bagimlilik-duman"]) == 0
 
 
@@ -201,8 +203,6 @@ def test_bagimlilik_duman_gercek_listeyle_gelistirme_kabinda_gecer() -> None:
 #: Windows işaretli paketleme dağıtımı → paketli ikilide import edilecek modül.
 #: Yeni win32 satırında buraya eşleme eklenir; yoksa test bilinçli KIRILIR.
 PAKETLEME_IMPORT_ESLEME = {
-    "pystray": "pystray",
-    "six": "six",
     # pywebview'ın WebView2 köprüsü `import clr` ile açılır (NOTLAR.md W9).
     "pythonnet": "clr",
 }
@@ -262,7 +262,7 @@ def _spec_windows_blogu_dizeleri() -> set[str]:
 def test_masaustu_modulleri_win32_isaretli_paketlerle_senkron() -> None:
     """UY-6: `DESKTOP_RUNTIME_MODULES` = win32 işaretli paketlerin modülleri."""
     win32 = _paketleme_gereksinimleri().get(_GIRIS["DESKTOP_PLATFORM"], set())
-    assert {"pystray", "six"} <= win32, "tepsi zinciri requirements-paketleme.txt'te yok"
+    assert "pythonnet" in win32, "WebView2 köprüsü requirements-paketleme.txt'te yok"
     esleme_eksik = sorted(win32 - PAKETLEME_IMPORT_ESLEME.keys())
     assert esleme_eksik == [], (
         f"requirements-paketleme.txt'e yeni win32 paketi girmiş: {esleme_eksik}. "
@@ -287,18 +287,19 @@ def test_paketleme_platform_isaretleri_bilinen_kumede() -> None:
 
 
 def test_masaustu_modulleri_spec_windows_blogunda_toplanir() -> None:
-    """Her masaüstü modülü spec'in `if WINDOWS:` bloğunda; pystray'in gizli yükleri de.
+    """Her masaüstü modülü spec'in `if WINDOWS:` bloğunda; tepsi zinciri yok (B18).
 
-    pystray arka ucunu import anında dinamik seçer ve `six.moves` çalışma
-    anında üretilen sanal modüldür; ikisi de statik çözümleyiciden kaçar
-    (okulzili `okul-zili.spec` emsali).
+    Aile iskeletinin tepsisi (pystray, six) ve yalnız tepsi simgesi için toplanan
+    Pillow eklentileri OAB'de yoktur: çarpı programı kapatır (T6).
     """
     dizeler = _spec_windows_blogu_dizeleri()
     eksik = sorted(set(_GIRIS["DESKTOP_RUNTIME_MODULES"]) - dizeler)
     assert eksik == [], f"spec `if WINDOWS:` bloğu şu masaüstü modüllerini toplamıyor: {eksik}"
     spec_metni = SPEC.read_text(encoding="utf-8")
-    assert 'collect_submodules("pystray")' in spec_metni
-    assert {"six.moves", "PIL.ImageDraw", "PIL.IcoImagePlugin"} <= dizeler
+    for yok in ("pystray", "six.moves", "PIL.ImageDraw", "PIL.IcoImagePlugin", "segno"):
+        assert yok not in dizeler, yok
+    assert "module_collection_mode" not in spec_metni
+    assert 'collect_submodules("segno")' not in spec_metni
 
 
 def test_duman_modul_listesi_platforma_gore() -> None:

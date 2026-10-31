@@ -15,11 +15,7 @@ Kurulum paketindeki kopyaya derleme sırasında iki ek girer:
 
 LGPL LİSANSLI BİLEŞENLER VE KAYNAK KOD
 --------------------------------------
-* pystray (yalnız Windows, sistem tepsisi) — LGPL-3.0. Kaynak kodu pakete
-  kaynak dosya olarak girer: kurulum klasöründe _internal\pystray\
-  altındadır; kütüphane bu dosyalar değiştirilerek yeniden kullanılabilir.
-  Aynı sürümün kaynak arşivi: https://pypi.org/project/pystray/0.19.5/#files
-* Qt 6 ve PySide6 (yalnız Linux, pencere ve tepsi) — pakete giren Qt
+* Qt 6 ve PySide6 (yalnız Linux, pencere) — pakete giren Qt
   modülleri için The Qt Company'nin sunduğu LGPL-3.0 / GPL-2.0 / GPL-3.0
   seçeneklerinden LGPL-3.0 kullanılır. Qt'nin YALNIZ GPL-3.0 ile sunulan
   modülleri (Charts, Data Visualization, Graphs, Quick 3D, Quick Timeline,
@@ -49,7 +45,6 @@ LGPL-3.0 bileşenleri fiziksel bir taşıyıcıyla dağıtılırsa GPL-3.0 madde
   - PySide6 6.8.3 (yalnız Linux paketi)
   - PySide6-Addons 6.8.3 (yalnız Linux paketi)
   - PySide6-Essentials 6.8.3 (yalnız Linux paketi)
-  - pystray 0.19.5 (yalnız Windows paketi)
   - shiboken6 6.8.3 (yalnız Linux paketi)
   - PySide6 tekerleklerinin taşıdığı Qt 6.8.3 kitaplıkları
     (yalnız Linux paketi)
@@ -115,20 +110,20 @@ Python kitaplıkları:
       Platform : Windows + Linux
       Kaynak   : https://pypi.org/project/argon2-cffi-bindings/26.1.0/
       Dosyalar : python-argon2-cffi-bindings-LICENSE.txt
-  asgiref 3.12.1
+  asgiref 3.13.0
       Lisans   : BSD-3-Clause
       Platform : Windows + Linux
-      Kaynak   : https://pypi.org/project/asgiref/3.12.1/
+      Kaynak   : https://pypi.org/project/asgiref/3.13.0/
       Dosyalar : python-asgiref-LICENSE.txt
   bottle 0.13.4
       Lisans   : MIT
       Platform : Windows + Linux
       Kaynak   : https://pypi.org/project/bottle/0.13.4/
       Dosyalar : python-bottle-LICENSE.txt
-  brotli 1.2.0
+  brotli 1.2.1
       Lisans   : MIT
       Platform : Windows + Linux
-      Kaynak   : https://pypi.org/project/brotli/1.2.0/
+      Kaynak   : https://pypi.org/project/brotli/1.2.1/
       Dosyalar : python-brotli-LICENSE.txt
   cffi 2.1.1
       Lisans   : MIT-0
@@ -180,11 +175,11 @@ Python kitaplıkları:
       Kaynak   : https://pypi.org/project/et_xmlfile/2.0.0/
       Dosyalar : python-et_xmlfile-LICENCE.python.txt
                  python-et_xmlfile-LICENCE.rst.txt
-  fonttools 4.65.0
+  fonttools 4.68.0
       Lisans   : MIT
       Platform : Windows + Linux
       Kullanım : PDF yazı tipi alt kümeleme
-      Kaynak   : https://pypi.org/project/fonttools/4.65.0/
+      Kaynak   : https://pypi.org/project/fonttools/4.68.0/
       Dosyalar : python-fonttools-LICENSE.external.txt
                  python-fonttools-LICENSE.txt
   openpyxl 3.1.5
@@ -211,15 +206,15 @@ Python kitaplıkları:
       Platform : Windows + Linux
       Kaynak   : https://pypi.org/project/proxy_tools/0.1.0/
       Dosyalar : python-proxy_tools-LICENSE-uretildi.txt
-  pycparser 3.0
+  pycparser 3.12
       Lisans   : BSD-3-Clause
       Platform : Windows + Linux
-      Kaynak   : https://pypi.org/project/pycparser/3.0/
+      Kaynak   : https://pypi.org/project/pycparser/3.12/
       Dosyalar : python-pycparser-LICENSE.txt
-  pydyf 0.12.1
+  pydyf 0.13.0
       Lisans   : BSD-3-Clause
       Platform : Windows + Linux
-      Kaynak   : https://pypi.org/project/pydyf/0.12.1/
+      Kaynak   : https://pypi.org/project/pydyf/0.13.0/
       Dosyalar : python-pydyf-LICENSE.txt
   pyinstaller 6.11.1
       Lisans   : GPL-2.0-or-later WITH Bootloader-exception AND Apache-2.0
@@ -227,11 +222,11 @@ Python kitaplıkları:
       Kullanım : Paketleyici; yalnız önyükleyici, loader ve çalışma anı kancaları pakete girer (derleme kodu girmez)
       Kaynak   : https://pypi.org/project/pyinstaller/6.11.1/
       Dosyalar : python-pyinstaller-COPYING.txt
-  pyinstaller-hooks-contrib 2026.7
+  pyinstaller-hooks-contrib 2026.9
       Lisans   : Apache-2.0
       Platform : Windows + Linux
       Kullanım : Yalnız çalışma anı kancaları (rthooks, Apache-2.0) pakete girer; standart kancalar (GPL-2.0+) girmez
-      Kaynak   : https://pypi.org/project/pyinstaller-hooks-contrib/2026.7/
+      Kaynak   : https://pypi.org/project/pyinstaller-hooks-contrib/2026.9/
       Dosyalar : python-pyinstaller-hooks-contrib-LICENSE.txt
   pypdf 6.14.2
       Lisans   : BSD-3-Clause
@@ -252,7 +247,7 @@ Python kitaplıkları:
   PySide6 6.8.3
       Lisans   : LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only  (kullanılan: LGPL-3.0-only)
       Platform : yalnız Linux
-      Kullanım : Linux penceresi ve tepsisi (Qt 6)
+      Kullanım : Linux penceresi (Qt 6)
       Kaynak   : https://pypi.org/project/PySide6/6.8.3/
       Dosyalar : GPL-3.0-metni.txt
                  LGPL-3.0-metni.txt
@@ -268,13 +263,6 @@ Python kitaplıkları:
       Platform : yalnız Linux
       Kullanım : Qt 6 kitaplıkları
       Kaynak   : https://pypi.org/project/PySide6-Essentials/6.8.3/
-      Dosyalar : GPL-3.0-metni.txt
-                 LGPL-3.0-metni.txt
-  pystray 0.19.5
-      Lisans   : LGPL-3.0-or-later
-      Platform : yalnız Windows
-      Kullanım : Windows sistem tepsisi
-      Kaynak   : https://pypi.org/project/pystray/0.19.5/
       Dosyalar : GPL-3.0-metni.txt
                  LGPL-3.0-metni.txt
   pythonnet 3.0.5
@@ -295,17 +283,11 @@ Python kitaplıkları:
       Kullanım : Qt bağlayıcı katmanı
       Kaynak   : https://pypi.org/project/QtPy/2.4.3/
       Dosyalar : python-QtPy-LICENSE.txt
-  segno 1.6.1
-      Lisans   : BSD-3-Clause
-      Platform : Windows + Linux
-      Kullanım : Etiketteki QR
-      Kaynak   : https://pypi.org/project/segno/1.6.1/
-      Dosyalar : python-segno-LICENSE.txt
-  setuptools 84.0.0
+  setuptools 84.2.1
       Lisans   : MIT
       Platform : Windows + Linux
       Kullanım : cffi derleme yardımcısı (çalışma anında kullanılmaz)
-      Kaynak   : https://pypi.org/project/setuptools/84.0.0/
+      Kaynak   : https://pypi.org/project/setuptools/84.2.1/
       Dosyalar : python-setuptools-LICENSE.txt
                  python-setuptools-setuptools__vendor_autocommand-2.2.2.dist-info_LICENSE.txt
                  python-setuptools-setuptools__vendor_backports.tarfile-1.2.0.dist-info_LICENSE.txt
@@ -314,9 +296,9 @@ Python kitaplıkları:
                  python-setuptools-setuptools__vendor_jaraco_context-6.1.0.dist-info_licenses_LICENSE.txt
                  python-setuptools-setuptools__vendor_jaraco_functools-4.4.0.dist-info_licenses_LICENSE.txt
                  python-setuptools-setuptools__vendor_more_itertools-10.8.0.dist-info_licenses_LICENSE.txt
-                 python-setuptools-setuptools__vendor_packaging-26.0.dist-info_licenses_LICENSE.APACHE.txt
-                 python-setuptools-setuptools__vendor_packaging-26.0.dist-info_licenses_LICENSE.BSD.txt
-                 python-setuptools-setuptools__vendor_packaging-26.0.dist-info_licenses_LICENSE.txt
+                 python-setuptools-setuptools__vendor_packaging-26.3.dist-info_licenses_LICENSE.APACHE.txt
+                 python-setuptools-setuptools__vendor_packaging-26.3.dist-info_licenses_LICENSE.BSD.txt
+                 python-setuptools-setuptools__vendor_packaging-26.3.dist-info_licenses_LICENSE.txt
                  python-setuptools-setuptools__vendor_platformdirs-4.4.0.dist-info_licenses_LICENSE.txt
                  python-setuptools-setuptools__vendor_tomli-2.4.0.dist-info_licenses_LICENSE.txt
                  python-setuptools-setuptools__vendor_wheel-0.46.3.dist-info_licenses_LICENSE.txt
@@ -330,11 +312,6 @@ Python kitaplıkları:
       Kaynak   : https://pypi.org/project/shiboken6/6.8.3/
       Dosyalar : GPL-3.0-metni.txt
                  LGPL-3.0-metni.txt
-  six 1.17.0
-      Lisans   : MIT
-      Platform : yalnız Windows
-      Kaynak   : https://pypi.org/project/six/1.17.0/
-      Dosyalar : python-six-LICENSE.txt
   sqlparse 0.6.0
       Lisans   : BSD-3-Clause
       Platform : Windows + Linux
@@ -355,11 +332,11 @@ Python kitaplıkları:
       Platform : Windows + Linux
       Kaynak   : https://pypi.org/project/typing_extensions/4.16.0/
       Dosyalar : python-typing_extensions-LICENSE.txt
-  tzdata 2026.4
+  tzdata 2026.6
       Lisans   : Apache-2.0
       Platform : yalnız Windows
       Kullanım : Windows'ta saat dilimi verisi
-      Kaynak   : https://pypi.org/project/tzdata/2026.4/
+      Kaynak   : https://pypi.org/project/tzdata/2026.6/
       Dosyalar : python-tzdata-LICENSE.txt
                  python-tzdata-licenses_LICENSE_APACHE.txt
   waitress 3.0.2

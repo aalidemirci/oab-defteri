@@ -22,18 +22,11 @@ pywebview==5.3.2
 # pywebview'ın edgechromium arka ucu .NET birlikte çalışabilirliği üzerinden
 # gider; pythonnet olmadan Windows'ta pencere AÇILMAZ (MSHTML düşüşü kodla
 # engelli olduğundan program hata verip durur).
-pythonnet==3.0.5 ; sys_platform == "win32"
-
-# ---------- Windows: sistem tepsisi (tasarım §4.5, denetim UY-6) ----------
-# pystray Windows'ta Win32 API'sini ctypes ile kullanır; Pillow zaten backend
-# bağımlılığıdır, six pystray'in uyumluluk katmanıdır (`six.moves`). Linux'ta
-# tepsi Qt'dir (QSystemTrayIcon), bu yüzden işaret yalnız win32.
-# LİSANS: pystray LGPLv3'tür — lisans metni VE kaynağı pakete girer (F12;
-# packaging/README.md "Masaüstü zinciri"). six MIT'tir.
-# Masaüstü zinciri: bu satırlar ↔ spec `if WINDOWS:` bloğu ↔
+# Masaüstü zinciri: win32 işaretli satırlar ↔ spec `if WINDOWS:` bloğu ↔
 # `giris.py::DESKTOP_RUNTIME_MODULES`; eşitliği test_spec_kapsami.py denetler.
-pystray==0.19.5 ; sys_platform == "win32"
-six==1.17.0 ; sys_platform == "win32"
+# (Aile iskeletinin Windows tepsisi — pystray, six — OAB'de yoktur: çarpı
+# programı kapatır, T6; tasarım §11 B18.)
+pythonnet==3.0.5 ; sys_platform == "win32"
 
 # ---------- Linux/Pardus: Qt WebEngine (PySide6) ----------
 # KS kararı (K17): WebKitGTK/PyGObject yolu ELENDİ (typelib paketleme + Pardus

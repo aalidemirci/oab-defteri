@@ -11,8 +11,8 @@ kurulum provası, Windows setup.exe + portable.zip). Kurucular sahada henüz
 
 ```
 packaging/
-├── requirements-paketleme.txt   PyInstaller + pywebview + (Windows) pythonnet,
-│                                pystray, six + (Linux) qtpy, PySide6
+├── requirements-paketleme.txt   PyInstaller + pywebview + (Windows) pythonnet
+│                                + (Linux) qtpy, PySide6
 ├── pyinstaller/
 │   ├── oab_defteri.spec   Windows + Linux ORTAK spec
 │   ├── giris.py                 paket giriş noktası + teşhis kipleri
@@ -93,7 +93,7 @@ olayını gönderir ve iki mutex serbest kalana dek en çok 30 sn bekler (tasar�
 Paketlenmiş ikili her derlemede iki teşhis kipiyle sınanır (`giris.py`):
 
 * `--bagimlilik-duman` — `RUNTIME_MODULES`'ın tamamını, Windows'ta ek olarak
-  `DESKTOP_RUNTIME_MODULES`'ı (pystray, six, `clr`) import eder.
+  `DESKTOP_RUNTIME_MODULES`'ı (`clr`) import eder.
 * `--pdf-duman [dosya.pdf]` — evrakın taban şablonundan
   (`backend/templates/documents/base.html`) küçük bir Türkçe örnek belge
   üretir; şablon ağacının pakette olduğunu, WeasyPrint zincirini, Türkçe
@@ -303,8 +303,9 @@ PYZ, PKG, EXE — spec süzgeçlerinden sonraki hâl; Analysis TOC'u okunmaz) pa
 her dosyanın sahibini bulur ve şunlarda derlemeyi DURDURUR: listede olmayan Python
 dağıtımı; sahibi bilinmeyen dosya; yalnız GPL'li yerel kütüphane (readline,
 gdbm); PyInstaller'ın gömülemeyen derleme kodu (yalnız önyükleyici, `loader/`,
-`rthooks/`, `fake-modules/` girebilir); süzülmemiş pyphen sözlükleri; pakette
-olmayan pystray kaynağı; Windows'un Universal CRT'si (`ucrtbase.dll`,
+`rthooks/`, `fake-modules/` girebilir); süzülmemiş pyphen sözlükleri;
+`kaynagi_pakette` işaretli bir LGPL bileşenin pakette olmayan kaynağı (bugün böyle
+bileşen yoktur); Windows'un Universal CRT'si (`ucrtbase.dll`,
 `api-ms-win-*.dll` — Windows 10/11'in bileşeni, pakete girmez). Paketle gelen sistem kütüphanelerinin lisans ve telif
 dosyaları (Windows'ta MSYS2 paket veritabanından, Linux'ta dpkg +
 `/usr/share/doc/<paket>/copyright`) kaynak kod adresleriyle
@@ -390,14 +391,14 @@ arşivlerde `uygulama/THIRD_PARTY_LICENSES/`.
 
 ## Masaüstü zinciri (yalnız kabuğun bağımlılıkları)
 
-Backend'in değil **masaüstü kabuğunun** ihtiyaç duyduğu paketler (Windows
-tepsisi için pystray ve six, WebView2 köprüsü için pythonnet) backend
-zincirine girmez; ayrı zincirdedir (tasarım §4.5, denetim UY-6):
+Backend'in değil **masaüstü kabuğunun** ihtiyaç duyduğu paketler (bugün yalnız
+WebView2 köprüsü için pythonnet) backend zincirine girmez; ayrı zincirdedir
+(tasarım §4.5, denetim UY-6). Aile iskeletinin Windows tepsisi (pystray, six)
+OAB'de yoktur: çarpı programı kapatır (tasarım T6, §11 B18).
 
 1. `requirements-paketleme.txt` — pin + `; sys_platform == "win32"` işareti,
 2. `test_spec_kapsami.py::PAKETLEME_IMPORT_ESLEME` (dağıtım → modül),
-3. spec'in `if WINDOWS:` bloğu — `collect_submodules("pystray")`, `six`,
-   `six.moves`, `PIL.ImageDraw`, `PIL.IcoImagePlugin` (okulzili emsali),
+3. spec'in `if WINDOWS:` bloğu — `clr`, `pythonnet`,
 4. `giris.py::DESKTOP_RUNTIME_MODULES` — `--bagimlilik-duman` bu listeyi
    yalnız Windows'ta import eder.
 
@@ -411,23 +412,6 @@ paketlenmiş dizinde `QtWebEngineProcess`, `libQt6WebEngineCore.so.6` ve
 `libQt6Widgets.so.6` dosyalarını arar, bulamazsa durur. Yardımcı süreç eksik
 paketlenirse program açılır ama pencere beyaz kalır; duman kipleri bunu
 yakalamaz.
-
-### Lisans: pystray LGPLv3
-
-pystray **LGPLv3**'tür (six MIT). Dağıtılan pakete pystray'in **lisans metni
-ve kaynağı** girer — *F12'de uygulandı (27.09.2026):*
-
-* Lisans metni `THIRD_PARTY_LICENSES/LGPL-3.0-metni.txt` ve `GPL-3.0-metni.txt`
-  (pystray'in `COPYING.LGPL` ve `COPYING` dosyalarından; LGPLv3, GPLv3 metnine
-  atıf yapar). Bileşen tablosu `BENIOKU.txt` ve `bilesenler.json`'dadır
-  (okulzili'deki `BAGIMLILIKLAR.md`'nin karşılığı).
-* Kaynak: spec `module_collection_mode={"pystray": "py"}` (yalnız Windows) —
-  pystray PYZ arşivine bayt kodu olarak değil `_internal\pystray\*.py` KAYNAK
-  DOSYASI olarak girer; kullanıcı kütüphaneyi değiştirip programı onunla
-  çalıştırabilir (LGPLv3 §4). Kaynak arşivi ayrıca indirilmez.
-* Denetim: `lisanslar.py paket` (`kaynagi_pakette` işaretli bileşen) ve
-  `build.ps1` adım 5'in başı `_internal\pystray\__init__.py`'yi arar; yoksa
-  derleme durur.
 
 ### Lisans: PySide6 LGPLv3 (Linux)
 
@@ -460,8 +444,11 @@ dağıtımları lisansı yalnız üstveride bildirir —
 `License: LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only`. Üçlü lisanstan
 **LGPLv3 seçilir**; seçim `bilesenler.json`'da (`secilen`) ve `BENIOKU.txt`'de
 yazılıdır. Lisans metni ortak `LGPL-3.0-metni.txt` + `GPL-3.0-metni.txt`'dir
-(FSF'nin standart metni; pystray'in dağıtımından alınır, depoya elle metin
-konmaz). qtpy'nin MIT metni kendi tekerleğindendir. Önceki taslakta anılan
+(FSF'nin değiştirilmemiş metni; `packaging/lisanslar/` altında sabit dosya olarak
+durur — geliştirme kabının Debian `base-files` paketindeki `common-licenses`
+kopyasından alındı, SHA-256 özetini `test_lisans_kapisi.py` sabitler. Aile iskeleti
+metni pystray'in dağıtımından alıyordu; tepsi söküldü, tasarım §11 B18).
+qtpy'nin MIT metni kendi tekerleğindendir. Önceki taslakta anılan
 "Qt LGPL Exception" metni Qt 5'in LGPL-2.1 seçeneğine aitti; Qt 6 LGPL-2.1
 sunmadığı için eklenmedi. Dizin paket köküne `lisanslar.py paket` ile kopyalanır.
 Kullanıcıya dönük metin `docs/kurulum.md`'de bir cümleyle durur:
@@ -492,7 +479,7 @@ Metin `uret.sh` ile üretilir; kapı testi depodaki `BENIOKU.txt`'nin üreticini
 birebir aynı olduğunu sınar. **Kararlı sürümden önce** Windows'un MSYS2 kaynak arşivleri
 Release'e ayrı bir "kaynak" paketi olarak konur (KB-1 (b); `docs/teknik-borc.md` TB28).
 Kararda Qt kaynağının (~1 GB) aynalanması yoktur: Qt için download.qt.io adresi ve yazılı
-teklif geçerlidir. (pystray'de durum farklıdır: kaynağı pakettedir.)
+teklif geçerlidir.
 
 **Not — Windows tarafı Qt kullanmaz.** Pencere motoru WebView2'dir; bu bölüm
 yalnız Linux/Pardus paketini bağlar.

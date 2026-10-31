@@ -38,7 +38,7 @@ bu dosyadaki `hiddenimports` → `giris.py::RUNTIME_MODULES`. Paketlenmiş ikili
 `--bagimlilik-duman` her modülü gerçekten import eder; `--pdf-duman` evrak
 şablonlarını ve WeasyPrint zincirini her derlemede sınar.
 
-Yalnız masaüstünde gereken Windows paketleri (pystray, six, pythonnet) ayrı
+Yalnız masaüstünde gereken Windows paketi (pythonnet) ayrı
 zincirdedir: `packaging/requirements-paketleme.txt` (`sys_platform == "win32"`)
 → aşağıdaki `if WINDOWS:` bloğu → `giris.py::DESKTOP_RUNTIME_MODULES`.
 `test_spec_kapsami.py` iki zinciri de platform işaretine göre denetler.
@@ -183,10 +183,6 @@ hiddenimports += collect_submodules("openpyxl")
 # xlrd alt modüllerini (biffh, compdoc, formula…) kendiliğinden toplamaz.
 hiddenimports += collect_submodules("xlrd")
 hiddenimports += collect_submodules("pypdf")
-# Etiketteki isteğe bağlı QR (tasarım §7.2). Backend kaynak olarak paketlendiği
-# için segno'yu statik çözümleyici görmez; `segno.helpers` gibi paketin kendi
-# `__init__`'inin import etmediği alt modüller de ancak böyle toplanır.
-hiddenimports += collect_submodules("segno")
 # LİSANS KAPISI (F12, 27.09.2026 yerel derlemesi): pywebview kendi PyInstaller
 # kancasını (`webview.__pyinstaller.hook-webview`) paketinin İÇİNDE taşır; süzgeçsiz
 # `collect_submodules` onu da toplar, kanca `PyInstaller.utils.hooks`'u import
@@ -201,20 +197,10 @@ if WINDOWS:
     # ne --pdf-duman bunu yakalar (NOTLAR.md W9 — açık sigorta). `clr`
     # `giris.py::DESKTOP_RUNTIME_MODULES`'ta; `--bagimlilik-duman` onu da açar.
     hiddenimports += ["clr", "pythonnet"]
-    # Masaüstü zinciri: Windows tepsisi (tasarım §4.5, denetim UY-6; okulzili
-    # `okul-zili.spec` emsali). Paketler `requirements-paketleme.txt`'te
-    # `sys_platform == "win32"` işaretiyle durur; çalışma anı kapısı
-    # `giris.py::DESKTOP_RUNTIME_MODULES`.
-    # - pystray arka ucunu `import pystray` anında `importlib` ile seçer
-    #   (`pystray._win32`); statik çözümleyici bunu göremez → bütün alt modüller.
-    #   Linux/macOS arka uçları (`_xorg`, `_gtk`, `_darwin`, `_appindicator`)
-    #   Windows'ta çözülemez; PyInstaller bunları yalnız uyarı olarak yazar.
-    # - `six.moves` çalışma anında üretilen sanal modüldür; pystray `_base` ve
-    #   `_win32` onu import eder.
-    # - `PIL.ImageDraw` tepsi simgesi çizimi; `PIL.IcoImagePlugin` pystray'in
-    #   Windows'ta simgeyi geçici ICO dosyasına yazması (`serialized_image`) için.
-    hiddenimports += collect_submodules("pystray")
-    hiddenimports += ["six", "six.moves", "PIL.ImageDraw", "PIL.IcoImagePlugin"]
+    # Aile iskeletinin Windows tepsisi (pystray, six ve yalnız tepsi simgesi için
+    # toplanan `PIL.ImageDraw`, `PIL.IcoImagePlugin`) OAB'de yoktur: çarpı programı
+    # kapatır (T6; tasarım §11 B18). Linux'ta pencere simgesini okuyan
+    # `desktop/qt_kurulum.py` bu bloğa bağlı değildir.
 hiddenimports += [
     # WeasyPrint zinciri
     "pydyf",
@@ -319,14 +305,6 @@ excludes = [
 if not WITH_QT:
     excludes += ["PySide6", "qtpy"]
 
-# ---------------------------------------------------------------------------
-# LGPL kaynağı pakette (F12, TB28): pystray LGPLv3'tür. Modülleri PYZ arşivine
-# bayt kodu olarak değil, `_internal/pystray/` altına KAYNAK DOSYA (.py) olarak
-# konur: kullanıcı kütüphaneyi değiştirip programı onunla çalıştırabilir
-# (LGPLv3 §4) ve kaynak pakettedir (CLAUDE.md §2-10). Derleme sonrası denetim
-# `pystray/__init__.py` dosyasını arar, yoksa derlemeyi durdurur.
-# ---------------------------------------------------------------------------
-module_collection_mode = {"pystray": "py"} if WINDOWS else {}
 
 a = Analysis(  # noqa: F821 — PyInstaller global'i
     [str(ENTRY)],
@@ -339,7 +317,6 @@ a = Analysis(  # noqa: F821 — PyInstaller global'i
     runtime_hooks=[str(RUNTIME_HOOK)],
     excludes=excludes,
     noarchive=False,
-    module_collection_mode=module_collection_mode,
     optimize=0,
 )
 
