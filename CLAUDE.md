@@ -1,8 +1,8 @@
 # CLAUDE.md — OAB Defteri
 
 > Her oturumda otomatik yüklenir. Amaç: projeyi ilk kez gören bir ajanın işi doğru
-> okuması ve **kasıtlı kararları kusur sanmaması**. Şu an proje **planlama**
-> aşamasındadır; kod yoktur. **Ana referans genel tasarımdır:**
+> okuması ve **kasıtlı kararları kusur sanmaması**. Proje **F1** aşamasındadır (F0
+> 31.10.2026'da kapandı). **Ana referans genel tasarımdır:**
 > [`docs/tasarim/2026-10-31-genel-tasarim.md`](docs/tasarim/2026-10-31-genel-tasarim.md)
 > (taslak v2, bağımsız denetimden geçti — [denetim](docs/kesif/2026-10-31-tasarim-denetimi.md)). Diğerleri:
 > [`docs/kesif/2026-10-31-on-degerlendirme.md`](docs/kesif/2026-10-31-on-degerlendirme.md)
@@ -102,8 +102,8 @@ siteyi ve evrakı kapsar.
 
 | Faz | Durum |
 |---|---|
-| F0 Keşif tamamlama + genel tasarım + mevzuat | **kapanışa hazır** — korpus, envanterler, kullanıcı kararları, saha notu, genel tasarım taslak v2 ve bağımsız denetim (129 bulgu işlendi) tamam (31.10.2026); kullanıcının "F0 tamam" demesi bekleniyor. İlerleme planın §1.7'sinde |
-| F1 İskelet + çekirdek + organlar + kural paketi | başlamadı |
+| F0 Keşif tamamlama + genel tasarım + mevzuat | **tamam (31.10.2026)** — korpus, envanterler, kullanıcı kararları, saha notu, genel tasarım taslak v2, bağımsız denetim (129 bulgu işlendi); kullanıcı "F0 tamam" dedi. Ayrıntı planın §1.7'sinde |
+| F1 İskelet + çekirdek + organlar + kural paketi | **sürüyor** — F1a (aile iskeleti) başladı (31.10.2026) |
 
 Sapmalar ve tasarımda yazmayan kararlar faz bittikçe "F<n> ekleri (tarih)" satırıyla
 plan/tasarım belgesine işlenir.
