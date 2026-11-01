@@ -27,12 +27,18 @@
 * `POST security/change-password/` `{parola, yeni_parola}` → oturumdaki hesabın
   kendi parolası. Yalnız açık oturumda (kilitliyken kilit kapısı 423 verir) ve o
   hesabın parolasıyla; başka hesabın parolası geçmez.
+* `GET|PUT security/idle-lock/` `{dakika}` → boşta kilit süresi (3-30, varsayılan 10;
+  `SchoolConfig.idle_lock_minutes`, tasarım TK14, §13 D11). Ayarlar → Güvenlik okur
+  ve yazar. Yalnız açık oturumda: kilit ekranının açık listesinde DEĞİLDİR
+  (`lock_middleware.KILITLI_IZINLI`; kilitliyken 423). Yazmayı yalnız program
+  yöneticisine bırakan rol kuralı (tasarım §4.4.2) 2. adımdadır.
 
 Parolalar ve kurtarma anahtarı YALNIZ istek gövdesinde taşınır; hiçbir yanıtta,
 günlükte ya da hata iletisinde yankılanmaz. Gövde anahtarları Türkçedir (oturum
 sözleşmesi); ilk hesabın kurulumu ve kurtarma anahtarı belgesi uçları `views.py`'dedir.
-Rol denetimi (`RolMiddleware`) 2. adımdadır; bu uçların hepsi her role açık olacaktır
-(§4.4.2 "Kendi parolasını değiştirme, Kilitle, Çık").
+Rol denetimi (`RolMiddleware`) 2. adımdadır; boşta kilit süresinin yazımı dışındaki
+bu uçların hepsi her role açık olacaktır (§4.4.2 "Kendi parolasını değiştirme, Kilitle,
+Çık").
 """
 
 from __future__ import annotations
@@ -48,8 +54,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.okul.models import IDLE_LOCK_MINUTES_MAX, IDLE_LOCK_MINUTES_MIN
 from apps.okul.oturum import OTURUM
 from apps.okul.services import app_password, hesaplar
+from apps.okul.services import setup as setup_service
 
 
 class SecurityRefusedResponse(APIException):
@@ -104,6 +112,23 @@ class ParolaDegistirmeSerializer(serializers.Serializer[dict[str, Any]]):
 
     parola = serializers.CharField(trim_whitespace=False)
     yeni_parola = serializers.CharField(trim_whitespace=False)
+
+
+class BostaKilitSuresiSerializer(serializers.Serializer[dict[str, Any]]):
+    """Boşta kilit süresi: dakika, 3-30 tam sayı (iletiler sözlüğe uyar; iç kod yok)."""
+
+    dakika = serializers.IntegerField(
+        min_value=IDLE_LOCK_MINUTES_MIN,
+        max_value=IDLE_LOCK_MINUTES_MAX,
+        error_messages={
+            "required": "Boşta kilit süresini dakika olarak girin.",
+            "null": "Boşta kilit süresini dakika olarak girin.",
+            "invalid": "Boşta kilit süresi tam sayı (dakika) olmalıdır.",
+            "max_string_length": "Boşta kilit süresi tam sayı (dakika) olmalıdır.",
+            "min_value": setup_service.IDLE_LOCK_RANGE_MESSAGE,
+            "max_value": setup_service.IDLE_LOCK_RANGE_MESSAGE,
+        },
+    )
 
 
 class OturumOzetiView(APIView):
@@ -184,3 +209,22 @@ class SecurityChangePasswordView(APIView):
                 new_password=veri["yeni_parola"],
             )
         return Response(OTURUM.ozet())
+
+
+class BostaKilitSuresiView(APIView):
+    """`GET|PUT /api/v1/security/idle-lock/` `{dakika}` — boşta kilit süresi (modül başlığı).
+
+    GET oturumun uyguladığı süreyi verir (`setup.idle_lock_minutes`); PUT yazar ve
+    yeni değeri döndürür. Yeni süre bir sonraki istekte geçerlidir (oturumun önbelleği
+    kayıtla boşalır). Kişi yazmaz.
+    """
+
+    def get(self, request: Request) -> Response:
+        return Response({"dakika": setup_service.idle_lock_minutes()})
+
+    def put(self, request: Request) -> Response:
+        req = BostaKilitSuresiSerializer(data=request.data)
+        req.is_valid(raise_exception=True)
+        with guvenlik_hatalari():
+            dakika = setup_service.set_idle_lock_minutes(dakika=req.validated_data["dakika"])
+        return Response({"dakika": dakika})

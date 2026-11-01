@@ -1,5 +1,6 @@
 // Kurtarma anahtarının istemci tarafı yardımcıları (tasarım §4.4.3; anahtarın PDF'i
-// katalog dışı program belgesidir, E-kodu yoktur — tasarım §9.7).
+// "Kurtarma anahtarı belgesi"dir, katalog dışı program belgesidir, E-kodu yoktur —
+// tasarım §9.7).
 //
 // Anahtar SUNUCUDA SAKLANMAZ: kurulumda bir kez gösterilir; "saklandı mı"
 // doğrulaması (iki grubu geri yazdırma) bu yüzden istemcide yapılır. Normalleştirme
@@ -9,19 +10,30 @@
 // A-Z ve 2-7'dir; 0, 1, 8, 9 yoktur). Türkçe klavyede büyük harfle yazılan "i"
 // noktalı "İ" olur ve `toUpperCase` onu "I"ya çevirmez; eşleme bu yüzden önce
 // yapılır. Anahtar Türkçe metin değildir: "i", "ı", "İ" hepsi "I" olmalıdır.
+//
+// Anahtarın KİMLİĞİ (no + üretim günü; tasarım TK10) sır değildir: belgede basılıdır,
+// yedek listesi hangi anahtarın hangi yedeği açtığını onunla söyler. Ekrandaki biçimi
+// buradaki iki yardımcıdan geçer (sözlük §1 "Kurtarma anahtarı").
 
 import { useState } from "react";
 
 import { ApiError } from "../../lib/api";
 import { dosyaAdi, saveBlob } from "../../lib/download";
-import { formatDate, todayIso } from "../../lib/format";
+import { formatDate, formatNumber, todayIso } from "../../lib/format";
 import { guvenlikApi } from "./api";
+import type { GuvenlikDurumu, KurtarmaKimligi } from "./api";
 
 /** Anahtar dörtlü gruplardan oluşur (backend `RECOVERY_GROUP_SIZE`). */
 export const GRUP_UZUNLUGU = 4;
 
-/** Belgenin kullanıcıya görünen adı — katalog dışı program belgesi (tasarım §9.7). */
-export const KURTARMA_CIKTISI_BELGE_ADI = "Kurtarma Anahtarı Çıktısı";
+/** Belgenin kullanıcıya görünen adı (sözlük §2; başlık yerinde de bu yazımla). */
+export const KURTARMA_BELGESI_ADI = "Kurtarma anahtarı belgesi";
+
+/**
+ * İndirilen dosyanın adının kökü — backend `recovery_key_document.DOCUMENT_NAME` ile
+ * BİREBİR ("Kurtarma Anahtarı Belgesi"; Content-Disposition ile aynı ad iner).
+ */
+export const KURTARMA_BELGESI_DOSYA_KOKU = "Kurtarma Anahtarı Belgesi";
 
 export function kurtarmaAnahtariniNormallestir(deger: string): string {
   return deger
@@ -57,16 +69,53 @@ export function rastgeleIkiGrup(
   return birinci < ikinci ? [birinci, ikinci] : [ikinci, birinci];
 }
 
-/** İndirilen PDF'in adı: belge adı + YEREL tarih (backend `recovery_key_pdf_filename` ile aynı). */
-export function kurtarmaCiktisiDosyaAdi(): string {
-  return dosyaAdi([KURTARMA_CIKTISI_BELGE_ADI, formatDate(todayIso())], "pdf");
+/** Güvenlik durumundaki (ya da ilk hesap / yenileme yanıtındaki) güncel anahtarın kimliği. */
+export function guncelKurtarmaKimligi(durum: GuvenlikDurumu): KurtarmaKimligi {
+  // `?? null`: eski ya da eksik yanıtta alan hiç gelmeyebilir; kimlik yine null'la kurulur.
+  return { no: durum.recovery_key_no ?? null, tarih: durum.recovery_key_date ?? null };
 }
 
 /**
- * Kurtarma anahtarı çıktısını (PDF) indirir. Backend anahtarı kurtarma sarmalına
- * karşı doğrular; yanlışsa Türkçe iletiyle 400 döner ve dosya inmez.
+ * Kimliğin kısa satırı: "Anahtar no 3 · üretim tarihi 01.11.2026". Biri yoksa yalnız
+ * öteki yazılır; ikisi de yoksa null (ekran satırı hiç göstermez).
  */
-export function useKurtarmaCiktisi() {
+export function kurtarmaKimligiMetni(kimlik: KurtarmaKimligi | null | undefined): string | null {
+  if (!kimlik) return null;
+  const parcalar: string[] = [];
+  if (typeof kimlik.no === "number") parcalar.push(`Anahtar no ${formatNumber(kimlik.no)}`);
+  if (kimlik.tarih) {
+    const tarih = formatDate(kimlik.tarih);
+    parcalar.push(parcalar.length > 0 ? `üretim tarihi ${tarih}` : `Üretim tarihi ${tarih}`);
+  }
+  return parcalar.length > 0 ? parcalar.join(" · ") : null;
+}
+
+/**
+ * Yedeği hangi anahtarın açtığı (tasarım TK10: "bu yedek <no> numaralı, <tarih> tarihli
+ * kurtarma anahtarıyla açılır"). Kimlik bilinmiyorsa (başlık yok ya da okunamıyor) bunu
+ * açıkça söyler.
+ */
+export function yedekAnahtarCumlesi(kimlik: KurtarmaKimligi | null | undefined): string {
+  const no = typeof kimlik?.no === "number" ? kimlik.no : null;
+  const tarih = kimlik?.tarih ? formatDate(kimlik.tarih) : null;
+  if (no !== null && tarih !== null) {
+    return `Bu yedek ${formatNumber(no)} numaralı, ${tarih} tarihli kurtarma anahtarıyla açılır.`;
+  }
+  if (no !== null) return `Bu yedek ${formatNumber(no)} numaralı kurtarma anahtarıyla açılır.`;
+  if (tarih !== null) return `Bu yedek ${tarih} tarihli kurtarma anahtarıyla açılır.`;
+  return "Bu yedeği hangi kurtarma anahtarının açtığı okunamadı.";
+}
+
+/** İndirilen PDF'in adı: belge adı + YEREL tarih (backend `recovery_key_pdf_filename` ile aynı). */
+export function kurtarmaBelgesiDosyaAdi(): string {
+  return dosyaAdi([KURTARMA_BELGESI_DOSYA_KOKU, formatDate(todayIso())], "pdf");
+}
+
+/**
+ * Kurtarma anahtarı belgesini (PDF) indirir. Backend anahtarı kurtarma sarmalına karşı
+ * doğrular; yanlışsa Türkçe iletiyle 400 döner ve dosya inmez.
+ */
+export function useKurtarmaBelgesi() {
   const [indiriliyor, setIndiriliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
@@ -75,10 +124,10 @@ export function useKurtarmaCiktisi() {
     setHata(null);
     try {
       const pdf = await guvenlikApi.kurtarmaAnahtariPdf(anahtar);
-      saveBlob(pdf, kurtarmaCiktisiDosyaAdi());
+      saveBlob(pdf, kurtarmaBelgesiDosyaAdi());
       return true;
     } catch (err) {
-      setHata(err instanceof ApiError ? err.message : "Kurtarma anahtarı çıktısı hazırlanamadı.");
+      setHata(err instanceof ApiError ? err.message : "Kurtarma anahtarı belgesi hazırlanamadı.");
       return false;
     } finally {
       setIndiriliyor(false);

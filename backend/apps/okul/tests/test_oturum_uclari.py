@@ -26,9 +26,10 @@ from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.okul.models import Account, AccountRole, AccountStatus, SuspendReason
+from apps.okul.models import Account, AccountRole, AccountStatus, SchoolConfig, SuspendReason
 from apps.okul.oturum import OTURUM
 from apps.okul.services import app_password, backup_restore, hesaplar
+from apps.okul.services import setup as setup_service
 from apps.okul.tests.hesap_ortak import (
     GECICI_PAROLA,
     UCUNCU_PAROLA,
@@ -56,6 +57,7 @@ ACMA_UCU = "/api/v1/security/unlock/"
 KILITLE_UCU = "/api/v1/security/lock/"
 KURTARMA_UCU = "/api/v1/security/recover/"
 PAROLA_UCU = "/api/v1/security/change-password/"
+BOSTA_KILIT_UCU = "/api/v1/security/idle-lock/"
 VERI_UCU = "/api/v1/grade-levels/"
 MUHASIP_ADI = "Örnek Muhasip"
 
@@ -525,6 +527,90 @@ def test_parola_degistirme_servisi_oturum_olmadan_reddeder(
         app_password.change_password(
             hesap_id=TEST_HESAP_ID, current_password=TEST_PAROLA, new_password=YENI_PAROLA
         )
+
+
+# ============================================================ boşta kilit süresi (TK14, §13 D11)
+
+
+def test_bosta_kilit_suresi_varsayilani_10_dakikadir(client: APIClient) -> None:
+    """Satır yokken alanın kendi varsayılanı; oturum özetindeki `bosta_dk` ile aynı kaynak."""
+    yanit = client.get(BOSTA_KILIT_UCU)
+
+    assert yanit.status_code == 200
+    assert _govde(yanit) == {"dakika": 10}
+    assert _govde(client.get(OTURUM_UCU))["bosta_dk"] == 10
+
+
+def test_bosta_kilit_suresi_yazilir_ve_oturum_hemen_uygular(client: APIClient) -> None:
+    """Kayıt oturumun önbelleğini boşaltır: yeni süre yeniden başlatmadan geçerlidir."""
+    assert _govde(client.get(OTURUM_UCU))["bosta_dk"] == 10  # önbelleğe alınır
+
+    yanit = client.put(BOSTA_KILIT_UCU, {"dakika": 3}, format="json")
+
+    assert yanit.status_code == 200, yanit.content
+    assert _govde(yanit) == {"dakika": 3}
+    assert SchoolConfig.load().idle_lock_minutes == 3
+    assert _govde(client.get(BOSTA_KILIT_UCU)) == {"dakika": 3}
+    assert _govde(client.get(OTURUM_UCU))["bosta_dk"] == 3
+    assert client.put(BOSTA_KILIT_UCU, {"dakika": 30}, format="json").status_code == 200
+    assert _govde(client.get(OTURUM_UCU))["bosta_dk"] == 30
+
+
+@pytest.mark.parametrize("deger", [2, 31, 0, -5, 1000])
+def test_bosta_kilit_suresi_aralik_disinda_reddedilir(client: APIClient, deger: int) -> None:
+    yanit = client.put(BOSTA_KILIT_UCU, {"dakika": deger}, format="json")
+
+    assert yanit.status_code == 400
+    assert _govde(yanit)["message"] == "Boşta kilit süresi 3 ile 30 dakika arasında olmalıdır."
+    assert SchoolConfig.load().idle_lock_minutes == 10
+
+
+@pytest.mark.parametrize("deger", ["on", "", True, 7.5, [5]])
+def test_bosta_kilit_suresi_tam_sayi_ister(client: APIClient, deger: object) -> None:
+    yanit = client.put(BOSTA_KILIT_UCU, {"dakika": deger}, format="json")
+
+    assert yanit.status_code == 400
+    assert _govde(yanit)["message"] == "Boşta kilit süresi tam sayı (dakika) olmalıdır."
+    assert SchoolConfig.load().idle_lock_minutes == 10
+
+
+@pytest.mark.parametrize("govde", [{}, {"dakika": None}], ids=["alansiz", "bos_deger"])
+def test_bosta_kilit_suresi_degersiz_reddedilir(client: APIClient, govde: dict[str, Any]) -> None:
+    """Alan adı olmadan anlamsız ret alanın altında durur (`fields`; ön yüz formu gösterir)."""
+    yanit = client.put(BOSTA_KILIT_UCU, govde, format="json")
+
+    assert yanit.status_code == 400
+    assert _govde(yanit)["fields"]["dakika"] == ["Boşta kilit süresini dakika olarak girin."]
+    assert SchoolConfig.load().idle_lock_minutes == 10
+
+
+def test_bosta_kilit_suresi_kilitliyken_423(client: APIClient, kilitli: None) -> None:
+    """Kilit ekranının açık listesinde değildir: kilitliyken ne okunur ne yazılır."""
+    for yanit in (
+        client.get(BOSTA_KILIT_UCU),
+        client.put(BOSTA_KILIT_UCU, {"dakika": 5}, format="json"),
+    ):
+        assert yanit.status_code == 423
+        assert _govde(yanit)["code"] == "locked"
+    assert SchoolConfig.load().idle_lock_minutes == 10
+
+
+def test_bosta_kilit_suresi_hesap_kurulmadan_yazilmaz(client: APIClient, parolasiz: None) -> None:
+    """Kurulum durumunda kilit kapısı geçirir; servis açık oturum ister (savunma derinliği)."""
+    assert _govde(client.get(BOSTA_KILIT_UCU)) == {"dakika": 10}
+
+    yanit = client.put(BOSTA_KILIT_UCU, {"dakika": 5}, format="json")
+
+    assert yanit.status_code == 400
+    assert _govde(yanit)["message"] == "Boşta kilit süresi yalnız açık oturumda değiştirilir."
+    assert SchoolConfig.load().idle_lock_minutes == 10
+
+
+def test_bosta_kilit_suresi_servisi_aralik_disini_ve_bool_u_reddeder() -> None:
+    """Uç dışı çağrı da veritabanı kısıtına (500) düşmeden Türkçe iletiyle reddedilir."""
+    for deger in (2, 31, True):
+        with pytest.raises(setup_service.IdleLockError, match="3 ile 30 dakika"):
+            setup_service.set_idle_lock_minutes(dakika=deger)
 
 
 # ============================================================ ilk hesap (Türkçe gövde)

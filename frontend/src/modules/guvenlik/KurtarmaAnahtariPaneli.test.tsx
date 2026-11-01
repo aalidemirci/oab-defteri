@@ -27,11 +27,16 @@ vi.mock("../../lib/download", async (importOriginal) => {
 
 import KurtarmaAnahtariPaneli, { BOSTA_GIZLEME_MS } from "./KurtarmaAnahtariPaneli";
 import {
+  KURTARMA_BELGESI_DOSYA_KOKU,
+  guncelKurtarmaKimligi,
   kurtarmaAnahtariniNormallestir,
-  kurtarmaCiktisiDosyaAdi,
+  kurtarmaBelgesiDosyaAdi,
   kurtarmaGruplari,
+  kurtarmaKimligiMetni,
   rastgeleIkiGrup,
+  yedekAnahtarCumlesi,
 } from "./kurtarma";
+import type { GuvenlikDurumu } from "./api";
 
 const ANAHTAR = "TEST-KURT-ARMA-ANAH-TARI-ABCD-EFGH-JKLM";
 
@@ -102,9 +107,45 @@ describe("kurtarma yardımcıları", () => {
   });
 
   it("PDF dosya adı belge adı + yerel tarih taşır, anahtar taşımaz", () => {
-    expect(kurtarmaCiktisiDosyaAdi()).toMatch(
-      /^Kurtarma-Anahtarı-Çıktısı_\d{2}\.\d{2}\.\d{4}\.pdf$/,
+    // Backend `recovery_key_document.DOCUMENT_NAME` + `recovery_key_pdf_filename` ile aynı:
+    // Content-Disposition'daki adla ön yüzün kaydettiği ad birebir.
+    expect(KURTARMA_BELGESI_DOSYA_KOKU).toBe("Kurtarma Anahtarı Belgesi");
+    expect(kurtarmaBelgesiDosyaAdi()).toMatch(
+      /^Kurtarma-Anahtarı-Belgesi_\d{2}\.\d{2}\.\d{4}\.pdf$/,
     );
+  });
+
+  it("anahtar kimliği no ve üretim tarihiyle yazılır; eksik parça atlanır", () => {
+    expect(kurtarmaKimligiMetni({ no: 3, tarih: "2026-11-01" })).toBe(
+      "Anahtar no 3 · üretim tarihi 01.11.2026",
+    );
+    expect(kurtarmaKimligiMetni({ no: 2, tarih: null })).toBe("Anahtar no 2");
+    expect(kurtarmaKimligiMetni({ no: null, tarih: "2026-09-15" })).toBe(
+      "Üretim tarihi 15.09.2026",
+    );
+    expect(kurtarmaKimligiMetni({ no: null, tarih: null })).toBeNull();
+    expect(kurtarmaKimligiMetni(null)).toBeNull();
+  });
+
+  it("yedeği açan anahtar cümlesi (tasarım TK10) ve bilinmeyen kimlik", () => {
+    expect(yedekAnahtarCumlesi({ no: 3, tarih: "2026-11-01" })).toBe(
+      "Bu yedek 3 numaralı, 01.11.2026 tarihli kurtarma anahtarıyla açılır.",
+    );
+    expect(yedekAnahtarCumlesi({ no: 4, tarih: null })).toBe(
+      "Bu yedek 4 numaralı kurtarma anahtarıyla açılır.",
+    );
+    expect(yedekAnahtarCumlesi({ no: null, tarih: "2026-11-01" })).toBe(
+      "Bu yedek 01.11.2026 tarihli kurtarma anahtarıyla açılır.",
+    );
+    expect(yedekAnahtarCumlesi(null)).toBe(
+      "Bu yedeği hangi kurtarma anahtarının açtığı okunamadı.",
+    );
+  });
+
+  it("güvenlik durumundan güncel kimlik; alan yoksa null", () => {
+    const durum = { recovery_key_no: 5, recovery_key_date: "2026-10-31" } as GuvenlikDurumu;
+    expect(guncelKurtarmaKimligi(durum)).toEqual({ no: 5, tarih: "2026-10-31" });
+    expect(guncelKurtarmaKimligi({} as GuvenlikDurumu)).toEqual({ no: null, tarih: null });
   });
 });
 
@@ -120,6 +161,37 @@ describe("KurtarmaAnahtariPaneli", () => {
     expect(screen.getByText(/elle yazacaksanız/i)).toBeInTheDocument();
     // Metin dosyası yolu kaldırıldı (PDF aynı işi resmî çıktı biçiminde görür).
     expect(screen.queryByRole("button", { name: /metin dosyası/i })).toBeNull();
+  });
+
+  it("anahtarın no'su ve üretim tarihi biliniyorsa anahtarın üstünde (yazdırma alanında) yazar", () => {
+    render(
+      <SnackbarProvider>
+        <KurtarmaAnahtariPaneli
+          anahtar={ANAHTAR}
+          kimlik={{ no: 2, tarih: "2026-11-01" }}
+          onDogrulama={vi.fn()}
+        />
+      </SnackbarProvider>,
+    );
+    expect(screen.getByTestId("kurtarma-kimligi")).toHaveTextContent(
+      "Anahtar no 2 · üretim tarihi 01.11.2026",
+    );
+    // Kimlik yazdırılan alandadır: kâğıt hangi no'yu taşıdığını söyler.
+    expect(document.getElementById("kurtarma-anahtari-yazdirma-alani")?.textContent).toContain(
+      "Anahtar no 2",
+    );
+  });
+
+  it("yazdırılan kâğıt saklama satırını taşır (zarf, veli, herkes kendi hesabıyla)", () => {
+    bas();
+    const alan = document.getElementById("kurtarma-anahtari-yazdirma-alani")?.textContent ?? "";
+    expect(alan).toContain("Okul müdürlüğünde kapalı zarfta saklanır; veliye geçmez.");
+    expect(alan).toContain("herkes programı kendi hesabıyla açar");
+  });
+
+  it("kimlik bilinmiyorsa satır gösterilmez", () => {
+    bas();
+    expect(screen.queryByTestId("kurtarma-kimligi")).toBeNull();
   });
 
   it("Yazdır pencere yazdırmasını çağırır", async () => {
@@ -141,21 +213,21 @@ describe("KurtarmaAnahtariPaneli", () => {
     await kullanici.click(screen.getByRole("button", { name: "PDF olarak kaydet" }));
 
     await waitFor(() => expect(guvenlik.kurtarmaAnahtariPdf).toHaveBeenCalledWith(ANAHTAR));
-    expect(indirme.saveBlob).toHaveBeenCalledWith(pdf, kurtarmaCiktisiDosyaAdi());
+    expect(indirme.saveBlob).toHaveBeenCalledWith(pdf, kurtarmaBelgesiDosyaAdi());
     expect(
-      await screen.findByText("Kurtarma anahtarı çıktısı PDF olarak kaydedildi."),
+      await screen.findByText("Kurtarma anahtarı belgesi PDF olarak kaydedildi."),
     ).toBeInTheDocument();
   });
 
   it("PDF hatasında backend iletisi görünür", async () => {
     const kullanici = userEvent.setup();
     guvenlik.kurtarmaAnahtariPdf.mockRejectedValue(
-      new ApiError(423, "locked", "Kayıtlar yönetici parolasıyla kilitli.", {}),
+      new ApiError(423, "locked", "Kayıtlar kilitli. Hesabınızı seçip parolanızla açın.", {}),
     );
     bas();
     await kullanici.click(screen.getByRole("button", { name: "PDF olarak kaydet" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Kayıtlar yönetici parolasıyla kilitli.",
+      "Kayıtlar kilitli. Hesabınızı seçip parolanızla açın.",
     );
     expect(indirme.saveBlob).not.toHaveBeenCalled();
   });
@@ -184,7 +256,7 @@ describe("KurtarmaAnahtariPaneli", () => {
   it("sunucu damgayı yazamazsa doğrulanmaz; ileti ve yeniden deneme çıkar", async () => {
     const kullanici = userEvent.setup();
     guvenlik.kurtarmaAnahtariniDogrula.mockRejectedValueOnce(
-      new ApiError(423, "locked", "Kayıtlar yönetici parolasıyla kilitli.", {}),
+      new ApiError(423, "locked", "Kayıtlar kilitli. Hesabınızı seçip parolanızla açın.", {}),
     );
     const onDogrulama = bas();
     await kullanici.click(screen.getByRole("button", { name: "Sakladım, doğrula" }));
@@ -192,7 +264,7 @@ describe("KurtarmaAnahtariPaneli", () => {
     await kullanici.type(screen.getByLabelText("6. grup"), "ABCD");
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Kayıtlar yönetici parolasıyla kilitli.",
+      "Kayıtlar kilitli. Hesabınızı seçip parolanızla açın.",
     );
     expect(screen.queryByRole("status")).toBeNull();
     expect(onDogrulama).not.toHaveBeenCalledWith(true);

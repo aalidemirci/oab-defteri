@@ -13,6 +13,11 @@ PAROLA POLİTİKASI (tasarım TK15, §15 M-4; plan F1b-1 "Parola ve hatalı dene
   ayarı yoktur). Türkçe harfler harf sayılır (`ç`, `ğ`, `ı` küçük; `Ç`, `Ğ`, `İ`
   büyük). Simge harf, rakam ve boşluk dışındaki her karakterdir; parola
   cümlesindeki ara boşluk serbesttir ama simge sayılmaz.
+  Rakam yalnız onluk rakamdır (`str.isdecimal`, Unicode `Nd`): `²`, `①` gibi üst
+  simge ya da daireli rakamlar rakam sayılmaz (`isdigit` onları da sayardı). Ön yüzün
+  ön denetimi (`oturum/parolaPolitikasi.ts`) her türü aynı Unicode özelliğiyle
+  denetler; iki tarafın ortak vaka tablosu `test_hesaplar.py` ile
+  `parolaPolitikasi.test.ts`'tedir.
 * Parola KIRPILMAZ; başında ya da sonunda boşluk olan parola kabul edilmez (aile
   kurulumda kırpıp açılışta kırpmıyordu: sonu boşluklu parola kurulduktan sonra
   açılamazdı).
@@ -99,7 +104,7 @@ def validate_password(password: str) -> str:
         eksik.append("küçük harf")
     if not any(ch.isupper() for ch in password):
         eksik.append("büyük harf")
-    if not any(ch.isdigit() for ch in password):
+    if not any(ch.isdecimal() for ch in password):
         eksik.append("rakam")
     if not any(not ch.isalnum() and not ch.isspace() for ch in password):
         eksik.append("simge")

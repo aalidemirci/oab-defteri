@@ -9,8 +9,8 @@
 #     ./kur.sh
 #
 # Her şey kullanıcının kendi ev dizinine kurulur; sistem dosyalarına
-# DOKUNULMAZ. Okul bilgisayarında yönetici parolası yoksa bu yol kullanılır
-# (.deb kurulumu için `sudo` gerekir).
+# DOKUNULMAZ. Okul bilgisayarında yönetici yetkiniz (`sudo`) yoksa bu yol
+# kullanılır (.deb kurulumu için `sudo` gerekir).
 #
 # Kaldırmak için: ./kaldir.sh   (verileriniz silinmez)
 # =============================================================================

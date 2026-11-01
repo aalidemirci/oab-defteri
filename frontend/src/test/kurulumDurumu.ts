@@ -4,7 +4,7 @@
 
 import type { SetupStatus } from "../modules/okul/api";
 
-/** Kurulum bitmiş, parola kurulu, anahtar doğrulanmış, aktif yıl dönemleriyle hazır; yol haritası boş. */
+/** Kurulum bitmiş, hesap kurulu, anahtar doğrulanmış, aktif yıl dönemleriyle hazır; yol haritası boş. */
 export const KURULU_DURUM: SetupStatus = {
   setup_completed: true,
   password_set: true,

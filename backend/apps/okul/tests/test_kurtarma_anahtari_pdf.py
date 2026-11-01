@@ -6,9 +6,18 @@ Kanıtlanan maddeler:
   gecikme, PDF üretilmez (yanlış yazılmış anahtar kâğıda basılmaz);
 * doğru anahtarla PDF üretilir ve İÇERİKTE anahtar vardır (pypdf ile metin
   çıkarılır); belge tek sayfadır (sayfa bütçesi gerçek uzunlukta verilerle);
-* belge metni OAB'nindir (§12.B, §13 D50): saklama yeri okul müdürlüğünde kapalı
-  zarf, veliye geçmez (D3); parola paylaşılmaz; aileden kalan "parola en az iki
-  kişide" öğüdü ve kütüphane dili yoktur;
+* belgenin adı "Kurtarma anahtarı belgesi"dir (tasarım §9.7): başlıkta Türkçe büyük
+  harfle, indirilen dosyanın adında tek sabitten (`DOCUMENT_NAME`; ön yüz aynı adı
+  kurar);
+* belge anahtarın kimliğini basar: anahtar no'su ve üretim tarihi `guvenlik.json`
+  `kurtarma.no` ve `kurtarma.tarih`'tendir (gg.aa.yyyy; plan F1b-1);
+* belge metni OAB'nindir (§12.B, §13 D50; plan F1b-1): herkes kendi hesabıyla ve
+  kendi parolasıyla açar, anahtar yalnız program yöneticisi içindir ve üç durumda
+  kullanılır (parola unutulduğunda, yeni bilgisayara taşınırken, güvenlik dosyası
+  kaybolduğunda ya da bozulduğunda); zarf yalnız bu üç durumda açılır; saklama yeri okul müdürlüğünde
+  kapalı zarf, veliye geçmez (D3); parola paylaşılmaz; eski kâğıt atılmaz, işaretlenip
+  saklanır; aileden kalan "yönetici parolası" dili, "parola en az iki kişide" öğüdü ve
+  kütüphane dili yoktur;
 * anahtar hiçbir günlüğe düşmez (caplog, DEBUG düzeyinde bütün kaydediciler)
   ve hata gövdesinde yankılanmaz;
 * kilitliyken kilit kapısı keser (kilitliyken açık listede değildir), parola
@@ -20,6 +29,7 @@ from __future__ import annotations
 import logging
 import re
 import time
+from datetime import date
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -30,7 +40,7 @@ from django.utils import timezone
 from pypdf import PdfReader
 from rest_framework.test import APIClient
 
-from apps.okul.services import app_password
+from apps.okul.services import app_password, recovery_key_document
 from apps.okul.services import setup as setup_service
 from conftest import TEST_HESAP_ID, TEST_KURTARMA_ANAHTARI, TEST_TANITICI
 from shared import crypto
@@ -79,38 +89,106 @@ def test_dogru_anahtarla_pdf_uretilir_ve_icerikte_anahtar_var(client: APIClient)
     assert icerik.startswith(b"%PDF-")
     metin = _metin(icerik)
     assert KANONIK in _bosluksuz(metin)
-    assert "KURTARMA ANAHTARI" in metin
-    assert f"{timezone.localdate():%d.%m.%Y}" in metin
+    # Belgenin adı başlıkta Türkçe büyük harfle (`tr_upper`: "BELGESİ", "BELGESI" değil).
+    assert "KURTARMA ANAHTARI BELGESİ" in metin
+    # Anahtarın üretim günü (conftest'in durumu oturum başında kurulur), kâğıttaki biçimle.
+    uretim = date.fromisoformat(app_password.status()["recovery_key_date"])
+    assert f"{uretim:%d.%m.%Y}" in metin
     assert "OAB Defteri" in metin
 
 
 def test_belge_metni_oab_ye_gore(client: APIClient) -> None:
-    """D50: program tanımı, saklama yeri (D3) ve paylaşım yasağı; aile öğütleri yok."""
+    """D50: herkes kendi hesabıyla; anahtar yalnız program yöneticisine; saklama yeri (D3)
+    ve paylaşım yasağı; aile öğütleri ve tek yönetici parolası dili yok."""
     metin = _metin(_pdf(_iste(client, TEST_KURTARMA_ANAHTARI)))
     sade = _bosluksuz(metin)
     for ifade in (
         "okul-aile birliğinin işlerini",
         "çevrimdışı masaüstü programı",
+        "Herkes programı kendi hesabıyla ve kendi parolasıyla açar",
+        "Anahtar yalnız program yöneticisi içindir",
+        "program yöneticisi parolasını unutursa",
+        "kayıtlar yeni bir bilgisayara taşınırken",
+        "güvenlik dosyası kaybolur ya da bozulursa kayıtlar yedekten",
+        "zarf yalnız yukarıdaki üç durumda açılır",
+        "güvenlik dosyası da kaybolursa şifreli kayıtlar hiçbir yolla açılamaz",
+        "parolasını unutan kişi program yöneticisine başvurur",
         "Zarfı okul müdürlüğünde",
         "Zarf veliye geçmez",
-        "Yönetici parolası kimseyle paylaşılmaz",
+        "Parola kimseyle paylaşılmaz",
         "md. 7/2",
         "9/2-e",
+        "eski kâğıt yenilemeden önceki yedekleri açtığı için atılmaz",
+        "“Eski anahtar” diye işaretlenip saklanır",
     ):
         assert _bosluksuz(ifade) in sade, ifade
     # Satır sonu çok sözcüklü ifadeyi bölebilir; boşluklar tekleştirilir ki yasak
     # ifade iki satıra düştüğünde de yakalansın.
     kucuk = re.sub(r"\s+", " ", metin).casefold()
-    for yasak in ("kütüphane", "en az iki", "öğrenci", "okul numara", "geçerli kalır"):
+    for yasak in (
+        "kütüphane",
+        "en az iki",
+        "öğrenci",
+        "okul numara",
+        "geçerli kalır",
+        "yönetici parolası",
+        "görevli",
+        "çıktı",
+        # Zarfın açıldığı durumlar üçtür (güvenlik dosyası kaybı da): "iki durum" denmez.
+        "iki durum",
+    ):
         assert yasak not in kucuk, yasak
+
+
+def test_belge_anahtarin_no_sunu_ve_uretim_tarihini_basar(client: APIClient) -> None:
+    """Plan F1b-1, tasarım §9.7: kimlik `guvenlik.json` `kurtarma` bölümündendir.
+
+    Burada dosyanın no'su ve tarihi elle değiştirilir (sarmal aynı kalır, anahtar yine
+    doğrulanır): belge basım gününü değil anahtarın üretim gününü basar; basım günü
+    ayrı satır değildir (iki tarih karıştırılmasın).
+    """
+    durum = app_password.read_state()
+    assert durum is not None
+    durum["kurtarma"].update(no=7, tarih="2026-09-15")
+    app_password._write_state(durum)
+
+    sade = _bosluksuz(_metin(_pdf(_iste(client, TEST_KURTARMA_ANAHTARI))))
+
+    assert "Anahtarno7" in sade
+    assert "Üretimtarihi15.09.2026" in sade
+    assert "Düzenlenme" not in sade
+
+
+def test_kimligi_okunamayan_anahtarda_elle_doldurulacak_cizgi_basilir(client: APIClient) -> None:
+    """Biçimsiz no ve tarih belgeyi düşürmez; yerlerine çizgi basılır (uydurma değer yok)."""
+    durum = app_password.read_state()
+    assert durum is not None
+    durum["kurtarma"].update(no="yedi", tarih="15.09.2026")
+    app_password._write_state(durum)
+
+    yanit = _iste(client, TEST_KURTARMA_ANAHTARI)
+
+    assert yanit.status_code == 200
+    sade = _bosluksuz(_metin(_pdf(yanit)))
+    assert "Anahtarno……" in sade and "Üretimtarihi……" in sade
+    assert "yedi" not in sade and "15.09.2026" not in sade
 
 
 def test_dosya_adi_belge_adi_ve_tarih_anahtarsiz(client: APIClient) -> None:
     yanit = _iste(client, TEST_KURTARMA_ANAHTARI)
     baslik = unquote(yanit["Content-Disposition"])
     assert baslik.startswith("attachment;")
-    assert f"Kurtarma-Anahtarı-Çıktısı_{timezone.localdate():%d.%m.%Y}.pdf" in baslik
+    assert f"Kurtarma-Anahtarı-Belgesi_{timezone.localdate():%d.%m.%Y}.pdf" in baslik
     assert KANONIK not in baslik and SADE not in baslik
+
+
+def test_dosya_adi_tek_sabitten_kurulur() -> None:
+    """Ön yüz dosya adını aynı sabitten kurar (`kurtarma.ts`; boşluk tire, tarih alt çizgi)."""
+    assert recovery_key_document.DOCUMENT_NAME == "Kurtarma Anahtarı Belgesi"
+    assert (
+        recovery_key_document.recovery_key_pdf_filename(date(2026, 11, 1))
+        == "Kurtarma-Anahtarı-Belgesi_01.11.2026.pdf"
+    )
 
 
 @pytest.mark.parametrize(

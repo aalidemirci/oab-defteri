@@ -102,8 +102,9 @@ class SchoolConfig(BaseModel):
     demirbaşı bilgisayara kurulur). Hiçbiri kişisel veri değildir, şifrelenmez.
 
     `idle_lock_minutes`: oturumun boşta kilit süresi (dakika; tasarım TK14, plan F1b-1
-    "Oturum"). Ayarlar → Güvenlik'te program yöneticisi değiştirir (ekran ve uç ön
-    yüz commit'inde). Oturum katmanı değeri süreç içinde önbelleğe alır; satır
+    "Oturum"). Ayarlar → Güvenlik'te program yöneticisi değiştirir (uç
+    `security/idle-lock/`, servis `services.setup.set_idle_lock_minutes`; rol kuralı
+    2. adımda). Oturum katmanı değeri süreç içinde önbelleğe alır; satır
     kaydedilince önbellek boşalır (`apps.okul.oturum.bosta_suresi_onbellegini_bosalt`).
 
     `yol_haritasi`: Genel Bakış'taki "Başlangıç Yol Haritası" kartının

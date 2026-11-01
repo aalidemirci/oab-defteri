@@ -7,18 +7,28 @@
 import { forwardRef, useId } from "react";
 import type { InputHTMLAttributes, ReactNode } from "react";
 
-interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "id"> {
+interface TextFieldProps extends Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "id" | "aria-describedby"
+> {
   label: string;
   helperText?: ReactNode;
   error?: string;
+  /**
+   * Alanı açıklayan BAŞKA öğelerin kimlikleri (boşlukla ayrılmış; ör. alanın altındaki
+   * kural metni, ekranın gerekçe kutusu). Alanın kendi hata/yardım metniyle BİRLEŞİR —
+   * `aria-describedby` doğrudan verilseydi hata metnini ezerdi.
+   */
+  describedBy?: string;
 }
 
 const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function TextField(
-  { label, helperText, error, className = "", required, ...rest },
+  { label, helperText, error, describedBy: ekAciklama, className = "", required, ...rest },
   ref,
 ) {
   const id = useId();
-  const describedBy = error || helperText ? `${id}-desc` : undefined;
+  const aciklamaId = error || helperText ? `${id}-desc` : undefined;
+  const describedBy = [aciklamaId, ekAciklama].filter(Boolean).join(" ") || undefined;
   const ring = error
     ? "border-error focus-within:border-error focus-within:ring-2 focus-within:ring-error"
     : "border-outline-variant hover:border-outline focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20";
@@ -51,7 +61,7 @@ const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function TextFiel
       </div>
       {(error || helperText) && (
         <p
-          id={describedBy}
+          id={aciklamaId}
           // Hata metni BELİRDİĞİNDE ekran okuyucuya duyurulur (Tur 704, m3-ui-reviewer).
           // Yalnız `aria-describedby` yetmiyordu: bazı ekran okuyucular o içeriği
           // ancak alana YENİDEN odaklanınca okur — oysa gönderimden sonra odak

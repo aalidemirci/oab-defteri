@@ -4,8 +4,8 @@
 // yeniden kurulursa onlar da gider. Okulun elinde kalan tek kopya, Ayarlar → Güvenlik'ten
 // indirilip USB belleğe alınan şifreli yedektir. Sunucu son indirmenin tarihini veri
 // klasöründe tutar (`GET backups/external/`); süre dolunca (varsayılan 30 gün; hiç indirme
-// yoksa parola kurulduktan 7 gün sonra) kart çıkar. Süre dolmadıysa, okunamazsa ya da
-// parola kurulmamışsa hiçbir şey göstermez.
+// yoksa ilk hesap kurulduktan 7 gün sonra) kart çıkar. Süre dolmadıysa, okunamazsa ya da
+// hesap kurulmamışsa hiçbir şey göstermez.
 //
 // Dürüst dil: program dosyanın USB belleğe gerçekten kopyalandığını bilemez; kart "son
 // indirme"yi söyler ve kopyalamayı ister. Kişisel veri yok (yalnız tarih ve gün sayısı).

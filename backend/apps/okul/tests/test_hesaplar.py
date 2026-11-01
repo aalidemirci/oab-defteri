@@ -489,6 +489,34 @@ def test_parola_politikasi_turkce_harfleri_harf_sayar(parola: str) -> None:
     assert hesap_kurallari.validate_password(parola) == parola  # kırpılmaz, değişmez
 
 
+#: ORTAK VAKA TABLOSU — ön yüzün `oturum/parolaPolitikasi.test.ts` dosyasında AYNI
+#: satırlar vardır (ön denetim backend'den katı ya da gevşek olmasın). Kenar
+#: karakterler: rakam yalnız onluk rakamdır (`²`, `①` değil; `٣` evet), küçük ve büyük
+#: harf Unicode "Lowercase"/"Uppercase" özelliğidir (`ª` küçük, `Ⅷ` büyük), boşluk
+#: Python `isspace`tir (U+00A0 ve U+001F boşluk; U+FEFF boşluk değil, simge sayılır).
+_EKSIK_RAKAM = "Parola küçük harf, büyük harf, rakam ve simge içermelidir; eksik: rakam."
+ORTAK_PAROLA_VAKALARI: list[tuple[str, str | None]] = [
+    ("Okul-Aile\u00b2", _EKSIK_RAKAM),
+    ("Okul-Aile\u2460", _EKSIK_RAKAM),
+    ("Okul-Aile\u0663", None),
+    ("OKUL-AILE1\u00aa", None),
+    ("okul-aile1\u2167", None),
+    ("\u00a0Okul-Aile1", hesap_kurallari.PASSWORD_EDGE_SPACE_MESSAGE),
+    ("Okul-Aile1\u001f", hesap_kurallari.PASSWORD_EDGE_SPACE_MESSAGE),
+    ("\ufeffOkulAile1", None),
+]
+
+
+@pytest.mark.parametrize(("parola", "ileti"), ORTAK_PAROLA_VAKALARI)
+def test_parola_politikasi_ortak_vaka_tablosu(parola: str, ileti: str | None) -> None:
+    if ileti is None:
+        assert hesap_kurallari.validate_password(parola) == parola
+        return
+    with pytest.raises(hesap_kurallari.AccountRuleError) as hata:
+        hesap_kurallari.validate_password(parola)
+    assert str(hata.value) == ileti
+
+
 # ---------------------------------------------------------------------------
 # Hesap mührü (tasarım §4.6.1, §4.3 tehdit 19) — F1 kapısı
 # ---------------------------------------------------------------------------

@@ -149,6 +149,7 @@ from desktop.backup_crypto import (
     is_usable_security_state,
     load_public_key,
     parse_security_state,
+    recovery_key_identity,
     recovery_metadata,
 )
 from django.apps import apps as django_apps
@@ -1182,7 +1183,8 @@ def status() -> dict[str, Any]:
     çözülür (`resolve_interrupted_setup`).
 
     Şema 2 alanları: `account_count` (dosyadaki hesap sarmalı sayısı),
-    `recovery_key_no` ve `recovery_key_date` (kurtarma anahtarının kimliği, TK10),
+    `recovery_key_no` ve `recovery_key_date` (kurtarma anahtarının kimliği, TK10; ISO
+    gün, tek kural `backup_crypto.recovery_key_identity`),
     `corrupt_field_count` (bu süreçte okunan çözülemeyen şifreli alan sayısı, D48).
     `password_set` "ilk hesap kurulu", `transition` kurulum damgasıdır.
     """
@@ -1200,10 +1202,7 @@ def status() -> dict[str, Any]:
     kurulu = state is not None or kayip
     gecis = state.get("gecis") if state else None
     gecis_metni = gecis if isinstance(gecis, str) else ""
-    kurtarma = state.get("kurtarma") if state else None
-    kurtarma = kurtarma if isinstance(kurtarma, dict) else {}
-    no = kurtarma.get("no")
-    tarih = kurtarma.get("tarih")
+    kimlik = recovery_key_identity(state) or {}
     return {
         "password_set": kurulu,
         "locked": kurulu and not OTURUM.acik_mi(),
@@ -1216,8 +1215,8 @@ def status() -> dict[str, Any]:
         "recovery_key_confirmed": _recovery_confirmed_in(state),
         "protected_fields": protected_field_labels(),
         "account_count": len(_accounts_in(state)) if state else 0,
-        "recovery_key_no": no if isinstance(no, int) and not isinstance(no, bool) else None,
-        "recovery_key_date": tarih if isinstance(tarih, str) and tarih else None,
+        "recovery_key_no": kimlik.get("no"),
+        "recovery_key_date": kimlik.get("tarih"),
         "corrupt_field_count": crypto.corrupt_read_count(),
     }
 
@@ -1753,7 +1752,7 @@ def _check_recovery_key(state: dict[str, Any], recovery_key: str) -> None:
 
 @sensitive_variables("recovery_key")
 def verify_recovery_key(recovery_key: str) -> list[str]:
-    """Kurtarma anahtarını doğrular; anahtarın dörtlü gruplarını döndürür (belge için).
+    """Kurtarma anahtarını doğrular; anahtarın dörtlü gruplarını döndürür.
 
     İki denetim: anahtar `guvenlik.json`'daki KURTARMA SARMALINI açmalı (yanlış
     yazılmış anahtarın kâğıda basılmasını önler) VE çıkan DEK bellekteki
@@ -1763,8 +1762,21 @@ def verify_recovery_key(recovery_key: str) -> list[str]:
 
     Anahtar hiçbir iletiye, günlüğe ya da istisnaya yazılmaz.
     """
-    _check_recovery_key(_require_state(), recovery_key)
-    return recovery_key_groups(recovery_key)
+    return verify_recovery_key_identity(recovery_key)[0]
+
+
+@sensitive_variables("recovery_key")
+def verify_recovery_key_identity(recovery_key: str) -> tuple[list[str], dict[str, Any] | None]:
+    """`verify_recovery_key` + anahtarın kimliği `{no, tarih}` (kurtarma anahtarı belgesi için).
+
+    Doğrulama ve kimlik AYNI okunmuş durumdan çıkar: arada anahtar yenilenseydi eski
+    anahtarın kâğıdına yenisinin no'su basılırdı. Kimlik `backup_crypto.
+    recovery_key_identity` kuralıyla okunur; tuz ve sarmal dönmez. Ret
+    `verify_recovery_key` ile aynıdır.
+    """
+    state = _require_state()
+    _check_recovery_key(state, recovery_key)
+    return recovery_key_groups(recovery_key), recovery_key_identity(state)
 
 
 @sensitive_variables("recovery_key")

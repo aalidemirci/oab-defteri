@@ -111,8 +111,9 @@ def test_yedek_listesi_en_yeniden_eskiye(tmp_path: Path, ortam: dict[str, Path])
     assert veri["backup_dir"] == str(ortam["yedekler"])
     adlar = [satir["name"] for satir in veri["backups"]]
     assert adlar == ["gunluk-2026-08-02.odbak", "gunluk-2026-08-01.odbak"]
-    # Yedekler daima şifrelidir; "şifreli mi" alanı artık yok (§13 D29).
-    assert set(veri["backups"][0]) == {"name", "size", "modified_at"}
+    # Yedekler daima şifrelidir; "şifreli mi" alanı artık yok (§13 D29). `kurtarma`
+    # yedeği açan kurtarma anahtarının kimliğidir (TK10).
+    assert set(veri["backups"][0]) == {"name", "size", "modified_at", "kurtarma"}
     assert all(satir["size"] > 0 and satir["modified_at"] for satir in veri["backups"])
 
 
@@ -125,6 +126,85 @@ def test_yedek_listesi_dizin_yokken_bos(
 
     assert yanit.status_code == 200
     assert yanit.json()["backups"] == []
+
+
+def _baslikli_yedek(tmp_path: Path, baslik: bytes) -> bytes:
+    """Bu kurulumun DEK'iyle, verilen ham kurtarma başlığını gömen şifreli yedek."""
+    acik = private_key_from_data_key(TEST_DEK).public_key()
+    return cast(
+        "bytes", encrypt_bytes(_sqlite_baytlari(tmp_path, "kimlik"), acik, recovery_header=baslik)
+    )
+
+
+def _liste_satiri(ad: str) -> dict[str, Any]:
+    yanit = APIClient().get(LISTE_URL)
+    assert yanit.status_code == 200
+    satirlar: list[dict[str, Any]] = yanit.json()["backups"]
+    return next(satir for satir in satirlar if satir["name"] == ad)
+
+
+def test_yedek_listesi_yedegi_acan_kurtarma_anahtarini_soyler(
+    tmp_path: Path, ortam: dict[str, Path]
+) -> None:
+    """Tasarım §4.4.4, TK10: hangi kâğıdın hangi yedeği açtığı listede görünür.
+
+    Kimlik güncel `guvenlik.json`'dan değil yedeğin gömülü başlığından okunur (burada
+    güncel dosyanın anahtarı 1 numaralı, yedeğinki 3). Tarih başlıktaki ISO biçimiyle
+    döner (arayüz gg.aa.yyyy yazar); başlığın tuzu ve sarmalı yanıta hiçbir biçimde
+    girmez.
+    """
+    durum = app_password.read_state() or {}
+    durum["kurtarma"].update(no=3, tarih="2026-11-01")
+    baslik = recovery_header_from_state(durum)
+    assert baslik is not None
+    (ortam["yedekler"] / "gunluk-2026-11-02.odbak").write_bytes(
+        _baslikli_yedek(tmp_path, json.dumps(baslik, ensure_ascii=False).encode("utf-8"))
+    )
+
+    satir = _liste_satiri("gunluk-2026-11-02.odbak")
+
+    assert satir["kurtarma"] == {"no": 3, "tarih": "2026-11-01"}
+    metin = APIClient().get(LISTE_URL).content.decode("utf-8")
+    assert baslik["kurtarma"]["salt"] not in metin
+    assert baslik["kurtarma"]["sarmal"] not in metin
+    assert "salt" not in metin and "sarmal" not in metin and "kdf" not in metin
+
+
+@pytest.mark.parametrize(
+    "baslik",
+    [
+        b"",
+        b"{bozuk",
+        json.dumps({"surum": 1, "kdf": {}, "parola": {"salt": "eA==", "sarmal": "eA=="}}).encode(),
+        # Kurtarma bölümü sarmalsız: başlık kullanılamaz, no/tarih olsa da gösterilmez.
+        json.dumps({"surum": 2, "kdf": {}, "kurtarma": {"no": 4, "tarih": "2026-11-01"}}).encode(),
+        # Derin iç içe JSON (40 KB; 1 MB sınırının altında): `json.loads` RecursionError
+        # yükseltir; liste 500'e düşmez, satır kimliksiz görünür.
+        b"[" * 20000 + b"]" * 20000,
+    ],
+    ids=["basliksiz", "bozuk_json", "sema_1", "sarmalsiz", "derin_ic_ice"],
+)
+def test_kullanilamayan_baslikta_kurtarma_kimligi_bostur(
+    tmp_path: Path, ortam: dict[str, Path], baslik: bytes
+) -> None:
+    (ortam["yedekler"] / "eski.odbak").write_bytes(_baslikli_yedek(tmp_path, baslik))
+
+    assert _liste_satiri("eski.odbak")["kurtarma"] is None
+
+
+def test_bozuk_yedek_dosyasi_listeyi_dusurmez(tmp_path: Path, ortam: dict[str, Path]) -> None:
+    """Yedek olmayan ya da kesik dosya listede kimliksiz görünür; liste 200 döner."""
+    (ortam["yedekler"] / "yedek-degil.odbak").write_bytes(b"duz metin, yedek degil")
+    tam = _sifreli_kapsayici(_sqlite_baytlari(tmp_path, "kesik"))[0]
+    (ortam["yedekler"] / "kesik.odbak").write_bytes(tam[:80])
+    (ortam["yedekler"] / "saglam.odbak").write_bytes(tam)
+
+    assert _liste_satiri("yedek-degil.odbak")["kurtarma"] is None
+    assert _liste_satiri("kesik.odbak")["kurtarma"] is None
+    assert _liste_satiri("saglam.odbak")["kurtarma"] == {
+        "no": 1,
+        "tarih": app_password.status()["recovery_key_date"],
+    }
 
 
 # ---------------------------------------------------------------------------

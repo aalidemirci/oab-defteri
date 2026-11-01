@@ -1,0 +1,197 @@
+// Oturum sorgusu ve görsel geri sayım (tasarım §4.4.3, TK14). Pinlenen davranışlar:
+// yoklama `X-OD-Etkinlik` TAŞIMAZ (etkinlik:false); açık özet ön yüzü "açık sanır"a
+// geçirir, açık sanılırken kilitli özet pencereyi yeniden yükler (D53; ayrıntı
+// `lib/kilit.test.ts`); 423 olayı sorguyu yeniler; geri sayım yalnız boşta süredir
+// (mutlak süre yok) ve özetten sonra giden başlıklı istek sayacı tazeler; etkinlik nabzı
+// yalnız açık oturumda, gerçek etkileşimle ve seyrek gider; sorgu hatası fail-open'dır.
+
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { etkinlikSaatleriniSifirla } from "../../lib/api";
+import {
+  KILIT_KAPISI_OLAYI,
+  oturumAcikSan,
+  oturumAcikSaniliyor,
+  pencereIcerigi,
+} from "../../lib/kilit";
+import type { OturumDurumAdi, OturumOzeti } from "./api";
+
+const oturum = vi.hoisted(() => ({ ozet: vi.fn() }));
+
+vi.mock("./api", () => ({ oturumApi: oturum }));
+
+import { OTURUM_DEGISTI_OLAYI } from "./eylemler";
+import { kalanSaniye, sureBicimle, useEtkinlikNabzi, useOturum } from "./useOturum";
+
+function ozetOlustur(durum: OturumDurumAdi, ek: Partial<OturumOzeti> = {}): OturumOzeti {
+  const acik = durum === "acik";
+  return {
+    durum,
+    hesap: acik
+      ? { id: "h-1", tanitici: "yonetici", rol: "yonetici", rol_etiketi: "Program yöneticisi" }
+      : null,
+    bosta_dk: 10,
+    bosta_kalan_sn: acik ? 600 : null,
+    kilit_bekliyor: false,
+    kurulum_tamam: true,
+    ...ek,
+  };
+}
+
+function OturumYazici() {
+  const { ozet } = useOturum();
+  useEtkinlikNabzi(ozet?.durum, () => {});
+  return <p>oturum: {ozet?.durum ?? "yok"}</p>;
+}
+
+function bas() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <OturumYazici />
+    </QueryClientProvider>,
+  );
+}
+
+describe("kalanSaniye", () => {
+  const T0 = 1_000_000;
+
+  it("boşta kalan süreyi geçen süreyi düşerek verir; mutlak süre yoktur", () => {
+    const ozet = ozetOlustur("acik", { bosta_kalan_sn: 161 });
+    expect(kalanSaniye(ozet, T0, T0, -Infinity)).toBe(161);
+    expect(kalanSaniye(ozet, T0, T0 + 60_000, -Infinity)).toBe(101);
+    expect(kalanSaniye(ozet, T0, T0 + 500_000, -Infinity)).toBe(0);
+  });
+
+  it("özetten sonra giden başlıklı istek boşta sayacını tazeler", () => {
+    const ozet = ozetOlustur("acik", { bosta_kalan_sn: 100, bosta_dk: 3 });
+    // 90 sn sonra bir kullanıcı eylemi gitti; 10 sn daha geçti.
+    expect(kalanSaniye(ozet, T0, T0 + 100_000, T0 + 90_000)).toBe(170);
+    // Eylem özetten ÖNCE gittiyse sunucu onu zaten saymıştır.
+    expect(kalanSaniye(ozet, T0, T0 + 10_000, T0 - 5_000)).toBe(90);
+  });
+
+  it("kurulumda, kilit beklerken (sunucu süre vermez) ve açık oturum dışında boştur", () => {
+    expect(kalanSaniye(ozetOlustur("acik", { bosta_kalan_sn: null }), T0, T0, -Infinity)).toBe(
+      null,
+    );
+    expect(kalanSaniye(ozetOlustur("kilitli"), T0, T0, -Infinity)).toBeNull();
+    expect(kalanSaniye(ozetOlustur("kurulum"), T0, T0, -Infinity)).toBeNull();
+  });
+});
+
+describe("sureBicimle", () => {
+  it.each([
+    [0, "0:00"],
+    [9, "0:09"],
+    [161, "2:41"],
+    [1800, "30:00"],
+  ])("%i sn → %s", (saniye, beklenen) => {
+    expect(sureBicimle(saniye)).toBe(beklenen);
+  });
+});
+
+describe("useOturum", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    etkinlikSaatleriniSifirla();
+  });
+
+  it("yoklama etkinlik başlığı olmadan gider ve açık oturum ön yüzü “açık sanır”a geçirir", async () => {
+    oturum.ozet.mockResolvedValue(ozetOlustur("acik"));
+    bas();
+    expect(await screen.findByText("oturum: acik")).toBeInTheDocument();
+    expect(oturum.ozet).toHaveBeenCalledWith(false);
+    expect(oturumAcikSaniliyor()).toBe(true);
+  });
+
+  it("423 olayı (ön yüz kilitli bilirken) sorguyu yeniler", async () => {
+    oturum.ozet.mockResolvedValue(ozetOlustur("kilitli"));
+    bas();
+    await screen.findByText("oturum: kilitli");
+    oturum.ozet.mockResolvedValue(ozetOlustur("guvenlik_dosyasi_kayip"));
+    act(() => {
+      window.dispatchEvent(new CustomEvent(KILIT_KAPISI_OLAYI));
+    });
+    expect(await screen.findByText("oturum: guvenlik_dosyasi_kayip")).toBeInTheDocument();
+    expect(pencereIcerigi.yenidenYukle).not.toHaveBeenCalled();
+  });
+
+  it("pencere yüklenmeden açılan oturum (ilk hesap) olayla hemen okunur", async () => {
+    oturum.ozet.mockResolvedValue(ozetOlustur("kurulum"));
+    bas();
+    await screen.findByText("oturum: kurulum");
+    oturum.ozet.mockResolvedValue(ozetOlustur("acik", { kurulum_tamam: false }));
+    act(() => {
+      window.dispatchEvent(new CustomEvent(OTURUM_DEGISTI_OLAYI));
+    });
+    expect(await screen.findByText("oturum: acik")).toBeInTheDocument();
+    expect(pencereIcerigi.yenidenYukle).not.toHaveBeenCalled();
+  });
+
+  it("açık sanılan oturum kilitli görünürse pencere yeniden yüklenir", async () => {
+    oturumAcikSan(true);
+    oturum.ozet.mockResolvedValue(ozetOlustur("kilitli"));
+    bas();
+    await screen.findByText("oturum: kilitli");
+    expect(pencereIcerigi.yenidenYukle).toHaveBeenCalledTimes(1);
+  });
+
+  it("sorgu hatasında özet boştur (fail-open), bayrağa dokunulmaz", async () => {
+    oturum.ozet.mockRejectedValue(new Error("ağ yok"));
+    bas();
+    await waitFor(() => expect(oturum.ozet).toHaveBeenCalled());
+    expect(screen.getByText("oturum: yok")).toBeInTheDocument();
+    expect(oturumAcikSaniliyor()).toBe(false);
+    expect(pencereIcerigi.yenidenYukle).not.toHaveBeenCalled();
+  });
+});
+
+describe("useEtkinlikNabzi", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    etkinlikSaatleriniSifirla();
+  });
+
+  it("açık oturumda etkileşim nabız gönderir, hemen ikincisi gönderilmez", async () => {
+    oturum.ozet.mockResolvedValue(ozetOlustur("acik"));
+    bas();
+    await screen.findByText("oturum: acik");
+    oturum.ozet.mockClear();
+
+    act(() => {
+      window.dispatchEvent(new Event("pointerdown"));
+      window.dispatchEvent(new Event("keydown"));
+    });
+
+    await waitFor(() => expect(oturum.ozet).toHaveBeenCalledTimes(1));
+    expect(oturum.ozet).toHaveBeenCalledWith(true);
+  });
+
+  it("nabız hatası sessizdir", async () => {
+    oturum.ozet.mockResolvedValueOnce(ozetOlustur("acik")).mockRejectedValue(new Error("x"));
+    bas();
+    await screen.findByText("oturum: acik");
+
+    act(() => window.dispatchEvent(new Event("pointerdown")));
+
+    await waitFor(() => expect(oturum.ozet).toHaveBeenLastCalledWith(true));
+    expect(screen.getByText("oturum: acik")).toBeInTheDocument();
+  });
+
+  it.each<OturumDurumAdi>(["kilitli", "kurulum"])(
+    "%s durumunda nabız gönderilmez",
+    async (durum) => {
+      oturum.ozet.mockResolvedValue(ozetOlustur(durum));
+      bas();
+      await screen.findByText(`oturum: ${durum}`);
+      oturum.ozet.mockClear();
+
+      act(() => window.dispatchEvent(new Event("pointerdown")));
+
+      expect(oturum.ozet).not.toHaveBeenCalled();
+    },
+  );
+});

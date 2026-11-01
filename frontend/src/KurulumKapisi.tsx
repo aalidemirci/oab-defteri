@@ -1,9 +1,9 @@
 // Kurulum kapısı (aile iskeletinin kalıbı) — programın İLK açılışında kullanıcıyı kurulum
-// sihirbazına kilitler. Kapıyı açan koşul kurulumun tamamlanmış olması VE yönetici
-// parolasının kurulu olmasıdır (tasarım §4.4.5: parola sihirbazın atlanamaz ilk
-// adımıdır, isteğe bağlı değildir). Parola yoksa — kurulum eskiden tamamlanmış
-// bir veritabanında bile — kullanıcı sihirbaza, ilk eksik adım olan parola
-// adımına gider. Okul künyesi girilmeden resmî evrak antedi boş çıkar, aktif
+// sihirbazına kilitler. Kapıyı açan koşul kurulumun tamamlanmış olması VE ilk program
+// yöneticisi hesabının kurulu olmasıdır (`password_set`; tasarım §4.4.5: hesap
+// sihirbazın atlanamaz ilk adımıdır, isteğe bağlı değildir). Hesap yoksa — kurulum
+// eskiden tamamlanmış bir veritabanında bile — kullanıcı sihirbaza, ilk eksik adım
+// olan program yöneticisi hesabı adımına gider. Okul künyesi girilmeden resmî evrak antedi boş çıkar, aktif
 // ders yılı olmadan da şube kataloğu ve e-Okul aktarımı yanlış yıla bağlanır.
 // Bu yüzden `GET /setup/status/` bu iki koşulu sağlamadığı sürece "/kurulum"
 // dışındaki her rota oraya yönlendirilir. (Kilit ekranı ayrı kapıdır:

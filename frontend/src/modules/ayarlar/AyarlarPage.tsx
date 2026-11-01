@@ -1,8 +1,8 @@
 // Ayarlar sayfası (aile iskeleti kalıbı) — altı sekme: ders yılları (dönemlerle), kapalı
 // günler (resmî/dini tatil, öğrenciye kapalı gün), şubeler, okul bilgileri (evrak
 // antedi, hazırlık sınıfı, kademe, kısa ad, demirbaş onayı ve no), güvenlik
-// (yönetici parolası, kurtarma anahtarı çıktısı, yedek) ve güncelleme (yalnız elle
-// denetim). Aile iskeletinin dört kütüphane paneli (Kütüphane Politikası, Bölümler,
+// (hesabın kendi parolası, boşta kilit süresi, şifreleme, kurtarma anahtarı ve belgesi,
+// yedek) ve güncelleme (yalnız elle denetim). Aile iskeletinin dört kütüphane paneli (Kütüphane Politikası, Bölümler,
 // Ağ Kataloğu, Saklama) F1a-2'de söküldü.
 
 import { useCallback, useEffect, useState } from "react";
@@ -116,9 +116,9 @@ export default function AyarlarPage() {
         <div>
           <h1 className="od-page-title">Ayarlar</h1>
           <p className="od-page-description">
-            Ders yılı, kapalı günler, şube kataloğu, okul künyesi, yönetici parolası, yedekler ve
-            güncelleme burada yönetilir. Okul künyesi programın bastığı evrakın antedinde
-            kullanılır.
+            Ders yılı, kapalı günler, şube kataloğu, okul künyesi, parolanız, boşta kilit süresi,
+            kurtarma anahtarı, yedekler ve güncelleme burada yönetilir. Okul künyesi programın
+            bastığı evrakın antedinde kullanılır.
           </p>
         </div>
       </div>
@@ -156,7 +156,7 @@ export default function AyarlarPage() {
             to="/kurulum"
             icon="checklist"
             title="Kurulum Sihirbazı"
-            description="Yönetici parolası, okul bilgileri, ders yılı ve kapalı gün adımlarını yeniden gözden geçirin."
+            description="Program yöneticisi hesabı, okul bilgileri, ders yılı ve kapalı gün adımlarını yeniden gözden geçirin."
           />
         </div>
       </section>

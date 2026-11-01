@@ -82,6 +82,39 @@ describe("HakkindaPage", () => {
     expect(screen.queryByText(/fotoğraf/i)).not.toBeInTheDocument();
   });
 
+  it("teknik bilgiler kişisel hesapları anlatır: tek bir yönetici parolası yoktur", () => {
+    const { container } = render(<HakkindaPage />);
+
+    // Veri anahtarı her hesap için ayrı sarılır (tasarım TK9); yedek başlığı hesap
+    // sarmalı taşımaz, başka bilgisayarda yalnız kurtarma anahtarı açar (TK10).
+    expect(screen.getByText(/Şifreleme anahtarı her hesap için ayrı sarılır/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/başka bir bilgisayarda yalnız kurtarma\s+anahtarıyla açılır/),
+    ).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/yönetici parolası|görevli kipi/i);
+  });
+
+  it("dürüst sınırlar kartı (tasarım §4.4.6) sade dille ve iç kod olmadan", () => {
+    const { container } = render(<HakkindaPage />);
+
+    const baslik = screen.getByRole("heading", { level: 2, name: "Dürüst Sınırlar" });
+    const kart = baslik.parentElement;
+    const metin = kart?.textContent ?? "";
+    // Tasarımın sayılı sınırları: rol şifreleme değildir, en zayıf hesap parolası, açık
+    // oturum sahibinin imzasıdır, anahtar yenilemek eski yedekleri kapatmaz, çıktı
+    // programın dışına çıkınca korumadan çıkar, kayıp ya da çalınmada bildirim.
+    expect(metin).toContain("Rol bir şifreleme önlemi değildir.");
+    expect(metin).toContain("Şifreli alanlar en zayıf hesap parolası kadar korunur.");
+    expect(metin).toContain("Açık oturum, sahibinin imzasıdır.");
+    expect(metin).toContain("Kurtarma anahtarını yenilemek önceki yedekleri kapatmaz.");
+    expect(metin).toMatch(/Word, PDF ya da Excel/);
+    expect(metin).toContain("KVKK md. 12/5");
+    expect(metin).toMatch(/BitLocker.*LUKS/);
+    // İç kodlar ve teknik adlar yüzeye çıkmaz (sözlük §2).
+    expect(metin).not.toMatch(/\bDEK\b|TK\d|§|Argon2id|Fernet/);
+    expect(container.querySelectorAll("li").length).toBeGreaterThanOrEqual(6);
+  });
+
   it("ağ servisi sunmadığını ve dış isteğin tek kapıdan çıktığını söyler (tasarım §4.1)", () => {
     render(<HakkindaPage />);
 

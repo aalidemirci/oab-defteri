@@ -4,7 +4,8 @@
 // Kartlar: "Başlangıç Yol Haritası" (kurulumdan sonra sıradaki işler; bütün
 // maddeler tamamlanınca gizlenebilir), "Son Oturumu Kontrol Edin" (beklenmedik
 // kapanıştan sonra — T15, tasarım §13 D4), "Ayrılış Havuzu" (havuz boş değilse
-// "N kişi ayrılış kararı bekliyor"), dış yedek hatırlatması ve gezinme kartları.
+// "N kişi ayrılış kararı bekliyor"), "Okunamayan Kayıt Alanları" (çözülemeyen şifreli
+// alan varsa yalnız sayı — tasarım §13 D48), dış yedek hatırlatması ve gezinme kartları.
 // Aile iskeletinin kütüphane kartları (katalog şablonu, dolaşım, sayım, raporlar,
 // saklama, yıl akışları) F1a-2'de söküldü; OAB pano kartları F1c'de gelir (§7.10).
 //
@@ -21,6 +22,7 @@ import { okulApi } from "../okul/api";
 import type { RoadmapManualItem, SetupStatus } from "../okul/api";
 import AyrilisHavuzuKarti from "./AyrilisHavuzuKarti";
 import BaslangicYolHaritasi from "./BaslangicYolHaritasi";
+import OkunamayanAlanlarKarti from "./OkunamayanAlanlarKarti";
 import SonOturumKarti from "./SonOturumKarti";
 
 export default function PanelPage() {
@@ -81,9 +83,11 @@ export default function PanelPage() {
       )}
       {/* T15 (§13 D4): beklenmedik kapanıştan sonra "Son Oturumu Kontrol Edin". */}
       <SonOturumKarti />
+      {/* D48: çözülemeyen şifreli alan yoksa görünmez; kişisiz, yalnız sayı. */}
+      <OkunamayanAlanlarKarti />
       {/* Havuz boşsa görünmez; yalnız sayı okunur. */}
       <AyrilisHavuzuKarti />
-      {/* Dış yedek hatırlatması — son şifreli yedek indirmesinden (yoksa parola
+      {/* Dış yedek hatırlatması — son şifreli yedek indirmesinden (yoksa ilk hesabın
           kurulumundan) süre dolunca; yalnız tarih ve gün sayısı. */}
       <DisYedekKarti />
       <div className="grid gap-4 sm:grid-cols-2">

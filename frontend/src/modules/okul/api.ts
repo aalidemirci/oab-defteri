@@ -101,7 +101,7 @@ export interface HolidaySeedResult {
 
 /**
  * Sihirbaz adımları, sırasıyla — backend `services/setup.py::SETUP_STEPS` ile BİREBİR:
- * yönetici parolası + kurtarma anahtarı → okul bilgileri → ders yılı ve kapalı günler.
+ * program yöneticisi hesabı + kurtarma anahtarı → okul bilgileri → ders yılı ve kapalı günler.
  */
 export type SetupStep = "password" | "school" | "calendar";
 
@@ -136,10 +136,10 @@ export interface RoadmapState {
  */
 export interface SetupStatus {
   setup_completed: boolean;
-  /** Yönetici parolası kurulu mu? Kurulu değilse sihirbaz ilk adımdan açılır. */
+  /** İlk program yöneticisi hesabı kurulu mu? Kurulu değilse sihirbaz ilk adımdan açılır. */
   password_set: boolean;
   /**
-   * Kurtarma anahtarının saklandığı doğrulandı mı? 1. adım ancak parola kurulu VE anahtar
+   * Kurtarma anahtarının saklandığı doğrulandı mı? 1. adım ancak hesap kurulu VE anahtar
    * doğrulanmışsa tamamdır; kurulumu önceden tamamlanmış programda yanlışsa yol haritası ve
    * Güvenlik ekranı uyarır.
    */
@@ -204,17 +204,28 @@ export const STUDENT_STATUS_TR: Record<StudentStatus, string> = {
 };
 
 /**
+ * Çözülemeyen şifreli alanlar (tasarım §13 D48; backend `CorruptFieldsMixin`): kilit
+ * açıkken çözülemeyen alan `null` gelir ve adı bu listede durur (değer taşımaz). Ad ya
+ * da soyad bozuksa türeyen `full_name` de `null`dır. Ekran "okunamadı" yazar
+ * (`kisiler/ortak`). Liste her yanıtta vardır; test kalıpları atlayabilsin diye isteğe bağlı.
+ */
+export interface BozukAlanlar {
+  bozuk_alanlar?: string[];
+}
+
+/**
  * Öğrenci sicili — StudentSerializer ile birebir (`full_name`/`class_label` türetilmiş).
  * Okul no şifreli saklanır; arama ve eşleştirme numaranın tamamıyla yapılır.
  * `status`, `left_at` ve `leave_candidate_since` salt okunurdur: ayrılış `leaveStudent`
- * ya da Ayrılış Havuzu kararıyla yapılır; kayıt silinmez.
+ * ya da Ayrılış Havuzu kararıyla yapılır; kayıt silinmez. Şifreli alanlar çözülemezse
+ * `null`dır (`BozukAlanlar`).
  */
-export interface Student {
+export interface Student extends BozukAlanlar {
   id: number;
-  first_name: string;
-  last_name: string;
-  full_name: string;
-  student_number: string;
+  first_name: string | null;
+  last_name: string | null;
+  full_name: string | null;
+  student_number: string | null;
   class_level: number | null;
   class_section: string;
   class_label: string;
@@ -249,11 +260,12 @@ export const MEMBER_KIND_TR: Record<MemberKind, string> = {
  * `is_active`, `left_at` ve `leave_candidate_since` salt okunurdur: ayrılış
  * `leavePersonnel` ya da Ayrılış Havuzu kararıyla yapılır; kayıt silinmez.
  */
-export interface Personnel {
+export interface Personnel extends BozukAlanlar {
   id: number;
-  first_name: string;
-  last_name: string;
-  full_name: string;
+  /** Şifreli; çözülemezse null (`BozukAlanlar`). */
+  first_name: string | null;
+  last_name: string | null;
+  full_name: string | null;
   member_kind: MemberKind;
   is_active: boolean;
   /** Ayrılış tarihi (ISO); aktif kişide null. */
@@ -280,11 +292,11 @@ export interface LeavePoolRun {
   date: string;
 }
 
-/** Havuzdaki öğrenci — LeavePoolStudentSerializer ile birebir. */
-export interface LeavePoolStudent {
+/** Havuzdaki öğrenci — LeavePoolStudentSerializer ile birebir (şifreli alan çözülemezse null). */
+export interface LeavePoolStudent extends BozukAlanlar {
   id: number;
-  full_name: string;
-  student_number: string;
+  full_name: string | null;
+  student_number: string | null;
   class_label: string;
   /** Havuza giriş tarihi (ISO). */
   leave_candidate_since: string;
@@ -320,9 +332,10 @@ export interface LeavePoolSimilar {
 }
 
 /** Havuzdaki öğretmen / diğer personel — LeavePoolPersonnelSerializer ile birebir. */
-export interface LeavePoolPersonnel {
+export interface LeavePoolPersonnel extends BozukAlanlar {
   id: number;
-  full_name: string;
+  /** Şifreli addan türer; çözülemezse null (`BozukAlanlar`). */
+  full_name: string | null;
   member_kind: MemberKind;
   leave_candidate_since: string;
   run: LeavePoolRun | null;

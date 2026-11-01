@@ -9,7 +9,8 @@ Yedeğin kurtarma başlığı (tasarım TK10, §4.4.4) `guvenlik.json`'un yalnı
 bölümünü ve kurtarma anahtarının kimliğini (no, tarih) taşır; hesap sarmalları
 yedeğe girmez (`recovery_header_from_state`). Aynı bilgisayarda geri yükleme güncel
 `guvenlik.json` ve bir hesabın parolasıyla, yeni bilgisayarda kurtarma anahtarıyla
-yapılır.
+yapılır. Anahtarın kimliğini okuyan tek kural `recovery_key_identity`'dir (durum
+özeti, kurtarma anahtarı belgesi, yedek listesi ve geri yüklemenin iletisi).
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +41,10 @@ _PUBLIC_BYTES = 32
 _LENGTH_BYTES = 4
 _PRIVATE_INFO = b"OABDefteri/backup/private/v1"
 _ENVELOPE_INFO = b"OABDefteri/backup/envelope/v1"
+#: Sabit başlığın boyu: sihirli bayt + geçici açık anahtar + nonce + başlık uzunluğu.
+_FIXED_HEADER_BYTES = len(MAGIC) + _PUBLIC_BYTES + _NONCE_BYTES + _LENGTH_BYTES
+#: Gömülü kurtarma başlığının üst sınırı (bayt); yazarken de okurken de aynı sınır.
+MAX_RECOVERY_HEADER_BYTES = 1_000_000
 
 
 class BackupCryptoError(ValueError):
@@ -170,10 +176,16 @@ def _is_complete_account_wrap(hesap: object) -> bool:
 
 
 def parse_security_state(raw: bytes) -> dict[str, Any] | None:
-    """Ham `guvenlik.json` baytlarını ayrıştırır; kullanılamazsa None (hata değil)."""
+    """Ham `guvenlik.json` baytlarını ayrıştırır; kullanılamazsa None (hata değil).
+
+    Derin iç içe JSON (`[[[[…]]]]`, 1 MB başlık sınırının çok altında) `json.loads`'ta
+    `RecursionError` yükseltir; o da "kullanılamaz"dır. Yakalanmasaydı yedek klasörüne
+    konmuş tek bir bozuk ya da kasıtlı hazırlanmış yedek, yedek listesini (kayıp kilidinin
+    çıkış yolu) ve geri yükleme çekirdeğini 500'e düşürürdü.
+    """
     try:
         data: Any = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError):
+    except (UnicodeDecodeError, ValueError, RecursionError):
         return None
     return data if is_usable_security_state(data) else None
 
@@ -197,6 +209,37 @@ def recovery_header_from_state(data: object) -> dict[str, Any] | None:
         if alan in kurtarma:
             bolum[alan] = kurtarma[alan]
     return {"surum": SECURITY_STATE_VERSION, "kdf": data["kdf"], "kurtarma": bolum}
+
+
+def recovery_key_identity(data: object) -> dict[str, Any] | None:
+    """Kurtarma anahtarının kimliği `{no, tarih}` — hangi kâğıdın açtığı (TK10); yoksa None.
+
+    `data` güvenlik durumu (`guvenlik.json`) ya da yedek başlığıdır; kurtarma
+    bölümünün YALNIZ `no` ve `tarih` alanı okunur, tuz ve sarmal dönmez. `no` 1 ya
+    da daha büyük bir tamsayıdır (bool değil; her yeni anahtarda bir artar), `tarih`
+    üretim gününün ISO biçimidir (`YYYY-AA-GG`; ekranda ve kâğıtta gg.aa.yyyy
+    yazılır). Biçimsiz alan None olur; ikisi de yoksa sonuç None'dır. Durumun
+    kullanılabilirliğine bakmaz: kullanılamaz başlığı çağıran önce eler
+    (`parse_security_state`).
+    """
+    if not isinstance(data, dict):
+        return None
+    bolum = data.get("kurtarma")
+    if not isinstance(bolum, dict):
+        return None
+    no = bolum.get("no")
+    if not isinstance(no, int) or isinstance(no, bool) or no < 1:
+        no = None
+    tarih = bolum.get("tarih")
+    gun: str | None = None
+    if isinstance(tarih, str) and tarih:
+        try:
+            gun = date.fromisoformat(tarih).isoformat()
+        except ValueError:
+            gun = None
+    if no is None and gun is None:
+        return None
+    return {"no": no, "tarih": gun}
 
 
 def _header_bytes(data: dict[str, Any]) -> bytes:
@@ -252,7 +295,7 @@ def encrypt_bytes(
     )
     aes_key = _hkdf(ephemeral.exchange(public_key), info=_ENVELOPE_INFO)
     nonce = os.urandom(_NONCE_BYTES)
-    if len(recovery_header) > 1_000_000:
+    if len(recovery_header) > MAX_RECOVERY_HEADER_BYTES:
         raise BackupCryptoError("Yedek kurtarma başlığı beklenenden büyük.")
     header = (
         MAGIC
@@ -284,7 +327,7 @@ def encrypt_to_path(
 
 def embedded_recovery_metadata(container: bytes) -> bytes:
     """Yedekteki parola KDF/sarmal bilgisini geri yükleme aracına verir."""
-    fixed_len = len(MAGIC) + _PUBLIC_BYTES + _NONCE_BYTES + _LENGTH_BYTES
+    fixed_len = _FIXED_HEADER_BYTES
     if len(container) <= fixed_len or not container.startswith(MAGIC):
         raise BackupCryptoError("Dosya geçerli bir OAB Defteri yedeği değil.")
     length_start = fixed_len - _LENGTH_BYTES
@@ -295,9 +338,33 @@ def embedded_recovery_metadata(container: bytes) -> bytes:
     return container[fixed_len:end]
 
 
+def read_embedded_recovery_metadata(path: Path) -> bytes:
+    """Yedek dosyasının gömülü kurtarma başlığı — dosyanın YALNIZ başı okunur.
+
+    `embedded_recovery_metadata`'nın dosya kardeşi: uygulama içi yedek listesi her
+    dosyanın başlığından kurtarma anahtarının kimliğini okur (`live_restore`), bunun
+    için veritabanının tamamı belleğe alınmaz. Kural aynıdır: sihirli bayt, uzunluk
+    alanı, başlık ve ardından en az bir bayt şifreli içerik; uzunluk alanı üst
+    sınırı (`MAX_RECOVERY_HEADER_BYTES`) aşarsa bozuk sayılır (bozuk bir dosya
+    okuyucuyu büyük bir okumaya sürüklemesin). Okuma hatası (`OSError`) çağırana
+    geçer.
+    """
+    with path.open("rb") as dosya:
+        sabit = dosya.read(_FIXED_HEADER_BYTES)
+        if len(sabit) < _FIXED_HEADER_BYTES or not sabit.startswith(MAGIC):
+            raise BackupCryptoError("Dosya geçerli bir OAB Defteri yedeği değil.")
+        metadata_len = int.from_bytes(sabit[-_LENGTH_BYTES:], "big")
+        if metadata_len > MAX_RECOVERY_HEADER_BYTES:
+            raise BackupCryptoError("Yedek başlığı bozuk veya eksik.")
+        baslik = dosya.read(metadata_len)
+        if len(baslik) < metadata_len or not dosya.read(1):
+            raise BackupCryptoError("Yedek başlığı bozuk veya eksik.")
+    return baslik
+
+
 def decrypt_bytes(container: bytes, data_key: bytes) -> bytes:
     """Geri yükleme/test aracı; kimlik doğrulaması başarısızsa açık hata verir."""
-    fixed_len = len(MAGIC) + _PUBLIC_BYTES + _NONCE_BYTES + _LENGTH_BYTES
+    fixed_len = _FIXED_HEADER_BYTES
     if len(container) <= fixed_len or not container.startswith(MAGIC):
         raise BackupCryptoError("Dosya geçerli bir OAB Defteri yedeği değil.")
     offset = len(MAGIC)

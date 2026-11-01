@@ -145,7 +145,7 @@ function ParolaPenceresi({ alanliMi = true }: { alanliMi?: boolean }) {
         {alanliMi && (
           <TextField
             ref={alan}
-            label="Yönetici parolası"
+            label="Parolanız"
             type="password"
             value={parola}
             onChange={(e) => setParola(e.target.value)}
@@ -164,7 +164,7 @@ describe("Dialog — ilk odak (initialFocusRef)", () => {
     const acici = screen.getByRole("button", { name: "Aç" });
 
     await user.click(acici);
-    expect(screen.getByLabelText("Yönetici parolası")).toHaveFocus();
+    expect(screen.getByLabelText("Parolanız")).toHaveFocus();
 
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -178,7 +178,7 @@ describe("Dialog — ilk odak (initialFocusRef)", () => {
 
     await user.keyboard("Gizli-Parola-1");
 
-    const alan = screen.getByLabelText("Yönetici parolası");
+    const alan = screen.getByLabelText("Parolanız");
     expect(alan).toHaveValue("Gizli-Parola-1");
     expect(alan).toHaveFocus();
   });

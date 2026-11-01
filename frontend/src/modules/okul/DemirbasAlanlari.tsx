@@ -55,7 +55,7 @@ export default function DemirbasAlanlari({
         maxLength={64}
         onChange={(e) => onNo(e.target.value)}
         error={errors.demirbas_no}
-        helperText="İsteğe bağlı. Taşınır kaydındaki numara; kurtarma anahtarı çıktısında da basılır."
+        helperText="İsteğe bağlı. Taşınır kaydındaki numara; kurtarma anahtarı belgesinde de basılır."
       />
     </div>
   );

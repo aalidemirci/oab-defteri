@@ -452,7 +452,7 @@ ACIKLAMALAR: dict[str, str] = {
     "openpyxl": "Excel içe/dışa aktarma",
     "xlrd": "e-Okul .xls okuma",
     "cryptography": "Alan şifrelemesi, şifreli yedek",
-    "argon2-cffi": "Yönetici parolası (Argon2id)",
+    "argon2-cffi": "Hesap parolaları (Argon2id)",
     "waitress": "Yerel yönetim sunucusu",
     "pywebview": "Program penceresi",
     "pythonnet": "Windows pencere motoru köprüsü (WebView2)",

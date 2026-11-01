@@ -6,6 +6,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -36,14 +37,16 @@ vi.mock("./modules/okul/api", async (importOriginal) => {
   return { ...actual, okulApi: { ...actual.okulApi, ...okulApiMock } };
 });
 
-const kipApiMock = vi.hoisted(() => ({
-  durum: vi.fn(),
-  gorevliyeGec: vi.fn(),
-  yoneticiyeGec: vi.fn(),
+const oturumApiMock = vi.hoisted(() => ({
+  ozet: vi.fn(),
+  hesaplar: vi.fn(),
+  ac: vi.fn(),
   kilitle: vi.fn(),
+  kurtar: vi.fn(),
+  kurtarmaHesaplari: vi.fn(),
 }));
 
-vi.mock("./modules/kip/api", () => ({ kipApi: kipApiMock }));
+vi.mock("./modules/oturum/api", () => ({ oturumApi: oturumApiMock }));
 
 import App from "./App";
 import { KILIT_EKRANI_BASLIGI } from "./modules/guvenlik/KilitEkrani";
@@ -60,6 +63,10 @@ const ACIK: GuvenlikDurumu = {
   transition: "",
   recovery_key_confirmed: true,
   protected_fields: [],
+  account_count: 1,
+  recovery_key_no: 1,
+  recovery_key_date: "2026-11-01",
+  corrupt_field_count: 0,
 };
 
 function ekranaBas() {
@@ -88,18 +95,37 @@ beforeEach(() => {
   guvenlikApiMock.yedekler.mockResolvedValue({ backup_dir: "", backups: [] });
   okulApiMock.getSetupStatus.mockResolvedValue(KURULU_DURUM);
   okulApiMock.getLeavePoolSummary.mockResolvedValue({ student_count: 0, personnel_count: 0 });
-  kipApiMock.durum.mockResolvedValue({
-    durum: "yonetici",
-    bosta_kalan_sn: 180,
-    mutlak_kalan_sn: 1800,
-    bosta_dk: 3,
-    mutlak_dk: 30,
+  oturumApiMock.ozet.mockResolvedValue({
+    durum: "acik",
+    hesap: { id: "h-1", tanitici: "yonetici", rol: "yonetici", rol_etiketi: "Program yöneticisi" },
+    bosta_dk: 10,
+    bosta_kalan_sn: 600,
+    kilit_bekliyor: false,
+    kurulum_tamam: true,
   });
+  oturumApiMock.hesaplar.mockResolvedValue([
+    {
+      id: "h-1",
+      tanitici: "yonetici",
+      rol: "yonetici",
+      rol_etiketi: "Program yöneticisi",
+      secilebilir: true,
+      askida_nedeni: null,
+    },
+  ]);
 });
 
 describe("Üst çubuk başlığı — program durumu ekranları", () => {
   it("kilitliyken ekranın h1'i ve üst çubuk aynı başlığı gösterir", async () => {
     guvenlikApiMock.durum.mockResolvedValue({ ...ACIK, locked: true });
+    oturumApiMock.ozet.mockResolvedValue({
+      durum: "kilitli",
+      hesap: null,
+      bosta_dk: 10,
+      bosta_kalan_sn: null,
+      kilit_bekliyor: false,
+      kurulum_tamam: true,
+    });
     ekranaBas();
 
     expect(
@@ -109,6 +135,11 @@ describe("Üst çubuk başlığı — program durumu ekranları", () => {
     // çizimde yetişir — bu yüzden `findByText`.
     expect(await within(ustCubuk()).findByText(KILIT_EKRANI_BASLIGI)).toBeInTheDocument();
     expect(within(ustCubuk()).queryByText("Genel Bakış")).not.toBeInTheDocument();
+    // Kilitliyken oturum göstergesi yoktur (kimse açık değil); Çık vardır ve parolasızdır.
+    expect(within(ustCubuk()).queryByRole("group", { name: "Oturum" })).not.toBeInTheDocument();
+    await userEvent.setup().click(within(ustCubuk()).getByRole("button", { name: "Çık" }));
+    const diyalog = screen.getByRole("dialog", { name: "Programdan çıkılsın mı?" });
+    expect(within(diyalog).queryByLabelText(/parola/i)).toBeNull();
   });
 
   it("güvenlik dosyası kayıpken ekranın h1'i ve üst çubuk aynı başlığı gösterir", async () => {

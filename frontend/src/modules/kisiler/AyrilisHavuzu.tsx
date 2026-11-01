@@ -13,7 +13,7 @@
 //
 // Karar tek işlemdir: seçilenlerden biri başka pencerede çözülmüşse backend hiçbir
 // kararı uygulamaz (400) — liste yenilenir, kullanıcı yeniden seçer. Adlar yalnız bu
-// yönetim ekranında görünür; ekran görevli kipinde kapalıdır.
+// yönetim ekranında görünür.
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
@@ -34,7 +34,16 @@ import type {
   LeavePoolSimilar,
   LeavePoolStudent,
 } from "../okul/api";
-import { ErrorBand, hataOku } from "./ortak";
+import {
+  ErrorBand,
+  KisiAdi,
+  OkunamadiIsareti,
+  hataOku,
+  kisiAdiMetni,
+  kisiKaydiniMetni,
+  kisiOznesi,
+  okunamadiMi,
+} from "./ortak";
 import type { SayfaHatasi } from "./ortak";
 
 const TH = "p-2 text-left text-label-medium text-on-surface-variant";
@@ -185,7 +194,7 @@ export default function AyrilisHavuzu({ onDegisti }: { onDegisti?: () => void })
     const ok = await confirm({
       title: "Bu iki kayıt aynı kişi mi?",
       message:
-        `Havuzdaki kayıt: “${kisi.full_name}” — ${MEMBER_KIND_TR[kisi.member_kind]}, havuza giriş ${formatDate(kisi.leave_candidate_since)}. ` +
+        `Havuzdaki kayıt: ${kisiOznesi(kisi)} — ${MEMBER_KIND_TR[kisi.member_kind]}, havuza giriş ${formatDate(kisi.leave_candidate_since)}. ` +
         `Kalacak kayıt: “${aday.full_name}” — ${MEMBER_KIND_TR[aday.member_kind]}, sicile eklendi ${formatDate(aday.created_on)}. ` +
         `Aday yalnız ad benzerliğiyle bulundu (${benzerlikGerekcesi(aday.reason)}); okula yeni gelen bir adaş da olabilir. ` +
         `Onaylarsanız havuzdaki kaydın bağları kalacak kayda taşınır ve havuzdaki kayıt silinir. Bu işlem geri alınamaz.`,
@@ -422,14 +431,23 @@ function OgrenciBolumu({
                   <td className={TD}>
                     <input
                       type="checkbox"
-                      aria-label={`${o.full_name} seç`}
+                      aria-label={`${kisiAdiMetni(o)} seç`}
                       checked={secim.has(o.id)}
                       onChange={(e) => onSecim(degistir(secim, o.id, e.target.checked))}
                       className="size-5 accent-primary"
                     />
                   </td>
-                  <td className={TD}>{o.student_number || "—"}</td>
-                  <td className={TD}>{o.full_name}</td>
+                  {/* Çözülemeyen şifreli alan boş hücre değil "okunamadı"dır (§13 D48). */}
+                  <td className={TD}>
+                    {okunamadiMi(o, "student_number") ? (
+                      <OkunamadiIsareti />
+                    ) : (
+                      o.student_number || "—"
+                    )}
+                  </td>
+                  <td className={TD}>
+                    <KisiAdi kayit={o} />
+                  </td>
                   <td className={TD}>{o.class_label || "Sınıfsız"}</td>
                   <td className={TD}>{formatDate(o.leave_candidate_since)}</td>
                   <td className={TD}>{aktarimAdi(o.run)}</td>
@@ -519,13 +537,15 @@ function PersonelBolumu({
                   <td className={TD}>
                     <input
                       type="checkbox"
-                      aria-label={`${k.full_name} seç`}
+                      aria-label={`${kisiAdiMetni(k)} seç`}
                       checked={secim.has(k.id)}
                       onChange={(e) => onSecim(degistir(secim, k.id, e.target.checked))}
                       className="size-5 accent-primary"
                     />
                   </td>
-                  <td className={TD}>{k.full_name}</td>
+                  <td className={TD}>
+                    <KisiAdi kayit={k} />
+                  </td>
                   <td className={TD}>{MEMBER_KIND_TR[k.member_kind]}</td>
                   <td className={TD}>{formatDate(k.leave_candidate_since)}</td>
                   <td className={TD}>{aktarimAdi(k.run)}</td>
@@ -543,7 +563,7 @@ function PersonelBolumu({
                                 icon="merge"
                                 disabled={mesgul}
                                 onClick={() => onBirlestir(k, aday)}
-                                aria-label={`${k.full_name} kaydını ${aday.full_name} kaydıyla birleştir`}
+                                aria-label={`${kisiKaydiniMetni(k)} ${aday.full_name} kaydıyla birleştir`}
                               >
                                 Birleştir
                               </Button>

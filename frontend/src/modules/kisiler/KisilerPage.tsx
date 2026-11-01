@@ -45,7 +45,16 @@ import type {
 } from "../okul/api";
 import AktarimPaneli from "./AktarimPaneli";
 import AyrilisHavuzu from "./AyrilisHavuzu";
-import { DurumRozeti, ErrorBand, hataOku } from "./ortak";
+import {
+  DurumRozeti,
+  ErrorBand,
+  KisiAdi,
+  OkunamadiIsareti,
+  hataOku,
+  kisiKaydiniMetni,
+  kisiOznesi,
+  okunamadiMi,
+} from "./ortak";
 import type { SayfaHatasi } from "./ortak";
 
 /** Sayfa başına kayıt (liste uçları limit/offset ile sayfalanır, varsayılan 25). */
@@ -65,6 +74,15 @@ const TABS: TabItem[] = [
 
 /** Ayrılış onayının ortak sonucu cümlesi (ayrılış yolu kaydı silmez). */
 const AYRILIS_SONUCU = "Kaydı silinmez; sicilde “Ayrıldı · gg.aa.yyyy” rozetiyle kalır.";
+
+/**
+ * Düzenleme penceresinde çözülemeyen şifreli alanın yardım metni (tasarım §13 D48). Ad ve
+ * soyad zorunludur: okunamayan değer ancak yeniden yazılarak kaydedilir. Okul no'su
+ * boş bırakılırsa gönderilmez, kayıtlı değer olduğu gibi kalır.
+ */
+const OKUNAMAYAN_AD_YARDIMI = "Kayıtlı değer okunamadı; kaydetmek için yeniden yazın.";
+const OKUNAMAYAN_NUMARA_YARDIMI =
+  "Kayıtlı numara okunamadı; boş bırakırsanız olduğu gibi kalır, yazarsanız yenisi kaydedilir.";
 
 export default function KisilerPage() {
   const [active, setActive] = useTabParam<TabKey>("tab", TAB_KEYS, "ogrenciler");
@@ -165,8 +183,13 @@ function OgrencilerSekmesi() {
   }, [search, level, section, offset, reloadKey]);
 
   const columns: Column<Student>[] = [
-    { header: "Okul no", cell: (s) => s.student_number || "—" },
-    { header: "Ad soyad", cell: (s) => s.full_name },
+    // Çözülemeyen şifreli alan boş hücre değil "okunamadı"dır (tasarım §13 D48; `ortak`).
+    {
+      header: "Okul no",
+      cell: (s) =>
+        okunamadiMi(s, "student_number") ? <OkunamadiIsareti /> : s.student_number || "—",
+    },
+    { header: "Ad soyad", cell: (s) => <KisiAdi kayit={s} /> },
     { header: "Sınıf", cell: (s) => s.class_label || "—" },
     {
       header: "Durum",
@@ -250,7 +273,7 @@ function OgrencilerSekmesi() {
             columns={columns}
             rows={page.results}
             onRowClick={(s) => setEditing(s)}
-            rowLabel={(s) => `${s.full_name} kaydını düzenle`}
+            rowLabel={(s) => `${kisiKaydiniMetni(s)} düzenle`}
           />
           <PaginationBar
             count={page.count}
@@ -311,6 +334,10 @@ function OgrenciFormDialog({
   const snackbar = useSnackbar();
   const confirm = useConfirm();
   const aktif = student === null || student.status === "ACTIVE";
+  // Çözülemeyen şifreli alanlar (D48): alan boş açılır, altında "okunamadı" yazar.
+  const adBozuk = student !== null && okunamadiMi(student, "first_name");
+  const soyadBozuk = student !== null && okunamadiMi(student, "last_name");
+  const numaraOkunamadi = student !== null && okunamadiMi(student, "student_number");
 
   const submit = async () => {
     clearErrors();
@@ -328,6 +355,9 @@ function OgrenciFormDialog({
       class_level: level ? Number(level) : null,
       class_section: section.trim(),
     };
+    // Okunamayan okul no'su boş bırakıldıysa GÖNDERİLMEZ: kayıtlı (bozuk) değer olduğu gibi
+    // kalır; boş dize gönderilseydi işaretli veri sessizce silinirdi (tasarım §13 D48).
+    if (numaraOkunamadi && !studentNumber.trim()) delete body.student_number;
     setBusy(true);
     try {
       if (student) await okulApi.updateStudent(student.id, body);
@@ -346,7 +376,7 @@ function OgrenciFormDialog({
     // Başlık soru, gövde sonuç (docs/sozluk.md §3); ad yalnız bu onay penceresinde görünür.
     const ok = await confirm({
       title: "Öğrenci ayrıldı olarak işaretlensin mi?",
-      message: `“${student.full_name}” okuldan ayrılmış sayılır ve seçicilerden düşer. ${AYRILIS_SONUCU}`,
+      message: `${kisiOznesi(student)} okuldan ayrılmış sayılır ve seçicilerden düşer. ${AYRILIS_SONUCU}`,
       confirmLabel: "Ayrıldı olarak işaretle",
     });
     if (!ok) return;
@@ -366,7 +396,7 @@ function OgrenciFormDialog({
     if (!student) return;
     const ok = await confirm({
       title: "Öğrenci sicilden silinsin mi?",
-      message: `“${student.full_name}” kaydı kalıcı olarak silinir, geri alınamaz. Yanlış girilmiş kayıtlar içindir; okuldan ayrılan öğrenci için “Ayrıldı olarak işaretle”yi kullanın. Yanlışlıkla silerseniz öğrenciyi yeniden ekleyebilir ya da e-Okul listesini yeniden aktarabilirsiniz.`,
+      message: `${kisiOznesi(student, true)} kalıcı olarak silinir, geri alınamaz. Yanlış girilmiş kayıtlar içindir; okuldan ayrılan öğrenci için “Ayrıldı olarak işaretle”yi kullanın. Yanlışlıkla silerseniz öğrenciyi yeniden ekleyebilir ya da e-Okul listesini yeniden aktarabilirsiniz.`,
       confirmLabel: "Sil",
     });
     if (!ok) return;
@@ -429,6 +459,7 @@ function OgrenciFormDialog({
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
             error={errors.first_name}
+            helperText={adBozuk ? OKUNAMAYAN_AD_YARDIMI : undefined}
           />
           <TextField
             label="Soyad"
@@ -436,13 +467,18 @@ function OgrenciFormDialog({
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
             error={errors.last_name}
+            helperText={soyadBozuk ? OKUNAMAYAN_AD_YARDIMI : undefined}
           />
           <TextField
             label="Okul no"
             value={studentNumber}
             onChange={(e) => setStudentNumber(e.target.value)}
             error={errors.student_number}
-            helperText="İçe aktarma bu numarayla eşleştirir; aktif kayıtlar arasında tekildir."
+            helperText={
+              numaraOkunamadi
+                ? OKUNAMAYAN_NUMARA_YARDIMI
+                : "İçe aktarma bu numarayla eşleştirir; aktif kayıtlar arasında tekildir."
+            }
           />
           <Select
             label="Sınıf düzeyi"
@@ -515,7 +551,7 @@ function PersonelSekmesi() {
   }, [search, offset, reloadKey]);
 
   const columns: Column<Personnel>[] = [
-    { header: "Ad soyad", cell: (p) => p.full_name },
+    { header: "Ad soyad", cell: (p) => <KisiAdi kayit={p} /> },
     { header: "Üye türü", cell: (p) => MEMBER_KIND_TR[p.member_kind] },
     {
       header: "Durum",
@@ -577,7 +613,7 @@ function PersonelSekmesi() {
             columns={columns}
             rows={page.results}
             onRowClick={(p) => setEditing(p)}
-            rowLabel={(p) => `${p.full_name} kaydını düzenle`}
+            rowLabel={(p) => `${kisiKaydiniMetni(p)} düzenle`}
           />
           <PaginationBar
             count={page.count}
@@ -630,6 +666,8 @@ function PersonelFormDialog({
   const snackbar = useSnackbar();
   const confirm = useConfirm();
   const aktif = personnel === null || personnel.is_active;
+  const adBozuk = personnel !== null && okunamadiMi(personnel, "first_name");
+  const soyadBozuk = personnel !== null && okunamadiMi(personnel, "last_name");
 
   const submit = async () => {
     clearErrors();
@@ -661,7 +699,7 @@ function PersonelFormDialog({
     if (!personnel) return;
     const ok = await confirm({
       title: "Kişi ayrıldı olarak işaretlensin mi?",
-      message: `“${personnel.full_name}” okuldan ayrılmış sayılır ve seçicilerden düşer. ${AYRILIS_SONUCU}`,
+      message: `${kisiOznesi(personnel)} okuldan ayrılmış sayılır ve seçicilerden düşer. ${AYRILIS_SONUCU}`,
       confirmLabel: "Ayrıldı olarak işaretle",
     });
     if (!ok) return;
@@ -681,7 +719,7 @@ function PersonelFormDialog({
     if (!personnel) return;
     const ok = await confirm({
       title: "Kişi sicilden silinsin mi?",
-      message: `“${personnel.full_name}” kaydı kalıcı olarak silinir, geri alınamaz. Yanlış girilmiş kayıtlar içindir; okuldan ayrılan kişi için “Ayrıldı olarak işaretle”yi kullanın.`,
+      message: `${kisiOznesi(personnel, true)} kalıcı olarak silinir, geri alınamaz. Yanlış girilmiş kayıtlar içindir; okuldan ayrılan kişi için “Ayrıldı olarak işaretle”yi kullanın.`,
       confirmLabel: "Sil",
     });
     if (!ok) return;
@@ -741,6 +779,7 @@ function PersonelFormDialog({
           value={firstName}
           onChange={(e) => setFirstName(e.target.value)}
           error={errors.first_name}
+          helperText={adBozuk ? OKUNAMAYAN_AD_YARDIMI : undefined}
         />
         <TextField
           label="Soyad"
@@ -748,6 +787,7 @@ function PersonelFormDialog({
           value={lastName}
           onChange={(e) => setLastName(e.target.value)}
           error={errors.last_name}
+          helperText={soyadBozuk ? OKUNAMAYAN_AD_YARDIMI : undefined}
         />
         <Select
           label="Üye türü"

@@ -224,7 +224,7 @@ hiddenimports += [
     "PIL.PngImagePlugin",
     "brotli",
     "zopfli",
-    # Yönetici parolası (Argon2id) + alan şifrelemesi (Fernet): cffi ikilisi
+    # Hesap parolaları (Argon2id) + alan şifrelemesi (Fernet): cffi ikilisi
     # `argon2` ile otomatik toplanmayabilir; eksikse kilit HİÇ açılmaz ve
     # `--pdf-duman` bunu yakalamaz (ayrı zincir — `--bagimlilik-duman` yakalar).
     "argon2",

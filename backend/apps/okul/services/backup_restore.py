@@ -84,6 +84,7 @@ from desktop.backup_crypto import (
     ensure_public_config,
     is_usable_security_state,
     parse_security_state,
+    recovery_key_identity,
 )
 from desktop.paths import VERSION_STAMP_FILE_NAME
 from django.utils import timezone
@@ -126,20 +127,14 @@ class BackupInfo:
         """Yedeği açan kurtarma anahtarının kimliği ("3 numaralı, 01.11.2026 tarihli"); yoksa "".
 
         Tarih kâğıttaki biçimiyle (gg.aa.yyyy) yazılır; no ya da tarih eksikse eldeki kadarı.
+        Kimliği okuyan kural tektir (`backup_crypto.recovery_key_identity`).
         """
-        bolum = (self.embedded_state or {}).get("kurtarma")
-        if not isinstance(bolum, dict):
-            return ""
+        kimlik = recovery_key_identity(self.embedded_state) or {}
         parcalar: list[str] = []
-        no = bolum.get("no")
-        if isinstance(no, int) and not isinstance(no, bool):
-            parcalar.append(f"{no} numaralı")
-        tarih = bolum.get("tarih")
-        if isinstance(tarih, str) and tarih:
-            try:
-                parcalar.append(f"{date.fromisoformat(tarih).strftime('%d.%m.%Y')} tarihli")
-            except ValueError:
-                pass
+        if kimlik.get("no") is not None:
+            parcalar.append(f"{kimlik['no']} numaralı")
+        if kimlik.get("tarih") is not None:
+            parcalar.append(f"{date.fromisoformat(kimlik['tarih']).strftime('%d.%m.%Y')} tarihli")
         return ", ".join(parcalar)
 
 

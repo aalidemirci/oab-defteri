@@ -18,10 +18,11 @@ tasarımdır. Sözlük onlara uyar; çelişirse onlar kazanır ve sözlük düze
 Yönergesi, "RYUE" Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmeliktir (tasarımdaki
 kısaltmalar; §6.4, §9.5).
 
-**Bugünkü durum.** Program F1b'dedir. Aile iskeletinden gelen bazı düzenler (tek yönetici parolası, görevli kipi,
-öğrenci sicili) F1b adımlarında OAB'nin düzenine döner ([plan §2.2](plan/2026-10-31-f0-f1-plani.md)). Sözlük bugün
-ekranda olanı yazar; değişeceği bilinen satır bunu yanında söyler. Ekrandaki metin değişince buradaki satır aynı
-değişiklikte güncellenir.
+**Bugünkü durum.** Program F1b'dedir. Aile iskeletinin tek yönetici parolası ve görevli kipi F1b 1. adımda
+kalktı: herkes programı kendi hesabıyla ve kendi parolasıyla açar. Öteki aile düzenleri (öğrenci sicili) F1b
+adımlarında OAB'nin düzenine döner ([plan §2.2](plan/2026-10-31-f0-f1-plani.md)). Sözlük bugün ekranda olanı
+yazar; değişeceği bilinen satır bunu yanında söyler. Ekrandaki metin değişince buradaki satır aynı değişiklikte
+güncellenir.
 
 ## 1. Kavram sözlüğü
 
@@ -53,15 +54,15 @@ zinciri, kantin, servis) ekranları geldiği fazda eklenir; o güne dek terim i�
 | Kişiler (bugün) | **öğrenci**, **öğretmen**, **diğer personel**; **sicil**; **Ayrılış Havuzu**; eylem **"Ayrıldı olarak işaretle"**, rozet **"Ayrıldı · gg.aa.yyyy"**; olası aynı kişi sorusu **"Bu iki kayıt aynı kişi mi?"** | — | Aile iskeletinden gelir. Öğrenci sicili, içe aktarımı ve Öğrenciler sekmesi F1b 5. adımda sökülür; e-Okul'dan personel ve **veli listesi** alınır (T5; plan §2.2). OAB'nin kişi türleri (veli, öğretmen, yönetici, hayırsever, kursiyer) F1c'de gelir (tasarım §5.2.2) |
 | Personelin türü (`MemberKind`) | ekranda bugün **"üye türü"**: **öğretmen** · **diğer personel**; sekme **"Öğretmenler ve Diğer Personel"** | öğretmen anlamında tek başına "personel" | "Personel" genel anlamda (okulun bütün çalışanları) ve e-Okul raporunun adında ("Personel Listesi") serbesttir. e-Okul'daki görev metni yalnız bu türü seçmek için okunur, saklanmaz (T5). OAB'de "üye" Yönetmeliğin birlik üyesidir (md. 4/1-e); değerler F1b 5. adımda tasarıma göre (öğretmen · yönetici · diğer; tasarım §5.1, §8.4) düzelir, "üye" sözcüğünün birlik üyeliğiyle karışması o adımda gözden geçirilir |
 | Veli | **veli**; **veli listesi** | — | Veli, öğrencinin annesi, babası ya da kanuni sorumluluğunu üstlenen kişidir ([md. 4/1-f](mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-4)). e-Okul'dan yalnız veli adı-soyadı ve öğrencinin sınıfı alınır (T5; §5). F1b 5. adımda gelir |
-| Parola | **parola**; bugün programın tek parolası **yönetici parolası**; F1b'den sonra her hesabın kendi **parolası**, ilk girişte değiştirilen **geçici parola** (tasarım §4.4.5, TK15) | parola anlamında **"şifre"**; "uygulama parolası"; "PIN" | Parola kurulum sihirbazının ilk adımıdır; kurulmadan kişi kaydı yapılamaz. **Parola paylaşılmaz, herkes kendi hesabıyla çalışır** (T1; [BSG Yön. md. 7/2](mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-7), [9/2-e](mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-9) — programa kıyasen, tasarım TK9): metin parolanın başkasıyla paylaşılmasını ya da birden çok kişide bulunmasını öğütlemez. Parola hiçbir belgede yoktur (tasarım §9.1-5). "Şifre" yalnız şifreleme anlamında kalır ("şifreli yedek", "şifrelenen alanlar"); mevzuattan alıntıda mevzuatın sözcüğü korunur. Programın parolası işletim sisteminin yetkisiyle karışmaz: Windows'un ve Pardus'un (`sudo`) yetkisi için **"yönetici yetkisi"** denir |
+| Parola | **parola**; her hesabın kendi **parolası** (kilit ekranında alanın adı **"Parola"**); ilk girişte değiştirilen **geçici parola** ve 180 günü dolan parola kilit ekranında yenilenir: **"Yeni parola"** + **"Parola (tekrar)"**, düğme **"Parolayı yenile ve aç"** (tasarım §4.4.5, TK15). Kural metni **"En az 8 karakter; küçük harf, büyük harf, rakam ve simge içerir. Başında ve sonunda boşluk olamaz."**; yeni parolanın altında **parola gücü** (**Zayıf** · **Orta** · **İyi** · **Güçlü**) ve parola cümlesi önerisi (en az 12 karakter). Kurulum sihirbazının ilk adımında hesabın ilk parolası **"Parola"** + **"Parola (tekrar)"**; Ayarlar → Güvenlik'te her hesap kendi parolasını **"Parolayı değiştir"** penceresinde değiştirir (**"Mevcut parola"** · **"Yeni parola"** · **"Parola (tekrar)"**, düğme **"Uygula"**, beklerken **"Denetleniyor…"**; snackbar **"Parolanız değiştirildi."**); oturumdaki hesabın parolasını isteyen alanların adı (kurtarma anahtarını yenileme, yedekten geri yükleme) **"Parolanız"**dır. Zorunlu yenilemenin iletisi: "Parolanızı yenilemeniz gerekiyor (geçici parola ya da süresi dolan parola). Yeni parolanızı belirleyin." | parola anlamında **"şifre"**; "uygulama parolası"; "PIN"; tek bir program parolası anlamında **"yönetici parolası"** | Program yöneticisi hesabı ve parolası kurulum sihirbazının ilk adımıdır; kurulmadan kişi kaydı yapılamaz (ileti: "Önce program yöneticisi hesabını kurun"). Kural ve iletiler sunucununkiyle birebirdir ("Parola en az 8 karakter olmalıdır.", "… eksik: büyük harf, simge.", "Yeni parola eskisiyle aynı olamaz.", "Parolalar eşleşmedi."); güç göstergesi programın yerel önerisidir, sunucu kararı değildir. Her ileti sorunlu alanın altında çıkar: "Parola hatalı." (mevcut parola yanlış) **Mevcut parola** ya da **Parola** alanının, politika iletisi **Yeni parola**nın, "Parolalar eşleşmedi." **Parola (tekrar)**ın altında; kural metni yeni parola alanına bağlıdır, ekran okuyucu alana gelince okur. **Parola paylaşılmaz, herkes kendi hesabıyla çalışır** (T1; [BSG Yön. md. 7/2](mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-7), [9/2-e](mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-9) — programa kıyasen, tasarım TK9): metin parolanın başkasıyla paylaşılmasını ya da birden çok kişide bulunmasını öğütlemez. Parola hiçbir belgede yoktur (tasarım §9.1-5). "Şifre" yalnız şifreleme anlamında kalır ("şifreli yedek", "şifrelenen alanlar"); mevzuattan alıntıda mevzuatın sözcüğü korunur. Programın parolası işletim sisteminin yetkisiyle karışmaz: Windows'un ve Pardus'un (`sudo`) yetkisi için **"yönetici yetkisi"** denir |
 | Program yöneticisi ve roller (F1b) | `yonetici` rolünün etiketi **"Program yöneticisi (OAB'den sorumlu müdür yardımcısı)"**; öteki roller **başkan** · **başkan yardımcısı** · **muhasip** · **sekreter** · **Denetleme Kurulu** · **okul müdürü** | programın yöneticisi için "sistem yöneticisi", "admin" | Tasarım §4.4. "Sistem yöneticisi" BSG Yön. [md. 4/1-s](mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-4)'de Bakanlığın ve il/ilçe millî eğitim müdürlüklerinin bilişim personelidir; programın yöneticisiyle karıştırılmaz. Roller F1b 2. adımda gelir (rol-izin matrisi tasarım §4.4.2) |
-| Hesap (F1b) | **hesap** (bir hesap = bir kişi + bir rol); kilit ekranında hesaplar **rol etiketiyle** ("Muhasip", "Denetleme Kurulu 2"); askıdaki hesap **"askıda — program yöneticisine başvurun"**; belge **Hesap teslim pusulası** | — | Kilit ekranında kişi adı gösterilmez (tasarım §4.4.3). Hesaplar dönemliktir (tasarım §4.4.1). F1b 1. ve 2. adımlarda gelir |
-| Kip (aile iskeleti) | **yönetici kipi**, **görevli kipi**, **kilitli**; eylemler **"Görevli kipine geç"** (Ctrl+Shift+G), **"Yönetici kipine geç"**, **"Kilitle"** | "öğrenci modu", "admin modu", "kiosk"; "kütüphane görevlisi", "öğrenci görevli", "masa" | Aile iskeletinden gelir. OAB tasarımında görevli kipi yoktur: boşta süre dolunca program kilitlenir (tasarım TK14); kip F1b 1. adımda hesap ve oturum düzenine döner (plan §2.2). O güne dek metin görevli kipini kütüphanenin ya da öğrencinin işi gibi anlatmaz |
-| Kilit ve çıkış | **"Kilitle"** (programı açık bırakır, kayıtları kilitler; ekran **"Kayıtlar kilitli"**, §4.2); **"Çık"** (programı kapatır) | — | Pencerenin çarpısı da programı kapatır; tepsi yoktur (T6). Çıkış diyalogları §4.2'dedir |
-| Kurtarma anahtarı | **kurtarma anahtarı** | "kurtarma kodu", "yedek parola", "ana anahtar" | Parola unutulursa kayıtlara erişmenin tek yoludur. Basılıp **okul müdürlüğünde kapalı zarfta** saklanır, veliye geçmez (T1, D3); PDF dosyası bilgisayarda bırakılmaz (tasarım §9.7). Anahtar programda saklanmaz; hiçbir günlüğe, iletiye ya da dosya adına yazılmaz |
-| Kurtarma anahtarı işlemleri | kart adları **Kurtarma Anahtarını Doğrula** ve **Kurtarma Anahtarını Yenile**; eylem **"yenileme"**; uyarı **"Kurtarma anahtarı doğrulanmadı"** | "anahtarı sıfırla", "anahtarı değiştir" | Bugünkü yenileme kayıtların anahtarını değiştirmez, kayıtlar yeniden şifrelenmez; yenilemeden önce alınmış yedekler başka bilgisayarda eski anahtarla açılır ve metin bunu söyler (tasarım §4.4.6). F1b'den sonra anahtarı yalnız program yöneticisi yeniler (tasarım TK9) |
-| Şifreleme | **şifreli**, **şifrelenen alanlar**; "güçlü şifrelemeyle korunur" | ayar ekranında ve iletide yöntem adları (Fernet, AES, X25519, Argon2id, HMAC); "veritabanı şifreli" | Şifrelenen şey belirli kişisel veri alanlarıdır; bu **tam disk şifrelemesi değildir** ve metin bunu açıkça söyler; tam koruma BitLocker ya da LUKS'tur (tasarım §4.4.6). Yöntem adları yalnız Hakkında'nın **Teknik Bilgiler** kartında geçer |
-| Yedek | **yedek**, **şifreli yedek**; bugün türleri **günlük yedek** (program günde bir kez kendiliğinden alır: açılışta ya da açıkken gün değişince) ve indirilen şifreli yedek; indirileni **"USB bellekteki yedek"** (ya da okulun ağ diskindeki); hatırlatma kartı **Şifreli Yedeği USB Belleğe Alın**; geri yüklemede kenara alınan **önceki veritabanı** (`db-onceki-…`) | kullanıcı metninde dosya uzantısı (`.odbak`), "kapsayıcı", yöntem adları; "dış yedek" (ekranda ve kılavuzda; kod yorumunda serbest); "harici yedek", "bulut yedeği" | Teknik adlar yalnız Hakkında sayfasında geçer. Yedek bulut depolama hizmetine yüklenmez ([BSG Yön. md. 11/23](mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-11)); taşınabilir ortamdaki veri şifreli saklanır ([BSG Yön. md. 10/5](mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-10)), programın yedeği zaten şifrelidir ve şifresiz kopya üretilmez. **USB bellekteki yedek programın dışındadır:** program ona ulaşamaz, onu silemez; saklanması okulun sorumluluğundadır. Program açılmıyorsa geri yükleme Windows'ta Başlat menüsündeki **"OAB Defteri — Yedekten Geri Yükle"** kısayoluyla, Pardus'ta `oab-defteri --geri-yukle` komutuyla yapılır. F1b 3. adımda dışarı çıkan yedek dosya deposunu da taşır (tasarım §4.4.7); yeni türlerin adları o adımda işlenir |
+| Hesap (F1b) | **hesap** (bir hesap = bir kişi + bir rol); hesabın kilit ekranında görünen adı **tanıtıcı** (`yonetici`, `muhasip`, `dk-1`; gerçek ad değildir); kilit ekranının satırı **rol etiketi** (büyük; program yöneticisi için kısa **"Program yöneticisi"**, aynı rolde birden çok hesapta sıra no'lu: "Denetleme Kurulu 2") + altında **tanıtıcı** (küçük); grubun adı **"Hesap"**; askıdaki hesap (hatalı deneme ya da üyelik/görev askısı) **"askıda — program yöneticisine başvurun"**, kaydı okunamayan **"Hesap kaydı okunamadı"** — ikisi de seçilemez (açık olmayan başka bir satır olursa **"giriş kapalı — program yöneticisine başvurun"**); hesap sahibinin **ad-soyadı** (kurulumda alan **"Ad-soyad"**; şifreli saklanır, kilit ekranında görünmez); kurulumda tanıtıcının alanı **"Tanıtıcı"** (varsayılan `yonetici`; kural metni **"Kilit ekranında herkese görünen hesap adıdır; gerçek ad yazılmaz. Küçük harfle başlar; küçük harf, rakam, nokta, tire ya da alt çizgi içerir."**); tanıtıcı ad-soyaddaki üç harften uzun bir sözcüğü içeriyorsa uyarı (engel değil) **"Tanıtıcı hesap sahibinin adını içeriyor. Tanıtıcı kilit ekranında herkese görünür; rolden türeyen bir tanıtıcı seçmeniz önerilir."**; belge **Hesap teslim pusulası** | — | Kilit ekranında ve üst çubukta kişi adı gösterilmez (tasarım §4.4.3; §5). Ayarlar → Güvenlik'teki **Hesap ve Parola** kartı oturumu rol etiketi ve tanıtıcıyla yazar (**"Bu oturum: Program yöneticisi · tanıtıcı yonetici"**). Tanıtıcı uyarısı gönderimden önce de ekrandadır; karşılaştırma Türkçe harfleri katlar ("Şükrü" ≡ "sukru"). Tek seçilebilir hesap seçili gelir. Hesaplar dönemliktir (tasarım §4.4.1). Hesap açma ve Kullanıcılar ekranı F1b 2. adımda gelir |
+| Oturum (F1b) | kilidi açan hesabın **oturumu**; üst çubuktaki **oturum göstergesi** rol etiketini ve tanıtıcıyı gösterir; başka hesaba geçmek **Kilitle** + kendi hesabıyla açmaktır | kullanıcı metninde **"yönetici kipi"**, **"görevli kipi"**, "kip"; "kullanıcı değiştir" diye ayrı düğme; "öğrenci modu", "admin modu", "kiosk"; "kütüphane görevlisi", "öğrenci görevli", "masa" | Aile iskeletinin görevli/yönetici kipi F1b 1. adımda kalktı (tasarım TK14): herkes kendi hesabıyla açar, boşta süre dolunca program kilitlenir. Kilitlenmede ve kilit ekranından açılışta pencere içeriği yeniden yüklenir; açık form kaybolur (tasarım §13 D53) |
+| Kilit ve çıkış | **"Kilitle"** (programı açık bırakır, kayıtları kilitler; kısayol **Ctrl+Shift+L**; ekran **"Kayıtlar kilitli"**, §4.2); uzun iş sürerken istenen kilit ertelenir, ekranda **"İşlem bitince kilitlenecek"**; **"Çık"** (programı kapatır; her durumda parolasız); kullanılmayan programın kendiliğinden kilitlendiği süre **boşta kilit süresi** (dakika) | — | Pencerenin çarpısı da programı kapatır; tepsi yoktur (T6). Çıkış diyalogları §4.2'dedir. Doğrulanmamış kurtarma anahtarı ekrandayken Kilitle önce sorar (**"Program kilitlensin mi?"**): kilitlenme anahtarı ekrandan kaldırır. Üst çubuktaki geri sayım ve ipucu (**"Program N dakika işlem yapılmazsa kilitlenir."**) yalnız kurulum tamamlandıktan sonra görünür. Boşta kilit süresi 3 ile 30 dakika arasındadır, varsayılanı 10'dur; Ayarlar → Güvenlik'in **Boşta Kilit Süresi** kartında (alan **"Boşta kilit süresi (dakika)"**, düğme **"Kaydet"**, snackbar **"Boşta kilit süresi N dakika olarak kaydedildi."**) yalnız açık oturumda değiştirilir (tasarım TK14; F1b 2. adımdan sonra yalnız program yöneticisi). Mutlak oturum süresi yoktur |
+| Kurtarma anahtarı | **kurtarma anahtarı**; kimliği **anahtar no** ve **üretim tarihi**; kilit ekranındaki yolu **"Parolamı unuttum"** → **"Kurtar ve aç"** (geri dönüş **"Parolayla açmaya dön"**) | "kurtarma kodu", "yedek parola", "ana anahtar" | Yalnız program yöneticisi içindir (kilit ekranında "Parolamı unuttum" yalnız program yöneticisi hesabı seçiliyken görünür; öteki hesaplarda **"Parolanızı unuttuysanız program yöneticisine başvurun."** yazar) ve **üç durumda** kullanılır: parolası unutulduğunda, kayıtlar yeni bilgisayara taşınırken ve bu bilgisayarın güvenlik dosyası kaybolduğunda ya da bozulduğunda yedekten geri yüklemede (o durumda parola yolu işlemez; tasarım §4.4.4). Anahtar panelinin uyarısı ve kurtarma anahtarı belgesi bu üçünü sayar; zarf "yalnız bu üç durumda" açılır; herkes programı kendi hesabıyla açar, öteki hesaplarda parolasını unutan program yöneticisine başvurur (tasarım §4.4.3). No her yeni anahtarda bir artar; belge ve yedek listesi hangi anahtarın hangi yedeği açtığını no ve tarihle gösterir (tasarım TK10). Ekranda kimlik **"Anahtar no 3 · üretim tarihi 01.11.2026"** biçimindedir (yeni anahtarın üstünde, Kurtarma anahtarı belgesi kartında ve yedek satırında); seçilen yedek için **"Bu yedek 3 numaralı, 01.11.2026 tarihli kurtarma anahtarıyla açılır."** yazar, bilinmiyorsa **"Bu yedeği hangi kurtarma anahtarının açtığı okunamadı."** Basılıp **okul müdürlüğünde kapalı zarfta** saklanır, veliye geçmez (T1, D3); PDF dosyası bilgisayarda bırakılmaz (tasarım §9.7). Panelden **Yazdır**'la basılan kâğıt da anahtarın altında **"Okul müdürlüğünde kapalı zarfta saklanır; veliye geçmez. Yalnız program yöneticisi içindir; parola paylaşılmaz, herkes programı kendi hesabıyla açar."** satırını taşır (tasarım §13 D50). Anahtar programda saklanmaz; hiçbir günlüğe, iletiye ya da dosya adına yazılmaz |
+| Kurtarma anahtarı işlemleri | kart adları **Kurtarma Anahtarını Doğrula** ve **Kurtarma Anahtarını Yenile**; eylem **"yenileme"** (onay diyaloğu oturumu açan hesabın parolasını sorar: alan **"Parolanız"**); uyarı **"Kurtarma anahtarı doğrulanmadı"** | "anahtarı sıfırla", "anahtarı değiştir" | Bugünkü yenileme kayıtların anahtarını değiştirmez, kayıtlar yeniden şifrelenmez; yenilemeden önce alınmış yedekler başka bilgisayarda eski anahtarla açılır ve metin bunu söyler (tasarım §4.4.6). F1b'den sonra anahtarı yalnız program yöneticisi yeniler (tasarım TK9) |
+| Şifreleme | **şifreli**, **şifrelenen alanlar**; "güçlü şifrelemeyle korunur"; dürüst sınır **"Şifreli alanlar en zayıf hesap parolası kadar korunur"**; çözülemeyen şifreli alanın ekrandaki karşılığı **"okunamadı"** (kişinin adı okunamazsa metinde **"Adı okunamayan kayıt"**, eylem adında **"Adı okunamayan kaydı düzenle"**; "kayıt kaydını" ikilemesi kurulmaz) | ayar ekranında ve iletide yöntem adları (Fernet, AES, X25519, Argon2id, HMAC); "veritabanı şifreli"; okunamayan alan için boş hücre | Şifrelenen şey belirli kişisel veri alanlarıdır; bu **tam disk şifrelemesi değildir** ve metin bunu açıkça söyler; tam koruma BitLocker ya da LUKS'tur (tasarım §4.4.6). Her hesabın parolası kayıtların anahtarını tek başına açar; Ayarlar → Güvenlik'in **Şifreleme** kartı ve Hakkında'nın **Dürüst Sınırlar** kartı bunu söyler. Okunamayan alan program dışından değiştirilmiş ya da bozulmuş kaydı gösterir (tasarım §13 D48); ekran onu "veri yok"la karıştırmaz, Genel Bakış'ta **Okunamayan Kayıt Alanları** kartı kişisiz sayıyı verir. Yöntem adları yalnız Hakkında'nın **Teknik Bilgiler** kartında geçer |
+| Yedek | **yedek**, **şifreli yedek**; bugün türleri **günlük yedek** (program günde bir kez kendiliğinden alır: açılışta ya da açıkken gün değişince) ve indirilen şifreli yedek; indirileni **"USB bellekteki yedek"** (ya da okulun ağ diskindeki); hatırlatma kartı **Şifreli Yedeği USB Belleğe Alın**; geri yüklemede kenara alınan **önceki veritabanı** (`db-onceki-…`) | kullanıcı metninde dosya uzantısı (`.odbak`), "kapsayıcı", yöntem adları; "dış yedek" (ekranda ve kılavuzda; kod yorumunda serbest); "harici yedek", "bulut yedeği" | Teknik adlar yalnız Hakkında sayfasında geçer. Yedek bulut depolama hizmetine yüklenmez ([BSG Yön. md. 11/23](mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-11)); taşınabilir ortamdaki veri şifreli saklanır ([BSG Yön. md. 10/5](mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-10)), programın yedeği zaten şifrelidir ve şifresiz kopya üretilmez. **USB bellekteki yedek programın dışındadır:** program ona ulaşamaz, onu silemez; saklanması okulun sorumluluğundadır. Yedek bu bilgisayarda program yöneticisinin parolasıyla (geri yüklemede alan **"Parolanız"**), başka bir bilgisayarda ya da güvenlik dosyası kayıpken yalnız yedeğin alındığı gün geçerli olan kurtarma anahtarıyla açılır (yedek başlığı hesap taşımaz; tasarım TK10). Program açılmıyorsa geri yükleme Windows'ta Başlat menüsündeki **"OAB Defteri — Yedekten Geri Yükle"** kısayoluyla, Pardus'ta `oab-defteri --geri-yukle` komutuyla yapılır. F1b 3. adımda dışarı çıkan yedek dosya deposunu da taşır (tasarım §4.4.7); yeni türlerin adları o adımda işlenir |
 | Eski program, yeni veri (`SchemaTooNewError`, çıkış kodu 4) | açılış iletisinin başlığı **"Program sürümü eski"**; çözüm "programı güncel sürüme yükseltip yeniden açın" | kullanıcı metninde "şema", "migration", "göç", "sürüm uyuşmazlığı" | İki durumda çıkar: daha yeni sürümün yazdığı veriyi eski program açmaya çalışınca ve daha yeni sürümle alınmış yedek eski programa geri yüklenince. Program veriyi korumak için açılmaz. İleti "tanımadığı **değişiklikler**" der; tanınmayan değişikliklerin adları iletide GEÇMEZ (§2), yalnız günlüğe (`logs/uygulama.log`) yazılır ve ipucu günlük dosyasını anar |
 | Sürüm | **"yayımlanan son sürüm"**, **"kurulu sürüm"**, **"kurulum dosyası"**; düğmeler **"Şimdi denetle"** · **"Doğrula ve indir"**; elle denetlemenin bağlantısı **okulapp.org/oab-defteri** (programın sayfası; dosyalar indir.okulapp.org'dan iner) | "GitHub sürümü", "Release", "kurucu"; özet algoritmasının adı; düğme adı olarak tek başına "Denetle" | Güncelleme denetimi yalnız düğmeyle yapılır, program açılışta internete çıkmaz (tasarım TK4). Hizmetin adı (GitHub) Güncelleme ekranının açıklama metninde geçmez. **Bugünkü sapma:** sunucunun denetim hata iletileri (ulaşılamama, güvenli bağlantı, sınırlama, HTTP hatası, beklenmeyen yanıt; `services/updates.py`) GitHub adını, doğrulama hata iletileri "SHA-256" ve "SHA256SUMS.txt" adlarını anar; iletiler F1b 6. adımda bu satıra uydurulur ve satır güncellenir. Program indir.okulapp.org'a ve programın sayfasına istek atmaz: bağlantıyı dış tarayıcı açar. Ekran adları §4.7 |
 | Kurulum ve kaldırma | **kurulum dosyası** (Windows'ta indirilen ve çalıştırılan dosya); işler **kurulum** · **güncelleme** · **kaldırma**; kurulumsuz paket **taşınabilir sürüm** (Windows'ta `…-win64-portable.zip`, Pardus'ta `…-linux-x64.tar.gz`); karşıtı **kurulu program** | kullanıcı metninde **"kurucu"**, **"yükleyici"**, "installer", "setup"; kurulum dosyasının penceresi için "sihirbaz" | **Kurulum Sihirbazı** programın ilk açılış ekranıdır (§4.4). Kod yorumlarında ve geliştiriciye dönük paketleme belgelerinde (`packaging/`) "kurucu" serbesttir. Kurulum yetkisinin iki seçeneği tasarım TK7'dedir |
@@ -99,7 +100,7 @@ ve F1'de ele alınan evrak, fazlarıyla:
 
 | Kod | Belgenin adı | Faz |
 |---|---|---|
-| — (program belgesi) | **Kurtarma anahtarı çıktısı** — tasarımdaki adı "kurtarma anahtarı belgesi" (§9.7); indirilen dosya `Kurtarma-Anahtarı-Çıktısı_gg.aa.yyyy.pdf` | aileden; metni F1b'de OAB'ye göre yazılır (tasarım §13 D50) |
+| — (program belgesi) | **Kurtarma anahtarı belgesi** (tasarım §9.7; belgenin başlığı "KURTARMA ANAHTARI BELGESİ"); indirilen dosya `Kurtarma-Anahtarı-Belgesi_gg.aa.yyyy.pdf` | aileden; metni F1b 1. adımda OAB'ye göre yazıldı (tasarım §13 D50): anahtar no'su ve üretim tarihi, "herkes kendi hesabıyla", anahtar yalnız program yöneticisine ve üç durumda (unutulan parola, yeni bilgisayar, güvenlik dosyasının kaybı ya da bozulması) |
 | — (program belgesi) | Yedek raporu (adı F1b'de kesinleşir) | F1b |
 | — (program belgesi) | Kurtarma anahtarı zarfı imha tutanağı | F4 |
 | E63 | Hesap teslim pusulası | F1b |
@@ -137,20 +138,20 @@ kullanılmaz** (altın kural 5):
   sekme, sayfa içi bölüm ve kart başlıkları — Başlık Düzenindedir ("Ayarlar → Güvenlik", "Kişiler → Ayrılış Havuzu",
   "Şifreli Veritabanı Yedeği"); bir bölümün ya da kartın içinde metni parçalayan **alt başlıklar** cümle düzeninde
   kalır ("Sakladığınızı doğrulayın"). Üç istisna: §2'deki **belge adları** başlık yerinde de oradaki yazımıyla
-  yazılır ("Kurtarma anahtarı çıktısı"); program durumu ekranlarının başlıkları §4.2'deki cümlenin kendisidir
+  yazılır ("Kurtarma anahtarı belgesi"); program durumu ekranlarının başlıkları §4.2'deki cümlenin kendisidir
   ("Kayıtlar kilitli"); onay diyaloğunun başlığı sorudur.
 - **Başlık sabit addır.** Kartın ya da bölümün başlığı duruma göre değişmez; durum başlığın altındaki cümlede
-  söylenir ("Yönetici Parolası ve Şifreleme" başlığının altında "Kişisel veri alanları şifreli." ya da "Yönetici
-  parolası kurulmadı."). Böylece yol tarifi hep aynı adı kullanır.
+  söylenir ("Hesap ve Parola" başlığının altında "Bu oturum: Program yöneticisi · tanıtıcı yonetici" ya da "Program
+  yöneticisi hesabı kurulmadı."). Böylece yol tarifi hep aynı adı kullanır.
 - **Onay diyaloğu:** geri dönüşü olmayan ya da kayıt düşüren her işlem onay diyaloğundan geçer. **Başlık soru, gövde
   sonuçtur** ("Yedekten geri yüklensin mi?" başlığının gövdesi ne olacağını söyler); gövde başlıktaki soruyu yinelemez,
   ikisi aynı cümle olmaz. Parola ya da başka bir değer isteyen diyalog bir formdur: başlığı eylemin adıdır
-  ("Programdan çık", "Parolayı değiştir"). Geri dönüşü olmayan işlemi onaylatırken parolayı da soran diyaloğun
+  ("Parolayı değiştir"). Geri dönüşü olmayan işlemi onaylatırken parolayı da soran diyaloğun
   başlığı yine sorudur ("Kurtarma anahtarı yenilensin mi?").
 - **Devam düğmesi** tek biçim: "Kaydet ve devam et" (kayıt yoksa "Devam"). Vazgeçme: "Vazgeç"; salt bilgi
   diyaloğunda "Kapat".
 - **Seçici yer tutucusu** tek biçim: "Seçin". Boş seçenek: "— yok —".
-- **Snackbar** tam cümledir ve noktayla biter ("Yönetici parolası değiştirildi.").
+- **Snackbar** tam cümledir ve noktayla biter ("Parolanız değiştirildi.").
 - **Süren iş** üç nokta karakteriyle söylenir: "Kaydediliyor…", "Denetleniyor…".
 - **Yol tarifi** ok işaretiyle yazılır ("Ayarlar → Güvenlik"); bağlantı metni gittiği yeri adıyla söyler
   ("Ayarlar → Güvenlik'i aç", "Ayrılış Havuzu'nu aç").
@@ -173,7 +174,7 @@ kullanılmaz** (altın kural 5):
   harfli metin `tr_upper` ile üretilir ("i/İ", "ı/I" ayrımı — tasarım §9.1-4).
 - **Simgeler** `Icon` bileşeniyle verilir; metne ham "✓" / "⚠" yazılmaz.
 - **İndirilen dosya adı** belge adı + kapsam + tarih taşır (`lib/download.ts` `dosyaAdi`):
-  `Kurtarma-Anahtarı-Çıktısı_31.10.2026.pdf`. Kimlik numaralı ad (`belge_3.pdf`) masaüstünde neye ait olduğunu
+  `Kurtarma-Anahtarı-Belgesi_31.10.2026.pdf`. Kimlik numaralı ad (`belge_3.pdf`) masaüstünde neye ait olduğunu
   söylemez. İstisna şifreli yedektir: `oab-defteri-yedek-yyyy-aa-gg` (adlar sıralanınca tarih sırası çıksın diye).
 
 ## 4. Sayfa ve gezinme adları
@@ -196,12 +197,11 @@ sayfaların h1'leri ve sekme tanımlarıdır.*
 | Kişiler | Kişiler | `/kisiler` | Bugün öğrenci, öğretmen ve diğer personel sicili ile e-Okul aktarımı (aile iskeleti; F1b 5. adımda personel ve veli listesine döner) |
 | Ayarlar | Ayarlar | `/ayarlar` | Altında "Diğer Ayarlar" bölümü ve **Kurulum Sihirbazı** kartı |
 | Kılavuz | Kullanım Kılavuzu | `/kilavuz` | Bugün tek bölüm: **Programın Konumu**. Bölümler her fazın özellikleriyle yazılır |
-| Hakkında ve Lisans | Hakkında ve Lisans | `/hakkinda` | Kenar çubuğunun altında, ana gezinmenin dışında. Kartları: **Program** (tanım ve konum) · **Geliştirici** (iletişim) · **Ücretsiz ve Ticari Olmayan Kullanım** · **Üçüncü Taraf Bileşenler** · **Teknik Bilgiler** |
+| Hakkında ve Lisans | Hakkında ve Lisans | `/hakkinda` | Kenar çubuğunun altında, ana gezinmenin dışında. Kartları: **Program** (tanım ve konum) · **Geliştirici** (iletişim) · **Ücretsiz ve Ticari Olmayan Kullanım** · **Üçüncü Taraf Bileşenler** · **Dürüst Sınırlar** (tasarım §4.4.6, sade dille: rol bir şifreleme önlemi değildir · şifreli alanlar en zayıf hesap parolası kadar korunur · açık oturum, sahibinin imzasıdır · kurtarma anahtarını yenilemek önceki yedekleri kapatmaz · çıktı, programın dışına çıkınca korumadan da çıkar · kayıp ya da çalınmada bildirim programın işi değildir, KVKK md. 12/5) · **Teknik Bilgiler** |
 | — | Kurulum Sihirbazı | `/kurulum` | Menüde yoktur. İlk açılışta kurulum kapısı buraya getirir; kurulumdan sonra Ayarlar'ın altındaki **Kurulum Sihirbazı** kartıyla açılır |
 
-Ana gezinmenin sırası: Genel Bakış · Kişiler · Ayarlar · Kılavuz. Görevli kipinde gezinme bağlantıları gösterilmez,
-her adreste görevli ekranı durur (aile iskeleti; F1b 1. adıma dek). Planlanan ekranlar: Kullanıcılar F1b 2. adımda
-(plan §2.2; tasarım §14); Okul Bilgileri bugün Ayarlar'ın sekmesidir, OAB alanları F1b 4. adımda gelir; Birlik Dönemi,
+Ana gezinmenin sırası: Genel Bakış · Kişiler · Ayarlar · Kılavuz. Role göre gezinme F1b 2. adımda gelir (tasarım
+§4.4.2). Planlanan ekranlar: Kullanıcılar F1b 2. adımda (plan §2.2; tasarım §14); Okul Bilgileri bugün Ayarlar'ın sekmesidir, OAB alanları F1b 4. adımda gelir; Birlik Dönemi,
 Kişiler (OAB'nin kişi türleriyle), Organlar, Temsilciler ve Pano (yol haritası) F1c'dedir (plan §2.3). Adları ekran
 gelince buraya işlenir.
 
@@ -213,7 +213,6 @@ açıkken kendi h1'ini üst çubuğa yazar (`ui/DurumBasligi.tsx`; `UstCubukBasl
 | Durum | Başlık |
 |---|---|
 | Kilitli | **Kayıtlar kilitli** |
-| Görevli kipi | **Görevli Kipi** (aile iskeleti; F1b 1. adımda kalkar) |
 | Güvenlik dosyası yok ya da bozuk | **Güvenlik dosyası bulunamadı ya da okunamıyor** |
 | Yedekten geri yüklendi | **Programı kapatıp yeniden açın** |
 
@@ -222,10 +221,18 @@ eski** (eski program, yeni veri — çıkış kodu 4) · **Veritabanı bozuk** �
 Defteri zaten çalışıyor** · **Pencere açılamadı** · **Program başlatılamadı** · **OAB Defteri açılamadı** (genel).
 İletinin gövdesi sonucu, ikinci paragrafı yapılacak işi söyler.
 
-Üst çubuktaki kip göstergesinin adları (aile iskeleti; F1b 1. adıma dek): kip adı **Yönetici kipi** / **Görevli
-kipi**; düğmeler **Görevli kipine geç** (kısayol Ctrl+Shift+G), **Yönetici kipine geç**, **Kilitle**. Her durumda
-görünen **Çık** düğmesinin pencereleri: **Programdan çıkılsın mı?** (onay) / **Programdan çık** (görevli kipinde,
-yönetici parolasıyla) · **Program kapanıyor**.
+Kilit ekranının adları: grup **Hesap** (satır rol etiketi + tanıtıcı; §1 "Hesap"), alan **Parola**, düğme **Aç**
+(sürerken **"Açılıyor…"**, beklerken **"Denetleniyor…"**); zorunlu yenilemede **Yeni parola** · **Parola (tekrar)** ·
+**Parolayı yenile ve aç** · **Vazgeç**; kurtarma yolu **Parolamı unuttum** → **Kurtarma anahtarı** · **Yeni parola** ·
+**Parola (tekrar)** · **Kurtar ve aç** · **Parolayla açmaya dön**. Liste boşsa (kayıtlar kurtarma anahtarıyla geri
+yüklendi) kurtarma yolu doğrudan açılır ve gerekçesini söyler. Hesap seçilmeden gönderilince Hesap grubunun altında
+**"Hesabınızı seçin."** (kurtarma yolunda **"Program yöneticisi hesabını seçin."**) yazar; onuncu hatalı denemedeki
+askı iletisi de orada kalır ve seçim bırakılır (başka hesap kendiliğinden seçilmez).
+
+Üst çubuktaki **oturum göstergesi** (yalnız açık oturumda): rol etiketi ve tanıtıcı, boşta kilide geri sayım (kurulumdan
+sonra), **"İşlem bitince kilitlenecek"** (kilit ertelenmişse), düğme **Kilitle** (ipucu "Kilitle (Ctrl+Shift+L)").
+Her durumda görünen **Çık** düğmesinin pencereleri: **Programdan çıkılsın mı?** (onay; her durumda parolasız) ·
+**Program kapanıyor**.
 
 ### 4.3 Sekmeler
 
@@ -239,7 +246,7 @@ yönetici parolasıyla) · **Program kapanıyor**.
 Kişiler'in Öğrenciler sekmesi F1b 5. adımda sökülür (plan §2.2).
 
 Pencere başlıkları (Dialog): **Yeni öğrenci** / **Öğrenciyi düzenle** · **Yeni kişi** / **Kişiyi düzenle** ·
-**Parolayı değiştir** · **Yönetici kipine geç**. Onay diyaloglarının başlıkları (soru, §3): **Ders yılı
+**Parolayı değiştir**. Onay diyaloglarının başlıkları (soru, §3): **Program kilitlensin mi?** · **Ders yılı
 aktifleştirilsin mi?** · **Şube katalogdan kaldırılsın mı?** · **Kapalı gün silinsin mi?** · **Öğrenci ayrıldı olarak
 işaretlensin mi?** · **Öğrenci sicilden silinsin mi?** · **Kişi ayrıldı olarak işaretlensin mi?** · **Kişi sicilden
 silinsin mi?** · **Bu iki kayıt aynı kişi mi?** · **Kurtarma anahtarı yenilensin mi?** · **Yedekten geri yüklensin
@@ -248,24 +255,32 @@ mi?** · **Güvenlik dosyası sıfırlansın mı?**. Kişiler'deki içe aktarma 
 
 ### 4.4 Kurulum Sihirbazı adımları
 
-Adım rayındaki adlar, sırasıyla: **Yönetici Parolası** · **Okul Bilgileri** · **Ders Yılı ve Kapalı Günler**. İlk
-adım atlanamaz. Adımlar arası düğmeler: **Geri**, **Devam** (1. adım), **Kaydet ve devam et** (2. adım), **Kurulumu
-tamamla** (son adım).
+Adım rayındaki adlar, sırasıyla: **Program Yöneticisi Hesabı** · **Okul Bilgileri** · **Ders Yılı ve Kapalı
+Günler**. İlk adım atlanamaz. Adımlar arası düğmeler: **Geri**, **Devam** (1. adım), **Kaydet ve devam et** (2. adım),
+**Kurulumu tamamla** (son adım).
 
-F1b'de sihirbazın ilk üç adımı OAB'nin düzenine döner: yönetici hesabı ve parolası + kurtarma anahtarı · okul kartı ·
-ders yılı, dönemler, kapalı günler (plan §2.2; tasarım §5.1, §14). Geçiş kurulumunun adımları sonra gelir: ilk birlik
-dönemi ve görevdeki kurul F1c'de, birliğin banka hesabı ve açılış (devreden) bakiyesi F3'te. Adların yeni hâli adım
-gelince buraya işlenir.
+1. adımın alanları **Tanıtıcı** · **Ad-soyad** · **Parola** · **Parola (tekrar)**, düğme **"Hesabı kur"** (sürerken
+**"Kuruluyor…"**), snackbar **"Program yöneticisi hesabı kuruldu."**; hesap kurulmadan ilerleme ipucu **"Devam etmek
+için program yöneticisi hesabını kurun."** Hesap kurulunca **Kurtarma Anahtarınız** paneli anahtarı no'su ve üretim
+tarihiyle gösterir. Bu adımda Kilitle'ye basılırsa ve anahtar henüz doğrulanmadıysa önce **"Program kilitlensin
+mi?"** sorulur (§1 "Kilit ve çıkış").
+
+F1b'de sihirbazın öteki adımları da OAB'nin düzenine döner: okul kartı (OAB alanları 4. adımda) · ders yılı,
+dönemler, kapalı günler (plan §2.2; tasarım §5.1, §14). Geçiş kurulumunun adımları sonra gelir: ilk birlik dönemi ve
+görevdeki kurul F1c'de, birliğin banka hesabı ve açılış (devreden) bakiyesi F3'te. Adların yeni hâli adım gelince
+buraya işlenir.
 
 ### 4.5 Genel Bakış kartları
 
 Sırasıyla: **Başlangıç Yol Haritası** (kurulumdan sonra; bütün maddeler bitince gizlenebilir; kurtarma anahtarı
 doğrulanmamışsa uyarı kartın başındadır. Maddeler bugün: e-Okul aktarımları, öğrenciye kapalı günler ve kurtarma
 anahtarının müdürlükte kapalı zarfta saklanması; parolanın paylaşılmasını öğütleyen madde yoktur — §1 "Parola") ·
-**Son Oturumu Kontrol Edin** (yalnız önceki oturum düzgün kapanmadıysa; düğme **"Kontrol ettim"**) · **Ayrılış
+**Son Oturumu Kontrol Edin** (yalnız önceki oturum düzgün kapanmadıysa; düğme **"Kontrol ettim"**) · **Okunamayan
+Kayıt Alanları** (yalnız çözülemeyen şifreli alan varken; kişisiz, yalnız sayı: "Program açıldığından beri N şifreli
+alan okunamadı; bu alanlar ekranda “okunamadı” diye görünür." — §1 "Şifreleme") · **Ayrılış
 Havuzu** (yalnız havuz boş değilken, yalnız sayı: "N kişi ayrılış kararı bekliyor" → Kişiler → Ayrılış Havuzu) ·
 **Şifreli Yedeği USB Belleğe Alın** (yalnız son şifreli yedek indirmesinden hatırlatma süresi — varsayılan 30 gün,
-ayarla 7-90 — geçince; hiç indirme yoksa yönetici parolası kurulduktan 7 gün sonra: "Son şifreli yedek gg.aa.yyyy
+ayarla 7-90 — geçince; hiç indirme yoksa program yöneticisi hesabı kurulduktan 7 gün sonra: "Son şifreli yedek gg.aa.yyyy
 tarihinde indirildi (N gün önce)." / "Bu bilgisayarda henüz şifreli yedek indirilmedi."; bağlantı **"Ayarlar →
 Güvenlik'i aç"**; program dosyanın USB belleğe kopyalandığını bilemez, kart "son indirme" der) · **Kişiler** ·
 **Ayarlar** (gezinme kartları).
@@ -274,15 +289,19 @@ OAB'nin pano kartları F1c'de gelir (tasarım §7.10).
 
 ### 4.6 Ayarlar → Güvenlik kartları
 
-Sırasıyla: **Yönetici Parolası ve Şifreleme** (durumu, şifrelenen alanları, **"Parolayı değiştir"** ve
-**"Kilitle"** düğmelerini taşır) · **Kurtarma Anahtarınız** (yalnız yeni üretilmiş anahtar beklerken) · **Kurtarma
-Anahtarını Doğrula** (yalnız anahtar doğrulanmamışken; üstünde "Kurtarma anahtarı doğrulanmadı" uyarısı) ·
-**Kurtarma Anahtarını Yenile** · **Kurtarma anahtarı çıktısı** (belge adı, §2; düğme **"PDF olarak kaydet"**) ·
-**Şifreli Veritabanı Yedeği** (düğme **"Şifreli yedeği indir"**, son indirme cümlesi, hatırlatmanın durumu ve
-**"Hatırlatma süresi"** seçimi) · **Yedekten Geri Yükleme**.
+Sırasıyla: **Hesap ve Parola** (oturumdaki hesabın rol etiketi ve tanıtıcısı, kişi adı yok; **"Parolayı
+değiştir"** ve **"Kilitle"** düğmeleri; hesap kurulmamışsa "Program yöneticisi hesabı kurulmadı." ve **"Kurulum
+Sihirbazı'nı aç"**) · **Boşta Kilit Süresi** (yalnız hesap kurulduktan sonra; §1 "Kilit ve çıkış") · **Şifreleme**
+(durumu, şifrelenen ve şifrelenmeyen alanlar, "en zayıf hesap parolası" sınırı) · **Kurtarma Anahtarınız** (yalnız
+yeni üretilmiş anahtar beklerken) · **Kurtarma Anahtarını Doğrula** (yalnız anahtar doğrulanmamışken; üstünde
+"Kurtarma anahtarı doğrulanmadı" uyarısı) · **Kurtarma Anahtarını Yenile** · **Kurtarma anahtarı belgesi** (belge adı,
+§2; güncel anahtarın no'su ve üretim tarihi; düğme **"PDF olarak kaydet"**) · **Şifreli Veritabanı Yedeği** (düğme
+**"Şifreli yedeği indir"**, son indirme cümlesi, hatırlatmanın durumu ve **"Hatırlatma süresi"** seçimi) · **Yedekten
+Geri Yükleme** (seçilen yedeği açan anahtarın cümlesi; alanlar **"Parolanız"** ve **"Kurtarma anahtarı"**; güvenlik
+dosyası kayıp ekranında yalnız **"Kurtarma anahtarı"**).
 
-Kart başlıkları durumla DEĞİŞMEZ (§3 "Başlık sabit addır"): kullanıcıya "Ayarlar → Güvenlik → Yönetici Parolası ve
-Şifreleme" diye yol tarif edilebilsin.
+Kart başlıkları durumla DEĞİŞMEZ (§3 "Başlık sabit addır"): kullanıcıya "Ayarlar → Güvenlik → Hesap ve Parola"
+diye yol tarif edilebilsin. Kurtarma kartlarının yalnız program yöneticisine görünmesi F1b 2. adımda gelir.
 
 ### 4.7 Güncelleme ekranının adları
 
@@ -295,7 +314,7 @@ engellenmiş olabilir. Yeni sürümü indir.okulapp.org'dan elle denetleyebilirs
 **okulapp.org/oab-defteri** (dış tarayıcıda açılır). Pardus'ta indirme düğmesi yoktur; ekran güncellemenin paketle
 yapıldığını söyler.
 
-Elle denetim yeni sürüm bulursa kabukta **güncelleme bandı** durur (Ayarlar'da ve görevli kipinde gizli;
+Elle denetim yeni sürüm bulursa kabukta **güncelleme bandı** durur (Ayarlar'da gizli;
 `UpdateBanner.tsx`). **Bugünkü sapma:** bant aynı kavramlar için aileden kalan adları kullanır: "OAB Defteri … hazır.
 Çalışan sürüm: …", düğme **"Güncellemeyi indir"** (sürerken "İndiriliyor…") · **"Daha sonra"**. Bu adlar F1b 6. adımda
 §1 "Sürüm" satırındaki **"kurulu sürüm"** ve **"Doğrula ve indir"** adlarına uydurulur.
@@ -322,7 +341,10 @@ Dayanak CLAUDE.md §2 altın kural 5 ve tasarım §3.4, §9.1-5'tir.
   aydınlatma metnidir (E04). Metin e-Okul aktarımından **önce** gösterilir
   ([KVKK md. 10/1](mevzuat/6698-kvkk.md#madde-10) "elde edilmesi sırasında"): F1b 5. adımda içe aktarma ekranında,
   belgesi F2'de (plan §2.2).
-- **Kilit ekranı kişi adı göstermez;** hesaplar rol etiketiyle listelenir (tasarım §4.4.3, F1b).
+- **Kilit ekranı ve üst çubuk kişi adı göstermez;** hesaplar rol etiketi ve tanıtıcıyla listelenir (tasarım §4.4.3).
+  Hesap sahibinin ad-soyadı şifreli saklanır; Ayarlar → Güvenlik de oturumu rol etiketi ve tanıtıcıyla yazar.
+- **Okunamayan ad tahmin edilmez:** çözülemeyen şifreli alan "okunamadı" diye görünür; onay diyaloğu "Adı okunamayan
+  bu kayıt", erişilebilir ad "Adı okunamayan kayıt" der (eylemde belirtme hâliyle: "Adı okunamayan kaydı düzenle"). Genel Bakış kartı yalnız sayıyı verir (§1 "Şifreleme").
 - **Şifreleme dürüst anlatılır:** metin olduğundan güçlü bir koruma vadetmez; şifrelenen alanları ve şifrelenmeyenleri
   ayrı ayrı söyler, tam disk şifrelemesi olmadığını yazar (§1 "Şifreleme"; tasarım §4.4.6).
 - **Destek ve hata bildirimi:** iletiye öğrenci, veli ya da personel bilgisi, gerçek veri içeren ekran görüntüsü,

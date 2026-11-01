@@ -1,7 +1,10 @@
-// Kurulum sihirbazı testi (sihirbaz kapısı): parola adımı olmadan ilerlenmez;
-// kurtarma anahtarı iki grubu geri yazılarak doğrulanıp sunucuda damgalanmadan
-// devam edilmez (genel tasarım §4.4.5); anahtar ekranda değilken kâğıttan doğrulama ve
-// YENİ anahtar üretme yolları (kaybolan anahtar senaryosu uçtan uca); okul
+// Kurulum sihirbazı testi (sihirbaz kapısı): program yöneticisi hesabı kurulmadan
+// ilerlenmez; hesap formu (tanıtıcı + kuralı, ad-soyad, parola politikası ve güç
+// göstergesi, tanıtıcı ad-soyadı içeriyorsa gönderimden ÖNCE ve sonra uyarı — engel
+// değil) ve ilk hesabın pencereyi yeniden yüklememesi (tasarım §13 D53); kurtarma
+// anahtarı (no'su ve üretim tarihiyle) iki grubu geri yazılarak doğrulanıp sunucuda
+// damgalanmadan devam edilmez (genel tasarım §4.4.5); anahtar ekranda değilken kâğıttan
+// doğrulama ve YENİ anahtar üretme yolları (kaybolan anahtar senaryosu uçtan uca); okul
 // adımının zorunlu alanları (kademe, kısa ad, demirbaş onayı); ders yılı
 // kaydedilince iki takvim yılının tatilleri eklenir; `setup/complete/` reddi
 // iletisiyle gösterilir; ve sihirbaz UÇTAN UCA çalışır.
@@ -17,6 +20,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../lib/api";
+import { pencereIcerigi } from "../../lib/kilit";
 import { ILK_ACILIS_DURUMU } from "../../test/kurulumDurumu";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
@@ -72,6 +76,8 @@ import KurulumPage from "./KurulumPage";
 const ANAHTAR = "TEST-KURT-ARMA-ANAH-TARI-ABCD-EFGH-JKLM";
 const YENI_ANAHTAR = "YENI-ANAH-TARD-EFGH-JKLM-NOPQ-RSTU-VWXY";
 const PAROLA = "Deneme-Parola-1";
+/** Uydurma ad-soyad; varsayılan tanıtıcıdaki ("yonetici") hiçbir sözcüğü içermez. */
+const AD_SOYAD = "Ayşe Deneme";
 
 // --- Bellek içi sahte sunucu -------------------------------------------------
 
@@ -185,7 +191,14 @@ function sunucuyuKur(baslangic: Partial<Sunucu> = {}) {
     sunucu.parola = true;
     sunucu.dogrulandi = false;
     sunucu.anahtar = ANAHTAR;
-    return { ...durum(), recovery_key: ANAHTAR, locked: false };
+    return {
+      ...durum(),
+      recovery_key: ANAHTAR,
+      recovery_key_no: 1,
+      recovery_key_date: "2026-11-01",
+      login_name_warning: null,
+      locked: false,
+    };
   });
   // Backend `confirm_recovery_key`: anahtar sarmalı açıyorsa damga yazılır.
   gapi.kurtarmaAnahtariniDogrula.mockImplementation(async (anahtar: string) => {
@@ -206,7 +219,13 @@ function sunucuyuKur(baslangic: Partial<Sunucu> = {}) {
     if (parola !== PAROLA) throw new ApiError(400, "validation_error", "Parola hatalı.");
     sunucu.anahtar = YENI_ANAHTAR;
     sunucu.dogrulandi = false;
-    return { password_set: true, recovery_key_confirmed: false, recovery_key: YENI_ANAHTAR };
+    return {
+      password_set: true,
+      recovery_key_confirmed: false,
+      recovery_key: YENI_ANAHTAR,
+      recovery_key_no: 2,
+      recovery_key_date: "2026-11-02",
+    };
   });
 }
 
@@ -256,11 +275,24 @@ async function anahtariDogrulaVeDevamEt(user: ReturnType<typeof userEvent.setup>
   await user.click(ileri("Devam"));
 }
 
-/** Parolayı kurar ve anahtarın sorulan iki grubunu (sabit rastgele: 1. ve 2.) doğrular. */
+/** "Parola" alanı (tekrarı ve "Parola gücü" göstergesinden ayrışsın diye tam etiket). */
+const PAROLA_ALANI = /^Parola \*$/;
+
+/** Hesap formunu doldurur (tanıtıcı varsayılan kalır) ve "Hesabı kur"a basar. */
+async function hesapFormunuDoldurVeKur(
+  user: ReturnType<typeof userEvent.setup>,
+  parola = PAROLA,
+  tekrar = parola,
+) {
+  await user.type(await screen.findByLabelText(/^Ad-soyad/), AD_SOYAD);
+  await user.type(screen.getByLabelText(PAROLA_ALANI), parola);
+  await user.type(screen.getByLabelText(/^Parola \(tekrar\)/), tekrar);
+  await user.click(screen.getByRole("button", { name: "Hesabı kur" }));
+}
+
+/** Hesabı kurar ve anahtarın sorulan iki grubunu (sabit rastgele: 1. ve 2.) doğrular. */
 async function parolaAdiminiGec(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(await screen.findByLabelText(/^Yönetici parolası/), PAROLA);
-  await user.type(screen.getByLabelText(/^Parola \(tekrar\)/), PAROLA);
-  await user.click(screen.getByRole("button", { name: "Yönetici parolasını kur" }));
+  await hesapFormunuDoldurVeKur(user);
   expect(await screen.findByTestId("kurtarma-anahtari")).toHaveTextContent(ANAHTAR);
   await anahtariDogrulaVeDevamEt(user, ANAHTAR);
 }
@@ -278,62 +310,183 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("KurulumPage — 1. adım: yönetici parolası (atlanamaz)", () => {
-  it("ilk açılışta parola adımından başlar; parola kurulmadan ilerlenemez", async () => {
+describe("KurulumPage — 1. adım: program yöneticisi hesabı (atlanamaz)", () => {
+  it("ilk açılışta hesap adımından başlar; hesap kurulmadan ilerlenemez", async () => {
     renderPage();
 
-    expect(await screen.findByText("1. Yönetici Parolası")).toBeInTheDocument();
+    expect(await screen.findByText("1. Program Yöneticisi Hesabı")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { level: 1, name: "Kurulum Sihirbazı" }),
     ).toBeInTheDocument();
     expect(ileri("Devam")).toBeDisabled();
-    expect(screen.getByText("Devam etmek için yönetici parolasını kurun.")).toBeInTheDocument();
-    // Adım rayı tıklanmaz (tamamlanmış adım olsa bile parola kapısı kapalı).
+    expect(
+      screen.getByText("Devam etmek için program yöneticisi hesabını kurun."),
+    ).toBeInTheDocument();
+    // Adım rayının adı sözlük §4.4'tekidir; ray tıklanmaz (hesap kapısı kapalı).
     const ray = screen.getByRole("list", { name: "Kurulum adımları" });
+    expect(within(ray).getByText("Program Yöneticisi Hesabı")).toBeInTheDocument();
     expect(within(ray).queryAllByRole("button")).toHaveLength(0);
-    // Eski "isteğe bağlı parola" dili yoktur.
+    // Eski "isteğe bağlı parola" ve tek "yönetici parolası" dili yoktur.
     expect(screen.queryByText(/isteğe bağlı/i)).toBeNull();
+    expect(document.body.textContent).not.toMatch(/yönetici parolası/i);
     expect(screen.queryByText("2. Okul Bilgileri")).toBeNull();
   });
 
-  it("okul bilgileri önceden tamam olsa bile parola yokken adım rayı atlatmaz", async () => {
+  it("form: tanıtıcı varsayılan “yonetici”, kural metni, ad-soyad, parola gücü göstergesi", async () => {
+    renderPage();
+
+    expect(await screen.findByLabelText(/^Tanıtıcı/)).toHaveValue("yonetici");
+    expect(screen.getByText(/Kilit ekranında herkese görünen hesap adıdır/)).toBeInTheDocument();
+    expect(screen.getByText(/şifreli saklanır, kilit ekranında görünmez/)).toBeInTheDocument();
+    expect(screen.getByRole("meter", { name: "Parola gücü" })).toBeInTheDocument();
+    // Parola cümlesi önerisi (yerel öneri; tasarım TK15).
+    expect(screen.getByText(/en az 12 karakter/)).toBeInTheDocument();
+  });
+
+  it("okul bilgileri önceden tamam olsa bile hesap yokken adım rayı atlatmaz", async () => {
     sunucuyuKur({ okul: { ...TAM_OKUL } });
     renderPage();
-    expect(await screen.findByText("1. Yönetici Parolası")).toBeInTheDocument();
+    expect(await screen.findByText("1. Program Yöneticisi Hesabı")).toBeInTheDocument();
     const ray = screen.getByRole("list", { name: "Kurulum adımları" });
     expect(within(ray).queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("ad-soyad girilmeden hesap kurulamaz", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(await screen.findByLabelText(PAROLA_ALANI), PAROLA);
+    await user.type(screen.getByLabelText(/^Parola \(tekrar\)/), PAROLA);
+    expect(screen.getByRole("button", { name: "Hesabı kur" })).toBeDisabled();
+    expect(gapi.kur).not.toHaveBeenCalled();
   });
 
   it("eşleşmeyen parola tekrarında istek atmaz", async () => {
     const user = userEvent.setup();
     renderPage();
-    await user.type(await screen.findByLabelText(/^Yönetici parolası/), "Deneme-Parola-1");
-    await user.type(screen.getByLabelText(/^Parola \(tekrar\)/), "baska");
-    await user.click(screen.getByRole("button", { name: "Yönetici parolasını kur" }));
+    await hesapFormunuDoldurVeKur(user, PAROLA, "baska");
     expect(await screen.findByText("Parolalar eşleşmedi.")).toBeInTheDocument();
+    // Eşleşmeme tekrar alanının hatasıdır; ilk alan işaretlenmez.
+    expect(screen.getByLabelText(/^Parola \(tekrar\)/)).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText(PAROLA_ALANI)).not.toHaveAttribute("aria-invalid");
     expect(gapi.kur).not.toHaveBeenCalled();
   });
 
-  it("backend reddi (ör. kısa parola) iletisiyle gösterilir", async () => {
+  it("parola politikası gönderimden önce denetlenir (sunucunun iletileriyle)", async () => {
     const user = userEvent.setup();
-    gapi.kur.mockRejectedValue(
-      new ApiError(400, "validation_error", "Parola en az 8 karakter olmalıdır.", {}),
-    );
     renderPage();
-    await user.type(await screen.findByLabelText(/^Yönetici parolası/), "kisa");
-    await user.type(screen.getByLabelText(/^Parola \(tekrar\)/), "kisa");
-    await user.click(screen.getByRole("button", { name: "Yönetici parolasını kur" }));
+    await hesapFormunuDoldurVeKur(user, "kisa");
     expect(await screen.findByText("Parola en az 8 karakter olmalıdır.")).toBeInTheDocument();
+    // Politika iletisi Parola alanının altındadır (tekrar alanının değil); kural metni de
+    // o alana bağlıdır.
+    expect(screen.getByLabelText(PAROLA_ALANI)).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText(PAROLA_ALANI)).toHaveAccessibleDescription(
+      /^Parola en az 8 karakter olmalıdır\. En az 8 karakter; küçük harf/,
+    );
+    expect(screen.getByLabelText(/^Parola \(tekrar\)/)).not.toHaveAttribute("aria-invalid");
+    expect(gapi.kur).not.toHaveBeenCalled();
+
+    await user.clear(screen.getByLabelText(PAROLA_ALANI));
+    await user.clear(screen.getByLabelText(/^Parola \(tekrar\)/));
+    await user.type(screen.getByLabelText(PAROLA_ALANI), "uzunamaduz1");
+    await user.type(screen.getByLabelText(/^Parola \(tekrar\)/), "uzunamaduz1");
+    await user.click(screen.getByRole("button", { name: "Hesabı kur" }));
+    expect(
+      await screen.findByText(
+        "Parola küçük harf, büyük harf, rakam ve simge içermelidir; eksik: büyük harf, simge.",
+      ),
+    ).toBeInTheDocument();
+    expect(gapi.kur).not.toHaveBeenCalled();
   });
 
-  it("anahtar gösterilir; iki grup doğrulanmadan devam edilemez, doğrulanınca okul adımına geçer", async () => {
+  it("kurala uymayan tanıtıcı alanın altında söylenir, istek atılmaz", async () => {
     const user = userEvent.setup();
     renderPage();
-    await user.type(await screen.findByLabelText(/^Yönetici parolası/), "Deneme-Parola-1");
-    await user.type(screen.getByLabelText(/^Parola \(tekrar\)/), "Deneme-Parola-1");
-    await user.click(screen.getByRole("button", { name: "Yönetici parolasını kur" }));
+    const tanitici = await screen.findByLabelText(/^Tanıtıcı/);
+    await user.clear(tanitici);
+    await user.type(tanitici, "iki sözcük");
+    await hesapFormunuDoldurVeKur(user);
+    expect(await screen.findByText(/Tanıtıcı 2-32 karakter olmalıdır/)).toBeInTheDocument();
+    expect(gapi.kur).not.toHaveBeenCalled();
+  });
+
+  it("tanıtıcı ad-soyadı içeriyorsa gönderimden ÖNCE uyarır ama engellemez", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const tanitici = await screen.findByLabelText(/^Tanıtıcı/);
+    await user.clear(tanitici);
+    await user.type(tanitici, "Ayse.D");
+    // Ad-soyad yazılmadan uyarı yoktur.
+    expect(screen.queryByText(/Tanıtıcı hesap sahibinin adını içeriyor/)).toBeNull();
+    await user.type(screen.getByLabelText(/^Ad-soyad/), "Ayşe Deneme");
+    // Türkçe harf katlanır ("Ayşe" ≡ "ayse"); uyarı canlı bölgede, engel değil.
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Tanıtıcı hesap sahibinin adını içeriyor.",
+    );
+    await user.type(screen.getByLabelText(PAROLA_ALANI), PAROLA);
+    await user.type(screen.getByLabelText(/^Parola \(tekrar\)/), PAROLA);
+    await user.click(screen.getByRole("button", { name: "Hesabı kur" }));
+
+    // Tanıtıcı Türkçe küçük harfe çevrilip gönderilir; ad-soyadın ara boşlukları tekleşir.
+    await waitFor(() =>
+      expect(gapi.kur).toHaveBeenCalledWith({
+        tanitici: "ayse.d",
+        ad_soyad: "Ayşe Deneme",
+        parola: PAROLA,
+      }),
+    );
+  });
+
+  it("sunucunun döndürdüğü tanıtıcı uyarısı hesap kurulduktan sonra anahtarın üstünde kalır", async () => {
+    const user = userEvent.setup();
+    const uyari =
+      "Tanıtıcı hesap sahibinin adını içeriyor. Tanıtıcı kilit ekranında herkese görünür; " +
+      "rolden türeyen bir tanıtıcı seçmeniz önerilir.";
+    gapi.kur.mockImplementationOnce(async () => {
+      sunucu.parola = true;
+      return {
+        ...durum(),
+        recovery_key: ANAHTAR,
+        recovery_key_no: 1,
+        recovery_key_date: "2026-11-01",
+        login_name_warning: uyari,
+      };
+    });
+    renderPage();
+    await hesapFormunuDoldurVeKur(user);
 
     expect(await screen.findByTestId("kurtarma-anahtari")).toHaveTextContent(ANAHTAR);
+    expect(screen.getByText(uyari)).toBeInTheDocument();
+  });
+
+  it("backend reddi iletisiyle bantta gösterilir", async () => {
+    const user = userEvent.setup();
+    gapi.kur.mockRejectedValue(
+      new ApiError(400, "validation_error", "Hesap sahibinin adı-soyadı boş olamaz.", {}),
+    );
+    renderPage();
+    await hesapFormunuDoldurVeKur(user);
+    expect(await screen.findByText("Hesap sahibinin adı-soyadı boş olamaz.")).toBeInTheDocument();
+    expect(screen.queryByTestId("kurtarma-anahtari")).toBeNull();
+  });
+
+  it("anahtar no'su ve tarihiyle gösterilir; iki grup doğrulanmadan devam edilemez, doğrulanınca okul adımına geçer", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await hesapFormunuDoldurVeKur(user);
+
+    expect(await screen.findByTestId("kurtarma-anahtari")).toHaveTextContent(ANAHTAR);
+    expect(screen.getByTestId("kurtarma-kimligi")).toHaveTextContent(
+      "Anahtar no 1 · üretim tarihi 01.11.2026",
+    );
+    // İlk program yöneticisi hesabı: Türkçe gövde, varsayılan tanıtıcı (tasarım §4.4.4).
+    expect(gapi.kur).toHaveBeenCalledWith({
+      tanitici: "yonetici",
+      ad_soyad: AD_SOYAD,
+      parola: PAROLA,
+    });
+    // İlk hesap pencereyi yeniden YÜKLEMEZ (tasarım §13 D53): anahtar ekranda kalır.
+    expect(pencereIcerigi.yenidenYukle).not.toHaveBeenCalled();
+    expect(await screen.findByText("Program yöneticisi hesabı kuruldu.")).toBeInTheDocument();
     expect(ileri("Devam")).toBeDisabled();
     expect(
       screen.getByText("Devam etmek için kurtarma anahtarını sakladığınızı doğrulayın."),
@@ -353,27 +506,25 @@ describe("KurulumPage — 1. adım: yönetici parolası (atlanamaz)", () => {
     // Geri dönülünce anahtar bir daha gösterilmez (bellekte tutulmaz).
     await user.click(screen.getByRole("button", { name: "Geri" }));
     expect(
-      await screen.findByText(/Parola kurulu, kurtarma anahtarının saklandığı doğrulandı/),
+      await screen.findByText(/Hesap kurulu, kurtarma anahtarının saklandığı doğrulandı/),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("kurtarma-anahtari")).toBeNull();
-    expect(screen.getByRole("heading", { name: "Kurtarma anahtarı çıktısı" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Kurtarma anahtarı belgesi" })).toBeInTheDocument();
   });
 
-  it("anahtar sihirbazdan PDF olarak kaydedilir", async () => {
+  it("anahtar sihirbazdan PDF olarak kaydedilir (backend'in Content-Disposition adıyla)", async () => {
     const user = userEvent.setup();
     const pdf = new Blob(["%PDF-"]);
     gapi.kurtarmaAnahtariPdf.mockResolvedValue(pdf);
     renderPage();
-    await user.type(await screen.findByLabelText(/^Yönetici parolası/), "Deneme-Parola-1");
-    await user.type(screen.getByLabelText(/^Parola \(tekrar\)/), "Deneme-Parola-1");
-    await user.click(screen.getByRole("button", { name: "Yönetici parolasını kur" }));
+    await hesapFormunuDoldurVeKur(user);
 
     await user.click(await screen.findByRole("button", { name: "PDF olarak kaydet" }));
 
     await waitFor(() => expect(gapi.kurtarmaAnahtariPdf).toHaveBeenCalledWith(ANAHTAR));
     expect(indirme.saveBlob).toHaveBeenCalledWith(
       pdf,
-      expect.stringMatching(/^Kurtarma-Anahtarı-Çıktısı_\d{2}\.\d{2}\.\d{4}\.pdf$/),
+      expect.stringMatching(/^Kurtarma-Anahtarı-Belgesi_\d{2}\.\d{2}\.\d{4}\.pdf$/),
     );
   });
 });
@@ -403,7 +554,7 @@ describe("KurulumPage — 1. adım: anahtar ekranda değilken", () => {
     await user.click(screen.getByRole("button", { name: "Doğrula" }));
 
     expect(
-      await screen.findByText(/Parola kurulu, kurtarma anahtarının saklandığı doğrulandı/),
+      await screen.findByText(/Hesap kurulu, kurtarma anahtarının saklandığı doğrulandı/),
     ).toBeInTheDocument();
     expect(sunucu.dogrulandi).toBe(true);
     await waitFor(() => expect(ileri("Devam")).toBeEnabled());
@@ -425,11 +576,15 @@ describe("KurulumPage — 1. adım: anahtar ekranda değilken", () => {
     const diyalog = await screen.findByRole("dialog", { name: "Kurtarma anahtarı yenilensin mi?" });
     // Dürüst metin: eski yedekler eski anahtarla açılır.
     expect(within(diyalog).getByText(/Bugünden önce alınmış yedekler/)).toBeInTheDocument();
-    await user.type(within(diyalog).getByLabelText(/^Yönetici parolası/), PAROLA);
+    await user.type(within(diyalog).getByLabelText(/^Parolanız/), PAROLA);
     await user.click(within(diyalog).getByRole("button", { name: "Yeni anahtar üret" }));
 
     await waitFor(() => expect(gapi.kurtarmaAnahtariniYenile).toHaveBeenCalledWith(PAROLA));
     expect(await screen.findByTestId("kurtarma-anahtari")).toHaveTextContent(YENI_ANAHTAR);
+    // Yeni anahtarın no'su bir artmıştır; kâğıda yazılacak kimlik anahtarın üstünde.
+    expect(screen.getByTestId("kurtarma-kimligi")).toHaveTextContent(
+      "Anahtar no 2 · üretim tarihi 02.11.2026",
+    );
     expect(ileri("Devam")).toBeDisabled();
 
     await anahtariDogrulaVeDevamEt(user, YENI_ANAHTAR);
@@ -452,7 +607,7 @@ describe("KurulumPage — 1. adım: anahtar ekranda değilken", () => {
 
     await user.click(await screen.findByRole("button", { name: "Kurtarma anahtarını yenile" }));
     const diyalog = await screen.findByRole("dialog");
-    await user.type(within(diyalog).getByLabelText(/^Yönetici parolası/), "yanlis-parola");
+    await user.type(within(diyalog).getByLabelText(/^Parolanız/), "yanlis-parola");
     await user.click(within(diyalog).getByRole("button", { name: "Yeni anahtar üret" }));
 
     expect(await within(diyalog).findByText("Parola hatalı.")).toBeInTheDocument();
@@ -617,12 +772,12 @@ describe("KurulumPage — 3. adım: ders yılı ve kapalı günler", () => {
       new ApiError(
         400,
         "kurulum_eksik",
-        "Kurulum tamamlanamadı. 1. adım (yönetici parolası): yönetici parolası kurulmadı.",
+        "Kurulum tamamlanamadı. 1. adım (program yöneticisi hesabı): hesap kurulmadı.",
       ),
     );
     renderPage();
     await user.click(await screen.findByRole("button", { name: "Kurulumu tamamla" }));
-    expect(await screen.findByText(/1\. adım \(yönetici parolası\)/)).toBeInTheDocument();
+    expect(await screen.findByText(/1\. adım \(program yöneticisi hesabı\)/)).toBeInTheDocument();
     expect(screen.queryByText("PANEL EKRANI")).toBeNull();
   });
 });

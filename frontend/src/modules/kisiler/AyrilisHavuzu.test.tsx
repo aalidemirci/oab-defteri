@@ -146,11 +146,11 @@ describe("AyrilisHavuzu — liste", () => {
 
   it("yükleme hatası bantta gösterilir", async () => {
     okulApiMock.getLeavePool.mockRejectedValue(
-      new ApiError(403, "kip_yetkisiz", "Bu işlem görevli kipinde yapılamaz."),
+      new ApiError(500, "error", "Havuz okunamadı; yeniden deneyin."),
     );
     kur();
 
-    expect(await screen.findByText("Bu işlem görevli kipinde yapılamaz.")).toBeInTheDocument();
+    expect(await screen.findByText("Havuz okunamadı; yeniden deneyin.")).toBeInTheDocument();
   });
 });
 
@@ -368,5 +368,53 @@ describe("AyrilisHavuzu — olası aynı kişi", () => {
 
     expect(okulApiMock.mergePersonnel).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog", { name: "Bu iki kayıt aynı kişi mi?" })).toBeInTheDocument();
+  });
+});
+
+// Çözülemeyen şifreli alan (tasarım §13 D48): havuz satırında da boş hücre değil
+// "okunamadı" yazar; seçim kutusunun adı kişi adı tahmin etmez.
+describe("AyrilisHavuzu — okunamayan şifreli alan", () => {
+  it("okunamayan ad ve okul no'su “okunamadı” diye görünür", async () => {
+    okulApiMock.getLeavePool.mockResolvedValue({
+      ...BOS,
+      student_count: 1,
+      personnel_count: 1,
+      students: [
+        {
+          ...HAVUZ.students[0],
+          full_name: null,
+          student_number: null,
+          bozuk_alanlar: ["last_name", "student_number"],
+        },
+      ],
+      personnel: [{ ...HAVUZ.personnel[1], full_name: null, bozuk_alanlar: ["first_name"] }],
+    });
+    kur();
+
+    const ogrenci = await screen.findByRole("region", { name: /^Öğrenciler/ });
+    expect(within(ogrenci).getAllByText("okunamadı")).toHaveLength(2);
+    expect(
+      within(ogrenci).getByRole("checkbox", { name: "Adı okunamayan kayıt seç" }),
+    ).toBeInTheDocument();
+    const personel = personelBolumu();
+    expect(within(personel).getByText("okunamadı")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/null/);
+  });
+
+  it("birleştirme düğmesinin adı okunamayanda “kayıt kaydını” ikilemesi kurmaz", async () => {
+    okulApiMock.getLeavePool.mockResolvedValue({
+      ...BOS,
+      personnel_count: 1,
+      personnel: [{ ...HAVUZ.personnel[0], full_name: null, bozuk_alanlar: ["last_name"] }],
+    });
+    kur();
+
+    expect(
+      await within(await screen.findByRole("region", { name: /^Öğretmenler/ })).findByRole(
+        "button",
+        { name: "Adı okunamayan kaydı AYŞE BEYAZ kaydıyla birleştir" },
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /kayıt kaydını/ })).toBeNull();
   });
 });

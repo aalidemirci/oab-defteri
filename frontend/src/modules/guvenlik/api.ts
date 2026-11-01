@@ -1,30 +1,34 @@
-// `guvenlik` modülü API istemcisi — yönetici parolası / kilit uçları.
-// Backend `apps/okul/{urls,views}.py` "security/*" bloğuyla BİREBİR.
+// `guvenlik` modülü API istemcisi — güvenlik durumu, ilk hesap, kurtarma anahtarı
+// belgesi, doğrulama ve yenileme, kayıp güvenlik dosyası ve yedekler.
+// Backend `apps/okul/{urls,views}.py` "security/*" ve "backups/*" bloklarıyla BİREBİR.
+// Oturum uçları (özet, kilit ekranının hesap listesi, kilit açma, Kilitle, kurtarma
+// anahtarıyla açılış, kendi parolasını değiştirme, boşta kilit süresi) ayrı istemcidedir:
+// `modules/oturum/api.ts` (backend `views_oturum.py`; tasarım §4.4.3).
 // Parolalar YALNIZ gövdede taşınır; hiçbir yanıtta geri dönmez. Tek istisna
-// `enable` yanıtındaki `recovery_key`: tek seferlik üretilir, bir daha alınamaz.
-// Yönetici parolası zorunludur: "parolayı kaldır" ucu YOKTUR (tasarım §4.4.3).
+// `enable` ve `renew` yanıtlarındaki `recovery_key`: tek seferlik üretilir, bir daha
+// alınamaz. İlk hesap zorunludur: "parolayı kaldır" ucu YOKTUR (tasarım §4.4.3).
 
 import { api } from "../../lib/api";
 
-/** `GET /security/status/` — sır içermez, her açılışta okunur. */
+/** `GET /security/status/` — sır ve kişi adı içermez, her açılışta okunur (`app_password.status`). */
 export interface GuvenlikDurumu {
   /**
-   * Yönetici parolası kurulu mu? Veri klasöründe `guvenlik.json` VAR ya da
+   * İlk program yöneticisi hesabı kurulu mu? Veri klasöründe `guvenlik.json` VAR ya da
    * veritabanında anahtar izi dolu (dosya kaybolsa bile "kurulu" sayılır).
    */
   password_set: boolean;
-  /** Kurulu ve anahtar bellekte değil → veri okunamaz. */
+  /** Kurulu ve oturum açık değil → veri okunamaz (kilit ekranı). */
   locked: boolean;
   /**
-   * Güvenlik dosyası kayıp: parola kurulmuş ama `guvenlik.json` bulunamıyor ya
-   * da okunamıyor (boş, bozuk, sarmal bölümleri eksik — backend ikisini ayırmaz).
+   * Güvenlik dosyası kayıp: hesap kurulmuş ama `guvenlik.json` bulunamıyor ya da
+   * okunamıyor (boş, bozuk, sarmal bölümleri eksik — backend ikisini ayırmaz).
    * Kayıtlar açılamaz; çıkış yolu dosyanın yedeğini geri koymak ya da bir
    * yedekten geri yüklemektir (backend 423 `guvenlik_dosyasi_kayip`).
    */
   security_file_missing: boolean;
-  /** Yarım kalmış kurulum (şifreleme) geçişi var mı (elektrik kesintisi vb.)? */
+  /** İlk hesabın kurulumu sürüyor mu (`guvenlik.json` `gecis`; yarım kalan kurulumu backend çözer)? */
   transition_pending: boolean;
-  /** "SIFRELENIYOR" | "" (yalnız yarım geçişte dolu). */
+  /** `"KURULUM"` | `""` (şema 2; F4'te DEK yenilemesi eklenir). */
   transition: string;
   /**
    * Kayıp ekranında "Güvenlik dosyasını sıfırla ve kuruluma dön" yolu açık mı? Yalnız
@@ -39,6 +43,17 @@ export interface GuvenlikDurumu {
   recovery_key_confirmed: boolean;
   /** Korunan alanların Türkçe adları — arayüz metni bunları listeler. */
   protected_fields: string[];
+  /** Güvenlik dosyasındaki hesap sarmalı sayısı (kurtarmayla geri yüklemeden sonra 0). */
+  account_count: number;
+  /** Kurtarma anahtarının no'su (her yeni anahtarda bir artar; tasarım TK10); yoksa null. */
+  recovery_key_no: number | null;
+  /** Kurtarma anahtarının üretim günü (ISO `yyyy-aa-gg`; ekranda gg.aa.yyyy); yoksa null. */
+  recovery_key_date: string | null;
+  /**
+   * Bu süreçte okunan ve çözülemeyen şifreli alan sayısı (tasarım §13 D48). Sıfırdan
+   * büyükse Genel Bakış'ta "okunamadı" kartı durur.
+   */
+  corrupt_field_count: number;
 }
 
 /** `POST /security/state/reset/` yanıtı: kenara alınan bozuk dosyanın adı + yeni durum. */
@@ -46,9 +61,25 @@ export interface SifirlamaSonucu extends GuvenlikDurumu {
   archived_as: string;
 }
 
+/**
+ * `POST /security/enable/` gövdesi — ilk program yöneticisi hesabı (tasarım §4.4.4).
+ * Anahtarlar Türkçedir (oturum sözleşmesi). Ad-soyad şifreli saklanır ve kilit
+ * ekranında GÖSTERİLMEZ; tanıtıcının varsayılanı `yonetici`dir.
+ */
+export interface IlkHesapGovdesi {
+  tanitici: string;
+  ad_soyad: string;
+  parola: string;
+}
+
 /** `POST /security/enable/` yanıtı: durum + TEK SEFERLİK kurtarma anahtarı. */
-export interface ParolaKurmaSonucu extends GuvenlikDurumu {
+export interface IlkHesapSonucu extends GuvenlikDurumu {
   recovery_key: string;
+  /**
+   * Tanıtıcı ad-soyaddaki üç harften uzun bir sözcüğü içeriyorsa uyarı metni
+   * (`hesap_kurallari.login_name_warning`; engel değil); yoksa null.
+   */
+  login_name_warning: string | null;
 }
 
 /** `POST /security/recovery-key/renew/` yanıtı: durum + TEK SEFERLİK YENİ kurtarma anahtarı. */
@@ -56,13 +87,33 @@ export interface AnahtarYenilemeSonucu extends GuvenlikDurumu {
   recovery_key: string;
 }
 
-/** `GET /backups/` satırı — yedek klasöründeki bir `.odbak` dosyası (daima şifreli). */
+/**
+ * Bir kurtarma anahtarının kimliği: no'su ve üretim günü (tasarım TK10, §9.7). Sır
+ * değildir; kurtarma anahtarı belgesinde de basılıdır. Güvenlik durumu (güncel anahtar),
+ * ilk hesap ve yenileme yanıtları (yeni anahtar) ve yedek listesi (yedeği açan anahtar)
+ * bu kimliği taşır.
+ */
+export interface KurtarmaKimligi {
+  no: number | null;
+  /** ISO gün (`yyyy-aa-gg`); ekranda gg.aa.yyyy. */
+  tarih: string | null;
+}
+
+/**
+ * Bir yedeği açan kurtarma anahtarının kimliği (yedek başlığından; `live_restore`).
+ * Kullanıcı yeni bilgisayarda hangi kâğıdın hangi yedeği açtığını buradan görür.
+ */
+export type YedekKurtarmaKimligi = KurtarmaKimligi;
+
+/** `GET /backups/` satırı — yedek klasöründeki bir yedek dosyası (daima şifreli). */
 export interface YedekDosyasi {
   name: string;
   /** Bayt cinsinden boyut. */
   size: number;
   /** Son değişme anı (ISO tarih-saat, yerel dilim). */
   modified_at: string;
+  /** Yedeği açan kurtarma anahtarının kimliği; başlık yok ya da okunamıyorsa null. */
+  kurtarma: YedekKurtarmaKimligi | null;
 }
 
 export interface YedekListesi {
@@ -91,7 +142,7 @@ export interface DisYedekDurumu {
   last_download: string | null;
   /** Hatırlatma süresi (gün). */
   reminder_days: number;
-  /** Son indirmeden (yoksa yönetici parolasının kurulmasından) bu yana geçen gün. */
+  /** Son indirmeden (yoksa ilk hesabın kurulmasından) bu yana geçen gün. */
   days_since: number | null;
   /** Genel Bakış kartı gösterilsin mi? */
   remind: boolean;
@@ -101,15 +152,15 @@ export interface DisYedekDurumu {
 
 export const guvenlikApi = {
   durum: () => api.get<GuvenlikDurumu>("/security/status/"),
-  kur: (password: string) => api.post<ParolaKurmaSonucu>("/security/enable/", { password }),
-  ac: (password: string) => api.post<GuvenlikDurumu>("/security/unlock/", { password }),
-  kilitle: () => api.post<GuvenlikDurumu>("/security/lock/"),
-  kurtar: (recovery_key: string, new_password: string) =>
-    api.post<GuvenlikDurumu>("/security/recover/", { recovery_key, new_password }),
-  parolaDegistir: (current_password: string, new_password: string) =>
-    api.post<GuvenlikDurumu>("/security/change-password/", { current_password, new_password }),
   /**
-   * Kurtarma anahtarı çıktısı (PDF). Anahtar yalnız gövdede gider; backend onu
+   * İlk program yöneticisi hesabı (yalnız ilk kurulumda). Oturum bu hesapla açılır;
+   * pencere YENİDEN YÜKLENMEZ (tasarım §13 D53: yalnız kilitlenme ve kilit ekranından
+   * açılış) — sihirbaz kurtarma anahtarını göstermeyi sürdürür. Akış
+   * `modules/oturum/eylemler.ts::ilkHesabiKur` üzerinden geçer.
+   */
+  kur: (govde: IlkHesapGovdesi) => api.post<IlkHesapSonucu>("/security/enable/", govde),
+  /**
+   * Kurtarma anahtarı belgesi (PDF). Anahtar yalnız gövdede gider; backend onu
    * kurtarma sarmalına karşı doğrular, yanlışsa 400 (kademeli gecikmeyle). Anahtar
    * sunucuda saklanmaz. Kilitliyken 423.
    */
@@ -118,14 +169,15 @@ export const guvenlikApi = {
   /**
    * Anahtarın saklandığını doğrular: TAM anahtar gider, backend onu kurtarma sarmalına
    * karşı doğrulayıp güvenlik dosyasına damga yazar (yanlışsa 400, kademeli gecikmeyle).
-   * Kurulum bu damga olmadan tamamlanmaz. Kilitliyken 423, görevli kipinde 403.
+   * Kurulum bu damga olmadan tamamlanmaz. Kilitliyken 423.
    */
   kurtarmaAnahtariniDogrula: (recovery_key: string) =>
     api.post<GuvenlikDurumu>("/security/recovery-key/confirm/", { recovery_key }),
   /**
-   * Kurtarma anahtarını yeniler (yönetici parolası ister). Yanıttaki YENİ anahtar tek
-   * seferliktir; damga silinir, yeni anahtar yeniden doğrulanmalıdır. Kayıtlar yeniden
-   * şifrelenmez. Kilitliyken 423, görevli kipinde 403.
+   * Kurtarma anahtarını yeniler: oturumdaki hesabın kendi parolasını ister (gövde
+   * anahtarı backend'de hâlâ İngilizce `password`; başka hesabın parolası geçmez, plan
+   * F1b-1). Yanıttaki YENİ anahtar tek seferliktir, no'su bir artar; damga silinir, yeni
+   * anahtar yeniden doğrulanmalıdır. Kayıtlar yeniden şifrelenmez. Kilitliyken 423.
    */
   kurtarmaAnahtariniYenile: (password: string) =>
     api.post<AnahtarYenilemeSonucu>("/security/recovery-key/renew/", { password }),

@@ -54,8 +54,8 @@ uçbirimden:
     oab-defteri --geri-yukle
 
 Yedekler listelenir ve seçtiğiniz yedek veritabanının yerine konur. Yedekler
-şifrelidir; yönetici parolanız ya da kurtarma anahtarınız sorulur. Mevcut
-(bozuk) dosya silinmez; 'db-onceki-*' adıyla veri klasöründe saklanır.
+şifrelidir; hesabınızın tanıtıcısı ve parolası ya da kurtarma anahtarı sorulur.
+Mevcut (bozuk) dosya silinmez; 'db-onceki-*' adıyla veri klasöründe saklanır.
 
 GEREKLİ SİSTEM PAKETLERİ
 ------------------------

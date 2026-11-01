@@ -29,6 +29,10 @@ neden eksik olduğu iletidedir (`SetupIncomplete`).
 `setup_status()` masaüstü sağlık denetiminin de ucudur (`HEALTH_PATH`): hafif
 kalır (birkaç sayım sorgusu) ve KİŞİSEL VERİ İÇERMEZ — yalnız bayraklar,
 sayılar, okul adı ve yol haritası işaretleri.
+
+Boşta kilit süresi (`SchoolConfig.idle_lock_minutes`) de bu tek satırdadır ama
+sihirbaz alanı değildir (`UPDATABLE_FIELDS`'te yoktur): Ayarlar → Güvenlik'teki
+ayrı uçtan yazılır (`set_idle_lock_minutes`).
 """
 
 from __future__ import annotations
@@ -39,7 +43,13 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.okul import selectors
-from apps.okul.models import SchoolConfig, SchoolLevel
+from apps.okul.models import (
+    IDLE_LOCK_MINUTES_MAX,
+    IDLE_LOCK_MINUTES_MIN,
+    SchoolConfig,
+    SchoolLevel,
+)
+from apps.okul.oturum import OTURUM, bosta_suresi_dk
 from apps.okul.services import app_password
 
 # Ayar/sihirbaz ekranından güncellenebilir alanlar (whitelist — başka alan yazılamaz).
@@ -318,6 +328,56 @@ def set_roadmap_hidden(*, hidden: bool) -> dict[str, Any]:
     state["hidden"] = hidden
     _save_roadmap(config, state)
     return roadmap_state(config)
+
+
+# ---------------------------------------------------------------------------
+# Boşta kilit süresi (Ayarlar → Güvenlik; tasarım TK14, §13 D11; plan F1b-1 "Oturum")
+# ---------------------------------------------------------------------------
+IDLE_LOCK_RANGE_MESSAGE = (
+    f"Boşta kilit süresi {IDLE_LOCK_MINUTES_MIN} ile {IDLE_LOCK_MINUTES_MAX} dakika "
+    "arasında olmalıdır."
+)
+IDLE_LOCK_SESSION_MESSAGE = "Boşta kilit süresi yalnız açık oturumda değiştirilir."
+
+
+class IdleLockError(ValueError):
+    """Boşta kilit süresi yazılamadı; ileti kullanıcıya olduğu gibi gösterilir (400)."""
+
+
+def idle_lock_minutes() -> int:
+    """Oturumun UYGULADIĞI boşta kilit süresi (dakika; `oturum.bosta_suresi_dk`).
+
+    Ayarın okunduğu tek yerdir: satır yoksa alanın varsayılanı (10), program
+    dışından aralık dışına yazılmış değer sınıra çekilmiş hâliyle döner. Ekranda
+    görünen süre böylece kilidin gerçekten uyguladığı süredir.
+    """
+    return bosta_suresi_dk()
+
+
+def set_idle_lock_minutes(*, dakika: int) -> int:
+    """Boşta kilit süresini yazar (3-30 dakika); yeni değeri döndürür.
+
+    Yalnız açık oturumda (kilitliyken uç zaten 423 alır; hesap kurulmadan da ayar
+    yazılmaz). Yazmayı yalnız program yöneticisinin yapması (rol-izin matrisi, tasarım
+    §4.4.2) 2. adımın `RolMiddleware`'iyle gelir; o güne dek açık oturumdaki hesap
+    yazar. Aralık doğrulayıcıları ve veritabanı kısıtı modeldedir; burada da
+    denetlenir ki program dışı bir çağrı kısıt hatasına (500) düşmesin. Kayıt
+    `post_save` ile oturumun önbelleğini boşaltır (`apps.okul.apps`): yeni süre bir
+    sonraki istekte geçerlidir, yeniden başlatma gerekmez.
+    """
+    if not OTURUM.acik_mi():
+        raise IdleLockError(IDLE_LOCK_SESSION_MESSAGE)
+    if (
+        isinstance(dakika, bool)
+        or not isinstance(dakika, int)
+        or not IDLE_LOCK_MINUTES_MIN <= dakika <= IDLE_LOCK_MINUTES_MAX
+    ):
+        raise IdleLockError(IDLE_LOCK_RANGE_MESSAGE)
+    config: SchoolConfig
+    config, _created = SchoolConfig.objects.get_or_create(pk=SchoolConfig.SINGLETON_PK)
+    config.idle_lock_minutes = dakika
+    config.save(update_fields=["idle_lock_minutes", "updated_at"])
+    return dakika
 
 
 # ---------------------------------------------------------------------------

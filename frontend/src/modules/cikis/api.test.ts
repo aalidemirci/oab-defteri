@@ -1,4 +1,5 @@
-// Çık ucu istemcisi: parola yalnız gövdede, etkinlik başlığı gönderilmez.
+// Çık ucu istemcisi: her oturum durumunda parolasız, boş gövde; etkinlik başlığı
+// gönderilmez (tasarım §4.2, §4.5; aile iskeletinin görevli kipi parola dalı kalktı).
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -17,9 +18,11 @@ afterEach(() => {
 });
 
 describe("cikisApi", () => {
-  it("parolasız çıkış boş gövdeyle POST eder", async () => {
+  it("parolasız, boş gövdeyle ve etkinlik başlığı olmadan POST eder", async () => {
     const fetchSahte = vi.fn().mockResolvedValue(yanit());
     vi.stubGlobal("fetch", fetchSahte);
+    // Kullanıcı az önce tıkladı: başlık yine gitmez (çıkış oturumu canlı tutmaz).
+    window.dispatchEvent(new Event("pointerdown"));
 
     await cikisApi.cik();
 
@@ -28,15 +31,5 @@ describe("cikisApi", () => {
     expect(secenek.method).toBe("POST");
     expect(secenek.body).toBe("{}");
     expect((secenek.headers as Record<string, string>)[ETKINLIK_BASLIGI]).toBeUndefined();
-  });
-
-  it("görevli kipinde parola gövdede gider", async () => {
-    const fetchSahte = vi.fn().mockResolvedValue(yanit());
-    vi.stubGlobal("fetch", fetchSahte);
-
-    await cikisApi.cik("Dogru-Parola-1");
-
-    const [, secenek] = fetchSahte.mock.calls[0] as [string, RequestInit];
-    expect(JSON.parse(String(secenek.body))).toEqual({ password: "Dogru-Parola-1" });
   });
 });

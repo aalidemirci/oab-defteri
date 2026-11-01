@@ -9,12 +9,15 @@
 //    (backend her istekte diske baktığı için dosya döndüğü anda olağan kilit
 //    ekranına geçilir).
 // 2. Yedekten geri yüklemek → geri yükleme guvenlik.json'u yedeğin kurtarma
-//    başlığından yeniden yazar; ardından "yeniden başlat" ekranı gelir.
+//    başlığından (yalnız kurtarma bölümü, hesap yok — tasarım TK10) yeniden yazar;
+//    ardından "yeniden başlat" ekranı gelir, kilit ekranında hesap listesi boştur ve
+//    kurtarma anahtarıyla açılır. Kayıp kipinde parola yolu işlemez (oturum yok,
+//    güncel dosya okunamıyor): geri yükleme kartı yalnız kurtarma anahtarını sorar.
 // 3. YALNIZ korunan veri yokken (backend `reset_available`: dosya okunamıyor +
 //    kayıtların anahtarı henüz veritabanına işlenmemiş + hiç kişi kaydı yok)
 //    "Güvenlik dosyasını sıfırla ve kuruluma dön": bozuk dosya arşivlenir
-//    (silinmez), program ilk açılış hâline döner ve sihirbaz parola adımından
-//    açılır. Koşul sağlanmıyorsa kart hiç görünmez, backend de 409 döner.
+//    (silinmez), program ilk açılış hâline döner ve sihirbaz program yöneticisi
+//    hesabı adımından açılır. Koşul sağlanmıyorsa kart hiç görünmez, backend de 409 döner.
 
 import { useState } from "react";
 
@@ -51,8 +54,8 @@ function SifirlamaKarti({ onSifirlandi }: { onSifirlandi: () => void }) {
     const onay = await confirm({
       title: "Güvenlik dosyası sıfırlansın mı?",
       message:
-        "Okunamayan dosya veri klasöründe arşivlenir ve kurulum sihirbazı yönetici parolası " +
-        "adımından yeniden açılır. Yeni bir kurtarma anahtarı verilir.",
+        "Okunamayan dosya veri klasöründe arşivlenir ve kurulum sihirbazı program yöneticisi " +
+        "hesabı adımından yeniden açılır. Yeni bir kurtarma anahtarı verilir.",
       confirmLabel: "Sıfırla ve kuruluma dön",
     });
     if (!onay) return;

@@ -110,7 +110,8 @@ urlpatterns = [
     path("security/status/", views.SecurityStatusView.as_view(), name="security-status"),
     path("security/enable/", views.SecurityEnableView.as_view(), name="security-enable"),
     # Oturum (tasarım §4.4.3, TK14; views_oturum): özet, kilit ekranının hesap listesi,
-    # kilit açma, Kilitle, kurtarma anahtarıyla açılış, kendi parolasını değiştirme.
+    # kilit açma, Kilitle, kurtarma anahtarıyla açılış, kendi parolasını değiştirme,
+    # boşta kilit süresi.
     path("security/session/", views_oturum.OturumOzetiView.as_view(), name="security-session"),
     path(
         "security/accounts/",
@@ -124,6 +125,13 @@ urlpatterns = [
         "security/change-password/",
         views_oturum.SecurityChangePasswordView.as_view(),
         name="security-change-password",
+    ),
+    # Boşta kilit süresi (Ayarlar → Güvenlik; TK14, §13 D11): yalnız açık oturumda —
+    # kilitliyken KAPALIDIR (lock_middleware.KILITLI_IZINLI'de değildir).
+    path(
+        "security/idle-lock/",
+        views_oturum.BostaKilitSuresiView.as_view(),
+        name="security-idle-lock",
     ),
     # Kurtarma anahtarı belgesi (tasarım §9.7): anahtar kurtarma sarmalını açıyorsa PDF.
     # KİLİTLİYKEN KAPALIDIR (lock_middleware.KILITLI_IZINLI'de değildir).

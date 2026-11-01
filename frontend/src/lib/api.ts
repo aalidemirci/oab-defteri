@@ -5,33 +5,37 @@
 // `{code, message, fields}` hata sözleşmesi ve snake_case gövde. Blob
 // yardımcıları (`getBlob`/`postBlob`) dosya indirmeleri (Excel şablonları,
 // şifreli yedek, kurulum dosyası, evrak/PDF) için korunur.
-// Kip (tasarım §4.4): kullanıcı etkileşiminden hemen sonra giden isteklere
-// `X-OD-Etkinlik: 1` eklenir (yönetici kipinin boşta sayacı); 403
-// `kip_yetkisiz` `lib/kip.ts` olayını yayınlar. Kilit kapısı (tasarım §4.4.3):
-// 423 `locked`/`guvenlik_dosyasi_kayip` `lib/kilit.ts` olayını yayınlar.
+// Oturum (tasarım §4.4.3, TK14): kullanıcı etkileşiminden hemen sonra giden isteklere
+// `X-OD-Etkinlik: 1` eklenir (oturumun boşta kilit sayacı); yoklamalar eklemez. Kilit
+// kapısı: 423 `locked`/`guvenlik_dosyasi_kayip` `lib/kilit.ts`'e verilir — ön yüz
+// oturumu açık sanıyorsa pencere yeniden yüklenir (tasarım §13 D53), sanmıyorsa güvenlik
+// kapısı durumu yeniden okur. Aile iskeletinin 403 `kip_yetkisiz` dalı görevli kipiyle
+// kalktı; 403 `rol_yetkisiz` (rol matrisi) F1b 2. adımda gelir.
 
 // Boş/tanımsız → göreli "/api/v1": geliştirmede Vite proxy'si (vite.config.ts
 // server.proxy) backend'e yönlendirir. Mutlak URL yalnız özel senaryoda gerekir.
-import { KILIT_KAPISI_KODLARI, kilitKapisiYayinla } from "./kilit";
-import { KIP_YETKISIZ_KODU, kipYetkisizYayinla } from "./kip";
+import { kilitKapisiYaniti } from "./kilit";
 import { yenidenBaslatGerekliYayinla } from "./restart";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
+
+/** Gövdesinde ileti olmayan hatalı yanıtın iletisi (ekranlar kod eşlemine düşebilsin). */
+export const BEKLENMEYEN_HATA_ILETISI = "Beklenmeyen bir hata oluştu.";
 
 /** Backend "yeniden başlat" kapısındayken (geri yükleme sonrası) dönen kod. */
 const RESTART_CODE = "restart_required";
 
 // --- Kullanıcı etkinliği (tasarım §4.4.3) ------------------------------------
-// Yönetici kipinin boşta süresi SUNUCUDA dolar ve yalnız kullanıcı eylemi
+// Oturumun boşta kilit süresi SUNUCUDA dolar ve yalnız kullanıcı eylemi
 // taşıyan isteklerle tazelenir. "Kullanıcı eylemi" = son birkaç saniye içinde
 // gerçek bir etkileşim (fare/dokunma ya da tuş) olmuş olması. Zamanlayıcıyla
-// giden istekler (kip ve durum sorguları, periyodik yenilemeler) başlığı
+// giden istekler (oturum ve durum sorguları, periyodik yenilemeler) başlığı
 // taşımaz; bunun için çağıran `etkinlik: false` verir — aksi hâlde kullanıcının
 // son tıklamasından hemen sonra denk gelen bir yoklama da eylem sayılırdı.
 
 /** Etkileşimden sonra giden isteğin kullanıcı eylemi sayıldığı pencere. */
 export const ETKINLIK_PENCERESI_MS = 5_000;
-/** Backend `apps/okul/kip_middleware.ETKINLIK_BASLIGI` ile aynı. */
+/** Backend `apps/okul/oturum.ETKINLIK_BASLIGI` ile aynı. */
 export const ETKINLIK_BASLIGI = "X-OD-Etkinlik";
 
 let sonEtkilesim = Number.NEGATIVE_INFINITY;
@@ -66,7 +70,7 @@ export function etkinlikSaatleriniSifirla(): void {
 
 export interface IstekSecenekleri {
   /**
-   * `false`: `X-OD-Etkinlik` hiçbir koşulda gönderilmez (kip/durum/pano
+   * `false`: `X-OD-Etkinlik` hiçbir koşulda gönderilmez (oturum/durum/pano
    * sorguları, periyodik yenilemeler). Verilmezse son etkileşime bakılır.
    */
   etkinlik?: boolean;
@@ -80,16 +84,14 @@ function etkinlikBasligiEkle(headers: Record<string, string>, etkinlik?: boolean
   sonEtkinlikGonderimi = simdi;
 }
 
-/** Hata koduna göre uygulama çapı olayları (yeniden başlat, kilit, kip değişimi). */
+/** Hata koduna göre uygulama çapı tepkiler (yeniden başlat, kilit kapısı). */
 function hataOlayiYayinla(status: number, code: string): void {
   // Geri yükleme sonrası kapı: HANGİ çağrı olursa olsun tam ekran
   // "yeniden başlatın" yönlendirmesi tetiklenir (sayfa yenilense bile).
   if (code === RESTART_CODE) yenidenBaslatGerekliYayinla();
-  // Kilit kapısı: program arayüzün haberi olmadan kilitlendi ya da güvenlik
-  // dosyası kayboldu; güvenlik kapısı durumu yeniden okur.
-  if (status === 423 && KILIT_KAPISI_KODLARI.has(code)) kilitKapisiYayinla();
-  // Görevli kipi kapısı: kip arayüzün haberi olmadan değişti (süre doldu).
-  if (status === 403 && code === KIP_YETKISIZ_KODU) kipYetkisizYayinla();
+  // Kilit kapısı: oturum arayüzün haberi olmadan kilitlendi (boşta süre doldu) ya da
+  // güvenlik dosyası kayboldu. Yeniden yükleme ve döngü koruması `lib/kilit.ts`'tedir.
+  if (status === 423) kilitKapisiYaniti(code);
 }
 
 export class ApiError extends Error {
@@ -138,12 +140,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     const d = (data ?? {}) as { code?: string; message?: string; fields?: Record<string, unknown> };
     const code = d.code ?? String(resp.status);
     hataOlayiYayinla(resp.status, code);
-    throw new ApiError(
-      resp.status,
-      code,
-      d.message ?? "Beklenmeyen bir hata oluştu.",
-      d.fields ?? {},
-    );
+    throw new ApiError(resp.status, code, d.message ?? BEKLENMEYEN_HATA_ILETISI, d.fields ?? {});
   }
   return data as T;
 }

@@ -5,7 +5,7 @@ Dosya değişimini `backup_restore` çekirdeği yapar; bu modül ÇALIŞAN sunuc
 
 * yedek listesi — `app_password.backup_dir()` içindeki `.odbak` dosyaları
   (masaüstü `desktop/restore.py::list_backups` ile aynı kaynak, en yeniden
-  eskiye);
+  eskiye) ve her birini açan kurtarma anahtarının kimliği (gömülü başlıktan, TK10);
 * kullanıcının YÜKLEDİĞİ dosyanın geçici yazımı (çekirdek yol ister) — KVKK:
   geçici dosya işlem sonunda her durumda silinir, kullanıcının elindeki asıl
   dosya zaten kendindedir;
@@ -37,10 +37,16 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
-from desktop.backup_crypto import BACKUP_SUFFIX
+from desktop.backup_crypto import (
+    BACKUP_SUFFIX,
+    BackupCryptoError,
+    parse_security_state,
+    read_embedded_recovery_metadata,
+    recovery_key_identity,
+)
 from django.conf import settings
 from django.db import connections
 from django.utils import timezone
@@ -66,6 +72,13 @@ def list_backups() -> dict[str, Any]:
     `backup_dir` yanıtta bilinçli olarak vardır: kullanıcı elle aldığı bir
     yedeği nereye koyacağını ya da dosyaların nerede durduğunu buradan görür
     (tek bilgisayarda çalışan yerel program — yol kişisel veri değildir).
+
+    Her satırın `kurtarma` alanı o yedeği açan kurtarma anahtarının kimliğidir:
+    `{no, tarih}` (`tarih` ISO gün; arayüz gg.aa.yyyy yazar) ya da başlık yoksa,
+    okunamıyorsa veya kullanılamıyorsa `null` (`_recovery_key_of`). Kullanıcı
+    yeni bilgisayarda hangi kâğıdın hangi yedeği açtığını buradan görür (tasarım
+    §4.4.4, TK10; anahtar yenilenince eski kâğıt eski yedekleri açmaya devam eder).
+    Başlığın tuzu ve sarmalı ASLA dönmez.
     """
     dizin = app_password.backup_dir()
     satirlar: list[dict[str, Any]] = []
@@ -81,6 +94,7 @@ def list_backups() -> dict[str, Any]:
                     "modified_at": timezone.localtime(
                         datetime.fromtimestamp(bilgi.st_mtime, tz=UTC)
                     ).isoformat(),
+                    "kurtarma": _recovery_key_of(yol),
                     "_mtime": bilgi.st_mtime,
                 }
             )
@@ -169,6 +183,24 @@ def _restore(
 # ---------------------------------------------------------------------------
 # İç yardımcılar
 # ---------------------------------------------------------------------------
+def _recovery_key_of(yol: Path) -> dict[str, Any] | None:
+    """Yedeği açan kurtarma anahtarının kimliği `{no, tarih}`; bilinemiyorsa None.
+
+    Yalnız dosyanın başı okunur (`read_embedded_recovery_metadata`). Başlık
+    kullanılamıyorsa (şema 1, kurtarma bölümü eksik, bozuk) kimlik de gösterilmez:
+    o yedek kurtarma anahtarıyla zaten açılamaz (`parse_security_state` tek kuraldır).
+    Okuma hatası listeyi düşürmez; satır kimliksiz görünür. Ayrıştırma da istisna
+    sızdırmaz (`parse_security_state` derin iç içe JSON'un RecursionError'ını dâhil
+    None'a çevirir): tek bir bozuk yedek, kayıp kilidinin çıkış yolu olan listeyi
+    düşüremez.
+    """
+    try:
+        ham = read_embedded_recovery_metadata(yol)
+    except (OSError, BackupCryptoError):
+        return None
+    return cast("dict[str, Any] | None", recovery_key_identity(parse_security_state(ham)))
+
+
 def _resolve_named(name: str) -> Path:
     """Yedek klasöründeki adı yola çevirir; klasör dışına çıkışı reddeder."""
     duz_ad = name.strip()

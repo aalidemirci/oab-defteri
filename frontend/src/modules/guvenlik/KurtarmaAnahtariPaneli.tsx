@@ -1,7 +1,10 @@
-// Kurtarma anahtarı paneli — kurulum sihirbazının ilk adımında, yönetici parolası
-// kurulur kurulmaz gösterilir (tasarım §4.4.3; PDF'i katalog dışı program belgesidir,
-// §9.7). Anahtar yenilendiğinde (sihirbaz ya da Ayarlar → Güvenlik) yeni anahtar da
-// bu panelle saklatılıp doğrulatılır.
+// Kurtarma anahtarı paneli — kurulum sihirbazının ilk adımında, program yöneticisi
+// hesabı kurulur kurulmaz gösterilir (tasarım §4.4.3; PDF'i "Kurtarma anahtarı
+// belgesi"dir, katalog dışı program belgesi, §9.7). Anahtar yenilendiğinde (sihirbaz ya
+// da Ayarlar → Güvenlik) yeni anahtar da bu panelle saklatılıp doğrulatılır. Anahtarın
+// kimliği (no + üretim tarihi; tasarım TK10) biliniyorsa anahtarın üstünde yazar ve
+// yazdırılan alana da girer: kâğıt hangi no'yu taşıdığını söylesin (yedek listesi
+// yedekleri bu no'yla eşler).
 //
 // Anahtar SUNUCUDA SAKLANMAZ, bu panel onu gösteren TEK yerdir. Kural "basım
 // zorunlu" değil "SAKLAMA zorunlu"dur; üç saklama yolu sunulur:
@@ -20,13 +23,13 @@
 // §4.4.4; kurulum damgasız tamamlanmaz, §4.4.5). `onDogrulama(true)` ancak sunucu damgayı yazınca bildirilir; hata
 // olursa ileti ve "Yeniden dene" çıkar.
 //
-// GÖZETİMSİZ EKRAN (tasarım §4.4.3, §13 D15): kurulum bitene kadar kip süreyle düşmez
-// — anahtar bellekte kalır, program kendiliğinden kilitlenmez. Bedeli anahtarın
+// GÖZETİMSİZ EKRAN (tasarım §4.4.3, §13 D15): kurulum bitene kadar oturum boşta süreyle
+// kilitlenmez — anahtar bellekte kalır, program kendiliğinden kilitlenmez. Bedeli anahtarın
 // ekranda süresiz durmasıydı; panel 5 dakika hiç etkileşim olmazsa anahtarı YERİNDE
-// gizler ("Anahtarı göster" ile geri gelir). Sayaç yalnız görseldir: kipi düşürmez,
+// gizler ("Anahtarı göster" ile geri gelir). Sayaç yalnız görseldir: oturumu kilitlemez,
 // sunucuya bir şey sormaz, anahtarı bellekten silmez — masadan kalkıldığında omuz
-// üstünden okunmasını zorlaştıran kaza önleyicidir (görevli kipindeki Çık parolası gibi).
-// Etkileşim saati `lib/api.ts` içinde ZATEN tutulur (kip boşta sayacı için, yakalama
+// üstünden okunmasını zorlaştıran kaza önleyicidir.
+// Etkileşim saati `lib/api.ts` içinde ZATEN tutulur (oturumun boşta sayacı için, yakalama
 // evresinde pointerdown + keydown): panel kendi küresel dinleyicisini kurmaz, o saati
 // okur — ikinci bir dinleyici aynı olayı iki kez izler ve iki ölçü birbirinden
 // kayardı. Panele ait olan yalnız yoklama zamanlayıcısıdır. Gizliyken anahtar DOM'da
@@ -49,13 +52,20 @@ import Icon from "../../ui/Icon";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import TextField from "../../ui/TextField";
 import { guvenlikApi } from "./api";
+import type { KurtarmaKimligi } from "./api";
 import {
   kurtarmaAnahtariniNormallestir,
   kurtarmaGruplari,
+  kurtarmaKimligiMetni,
   rastgeleIkiGrup,
-  useKurtarmaCiktisi,
+  useKurtarmaBelgesi,
 } from "./kurtarma";
-import { ELLE_YAZ_METNI, KURTARMA_UYARISI, dogrulamaMetni } from "./metinler";
+import {
+  ELLE_YAZ_METNI,
+  KURTARMA_UYARISI,
+  YAZDIRMA_SAKLAMA_METNI,
+  dogrulamaMetni,
+} from "./metinler";
 
 const YAZDIRMA_ALANI_ID = "kurtarma-anahtari-yazdirma-alani";
 
@@ -77,6 +87,8 @@ interface KurtarmaAnahtariPaneliProps {
   anahtar: string;
   /** Okul adı — yazıcı çıktısında hangi kuruma ait olduğu belli olsun (boş olabilir). */
   okulAdi?: string;
+  /** Anahtarın kimliği (no, üretim günü); bilinmiyorsa satır gösterilmez. */
+  kimlik?: KurtarmaKimligi | null;
   /**
    * İki grup doğru yazılıp sunucu "saklandı" damgasını yazınca `true`, doğrulama
    * bozulunca (grup değişti, anahtar yeniden gösterildi) `false` bildirilir.
@@ -96,6 +108,7 @@ type Onay = "bekliyor" | "gonderiliyor" | "tamam" | "hata";
 export default function KurtarmaAnahtariPaneli({
   anahtar,
   okulAdi = "",
+  kimlik = null,
   onDogrulama,
   dogrulandiMetni = "Doğrulandı. Kurulumun sonraki adımına geçebilirsiniz.",
   rastgele,
@@ -113,7 +126,8 @@ export default function KurtarmaAnahtariPaneli({
   const [gorunurlukAni, setGorunurlukAni] = useState(() => Date.now());
   // Her yeni istek (ya da iptal) sayacı artırır; bayat yanıt durumu değiştirmez.
   const istekNo = useRef(0);
-  const { indir, indiriliyor, hata: pdfHatasi } = useKurtarmaCiktisi();
+  const { indir, indiriliyor, hata: pdfHatasi } = useKurtarmaBelgesi();
+  const kimlikMetni = kurtarmaKimligiMetni(kimlik);
 
   const dogru = sorulan.map(
     (sira, i) => kurtarmaAnahtariniNormallestir(yanitlar[i]) === gruplar[sira],
@@ -169,7 +183,7 @@ export default function KurtarmaAnahtariPaneli({
 
   async function pdfKaydet() {
     if (await indir(anahtar)) {
-      snackbar.success("Kurtarma anahtarı çıktısı PDF olarak kaydedildi.");
+      snackbar.success("Kurtarma anahtarı belgesi PDF olarak kaydedildi.");
     }
   }
 
@@ -228,6 +242,11 @@ export default function KurtarmaAnahtariPaneli({
             <p className="text-label-large text-on-surface-variant">
               OAB Defteri kurtarma anahtarı{okulAdi ? ` — ${okulAdi}` : ""}
             </p>
+            {kimlikMetni && (
+              <p className="mt-1 text-body-medium text-on-surface" data-testid="kurtarma-kimligi">
+                {kimlikMetni}
+              </p>
+            )}
             <ol
               aria-label="Kurtarma anahtarının grupları"
               className="mt-2 grid grid-cols-2 gap-2 rounded-shape-md bg-surface-container-high p-4 sm:grid-cols-4"
@@ -248,6 +267,7 @@ export default function KurtarmaAnahtariPaneli({
             >
               {anahtar}
             </p>
+            <p className="mt-2 text-body-small text-on-surface-variant">{YAZDIRMA_SAKLAMA_METNI}</p>
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">

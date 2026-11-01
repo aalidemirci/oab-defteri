@@ -20,11 +20,14 @@ const oapi = vi.hoisted(() => ({
   getLeavePoolSummary: vi.fn(),
 }));
 const papi = vi.hoisted(() => ({ sonOturum: vi.fn(), kontrolEttim: vi.fn() }));
+// Güvenlik durumu (okunamayan alan kartı) ve dış yedek hatırlatması kendi uçlarından okur.
+const gapi = vi.hoisted(() => ({ durum: vi.fn(), disYedek: vi.fn() }));
 
 vi.mock("../okul/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../okul/api")>()),
   okulApi: oapi,
 }));
+vi.mock("../guvenlik/api", () => ({ guvenlikApi: gapi }));
 vi.mock("./api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./api")>()),
   panelApi: papi,
@@ -67,6 +70,8 @@ beforeEach(() => {
     unexpected_shutdown: false,
     process_started_at: "2026-10-31T09:00:00+03:00",
   });
+  gapi.durum.mockResolvedValue({ corrupt_field_count: 0 });
+  gapi.disYedek.mockResolvedValue({ remind: false });
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -84,6 +89,23 @@ describe("Genel Bakış", () => {
     expect(
       screen.getByRole("link", { name: /Ders yılı, şubeler, okul bilgileri/ }),
     ).toHaveAttribute("href", "/ayarlar");
+  });
+
+  it("çözülemeyen şifreli alan varsa “Okunamayan Kayıt Alanları” kartı çıkar (yalnız sayı)", async () => {
+    gapi.durum.mockResolvedValue({ corrupt_field_count: 2 });
+    bas();
+
+    expect(
+      await screen.findByRole("heading", { name: "Okunamayan Kayıt Alanları" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/2 şifreli alan okunamadı/)).toBeInTheDocument();
+  });
+
+  it("çözülemeyen alan yoksa kart görünmez", async () => {
+    bas();
+    await screen.findByRole("heading", { name: "Başlangıç Yol Haritası" });
+    await waitFor(() => expect(gapi.durum).toHaveBeenCalled());
+    expect(screen.queryByRole("heading", { name: "Okunamayan Kayıt Alanları" })).toBeNull();
   });
 
   it("kütüphane kartları ve bağlantıları sökülmüştür", async () => {
@@ -133,7 +155,7 @@ describe("Genel Bakış", () => {
     expect(screen.queryByRole("region", { name: "Ayrılış Havuzu" })).toBeNull();
     unmount();
 
-    oapi.getLeavePoolSummary.mockRejectedValueOnce(new Error("görevli kipi"));
+    oapi.getLeavePoolSummary.mockRejectedValueOnce(new Error("bağlantı koptu"));
     bas();
     await waitFor(() => expect(oapi.getLeavePoolSummary).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("region", { name: "Ayrılış Havuzu" })).toBeNull();
@@ -191,7 +213,7 @@ describe("Başlangıç Yol Haritası", () => {
   it("işaret kaydedilemezse hata bildirilir, kutu işaretlenmez", async () => {
     const user = userEvent.setup();
     oapi.markRoadmapItem.mockRejectedValue(
-      new ApiError(403, "kip_yetkisiz", "Bu işlem görevli kipinde yapılamaz.", {}),
+      new ApiError(500, "error", "İşaret kaydedilemedi; yeniden deneyin.", {}),
     );
     bas();
 
@@ -200,7 +222,7 @@ describe("Başlangıç Yol Haritası", () => {
     });
     await user.click(kutu);
 
-    expect(await screen.findByText("Bu işlem görevli kipinde yapılamaz.")).toBeInTheDocument();
+    expect(await screen.findByText("İşaret kaydedilemedi; yeniden deneyin.")).toBeInTheDocument();
     expect(kutu).not.toBeChecked();
   });
 

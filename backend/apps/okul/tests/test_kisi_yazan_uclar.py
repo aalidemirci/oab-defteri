@@ -78,6 +78,8 @@ DIGER_UCLAR = frozenset(
         "security-accounts",
         "security-change-password",
         "security-enable",
+        # Boşta kilit süresi (Ayarlar → Güvenlik): okul ayarı, kişi yazmaz.
+        "security-idle-lock",
         "security-lock",
         "security-recover",
         "security-recovery-key-confirm",

@@ -1,40 +1,34 @@
-// Güvenlik kapısı — yönetici parolası kuruluysa ve kilit açık değilse içerik
-// yerine kilit ekranını; güvenlik dosyası kayıpsa (guvenlik.json silinmiş ya da
-// yeniden adlandırılmış ya da içi bozuk) ayrı bir "güvenlik dosyası kayıp" ekranını
-// gösterir. `KurulumKapisi` ile aynı desendedir, üç farkla:
+// Güvenlik kapısı — hesap kuruluysa ve oturum açık değilse içerik yerine kilit ekranını;
+// güvenlik dosyası kayıpsa (guvenlik.json silinmiş ya da yeniden adlandırılmış ya da içi
+// bozuk) ayrı bir "güvenlik dosyası kayıp" ekranını gösterir. `KurulumKapisi` ile aynı
+// desendedir, dört farkla:
 //
-// 1. Durum bir KEZ değil, kilit her kapandığında yeniden okunur; "Kilitle"
-//    eylemi (Ayarlar, kip göstergesi) `guvenlikKilitlendi` olayını yayınlar,
-//    kapı dinler. Oturum ortasında bir istek 423 alırsa (başka yoldan kilit ya
-//    da güvenlik dosyası kaybı) `lib/api.ts` `lib/kilit.ts` olayını yayınlar;
-//    kapı durumu sunucudan yeniden okur.
-// 2. Parola hiç kurulmamışsa kapı içeriği gösterir: kullanıcıyı sihirbazın parola
-//    adımına İÇTEKİ `KurulumKapisi` götürür (parola kurulmadan kurulum kapısı
-//    açılmaz). Bu kapı "parolasız kip" sunmaz; o dal yoktur (tasarım §4.4.3).
+// 1. Kilit ve açılış YEREL durumla değil, pencerenin yeniden yüklenmesiyle olur (tasarım
+//    §4.4.3 "Ön yüz belleği", §13 D53; `lib/kilit.ts`): Kilitle, boşta kilit ve ön yüz
+//    oturumu açık sanırken gelen 423 pencereyi yeniden yükler; kapı yeni pencerede durumu
+//    sunucudan okur. Kapı okuduğu durumla "açık sanma" bayrağını yazar (döngü koruması).
+//    Ön yüz kilitli olduğunu bilirken gelen 423 (`od:kilit-kapisi`; ör. kilit ekranı
+//    açıkken güvenlik dosyası kayboldu) durumu yeniden okutur.
+// 2. Hesap hiç kurulmamışsa kapı içeriği gösterir: kullanıcıyı sihirbazın ilk adımına
+//    İÇTEKİ `KurulumKapisi` götürür. Bu kapı "parolasız kip" sunmaz (tasarım §4.4.3).
 // 3. FAIL-OPEN'dır: durum ucu okunamazsa içeri alır. Gerçek kapı BACKEND'dedir
-//    (`apps.okul.lock_middleware` → 423 `locked` / `guvenlik_dosyasi_kayip`) —
-//    burada ikinci kez kilitlemek, uç hatasında kullanıcıyı kilit ekranına
-//    hapsedip parolayı doğrulatamamak demek olurdu.
+//    (`apps.okul.lock_middleware` → 423 `locked` / `guvenlik_dosyasi_kayip`) — burada
+//    ikinci kez kilitlemek, uç hatasında kullanıcıyı kilit ekranına hapsetmek olurdu.
+//    Okunamayan durum bayrağı KALDIRMAZ: okunamayan durum + 423 sonsuz yüklemeye dönmesin.
+// 4. Görevli kipi yoktur (tasarım TK14): oturum açıkken içerik, kapalıyken kilit ekranı.
 
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import { KILIT_KAPISI_OLAYI } from "../../lib/kilit";
+import { KILIT_KAPISI_OLAYI, oturumAcikSan } from "../../lib/kilit";
 import { SkeletonList } from "../../ui/Skeleton";
 import GuvenlikDosyasiKayip from "./GuvenlikDosyasiKayip";
 import KilitEkrani from "./KilitEkrani";
 import { guvenlikApi } from "./api";
 import type { GuvenlikDurumu } from "./api";
 
-/** "Kilitle" eylemi (Ayarlar, kip göstergesi) bu olayı yayınlar. */
-export const KILIT_OLAYI = "guvenlik:kilitlendi";
-
-export function kilitOlayiYayinla(): void {
-  window.dispatchEvent(new CustomEvent(KILIT_OLAYI));
-}
-
 /** Durum ucu okunamadığında kullanılan açık durum (fail-open — dosya başı notu). */
-const OKUNAMADI: GuvenlikDurumu = {
+export const OKUNAMADI: GuvenlikDurumu = {
   password_set: false,
   locked: false,
   security_file_missing: false,
@@ -43,7 +37,16 @@ const OKUNAMADI: GuvenlikDurumu = {
   transition: "",
   recovery_key_confirmed: false,
   protected_fields: [],
+  account_count: 0,
+  recovery_key_no: null,
+  recovery_key_date: null,
+  corrupt_field_count: 0,
 };
+
+/** Okunan durum oturumun açık olduğunu mu söylüyor? (Hesap kurulu, kilit yok, dosya yerinde.) */
+export function oturumAcikMi(d: GuvenlikDurumu): boolean {
+  return d.password_set && !d.locked && !d.security_file_missing;
+}
 
 export default function GuvenlikKapisi({ children }: { children: ReactNode }) {
   const [durum, setDurum] = useState<GuvenlikDurumu | null>(null);
@@ -53,7 +56,9 @@ export default function GuvenlikKapisi({ children }: { children: ReactNode }) {
     guvenlikApi
       .durum()
       .then((d) => {
-        if (!iptal) setDurum(d);
+        if (iptal) return;
+        oturumAcikSan(oturumAcikMi(d));
+        setDurum(d);
       })
       .catch(() => {
         if (!iptal) setDurum(OKUNAMADI);
@@ -65,13 +70,7 @@ export default function GuvenlikKapisi({ children }: { children: ReactNode }) {
 
   useEffect(() => oku(), [oku]);
 
-  useEffect(() => {
-    const dinleyici = () => setDurum((onceki) => (onceki ? { ...onceki, locked: true } : onceki));
-    window.addEventListener(KILIT_OLAYI, dinleyici);
-    return () => window.removeEventListener(KILIT_OLAYI, dinleyici);
-  }, []);
-
-  // 423: hangi kilidin kapandığını (olağan kilit ya da kayıp dosya) sunucu söyler.
+  // 423 (ön yüz kilitli olduğunu bilirken): hangi kilidin kapandığını sunucu söyler.
   useEffect(() => {
     const dinleyici = () => void oku();
     window.addEventListener(KILIT_KAPISI_OLAYI, dinleyici);
@@ -80,8 +79,8 @@ export default function GuvenlikKapisi({ children }: { children: ReactNode }) {
 
   if (durum === null) return <SkeletonList rows={3} className="mx-auto max-w-3xl" />;
 
-  // Kayıp dosya kilit ekranından ÖNCE gelir: dosya yokken parola sarmalı da
-  // yoktur, kilit ekranındaki parola hiçbir zaman kabul edilmezdi.
+  // Kayıp dosya kilit ekranından ÖNCE gelir: dosya yokken hesap sarmalları da yoktur,
+  // kilit ekranındaki hiçbir parola kabul edilmezdi.
   if (durum.security_file_missing) {
     return (
       <GuvenlikDosyasiKayip
@@ -91,14 +90,7 @@ export default function GuvenlikKapisi({ children }: { children: ReactNode }) {
     );
   }
 
-  if (durum.locked) {
-    return (
-      <KilitEkrani
-        yarimGecis={durum.transition_pending}
-        onAcildi={() => setDurum({ ...durum, locked: false, transition_pending: false })}
-      />
-    );
-  }
+  if (durum.locked) return <KilitEkrani />;
 
   return <>{children}</>;
 }

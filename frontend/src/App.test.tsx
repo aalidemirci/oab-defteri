@@ -6,9 +6,10 @@
 // (3) açılışta güncelleme denetimi YOK — kabuk açılırken `/updates/` isteği
 // çıkmaz (tasarım TK4); (4) M3 token bütünlüğü — kaynakta kullanılan
 // şekil/opaklık sınıflarının Tailwind çıktısında gerçekten üretildiği (aile
-// iskeletinin dersi); (5) kip (tasarım §4.4) — yönetici kipinde üst çubukta kip
-// göstergesi, görevli kipinde rotaların yerine görevli ekranı ve gezinmesiz
-// kabuk; kip okunamazsa FAIL-OPEN.
+// iskeletinin dersi); (5) oturum (tasarım §4.4.3, TK14) — açık oturumda üst çubukta
+// oturum göstergesi (rol etiketi + tanıtıcı, Kilitle); Kilitle pencereyi yeniden
+// yükler (D53); oturum okunamazsa FAIL-OPEN. Aile iskeletinin görevli kipi (görevli
+// ekranı, gezinmesiz kabuk, gizli güncelleme bandı) yoktur.
 
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -50,32 +51,29 @@ vi.mock("./modules/okul/api", async (importOriginal) => {
   return { ...actual, okulApi: okulApiMock };
 });
 
-const kipApiMock = vi.hoisted(() => ({
-  durum: vi.fn(),
-  gorevliyeGec: vi.fn(),
-  yoneticiyeGec: vi.fn(),
+const oturumApiMock = vi.hoisted(() => ({
+  ozet: vi.fn(),
+  hesaplar: vi.fn(),
+  ac: vi.fn(),
   kilitle: vi.fn(),
+  kurtar: vi.fn(),
+  kurtarmaHesaplari: vi.fn(),
 }));
 
-vi.mock("./modules/kip/api", () => ({ kipApi: kipApiMock }));
+vi.mock("./modules/oturum/api", () => ({ oturumApi: oturumApiMock }));
 
 import App from "./App";
 import { denetimSonucunuYayinla } from "./modules/guncelleme/denetimOlayi";
-import type { KipOzeti } from "./modules/kip/api";
+import { pencereIcerigi } from "./lib/kilit";
+import type { OturumOzeti } from "./modules/oturum/api";
 
-const YONETICI_KIPI: KipOzeti = {
-  durum: "yonetici",
-  bosta_kalan_sn: 180,
-  mutlak_kalan_sn: 1800,
-  bosta_dk: 3,
-  mutlak_dk: 30,
-};
-
-const GOREVLI_KIPI: KipOzeti = {
-  ...YONETICI_KIPI,
-  durum: "gorevli",
-  bosta_kalan_sn: null,
-  mutlak_kalan_sn: null,
+const ACIK_OTURUM: OturumOzeti = {
+  durum: "acik",
+  hesap: { id: "h-1", tanitici: "yonetici", rol: "yonetici", rol_etiketi: "Program yöneticisi" },
+  bosta_dk: 10,
+  bosta_kalan_sn: 600,
+  kilit_bekliyor: false,
+  kurulum_tamam: true,
 };
 
 const KURULU: SetupStatus = {
@@ -153,58 +151,48 @@ beforeEach(() => {
   okulApiMock.listStudents.mockResolvedValue(bosSayfa);
   okulApiMock.listPersonnel.mockResolvedValue(bosSayfa);
   okulApiMock.getLeavePoolSummary.mockResolvedValue({ student_count: 0, personnel_count: 0 });
-  kipApiMock.durum.mockResolvedValue(YONETICI_KIPI);
+  oturumApiMock.ozet.mockResolvedValue(ACIK_OTURUM);
 });
 
-describe("App — kip (görevli / yönetici)", () => {
-  it("yönetici kipinde üst çubukta kip göstergesi durur, sayfalar açılır", async () => {
+describe("App — oturum", () => {
+  it("açık oturumda üst çubukta rol etiketi, tanıtıcı ve Kilitle durur; sayfalar açılır", async () => {
     ekranaBas("/");
     expect(await screen.findByRole("heading", { name: "Genel Bakış" })).toBeInTheDocument();
     const cubuk = ustCubuk();
-    expect(await within(cubuk).findByText("Yönetici kipi")).toBeInTheDocument();
-    expect(within(cubuk).getByRole("button", { name: "Görevli kipine geç" })).toBeInTheDocument();
-    expect(within(cubuk).getByRole("button", { name: "Kilitle" })).toBeInTheDocument();
-    expect(kipApiMock.durum).toHaveBeenCalledWith(false);
+    const gosterge = await within(cubuk).findByRole("group", { name: "Oturum" });
+    expect(within(gosterge).getByText("Program yöneticisi")).toBeInTheDocument();
+    expect(within(gosterge).getByText("yonetici")).toBeInTheDocument();
+    expect(within(gosterge).getByRole("button", { name: "Kilitle" })).toBeInTheDocument();
+    // Yoklama oturumu canlı tutmaz (etkinlik başlığı yok).
+    expect(oturumApiMock.ozet).toHaveBeenCalledWith(false);
+    // Görevli kipinin izi kalmadı.
+    expect(within(cubuk).queryByText(/kipi/)).not.toBeInTheDocument();
+    expect(within(cubuk).queryByRole("button", { name: /kipine geç/ })).not.toBeInTheDocument();
+    expect(within(cubuk).getByRole("button", { name: "Çık" })).toBeInTheDocument();
   });
 
-  it("görevli kipinde rotaların yerine görevli ekranı durur ve gezinme boşalır", async () => {
-    kipApiMock.durum.mockResolvedValue(GOREVLI_KIPI);
-    ekranaBas("/kisiler");
-
-    expect(
-      await screen.findByRole("heading", { level: 1, name: "Görevli Kipi" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Kişiler" })).not.toBeInTheDocument();
-    expect(within(ustCubuk()).getByText("Görevli Kipi")).toBeInTheDocument();
-    const gezinme = screen.getByRole("navigation", { name: "Ana gezinme" });
-    expect(within(gezinme).queryAllByRole("link")).toHaveLength(0);
-    expect(screen.queryByRole("link", { name: "Hakkında ve Lisans" })).not.toBeInTheDocument();
-    expect(
-      within(ustCubuk()).getByRole("button", { name: "Yönetici kipine geç" }),
-    ).toBeInTheDocument();
-  });
-
-  it("Görevli kipine geç düğmesi ekranı görevli ekranına çevirir", async () => {
+  it("Kilitle pencereyi yeniden yükler (sorgu önbelleği ve modül belleği gider)", async () => {
     const user = userEvent.setup();
-    kipApiMock.gorevliyeGec.mockResolvedValue(GOREVLI_KIPI);
+    oturumApiMock.kilitle.mockResolvedValue({
+      ...ACIK_OTURUM,
+      sonuc: "kilitlendi",
+      durum: "kilitli",
+      hesap: null,
+    });
     ekranaBas("/");
     await screen.findByRole("heading", { name: "Genel Bakış" });
 
-    await user.click(await within(ustCubuk()).findByRole("button", { name: "Görevli kipine geç" }));
+    await user.click(await within(ustCubuk()).findByRole("button", { name: "Kilitle" }));
 
-    expect(
-      await screen.findByRole("heading", { level: 1, name: "Görevli Kipi" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Genel Bakış" })).not.toBeInTheDocument();
+    expect(oturumApiMock.kilitle).toHaveBeenCalledTimes(1);
+    expect(pencereIcerigi.yenidenYukle).toHaveBeenCalledTimes(1);
   });
 
-  it("güncelleme bandı görevli kipinde görünmez (indirme yönetici işidir)", async () => {
-    const user = userEvent.setup();
-    kipApiMock.gorevliyeGec.mockResolvedValue(GOREVLI_KIPI);
+  it("güncelleme bandı açık oturumda görünür (görevli kipindeki gizleme kalktı)", async () => {
     ekranaBas("/");
     await screen.findByRole("heading", { name: "Genel Bakış" });
 
-    // Yönetici Ayarlar → Güncelleme'de elle denetledi ve yeni sürüm bulundu.
+    // Ayarlar → Güncelleme'de elle denetlendi ve yeni sürüm bulundu.
     act(() =>
       denetimSonucunuYayinla({
         current_version: "2026.9.0",
@@ -221,22 +209,15 @@ describe("App — kip (görevli / yönetici)", () => {
     );
     expect(await screen.findByText(/OAB Defteri 2026\.10\.0 hazır\./)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Güncellemeyi indir" })).toBeInTheDocument();
-
-    await user.click(await within(ustCubuk()).findByRole("button", { name: "Görevli kipine geç" }));
-
-    expect(
-      await screen.findByRole("heading", { level: 1, name: "Görevli Kipi" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/2026\.10\.0 hazır/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Güncellemeyi indir" })).not.toBeInTheDocument();
   });
 
-  it("kip okunamazsa sayfalar açılır, gösterge görünmez (fail-open)", async () => {
-    kipApiMock.durum.mockRejectedValue(new Error("ağ yok"));
+  it("oturum okunamazsa sayfalar açılır, gösterge görünmez (fail-open)", async () => {
+    oturumApiMock.ozet.mockRejectedValue(new Error("ağ yok"));
     ekranaBas("/");
     expect(await screen.findByRole("heading", { name: "Genel Bakış" })).toBeInTheDocument();
-    await waitFor(() => expect(kipApiMock.durum).toHaveBeenCalled());
-    expect(screen.queryByRole("group", { name: "Kip" })).not.toBeInTheDocument();
+    await waitFor(() => expect(oturumApiMock.ozet).toHaveBeenCalled());
+    expect(screen.queryByRole("group", { name: "Oturum" })).not.toBeInTheDocument();
+    expect(pencereIcerigi.yenidenYukle).not.toHaveBeenCalled();
   });
 });
 

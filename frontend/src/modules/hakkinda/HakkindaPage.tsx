@@ -1,5 +1,6 @@
 import Card from "../../ui/Card";
 import Icon from "../../ui/Icon";
+import { DURUST_SINIRLAR } from "../guvenlik/metinler";
 
 export default function HakkindaPage() {
   return (
@@ -145,6 +146,32 @@ export default function HakkindaPage() {
         </div>
       </Card>
 
+      {/* Dürüst sınırlar (tasarım §4.4.6; kılavuza da girer): programın korumasının
+          nerede bittiği sade dille, iç kod olmadan. Metinler güvenlik metinlerinin tek
+          kaynağındadır (`guvenlik/metinler.DURUST_SINIRLAR`); yalnız bugün doğru olan
+          söylenir. KVKK md. 12/5 atfı kanonik metindedir (docs/mevzuat/6698-kvkk.md). */}
+      <Card className="p-5 sm:p-6">
+        <div className="flex items-start gap-4">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-shape-md bg-tertiary-container text-on-tertiary-container">
+            <Icon name="policy" size="xl" />
+          </span>
+          <div>
+            <h2 className="text-title-large font-semibold text-on-surface">Dürüst Sınırlar</h2>
+            <p className="mt-2 text-body-medium text-on-surface-variant">
+              Program kişisel verileri korumak için önlem alır; ama her önlemin bir sınırı vardır.
+              Bilmeniz gerekenler:
+            </p>
+            <ul className="mt-2 list-disc space-y-2 pl-5 text-body-medium text-on-surface-variant">
+              {DURUST_SINIRLAR.map(({ baslik, metin }) => (
+                <li key={baslik}>
+                  <strong className="font-semibold text-on-surface">{baslik}</strong> {metin}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </Card>
+
       {/* Şifreleme yöntemlerinin ADI yalnız burada geçer (docs/sozluk.md §1):
           ayar ekranları "güçlü şifrelemeyle korunur" der, merak eden ya da
           bilişim sorumlusuna bilgi verecek olan ayrıntıyı bu kartta bulur. */}
@@ -166,15 +193,19 @@ export default function HakkindaPage() {
                 çıkmaz.
               </li>
               <li>
-                Öğrenci, öğretmen ve diğer personelin ad-soyadları ile öğrencilerin okul numaraları
-                Fernet (AES-128-CBC + HMAC-SHA256) ile şifrelenir; şifreleme anahtarı, yönetici
-                parolasından Argon2id ile türetilen anahtarla korunur. Okul numarasıyla arama ve
-                e-Okul eşleştirmesi, aynı anahtardan türetilen HMAC-SHA256 kör indeksle numaranın
-                tamamı üzerinden yapılır.
+                Öğrenci, öğretmen ve diğer personelin ad-soyadları, öğrencilerin okul numaraları ve
+                hesap sahiplerinin ad-soyadları Fernet (AES-128-CBC + HMAC-SHA256) ile şifrelenir.
+                Şifreleme anahtarı her hesap için ayrı sarılır: her hesabın parolasından Argon2id
+                ile türetilen anahtar onu tek başına açar; kurtarma anahtarının da kendi sarmalı
+                vardır. Okul numarasıyla arama ve e-Okul eşleştirmesi, aynı anahtardan türetilen
+                HMAC-SHA256 kör indeksle numaranın tamamı üzerinden yapılır.
               </li>
               <li>
                 Şifreli yedekler (<span className="font-mono">.odbak</span>) X25519 ve AES-256-GCM
-                ile şifrelenir; yedek, yönetici parolası ya da kurtarma anahtarıyla açılır.
+                ile şifrelenir. Yedeğin başlığı yalnız kurtarma anahtarının sarmalını ve
+                no&apos;sunu taşır, hesapların sarmallarını taşımaz: yedek bu bilgisayarda program
+                yöneticisinin parolasıyla, başka bir bilgisayarda yalnız kurtarma anahtarıyla
+                açılır.
               </li>
             </ul>
           </div>

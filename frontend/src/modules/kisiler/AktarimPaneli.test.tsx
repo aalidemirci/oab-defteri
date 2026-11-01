@@ -270,13 +270,17 @@ describe("AktarimPaneli — öğrenci mutabakatı ve ayrılış havuzu", () => {
 
   it("409 parola_gerekli önizlemede kurulum sihirbazına yönlendirir", async () => {
     okulApiMock.previewStudentImport.mockRejectedValue(
-      new ApiError(409, "parola_gerekli", "Kişi kaydı için önce yönetici parolasını kurun."),
+      new ApiError(
+        409,
+        "parola_gerekli",
+        "Kişi kaydı için önce program yöneticisi hesabını kurun.",
+      ),
     );
     const user = userEvent.setup();
     kur("students");
     await yapistirVeOnizle(user);
 
-    expect(await screen.findByText("Önce yönetici parolasını kurun")).toBeInTheDocument();
+    expect(await screen.findByText("Önce program yöneticisi hesabını kurun")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Kurulum sihirbazını aç" })).toBeInTheDocument();
   });
 

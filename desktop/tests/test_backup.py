@@ -25,12 +25,16 @@ from desktop.backup import (
 )
 from desktop.backup_crypto import (
     MAGIC,
+    MAX_RECOVERY_HEADER_BYTES,
     BackupCryptoError,
     decrypt_bytes,
     embedded_recovery_metadata,
     ensure_public_config,
     is_usable_security_state,
+    parse_security_state,
+    read_embedded_recovery_metadata,
     recovery_header_from_state,
+    recovery_key_identity,
 )
 
 _TEST_KEY = b"k" * 32
@@ -366,6 +370,9 @@ _KULLANILAMAZ_GUVENLIK = {
     ),
     "tuz_dize_degil": b'{"surum":2,"kdf":{},"kurtarma":{"salt":5,"sarmal":"s"}}',
     "kdf_sozluk_degil": b'{"surum":2,"kdf":"x","kurtarma":{"salt":"dHV6","sarmal":"s"}}',
+    # Derin iç içe JSON: `json.loads` RecursionError yükseltir; o da "kullanılamaz"dır
+    # (yedek atlanır, istisna sızmaz — `parse_security_state`).
+    "derin_ic_ice": b"[" * 20000 + b"]" * 20000,
     # Kullanılabilir (hesap sarmalı tam) ama kurtarma bölümü yok: başlık başka
     # bilgisayarda hiçbir sırla açılamazdı (TK10) → yedek alınmaz.
     "kurtarma_yok": (
@@ -417,6 +424,69 @@ def test_baslik_kurallari_dogrudan() -> None:
     durum["kurtarma"] = {}
     assert is_usable_security_state(durum)  # hesap sarmalı tam
     assert recovery_header_from_state(durum) is None  # ama başlık olamaz
+
+
+def test_derin_ic_ice_json_recursionerror_sizdirmaz() -> None:
+    """`json.loads` derin iç içe dizide RecursionError yükseltir; ayrıştırıcı None döner.
+
+    Yedek listesi (kayıp kilidinin çıkış yolu) ve geri yükleme çekirdeği bu kuralı
+    çağırır: tek bir bozuk başlık ikisini de 500'e düşürmemeli.
+    """
+    with pytest.raises(RecursionError):
+        json.loads("[" * 20000 + "]" * 20000)
+    assert parse_security_state(b"[" * 20000 + b"]" * 20000) is None
+    assert parse_security_state(_GUVENLIK) is not None
+
+
+def test_kurtarma_anahtarinin_kimligi_yalniz_no_ve_tarihtir() -> None:
+    """TK10: başlık ve durum dosyası aynı kuraldan `{no, tarih}` verir; tuz ve sarmal dönmez."""
+    assert recovery_key_identity(json.loads(_GUVENLIK)) == {"no": 1, "tarih": "2026-07-24"}
+    assert recovery_key_identity(_BASLIK) == {"no": 1, "tarih": "2026-07-24"}
+    # Biçimsiz alan tek başına düşer; ikisi de yoksa kimlik yoktur.
+    assert recovery_key_identity({"kurtarma": {"no": True, "tarih": "2026-07-24"}}) == {
+        "no": None,
+        "tarih": "2026-07-24",
+    }
+    assert recovery_key_identity({"kurtarma": {"no": 2, "tarih": "24.07.2026"}}) == {
+        "no": 2,
+        "tarih": None,
+    }
+    bos_durumlar: tuple[object, ...] = (
+        None,
+        [],
+        {},
+        {"kurtarma": []},
+        {"kurtarma": {"no": 0, "tarih": ""}},
+    )
+    for bos in bos_durumlar:
+        assert recovery_key_identity(bos) is None
+
+
+def test_gomulu_baslik_dosyanin_yalniz_basindan_okunur(tmp_path: Path) -> None:
+    """Yedek listesinin okuyucusu bellekteki kuralla aynı sonucu verir, bozuğu reddeder."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db)
+    yedek = daily_backup(db, tmp_path / "backups", today=date(2026, 7, 24))
+    assert yedek is not None
+    icerik = yedek.read_bytes()
+    assert read_embedded_recovery_metadata(yedek) == embedded_recovery_metadata(icerik)
+
+    sabit = len(MAGIC) + 32 + 12 + 4  # sihirli bayt + açık anahtar + nonce + uzunluk
+    uzunluk = int.from_bytes(icerik[sabit - 4 : sabit], "big")
+    bozuklar = {
+        "yedek_degil": b"duz metin",
+        "kisa": icerik[: sabit - 1],
+        "baslik_kesik": icerik[: sabit + uzunluk - 1],
+        "icerik_yok": icerik[: sabit + uzunluk],
+        "uzunluk_sinir_disi": icerik[: sabit - 4]
+        + (MAX_RECOVERY_HEADER_BYTES + 1).to_bytes(4, "big")
+        + icerik[sabit:],
+    }
+    for ad, bayt in bozuklar.items():
+        yol = tmp_path / f"{ad}.odbak"
+        yol.write_bytes(bayt)
+        with pytest.raises(BackupCryptoError):
+            read_embedded_recovery_metadata(yol)
 
 
 def test_bosaltilan_guvenlik_json_eski_baslikli_yedekleri_rotasyona_kurban_etmez(
