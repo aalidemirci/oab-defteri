@@ -1,4 +1,4 @@
-// Onay (confirm) altyapısı (CLAUDE.md §7.5): uygulama kökünde tek M3 Dialog host'u
+// Onay (confirm) altyapısı: uygulama kökünde tek M3 Dialog host'u
 // + `useConfirm` hook'u. Native `window.confirm()` yerine erişilebilir ui/Dialog
 // (scrim + klavye tuzağı + ESC + odak yönetimi). KVKK: onay metni (dosya/kişi adı)
 // tarayıcı-native dialog yerine uygulama içinde, kontrollü bileşende gösterilir.
@@ -8,7 +8,7 @@
 //   if (!(await confirm({ message: "'X' silinsin mi?", confirmLabel: "Sil" }))) return;
 // Onayla → Promise true; Vazgeç / ESC / scrim → false.
 //
-// İKİNCİ DOĞRULAMA (`acknowledgeLabel`, TB18): geri alınamayan ve kararı PROGRAMIN
+// İKİNCİ DOĞRULAMA (`acknowledgeLabel`; tasarım §13 D30): geri alınamayan ve kararı PROGRAMIN
 // DEĞİL kullanıcının verdiği işlemlerde (ör. "olası aynı kişi" birleştirmesi —
 // aday yalnız ad benzerliğiyle bulunur, adaş olabilir) onay düğmesi kutu
 // işaretlenmeden etkinleşmez. Kutu her açılışta boştur: bir önceki onayın
@@ -31,7 +31,7 @@ export interface ConfirmOptions {
   cancelLabel?: string;
   /**
    * Verilirse onay düğmesi bu kutu işaretlenmeden KAPALI kalır (geri alınamayan,
-   * kullanıcının kendi bilgisiyle doğrulaması gereken işlemler — TB18).
+   * kullanıcının kendi bilgisiyle doğrulaması gereken işlemler — tasarım §13 D30).
    */
   acknowledgeLabel?: string;
 }

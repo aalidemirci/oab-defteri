@@ -1,4 +1,4 @@
-// M3 Snackbar (CLAUDE.md §7.5 / .claude/rules/frontend-m3.md): geçici bildirim;
+// M3 Snackbar: geçici bildirim;
 // inverse-surface zemin + inverse-on-surface metin, shape-xs köşe, elevation-3,
 // tek satır body-medium + opsiyonel eylem (inverse-primary etiket) + kapat ikonu.
 // Erişilebilirlik: varsayılan role=status (polite); hata için role=alert (assertive).

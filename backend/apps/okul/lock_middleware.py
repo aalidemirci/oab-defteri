@@ -1,11 +1,11 @@
-"""Kilit kapısı — açılmamış veriye API erişimini keser (tasarım §4.3, §4.4, §6.3).
+"""Kilit kapısı — açılmamış veriye API erişimini keser (tasarım §4.3 tehdit 8, §4.4.3).
 
 Yönetici parolası zorunludur (parolasız kip yok). Parola kurulu ve kilit
 açılmamışken hassas alanlar zaten okunamaz (şifreli token döner) ve yazılamaz
 (`KeyMissingError`), ama programın "çalışıyormuş gibi" davranıp resmî evraka
 çözülememiş metin basması KABUL EDİLEMEZ. Bu ara katman iki kilidi uygular:
 
-1. **Güvenlik dosyası kayıp** (GA-2): DB'de anahtar parmak izi var ama
+1. **Güvenlik dosyası kayıp** (tehdit 8): DB'de anahtar parmak izi var ama
    `guvenlik.json` yok — ya da dosya var ama kullanılamıyor (boş, bozuk,
    sarmal bölümleri eksik; `app_password.security_file_missing`). Kilitliyken
    dosyanın silinmesi, yeniden adlandırılması ya da bozulması programı
@@ -26,7 +26,7 @@ açılmamışken hassas alanlar zaten okunamaz (şifreli token döner) ve yazıl
      (`backup_restore._ensure_state_file`). Diğer çıkış yolu dosyanın yedeğini
      veri klasörüne geri koymaktır; kapı her istekte diske bakar, dosya
      döndüğü anda normal kilit durumuna geçilir;
-   - `POST app/quit/` — Çık (F5, §4.2-4): kilitliyken ve kayıp kilidinde
+   - `POST app/quit/` — Çık (tasarım §4.2 "Kapanış"): kilitliyken ve kayıp kilidinde
      parolasızdır (`views_app`).
 2. **Kilitli** (`423 locked`): parola kurulu, anahtar bellekte değil.
    Açık kalanlar:
@@ -39,8 +39,8 @@ açılmamışken hassas alanlar zaten okunamaz (şifreli token döner) ve yazıl
      uçları kapalı kalır;
    - `/api/v1/app/quit/` — Çık (parolasız; çarpıyla aynı düzenli kapanış, T6).
 
-   `/api/v1/updates/` kilitliyken KAPALIDIR (F11 düzeltme turu): sürüm denetimi
-   yalnız Ayarlar → Güncelleme'deki "Şimdi denetle" düğmesiyledir (T11 v4) ve o
+   `/api/v1/updates/` kilitliyken KAPALIDIR (aile iskeletinden): sürüm denetimi
+   yalnız Ayarlar → Güncelleme'deki "Şimdi denetle" düğmesiyledir (tasarım TK4) ve o
    ekran kilit açıkken görünür; kilit ekranı güncelleme ucunu çağırmaz. Önceki
    muafiyetin gerekçesi ("kilit ekranında başlayan otomatik sürüm denetimi")
    kalktı; kullanılmayan muafiyet kilitli programa GitHub'dan kurucu indirip
@@ -74,12 +74,12 @@ ALLOWED_PREFIXES = (
     # sihirbazının diğer uçları kapalıdır.
     "/api/v1/setup/status/",
 )
-# Kilitliyken izin verilen TEKİL yollar (tam yol eşleşmesi): Çık (F5, §4.2-4)
+# Kilitliyken izin verilen TEKİL yollar (tam yol eşleşmesi): Çık (tasarım §4.2)
 # kilitliyken parolasızdır; çarpıyla aynı düzenli kapanış yoludur (T6). Ön ek
 # değildir: `app/` altına ileride eklenecek bir yol kilit kapısını aşmasın.
 LOCKED_ALLOWED_PATHS = frozenset({"/api/v1/app/quit/"})
 # `security/` ön ekinde olup kilitliyken YİNE DE kesilen uçlar (TAM yol). Kurtarma
-# anahtarı çıktısı (E14), saklandı damgası ve anahtar yenileme (F1 eki, karar 2)
+# anahtarı belgesi (tasarım §9.7), saklandı damgası ve anahtar yenileme
 # bellekteki anahtara karşı doğrular ve kilit açmanın bir yolu değildir:
 # kilitliyken açık kalsalardı kurtarma anahtarı ya da parola için ikinci bir
 # deneme kapısı olurlardı. Kurulum sihirbazında ve Ayarlar → Güvenlik'te kilit
@@ -91,7 +91,7 @@ LOCKED_DENIED_PATHS = frozenset(
         "/api/v1/security/recovery-key/renew/",
     }
 )
-# Güvenlik dosyası kayıpken izin verilen uçlar (TAM yol eşleşmesi, sözleşme §3).
+# Güvenlik dosyası kayıpken izin verilen uçlar (TAM yol eşleşmesi; §4.3 tehdit 8).
 # `security/state/reset/`: kayıp ekranındaki "sıfırla ve kuruluma dön" yolu; uç
 # kendi koşullarını (parmak izi boş + şifreli tablolar boş) denetler, aksi 409.
 SECURITY_FILE_MISSING_ALLOWED_PATHS = frozenset(
@@ -102,7 +102,7 @@ SECURITY_FILE_MISSING_ALLOWED_PATHS = frozenset(
         "/api/v1/security/state/reset/",
         "/api/v1/backups/",
         "/api/v1/backups/restore/",
-        # Çık (F5, §4.2-4): kayıp kilidinde de parolasız çıkılır.
+        # Çık (tasarım §4.2): kayıp kilidinde de parolasız çıkılır.
         "/api/v1/app/quit/",
     }
 )

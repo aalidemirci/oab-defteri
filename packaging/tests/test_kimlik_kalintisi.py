@@ -353,5 +353,6 @@ def test_teknik_borc_muafiyeti_hala_gerekli() -> None:
         assert goreli in MUAF_DOSYALAR
         assert dosya_bulgulari(REPO, goreli) != [], (
             f"{goreli} artık kalıntı taşımıyor: MUAF_DOSYALAR'dan ve "
-            "TEKNIK_BORC_MUAFIYETLERI'nden silin, docs/teknik-borc.md'deki kalemi kapatın."
+            "TEKNIK_BORC_MUAFIYETLERI'nden silin, genel tasarımın §13 'Devralınan "
+            "kusurlar' tablosundaki kalemi kapatın."
         )

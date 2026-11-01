@@ -1,5 +1,4 @@
-// Tema (açık/karanlık) durumu (CLAUDE.md §7.5 — karanlık tema V2'de token'lar
-// üzerinden açılır).
+// Tema (açık/karanlık) durumu — karanlık tema token'lar üzerinden açılır.
 //
 // İlk değer mantığı:
 //   1. localStorage tercihi (kullanıcı manuel seçmişse)

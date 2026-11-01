@@ -1,4 +1,4 @@
-// Kabuktaki güncelleme bandı. Açılışta DENETİM YAPMAZ (tasarım T11): kendi
+// Kabuktaki güncelleme bandı. Açılışta DENETİM YAPMAZ (tasarım TK4): kendi
 // başına hiçbir istek atmaz, yalnız Ayarlar → Güncelleme'deki elle denetimin
 // sonucunu (`denetimOlayi.ts`) dinler. Yeni sürüm bulunduysa kullanıcı başka
 // ekrana geçtiğinde de hatırlatır; "Daha sonra" o sürüm için bandı kapatır.

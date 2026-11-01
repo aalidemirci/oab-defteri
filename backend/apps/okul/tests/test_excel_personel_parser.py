@@ -1,7 +1,7 @@
 """apps.okul.excel_personel — SADELEŞMİŞ personel parser testleri.
 
-OYS şablonundan fark: e-posta ve Rol/Kapsam çiftleri YOK — personel hesabı yoktur.
-F1-C (tasarım §6.1, V2-01): unvan ve branş SAKLANMAZ. Branş sütunu hiç
+Aile şablonundan fark: e-posta ve Rol/Kapsam çiftleri YOK — personel hesabı yoktur.
+Unvan ve branş SAKLANMAZ (tasarım §8.4). Branş sütunu hiç
 eşlenmez; "Görevi/Unvan" (şablonda "Üye Türü") yalnız üye türüne (öğretmen /
 diğer personel) çevrilir, metni satır nesnesine girmez.
 """

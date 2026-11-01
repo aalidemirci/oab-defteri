@@ -1,11 +1,12 @@
-"""Program uçları — `POST app/quit/`: arayüzden düzenli çıkış (tasarım §4.2-4, §5.10-18).
+"""Program uçları — `POST app/quit/`: arayüzden düzenli çıkış (tasarım §4.2 "Kapanış").
 
 Pencerenin çarpısı programı kapatır (T6, tasarım §4.5); tepsi yoktur. Düzenli
 kapanış ayrıca tek kopya kanalının `kapat` komutundan (kurucu), Linux'ta oturum
 kapanışından (SIGTERM) ve bu uçtan gelir. Uç, pencere süslemesi olmayan Linux
-masaüstünün çıkış yoludur (TB13).
+masaüstünün çıkış yoludur (tasarım §4.5).
 
-Kip kuralı (§4.2-4 tablosu):
+Kip kuralı (aile iskeletinden; tasarım §4.2 Çık'ı her oturum durumunda parolasız
+ister — kip F1b'nin 1. adımında oturuma döner):
 
 | Durum | Çık |
 |---|---|
@@ -13,7 +14,7 @@ Kip kuralı (§4.2-4 tablosu):
 | görevli kipi | gövdede yönetici parolası; parolasız istek **403** `cikis_parolasi_gerekli`, yanlış parola 400 "Parola hatalı." (+ kademeli gecikme) |
 | kilitli, kurulum, güvenlik dosyası kayıp, yeniden başlat gerekli | parolasız |
 
-Bu koruma **kaza önleyicidir, güvenlik sınırı değildir** (§4.2-4): Görev
+Bu koruma **kaza önleyicidir, güvenlik sınırı değildir**: Görev
 Yöneticisi süreci her durumda kapatabilir. Görevli kipinin izin listesinde uç
 yalnız `POST` olarak durur (`kip_izinleri`); parolayı bu görünüm denetler.
 Kilit kapısı ve yeniden başlat kapısı bu yolu geçirir (`lock_middleware`,

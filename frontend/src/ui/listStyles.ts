@@ -5,7 +5,7 @@
 // satırdaysa o satır hafifçe renklenir" (hover-follow) davranışı için bu sabit tüm
 // liste satırlarına uygulanır.
 //
-// M3: hover state layer %8 opaklıkta on-surface örtüsü (frontend-m3.md "State layer").
+// M3: hover state layer %8 opaklıkta on-surface örtüsü.
 // %8 değeri --md-state-hover token'ıyla aynı (Tur 313). Bu satır-tinti deseni (örtü
 // span'ı YERİNE doğrudan bg) tablo satırları için bilinçli — heterojen satır markup'ına
 // absolute örtü span'ı eklemek pratik değil; `.state-layer` sınıfı `group relative

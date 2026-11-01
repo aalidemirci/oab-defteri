@@ -1,13 +1,13 @@
 // Ders yılının kapalı günlerini tohumlama — kurulum sihirbazı ve Ayarlar → Ders Yılları
-// aynı kuralı kullanır (tasarım §6.1, §9-5).
+// aynı kuralı kullanır (genel tasarım §5.1 `Holiday`).
 //
-// İade tarihi kaydırması yalnız Kapalı Günler'deki kayıtlara bakar. Bir takvim yılının
-// resmî tatilleri ve dini bayramları girilmemişse o yılın 1 Ocak'ına ya da bayramına
-// düşen iade tarihi kaydırılmaz ve ertesi gün sahte gecikme doğar (F6 düzeltme turu:
-// ikinci kullanım yılında Ayarlar'dan açılan ders yılı tatilsiz kalıyordu). Ders yılı
-// iki takvim yılına yayılır; ikisi de tohumlanır. Tohumlama fikirdeştir: var olan
-// kayıt yeniden eklenmez. Yalnız ders yılı oluşturulunca ya da aktifleşince koşar:
-// sonradan silinen bir tatil her ekran açılışında geri gelmesin.
+// İş günü hesabı tatilleri yalnız Kapalı Günler'deki kayıtlardan bilir. Bir takvim
+// yılının resmî tatilleri ve dini bayramları girilmemişse o günler iş günü sayılır ve
+// iş günüyle verilen süreler yanlış hesaplanır (aile iskeletinde görülen kusur: ikinci
+// kullanım yılında Ayarlar'dan açılan ders yılı tatilsiz kalıyordu). Ders yılı iki
+// takvim yılına yayılır; ikisi de tohumlanır. Tohumlama fikirdeştir: var olan kayıt
+// yeniden eklenmez. Yalnız ders yılı oluşturulunca ya da aktifleşince koşar: sonradan
+// silinen bir tatil her ekran açılışında geri gelmesin.
 
 import { okulApi } from "../okul/api";
 import type { SchoolYear } from "../okul/api";

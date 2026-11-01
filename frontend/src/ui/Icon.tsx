@@ -1,4 +1,4 @@
-// Material Symbols (self-host) sarmalayıcı (CLAUDE.md §7.5). Boyut `size` prop'u
+// Material Symbols (self-host) sarmalayıcı. Boyut `size` prop'u
 // ile merkezî eşlemden gelir (F32 — sayfalarda ham text-* ölçeği yazılmaz);
 // verilmezse bağlamın font-size'ı geçerlidir (varsayılan 24px = M3 standart, Tur 314).
 // İkon-only kullanımda `label` ile erişilebilir ad verin.

@@ -1,8 +1,8 @@
-// main.tsx — OYS `src/main.tsx`'ten UYARLANMIŞTIR (Görev 3).
-// AuthProvider, Sentry init ve Google OAuth 127.0.0.1→localhost yönlendirmesi
-// TAMAMEN ÇIKARILDI (OAB Defteri authsuz/tek-kullanıcılı — README
-// "Mimari"). QueryClient/Snackbar/Confirm sağlayıcıları ve tema ilklemesi
-// (FOUC önleme) korunur.
+// main.tsx — aile iskeletinden uyarlandı. Web uygulamalarındaki AuthProvider,
+// Sentry ve Google OAuth katmanları yoktur: program yerel sunucuyla çalışan
+// çevrimdışı bir masaüstü programıdır, telemetri göndermez (tasarım §4.1, TK4).
+// QueryClient/Snackbar/Confirm sağlayıcıları ve tema ilklemesi (FOUC önleme)
+// korunur.
 
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
@@ -19,8 +19,7 @@ import { SnackbarProvider } from "./ui/SnackbarProvider";
 import "./index.css";
 
 // Tema'yı React mount'undan ÖNCE uygula — FOUC olmadan açık/karanlık. Kullanıcı
-// tercihi localStorage'da yoksa sistem `prefers-color-scheme` esas alınır
-// (CLAUDE.md §7.5).
+// tercihi localStorage'da yoksa sistem `prefers-color-scheme` esas alınır.
 initThemeFromStorage();
 initDensityFromStorage();
 

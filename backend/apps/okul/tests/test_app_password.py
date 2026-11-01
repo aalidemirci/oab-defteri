@@ -1,4 +1,4 @@
-"""Zorunlu yönetici parolası (tasarım §4.3, §6.3) — uçtan uca davranış testleri.
+"""Zorunlu yönetici parolası (tasarım §4.3, §4.4.4) — uçtan uca davranış testleri.
 
 Varsayılan test ortamı `backend/conftest.py`'dedir: **parola kurulu + kilit
 açık** (sabit `TEST_DEK`, `TEST_PAROLA`, `TEST_KURTARMA_ANAHTARI`). Parolasız
@@ -202,7 +202,7 @@ class TestEnable:
             app_password.enable(password=YENI_PAROLA)
 
     def test_guvenlik_dosyasi_kayipken_reddedilir(self, kayip: Path) -> None:
-        """GA-2: parmak izi doluyken yeni anahtar eski kayıtları okunamaz bırakırdı."""
+        """Tehdit 8 (§4.3): parmak izi doluyken yeni anahtar eski kayıtları okunamaz bırakırdı."""
         with pytest.raises(app_password.AppPasswordError, match="guvenlik.json"):
             app_password.enable(password=YENI_PAROLA)
         assert app_password.read_state() is None
@@ -487,7 +487,7 @@ class TestChangePassword:
         assert Student.objects.get(pk=ogrenci.pk).first_name == OGRENCI_AD
 
     def test_kor_indeks_parola_degisiminden_sonra_ayni_kalir(self) -> None:
-        """T14: kör indeks anahtarı DEK'ten türer; parola değişimi indeksi bozmaz."""
+        """Kör indeks (§5.3) anahtarı DEK'ten türer; parola değişimi indeksi bozmaz."""
         onceki = crypto.blind_index("101")
         app_password.change_password(current_password=TEST_PAROLA, new_password=YENI_PAROLA)
         app_password.lock()
@@ -548,7 +548,7 @@ class TestInterruptedTransition:
             app_password.read_state()
 
     def test_cozme_gecisi_yoktur(self) -> None:
-        """§6.3-6: parolasız dal söküldü — çözme geçişi ve kaldırma işlevi yok."""
+        """Parolasız dal aile iskeletinde söküldü (OAB'de parola zorunlu, tasarım §4.4.5)."""
         for ad in ("disable", "_run_decrypt_pass", "TRANSITION_DECRYPTING", "_archive_state"):
             assert not hasattr(app_password, ad), ad
         for ad in ("plaintext_writes", "writes_encrypted"):
@@ -629,7 +629,7 @@ class TestSecurityApi:
         assert resp.json()["locked"] is False
 
     def test_kaldirma_ucu_yoktur(self, client: APIClient) -> None:
-        """§6.3-6: `security/disable/` söküldü; yol ne adla ne adresle çözülür."""
+        """`security/disable/` aile iskeletinde söküldü; yol ne adla ne adresle çözülür."""
         with pytest.raises(NoReverseMatch):
             reverse("security-disable")
         resp = client.post("/api/v1/security/disable/", {"password": TEST_PAROLA}, format="json")
@@ -896,7 +896,7 @@ def test_parmak_izi_yokken_bozuk_dosya_da_kayip_sayilir_ve_db_istemez() -> None:
 @pytest.mark.django_db
 def test_parmak_izi_yokken_bozuk_dosya_durum_ozetinde_kayip_ve_sifirlanabilir() -> None:
     """Durum özeti kayıp hâlinde sıfırlama yolunun koşullarını da sorar (DB'ye gider:
-    parmak izi + şifreli tablolar; F1-E). Parmak izi boş ve kişi yokken yol açıktır."""
+    parmak izi + şifreli tablolar). Parmak izi boş ve kişi yokken yol açıktır."""
     app_password.state_path().write_bytes(b"")
     crypto.unload_key()
 

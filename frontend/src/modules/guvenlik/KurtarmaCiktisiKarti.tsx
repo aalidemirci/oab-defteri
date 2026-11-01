@@ -1,7 +1,8 @@
-// "Kurtarma anahtarı çıktısı" kartı (E14) — parola kurulduktan SONRA çıktıyı yeniden
-// almak için (ör. elle yazılmış kâğıdın temiz kopyası). Anahtar programda saklanmaz:
-// kullanıcı elindeki anahtarı yazar, backend onu kurtarma sarmalına karşı doğrular
-// (yanlışsa Türkçe ileti + kademeli gecikme) ve yalnız doğruysa PDF üretir.
+// "Kurtarma anahtarı çıktısı" kartı (katalog dışı program belgesi, tasarım §9.7) —
+// parola kurulduktan SONRA çıktıyı yeniden almak için (ör. elle yazılmış kâğıdın
+// temiz kopyası). Anahtar programda saklanmaz: kullanıcı elindeki anahtarı yazar,
+// backend onu kurtarma sarmalına karşı doğrular (yanlışsa Türkçe ileti + kademeli
+// gecikme) ve yalnız doğruysa PDF üretir.
 // Ayarlar → Güvenlik'te ve sihirbazın ilk adımında (parola zaten kuruluysa) durur.
 
 import { useState } from "react";

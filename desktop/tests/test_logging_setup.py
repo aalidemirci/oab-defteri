@@ -1,4 +1,4 @@
-"""Günlük yapılandırması testleri — erişim logu KAPALI, PII yazılmaz (KS F2 bulgu #20)."""
+"""Günlük yapılandırması testleri — erişim logu KAPALI, PII yazılmaz (aile denetim bulgusu)."""
 
 from __future__ import annotations
 
@@ -129,7 +129,7 @@ def test_logger_adi_paket_ile_hizali(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Çöküş kaydı (19.09.2026): PDF motorunun C katmanındaki çöküş süreci anında
+# Çöküş kaydı (aile iskeletinde 19.09.2026): PDF motorunun C katmanındaki çöküş süreci anında
 # kapatıyor, `uygulama.log`a iz düşmüyordu.
 # ---------------------------------------------------------------------------
 def test_cokme_kaydi_ayrac_yazar_ve_tum_is_parcaciklarini_dosyaya_baglar(

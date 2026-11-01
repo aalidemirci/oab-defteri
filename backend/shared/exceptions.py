@@ -1,12 +1,12 @@
-"""Standart API hata yanıtı — `{code, message, fields}` sözleşmesi (tasarım §4.3).
+"""Standart API hata yanıtı — `{code, message, fields}` sözleşmesi (aile iskeletinden; ret kodları tasarım §2.3.1).
 
-OYS `shared/exceptions.py`'den uyarlandı: AccessLog/yetki-reddi bölümleri
-KALDIRILDI (hesapsız program — masadaki kişi ayrımı kiple yapılır, §4.4); gövde
+Aile iskeletinden uyarlandı: AccessLog/yetki-reddi bölümleri KALDIRILDI
+(bugün hesapsız program — kişiler arasındaki ayrım kiple yapılır, §4.4); gövde
 dönüşümü AYNEN. FE `lib/api.ts` bu biçimi bekler:
 
     { "code": "validation_error", "message": "Türkçe açıklama", "fields": {...} }
 
-Fail-closed şifreleme (§6.3-2/3): anahtar bellekte değilken şifreli alana yazma
+Fail-closed şifreleme (tasarım §5.3): anahtar bellekte değilken şifreli alana yazma
 girişimi (`shared.crypto.KeyMissingError`, alt sınıfı
 `app_password.PasswordRequired` dahil) **409 `parola_gerekli`** olur. Parola
 kuruluysa kilitli durum zaten ara katmanda (423) kesildiği için bu yanıt
@@ -27,7 +27,7 @@ from rest_framework.views import exception_handler as drf_exception_handler
 
 from shared.crypto import KeyMissingError
 
-# Sözleşme §2 — FE bu kodu tanır (kurulum sihirbazına yönlendirir). S105: hata kodu
+# Ön yüz bu kodu tanır (kurulum sihirbazına yönlendirir; `lib/api.ts`). S105: hata kodu
 # ve kullanıcı iletisidir, parola değil.
 PASSWORD_REQUIRED_CODE = "parola_gerekli"  # noqa: S105
 PASSWORD_REQUIRED_MESSAGE = (

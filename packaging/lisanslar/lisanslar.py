@@ -1,4 +1,4 @@
-"""Üçüncü taraf lisansları: THIRD_PARTY_LICENSES üretimi ve paket denetimi (F12, TB28).
+"""Üçüncü taraf lisansları: THIRD_PARTY_LICENSES üretimi ve paket denetimi (tasarım §11.4).
 
 OAB Defteri'nin kendi kodu PolyForm Noncommercial'dır (`LICENSE`); pakete
 giren her üçüncü taraf bileşenin adı, sürümü, lisansı ve lisans METNİ depo
@@ -453,7 +453,7 @@ ACIKLAMALAR: dict[str, str] = {
     "xlrd": "e-Okul .xls okuma",
     "cryptography": "Alan şifrelemesi, şifreli yedek",
     "argon2-cffi": "Yönetici parolası (Argon2id)",
-    "waitress": "Yerel sunucular",
+    "waitress": "Yerel yönetim sunucusu",
     "pywebview": "Program penceresi",
     "pythonnet": "Windows pencere motoru köprüsü (WebView2)",
     "pyside6": "Linux penceresi (Qt 6)",
@@ -964,7 +964,7 @@ Hangi dosyaların pakette bulunduğu paket-icerigi.txt'de yazılıdır.
 
 #: PySide6 6.8.3 tekerleğinin Linux'ta AYRI kitaplık dosyaları olarak taşıdığı ICU
 #: (`PySide6/Qt/lib/libicu{data,i18n,uc}.so.73`). Sürüm kitaplığın içindeki sürüm
-#: dizesinden okundu (F12 düzeltme turu, 28.09.2026); lisans metni aynı sürümün
+#: dizesinden okundu (aile iskeletinin düzeltme turu, 28.09.2026); lisans metni aynı sürümün
 #: etiketinden alınır (ICU lisansı telif ve izin metninin kopyalarla verilmesini ister).
 ICU_SURUMU = "73.2"
 ICU_LISANS_ADRESI = "https://raw.githubusercontent.com/unicode-org/icu/release-73-2/icu4c/LICENSE"
@@ -1126,9 +1126,9 @@ def _elle_bilesenler() -> list[tuple[Bilesen, list[tuple[str, str]]]]:
 
 
 #: Programın herkese açık deposu. LGPL kaynağı için yazılı teklifin iletişim yolu bu
-#: deponun Issues sayfası ve geliştiricinin e-posta adresidir (KB-1, 28.09.2026 kullanıcı
-#: kararı: Issues; 29.09.2026 kullanıcı kararı — tasarım §14.1 F12 ekleri İA-2: kardeş
-#: programlardaki gibi e-posta da verilir; teklifte kişi adı, unvan ve kurum adı YAZILMAZ).
+#: deponun Issues sayfası ve geliştiricinin e-posta adresidir (aile iskeletinin kullanıcı
+#: kararları: KB-1, 28.09.2026 — Issues; 29.09.2026 — kardeş programlardaki gibi e-posta
+#: da verilir; teklifte kişi adı, unvan ve kurum adı YAZILMAZ).
 #: Güncelleme denetiminin varsayılan deposuyla aynıdır
 #: (`backend/apps/okul/services/updates.py::GITHUB_REPOSITORY`; kapı testi eşitler).
 DEPO_ADRESI = "https://github.com/aalidemirci/oab-defteri"
@@ -1156,9 +1156,9 @@ def _yazili_teklif(bilesenler: list[Bilesen]) -> list[str]:
     erişim (Release notu — `.github/workflows/paketleme.yml`; KB-1 düzeltme turu,
     29.09.2026). Bileşen listesi `bilesenler.json`'dan türer: pakete yeni bir LGPL bileşen
     girerse teklife kendiliğinden girer. Kararlı sürümden önce Windows'un MSYS2 kaynak
-    arşivleri ayrıca Release'e konur (KB-1 (b), tasarım §14.1 F12 ekleri). İstek yolu
-    deponun Issues sayfası ya da geliştiricinin e-posta adresidir (29.09.2026 kullanıcı
-    kararı, F12 ekleri İA-2; kişi adı, unvan ve kurum adı yazılmaz).
+    arşivleri ayrıca Release'e konur (KB-1 (b); tasarım §11.4, §13 D18: F7 paketlemesinden
+    önce). İstek yolu deponun Issues sayfası ya da geliştiricinin e-posta adresidir (aile
+    iskeletinin 29.09.2026 kullanıcı kararı; kişi adı, unvan ve kurum adı yazılmaz).
     """
     lgpl = [b for b in bilesenler if b.tur == "python" and "LGPL" in b.etkin_lisans]
     satirlar = [
@@ -1421,9 +1421,9 @@ def uret(on_yuz_json: Path, hedef: Path = LISANS_DIZINI) -> list[Bilesen]:
 #: (27.09.2026 yerel derleme; spec `excludes`'a alındı). Debian paketlerinin lisansı
 #: makine okunur biçimde güvenilir değildir (copyright dosyalarının çoğu DEP-5 değil,
 #: DEP-5 olanlarda da test ve araç dosyalarının GPL'i kitaplığınkiyle karışır); bu
-#: yüzden Linux'ta kural BİLİNEN ad listesidir (F12 düzeltme turu). Liste, bir Python
-#: eklentisi, görüntü/PDF ya da ortam kitaplığı zinciri üzerinden sızabilecek, lisansı
-#: yalnız GPL (ya da AGPL) olan Debian kitaplıklarıdır: readline/history, gdbm,
+#: yüzden Linux'ta kural BİLİNEN ad listesidir (aile iskeletinin düzeltme turu). Liste,
+#: bir Python eklentisi, görüntü/PDF ya da ortam kitaplığı zinciri üzerinden sızabilecek,
+#: lisansı yalnız GPL (ya da AGPL) olan Debian kitaplıklarıdır: readline/history, gdbm,
 #: fftw3, gsl, poppler, ghostscript (libgs), jbig2dec, x264, x265, postproc
 #: (FFmpeg'in GPL parçası), mad, faad, cdio, dvdcss, xvidcore, mpeg2, pci, iw,
 #: parted. Windows'ta MSYS2 paketinin SPDX lisansı ayrıca değerlendirilir
@@ -1444,8 +1444,8 @@ YASAK_YEREL = re.compile(
 #: Animation — kitaplık adı Bodymovin —, MQTT, Network Authorization, Qml Compiler,
 #: Quick 3D, Quick 3D Physics, Quick Timeline, Virtual Keyboard, Wayland Compositor).
 #: PySide6_Addons bu modüllerin kitaplıklarını da taşır ve dağıtımın lisansı TEK
-#: ifadedir ("LGPL-3.0-only OR GPL-…"): dağıtım etiketine güvenmek yetmez (F12
-#: düzeltme turu — 27.09.2026 Qt'li Linux derlemesinde 22 kitaplık, QML eklentileri ve
+#: ifadedir ("LGPL-3.0-only OR GPL-…"): dağıtım etiketine güvenmek yetmez (aile
+#: iskeletinin düzeltme turu — 27.09.2026 Qt'li Linux derlemesinde 22 kitaplık, QML eklentileri ve
 #: `QtDataVisualization` bağlayıcısı pakete girmişti). Kural DOSYA düzeyindedir:
 #: kitaplık, Python bağlayıcısı, QML modül dizini ve bunlara bağlanan (DT_NEEDED) her
 #: ELF (ör. Quick 3D'nin `assetimporters` eklentisi, Virtual Keyboard'un giriş eklentisi).
@@ -2480,8 +2480,8 @@ def kisitlar_metni(bilesenler: Sequence[Bilesen], platform: str) -> str:
     Geçişli bağımlılıklar gereksinim dosyalarında pinli değildir (dört halka kuralı
     yalnız doğrudan bağımlılıkları pinler); kısıt dosyası paket ortamını listenin
     üretildiği sürümlere bağlar. Böylece pakete giren sürüm `BENIOKU.txt` ve
-    `bilesenler.json`'dakiyle aynıdır (F12 düzeltme turu: 27.09.2026 Linux derlemesinde
-    `paket-icerigi.txt` fonttools 4.66.0, liste 4.65.0 diyordu). Kısıt yalnız kurulan
+    `bilesenler.json`'dakiyle aynıdır (aile iskeletinin düzeltme turu: 27.09.2026 Linux
+    derlemesinde `paket-icerigi.txt` fonttools 4.66.0, liste 4.65.0 diyordu). Kısıt yalnız kurulan
     dağıtıma uygulanır; listede olup kurulmayan (ör. `OD_WITH_QT=0`'da PySide6) kurulmaz.
     """
     satirlar = [
@@ -2510,7 +2510,7 @@ def npm_farki(on_yuz: dict[str, Any], bilesenler: Sequence[Bilesen]) -> list[str
     Depo testi yalnız `package.json` `dependencies` kayıtlarına bakar; bir sürüm
     yükseltmesiyle çıktıya yeni bir GEÇİŞLİ npm paketi girerse ya da yalnız tip olarak
     kullanılan bir paket (`PAKETLENMEYEN_NPM`) çalışma anında import edilmeye başlarsa
-    bunu ancak bu karşılaştırma görür (F12 düzeltme turu; scripts/gates.sh).
+    bunu ancak bu karşılaştırma görür (aile iskeletinin düzeltme turu; scripts/gates.sh).
     """
     cikti = {(str(p["ad"]), str(p["surum"])) for p in on_yuz["paketler"]}
     liste = {(b.ad, b.surum) for b in bilesenler if b.tur == "npm"}

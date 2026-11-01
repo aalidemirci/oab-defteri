@@ -1,11 +1,14 @@
-"""Kurtarma anahtarı çıktısı (E14) — `POST security/recovery-key/pdf/` (F1-E kod kapısı).
+"""Kurtarma anahtarı belgesi (tasarım §9.7 program belgesi) — `POST security/recovery-key/pdf/`.
 
-Kanıtlanan maddeler (sözleşme E):
+Kanıtlanan maddeler:
 
 * anahtar `guvenlik.json`'daki kurtarma sarmalını açmıyorsa 400 + kademeli
   gecikme, PDF üretilmez (yanlış yazılmış anahtar kâğıda basılmaz);
 * doğru anahtarla PDF üretilir ve İÇERİKTE anahtar vardır (pypdf ile metin
   çıkarılır); belge tek sayfadır (sayfa bütçesi gerçek uzunlukta verilerle);
+* belge metni OAB'nindir (§12.B, §13 D50): saklama yeri okul müdürlüğünde kapalı
+  zarf, veliye geçmez (D3); parola paylaşılmaz; aileden kalan "parola en az iki
+  kişide" öğüdü ve kütüphane dili yoktur;
 * anahtar hiçbir günlüğe düşmez (caplog, DEBUG düzeyinde bütün kaydediciler)
   ve hata gövdesinde yankılanmaz;
 * kilitliyken kilit kapısı keser (`security/` önekine rağmen), görevli kipinde
@@ -82,6 +85,27 @@ def test_dogru_anahtarla_pdf_uretilir_ve_icerikte_anahtar_var(client: APIClient)
     assert "OAB Defteri" in metin
 
 
+def test_belge_metni_oab_ye_gore(client: APIClient) -> None:
+    """D50: program tanımı, saklama yeri (D3) ve paylaşım yasağı; aile öğütleri yok."""
+    metin = _metin(_pdf(_iste(client, TEST_KURTARMA_ANAHTARI)))
+    sade = _bosluksuz(metin)
+    for ifade in (
+        "okul-aile birliğinin işlerini",
+        "çevrimdışı masaüstü programı",
+        "Zarfı okul müdürlüğünde",
+        "Zarf veliye geçmez",
+        "Yönetici parolası kimseyle paylaşılmaz",
+        "md. 7/2",
+        "9/2-e",
+    ):
+        assert _bosluksuz(ifade) in sade, ifade
+    # Satır sonu çok sözcüklü ifadeyi bölebilir; boşluklar tekleştirilir ki yasak
+    # ifade iki satıra düştüğünde de yakalansın.
+    kucuk = re.sub(r"\s+", " ", metin).casefold()
+    for yasak in ("kütüphane", "en az iki", "öğrenci", "okul numara", "geçerli kalır"):
+        assert yasak not in kucuk, yasak
+
+
 def test_dosya_adi_belge_adi_ve_tarih_anahtarsiz(client: APIClient) -> None:
     yanit = _iste(client, TEST_KURTARMA_ANAHTARI)
     baslik = unquote(yanit["Content-Disposition"])
@@ -120,7 +144,7 @@ def test_okul_adi_ve_demirbas_no_basilir(client: APIClient) -> None:
 
 
 def test_sayfa_butcesi_uzun_okul_adi_ve_demirbas_no_ile_tek_sayfa(client: APIClient) -> None:
-    """Sayfa bütçesi gerçek uzunlukta verilerle (CLAUDE.md §3): en uzun künye tek sayfa."""
+    """Sayfa bütçesi gerçek uzunlukta uydurma verilerle (tasarım §9.1-4): en uzun künye tek sayfa."""
     setup_service.update_school_config(
         fields={
             # Uydurma ad: gerçek bir kuruma ait değildir, yalnız uzunluk içindir.
@@ -129,7 +153,7 @@ def test_sayfa_butcesi_uzun_okul_adi_ve_demirbas_no_ile_tek_sayfa(client: APICli
                 "Çok Programlı Pansiyonlu Ek Hizmet Binası"
             ),
             "district": "Örnekkaraağaç",
-            "demirbas_no": "255.01.02.03-2026/000123-BİLGİSAYAR-MASAÜSTÜ-KÜTÜPHANE",
+            "demirbas_no": "255.01.02.03-2026/000123-BİLGİSAYAR-MASAÜSTÜ-İDARE-ODASI",
         }
     )
     icerik = _pdf(_iste(client, TEST_KURTARMA_ANAHTARI))

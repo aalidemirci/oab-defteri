@@ -1,21 +1,21 @@
 """Kurum yapılandırması (SchoolConfig singleton) + kurulum sihirbazı kapısı + yol haritası.
 
-OYS `core.services.school_config` ikamesi (KS'den alındı). Farklar: env (`OYS_*`)
-fallback YOK — tek doğruluk kaynağı DB satırıdır; `principal_name` Müdür
+Ailenin `school_config` servisinin ikamesi (aile iskeletinden alındı). Farklar: ortam
+değişkeni fallback'i YOK — tek doğruluk kaynağı DB satırıdır; `principal_name` Müdür
 hesabından değil doğrudan yapılandırmadan gelir (login'siz program).
 `setup_completed` yalnız `mark_setup_completed` ile değişir — sihirbaz kapısının
 düz alan güncellemesiyle yanlışlıkla açılması/kapanması önlenir.
 
-SİHİRBAZ SIRASI (tasarım §6.3-1, §14.1 F1) — adım anahtarları API'de ve ön
+SİHİRBAZ SIRASI (tasarım §4.4.5, §5.1; plan §2.2) — adım anahtarları API'de ve ön
 yüzde aynıdır (`SETUP_STEPS`):
 
 1. `password` — yönetici parolası + kurtarma anahtarı (atlanamaz). Adım ancak
-   parola kurulu VE anahtarın saklandığı doğrulanmışsa tamamdır (F1 eki,
-   22.09.2026 kullanıcı kararı 2): sihirbaz iki grubu istemcide denetler, sonra
+   parola kurulu VE anahtarın saklandığı doğrulanmışsa tamamdır (tasarım
+   §4.4.4 `kurtarma.dogrulandi`, §4.4.5): sihirbaz iki grubu istemcide denetler, sonra
    TAM anahtarı `security/recovery-key/confirm/`'a gönderir; sunucu onu kurtarma
    sarmalına karşı doğrulayıp `guvenlik.json`'a damga yazar
-   (`app_password.confirm_recovery_key`). Anahtar sunucuda saklanmaz. Kurulumu
-   bu karardan önce tamamlanmış (damgasız) kurulum kilitlenmez; yol haritası ve
+   (`app_password.confirm_recovery_key`). Anahtar sunucuda saklanmaz. Damgasız
+   tamamlanmış bir kurulum kilitlenmez; yol haritası ve
    Güvenlik ekranı uyarı gösterir (`recovery_key_confirmed`).
 2. `school` — okul adı, kademe, kısa ad ve "bu bilgisayar okul demirbaşıdır"
    onayı (Yönerge 11/8, 11/23). Demirbaş no isteğe bağlıdır.
@@ -199,12 +199,16 @@ def mark_setup_completed() -> SchoolConfig:
 # Kendiliğinden tespit edilen maddeler ön yüzde `setup_status` sayılarından
 # okunur (öğrenci/personel sayısı, aktif ders yılındaki öğrenciye kapalı gün
 # sayısı). Burada yalnız KULLANICININ İŞARETLEDİĞİ maddeler tutulur: program
-# bunların yapıldığını bilemez (zarfın kapatılması, parolanın paylaşılması…).
-# Aile iskeletinin katalog şablonu ve Ağ Kataloğu (BTR görüşmesi) maddeleri
-# kütüphaneyle birlikte söküldü (F1a-2); OAB'nin maddeleri F1b/F1c'de (§12.B).
+# bunların yapıldığını bilemez (ör. zarfın kapatılması). OAB'nin maddeleri
+# F1b/F1c'de eklenir (plan §2.2; genel tasarım §7.10).
+#
+# Aileden gelen "parola_paylasimi" maddesi ("yönetici parolasını iki kişiyle
+# paylaş") kaldırıldı: parola paylaşılmaz (BSG Yönergesi md. 7/2); kişisel
+# hesaplar T1 ile F1b 1. adımda gelir. Önceden kaydedilmiş işareti bilinmeyen
+# anahtar gibi yok sayılır (`_stored_roadmap` yalnız bu listedekileri okur) ve
+# ilk yazmada kayıttan düşer.
 ROADMAP_MANUAL_ITEMS: tuple[str, ...] = (
     "kurtarma_zarfi",  # kurtarma anahtarını müdürlükte kapalı zarfta sakla
-    "parola_paylasimi",  # yönetici parolasını en az iki görevlendirilmiş kişiyle paylaş
 )
 
 _ROADMAP_MARKS = "isaretler"
@@ -292,8 +296,8 @@ def set_roadmap_mark(item: str, *, done: bool) -> dict[str, Any]:
 def set_roadmap_hidden(*, hidden: bool) -> dict[str, Any]:
     """Kartı gizler/gösterir. Gizleme yalnız bütün maddeler tamamlanınca yapılır.
 
-    Kurtarma anahtarı doğrulanmamışken gizlenemez: uyarı kartın içindedir
-    (F1 eki 10). Kapı hem burada hem `roadmap_state`'tedir — eski bir kurulumda
+    Kurtarma anahtarı doğrulanmamışken gizlenemez: uyarı kartın içindedir.
+    Kapı hem burada hem `roadmap_state`'tedir — eski bir kurulumda
     damgasızken kart zaten gizli kaydedilmiş olabilir.
     """
     config: SchoolConfig
@@ -358,7 +362,7 @@ def get_letterhead_identity() -> dict[str, str]:
     """Resmî evrak antedi için kurum kimliği.
 
     Döner: `school_name`, `district`, `province`, `principal_name` — hepsi düz
-    metin. Okul adı boşsa OYS paritesiyle 'Okul' yer tutucusu; ilçe/müdür boş
+    metin. Okul adı boşsa aile kalıbıyla 'Okul' yer tutucusu; ilçe/müdür boş
     kalabilir (antet şablonu yer tutucu basar).
     """
     config = get_school_config()

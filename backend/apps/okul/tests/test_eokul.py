@@ -6,7 +6,7 @@ sınıf listesi örneği (`.xls`) T5 gereği F1a-2'de söküldü; blok düzleşt
 veli listesi ayrıştırıcısına kalacağı için (tasarım §12.B) aynı yerleşim burada
 bellekte kurulur (`_sinif_listesi_matrisi`, xlrd'nin döndürdüğü hücre türleriyle).
 
-Yerleşim referansı 30.08.2026'da iki gerçek raporun incelenmesinden çıkarıldı:
+Yerleşim referansı aile iskeletinde (30.08.2026) iki gerçek raporun incelenmesinden çıkarıldı:
 sınıf/şube bilgisi blok BAŞLIĞINDADIR, sütun olarak yoktur.
 """
 
@@ -334,7 +334,7 @@ class TestPersonelListesi:
         rows = personel_satirlari(temiz, mapping)
         assert len(rows) == 4  # dipnot ve tarih satırı personel sayılmadı
         assert {r.last_name for r in rows} == {"YURTSEVEN", "DALGIÇ", "IŞIKÇI", "ÖZGÜNEŞ"}
-        # GÖREVİ sütunu yalnız üye türüne çevrilir; metni satıra girmez (V2-01).
+        # GÖREVİ sütunu yalnız üye türüne çevrilir; metni satıra girmez (tasarım §8.4).
         assert {r.member_kind for r in rows} == {"TEACHER"}
         assert not any(r.member_kind_unrecognized for r in rows)
 

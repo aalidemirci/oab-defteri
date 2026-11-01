@@ -1,11 +1,12 @@
 // Kurtarma anahtarı paneli — kurulum sihirbazının ilk adımında, yönetici parolası
-// kurulur kurulmaz gösterilir (tasarım §6.3-1, E14). Anahtar yenilendiğinde (sihirbaz
-// ya da Ayarlar → Güvenlik) yeni anahtar da bu panelle saklatılıp doğrulatılır.
+// kurulur kurulmaz gösterilir (tasarım §4.4.3; PDF'i katalog dışı program belgesidir,
+// §9.7). Anahtar yenilendiğinde (sihirbaz ya da Ayarlar → Güvenlik) yeni anahtar da
+// bu panelle saklatılıp doğrulatılır.
 //
 // Anahtar SUNUCUDA SAKLANMAZ, bu panel onu gösteren TEK yerdir. Kural "basım
 // zorunlu" değil "SAKLAMA zorunlu"dur; üç saklama yolu sunulur:
 //   1. Yazdır — pencere içi yazdırma; yazdırma stili yalnız anahtar alanını bırakır.
-//   2. PDF olarak kaydet — backend E14 çıktısı (anahtar kurtarma sarmalına karşı
+//   2. PDF olarak kaydet — kurtarma anahtarı belgesi (anahtar kurtarma sarmalına karşı
 //      doğrulanır, yanlış yazılmış anahtar basılmaz). Eski "metin dosyası olarak
 //      kaydet" KALDIRILDI: düz .txt bilgisayarda unutulan, arama dizinine giren ve
 //      yazdırıldığında ne olduğu anlaşılmayan bir kopyaydı; PDF aynı işi resmî çıktı
@@ -15,15 +16,16 @@
 // (doğrulama kipinde anahtar ekrandan kalkar, yoksa ekrandan kopyalanırdı). İki grup
 // istemcide tutunca bellekteki TAM anahtar `security/recovery-key/confirm/`'a gider:
 // sunucu onu kurtarma sarmalına karşı doğrulayıp güvenlik dosyasına "saklandı"
-// damgası yazar (F1 eki, karar 2; kurulum damgasız tamamlanmaz). `onDogrulama(true)`
-// ancak sunucu damgayı yazınca bildirilir; hata olursa ileti ve "Yeniden dene" çıkar.
+// damgası yazar (`kurtarma.dogrulandi`, aile iskeletinin doğrulama deseni, tasarım
+// §4.4.4; kurulum damgasız tamamlanmaz, §4.4.5). `onDogrulama(true)` ancak sunucu damgayı yazınca bildirilir; hata
+// olursa ileti ve "Yeniden dene" çıkar.
 //
-// GÖZETİMSİZ EKRAN (TB19): kurulum bitene kadar kip süreyle düşmez (kullanıcı kararı
-// 2-1) — anahtar bellekte kalır, program kendiliğinden kilitlenmez. Bedeli anahtarın
+// GÖZETİMSİZ EKRAN (tasarım §4.4.3, §13 D15): kurulum bitene kadar kip süreyle düşmez
+// — anahtar bellekte kalır, program kendiliğinden kilitlenmez. Bedeli anahtarın
 // ekranda süresiz durmasıydı; panel 5 dakika hiç etkileşim olmazsa anahtarı YERİNDE
 // gizler ("Anahtarı göster" ile geri gelir). Sayaç yalnız görseldir: kipi düşürmez,
 // sunucuya bir şey sormaz, anahtarı bellekten silmez — masadan kalkıldığında omuz
-// üstünden okunmasını zorlaştıran kaza önleyicidir (§4.2-4'teki Çık parolası gibi).
+// üstünden okunmasını zorlaştıran kaza önleyicidir (görevli kipindeki Çık parolası gibi).
 // Etkileşim saati `lib/api.ts` içinde ZATEN tutulur (kip boşta sayacı için, yakalama
 // evresinde pointerdown + keydown): panel kendi küresel dinleyicisini kurmaz, o saati
 // okur — ikinci bir dinleyici aynı olayı iki kez izler ve iki ölçü birbirinden
@@ -57,7 +59,7 @@ import { ELLE_YAZ_METNI, KURTARMA_UYARISI, dogrulamaMetni } from "./metinler";
 
 const YAZDIRMA_ALANI_ID = "kurtarma-anahtari-yazdirma-alani";
 
-/** Anahtarın ekranda gizleneceği boşta süre (TB19; yalnız görsel önlem). */
+/** Anahtarın ekranda gizleneceği boşta süre (gözetimsiz ekran; yalnız görsel önlem). */
 export const BOSTA_GIZLEME_MS = 5 * 60_000;
 /** Boşta süresinin yoklanma aralığı — saniye hassasiyeti gerekmez. */
 const YOKLAMA_ARALIGI_MS = 15_000;
@@ -105,7 +107,7 @@ export default function KurtarmaAnahtariPaneli({
   const [yanitlar, setYanitlar] = useState<[string, string]>(["", ""]);
   const [onay, setOnay] = useState<Onay>("bekliyor");
   const [onayHatasi, setOnayHatasi] = useState<string | null>(null);
-  // Boşta gizleme (TB19): `gorunurlukAni` anahtarın en son gösterildiği andır;
+  // Boşta gizleme (gözetimsiz ekran): `gorunurlukAni` anahtarın en son gösterildiği andır;
   // etkileşim saati lib/api.ts'ten okunur (panelin kendi dinleyicisi yok).
   const [gizli, setGizli] = useState(false);
   const [gorunurlukAni, setGorunurlukAni] = useState(() => Date.now());

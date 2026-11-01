@@ -5,7 +5,8 @@
 // çıktısını yeniden al. Aile iskeletinin kütüphaneye bağlı Görev Devri kartı F1a-2'de
 // söküldü (OAB devir-teslimi F4'te — tasarım §13 D10). Yönetici parolası zorunludur ve YALNIZ kurulum sihirbazının
 // ilk adımında kurulur (kurtarma anahtarı orada gösterilir ve saklandığı doğrulanır);
-// bu ekranda "parolayı kur" ya da "parolayı kaldır" eylemi YOKTUR (tasarım §6.3).
+// bu ekranda "parolayı kur" ya da "parolayı kaldır" eylemi YOKTUR (tasarım §4.4.3:
+// kurulumdan sonra parolasız durum yoktur).
 // Yenilenen anahtar modül belleğinde bekler (`bekleyenAnahtar`) ve bu ekranda
 // `KurtarmaAnahtariPaneli` ile saklatılıp doğrulatılır; doğrulanınca bırakılır.
 // Parola kurulmamışsa (kurulum kapısı bunu zaten sihirbaza yönlendirir) yalnız
@@ -59,7 +60,6 @@ export default function GuvenlikAyarlari() {
   const [calisiyor, setCalisiyor] = useState(false);
   // Yenilenmiş (ya da sihirbazda gösterilmiş) ve henüz doğrulanmamış anahtar.
   const bekleyenAnahtar = useBekleyenKurtarmaAnahtari();
-  // Görev devrinin anahtarı Görev Devri sihirbazının 2. adımında saklatılır (üstteki panelde değil).
 
   const oku = useCallback(() => {
     guvenlikApi
@@ -123,7 +123,7 @@ export default function GuvenlikAyarlari() {
   return (
     <div className="flex flex-col gap-4">
       <Card className="p-6">
-        {/* Kart başlığı SABİT bir addır (sözlük §3, §4.6): kullanıcıya
+        {/* Kart başlığı SABİT bir addır (docs/sozluk.md §3, §4.6): kullanıcıya
             "Ayarlar → Güvenlik → Yönetici Parolası ve Şifreleme" diye yol
             tarif edilebilsin. Durum cümlesi başlığın altındadır. */}
         <div className="mb-2 flex items-center gap-3">
@@ -170,7 +170,7 @@ export default function GuvenlikAyarlari() {
                 to="/kurulum"
                 className="inline-flex items-center gap-1.5 text-label-large font-medium text-primary underline-offset-4 hover:underline"
               >
-                Kurulum sihirbazına git
+                Kurulum Sihirbazı&apos;nı aç
                 <Icon name="arrow_forward" size="sm" />
               </Link>
             </>

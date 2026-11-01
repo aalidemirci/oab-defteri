@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-// Material Design 3 tasarım token'ları (CLAUDE.md §7.5). Renkler index.css'teki
+// Material Design 3 tasarım token'ları. Renkler index.css'teki
 // CSS değişkenlerinden (RGB kanal) gelir → opaklık modifiyeleri (state layer) çalışır
 // ve karanlık tema ileride tek yerden açılır.
 
@@ -144,7 +144,7 @@ export default {
         "label-medium": ["12px", { lineHeight: "16px", letterSpacing: "0.5px", fontWeight: "500" }],
         "label-small": ["11px", { lineHeight: "16px", letterSpacing: "0.5px", fontWeight: "500" }],
         // Kiosk saat ölçekleri (C31, Tur 615) — M3 display üstü, tahta-özel;
-        // uzaktan okunabilirlik için amaca-özel token (ham arbitrary değer yasak, §7.5).
+        // uzaktan okunabilirlik için amaca-özel token (ham arbitrary değer yasak).
         "kiosk-clock": ["6rem", { lineHeight: "1" }],
         "kiosk-clock-lg": ["9rem", { lineHeight: "1" }],
       },
@@ -168,7 +168,7 @@ export default {
         8: "0.08",
         12: "0.12",
       },
-      // M3 hareket (motion) — easing eğrileri (Tur 311, öneri §1). Değerler
+      // M3 hareket (motion) — easing eğrileri. Değerler
       // index.css `--md-easing-*` değişkenlerinden gelir → tek doğruluk kaynağı.
       // Kullanım: `ease-standard`, `ease-emphasized-decelerate`…
       transitionTimingFunction: {

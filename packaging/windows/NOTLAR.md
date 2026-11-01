@@ -1,19 +1,19 @@
 # Windows paketleme — doğrulanmamış varsayımlar ve ilk koşu çek-listesi
 
-> **Durum (31.10.2026, F1a-2):** Bu hat aile iskeletinden devralındı (KS →
-> Kütüphane iskeleti) ve orada doğrulandı: KS'nin 29.08.2026 CI koşusu uçtan uca
-> yeşildi (setup.exe + portable.zip üretildi, Türkçe PDF duman testi gömülü DejaVu
-> ile geçti, `--autotest` çıkış 0; W1 ve W5 fiilen, W2-W4 ve W6-W8 dolaylı
-> doğrulandı). W9 da KS'de doğrulandı (30.08.2026): paketlenmiş exe Windows 11'de
-> gerçek pencere açtı, WebView2/pythonnet zinciri çalıştı. Kütüphane iskeletinde CI
-> Windows işi F4'ten (24.09.2026) F11'e kadar her faz PR'ında yeşildi (DLL kapanışı,
-> PyInstaller, `--bagimlilik-duman`, `--pdf-duman`, `--autotest`, paket veri
-> sızıntısı denetimi, Inno derlemesi). Kurucu düzeltmeler (PS1 BOM'u, MSYS2 python
+> **Durum (31.10.2026, F1a):** Bu hat aile iskeletinden devralındı ve orada
+> doğrulandı: ailenin 29.08.2026 CI koşusu uçtan uca yeşildi (setup.exe +
+> portable.zip üretildi, Türkçe PDF duman testi gömülü DejaVu ile geçti,
+> `--autotest` çıkış 0; W1 ve W5 fiilen, W2-W4 ve W6-W8 dolaylı doğrulandı). W9 da
+> ailede doğrulandı (30.08.2026): paketlenmiş exe Windows 11'de gerçek pencere açtı,
+> WebView2/pythonnet zinciri çalıştı. Kurucu düzeltmeler (PS1 BOM'u, MSYS2 python
 > gölgelemesi, paket içi fontconfig) de aileden gelir.
 >
-> **OAB Defteri adıyla henüz hiçbir Windows koşusu yapılmadı** ve kurucu hiçbir
-> makinede çalıştırılmadı: yönetici kurulumu, UAC, çarpı = çık (T6) ve kapatma olayı
-> sahada doğrulanır — aşağıdaki çek-listesi.
+> **OAB Defteri adıyla** CI Windows işi F1a'da yeşil geçti (plan §2.1 "F1a
+> durumu"): DLL kapanışı, PyInstaller, paket veri sızıntısı denetimi, Inno
+> derlemesi, setup.exe + portable.zip; `--bagimlilik-duman`, `--pdf-duman`,
+> `--evrak-duman`, `--autotest`. Windows'ta çarpıyla kapanma (T6) ve 1366×768
+> görünümü elle doğrulandı. Kurucunun iki kipi (TK7), UAC ve kapatma olayı henüz
+> elle sınanmadı — aşağıdaki çek-listesi.
 >
 > **Aile iskeletinin F0 spike'ı, kapatma olayı (21.09.2026, Windows 11 + Inno
 > Setup 6):** iskeletin `.iss`'i yerel ISCC ile derlendi. Aynı `[Code]` işlevleriyle
@@ -24,9 +24,9 @@
 > beklendi, ileti (bastırılmış) İptal'e düştü, süreç zorla sonlandırılmadı. İkinci
 > açılış kilidi reddetti ve `Goster` olayını teslim etti. OAB'de olay adı
 > `OABDefteri.Kapat`'tır; spike OAB adıyla yinelenmedi. **Doğrulanmayanlar:** gerçek
-> yönetici kurucu ve kaldırıcı, UAC'ye başka bir hesabın kimliği girilmesi (W12),
-> gerçek paketli exe (pencere, çarpı = çık, oturum kapanışı) — W11-W14 ve
-> çek-listesi 7-12.
+> kurucu ve kaldırıcı (iki kip), UAC'ye başka bir hesabın kimliği girilmesi (W12),
+> paketli exe'de oturum kapanışı — W11, W12, W14 ve çek-listesi 4, 8-12. Çarpıyla
+> kapanma (W13, çek-listesi 7) F1a kapısında elle doğrulandı (plan §2.1).
 
 ## 1. Doğrulanması gereken varsayımlar
 
@@ -42,17 +42,17 @@
 | W8 | TK7: `PrivilegesRequired=lowest` + `PrivilegesRequiredOverridesAllowed=dialog`; yönetici kipinde `{autopf}` = `Program Files`, kullanıcı kipinde `%LOCALAPPDATA%\Programs`; paketlenmiş program kurulum dizinine hiçbir şey YAZMAZ (fontconfig önbelleği `%LOCALAPPDATA%` altında) | `oab-defteri.iss`, `rthook_od.py` | standart hesapta açılışta "erişim reddedildi" ya da PDF'te font hatası; `OD_RTHOOK_UYARI` değeri `uygulama.log`'a "Paket ortamı uyarısı:" satırı olarak, duman kiplerinde `logs\tanilama.log`'a düşer |
 | W9 | pywebview `edgechromium` arka ucu `pythonnet` ile çalışıyor ve PyInstaller ile paketleniyor | `requirements-paketleme.txt`, spec | pencere açılmaz; `webview/lib/*.dll` elle `datas`'a eklenmesi gerekebilir |
 | W10 | Kurulum sonrası "programı çalıştır" adımı yükseltilmemiş (kurucuyu başlatan) hesapla koşar | `oab-defteri.iss` `[Run]` (`runasoriginaluser`) | yönetici kipinde veri UAC'ye kimliği girilen hesabın profilinde oluşur |
-| W11 | Kapatma olayı kurucu VE kaldırıcıda çalışır: `InitializeSetup`/`InitializeUninstall` → `OpenEventW`+`SetEvent` (kernel32 `external`) → `CheckForMutexes` döngüsü; `AppMutex` yok (tasarım §4.2-5). Derleme ve düşük yetkili spike geçti (yukarıdaki not) | `oab-defteri.iss` `[Code]`, `desktop/instance_channel.py` | kurucu program açıkken dosyaların üzerine yazar ("dosya kullanımda") ya da her seferinde 30 sn bekleyip "Programı kapatıp Yeniden Dene'ye basın" der; kurulum günlüğünde (`/LOG`) "Kapatma olayı açılamadı" satırı |
+| W11 | Kapatma olayı kurucu VE kaldırıcıda çalışır: `InitializeSetup`/`InitializeUninstall` → `OpenEventW`+`SetEvent` (kernel32 `external`) → `CheckForMutexes` döngüsü; `AppMutex` yok (tasarım §4.2 "Kurucu ve kaldırıcı"). Derleme ve düşük yetkili spike geçti (yukarıdaki not) | `oab-defteri.iss` `[Code]`, `desktop/instance_channel.py` | kurucu program açıkken dosyaların üzerine yazar ("dosya kullanımda") ya da her seferinde 30 sn bekleyip "Programı kapatıp Yeniden Dene'ye basın" der; kurulum günlüğünde (`/LOG`) "Kapatma olayı açılamadı" satırı |
 | W12 | Yönetici kipinde UAC'ye BAŞKA hesabın kimliği girildiğinde yükseltilmiş kurucu programı çalıştıran hesabın olay ve mutex'lerini açabilir: nesneler SY/BA/IU/OW'ye açık güvenlik tanımlayıcısıyla kurulur | `desktop/win32_objects.py` (`MUTEX_SDDL`, `EVENT_SDDL`) | varsayılan tanımlayıcıda olduğu gibi erişim reddi: kurucu "program kapalı" sanıp kuruluma geçer (Inno `OpenMutex` reddini "yok" okur); günlükte "Kapatma olayı açılamadı" |
 | W13 | T6 (tasarım §4.5): çarpı programı kapatır, onay sorulmaz; `webview.start` döner, düzenli kapanış (WAL checkpoint + temiz kapanış işareti) yazılır ve çıkış kodu 0'dır; süreç Görev Yöneticisi'nde KALMAZ (elle doğrulama — CI pencereye tıklayamaz) | `desktop/window.py` (`WindowController.on_closing`), `desktop/main.py` | çarpıdan sonra süreç asılı kalır (mutex'ler bırakılmaz, kurucu 30 sn bekler) ya da sonraki açılışta "Önceki oturum beklenmedik biçimde kapandı" |
 | W14 | Windows oturum kapanışı/yeniden başlatma programca engellenmez: `closing` işleyicisi kapanmayı hiç iptal etmez (T6); ailedeki `FormClosing` iptal-geri-alma işleyicisi bu yüzden söküldü | `desktop/window.py` | Windows kapanırken "Bu uygulama kapanmayı engelliyor" ekranı; sonraki açılışta günlükte "Önceki oturum beklenmedik biçimde kapandı" |
 | W15-W20 | *(F1a-2'de düştü)* Aile iskeletinin ağ kataloğu, güvenlik duvarı, otomatik başlatma, UAC yardımcısı, uyku engeli ve tepsi menüsü varsayımlarıydı; bileşenler sökülünce düştüler. Numaralar yeniden kullanılmaz | — | — |
-| W21 | *(F12)* Lisans denetimi Windows'ta: PyInstaller'ın son aşama TOC dosyaları (`COLLECT/PYZ/PKG/EXE-00.toc`) `dist\_build-win\oab_defteri\` altında; MSYS2 pacman yerel veritabanı `<msys64>\var\lib\pacman\local\*\{desc,files,mtree}` (setup-msys2 kurulumunda da) ve her DLL'in paketi `share/licenses/` dosyası taşıyor; setup-python'ın `LICENSE.txt`'si `Lib\` ya da kökte. **29.09.2026 aile iskeletinin ilk CI koşusu:** TOC'lar, `D:\a\_temp\msys64` veritabanı, kapanıştaki 30 DLL'in sahibi ve lisans dosyaları, Python'un `LICENSE.txt`'si bulundu — varsayım DOĞRU. Denetim dört bulgu sınıfıyla durdu, hepsi giderildi (`packaging/README.md` "İlk CI Windows koşusunun bulguları"): (A) koşucunun PATH'indeki JDK'dan Universal CRT (43 dosya) → spec `ucrt_suz` + yalın PATH + Inno `MinVersion=10.0`; (B) hooks-contrib `hook-weasyprint`'in topladığı MSYS2 `etc/fonts` (25 dosya) "sahipsiz" → veritabanı %FILES%'teki her tam yolu tutar, DLL dışı dosyada `mtree` sha256 özeti doğrulanır; (C) colorama ve `packaging` (W24); (D) `pywebview-android.jar` → `_webview_platform_disi` Analysis'ten sonra da. Aynı günün doğrulama turu: depo içindeki sanal ortamın RECORD'suz dosyası artık hatadır (en dar kök kuralı); fontconfig yapılandırması spec'te yerleşir, (B)'nin MSYS2 `etc/fonts` dosyaları artık pakete GİRMEZ. Düzeltmeli hattın ilk Windows koşusu PR'ın sonraki CI'ındadır. **O koşuda beklenenler (gerileme DEĞİL):** PyInstaller yalın PATH'te UCRT'yi bulamaz ve çok sayıda `Library not found: could not resolve 'api-ms-win-crt-…'` uyarısı basar (Windows Server 2025'te PyInstaller'ın bu uyarıyı bastırması çalışmaz: `platform.win32_ver()` "2025Server" döndürür); hiçbir ikili `ucrtbase.dll`'i doğrudan içe aktarmadığı için spec'in "Universal CRT'den N dosya ayıklandı" satırı hiç görünmeyebilir; spec "fontconfig: MSYS2'nin etc/fonts ağacından N dosya ayıklandı" yazar (29.09.2026 koşusunda 25); `Hidden import 'PySide6…' not found` hataları zararsızdır (`OD_WITH_QT=1`, PySide6 Windows'ta kurulmaz); `paket-icerigi.txt` fontconfig paketi için yalnız `libfontconfig-1.dll`'i yazar | `packaging/lisanslar/lisanslar.py` (`paket`), `build.ps1` "lisans denetimi", spec (`ucrt_suz`, `_webview_platform_disi`, `fontconfig_yerlestir`) | derleme "MSYS2 paket veritabanı yok", "MSYS2 sahibi bulunamayan DLL/dosya", "lisans/telif dosyası bulunamadı", "Universal C çalışma zamanı dosyası pakete girmiş", "MSYS2 dosyasının … özeti yok" / "yerelde değiştirilmiş" , "COLLECT TOC dosyası yok" ya da "paket içi fontconfig …" ile durur |
+| W21 | *(lisans kapısı, tasarım §11.4)* Lisans denetimi Windows'ta: PyInstaller'ın son aşama TOC dosyaları (`COLLECT/PYZ/PKG/EXE-00.toc`) `dist\_build-win\oab_defteri\` altında; MSYS2 pacman yerel veritabanı `<msys64>\var\lib\pacman\local\*\{desc,files,mtree}` (setup-msys2 kurulumunda da) ve her DLL'in paketi `share/licenses/` dosyası taşıyor; setup-python'ın `LICENSE.txt`'si `Lib\` ya da kökte. **29.09.2026 aile iskeletinin ilk CI koşusu:** TOC'lar, `D:\a\_temp\msys64` veritabanı, kapanıştaki 30 DLL'in sahibi ve lisans dosyaları, Python'un `LICENSE.txt`'si bulundu — varsayım DOĞRU. Denetim dört bulgu sınıfıyla durdu, hepsi giderildi (`packaging/README.md` "Aile iskeletinin ilk CI Windows koşusunun bulguları"): (A) koşucunun PATH'indeki JDK'dan Universal CRT (43 dosya) → spec `ucrt_suz` + yalın PATH + Inno `MinVersion=10.0`; (B) hooks-contrib `hook-weasyprint`'in topladığı MSYS2 `etc/fonts` (25 dosya) "sahipsiz" → veritabanı %FILES%'teki her tam yolu tutar, DLL dışı dosyada `mtree` sha256 özeti doğrulanır; (C) colorama ve `packaging` (W24); (D) `pywebview-android.jar` → `_webview_platform_disi` Analysis'ten sonra da. Aynı günün doğrulama turu: depo içindeki sanal ortamın RECORD'suz dosyası artık hatadır (en dar kök kuralı); fontconfig yapılandırması spec'te yerleşir, (B)'nin MSYS2 `etc/fonts` dosyaları artık pakete GİRMEZ. Düzeltmeli hat OAB Defteri adıyla F1a CI'ında yeşil geçti (plan §2.1). **Koşuda beklenenler (gerileme DEĞİL):** PyInstaller yalın PATH'te UCRT'yi bulamaz ve çok sayıda `Library not found: could not resolve 'api-ms-win-crt-…'` uyarısı basar (Windows Server 2025'te PyInstaller'ın bu uyarıyı bastırması çalışmaz: `platform.win32_ver()` "2025Server" döndürür); hiçbir ikili `ucrtbase.dll`'i doğrudan içe aktarmadığı için spec'in "Universal CRT'den N dosya ayıklandı" satırı hiç görünmeyebilir; spec "fontconfig: MSYS2'nin etc/fonts ağacından N dosya ayıklandı" yazar (ailenin 29.09.2026 koşusunda 25); `Hidden import 'PySide6…' not found` hataları zararsızdır (`OD_WITH_QT=1`, PySide6 Windows'ta kurulmaz); `paket-icerigi.txt` fontconfig paketi için yalnız `libfontconfig-1.dll`'i yazar | `packaging/lisanslar/lisanslar.py` (`paket`), `build.ps1` "lisans denetimi", spec (`ucrt_suz`, `_webview_platform_disi`, `fontconfig_yerlestir`) | derleme "MSYS2 paket veritabanı yok", "MSYS2 sahibi bulunamayan DLL/dosya", "lisans/telif dosyası bulunamadı", "Universal C çalışma zamanı dosyası pakete girmiş", "MSYS2 dosyasının … özeti yok" / "yerelde değiştirilmiş" , "COLLECT TOC dosyası yok" ya da "paket içi fontconfig …" ile durur |
 | W22 | *(F1a-2'de düştü)* Aile iskeletinin pystray kaynak dosyası (`module_collection_mode`) varsayımıydı; tepsi söküldü (tasarım T6, §11 B18). |
-| W23 | *(F12)* Inno `LicenseFile` UTF-8 **BOM'lu** `LICENSE.txt`'yi Türkçe karakterleri bozmadan gösterir ("DEMİRCİ"); `{app}\THIRD_PARTY_LICENSES\` ve `{app}\LICENSE.txt` kurulur. `MinVersion=10.0` (29.09.2026) Windows 10'dan eski sistemde kurulumu durdurur (paket UCRT taşımaz). **29.09.2026 ilk CI koşusu:** SINANMADI — Inno adımına gelinmedi; düzeltmeli koşuda ISCC derlemesi görülür, lisans sayfası sahada | `.iss` `[Setup]`, `lisanslar.py` (`encoding="utf-8-sig"`) | lisans sayfasında "DEMÄ°RCÄ°" gibi bozuk harfler; lisans dizini kurulum klasöründe yok; ISCC `MinVersion` satırında hata |
-| W24 | *(F12 düzeltme turu)* Pip kısıt dosyası (`lisanslar.py kisitlar --platform windows`): listedeki geçişli bağımlılık sürümlerinin Windows tekerlekleri PyPI'da var (Linux derlemesinde sınandı); kısıt geliştirme kabının sürümlerinden üretilir. **29.09.2026 ilk CI koşusu:** `pip install -c` geçti (tekerlekler var — DOĞRU), ama iki eksik çıktı: (1) kurulum koşucunun PAYLAŞILAN varsayılan Python'una yapılıyordu (actions/runner-images `Install-Pipx.ps1` oraya `pip install pipx` koşar; pipx'in Windows bağımlılığı colorama'yı Django koşullu import eder) → `build.ps1` artık yalıtılmış sanal ortamda (`dist\_venv-win`) kurar ve derler; colorama hiçbir pinin kapanışında olmadığı için listeye girmez; (2) `packaging` Windows kısıtında yoktu (liste onu yalnız Linux'ta biliyordu) → üretici iki platformu ayrı çözer, setuptools'un tercih ettiği kurulu vendored bağımlılık (`KURULUYU_TERCIH_EDEN`) iki platformda işaretlenir. Pakete girmeyen derleme araçları bağımlılıkları (altgraph, pefile, pywin32-ctypes) kısıtta değildir | `build.ps1` adım 2 (sanal ortam), `lisanslar.py` (`Uretici.coz`) | `pip install` "No matching distribution" ya da kaynaktan derleme hatasıyla durur — liste `uret.sh` ile tazelenir; sanal ortam kurulamazsa "Sanal ortam kurulamadı"; kısıtta olmayan bir dağıtım pakete girerse lisans denetimi "THIRD_PARTY_LICENSES'ta olmayan" ya da "… için işaretli değil" der |
-| W25 | *(F12 düzeltme turu)* MSYS2 paketlerinin `%LICENSE%` alanı SPDX'tir ve pakete giren DLL'lerin sahibi olan paketlerden yalnız GPL görünenler `MSYS2_GPL_IZINLERI`'ndedir (gcc-libs, gettext-runtime, libiconv — DLL düzeyinde izin). **29.09.2026 ilk CI koşusu:** kapanıştaki 30 DLL'in paketlerinde "yalnız GPL" hatası ya da "ayrıştırılamadı" uyarısı çıkmadı — varsayım bugünkü kapanış için DOĞRU. (CI'dan değil, geliştirme makinesinin yerel MSYS2 veritabanından — fontconfig 2.18.2-1: `etc/fonts` dosyalarının sahibi mingw-w64-x86_64-fontconfig'in lisansı `custom`'dır, GPL değil. CI koşusunda bu dosyalar sahiplenilemeden durulmuştu; doğrulama turundan sonra pakete girmezler.) | `lisanslar.py` (`msys2_lisans_denetimi`) | derleme "yalnız GPL lisanslı MSYS2 paketi pakete girmiş: …" ile durur; DLL'in kendi lisansı doğrulanıp izin listesine gerekçeyle eklenir ya da bağımlılık kapanıştan çıkarılır |
-| W26 | *(F12 doğrulama turu, 29.09.2026)* (a) Paketin statik DLL kapanışı: paketteki her `.exe`, `.dll` ve `.pyd` dosyasının içe aktardığı (gecikmeli dahil) her DLL pakette ya da Windows 10/11'in bileşenidir (`api-ms-win-*`, `ext-ms-win-*`, `WINDOWS_SISTEM_DLL`). Liste geliştirme makinesindeki CPython 3.12, paketin Windows tekerlekleri ve kapanışın 30 MSYS2 DLL'i (88 PE dosyası) okunarak çıkarıldı; CI'daki Python 3.12.10 ve paketin GERÇEK içeriğiyle ilk kez sınanır. (b) Duman testleri Windows'un varsayılan sistem PATH'iyle (`Get-SistemPath`: System32, Windows, Wbem, WindowsPowerShell) geçer — paket koşucunun mingw64\bin'ine, Python'una ya da JDK'sına dayanmaz | `packaging/windows/paket_kapanisi.py`, `build.ps1` (`Invoke-Uygulama`, "paketin statik DLL kapanışı") | (a) derleme "<ad>: ne pakette ne Windows 10/11'in bileşeni" ile durur → eksik DLL kapanışa girer (`dll_kapanisi.py`), ya da ad Windows 10'un System32'sinde bulunduğu doğrulanarak `WINDOWS_SISTEM_DLL`'e gerekçesiyle eklenir; (b) `--bagimlilik-duman` / `--pdf-duman` "cannot load library" ile düşer → eksik DLL pakete girmeli (kullanıcının makinesinde de açılmazdı) |
+| W23 | *(lisans kapısı, tasarım §11.4)* Inno `LicenseFile` UTF-8 **BOM'lu** `LICENSE.txt`'yi Türkçe karakterleri bozmadan gösterir ("DEMİRCİ"); `{app}\THIRD_PARTY_LICENSES\` ve `{app}\LICENSE.txt` kurulur. `MinVersion=10.0` (29.09.2026) Windows 10'dan eski sistemde kurulumu durdurur (paket UCRT taşımaz). Ailenin 29.09.2026 ilk CI koşusu Inno adımına gelmedi; ISCC derlemesi OAB Defteri adıyla F1a CI'ında geçti (plan §2.1), lisans sayfasının görünüşü elle denetlenir | `.iss` `[Setup]`, `lisanslar.py` (`encoding="utf-8-sig"`) | lisans sayfasında "DEMÄ°RCÄ°" gibi bozuk harfler; lisans dizini kurulum klasöründe yok; ISCC `MinVersion` satırında hata |
+| W24 | *(aile iskeletinin düzeltme turu)* Pip kısıt dosyası (`lisanslar.py kisitlar --platform windows`): listedeki geçişli bağımlılık sürümlerinin Windows tekerlekleri PyPI'da var (Linux derlemesinde sınandı); kısıt geliştirme kabının sürümlerinden üretilir. **Ailenin 29.09.2026 ilk CI koşusu:** `pip install -c` geçti (tekerlekler var — DOĞRU), ama iki eksik çıktı: (1) kurulum koşucunun PAYLAŞILAN varsayılan Python'una yapılıyordu (actions/runner-images `Install-Pipx.ps1` oraya `pip install pipx` koşar; pipx'in Windows bağımlılığı colorama'yı Django koşullu import eder) → `build.ps1` artık yalıtılmış sanal ortamda (`dist\_venv-win`) kurar ve derler; colorama hiçbir pinin kapanışında olmadığı için listeye girmez; (2) `packaging` Windows kısıtında yoktu (liste onu yalnız Linux'ta biliyordu) → üretici iki platformu ayrı çözer, setuptools'un tercih ettiği kurulu vendored bağımlılık (`KURULUYU_TERCIH_EDEN`) iki platformda işaretlenir. Pakete girmeyen derleme araçları bağımlılıkları (altgraph, pefile, pywin32-ctypes) kısıtta değildir | `build.ps1` adım 2 (sanal ortam), `lisanslar.py` (`Uretici.coz`) | `pip install` "No matching distribution" ya da kaynaktan derleme hatasıyla durur — liste `uret.sh` ile tazelenir; sanal ortam kurulamazsa "Sanal ortam kurulamadı"; kısıtta olmayan bir dağıtım pakete girerse lisans denetimi "THIRD_PARTY_LICENSES'ta olmayan" ya da "… için işaretli değil" der |
+| W25 | *(aile iskeletinin düzeltme turu)* MSYS2 paketlerinin `%LICENSE%` alanı SPDX'tir ve pakete giren DLL'lerin sahibi olan paketlerden yalnız GPL görünenler `MSYS2_GPL_IZINLERI`'ndedir (gcc-libs, gettext-runtime, libiconv — DLL düzeyinde izin). **Ailenin 29.09.2026 ilk CI koşusu:** kapanıştaki 30 DLL'in paketlerinde "yalnız GPL" hatası ya da "ayrıştırılamadı" uyarısı çıkmadı — varsayım bugünkü kapanış için DOĞRU. (CI'dan değil, geliştirme makinesinin yerel MSYS2 veritabanından — fontconfig 2.18.2-1: `etc/fonts` dosyalarının sahibi mingw-w64-x86_64-fontconfig'in lisansı `custom`'dır, GPL değil. CI koşusunda bu dosyalar sahiplenilemeden durulmuştu; doğrulama turundan sonra pakete girmezler.) | `lisanslar.py` (`msys2_lisans_denetimi`) | derleme "yalnız GPL lisanslı MSYS2 paketi pakete girmiş: …" ile durur; DLL'in kendi lisansı doğrulanıp izin listesine gerekçeyle eklenir ya da bağımlılık kapanıştan çıkarılır |
+| W26 | *(aile iskeletinin doğrulama turu, 29.09.2026)* (a) Paketin statik DLL kapanışı: paketteki her `.exe`, `.dll` ve `.pyd` dosyasının içe aktardığı (gecikmeli dahil) her DLL pakette ya da Windows 10/11'in bileşenidir (`api-ms-win-*`, `ext-ms-win-*`, `WINDOWS_SISTEM_DLL`). Liste geliştirme makinesindeki CPython 3.12, paketin Windows tekerlekleri ve kapanışın 30 MSYS2 DLL'i (88 PE dosyası) okunarak çıkarıldı. Denetim `build.ps1`'in adımıdır; OAB Defteri adıyla F1a CI'ında paketin gerçek içeriğiyle geçti (plan §2.1). (b) Duman testleri Windows'un varsayılan sistem PATH'iyle (`Get-SistemPath`: System32, Windows, Wbem, WindowsPowerShell) geçer — paket koşucunun mingw64\bin'ine, Python'una ya da JDK'sına dayanmaz | `packaging/windows/paket_kapanisi.py`, `build.ps1` (`Invoke-Uygulama`, "paketin statik DLL kapanışı") | (a) derleme "<ad>: ne pakette ne Windows 10/11'in bileşeni" ile durur → eksik DLL kapanışa girer (`dll_kapanisi.py`), ya da ad Windows 10'un System32'sinde bulunduğu doğrulanarak `WINDOWS_SISTEM_DLL`'e gerekçesiyle eklenir; (b) `--bagimlilik-duman` / `--pdf-duman` "cannot load library" ile düşer → eksik DLL pakete girmeli (kullanıcının makinesinde de açılmazdı) |
 
 ## 2. Bilinen Windows tuzakları (kodda karşılığı var)
 
@@ -114,17 +114,18 @@
 12. `--autotest` çıkış kodu 0 ve `uygulama.log`'da "Temiz kapanış işareti
     yazıldı." (duman testi; pencere açılmaz).
 13. Defender/AV taraması: onedir olduğu için imzasız da olsa engellenmemeli;
-    engellenirse `docs/kurulum.md`'deki istisna adımları güncellenmeli.
-## 3b. F12 — Inno kalemlerinin kod durumu (27.09.2026)
+    engellenirse istisna adımları kılavuza yazılır (tasarım §13 D24, F7).
 
-Tasarım §14.1 F12 satırının Inno kalemleri kodda doğrulandı; hepsi **kod tarafı
-tamam, sahada doğrulanacak** (kurucu hiçbir makinede çalıştırılmadı). Yerel ISCC 6
-ile `/O-` derlemesi 27.09.2026'da iki dalda geçti: lisans dosyaları paket kökündeyken
-başarılı, `THIRD_PARTY_LICENSES` yokken `#error` ile durdu.
+## 3b. Inno kalemlerinin kod durumu
+
+Inno kalemleri kodda ve testte sabittir; ISCC derlemesi OAB Defteri adıyla F1a
+CI'ında geçti (plan §2.1). Kurucunun kendisi elle doğrulanır (son sütun). Aile
+iskeletinde yerel ISCC 6 ile `/O-` derlemesi 27.09.2026'da iki dalda geçmişti: lisans
+dosyaları paket kökündeyken başarılı, `THIRD_PARTY_LICENSES` yokken `#error` ile durdu.
 
 | Kalem | Kodda | Sabitleyen test | Sahada |
 |---|---|---|---|
-| Yeni AppId GUID, değişmez | `AppId={{A9D4215F-2BDD-4851-8B81-86286AFDE787}` — KS, DD, okulzili ve öbür kardeş kurucuların GUID'lerinden farklı (27.09.2026 denetlendi) | `packaging/tests/test_surum_yolu.py` (GUID sabit) | aynı sürümün üstüne kurulum ve beta → kararlı yükseltme yan yana kurmaz |
+| Yeni AppId GUID, değişmez | `AppId={{A9D4215F-2BDD-4851-8B81-86286AFDE787}` — OAB Defteri'ne özgüdür: F1a-1'de `uuid.uuid4()` ile yeni üretildi; aile programlarının kurucularındaki AppId'lerden farklı olduğu 31.10.2026'da yerel depolarda denetlendi | `packaging/tests/test_surum_yolu.py` (GUID sabit) | aynı sürümün üstüne kurulum ve beta → kararlı yükseltme yan yana kurmaz |
 | WebView2 | Evergreen önyükleyicisi CI'da ve `build.ps1`'de indirilir, `[Files]` sonunda koşullu girer (yoksa derleme uyarısı), `[Run]` yalnız `WebView2Eksik` iken sessiz kurar | `packaging/tests/test_kurucu.py::test_iss_her_satir_kendi_bolumunde` | W5, çek-listesi 5 |
 | İki mutex | `[Code]` `ProgramMutexleri = 'OABDefteri,Global\OABDefteri'`; `AppMutex` YOK | `desktop/tests/test_lock.py` (adlar programla aynı) | W11, W12, çek-listesi 9 |
 | Kapatma olayı | `InitializeSetup`/`InitializeUninstall` → `OABDefteri.Kapat` + 30 sn bekleme, zorla sonlandırma yok | `desktop/tests/test_instance_channel.py`; F0 spike'ı | W11, W12 |
@@ -138,33 +139,8 @@ başarılı, `THIRD_PARTY_LICENSES` yokken `#error` ile durdu.
   WebView2'nin sabit sürümünü paketin içine gömen "full" zip varyantı. Bu
   varyant henüz üretilmiyor.
 
-## 5. Saha kabul protokolündeki karşılıklar (F12)
+## 5. Saha kabul protokolündeki karşılıklar
 
-W maddeleri ve §3 çek-listesinin 1-13. maddeleri sahada
-[`docs/saha-kabulu.md`](../../docs/saha-kabulu.md) protokolünün adımlarıyla kanıtlanır; tam
-eşleme o belgenin §26.3 (W maddeleri) ve §26.4 (çek-listesi) tablolarındadır.
-
-| Madde | Protokol adımı |
-|---|---|
-| W1-W4 (DLL, fontconfig) | 2.5 (`--pdf-duman`, `--bagimlilik-duman`); W1 ayrıca CI |
-| W5, W9 (WebView2) | 2.4, 3.1, 23.2 |
-| W6, W7 (Inno sürümü, Türkçe dil dosyası) | CI derlemesi; sahada 2.2 |
-| W8, W10 (TK7 kurulum kipleri, "çalıştır" kurucuyu başlatan hesapla) | 2.2 |
-| W11, W12 (kapatma olayı, başka hesabın kimliğiyle UAC) | 21.3, 22.1 |
-| W13, W14 (çarpı = çık, oturum kapanışı) | 4.1, 4.3, 4.5 |
-| W21 (lisans denetimi Windows derlemesinde) | CI; sahada 2.2 |
-| W23 (lisans sayfası ve lisans dosyaları) | 2.2 |
-| W24 (pip kısıt dosyası Windows'ta) | CI; sahada dolaylı: 2.5 (`--bagimlilik-duman`) |
-| W25 (MSYS2 SPDX lisans denetimi) | CI; sahada 2.2 (lisans dizini kurulum klasöründe) |
-| W26 (statik DLL kapanışı, sistem PATH'iyle duman testleri) | CI; sahada dolaylı: 2.5 (`--pdf-duman`, `--bagimlilik-duman`) |
-| Çek-listesi 1-2 | CI (paket hattı) |
-| Çek-listesi 3, 12 | 2.5 |
-| Çek-listesi 4 | 2.2 |
-| Çek-listesi 5, 6 | 23.2, 23.1 |
-| Çek-listesi 7, 8, 10, 11 | 4.1-4.5 |
-| Çek-listesi 9 | 21.3, 22.1 |
-| Çek-listesi 13 | 2.1 |
-| Çek-listesi 14 | 2.3, 12.2, 12.4, 12.8, 21.3, 22.1 |
-| Çek-listesi 15 | 2.3, 4.6 |
-| Çek-listesi 16 | 12.9 |
-| Çek-listesi 17 | 12.10, 4.7 |
+W maddelerinin ve §3 çek-listesinin saha kabulü protokolündeki karşılıkları F7'de,
+protokolle birlikte yazılır (tasarım §14 F7: ailenin saha kabulü protokolü OAB'ye
+uyarlanır). O güne dek bu maddeler §3'teki çek-listesiyle elle doğrulanır.

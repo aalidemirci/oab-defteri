@@ -27,14 +27,19 @@ function madde(metin: RegExp): HTMLElement {
 }
 
 describe("BaslangicYolHaritasi", () => {
-  it("maddeler bu sırayla durur (katalog şablonu ve BTR maddeleri F1a-2'de söküldü)", () => {
+  it("maddeler bu sırayla durur; parola paylaşımı maddesi yoktur", () => {
     expect(YOL_HARITASI_MADDELERI.map((m) => m.anahtar)).toEqual([
       "ogrenci_aktarimi",
       "personel_aktarimi",
       "kapali_gunler",
       "kurtarma_zarfi",
-      "parola_paylasimi",
     ]);
+  });
+
+  it("parolanın paylaşılmasını öğütleyen madde ya da metin yoktur", () => {
+    const { container } = bas();
+    expect(container.textContent).not.toMatch(/paylaş/i);
+    expect(container.textContent).not.toMatch(/görevlendirilmiş kişi|masadaki görevli/i);
   });
 
   it("kendiliğinden tespit edilen maddeler sayılardan, diğerleri işaretten okunur", () => {
@@ -43,13 +48,25 @@ describe("BaslangicYolHaritasi", () => {
       student_count: 3,
       personnel_count: 0,
       school_break_count: 1,
-      roadmap: { marks: { parola_paylasimi: "2026-09-22" }, hidden: false },
+      roadmap: { marks: {}, hidden: false },
     };
     expect(maddeTamamMi("ogrenci_aktarimi", durum)).toBe(true);
     expect(maddeTamamMi("personel_aktarimi", durum)).toBe(false);
     expect(maddeTamamMi("kapali_gunler", durum)).toBe(true);
-    expect(maddeTamamMi("parola_paylasimi", durum)).toBe(true);
     expect(maddeTamamMi("kurtarma_zarfi", durum)).toBe(false);
+    expect(
+      maddeTamamMi("kurtarma_zarfi", {
+        ...durum,
+        roadmap: { marks: { kurtarma_zarfi: "2026-09-22" }, hidden: false },
+      }),
+    ).toBe(true);
+  });
+
+  it("kapalı günler maddesi iş günü hesabını anlatır, iade tarihinden söz etmez", () => {
+    bas();
+    const kapali = madde(/Öğrenciye kapalı günleri girin/);
+    expect(kapali).toHaveTextContent(/iş günüyle verilen süreler/);
+    expect(kapali.textContent).not.toMatch(/iade/i);
   });
 
   it("kurtarma anahtarı doğrulanmamışsa uyarı ve Güvenlik bağlantısı gösterilir", () => {
@@ -57,7 +74,7 @@ describe("BaslangicYolHaritasi", () => {
     const uyari = screen.getByText(/Kurtarma anahtarı doğrulanmadı/).closest("div");
     expect(uyari).not.toBeNull();
     expect(
-      within(uyari as HTMLElement).getByRole("link", { name: /Güvenlik ayarları/ }),
+      within(uyari as HTMLElement).getByRole("link", { name: /Ayarlar → Güvenlik'i aç/ }),
     ).toHaveAttribute("href", "/ayarlar?tab=guvenlik");
   });
 
@@ -82,10 +99,6 @@ describe("BaslangicYolHaritasi", () => {
       "href",
       "/ayarlar?tab=guvenlik",
     );
-    expect(bag(/Yönetici parolasını en az iki görevlendirilmiş kişiyle paylaşın/)).toHaveAttribute(
-      "href",
-      "/ayarlar?tab=guvenlik",
-    );
     expect(screen.queryByRole("button", { name: /Şablonu indir/ })).toBeNull();
   });
 
@@ -97,7 +110,8 @@ describe("BaslangicYolHaritasi", () => {
         "Yapıldığında kendiliğinden işaretlenir.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+    // Elle işaretlenen tek madde: kurtarma anahtarı zarfı.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
   });
 
   it("aktarımlar yapılınca maddeler tamamlandı olarak görünür", () => {

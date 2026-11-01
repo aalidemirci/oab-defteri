@@ -83,7 +83,8 @@ describe("YedektenGeriYukleme", () => {
     ekranaBas();
     await screen.findByText("gunluk-2026-09-01.odbak");
 
-    // docs/kurulum.md §5.1 ile aynı: Windows kısayolu + Pardus/Linux komutu.
+    // Paketle aynı: Windows'ta Başlat menüsü kısayolu (packaging/windows/oab-defteri.iss),
+    // Pardus/Linux'ta `--geri-yukle` komutu (desktop/main.py, desktop/restore.py).
     expect(screen.getByText(/“OAB Defteri — Yedekten Geri Yükle” kısayolunu/)).toBeInTheDocument();
     expect(screen.getByText("oab-defteri --geri-yukle")).toBeInTheDocument();
   });
@@ -220,7 +221,7 @@ describe("YedektenGeriYukleme", () => {
   it.each([false, true])(
     "kullanıcı metninde teknik dosya uzantısı geçmez (kayıp kipi: %s)",
     async (kayipKipi) => {
-      // Sözlük: ".odbak" kullanıcı metninde kullanılmaz; teknik adlar yalnız
+      // Sözlük (docs/sozluk.md §2): ".odbak" kullanıcı metninde kullanılmaz; teknik adlar yalnız
       // Hakkında sayfasında. Liste boşken ekrandaki her metin kartın kendisinindir
       // (dolu listede dosya adları sunucudan gelen veridir, metin değil).
       guvenlik.yedekler.mockResolvedValue({ backup_dir: "C:\\x", backups: [] });

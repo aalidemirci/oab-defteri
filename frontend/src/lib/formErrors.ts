@@ -1,4 +1,4 @@
-// Backend hata sözleşmesini (CLAUDE.md §7: `{code, message, fields}`) alan-bazlı
+// Backend hata sözleşmesini (`{code, message, fields}`) alan-bazlı
 // hata haritasına çeviren paylaşılan yardımcı. Kontrollü-form `useFormErrors` ve
 // RHF resolver'ları bunu kullanır (tek doğruluk kaynağı, DRY).
 

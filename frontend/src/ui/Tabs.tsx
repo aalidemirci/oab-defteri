@@ -1,6 +1,6 @@
-// M3 sekme çubuğu (CLAUDE.md §7.5): alt-çizgi göstergeli sekmeler. role="tablist"
+// M3 sekme çubuğu: alt-çizgi göstergeli sekmeler. role="tablist"
 // + role="tab" + aria-selected; aktif sekme border-b-2 border-primary. Dokunma
-// hedefi h-12 (48px). Token tüketir, ham renk yok. (DenetimPage deseni buradan.)
+// hedefi h-12 (48px). Token tüketir, ham renk yok.
 //
 // Erişilebilirlik (Tur 116, C3 — WAI-ARIA tabs deseni): roving tabindex (yalnız aktif
 // sekme Tab ile odaklanır) + Sol/Sağ ok ile sekme değişimi (otomatik etkinleştirme) +
@@ -11,7 +11,7 @@
 // yayar (role=tabpanel + id + aria-labelledby). Tek-panel (içerik-değişen) deseni:
 // tek panel id'si, `aria-labelledby` aktif sekmeye işaret eder.
 //
-// M3 "scrollable tabs" (Tur 315, Ek A): çok sekme dar ekrana sığmaz → yatay kaydırma.
+// M3 "scrollable tabs": çok sekme dar ekrana sığmaz → yatay kaydırma.
 // Native kaydırma çubuğu GİZLİ (.scrollbar-none); taşma kenar solmasıyla (edge fade —
 // kaydırma konumuna göre sol/sağ/iki) bildirilir. Dikey tekerlek yatay kaydırmaya
 // çevrilir (trackpad'siz okul PC'leri). Aktif sekme görünür değilse görünüre kaydırılır

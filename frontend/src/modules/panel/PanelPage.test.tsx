@@ -32,7 +32,7 @@ vi.mock("./api", async (importOriginal) => ({
 
 import PanelPage from "./PanelPage";
 
-/** Bütün maddeler tamam: aktarımlar yapılmış, kapalı gün girilmiş, iki işaret konmuş. */
+/** Bütün maddeler tamam: aktarımlar yapılmış, kapalı gün girilmiş, zarf işareti konmuş. */
 const HEPSI_TAMAM: SetupStatus = {
   ...KURULU_DURUM,
   student_count: 480,
@@ -41,7 +41,6 @@ const HEPSI_TAMAM: SetupStatus = {
   roadmap: {
     marks: {
       kurtarma_zarfi: "2026-09-22",
-      parola_paylasimi: "2026-09-22",
     },
     hidden: false,
   },
@@ -142,16 +141,16 @@ describe("Genel Bakış", () => {
 });
 
 describe("Başlangıç Yol Haritası", () => {
-  it("yeni kurulumda beş madde yapılacak olarak görünür, ilerleme 0/5", async () => {
+  it("yeni kurulumda dört madde yapılacak olarak görünür, ilerleme 0/4", async () => {
     bas();
 
     expect(
       await screen.findByRole("heading", { name: "Başlangıç Yol Haritası" }),
     ).toBeInTheDocument();
     const kart = yolHaritasi();
-    expect(within(kart).getAllByRole("listitem")).toHaveLength(5);
+    expect(within(kart).getAllByRole("listitem")).toHaveLength(4);
     expect(within(kart).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
-    expect(within(kart).getByText(/5 maddeden 0 tanesi tamamlandı/)).toBeInTheDocument();
+    expect(within(kart).getByText(/4 maddeden 0 tanesi tamamlandı/)).toBeInTheDocument();
     expect(within(kart).queryByRole("button", { name: "Kartı gizle" })).toBeNull();
   });
 
@@ -197,7 +196,7 @@ describe("Başlangıç Yol Haritası", () => {
     bas();
 
     const kutu = await screen.findByRole("checkbox", {
-      name: /Yönetici parolasını en az iki görevlendirilmiş kişiyle paylaşın — yapıldı/,
+      name: /Kurtarma anahtarını müdürlükte kapalı zarfta saklayın — yapıldı/,
     });
     await user.click(kutu);
 

@@ -1,6 +1,6 @@
-"""Ayrılış havuzu — uçlar, toplu karar, olası aynı kişi (F1 eki 7; tasarım §6.1, §8.3).
+"""Ayrılış havuzu — uçlar, toplu karar, olası aynı kişi (tasarım §5.1 `Personnel`, §13 D30).
 
-Kullanıcı kararı (22.09.2026): e-Okul aktarımı kimseyi ayırmaz ve silmez;
+Aile iskeletinin kullanıcı kararı: e-Okul aktarımı kimseyi ayırmaz ve silmez;
 listede bulunmayan aktif kişi havuza girer, karar burada verilir:
 
 - `GET leave-pool/` öğrenci ve personeli AYRI listeler, TR sıralı; havuza giriş
@@ -10,7 +10,7 @@ listede bulunmayan aktif kişi havuza girer, karar burada verilir:
   Tek işlemdir: seçilenlerden biri havuzda değilse hiçbir karar uygulanmaz.
 - Karar ucu kişi yazar: parola kurulmadan 409; iki uç da görevli kipinde 403.
 - Havuzdaki personel için "olası aynı kişi" adayları (eşleşme GEREKÇESİYLE —
-  TB18) ve havuzdan birleştirme.
+  §13 D30) ve havuzdan birleştirme.
 - Günlüğe ad yazılmaz.
 
 Bütün ad ve numaralar uydurmadır (KVKK).
@@ -371,7 +371,7 @@ def test_havuzdaki_personel_icin_olasi_ayni_kisi_ve_havuzdan_birlestirme(
 
     veri = client.get(HAVUZ_URL).json()
 
-    # Aday satırı NEDEN aday olduğunu ve ayırt edici bilgisini taşır (TB18).
+    # Aday satırı NEDEN aday olduğunu ve ayırt edici bilgisini taşır (§13 D30).
     assert [(p["id"], p["similar"]) for p in veri["personnel"]] == [
         (
             eski.pk,
@@ -410,7 +410,7 @@ def test_olasi_ayni_kisi_havuza_giristen_once_acilmis_kayitlarda_aranmaz() -> No
 
 
 def test_aday_gerekcesi_ucta_dondurulur(client: APIClient) -> None:
-    """Her aday satırı neden aday olduğunu söyler: ad eşitliği mi, yazım farkı mı (TB18)."""
+    """Her aday satırı neden aday olduğunu söyler: ad eşitliği mi, yazım farkı mı (§13 D30)."""
     havuzdaki = _personel("SELİN", "ÖZTÜRK")
     ad_ayni = _personel("SELİN", "BEYAZ")
     yazim = _personel("SELİM", "ÖZTÜRK")

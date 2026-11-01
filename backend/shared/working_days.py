@@ -1,32 +1,25 @@
-"""Kapalı gün aritmetiği — iade tarihi kaydırmasının tek kaynağı (tasarım §6.1, §9-5).
+"""Kapalı gün aritmetiği — takvime bağlı süre hesaplarının ortak çekirdeği (tasarım §5.1).
 
-DD'nin `shared/working_days.py` + `services/calendar.py::is_working_day` ikilisinden
-UYARLANDI (tasarım §12: `SCHOOL_BREAK`, `next_open_day`). DD'de soru "disiplin
-süresi hangi gün dolar?" idi ve iş günü sayılıyordu; burada soru "iade tarihi hangi
-güne düşer?" dir ve yalnız KAPALI GÜNÜN ATLANMASI gerekir (süre gün olarak işler,
-Md. 18: "on beş gündür"; kaydırma yalnız son güne uygulanır).
+Aile iskeletinden AYNEN alındı (tasarım §12.B; `SCHOOL_BREAK` ve `next_open_day`
+iskeletin kendi uyarlamasıdır). Modül yalnız
+takvim aritmetiğidir: bir gün kapalı mı, kapalıysa izleyen ilk açık gün hangisi.
+Bir sürenin nasıl sayılacağı (gün mü, iş günü mü, son gün kayar mı) bu modülün
+işi DEĞİLDİR; süreyi koyan kural paketinin maddesi söyler (CLAUDE.md §2 altın
+kural 1-2). OAB'de bu çekirdeğe dayanacak iş günü süreleri tasarım §5.1
+(`Holiday` satırı) ve kural paketinin süre kurallarındadır (§6.4.5, §6.4.9); bugün
+`is_closed_day` ile `next_open_day`'i üretim kodunda çağıran yoktur.
 
-İKİ AYRI KURAL, İKİ AYRI DAYANAK (AT-3; bu ayrım kullanıcı metnine de yansır):
+İKİ AYRI KAPALI GÜN KURALI (bu ayrım kullanıcı metnine de yansır):
 
-1. **Hafta sonu, resmî tatil, dini bayram, idari izin — her zaman kapalı.** Okul
-   Kütüphaneleri Yönetmeliği son günün tatile rastlamasını düzenlemez. Program,
-   TBK md. 93'teki genel ilkeye ("sürenin son günü, kanunlarda tatil olarak kabul
-   edilen bir güne rastlarsa, kendiliğinden bu günü izleyen ve tatil olmayan ilk
-   güne geçer") KIYASEN iade tarihini izleyen ilk açık güne kaydırır. Öğrencinin
-   lehine bir uygulamadır; doğrudan uygulama değil kıyastır. Metin:
-   `docs/mevzuat/6098-turk-borclar-kanunu-md92-93.md#madde-93`.
-   İdari izin (`OTHER`) kanunen tatil sayılmaz ama o gün personel izinlidir,
-   kütüphane kapalıdır; iade fiilen alınamadığı için aynı DAVRANIŞA (her zaman
-   kapalı) bağlandı. Dayanağı TBK 93 DEĞİLDİR, programın kuralıdır: kullanıcı
-   metninde ayrı anılır (`docs/mevzuat/BENIOKU.md` §4 "Dayanağı olmayan kurallar").
-2. **Öğrenciye kapalı gün (ara tatil, yarıyıl — `SCHOOL_BREAK`) — bayrakla.** Bu
-   günler kanunen tatil DEĞİLDİR, mesai sürer; kaydırmanın mevzuat dayanağı YOKTUR.
-   Okulun tercihidir: öğrenci okulda değilken sahte gecikme doğmasın diye iade
-   tarihi derslerin başladığı ilk güne kayar (UY-13, SU-6). Ayarla kapatılır
-   (`include_school_breaks=False`); ayar F6'da `LibraryPolicy`'ye bağlanır.
-
-Kaydırılmış tarih kullanıcıya hiçbir yerde "Md. 18 gereği" diye SUNULMAZ
-(tasarım §9-5, sözlük "İade tarihi").
+1. **Hafta sonu, resmî tatil, dini bayram, idari izin — her zaman kapalı.**
+   İdari izin (`OTHER`) de aynı DAVRANIŞA (her zaman kapalı) bağlandı; günün
+   hukuki niteliği hakkında program hüküm koymaz. Bu, programın kuralıdır, mevzuat
+   dayanağı değildir: kullanıcı metninde mevzuat gereği diye sunulmaz
+   (tasarım §3.3).
+2. **Öğrenciye kapalı gün (ara tatil, yarıyıl — `SCHOOL_BREAK`) — bayrakla.**
+   Hesaba girip girmeyeceğini çağıran, yani süreyi koyan kural seçer
+   (`include_school_breaks`). Bu günlerin hukuki niteliği hakkında program hüküm
+   koymaz (dayanağı korpusta yok; CLAUDE.md §2 altın kural 1).
 
 Katman: çekirdek (`*_in` işlevleri) ORM'sizdir, kapalı dönemleri parametre alır ve
 saf birim testiyle sınanır. Sözleşme işlevleri (`is_closed_day`, `next_open_day`)
@@ -128,9 +121,8 @@ def next_open_day(
     include_school_breaks: bool = True,
     periods: Iterable[ClosedPeriod] | None = None,
 ) -> date:
-    """`day` açıksa kendisi; değilse izleyen ilk açık gün (TBK 93'e kıyasen).
+    """`day` açıksa kendisi; değilse izleyen ilk açık gün.
 
-    Kullanım (F6): iade tarihi = `next_open_day(bugün + 15, include_school_breaks=…)`.
     `periods` verilmezse canlı kapalı gün kayıtları DB'den okunur.
     """
     source = _periods_from_db(day) if periods is None else periods

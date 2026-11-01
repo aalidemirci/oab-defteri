@@ -1,9 +1,9 @@
-"""`shared.working_days` saf çekirdeği — kapalı gün atlama (tasarım §9-5).
+"""`shared.working_days` saf çekirdeği — kapalı gün atlama (tasarım §5.1 `Holiday`).
 
 DB'siz: kapalı dönemler `periods=` ile verilir. Sabitlenen sözleşmeler:
 
 - Açık gün kendisini döndürür (kaydırma yalnız kapalı güne uygulanır).
-- Hafta sonu, resmî/dini tatil ve idari izin HER ZAMAN kapalıdır (TBK 93'e kıyasen).
+- Hafta sonu, resmî/dini tatil ve idari izin HER ZAMAN kapalıdır.
 - Öğrenciye kapalı gün (ara tatil, yarıyıl) YALNIZ bayrak açıkken kapalıdır.
 - Arka arkaya kapalı günler ve yıl sonu geçişi tek seferde atlanır.
 

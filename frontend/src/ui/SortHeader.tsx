@@ -1,10 +1,9 @@
 // Paylaşılan sıralama şeridi (Tur 364) — "kolon başlığı" gibi davranan, anında
-// uygulanan sıralama kontrolü. Öğrenci listesindeki StudentSortHeader (Tur 168)
-// deseninden genelleştirildi; personel/proje/kulüp gibi adlı kayıt listeleri de
-// kullanır. Sıralama backend'de (ICU Türkçe collation) yapılır → sayfalar arası
-// tutarlı. Sıralama değeri "<alan>" (artan) / "-<alan>" (azalan) sözleşmesini izler.
+// uygulanan sıralama kontrolü; adlı kayıt listeleri için genel bileşen.
+// Sıralama backend'de Türk alfabesine göre (`normalize.tr_sort_key`) yapılır →
+// sayfalar arası tutarlı. Sıralama değeri "<alan>" (artan) / "-<alan>" (azalan) sözleşmesini izler.
 //
-// Erişilebilirlik (§7.5): role=group + yön bilgili aria-label/aria-pressed,
+// Erişilebilirlik: role=group + yön bilgili aria-label/aria-pressed,
 // 48px dokunma hedefi, görünür focus halkası. Yalnız M3 token.
 
 import Icon from "./Icon";

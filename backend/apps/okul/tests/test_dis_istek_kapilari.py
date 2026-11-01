@@ -1,4 +1,4 @@
-"""Program ağ servisi sunmaz; dış istek TEK kapıdan çıkar (tasarım §4.1, T11).
+"""Program ağ servisi sunmaz; dış istek TEK kapıdan çıkar (tasarım §4.1, TK4).
 
 Program ağ servisi sunmaz: yönetim sunucusu yalnız 127.0.0.1'de, rastgele portta ve
 oturum belirteciyle dinler; hiçbir port okul ağına açılmaz. Dış istek yalnız

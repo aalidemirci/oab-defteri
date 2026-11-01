@@ -1,5 +1,5 @@
-// Tur 43 — format yardımcılarının testi. CLAUDE.md §2'deki Türkçe görüntü
-// kuralları (gg.aa.yyyy, 1.234,56) doğrulanır.
+// Format yardımcılarının testi. Türkçe görüntü kuralları (tarih gg.aa.yyyy —
+// CLAUDE.md giriş bölümü; sayı 1.234,56) doğrulanır.
 
 import { describe, expect, it } from "vitest";
 

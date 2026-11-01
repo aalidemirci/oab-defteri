@@ -1,7 +1,8 @@
 // Kapalı Günler paneli testi: yıl seçimi, tür ve "tahmini" rozetleri, resmî ve dini
 // tatil tohumlama, onaylı silme, öğrenciye kapalı gün aralığı ekleme ve sihirbazda
 // yeniden kullanım için denetimli kip. Metinler sözlüğe uyar: ara tatil "öğrenciye
-// kapalı gün"dür, kaydırma "Md. 18 gereği" diye sunulmaz.
+// kapalı gün"dür; kapalı günler iş günü hesabının takvimidir, ödünç iadesinden söz
+// edilmez.
 
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -135,10 +136,11 @@ describe("KapaliGunlerPaneli — liste", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Liste okunamadı.");
   });
 
-  it("metinler kaydırmayı “Md. 18 gereği” diye sunmaz, ara tatile yalın “tatil” demez", async () => {
+  it("metinler iş günü hesabını anlatır, iade tarihinden söz etmez; ara tatile yalın “tatil” demez", async () => {
     ekranaBas();
     await screen.findByText("Cumhuriyet Bayramı");
-    expect(document.body.textContent).not.toMatch(/Md\. ?18/);
+    expect(document.body.textContent).not.toMatch(/Md\. ?18|iade|ödünç|gecikme/i);
+    expect(screen.getByText(/iş günüyle verilen süreler/)).toBeInTheDocument();
     expect(screen.getByText(/öğrenciye kapalı gün olarak ayrı tutulur/)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Kapalı Günler" })).toBeInTheDocument();
   });
@@ -219,7 +221,8 @@ describe("KapaliGunlerPaneli — silme", () => {
     await user.click(screen.getByRole("button", { name: "1. dönem ara tatili kaydını sil" }));
     const onay = await screen.findByRole("dialog", { name: "Kapalı gün silinsin mi?" });
     expect(onay).toHaveTextContent(/09\.11\.2026 – 13\.11\.2026/);
-    expect(onay).toHaveTextContent(/açık gün sayılır/);
+    expect(onay).toHaveTextContent(/süre hesaplarında bu günler kapalı gün sayılmaz/);
+    expect(onay.textContent).not.toMatch(/iade/i);
     await user.click(within(onay).getByRole("button", { name: "Sil" }));
 
     await waitFor(() => expect(oapi.deleteHoliday).toHaveBeenCalledWith(2));
@@ -256,7 +259,9 @@ describe("KapaliGunlerPaneli — ekleme", () => {
     await screen.findByText("Cumhuriyet Bayramı");
 
     expect(screen.getByLabelText("Tür")).toHaveValue("SCHOOL_BREAK");
-    expect(screen.getByText(/Kanunen tatil değildir, mesai sürer/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Ara tatil ve yarıyıl\. Resmî tatilden ayrı tutulur/),
+    ).toBeInTheDocument();
     await user.type(screen.getByLabelText(/^Ad/), "Yarıyıl tatili");
     tarihGir(/^Başlangıç/, "2026-12-28");
     tarihGir(/^Bitiş/, "2026-12-31");

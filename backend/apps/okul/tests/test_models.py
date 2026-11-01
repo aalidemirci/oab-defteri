@@ -1,8 +1,8 @@
-"""`okul` modelleri — kısıtlar, singleton, seviye kümesi (KS'den alındı).
+"""`okul` modelleri — kısıtlar, singleton, seviye kümesi (aile iskeletinden alındı).
 
-DD test kalıbından uyarlandı: TCKN/veli/tatil testleri kalktı; okul içi seviye
+Aile test kalıbından uyarlandı: TCKN/veli/tatil testleri kalktı; okul içi seviye
 sabiti (1-12 + hazırlık bayrağı), okul-no teklik kısıtı ve şube kataloğu eklendi.
-F1-C: okul no şifreli + kör indeks (T14) — teklik indekste, sütun DB'de token;
+Okul no şifreli + kör indeks (tasarım §5.3) — teklik indekste, sütun DB'de token;
 personelde unvan/branş yok, üye türü ve ayrılış tarihi var.
 """
 
@@ -113,7 +113,7 @@ class TestSchoolYear:
 @pytest.mark.django_db
 class TestStudent:
     def test_ayni_okul_no_aktif_canli_kayitta_tekil(self) -> None:
-        """Teklik KÖR İNDEKSTEDİR: '0101' ile '101' aynı numaradır (T14)."""
+        """Teklik KÖR İNDEKSTEDİR: '0101' ile '101' aynı numaradır (§5.3)."""
         Student.objects.create(first_name="A", last_name="B", student_number="101")
         with pytest.raises(IntegrityError):
             Student.objects.create(first_name="C", last_name="D", student_number="0101")
@@ -156,7 +156,7 @@ class TestStudent:
         assert Student.objects.get(pk=ogrenci.pk).student_number_index == indeks
 
     def test_kilitliyken_okul_no_yazilamaz(self) -> None:
-        """Fail-closed: anahtar yokken kör indeks de hesaplanamaz (§6.3-3)."""
+        """Fail-closed: anahtar yokken kör indeks de hesaplanamaz (§5.3)."""
         crypto.unload_key()
         try:
             with pytest.raises(crypto.KeyMissingError):
@@ -230,7 +230,7 @@ class TestStudent:
 @pytest.mark.django_db
 class TestPersonnel:
     def test_unvan_ve_brans_alani_yoktur(self) -> None:
-        """V2-01: branş, küçük okulda öğretmeni kişiye bağlar — model bu veriyi hiç tutmaz."""
+        """Tasarım §8.4: branş, küçük okulda öğretmeni kişiye bağlar — model onu hiç tutmaz."""
         alanlar = {alan.name for alan in Personnel._meta.get_fields()}
         assert not {"title", "branch"} & alanlar
         assert {"member_kind", "left_at", "is_active"} <= alanlar

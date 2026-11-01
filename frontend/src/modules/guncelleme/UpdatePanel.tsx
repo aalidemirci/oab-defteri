@@ -2,11 +2,11 @@
 // kaynağı "yayımlanan son sürüm", paket "kurulum dosyası"dır — "GitHub sürümü",
 // "Release", "kurucu" ve özet algoritmasının adı yüzeye çıkmaz.
 //
-// Denetim YALNIZ "Şimdi denetle" düğmesiyle yapılır (tasarım T11): sekme
+// Denetim YALNIZ "Şimdi denetle" düğmesiyle yapılır (tasarım TK4): sekme
 // açılınca da istek atılmaz. Sonuç kabuktaki banda da yayınlanır
 // (`denetimOlayi.ts`), kullanıcı başka ekrana geçtiğinde hatırlatma sürer.
 //
-// Hedef GitHub'dır (kullanıcı kararı 27.09.2026). MEB ağında GitHub engellenebilir:
+// Hedef GitHub'dır (tasarım TK4). MEB ağında GitHub engellenebilir:
 // sunucunun iletisi bunu söyler ve yeni sürümün indir.okulapp.org'dan elle
 // denetlenebileceğini yazar (program o adrese istek atmaz). Sunucuya hiç
 // ulaşılamazsa aynı ileti burada da gösterilir (`ULASILAMADI_METNI`). Hizmetin adı
@@ -36,7 +36,8 @@ export const ULASILAMADI_METNI =
 /**
  * Elle denetlemenin sayfası: programın okulapp.org'daki sayfası sürümü ve kurulum
  * dosyalarının bağlantılarını verir; dosyaların kendisi indir.okulapp.org'dan iner (R2
- * önekinin dizin sayfası yoktur — kök adres 404 verir, 27.09.2026 denetimi). Bağlantı
+ * önekinin dizin sayfası yoktur — kök adres 404 verir; aile iskeletinde 27.09.2026'da
+ * denetlendi). Bağlantı
  * `target="_blank"` ile açılır: masaüstü penceresi (pywebview, `OPEN_EXTERNAL_LINKS_IN_BROWSER`
  * varsayılanı) onu DIŞ tarayıcıda açar. Program bu adrese kendisi istek ATMAZ.
  */
@@ -170,11 +171,11 @@ export default function UpdatePanel() {
             )}
             {status.platform === "linux" ? (
               // Pardus/Linux: uygulama içi indirme Windows kurulum dosyasını verirdi —
-              // burada çalışmaz. Güncelleme paketle yapılır (docs/kurulum.md §3).
+              // burada çalışmaz. Güncelleme paketle yapılır (tasarım TK6: `.deb`, `.tar.gz`).
               <p className="mt-2 text-body-small">
-                Pardus ve Linux’ta güncelleme paketle yapılır: yeni sürümün <code>.deb</code> (ya da{" "}
-                <code>.tar.gz</code>) dosyasını indirme sayfasından alıp eski sürümün üzerine kurun.
-                Verileriniz kurulum klasörünün dışında tutulduğu için korunur.
+                Pardus ve Linux&apos;ta güncelleme paketle yapılır: yeni sürümün <code>.deb</code>{" "}
+                (ya da <code>.tar.gz</code>) dosyasını indirme sayfasından alıp eski sürümün üzerine
+                kurun. Verileriniz kurulum klasörünün dışında tutulduğu için korunur.
               </p>
             ) : (
               <>

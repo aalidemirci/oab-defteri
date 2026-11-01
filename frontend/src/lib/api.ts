@@ -1,13 +1,13 @@
-// Backend API istemcisi — OYS `lib/api.ts`'ten UYARLANMIŞTIR (Görev 3).
-// OAB Defteri authsuz/tek-kullanıcılı çalışır (README "Mimari"): JWT/Bearer,
-// token yenileme, `personnel_inactive`/`password_change_required` oturum kapıları
-// ve impersonation TAMAMEN çıkarıldı. Kalan: temel `fetch` sarmalayıcı, `ApiError`,
-// backend `{code, message, fields}` hata sözleşmesi (CLAUDE.md §7 mirası) ve
-// snake_case gövde. Blob yardımcıları (`getBlob`/`postBlob`) dosya indirmeleri
-// (Excel şablonları, şifreli yedek, kurulum dosyası, evrak/PDF) için korunur.
-// Kip (U5, tasarım §4.4): kullanıcı etkileşiminden hemen sonra giden isteklere
+// Backend API istemcisi — aile iskeletinden uyarlandı. Program yerel sunucuyla
+// konuşur (tasarım §4.1): JWT/Bearer, token yenileme,
+// `personnel_inactive`/`password_change_required` oturum kapıları ve
+// impersonation yoktur. Kalan: temel `fetch` sarmalayıcı, `ApiError`, backend
+// `{code, message, fields}` hata sözleşmesi ve snake_case gövde. Blob
+// yardımcıları (`getBlob`/`postBlob`) dosya indirmeleri (Excel şablonları,
+// şifreli yedek, kurulum dosyası, evrak/PDF) için korunur.
+// Kip (tasarım §4.4): kullanıcı etkileşiminden hemen sonra giden isteklere
 // `X-OD-Etkinlik: 1` eklenir (yönetici kipinin boşta sayacı); 403
-// `kip_yetkisiz` `lib/kip.ts` olayını yayınlar. Kilit kapısı (tasarım §4.3):
+// `kip_yetkisiz` `lib/kip.ts` olayını yayınlar. Kilit kapısı (tasarım §4.4.3):
 // 423 `locked`/`guvenlik_dosyasi_kayip` `lib/kilit.ts` olayını yayınlar.
 
 // Boş/tanımsız → göreli "/api/v1": geliştirmede Vite proxy'si (vite.config.ts
@@ -21,7 +21,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
 /** Backend "yeniden başlat" kapısındayken (geri yükleme sonrası) dönen kod. */
 const RESTART_CODE = "restart_required";
 
-// --- Kullanıcı etkinliği (tasarım §4.4 "Boşta dönüş", §5.10-14) -------------
+// --- Kullanıcı etkinliği (tasarım §4.4.3) ------------------------------------
 // Yönetici kipinin boşta süresi SUNUCUDA dolar ve yalnız kullanıcı eylemi
 // taşıyan isteklerle tazelenir. "Kullanıcı eylemi" = son birkaç saniye içinde
 // gerçek bir etkileşim (fare/dokunma ya da tuş) olmuş olması. Zamanlayıcıyla

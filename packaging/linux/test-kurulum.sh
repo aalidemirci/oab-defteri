@@ -2,7 +2,7 @@
 # =============================================================================
 # packaging/linux/test-kurulum.sh — .deb'i TEMİZ Debian kaplarında sınar
 # =============================================================================
-# Tasarım §14 F12 kapısı: paket, derlendiği kapta değil, hiçbir geliştirme
+# Tasarım §14 F1a kapısı: paket, derlendiği kapta değil, hiçbir geliştirme
 # bağımlılığı olmayan TEMİZ bir sistemde kurulup açılabilmelidir.
 #
 #   debian:11 (bullseye) → Pardus 21 provası

@@ -1,4 +1,4 @@
-// Güncelleme bandı testleri: açılışta denetim YOK (tasarım T11), bant yalnız
+// Güncelleme bandı testleri: açılışta denetim YOK (tasarım TK4), bant yalnız
 // elle denetimin yayınladığı sonucu gösterir; ertelenen sürümü yeniden
 // göstermez; Ayarlar ekranında (panel oradayken) gizlidir.
 

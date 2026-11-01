@@ -1,4 +1,5 @@
-"""Tek kopya kanalı testleri (tasarım §4.2-1 ikinci açılış, §4.2-5 kapatma olayı).
+"""Tek kopya kanalı testleri (tasarım §4.2 adım 2 ikinci açılış, "Kurucu ve kaldırıcı"
+kapatma olayı).
 
 Linux yolu GERÇEK UNIX soketiyle koşar. Windows yolu (adlı olaylar) sahte
 `EventApi` ile sınanır: bekleme, önceliklendirme ve durdurma mantığı ctypes'tan

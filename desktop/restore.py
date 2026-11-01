@@ -18,9 +18,9 @@ Django BURADA AYAĞA KALDIRILIR ama veritabanına DOKUNULMAZ: `prepare_django`
 yalnız ayarları ve uygulama kayıt defterini yükler; göç ve bütünlük denetimi
 bu kipte KOŞULMAZ (bozuk veritabanı bu kipin varlık sebebidir).
 
-Yedekler daima şifrelidir (tasarım §6.3-6; düz yedek dalı söküldü): yönetici
+Yedekler daima şifrelidir (tasarım §4.4.7; düz yedek dalı söküldü, §13 D29): yönetici
 parolası ya da kurtarma anahtarı her geri yüklemede istenir. Güvenlik dosyası
-kayıpsa (GA-2) bu kip de çıkış yoludur: çekirdek `guvenlik.json`'u yedeğin
+kayıpsa (tasarım §4.3 tehdit 8) bu kip de çıkış yoludur: çekirdek `guvenlik.json`'u yedeğin
 kurtarma başlığından yeniden yazar.
 """
 

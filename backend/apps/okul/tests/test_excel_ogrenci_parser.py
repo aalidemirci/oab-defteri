@@ -119,7 +119,7 @@ class TestNormalizeHelpers:
 
 
 class TestOkunmayanSutunlar:
-    """Veri en aza indirme (tasarım §6.1): e-Okul'un cinsiyet ve pansiyon sütunları OKUNMAZ."""
+    """Veri en aza indirme (tasarım §3.4): e-Okul'un cinsiyet ve pansiyon sütunları OKUNMAZ."""
 
     def test_eokul_basligi_eslesir_cinsiyet_ve_pansiyon_alinmaz(self) -> None:
         grid = _grid(

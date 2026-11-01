@@ -1,4 +1,4 @@
-// Kurulum kapısı testi (F4-D4) — App.test.tsx kapının SONUCUNU (hangi sayfa
+// Kurulum kapısı testi — App.test.tsx kapının SONUCUNU (hangi sayfa
 // açılıyor) pinler; burada davranışın kendisi izole edilir: yönlendirme, sihirbaz
 // rotasının muaf olması, sihirbaz bitince geri sekmeme (durumun yeniden okunması)
 // ve kurulum tamamken gereksiz istek atılmaması.
@@ -117,7 +117,7 @@ describe("KurulumKapisi", () => {
   });
 
   it("kurulum tamamlanmış olsa bile yönetici parolası yoksa sihirbaza yönlendirir", async () => {
-    // Parola isteğe bağlı değildir (tasarım §6.3-1): kapı parolayı da sorar.
+    // Parola isteğe bağlı değildir (tasarım §4.4.5): kapı parolayı da sorar.
     okulApiMock.getSetupStatus.mockResolvedValue(PAROLASIZ_TAMAM);
     render(<Deneme yol="/kisiler" />);
     expect(await screen.findByRole("heading", { name: "Sihirbaz içeriği" })).toBeInTheDocument();

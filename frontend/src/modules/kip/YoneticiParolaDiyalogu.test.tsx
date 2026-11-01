@@ -44,7 +44,7 @@ describe("YoneticiParolaDiyalogu", () => {
   });
 
   // `autoFocus` ortak Dialog'un panel odağına yeniliyordu; parola alanı
-  // `initialFocusRef` ile odaklanır (tasarım §14.1 F6 ekleri 23).
+  // `initialFocusRef` ile odaklanır (`ui/Dialog` başlığındaki İLK ODAK notu).
   it("açılışta parola alanı odaktadır", () => {
     bas();
     expect(screen.getByLabelText(/Yönetici parolası/)).toHaveFocus();

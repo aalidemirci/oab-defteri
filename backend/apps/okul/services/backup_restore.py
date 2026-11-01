@@ -1,8 +1,9 @@
-"""Yedekten geri yükleme — yalnız şifreli `.odbak` (tasarım §4.3, §6.3).
+"""Yedekten geri yükleme — yalnız şifreli `.odbak` (tasarım §4.3, §4.4.7).
 
 Yönetici parolası zorunludur ve bütün yedekler X25519 + AES-256-GCM
-kapsayıcısıdır; KS'deki düz SQLite yedek dalı F1'de söküldü (§6.3-6). Düz bir
-SQLite dosyası "yedek" olarak verilirse açık bir Türkçe hatayla reddedilir:
+kapsayıcısıdır; ailenin eski düz SQLite yedek dalı aile iskeletinde
+sökülmüştü, kalıntıları OAB'de de söküldü (tasarım §13 D29). Düz bir SQLite
+dosyası "yedek" olarak verilirse açık bir Türkçe hatayla reddedilir:
 şifresiz bir kopyayı geri yüklemek, kişi alanları düz metin olan ve parmak
 izi taşımayan bir veritabanı getirirdi. Bu çekirdek üç giriş kapısından
 çağrılır:
@@ -30,7 +31,7 @@ olan `guvenlik.json` gömülüdür (`backup_crypto.recovery_metadata`). Çözerk
 AES-GCM kimlik doğrulaması nihai hakemdir: yanlış DEK açık hata verir,
 sessizce bozuk çıktı üretilemez.
 
-GÜVENLİK DOSYASI KAYIP KİLİDİNDEN ÇIKIŞ (GA-2): güncel `guvenlik.json` yoksa
+GÜVENLİK DOSYASI KAYIP KİLİDİNDEN ÇIKIŞ (tasarım §4.3 tehdit 8): güncel `guvenlik.json` yoksa
 aday listesinde yalnız gömülü başlık kalır; çözüm onunla başarılırsa başlık
 `guvenlik.json` olarak YAZILIR (`_ensure_state_file`). Böylece geri yüklemeden
 çıkan (veritabanı, durum dosyası) çifti aynı DEK'i anlatır ve program yeniden
@@ -42,11 +43,13 @@ Ayrı bir düz kopya bırakılmaz. Mevcut (bozuk) veritabanı da SİLİNMEZ:
 `db-onceki-<damga>.sqlite3` adıyla kenara alınır — veri kurtarma denemesi
 için tek nüsha oydu.
 
-KENARA ALINAN VERİTABANININ AKIBETİ (27.09.2026 kullanıcı kararı; tasarım §6.4
-"Yedeklerdeki kalıntı"): geri yükleme onu silmez; onaylı saklama tetiği, tetik
-anından 14 günden eski olanları `-wal`/`-shm` eşleriyle siler
-(`old_databases_before` + `remove_old_databases_named`, çağıran
-`apps.kutuphane.services.saklama`). Yaş dosyanın ADINDAKİ damgadan okunur, dosya
+KENARA ALINAN VERİTABANININ AKIBETİ (aile iskeletinden; OAB'de tasarım §4.4.7):
+geri yükleme onu silmez. 14 günden eskileri `-wal`/`-shm` eşleriyle silmenin
+araçları buradadır (`old_databases_before` + `remove_old_databases_named`). Aile
+iskeletinde bunları saklama tetiği çağırıyordu; o servis OAB'ye alınmadı, bugün
+çağıran yoktur. Tasarıma göre `db-onceki-` yerel yedeklerin 14 günlük
+rotasyonuna girecektir (tasarım §4.4.7, §12.B `desktop/backup.py`; bugünkü
+`rotate_backups` bu öneki kapsamaz). Yaş dosyanın ADINDAKİ damgadan okunur, dosya
 zamanından değil: `os.replace` dosya zamanını korur, yani dosya zamanı kenara
 alınma anını değil eski veritabanına son yazılan anı söyler (program yaz tatilinde
 kapalı kaldıysa haftalar öncesini) — dosya zamanına bakılsa dün yapılan geri
@@ -188,7 +191,7 @@ def restore_database(
 
 
 # ---------------------------------------------------------------------------
-# Kenara alınan veritabanının akıbeti (saklama tetiği — tasarım §6.4)
+# Kenara alınan veritabanının akıbeti (14 günlük rotasyon — tasarım §4.4.7)
 # ---------------------------------------------------------------------------
 def old_database_stamp(name: str) -> datetime | None:
     """`db-onceki-<damga>.sqlite3[-wal|-shm]` adındaki geri yükleme anı (yerel, saf).
@@ -245,7 +248,7 @@ def remove_old_databases_named(data_dir: Path, names: Iterable[str]) -> tuple[li
     * Yalnız programın ürettiği biçimdeki ad (`old_database_stamp` tanır); öbür adlara
       dokunulmaz ve beklemede de kalmaz. Dosya zamanına BAKILMAZ: hangi dosyaların
       silineceğini çağıran tetik anında belirler; sistem saati sonradan kaysa da
-      yeniden deneme yalnız bu adları siler (F11 düzeltme turu D-7 ilkesi).
+      yeniden deneme yalnız bu adları siler (aile iskeletinin düzeltme ilkesi).
     * Önce veritabanının kendisi, sonra `-wal`/`-shm` eşleri. Kendisi silinemezse (ör. bir
       veritabanı aracında açık) eşleri de SİLİNMEZ, bekler: kalan kopyanın işlenmiş
       sayfaları `-wal`'da olabilir, eşini silmek o kopyayı eksik bırakırdı.

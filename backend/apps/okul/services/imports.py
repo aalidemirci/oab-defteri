@@ -1,17 +1,17 @@
 """Öğrenci/Personel toplu içe aktarma ve e-Okul MUTABAKATI — preview (dry-run) + commit.
 
-KS'den alındı (KS bunu DD `services/imports.py` kalıbından uyarlamıştı), F1'de
-mutabakatla genişletildi (tasarım §8.3, EK-20, EK-21):
+Aile iskeletinden alındı (iskelet bunu atalarının `services/imports.py`
+kalıbından uyarlamış, mutabakatla genişletmişti; OAB'de tasarım §8.4):
 
 - TCKN, veli ve cinsiyet zinciri TAMAMEN YOK. Öğrenci eşleştirme anahtarı OKUL
-  NUMARASIDIR ve eşleştirme KÖR İNDEKSLE, tam eşleşmedir (okul no şifreli, T14):
+  NUMARASIDIR ve eşleştirme KÖR İNDEKSLE, tam eşleşmedir (okul no şifreli, tasarım §5.3):
   aynı numaranın farklı yazımı ('0123' ≡ '123') aynı kişiye iner.
-- **AKTARIM HİÇ KİMSEYİ AYIRMAZ VE SİLMEZ (F1 eki 7, kullanıcı kararı
+- **AKTARIM HİÇ KİMSEYİ AYIRMAZ VE SİLMEZ (aile iskeletinin kullanıcı kararı
   22.09.2026).** Mutabakatta listede bulunmayan aktif kişi AYRILIŞ HAVUZUNA
   girer (`persons.add_to_leave_pool`: giriş tarihi + bu aktarım), durumu AKTİF
   kalır; karar Kişiler → Ayrılış Havuzu'nda yöneticinindir. Dosyada bulunan kişi
   havuzdaysa kendiliğinden çıkar (`persons.remove_from_leave_pool`).
-- **Öğrenci mutabakatı (EK-21):** dosyada olmayan aktif öğrenciler havuza girer
+- **Öğrenci mutabakatı:** dosyada olmayan aktif öğrenciler havuza girer
   — ama VARSAYILAN KAPSAM YALNIZ DOSYADA BULUNAN ŞUBELERDİR. Tek şubelik dosya
   diğer şubelere dokunmaz; bütün okulla karşılaştırma yalnız `full_list` ("Bu
   dosya okulun tam listesidir") onayıyla yapılır. Şube değiştiren öğrenci
@@ -19,18 +19,18 @@ mutabakatla genişletildi (tasarım §8.3, EK-20, EK-21):
   dosyası onu bulup çıkarır). Ayrılmış (canlı) kayıt aynı numarayla ve AYNI
   ADLA dönerse yeniden aktifleşir; numara adı farklı birine verilmişse eski
   kayıt dokunulmadan kalır, yeni kayıt açılır (okul no yeniden kullanılabilir —
-  başkasının kütüphane geçmişi yeni öğrenciye bağlanmaz).
+  başkasının kayıt geçmişi yeni öğrenciye bağlanmaz).
 - **Havuza ekleme yalnız kanıtla (import silmez ilkesi).** Okul numarası dosyada
   geçen öğrenci, satırı başka sebeple atlansa da (ad boş, sınıf çözülemedi)
   havuza eklenmez. Numarası boş bir öğrenci satırı kimin olduğu bilinemediği
   için o satırın şubesinde (sınıfı da yoksa hiçbir yerde) havuza eklemeyi
   durdurur; hiç satır işlenemeyen dosya kimseyi havuza eklemez. Her durum
   önizlemede satır no ile söylenir.
-- **Personel mutabakatı (EK-20):** eşleşme normalize ad-soyadla (Python; ad
+- **Personel mutabakatı:** eşleşme normalize ad-soyadla (Python; ad
   şifreli). Listede olmayan aktif personel havuza girer (eski `mark_left_ids`
   seçimi kalktı; karar havuzda verilir). Ada göre eşleşmeyen yeni satırla
   listede olmayan kişi arasında "olası aynı kişi" çifti üretilir (soyadı
-  değişimi) — çift eşleşme GEREKÇESİNİ taşır (TB18: "adı aynı" adaşı da
+  değişimi) — çift eşleşme GEREKÇESİNİ taşır (tasarım §13 D30: "adı aynı" adaşı da
   yakalar); birleştirme ayrı uçtandır (`persons.merge_personnel`) ve havuzdan
   da yapılabilir. Havuza ekleme personelde de yalnız KANITLADIR: kimlik anahtarı
   ad olduğu için ad-soyadı boş bir satır (kaymış sütun) ya da hiç satırı
@@ -251,7 +251,7 @@ class SimilarPair:
     yeni kayıt geri alındığı için None'dır); birleştirme `personnel/<existing_id>/merge/`
     ucuna `{into_id: new_id}` ile yapılır (aktarım sonucundan ya da ayrılış havuzundan).
     `reason` çiftin NEDEN kurulduğudur (`MatchReason` kodu): "adı aynı" adaşı da
-    yakalar, kullanıcı bunu ancak gerekçeyi görürse anlar (TB18).
+    yakalar, kullanıcı bunu ancak gerekçeyi görürse anlar (§13 D30).
     """
 
     row_number: int
@@ -597,8 +597,8 @@ def _returning_student(row: ParsedRow, report: StudentImportReport) -> Student |
     """Aynı numarayla dönen AYRILMIŞ öğrenci — yalnız normalize ad-soyad da eşleşirse.
 
     Okul no ayrılan öğrenciden sonra başka öğrenciye verilebilir. Numara tek
-    başına yeterli sayılsaydı saklanan eski kayıt (F6'dan sonra üyelik ve ödünç
-    geçmişiyle) yeni öğrencinin adına aktifleşirdi. Ad eşleşmezse eski kayıt
+    başına yeterli sayılsaydı saklanan eski kayıt (bağlı kayıtlarıyla birlikte)
+    yeni öğrencinin adına aktifleşirdi. Ad eşleşmezse eski kayıt
     olduğu gibi kalır, çağıran yeni kayıt açar ve önizleme satır no ile uyarır
     (uyarıda ad ve numara yok).
     """
@@ -614,7 +614,7 @@ def _returning_student(row: ParsedRow, report: StudentImportReport) -> Student |
 
 
 def _reconcile_students(kosu: _StudentRun) -> None:
-    """Dosyada olmayan AKTİF öğrencileri AYRILIŞ HAVUZUNA ekler (EK-21, F1 eki 7).
+    """Dosyada olmayan AKTİF öğrencileri AYRILIŞ HAVUZUNA ekler.
 
     Hiç kimse ayrılmaz ve silinmez: havuza giren öğrencinin durumu AKTİF kalır,
     karar havuzda verilir. Zaten havuzda olan öğrenci yeniden sayılmaz (ilk giriş
@@ -725,7 +725,7 @@ def _ingest_personnel(
     satır iki ayrı kayda eşleşir (biri "listede yok" sayılmaz). Aktif kayıt
     ayrılmış kayıttan önce eşleşir; ayrılmış kayıt eşleşirse yeniden aktifleşir.
 
-    Kimseyi ayırmaz ve silmez (F1 eki 7): listede olmayan aktif personel ayrılış
+    Kimseyi ayırmaz ve silmez: listede olmayan aktif personel ayrılış
     havuzuna girer; karar (ayrıldı / aktif kalsın / birleştir) havuzda verilir.
     "Olası aynı kişi" çiftleri bütün listede olmayanlarla kurulur (zaten havuzda
     bekleyenler dahil).
@@ -777,7 +777,7 @@ def _ingest_personnel(
 
 
 def _reconcile_personnel(kosu: _PersonnelRun, listede_yok: list[Personnel], run: ImportRun) -> None:
-    """Listede olmayan aktif personeli AYRILIŞ HAVUZUNA ekler (EK-20, F1 eki 7).
+    """Listede olmayan aktif personeli AYRILIŞ HAVUZUNA ekler (tasarım §5.1 `Personnel`).
 
     Hiç kimse ayrılmaz ve silinmez: havuza giren kişinin durumu AKTİF kalır,
     karar havuzda verilir. Zaten havuzda olan kişi yeniden sayılmaz (ilk giriş

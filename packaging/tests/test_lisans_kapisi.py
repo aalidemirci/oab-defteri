@@ -3,7 +3,7 @@
 OAB Defteri PolyForm Noncommercial lisanslıdır; GPLv3 dağıtılan bütüne
 ek kısıtlama konmasını yasakladığı için YALNIZ GPL'li bir bileşen pakete
 giremez (23.09.2026 yayın denetimi; PyQt5 → PySide6). LGPL bileşenler girer
-ama lisans metni ve kaynağa erişim bilgisiyle (TB28, CLAUDE.md §2-10).
+ama lisans metni ve kaynağa erişim bilgisiyle (tasarım §11.4).
 
 Üç katman:
 
@@ -206,7 +206,7 @@ def _kurulu_kapanis() -> set[str]:
     """Kurulu backend kapanışı; EKLER izlenir (`fonttools[woff]` → brotli, zopfli).
 
     İşaretler her ek için `extra=<ek>` ile değerlendirilir (`lisanslar.Uretici.coz`
-    ile aynı kural). F12 düzeltme turu: gezinme yalnız istek adını kuyruğa alıp
+    ile aynı kural). Aile iskeletinin düzeltmesi: gezinme yalnız istek adını kuyruğa alıp
     `extra=''` ile değerlendirdiği için ek üzerinden gelen dağıtımlar hiç gezilmiyordu.
     """
     from packaging.requirements import Requirement
@@ -682,7 +682,7 @@ def test_benioku_her_bileseni_ve_lgpl_kaynak_bilgisini_tasir() -> None:
     metin = (LISANSLAR / L.BENIOKU_ADI).read_text(encoding="utf-8")
     for b in BILESENLER:
         assert f"  {L.benioku_basligi(b)}\n" in metin, b.ad
-    # LGPL kaynağına erişim (TB28): Qt/PySide6 tam sürüm adresi. Tepsi (pystray) yok, B18.
+    # LGPL kaynağına erişim (tasarım §13 D18): Qt/PySide6 tam sürüm adresi. Tepsi (pystray) yok, B18.
     assert "pystray" not in metin
     assert "qt-everywhere-src-6.8.3.tar.xz" in metin
     assert "pyside-setup-everywhere-src-6.8.3.tar.xz" in metin
@@ -693,7 +693,7 @@ def test_benioku_her_bileseni_ve_lgpl_kaynak_bilgisini_tasir() -> None:
 
 
 def test_benioku_ureticinin_ciktisiyla_birebir() -> None:
-    """Dizin elle düzenlenmez (CLAUDE.md §2-10): depodaki `BENIOKU.txt` üreticinin
+    """Dizin elle düzenlenmez (tasarım §11.4): depodaki `BENIOKU.txt` üreticinin
     `bilesenler.json`'dan ürettiği metinle birebir aynıdır. Üreticinin metni değişip
     `uret.sh` koşulmazsa ya da dosya elle düzeltilirse kapı kırılır."""
     metin = (LISANSLAR / L.BENIOKU_ADI).read_text(encoding="utf-8")
@@ -707,8 +707,8 @@ def _tr_kucuk(metin: str) -> str:
 def test_benioku_lgpl_kaynagi_icin_yazili_teklif_tasir() -> None:
     """KB-1 (28.09.2026 kullanıcı kararı, beta): LGPL-2.1 madde 6(c) yazılı teklifi (GPL-3.0
     madde 6(b) fiziksel taşıyıcıda; ağdan dağıtımda 6(d)) — en az üç yıl, ücretsiz ya da en
-    çok gönderim maliyetine, iletişim yolu GitHub deposunun Issues sayfası ve (29.09.2026
-    kullanıcı kararı, tasarım F12 ekleri İA-2) geliştiricinin e-posta adresi. Teklifte
+    çok gönderim maliyetine, iletişim yolu GitHub deposunun Issues sayfası ve (aile
+    iskeletinin 29.09.2026 kullanıcı kararı) geliştiricinin e-posta adresi. Teklifte
     başka e-posta, kişi adı, unvan ve kurum adı yoktur."""
     metin = (LISANSLAR / L.BENIOKU_ADI).read_text(encoding="utf-8")
     teklif = metin[metin.index(L.TEKLIF_BASLIGI) : metin.index("\nOrtak metinler:")]
@@ -788,7 +788,7 @@ def test_teklifin_e_postasi_hakkinda_ve_lisansla_ayni() -> None:
 
 
 def test_benioku_sayisal_olmayan_surumu_parantezle_yazar() -> None:
-    """F12 düzeltme turu: "önyükleyicisi derlemede indirilen" yarım cümle gibi okunuyordu."""
+    """Aile iskeletinin düzeltmesi: "önyükleyicisi derlemede indirilen" yarım cümle gibi okunuyordu."""
     bilesen = L.Bilesen(
         ad="Örnek önyükleyici",
         surum="derlemede indirilen güncel sürüm",
@@ -809,7 +809,7 @@ def test_benioku_sayisal_olmayan_surumu_parantezle_yazar() -> None:
 
 def test_qt_ile_gelen_icu_ve_ucuncu_taraf_bildirimi_linux_listesinde() -> None:
     """ICU ayrı kitaplık olarak Linux paketindedir; lisansı telif ve izin metninin
-    kopyalarla verilmesini ister (F12 düzeltme turu)."""
+    kopyalarla verilmesini ister."""
     icu = next(b for b in BILESENLER if b.ad.startswith("ICU "))
     assert (icu.surum, icu.platformlar, icu.dosyalar) == (
         L.ICU_SURUMU,
@@ -1515,7 +1515,7 @@ def test_paket_dizini_denetimi_lgpl_kaynagi_ve_sozlukler(tmp_path: Path) -> None
     assert len(hatalar) == 1 and "pyphen" in hatalar[0]
 
 
-# ------------------------------------- Qt'nin yalnız GPL'li modülleri (F12 düzeltme turu)
+# ------------------------------------------------------------ Qt'nin yalnız GPL'li modülleri
 
 
 def _sahte_elf(yol: Path, gerekenler: list[str]) -> None:
@@ -1779,7 +1779,7 @@ def _msys2_paketi(ad: str, lisans_satirlari: tuple[str, ...], dosyalar: set[str]
 
 
 def test_msys2_paketinin_spdx_lisansi_degerlendirilir() -> None:
-    """F12 düzeltme turu: %LICENSE% okunuyordu ama değerlendirilmiyordu."""
+    """Aile iskeletinin düzeltmesi: %LICENSE% okunuyordu ama değerlendirilmiyordu."""
     gpl = _msys2_paketi("mingw-w64-x86_64-gplkit", ("spdx:GPL-3.0-or-later",), {"libgk-1.dll"})
     hata, uyari = L.msys2_lisans_denetimi(gpl)
     assert hata and "mingw-w64-x86_64-gplkit" in hata and uyari is None
@@ -1911,7 +1911,7 @@ def test_deb_copyright_dep5_bicimli_ve_lisans_metnini_tasir() -> None:
     dosya_paragraflari = [p for p in digerleri if "Files" in p]
     lisans_paragraflari = {p["License"].split("\n")[0]: p for p in digerleri if "Files" not in p}
     assert dosya_paragraflari[0]["Files"] == "*"
-    # F12 düzeltme turu: çalıştırılabilir dosya (PyInstaller önyükleyicisi + gömülü üçüncü
+    # Çalıştırılabilir dosya (PyInstaller önyükleyicisi + gömülü üçüncü
     # taraf bayt kodu) ve lisans dizini "Files: *" ile PolyForm'a bağlanmaz.
     ozel = {p["Files"]: p for p in dosya_paragraflari[1:]}
     for yol in (

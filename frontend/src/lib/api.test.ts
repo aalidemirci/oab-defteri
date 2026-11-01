@@ -74,7 +74,7 @@ describe("api — restart_required sözleşmesi", () => {
   });
 });
 
-// Kip sözleşmesi (tasarım §4.4, §5.10-14): kullanıcı etkileşiminden hemen sonra
+// Kip sözleşmesi (tasarım §4.4.3): kullanıcı etkileşiminden hemen sonra
 // giden istek `X-OD-Etkinlik: 1` taşır; zamanlayıcıyla giden istek (çağıran
 // `etkinlik: false` verir) ve etkileşimsiz istek taşımaz. 403 `kip_yetkisiz`
 // kip olayını yayınlar; oturum belirteci 403'ü (kodsuz) yayınlamaz.
@@ -184,7 +184,7 @@ describe("api — kip_yetkisiz sözleşmesi", () => {
   });
 });
 
-// Kilit kapısı (tasarım §4.3): oturum ortasında 423 `locked` ya da
+// Kilit kapısı (tasarım §4.4.3): oturum ortasında 423 `locked` ya da
 // `guvenlik_dosyasi_kayip` gelirse güvenlik kapısı durumu yeniden okusun diye
 // olay yayınlanır; başka kodlu 423 yayınlamaz.
 describe("api — kilit kapısı sözleşmesi", () => {

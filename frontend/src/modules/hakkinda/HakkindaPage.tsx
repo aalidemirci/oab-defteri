@@ -14,22 +14,27 @@ export default function HakkindaPage() {
         </p>
       </header>
 
-      {/* Konum dili tasarım §3 ve docs/sozluk.md §1'e bağlıdır: program kendini
-          "yerel araç" diye tanıtır, "otomasyon sistemi" adını Bakanlığınkine bırakır. */}
+      {/* Tanım ve konum notu CLAUDE.md §1'e ve tasarım §3.1'e bağlıdır; Kullanım
+          Kılavuzu'ndaki "Programın Konumu" ile aynı dildedir (docs/sozluk.md §1). Program
+          karar defterinin ve TEFBİS'in yerine geçmez, bunlara girilecek metni ve listeyi
+          hazırlar; kendine "otomasyon sistemi" adını vermez. Simge logonun motifidir
+          (okul çatısı altında aile: iki yetişkin ve bir çocuk). */}
       <Card className="p-5 sm:p-6">
         <div className="flex items-start gap-4">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-shape-md bg-primary-container text-on-primary-container">
-            <Icon name="local_library" size="xl" />
+            <Icon name="family_restroom" size="xl" />
           </span>
           <div>
             <h2 className="text-title-large font-semibold text-on-surface">Program</h2>
             <p className="mt-2 text-body-medium text-on-surface-variant">
-              OAB Defteri, okul kütüphanesinin kayıtlarını bu bilgisayarda tutan çevrimdışı bir
-              masaüstü programıdır.
+              OAB Defteri, okul-aile birliğinin işlerini okulun bilgisayarında yürüten çevrimdışı
+              bir masaüstü programıdır.
             </p>
             <p className="mt-3 rounded-shape-md bg-tertiary-container px-4 py-3 text-body-medium text-on-tertiary-container">
-              Program okulun kütüphane işlerini yürüttüğü yerel araçtır; Bakanlıkça belirlenen
-              otomasyon sistemindeki kaydın yerine geçmez.
+              Program karar defterinin ve TEFBİS&apos;in yerine geçmez. Karar defterine kararlar el
+              ile yazılır ve defter noter tasdiklidir; birliğin gelir-gider kayıtlarını
+              TEFBİS&apos;e okul idaresi girer. Program bunlara girilecek metni ve listeyi hazırlar,
+              tutarlılığı denetler.
             </p>
           </div>
         </div>
@@ -54,8 +59,10 @@ export default function HakkindaPage() {
               Programla ilgili talep, öneri, hata bildirimi ve şikâyetlerinizi bu e-posta adresine
               iletebilirsiniz.
             </p>
-            {/* KVKK (CLAUDE.md §2-12, SECURITY.md): kişi verisi destek iletisine girmez. Okulun
-                kayıtlarına ilişkin KVKK başvurusunun yeri okul müdürlüğüdür (E13 §8). */}
+            {/* KVKK (CLAUDE.md §2 altın kural 5, SECURITY.md): kişi verisi destek iletisine
+                girmez. Okulun kayıtlarına ilişkin başvuru okul müdürlüğüne yönelir; veri
+                sorumlusunun kim olduğu okul müdürlüğünün değerlendirmesidir (tasarım §3.4,
+                §15 KE-20). Aydınlatma metni E04'tür (F2). */}
             <p className="mt-2 text-body-small text-on-surface-variant">
               İletinize öğrenci, veli ya da personel bilgisi, gerçek veri içeren ekran görüntüsü,
               yedek ya da veritabanı dosyası eklemeyin. Programdaki kişisel verilere ilişkin
@@ -104,8 +111,8 @@ export default function HakkindaPage() {
       </Card>
 
       {/* LGPL-3.0 §4(c): çalışırken telif bildirimi gösteren program, LGPL kitaplığın
-          telif bildirimini de gösterir ve GPL/LGPL metinlerine yönlendirir (F12 düzeltme
-          turu). Dosya adları paketin gerçek yerleşimidir (THIRD_PARTY_LICENSES). */}
+          telif bildirimini de gösterir ve GPL/LGPL metinlerine yönlendirir (lisans kümesi:
+          tasarım §11.4). Dosya adları paketin gerçek yerleşimidir (THIRD_PARTY_LICENSES). */}
       <Card className="p-5 sm:p-6">
         <div className="flex items-start gap-4">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-shape-md bg-surface-container-high text-on-surface-variant">

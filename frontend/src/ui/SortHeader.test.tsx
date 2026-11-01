@@ -1,7 +1,7 @@
 // Paylaşılan sıralama şeridi (Tur 364) testi: aktif alan aria-pressed; yeni alana
 // tıklayınca artan ile başlar; aktif alana tekrar tıklayınca yön değişir (artan↔azalan).
-// nextSort saf fonksiyonu ayrıca birim test edilir. Türkçe collation + sayısal
-// sıralama backend'de (pytest test_students_list / test_users_list).
+// nextSort saf fonksiyonu ayrıca birim test edilir. Türk alfabesine göre sıralama
+// backend'dedir (`normalize.tr_sort_key`; pytest `apps/okul/tests/test_normalize.py`).
 
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

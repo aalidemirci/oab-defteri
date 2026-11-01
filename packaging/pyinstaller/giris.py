@@ -12,7 +12,7 @@ Bu kip `RUNTIME_MODULES`'ın tamamını (Windows'ta ek olarak masaüstü zinciri
 `DESKTOP_RUNTIME_MODULES`'ını) import eder ve hiddenimports zincirinin çalışma
 anı kapısıdır: spec'e eklenmesi unutulan bir bağımlılık burada, derleme
 sırasında yakalanır — sahada değil. Aşağıdaki PDF kipi yalnız WeasyPrint
-zincirini sınadığı için tek başına yetmez (KS'de `xlrd` eklendiğinde görüldü:
+zincirini sınadığı için tek başına yetmez (ailede `xlrd` eklendiğinde görüldü:
 yeni bağımlılığın pakete girip girmediğini sınayan kapı yoktu).
 
     oab-defteri --pdf-duman [dosya.pdf]
@@ -36,7 +36,7 @@ katmanı ayrı ayrı sınamaktır:
    ise, fontconfig gömülü fonta bakıyor demektir ("fontconfig tuzağı" —
    `fonts.conf.tmpl` başlığı).
 
-KS'deki JPEG gömme denetimi bilinçli olarak ALINMADI: tek JPEG üreticisi
+Ailedeki JPEG gömme denetimi bilinçli olarak ALINMADI: tek JPEG üreticisi
 öğrenci fotoğrafıydı ve fotoğraf özelliği bu projede yok. Evrakta raster
 fotoğraf basılmadığı için denetim ürünün kullanmadığı bir yolu sınardı;
 Pillow'un pakette olduğunu `--bagimlilik-duman` zaten kanıtlar.
@@ -89,7 +89,7 @@ EXIT_EVRAK_SMOKE_FAILED = 12
 #:   requirements.txt → DAGITIM_IMPORT_ESLEME → spec hiddenimports
 #: Bu liste dördüncü halkadır: paketlenmiş ikili her derlemede modülleri
 #: GERÇEKTEN import eder. `--pdf-duman` yalnız WeasyPrint zincirini sınar;
-#: KS'de `xlrd` eklendiğinde onun paketlenip paketlenmediğini sınayan hiçbir
+#: Ailede `xlrd` eklendiğinde onun paketlenip paketlenmediğini sınayan hiçbir
 #: kapı olmadığı görüldü (e-Okul .xls içe aktarımı sahada çökebilirdi).
 #:
 #: Liste `backend/requirements.txt` ile senkron tutulur; kaymayı
@@ -163,11 +163,11 @@ class SmokeTemplateMissing(Exception):
     """Evrak şablon ağacı pakette bulunamadı (spec `Tree` yolu bozuk olabilir)."""
 
 
-#: Duman kiplerinin tanı çıktısının AYRICA yazıldığı dosya (günlük klasöründe). F12
-#: düzeltme turu: penceresiz Windows derlemesinde `sys.stderr` `None`'dır ve duman
+#: Duman kiplerinin tanı çıktısının AYRICA yazıldığı dosya (günlük klasöründe). Aile
+#: iskeletinin düzeltme turu: penceresiz Windows derlemesinde `sys.stderr` `None`'dır ve duman
 #: kipleri günlük kurulmadan koşar — dosya olmadan eksik harf, font adı, fontconfig
 #: tanısı ve `OD_RTHOOK_UYARI` hiçbir yere düşmezdi; sahada elde yalnız çıkış kodu
-#: kalırdı (saha protokolü §2.5). Her koşu dosyayı baştan yazar (yalnız son koşu).
+#: kalırdı. Her koşu dosyayı baştan yazar (yalnız son koşu).
 TANILAMA_DOSYASI = "tanilama.log"
 _tanilama_yolu: Path | None = None
 
@@ -439,7 +439,8 @@ def _smoke_target(argv: Sequence[str], flag: str = PDF_SMOKE_FLAG) -> Path:
     Yol, bayraktan sonraki ve `-` ile başlamayan BÜTÜN öğelerin boşlukla birleşimidir:
     PowerShell 5.1'in `Start-Process -ArgumentList` dizisi öğeleri tırnaklamadan
     birleştirir; "C:\\Users\\Okul Aile\\…" yolu iki öğeye bölünür ve ilk öğe
-    (`C:\\Users\\Okul`) yazılamadığı için yalancı 8 kodu dönerdi (F12 düzeltme turu).
+    (`C:\\Users\\Okul`) yazılamadığı için yalancı 8 kodu dönerdi (aile iskeletinin
+    düzeltme turu).
     """
     index = list(argv).index(flag)
     parcalar: list[str] = []

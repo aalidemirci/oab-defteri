@@ -1,6 +1,6 @@
 // Sunucu tarafı sayfalamanın ortak çubuğu: "1–25 / 480 kayıt" + Önceki/Sonraki.
 // Backend liste uçları `?limit=&offset=` alır ve `{count, next, previous, results}`
-// döndürür (CLAUDE.md §7, tasarım D9); bu çubuk o sözleşmenin tek arayüz karşılığıdır.
+// döndürür; bu çubuk o sözleşmenin tek arayüz karşılığıdır.
 // Sayılar Türkçe biçimlenir (binlik nokta — lib/format.ts).
 
 import { formatNumber } from "../lib/format";

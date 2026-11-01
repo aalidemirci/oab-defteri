@@ -1,12 +1,12 @@
-// Kişiler sayfası (DD kalıbı) — öğrenci, öğretmen ve diğer personel sicillerinin tek
-// ekranı. Sicil sekmelerinde arama/filtre + sayfalama, Dialog içinde elle
+// Kişiler sayfası (aile iskeleti kalıbı) — öğrenci, öğretmen ve diğer personel
+// sicillerinin tek ekranı. Sicil sekmelerinde arama/filtre + sayfalama, Dialog içinde elle
 // ekleme-düzenleme, "Ayrıldı olarak işaretle" (ayrılış yolu; kayıt silinmez) ve
 // silme; altta e-Okul listesinden aktarım paneli (önizle → mutabakat → aktar,
-// AktarimPaneli). Üçüncü sekme "Ayrılış Havuzu" (F1 eki 7): aktarım kimseyi ayırmaz,
-// listede bulunmayan kişi orada karar bekler (AyrilisHavuzu).
-// KVKK (tasarım §6.1): TCKN, veli, cinsiyet, fotoğraf, unvan ve branş bu programda
-// HİÇ YOKTUR — sicil ad-soyad + okul no + sınıf/şube (personelde üye türü) ile
-// yürür. Okul no şifreli saklanır: arama numaranın tamamıyla yapılır. Sekme URL'de
+// AktarimPaneli). Üçüncü sekme "Ayrılış Havuzu" (genel tasarım §5.1, §8.4): aktarım
+// kimseyi ayırmaz, listede bulunmayan kişi orada karar bekler (AyrilisHavuzu).
+// KVKK: bugün TCKN, veli, cinsiyet, fotoğraf, unvan ve branş bu ekranda HİÇ YOKTUR —
+// sicil ad-soyad + okul no + sınıf/şube (personelde üye türü) ile yürür. OAB'nin
+// işleme envanteri genel tasarım §3.4'tedir (veli adı ve öğrencinin sınıfı T5 ile gelir). Okul no şifreli saklanır: arama numaranın tamamıyla yapılır. Sekme URL'de
 // tutulur (`?tab=personel`, `?tab=havuz`): başka ekranlar doğrudan o sekmeye bağlanır.
 // Aile iskeletinin kütüphane üyelik sekmeleri ve "Bakanlık sistemi" hatırlatması
 // F1a-2'de söküldü.
@@ -48,7 +48,7 @@ import AyrilisHavuzu from "./AyrilisHavuzu";
 import { DurumRozeti, ErrorBand, hataOku } from "./ortak";
 import type { SayfaHatasi } from "./ortak";
 
-/** Sayfa başına kayıt (CLAUDE.md §7 — liste uçları limit/offset, varsayılan 25). */
+/** Sayfa başına kayıt (liste uçları limit/offset ile sayfalanır, varsayılan 25). */
 const PAGE_SIZE = 25;
 
 // TAB_KEYS[0] varsayılan sekmedir (useTabParam fallback) — başa yeni anahtar EKLEME.
@@ -63,7 +63,7 @@ const TABS: TabItem[] = [
   { key: "havuz", label: "Ayrılış Havuzu", icon: "pending_actions" },
 ];
 
-/** Ayrılış onayının ortak sonucu cümlesi (F1 eki 7: ayrılış kaydı silmez). */
+/** Ayrılış onayının ortak sonucu cümlesi (ayrılış yolu kaydı silmez). */
 const AYRILIS_SONUCU = "Kaydı silinmez; sicilde “Ayrıldı · gg.aa.yyyy” rozetiyle kalır.";
 
 export default function KisilerPage() {
@@ -755,7 +755,7 @@ function PersonelFormDialog({
           onChange={(e) => setMemberKind(e.target.value as MemberKind)}
           options={MEMBER_KIND_OPTIONS}
           error={errors.member_kind}
-          helperText="Ödünç sayı sınırı üye türüne göre uygulanır. Unvan ve branş tutulmaz."
+          helperText="Unvan ve branş tutulmaz."
         />
       </div>
     </Dialog>

@@ -3,16 +3,16 @@
 # packaging/r2-yukle.sh — yayın paketlerini indir.okulapp.org'a (Cloudflare R2)
 # =============================================================================
 # Kullanım: bash packaging/r2-yukle.sh <paket-dizini> <sürüm>
-#           (sürüm etiketin `v`siz hâlidir: 2026.10.0-beta.1)
+#           (sürüm etiketin `v`siz hâlidir: 2026.11.0-alpha.1)
 #
 # R2 yüklemesinin TEK yeri; kova, önek, kovadaki adlar ve içerik türleri yalnız
 # burada yazılıdır. İki yerden çağrılır:
 #   * paketleme.yml `yayin` işi — GitHub Release'in hemen ardından;
 #   * r2-yukle.yml — var olan bir Release'in dosyalarını, paketleri yeniden
 #     üretmeden sonradan yüklemek için (secret'lar Release'ten sonra eklendiyse
-#     ya da adım kırıldıysa; v2026.10.0-beta.1 R2'siz çıktı).
-# Emsal DD hattındaki aynı adlı betiktir (28.09.2026'da uçtan uca yeşil); KD'de
-# yüklemeden önceki denetim ve zorunlu kimlik kipi eklendi.
+#     ya da adım kırıldıysa).
+# Betik aile iskeletinden devralındı (orada 28.09.2026'da uçtan uca yeşil);
+# yüklemeden önceki denetim ve zorunlu kimlik kipi de ailede eklendi.
 #
 # Dizin, Release'e giden dosyaların kendisidir: dört paket + SHA256SUMS.txt.
 # `.deb` adındaki `~` yayın işinin "SHA256SUMS.txt" adımında `.` yapılır ve
@@ -21,8 +21,8 @@
 # Kimlik: CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID ortam değişkenleri.
 # Token izni R2 **Admin Read & Write** olmalıdır. *Object Read & Write* YETMEZ:
 # wrangler `r2 object put` Cloudflare REST API'siyle çalışır ve object-düzeyi
-# token REST'te 403 (kod 10000 "Authentication error") ile reddedilir — DD
-# hattında 28.09.2026'da yaşandı, KS aynı gün düzeltti
+# token REST'te 403 (kod 10000 "Authentication error") ile reddedilir — aile
+# iskeletinin hattında 28.09.2026'da yaşandı
 # (developers.cloudflare.com/r2/platform/troubleshooting).
 # Kimlik yoksa:
 #   * varsayılan: İŞ DURMAZ — sürüm ve dizin denetlenmeden uyarı basılır, 0 ile
@@ -53,7 +53,8 @@ R2_ONEK="oab-defteri"
 OZET="SHA256SUMS.txt"
 # wrangler `r2 object put` tek parçada yükler: en çok 300 MiB (Cloudflare "Upload
 # objects": "up to 315 MB"). Üstü çok parçalı S3 yüklemesi ister (rclone, aws s3).
-# v2026.10.0-beta.1'in en büyüğü Linux arşiviydi: 247.424.211 bayt (~236 MiB).
+# Aile iskeletinin ilk betasında en büyük paket Linux arşiviydi: 247.424.211 bayt
+# (~236 MiB); OAB'nin Linux paketi aynı Qt zincirini taşır.
 WRANGLER_AZAMI=$((300 * 1024 * 1024))
 
 hata() {
@@ -75,7 +76,7 @@ fi
 # CalVer + isteğe bağlı ön sürüm eki (packaging/README.md "Sürüm"). Başında `v`
 # kalırsa özet kovaya `SHA256SUMS-v….txt` adıyla giderdi.
 if ! [[ "${SURUM}" =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]]; then
-    hata "Sürüm biçimi tanınmadı: '${SURUM}' (beklenen ör. 2026.10.0-beta.1; başında 'v' olmadan)."
+    hata "Sürüm biçimi tanınmadı: '${SURUM}' (beklenen ör. 2026.11.0-alpha.1; başında 'v' olmadan)."
 fi
 [ -d "${DIZIN}" ] || hata "Paket dizini yok: ${DIZIN}"
 

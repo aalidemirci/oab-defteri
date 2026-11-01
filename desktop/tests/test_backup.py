@@ -1,6 +1,6 @@
 """Otomatik yedek testleri (tasarım §4.2 — `Connection.backup()`, 14 gün rotasyon).
 
-Yedek YALNIZ şifreli alınır (tasarım §6.3-6; KS'nin düz yedek dalı söküldü).
+Yedek YALNIZ şifreli alınır (tasarım §4.4.7; ailenin düz yedek dalı söküldü, §13 D29).
 Yedek anahtarı (`yedekleme.json`) ya da kurtarma başlığı (`guvenlik.json`) yoksa
 yedek ATLANIR; düz kopya hiçbir koşulda yazılmaz. Yardımcı `_db_olustur`
 varsayılan olarak ikisini de yazar (parolası kurulu kurulum).
@@ -263,13 +263,13 @@ def test_rotasyon_yabanci_dosyalara_dokunmaz(tmp_path: Path) -> None:
     assert (yedekler / "notlar.txt").exists()
 
 
-# ------------------------------------------------ yalnız şifreli (§6.3-6)
+# ----------------------------------------------- yalnız şifreli (§4.4.7)
 
 
 def test_serialize_olmayan_sqlite_ile_yedek_alinir(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Pardus 21/bullseye: libsqlite3 3.34 `Connection.serialize` sunmaz (KS F9).
+    """Pardus 21/bullseye: libsqlite3 3.34 `Connection.serialize` sunmaz (ailede görülen çökme).
 
     Geçici-dosya yedek yolu da tutarlı görüntü üretmeli ve artık bırakmamalı.
     """
@@ -286,8 +286,8 @@ def test_serialize_olmayan_sqlite_ile_yedek_alinir(
 
 
 def test_ilk_acilista_yedek_anahtari_yokken_gunluk_yedek_atlanir(tmp_path: Path) -> None:
-    """Tasarım §6.3-6: yönetici parolası kurulmadan (yedekleme.json yok, kişi verisi
-    de yok) günlük yedek ATLANIR; düz kopya YAZILMAZ."""
+    """Tasarım §4.2 adım 7 (yedek kabı §4.4.7): yönetici parolası kurulmadan
+    (yedekleme.json yok, kişi verisi de yok) günlük yedek ATLANIR; düz kopya YAZILMAZ."""
     db = tmp_path / "db.sqlite3"
     _db_olustur(db, parola_kurulu=False)
 
@@ -308,7 +308,7 @@ def test_bozuk_anahtar_dosyasiyla_duz_yedek_yazilmaz(tmp_path: Path) -> None:
 
 
 def test_guvenlik_dosyasi_kayipken_basliksiz_yedek_alinmaz(tmp_path: Path) -> None:
-    """GA-2: guvenlik.json kayıpken yedek kurtarma başlığı taşıyamaz; başlıksız yedek
+    """Tehdit 8 (§4.3): guvenlik.json kayıpken yedek kurtarma başlığı taşıyamaz; başlıksız yedek
     ancak kaybolan dosyayla açılabilirdi. Yedek atlanır (eski başlıklı yedekler çıkış
     yoludur; açılış akışı bu durumda rotasyonu da koşmaz — test_main)."""
     db = tmp_path / "db.sqlite3"
@@ -340,7 +340,7 @@ _KULLANILAMAZ_GUVENLIK = {
 
 @pytest.mark.parametrize("icerik", _KULLANILAMAZ_GUVENLIK.values(), ids=_KULLANILAMAZ_GUVENLIK)
 def test_bos_ya_da_bozuk_guvenlik_json_ile_yedek_alinmaz(tmp_path: Path, icerik: bytes) -> None:
-    """GA-2 türevi: dosya SİLİNMEZ ama içi boşaltılır/bozulur. Varlık denetimi yetmez;
+    """Tehdit 8 türevi: dosya SİLİNMEZ ama içi boşaltılır/bozulur. Varlık denetimi yetmez;
     başlık `is_usable_security_state` kuralından geçmezse yedek atlanır (None)."""
     db = tmp_path / "db.sqlite3"
     _db_olustur(db)

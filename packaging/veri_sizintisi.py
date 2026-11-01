@@ -3,7 +3,8 @@
 Bu denetim dosya içeriklerini okumadan yalnızca yolları inceler. Böylece hata
 çıktısı da kişisel veri içermez.
 
-İki katmanda koşar ve iki platformda KAPSAMI AYNIDIR (F12, `veri_sizintisi` ×2):
+İki katmanda koşar ve iki platformda KAPSAMI AYNIDIR (tasarım §4.3 tehdit 17,
+`veri_sizintisi` ×2):
 
 1. **Paket dizini** — PyInstaller çıktısı (lisans dosyaları kopyalandıktan
    sonra): `build.ps1` ve `build.sh` aynı dizini denetler.
@@ -30,11 +31,13 @@ from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import BinaryIO
 
-# .odbak: programın yedek kapsayıcısı (parolasız kurulumda DÜZ SQLite baytları taşır).
+# .odbak: programın yedek kapsayıcısı. Şifrelidir (OAB'de düz yedek yoktur, tasarım
+# §13 D29), ama bir okulun yedeği pakete hiçbir biçimde girmez.
 # .docx/.ods: doldurulmuş ya da imzalı evrak (tasarım §13 D9).
-# Küme depo kapısının `depo_sizintisi.RISKLI_UZANTILAR` kümesiyle AYNIDIR (F12 düzeltme
-# turu: paket kapısı .csv, .db ve .xlsm'yi geçiriyordu — e-Okul ya da kişi dökümü
-# CSV'si backend/apps altına düşse pakete girerdi). Eşitliği test sınar; meşru bir
+# Küme depo kapısının `depo_sizintisi.RISKLI_UZANTILAR` kümesiyle AYNIDIR (aile
+# iskeletinin düzeltme turu: paket kapısı .csv, .db ve .xlsm'yi geçiriyordu —
+# e-Okul ya da kişi dökümü CSV'si backend/apps altına düşse pakete girerdi).
+# Eşitliği test sınar; meşru bir
 # paket içeriği bu uzantıyı taşırsa ADIYLA muaf tutulur (joker yok, `MUAF_SONLAR`).
 YASAK_UZANTILAR = frozenset(
     {

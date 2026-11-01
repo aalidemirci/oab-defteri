@@ -1,4 +1,4 @@
-"""Dış yedek hatırlatması uçları (F11 bakım kolu; tasarım §16 risk 13).
+"""Dış yedek hatırlatması uçları (aile iskeletinden; tasarım §16 R6, §4.3 tehdit 18).
 
 | Uç | Ad | İş |
 |---|---|---|
@@ -7,7 +7,7 @@
 
 Tarih indirmeyle kendiliğinden yazılır (`encrypted_backup.create_encrypted_backup`);
 burada elle "indirdim" işareti YOKTUR — kart yalnız programın gördüğü olayı söyler.
-Uç görevli kipi izin listesinde DEĞİLDİR (varsayılan kapalı, CLAUDE.md §2-4) ve
+Uç görevli kipi izin listesinde DEĞİLDİR (varsayılan kapalı, `kip_izinleri`) ve
 kilitliyken kilit kapısı keser (`backups/external/` kilit muafiyeti taşımaz).
 """
 

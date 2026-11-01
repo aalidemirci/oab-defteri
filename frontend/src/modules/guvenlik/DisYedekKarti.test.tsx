@@ -1,4 +1,4 @@
-// Genel Bakış "Şifreli Yedeği USB Belleğe Alın" kartı (F11; tasarım §16 risk 13):
+// Genel Bakış "Şifreli Yedeği USB Belleğe Alın" kartı (tasarım §4.3 tehdit 18, §16 R6):
 // yalnız süre dolunca görünür, son indirmeyi ya da hiç indirme olmadığını söyler,
 // Güvenlik sekmesine bağlanır; pano okuması kullanıcı etkinliği sayılmaz.
 
@@ -39,7 +39,7 @@ it("hiç indirme yoksa bunu söyler ve Güvenlik sekmesine bağlanır", async ()
   expect(screen.getByText("Bu bilgisayarda henüz şifreli yedek indirilmedi.")).toBeInTheDocument();
   expect(screen.getByText(/USB belleğe kopyalayın/)).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Güvenlik/ })).toHaveAttribute("href", GUVENLIK_ADRESI);
-  // Pano okuması boşta süreyi tazelemez (tasarım §4.4).
+  // Pano okuması boşta süreyi tazelemez (tasarım §4.4.3).
   expect(mocks.get).toHaveBeenCalledWith("/backups/external/", { etkinlik: false });
 });
 

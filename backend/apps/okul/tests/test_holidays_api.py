@@ -1,8 +1,8 @@
-"""Kapalı günler uçları — liste/ekle, sil, tohumla (tasarım §6.1; F1 sözleşmesi §5).
+"""Kapalı günler uçları — liste/ekle, sil, tohumla (tasarım §5.1 `Holiday`).
 
 Sabitlenen sözleşmeler:
 
-- Yanıt alan kümesi ön yüz tiplerinin sözleşmesidir (anlık görüntü, T13).
+- Yanıt alan kümesi ön yüz tiplerinin sözleşmesidir (anlık görüntü; tipler elle, TK2).
 - `?year=` takvim yılıyla KESİŞEN kayıtları tarih sırasıyla döndürür; yıl sınırını
   aşan aralık iki yılda da görünür.
 - Doğrulama hataları Türkçedir ve `{code, message, fields}` biçimindedir; ileti

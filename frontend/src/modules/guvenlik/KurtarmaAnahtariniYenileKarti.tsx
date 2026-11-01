@@ -1,8 +1,9 @@
-// "Kurtarma Anahtarını Yenile" kartı (F1 eki, 22.09.2026 kullanıcı kararı 2-3).
+// "Kurtarma Anahtarını Yenile" kartı (aile iskeletinden; OAB'deki yenileme plan §2.2
+// adım 3, tasarım §13 D14).
 //
 // Anahtar kurulumda kaydedilemediyse (pencere kapandı, program çöktü) ya da sonradan
 // kaybolduysa yenisi üretilir. Onay diyaloğu yönetici parolasını ister (başlık soru,
-// gövde sonuç — sözlük §3); backend parolayı bellekteki anahtara karşı doğrular,
+// gövde sonuç — docs/sozluk.md §3); backend parolayı bellekteki anahtara karşı doğrular,
 // aynı veri anahtarını YENİ kurtarma anahtarıyla sarmalar, önceki güvenlik dosyasını
 // "guvenlik-arsiv" adıyla saklar ve yeni anahtarı BİR KEZ döndürür.
 //

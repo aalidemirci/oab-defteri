@@ -1,7 +1,7 @@
 // M3 Avatar (Tur 548) — öğrenci/kişi görseli: foto (data-URI/objectURL) varsa
 // gösterir, yoksa baş-harf fallback. Dekoratif kullanım varsayılan (ad zaten
-// satırda yazar) → aria-hidden; anlam taşıyorsa `label` verilir. Token tüketir
-// (CLAUDE.md §7.5): ham renk/px yok; boyutlar Tailwind 4px ölçeğinden.
+// satırda yazar) → aria-hidden; anlam taşıyorsa `label` verilir. Token tüketir:
+// ham renk/px yok; boyutlar Tailwind 4px ölçeğinden.
 
 export type AvatarSize = "sm" | "md" | "lg";
 

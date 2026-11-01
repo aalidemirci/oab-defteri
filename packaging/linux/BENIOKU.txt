@@ -98,4 +98,18 @@ Komut 0 ile biterse PDF motoru ve Türkçe karakterler sorunsuzdur.
 
 SORUN GİDERME
 -------------
-Ayrıntılı kılavuz: docs/kurulum.md (çıkış kodları tablosu dahil).
+Program açılamazsa nedenini bir iletiyle söyler; ayrıntı günlük klasöründedir
+(~/.local/state/oab-defteri/logs). Uçbirimden çalıştırdıysanız çıkış kodunu
+"echo $?" ile görebilirsiniz:
+
+     0   sorun yok
+     1   beklenmeyen hata
+     2   program zaten açık (önce onu kapatın)
+     3   veritabanı bozuk (yukarıdaki "Yedekten geri yükleme")
+     4   kayıtlar programın daha yeni bir sürümüyle yazılmış (programı güncelleyin)
+     5   veritabanı güncellenemedi
+     6   programın yerel sunucusu başlatılamadı
+     8   PDF denemesi (--pdf-duman) başarısız
+     9   yedekten geri yükleme başarısız
+    10   bileşen denetimi (--bagimlilik-duman) başarısız
+    12   Word denemesi (--evrak-duman) başarısız

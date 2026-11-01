@@ -1,4 +1,4 @@
-// M3 açılır seçim (CLAUDE.md §7.5 — outlined). Etiket + yardımcı/hata metni.
+// M3 açılır seçim (outlined). Etiket + yardımcı/hata metni.
 // Yerel <select> erişilebilirlik için korunur; M3 token'larıyla biçimlenir.
 
 import { useId } from "react";

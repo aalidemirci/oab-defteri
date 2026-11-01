@@ -1,4 +1,4 @@
-// Snackbar altyapısı (CLAUDE.md §7.5): uygulama kökünde tek host + `useSnackbar`
+// Snackbar altyapısı: uygulama kökünde tek host + `useSnackbar`
 // hook'u. Geçici işlem geri bildirimi için (kaydedildi / silindi / hata). Kalıcı
 // durumlar (sayfa-yükleme hatası, form doğrulama) inline error kartı olarak kalır;
 // Snackbar yalnız GEÇİCİ bildirimdir (M3).

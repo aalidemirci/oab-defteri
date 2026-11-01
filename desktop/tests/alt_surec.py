@@ -1,4 +1,4 @@
-"""F11 uçtan uca testlerinin alt süreç yardımcıları (toplanmaz: `test_` ile başlamaz).
+"""Uçtan uca masaüstü testlerinin alt süreç yardımcıları (toplanmaz: `test_` ile başlamaz).
 
 Gerçek program (`python -m desktop.main`) ve prova betiği
 (`python -m desktop.tests.prova_betigi`) AYRI süreçte, depo kökünde koşar: masaüstü

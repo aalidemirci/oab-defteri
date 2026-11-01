@@ -199,7 +199,8 @@ describe("AyarlarPage — ders yılları", () => {
   });
 
   it("aktifleştirilen yılın iki takvim yılına tatiller eklenir; eksik dini bayram söylenir", async () => {
-    // Yıl dönümü (F6 düzeltme turu): tatilsiz takvim yılına düşen iade tarihi kaymaz.
+    // Yıl dönümü: tatilsiz kalan takvim yılında tatiller iş günü sayılır, iş günüyle
+    // verilen süreler yanlış hesaplanır (aile iskeletinde görülen kusur).
     oapi.activateSchoolYear.mockResolvedValue(PASIF_YIL);
     oapi.seedHolidays.mockImplementation((yil: number) =>
       Promise.resolve({ year: yil, created: 7, skipped: 0, religious_available: yil !== 2028 }),
@@ -361,6 +362,17 @@ describe("AyarlarPage — okul bilgileri", () => {
     );
   });
 
+  it("okul bilgileri metni yalnız evrak antedini anar; etiket ve üye kartı yoktur", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("tab", { name: /Okul Bilgileri/ }));
+    await screen.findByLabelText(/^Kısa ad/);
+    expect(screen.getByText(/evrakın antedi bu bilgilerden üretilir/)).toBeInTheDocument();
+    expect(screen.getByText("En çok 24 karakter.")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/etiket|üye kart/i);
+  });
+
   it("kurulumdan sonra zorunlu alanlar boşaltılamaz (sihirbazla aynı kural)", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -460,9 +472,12 @@ describe("AyarlarPage — kapalı günler", () => {
     renderPage();
     await screen.findByText("2026-2027");
     await user.click(screen.getAllByRole("button", { name: /Dönemler/ })[0]);
-    expect(
-      await screen.findByText(/Kapalı Günler sekmesinde öğrenciye kapalı gün olarak ekleyin/),
-    ).toBeInTheDocument();
+    const metin = await screen.findByText(
+      /Kapalı Günler sekmesinde öğrenciye kapalı gün olarak da ekleyin/,
+    );
+    // Gerekçe OAB'nin yarıyıla bağlı hesaplarıdır; ödünç iadesinden söz edilmez.
+    expect(metin).toHaveTextContent(/yarıyıla bağlı hesaplar/);
+    expect(metin.textContent).not.toMatch(/iade/i);
   });
 });
 

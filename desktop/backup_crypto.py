@@ -114,7 +114,7 @@ def is_usable_security_state(data: object) -> bool:
     * günlük/göç öncesi yedeğin kurtarma başlığı (`desktop.backup`): kullanılamaz
       başlıkla yedek ALINMAZ, rotasyon da koşmaz;
     * güvenlik dosyası kayıp kilidi (`app_password.security_file_missing`): dosya
-      var ama kullanılamıyorsa kayıp sayılır (GA-2);
+      var ama kullanılamıyorsa kayıp sayılır (tasarım §4.3 tehdit 8);
     * geri yüklemede aday durumlar (`backup_restore`).
 
     Biçim yapısaldır (kriptografik doğrulama değildir; yanlış sarmal çözümde
@@ -152,7 +152,7 @@ def usable_recovery_header(data_dir: Path) -> bytes | None:
     """Güncel `guvenlik.json` kurtarma başlığı olarak kullanılabiliyorsa baytları; yoksa None.
 
     Yok, okunamıyor, boş ya da biçimsiz dosya aynı sonucu verir: böyle bir
-    başlıkla alınan yedek hiçbir parolayla açılamazdı (GA-2).
+    başlıkla alınan yedek hiçbir parolayla açılamazdı (tasarım §4.3 tehdit 8).
     """
     try:
         raw = (data_dir / SECURITY_STATE_FILE_NAME).read_bytes()

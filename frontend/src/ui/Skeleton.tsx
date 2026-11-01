@@ -1,4 +1,4 @@
-// M3 yükleme iskeleti (CLAUDE.md §7.5): içerik inerken yer tutan nabız bloğu.
+// M3 yükleme iskeleti: içerik inerken yer tutan nabız bloğu.
 // "Yükleniyor…" metni yerine sayfanın gerçek düzenini taklit eden gri bloklar →
 // algılanan hız + düzen kayması (CLS) azalır.
 //

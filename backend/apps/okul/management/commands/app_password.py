@@ -1,4 +1,4 @@
-"""Yönetici parolası — konsol kurtarma aracı (tasarım §4.3, §6.3).
+"""Yönetici parolası — konsol kurtarma aracı (tasarım §4.3, §4.4.4).
 
 Arayüz açılamadığında (yarım kalmış kurulum geçişi, kayıp güvenlik dosyası
 şüphesi, kilitli veriyle destek çağrısı) destek elinin yoludur. Program
@@ -13,7 +13,7 @@ destek senaryosu içindir):
     python manage.py app_password resume            # yarım kalan geçişi tamamlar
     python manage.py app_password recover           # kurtarma anahtarıyla yeni parola
 
-Parolayı KALDIRMA işlemi yoktur: yönetici parolası zorunludur (§6.3-6).
+Parolayı KALDIRMA işlemi yoktur: yönetici parolası zorunludur (tasarım §5.3).
 
 Parolalar VARSAYILAN OLARAK gizli istemle (getpass) alınır — komut satırı
 geçmişine ve süreç listesine düşmez. `--password/--new-password/--recovery-key`

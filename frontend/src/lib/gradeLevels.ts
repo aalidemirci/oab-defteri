@@ -1,6 +1,5 @@
-// OYS `lib/gradeLevels.ts`'ten uyarlandı (F4-D3/D5); yalnız kullanılan yüzey
-// taşındı — OYS'nin sınıf çipi renk eşlemesi (`gradeColor`) burada çağıran
-// bulamadığı için alınmadı.
+// Aile iskeletinden uyarlandı; yalnız kullanılan yüzey taşındı — sınıf çipi
+// renk eşlemesi (`gradeColor`) burada çağıran bulamadığı için alınmadı.
 
 // Öğrenim seviyeleri — UI seçicileri (sınıf düzeyi süzgeci, şube ekleme).
 // `GET /api/v1/grade-levels/` okul içi sabit kümeyi döner: 1-12, okul

@@ -1,7 +1,7 @@
-"""Backend test altyapısı — varsayılan güvenlik ortamı (F1, sözleşme §3).
+"""Backend test altyapısı — varsayılan güvenlik ortamı (tasarım §5.3).
 
 Yönetici parolası zorunludur ve şifreli alan anahtarsız yazmaz (fail-closed,
-tasarım §6.3). Bu yüzden her test, gerçek programın olağan çalışma hâlinde
+tasarım §5.3). Bu yüzden her test, gerçek programın olağan çalışma hâlinde
 başlar: **parola kurulu + kilit açık**.
 
 OTOMATİK FİXTÜR `guvenlik_ortami` (her teste uygulanır, DB İSTEMEZ):

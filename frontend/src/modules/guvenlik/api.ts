@@ -2,7 +2,7 @@
 // Backend `apps/okul/{urls,views}.py` "security/*" bloğuyla BİREBİR.
 // Parolalar YALNIZ gövdede taşınır; hiçbir yanıtta geri dönmez. Tek istisna
 // `enable` yanıtındaki `recovery_key`: tek seferlik üretilir, bir daha alınamaz.
-// Yönetici parolası zorunludur: "parolayı kaldır" ucu YOKTUR (tasarım §6.3).
+// Yönetici parolası zorunludur: "parolayı kaldır" ucu YOKTUR (tasarım §4.4.3).
 
 import { api } from "../../lib/api";
 
@@ -82,7 +82,7 @@ export interface GeriYuklemeSonucu {
 }
 
 /**
- * `GET/PUT /backups/external/` — dış yedek hatırlatması (F11; tasarım §16 risk 13).
+ * `GET/PUT /backups/external/` — dış yedek hatırlatması (tasarım §4.3 tehdit 18, §16 R6).
  * Tarih, şifreli yedek her indirildiğinde sunucuda kendiliğinden yazılır (veri
  * klasöründeki dosyada; veritabanında değil — geri yükleme onu geri sarmaz).
  */
@@ -136,7 +136,7 @@ export const guvenlikApi = {
   // parçalı gönderir (dosya yüklemesi ile aynı uç — kaynak `name` YA DA `file`).
   yedekler: () => api.get<YedekListesi>("/backups/"),
   geriYukle: (form: FormData) => api.postForm<GeriYuklemeSonucu>("/backups/restore/", form),
-  // Dış yedek hatırlatması (F11). Pano kartı okuması kullanıcı etkinliği sayılmaz.
+  // Dış yedek hatırlatması. Pano kartı okuması kullanıcı etkinliği sayılmaz.
   disYedek: () => api.get<DisYedekDurumu>("/backups/external/", { etkinlik: false }),
   disYedekSuresi: (reminder_days: number) =>
     api.put<DisYedekDurumu>("/backups/external/", { reminder_days }),

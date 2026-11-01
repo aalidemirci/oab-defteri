@@ -77,7 +77,7 @@ def test_kullanici_durum_dosyalari_reddedilir(tmp_path: Path) -> None:
 
 
 def test_paket_kapisi_depo_kapisinin_riskli_uzantilarini_kapsar() -> None:
-    """F12 düzeltme turu: paket kapısı .csv, .db ve .xlsm'yi geçiriyordu."""
+    """Aile iskeletinin düzeltmesi: paket kapısı .csv, .db ve .xlsm'yi geçiriyordu."""
     depo = runpy.run_path(str(Path(__file__).parents[1] / "depo_sizintisi.py"))
     assert MODUL["YASAK_UZANTILAR"] == depo["RISKLI_UZANTILAR"]
 
@@ -121,7 +121,7 @@ def test_windows_cp1252_konsolunda_turkce_mesaj_derlemeyi_kirmaz() -> None:
 
 
 # ---------------------------------------------------------------------------
-# F12 — son arşivler ve iki platformun eşit kapsamı (`veri_sizintisi` ×2)
+# Son arşivler ve iki platformun eşit kapsamı (`veri_sizintisi` ×2)
 # ---------------------------------------------------------------------------
 REPO = Path(__file__).resolve().parents[2]
 ARSIVDEKI_YASAKLAR = cast(Callable[[Path], list[str]], MODUL["arsivdeki_yasak_dosyalar"])

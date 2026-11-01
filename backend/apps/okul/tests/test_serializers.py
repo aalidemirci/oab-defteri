@@ -3,8 +3,8 @@
 Kişi/şube doğrulamaları kendi test dosyalarındadır (`test_persons`,
 `test_class_sections`). Burada kalanlar:
 
-- Serializer alan kümeleri — ön yüz tiplerinin sözleşmesi (anlık görüntü, T13).
-  Kaldırılan KS alanlarının (zil, vardiya, şube kümesi, zümre, cinsiyet, okul
+- Serializer alan kümeleri — ön yüz tiplerinin sözleşmesi (anlık görüntü; tipler elle, TK2).
+  Aile iskeletinin atasından kaldırılan alanların (zil, vardiya, şube kümesi, zümre, cinsiyet, okul
   türü/çizelge) geri sızması burada yakalanır.
 - `SchoolYearSerializer` — tarih sırası ve ad tekliği.
 - `ImportRequestSerializer` — dosya ile pano metni BİRBİRİNİ DIŞLAR.
@@ -110,7 +110,7 @@ def test_serializer_alan_kumesi_sabittir(serializer: Any, alanlar: set[str]) -> 
 
 
 def test_okul_ayarinda_kaldirilan_alanlar_yok_sayilir(client: APIClient) -> None:
-    """Eski ön yüzün gönderebileceği KS alanları 400 üretmez, hiçbir yere de yazılmaz."""
+    """Eski ön yüzün gönderebileceği kaldırılmış alanlar 400 üretmez, hiçbir yere de yazılmaz."""
     yanit = client.put(
         AYAR_URL,
         {

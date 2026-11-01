@@ -1,4 +1,4 @@
-// Görevli kipinin ana ekranı (U5). Görevli kipinde rotaların YERİNE gösterilir:
+// Görevli kipinin ana ekranı. Görevli kipinde rotaların YERİNE gösterilir:
 // görevli yönetici ekranlarına (kişiler, ayarlar, yedek…) ulaşamaz. Backend bunu
 // ayrıca keser (403 `kip_yetkisiz`); bu ekran kullanıcıya boş ya da hata dolu
 // sayfalar yerine ne yapacağını söyler.

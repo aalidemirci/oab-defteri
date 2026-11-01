@@ -1,4 +1,4 @@
-"""Kip uçları — görevli kipi / yönetici kipi (U5, tasarım §4.4).
+"""Kip uçları — görevli kipi / yönetici kipi (aile iskeletinden; tasarım §4.4).
 
 * `GET  security/mode/`        → `KIP.ozet()`; kip göstergesi bunu periyodik
   sorar (ön yüz `X-OD-Etkinlik` GÖNDERMEZ). Hiçbir kipte kesilmez; kilitliyken

@@ -1,4 +1,4 @@
-"""Kişi yazan uçların yönetici parolası kapısı (tasarım §6.3-2, F1 kod kapısı).
+"""Kişi yazan uçların yönetici parolası kapısı (tasarım §5.3; plan §2.4).
 
 "Parola yokken kişi yazan uç 409" maddesinin kanıtı. Test `config.urls`'ün
 BÜTÜN desenlerini dolaşır:
@@ -30,7 +30,7 @@ from apps.okul.models import Student
 from apps.okul.permissions import RequiresAdminPassword
 
 # Kişi (öğrenci/personel) yazan uçlar — izin sınıfını taşımalıdır.
-# Ayrılış, birleştirme (F1-C) ve ayrılış havuzu kararı (F1 eki 7) da kişi yazar.
+# Ayrılış, birleştirme ve ayrılış havuzu kararı da kişi yazar.
 KISI_YAZAN_UCLAR = frozenset(
     {
         "student-list",
@@ -51,11 +51,11 @@ KISI_YAZAN_UCLAR = frozenset(
 # Anlık görüntü: kişi YAZMAYAN bütün `/api/` uçları. Yeni uç → bilinçli sınıflandırma.
 DIGER_UCLAR = frozenset(
     {
-        # Çık (F5, §4.2-4): kişi yazmaz; görevli kipinde yönetici parolası ister.
+        # Çık (tasarım §4.2): kişi yazmaz; görevli kipinde yönetici parolası ister.
         "app-quit",
         "backup-list",
         "backup-restore",
-        # F11 bakım kolu: dış yedek hatırlatması veri dizinindeki dosyaya (tarih ve
+        # Dış yedek hatırlatması (tasarım §16 R6) veri dizinindeki dosyaya (tarih ve
         # süre) yazar — kişi sicili yazmaz.
         "backup-external-reminder",
         "class-section-detail",

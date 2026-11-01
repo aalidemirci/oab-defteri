@@ -1,8 +1,8 @@
 // Masaüstü metin alanı. Yoğunluk ölçüsü CSS değişkeninden gelir.
 //
-// `ref` İÇ `<input>`e gider (F3): masa akışlarında odak yönetimi şarttır —
-// hızlı kayıtta kayıttan sonra imleç yeniden okutma kutusuna döner, yoksa
-// kullanıcı her kitapta fareye uzanır. Sarmalayıcı `div`in ref'i işe yaramaz.
+// `ref` İÇ `<input>`e gider: hızlı veri girişinde odak yönetimi şarttır —
+// kayıttan sonra imleç yeniden ilk alana döner, yoksa kullanıcı her kayıtta
+// fareye uzanır. Sarmalayıcı `div`in ref'i işe yaramaz.
 
 import { forwardRef, useId } from "react";
 import type { InputHTMLAttributes, ReactNode } from "react";

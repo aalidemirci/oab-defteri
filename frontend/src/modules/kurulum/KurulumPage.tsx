@@ -1,9 +1,10 @@
-// Kurulum sihirbazı — programın İLK AÇILIŞ ekranı (tasarım §6.3-1, §14.1 F1).
-// Üç adım, bu sırayla:
+// Kurulum sihirbazı — programın İLK AÇILIŞ ekranı (plan §2.2; genel tasarım §5.1
+// sihirbaz sırası, §4.4.5). Üç adım, bu sırayla:
 //   1. Yönetici parolası + kurtarma anahtarı — ATLANAMAZ. Parola kurulunca anahtar
 //      bir kez gösterilir (yazdır / PDF olarak kaydet / elle yaz); devam için
 //      sakladığı kopyadan iki grup geri yazılır, sonra TAM anahtar sunucuda
-//      doğrulanıp güvenlik dosyasına damgalanır (F1 eki, 22.09.2026 kararı 2).
+//      doğrulanıp güvenlik dosyasına damgalanır (anahtarın saklandığı doğrulanmadan
+//      kurulum bitmez; genel tasarım §4.4.5).
 //      Anahtar ekranda değilken (pencere kapandı, program çöktü) adım iki yol
 //      sunar: kâğıttaki anahtarı yazıp doğrulamak ya da yönetici parolasıyla
 //      YENİ anahtar üretmek (eski anahtar geçersizleşir, kayıtlar değişmez).
@@ -19,8 +20,9 @@
 // adımlar (`missing_steps`) backend'in `setup/complete/` kapısıyla AYNI hesaptır;
 // sihirbaz ilk EKSİK adımdan açılır. Parola kurulmadan ve kurtarma anahtarı
 // doğrulanmadan ilerlenemez (İleri kapalı, adım rayı tıklanmaz); kapı backend'de de
-// vardır (eksik adımda 400 `kurulum_eksik`). Kurulumu bu karardan önce tamamlanmış
-// (damgasız) programda ray kilitlenmez; 1. adım yalnız uyarır.
+// vardır (eksik adımda 400 `kurulum_eksik`). Kurulum tamamlandıktan sonra anahtar
+// damgasız kalmışsa (yenilenip doğrulanmamış anahtar) ray kilitlenmez; 1. adım yalnız
+// uyarır.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
@@ -606,8 +608,8 @@ function OkulBilgileriAdimi({ form, errors, onChange }: OkulBilgileriProps) {
     <Card elevation={1} className="p-6">
       <p className="text-title-medium text-on-surface">2. Okul Bilgileri</p>
       <p className="mt-1 text-body-medium text-on-surface-variant">
-        Bu bilgiler programın bastığı evrakın antedinde, etiketlerde ve üye kartlarında kullanılır.
-        Hazırlık sınıfı varsa sınıf düzeylerine Hazırlık eklenir.
+        Bu bilgiler programın bastığı evrakın antedinde kullanılır. Hazırlık sınıfı varsa sınıf
+        düzeylerine Hazırlık eklenir.
       </p>
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <TextField
@@ -628,7 +630,7 @@ function OkulBilgileriAdimi({ form, errors, onChange }: OkulBilgileriProps) {
           onChange={(e) => onChange({ kisaAd: e.target.value })}
           error={errors.kisa_ad}
           placeholder="Örn. Örnek AL"
-          helperText={`Etiketlerde basılır (üye kartında okulun tam adı yer alır); en çok ${KISA_AD_EN_COK} karakter.`}
+          helperText={`En çok ${KISA_AD_EN_COK} karakter.`}
         />
         <Select
           label="Kademe"
@@ -638,7 +640,6 @@ function OkulBilgileriAdimi({ form, errors, onChange }: OkulBilgileriProps) {
           placeholder="Seçin"
           options={KADEME_SECENEKLERI}
           error={errors.kademe}
-          helperText="Kayıp ve hasarda bedel seçenekleri (yalnız ortaöğretimde) ve yıl sonundaki son sınıf kademeye göre belirlenir."
         />
         <TextField
           label="İl"
@@ -730,8 +731,9 @@ function TakvimAdimi({
           <p className="text-title-medium text-on-surface">Kapalı Günler</p>
           <p className="mt-1 text-body-medium text-on-surface-variant">
             Ders yılı kaydedilince iki takvim yılının resmî ve dini tatilleri kendiliğinden eklenir.
-            Ara tatil ve yarıyılı “öğrenciye kapalı gün” olarak girin; iade tarihi kapalı bir güne
-            denk gelirse izleyen ilk açık güne kayar. Kapalı günleri daha sonra Ayarlar → Kapalı
+            Ara tatil ve yarıyılı “öğrenciye kapalı gün” olarak girin. Kapalı günler, mevzuatta iş
+            günüyle verilen sürelerin takvimidir; ara tatil ve yarıyılın bir sürenin hesabına girip
+            girmediğini o sürenin kuralı belirler. Kapalı günleri daha sonra Ayarlar → Kapalı
             Günler'den de düzenleyebilirsiniz.
           </p>
           <div className="mt-4">

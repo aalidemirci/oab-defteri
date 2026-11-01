@@ -1,19 +1,19 @@
 // Sayfa hata bandı — yükleme/kaydetme/silme başarısız olduğunda görünen canlı bölge.
-// Kişiler sayfasında doğdu (F1), F2'de katalog ekranları da aynı iki durumu taşıdığı
+// Aile iskeletinde Kişiler sayfasında doğdu; başka ekranlar da aynı iki durumu taşıdığı
 // için ortak kite alındı; `modules/kisiler/ortak.tsx` buradan yeniden dışa verir.
 //
 // İki durum vardır:
 //   1) olağan hata → kırmızı bant, backend iletisi olduğu gibi;
 //   2) 409 `parola_gerekli` → bu bir "hata" değil, eksik adımdır: yönetici parolası
 //      kurulmadan şifreli alana (kişi adı, bağışçı, komisyon başkanı) yazılamaz
-//      (tasarım §6.3, F1 sözleşmesi §2). Kullanıcı sihirbaza yönlendirilir.
+//      (tasarım §4.2, TK8). Kullanıcı sihirbaza yönlendirilir.
 
 import { Link } from "react-router-dom";
 
 import { ApiError } from "../lib/api";
 import Icon from "./Icon";
 
-/** Backend sözleşmesi §2: yönetici parolası kurulmadan şifreli alan yazan uç 409 döner. */
+/** Fail-closed yazma (tasarım TK8): yönetici parolası yokken şifreli alan yazan uç 409 döner. */
 export const PAROLA_GEREKLI_KODU = "parola_gerekli";
 
 /** Sayfada gösterilecek hata: ileti + (varsa) parola kurulmamış olduğu bilgisi. */

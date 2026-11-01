@@ -51,7 +51,7 @@ export default function YenidenBaslatEkrani() {
           Programı kapatıp yeniden açın: aşağıdaki düğmeyle ya da pencerenin çarpı düğmesiyle
           programdan çıkın, sonra programı yeniden açın.
         </p>
-        {/* Çık (TB13): pencere süslemesi olmayan masaüstünde çıkış yolu; parolasızdır. */}
+        {/* Çık (tasarım §4.5): pencere süslemesi olmayan masaüstünde çıkış yolu; parolasızdır. */}
         <DogrudanCikisDugmesi />
         <p className="mt-3 text-body-small text-on-surface-variant">
           Önceki veritabanı silinmedi; veri klasöründe{" "}

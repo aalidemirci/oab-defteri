@@ -1,7 +1,7 @@
 // e-Okul listesinden (ya da şablondan) aktarım paneli — önizle → aktar, MUTABAKATLA
-// (tasarım §8.3). Dosya VEYA pano metni aynı boru hattından geçer.
+// (genel tasarım §8.4). Dosya VEYA pano metni aynı boru hattından geçer.
 //
-// AKTARIM KİMSEYİ AYIRMAZ VE SİLMEZ (F1 eki 7, kullanıcı kararı 22.09.2026): listede
+// AKTARIM KİMSEYİ AYIRMAZ VE SİLMEZ (aile iskeletinden gelen kullanıcı kararı): listede
 // bulunmayan aktif kişi Ayrılış Havuzu'na eklenir, durumu aktif kalır; dosyada
 // bulunan havuzdaki kişi havuzdan kendiliğinden çıkar. Karar Kişiler → Ayrılış
 // Havuzu'nda verilir. Önizleme "N öğrenci ayrılış havuzuna eklenecek, M öğrenci
@@ -173,7 +173,7 @@ export default function AktarimPaneli({
 
   const birlestir = async (pair: SimilarPair) => {
     if (pair.new_id === null || report === null || isStudentReport(report)) return;
-    // Geri alınamaz işlem + yalnız ad benzerliğiyle bulunmuş aday (TB18):
+    // Geri alınamaz işlem + yalnız ad benzerliğiyle bulunmuş aday (§13 D30):
     // gerekçe yazılır ve onay düğmesi doğrulama kutusuyla açılır.
     const ok = await confirm({
       title: "Bu iki kayıt aynı kişi mi?",
@@ -583,7 +583,7 @@ function PersonelMutabakati({
               >
                 <span className="text-body-medium text-on-surface">
                   Satır {p.row_number}: {p.row_name} ↔ kayıttaki {p.existing_name}
-                  {/* Neden çift? Kural adı yeterli sayar; adaş da buraya düşer (TB18). */}
+                  {/* Neden çift? Kural adı yeterli sayar; adaş da buraya düşer (§13 D30). */}
                   <span className="block text-body-small text-on-surface-variant">
                     Neden aday: {benzerlikGerekcesi(p.reason)}
                   </span>

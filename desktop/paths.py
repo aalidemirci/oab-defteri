@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # Dizin adı — tasarım §2.3 kimlik sabitleri: veri dizini adı OABDefteri.
-# (Ad değişirse YALNIZ bu iki sabit değişir; kardeş programların (KS, DD)
+# (Ad değişirse YALNIZ bu iki sabit değişir; aile programlarının
 # karşılıklarıyla çakışmaz — aynı makinedeki iki program veri karıştırmaz.)
 APP_DIR_NAME_WINDOWS = "OABDefteri"
 APP_DIR_NAME_XDG = "oab-defteri"

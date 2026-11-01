@@ -1,22 +1,22 @@
 // "Başlangıç Yol Haritası" kartı — Genel Bakış'ta, kurulum bittikten sonra
-// (tasarım §14.1 F1). Programı okulda kullanmaya başlamak için sıradaki işleri
-// sıralar; her madde ilgili sayfaya bağlanır. Bütün maddeler tamamlanınca kart
-// gizlenebilir.
+// (plan §2.2; genel tasarım §7.10). Programı okulda kullanmaya başlamak için
+// sıradaki işleri sıralar; her madde ilgili sayfaya bağlanır. Bütün maddeler
+// tamamlanınca kart gizlenebilir.
 //
 // İki tür madde vardır:
 // * KENDİLİĞİNDEN tespit edilenler — `setup/status/` sayılarından: öğrenci ve
 //   personel aktarımı (sayı > 0), aktif ders yılında öğrenciye kapalı gün (> 0).
-// * KULLANICININ İŞARETLEDİKLERİ — program bunların yapıldığını bilemez (zarfın
-//   kapatılması, parolanın paylaşılması). Aile iskeletinin katalog şablonu ve
-//   Ağ Kataloğu (BTR görüşmesi) maddeleri F1a-2'de söküldü.
+// * KULLANICININ İŞARETLEDİKLERİ — program bunların yapıldığını bilemez (kurtarma
+//   anahtarı zarfının kapatılması). Parola paylaşımı maddesi yoktur: parola
+//   paylaşılmaz (BSG Yönergesi md. 7/2); kişisel hesaplar T1 ile F1b 1. adımda gelir.
 // İşaretler `SchoolConfig.yol_haritasi`'nda (backend) durur, tarayıcı
 // depolamasında DEĞİL: yönetim yüzeyi her açılışta rastgele portta dinler, köken
 // değiştiği için `localStorage` açılışlar arasında taşınmaz. İşaretler kişisel
 // veri içermez (madde + tarih).
 //
-// Kurtarma anahtarının saklandığı sunucuda doğrulanmamışsa (kurulumu bu karardan
-// önce tamamlanmış program ya da yenilenip doğrulanmamış anahtar — F1 eki,
-// 22.09.2026 kararı 2) kartın başında uyarı ve Güvenlik ayarlarına bağlantı durur.
+// Kurtarma anahtarının saklandığı sunucuda doğrulanmamışsa (kurulumdan sonra
+// yenilenip doğrulanmamış anahtar; `kurtarma.dogrulandi`, genel tasarım §4.4.4)
+// kartın başında uyarı ve Ayarlar → Güvenlik'e bağlantı durur.
 
 import { Link } from "react-router-dom";
 
@@ -56,7 +56,7 @@ export const YOL_HARITASI_MADDELERI: readonly MaddeTanimi[] = [
     anahtar: "kapali_gunler",
     baslik: "Öğrenciye kapalı günleri girin (ara tatil, yarıyıl)",
     aciklama:
-      "Resmî ve dini tatiller kurulumda eklendi. Ara tatil ve yarıyıl tarihlerini girin; iade tarihi bu günlere denk gelirse izleyen ilk açık güne kayar.",
+      "Resmî ve dini tatiller kurulumda eklendi. Ara tatil ve yarıyıl tarihlerini de öğrenciye kapalı gün olarak girin. Kapalı günler iş günüyle verilen sürelerin takvimidir; ara tatil ve yarıyılın bir sürenin hesabına girip girmediğini o sürenin kuralı belirler.",
     bag: { to: "/ayarlar?tab=kapali-gunler", etiket: "Kapalı Günler'e git" },
   },
   {
@@ -64,14 +64,7 @@ export const YOL_HARITASI_MADDELERI: readonly MaddeTanimi[] = [
     baslik: "Kurtarma anahtarını müdürlükte kapalı zarfta saklayın",
     aciklama:
       "Kurtarma anahtarı çıktısını zarfa koyup kapatın ve müdürlükte kilitli dolapta saklayın. PDF dosyasını bu bilgisayarda bırakmayın.",
-    bag: { to: "/ayarlar?tab=guvenlik", etiket: "Güvenlik ayarları" },
-  },
-  {
-    anahtar: "parola_paylasimi",
-    baslik: "Yönetici parolasını en az iki görevlendirilmiş kişiyle paylaşın",
-    aciklama:
-      "Parolayı bilen tek kişi okuldan ayrılır ya da parolayı unutursa kayıtlara yalnız kurtarma anahtarıyla erişilir. Parolayı masadaki görevlilere vermeyin; görevliler görevli kipinde çalışır.",
-    bag: { to: "/ayarlar?tab=guvenlik", etiket: "Güvenlik ayarları" },
+    bag: { to: "/ayarlar?tab=guvenlik", etiket: "Ayarlar → Güvenlik'i aç" },
   },
 ];
 
@@ -153,14 +146,14 @@ export default function BaslangicYolHaritasi({
             <div className="min-w-0">
               <p>
                 <strong>{DOGRULANMADI_BASLIGI}.</strong> Parola unutulursa kayıtlara yalnız kurtarma
-                anahtarıyla ulaşılır. Anahtarı sakladıysanız Güvenlik ayarlarında doğrulayın;
+                anahtarıyla ulaşılır. Anahtarı sakladıysanız Ayarlar → Güvenlik&apos;te doğrulayın;
                 kaydedemediyseniz aynı yerden yenisini üretin.
               </p>
               <Link
                 to="/ayarlar?tab=guvenlik"
                 className="mt-1 inline-flex items-center gap-1 text-label-large font-medium underline-offset-4 hover:underline"
               >
-                Güvenlik ayarları
+                Ayarlar → Güvenlik&apos;i aç
                 <Icon name="arrow_forward" size="sm" />
               </Link>
             </div>

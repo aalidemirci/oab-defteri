@@ -1,15 +1,15 @@
-// M3 Dialog (CLAUDE.md §7.5 / .claude/rules/frontend-m3.md): scrim %32 siyah,
+// M3 Dialog: scrim %32 siyah,
 // surface-container-high, shape-xl, elevation-3, başlık headline-small. ESC + scrim
 // tıklaması kapatır; açılışta ilk odak panele alınır, Tab odak TUZAĞI panel
 // içinde döner (F29, Tur 247 — WCAG 2.1 klavye tuzağı deseni: Tab son öğeden
 // ilkine, Shift+Tab ilkinden sonuncuya sarar). İçerik token tüketir; ham renk/px yok.
 //
-// İLK ODAK (KD, tasarım §14.1 F6 ekleri 23): pencere açılınca bir alanın odakta olması
-// gerekiyorsa (parola, okutma, arama) o alanın ref'i `initialFocusRef` ile verilir.
+// İLK ODAK: pencere açılınca bir alanın odakta olması gerekiyorsa (parola,
+// arama) o alanın ref'i `initialFocusRef` ile verilir.
 // Çocukta `autoFocus` KULLANILMAZ: React onu bu bileşenin açılış efektinden ÖNCE
 // uygular; efekt ardından odağı panele alır (autoFocus etkisiz kalır) ve açan öğe
 // yerine alanın kendisini "açan" diye kaydeder (kapanışta odak geri verilemez).
-// Prop verilmezse davranış KS'dekiyle aynıdır: odak panele alınır.
+// Prop verilmezse odak panele alınır.
 
 import { useEffect, useRef } from "react";
 import type { ReactNode, RefObject } from "react";
@@ -38,7 +38,7 @@ interface DialogProps {
   /** Tam-genişliğe yakın panel (haftalık ızgara gibi büyük tablolar — Tur 671). */
   full?: boolean;
   /**
-   * Açılışta odaklanacak öğe (parola ya da okutma alanı). Yalnız açılış anında
+   * Açılışta odaklanacak öğe (ör. parola alanı). Yalnız açılış anında
    * okunur; öğe o an basılmamışsa (ref boş) odak panele alınır. `useRef` ile
    * verilen kararlı bir ref olmalıdır.
    */

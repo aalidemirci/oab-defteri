@@ -1,4 +1,4 @@
-// Ayarlar sayfası (DD kalıbı) — altı sekme: ders yılları (dönemlerle), kapalı
+// Ayarlar sayfası (aile iskeleti kalıbı) — altı sekme: ders yılları (dönemlerle), kapalı
 // günler (resmî/dini tatil, öğrenciye kapalı gün), şubeler, okul bilgileri (evrak
 // antedi, hazırlık sınıfı, kademe, kısa ad, demirbaş onayı ve no), güvenlik
 // (yönetici parolası, kurtarma anahtarı çıktısı, yedek) ve güncelleme (yalnız elle
@@ -233,7 +233,8 @@ function SchoolYearRow({ year, onChanged }: { year: SchoolYear; onChanged: () =>
     try {
       await okulApi.activateSchoolYear(year.id);
       // Ders yılının iki takvim yılına resmî ve dini tatiller eklenir (sihirbazla aynı
-      // kural): tatilsiz yıla düşen iade tarihi kaydırılmaz, sahte gecikme doğar.
+      // kural): tatilsiz kalan yılda tatiller iş günü sayılır, iş günüyle verilen süreler
+      // yanlış hesaplanır.
       const eksikDini = eksikDiniBayramIletisi(await tatilleriTohumla(year));
       const ileti = `“${year.name}” aktif ders yılı oldu; resmî ve dini tatiller eklendi.`;
       // Eksik dini bayram elle girilmeli: ileti kapatılana dek kalır.
@@ -335,8 +336,9 @@ function SchoolTermEditor({ year }: { year: SchoolYear }) {
     <div className="rounded-shape-sm bg-surface-container-low p-4">
       <p className="text-body-small text-on-surface-variant">
         1. dönem ders yılı başlangıcında, 2. dönem ders yılı bitişinde sonlanır. Aradaki boşluk
-        yarıyıldır; iade tarihlerinin hesabına girmesi için Kapalı Günler sekmesinde öğrenciye
-        kapalı gün olarak ekleyin.
+        yarıyıl tatilidir; yarıyıla bağlı hesaplar (ör. kantinde yarıyıl ayının kirası) bu tarihlere
+        dayanır. Yarıyılı Kapalı Günler sekmesinde öğrenciye kapalı gün olarak da ekleyin; iş
+        günüyle verilen süreler o takvime bakar.
       </p>
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <TextField
@@ -755,8 +757,8 @@ function OkulBilgileriPanel() {
     <Card elevation={1} className="p-6">
       <p className="text-title-medium text-on-surface">Okul Bilgileri</p>
       <p className="mt-1 text-body-medium text-on-surface-variant">
-        Programın bastığı evrakın antedi, etiketler ve üye kartları bu bilgilerden üretilir.
-        Hazırlık sınıfı varsa sınıf düzeylerine Hazırlık eklenir.
+        Programın bastığı evrakın antedi bu bilgilerden üretilir. Hazırlık sınıfı varsa sınıf
+        düzeylerine Hazırlık eklenir.
       </p>
       {error && (
         <div className="mt-4">
@@ -817,7 +819,7 @@ function OkulBilgileriPanel() {
           value={kisaAd}
           onChange={(e) => setKisaAd(e.target.value)}
           error={fieldErrors.kisa_ad}
-          helperText={`Etiketlerde basılır (üye kartında okulun tam adı yer alır); en çok ${KISA_AD_EN_COK} karakter.`}
+          helperText={`En çok ${KISA_AD_EN_COK} karakter.`}
         />
         <div className="sm:col-span-2">
           <DemirbasAlanlari

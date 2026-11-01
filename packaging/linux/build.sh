@@ -7,9 +7,10 @@
 #     bash packaging/linux/docker-build.sh
 #
 # Doğrudan çalıştırmak yalnız `python:3.12-bullseye` (veya Debian 11 tabanlı)
-# bir kap içinde anlamlıdır. KS kararı (K6): derleme YALNIZ bullseye'da yapılır
-# çünkü glibc 2.31, Pardus 21'in tabanıdır — daha yeni bir glibc'de derlenen
-# paket Pardus 21'de açılmaz ("GLIBC_2.34 not found").
+# bir kap içinde anlamlıdır. Aile kararı (tasarım §2.2 TK6, plan §2.1 madde 4):
+# derleme YALNIZ bullseye'da yapılır, çünkü glibc 2.31 Pardus 21'in tabanıdır —
+# daha yeni bir glibc'de derlenen paket Pardus 21'de açılmaz ("GLIBC_2.34 not
+# found").
 #
 # Adımlar:
 #   1. Sistem bağımlılıkları (yalnız DERLEME için; pakete girmez)
@@ -51,7 +52,7 @@ DEB_SURUM="${SURUM/-/\~}"
 DEB_ADI="oab-defteri_${DEB_SURUM}_amd64.deb"
 TAR_ADI="oab-defteri-${SURUM}-linux-x64.tar.gz"
 
-# .deb bağımlılıkları (KS hattı, K17). Pango/glib/fontconfig Linux'ta BUNDLE
+# .deb bağımlılıkları (aile hattından). Pango/glib/fontconfig Linux'ta BUNDLE
 # EDİLMEZ (sistem sürümüyle çakışır); dağıtımın kendi paketleri kullanılır.
 # Hepsi Debian 11 ve 12 ana deposunda mevcuttur.
 DEPENDS_TEMEL="libpango-1.0-0, libpangoft2-1.0-0, libharfbuzz0b, libfontconfig1, libglib2.0-0, fonts-dejavu-core"
@@ -69,7 +70,7 @@ DEPENDS_QT="libgl1, libegl1, libxkbcommon0, libxkbcommon-x11-0, libxkbfile1, lib
 APT_TEMEL="libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libfontconfig1 libglib2.0-0 fonts-dejavu-core binutils"
 # libharfbuzz-subset0 Debian 11'DE YOKTUR (bookworm ile geldi). WeasyPrint font
 # alt-kümeleme için arar, bulamazsa fontu tam gömer — PDF büyür ama üretilir.
-# Bu yüzden hem burada hem .deb Depends'inde ZORUNLU DEĞİLDİR (KS hattının
+# Bu yüzden hem burada hem .deb Depends'inde ZORUNLU DEĞİLDİR (aile hattının
 # bağımlılık listesiyle birebir uyumlu).
 APT_ISTEGE_BAGLI="libharfbuzz-subset0"
 APT_QT="libgl1 libegl1 libxkbcommon0 libxkbcommon-x11-0 libxkbfile1 libdbus-1-3 libnss3 libnspr4 libxcomposite1 libxdamage1 libxrandr2 libxtst6 libxi6 libasound2 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxcb-cursor0"
@@ -77,7 +78,8 @@ APT_QT="libgl1 libegl1 libxkbcommon0 libxkbcommon-x11-0 libxkbfile1 libdbus-1-3 
 bilgi() { echo "== $*"; }
 
 # apt komutları ayna tutarsızlığına karşı sarmalanır (gerekçe apt_dene.sh
-# başlığında: 04.09.2026'da KS'de bir sürüm koşusu tam burada 404 ile düştü).
+# başlığında: 04.09.2026'da aile iskeletinde bir sürüm koşusu tam burada 404 ile
+# düştü).
 . "$(dirname "${BASH_SOURCE[0]}")/apt_dene.sh"
 
 # --- 1. Sistem bağımlılıkları (derleme kabında) ------------------------------
@@ -103,7 +105,7 @@ if [ "${OD_SKIP_PIP:-0}" != "1" ]; then
     bilgi "python bağımlılıkları (lisans listesindeki sürümlere kısıtlı)"
     # Geçişli bağımlılıklar pinli değildir; kısıt dosyası onları THIRD_PARTY_LICENSES
     # listesinin sürümlerine bağlar — pakete giren sürüm BENIOKU'dakiyle aynı olur
-    # (F12 düzeltme turu). Yalnız standart kitaplıkla üretilir.
+    # (aile iskeletinin düzeltme turu). Yalnız standart kitaplıkla üretilir.
     KISITLAR="$GECICI_PAKETLEME/kisitlar.txt"
     python "$DEPO/packaging/lisanslar/lisanslar.py" kisitlar --platform linux --cikti "$KISITLAR"
     pip install --no-cache-dir -q -c "$KISITLAR" -r "$DEPO/backend/requirements.txt"
@@ -151,7 +153,7 @@ OD_WITH_QT="$QT_ILE" pyinstaller \
 UYGULAMA="$PAKET_KOKU/oab-defteri/oab-defteri"
 [ -x "$UYGULAMA" ] || { echo "HATA: çalıştırılabilir üretilmedi: $UYGULAMA" >&2; exit 1; }
 
-# Lisans kapısı (F12, TB28): THIRD_PARTY_LICENSES/ ve LICENSE.txt paket köküne
+# Lisans kapısı (tasarım §11.4): THIRD_PARTY_LICENSES/ ve LICENSE.txt paket köküne
 # kopyalanır; pakete GERÇEKTEN giren her dosyanın sahibi bulunur (Python
 # dağıtımı → lisans listesi, sistem kütüphanesi → dpkg + /usr/share/doc
 # copyright). Listede olmayan dağıtım, sahibi bilinmeyen dosya ya da yalnız
@@ -207,7 +209,7 @@ mkdir -p "$DEB_AGACI/opt" "$DEB_AGACI/usr/bin" "$DEB_AGACI/usr/share/application
 cp -a "$PAKET_KOKU/oab-defteri" "$DEB_AGACI/opt/oab-defteri"
 ln -sf /opt/oab-defteri/oab-defteri "$DEB_AGACI/usr/bin/oab-defteri"
 cp "$DEPO/packaging/linux/oab-defteri.desktop" "$DEB_AGACI/usr/share/applications/"
-# Debian telif dosyası (DEP-5) ve üçüncü taraf lisansları (F12, TB28): lisans
+# Debian telif dosyası (DEP-5) ve üçüncü taraf lisansları (tasarım §11.4): lisans
 # dizini programın yanındadır (/opt/…/THIRD_PARTY_LICENSES); belge dizininden
 # bağlanır.
 DOC_DIZINI="$DEB_AGACI/usr/share/doc/oab-defteri"
@@ -255,7 +257,7 @@ tar -czf "$CIKTI/$TAR_ADI" -C "$TAR_KOKU" "oab-defteri-${SURUM}"
 # --- 7b. Son arşivlerde veri sızıntısı denetimi ------------------------------
 # Paket dizini adım 4'te denetlendi; arşive SONRADAN girenler (/usr/share/doc,
 # kur.sh, ikonlar) ancak burada görünür. Windows'taki karşılığı build.ps1'in
-# taşınabilir .zip denetimidir (iki platformda eşit kapsam — F12).
+# taşınabilir .zip denetimidir (iki platformda eşit kapsam — tasarım §4.3 tehdit 17).
 bilgi "son arşivlerde kişisel veri sızıntısı denetimi"
 python "$DEPO/packaging/veri_sizintisi.py" "$CIKTI/$DEB_ADI" "$CIKTI/$TAR_ADI"
 

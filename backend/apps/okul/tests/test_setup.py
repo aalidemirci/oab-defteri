@@ -1,15 +1,15 @@
-"""Kurulum sihirbazı uçları + kurulum durumu + Başlangıç Yol Haritası (F1-E).
+"""Kurulum sihirbazı uçları + kurulum durumu + Başlangıç Yol Haritası (plan §2.2).
 
 `setup/status/` alan kümesi hem arayüz kurulum kapısının hem masaüstü sağlık
 denetiminin sözleşmesidir — küme değişirse FE `SetupStatus` tipi ve
 `desktop/server.py` birlikte gözden geçirilir.
 
-Kod kapısı (tasarım §14.1 F1, sözleşme E): sihirbaz parola adımı olmadan
+Kural (tasarım §4.4.5; sihirbaz adımları plan §2.2): sihirbaz parola adımı olmadan
 ilerlemez ve `setup/complete/` eksik adımda Türkçe 400 (`kurulum_eksik`) ile
 HANGİ adımın eksik olduğunu söyler — her dal ayrı testtedir.
 
 Bu dosyada kurtarma anahtarı DOĞRULANMIŞ başlanır (`anahtar_dogrulanmis`,
-otomatik): 1. adımın ikinci koşulu (F1 eki, karar 2) ve damgasız kurulumun
+otomatik): 1. adımın ikinci koşulu (tasarım §4.4.4 `kurtarma.dogrulandi`) ve damgasız kurulumun
 reddi `test_kurtarma_dogrulama.py`'dedir.
 """
 
@@ -218,7 +218,7 @@ class TestSetupComplete:
     def test_kurulum_suresince_sure_islemez_tamamlaninca_sayaclar_sifirdan_baslar(
         self, client: APIClient
     ) -> None:
-        """Karar 2-1: sihirbazda geçen süre yönetici kipini düşürmez; bitince tam süre."""
+        """Tasarım §13 D15: sihirbazda geçen süre yönetici kipini düşürmez; bitince tam süre."""
         saat = SahteSaat()
         KIP._reset_for_tests(saat=saat)
         assert KIP.durum() == "yonetici"
@@ -382,9 +382,40 @@ class TestYolHaritasi:
         assert durum["roadmap"]["marks"] == {"kurtarma_zarfi": bugun}
 
     def test_isaret_kaldirilir(self, client: APIClient) -> None:
-        self._isaretle(client, "parola_paylasimi")
-        yanit = self._isaretle(client, "parola_paylasimi", done=False)
+        self._isaretle(client, "kurtarma_zarfi")
+        yanit = self._isaretle(client, "kurtarma_zarfi", done=False)
         assert yanit.json()["marks"] == {}
+
+    def test_elle_isaretlenen_madde_yalniz_kurtarma_zarfidir(self) -> None:
+        """Parola paylaşımı maddesi yoktur: parola paylaşılmaz (T1; BSG Yön. md. 7/2)."""
+        assert setup_service.ROADMAP_MANUAL_ITEMS == ("kurtarma_zarfi",)
+
+    def test_kaldirilan_parola_paylasimi_maddesi_isaretlenemez(self, client: APIClient) -> None:
+        yanit = self._isaretle(client, "parola_paylasimi")
+        assert yanit.status_code == 400
+        assert yanit.json()["message"] == "Bu madde elle işaretlenemez."
+        assert SchoolConfig.load().yol_haritasi == {}
+
+    def test_eski_parola_paylasimi_isareti_zararsizca_yok_sayilir(self, client: APIClient) -> None:
+        """Aile iskeletinden kalma kayıtlı işaret okunmaz, ilk yazmada kayıttan düşer."""
+        config, _ = SchoolConfig.objects.get_or_create(pk=SchoolConfig.SINGLETON_PK)
+        config.yol_haritasi = {
+            "isaretler": {"kurtarma_zarfi": "2026-09-22", "parola_paylasimi": "2026-09-22"},
+            "gizli": False,
+        }
+        config.save()
+
+        durum = client.get("/api/v1/setup/status/")
+        assert durum.status_code == 200
+        assert durum.json()["roadmap"] == {
+            "marks": {"kurtarma_zarfi": "2026-09-22"},
+            "hidden": False,
+        }
+
+        yanit = self._isaretle(client, "kurtarma_zarfi", done=False)
+        assert yanit.status_code == 200
+        assert yanit.json()["marks"] == {}
+        assert SchoolConfig.load().yol_haritasi == {"isaretler": {}, "gizli": False}
 
     def test_kendiliginden_tespit_edilen_madde_elle_isaretlenemez(self, client: APIClient) -> None:
         yanit = self._isaretle(client, "ogrenci_aktarimi")
@@ -420,7 +451,7 @@ class TestYolHaritasi:
         assert yanit.status_code == 200, yanit.json()
         assert yanit.json()["hidden"] is True
 
-        yanit = self._isaretle(client, "parola_paylasimi", done=False)
+        yanit = self._isaretle(client, "kurtarma_zarfi", done=False)
         assert yanit.json()["hidden"] is False
 
     def _hepsi_tamam(self, client: APIClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -479,7 +510,7 @@ class TestYolHaritasi:
         client.post("/api/v1/setup/roadmap/", {"hidden": True}, format="json")
         yeni_anahtar = app_password.renew_recovery_key(password=TEST_PAROLA)
 
-        yanit = self._isaretle(client, "parola_paylasimi")
+        yanit = self._isaretle(client, "kurtarma_zarfi")
 
         assert yanit.json()["hidden"] is False  # arayüz: kart görünür
         assert SchoolConfig.load().yol_haritasi["gizli"] is True  # saklanan: gizli
@@ -489,7 +520,7 @@ class TestYolHaritasi:
     def test_bozuk_ya_da_bilinmeyen_kayit_disari_sizmaz(self) -> None:
         config, _ = SchoolConfig.objects.get_or_create(pk=SchoolConfig.SINGLETON_PK)
         config.yol_haritasi = {
-            "isaretler": {"kurtarma_zarfi": "2026-09-22", "bilinmeyen": "x", "parola_paylasimi": 5},
+            "isaretler": {"kurtarma_zarfi": "2026-09-22", "bilinmeyen": "x"},
             "gizli": "evet",
         }
         config.save()
@@ -497,6 +528,10 @@ class TestYolHaritasi:
             "marks": {"kurtarma_zarfi": "2026-09-22"},
             "hidden": True,
         }
+        # Bilinen maddenin bozuk değeri (tarih dizesi değil) de okunmaz.
+        config.yol_haritasi = {"isaretler": {"kurtarma_zarfi": 5}}
+        config.save()
+        assert setup_service.roadmap_state(SchoolConfig.load()) == {"marks": {}, "hidden": False}
         config.yol_haritasi = ["liste"]
         config.save()
         assert setup_service.roadmap_state(SchoolConfig.load()) == {"marks": {}, "hidden": False}
@@ -517,7 +552,7 @@ class TestGradeLevelsApi:
         assert veri["prep_enabled"] is True
 
     def test_kademe_seviyeleri_kisitlamaz(self, client: APIClient) -> None:
-        """F1'de kademe yalnız saklanır; Md. 19 ve sınıf kitaplığı kuralları F6/F7'de."""
+        """Kademe bugün yalnız saklanır; okul kartının `levels` alanı F1b 4. adımdadır (§5.1)."""
         setup_service.update_school_config(fields={"kademe": SchoolLevel.ILKOKUL})
         veri = client.get("/api/v1/grade-levels/").json()
         assert [x["value"] for x in veri["levels"]] == list(range(1, 13))

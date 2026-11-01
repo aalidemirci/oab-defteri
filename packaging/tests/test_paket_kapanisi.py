@@ -5,8 +5,8 @@ Python, JDK); paketten eksik bir WeasyPrint DLL'i `find_library` üzerinden orad
 test yeşil kalırdı. Kapanış artık dosyalar üzerinden, çalışma anından bağımsız sınanır ve
 Universal CRT kararı (pakette yok; Windows 10/11'in bileşeni) dosya düzeyinde kilitlenir.
 Burada PE okuyucusu sahte PE dosyalarıyla sınanır; gerçek ikililerle (yerel CPython 3.12,
-Windows tekerlekleri, 30 MSYS2 DLL'i — 88 dosya) doğrulama tasarım §14.1 "F12 ekleri — ilk
-CI Windows koşusu"ndadır.
+Windows tekerlekleri, 30 MSYS2 DLL'i — 88 dosya) doğrulama aile iskeletinin
+ilk CI Windows koşusunda yapıldı (packaging/windows/NOTLAR.md W26).
 """
 
 from __future__ import annotations

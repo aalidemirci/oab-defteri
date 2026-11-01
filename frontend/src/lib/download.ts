@@ -1,4 +1,4 @@
-// Blob'u tarayıcıda/pywebview penceresinde dosya olarak indirtir (Tur 535, ADR-0034).
+// Blob'u tarayıcıda/pywebview penceresinde dosya olarak indirtir.
 // Tüm Excel, PDF, ek ve kurtarma anahtarı indirmelerinin ortak hedefidir.
 export function saveBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
@@ -15,8 +15,8 @@ export function saveBlob(blob: Blob, filename: string): void {
 
 /**
  * İndirilen dosyanın adı: belge adı + kapsam + tarih (docs/sozluk.md §3).
- * `dosyaAdi(["Sayım Tutanağı", "2026-2027", "16.11.2026"], "pdf")`
- * → `Sayım-Tutanağı_2026-2027_16.11.2026.pdf`. Kimlik numaralı adlar
+ * `dosyaAdi(["Genel Kurul Toplantı Tutanağı", "2026-2027", "16.11.2026"], "pdf")`
+ * → `Genel-Kurul-Toplantı-Tutanağı_2026-2027_16.11.2026.pdf`. Kimlik numaralı adlar
  * (`belge_3.pdf`) masaüstünde neye ait olduklarını söylemez.
  * Türkçe harfler korunur; yalnız dosya sistemlerinin yasakladığı karakterler
  * atılır, boşluklar tireye döner, boş parça düşer.

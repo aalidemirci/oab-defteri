@@ -1,7 +1,7 @@
-// "Kurtarma Anahtarını Doğrula" kartı (F1 eki, 22.09.2026 kullanıcı kararı 2).
+// "Kurtarma Anahtarını Doğrula" kartı (aile iskeletinin doğrulama deseni; tasarım §4.4.4 `kurtarma.dogrulandi`).
 //
 // Anahtar ekranda değilken (sihirbaz yeniden açıldı, pencere kapanıp açıldı ya da
-// kurulum bu karardan önce tamamlandı) saklandığını doğrulamanın yolu: kullanıcı
+// yenilenen anahtar doğrulanmadan kaldı) saklandığını doğrulamanın yolu: kullanıcı
 // kâğıttaki ya da PDF'teki anahtarın TAMAMINI yazar; backend onu kurtarma
 // sarmalına karşı doğrular (yanlışsa Türkçe ileti + kademeli gecikme) ve güvenlik
 // dosyasına "saklandı" damgasını yazar. Anahtar programda saklanmaz; iş bitince

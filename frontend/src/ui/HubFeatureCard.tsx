@@ -1,7 +1,7 @@
-// Hub/landing sayfası özellik kartı (Tur 179). Öğrenci İşleri + Süreç Takip
-// hub'larındaki yinelenen Link+Card+state-layer deseni tek bileşene alındı.
+// Hub/landing sayfası özellik kartı: yinelenen Link+Card+state-layer deseni tek
+// bileşendedir (Genel Bakış ve Ayarlar kullanır).
 // Klavye focus'unda GÖRÜNÜR M3 halkası (focus-visible:ring) burada garanti edilir
-// — WCAG 2.1 AA (2.4.7 Focus Visible) + CLAUDE.md §7.5. Yalnız M3 token kullanır;
+// — WCAG 2.1 AA (2.4.7 Focus Visible). Yalnız M3 token kullanır;
 // ikon dekoratiftir (görünür başlık etiket görevi görür → aria-hidden).
 
 import { Link } from "react-router-dom";

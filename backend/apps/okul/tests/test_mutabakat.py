@@ -1,6 +1,6 @@
-"""e-Okul mutabakatı — öğrenci (EK-21) ve personel (EK-20); tasarım §8.3, F1 kod kapısı.
+"""e-Okul mutabakatı — öğrenci ve personel (aile iskeletinden; OAB'de tasarım §8.4).
 
-F1 eki 7 (kullanıcı kararı 22.09.2026): **aktarım hiç kimseyi ayırmaz ve hiç
+Aile iskeletinin kullanıcı kararı: **aktarım hiç kimseyi ayırmaz ve hiç
 kimseyi silmez.** Listede bulunmayan aktif kişi AYRILIŞ HAVUZUNA girer, durumu
 aktif kalır; dosyada bulunan havuzdaki kişi havuzdan kendiliğinden çıkar. Karar
 havuzda verilir (`test_ayrilis_havuzu.py`).
@@ -239,7 +239,7 @@ class TestOgrenciKapsami:
 
 class TestOgrenciHavuzu:
     def test_havuza_giren_aktif_kalir_tarih_ve_aktarim_yazilir_kanca_cagrilmaz(self) -> None:
-        """Havuza girmek ayrılış DEĞİLDİR: ayrılış kancası (F6 üyelik sonu) koşmaz."""
+        """Havuza girmek ayrılış DEĞİLDİR: ayrılış kancası koşmaz."""
         kancaya_gelen: list[int] = []
         persons.register_leave_hook(lambda kisi: kancaya_gelen.append(kisi.pk))
         _ogrenci("101", 10, "A")
@@ -821,7 +821,7 @@ class TestPersonelMutabakati:
             text=_personel_metni("SELİM\tÖZTÜRK\tÖğretmen\t")
         )
 
-        # Gerekçe çiftle birlikte taşınır: kullanıcı neden eşleştiğini görsün (TB18).
+        # Gerekçe çiftle birlikte taşınır: kullanıcı neden eşleştiğini görsün (§13 D30).
         assert [(c.existing_id, c.reason) for c in rapor.similar_pairs] == [
             (eski.pk, "yazim_farki")
         ]

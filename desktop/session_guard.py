@@ -2,9 +2,9 @@
 
 **Tehdit:** Program 127.0.0.1'de kimlik doğrulamasız bir HTTP sunucusu çalıştırır.
 Aynı makinedeki başka bir işlem (başka bir kullanıcı oturumu, bir tarayıcı sekmesi,
-kötü niyetli bir betik) portu tarayıp `GET /api/v1/students/` isteyebilir ve
-öğrenci, personel ve ödünç verisini okuyabilir. Yerel olması "erişilemez" demek
-değildir.
+kötü niyetli bir betik) portu tarayıp yönetim API'sine (`/api/v1/…`) istek atabilir
+ve birliğin kayıtlarını — veli ve personel verisini, mali kayıtları — okuyabilir
+(tasarım §4.3 tehdit 1). Yerel olması "erişilemez" demek değildir.
 
 **Sigorta:** Program her açılışta rastgele bir belirteç üretir. Belirteç yalnız
 pencerenin açılış URL'sinde taşınır; middleware belirteçsiz her isteği 403 ile

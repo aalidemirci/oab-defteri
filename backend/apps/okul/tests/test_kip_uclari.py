@@ -1,4 +1,4 @@
-"""Kip uçları (`security/mode/*`) — uçtan uca davranış (U5, tasarım §4.4).
+"""Kip uçları (`security/mode/*`) — uçtan uca davranış (aile iskeletinden; tasarım §4.4).
 
 İstekler tam ara katman zincirinden geçer (restart → kilit → kip). Kip tekili
 her testte sıfırlanır (kök `conftest.py`).
@@ -30,7 +30,7 @@ YONETICI = "/api/v1/security/mode/admin/"
 
 @pytest.fixture(autouse=True)
 def kurulum_tamamlanmis(db: None) -> None:
-    """Kalan süreler yalnız kurulum tamamlanmışken doludur (kurulumda süre işlemez, karar 2-1)."""
+    """Kalan süreler yalnız kurulum tamamlanmışken doludur (kurulumda süre işlemez, tasarım §13 D15)."""
     kurulum_durumunu_yaz(tamam=True)
 
 

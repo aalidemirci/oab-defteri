@@ -1,7 +1,7 @@
 // Gecikmeli (debounce) değer — sunucu tarafı aramanın ön yüz ayağı.
-// Arama sunucudadır (F2 sözleşmesi §4: "arama gecikmeli ve sunucuda"); her tuş
-// vuruşunda istek atmak on binlik bir katalogda pencereyi kilitler. Kanca yalnız
-// değeri geciktirir, isteği çağıran yer atar.
+// Arama sunucudadır ve gecikmelidir: her tuş vuruşunda istek atmak uzun bir
+// listede pencereyi kilitler. Kanca yalnız değeri geciktirir, isteği çağıran
+// yer atar.
 //
 // Kişiler sayfası da aynı deseni kullanır; kopya yerine tek kaynak burasıdır.
 

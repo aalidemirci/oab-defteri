@@ -1,9 +1,9 @@
-// M3 yatay aşama rayı (CLAUDE.md §7.5): süreç adımlarını durum renkleriyle gösterir.
+// M3 yatay aşama rayı: süreç adımlarını durum renkleriyle gösterir.
 // Erişilebilirlik için <ol> + aria-current="step". Token tüketir, ham renk yok.
 // Dar ekranda yatay kayar.
 //
 // `onSelect` verilirse TAMAMLANMIŞ ("done") adımlar düğmeye dönüşür: kullanıcı
-// "Geri"ye art arda basmadan istediği adıma döner (18.09.2026 değerlendirmesi —
+// "Geri"ye art arda basmadan istediği adıma döner (aile iskeletinin 18.09.2026 değerlendirmesi —
 // "Stepper tıklanamıyor"). Yalnız tamamlanmış adım tıklanır: gelecek adımın kendi
 // kaydet/doğrula kapısı vardır, "atlandı" adımın ise gösterecek ekranı yoktur.
 // `onSelect` verilmezse ray eskisi gibi salt görseldir.

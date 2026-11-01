@@ -399,6 +399,9 @@ describe("KisilerPage — öğretmenler ve diğer personel sekmesi", () => {
     const dialog = await screen.findByRole("dialog", { name: "Yeni kişi" });
     expect(within(dialog).queryByLabelText("Unvan")).toBeNull();
     expect(within(dialog).queryByLabelText("Branş")).toBeNull();
+    // Üye türünün yardım metni ödünç sınırından söz etmez (OAB'de ödünç yoktur).
+    expect(within(dialog).getByText("Unvan ve branş tutulmaz.")).toBeInTheDocument();
+    expect(dialog.textContent).not.toMatch(/ödünç/i);
     await user.type(within(dialog).getByLabelText(/^Ad \*$/), "Mehmet");
     await user.type(within(dialog).getByLabelText(/^Soyad \*$/), "Demirci");
     await user.selectOptions(within(dialog).getByLabelText("Üye türü"), "STAFF");

@@ -1,4 +1,4 @@
-"""Kayıp ekranındaki "güvenlik dosyasını sıfırla ve kuruluma dön" yolu (F1-E; GA-2 eki).
+"""Kayıp ekranındaki "güvenlik dosyasını sıfırla ve kuruluma dön" yolu (tasarım §4.3 tehdit 8).
 
 Yol YALNIZ şu dört koşul birlikteyken açıktır (`app_password.state_reset_available`):
 güvenlik dosyası var ama kullanılamıyor · DB'de anahtar parmak izi boş · şifreli

@@ -8,7 +8,7 @@ koşar. Uçtan uca açılış doğrulaması `test_main.py`'deki `--autotest` alt
 testinde gerçek ayarlarla yapılır.
 
 `desktop.main.run` açılışta `faulthandler`ı `logs/cokme.log`a bağlar
-(`enable_crash_log`, 19.09.2026). Bu SÜREÇ GENELİNDE bir ayardır: testlerde
+(`enable_crash_log`, aile iskeletinden). Bu SÜREÇ GENELİNDE bir ayardır: testlerde
 gerçekten çağrılırsa pytest'in kendi çöküş çıktısı geçici bir dosyaya kayardı.
 Aşağıdaki fikstür onu etkisizleştirir; gerçek davranış `test_logging_setup.py`
 içinde AYRI bir alt süreçte, gerçek bir yerel çöküşle sınanır.

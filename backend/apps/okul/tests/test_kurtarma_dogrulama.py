@@ -1,4 +1,4 @@
-"""Kurtarma anahtarının saklandığının doğrulanması (F1 eki, 22.09.2026 kullanıcı kararı 2-2).
+"""Kurtarma anahtarının saklandığının doğrulanması (tasarım §4.4.4 `kurtarma.dogrulandi`, §4.4.5).
 
 Kanıtlanan maddeler:
 

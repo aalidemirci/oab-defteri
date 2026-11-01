@@ -9,7 +9,7 @@ arayıp sonra ona bağlanmak yarış koşulu yaratırdı).
 
 `host="127.0.0.1"`: yönetim sunucusu LAN'dan erişilemez. `BackgroundServer`
 `DEFAULT_HOST` dışında bir adres verilirse kurulmaz (§4.1 değişmezi, koruma testi
-§5.10-1). Yerel erişim sigortası ayrıca `session_guard.SessionTokenMiddleware`'dedir.
+`test_server.py`, §13 D2). Yerel erişim sigortası ayrıca `session_guard.SessionTokenMiddleware`'dedir.
 
 Program ağ servisi sunmaz: yönetim sunucusu yalnız 127.0.0.1'de, rastgele portta
 ve oturum belirteciyle dinler; hiçbir port okul ağına açılmaz. Dış istek yalnız

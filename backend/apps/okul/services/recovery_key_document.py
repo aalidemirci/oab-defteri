@@ -1,8 +1,13 @@
-"""Kurtarma anahtarı çıktısı (E14, tasarım §6.3-1, §10) — PDF.
+"""Kurtarma anahtarı belgesi — PDF.
+
+Programın kendi güvenlik belgesidir; birlik evrakı değildir, katalog dışıdır ve
+E-kodu almaz (tasarım §9.7 "program belgeleri", §12.B). Saklama yeri okul
+müdürlüğünde kapalı zarftır, veliye geçmez (kullanıcı kararı D3; T1).
 
 Kurulum sihirbazının ilk adımında kullanıcı kurtarma anahtarını yazdırır, PDF
-olarak kaydeder (USB bellek) ya da elle yazar; kural "basım zorunlu" değil
-"saklama zorunlu"dur. Bu modül PDF yolunu üretir:
+olarak kaydeder (USB bellek) ya da elle yazar; sihirbaz, anahtarın saklandığı
+doğrulanmadan tamamlanmaz (`app_password.confirm_recovery_key`). Bu modül PDF
+yolunu üretir:
 
 1. Anahtar ÖNCE doğrulanır (`app_password.verify_recovery_key`): kurtarma
    sarmalını gerçekten açmayan anahtar basılmaz — yanlış yazılmış bir anahtarın
@@ -31,7 +36,8 @@ from apps.okul.services import app_password
 from shared.letterhead import letterhead_context
 from shared.pdf import html_to_pdf
 
-#: Belgenin adı (sözlük §2: E14) — dosya adı ve belge başlığı buradan.
+#: Belgenin görünen adı; indirilen dosyanın adı buradan kurulur (ön yüz
+#: `kurtarma.ts` aynı adı kurar). Katalog kodu yoktur (tasarım §9.7; sözlük §2).
 DOCUMENT_NAME = "Kurtarma Anahtarı Çıktısı"
 
 TEMPLATE_NAME = "documents/kurtarma_anahtari.html"
@@ -51,7 +57,7 @@ def recovery_key_pdf_filename(today: date | None = None) -> str:
 # basılır; anahtarı ve onu taşıyan bağlam/HTML gizlenir.
 @sensitive_variables("recovery_key", "gruplar", "context")
 def render_recovery_key_pdf(recovery_key: str) -> bytes:
-    """Anahtarı doğrular ve E14 PDF'ini üretir; yanlışsa `AppPasswordError` (400)."""
+    """Anahtarı doğrular ve belgenin PDF'ini üretir; yanlışsa `AppPasswordError` (400)."""
     gruplar = app_password.verify_recovery_key(recovery_key)
     config = SchoolConfig.load()
     context = {

@@ -1,16 +1,19 @@
-"""Temiz kapanış işareti (tasarım T15, §4.2-6).
+"""Temiz kapanış işareti (tasarım T15, §4.2).
 
 WAL kipinde elektrik kesintisi ya da zorla sonlandırma son işlemleri
-kaybettirebilir; dolaşımda bu sessiz kayıp demektir. Program bu yüzden düzenli
-çıkışta veri dizinine bir işaret yazar ve açılışta onu **okuyup siler**:
+kaybettirebilir; birliğin kayıtlarında bu sessiz kayıp demektir. Program bu
+yüzden düzenli çıkışta veri dizinine bir işaret yazar ve açılışta onu **okuyup
+siler**:
 
 - işaret VAR → önceki oturum düzenli kapandı (`temiz`);
 - işaret YOK, veritabanı VAR → önceki oturum beklenmedik biçimde kapandı
-  (`beklenmedik`): günlüğe uyarı düşer, pano kartı F6'da gelir;
+  (`beklenmedik`): günlüğe uyarı düşer, panoda "son oturumdaki kayıtları kontrol
+  edin" kartı çıkar (`backend/apps/okul/son_oturum.py`; tasarım §13 D4);
 - işaret YOK, veritabanı YOK → ilk açılış (`ilk`): alarm verilmez.
 
-Açılışta silinen işaret yalnız düzenli çıkışta (pencere kapandı, iki sunucu
-durdu) yeniden yazılır; süreç öldürülürse eksik kalır. Açılış bir
+Açılışta silinen işaret yalnız düzenli çıkışta (pencere kapandı, yönetim
+sunucusu durdu, WAL ana dosyaya yazıldı) yeniden yazılır; süreç öldürülürse
+eksik kalır. Açılış bir
 `StartupError` ile durursa (bozuk veritabanı, WebView2 yok…) bu oturumda işlem
 yapılmamıştır: önceki oturumun durumu korunur (`restore_after_failed_startup`).
 

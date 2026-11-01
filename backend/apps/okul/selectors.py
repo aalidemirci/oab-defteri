@@ -1,10 +1,10 @@
 """`okul` salt-okunur sorguları — view'lar ORM'e buradan erişir (katman disiplini).
 
 Arama Türkçe-katlamalı yapılır: `normalize_header` (Türkçe→ASCII küçük harf) iki
-tarafı da katlar. Ad-soyad VE okul no ŞİFRELİDİR (U9): ada dokunan her arama ve
+tarafı da katlar. Ad-soyad VE okul no ŞİFRELİDİR (tasarım §5.3): ada dokunan her arama ve
 kullanıcıya gösterilen her sıralama ZORUNLU olarak Python tarafındadır — yeni
 ad sorgusu ORM filtresiyle YAZILMAZ; yerel ölçek (≤2000 kayıt) bunu ucuzlatır.
-Okul no ile arama ve eşleştirme KÖR İNDEKSLE, tam eşleşmedir (T14): düz okul no
+Okul no ile arama ve eşleştirme KÖR İNDEKSLE, tam eşleşmedir: düz okul no
 üzerinden DB sorgusu yazılmaz (şifreli sütunda her yazım farklı token'dır).
 Sınıf, şube ve durum düz alanlardır; süzgeçleri DB tarafında kalır.
 """
@@ -107,7 +107,7 @@ def personnel_sorted(
 def personnel_list(*, search: str = "", only_active: bool = False) -> list[Personnel]:
     """Personel listesi — ad araması ve sıralaması Python tarafında (şifreli ad).
 
-    Unvan ve branş YOKTUR (V2-01); arama yalnız ad-soyad üzerindedir.
+    Unvan ve branş YOKTUR (tasarım §8.4); arama yalnız ad-soyad üzerindedir.
     """
     qs = Personnel.objects.all()
     if only_active:
@@ -187,7 +187,7 @@ def student_sort_key(student: Student) -> tuple[Any, ...]:
 
 
 def students_sorted(rows: Iterable[Student] | None = None) -> list[Student]:
-    """Kullanıcıya gösterilen öğrenci sırası — Python'da (okul no şifrelidir, T14).
+    """Kullanıcıya gösterilen öğrenci sırası — Python'da (okul no şifrelidir).
 
     SQLite'ın BINARY sırası şubede 'Ç/İ/Ş'yi 'Z'den sonraya atar, okul no'yu
     ise hiç sıralayamaz (token sırası). `rows` verilmezse canlı öğrencilerin
@@ -203,7 +203,7 @@ def number_search_index(search: str) -> str:
 
     Yalnız rakam (boşluk ve baştaki sıfırlar serbest) içeren arama okul no
     aramasıdır ve TAM eşleşmedir: '10' yazan '101'i bulmaz (kör indeks ön ek
-    araması yapamaz; T14).
+    araması yapamaz).
     """
     sade = normalize.normalize_student_number(search)
     if not sade or not sade.isascii() or not sade.isdigit():
@@ -253,11 +253,12 @@ def get_student(student_id: int) -> Student | None:
 
 
 def find_student_by_number(student_number: str) -> Student | None:
-    """Okul numarasıyla AKTİF canlı öğrenci arar — kör indeksle tam eşleşme (T14).
+    """Okul numarasıyla AKTİF canlı öğrenci arar — kör indeksle tam eşleşme.
 
     Aynı numaranın farklı yazımları ('0123', ' 123 ') aynı indekse iner
-    (`normalize.normalize_student_number`). Kart okutma (F6) ve e-Okul
-    eşleştirmesi bu kanalı kullanır.
+    (`normalize.normalize_student_number`). Aile iskeletinde kart okutma bu
+    kanalı kullanıyordu; bugün üretim kodunda çağıran yoktur (öğrenci dalı
+    F1b'de sökülür, plan §2.2 adım 5).
     """
     index = student_number_blind_index(student_number or "")
     if not index:
@@ -295,7 +296,7 @@ def get_personnel(personnel_id: int) -> Personnel | None:
 
 
 # ---------------------------------------------------------------------------
-# Ayrılış havuzu (F1 eki 7 — kişisel veri: yalnız yönetim yüzeyi, yönetici kipi)
+# Ayrılış havuzu (aile iskeletinden — kişisel veri: yalnız yönetim yüzeyi, yönetici kipi)
 # ---------------------------------------------------------------------------
 def _pool_students_qs() -> QuerySet[Student]:
     return Student.objects.filter(status=StudentStatus.ACTIVE, leave_candidate_since__isnull=False)
@@ -333,7 +334,7 @@ def leave_pool_run(person: Student | Personnel) -> ImportRun | None:
 
 @dataclass(frozen=True)
 class SimilarCandidate:
-    """Havuzdaki kişiyle eşleşen aday + eşleşmenin GEREKÇESİ (TB18).
+    """Havuzdaki kişiyle eşleşen aday + eşleşmenin GEREKÇESİ (tasarım §13 D30).
 
     `created_on` adayın sicile eklendiği gündür (yerel gün; UTC'den türetilmez):
     onay diyaloğunda iki kaydı ayırt eden bilgidir.
@@ -352,7 +353,7 @@ def leave_pool_similar_personnel(pool: Iterable[Personnel]) -> dict[int, list[Si
     değişimi). Eski kayıtlar aday sayılmaz: okulda aynı adı taşıyan başka
     öğretmenler her havuz kişisine "benzer" görünürdü. Kural aktarım
     önizlemesindekiyle aynıdır (`name_match.match_reason`) ve GEREKÇESİYLE
-    birlikte taşınır: ekran adayın neden aday olduğunu yazar (TB18).
+    birlikte taşınır: ekran adayın neden aday olduğunu yazar (§13 D30).
     """
     kisiler = list(pool)
     if not kisiler:
@@ -415,7 +416,7 @@ def distinct_class_levels() -> list[int]:
 
 
 # ---------------------------------------------------------------------------
-# Kapalı günler (F1-D; kişisel veri yok)
+# Kapalı günler (tasarım §5.1 `Holiday`; kişisel veri yok)
 # ---------------------------------------------------------------------------
 
 

@@ -1,9 +1,9 @@
 """Öğrenci içe aktarımı için saf (DB'siz) normalize ediciler.
 
-KS'den alındı (KS bunu DD `apps/okul/normalize.py` dosyasından sadeleştirmişti):
-TCKN/telefon/doğum tarihi/cinsiyet normalize edicileri YOKTUR — program bu
-verileri hiç toplamaz (tasarım §6.1). Sınıf/şube ayrıştırması seviye kümesiyle
-PARAMETRİKTİR; varsayılan küme okul içi sabittir (`GRADE_LEVELS`).
+Aile iskeletinden alındı (iskelet bunu atalarının `apps/okul/normalize.py`
+dosyasından sadeleştirmişti): TCKN/telefon/doğum tarihi/cinsiyet normalize
+edicileri YOKTUR — program bu verileri hiç toplamaz (tasarım §3.4). Sınıf/şube
+ayrıştırması seviye kümesiyle PARAMETRİKTİR; varsayılan küme okul içi sabittir (`GRADE_LEVELS`).
 
 Okul numarasının kör indeks normalleştirmesi (`normalize_student_number`) de
 buradadır: yazma (`Student.save`) ve arama (`selectors`) aynı kuralı kullanır.
@@ -22,10 +22,10 @@ from shared.text import tr_upper as _tr_upper
 
 #: Okulda geçerli sınıf seviyeleri — OKUL İÇİ SABİT (1-12: ilkokul, ortaokul,
 #: lise). Ders çizelgesine ya da okul türüne bağlı DEĞİLDİR; kademeye göre
-#: daraltma F1'de `SchoolConfig.kademe` ile gelir (tasarım §6.1).
+#: daraltma okul kartının `levels` alanıyla gelir (tasarım §5.1; plan §2.2 adım 4).
 GRADE_LEVELS: tuple[int, ...] = tuple(range(1, 13))
 
-#: Hazırlık sınıfının seviye kodu (KS temsili: etiket 'Hz/A'). Yalnız
+#: Hazırlık sınıfının seviye kodu (aile temsili: etiket 'Hz/A'). Yalnız
 #: `SchoolConfig.has_prep_class` açıkken geçerli kümeye girer.
 PREP_LEVEL = 0
 
@@ -69,7 +69,7 @@ def tr_upper(value: str) -> str:
     """Türkçeye uygun büyük harf ('10/i' → '10/İ', '9/ş' → '9/Ş').
 
     ŞUBE HARFİ KATLAMASININ TEK DOĞRU YOLU BUDUR. `_ascii_upper` ile katlamak
-    (30.08.2026 öncesi davranış) Türk alfabesinin ayrı harflerini birleştirir:
+    (aile iskeletinin 30.08.2026 öncesi davranışı) Türk alfabesinin ayrı harflerini birleştirir:
     e-Okul sınıf listesi şubeleri Türk alfabesi sırasıyla açar (…G, H, I, İ,
     J, K…), yani orta ölçekli bir okulda **hem 10/I hem 10/İ** bulunur. ASCII
     katlaması bu iki şubeyi tek şubeye çökertip iki ayrı sınıfın öğrencilerini
@@ -136,7 +136,7 @@ def fold_diacritics(value: object) -> str:
 
     'Kâmil' → 'Kamil', 'Rüzgâr' → 'Rüzgar', 'Émile' → 'Emile'. TÜRK ALFABESİNİN
     HARFLERİNE DOKUNMAZ: Ç/Ğ/I/İ/Ö/Ş/Ü olduğu gibi kalır, yani 'ılık' ile
-    'ilik' ayrı kalmayı sürdürür (T7).
+    'ilik' ayrı kalmayı sürdürür.
 
     Gerekçe iki yönlüdür: düzeltme işareti çoğu klavyede zahmetlidir, kullanıcı
     "rüzgar" yazar ama künye "Rüzgâr" girilmiştir (arama); ve 'Â' Türk
@@ -158,9 +158,9 @@ def fold_diacritics(value: object) -> str:
 #: BÜYÜKTÜR, yani '10/Ç' ile '10/İ' basılan evrakta listenin sonuna düşer ve
 #: '10/I' ile '10/İ' iki uca ayrılırdı.
 #:
-#: Q/W/X Türk alfabesinde YOKTUR ama Türkçe metinde sıradandır: okul
-#: kütüphanesinin İngilizce bölümü ("Wuthering Heights", "Quo Vadis") ve
-#: yabancı yazar adları (Woolf, Wilde) bu harflerle başlar. Alfabe dışı
+#: Q/W/X Türk alfabesinde YOKTUR ama Türkçe metinde sıradandır: yabancı kişi
+#: adları (Woolf, Wilde) ve yabancı kökenli kurum ve firma adları bu harflerle
+#: başlar. Alfabe dışı
 #: sayılsalardı 0 önceliğiyle listenin EN BAŞINA düşerlerdi; bu yüzden Latin
 #: sırasındaki yerlerine konurlar (…P Q R… ve …V W X Y Z), ICU'nun Türkçe
 #: sıralamasıyla aynı.
@@ -231,7 +231,7 @@ _ASCII_DIGITS_RE = re.compile(r"[0-9]+")
 
 
 def normalize_student_number(value: object) -> str:
-    """Okul numarasının kör indeks biçimi (tasarım §6.3, T14): '0123' ≡ '123' ≡ ' 1 23 '.
+    """Okul numarasının kör indeks biçimi (tasarım §5.3): '0123' ≡ '123' ≡ ' 1 23 '.
 
     Kör indeks tam eşleşmedir; bu yüzden aynı numaranın farklı yazımları AYNI
     değere inmelidir. Kural bilinçli olarak dardır:

@@ -360,7 +360,7 @@ Python kitaplıkları:
   waitress 3.0.2
       Lisans   : ZPL-2.1
       Platform : Windows + Linux
-      Kullanım : Yerel sunucular
+      Kullanım : Yerel yönetim sunucusu
       Kaynak   : https://pypi.org/project/waitress/3.0.2/
       Dosyalar : python-waitress-LICENSE.txt
   weasyprint 68.0

@@ -1,11 +1,11 @@
-"""Görevli kipinin izin listesi (U5, tasarım §4.4) — fail-closed.
+"""Görevli kipinin izin listesi (aile iskeletinden; tasarım §4.4) — fail-closed.
 
 Görevli kipinde bir API isteği yalnız buradaki bir kurala uyarsa geçer; geri
 kalan HER şey `kip_middleware` tarafından 403 `kip_yetkisiz` ile kesilir. Yeni
 bir uç bu listeye kendiliğinden girmez (varsayılan kapalı): görevlinin o işe
 gerçekten ihtiyacı varsa bilinçli olarak eklenir ve anlık görüntü testi
 (`tests/test_kip_koruma.py`) aynı değişiklikte güncellenir. Testi yeşile
-çekmek için listeye uç eklemek kusurdur (CLAUDE.md §2-4).
+çekmek için listeye uç eklemek kusurdur.
 
 Kural düzeyi: **uç + yöntem (+ parametre)**.
 
@@ -52,7 +52,7 @@ from django.http import HttpRequest
 
 ParametreDenetcisi = Callable[[HttpRequest], bool]
 
-#: Masa uçlarının kabul ettiği tek gövde biçimi.
+#: Parametre denetçili uçların kabul ettiği tek gövde biçimi.
 JSON_ICERIK = "application/json"
 #: Gövdenin kabul edilen tek karakter kümesi (adı büyük/küçük harf ve tire farkı gözetmeden).
 UTF8_ADLARI = frozenset({"utf-8", "utf8"})
@@ -136,8 +136,8 @@ IZIN_LISTESI: tuple[IzinKurali, ...] = (
         "app-quit",
         "POST",
         gerekce=(
-            "Çık (F5, §4.2-4); parolasız istek görünümde 403 alır, gövdede yönetici "
-            "parolası gerekir — kaza önleyicidir (CLAUDE.md §2-4)"
+            "Çık (tasarım §4.2); parolasız istek görünümde 403 alır, gövdede yönetici "
+            "parolası gerekir — kaza önleyicidir, güvenlik sınırı değildir"
         ),
     ),
 )

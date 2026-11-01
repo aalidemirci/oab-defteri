@@ -1,11 +1,12 @@
 # =============================================================================
-# .github/workflows/paketleme.yml — Windows + Linux paket üretimi (tasarım §14 F12)
+# .github/workflows/paketleme.yml — Windows + Linux paket üretimi (tasarım §2.2 TK6)
 # =============================================================================
-# Hat aile iskeletinden devralındı (KS → Kütüphane iskeleti); KS'de 29.08.2026'da
-# uçtan uca YEŞİLDİ (Linux .deb + debian:11/12 kurulum provası + Windows
-# setup.exe/portable.zip; iki platformda Türkçe PDF duman testi gömülü DejaVu ile
-# geçti), Kütüphane iskeletinde F4-F11 boyunca her PR'da yeşil kaldı. OAB Defteri
-# adıyla henüz koşmadı; ilk koşunun çek-listesi packaging/windows/NOTLAR.md'de.
+# Hat aile iskeletinden devralındı (tasarım §12.B) ve orada uçtan uca yeşildi.
+# OAB Defteri adıyla F1a'da yeşil geçti (plan §2.1 "F1a durumu"): Linux .deb +
+# .tar.gz, debian:11/12/13 kurulum provası, Windows setup.exe + portable.zip;
+# iki platformda `--bagimlilik-duman`, `--pdf-duman` (gömülü DejaVu ile Türkçe
+# PDF), `--evrak-duman`, `--autotest`. Elle doğrulama çek-listesi
+# packaging/windows/NOTLAR.md'de.
 #
 # Akış:
 #   arayuz          → frontend/dist artefaktı (bir kez derlenir, iki paket işi indirir)
@@ -18,7 +19,7 @@
 #                     R2) yüklenmesi — packaging/r2-yukle.sh; secret yoksa
 #                     uyarıyla atlanır, sonradan r2-yukle.yml ile yüklenir
 #
-# Lisanslar (F12, TB28): iki derleme de PyInstaller'dan sonra
+# Lisanslar (tasarım §11.4): iki derleme de PyInstaller'dan sonra
 # `packaging/lisanslar/lisanslar.py paket` koşar — THIRD_PARTY_LICENSES pakete
 # girer, listede olmayan bağımlılık ya da yalnız GPL'li bileşen derlemeyi durdurur.
 # =============================================================================
@@ -28,9 +29,9 @@ on:
   push:
     tags:
       - "v*"
-  # Her PR'da, YOL SÜZGECİ OLMADAN koşar (01.10.2026). "Linux paketi" ve "Windows
+  # Her PR'da, YOL SÜZGECİ OLMADAN koşar (aile iskeletinin 01.10.2026 kararı). "Linux paketi" ve "Windows
   # paketi" main'in ZORUNLU kontrolleridir: süzgeç iş akışını başlatmazsa kontrol
-  # hiç raporlanmaz ve PR birleşemez (yalnız frontend/ değiştiren PR böyle takıldı;
+  # hiç raporlanmaz ve PR birleşemez (ailede yalnız frontend/ değiştiren PR böyle takıldı;
   # süzgeçte frontend/ yoktu, oysa arayüz pakete girer). Süzgecin yerine iş
   # düzeyinde "atla" koşulu da KONMAZ: atlanan iş zorunlu kontrolde başarılı
   # sayılır, paket derlenmeden birleştirme açılırdı. Bedel: belge ya da betik
@@ -70,15 +71,16 @@ jobs:
     name: Linux paketi (.deb + .tar.gz)
     needs: arayuz
     runs-on: ubuntu-latest
-    # KS kararı (K6): glibc 2.31 = Pardus 21 tabanı. Daha yeni bir tabanda
-    # derlenen paket Pardus 21'de açılmaz.
+    # Aile kararı (tasarım §2.2 TK6, plan §2.1 madde 4): glibc 2.31 = Pardus 21
+    # tabanı. Daha yeni bir tabanda derlenen paket Pardus 21'de açılmaz.
     container:
       image: python:3.12-bullseye
     steps:
       - uses: actions/checkout@v7
       - name: Sürüm etiketi ↔ VERSION kapısı
         # Kurucu adı VERSION'dan, Release sürümü etiketten türer; ayrışırlarsa
-        # güncelleme denetimi kurulu sürümü hiç "güncel" saymaz (KS denetim bulgusu).
+        # güncelleme denetimi kurulu sürümü hiç "güncel" saymaz (aile iskeletinin
+        # denetim bulgusu).
         if: startsWith(github.ref, 'refs/tags/v')
         run: test "v$(tr -d '[:space:]' < VERSION)" = "${GITHUB_REF_NAME}"
       - uses: actions/download-artifact@v8
@@ -116,14 +118,14 @@ jobs:
       #
       # Sarmal BURADA İNLİNE olmak ZORUNDA: bu adım checkout'tan ÖNCE koşar,
       # `packaging/linux/apt_dene.sh` henüz diskte yoktur. Gerekçe ve davranış
-      # o dosyanın başlığında — 04.09.2026'da KS'nin v2026.9.0-beta.5 etiket
+      # o dosyanın başlığında — 04.09.2026'da aile iskeletinin bir etiket
       # koşusu tam bu adımda `libperl5.32` için 404 alıp düştü (aynı commit
       # yeniden denemede geçti); listeler her denemede silinir, çünkü asıl sorun
       # kap imajındaki BAYAT apt indeksidir.
       #
       # 19.09.2026: Debian 11 LTS 31.08.2026'da bitti; `bullseye-security`
       # havuzu 03-05.09.2026 arasında boşaltıldı, dizini silinen paketlere işaret
-      # ediyor → KALICI 404 (KS v2026.9.0-beta.6 koşusu). Kaynak Debian'ın tarihli
+      # ediyor → KALICI 404 (aile iskeletinin etiket koşusu). Kaynak Debian'ın tarihli
       # arşivine sabitlenir (kapatmak yetmez: temel paketler güvenlik sürümünde
       # kurulu, `git` bağımlılıkları kırılır). Tarih apt_dene.sh içindeki
       # APT_BULLSEYE_GUVENLIK_ANLIK ile AYNI kalmalıdır (koruma testi var).
@@ -259,7 +261,8 @@ jobs:
       - name: Kişisel veri denetimi (yayımlanacak son paketler)
         # Derleme işleri paket dizinini ve kendi arşivlerini zaten denetledi; bu
         # adım Release'e ve indirme alanına GİDECEK dosyaların kendisini, iki
-        # platform için AYNI betikle son kez denetler (F12, `veri_sizintisi` ×2).
+        # platform için AYNI betikle son kez denetler (tasarım §4.3 tehdit 17,
+        # `veri_sizintisi` ×2).
         run: python3 packaging/veri_sizintisi.py yayin/*.deb yayin/*.tar.gz yayin/*.zip
       - name: SHA256SUMS.txt
         working-directory: yayin
@@ -269,7 +272,7 @@ jobs:
             [ -e "${paket}" ] || continue
             # Tilde TIRNAKLI olmak ZORUNDA: bash `${degisken//desen/…}` içindeki
             # deseni sözcük genişletmesinden geçirir, çıplak `~` `$HOME`a dönüşür
-            # ve hiçbir şey eşleşmez. KS'nin ilk etiketli koşusu (v2026.8.0-beta.1) tam
+            # ve hiçbir şey eşleşmez. Aile iskeletinin ilk etiketli koşusu tam
             # buradan `mv: … are the same file` ile kırıldı — `yayin` işi yalnız
             # `v*` etiketinde koştuğu için PR/dispatch kapıları bunu göremiyordu.
             mv -- "${paket}" "${paket//'~'/.}"
@@ -284,7 +287,7 @@ jobs:
           # (alpha < beta < rc < kesin) — yeni bir ek türü buraya da eklenir.
           # Notun son cümlesi LGPL kaynağına yönlendirir: program ağdan dağıtıldığı için
           # LGPL-3.0 bileşenlerinde GPL-3.0 md. 6(d) geçerlidir (nesne kodunun yanında açık
-          # yönlendirme; KB-1 düzeltme turu, 29.09.2026). Qt/PySide6 sürümü değişince adres
+          # yönlendirme; aile iskeletinin KB-1 düzeltme turu). Qt/PySide6 sürümü değişince adres
           # de değişir — test_surum_yolu.py sürümü lisans listesiyle eşitler.
           ON_SURUM=""
           NOT_ONEKI=""
@@ -298,7 +301,7 @@ jobs:
             --repo "${GITHUB_REPOSITORY}" \
             ${ON_SURUM} \
             --title "OAB Defteri ${GITHUB_REF_NAME}" \
-            --notes "${NOT_ONEKI}Gerçek okul verisiyle kullanmadan önce şifreli yedek alın. Kurulum adımları: docs/kurulum.md — imzasız paketleri SHA256SUMS.txt ile doğrulayın. LGPL bileşenlerinin kaynağı: her paketteki THIRD_PARTY_LICENSES/BENIOKU.txt kaynak adreslerini ve yazılı teklifi verir; Linux paketindeki Qt ve PySide6 6.8.3'ün kaynağı https://download.qt.io/archive/qt/6.8/6.8.3/single/ ve https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.8.3-src/ adreslerindedir."
+            --notes "${NOT_ONEKI}Gerçek okul verisiyle kullanmadan önce şifreli yedek alın. İmzasız paketleri SHA256SUMS.txt ile doğrulayın. LGPL bileşenlerinin kaynağı: her paketteki THIRD_PARTY_LICENSES/BENIOKU.txt kaynak adreslerini ve yazılı teklifi verir; Linux paketindeki Qt ve PySide6 6.8.3'ün kaynağı https://download.qt.io/archive/qt/6.8/6.8.3/single/ ve https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.8.3-src/ adreslerindedir."
 
       # --- indir.okulapp.org (Cloudflare R2) --------------------------------
       # Neden GitHub Release'den SONRA: MEB ağında GitHub sık sık engellidir ve

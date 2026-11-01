@@ -1,5 +1,5 @@
-// KORUMA TESTİ (tasarım §6.3-1 "saklama zorunlu"; F1 kod kapısı "parola adımı
-// atlanamaz"): kurtarma anahtarı ekrandayken sihirbaz sayfası sökülürse anahtar
+// KORUMA TESTİ (tasarım §4.4.5: anahtar basılıp saklandığı doğrulanmadan kurulum
+// bitmez): kurtarma anahtarı ekrandayken sihirbaz sayfası sökülürse anahtar
 // kaybolmamalı ve doğrulama atlanmamalıdır. Tam App ağacı (kilit, kurulum ve
 // kip kapıları gerçek); yalnız API sınırı sahtedir.
 //
@@ -67,7 +67,7 @@ const GRUPLAR = ANAHTAR.split("-");
 const PAROLA = "Gizli-Parola-42";
 let parolaKurulu = false;
 let kilitli = false;
-/** Sunucudaki "saklandı" damgası (F1 eki, karar 2): doğrulama ucu yazar. */
+/** Sunucudaki "saklandı" damgası (`kurtarma.dogrulandi`, tasarım §4.4.4): doğrulama ucu yazar. */
 let anahtarDogrulandi = false;
 
 const kipOzeti = (durum: string) => ({

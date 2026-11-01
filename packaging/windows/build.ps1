@@ -2,8 +2,8 @@
 =============================================================================
  packaging/windows/build.ps1 — Windows paketlerini üretir
 =============================================================================
- BU BETİK BU ORTAMDA DOĞRULANMADI — ilk Windows koşusunda sınanacak.
- (Linux'ta yalnız sözdizimi gözden geçirmesi yapıldı; PowerShell çalıştırılmadı.)
+ CI'da her PR'da windows-latest üzerinde koşar (paketleme.yml); OAB Defteri
+ adıyla F1a'da yeşil geçti (plan §2.1 "F1a durumu").
 
  Ön koşullar:
    * Python 3.12 (PATH'te)
@@ -16,13 +16,13 @@
      powershell -ExecutionPolicy Bypass -File packaging\windows\build.ps1
 
  Çıktılar: dist\cikti\
-   oab-defteri-<sürüm>-win64-setup.exe      (Inno, yönetici İSTER — U4)
+   oab-defteri-<sürüm>-win64-setup.exe      (Inno; kullanıcı başına ya da yönetici kipi — TK7)
    oab-defteri-<sürüm>-win64-portable.zip   (taşınabilir)
    SHA256SUMS.txt
 
  Paket kökünde (ikisinde de): LICENSE.txt (PolyForm Noncommercial; kurucunun
  lisans sayfası) ve THIRD_PARTY_LICENSES\ (üçüncü taraf lisansları, derlemede
- eklenen paket-icerigi.txt ve yerel-kutuphaneler\ ile — F12, TB28).
+ eklenen paket-icerigi.txt ve yerel-kutuphaneler\ ile — tasarım §11.4).
 =============================================================================
 #>
 [CmdletBinding()]
@@ -142,7 +142,7 @@ if (-not $SkipDeps) {
     Write-Adim "python bağımlılıkları (lisans listesindeki sürümlere kısıtlı)"
     # Geçişli bağımlılıklar pinli değildir; kısıt dosyası onları THIRD_PARTY_LICENSES
     # listesinin sürümlerine bağlar — pakete giren sürüm BENIOKU'dakiyle aynı olur
-    # (F12 düzeltme turu). Dosyayı betik yazar: PowerShell 5.1'in `>` yönlendirmesi
+    # (aile iskeletinin düzeltme turu). Dosyayı betik yazar: PowerShell 5.1'in `>` yönlendirmesi
     # UTF-16 yazardı, pip okuyamazdı.
     $Kisitlar = Join-Path $DistRoot "kisitlar-windows.txt"
     & $VenvPython (Join-Path $Repo "packaging\lisanslar\lisanslar.py") kisitlar `
@@ -202,7 +202,7 @@ try {
 if ($PyInstallerKodu -ne 0) { throw "PyInstaller başarısız." }
 if (-not (Test-Path $AppExe)) { throw "Çalıştırılabilir üretilmedi: $AppExe" }
 
-# Lisans kapısı (F12, TB28): THIRD_PARTY_LICENSES\ ve LICENSE.txt (UTF-8 BOM —
+# Lisans kapısı (tasarım §11.4): THIRD_PARTY_LICENSES\ ve LICENSE.txt (UTF-8 BOM —
 # Inno LicenseFile) paket köküne kopyalanır; pakete GERÇEKTEN giren her dosyanın
 # sahibi bulunur (Python dağıtımı → lisans listesi; WeasyPrint DLL'leri → MSYS2
 # paket veritabanı ve paketin share\licenses dosyaları). Listede olmayan dağıtım,
@@ -282,7 +282,7 @@ Remove-Item -Force $zip -ErrorAction SilentlyContinue
 Compress-Archive -Path (Join-Path $AppDir "*") -DestinationPath $zip
 
 # Son arşivde de aynı denetim (Linux'ta .deb + .tar.gz — iki platformda eşit
-# kapsam, F12). Kurulum dosyası (setup.exe) listelenemez: içeriği $AppDir ile
+# kapsam, tasarım §4.3 tehdit 17). Kurulum dosyası (setup.exe) listelenemez: içeriği $AppDir ile
 # .iss [Files] bölümündeki üç sabit depo dosyasıdır (test_veri_sizintisi.py).
 Write-Adim "son arşivde kişisel veri sızıntısı denetimi"
 & $PythonExe (Join-Path $Repo "packaging\veri_sizintisi.py") $zip
@@ -290,8 +290,8 @@ if ($LASTEXITCODE -ne 0) { throw "Taşınabilir arşivde kişisel veri denetimi 
 
 # --- 7. Inno Setup kurulum paketi -------------------------------------------
 if (-not $SkipInno) {
-    # WebView2 Evergreen önyükleyicisi kurucuya gömülür (tasarım §14 F12).
-    # KS'de önce yalnız CI indiriyordu; yerel/elle üretilen her setup.exe
+    # WebView2 Evergreen önyükleyicisi kurucuya gömülür (tasarım §11.3).
+    # Ailede önce yalnız CI indiriyordu; yerel/elle üretilen her setup.exe
     # onsuz çıkıyor ve .iss önişlemcisi bunu SESSİZCE düşürüyordu. İndirilemezse
     # paket yine üretilir (iss artık uyarı basar); program ilk açılışta Türkçe
     # yönlendirme verir (desktop/window.py).

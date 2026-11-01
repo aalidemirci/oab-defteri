@@ -623,7 +623,7 @@
         "python-waitress-LICENSE.txt"
       ],
       "kaynak": "https://pypi.org/project/waitress/3.0.2/",
-      "aciklama": "Yerel sunucular"
+      "aciklama": "Yerel yönetim sunucusu"
     },
     {
       "ad": "weasyprint",

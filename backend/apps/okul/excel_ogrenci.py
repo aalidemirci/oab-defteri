@@ -1,13 +1,16 @@
 """Öğrenci listesi Excel/pano okuma: başlık tespiti, esnek (fuzzy) sütun eşleme,
 satır ayrıştırma + normalize.
 
-KS'den alındı (KS bunu DD `excel_veli.py` kalıbından sadeleştirmişti): TCKN,
-veli (anne/baba ad-telefon, Veli Kim) ve doğum tarihi sütunları YOKTUR — program
-bu verileri toplamaz (tasarım §6.1). e-Okul sınıf/okul listesi ihracının ya da
-uygulama şablonunun şu üçlüsü yeter: Sınıf/Şube · Okul No · Ad-Soyad.
+Aile iskeletinden alındı (iskelet bunu atalarının veli listesi kalıbından
+sadeleştirmişti): TCKN, veli (anne/baba ad-telefon, Veli Kim) ve doğum tarihi
+sütunları YOKTUR; bu ayrıştırıcı onları okumaz. OAB T.C. kimlik no'yu ve telefonu
+tutmaz (tasarım §3.4); veli adını ve öğrencinin sınıfını ayrı e-Okul veli listesinden
+alır (T5, §8.4). Bu modül F1b 5. adımda veli listesi ayrıştırıcısına döner (§12.B).
+e-Okul sınıf/okul listesi ihracının ya da uygulama şablonunun şu üçlüsü yeter:
+Sınıf/Şube · Okul No · Ad-Soyad.
 
 e-Okul sınıf listesindeki **"Cinsiyeti"** ve "Pansiyon Durum" sütunları
-OKUNMAZ (veri en aza indirme — tasarım §6.1): eşleme sözlüğünde karşılıkları
+OKUNMAZ (veri en aza indirme — tasarım §3.4): eşleme sözlüğünde karşılıkları
 yoktur, dosyada bulunmaları aktarımı etkilemez.
 
 Sınıf ayrıştırması seviye kümesiyle parametriktir; küme `parse_rows`'a
@@ -286,8 +289,7 @@ def _read_xls(file_bytes: bytes, sheet_name: str | None = None) -> list[list[Any
     try:
         if wb.nsheets == 0:
             raise ParserError("Excel dosyasında sayfa yok.")
-        # Adlı sayfa istendiyse (katalog aktarımı yalnız "Katalog" sayfasını
-        # okur) o sayfa alınır; yoksa ilk sayfaya düşülür.
+        # Adlı sayfa istendiyse o sayfa alınır; yoksa ilk sayfaya düşülür.
         sayfalar = wb.sheet_names()
         sh = wb.sheet_by_name(sheet_name) if sheet_name in sayfalar else wb.sheet_by_index(0)
         return [[sh.cell_value(r, c) for c in range(sh.ncols)] for r in range(sh.nrows)]
@@ -309,9 +311,9 @@ def read_sheet(file_bytes: bytes, *, sheet_name: str | None = None) -> list[list
     ve kullanıcılar bunları elle `.xlsx` diye yeniden adlandırabiliyor.
 
     `sheet_name` verilirse O SAYFA okunur, bulunamazsa ilk/etkin sayfaya düşülür
-    (F3 katalog aktarımı yalnız "Katalog" sayfasını okur — şablonun "Sütunlar" ve
-    "Örnek" sayfaları içe aktarılmaz; okulun kendi hazırladığı dosyada ise böyle
-    bir sayfa adı bulunmayabilir).
+    (çok sayfalı bir şablonda yalnız veri sayfasını okumak için; okulun kendi
+    hazırladığı dosyada böyle bir sayfa adı bulunmayabilir). Aile iskeletinde bunu
+    katalog aktarımı kullanıyordu; OAB'de bugün kullanan yoktur.
     """
     if is_legacy_xls(file_bytes):
         return _read_xls(file_bytes, sheet_name)

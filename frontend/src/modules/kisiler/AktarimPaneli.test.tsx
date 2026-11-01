@@ -1,4 +1,4 @@
-// Aktarım paneli — e-Okul MUTABAKATI (tasarım §8.3) ve AYRILIŞ HAVUZU (F1 eki 7):
+// Aktarım paneli — e-Okul MUTABAKATI (genel tasarım §8.4) ve AYRILIŞ HAVUZU (§5.1):
 // aktarım kimseyi ayırmaz ve silmez; listede bulunmayanlar havuza eklenir, karar
 // Kişiler → Ayrılış Havuzu'nda verilir. Öğrenci: bütün şubeleri içeren tek dosya
 // önerisi, "Bu dosya okulun tam listesidir" onayı, şube bazında etki tablosu,
@@ -385,7 +385,7 @@ describe("AktarimPaneli — personel mutabakatı ve ayrılış havuzu", () => {
     await user.click(birlestir);
     const onay = await screen.findByRole("dialog", { name: "Bu iki kayıt aynı kişi mi?" });
     expect(within(onay).getByText(/eski kayıt silinir/)).toBeInTheDocument();
-    // Gerekçe + ikinci doğrulama (TB18): kutu işaretlenmeden düğme kapalıdır.
+    // Gerekçe + ikinci doğrulama (§13 D30): kutu işaretlenmeden düğme kapalıdır.
     expect(within(onay).getByText(/adı aynı, soyadı farklı/)).toBeInTheDocument();
     const dugme = within(onay).getByRole("button", { name: "Birleştir" });
     expect(dugme).toBeDisabled();

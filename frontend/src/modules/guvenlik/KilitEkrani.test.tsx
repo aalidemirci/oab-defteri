@@ -1,4 +1,4 @@
-// Kilit ekranı testi (F5-D5): parolayla açma, yanlış parolada Türkçe hata,
+// Kilit ekranı testi: parolayla açma, yanlış parolada Türkçe hata,
 // "parolamı unuttum" → kurtarma anahtarı + yeni parola akışı.
 // API istemcisi vi.mock ile taklit edilir — ağ yok. Auth yok (tek kullanıcı).
 

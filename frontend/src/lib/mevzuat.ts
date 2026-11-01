@@ -1,12 +1,13 @@
-// Mevzuat adlarının TEK KOPYASI (CLAUDE.md §2-13: atıf `docs/mevzuat/`teki
-// metinden doğrulanır).
+// Mevzuat adlarının TEK KOPYASI (CLAUDE.md §2 madde 1: atıf `docs/mevzuat/`teki
+// kanonik metinden doğrulanır).
 //
 // Neden ayrı dosya: aynı mevzuatın adı birden çok ekranda geçer ve kopyalar
 // ayrışırsa atıf tutmaz; madde numarası doğru olsa bile yanlış adla kaynak
 // bulunamaz.
 //
-// Kısa adlar `docs/mevzuat/BENIOKU.md` §3'te sabittir: ilk geçişten sonra
-// "Yönerge" ve "Yönetmelik" denir.
+// Ad, dosyanın `mevzuat-adi` ön veri alanıyla birebir aynıdır (dosya biçimi:
+// `docs/mevzuat/BENIOKU.md` §2). Ekranda ilk geçişten sonra kısa ad
+// ("Yönerge", "Yönetmelik") kullanılır.
 
 /** `docs/mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md` ön verisindeki ad. */
 export const YONERGE = "Millî Eğitim Bakanlığı Bilgi ve Sistem Güvenliği Yönergesi";

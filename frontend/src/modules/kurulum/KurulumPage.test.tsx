@@ -1,6 +1,6 @@
-// Kurulum sihirbazı testi (F1-E kod kapısı): parola adımı olmadan ilerlenmez;
+// Kurulum sihirbazı testi (sihirbaz kapısı): parola adımı olmadan ilerlenmez;
 // kurtarma anahtarı iki grubu geri yazılarak doğrulanıp sunucuda damgalanmadan
-// devam edilmez (F1 eki, karar 2); anahtar ekranda değilken kâğıttan doğrulama ve
+// devam edilmez (genel tasarım §4.4.5); anahtar ekranda değilken kâğıttan doğrulama ve
 // YENİ anahtar üretme yolları (kaybolan anahtar senaryosu uçtan uca); okul
 // adımının zorunlu alanları (kademe, kısa ad, demirbaş onayı); ders yılı
 // kaydedilince iki takvim yılının tatilleri eklenir; `setup/complete/` reddi
@@ -378,7 +378,7 @@ describe("KurulumPage — 1. adım: yönetici parolası (atlanamaz)", () => {
   });
 });
 
-describe("KurulumPage — 1. adım: anahtar ekranda değilken (F1 eki, karar 2)", () => {
+describe("KurulumPage — 1. adım: anahtar ekranda değilken", () => {
   it("parola kurulu ama anahtar doğrulanmamış: uyarı, ray kilitli, kâğıttaki anahtarla doğrulanır", async () => {
     const user = userEvent.setup();
     sunucuyuKur({ parola: true, dogrulandi: false, okul: { ...TAM_OKUL } });
@@ -491,6 +491,14 @@ describe("KurulumPage — 2. adım: okul bilgileri", () => {
     expect(screen.getByText("2. Okul Bilgileri")).toBeInTheDocument();
   });
 
+  it("açıklamalar yalnız evrak antedini anar; etiket, üye kartı ve kitap bedeli yoktur", async () => {
+    renderPage();
+    expect(await screen.findByText("2. Okul Bilgileri")).toBeInTheDocument();
+    expect(screen.getByText(/evrakın antedinde kullanılır/)).toBeInTheDocument();
+    expect(screen.getByText("En çok 24 karakter.")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/etiket|üye kart|kayıp ve hasar|son sınıf/i);
+  });
+
   it("tam gövdeyi gönderir ve 3. adıma geçer", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -563,6 +571,9 @@ describe("KurulumPage — 3. adım: ders yılı ve kapalı günler", () => {
     expect(
       await screen.findByText(`KAPALI GÜNLER PANELİ ${tohumlanan[0]} [${tohumlanan.join(",")}]`),
     ).toBeInTheDocument();
+    // Kapalı günlerin gerekçesi iş günü hesabıdır; ödünç iadesinden söz edilmez.
+    expect(screen.getByText(/iş günüyle verilen süreler/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/iade tarihi/i);
     await waitFor(() => expect(ileri("Kurulumu tamamla")).toBeEnabled());
   });
 

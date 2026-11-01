@@ -7,14 +7,14 @@
     3. Temiz kapanış işareti okunur ve silinir (T15) + tek kopya kanalı kurulur
     4. Oturum belirteci ..................... ayarlar okunmadan ÖNCE üretilir
     5. Sürüm damgası ........................ eski program yeni veriyi AÇMAZ
-       (damga yoksa 8'den önce veritabanının göç kaydı da denetlenir — F11)
+       (damga yoksa 8'den önce veritabanının göç kaydı da denetlenir — §4.2 adım 5)
     6. Bütünlük denetimi .................... bozuk veriyle pencere AÇILMAZ
     7. Günlük yedek + 14 gün rotasyonu ...... `Connection.backup()`; yalnız şifreli
        `.odbak`. Yönetici parolası kurulmadan (ilk açılış) yedek atlanır; bugünün
-       yedeği alınmadıysa rotasyon da koşmaz (tasarım §6.3-6)
+       yedeği alınmadıysa rotasyon da koşmaz (tasarım §4.2 adım 7; yedekler §4.4.7)
     8. Göç öncesi yedek + `migrate --no-input`
     9. Gömülü sunucu (waitress, 127.0.0.1, boş port) + sağlık denetimi
-   10. Çıkış kancası backend'e kaydolur (`masaustu_kanca`, T16); `od-gunluk`
+   10. Çıkış kancası backend'e kaydolur (`masaustu_kanca`, §4.2 adım 10); `od-gunluk`
        başlar: gün değişimi kapısını koşar (günlük yedek + rotasyon; saatte bir
        yinelenir, her iş ortak bakım kapısından geçer — `shared/bakim.py`)
    11. Linux: Qt uygulaması + SIGTERM köprüsü (`desktop/qt_kurulum.py`)
@@ -163,7 +163,7 @@ def resolve_paths(args: argparse.Namespace) -> AppPaths:
 
 
 def is_plain_launch(args: argparse.Namespace) -> bool:
-    """Bayraksız normal açılış mı? (pencereli kip; §4.2-1)
+    """Bayraksız normal açılış mı? (pencereli kip; §4.2 adım 2)
 
     `--autotest` ve `--geri-yukle` kiptir: çalışan kopya bulurlarsa 2 koduyla
     çıkarlar, sinyal göndermezler. `--data-dir` kip değil konumdur; aynı veri
@@ -180,12 +180,12 @@ def prepare_data(paths: AppPaths, app_version: str) -> None:
 
     # Rotasyon yalnız bugünün yedeği elde varken koşar: yedek atlandıysa
     # (parola henüz kurulmadı, yedek anahtarı bozuk, guvenlik.json kayıp) eski
-    # yedekler silinmez — kayıp kilidinden çıkış yolu onlardır (GA-2).
+    # yedekler silinmez — kayıp kilidinden çıkış yolu onlardır (tasarım §4.3 tehdit 8).
     if daily_backup(paths.db_path, paths.backups) is not None:
         rotate_backups(paths.backups)
 
     prepare_django(resolve_backend_dir(), paths.data)
-    # İkinci hat (F11): damga yoksa (geri yükleme siler) veritabanının göç kaydı
+    # İkinci hat (§4.2 adım 5): damga yoksa (geri yükleme siler) veritabanının göç kaydı
     # konuşur — tanınmayan göç = daha yeni sürümün şeması; göç ve yazım başlamadan dur.
     ensure_no_unknown_migrations(unknown_applied_migrations(), app_version)
     if has_pending_migrations():
@@ -251,7 +251,7 @@ def run_window_session(
 
 
 def _kancalari_kaydet(**kancalar: Any) -> None:
-    """Masaüstü kancalarını backend'e kaydeder (T16). Backend yoksa (testte) sessiz."""
+    """Masaüstü kancalarını backend'e kaydeder (§4.2 adım 10). Backend yoksa (testte) sessiz."""
     try:
         from apps.okul import masaustu_kanca
     except ImportError:
@@ -285,7 +285,7 @@ def gunluk_yedek_isi(
     bugun: Callable[[], date] = date.today,
     saat: Callable[[], float] = acik_kalma_saati,
 ) -> Callable[[], bool]:
-    """Günlük yedek + 14 gün rotasyonu; yedek alınmadıysa rotasyon koşmaz (GA-2).
+    """Günlük yedek + 14 gün rotasyonu; yedek alınmadıysa rotasyon koşmaz (§4.3 tehdit 8).
 
     Oturum içi rotasyon SAAT SIÇRAMASINA karşı korunur: program günlerce açık
     kalırken sistem saati 14 günden fazla ileri sıçrarsa (NTP ya da elle yanlış
@@ -294,9 +294,9 @@ def gunluk_yedek_isi(
     rotasyon `min(bugün, çapa + gerçekte geçen gün + 1)` tarihiyle yapılır.
     Saat doğruyken iki değer aynıdır (tatilde uykuda kalan bilgisayarda da:
     açık kalma saati uykuyu sayar); saat ileri sıçramışsa kesim gerçek süreye
-    göre konur. "En çok 14 gün" saklama sözü (TB8, §6.4) bozulmaz: hiçbir
+    göre konur. "En çok 14 gün" saklama sözü (§4.4.7) bozulmaz: hiçbir
     yedek gerçek yaşı 14 günü aştığı hâlde tutulmaz. Açılıştaki rotasyon
-    (`prepare_data`) çapasızdır, F1'deki gibi kalır.
+    (`prepare_data`) çapasızdır, aile iskeletindeki gibi kalır.
     """
     capa: list[tuple[date, float]] = []
 
@@ -404,7 +404,8 @@ def run(argv: Sequence[str] | None = None) -> int:
     app_version = get_app_version()
     logger.info("OAB Defteri %s başlıyor.", app_version)
     # PDF motorunun C katmanındaki bir çöküş süreci anında kapatır ve bu günlüğe
-    # hiçbir şey düşmez (19.09.2026); o an Python yığını `logs/cokme.log`a yazılır.
+    # hiçbir şey düşmez (aile iskeletinde 19.09.2026); o an Python yığını
+    # `logs/cokme.log`a yazılır.
     enable_crash_log(paths.logs, app_version)
     hazard = check_sync_hazard(paths.root)
     if hazard:
@@ -421,7 +422,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         try:
             lock.acquire()
         except AlreadyRunningError:
-            # §4.2-1: YALNIZ bayraksız açılış çalışan kopyanın penceresini öne
+            # §4.2 adım 2: YALNIZ bayraksız açılış çalışan kopyanın penceresini öne
             # getirir; sinyal ulaşmazsa (kanal yok) "zaten çalışıyor" iletisi.
             if is_plain_launch(args) and signal_running_instance(paths.root):
                 logger.info("Program zaten çalışıyor; penceresi öne getirildi.")

@@ -139,7 +139,7 @@ describe("GuvenlikKapisi", () => {
     await kullanici.click(
       await screen.findByRole("button", { name: "Güvenlik dosyasını sıfırla ve kuruluma dön" }),
     );
-    // Onay diyaloğu: başlık soru, gövde sonuç (sözlük §3).
+    // Onay diyaloğu: başlık soru, gövde sonuç (docs/sozluk.md §3).
     const diyalog = await screen.findByRole("dialog", { name: "Güvenlik dosyası sıfırlansın mı?" });
     expect(diyalog).toHaveTextContent(/arşivlenir/);
     await kullanici.click(screen.getByRole("button", { name: "Sıfırla ve kuruluma dön" }));

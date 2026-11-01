@@ -1,37 +1,35 @@
-"""Kapalı günler — tohumlama, elle ekleme/silme ve kapalı dönem kaynağı (tasarım §6.1, §9-5).
+"""Kapalı günler — tohumlama, elle ekleme/silme ve kapalı dönem kaynağı (tasarım §5.1 `Holiday`).
 
-DD'nin `services/calendar.py`'sinden UYARLANDI (tasarım §12):
+Aile iskeletinden AYNEN alındı (tasarım §12.B):
 
-- Tohumlama DD'de DERS YILINA göreydi ve ders yılı dışındaki tatiller (15 Temmuz,
-  30 Ağustos) yazılmıyordu. Burada TAKVİM YILINA göredir ve yılın bütün sabit
-  resmî tatilleri yazılır: iade tarihi yaz başında da hesaplanabilir, kapalı gün
-  kaynağının boşluğu sessiz yanlış tarih üretir.
-- DD'nin `is_working_day`'i (iş günü sayımı, disiplin süreleri) ALINMADI; yerini
-  `shared.working_days.next_open_day` aldı. Bu modül ona kapalı dönemleri verir
+- Tohumlama TAKVİM YILINA göredir ve yılın bütün sabit resmî tatilleri yazılır
+  (ders yılı dışındakiler — 15 Temmuz, 30 Ağustos — dahil): süre hesabı yaz
+  aylarında da yapılabilir, kapalı gün kaynağının boşluğu sessiz yanlış tarih
+  üretir.
+- İş günü sayımı (`is_working_day`) bu modülde YOKTUR; kapalı gün çekirdeği
+  `shared.working_days`'tir. Bu modül ona kapalı dönemleri verir
   (`closed_periods_from`).
-- Fikirdeşlik: DD yalnız (ad, başlangıç) eşleşmesine bakıyordu. Tahmini bir bayramı
+- Fikirdeşlik: yalnız (ad, başlangıç) eşleşmesine bakılsaydı, tahmini bir bayramı
   silip doğru tarihle elle giren kullanıcı ikinci tohumlamada aynı bayramı iki kez
   görürdü; burada aynı türden kayıt o tarihi (dini bayramda ±15 günlük pencereyi)
   zaten kapsıyorsa satır ATLANIR.
 
-Dini bayram verisi (DD tasarım §7 kararı AYNEN): `holidays` pip paketi yok — hicri
+Dini bayram verisi (aile kararı AYNEN): `holidays` pip paketi yok — hicri
 hesap Diyanet takviminden ±1 gün sapabilir. Gömülü tablo: Diyanet takviminde
 kesinleşmiş yıllar kesin (`is_estimated=False`), 2027 ve sonrası TAHMİNİ bayraklıdır;
 arayüz "tahmini" rozetini ve "Diyanet takvimi kesinleşince kontrol edin" notunu
 gösterir. Tablonun kapsamadığı yılda dini bayram eklenmez ve yanıt bunu söyler
 (`religious_available=False`); kullanıcı elle girer.
 
-ARİFE KARARI: arife günleri (28 Ekim ile Ramazan ve Kurban Bayramı arifeleri)
-öğleden sonra yarım gün tatildir (2429 sayılı Kanun; metni `docs/mevzuat/`'ta
-yoktur, bu not atıf değil bağlamdır — kullanıcı metnine girmez). DD arifeyi iş günü
-sayıyordu; kütüphane için de arife AÇIK GÜNDÜR ve tohumlanmaz:
-  1. Günün ilk yarısı mesai ve ders sürer; öğrenci okuldadır, iade fiilen alınabilir.
-  2. Kaydırmanın kıyas dayanağı TBK md. 93 "tatil olarak kabul edilen bir gün"den
-     söz eder; yarım günlük tatil bütün günü tatil yapmaz.
-  3. Kapalı gün kaydı gün birimlidir (yarım gün tutulamaz); arifeyi kapalı saymak
-     bayramdan önceki günü de kaydırıp iade tarihini gereksiz uzatırdı.
-  Okul arife günü kütüphaneyi kapatıyorsa o günü elle "İdari izin / diğer" ya da
-  "öğrenciye kapalı gün" olarak ekler.
+ARİFE KARARI (aileden): arife günleri (28 Ekim ile Ramazan ve Kurban Bayramı
+arifeleri) öğleden sonra yarım gün tatildir (2429 sayılı Kanun; metni
+`docs/mevzuat/`'ta yoktur, bu not atıf değil bağlamdır — kullanıcı metnine
+girmez). Arife AÇIK GÜNDÜR ve tohumlanmaz:
+  1. Günün ilk yarısı mesai sürer; okul açıktır.
+  2. Kapalı gün kaydı gün birimlidir (yarım gün tutulamaz); arifeyi kapalı saymak
+     yarım günlük tatili bütün güne çevirir ve süre hesaplarını bir gün kaydırırdı.
+  Okul arife günü kapalıysa o günü elle "İdari izin / diğer" ya da "öğrenciye
+  kapalı gün" olarak ekler.
 """
 
 from __future__ import annotations
@@ -52,11 +50,11 @@ MIN_YEAR: Final = 2000
 MAX_YEAR: Final = 2100
 
 # Bir kaydın kapsayabileceği en uzun süre. Yaz tatili (≈ 80 gün) sığar; yıl hanesi
-# yanlış yazılmış bitiş tarihi (2027 yerine 2072) bütün iade tarihlerini on yıllarca
+# yanlış yazılmış bitiş tarihi (2027 yerine 2072) bütün süre hesaplarını on yıllarca
 # kaydırmasın diye üst sınır vardır.
 MAX_SPAN_DAYS: Final = 120
 
-# Ulusal bayram ve genel tatillerin SABİT tarihli olanları (DD/OYS
+# Ulusal bayram ve genel tatillerin SABİT tarihli olanları (aile tablosu
 # `FIXED_OFFICIAL_HOLIDAYS` AYNEN). Dini bayramlar hicri takvime göre kaydığından
 # aşağıdaki ayrı tablodadır.
 FIXED_OFFICIAL_HOLIDAYS: Final[tuple[tuple[int, int, str], ...]] = (
@@ -69,7 +67,7 @@ FIXED_OFFICIAL_HOLIDAYS: Final[tuple[tuple[int, int, str], ...]] = (
     (10, 29, "Cumhuriyet Bayramı"),
 )
 
-# Dini bayramlar: (ad, başlangıç, bitiş, tahmini_mi) — DD tablosu AYNEN.
+# Dini bayramlar: (ad, başlangıç, bitiş, tahmini_mi) — aile tablosu AYNEN.
 # 2026 Diyanet takviminde yayımlı → kesin. 2027 ve sonrası astronomik hesapla
 # TAHMİNİ; Diyanet takvimi kesinleşince kullanıcı kontrol eder ve gerekirse
 # kaydı silip doğru tarihle yeniden girer.

@@ -1,6 +1,6 @@
-"""GitHub Release tabanlı güncelleme servisinin ağsız birim testleri (F8).
+"""GitHub Release tabanlı güncelleme servisinin ağsız birim testleri (tasarım TK4).
 
-DD `test_updates.py`'den KS'ye uyarlandı: ürün/depo adları değişti, akış aynı.
+Ailenin `test_updates.py`'sinden uyarlandı: ürün/depo adları değişti, akış aynı.
 Ağ hiç kullanılmaz — `latest_release`/`_read_url` monkeypatch'lenir; ağ katmanının
 kendisi (`_read_url`) sınanırken de `urlopen` sahtelenir.
 """
@@ -130,7 +130,7 @@ def test_release_yaniti_windows_kurucusunu_ve_ozeti_cozer() -> None:
 
 def test_yol_bilesenli_varlik_adi_reddedilir() -> None:
     """Ad dosya yoluna çevrilir; `..`/ayırıcı taşıyan varlık önbellek dizini
-    dışına yazamamalı (DD'den bilinçli sapma — güvenlik sertleştirmesi)."""
+    dışına yazamamalı (aile kalıbından bilinçli sapma — güvenlik sertleştirmesi)."""
     release = updates._parse_release(  # noqa: SLF001
         {
             "tag_name": "v2026.10.0",
@@ -164,7 +164,7 @@ def test_guvenilmeyen_varlik_adresi_kabul_edilmez() -> None:
 
 def test_kararli_surum_yokken_on_surum_listeden_secilir(monkeypatch: pytest.MonkeyPatch) -> None:
     """Beta dönemi: `releases/latest` 404 verir (yalnız --prerelease yayın var);
-    liste okunur, taslaklar elenir, en yüksek sürüm seçilir (F9 bulgusu)."""
+    liste okunur, taslaklar elenir, en yüksek sürüm seçilir (aile iskeletinin yayın bulgusu)."""
 
     def sahte_read_url(url: str, *, max_bytes: int) -> bytes:
         if url == updates.LATEST_RELEASE_URL:
@@ -353,8 +353,9 @@ def test_ag_yokken_baglanti_mesaji_verilir(
 ) -> None:
     """Çevrimdışı okul olağan durumdur: ham soket hatası değil, anlaşılır Türkçe mesaj.
 
-    Metin kullanıcı kararıyla (27.09.2026) birebirdir: MEB ağında GitHub engellenebilir,
-    yeni sürüm indir.okulapp.org'dan elle denetlenir (program o adrese istek atmaz).
+    Metin aile iskeletinin kullanıcı kararıyla (27.09.2026) birebirdir: MEB ağında GitHub
+    engellenebilir, yeni sürüm indir.okulapp.org'dan elle denetlenir (program o adrese
+    istek atmaz).
     """
 
     def patla(*_a: object, **_k: object) -> _SahteYanit:
@@ -371,8 +372,9 @@ def test_ag_yokken_baglanti_mesaji_verilir(
 
 
 def test_guncelleme_hedefi_githubdir_indirme_alanina_istek_atilmaz() -> None:
-    """Kullanıcı kararı 1 (27.09.2026): denetim ve kurulum dosyası GitHub'dan; indirme
-    alanı (`indir.okulapp.org`) yalnız iletide geçer, hiçbir istek adresinde geçmez."""
+    """Aile iskeletinin kullanıcı kararı (27.09.2026; tasarım TK4): denetim ve kurulum dosyası
+    GitHub'dan; indirme alanı (`indir.okulapp.org`) yalnız iletide geçer, hiçbir istek
+    adresinde geçmez."""
     from urllib.parse import urlparse
 
     assert urlparse(updates.LATEST_RELEASE_URL).hostname == "api.github.com"
@@ -385,7 +387,7 @@ def test_guncelleme_hedefi_githubdir_indirme_alanina_istek_atilmaz() -> None:
 
 
 def test_version_key_iki_kopyasi_aynidir() -> None:
-    """CLAUDE.md §3: `version_key` iki kopyadır (masaüstü + backend) ve AYNI kalmalıdır.
+    """`version_key` iki kopyadır (masaüstü + backend) ve AYNI kalmalıdır.
 
     Eski program yeni veriyi açmaz kapısı (`desktop.version`) ile güncelleme önerisi
     (`updates`) aynı sıralamayı kullanmazsa biri "güncel" derken öbürü "yeni" derdi.
@@ -935,7 +937,7 @@ def test_kurucu_indirme_ucu_servis_hatasini_400_yapar(
 def test_kilitliyken_guncelleme_uclari_kapali(
     kilitli: Path, client: APIClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """F11 düzeltme turu: kilit kapısında `updates/` muafiyeti YOK (fail-closed).
+    """Kilit kapısında `updates/` muafiyeti YOK (fail-closed).
 
     Sürüm denetimi yalnız Ayarlar → Güncelleme'deki "Şimdi denetle" düğmesiyledir ve o
     ekran kilit açıkken görünür; kilit ekranı güncelleme ucunu çağırmaz. Kilitli program
@@ -961,7 +963,7 @@ def test_kilitliyken_guncelleme_uclari_kapali(
 
 
 # ===========================================================================
-# F12 — beta sürüm yolu (kullanıcı kararı 3, 27.09.2026): kararlı sürüm
+# Beta sürüm yolu (aile iskeletinde kullanıcı kararı, 27.09.2026): kararlı sürüm
 # kullanan okula ön-sürüm ÖNERİLMEZ; beta kullanıcısı sonraki betayı ve
 # kararlı sürümü alır.
 # ===========================================================================
@@ -1048,7 +1050,7 @@ def test_on_surum_ve_oneri_kurali() -> None:
 
 
 def test_ilk_beta_eski_alfa_verisini_acar_ve_kararlidan_once_gelir() -> None:
-    """VERSION alfa → beta geçişi (F12): iki `version_key` kopyası da betayı alfadan
+    """VERSION alfa → beta geçişi: iki `version_key` kopyası da betayı alfadan
     YENİ, kararlıdan ESKİ sayar — alfa verisi betada açılır (damga kapısı), kararlı
     sürüm betanın güncellemesidir."""
     from desktop import version as masaustu
@@ -1059,7 +1061,7 @@ def test_ilk_beta_eski_alfa_verisini_acar_ve_kararlidan_once_gelir() -> None:
 
 
 # ===========================================================================
-# F12 düzeltme turu — beta kanalı kararlı sürümden SONRA da çalışır; sertifika
+# Beta kanalı kararlı sürümden SONRA da çalışır; sertifika
 # hatası "ağ engeli" diye sunulmaz.
 # ===========================================================================
 

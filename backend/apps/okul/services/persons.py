@@ -1,35 +1,35 @@
 """Öğrenci/Personel kayıt işlemleri, ayrılış yolu, ayrılış havuzu ve unutma kancası.
 
-Tasarım §6.1, §6.4, §8.3; F1 eki 7 (kullanıcı kararı 22.09.2026). İnce servis
-katmanı — doğrulama/normalize serializer'da, yazma burada. View ORM çağırmaz
-(katman disiplini).
+Tasarım §5.1, §5.4, §8.4. İnce servis katmanı — doğrulama/normalize
+serializer'da, yazma burada. View ORM çağırmaz (katman disiplini).
 
-UNUTMA KANCASI — KAYIT DEFTERLERİ (KS'den UYARLANDI). KS öğrenci LEFT olunca
-kancalarla okul dışı veriyi hemen siliyordu. Kütüphanede kişinin açık ödüncü,
-dosyası ya da teslimi olabilir; bu yüzden düzen dört kayıt defterine ayrıldı.
+UNUTMA KANCASI — KAYIT DEFTERLERİ (aile iskeletinden UYARLANDI). Okul
+çekirdeğindeki kişinin başka uygulamalardaki kayıtlarla bağı olabilir (OAB'de
+organ üyeliği, komisyon, imza bloğu, bağış ya da sözleşme — tasarım §5.4); okul
+çekirdeği bu bağları bilmez, bu yüzden düzen kayıt defterlerine ayrıldı.
 Bağımlılık yönü <uygulama> → okul'dur: okul diğer uygulamaları import etmez,
-her uygulama kendi denetimini `AppConfig.ready` içinde buraya kaydeder (F6
-üyelik ve ödünç; F7 açık teslim ve çözülmemiş kayıp/hasar dosyası yükümlülük,
-kapanmış teslim silme engeli, teslimlerin birleştirmede taşınması):
+her uygulama kendi denetimini `AppConfig.ready` içinde buraya kaydeder. OAB
+modelleri kancalarını F1c'den itibaren kaydeder (tasarım §12.B); bugün kayıtlı
+kanca yoktur:
 
 - `register_obligation_check(fn)` → `fn(kişi) -> list[str]`: kişinin AÇIK
-  yükümlülüklerinin Türkçe gerekçeleri ("Açık ödünç var."). Gerekçe KİŞİ ADI
-  İÇERMEZ (hata metnine ve günlüğe ad yazılmaz — sözlük §5).
-- `register_membership_check(fn)` → `fn(kişi) -> bool`: kişi hiç üye olmuş mu.
-- `register_leave_hook(fn)` → `fn(kişi)`: ayrılışta çağrılır (F6: üyeliği
-  sonlandırır).
+  yükümlülüklerinin Türkçe gerekçeleri. Gerekçe KİŞİ ADI İÇERMEZ (hata
+  metnine ve günlüğe ad yazılmaz — sözlük §5).
+- `register_membership_check(fn)` → `fn(kişi) -> bool`: kişi birlik
+  kayıtlarına bağlanmış mı (bağlıysa kullanıcı silemez, aşağıda SİLME).
+- `register_leave_hook(fn)` → `fn(kişi)`: ayrılışta çağrılır.
 - `register_merge_hook(fn)` → `fn(kaynak, hedef)`: personel birleştirmede
-  kaynağın bağlarını hedefe taşır (F6: üyelik ve ödünçler; F7: teslimler).
-- `register_deletion_block(fn)` → `fn(kişi) -> list[str]` (F7): açık yükümlülük
-  olmasa da kişiye bağlı kalıcı kaydı (kapanmış teslim) olan kişinin
-  kullanıcı silmesini gerekçeyle reddeder.
+  kaynağın bağlarını hedefe taşır.
+- `register_deletion_block(fn)` → `fn(kişi) -> list[str]`: açık yükümlülük
+  olmasa da kişiye bağlı kalıcı kaydı olan kişinin kullanıcı silmesini
+  gerekçeyle reddeder.
 
 Kancalar AYNI veritabanı işleminde koşar: hata verirlerse durum değişikliği de
 geri sarılır. Kancalar yalnız veritabanına yazmalıdır (dosya, ağ yan etkisi yok).
 
-AYRILIŞ HAVUZU (F1 eki 7). Kullanıcının kararı: "ayrılanları doğrudan silme,
-bir havuza ekle, orada karar verilsin; ayrılanın iade etmediği kitap olabilir,
-kaydı silmeyelim, yalnız aktif öğrencilik durumu değişsin."
+AYRILIŞ HAVUZU (aile iskeletinden; tasarım §5.1 personel ayrılış havuzunu
+alır). e-Okul listesinde bulunmayan kişi doğrudan silinmez, bir havuza girer ve
+karar orada verilir; kayıt silinmez, yalnız aktiflik durumu değişir.
 
 - e-Okul aktarımı hiç kimseyi AYIRMAZ ve SİLMEZ. Listede bulunmayan aktif kişi
   havuza girer (`add_to_leave_pool`: giriş tarihi + hangi aktarımla); durumu
@@ -40,18 +40,21 @@ kaydı silmeyelim, yalnız aktif öğrencilik durumu değişsin."
   çıkarır. Yıl sonu mezunları bu yolla toplu ayrılır.
 - Havuzdaki kişi DB kısıtıyla aktiftir (`ck_*_leave_candidate_active`).
 
-AYRILIŞ YOLU (§6.1): `left_at = localdate()`, öğrencide durum LEFT, personelde
-`is_active=False`, havuz alanları temizlenir, sonra ayrılış kancaları. **Ayrılış
-kaydı SİLMEZ** — üyelik ve yükümlülükten bağımsız (eski "hiç üye olmamış ve
-yükümlülüksüz → katı sil" dalı F1 eki 7 ile kalktı). Ayrılmış kişinin kaydı
-saklama taramasına kalır (§6.4, F11: ayrılıştan `retention_years_left_person` —
-varsayılan 2 — yıl sonra aday olur, açık işi yoksa yönetici onayıyla silinir;
-`apps.kutuphane.services.saklama`).
+AYRILIŞ YOLU (tasarım §5.1): `left_at = localdate()`, öğrencide durum LEFT,
+personelde `is_active=False`, havuz alanları temizlenir, sonra ayrılış
+kancaları. **Ayrılış kaydı SİLMEZ** — bağdan ve yükümlülükten bağımsız (ailenin
+eski "bağsız ve yükümlülüksüz → katı sil" dalı aile iskeletinde kalkmıştı).
+Ayrılmış kişinin kaydının akıbeti saklama kuralındadır: ayrıldı işaretlenen ve
+hiçbir birlik kaydına bağı olmayan personel, ayrılışı izleyen dönem kapanışında
+silinir (tasarım §5.4). Bu silmeyi yapan iş henüz yoktur; dönem kapanışıyla
+gelir (tasarım §7.8).
 
-SİLME (kullanıcının bilinçli eylemi, "Sil" düğmesi): açık yükümlülük varsa
-gerekçeyle reddedilir; hiç üye olmamışsa katı silinir; üye olmuşsa ayrılış
-yoluna yönlendirilir (silinmez). Katı silme BİLİNÇLİDİR: yanlış girilmiş
-kaydın yumuşak silmesi kişi verisini süresiz tutardı.
+SİLME (kullanıcının bilinçli eylemi, "Sil" düğmesi): açık yükümlülük ya da
+silme engeli varsa gerekçeyle reddedilir; kişi birlik kayıtlarına bağlıysa
+silinmez, ayrılış yoluna yönlendirilir (`MEMBER_DELETE_MESSAGE`; birlik kaydı
+silinmez — CLAUDE.md §2 altın kural 4); bağı yoksa katı silinir. Katı silme
+BİLİNÇLİDİR: yanlış girilmiş kaydın yumuşak silmesi kişi verisini süresiz
+tutardı.
 """
 
 from __future__ import annotations
@@ -99,7 +102,7 @@ POOL_FIELDS: tuple[str, str] = ("leave_candidate_since", "leave_candidate_run")
 DUPLICATE_NUMBER_MESSAGE = "Bu okul numarası başka bir aktif öğrencide kayıtlı."
 ALREADY_LEFT_MESSAGE = "Bu kişi zaten ayrıldı olarak işaretli."
 MEMBER_DELETE_MESSAGE = (
-    "Bu kişi kütüphane üyesi olmuş; kaydı silinemez. Okuldan ayrıldıysa "
+    "Bu kişi birlik kayıtlarına bağlı; kaydı silinemez. Okuldan ayrıldıysa "
     "“Ayrıldı olarak işaretle” eylemini kullanın."
 )
 SELF_MERGE_MESSAGE = "Bir kişi kendisiyle birleştirilemez."
@@ -126,7 +129,7 @@ def register_obligation_check(fn: ObligationCheck) -> None:
 
 
 def register_membership_check(fn: MembershipCheck) -> None:
-    """Üyelik denetimi: `fn(kişi)` kişi hiç kütüphane üyesi olmuşsa True döner."""
+    """Bağ denetimi: `fn(kişi)` kişi birlik kayıtlarına bağlanmışsa True döner."""
     _register(_membership_checks, fn)
 
 
@@ -141,11 +144,11 @@ def register_merge_hook(fn: MergeHook) -> None:
 
 
 def register_deletion_block(fn: DeletionBlock) -> None:
-    """Silme engeli (F7): `fn(kişi)` kapanmış da olsa kişiye bağlı kayıt varsa gerekçe döner.
+    """Silme engeli: `fn(kişi)` kapanmış da olsa kişiye bağlı kayıt varsa gerekçe döner.
 
-    Açık yükümlülükten AYRIDIR: kapanmış bir teslim kişinin yükümlülüğü değildir
-    (ilişik listesine girmez) ama teslim satırı kişiyi PROTECT ile tutar; bağı
-    saklama taraması koparır (§6.4, F11), kullanıcının "Sil"i değil.
+    Açık yükümlülükten AYRIDIR: kapanmış bir kayıt kişinin yükümlülüğü değildir
+    ama kişiyi PROTECT ile tutabilir; o bağı kullanıcının "Sil"i koparmaz
+    (saklama kuralı, tasarım §5.4).
     """
     _register(_deletion_blocks, fn)
 
@@ -167,7 +170,7 @@ def open_obligations(person: Person) -> list[str]:
 
 
 def was_ever_member(person: Person) -> bool:
-    """Kişi hiç kütüphane üyesi olmuş mu? (F1'de kayıtlı denetim yok → False)"""
+    """Kişi birlik kayıtlarına bağlanmış mı? (bugün kayıtlı denetim yok → False)"""
     return any(check(person) for check in _membership_checks)
 
 
@@ -186,7 +189,7 @@ def _run_leave_hooks(person: Person) -> None:
 
 
 def _ensure_deletable(person: Person) -> None:
-    """Kullanıcı silmesi: açık yükümlülük ya da geçmiş üyelik varsa Türkçe ret (400)."""
+    """Kullanıcı silmesi: açık yükümlülük, silme engeli ya da birlik bağı varsa Türkçe ret (400)."""
     gerekceler = open_obligations(person)
     if gerekceler:
         raise ValidationError("Kayıt silinemez: " + " ".join(gerekceler))
@@ -202,7 +205,7 @@ def _changed_fields(instance: Any, fields: dict[str, Any]) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Ayrılış havuzu (F1 eki 7)
+# Ayrılış havuzu (tasarım §5.1 `Personnel`)
 # ---------------------------------------------------------------------------
 def in_leave_pool(person: Person) -> bool:
     """Kişi ayrılış havuzunda mı (karar bekliyor mu)?"""
@@ -327,7 +330,7 @@ def resolve_leave_pool(
 # Öğrenci
 # ---------------------------------------------------------------------------
 def ensure_student_number_free(student_number: str, *, exclude_pk: int | None = None) -> None:
-    """Okul no başka bir AKTİF canlı öğrencide mi? Kör indeksle tam eşleşme (T14).
+    """Okul no başka bir AKTİF canlı öğrencide mi? Kör indeksle tam eşleşme (§5.3).
 
     DB kısıtı (`uq_student_number_index_active_alive`) son savunma hattıdır;
     buradaki denetim çakışmayı 500 (IntegrityError) yerine Türkçe 400'e çevirir.
@@ -370,7 +373,7 @@ def update_student(student: Student, **fields: Any) -> Student:
 
 @transaction.atomic
 def leave_student(student: Student, *, log: bool = True) -> Student:
-    """Ayrılış yolu (§6.1): LEFT + `left_at`, havuzdan çıkış, kancalar. Kayıt SİLİNMEZ.
+    """Ayrılış yolu: LEFT + `left_at`, havuzdan çıkış, kancalar. Kayıt SİLİNMEZ.
 
     `log=False`: toplu çağıran (havuz kararı) kişi başına günlük satırı
     yazdırmaz; kendi sayısal özetini yazar.
@@ -398,7 +401,7 @@ def reactivate_student(student: Student) -> None:
 
 @transaction.atomic
 def delete_student(student: Student) -> None:
-    """Kullanıcı silmesi: açık yükümlülük yoksa ve hiç üye olmamışsa KATI silinir."""
+    """Kullanıcı silmesi: açık yükümlülük ve birlik bağı yoksa KATI silinir."""
     _ensure_deletable(student)
     student.hard_delete()
     logger.info("Öğrenci kaydı silindi.")
@@ -428,7 +431,7 @@ def update_personnel(person: Personnel, **fields: Any) -> Personnel:
 
 @transaction.atomic
 def leave_personnel(person: Personnel, *, log: bool = True) -> Personnel:
-    """Ayrılış yolu (§6.1): `is_active=False` + `left_at`, havuzdan çıkış, kancalar.
+    """Ayrılış yolu (tasarım §5.1): `is_active=False` + `left_at`, havuzdan çıkış, kancalar.
 
     Kayıt SİLİNMEZ. `log=False`: toplu çağıran kişi başına günlük satırı
     yazdırmaz (bkz. `leave_student`).
@@ -453,7 +456,7 @@ def reactivate_personnel(person: Personnel) -> None:
 
 @transaction.atomic
 def delete_personnel(person: Personnel) -> None:
-    """Kullanıcı silmesi: açık yükümlülük yoksa ve hiç üye olmamışsa KATI silinir."""
+    """Kullanıcı silmesi: açık yükümlülük ve birlik bağı yoksa KATI silinir."""
     _ensure_deletable(person)
     person.hard_delete()
     logger.info("Personel kaydı silindi.")
@@ -467,8 +470,8 @@ def merge_personnel(source: Personnel, target: Personnel) -> Personnel:
     listede artık bulunmayan (ayrılış havuzundaki) eski kayıt KAYNAKTIR.
     Birleştirme aktarım önizlemesinden sonra ya da ayrılış havuzundan yapılır.
     İki kayıt da canlı olmalıdır (görünüm yalnız canlı kayıtları çözer) ve aynı
-    kişi olamaz. Taşıma birleştirme kancalarıyla yapılır (F6: üyelik ve
-    ödünçler); F1'de kayıtlı kanca yoktur.
+    kişi olamaz. Taşıma birleştirme kancalarıyla yapılır (OAB modelleri F1c'den
+    itibaren kaydeder); bugün kayıtlı kanca yoktur.
     """
     if source.pk == target.pk:
         raise ValidationError(SELF_MERGE_MESSAGE)

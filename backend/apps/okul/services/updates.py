@@ -5,14 +5,14 @@ Yalnız sabit proje deposunun sürüm kayıtları okunur (kararlı kurulumda ``r
 GitHub'ın ``sha256:...`` varlık özetiyle; eski Release kayıtlarında bu alan yoksa
 aynı Release'teki ``SHA256SUMS.txt`` ile doğrulanmadan kullanıcıya verilmez.
 
-**Hedef GitHub'da kalır** (kullanıcı kararı 27.09.2026; tasarım T11, F5 ekleri 15
-kapandı): denetim `api.github.com`'a, kurulum dosyası indirmesi `github.com`'a
+**Hedef GitHub'da kalır** (aile iskeletinde kullanıcı kararı, 27.09.2026; OAB'de
+tasarım TK4): denetim `api.github.com`'a, kurulum dosyası indirmesi `github.com`'a
 gider. `indir.okulapp.org` paketlerin İNDİRME alanıdır (paketleme.yml R2
 yüklemesi); program o adrese istek ATMAZ. MEB ağında GitHub engellenebildiği için
 ulaşılamazsa ileti bunu dürüstçe söyler ve yeni sürümün `indir.okulapp.org`'dan
 elle denetlenebileceğini yazar (`ULASILAMADI_MESAJI` — yalnız metin).
 
-Çevrimdışı ilke (tasarım §1, T11) korunur: denetim yalnız kullanıcının "Şimdi
+Çevrimdışı ilke (tasarım §4.1, TK4) korunur: denetim yalnız kullanıcının "Şimdi
 denetle" düğmesiyle koşar; açılış zincirine, gün değişimi kapısına ya da arka plana
 girmez (koruma testleri: `apps/okul/tests/test_dis_istek_kapilari.py`,
 `desktop/tests/test_acilista_dis_istek.py`). Ağ yoksa Türkçe hata döner.
@@ -63,13 +63,13 @@ CACHE_SECONDS = 15 * 60
 
 #: Paketlerin elle indirildiği alan — program bu adrese istek ATMAZ, yalnız iletide anar.
 INDIRME_ALANI = "indir.okulapp.org"
-#: Denetim GitHub'a ulaşamadığında (kullanıcı kararı 27.09.2026, metin birebir).
+#: Denetim GitHub'a ulaşamadığında (aile iskeletinin 27.09.2026 kullanıcı kararı, metin birebir).
 ULASILAMADI_MESAJI = (
     "GitHub'a ulaşılamadı; okul ağında engellenmiş olabilir. Yeni sürümü "
     f"{INDIRME_ALANI}'dan elle denetleyebilirsiniz."
 )
 
-#: Sertifika doğrulanamadığında (F12 düzeltme turu): bu hata ağ engeli değildir; en sık
+#: Sertifika doğrulanamadığında (aile iskeletinden): bu hata ağ engeli değildir; en sık
 #: nedeni yanlış tarih/saat (sahada saat ileri alınmış deneme bilgisayarı) ya da güvenli
 #: bağlantıları araya girerek denetleyen bir okul ağıdır. Program doğrulamayı GEVŞETMEZ.
 SERTIFIKA_MESAJI = (
@@ -162,12 +162,12 @@ def offered(latest: str, current: str) -> bool:
     """`latest` bu kuruluma ÖNERİLİR mi?
 
     Daha yeni olmalı; ayrıca KARARLI sürüm kullanan okula ön-sürüm (beta/rc)
-    önerilmez (F12 kullanıcı kararı 3, 27.09.2026). `releases/latest` ucu
+    önerilmez (aile iskeletinde kullanıcı kararı, 27.09.2026). `releases/latest` ucu
     ön-sürümleri zaten döndürmez; bu kural liste yolunun (`_highest_listed_release`
     — GitHub'da hiç kararlı sürüm yokken) ve indirme ucunun da aynı sözü tutmasını
     sağlar. Beta kullanıcısı hem sonraki betayı hem kararlı sürümü alır: çalışan
     sürüm ön sürümse `latest_release(prereleases=True)` doğrudan listeyi okur (ilk
-    kararlı sürüm yayımlandıktan sonra da — F12 düzeltme turu).
+    kararlı sürüm yayımlandıktan sonra da).
     """
     if version_key(latest) <= version_key(current):
         return False
@@ -246,7 +246,7 @@ def _asset_from_json(value: Any) -> ReleaseAsset | None:
     if not isinstance(value, dict):
         return None
     name = str(value.get("name") or "").strip()
-    # DD'den sapma (güvenlik sertleştirmesi): ad dosya yoluna çevrildiği için
+    # Aile kalıbından sapma (güvenlik sertleştirmesi): ad dosya yoluna çevrildiği için
     # yol bileşeni taşıyan varlık reddedilir — önbellek dizini dışına yazılamaz.
     if "/" in name or "\\" in name or ".." in name:
         return None
@@ -301,7 +301,7 @@ def _decode_payload(raw: bytes) -> Any:
 def _highest_listed_release() -> ReleaseInfo:
     """Sürüm LİSTESİNDEN (son 10 yayın, taslaklar hariç) en yüksek sürümü seçer.
 
-    F9 yayın işi `-dev/-beta/-rc` etiketlerini `--prerelease` yayımlar; GitHub'ın
+    Yayın işi `-dev/-beta/-rc` etiketlerini `--prerelease` yayımlar; GitHub'ın
     `releases/latest` ucu ön-sürümleri DÖNDÜRMEZ. İki yerde koşar: (1) çalışan sürüm
     ön sürümse (beta kanalı — kararlı sürüm yayımlandıktan sonra da sonraki beta
     ancak buradan görülür) ve (2) kararlı kurulumda GitHub'da hiç kararlı sürüm

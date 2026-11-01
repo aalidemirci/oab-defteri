@@ -1,4 +1,4 @@
-"""Kör indeks eşleşmesi ve şifreli kipte selector'lar (F1 kod kapısı; tasarım §6.3, T14).
+"""Kör indeks eşleşmesi ve şifreli kipte selector'lar (plan §2.4; tasarım §5.3).
 
 Kod kapısının iki maddesi burada kanıtlanır:
 
@@ -94,7 +94,7 @@ def test_farkli_dek_ile_uretilen_indeks_eslesmez() -> None:
 
 
 def test_parola_degisimi_indeksi_bozmaz() -> None:
-    """Anahtar DEK'ten türer; parola değişimi yalnız sarmalı yeniler (§6.3)."""
+    """Anahtar DEK'ten türer; parola değişimi yalnız sarmalı yeniler (§4.4.4)."""
     ogrenci = _ogrenci(student_number="321")
 
     app_password.change_password(current_password=TEST_PAROLA, new_password="Yeni-Parola-99")

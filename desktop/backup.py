@@ -6,10 +6,10 @@ bir yedek üretir. `Connection.backup()` ise SQLite'ın kendi çevrimiçi yedek 
 kullanır: kaynak veritabanını sayfa sayfa RAM'e okur, WAL dahil tutarlı bir görüntü
 çıkarır.
 
-**Yedek YALNIZ şifreli yazılır** (tasarım §6.3-6; KS'nin "parolasız kipte düz
-`.odbak`" dalı F1'de söküldü). Görüntü, yedek açık anahtarıyla (`yedekleme.json`)
-X25519 + AES-256-GCM kapsayıcısına mühürlenir ve başlığına o anki
-`guvenlik.json` (kurtarma başlığı) gömülür. Yedek ATLANIR (uyarı loglanır,
+**Yedek YALNIZ şifreli yazılır** (tasarım §4.4.7; ailenin eski "parolasız kipte
+düz `.odbak`" dalı aile iskeletinde söküldü, tasarım §13 D29). Görüntü, yedek açık
+anahtarıyla (`yedekleme.json`) X25519 + AES-256-GCM kapsayıcısına mühürlenir ve
+başlığına o anki `guvenlik.json` (kurtarma başlığı) gömülür. Yedek ATLANIR (uyarı loglanır,
 düz kopya asla yazılmaz):
 
 * `yedekleme.json` yoksa: yönetici parolası henüz kurulmamıştır (ilk açılış).
@@ -18,7 +18,7 @@ düz kopya asla yazılmaz):
 * `yedekleme.json` bozuksa: kilit bir kez açıldığında `ensure_public_config`
   dosyayı onarır.
 * Kurtarma başlığı kullanılamıyorsa (`guvenlik.json` kayıp, okunamıyor, boş ya
-  da biçimsiz — GA-2): böyle bir başlıkla alınan yedek ancak kaybolan dosyayla
+  da biçimsiz — tasarım §4.3 tehdit 8): böyle bir başlıkla alınan yedek ancak kaybolan dosyayla
   açılabilirdi; üretmek yerine atlanır. "Kullanılabilir" kuralı tektir ve
   `backup_crypto.is_usable_security_state`'tedir (kayıp kilidi ve geri yükleme
   de onu kullanır). Yalnız dosyanın VARLIĞINA bakmak yetmez: içi boşaltılmış
@@ -30,8 +30,9 @@ düz kopya asla yazılmaz):
 Yedek adları tarihlidir ve deterministiktir: aynı gün ikinci kez açılan program o
 günün yedeğini yeniden ÜRETMEZ (sabah alınan yedek, akşam bozulan veriyle ezilmez).
 
-**Saklama tetiği** (tasarım §6.4, EK-18, V2-02; F11): onaylı anonimleştirme
-tetiğinden hemen ÖNCE `pre-anonim-<tarih>-<saat>.odbak` alınır (`pre_anonim_backup`;
+**Saklama tetiği** (aile iskeletinden; OAB'de tasarım §4.4.7 `pre-anonim`, §5.4):
+onaylı anonimleştirme tetiğinden hemen ÖNCE `pre-anonim-<tarih>-<saat>.odbak`
+alınır (`pre_anonim_backup`;
 aynı gün ikinci tetik ayrı dosya alır, sabahki yedeğin yerine geçmez). Bu yedek
 rotasyona girer ve günlük yedekler gibi **14 gün** tutulur (`rotate_backups`).
 Tetik, tetik anından eski `pre-migrate` yedeklerini de siler
@@ -61,7 +62,7 @@ from desktop.backup_crypto import (
 
 DAILY_PREFIX = "gunluk"
 PRE_MIGRATE_PREFIX = "pre-migrate"
-#: Onaylı saklama tetiğinden önceki yedek (§6.4; rotasyonda 14 gün).
+#: Onaylı saklama tetiğinden önceki yedek (§4.4.7; rotasyonda 14 gün).
 PRE_ANONIM_PREFIX = "pre-anonim"
 
 DEFAULT_KEEP_DAYS = 14
@@ -75,7 +76,7 @@ logger = logging.getLogger("oab_defteri.backup")
 
 # CPython `Connection.serialize`i ancak SQLite ≥3.36 (SQLITE_ENABLE_DESERIALIZE)
 # ile derlendiyse sunar; Pardus 21/bullseye tabanının libsqlite3'ü 3.34'tür ve
-# yöntem HİÇ yoktur — KS F9 paket `--autotest`i bullseye kabında bununla çöktü
+# yöntem HİÇ yoktur — aile iskeletinin paketli `--autotest`i bullseye kabında bununla çöktü
 # (eski kod parolasız kipte yedeği atladığı için tuzak hiç tetiklenmemişti).
 _HAS_SERIALIZE = hasattr(sqlite3.Connection, "serialize")
 
@@ -195,12 +196,12 @@ def pre_anonim_backup(
     data_dir: Path | None = None,
     now: datetime | None = None,
 ) -> Path | None:
-    """Onaylı saklama tetiğinden ÖNCE şifreli yedek alır (§6.4, EK-18); alınamazsa `None`.
+    """Onaylı saklama tetiğinden ÖNCE şifreli yedek alır (§4.4.7, §5.4); alınamazsa `None`.
 
     Ad `pre-anonim-<YYYY-MM-DD>-<HHMMSS>.odbak`: tarih rotasyonun okuduğu kısımdır,
     saat aynı gün ikinci tetiğin ayrı yedek almasını sağlar. Aynı saniyede dosya
     varsa üzerine yazılmaz (sonek eklenir). Yedek alınamazsa tetik ÇALIŞMAZ —
-    çağıranın kuralıdır (`apps.kutuphane.services.saklama`).
+    çağıranın kuralıdır (OAB'de saklama tetiği henüz yok; tasarım §5.4).
     """
     if not db_path.exists():
         return None
@@ -254,8 +255,8 @@ def remove_pre_migrate_named(backup_dir: Path, names: list[str]) -> tuple[list[P
     Saklama tetiği silinecekleri tetik anında ADIYLA belirler; silinemeyenleri
     (`RetentionRun.pre_migrate_pending`) gün değişimi kapısı yine ADIYLA yeniden dener.
     Yeniden deneme dosya zamanına bakmaz: sistem saati sonradan geri kayarsa tetikten
-    SONRA alınmış bir güncelleme yedeği "tetikten eski" görünür ve silinirdi (F11
-    düzeltme turu). Klasörde olmayan ad silinmiş sayılmaz ama beklemede de kalmaz;
+    SONRA alınmış bir güncelleme yedeği "tetikten eski" görünür ve silinirdi (aile
+    iskeletinin düzeltmesi). Klasörde olmayan ad silinmiş sayılmaz ama beklemede de kalmaz;
     `pre-migrate-*.odbak` biçiminde olmayan ada dokunulmaz.
     """
     removed: list[Path] = []
@@ -281,7 +282,7 @@ def remove_pre_migrate_named(backup_dir: Path, names: list[str]) -> tuple[list[P
 def remove_pre_migrate_before(backup_dir: Path, moment: datetime) -> list[Path]:
     """`moment`'ten ÖNCE yazılmış güncelleme öncesi yedekleri siler; sildiklerini döndürür.
 
-    Onaylı saklama tetiği (§6.4 "Yedeklerdeki kalıntı") o yedekleri siler: onlar
+    Onaylı saklama tetiği (§4.4.7, §5.4) o yedekleri siler: onlar
     anonimleştirilen bağları "son 5 güncellemeye kadar" taşırdı. Tetik silinemeyen
     adları da tutmak için iki adımı (`pre_migrate_before` + `remove_pre_migrate_named`)
     ayrı çağırır; bu kısayol ikisini birleştirir.
@@ -301,7 +302,7 @@ def rotate_backups(
 ) -> list[Path]:
     """Eskimiş yedekleri siler; sildiklerini döndürür.
 
-    Günlük yedekler ve saklama tetiği öncesi (`pre-anonim`, §6.4) yedekler GÜN
+    Günlük yedekler ve saklama tetiği öncesi (`pre-anonim`, §4.4.7) yedekler GÜN
     (varsayılan 14), güncelleme öncesi yedekler ADET (varsayılan son 5) ile
     sınırlanır — ikincisi haftalar sonra fark edilen bir yükseltme sorununda hâlâ
     elde olmalıdır. Program dışı/elle konmuş dosyalara (adı desenlerimize uymayan

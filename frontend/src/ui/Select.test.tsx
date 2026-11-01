@@ -8,8 +8,8 @@ import { describe, expect, it, vi } from "vitest";
 import Select from "./Select";
 
 const DURUMLAR = [
-  { value: "AVAILABLE", label: "Rafta" },
-  { value: "ON_LOAN", label: "Ödünçte" },
+  { value: "KIRA", label: "Kiraya veriliyor" },
+  { value: "BIRLIK", label: "Birlikçe işletiliyor" },
 ];
 
 describe("Select", () => {
@@ -17,10 +17,10 @@ describe("Select", () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
-      <Select label="Nüsha durumu" options={DURUMLAR} value="AVAILABLE" onChange={onChange} />,
+      <Select label="Kantin işletme modu" options={DURUMLAR} value="KIRA" onChange={onChange} />,
     );
 
-    await user.selectOptions(screen.getByLabelText("Nüsha durumu"), "ON_LOAN");
+    await user.selectOptions(screen.getByLabelText("Kantin işletme modu"), "BIRLIK");
 
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(screen.getAllByRole("option")).toHaveLength(2);
@@ -35,7 +35,7 @@ describe("Select", () => {
     expect(secenekler[0]).toHaveTextContent("Seçin");
     expect(secenekler[0].value).toBe("");
 
-    rerender(<Select label="Durum" options={DURUMLAR} defaultValue="AVAILABLE" />);
+    rerender(<Select label="Durum" options={DURUMLAR} defaultValue="KIRA" />);
     expect(screen.getAllByRole("option")).toHaveLength(2);
   });
 

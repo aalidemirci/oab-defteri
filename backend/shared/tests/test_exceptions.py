@@ -1,6 +1,6 @@
-"""`{code, message, fields}` hata sözleşmesi testleri (tasarım §11 — FE api.ts eşi).
+"""`{code, message, fields}` hata sözleşmesi testleri (aile iskeletinden — FE api.ts eşi).
 
-Sözleşme OYS/DD'den AYNEN devralındı; burada SABİTLENİR. FE `lib/api.ts`
+Sözleşme aileden AYNEN devralındı; burada SABİTLENİR. FE `lib/api.ts`
 `ApiError`'ı bu üç alandan kurar — alan adları değişirse arayüz hata
 gösterimleri sessizce bozulur.
 """
@@ -84,7 +84,7 @@ def test_cevrilmemis_django_dogrulama_hatasi_400_olur() -> None:
 
 
 def test_anahtar_eksik_hatasi_409_parola_gerekli_olur() -> None:
-    """Fail-closed (§6.3-2/3): izin sınıfı unutulsa bile anahtarsız kişi yazımı 409'dur.
+    """Fail-closed (tasarım §5.3): izin sınıfı unutulsa bile anahtarsız kişi yazımı 409'dur.
     İç ayrıntı (hatanın kendi metni) yankılanmaz; sözleşme metni gider."""
     yanit = od_exception_handler(KeyMissingError("iç ayrıntı"), _ctx())
 

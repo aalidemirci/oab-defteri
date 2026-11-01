@@ -1,4 +1,4 @@
-"""İndirilebilir içe aktarma şablonları (tasarım §4.7/2) — gidiş-dönüş sözleşmesi.
+"""İndirilebilir içe aktarma şablonları (tasarım §8.4) — gidiş-dönüş sözleşmesi.
 
 Şablonun var olma nedeni TEKTİR: idareci doldurur ve AYNI içe aktarma ucuna
 yükler; "ayrı bir şablon kod yolu" YOKTUR. Bu yüzden asıl sabitlenen davranış
@@ -133,7 +133,7 @@ def test_sablon_indirme_ucu_excel_eki_dondurur(
 
 
 def test_personel_sablonunda_unvan_ve_brans_sutunu_yoktur() -> None:
-    """V2-01: şablon unvan/branş istemez; "Üye Türü" yalnız öğretmen / diğer personel."""
+    """Tasarım §8.4: şablon unvan/branş istemez; "Üye Türü" yalnız öğretmen / diğer personel."""
     basliklar = [
         excel_ogrenci.normalize_header(b) for b in template_service.PERSONNEL_TEMPLATE_HEADERS
     ]

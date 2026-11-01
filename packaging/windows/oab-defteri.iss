@@ -1,7 +1,9 @@
 ; =============================================================================
 ;  oab-defteri.iss — Inno Setup kurulum betiği (Windows)
 ; =============================================================================
-;  BU DOSYA BU ORTAMDA DOĞRULANMADI — ilk Windows koşusunda sınanacak.
+;  ISCC derlemesi CI'da her PR'da koşar (paketleme.yml; OAB Defteri adıyla F1a'da
+;  yeşil, plan §2.1). Kurucunun iki kipi ve kapatma yolu elle doğrulanır
+;  (packaging/windows/NOTLAR.md çek-listesi).
 ;
 ;  Kurulum yetkisi (tasarım §2.2 TK7, §15 M-1):
 ;   * PrivilegesRequired=lowest + PrivilegesRequiredOverridesAllowed=dialog →
@@ -16,7 +18,7 @@
 ;   * WebView2 Runtime yoksa gömülü Evergreen kurucusu sessizce çalıştırılır.
 ;   * Kullanıcı verisi kurulum dizininde DEĞİLDİR; kaldırma veriyi silmez.
 ;   * Lisans sayfası LICENSE.txt'dir (PolyForm Noncommercial); üçüncü taraf
-;     lisansları {app}\THIRD_PARTY_LICENSES\ altına kurulur (F12, TB28).
+;     lisansları {app}\THIRD_PARTY_LICENSES\ altına kurulur (tasarım §11.4).
 ;   * Kurucu ve kaldırıcı açık programı `OABDefteri.Kapat` adlı olayıyla DÜZENLİ
 ;     kapatır ve iki mutex'in kaybolmasını bekler (tasarım §4.2; aşağıdaki
 ;     [Code]). Inno `AppMutex` KULLANILMAZ.
@@ -50,7 +52,7 @@
 #define AppIconSource "..\ikonlar\oab-defteri.ico"
 #define InstalledIconName "oab-defteri-" + AppVersion + ".ico"
 #define WebView2Setup "MicrosoftEdgeWebView2Setup.exe"
-; Lisanslar (F12, TB28): build.ps1 PyInstaller çıktısının KÖKÜNE LICENSE.txt'yi
+; Lisanslar (tasarım §11.4): build.ps1 PyInstaller çıktısının KÖKÜNE LICENSE.txt'yi
 ; (PolyForm Noncommercial, UTF-8 BOM'lu — Inno BOM'suz metni ANSI okur) ve
 ; THIRD_PARTY_LICENSES\ dizinini koyar (packaging/lisanslar/lisanslar.py paket).
 ; İkisi `{#SourceDir}\*` ile {app}'e kurulur. Biri eksikse kurucu DERLENMEZ:
@@ -97,7 +99,7 @@ UninstallDisplayName={#AppName}
 ; Kurulum sihirbazının lisans sayfası: programın kendi lisansı. Üçüncü taraf
 ; lisansları {app}\THIRD_PARTY_LICENSES\ altına kurulur (BENIOKU.txt).
 LicenseFile={#LisansDosyasi}
-; `AppMutex` bilerek YOK (tasarım §2.3, §4.2-5, denetim GA-15): Inno onu hem
+; `AppMutex` bilerek YOK (tasarım §2.3, §4.2 "Kurucu ve kaldırıcı"): Inno onu hem
 ; kurucuda hem kaldırıcıda denetler; kaldırıcı kapatma olayını gönderecek aşamaya
 ; gelmeden "programı kapatın" iletisinde beklerdi. Program çalışırken yükseltme
 ; yapılmaması güvencesi `[Code]` içindeki `ProgramiKapat`tadır.
@@ -153,7 +155,7 @@ turkish.FinishedLabel=Kurulum tamamlandı.%n%nVerileriniz (birlik kayıtları ve
 [Code]
 const
   WebView2ClientId = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
-  // Kapatma yolu (tasarım §4.2-5). Adlar programla BİREBİR aynı olmak zorunda:
+  // Kapatma yolu (tasarım §4.2 "Kurucu ve kaldırıcı"). Adlar programla BİREBİR aynı olmak zorunda:
   // desktop/instance_channel.py::QUIT_EVENT_NAME ve desktop/lock.py::APP_MUTEX_NAMES
   // (eşitliği desktop/tests/test_lock.py ve test_instance_channel.py denetler).
   KapatOlayi = 'OABDefteri.Kapat';

@@ -1,6 +1,6 @@
-// Kurulum kapısı (DD kalıbı) — programın İLK açılışında kullanıcıyı kurulum
+// Kurulum kapısı (aile iskeletinin kalıbı) — programın İLK açılışında kullanıcıyı kurulum
 // sihirbazına kilitler. Kapıyı açan koşul kurulumun tamamlanmış olması VE yönetici
-// parolasının kurulu olmasıdır (tasarım §6.3-1: parola sihirbazın atlanamaz ilk
+// parolasının kurulu olmasıdır (tasarım §4.4.5: parola sihirbazın atlanamaz ilk
 // adımıdır, isteğe bağlı değildir). Parola yoksa — kurulum eskiden tamamlanmış
 // bir veritabanında bile — kullanıcı sihirbaza, ilk eksik adım olan parola
 // adımına gider. Okul künyesi girilmeden resmî evrak antedi boş çıkar, aktif

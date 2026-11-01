@@ -1,4 +1,4 @@
-// Çık düğmesi ve diyaloğu — üst çubukta her durumda görünür (tasarım §4.2-4, TB13).
+// Çık düğmesi ve diyaloğu — üst çubukta her durumda görünür (tasarım §4.2, §4.5).
 //
 // * Yönetici kipi, kilitli, kurulum: "Programdan çıkılsın mı?" onayı, parolasız.
 // * Görevli kipi: yönetici parolası sorulur (kaza önleyicidir, güvenlik sınırı

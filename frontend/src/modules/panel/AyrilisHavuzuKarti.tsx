@@ -1,4 +1,4 @@
-// Genel Bakış'ta "Ayrılış Havuzu" kartı (F1 eki 7; tasarım §8.3). e-Okul aktarımı
+// Genel Bakış'ta "Ayrılış Havuzu" kartı (genel tasarım §5.1, §8.4). e-Okul aktarımı
 // kimseyi ayırmaz: listede bulunmayan kişiler Kişiler → Ayrılış Havuzu'nda karar
 // bekler. Havuz boş değilse kart "N kişi ayrılış kararı bekliyor" der ve havuza
 // bağlanır; boşsa ya da sayı okunamazsa hiçbir şey göstermez.

@@ -1,6 +1,6 @@
-"""Ayrılış havuzu uçları (F1 eki 7; tasarım §6.1, §8.3) — İNCE görünümler.
+"""Ayrılış havuzu uçları (tasarım §5.1 `Personnel`, §13 D30) — İNCE görünümler.
 
-Kullanıcı kararı (22.09.2026): e-Okul aktarımı kimseyi ayırmaz ve silmez;
+Aile iskeletinin kullanıcı kararı (22.09.2026): e-Okul aktarımı kimseyi ayırmaz ve silmez;
 listede bulunmayan aktif kişi ayrılış havuzuna girer, karar burada verilir.
 
 - `GET leave-pool/` — havuzdaki öğrenciler ve personel AYRI listeler, TR

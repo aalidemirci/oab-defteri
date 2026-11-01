@@ -1,21 +1,21 @@
 /* =========================================================================
-   OYS BASKI TASARIM DİLİ — "Kurumsal Sade" (Tur 238, talep 4)
+   OAB DEFTERİ BASKI TASARIM DİLİ — "Kurumsal Sade" (aile iskeletinden)
    Tek doğruluk kaynağı: PDF/baskı çıktılarının renk + tipografi token'ları.
-   Köken: documents/base.html (Tur 98-99) slate paleti — resmî evrakta yıllarca
-   rafine edilen dil tüm belge ailelerine standartlaştırıldı.
+   Köken: aile iskeletindeki documents/base.html slate paleti; bütün belge
+   aileleri aynı dili kullanır.
 
    Kullanım: base şablonun <style> bloğu başında Django include etiketi ile
    ("print/_design.css") gömülür; bileşen sınıfları değerleri var(--pr-*) ile
    tüketir. DİKKAT: bu dosya şablon olarak render edilir — içine Django etiketi
-   yazılamaz (kendini include eden yorum bile sonsuz döngü yapar; Tur 238 dersi).
+   yazılamaz (kendini include eden yorum bile sonsuz döngü yapar; ailenin dersi).
 
    KURALLAR (bağlayıcı):
    - text-transform KULLANILMAZ (WeasyPrint Türkçe i→I tuzağı) — büyük harf
      doğrudan yazılır.
    - Renkli dolgu yok; palet nötr slate gri (ofis yazıcısı dostu).
    - Yazı tipi DejaVu Sans (tam Türkçe kapsama).
-   - M3 token'larından bağımsızdır (kurumsal kâğıt düzeni — CLAUDE.md §7.5 notu).
-   Belge: docs/rapor-tasarim-standardi.md
+   - Ekran temasının token'larından bağımsızdır (kurumsal kâğıt düzeni).
+   Belge: docs/tasarim/2026-10-31-genel-tasarim.md §9.1 (evrak ilkeleri)
    ========================================================================= */
 :root {
   /* Renk rolleri (slate skalası) */

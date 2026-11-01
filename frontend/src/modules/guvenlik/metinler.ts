@@ -1,9 +1,9 @@
-// Güvenlik arayüzünün DÜRÜST metinleri — tek kaynak (tasarım §4.3, §6.3).
+// Güvenlik arayüzünün DÜRÜST metinleri — tek kaynak (tasarım §4.3, §4.4.6).
 // Kural: bu program "veritabanını şifreliyorum" DEMEZ. Şifrelenen şey belirli
 // kişisel veri alanlarıdır; anahtar da aynı bilgisayarda durur. Kullanıcıya
 // olduğundan güçlü bir koruma vadetmek, gerçek önlemi (tam disk şifreleme)
 // almasını engellerdi. Sözlük: "yönetici parolası", "kurtarma anahtarı"
-// (docs/sozluk.md — "şifre", "uygulama parolası" kullanılmaz).
+// (docs/sozluk.md §1 — "şifre", "uygulama parolası" kullanılmaz).
 
 /** Ayarlar ve kilit ekranında gösterilen kapsam açıklaması. */
 export const KAPSAM_METNI =
@@ -38,12 +38,20 @@ export function dogrulamaMetni(birinci: number, ikinci: number): string {
   );
 }
 
-/** Parola kurma açıklaması (yalnız ilk kurulumda, sihirbazın ilk adımı; kaldırılamaz). */
+/**
+ * Parola kurma açıklaması (yalnız ilk kurulumda, sihirbazın ilk adımı; kaldırılamaz).
+ * Parola paylaşılmaz (MEB Bilgi ve Sistem Güvenliği Yönergesi md. 7/2, programa kıyasen —
+ * tasarım TK9; kullanıcı kararı T1): parolayı bilen ayrılır ya da unutursa yol kurtarma
+ * anahtarıdır, anahtar okul müdürlüğünde kapalı zarfta durur (kullanıcı kararı D3;
+ * tasarım §4.4.3).
+ */
 export const KURMA_UYARISI =
   "Yönetici parolası zorunludur: parola kurulmadan öğrenci, öğretmen ve diğer " +
-  "personel kaydı yapılamaz. Kurulduktan sonra kaldırılamaz, yalnız değiştirilebilir. Parolayı en " +
-  "az iki görevlendirilmiş kişi bilsin; kütüphane görevlileri görevli kipinde çalışır " +
-  "ve parolayı bilmez.";
+  "personel kaydı yapılamaz. Kurulduktan sonra kaldırılamaz, yalnız değiştirilebilir. " +
+  "Parolayı kimseyle paylaşmayın; parolayı bilmeyenler programı görevli kipinde kullanır. " +
+  "Parolayı bilen kişi görevden ayrılırsa ya da parolayı unutursa kayıtlar kurtarma " +
+  "anahtarıyla açılır ve yeni parola belirlenir; bu yüzden anahtar okul müdürlüğünde " +
+  "kapalı zarfta saklanır.";
 
 /** Kurtarma anahtarı çıktısını yeniden alma kartı (Ayarlar → Güvenlik). */
 export const CIKTI_YENIDEN_METNI =
@@ -70,7 +78,7 @@ export const YENILEME_METNI =
   "kez gösterilir; saklayıp doğrulamadan programı kapatmayın. Yönetici parolası değişmez, " +
   "kayıtlar yeniden şifrelenmez.";
 
-/** Yenileme onay diyaloğu: sonuç (başlık soru, gövde sonuç — sözlük §3). */
+/** Yenileme onay diyaloğu: sonuç (başlık soru, gövde sonuç — docs/sozluk.md §3). */
 export const YENILEME_SONUCU_METNI =
   "Yeni bir kurtarma anahtarı üretilir ve bir kez gösterilir. Bu bilgisayarın güvenlik " +
   "dosyasında kilidi bundan sonra yeni anahtar açar; zarftaki eski anahtar eski yedeklerle " +

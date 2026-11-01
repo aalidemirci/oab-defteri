@@ -1,32 +1,31 @@
 """`okul` modelleri — kurum künyesi, ders yılı/dönemler, kapalı günler, kişi sicilleri, şube kataloğu, içe aktarma.
 
-Aile iskeletinden alındı (KS bunu DD'nin `apps/okul/models.py` kalıbından türetmişti;
-Kütüphane iskeleti kendi tasarımının §6.1 ve §12'sine göre sadeleştirdi). OAB'deki
-yeri ve değişecek alanları OAB tasarımının §12.B'sindedir (öğrenci ve kütüphane
-alanları F1b'de düşer):
+Aile iskeletinden alındı (iskelet bunu atalarının `apps/okul/models.py`
+kalıbından türetip sadeleştirmişti). OAB'deki yeri ve değişecek alanları OAB
+tasarımının §5.1 ve §12.B'sindedir (öğrenci ve kütüphane alanları F1b'de düşer):
 
 - `Student`: yalnız ad-soyad + okul no + sınıf/şube + durum + ayrılış tarihi.
-  TCKN, veli ve cinsiyet alanları YOKTUR (tasarım §6.1 — en iyi KVKK önlemi
-  veriyi hiç edinmemek). Ad-soyad VE okul no `EncryptedCharField`'dır (U9);
-  okul no'nun eşleştirmesi ve tekliği kör indeksledir (T14), ad temelli arama
+  TCKN, veli ve cinsiyet alanları YOKTUR (en iyi KVKK önlemi veriyi hiç
+  edinmemek). Ad-soyad VE okul no `EncryptedCharField`'dır (tasarım §5.3);
+  okul no'nun eşleştirmesi ve tekliği kör indeksledir, ad temelli arama
   ve bütün sıralamalar Python katmanındadır (selectors).
-- `Personnel`: DD kalıbı + `is_active` + şifreli ad-soyad + `member_kind` +
-  ayrılış tarihi. Unvan ve branş YOKTUR (V2-01: branş, küçük okulda öğretmeni
-  kişiye bağlar).
-- AYRILIŞ HAVUZU (F1 eki 7, kullanıcı kararı 22.09.2026): `Student` ve
+- `Personnel`: aile kalıbı + `is_active` + şifreli ad-soyad + `member_kind` +
+  ayrılış tarihi. Unvan ve branş YOKTUR (tasarım §8.4; branş, küçük okulda
+  öğretmeni kişiye bağlar).
+- AYRILIŞ HAVUZU (aile iskeletinin kararı; OAB'de tasarım §5.1 `Personnel`): `Student` ve
   `Personnel` `leave_candidate_since` + `leave_candidate_run` taşır. e-Okul
   aktarımında listede bulunmayan AKTİF kişi havuza girer, durumu aktif kalır;
   karar yöneticinindir (`services.persons`). Havuzdaki kişi DB kısıtıyla
   aktiftir: ayrılış havuz alanlarını aynı kayıtta temizler.
 - `ClassSection`: şube kataloğu — ders yılı içinde görülen (seviye, şube)
   çiftleri; içe aktarma sonrası tohumlanır.
-- `Holiday`: DD'nin tatil tablosu, UYARLANARAK — + `SCHOOL_BREAK` türü
-  ("öğrenciye kapalı gün"); iade tarihi kaydırmasının veri kaynağıdır
-  (`shared.working_days`, tasarım §9-5).
+- `Holiday`: aile iskeletinden AYNEN (tasarım §5.1) — `SCHOOL_BREAK` türüyle
+  ("öğrenciye kapalı gün"); kapalı gün aritmetiğinin veri kaynağıdır
+  (`shared.working_days`; OAB'de iş günü hesabı, tasarım §5.1).
 - Sınıf seviyeleri OKUL İÇİ SABİTTİR (`normalize.GRADE_LEVELS`, 1-12); hazırlık
-  sınıfı KS'deki gibi 0 koduyla temsil edilir ve `SchoolConfig.has_prep_class`
+  sınıfı aile iskeletindeki gibi 0 koduyla temsil edilir ve `SchoolConfig.has_prep_class`
   açıkken geçerli kümeye girer.
-- Koşullu UniqueConstraint'ler SQLite partial index ile çalışır (DD'de kanıtlı).
+- Koşullu UniqueConstraint'ler SQLite partial index ile çalışır (ailede kanıtlı).
 """
 
 from __future__ import annotations
@@ -54,11 +53,12 @@ def _class_label(class_level: int, class_section: str) -> str:
 
 
 class SchoolLevel(models.TextChoices):
-    """Okulun kademesi (tasarım §3 "Okul türü", §6.1 `SchoolConfig.kademe`).
+    """Okulun kademesi (tasarım §3.5, §5.1 `levels`).
 
-    Md. 19 kayıp bedeli yalnız ortaöğretimde uygulanır; ilkokulda sınıf
-    kitaplığı zorunludur (Md. 4/1-i, 5/1). Bu kurallar F6/F7'de buna bağlanır.
-    F1'de kademe sınıf seviyelerini KISITLAMAZ (1-12 okul içi sabit kalır).
+    OAB'de kademe kural paketinin koşuluna ve temsilci kurullarına girer
+    (tasarım §5.1); çok değerli `levels` alanına dönüşmesi F1b'nin okul kartı
+    adımındadır (plan §2.2 adım 4). Bugün kademe sınıf seviyelerini KISITLAMAZ
+    (1-12 okul içi sabit kalır).
     """
 
     ILKOKUL = "ILKOKUL", "İlkokul"
@@ -72,14 +72,15 @@ class SchoolConfig(BaseModel):
     Kurulum sihirbazı doldurur; evrak antedi (okul adı/ilçe/müdür) buradan
     çözülür. `setup_completed` sihirbaz kapısıdır.
 
-    `app_password_hash` (DD F5-D5 kalıbı, tasarım §5): adı tarihsel — içeriği
+    `app_password_hash` (aile kalıbı; tasarım §4.4.4): adı tarihsel — içeriği
     parolanın özeti DEĞİLDİR; veri anahtarının (DEK) tek yönlü parmak izini
     tutar (`shared.crypto.key_fingerprint`). Parola/tuz/sarmal `guvenlik.json`
     dosyasındadır; DB ile güvenlik dosyasının eşleşmesi bu damgayla denetlenir
     ve alan şifreleme geçişi bu alanla AYNI işlemde damgalanır.
 
-    F1 sihirbaz alanları (tasarım §3, §6.1, §14.1): `kademe`, `kisa_ad`
-    (etiket ve kartlarda basılan kısa ad), `demirbas_onayi` + `demirbas_no`
+    Sihirbaz alanları (aile iskeletinden; OAB'deki karşılıkları tasarım §5.1):
+    `kademe`, `kisa_ad` (aile iskeletinde etiket ve kartlara basılırdı; OAB'deki
+    yeri okul kartı adımında belirlenir), `demirbas_onayi` + `demirbas_no`
     (Bilgi ve Sistem Güvenliği Yönergesi 11/8, 11/23: program yalnız kurum
     demirbaşı bilgisayara kurulur). Hiçbiri kişisel veri değildir, şifrelenmez.
 
@@ -220,16 +221,16 @@ class SchoolTerm(BaseModel):
 
 
 class HolidayKind(models.TextChoices):
-    """Kapalı gün türü — DD `HolidayKind` + `SCHOOL_BREAK` (tasarım §6.1, §9-5).
+    """Kapalı gün türü — ailenin `HolidayKind`'ı + `SCHOOL_BREAK` (tasarım §5.1 `Holiday`).
 
-    İade tarihi kaydırmasında türler İKİ ayrı kurala ayrılır; dayanakları farklıdır
+    Kapalı gün aritmetiğinde türler İKİ ayrı kurala ayrılır; dayanakları farklıdır
     (`shared.working_days` modül yorumu):
 
     - `OFFICIAL`, `RELIGIOUS`, `OTHER` her zaman kapalıdır (hafta sonu gibi).
-    - `SCHOOL_BREAK` ("öğrenciye kapalı gün": ara tatil, yarıyıl) kanunen tatil
-      DEĞİLDİR, mesai sürer; bu günlerde kaydırma okulun tercihidir ve ayarla
-      kapanır. DD bu günleri Holiday'e hiç almıyordu (disiplin süreleri işler);
-      kütüphanede öğrenci okulda olmadığı için ayrı türle tutulur (UY-13, SU-6).
+    - `SCHOOL_BREAK` ("öğrenciye kapalı gün": ara tatil, yarıyıl) hesaba girip
+      girmeyeceğini çağıran seçer
+      (`include_school_breaks`). Ayrı türle tutulur ki yarıyıl tatili resmî
+      tatilden ayrılabilsin (tasarım §5.1: `SCHOOL_BREAK` yarıyıl tatilini tanır).
     """
 
     OFFICIAL = "OFFICIAL", "Resmî tatil"
@@ -239,9 +240,9 @@ class HolidayKind(models.TextChoices):
 
 
 class Holiday(BaseModel):
-    """Kapalı gün aralığı (DD `Holiday` — UYARLA; tasarım §6.1).
+    """Kapalı gün aralığı (aile iskeletinden AYNEN; tasarım §5.1).
 
-    Ders yılına BAĞLANMAZ (DD kalıbı): kapalı gün sorusu tarih kapsamasıyla
+    Ders yılına BAĞLANMAZ (aile kalıbı): kapalı gün sorusu tarih kapsamasıyla
     cevaplanır. Tek günlük kayıtta başlangıç ve bitiş aynı gündür.
 
     `is_estimated`: hicri takvime bağlı dini bayramlar Diyanet takvimi
@@ -290,10 +291,10 @@ class Holiday(BaseModel):
 class MemberKind(models.TextChoices):
     """Personelin üye türü (sözlük: "öğretmen" / "diğer personel").
 
-    Md. 18 sayı sınırı (öğretmen 5) ve diğer personele ödünç kararı (F6) buna
-    bağlanır. Şifrelenmez (tasarım §6.3 "açık kalanlar"). Unvanın yerini
-    ALMAZ: e-Okul'daki görev metni yalnız bu iki değerden birini seçmek için
-    aktarım sırasında geçici okunur, saklanmaz (C sözleşmesi, F1 eki).
+    OAB'de personelin türünü ayırır; tasarımda değer kümesi "öğretmen, yönetici,
+    diğer" olur (tasarım §5.1; e-Okul aktarımıyla F1b'de). Şifrelenmez (tasarım
+    §5.3). Unvanın yerini ALMAZ: e-Okul'daki görev metni yalnız bu değerlerden
+    birini seçmek için aktarım sırasında geçici okunur, saklanmaz (tasarım §8.4).
     """
 
     TEACHER = "TEACHER", "öğretmen"
@@ -301,14 +302,14 @@ class MemberKind(models.TextChoices):
 
 
 class Personnel(BaseModel):
-    """Okul personeli — login'siz sicil kaydı (tasarım §6.1).
+    """Okul personeli — login'siz sicil kaydı (tasarım §5.1).
 
     Ayrılışta `is_active=False` + `left_at` yazılır (`services.persons`
-    ayrılış yolu); kayıt SİLİNMEZ (F1 eki 7), saklama taraması (§6.4, F11)
-    aday gösterir. e-Okul listesinde bulunmayan aktif kişi önce ayrılış
-    havuzuna girer (`leave_candidate_since`). Ad-soyad ŞİFRELİDİR (U3) — ada
+    ayrılış yolu); kayıt SİLİNMEZ. Bağsız ayrılan personelin silinmesi dönem
+    kapanışının işidir (tasarım §5.4). e-Okul listesinde bulunmayan aktif kişi
+    önce ayrılış havuzuna girer (`leave_candidate_since`). Ad-soyad ŞİFRELİDİR (§5.3) — ada
     dayalı arama, sıralama ve eşleştirme Python katmanında yapılır. Unvan ve
-    branş YOKTUR (V2-01).
+    branş YOKTUR (§8.4).
     """
 
     first_name = EncryptedCharField("ad", max_length=100)
@@ -354,7 +355,7 @@ class Personnel(BaseModel):
         return f"{self.first_name} {self.last_name}".strip()
 
     def get_full_name(self) -> str:
-        """OYS `User.get_full_name` paritesi — evrak şablonları bu adı çağırır."""
+        """Aile kalıbındaki `get_full_name` eşi — evrak şablonları bu adı çağırır."""
         return self.full_name
 
 
@@ -406,7 +407,7 @@ class StudentStatus(models.TextChoices):
 
 
 def student_number_blind_index(student_number: str) -> str:
-    """Okul numarasının kör indeksi (tasarım §6.3, T14); boş numara → ''.
+    """Okul numarasının kör indeksi (tasarım §5.3); boş numara → ''.
 
     Yazmada (`Student.save`) ve aramada (`selectors`) AYNI yol kullanılır:
     `normalize_student_number` ('0123' ≡ '123') + `crypto.blind_index`.
@@ -416,12 +417,12 @@ def student_number_blind_index(student_number: str) -> str:
 
 
 class Student(BaseModel):
-    """Öğrenci — okul sicilinin kişi kaydı (tasarım §6.1).
+    """Öğrenci — okul sicilinin kişi kaydı (aile iskeletinden; T5 gereği sökülür, tasarım §5.1).
 
     Evrak sözleşmesi: `full_name`, `student_number`, `class_label` — basılı
     belgeler ve anlık görüntüler (snapshot) bu üçünden beslenir.
 
-    ŞİFRELEME KAPSAMI (U9, tasarım §6.3): ad, soyad ve OKUL NO şifrelidir;
+    ŞİFRELEME KAPSAMI (tasarım §5.3): ad, soyad ve OKUL NO şifrelidir;
     sınıf/şube ve durum AÇIKTIR. Okul no şifreli olduğu için DB'de onunla
     süzülemez ve sıralanamaz: kimlik eşleştirmesi (e-Okul, arama, teklik)
     `student_number_index` kör indeksiyle TAM EŞLEŞMEDİR, okul no'ya göre
@@ -432,7 +433,7 @@ class Student(BaseModel):
     boş) kalır ve eşleştirme sessizce bozulur. Okul no toplu yazılmaz (koruma
     testi: `test_models.py::test_okul_no_toplu_yazilmaz`).
 
-    AYRILIŞ HAVUZU (F1 eki 7): e-Okul aktarımı kimseyi ayırmaz; dosyada
+    AYRILIŞ HAVUZU (aile iskeletinden): e-Okul aktarımı kimseyi ayırmaz; dosyada
     bulunmayan aktif öğrenci `leave_candidate_since` (+ hangi aktarımla)
     damgasıyla havuza girer, durumu AKTİF kalır. Ayrılış (LEFT + `left_at`)
     kaydı silmez.
@@ -474,7 +475,7 @@ class Student(BaseModel):
         ]
         constraints = [
             # Okul numaralı AKTİF canlı kayıt tekil — içe aktarma eşleştirme anahtarı.
-            # Teklik KÖR İNDEKSE konur (T14): şifreli sütunda token her yazımda
+            # Teklik KÖR İNDEKSE konur (§5.3): şifreli sütunda token her yazımda
             # değiştiği için teklik orada çalışmaz. Ayrılan öğrencinin numarası
             # ileride başka öğrenciye verilebilir.
             models.UniqueConstraint(
@@ -539,7 +540,7 @@ class ImportStatus(models.TextChoices):
 class ImportRun(BaseModel):
     """Her toplu içe aktarma için bir kayıt (geçmiş izi + idempotency uyarısı).
 
-    DD kalıbı: aynı dosyanın yeniden COMMIT'i ENGELLENMEZ — `already_imported`
+    Aile kalıbı: aynı dosyanın yeniden COMMIT'i ENGELLENMEZ — `already_imported`
     yalnız UYARIDIR (güncelleme meşru). Kısıt bozulmasın diye yeniden commit
     MEVCUT COMPLETED satırı günceller (yeni satır açmaz).
     """

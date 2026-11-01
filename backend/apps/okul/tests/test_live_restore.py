@@ -94,7 +94,7 @@ def test_yedek_listesi_en_yeniden_eskiye(tmp_path: Path, ortam: dict[str, Path])
     assert veri["backup_dir"] == str(ortam["yedekler"])
     adlar = [satir["name"] for satir in veri["backups"]]
     assert adlar == ["gunluk-2026-08-02.odbak", "gunluk-2026-08-01.odbak"]
-    # Yedekler daima şifrelidir; "şifreli mi" alanı artık yok (§6.3-6).
+    # Yedekler daima şifrelidir; "şifreli mi" alanı artık yok (§13 D29).
     assert set(veri["backups"][0]) == {"name", "size", "modified_at"}
     assert all(satir["size"] > 0 and satir["modified_at"] for satir in veri["backups"])
 

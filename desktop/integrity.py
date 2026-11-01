@@ -6,7 +6,8 @@ yerine program durur ve "son yedekten dön" yolunu gösterir.
 
 `PRAGMA integrity_check(1)` kullanılır: tam denetimin hızlı biçimi (ilk hatada
 durur). Açılışa saniyeler eklememesi için tam tarama yerine bu seçildi; okulun
-tek makinesinde veritabanı görece küçüktür (birkaç bin üye, on binlerce nüsha).
+tek bilgisayarında birliğin veritabanı küçüktür (yılda ~400-500 banka hareketi,
+organ üyeleri, personel ve veli listesi; tasarım §2.2 TK2).
 """
 
 from __future__ import annotations
