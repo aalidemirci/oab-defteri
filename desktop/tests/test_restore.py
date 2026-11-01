@@ -54,9 +54,19 @@ def test_geri_yukle_bayragi_uc_bicimde_ayristirilir() -> None:
     assert parser.parse_args(["--geri-yukle", "x.odbak"]).geri_yukle == "x.odbak"
 
     args = parser.parse_args(
-        ["--geri-yukle", "--parola", "p", "--kurtarma-anahtari", "k", "--evet"]
+        [
+            "--geri-yukle",
+            "--hesap",
+            "yonetici",
+            "--parola",
+            "p",
+            "--kurtarma-anahtari",
+            "k",
+            "--evet",
+        ]
     )
     assert args.geri_yukle == ""
+    assert args.hesap == "yonetici"
     assert args.parola == "p"
     assert args.kurtarma_anahtari == "k"
     assert args.evet is True
@@ -160,11 +170,17 @@ class SahteServisHatasi(Exception):
 
 def _sahte_servis(kayit: dict[str, Any], *, hata: str | None = None) -> Any:
     def restore_database(
-        yedek: Path, db_path: Path, *, password: str | None = None, recovery_key: str | None = None
+        yedek: Path,
+        db_path: Path,
+        *,
+        hesap: str | None = None,
+        password: str | None = None,
+        recovery_key: str | None = None,
     ) -> Any:
         if hata is not None:
             raise SahteServisHatasi(hata)
         kayit["cagri"] = (yedek, db_path, password, recovery_key)
+        kayit["hesap"] = hesap
         return SimpleNamespace(db_path=db_path, old_db_path=None, state_written=False)
 
     return SimpleNamespace(BackupRestoreError=SahteServisHatasi, restore_database=restore_database)
@@ -179,14 +195,14 @@ def sahte_ortam(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     return kayit
 
 
-def test_akis_yedegi_ve_parola_bayragini_servise_iletir(
+def test_akis_yedegi_hesap_ve_parola_bayragini_servise_iletir(
     tmp_path: Path, sahte_ortam: dict[str, Any], capsys: pytest.CaptureFixture[str]
 ) -> None:
     paths = _paths(tmp_path)
     yedek = paths.backups / "gunluk-2026-08-29.odbak"
     yedek.write_bytes(MAGIC + b"\x00" * 64)
     args = main_mod.build_parser().parse_args(
-        ["--geri-yukle", str(yedek), "--evet", "--parola", "Gizli-Parola-1"]
+        ["--geri-yukle", str(yedek), "--evet", "--hesap", "yonetici", "--parola", "Gizli-Parola-1"]
     )
 
     kod = restore_mod._restore_flow(paths, args)
@@ -196,7 +212,24 @@ def test_akis_yedegi_ve_parola_bayragini_servise_iletir(
     assert hedef_yedek == yedek
     assert hedef_db == paths.db_path
     assert parola == "Gizli-Parola-1" and anahtar is None
+    assert sahte_ortam["hesap"] == "yonetici"
     assert "tamamlandı" in capsys.readouterr().out
+
+
+def test_akis_parola_hesapsiz_verilirse_reddedilir(
+    tmp_path: Path, sahte_ortam: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Parola bir hesabındır (tasarım §4.4.4): tanıtıcısız parola servise gitmez."""
+    paths = _paths(tmp_path)
+    yedek = paths.backups / "gunluk.odbak"
+    yedek.write_bytes(MAGIC)
+    args = main_mod.build_parser().parse_args(
+        ["--geri-yukle", str(yedek), "--evet", "--parola", "Gizli-Parola-1"]
+    )
+
+    assert restore_mod._restore_flow(paths, args) == EXIT_RESTORE_FAILED
+    assert "cagri" not in sahte_ortam
+    assert "--hesap" in capsys.readouterr().out
 
 
 def test_akis_yalniz_dosya_adiyla_yedek_klasorunde_arar(
@@ -224,11 +257,21 @@ def test_akis_sir_verilmezse_her_yedekte_sorar(
     paths = _paths(tmp_path)
     yedek = paths.backups / "gunluk.odbak"
     yedek.write_bytes(MAGIC + b"\x00" * 64)
-    monkeypatch.setattr(restore_mod, "_ask_secret", lambda: (None, "KURT-ARMA"))
+    monkeypatch.setattr(restore_mod, "_ask_secret", lambda: (None, None, "KURT-ARMA"))
     args = main_mod.build_parser().parse_args(["--geri-yukle", str(yedek), "--evet"])
 
     assert restore_mod._restore_flow(paths, args) == EXIT_OK
     assert sahte_ortam["cagri"][2:] == (None, "KURT-ARMA")
+
+
+def test_sir_istemi_once_hesabi_sonra_parolayi_sorar(monkeypatch: pytest.MonkeyPatch) -> None:
+    girdiler = iter(["  yonetici "])
+    monkeypatch.setattr("builtins.input", lambda *args: next(girdiler))
+    monkeypatch.setattr(restore_mod, "_read_secret", lambda istem: "Gizli-Parola-1")
+    assert restore_mod._ask_secret() == ("yonetici", "Gizli-Parola-1", None)
+
+    girdiler = iter(["", "KURT-ARMA"])
+    assert restore_mod._ask_secret() == (None, None, "KURT-ARMA")
 
 
 def test_akis_konsolsuz_ve_sirsiz_turkce_hatayla_biter(
@@ -272,7 +315,7 @@ def test_servis_hatasi_kullaniciya_mesajla_doner(
         restore_mod, "_load_service", lambda: _sahte_servis({}, hata="Yedek anahtarı yanlış.")
     )
     args = main_mod.build_parser().parse_args(
-        ["--geri-yukle", str(yedek), "--evet", "--parola", "Gizli-Parola-1"]
+        ["--geri-yukle", str(yedek), "--evet", "--hesap", "yonetici", "--parola", "Gizli-Parola-1"]
     )
 
     kod = restore_mod._restore_flow(paths, args)
@@ -292,7 +335,7 @@ def test_onay_reddinde_servis_cagrilmaz(
     yedek.write_bytes(MAGIC)
     monkeypatch.setattr("builtins.input", lambda *args: "h")
     args = main_mod.build_parser().parse_args(
-        ["--geri-yukle", str(yedek), "--parola", "Gizli-Parola-1"]
+        ["--geri-yukle", str(yedek), "--hesap", "yonetici", "--parola", "Gizli-Parola-1"]
     )
 
     kod = restore_mod._restore_flow(paths, args)
@@ -305,14 +348,15 @@ def test_onay_reddinde_servis_cagrilmaz(
 # ------------------------------------------------------------------ uçtan uca
 
 
-_E2E_PAROLA = "Uctan-Uca-Parola-1"
+_E2E_KURTARMA = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6723"
 
 
-def _gomulu_durum(dek: bytes, parola: str) -> bytes:
-    """`guvenlik.json` biçiminde kurtarma başlığı (app_password._build_state eşi).
+def _gomulu_durum(dek: bytes, kurtarma: str) -> bytes:
+    """TK10 yedek başlığı: yalnız kurtarma bölümü (`backup_crypto.recovery_header_from_state`).
 
-    Masaüstü testleri backend'i import edemediği için biçim burada ucuz Argon2
-    profiliyle elle kurulur; çekirdek yalnız `kdf` ve `parola` bölümünü okur.
+    Masaüstü testleri backend'i import edemediği için sarmal burada ucuz Argon2
+    profiliyle elle kurulur; anahtar normalleştirilmiş biçimiyle (tiresiz) sarılır,
+    çekirdek de öyle açar (`app_password.normalize_recovery_key`).
     """
     import base64
     import json
@@ -323,7 +367,7 @@ def _gomulu_durum(dek: bytes, parola: str) -> bytes:
     kdf = {"time_cost": 1, "memory_cost": 8, "parallelism": 1}
     tuz = os.urandom(16)
     sarmalama = hash_secret_raw(
-        secret=parola.encode("utf-8"),
+        secret=kurtarma.replace("-", "").encode("utf-8"),
         salt=tuz,
         time_cost=1,
         memory_cost=8,
@@ -332,13 +376,17 @@ def _gomulu_durum(dek: bytes, parola: str) -> bytes:
         type=Type.ID,
     )
     sarmal = Fernet(base64.urlsafe_b64encode(sarmalama)).encrypt(dek).decode("ascii")
-    durum = {
-        "surum": 1,
+    baslik = {
+        "surum": 2,
         "kdf": kdf,
-        "parola": {"salt": base64.b64encode(tuz).decode("ascii"), "sarmal": sarmal},
-        "gecis": "TAMAM",
+        "kurtarma": {
+            "no": 1,
+            "tarih": "2026-08-29",
+            "salt": base64.b64encode(tuz).decode("ascii"),
+            "sarmal": sarmal,
+        },
     }
-    return json.dumps(durum).encode("utf-8")
+    return json.dumps(baslik).encode("utf-8")
 
 
 @pytest.mark.slow
@@ -367,7 +415,7 @@ def test_geri_yukleme_kipi_gercek_akista_calisir(tmp_path: Path) -> None:
     kaynak = tmp_path / "yeni.sqlite3"
     sqlite_yaz(kaynak, "yeni-icerik")
     dek = os.urandom(32)
-    baslik = _gomulu_durum(dek, _E2E_PAROLA)
+    baslik = _gomulu_durum(dek, _E2E_KURTARMA)
     yedek = yedek_dizini / "gunluk-2026-08-29.odbak"
     yedek.write_bytes(
         encrypt_bytes(
@@ -387,8 +435,8 @@ def test_geri_yukleme_kipi_gercek_akista_calisir(tmp_path: Path) -> None:
             "--geri-yukle",
             str(yedek),
             "--evet",
-            "--parola",
-            _E2E_PAROLA,
+            "--kurtarma-anahtari",
+            _E2E_KURTARMA,
         ],
         cwd=REPO_ROOT,
         capture_output=True,
@@ -404,8 +452,16 @@ def test_geri_yukleme_kipi_gercek_akista_calisir(tmp_path: Path) -> None:
     assert (onceki[0].with_name(onceki[0].name + "-wal")).is_file()
     assert not (veri / "db.sqlite3-wal").exists()
     assert not (veri / "surum.json").exists()
-    # Kayıp güvenlik dosyası yedeğin kurtarma başlığından yazıldı; yedek anahtarı eşitlendi.
-    assert (veri / "guvenlik.json").read_bytes() == baslik
+    # Kayıp güvenlik dosyası yedeğin kurtarma başlığından YALNIZ kurtarma bölümüyle yazıldı
+    # (TK10; hesaplar boş, anahtar kullanıldığı için saklandı damgası dolu); yedek anahtarı
+    # eşitlendi.
+    import json
+
+    yazilan = json.loads((veri / "guvenlik.json").read_text(encoding="utf-8"))
+    beklenen = json.loads(baslik)
+    assert yazilan["hesaplar"] == [] and yazilan["surum"] == 2
+    assert yazilan["kurtarma"]["sarmal"] == beklenen["kurtarma"]["sarmal"]
+    assert yazilan["kurtarma"]["dogrulandi"]
     assert (veri / "yedekleme.json").is_file()
     # Yedeğin kendisine dokunulmaz.
     assert yedek.is_file()

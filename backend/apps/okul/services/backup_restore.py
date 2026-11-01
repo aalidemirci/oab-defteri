@@ -1,6 +1,6 @@
-"""Yedekten geri yükleme — yalnız şifreli `.odbak` (tasarım §4.3, §4.4.7).
+"""Yedekten geri yükleme — yalnız şifreli `.odbak` (tasarım §4.3, §4.4.4, §4.4.7).
 
-Yönetici parolası zorunludur ve bütün yedekler X25519 + AES-256-GCM
+İlk hesap zorunludur ve bütün yedekler X25519 + AES-256-GCM
 kapsayıcısıdır; ailenin eski düz SQLite yedek dalı aile iskeletinde
 sökülmüştü, kalıntıları OAB'de de söküldü (tasarım §13 D29). Düz bir SQLite
 dosyası "yedek" olarak verilirse açık bir Türkçe hatayla reddedilir:
@@ -17,25 +17,32 @@ db.sqlite3'tür; bu modülde ORM importu ve sorgusu yoktur. Django'dan yalnız
 ayarlar (`settings.DATA_DIR`, `app_password` yol çözümü üzerinden) ve saat
 dilimi kullanılır.
 
-DEK NEREDEN GELİR: şifreli kapsayıcının başlığına, yedek alınırken geçerli
-olan `guvenlik.json` gömülüdür (`backup_crypto.recovery_metadata`). Çözerken
-İKİ aday durum dosyası sırayla denenir:
+DEK NEREDEN GELİR (tasarım TK10, §4.4.4): şifreli kapsayıcının başlığında
+yalnız `guvenlik.json`'un KURTARMA bölümü ve kurtarma anahtarının kimliği (no,
+tarih) durur (`backup_crypto.recovery_header_from_state`); hesap sarmalları
+yedeğe girmez. Çözerken aday sırası:
 
-    1. Veri dizinindeki GÜNCEL guvenlik.json — parola yedekten sonra
-       değiştiyse kullanıcının bildiği parola bu dosyayı açar (DEK parola
-       değişiminde DEĞİŞMEZ, yalnız sarmal yenilenir).
-    2. Yedeğe GÖMÜLÜ başlık — güncel dosya kayıpsa ya da başka kuruluma
-       aitse yedek kendini tarif eder (o dönemki parola veya kurtarma
-       anahtarı ile açılır).
+    1. Veri dizinindeki GÜNCEL guvenlik.json + bir hesabın tanıtıcısı ve
+       parolası (aynı bilgisayar). DEK parola değişiminde DEĞİŞMEDİĞİ için
+       güncel parola yedekten önceki veriyi de açar. Güncel dosyanın kurtarma
+       bölümü kurtarma anahtarıyla da denenir.
+    2. Yedeğe GÖMÜLÜ başlık + kurtarma anahtarı (yeni bilgisayar, kayıp ya da
+       başka kuruluma ait dosya). Yedek "<no> numaralı, <tarih> tarihli kurtarma
+       anahtarıyla açılır" diye kendini tarif eder (`BackupInfo.recovery_key_label`).
 
-AES-GCM kimlik doğrulaması nihai hakemdir: yanlış DEK açık hata verir,
-sessizce bozuk çıktı üretilemez.
+Rol denetimi (geri yüklemeyi yalnız program yöneticisi yapar) 2. adımdadır;
+yanlış denemelerin gecikmesi hesapsız ve süreç içidir (plan F1b-1). AES-GCM
+kimlik doğrulaması nihai hakemdir: yanlış DEK açık hata verir, sessizce bozuk
+çıktı üretilemez.
 
 GÜVENLİK DOSYASI KAYIP KİLİDİNDEN ÇIKIŞ (tasarım §4.3 tehdit 8): güncel `guvenlik.json` yoksa
-aday listesinde yalnız gömülü başlık kalır; çözüm onunla başarılırsa başlık
-`guvenlik.json` olarak YAZILIR (`_ensure_state_file`). Böylece geri yüklemeden
-çıkan (veritabanı, durum dosyası) çifti aynı DEK'i anlatır ve program yeniden
-açıldığında olağan kilit ekranına döner.
+aday listesinde yalnız gömülü başlık kalır; çözüm onunla (kurtarma anahtarıyla)
+başarılırsa `guvenlik.json` YALNIZ KURTARMA BÖLÜMÜYLE yazılır (`_ensure_state_file`):
+`hesaplar` boştur, `kurtarma.dogrulandi` doludur (anahtar kullanılarak açıldı).
+Program açılınca "kurtarma anahtarıyla aç + program yöneticisi parolası" yolu
+yöneticinin sarmalını yeniden kurar (kilit ekranı listesi boştur; hesap kilitliyken
+açık kurtarma listesinden seçilir, `GET security/recover/`); iki depo karşılaştırması
+öteki hesapları parola yenilemeye çeker (`hesaplar.reconcile_two_stores`).
 
 KVKK: çözülen içerik diske YALNIZ hedef veritabanı dosyası olarak yazılır
 (aynı dizinde .tmp → atomik yer değiştirme; hata hâlinde .tmp silinir).
@@ -60,11 +67,12 @@ taşıdığı için bir çift birlikte karar görür.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -113,6 +121,27 @@ class BackupInfo:
     embedded_state: dict[str, Any] | None = None
     embedded_raw: bytes = field(default=b"", repr=False)
 
+    @property
+    def recovery_key_label(self) -> str:
+        """Yedeği açan kurtarma anahtarının kimliği ("3 numaralı, 01.11.2026 tarihli"); yoksa "".
+
+        Tarih kâğıttaki biçimiyle (gg.aa.yyyy) yazılır; no ya da tarih eksikse eldeki kadarı.
+        """
+        bolum = (self.embedded_state or {}).get("kurtarma")
+        if not isinstance(bolum, dict):
+            return ""
+        parcalar: list[str] = []
+        no = bolum.get("no")
+        if isinstance(no, int) and not isinstance(no, bool):
+            parcalar.append(f"{no} numaralı")
+        tarih = bolum.get("tarih")
+        if isinstance(tarih, str) and tarih:
+            try:
+                parcalar.append(f"{date.fromisoformat(tarih).strftime('%d.%m.%Y')} tarihli")
+            except ValueError:
+                pass
+        return ", ".join(parcalar)
+
 
 @dataclass(frozen=True)
 class RestoreResult:
@@ -147,10 +176,16 @@ def restore_database(
     backup_path: Path,
     db_path: Path,
     *,
+    hesap: str | None = None,
     password: str | None = None,
     recovery_key: str | None = None,
 ) -> RestoreResult:
-    """Yedeği hedef veritabanının yerine koyar; eski dosyayı KENARA ALIR (silmez)."""
+    """Yedeği hedef veritabanının yerine koyar; eski dosyayı KENARA ALIR (silmez).
+
+    Sır ikisinden biridir: `hesap` (tanıtıcı ya da kimlik) + `password` — güncel
+    `guvenlik.json`'daki o hesabın sarmalı denenir — YA DA `recovery_key`.
+    """
+    hesap_adi = (hesap or "").strip() or None
     parola = password or None
     anahtar = recovery_key or None
     try:
@@ -161,9 +196,17 @@ def restore_database(
     info = inspect_backup(container)
     if not parola and not anahtar:
         raise BackupRestoreError(
-            "Bu yedek şifreli; açmak için yönetici parolası ya da kurtarma anahtarı gerekli."
+            "Bu yedek şifreli; açmak için hesabınızın tanıtıcısı ve parolası ya da kurtarma "
+            "anahtarı gerekli."
         )
-    icerik, kaynak, dek = _decrypt_container(container, info, password=parola, recovery_key=anahtar)
+    if parola and not hesap_adi:
+        raise BackupRestoreError(
+            "Parolayla açmak için hesabın tanıtıcısını da verin; ya da kurtarma anahtarını "
+            "kullanın."
+        )
+    icerik, kaynak, dek = _decrypt_container(
+        container, info, hesap=hesap_adi, password=parola, recovery_key=anahtar
+    )
     if not icerik.startswith(SQLITE_MAGIC):
         raise BackupRestoreError(
             "Yedek çözüldü ama içeriği SQLite veritabanı çıkmadı; dosya bozulmuş olabilir."
@@ -315,10 +358,15 @@ def _decrypt_container(
     container: bytes,
     info: BackupInfo,
     *,
+    hesap: str | None,
     password: str | None,
     recovery_key: str | None,
 ) -> tuple[bytes, str, bytes]:
-    """Kapsayıcıyı çözer; (düz içerik, DEK kaynağı, DEK) döndürür."""
+    """Kapsayıcıyı çözer; (düz içerik, DEK kaynağı, DEK) döndürür.
+
+    Parola yolu yalnız güncel `guvenlik.json`'un hesap sarmallarıyla işler (yedek
+    başlığında hesap yoktur, TK10); kurtarma anahtarı iki adayda da denenir.
+    """
     adaylar = _candidate_states(info)
     if not adaylar:
         raise BackupRestoreError(
@@ -330,7 +378,7 @@ def _decrypt_container(
     for kaynak, durum in adaylar:
         try:
             if password:
-                dek = app_password._unwrap_with_password(durum, password)
+                dek = app_password._unwrap_with_account(durum, hesap or "", password)
             else:
                 dek = app_password._unwrap_with_recovery(durum, recovery_key or "")
         except app_password.AppPasswordError:
@@ -339,11 +387,15 @@ def _decrypt_container(
             return decrypt_bytes(container, dek), kaynak, dek
         except BackupCryptoError:
             continue  # sarmal açıldı ama DEK bu yedeğe ait değil (başka kurulum)
-    raise BackupRestoreError(
-        "Yedek açılamadı: yönetici parolası ya da kurtarma anahtarı hatalı veya yedek "
-        "bu kuruluma ait değil. Parola sonradan değiştiyse yedeğin alındığı dönemdeki "
-        "parolayı da deneyin."
+    ileti = (
+        "Yedek açılamadı: tanıtıcı, parola ya da kurtarma anahtarı hatalı veya yedek bu "
+        "kuruluma ait değil. Başka bilgisayarda alınmış yedek yalnız kurtarma anahtarıyla "
+        "açılır."
     )
+    kimlik = info.recovery_key_label
+    if kimlik:
+        ileti += f" Bu yedek {kimlik} kurtarma anahtarıyla açılır."
+    raise BackupRestoreError(ileti)
 
 
 def _swap_database_files(db_path: Path, content: bytes) -> Path | None:
@@ -385,28 +437,80 @@ def _swap_database_files(db_path: Path, content: bytes) -> Path | None:
         temp.unlink(missing_ok=True)
 
 
+def _creation_stamp(kurtarma: dict[str, Any]) -> str:
+    """Kurtarmayla yazılan durumun `olusturma` damgası: kurtarma anahtarının üretim günü.
+
+    Damga dış yedek hatırlatmasının ilk günüdür (`dis_yedek`; plan F1b-1 "şema 2":
+    `olusturma` korunur). Yedek başlığı `olusturma` taşımaz (TK10), ama kurtarma
+    bölümünün `tarih`'ini taşır: o gün hesap kurulduğu ya da anahtar yenilendiği
+    gündür, yani eski bir tarihtir. Yeni bilgisayara taşınan kurulumda kart bu yüzden
+    eskisi gibi hemen çıkar: yeni diskte henüz dış kopya yoktur (`dis_yedek` modül
+    başlığı). Tarih yoksa ya da biçimsizse geri yükleme anı yazılır.
+    """
+    tarih = kurtarma.get("tarih")
+    if isinstance(tarih, str) and tarih:
+        try:
+            gun = date.fromisoformat(tarih)
+        except ValueError:
+            pass
+        else:
+            an = timezone.make_aware(datetime.combine(gun, datetime.min.time()))
+            return timezone.localtime(an).isoformat(timespec="seconds")
+    return timezone.localtime().isoformat(timespec="seconds")
+
+
+def _state_from_header(header: dict[str, Any]) -> dict[str, Any]:
+    """Yedek başlığından yalnız kurtarma bölümlü şema 2 durumu (TK10; plan F1b-1).
+
+    `hesaplar` boştur (başlık hesap taşımaz); `kurtarma.dogrulandi` doludur, çünkü
+    yedek kurtarma anahtarı KULLANILARAK açıldı. `olusturma` kurtarma anahtarının
+    üretim günüdür (`_creation_stamp`).
+    """
+    kurtarma = dict(header.get("kurtarma") or {})
+    kurtarma[app_password.RECOVERY_CONFIRMED_FIELD] = timezone.localtime().isoformat(
+        timespec="seconds"
+    )
+    return {
+        "surum": app_password.STATE_VERSION,
+        "olusturma": _creation_stamp(kurtarma),
+        "kdf": header.get("kdf", {}),
+        "hesaplar": [],
+        "kurtarma": kurtarma,
+        "gecis": None,
+    }
+
+
 def _ensure_state_file(info: BackupInfo, kaynak: str) -> bool:
     """Geri yüklenen veritabanı ile guvenlik.json'ın tutarlı kalmasını sağlar.
 
     Çözüm GÜNCEL dosyayla başarıldıysa o dosya doğru DEK'i sarmalıyor demektir
     (parola değiştiyse en yeni sarmalı taşıyan da odur) → DOKUNULMAZ. Çözüm
-    GÖMÜLÜ başlıkla başarıldıysa güncel dosya ya yok ya da bu veriye ait değil:
-    varsa arşivlenir (silinmez: eski yedekleri açan tek sarmal olabilir), gömülü başlık
-    olduğu gibi guvenlik.json olarak yazılır. Böylece geri yüklemeden çıkan
-    (veritabanı, durum dosyası) çifti DAİMA aynı DEK'i anlatır ve açılıştaki
-    parmak izi denetimi (`_adopt_key`) geçer.
+    GÖMÜLÜ başlıkla (kurtarma anahtarıyla) başarıldıysa güncel dosya ya yok ya da
+    bu veriye ait değil: varsa arşivlenir (silinmez: eski yedekleri açan tek sarmal
+    olabilir), yerine YALNIZ kurtarma bölümlü durum yazılır (`_state_from_header`).
+    Böylece geri yüklemeden çıkan (veritabanı, durum dosyası) çifti DAİMA aynı DEK'i
+    anlatır; kilit açılışı kurtarma anahtarıyla program yöneticisinin sarmalını kurar.
+
+    Yazım güvenlik dosyasının süreç içi kilidi altındadır (`app_password._state_lock`):
+    çalışan programdaki geri yükleme, kilit açılışındaki sarmal ve `.tmp` artığı
+    temizliğiyle çakışmasın. Arşive taşınan dosyanın, sonradan kapanan hesaplara ait
+    sarmallarını o temizlik siler (adaylar arşivlerden de toplanır; TK11).
     """
-    if kaynak != _SOURCE_EMBEDDED or not info.embedded_raw:
+    if kaynak != _SOURCE_EMBEDDED or info.embedded_state is None:
         return False
     hedef = app_password.state_path()
-    if hedef.is_file():
-        damga = timezone.localtime().strftime("%Y-%m-%d-%H%M%S")
-        arsiv = hedef.with_name(f"guvenlik-arsiv-{damga}.json")
-        hedef.replace(arsiv)
-        logger.info("Geri yüklenen veriyle eşleşmeyen guvenlik.json arşivlendi: %s", arsiv.name)
-    hedef.parent.mkdir(parents=True, exist_ok=True)
-    temp = hedef.with_name(hedef.name + ".tmp")
-    temp.write_bytes(info.embedded_raw)
-    temp.replace(hedef)
-    logger.info("guvenlik.json yedekteki kurtarma başlığından yazıldı.")
+    with app_password._state_lock:
+        if hedef.is_file():
+            # Aynı saniyedeki ikinci arşiv öncekini ezmesin (`app_password._archive_target`).
+            arsiv = app_password._archive_target()
+            hedef.replace(arsiv)
+            logger.info("Geri yüklenen veriyle eşleşmeyen guvenlik.json arşivlendi: %s", arsiv.name)
+        hedef.parent.mkdir(parents=True, exist_ok=True)
+        temp = hedef.with_name(hedef.name + ".tmp")
+        temp.write_text(
+            json.dumps(_state_from_header(info.embedded_state), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        temp.replace(hedef)
+    logger.info("guvenlik.json yedekteki kurtarma başlığından (yalnız kurtarma bölümü) yazıldı.")
     return True

@@ -630,7 +630,7 @@ def test_autotest_kipi_gercek_acilisi_dogrular(tmp_path: Path) -> None:
     assert (tmp_path / "data" / "db.sqlite3").is_file()
     assert (tmp_path / "data" / "surum.json").is_file()
     assert (tmp_path / "logs" / "uygulama.log").is_file()
-    # İlk açılışta veritabanı henüz yoktu → yedek yok; ilk yedek yönetici parolası
+    # İlk açılışta veritabanı henüz yoktu → yedek yok; ilk yedek ilk program yöneticisi hesabı
     # kurulduktan sonraki açılışta alınır.
     assert (tmp_path / "backups").is_dir()
     # T15: düzenli çıkış işareti yazar; ilk açılış alarm vermez.
@@ -643,7 +643,7 @@ def test_autotest_kipi_gercek_acilisi_dogrular(tmp_path: Path) -> None:
 @pytest.mark.slow
 def test_parola_kurulmadan_ikinci_acilista_gunluk_yedek_atlanir(tmp_path: Path) -> None:
     """Tasarım §4.2 adım 7 (yedek kabı §4.4.7): ilk açılışta `yedekleme.json` (ve kişi
-    verisi) yokken günlük yedek ATLANIR; düz kopya hiçbir koşulda yazılmaz. İlk yedek, yönetici parolası
+    verisi) yokken günlük yedek ATLANIR; düz kopya hiçbir koşulda yazılmaz. İlk yedek, ilk hesap
     kurulduktan sonraki açılışta şifreli alınır."""
     for _ in range(2):
         sonuc = subprocess.run(  # noqa: S603 — sabit argümanlar, kabuk yok
@@ -667,7 +667,7 @@ def test_parola_kurulmadan_ikinci_acilista_gunluk_yedek_atlanir(tmp_path: Path) 
     assert "Önceki oturum düzenli kapanmış." in gunluk
     assert (tmp_path / "data" / MARKER_FILE_NAME).is_file()
 
-    # Parola kurulmadı → yedek anahtarı yok → yedek atlandı; düz kopya da yok.
+    # Hesap kurulmadı → yedek anahtarı yok → yedek atlandı; düz kopya da yok.
     assert not (tmp_path / "data" / "yedekleme.json").exists()
     assert not list((tmp_path / "backups").glob("gunluk-*"))
     assert "yedek alınmadı" in gunluk
@@ -973,10 +973,13 @@ def sahte_servis(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, A
     )
     monkeypatch.setattr(main_mod, "gun_kapisi_kur", lambda paths, **_: _SahteKapi(sira))
     monkeypatch.setattr(main_mod, "wal_checkpoint", lambda yol: sira.append("wal-checkpoint"))
+    monkeypatch.setattr(main_mod, "_oturumu_kilitle", lambda: sira.append("oturum-kilidi"))
     return kayit
 
 
-def test_kapanis_sirasi_gun_kapisi_sunucu_ve_wal_checkpoint(sahte_servis: dict[str, Any]) -> None:
+def test_kapanis_sirasi_gun_kapisi_oturum_sunucu_ve_wal_checkpoint(
+    sahte_servis: dict[str, Any],
+) -> None:
     kod = main_mod.serve(sahte_servis["paths"], "belirtec", False)
 
     assert kod == EXIT_OK
@@ -986,6 +989,7 @@ def test_kapanis_sirasi_gun_kapisi_sunucu_ve_wal_checkpoint(sahte_servis: dict[s
         "od-gunluk",  # yönetim ayakta ve korumalı olduktan SONRA
         "pencere",
         "od-gunluk-dur",
+        "oturum-kilidi",  # §4.2: od-gunluk durduktan SONRA, sunucudan ÖNCE
         "yonetim-dur",
         "wal-checkpoint",  # TB14: sunucu durduktan SONRA
     ]
@@ -998,7 +1002,13 @@ def test_autotest_pencere_ve_gun_kapisi_acmaz_ag_dinleyicisi_kurmaz(
     kod = main_mod.serve(sahte_servis["paths"], "belirtec", True)
 
     assert kod == EXIT_OK
-    assert sahte_servis["sira"] == ["yonetim-basla", "saglik", "yonetim-dur", "wal-checkpoint"]
+    assert sahte_servis["sira"] == [
+        "yonetim-basla",
+        "saglik",
+        "oturum-kilidi",  # oturum açılmadığı için etkisizdir; sıra aynı kalır
+        "yonetim-dur",
+        "wal-checkpoint",
+    ]
 
 
 def test_pencere_motoru_yoksa_gun_kapisi_kalkmaz(
@@ -1027,7 +1037,12 @@ def test_pencere_hatasinda_da_gun_kapisi_ve_sunucu_durdurulur(
     with pytest.raises(RuntimeError):
         main_mod.serve(sahte_servis["paths"], "belirtec", False)
 
-    assert sahte_servis["sira"][-3:] == ["od-gunluk-dur", "yonetim-dur", "wal-checkpoint"]
+    assert sahte_servis["sira"][-4:] == [
+        "od-gunluk-dur",
+        "oturum-kilidi",
+        "yonetim-dur",
+        "wal-checkpoint",
+    ]
 
 
 def test_gun_kapisi_yerlesik_isi_gunluk_yedektir(tmp_path: Path) -> None:
@@ -1075,3 +1090,51 @@ def test_acilista_umask_dizinlerden_ve_gunlukten_once(
         main_mod.run([])
 
     assert sira == ["umask", "dizinler", "gunluk"]
+
+
+# ------------------------------------------------- kapanışta oturum kilidi (§4.2)
+
+
+def _sahte_kanca(monkeypatch: pytest.MonkeyPatch, kilitle: Any) -> None:
+    """`apps.okul.masaustu_kanca` yerine yalnız kapanış kilidini taşıyan sahte modül."""
+    import types
+
+    sahte = types.ModuleType("apps.okul.masaustu_kanca")
+    sahte.kapanista_kilitle = kilitle  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "apps.okul.masaustu_kanca", sahte)
+
+
+def test_kapanis_oturum_kilidini_backend_kancasindan_cagirir(
+    monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[Any]
+) -> None:
+    cagrilar: list[str] = []
+
+    def kilitle() -> bool:
+        cagrilar.append("kilit")
+        return True
+
+    _sahte_kanca(monkeypatch, kilitle)
+
+    main_mod._oturumu_kilitle()
+
+    assert cagrilar == ["kilit"]
+    assert any("oturum kilitlendi" in kayit.getMessage() for kayit in od_gunlugu)
+
+
+def test_kapanis_oturum_kilidi_hatasi_kapanisi_durdurmaz(
+    monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[Any]
+) -> None:
+    def patlat() -> bool:
+        raise RuntimeError("kilit düştü")
+
+    _sahte_kanca(monkeypatch, patlat)
+
+    main_mod._oturumu_kilitle()  # istisna yükseltmez
+
+    assert any("kilitlenemedi" in kayit.getMessage() for kayit in od_gunlugu)
+
+
+def test_kapanis_oturum_kilidi_backend_yoksa_sessizdir(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "apps.okul.masaustu_kanca", None)
+
+    main_mod._oturumu_kilitle()  # ImportError yutulur

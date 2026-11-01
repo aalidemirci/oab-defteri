@@ -8,9 +8,11 @@ işareti bilinçli olarak yoktur); hedef veritabanı geçici bir dosyadır.
 
 Veri dizini `backend/conftest.py`'nin güvenlik dizinidir (geçerli bir
 `guvenlik.json` içerir; kilit kapısı böylece DB'ye sormadan geçer). Yedekler
-başka bir DEK'le alınır: güncel dosya o yedeği açamaz, gömülü başlık açar ve
-`guvenlik.json` olarak yazılır. Güvenlik dosyası KAYIPKEN geri yükleme
-`test_app_password.py::TestGuvenlikDosyasiKayip`'tadır.
+varsayılan olarak bu kurulumun DEK'iyle alınır ve oturumdaki hesabın parolasıyla
+açılır (aynı bilgisayar yolu; tasarım §4.4.4). Başka DEK'le alınan yedeği güncel
+dosya açamaz; başlık yalnız kurtarma bölümünü taşıdığı için (TK10) o yedek yalnız
+kurtarma anahtarıyla açılır ve `guvenlik.json` yalnız kurtarma bölümüyle yazılır.
+Güvenlik dosyası KAYIPKEN geri yükleme `test_app_password.py::TestGuvenlikDosyasiKayip`'tadır.
 """
 
 from __future__ import annotations
@@ -24,7 +26,11 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from desktop.backup_crypto import encrypt_bytes, private_key_from_data_key
+from desktop.backup_crypto import (
+    encrypt_bytes,
+    private_key_from_data_key,
+    recovery_header_from_state,
+)
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connections
@@ -32,10 +38,10 @@ from rest_framework.test import APIClient
 
 from apps.okul import restart_gate
 from apps.okul.services import app_password, backup_restore, live_restore
-from conftest import TEST_PAROLA
+from conftest import TEST_DEK, TEST_KURTARMA_ANAHTARI, TEST_PAROLA, TEST_TANITICI
 from shared import bakim, crypto
 
-PAROLA = "Deneme-Parola-1"
+PAROLA = TEST_PAROLA
 LISTE_URL = "/api/v1/backups/"
 GERI_YUKLE_URL = "/api/v1/backups/restore/"
 
@@ -62,14 +68,25 @@ def _sqlite_baytlari(dizin: Path, isaret: str) -> bytes:
     return yol.read_bytes()
 
 
-def _sifreli_kapsayici(icerik: bytes) -> tuple[bytes, dict[str, Any]]:
-    """Gömülü başlıklı şifreli `.odbak`; PAROLA ile açılır."""
-    dek = crypto.new_data_key()
-    durum = app_password._build_state(
-        dek, password=PAROLA, recovery_key=app_password.generate_recovery_key()
-    )
-    durum["gecis"] = app_password.TRANSITION_DONE
-    baslik = json.dumps(durum, ensure_ascii=False).encode("utf-8")
+def _sifreli_kapsayici(icerik: bytes, *, yabanci: bool = False) -> tuple[bytes, dict[str, Any]]:
+    """Başlıklı (TK10 izdüşümü) şifreli `.odbak` ve başlığın güvenlik durumu.
+
+    Varsayılan: bu kurulumun DEK'i — oturumdaki hesabın parolasıyla açılır.
+    `yabanci`: başka DEK — yalnız `TEST_KURTARMA_ANAHTARI` ile (başlıktan) açılır.
+    """
+    if yabanci:
+        dek = crypto.new_data_key()
+        durum = app_password._build_state(
+            dek,
+            hesap_id="5e6f7a8b-9c0d-4e1f-a2b3-c4d5e6f7a8b9",
+            tanitici=TEST_TANITICI,
+            password="Baska-Parola-7",
+            recovery_key=TEST_KURTARMA_ANAHTARI,
+        )
+    else:
+        dek = TEST_DEK
+        durum = app_password.read_state() or {}
+    baslik = json.dumps(recovery_header_from_state(durum), ensure_ascii=False).encode("utf-8")
     acik = private_key_from_data_key(dek).public_key()
     return cast("bytes", encrypt_bytes(icerik, acik, recovery_header=baslik)), durum
 
@@ -157,7 +174,7 @@ def test_sirsiz_istek_400_ile_reddedilir(tmp_path: Path, ortam: dict[str, Path])
     yanit = APIClient().post(GERI_YUKLE_URL, {"name": "gunluk.odbak"}, format="json")
 
     assert yanit.status_code == 400
-    assert "yönetici parolası ya da kurtarma anahtarı" in yanit.json()["message"]
+    assert "tanıtıcısı ve parolası ya da kurtarma anahtarı" in yanit.json()["message"]
 
 
 def test_yol_ayracli_ad_reddedilir(tmp_path: Path, ortam: dict[str, Path]) -> None:
@@ -181,11 +198,13 @@ def test_olmayan_ad_turkce_hata_verir(ortam: dict[str, Path]) -> None:
 # ---------------------------------------------------------------------------
 # Geri yükleme — dosya yükleyerek
 # ---------------------------------------------------------------------------
-def test_yuklenen_sifreli_dosya_parola_ile_geri_yuklenir(
+def test_yuklenen_sifreli_dosya_oturum_hesabinin_parolasiyla_geri_yuklenir(
     tmp_path: Path, ortam: dict[str, Path]
 ) -> None:
+    """Parola yolunda hesap verilmezse oturumdaki hesap kullanılır (aynı bilgisayar)."""
     icerik = _sqlite_baytlari(tmp_path, "gizli")
-    kapsayici, durum = _sifreli_kapsayici(icerik)
+    kapsayici, _durum = _sifreli_kapsayici(icerik)
+    once = (ortam["veri"] / "guvenlik.json").read_bytes()
 
     yanit = APIClient().post(
         GERI_YUKLE_URL,
@@ -193,14 +212,42 @@ def test_yuklenen_sifreli_dosya_parola_ile_geri_yuklenir(
         format="multipart",
     )
 
-    assert yanit.status_code == 200
-    veri = yanit.json()
-    assert veri["state_written"] is True
+    assert yanit.status_code == 200, yanit.json()
+    assert yanit.json()["state_written"] is False  # güncel dosya açtı: dokunulmadı
     assert ortam["db"].read_bytes() == icerik
-    # guvenlik.json gömülü başlıktan onarıldı; geçici yükleme dosyası kalmadı.
-    yazilan = json.loads((ortam["veri"] / "guvenlik.json").read_text(encoding="utf-8"))
-    assert yazilan["parola"] == durum["parola"]
+    assert (ortam["veri"] / "guvenlik.json").read_bytes() == once
     assert not list(ortam["yedekler"].glob(".yukleme-*"))
+
+
+def test_baska_kurulumun_yedegi_yalniz_kurtarma_anahtariyla_acilir(
+    tmp_path: Path, ortam: dict[str, Path]
+) -> None:
+    """TK10: başlıkta hesap sarmalı yok; açılınca `guvenlik.json` yalnız kurtarma bölümüdür."""
+    icerik = _sqlite_baytlari(tmp_path, "gizli")
+    kapsayici, durum = _sifreli_kapsayici(icerik, yabanci=True)
+    (ortam["yedekler"] / "elden.odbak").write_bytes(kapsayici)
+
+    parolali = APIClient().post(
+        GERI_YUKLE_URL,
+        {"name": "elden.odbak", "hesap": TEST_TANITICI, "password": "Baska-Parola-7"},
+        format="json",
+    )
+    assert parolali.status_code == 400
+    assert "1 numaralı" in parolali.json()["message"]
+
+    yanit = APIClient().post(
+        GERI_YUKLE_URL,
+        {"name": "elden.odbak", "recovery_key": TEST_KURTARMA_ANAHTARI},
+        format="json",
+    )
+
+    assert yanit.status_code == 200, yanit.json()
+    assert yanit.json()["state_written"] is True
+    assert ortam["db"].read_bytes() == icerik
+    yazilan = json.loads((ortam["veri"] / "guvenlik.json").read_text(encoding="utf-8"))
+    assert yazilan["hesaplar"] == []
+    assert yazilan["kurtarma"]["sarmal"] == durum["kurtarma"]["sarmal"]
+    assert yazilan["kurtarma"]["dogrulandi"]
 
 
 def test_yanlis_parola_400_kapi_kurulmaz(tmp_path: Path, ortam: dict[str, Path]) -> None:
@@ -338,3 +385,34 @@ def test_yedek_adi_gecersizse_bakim_kapisina_dokunulmaz(
 
     assert yanit.status_code == 400
     assert kapi.bakimda is False
+
+
+# ---------------------------------------------------------------------------
+# Uzun iş sayacı (tasarım §4.2, §4.4.3; plan F1b-1 "Oturum")
+# ---------------------------------------------------------------------------
+def test_geri_yukleme_uzun_is_olarak_sayilir_ve_basarida_oturum_kapanir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ortam: dict[str, Path]
+) -> None:
+    """Geri yükleme sürerken oturumun kilidi ertelenir (DEK işin ortasında silinmez);
+    başarıda oturum HEMEN kapanır: DEK artık bu veritabanına ait değildir."""
+    from apps.okul.oturum import OTURUM
+
+    ortam["db"].write_bytes(_sqlite_baytlari(tmp_path, "eski"))
+    gorulen: list[tuple[int, str]] = []
+    asil = backup_restore.restore_database
+
+    def izleyen(*args: Any, **kwargs: Any) -> Any:
+        gorulen.append((bakim.UZUN_ISLER.sayi, OTURUM.kilitle(neden="elle")))
+        return asil(*args, **kwargs)
+
+    monkeypatch.setattr(backup_restore, "restore_database", izleyen)
+    (ortam["yedekler"] / "gunluk.odbak").write_bytes(
+        _sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni"))[0]
+    )
+
+    live_restore.restore_and_require_restart(name="gunluk.odbak", password=PAROLA)
+
+    assert gorulen == [(1, "ertelendi")]  # iş sürerken Kilitle ertelendi
+    assert bakim.UZUN_ISLER.sayi == 0
+    assert OTURUM.acik_mi() is False
+    assert crypto.is_unlocked() is False

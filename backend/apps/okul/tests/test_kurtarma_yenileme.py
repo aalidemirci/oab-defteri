@@ -1,19 +1,24 @@
 """Kurtarma anahtarını yenileme (aile iskeletinden; OAB'de tasarım §13 D14).
 
-`POST security/recovery-key/renew/ {password}`. Kanıtlanan maddeler:
+`POST security/recovery-key/renew/ {password}`; yalnız program yöneticisi, parola
+oturumdaki hesabınkine karşı doğrulanır (tasarım TK9; plan F1b-1). Kanıtlanan maddeler:
 
-* yanlış parola reddedilir (kademeli gecikme), hiçbir dosya değişmez;
+* yanlış parola reddedilir (hesap başına kademeli gecikme), kurtarma bölümü değişmez,
+  arşiv alınmaz (yalnız hatalı deneme sayacı yazılır);
 * yeni anahtar yanıtla BİR KEZ döner (`Cache-Control: no-store`); eski anahtar
   artık bu kurulumun kilidini açmaz, yeni anahtar açar;
 * DEK ve kör indeks DEĞİŞMEZ: kayıtlar yenilemeden sonra da okunur, parola ve
   yedek anahtarı aynen çalışır;
-* doğrulama damgası silinir (yeni anahtar yeniden doğrulanmalı), önceki
-  `guvenlik.json` `guvenlik-arsiv-<damga>.json` olarak saklanır;
-* yedekler: yenilemeden SONRA alınan yedek yeni başlığı taşır; ÖNCE alınmış yedek
+* doğrulama damgası silinir (yeni anahtar yeniden doğrulanmalı), `kurtarma.no` bir
+  artar, `tarih` üretim günüdür; önceki `guvenlik.json` `guvenlik-arsiv-<damga>.json`
+  olarak saklanır;
+* yedekler (başlık yalnız kurtarma bölümüdür, TK10): yenilemeden SONRA alınan yedek
+  yeni başlığı taşır; ÖNCE alınmış yedek
   güncel güvenlik dosyası yokken yalnız eski anahtarla açılır, bu bilgisayarda
   (güncel dosya yerindeyken) yeni anahtarla da açılır — Ayarlar → Güvenlik'teki
   yenileme metni bu davranışı anlatır;
-* anahtar hiçbir günlüğe düşmez; görevli kipinde 403, kilitliyken 423.
+* anahtar hiçbir günlüğe düşmez; kilitliyken 423 (yalnız açık oturumda); program
+  yöneticisi olmayan hesap yenileyemez (rol matrisi 2. adımda).
 """
 
 from __future__ import annotations
@@ -30,18 +35,26 @@ from typing import Any
 import pytest
 from desktop.backup import daily_backup
 from desktop.backup_crypto import config_path, decrypt_bytes, embedded_recovery_metadata
+from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.okul.kip import KIP
-from apps.okul.models import Student
+from apps.okul.models import SchoolConfig, Student
+from apps.okul.oturum import OTURUM
 from apps.okul.services import app_password, backup_restore
-from conftest import TEST_DEK, TEST_KURTARMA_ANAHTARI, TEST_PAROLA
+from apps.okul.tests.hesap_ortak import GECICI_PAROLA, YENI_PAROLA, hesap_ac
+from conftest import (
+    TEST_DEK,
+    TEST_HESAP_ID,
+    TEST_KURTARMA_ANAHTARI,
+    TEST_PAROLA,
+    TEST_TANITICI,
+)
 from shared import crypto
 
 URL = "/api/v1/security/recovery-key/renew/"
 ANAHTAR_BICIMI = re.compile(r"^[A-Z2-7]{4}(-[A-Z2-7]{4}){7}$")
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.usefixtures("yonetici_hesabi")]
 
 
 @pytest.fixture
@@ -113,9 +126,13 @@ def test_yeni_anahtar_acar_eski_anahtar_acmaz(client: APIClient) -> None:
     app_password.lock()
     with pytest.raises(app_password.AppPasswordError):
         app_password.unlock_with_recovery(
-            recovery_key=TEST_KURTARMA_ANAHTARI, new_password="Yeni-Parola-42"
+            recovery_key=TEST_KURTARMA_ANAHTARI,
+            hesap_id=TEST_HESAP_ID,
+            new_password="Yeni-Parola-42",
         )
-    app_password.unlock_with_recovery(recovery_key=yeni, new_password="Yeni-Parola-42")
+    app_password.unlock_with_recovery(
+        recovery_key=yeni, hesap_id=TEST_HESAP_ID, new_password="Yeni-Parola-42"
+    )
     assert crypto.is_unlocked()
 
 
@@ -134,7 +151,9 @@ def test_dek_ve_kor_indeks_degismez_kayitlar_okunur(client: APIClient) -> None:
 
     # Kurtarma anahtarıyla yeniden açılış aynı DEK'i verir: kayıt okunur.
     app_password.lock()
-    app_password.unlock_with_recovery(recovery_key=yeni, new_password="Yeni-Parola-42")
+    app_password.unlock_with_recovery(
+        recovery_key=yeni, hesap_id=TEST_HESAP_ID, new_password="Yeni-Parola-42"
+    )
     assert crypto.active_fingerprint() == crypto.key_fingerprint(TEST_DEK)
     okunan = Student.objects.get(pk=ogrenci.pk)
     assert (okunan.first_name, okunan.last_name, okunan.student_number) == (
@@ -147,18 +166,23 @@ def test_dek_ve_kor_indeks_degismez_kayitlar_okunur(client: APIClient) -> None:
     assert config_path(app_password.state_path().parent).read_bytes() == yedek_ayari_once
 
 
-def test_parola_ve_kdf_bolumleri_aynen_kalir(client: APIClient) -> None:
+def test_hesap_ve_kdf_bolumleri_aynen_kalir_no_bir_artar(client: APIClient) -> None:
     once = json.loads(app_password.state_path().read_text(encoding="utf-8"))
     _yenile(client)
     sonra = json.loads(app_password.state_path().read_text(encoding="utf-8"))
 
-    assert sonra["parola"] == once["parola"]
+    assert sonra["hesaplar"] == once["hesaplar"]
     assert sonra["kdf"] == once["kdf"]
     assert sonra["gecis"] == once["gecis"]
+    assert sonra["olusturma"] == once["olusturma"]
     assert sonra["kurtarma"]["salt"] != once["kurtarma"]["salt"]
     assert sonra["kurtarma"]["sarmal"] != once["kurtarma"]["sarmal"]
-    # Parola aynen çalışır.
-    app_password.verify_password(TEST_PAROLA)
+    assert (once["kurtarma"]["no"], sonra["kurtarma"]["no"]) == (1, 2)
+    assert sonra["kurtarma"]["tarih"] == timezone.localdate().isoformat()
+    _yenile(client)
+    assert app_password.status()["recovery_key_no"] == 3
+    # Hesabın parolası aynen çalışır.
+    app_password.verify_password(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
 
 
 def test_damga_silinir_yeni_anahtarla_yeniden_dogrulanir(client: APIClient) -> None:
@@ -201,13 +225,14 @@ def test_eski_guvenlik_dosyasi_arsivlenir_silinmez(
     assert not list(guvenlik_ortami.glob("*.tmp"))
 
 
-def test_kip_etkilenmez(client: APIClient) -> None:
-    """DEK yeniden yüklenmez: kilit açılışı (anahtar dönemi) değişmez."""
+def test_oturum_etkilenmez(client: APIClient) -> None:
+    """DEK yeniden yüklenmez (anahtar dönemi değişmez); oturum ve hesabı aynen kalır."""
     donem = crypto.key_epoch()
-    assert KIP.durum() == "yonetici"
+    hesap = OTURUM.hesap()
+    assert hesap is not None
     _yenile(client)
     assert crypto.key_epoch() == donem
-    assert KIP.durum() == "yonetici"
+    assert OTURUM.hesap() == hesap
 
 
 # ============================================================ retler
@@ -219,25 +244,31 @@ def test_yanlis_parola_reddedilir_hicbir_dosya_degismez(
     uyumalar: list[float] = []
     monkeypatch.setattr(app_password, "FAILURE_DELAYS", (0.0, 3.0))
     monkeypatch.setattr(time, "sleep", uyumalar.append)
-    once = app_password.state_path().read_bytes()
+    once = json.loads(app_password.state_path().read_text(encoding="utf-8"))
 
     yanit = _yenile(client, "Yanlis-Parola-9")
     _yenile(client, "Yanlis-Parola-9")
 
     assert yanit.status_code == 400
     assert yanit.json()["message"] == "Parola hatalı."
+    assert yanit.json()["code"] == "parola_yanlis"
     assert "recovery_key" not in yanit.json()
     assert uyumalar == [3.0]
-    assert app_password.state_path().read_bytes() == once
+    sonra = json.loads(app_password.state_path().read_text(encoding="utf-8"))
+    assert sonra["kurtarma"] == once["kurtarma"]
+    assert sonra["hesaplar"][0]["hatali"] == 2  # yalnız sayaç (hesap başına) yazıldı
     assert _arsivler(guvenlik_ortami) == []
 
 
 def test_baska_kurulumun_dosyasiyla_yenilenemez(client: APIClient) -> None:
     """Parolası bilinen yabancı bir `guvenlik.json` ile bellekteki DEK yeniden sarmalanamaz."""
     baska = app_password._build_state(
-        bytes(range(1, 33)), password="Baska-Parola-9", recovery_key=TEST_KURTARMA_ANAHTARI
+        bytes(range(1, 33)),
+        hesap_id=TEST_HESAP_ID,
+        tanitici=TEST_TANITICI,
+        password="Baska-Parola-9",
+        recovery_key=TEST_KURTARMA_ANAHTARI,
     )
-    baska["gecis"] = app_password.TRANSITION_DONE
     app_password._write_state(baska)
 
     yanit = _yenile(client, "Baska-Parola-9")
@@ -249,11 +280,18 @@ def test_bos_parola_reddedilir(client: APIClient) -> None:
     assert client.post(URL, {}, format="json").status_code == 400
 
 
-def test_gorevli_kipinde_kapali(client: APIClient) -> None:
-    KIP.gorevliye_gec()
-    yanit = _yenile(client)
-    assert yanit.status_code == 403
-    assert yanit.json()["code"] == "kip_yetkisiz"
+def test_program_yoneticisi_olmayan_hesap_yenileyemez(client: APIClient) -> None:
+    """Kurtarma anahtarını yalnız program yöneticisi yeniler (tasarım TK9)."""
+    muhasip = hesap_ac()
+    app_password.lock()
+    app_password.unlock(hesap_id=muhasip.id, password=GECICI_PAROLA, new_password=YENI_PAROLA)
+    once = app_password.read_state()
+
+    yanit = _yenile(client, YENI_PAROLA)
+
+    assert yanit.status_code == 400
+    assert yanit.json()["message"] == "Kurtarma anahtarını yalnız program yöneticisi yeniler."
+    assert app_password.read_state() == once
 
 
 def test_kilitliyken_kilit_kapisi_keser(client: APIClient, kilitli: Path) -> None:
@@ -266,20 +304,23 @@ def test_kilitliyken_kilit_kapisi_keser(client: APIClient, kilitli: Path) -> Non
 
 def test_servis_kilitliyken_yenilemez(kilitli: Path) -> None:
     with pytest.raises(app_password.AppPasswordError, match="kilitli"):
-        app_password.renew_recovery_key(password=TEST_PAROLA)
+        app_password.renew_recovery_key(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
 
 
-def test_guvenlik_dosyasi_kayipken_kapali(client: APIClient, parmak_izi_yazili: str) -> None:
+def test_guvenlik_dosyasi_kayipken_kapali(client: APIClient) -> None:
     app_password.state_path().unlink()
     yanit = _yenile(client)
     assert yanit.status_code == 423
     assert yanit.json()["code"] == "guvenlik_dosyasi_kayip"
 
 
-def test_parola_kurulmadan_calismaz(client: APIClient, parolasiz: Path) -> None:
+def test_hesap_kurulmadan_calismaz(client: APIClient, parolasiz: Path) -> None:
+    # Modülün hesap fixtürü parmak izini yazar; "hiç kurulmamış" hâl için silinir (aksi
+    # hâlde dosyasız + parmak izi dolu = güvenlik dosyası kayıp kilidi olurdu).
+    SchoolConfig.objects.filter(pk=SchoolConfig.SINGLETON_PK).update(app_password_hash="")
     yanit = _yenile(client)
     assert yanit.status_code == 400
-    assert yanit.json()["message"] == "Yönetici parolası kurulu değil."
+    assert yanit.json()["message"] == "Program yöneticisi hesabı henüz kurulmadı."
 
 
 def test_anahtar_hicbir_gunluge_dusmez(client: APIClient, caplog: pytest.LogCaptureFixture) -> None:
@@ -318,6 +359,10 @@ class TestYedekler:
 
         eski_baslik = _baslik(eski_yedek)
         yeni_baslik = _baslik(yeni_yedek)
+        # TK10: başlık yalnız kurtarma bölümü ve anahtarın kimliği; hesap sarmalı yok.
+        assert set(yeni_baslik) == {"surum", "kdf", "kurtarma"}
+        assert set(yeni_baslik["kurtarma"]) == {"no", "tarih", "salt", "sarmal"}
+        assert (eski_baslik["kurtarma"]["no"], yeni_baslik["kurtarma"]["no"]) == (1, 2)
         # Eski yedeğin başlığı yalnız eski anahtarla, yenisininki yalnız yeni anahtarla açılır.
         assert app_password._unwrap_with_recovery(eski_baslik, TEST_KURTARMA_ANAHTARI) == TEST_DEK
         assert app_password._unwrap_with_recovery(yeni_baslik, yeni) == TEST_DEK
@@ -389,3 +434,6 @@ class TestYedekler:
         assert app_password.verify_recovery_key(TEST_KURTARMA_ANAHTARI)
         with pytest.raises(app_password.AppPasswordError):
             app_password.verify_recovery_key(yeni)
+        # Başlıktan yazılan dosya yalnız kurtarma bölümünü taşır (TK10): hesap sarmalları
+        # kurtarma anahtarıyla açılışta yeniden kurulur.
+        assert (app_password.read_state() or {})["hesaplar"] == []

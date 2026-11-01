@@ -7,7 +7,7 @@ Kanıtlanan maddeler:
 * hiç indirme yokken hatırlatma parola kurulumundan 7 gün sonra, indirme varken son
   indirmeden `hatirlatma_gun` (varsayılan 30) gün sonra başlar;
 * süre 7-90 gün arasında ayarlanır; aralık dışı 400; bozuk dosya "hiç indirme yok" sayılır;
-* uç görevli kipinde 403 `kip_yetkisiz`, kilitliyken 423; yanıtta kişisel veri yok.
+* uç kilitliyken 423 (rol izni 2. adımın rol matrisinde); yanıtta kişisel veri yok.
 """
 
 from __future__ import annotations
@@ -24,8 +24,7 @@ from django.conf import settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.okul.kip import KIP
-from apps.okul.services import app_password, dis_yedek
+from apps.okul.services import app_password, backup_restore, dis_yedek
 
 URL = "/api/v1/backups/external/"
 
@@ -68,6 +67,27 @@ def test_hic_indirme_yoksa_parola_kurulumundan_yedi_gun_sonra_hatirlatir() -> No
     assert ozet.hatirlat is True
     assert ozet.gecen_gun == 7
     assert ozet.son_indirme is None
+
+
+def test_kurtarmayla_tasinan_kurulumda_kart_hemen_cikar() -> None:
+    """Yeni bilgisayara kurtarma anahtarıyla geri yüklenen kurulum (TK10): yedek başlığı
+    `olusturma` taşımaz; damga kurtarma anahtarının üretim günüdür, yani eski bir tarih
+    (`backup_restore._creation_stamp`). Yeni diskte henüz dış kopya yoktur."""
+    baslik = {
+        "surum": 2,
+        "kdf": {},
+        "kurtarma": {"no": 3, "tarih": "2026-09-01", "salt": "dHV6", "sarmal": "s"},
+    }
+    yazilan = backup_restore._state_from_header(baslik)
+    assert yazilan["olusturma"].startswith("2026-09-01T00:00:00")
+    app_password._write_state(yazilan)
+
+    ozet = dis_yedek.durum(date(2026, 11, 1))
+
+    assert ozet.hatirlat is True and ozet.gecen_gun == 61
+    # Kurtarma bölümünde tarih yoksa geri yükleme anı yazılır.
+    tarihsiz = backup_restore._state_from_header({"surum": 2, "kdf": {}, "kurtarma": {}})
+    assert datetime.fromisoformat(tarihsiz["olusturma"]).date() == timezone.localdate()
 
 
 def test_indirme_saati_sifirlar_ve_sure_dolunca_hatirlatir() -> None:
@@ -159,14 +179,6 @@ def test_parola_kurulmamissa_hatirlatma_yok(parolasiz: Path, client: APIClient) 
 
     assert ozet["remind"] is False
     assert ozet["days_since"] is None
-
-
-def test_gorevli_kipinde_kapali(client: APIClient) -> None:
-    KIP.gorevliye_gec()
-
-    for yanit in (client.get(URL), client.put(URL, {"reminder_days": 30}, format="json")):
-        assert yanit.status_code == 403
-        assert yanit.json()["code"] == "kip_yetkisiz"
 
 
 def test_kilitliyken_kapali(kilitli: Path, client: APIClient) -> None:

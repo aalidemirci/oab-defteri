@@ -30,13 +30,22 @@ tasarımının §5.1 ve §12.B'sindedir (öğrenci ve kütüphane alanları F1b'
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
 from apps.okul.normalize import GRADE_LEVELS, PREP_LEVEL, normalize_student_number
-from shared.crypto import EncryptedCharField, blind_index
+from shared import kanonik
+from shared.crypto import (
+    EncryptedCharField,
+    EncryptedTextField,
+    account_seal_key,
+    blind_index,
+    is_corrupt,
+)
 from shared.models import BaseModel
 
 
@@ -66,6 +75,14 @@ class SchoolLevel(models.TextChoices):
     ORTAOGRETIM = "ORTAOGRETIM", "Ortaöğretim (lise)"
 
 
+#: Boşta kilit süresi (dakika; tasarım TK14, §15 M-3): varsayılan 10, ayar 3-30. Alanın
+#: kendi varsayılanıdır; oturum katmanı satır yokken de bunu kullanır (aile iskeletinin
+#: 3 dk'lık varsayılanına sessiz düşüş yoktur, tasarım §13 D11).
+IDLE_LOCK_MINUTES_DEFAULT = 10
+IDLE_LOCK_MINUTES_MIN = 3
+IDLE_LOCK_MINUTES_MAX = 30
+
+
 class SchoolConfig(BaseModel):
     """Kurum bilgisi — TEK satır (singleton, pk=1).
 
@@ -83,6 +100,11 @@ class SchoolConfig(BaseModel):
     yeri okul kartı adımında belirlenir), `demirbas_onayi` + `demirbas_no`
     (Bilgi ve Sistem Güvenliği Yönergesi 11/8, 11/23: program yalnız kurum
     demirbaşı bilgisayara kurulur). Hiçbiri kişisel veri değildir, şifrelenmez.
+
+    `idle_lock_minutes`: oturumun boşta kilit süresi (dakika; tasarım TK14, plan F1b-1
+    "Oturum"). Ayarlar → Güvenlik'te program yöneticisi değiştirir (ekran ve uç ön
+    yüz commit'inde). Oturum katmanı değeri süreç içinde önbelleğe alır; satır
+    kaydedilince önbellek boşalır (`apps.okul.oturum.bosta_suresi_onbellegini_bosalt`).
 
     `yol_haritasi`: Genel Bakış'taki "Başlangıç Yol Haritası" kartının
     KULLANICININ İŞARETLEDİĞİ maddeleri (`{"isaretler": {madde: "gg-aa-yyyy"
@@ -116,7 +138,15 @@ class SchoolConfig(BaseModel):
     )
     setup_completed = models.BooleanField("kurulum tamamlandı", default=False)
     app_password_hash = models.CharField(
-        "yönetici parolası parmak izi", max_length=255, blank=True, default=""
+        "veri anahtarı parmak izi", max_length=255, blank=True, default=""
+    )
+    idle_lock_minutes = models.PositiveSmallIntegerField(
+        "boşta kilit süresi (dakika)",
+        default=IDLE_LOCK_MINUTES_DEFAULT,
+        validators=[
+            MinValueValidator(IDLE_LOCK_MINUTES_MIN),
+            MaxValueValidator(IDLE_LOCK_MINUTES_MAX),
+        ],
     )
 
     class Meta:
@@ -127,6 +157,14 @@ class SchoolConfig(BaseModel):
             models.CheckConstraint(
                 condition=models.Q(kademe__in=[*SchoolLevel.values, ""]),
                 name="ck_schoolconfig_kademe",
+            ),
+            # Aralık doğrulayıcılarla aynı; program dışından yazılan değer de reddedilir.
+            models.CheckConstraint(
+                condition=models.Q(
+                    idle_lock_minutes__gte=IDLE_LOCK_MINUTES_MIN,
+                    idle_lock_minutes__lte=IDLE_LOCK_MINUTES_MAX,
+                ),
+                name="ck_schoolconfig_idle_lock_minutes",
             ),
         ]
 
@@ -503,9 +541,15 @@ class Student(BaseModel):
         hesaplanmaz (numara değişmedi; anahtar gerekmez). Okul no içindeyse
         indeks alanı da `update_fields`'e eklenir — aksi hâlde yeni numara
         yazılır, indeks eskide kalırdı.
+
+        Okul no çözülemiyorsa (`CorruptField`, tasarım §13 D48) indeks yeniden
+        HESAPLANMAZ: işaretin indeksi anlamsızdır ve eşleşmeye sahte bir değer
+        sokardı; kayıtlı indeks olduğu gibi kalır, ham değer de aynen geri yazılır.
         """
         update_fields = kwargs.get("update_fields")
-        if update_fields is None or "student_number" in update_fields:
+        if (update_fields is None or "student_number" in update_fields) and not is_corrupt(
+            self.student_number
+        ):
             self.student_number_index = student_number_blind_index(self.student_number)
             if update_fields is not None and "student_number_index" not in update_fields:
                 kwargs["update_fields"] = [*update_fields, "student_number_index"]
@@ -574,3 +618,260 @@ class ImportRun(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.get_source_type_display()} — {self.file_name or self.file_hash[:12]}"
+
+
+# ---------------------------------------------------------------------------
+# Hesaplar ve iz anahtarı (tasarım §4.6; F1b-1)
+# ---------------------------------------------------------------------------
+class DeletionNotAllowed(RuntimeError):
+    """Satırı silinmeyen modelde silme denendi (altın kural 4; tasarım §4.6)."""
+
+
+class _NoDeleteQuerySet(models.QuerySet):  # type: ignore[type-arg]  # Any davranışı korunur
+    """Toplu silmeyi reddeden queryset (hesap ve iz anahtarı satırları silinmez)."""
+
+    def delete(self) -> tuple[int, dict[str, int]]:
+        raise DeletionNotAllowed("Bu kayıtlar silinmez (tasarım §4.6).")
+
+
+class AccountRole(models.TextChoices):
+    """Hesap rolleri (tasarım §2.3.1 rol kodları, §4.4.1; etiketler sözlük §1).
+
+    `yonetici` etiketi sözlüğün tam adıdır; kilit ekranındaki kısa etiket
+    ("Program yöneticisi") oturum katmanındadır (plan F1b-1 "Oturum").
+    """
+
+    YONETICI = "yonetici", "Program yöneticisi (OAB'den sorumlu müdür yardımcısı)"
+    BASKAN = "baskan", "Başkan"
+    BASKAN_YARDIMCISI = "baskan_yardimcisi", "Başkan yardımcısı"
+    MUHASIP = "muhasip", "Muhasip"
+    SEKRETER = "sekreter", "Sekreter"
+    DENETLEME_KURULU = "denetleme_kurulu", "Denetleme Kurulu"
+    MUDUR = "mudur", "Okul müdürü"
+
+
+#: Aynı anda tek açık (KAPALI olmayan) hesabı olabilen roller (tasarım §4.6.1 kısıtları).
+SINGLE_ACCOUNT_ROLES: tuple[str, ...] = (
+    AccountRole.BASKAN.value,
+    AccountRole.BASKAN_YARDIMCISI.value,
+    AccountRole.MUHASIP.value,
+    AccountRole.SEKRETER.value,
+    AccountRole.MUDUR.value,
+)
+#: Denetleme Kurulu hesabı üst sınırı (asıl üyeler: 1 veli + 2 öğretmen, md. 14/1).
+MAX_AUDIT_BOARD_ACCOUNTS = 3
+
+
+class AccountStatus(models.TextChoices):
+    """Hesap durumu (tasarım §4.6.1). `KAPALI` geri dönmez."""
+
+    PAROLA_YENILENMELI = "PAROLA_YENILENMELI", "Parola yenilenmeli"
+    ACIK = "ACIK", "Açık"
+    ASKIDA = "ASKIDA", "Askıda"
+    KAPALI = "KAPALI", "Kapalı"
+
+
+class SuspendReason(models.TextChoices):
+    """`ASKIDA` durumunun nedeni; hatalı deneme askısı `guvenlik.json`'dadır (§4.4.4)."""
+
+    UYELIK_DUSTU = "UYELIK_DUSTU", "Üyelik düştü"
+    GOREV_BOLUMU = "GOREV_BOLUMU", "Görev bölümü"
+
+
+class ResetKind(models.TextChoices):
+    """Parolanın neden yenilendiği (sahibine ilk girişte bildirilir; tasarım §4.3 tehdit 12)."""
+
+    SIFIRLAMA = "SIFIRLAMA", "Parola sıfırlandı"
+    KURTARMA = "KURTARMA", "Kurtarma anahtarıyla yenilendi"
+
+
+class Account(models.Model):
+    """Kişisel hesap: bir kişi + bir rol (tasarım §4.4.1, §4.6.1; T1).
+
+    `guvenlik.json`'daki `hesaplar[]` ile İKİ DEPO kuralına bağlıdır: `id` sarmalın
+    `id`'si, `login_name` sarmalın `tanitici`'sidir; rol, ad-soyad, durum ve tarihler
+    yalnız burada durur (§4.4.4). Kural ve sıralar `services.app_password` ve
+    `services.hesaplar` modül başlıklarındadır.
+
+    MÜHÜR (`seal`): `HMAC(HKDF(DEK, "od-hesap-muhru/v1"), kanonik(id, login_name,
+    role, status, person, membership, term, opened_at, closed_at))`
+    (`shared.kanonik.hesap_muhru`). Kilit açılışında seçilen hesabın mührü DEK
+    belleğe alınmadan doğrulanır; tutmazsa giriş reddedilir ve satıra DOKUNULMAZ
+    (yeniden mühürlemek program dışından değiştirilmiş rolü meşrulaştırırdı; §4.3
+    tehdit 19). `person`, `membership` ve `term` alanları hedef modelleriyle F1c'de
+    gelir; mühür onları bugünden `null` olarak taşır, alanlar eklenince var olan
+    mühürler değişmez.
+
+    KISITLAR (sert; sistem bütünlüğü): açık (`KAPALI` olmayan) hesaplar arasında
+    `login_name` tekil · başkan, başkan yardımcısı, muhasip, sekreter ve okul müdürü
+    için tek açık hesap (DB kısıtı) · Denetleme Kurulu için en çok üç ve en az bir
+    açık program yöneticisi (servis katmanı, `services.hesaplar`). SATIR SİLİNMEZ:
+    `delete()` ve toplu silme `DeletionNotAllowed` yükseltir (TK11; altın kural 4).
+    `BaseModel`'den türemez: yumuşak silme ve `updated_at` bu modele uymaz.
+    """
+
+    id = models.UUIDField("kimlik", primary_key=True, default=uuid.uuid4, editable=False)
+    login_name = models.CharField("tanıtıcı", max_length=32)
+    role = models.CharField("rol", max_length=24, choices=AccountRole.choices)
+    display_name = EncryptedCharField("hesap sahibinin adı-soyadı", max_length=150)
+    status = models.CharField(
+        "durum",
+        max_length=24,
+        choices=AccountStatus.choices,
+        default=AccountStatus.PAROLA_YENILENMELI,
+    )
+    suspend_reason = models.CharField(
+        "askı nedeni", max_length=16, choices=SuspendReason.choices, blank=True, default=""
+    )
+    opened_at = models.DateTimeField("açılış", default=timezone.now)
+    opened_by = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="açan hesap",
+    )
+    closed_at = models.DateTimeField("kapanış", null=True, blank=True)
+    closed_by = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="kapatan hesap",
+    )
+    password_changed_at = models.DateTimeField("parola değişimi", null=True, blank=True)
+    reset_at = models.DateTimeField("parola yenilenme anı", null=True, blank=True)
+    reset_by = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="parolayı sıfırlayan hesap",
+    )
+    reset_kind = models.CharField(
+        "parola yenilenme türü", max_length=16, choices=ResetKind.choices, blank=True, default=""
+    )
+    reset_notice_pending = models.BooleanField("yenilenme bildirimi bekliyor", default=False)
+    last_login_at = models.DateTimeField("son giriş", null=True, blank=True)
+    seal = models.CharField("mühür", max_length=64, blank=True, default="")
+
+    objects = _NoDeleteQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = "hesap"
+        verbose_name_plural = "hesaplar"
+        ordering = ["opened_at", "login_name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["login_name"],
+                condition=~models.Q(status="KAPALI"),
+                name="uq_account_login_name_open",
+            ),
+            models.UniqueConstraint(
+                fields=["role"],
+                condition=models.Q(role__in=SINGLE_ACCOUNT_ROLES) & ~models.Q(status="KAPALI"),
+                name="uq_account_single_role_open",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(role__in=AccountRole.values), name="ck_account_role"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status__in=AccountStatus.values), name="ck_account_status"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(suspend_reason__in=[*SuspendReason.values, ""]),
+                name="ck_account_suspend_reason",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(reset_kind__in=[*ResetKind.values, ""]),
+                name="ck_account_reset_kind",
+            ),
+            # Askı nedeni yalnız ASKIDA durumunda dolu olur.
+            models.CheckConstraint(
+                condition=models.Q(status="ASKIDA") | models.Q(suspend_reason=""),
+                name="ck_account_suspend_reason_status",
+            ),
+            # Kapanış anı yalnız KAPALI durumda, KAPALI durumda da daima dolu.
+            models.CheckConstraint(
+                condition=(models.Q(status="KAPALI") & models.Q(closed_at__isnull=False))
+                | (~models.Q(status="KAPALI") & models.Q(closed_at__isnull=True)),
+                name="ck_account_closed_at_status",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        # Ad-soyad şifreli ve kişisel veridir: temsil tanıtıcı ve roldür.
+        return f"{self.login_name} ({self.get_role_display()})"
+
+    def delete(self, using: Any = None, keep_parents: bool = False) -> tuple[int, dict[str, int]]:
+        raise DeletionNotAllowed("Hesap kaydı silinmez; hesap kapatılır (tasarım §4.6.1).")
+
+    def seal_fields(self) -> dict[str, Any]:
+        """Mühre giren alanlar (`shared.kanonik.HESAP_MUHRU_ALANLARI`).
+
+        `person`, `membership` ve `term` F1c'ye dek `None`dır (sınıf belge dizesi).
+        """
+        return {
+            "id": self.id,
+            "login_name": self.login_name,
+            "role": self.role,
+            "status": self.status,
+            "person": None,
+            "membership": None,
+            "term": None,
+            "opened_at": self.opened_at,
+            "closed_at": self.closed_at,
+        }
+
+    def compute_seal(self, data_key: bytes) -> str:
+        """Bu satırın verilen DEK'le mührü (DEK belleğe yüklenmeden de hesaplanır)."""
+        return kanonik.hesap_muhru(account_seal_key(data_key), self.seal_fields())
+
+    def seal_matches(self, data_key: bytes) -> bool:
+        """Kayıtlı mühür verilen DEK'le hesaplanana eşit mi? (sabit sürede karşılaştırılır)"""
+        return bool(self.seal) and kanonik.esit(self.seal, self.compute_seal(data_key))
+
+    @property
+    def display_name_text(self) -> str | None:
+        """Ad-soyadın okunabilir hâli; çözülemiyorsa None (ekranda "okunamadı", plan F1b-1)."""
+        deger = self.display_name
+        return None if is_corrupt(deger) else str(deger)
+
+
+class AuditKey(models.Model):
+    """Denetim izinin iz anahtarı (İA; tasarım §4.6.3).
+
+    İA kurulumda ayrı üretilen 32 rastgele bayttır, DEK'ten TÜREMEZ; DEK'le şifreli
+    (Fernet) olarak burada durur: veritabanıyla birlikte yedeğe girer, geri yükleme
+    hangi yoldan yapılırsa yapılsın zincir doğrulanabilir. `key` alanı base64
+    kodlu anahtarın şifreli hâlidir. DEK yenilemesinde (F4) yeni İA eklenir, eskiler
+    yeni DEK'le yeniden şifrelenir ve `retired_at` alır. `AuditTrail` modeli
+    alt commit (c)'dedir. Satır silinmez.
+
+    İA kişisel veri değildir (§4.6.5): şifreli alanı Güvenlik ekranındaki
+    "şifrelenen alanlar" listesine girmez (`ENCRYPTED_FIELDS_ARE_PERSONAL`).
+    """
+
+    #: `app_password.protected_field_labels` bu modelin şifreli alanlarını listelemez.
+    ENCRYPTED_FIELDS_ARE_PERSONAL = False
+
+    key = EncryptedTextField("iz anahtarı")
+    valid_from_seq = models.PositiveBigIntegerField("geçerli ilk iz sırası", unique=True)
+    created_at = models.DateTimeField("oluşturulma", default=timezone.now)
+    retired_at = models.DateTimeField("emeklilik", null=True, blank=True)
+
+    objects = _NoDeleteQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = "iz anahtarı"
+        verbose_name_plural = "iz anahtarları"
+        ordering = ["valid_from_seq"]
+
+    def __str__(self) -> str:
+        return f"İz anahtarı ({self.valid_from_seq}. satırdan)"
+
+    def delete(self, using: Any = None, keep_parents: bool = False) -> tuple[int, dict[str, int]]:
+        raise DeletionNotAllowed("İz anahtarı silinmez (tasarım §4.6.3).")

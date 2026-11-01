@@ -8,9 +8,9 @@ dönüşümü AYNEN. FE `lib/api.ts` bu biçimi bekler:
 
 Fail-closed şifreleme (tasarım §5.3): anahtar bellekte değilken şifreli alana yazma
 girişimi (`shared.crypto.KeyMissingError`, alt sınıfı
-`app_password.PasswordRequired` dahil) **409 `parola_gerekli`** olur. Parola
+`app_password.PasswordRequired` dahil) **409 `parola_gerekli`** olur. İlk hesap
 kuruluysa kilitli durum zaten ara katmanda (423) kesildiği için bu yanıt
-pratikte "önce yönetici parolasını kurun" demektir.
+pratikte "önce program yöneticisi hesabını kurun" demektir (plan F1b-1).
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from shared.crypto import KeyMissingError
 # ve kullanıcı iletisidir, parola değil.
 PASSWORD_REQUIRED_CODE = "parola_gerekli"  # noqa: S105
 PASSWORD_REQUIRED_MESSAGE = (
-    "Kişi kaydı için önce yönetici parolasını kurun (Kurulum Sihirbazı'nın ilk adımı)."  # noqa: S105
+    "Kişi kaydı için önce program yöneticisi hesabını kurun (Kurulum Sihirbazı'nın ilk adımı)."  # noqa: S105
 )
 
 

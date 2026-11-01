@@ -1,9 +1,15 @@
 """OAB Defteri yedek kapsayıcısı.
 
 Yedekleme için asimetrik zarf şifrelemesi kullanılır: veri anahtarından türetilen
-X25519 özel anahtar yalnız yönetici parolasıyla kilit açıldığında elde edilebilir;
+X25519 özel anahtar yalnız bir hesabın parolasıyla kilit açıldığında elde edilebilir;
 açık anahtar ise başlangıçta parola sorulmadan yedek alınabilmesi için diskte tutulur.
 Yedek içeriği AES-256-GCM ile hem şifrelenir hem de doğrulanır.
+
+Yedeğin kurtarma başlığı (tasarım TK10, §4.4.4) `guvenlik.json`'un yalnız kurtarma
+bölümünü ve kurtarma anahtarının kimliğini (no, tarih) taşır; hesap sarmalları
+yedeğe girmez (`recovery_header_from_state`). Aynı bilgisayarda geri yükleme güncel
+`guvenlik.json` ve bir hesabın parolasıyla, yeni bilgisayarda kurtarma anahtarıyla
+yapılır.
 """
 
 from __future__ import annotations
@@ -94,7 +100,8 @@ def load_public_key(data_dir: Path) -> X25519PublicKey:
         return X25519PublicKey.from_public_bytes(key)
     except (OSError, KeyError, ValueError, TypeError) as exc:
         raise BackupCryptoError(
-            "Şifreli yedekleme anahtarı yok veya bozuk; önce yönetici parolasını kurup açın."
+            "Şifreli yedekleme anahtarı yok veya bozuk; önce program yöneticisi hesabını "
+            "kurup kilidi açın."
         ) from exc
 
 
@@ -106,8 +113,14 @@ def can_encrypt(data_dir: Path) -> bool:
     return True
 
 
+#: `guvenlik.json` şema sürümü (tasarım §2.3.1, §4.4.4). Şema 1 (tek yönetici
+#: parolası) KULLANILAMAZ sayılır: çevirici yazılmadı, deneme kurulumları yeniden
+#: kurulur (plan F1b-1 "Eski veri").
+SECURITY_STATE_VERSION = 2
+
+
 def is_usable_security_state(data: object) -> bool:
-    """Güvenlik durumu (`guvenlik.json` içeriği) DEK'i açmaya yeter mi? — TEK KURAL.
+    """Güvenlik durumu (`guvenlik.json` içeriği ya da yedek başlığı) DEK'i açmaya yeter mi? — TEK KURAL.
 
     Aynı kural üç yerde uygulanır ve yalnız burada tanımlıdır:
 
@@ -118,18 +131,28 @@ def is_usable_security_state(data: object) -> bool:
     * geri yüklemede aday durumlar (`backup_restore`).
 
     Biçim yapısaldır (kriptografik doğrulama değildir; yanlış sarmal çözümde
-    açık hatayla düşer): JSON sözlük; `kdf` varsa sözlük; `parola` ya da
-    `kurtarma` bölümlerinden EN AZ BİRİ sözlük ve içinde `salt` ile `sarmal`
-    dolu dize. Tek tam sarmal DEK'i açmaya yeter (o sırla); program her zaman
-    ikisini birlikte yazar. İkisinden birini şart koşmak, parolayla
-    açılabilecek bir dosyayı "kayıp" sayıp kilidi açtırmaz, yedeği de
+    açık hatayla düşer). Şema 2 (tasarım §4.4.4): JSON sözlük; `surum` 2; `kdf`
+    sözlük; `hesaplar` varsa liste; hesap sarmallarından (`{id, tanitici, salt,
+    sarmal}`) EN AZ BİRİ ya da `kurtarma` bölümü (`{salt, sarmal}`) tam. Yedek
+    başlığı yalnız kurtarma bölümünü taşır (TK10; `hesaplar` yoktur) ve aynı
+    kuraldan geçer. Kurtarmayla geri yüklemeden sonra `hesaplar` boştur: dosya
+    yalnız kurtarma bölümüyle kullanılabilir (kurtarma anahtarıyla aç + program
+    yöneticisi parolası). Tek tam sarmal DEK'i açmaya yeter (o sırla); birini şart
+    koşmak, açılabilecek bir dosyayı "kayıp" sayıp kilidi açtırmaz, yedeği de
     durdururdu.
     """
     if not isinstance(data, dict):
         return False
-    if not isinstance(data.get("kdf", {}), dict):
+    if data.get("surum") != SECURITY_STATE_VERSION:
         return False
-    return any(_is_complete_wrap(data.get(bolum)) for bolum in ("parola", "kurtarma"))
+    if not isinstance(data.get("kdf"), dict):
+        return False
+    hesaplar = data.get("hesaplar", [])
+    if not isinstance(hesaplar, list):
+        return False
+    if any(_is_complete_account_wrap(hesap) for hesap in hesaplar):
+        return True
+    return _is_complete_wrap(data.get("kurtarma"))
 
 
 def _is_complete_wrap(bolum: object) -> bool:
@@ -137,6 +160,13 @@ def _is_complete_wrap(bolum: object) -> bool:
     if not isinstance(bolum, dict):
         return False
     return all(isinstance(bolum.get(alan), str) and bolum[alan] for alan in ("salt", "sarmal"))
+
+
+def _is_complete_account_wrap(hesap: object) -> bool:
+    """Hesap sarmalı kimliği, tanıtıcısı, tuzu ve sarmalı dolu mu?"""
+    if not isinstance(hesap, dict) or not _is_complete_wrap(hesap):
+        return False
+    return all(isinstance(hesap.get(alan), str) and hesap[alan] for alan in ("id", "tanitici"))
 
 
 def parse_security_state(raw: bytes) -> dict[str, Any] | None:
@@ -148,25 +178,65 @@ def parse_security_state(raw: bytes) -> dict[str, Any] | None:
     return data if is_usable_security_state(data) else None
 
 
-def usable_recovery_header(data_dir: Path) -> bytes | None:
-    """Güncel `guvenlik.json` kurtarma başlığı olarak kullanılabiliyorsa baytları; yoksa None.
+def recovery_header_from_state(data: object) -> dict[str, Any] | None:
+    """Güvenlik durumunun yedek başlığına giden izdüşümü; kurtarma bölümü yoksa None.
 
-    Yok, okunamıyor, boş ya da biçimsiz dosya aynı sonucu verir: böyle bir
-    başlıkla alınan yedek hiçbir parolayla açılamazdı (tasarım §4.3 tehdit 8).
+    TK10 (tasarım §4.4.4): başlık YALNIZ `{surum, kdf, kurtarma: {no, tarih, salt,
+    sarmal}}` taşır. Hesap sarmalları yedeğe GİRMEZ (dönemi biten üyenin eski
+    parolası eski yedeği açmasın; §4.3 tehdit 5) ve doğrulama damgası da girmez
+    (başlık yeni bilgisayarda anahtarın no'sunu ve tarihini gösterir, kâğıdın
+    saklanıp saklanmadığını değil).
+    """
+    if not isinstance(data, dict) or not is_usable_security_state(data):
+        return None
+    kurtarma = data.get("kurtarma")
+    if not isinstance(kurtarma, dict) or not _is_complete_wrap(kurtarma):
+        return None
+    bolum: dict[str, Any] = {"salt": kurtarma["salt"], "sarmal": kurtarma["sarmal"]}
+    for alan in ("no", "tarih"):
+        if alan in kurtarma:
+            bolum[alan] = kurtarma[alan]
+    return {"surum": SECURITY_STATE_VERSION, "kdf": data["kdf"], "kurtarma": bolum}
+
+
+def _header_bytes(data: dict[str, Any]) -> bytes:
+    return json.dumps(data, ensure_ascii=False, sort_keys=True).encode("utf-8")
+
+
+def usable_recovery_header(data_dir: Path) -> bytes | None:
+    """Güncel `guvenlik.json`'un yedek başlığı (TK10 izdüşümü); kullanılamazsa None.
+
+    Yok, okunamıyor, boş, biçimsiz ya da kurtarma bölümü eksik dosya aynı sonucu
+    verir: böyle bir başlıkla alınan yedek başka bilgisayarda hiçbir sırla
+    açılamazdı (tasarım §4.3 tehdit 8). Dosyanın kendisi gömülmez.
     """
     try:
         raw = (data_dir / SECURITY_STATE_FILE_NAME).read_bytes()
     except OSError:
         return None
-    return raw if parse_security_state(raw) is not None else None
+    baslik = recovery_header_from_state(parse_security_state(raw))
+    return _header_bytes(baslik) if baslik is not None else None
 
 
 def recovery_metadata(data_dir: Path) -> bytes:
-    """Parolayla DEK'i açmaya yarayan, kişisel veri içermeyen kurtarma başlığı."""
+    """Kişisel veri ve hesap sarmalı içermeyen kurtarma başlığı (TK10); yoksa b"".
+
+    Önce güncel `guvenlik.json`, o kullanılamazsa en yeni `guvenlik-arsiv-*`
+    kopyası denenir. Dönen baytlar dosyanın kendisi değil izdüşümüdür
+    (`recovery_header_from_state`).
+    """
     current = data_dir / SECURITY_STATE_FILE_NAME
     candidates = [current] if current.is_file() else []
     candidates.extend(sorted(data_dir.glob("guvenlik-arsiv-*.json"), reverse=True))
-    return candidates[0].read_bytes() if candidates else b""
+    for aday in candidates:
+        try:
+            raw = aday.read_bytes()
+        except OSError:
+            continue
+        baslik = recovery_header_from_state(parse_security_state(raw))
+        if baslik is not None:
+            return _header_bytes(baslik)
+    return b""
 
 
 def encrypt_bytes(

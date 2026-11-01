@@ -21,9 +21,15 @@ Masaüstü kardeşi `desktop/restore.py` bozuk-veritabanı senaryosudur (pencere
 hiç açılmadan `--geri-yukle`); bu modül programın AÇILABİLDİĞİ senaryo içindir
 (yanlış veri girişi sonrası eski güne dönme; güvenlik dosyası kayıp kilidinden
 çıkış — iki uç da o kilitte açıktır, `lock_middleware`). Yedekler daima
-şifrelidir (düz yedek dalı yok, §13 D29); parola ya da kurtarma anahtarı
-gerekir. Parola/kurtarma anahtarı yalnız parametre olarak akar; hiçbir günlük
-satırına ve hata metnine yazılmaz.
+şifrelidir (düz yedek dalı yok, §13 D29); bir hesabın parolası ya da kurtarma
+anahtarı gerekir. Parola yolunda hesap verilmezse oturumdaki hesap kullanılır
+(tasarım §4.4.4: aynı bilgisayarda güncel `guvenlik.json` + hesap parolası; rol
+denetimi 2. adımda). Parola/kurtarma anahtarı yalnız parametre olarak akar; hiçbir
+günlük satırına ve hata metnine yazılmaz.
+
+Geri yükleme UZUN İŞTİR (`shared.bakim.UZUN_ISLER`; tasarım §4.2, §4.4.3): sürerken
+oturumun boşta ve elle kilidi ertelenir, DEK işin ortasında silinmez. Başarıda oturum
+burada HEMEN kapanır (`app_password.lock`): DEK artık bu veritabanına ait değildir.
 """
 
 from __future__ import annotations
@@ -40,6 +46,7 @@ from django.db import connections
 from django.utils import timezone
 
 from apps.okul import restart_gate
+from apps.okul.oturum import OTURUM
 from apps.okul.services import app_password, backup_restore
 from shared import bakim
 
@@ -87,6 +94,7 @@ def restore_and_require_restart(
     *,
     name: str = "",
     content: bytes | None = None,
+    hesap: str = "",
     password: str = "",
     recovery_key: str = "",
 ) -> dict[str, Any]:
@@ -94,8 +102,18 @@ def restore_and_require_restart(
 
     Kaynak ikisinden biridir: `name` (yedek klasöründen) YA DA `content`
     (kullanıcının yüklediği dosyanın baytları). Hata hâlinde hedefe dokunulmaz
-    (çekirdek garantisi) ve kapı KURULMAZ — kullanıcı yeniden dener.
+    (çekirdek garantisi) ve kapı KURULMAZ — kullanıcı yeniden dener. İş uzun iş
+    sayacındadır (modül başlığı).
     """
+    with bakim.UZUN_ISLER.is_():
+        return _restore(
+            name=name, content=content, hesap=hesap, password=password, recovery_key=recovery_key
+        )
+
+
+def _restore(
+    *, name: str, content: bytes | None, hesap: str, password: str, recovery_key: str
+) -> dict[str, Any]:
     hedef = _database_path()
     gecici: Path | None = None
     if content is not None:
@@ -121,6 +139,7 @@ def restore_and_require_restart(
         sonuc = backup_restore.restore_database(
             kaynak,
             hedef,
+            hesap=hesap or OTURUM.hesap_id(),
             password=password or None,
             recovery_key=recovery_key or None,
         )

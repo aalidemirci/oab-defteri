@@ -11,8 +11,8 @@ Kanıtlanan maddeler:
   kişide" öğüdü ve kütüphane dili yoktur;
 * anahtar hiçbir günlüğe düşmez (caplog, DEBUG düzeyinde bütün kaydediciler)
   ve hata gövdesinde yankılanmaz;
-* kilitliyken kilit kapısı keser (`security/` önekine rağmen), görevli kipinde
-  kapalıdır, parola kurulmadan çalışmaz.
+* kilitliyken kilit kapısı keser (kilitliyken açık listede değildir), parola
+  kurulmadan çalışmaz.
 """
 
 from __future__ import annotations
@@ -30,10 +30,9 @@ from django.utils import timezone
 from pypdf import PdfReader
 from rest_framework.test import APIClient
 
-from apps.okul.kip import KIP
 from apps.okul.services import app_password
 from apps.okul.services import setup as setup_service
-from conftest import TEST_KURTARMA_ANAHTARI
+from conftest import TEST_HESAP_ID, TEST_KURTARMA_ANAHTARI, TEST_TANITICI
 from shared import crypto
 
 URL = "/api/v1/security/recovery-key/pdf/"
@@ -192,9 +191,12 @@ def test_baska_kurulumun_dosyasiyla_dogrulama_yapilamaz(
 ) -> None:
     """Sarmal açılsa bile DEK bellekteki anahtar değilse (başka kurulum) PDF basılmaz."""
     baska = app_password._build_state(
-        bytes(range(1, 33)), password="Baska-Parola-9", recovery_key=TEST_KURTARMA_ANAHTARI
+        bytes(range(1, 33)),
+        hesap_id=TEST_HESAP_ID,
+        tanitici=TEST_TANITICI,
+        password="Baska-Parola-9",
+        recovery_key=TEST_KURTARMA_ANAHTARI,
     )
-    baska["gecis"] = app_password.TRANSITION_DONE
     app_password._write_state(baska)
     uyumalar: list[float] = []
     monkeypatch.setattr(app_password, "FAILURE_DELAYS", (2.0,))
@@ -229,17 +231,10 @@ def test_servis_de_kilitliyken_dogrulamaz() -> None:
         app_password.verify_recovery_key(TEST_KURTARMA_ANAHTARI)
 
 
-def test_parola_kurulmadan_calismaz(client: APIClient, parolasiz: Path) -> None:
+def test_hesap_kurulmadan_calismaz(client: APIClient, parolasiz: Path) -> None:
     yanit = _iste(client, TEST_KURTARMA_ANAHTARI)
     assert yanit.status_code == 400
-    assert yanit.json()["message"] == "Yönetici parolası kurulu değil."
-
-
-def test_gorevli_kipinde_kapali(client: APIClient) -> None:
-    KIP.gorevliye_gec()
-    yanit = _iste(client, TEST_KURTARMA_ANAHTARI)
-    assert yanit.status_code == 403
-    assert yanit.json()["code"] == "kip_yetkisiz"
+    assert yanit.json()["message"] == "Program yöneticisi hesabı henüz kurulmadı."
 
 
 def test_anahtar_hicbir_gunluge_dusmez(client: APIClient, caplog: pytest.LogCaptureFixture) -> None:

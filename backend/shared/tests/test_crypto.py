@@ -12,6 +12,7 @@ from hashlib import sha256
 from pathlib import Path
 
 import pytest
+from cryptography.fernet import InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
@@ -102,7 +103,7 @@ def test_kor_indeks_normallestirme_yapmaz() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Anahtar sayacı (kip katmanı yeni kilit açılışını buradan anlar)
+# Anahtar sayacı (teşhis ve test içindir; oturum açılışı buradan çıkarılmaz)
 # ---------------------------------------------------------------------------
 def test_key_epoch_yukleme_ve_bosaltmada_artar() -> None:
     ilk = crypto.key_epoch()
@@ -118,3 +119,122 @@ def test_kaldirilan_duz_yazma_araclari_yoktur() -> None:
     for ad in ("plaintext_writes", "writes_encrypted"):
         assert not hasattr(crypto, ad), ad
     assert not hasattr(crypto._holder, "_encrypt_writes")
+
+
+# ---------------------------------------------------------------------------
+# Katı kip (tasarım TK8 (3), §13 D48; F1 kapısı `test_from_db_value_kati_kip`)
+# ---------------------------------------------------------------------------
+class _SahteModel:
+    """`from_db_value`'nun okuduğu `_meta.label` için en küçük taklit."""
+
+    class _meta:  # noqa: N801 — Django'nun `_meta` adı
+        label = "okul.Ornek"
+
+
+def _kati_alan() -> crypto.EncryptedCharField:
+    alan = crypto.EncryptedCharField("ad", max_length=100)
+    alan.name = "first_name"
+    alan.model = _SahteModel  # type: ignore[assignment]
+    return alan
+
+
+def test_from_db_value_kati_kip() -> None:
+    """Kilit açıkken token olmayan ya da bu DEK'in olmayan dolu değer METİN DÖNMEZ."""
+    alan = _kati_alan()
+    # 1) SQLite'ta şifreli sütuna yazılmış düz metin (Türkçe harfli ve ASCII).
+    for duz in ("ŞÜKRÜ", "EMRE"):
+        okunan = alan.from_db_value(duz, None, None)
+        assert isinstance(okunan, crypto.CorruptField)
+        assert not isinstance(okunan, str)
+        assert okunan.raw == duz
+        assert okunan.model_label == "okul.Ornek" and okunan.field_name == "first_name"
+    # 2) Başka bir DEK'in token'ı (satırdan satıra taşınmış ya da başka kurulum).
+    crypto.load_key(b"\x09" * 32)
+    yabanci = alan.get_prep_value("AYŞE")
+    crypto.load_key(TEST_DEK)
+    assert isinstance(alan.from_db_value(yabanci, None, None), crypto.CorruptField)
+    # 3) Kendi token'ı çözülür; boş ve None olduğu gibi kalır.
+    token = alan.get_prep_value("AYŞE")
+    assert alan.from_db_value(token, None, None) == "AYŞE"
+    assert alan.from_db_value("", None, None) == ""
+    assert alan.from_db_value(None, None, None) is None
+
+
+def test_kilitliyken_kati_kip_uygulanmaz_token_aynen_doner(kilitli: Path) -> None:
+    """Anahtar yokken çözme denenmez: değer olduğu gibi döner (okunamaz ama patlamaz)."""
+    assert _kati_alan().from_db_value("EMRE", None, None) == "EMRE"
+
+
+def test_bozuk_alan_isareti_yazilirken_ham_deger_aynen_doner() -> None:
+    """İşaret şifrelenip meşru veriye DÖNMEZ; eski ham değer olduğu gibi geri yazılır."""
+    alan = _kati_alan()
+    isaret = alan.from_db_value("DÜZ METİN", None, None)
+    assert isinstance(isaret, crypto.CorruptField)
+    assert alan.get_prep_value(isaret) == "DÜZ METİN"
+
+
+def test_bozuk_alan_isareti_kilitliyken_de_ham_yazilir() -> None:
+    isaret = crypto.CorruptField("gAAAAbozuk")
+    crypto.unload_key()
+    assert _kati_alan().get_prep_value(isaret) == "gAAAAbozuk"
+
+
+def test_bozuk_alan_isareti_metin_gibi_sizdirmaz() -> None:
+    isaret = crypto.CorruptField("ÖZEL BİLGİ", model_label="okul.Ornek", field_name="ad")
+    assert str(isaret) == ""
+    assert f"{isaret} SOYAD".strip() == "SOYAD"
+    assert not isaret
+    assert "ÖZEL" not in repr(isaret)
+    assert crypto.is_corrupt(isaret) and not crypto.is_corrupt("metin")
+    assert isaret == crypto.CorruptField("ÖZEL BİLGİ") and isaret != "ÖZEL BİLGİ"
+
+
+def test_bozuk_alan_isareti_temizlemede_metne_cevrilmez() -> None:
+    """`full_clean` işareti "" yapsaydı kayıt bozuk değeri boşla ezerdi."""
+    alan = _kati_alan()
+    isaret = crypto.CorruptField("x" * 500)  # uzunluk denetimi işarete uygulanmaz
+    assert alan.to_python(isaret) is isaret
+    assert alan.clean(isaret, None) is isaret
+    assert alan.to_python("ad") == "ad"
+
+
+def test_bozuk_okuma_kaydi_sayar_ve_sifirlanir() -> None:
+    crypto.record_corrupt_read("okul.Ornek", 7, "first_name")
+    crypto.record_corrupt_read("okul.Ornek", 7, "first_name")  # aynı kayıt-alan bir kez
+    crypto.record_corrupt_read("okul.Ornek", None, "last_name")
+    assert crypto.corrupt_read_count() == 2
+    assert crypto.corrupt_reads() == [
+        ("okul.Ornek", "", "last_name"),
+        ("okul.Ornek", "7", "first_name"),
+    ]
+    crypto._reset_corrupt_reads_for_tests()
+    assert crypto.corrupt_read_count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Alt anahtarlar ve iz anahtarı tutucusu (tasarım §2.3.1, §4.6.3)
+# ---------------------------------------------------------------------------
+def test_hesap_muhru_anahtari_tasarimdaki_hkdf_dizgesiyle_turer() -> None:
+    beklenen = HKDF(
+        algorithm=hashes.SHA256(), length=32, salt=None, info=b"od-hesap-muhru/v1"
+    ).derive(TEST_DEK)
+    assert crypto.ACCOUNT_SEAL_INFO == b"od-hesap-muhru/v1"
+    assert crypto.account_seal_key(TEST_DEK) == beklenen
+    assert crypto.derive_subkey(TEST_DEK, info=b"od-kor-indeks") != beklenen
+
+
+def test_iz_anahtari_dek_ile_yuklenir_ve_dusurulur() -> None:
+    crypto.load_key(TEST_DEK, audit_key=b"\x05" * 32)
+    assert crypto.active_audit_key() == b"\x05" * 32
+    crypto.load_key(TEST_DEK)  # yeni yükleme önceki iz anahtarını bırakmaz
+    assert crypto.active_audit_key() is None
+    crypto.load_key(TEST_DEK, audit_key=b"\x05" * 32)
+    crypto.unload_key()
+    assert crypto.active_audit_key() is None
+
+
+def test_decrypt_with_bellekteki_anahtardan_bagimsizdir() -> None:
+    token = crypto._fernet_for(b"\x03" * 32).encrypt(b"iz").decode("ascii")
+    assert crypto.decrypt_with(b"\x03" * 32, token) == b"iz"
+    with pytest.raises(InvalidToken):
+        crypto.decrypt_with(TEST_DEK, token)

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.db.models import Model
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -27,6 +28,7 @@ from apps.okul.models import (
     Student,
 )
 from apps.okul.services import calendar as calendar_service
+from shared import crypto
 
 
 def _validate_level(value: int) -> int:
@@ -269,7 +271,34 @@ class HolidaySeedRequestSerializer(serializers.Serializer[dict[str, Any]]):
     year = _year_field(required=False)
 
 
-class PersonnelSerializer(serializers.ModelSerializer[Personnel]):
+class CorruptFieldsMixin(serializers.Serializer[Any]):
+    """Çözülemeyen şifreli alanı `null` verir, kayda `bozuk_alanlar` listesini ekler (D48).
+
+    Kilit açıkken çözülemeyen değer `CorruptField` işaretidir (tasarım TK8 (3), §13
+    D48; plan F1b-1 "API'de alan boş gelir, kayıtta bozuk_alanlar listesi durur").
+    İşaret metin değildir; DRF onu boş dizeye çevirirdi, bu da "veri yok" ile
+    "veri okunamadı"yı karıştırırdı. Şifreli alanlardan türeyen alanlar
+    (`DERIVED_FROM`: ör. ad-soyad) kaynaklarından biri bozuksa `null` olur. Liste
+    alan ADLARINI taşır, değer taşımaz; panodaki bütünlük kartı ön yüz commit'indedir.
+    """
+
+    #: Türeyen alan → şifreli kaynak alanlar.
+    DERIVED_FROM: dict[str, tuple[str, ...]] = {"full_name": ("first_name", "last_name")}
+
+    def to_representation(self, instance: Any) -> Any:
+        veri = super().to_representation(instance)
+        bozuk = crypto.corrupt_fields_of(instance) if isinstance(instance, Model) else []
+        for alan in bozuk:
+            if alan in veri:
+                veri[alan] = None
+        for turemis, kaynaklar in self.DERIVED_FROM.items():
+            if turemis in veri and any(k in bozuk for k in kaynaklar):
+                veri[turemis] = None
+        veri["bozuk_alanlar"] = bozuk
+        return veri
+
+
+class PersonnelSerializer(CorruptFieldsMixin, serializers.ModelSerializer[Personnel]):
     """Personel sicili. Unvan ve branş YOKTUR (tasarım §8.4).
 
     `is_active` ve `left_at` salt okunurdur: ayrılış yalnız `personnel/<pk>/leave/`
@@ -348,7 +377,7 @@ class ClassSectionSerializer(serializers.ModelSerializer[ClassSection]):
         return attrs
 
 
-class StudentSerializer(serializers.ModelSerializer[Student]):
+class StudentSerializer(CorruptFieldsMixin, serializers.ModelSerializer[Student]):
     """Öğrenci sicili.
 
     Okul no şifreli + kör indekslidir (tasarım §5.3). Teklik kısıtı kör indekstedir;
@@ -465,7 +494,7 @@ def _pool_run(person: Student | Personnel) -> dict[str, Any] | None:
     }
 
 
-class LeavePoolStudentSerializer(serializers.ModelSerializer[Student]):
+class LeavePoolStudentSerializer(CorruptFieldsMixin, serializers.ModelSerializer[Student]):
     """Havuzdaki öğrenci: sınıf/şube, havuza giriş tarihi ve hangi aktarımla."""
 
     full_name = serializers.CharField(read_only=True)
@@ -488,7 +517,7 @@ class LeavePoolStudentSerializer(serializers.ModelSerializer[Student]):
         return _pool_run(obj)
 
 
-class LeavePoolPersonnelSerializer(serializers.ModelSerializer[Personnel]):
+class LeavePoolPersonnelSerializer(CorruptFieldsMixin, serializers.ModelSerializer[Personnel]):
     """Havuzdaki öğretmen / diğer personel + "olası aynı kişi" adayları.
 
     Adaylar `context["similar"]`'dan (kimlik → `SimilarCandidate`) okunur; birleştirme

@@ -1,4 +1,8 @@
-"""Kullanıcının istediğinde indirebildiği şifreli SQLite yedeği."""
+"""Kullanıcının istediğinde indirebildiği şifreli SQLite yedeği.
+
+Başlık TK10 izdüşümüdür (`backup_crypto.recovery_metadata`): yalnız kurtarma bölümü ve
+kurtarma anahtarının kimliği; hesap sarmalları yedeğe girmez (tasarım §4.4.4).
+"""
 
 from __future__ import annotations
 
@@ -20,9 +24,7 @@ class EncryptedBackupError(ValueError):
 def create_encrypted_backup() -> tuple[bytes, str]:
     """Tutarlı veritabanı görüntüsünü RAM'de şifreleyip indirmeye hazırlar."""
     if app_password.is_locked():
-        raise EncryptedBackupError(
-            "Şifreli yedek oluşturmak için yönetici parolasıyla kilidi açın."
-        )
+        raise EncryptedBackupError("Şifreli yedek oluşturmak için önce hesabınızla kilidi açın.")
 
     data_dir = app_password.state_path().parent
     database_path = Path(str(settings.DATABASES["default"]["NAME"]))

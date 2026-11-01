@@ -23,14 +23,14 @@ import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.okul.kip import KIP
 from apps.okul.models import Holiday, HolidayKind, SchoolConfig, SchoolLevel, Student
+from apps.okul.oturum import OTURUM
 from apps.okul.services import app_password
 from apps.okul.services import school_year as school_year_service
 from apps.okul.services import setup as setup_service
 from apps.okul.services import terms as term_service
-from apps.okul.tests.kip_ortak import SahteSaat
-from conftest import TEST_KURTARMA_ANAHTARI, TEST_PAROLA
+from apps.okul.tests.oturum_ortak import SahteSaat, oturum_saatini_kur
+from conftest import TEST_HESAP_ID, TEST_KURTARMA_ANAHTARI, TEST_PAROLA
 
 DURUM_ALANLARI = {
     "setup_completed",
@@ -189,7 +189,7 @@ class TestSetupComplete:
         assert yanit.status_code == 400
         govde = yanit.json()
         assert govde["code"] == "kurulum_eksik"
-        assert "1. adım (yönetici parolası)" in govde["message"]
+        assert "1. adım (program yöneticisi hesabı)" in govde["message"]
         assert "2. adım" not in govde["message"] and "3. adım" not in govde["message"]
         assert SchoolConfig.load().setup_completed is False
 
@@ -215,27 +215,27 @@ class TestSetupComplete:
         assert f"{beklenen} eksik." in mesaj
         assert SchoolConfig.load().setup_completed is False
 
-    def test_kurulum_suresince_sure_islemez_tamamlaninca_sayaclar_sifirdan_baslar(
+    def test_kurulum_suresince_bosta_kilit_yok_tamamlaninca_sayac_sifirdan_baslar(
         self, client: APIClient
     ) -> None:
-        """Tasarım §13 D15: sihirbazda geçen süre yönetici kipini düşürmez; bitince tam süre."""
+        """Tasarım §13 D15: sihirbazda geçen süre oturumu kilitlemez; bitince tam süre."""
         saat = SahteSaat()
-        KIP._reset_for_tests(saat=saat)
-        assert KIP.durum() == "yonetici"
+        oturum_saatini_kur(saat)
+        assert OTURUM.durum() == "acik"
         _okul_bilgileri()
         _aktif_yil()
-        saat.ilerlet(45 * 60)  # sihirbazda 45 dk (boşta ve mutlak süreden uzun)
-        assert KIP.durum() == "yonetici"
-        saat.ilerlet(170)
+        saat.ilerlet(45 * 60)  # sihirbazda 45 dk (boşta süreden uzun)
+        assert OTURUM.durum() == "acik"
+        saat.ilerlet(9 * 60)
 
         assert _tamamla(client).status_code == 200
 
-        ozet = KIP.ozet()
-        assert ozet["durum"] == "yonetici"
-        assert ozet["bosta_kalan_sn"] == 180
-        assert ozet["mutlak_kalan_sn"] == 1800
-        saat.ilerlet(180)
-        assert KIP.durum() == "gorevli"
+        ozet = OTURUM.ozet()
+        assert ozet["durum"] == "acik"
+        assert ozet["kurulum_tamam"] is True
+        assert ozet["bosta_kalan_sn"] == 10 * 60
+        saat.ilerlet(10 * 60)
+        assert OTURUM.durum() == "kilitli"
 
     def test_demirbas_no_istege_baglidir(self, client: APIClient) -> None:
         _okul_bilgileri(demirbas_no="")
@@ -367,6 +367,7 @@ class TestSchoolConfigApi:
 
 
 @pytest.mark.django_db
+@pytest.mark.usefixtures("yonetici_hesabi")  # kurtarma anahtarı yenilemesi hesap satırı ister
 class TestYolHaritasi:
     """Başlangıç Yol Haritası — kullanıcı işaretleri `SchoolConfig.yol_haritasi`'nda."""
 
@@ -480,7 +481,9 @@ class TestYolHaritasi:
             is True
         )
 
-        yeni_anahtar = app_password.renew_recovery_key(password=TEST_PAROLA)  # damga silinir
+        yeni_anahtar = app_password.renew_recovery_key(
+            hesap_id=TEST_HESAP_ID, password=TEST_PAROLA
+        )  # damga silinir
 
         durum = client.get("/api/v1/setup/status/").json()
         assert durum["recovery_key_confirmed"] is False
@@ -494,7 +497,7 @@ class TestYolHaritasi:
         self, client: APIClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         self._hepsi_tamam(client, monkeypatch)
-        app_password.renew_recovery_key(password=TEST_PAROLA)
+        app_password.renew_recovery_key(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
 
         yanit = client.post("/api/v1/setup/roadmap/", {"hidden": True}, format="json")
 
@@ -508,7 +511,7 @@ class TestYolHaritasi:
         """Yazma yolu SAKLANAN durumu okur: kapı tercihi sessizce sıfırlamaz."""
         self._hepsi_tamam(client, monkeypatch)
         client.post("/api/v1/setup/roadmap/", {"hidden": True}, format="json")
-        yeni_anahtar = app_password.renew_recovery_key(password=TEST_PAROLA)
+        yeni_anahtar = app_password.renew_recovery_key(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
 
         yanit = self._isaretle(client, "kurtarma_zarfi")
 

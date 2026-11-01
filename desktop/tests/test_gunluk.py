@@ -82,7 +82,7 @@ def test_uc_gun_acik_kalan_program_her_gun_bir_yedek_alir(tmp_path: Path) -> Non
 
 
 def test_yedek_alinamazsa_damga_yazilmaz_ve_saatte_bir_yeniden_denenir(tmp_path: Path) -> None:
-    """Yönetici parolası kurulmadan yedek atlanır; rotasyon da koşmaz (§4.3 tehdit 8)."""
+    """İlk program yöneticisi hesabı kurulmadan yedek atlanır; rotasyon da koşmaz (§4.3 tehdit 8)."""
     paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
     paths.ensure()
     _db_olustur(paths.db_path, parola_kurulu=False)

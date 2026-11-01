@@ -5,6 +5,11 @@ söküldü, §13 D29): düz SQLite dosyası reddedilir. Çekirdeğin sözleşmes
 ORM'e HİÇ dokunmaz — geri yükleme bozuk bir veritabanıyla da çalışabilmelidir
 (`django_db` işareti bilinçli olarak yoktur).
 
+Yedek başlığı yalnız kurtarma bölümünü taşır (tasarım TK10, §4.4.4): aday sırası
+(1) güncel `guvenlik.json` + hesabın tanıtıcısı ve parolası, (2) yedek başlığı +
+kurtarma anahtarı. Başlıkla açılınca `guvenlik.json` yalnız kurtarma bölümüyle
+yazılır.
+
 Her test kendi (başlangıçta `guvenlik.json` içermeyen) veri dizininde koşar;
 ucuz Argon2 profili ve gecikmesiz deneme `backend/conftest.py`'dendir.
 """
@@ -21,7 +26,12 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from desktop.backup_crypto import encrypt_bytes, ensure_public_config, private_key_from_data_key
+from desktop.backup_crypto import (
+    encrypt_bytes,
+    ensure_public_config,
+    private_key_from_data_key,
+    recovery_header_from_state,
+)
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -31,6 +41,8 @@ from apps.okul.services import app_password, backup_restore
 from shared import crypto
 
 PAROLA = "Deneme-Parola-1"
+HESAP = "yonetici"
+HESAP_ID = "0b6f5c1e-2a3d-4e5f-8a9b-0c1d2e3f4a5b"
 
 
 @pytest.fixture(autouse=True)
@@ -53,20 +65,34 @@ def _sqlite_baytlari(dizin: Path, isaret: str) -> bytes:
     return yol.read_bytes()
 
 
+def _durum(dek: bytes, parola: str, kurtarma: str) -> dict[str, Any]:
+    return app_password._build_state(
+        dek, hesap_id=HESAP_ID, tanitici=HESAP, password=parola, recovery_key=kurtarma
+    )
+
+
 def _dek_ile_durum(parola: str, kurtarma: str | None = None) -> tuple[bytes, dict[str, Any]]:
     dek = crypto.new_data_key()
-    durum = app_password._build_state(
-        dek, password=parola, recovery_key=kurtarma or app_password.generate_recovery_key()
-    )
-    durum["gecis"] = app_password.TRANSITION_DONE
-    return dek, durum
+    return dek, _durum(dek, parola, kurtarma or app_password.generate_recovery_key())
 
 
 def _sifreli_kapsayici(icerik: bytes, dek: bytes, durum: dict[str, Any] | None) -> bytes:
-    baslik = json.dumps(durum, ensure_ascii=False).encode("utf-8") if durum is not None else b""
+    """Başlığa güvenlik durumunun TK10 izdüşümü (yalnız kurtarma bölümü) gömülür."""
+    baslik_verisi = recovery_header_from_state(durum) if durum is not None else None
+    baslik = (
+        json.dumps(baslik_verisi, ensure_ascii=False).encode("utf-8")
+        if baslik_verisi is not None
+        else b""
+    )
     acik = private_key_from_data_key(dek).public_key()
     # desktop.* backend mypy koşusunda çözümlenmez (Any) → dönüş tipi sabitlenir.
     return cast("bytes", encrypt_bytes(icerik, acik, recovery_header=baslik))
+
+
+def _guncel_yaz(veri_dizini: Path, durum: dict[str, Any]) -> None:
+    (veri_dizini / "guvenlik.json").write_text(
+        json.dumps(durum, ensure_ascii=False), encoding="utf-8"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +108,7 @@ def test_duz_sqlite_dosyasi_reddedilir_ve_hedefe_dokunulmaz(
     yedek.write_bytes(_sqlite_baytlari(tmp_path, "duz"))
 
     with pytest.raises(backup_restore.BackupRestoreError, match="şifrelenmemiş"):
-        backup_restore.restore_database(yedek, db, password=PAROLA)
+        backup_restore.restore_database(yedek, db, hesap=HESAP, password=PAROLA)
 
     assert db.read_bytes() == orijinal
     assert not list(veri_dizini.glob("db-onceki-*"))
@@ -98,10 +124,11 @@ def test_yedek_geri_yuklenir_eski_dosya_ve_wal_kenara_alinir(
     (veri_dizini / "surum.json").write_text("{}", encoding="utf-8")
     yeni = _sqlite_baytlari(tmp_path, "yeni")
     dek, durum = _dek_ile_durum(PAROLA)
+    _guncel_yaz(veri_dizini, durum)
     yedek = tmp_path / "gunluk-2026-08-01.odbak"
     yedek.write_bytes(_sifreli_kapsayici(yeni, dek, durum))
 
-    sonuc = backup_restore.restore_database(yedek, db, password=PAROLA)
+    sonuc = backup_restore.restore_database(yedek, db, hesap=HESAP, password=PAROLA)
 
     assert db.read_bytes() == yeni
     # Eski veritabanı SİLİNMEZ, kenara alınır; WAL/SHM de onun yanına taşınır.
@@ -128,11 +155,12 @@ def test_hedef_yokken_calisir_ve_basibos_wal_temizlenir(tmp_path: Path, veri_diz
     db = veri_dizini / "db.sqlite3"
     (veri_dizini / "db.sqlite3-wal").write_bytes(b"basibos")
     yeni = _sqlite_baytlari(tmp_path, "yeni")
-    dek, durum = _dek_ile_durum(PAROLA)
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
     yedek = tmp_path / "gunluk.odbak"
     yedek.write_bytes(_sifreli_kapsayici(yeni, dek, durum))
 
-    sonuc = backup_restore.restore_database(yedek, db, password=PAROLA)
+    sonuc = backup_restore.restore_database(yedek, db, recovery_key=kurtarma)
 
     assert db.read_bytes() == yeni
     assert sonuc.old_db_path is None
@@ -246,31 +274,38 @@ def test_gecersiz_dosya_reddedilir(tmp_path: Path, veri_dizini: Path) -> None:
     yedek.write_bytes(b"HERHANGI BIR ICERIK")
 
     with pytest.raises(backup_restore.BackupRestoreError, match="geçerli bir"):
-        backup_restore.restore_database(yedek, veri_dizini / "db.sqlite3", password=PAROLA)
+        backup_restore.restore_database(
+            yedek, veri_dizini / "db.sqlite3", hesap=HESAP, password=PAROLA
+        )
 
 
 # ---------------------------------------------------------------------------
-# Şifreli kapsayıcı
+# Şifreli kapsayıcı ve aday sırası (TK10)
 # ---------------------------------------------------------------------------
-def test_sifreli_yedek_parola_ile_acilir_ve_guvenlik_dosyasi_yazilir(
+def test_baslikta_hesap_sarmali_olmadigi_icin_parola_yolu_kapali(
     tmp_path: Path, veri_dizini: Path
 ) -> None:
-    """guvenlik.json kayıp senaryosu: gömülü başlık hem DEK'i verir hem dosyayı onarır."""
+    """Yeni bilgisayar / kayıp güvenlik dosyası: hesap parolası başlıkla DEK vermez (TK10)."""
     dek, durum = _dek_ile_durum(PAROLA)
-    icerik = _sqlite_baytlari(tmp_path, "gizli")
     yedek = tmp_path / "gunluk.odbak"
-    yedek.write_bytes(_sifreli_kapsayici(icerik, dek, durum))
+    yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "gizli"), dek, durum))
     db = veri_dizini / "db.sqlite3"
 
-    sonuc = backup_restore.restore_database(yedek, db, password=PAROLA)
+    with pytest.raises(backup_restore.BackupRestoreError) as hata:
+        backup_restore.restore_database(yedek, db, hesap=HESAP, password=PAROLA)
 
-    assert db.read_bytes() == icerik
-    assert sonuc.state_written is True
-    yazilan = json.loads((veri_dizini / "guvenlik.json").read_text(encoding="utf-8"))
-    assert yazilan["parola"] == durum["parola"]
+    ileti = str(hata.value)
+    tarih = timezone.localdate().strftime("%d.%m.%Y")
+    assert f"Bu yedek 1 numaralı, {tarih} tarihli kurtarma anahtarıyla açılır." in ileti
+    assert not db.exists()
+    assert not (veri_dizini / "guvenlik.json").exists()
 
 
-def test_sifreli_yedek_kurtarma_anahtari_ile_acilir(tmp_path: Path, veri_dizini: Path) -> None:
+def test_kurtarma_anahtariyla_acilir_ve_yalniz_kurtarma_bolumu_yazilir(
+    tmp_path: Path, veri_dizini: Path
+) -> None:
+    """Kayıp dosya senaryosu: başlık DEK'i verir, dosya YALNIZ kurtarma bölümüyle onarılır;
+    anahtar kullanıldığı için saklandı damgası doludur (plan F1b-1)."""
     kurtarma = app_password.generate_recovery_key()
     dek, durum = _dek_ile_durum(PAROLA, kurtarma)
     icerik = _sqlite_baytlari(tmp_path, "gizli")
@@ -282,10 +317,43 @@ def test_sifreli_yedek_kurtarma_anahtari_ile_acilir(tmp_path: Path, veri_dizini:
 
     assert db.read_bytes() == icerik
     assert sonuc.state_written is True
+    yazilan = json.loads((veri_dizini / "guvenlik.json").read_text(encoding="utf-8"))
+    assert yazilan["surum"] == 2 and yazilan["gecis"] is None
+    assert yazilan["hesaplar"] == []
+    assert yazilan["kdf"] == durum["kdf"]
+    for alan in ("no", "tarih", "salt", "sarmal"):
+        assert yazilan["kurtarma"][alan] == durum["kurtarma"][alan]
+    assert yazilan["kurtarma"]["dogrulandi"]
+    assert app_password._unwrap_with_recovery(yazilan, kurtarma) == dek
+
+
+def test_parola_hesapsiz_verilirse_reddedilir(tmp_path: Path, veri_dizini: Path) -> None:
+    dek, durum = _dek_ile_durum(PAROLA)
+    _guncel_yaz(veri_dizini, durum)
+    yedek = tmp_path / "gunluk.odbak"
+    yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "gizli"), dek, durum))
+
+    with pytest.raises(backup_restore.BackupRestoreError, match="tanıtıcısını"):
+        backup_restore.restore_database(yedek, veri_dizini / "db.sqlite3", password=PAROLA)
+
+
+def test_hesap_kimligiyle_de_acilir(tmp_path: Path, veri_dizini: Path) -> None:
+    dek, durum = _dek_ile_durum(PAROLA)
+    _guncel_yaz(veri_dizini, durum)
+    icerik = _sqlite_baytlari(tmp_path, "gizli")
+    yedek = tmp_path / "gunluk.odbak"
+    yedek.write_bytes(_sifreli_kapsayici(icerik, dek, durum))
+
+    backup_restore.restore_database(
+        yedek, veri_dizini / "db.sqlite3", hesap=HESAP_ID, password=PAROLA
+    )
+
+    assert (veri_dizini / "db.sqlite3").read_bytes() == icerik
 
 
 def test_yanlis_parola_hedefe_dokunmaz(tmp_path: Path, veri_dizini: Path) -> None:
     dek, durum = _dek_ile_durum(PAROLA)
+    _guncel_yaz(veri_dizini, durum)
     orijinal = _sqlite_baytlari(tmp_path, "orijinal")
     db = veri_dizini / "db.sqlite3"
     db.write_bytes(orijinal)
@@ -293,10 +361,15 @@ def test_yanlis_parola_hedefe_dokunmaz(tmp_path: Path, veri_dizini: Path) -> Non
     yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "gizli"), dek, durum))
 
     with pytest.raises(backup_restore.BackupRestoreError, match="açılamadı"):
-        backup_restore.restore_database(yedek, db, password="Yanlis-Parola-9")
+        backup_restore.restore_database(yedek, db, hesap=HESAP, password="Yanlis-Parola-9")
+    with pytest.raises(backup_restore.BackupRestoreError, match="açılamadı"):
+        backup_restore.restore_database(yedek, db, hesap="baska-hesap", password=PAROLA)
 
     assert db.read_bytes() == orijinal
     assert not list(veri_dizini.glob("db-onceki-*"))
+    # Geri yükleme denemesi hesap sayacına dokunmaz (gecikme süreç içidir; plan F1b-1).
+    guncel = json.loads((veri_dizini / "guvenlik.json").read_text(encoding="utf-8"))
+    assert guncel["hesaplar"][0]["hatali"] == 0
 
 
 def test_sifreli_yedek_sir_olmadan_acilmaz(tmp_path: Path, veri_dizini: Path) -> None:
@@ -309,13 +382,14 @@ def test_sifreli_yedek_sir_olmadan_acilmaz(tmp_path: Path, veri_dizini: Path) ->
 
 
 def test_cozulen_icerik_sqlite_degilse_reddedilir(tmp_path: Path, veri_dizini: Path) -> None:
-    dek, durum = _dek_ile_durum(PAROLA)
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
     yedek = tmp_path / "gunluk.odbak"
     yedek.write_bytes(_sifreli_kapsayici(b"duz metin, veritabani degil", dek, durum))
     db = veri_dizini / "db.sqlite3"
 
     with pytest.raises(backup_restore.BackupRestoreError, match="SQLite"):
-        backup_restore.restore_database(yedek, db, password=PAROLA)
+        backup_restore.restore_database(yedek, db, recovery_key=kurtarma)
 
     assert not db.exists()
 
@@ -328,52 +402,50 @@ def test_parola_degisse_de_guncel_dosya_ile_acilir(tmp_path: Path, veri_dizini: 
     sarmalı taşıyan odur)."""
     dek = crypto.new_data_key()
     kurtarma = app_password.generate_recovery_key()
-    eski_durum = app_password._build_state(dek, password="Eski-Parola-1", recovery_key=kurtarma)
-    eski_durum["gecis"] = app_password.TRANSITION_DONE
-    yeni_durum = app_password._build_state(dek, password="Yeni-Parola-2", recovery_key=kurtarma)
-    yeni_durum["gecis"] = app_password.TRANSITION_DONE
-    (veri_dizini / "guvenlik.json").write_text(
-        json.dumps(yeni_durum, ensure_ascii=False), encoding="utf-8"
-    )
+    eski_durum = _durum(dek, "Eski-Parola-1", kurtarma)
+    yeni_durum = _durum(dek, "Yeni-Parola-2!", kurtarma)
+    _guncel_yaz(veri_dizini, yeni_durum)
     icerik = _sqlite_baytlari(tmp_path, "gizli")
     yedek = tmp_path / "eski-donem.odbak"
     yedek.write_bytes(_sifreli_kapsayici(icerik, dek, eski_durum))
     db = veri_dizini / "db.sqlite3"
 
-    sonuc = backup_restore.restore_database(yedek, db, password="Yeni-Parola-2")
+    sonuc = backup_restore.restore_database(yedek, db, hesap=HESAP, password="Yeni-Parola-2!")
 
     assert db.read_bytes() == icerik
     assert sonuc.state_written is False
     guncel = json.loads((veri_dizini / "guvenlik.json").read_text(encoding="utf-8"))
-    assert guncel["parola"] == yeni_durum["parola"]
+    assert guncel["hesaplar"] == yeni_durum["hesaplar"]
 
 
-def test_yabanci_guvenlik_dosyasi_arsivlenip_gomulu_baslik_yazilir(
+def test_yabanci_guvenlik_dosyasi_arsivlenip_baslik_yazilir(
     tmp_path: Path, veri_dizini: Path
 ) -> None:
-    """Veri klasöründe BAŞKA kuruluma ait dosya: sarmal aynı parolayla açılır ama
-    DEK yanlıştır; AES-GCM reddeder → gömülü başlık kazanır, yabancı dosya
-    silinmeden arşivlenir."""
+    """Veri klasöründe BAŞKA kuruluma ait dosya: hesap sarmalı aynı parolayla açılır ama
+    DEK yanlıştır; AES-GCM reddeder, başlık hesap taşımadığı için parola yolu kapanır.
+    Kurtarma anahtarıyla başlık kazanır, yabancı dosya silinmeden arşivlenir."""
     _yabanci_dek, yabanci_durum = _dek_ile_durum(PAROLA)
-    (veri_dizini / "guvenlik.json").write_text(
-        json.dumps(yabanci_durum, ensure_ascii=False), encoding="utf-8"
-    )
-    dek, durum = _dek_ile_durum(PAROLA)
+    _guncel_yaz(veri_dizini, yabanci_durum)
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
     icerik = _sqlite_baytlari(tmp_path, "gizli")
     yedek = tmp_path / "gunluk.odbak"
     yedek.write_bytes(_sifreli_kapsayici(icerik, dek, durum))
     db = veri_dizini / "db.sqlite3"
 
-    sonuc = backup_restore.restore_database(yedek, db, password=PAROLA)
+    with pytest.raises(backup_restore.BackupRestoreError, match="açılamadı"):
+        backup_restore.restore_database(yedek, db, hesap=HESAP, password=PAROLA)
+    sonuc = backup_restore.restore_database(yedek, db, recovery_key=kurtarma)
 
     assert db.read_bytes() == icerik
     assert sonuc.state_written is True
     arsivler = list(veri_dizini.glob("guvenlik-arsiv-*.json"))
     assert len(arsivler) == 1
     arsiv = json.loads(arsivler[0].read_text(encoding="utf-8"))
-    assert arsiv["parola"] == yabanci_durum["parola"]
+    assert arsiv["hesaplar"] == yabanci_durum["hesaplar"]
     guncel = json.loads((veri_dizini / "guvenlik.json").read_text(encoding="utf-8"))
-    assert guncel["parola"] == durum["parola"]
+    assert guncel["kurtarma"]["sarmal"] == durum["kurtarma"]["sarmal"]
+    assert guncel["hesaplar"] == []
 
 
 def test_capraz_dek_geri_yukleme_yedekleme_json_u_da_esitler(
@@ -386,15 +458,14 @@ def test_capraz_dek_geri_yukleme_yedekleme_json_u_da_esitler(
     from desktop.backup_crypto import load_public_key, public_key_bytes
 
     yerli_dek, yerli_durum = _dek_ile_durum(PAROLA)
-    (veri_dizini / "guvenlik.json").write_text(
-        json.dumps(yerli_durum, ensure_ascii=False), encoding="utf-8"
-    )
+    _guncel_yaz(veri_dizini, yerli_durum)
     ensure_public_config(veri_dizini, yerli_dek, replace=True)  # bayat kalacak aday
-    dek, durum = _dek_ile_durum(PAROLA)
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
     yedek = tmp_path / "gunluk.odbak"
     yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "gizli"), dek, durum))
 
-    backup_restore.restore_database(yedek, veri_dizini / "db.sqlite3", password=PAROLA)
+    backup_restore.restore_database(yedek, veri_dizini / "db.sqlite3", recovery_key=kurtarma)
 
     from cryptography.hazmat.primitives import serialization
 
@@ -406,15 +477,13 @@ def test_capraz_dek_geri_yukleme_yedekleme_json_u_da_esitler(
 
 def test_bassiz_yedek_guncel_guvenlik_dosyasiyla_acilir(tmp_path: Path, veri_dizini: Path) -> None:
     dek, durum = _dek_ile_durum(PAROLA)
-    (veri_dizini / "guvenlik.json").write_text(
-        json.dumps(durum, ensure_ascii=False), encoding="utf-8"
-    )
+    _guncel_yaz(veri_dizini, durum)
     icerik = _sqlite_baytlari(tmp_path, "gizli")
     yedek = tmp_path / "bassiz.odbak"
     yedek.write_bytes(_sifreli_kapsayici(icerik, dek, None))
     db = veri_dizini / "db.sqlite3"
 
-    sonuc = backup_restore.restore_database(yedek, db, password=PAROLA)
+    sonuc = backup_restore.restore_database(yedek, db, hesap=HESAP, password=PAROLA)
 
     assert db.read_bytes() == icerik
     assert sonuc.state_written is False
@@ -428,7 +497,38 @@ def test_bassiz_yedek_guvenlik_dosyasi_yokken_yol_gosterir(
     yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "gizli"), dek, None))
 
     with pytest.raises(backup_restore.BackupRestoreError, match="guvenlik.json"):
-        backup_restore.restore_database(yedek, veri_dizini / "db.sqlite3", password=PAROLA)
+        backup_restore.restore_database(
+            yedek, veri_dizini / "db.sqlite3", hesap=HESAP, password=PAROLA
+        )
+
+
+def test_sema_1_baslikli_eski_yedek_aday_degildir(tmp_path: Path, veri_dizini: Path) -> None:
+    """Şema 1 başlığı (tek parola bölümü) kullanılamaz sayılır (plan F1b-1 "Eski veri")."""
+    dek = crypto.new_data_key()
+    sema_1 = {"surum": 1, "kdf": {}, "parola": {"salt": "eA==", "sarmal": "eA=="}}
+    yedek = tmp_path / "eski.odbak"
+    yedek.write_bytes(
+        cast(
+            "bytes",
+            encrypt_bytes(
+                _sqlite_baytlari(tmp_path, "eski"),
+                private_key_from_data_key(dek).public_key(),
+                recovery_header=json.dumps(sema_1).encode("utf-8"),
+            ),
+        )
+    )
+
+    assert backup_restore.inspect_backup(yedek.read_bytes()).embedded_state is None
+
+
+def test_yedek_kurtarma_anahtarinin_kimligini_soyler(tmp_path: Path) -> None:
+    dek, durum = _dek_ile_durum(PAROLA)
+    durum["kurtarma"].update(no=3, tarih="2026-11-01")
+    bilgi = backup_restore.inspect_backup(_sifreli_kapsayici(b"x", dek, durum))
+    assert bilgi.recovery_key_label == "3 numaralı, 01.11.2026 tarihli"
+    assert (
+        backup_restore.inspect_backup(_sifreli_kapsayici(b"x", dek, None)).recovery_key_label == ""
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -443,26 +543,53 @@ def test_komut_duz_yedegi_reddeder(
     yedek.write_bytes(_sqlite_baytlari(tmp_path, "komut"))
 
     with pytest.raises(CommandError, match="şifrelenmemiş"):
-        call_command("restore_backup", str(yedek), "--yes", "--password", PAROLA)
+        call_command("restore_backup", str(yedek), "--yes", "--hesap", HESAP, "--password", PAROLA)
 
     assert not db.exists()
 
 
-def test_komut_sifreli_yedegi_parola_bayragiyla_acar(
+def test_komut_sifreli_yedegi_hesap_ve_parolayla_acar(
     tmp_path: Path, veri_dizini: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     db = veri_dizini / "db.sqlite3"
     monkeypatch.setitem(settings.DATABASES["default"], "NAME", str(db))
     dek, durum = _dek_ile_durum(PAROLA)
+    _guncel_yaz(veri_dizini, durum)
     icerik = _sqlite_baytlari(tmp_path, "gizli")
     yedek = tmp_path / "gunluk.odbak"
     yedek.write_bytes(_sifreli_kapsayici(icerik, dek, durum))
     cikti = StringIO()
 
-    call_command("restore_backup", str(yedek), "--yes", "--password", PAROLA, stdout=cikti)
+    call_command(
+        "restore_backup",
+        str(yedek),
+        "--yes",
+        "--hesap",
+        HESAP,
+        "--password",
+        PAROLA,
+        stdout=cikti,
+    )
 
     assert db.read_bytes() == icerik
-    assert "guvenlik.json" in cikti.getvalue()
+    assert "kurtarma başlığından" not in cikti.getvalue()
+
+
+def test_komut_kurtarma_anahtariyla_baslik_yazar(
+    tmp_path: Path, veri_dizini: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = veri_dizini / "db.sqlite3"
+    monkeypatch.setitem(settings.DATABASES["default"], "NAME", str(db))
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
+    yedek = tmp_path / "gunluk.odbak"
+    yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "gizli"), dek, durum))
+    cikti = StringIO()
+
+    call_command("restore_backup", str(yedek), "--yes", "--recovery-key", kurtarma, stdout=cikti)
+
+    assert "kurtarma başlığından" in cikti.getvalue()
+    assert "program yöneticisinin parolasını" in cikti.getvalue()
 
 
 def test_komut_onay_reddinde_dokunmaz(

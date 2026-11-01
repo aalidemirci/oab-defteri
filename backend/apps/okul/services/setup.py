@@ -9,8 +9,9 @@ düz alan güncellemesiyle yanlışlıkla açılması/kapanması önlenir.
 SİHİRBAZ SIRASI (tasarım §4.4.5, §5.1; plan §2.2) — adım anahtarları API'de ve ön
 yüzde aynıdır (`SETUP_STEPS`):
 
-1. `password` — yönetici parolası + kurtarma anahtarı (atlanamaz). Adım ancak
-   parola kurulu VE anahtarın saklandığı doğrulanmışsa tamamdır (tasarım
+1. `password` — ilk program yöneticisi hesabı + kurtarma anahtarı (atlanamaz;
+   adım anahtarı aileden kalır). Adım ancak hesap kurulu VE anahtarın saklandığı
+   doğrulanmışsa tamamdır (tasarım
    §4.4.4 `kurtarma.dogrulandi`, §4.4.5): sihirbaz iki grubu istemcide denetler, sonra
    TAM anahtarı `security/recovery-key/confirm/`'a gönderir; sunucu onu kurtarma
    sarmalına karşı doğrulayıp `guvenlik.json`'a damga yazar
@@ -160,12 +161,12 @@ def setup_incomplete_message(missing: list[str], *, config: SchoolConfig) -> str
     if STEP_PASSWORD in missing:
         if app_password.is_password_set():
             parcalar.append(
-                "1. adım (yönetici parolası): kurtarma anahtarı doğrulanmadı. Anahtarı "
+                "1. adım (program yöneticisi hesabı): kurtarma anahtarı doğrulanmadı. Anahtarı "
                 "sakladıktan sonra istenen iki grubunu yazarak doğrulayın; kaydedemediyseniz "
                 "yenisini üretin."
             )
         else:
-            parcalar.append("1. adım (yönetici parolası): yönetici parolası kurulmadı.")
+            parcalar.append("1. adım (program yöneticisi hesabı): hesap kurulmadı.")
     if STEP_SCHOOL in missing:
         alanlar = ", ".join(missing_school_fields(config))
         parcalar.append(f"2. adım (okul bilgileri): {alanlar} eksik.")

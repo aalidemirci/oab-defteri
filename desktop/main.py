@@ -10,7 +10,7 @@
        (damga yoksa 8'den önce veritabanının göç kaydı da denetlenir — §4.2 adım 5)
     6. Bütünlük denetimi .................... bozuk veriyle pencere AÇILMAZ
     7. Günlük yedek + 14 gün rotasyonu ...... `Connection.backup()`; yalnız şifreli
-       `.odbak`. Yönetici parolası kurulmadan (ilk açılış) yedek atlanır; bugünün
+       `.odbak`. İlk program yöneticisi hesabı kurulmadan (ilk açılış) yedek atlanır; bugünün
        yedeği alınmadıysa rotasyon da koşmaz (tasarım §4.2 adım 7; yedekler §4.4.7)
     8. Göç öncesi yedek + `migrate --no-input`
     9. Gömülü sunucu (waitress, 127.0.0.1, boş port) + sağlık denetimi
@@ -28,7 +28,8 @@ bozukken rotasyonun sağlam eski yedekleri silmesi istenmez.
 Öteki kaynaklar: arayüzdeki Çık (`POST app/quit/`), kurucu ve kaldırıcının
 `OABDefteri.Kapat` olayı, tek kopya kanalının `kapat` komutu ve Linux oturum
 kapanışı (SIGTERM). Sıra: pencere → kanal → Qt köprüsü → kancalar bırakılır →
-`od-gunluk` → yönetim sunucusu → WAL checkpoint (TB14) → temiz kapanış işareti →
+`od-gunluk` → oturum açıksa kilitlenir (DEK ve iz anahtarı bellekten düşer; çapa alt
+commit c'de) → yönetim sunucusu → WAL checkpoint (TB14) → temiz kapanış işareti →
 kilit. Mutex'ler süreç bitene dek kalır (lock.py).
 
 Herhangi bir adım başarısız olursa pencere açılmaz; kullanıcıya Türkçe ileti +
@@ -138,9 +139,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--hesap",
+        default=None,
+        metavar="TANITICI",
+        help="Geri yükleme: parolası verilecek hesabın tanıtıcısı (ör. yonetici).",
+    )
+    parser.add_argument(
         "--parola",
         default=None,
-        help="Geri yükleme: yönetici parolası (otomasyon içindir; komut geçmişine düşer).",
+        help="Geri yükleme: --hesap ile verilen hesabın parolası (otomasyon içindir; komut "
+        "geçmişine düşer).",
     )
     parser.add_argument(
         "--kurtarma-anahtari",
@@ -267,6 +275,25 @@ def _kancalari_birak() -> None:
     masaustu_kanca.kaldir()
 
 
+def _oturumu_kilitle() -> None:
+    """Düzenli kapanışta oturum açıksa kilitler (§4.2: `od-gunluk` durduktan sonra, sunucudan önce).
+
+    Kilidi backend kaydeder (`masaustu_kanca.kapanista_kilitle`; `OkulConfig.ready`):
+    uçuştaki isteklerin bitmesini sınırlı süre bekler, sonra DEK ve iz anahtarı bellekten
+    düşer. Backend yoksa (testte) sessiz; hata kapanışı DURDURMAZ, günlüğe yazılır.
+    Çapanın `iz-durumu.json`'a yazımı alt commit (c)'de aynı kilide eklenir.
+    """
+    try:
+        from apps.okul.masaustu_kanca import kapanista_kilitle
+    except ImportError:
+        return
+    try:
+        if kapanista_kilitle():
+            logger.info("Kapanışta oturum kilitlendi.")
+    except Exception:
+        logger.exception("Kapanışta oturum kilitlenemedi; program kapanmaya devam ediyor.")
+
+
 def gun_kapisi_kur(
     paths: AppPaths,
     *,
@@ -353,9 +380,11 @@ def serve(
         )
         return EXIT_OK
     finally:
+        # Kapanış sırası (§4.2): kancalar → od-gunluk → oturum kilidi → sunucu → WAL.
         _kancalari_birak()
         if kapi is not None:
             kapi.durdur()
+        _oturumu_kilitle()
         server.stop()
         wal_checkpoint(paths.db_path)
 

@@ -1,6 +1,7 @@
-"""Kişi yazan uçların yönetici parolası kapısı (tasarım §5.3; plan §2.4).
+"""Kişi yazan uçların ilk hesap kapısı (tasarım §5.3; plan §2.4).
 
-"Parola yokken kişi yazan uç 409" maddesinin kanıtı. Test `config.urls`'ün
+"Parola kurulmadan kişi yazan uç 409" maddesinin kanıtı (ilk program yöneticisi
+hesabı kurulmadan, 409 `parola_gerekli`). Test `config.urls`'ün
 BÜTÜN desenlerini dolaşır:
 
 1. `RequiresAdminPassword` taşıyan uçlar kümesi, aşağıdaki AÇIK listeye
@@ -51,7 +52,7 @@ KISI_YAZAN_UCLAR = frozenset(
 # Anlık görüntü: kişi YAZMAYAN bütün `/api/` uçları. Yeni uç → bilinçli sınıflandırma.
 DIGER_UCLAR = frozenset(
     {
-        # Çık (tasarım §4.2): kişi yazmaz; görevli kipinde yönetici parolası ister.
+        # Çık (tasarım §4.2): kişi yazmaz; her oturum durumunda parolasız.
         "app-quit",
         "backup-list",
         "backup-restore",
@@ -73,16 +74,17 @@ DIGER_UCLAR = frozenset(
         "school-year-activate",
         "school-year-list",
         "school-year-terms",
+        # Kilit ekranının hesap listesi: tanıtıcı + rol etiketi; kişi adı okumaz, yazmaz.
+        "security-accounts",
         "security-change-password",
         "security-enable",
         "security-lock",
-        "security-mode",
-        "security-mode-admin",
-        "security-mode-staff",
         "security-recover",
         "security-recovery-key-confirm",
         "security-recovery-key-pdf",
         "security-recovery-key-renew",
+        # Oturum özeti (tasarım §4.4.3): kişisiz.
+        "security-session",
         "security-state-reset",
         "security-status",
         "security-unlock",
@@ -101,7 +103,9 @@ YAZMA_YONTEMLERI = ("post", "put", "patch", "delete")
 
 PAROLA_GEREKLI_GOVDESI = {
     "code": "parola_gerekli",
-    "message": "Kişi kaydı için önce yönetici parolasını kurun (Kurulum Sihirbazı'nın ilk adımı).",
+    "message": (
+        "Kişi kaydı için önce program yöneticisi hesabını kurun (Kurulum Sihirbazı'nın ilk adımı)."
+    ),
     "fields": {},
 }
 

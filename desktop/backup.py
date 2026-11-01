@@ -9,14 +9,16 @@ kullanır: kaynak veritabanını sayfa sayfa RAM'e okur, WAL dahil tutarlı bir 
 **Yedek YALNIZ şifreli yazılır** (tasarım §4.4.7; ailenin eski "parolasız kipte
 düz `.odbak`" dalı aile iskeletinde söküldü, tasarım §13 D29). Görüntü, yedek açık
 anahtarıyla (`yedekleme.json`) X25519 + AES-256-GCM kapsayıcısına mühürlenir ve
-başlığına o anki `guvenlik.json` (kurtarma başlığı) gömülür. Yedek ATLANIR (uyarı loglanır,
-düz kopya asla yazılmaz):
+başlığına o anki `guvenlik.json`'un kurtarma bölümünün izdüşümü (kurtarma başlığı)
+gömülür: yalnız `{surum, kdf, kurtarma: {no, tarih, salt, sarmal}}`; hesap
+sarmalları yedeğe girmez (tasarım TK10, `backup_crypto.usable_recovery_header`).
+Yedek ATLANIR (uyarı loglanır, düz kopya asla yazılmaz):
 
-* `yedekleme.json` yoksa: yönetici parolası henüz kurulmamıştır (ilk açılış).
-  Kişi verisi de yoktur (parola kurulmadan kişi yazılamaz); ilk yedek parola
+* `yedekleme.json` yoksa: ilk program yöneticisi hesabı henüz kurulmamıştır (ilk
+  açılış). Kişi verisi de yoktur (hesap kurulmadan kişi yazılamaz); ilk yedek hesap
   kurulduktan sonraki açılışta alınır. Bu davranış testle sabitlenir.
-* `yedekleme.json` bozuksa: kilit bir kez açıldığında `ensure_public_config`
-  dosyayı onarır.
+* `yedekleme.json` bozuksa: herhangi bir hesapla kilit bir kez açıldığında
+  `ensure_public_config` dosyayı onarır.
 * Kurtarma başlığı kullanılamıyorsa (`guvenlik.json` kayıp, okunamıyor, boş ya
   da biçimsiz — tasarım §4.3 tehdit 8): böyle bir başlıkla alınan yedek ancak kaybolan dosyayla
   açılabilirdi; üretmek yerine atlanır. "Kullanılabilir" kuralı tektir ve
@@ -112,14 +114,14 @@ def _copy_database(source_path: Path, target_path: Path, *, data_dir: Path | Non
     """
     data_dir = data_dir if data_dir is not None else source_path.parent
     if not config_path(data_dir).is_file():
-        logger.info("Yönetici parolası henüz kurulmadı; yedek alınmadı.")
+        logger.info("İlk program yöneticisi hesabı henüz kurulmadı; yedek alınmadı.")
         return False
     try:
         public_key = load_public_key(data_dir)
     except BackupCryptoError:
         logger.warning(
             "Şifreli yedekleme anahtarı bozuk; yedek alınamadı (düz kopya yazılmadı). "
-            "Yönetici parolasıyla kilidi açmak dosyayı onarır."
+            "Herhangi bir hesapla kilidi açmak dosyayı onarır."
         )
         return False
     # Başlık DOĞRULANMIŞ baytlardan gömülür (varlık denetimi + ayrı okuma arasında

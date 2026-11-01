@@ -12,6 +12,12 @@ kontrol kanalı doğmaz:
 * **Gün değişimi işleri** (T9): backend'deki bir işin masaüstünün `od-gunluk`
   kapısına girmesi için buraya kaydolması yeter; kapı açılışta bu listeyi okur.
   Masaüstü modüllerini backend'den içe aktarmak gerekmez.
+* **Kapanış kilidi** (ters yön; tasarım §4.2 kapanış sırası, plan F1b-1 "Oturum"):
+  backend `OkulConfig.ready` içinde oturumun kapanış kilidini KAYDEDER
+  (`kapanis_kilidi_kaydet`), masaüstü kabuğu düzenli kapanışta `od-gunluk` durduktan
+  sonra, yönetim sunucusu durmadan önce ÇAĞIRIR (`kapanista_kilitle`). Masaüstü
+  oturum modülünü içe aktarmaz; çapanın `iz-durumu.json`'a yazımı (alt commit c)
+  aynı kilide eklenir. Bu kayıt `kaldir()` ile düşmez: backend'in kendi kaydıdır.
 
 Geri yükleme ile gün işlerinin dışlaşması bu kanaldan değil, ortak bakım
 kapısından (`shared/bakim.py`) geçer.
@@ -41,6 +47,7 @@ class GunlukIsKaydi:
 _kilit = threading.Lock()
 _cikis: Callable[[], None] | None = None
 _gunluk_isler: dict[str, GunlukIsKaydi] = {}
+_kapanis_kilidi: Callable[[], bool] | None = None
 
 
 def kaydet(*, cikis: Callable[[], None] | None = None) -> None:
@@ -93,8 +100,35 @@ def gunluk_isler() -> tuple[GunlukIsKaydi, ...]:
         return tuple(_gunluk_isler.values())
 
 
+def kapanis_kilidi_kaydet(kilitle: Callable[[], bool] | None) -> None:
+    """Backend düzenli kapanışın oturum kilidini kaydeder (`None` kaydı kaldırır).
+
+    `kilitle` oturum açıksa kilitler ve True döndürür; oturum yoksa False.
+    """
+    global _kapanis_kilidi
+    with _kilit:
+        _kapanis_kilidi = kilitle
+
+
+def kapanista_kilitle() -> bool:
+    """Masaüstü düzenli kapanışta çağırır: oturum açıksa kilitler; kilitlediyse True.
+
+    Kayıt yoksa (backend yüklenmemiş, testler) False. Kanca ENGELLER: uçuştaki
+    isteklerin bitmesini sınırlı süre bekler (`apps.okul.oturum.UCUSTA_BEKLEME_SN`).
+    """
+    with _kilit:
+        kilitle = _kapanis_kilidi
+    if kilitle is None:
+        return False
+    return kilitle()
+
+
 def _reset_for_tests() -> None:
-    """Yalnız testler için: kayıt süreç içi olduğundan testler arasında sızar."""
+    """Yalnız testler için: kayıt süreç içi olduğundan testler arasında sızar.
+
+    Masaüstünün kaydettikleri (çıkış, gün işleri) temizlenir; backend'in açılışta
+    kaydettiği kapanış kilidi YERİNDE kalır (süreç boyunca tek kayıttır).
+    """
     global _cikis
     with _kilit:
         _cikis = None

@@ -37,7 +37,7 @@ kalıbından uyarlamış, mutabakatla genişletmişti; OAB'de tasarım §8.4):
   işlenemeyen bir dosya hiç kimseyi havuza eklemez — öğrencideki şube kapsamının
   personelde karşılığı yoktur, kapı "hiç kimse"dir.
 - **Kişisel veri ve kalıcı iz:** havuza eklenecek kişilerin ADLARI yalnız API
-  yanıtında (yönetim yüzeyi, yönetici kipi) döner; `ImportRun.report` (kalıcı)
+  yanıtında (yönetim yüzeyi, açık oturum) döner; `ImportRun.report` (kalıcı)
   yalnız SAYILARI taşır (`to_run_dict`). Satır sorunlarına ad, okul no ve görev
   metni yazılmaz; hücrenin ham değeri (`raw_value`) yalnız API yanıtındadır,
   kalıcı rapordan silinir (kaymış sütunda kişi verisi taşıyabilir). Günlüğe
@@ -87,6 +87,7 @@ from apps.okul.models import (
     student_number_blind_index,
 )
 from apps.okul.services import app_password, persons
+from shared.crypto import has_corrupt
 
 logger = logging.getLogger("oab_defteri.okul")
 
@@ -607,7 +608,8 @@ def _returning_student(row: ParsedRow, report: StudentImportReport) -> Student |
         return None
     anahtar = name_match.name_key(f"{row.student_first} {row.student_last}")
     for aday in adaylar:
-        if name_match.name_key(aday.full_name) == anahtar:
+        # Çözülemeyen alanlı kayıt eşleşmeye girmez (tasarım §13 D48).
+        if not has_corrupt(aday) and name_match.name_key(aday.full_name) == anahtar:
             return aday
     report.add_warning(row.row_number, "number", REUSED_NUMBER_MESSAGE)
     return None
@@ -748,7 +750,10 @@ def _ingest_personnel(
     mevcut = sorted(Personnel.objects.all(), key=lambda p: (not p.is_active, p.pk))
     kosu = _PersonnelRun(report=report, header_row_number=mapping.header_row + 1)
     for person in mevcut:
-        kosu.by_key.setdefault(name_match.name_key(person.full_name), []).append(person)
+        # Çözülemeyen adlı kayıt ada göre eşleşmez (tasarım §13 D48): listede bulunmamış
+        # sayılır ve ayrılış havuzunda kararı bekler; adı ve yazımı değişmez.
+        if not has_corrupt(person):
+            kosu.by_key.setdefault(name_match.name_key(person.full_name), []).append(person)
     for row in rows:
         _process_personnel_row(row, kosu)
 
@@ -766,7 +771,7 @@ def _ingest_personnel(
         )
         for row, new_person in kosu.created
         for person in listede_yok
-        if (gerekce := _match_reason(row, person)) is not None
+        if not has_corrupt(person) and (gerekce := _match_reason(row, person)) is not None
     ]
     report.similar_pair_count = len(report.similar_pairs)
 

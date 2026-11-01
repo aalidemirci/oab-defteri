@@ -11,7 +11,7 @@ damga dosyasında tutar ve günü eskiyen işi çalıştırır.
   açılışta okur (`backend_islerini_ekle`).
 * **Damga** (`gun-kapisi.json`, veri dizininde): iş başına son başarılı gün.
   Bir iş `False` döner ya da istisna yükseltirse damgası yazılmaz ve bir saat
-  sonra yeniden denenir (ör. yönetici parolası kurulmadan yedek alınamaz).
+  sonra yeniden denenir (ör. ilk program yöneticisi hesabı kurulmadan yedek alınamaz).
   Tarih YEREL gündür (`date.today()`, `Europe/Istanbul`); saat taklit edilebilir.
 * **Bakım kapısı** (§13 D3): her iş ortak bakım kapısından geçer
   (`shared.bakim.KAPI.is_()`); geri yükleme sürerken iş başlamaz, başlamış iş

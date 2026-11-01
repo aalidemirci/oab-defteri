@@ -26,13 +26,13 @@ _MESSAGE = "Veri dosyası bozuk görünüyor; program veriyi korumak için açı
 
 def _hint(backup_dir: Path | None) -> str:
     """Yol daima geri yükleme kipine çıkar: `--geri-yukle` şifreli yedeği açar
-    (yönetici parolası ya da kurtarma anahtarı sorulur; düz yedek dalı yok);
+    (hesabın tanıtıcısı ve parolası ya da kurtarma anahtarı sorulur; düz yedek dalı yok);
     elle kopyalama tarifi kaldırıldı — şifreli `.odbak` için çalışmaz."""
     yol = (
         "Son sağlam yedeği geri yüklemek için Başlat menüsündeki "
         "'OAB Defteri — Yedekten Geri Yükle' kısayolunu çalıştırın "
         "(veya komut satırından: oab-defteri --geri-yukle). Yedek listeden "
-        "seçilir; yönetici parolanız ya da kurtarma anahtarınız sorulur. Bozuk "
+        "seçilir; hesabınızın tanıtıcısı ve parolası ya da kurtarma anahtarı sorulur. Bozuk "
         "dosya silinmez; 'db-onceki-*' adıyla veri klasöründe saklanır."
     )
     if backup_dir is None:

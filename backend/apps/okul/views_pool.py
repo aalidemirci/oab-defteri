@@ -10,8 +10,8 @@ listede bulunmayan aktif kişi ayrılış havuzuna girer, karar burada verilir.
   personnel: {leave, keep}}`. Kişi yazar → `RequiresAdminPassword` (parola
   kurulmadan 409 `parola_gerekli`).
 
-İkisi de görevli kipinin izin listesinde YOKTUR (varsayılan kapalı, 403
-`kip_yetkisiz`): karar yönetici işidir.
+Karar program yöneticisinin işidir; rol izni F1b 2. adımın rol matrisindedir
+(tasarım §4.4.2).
 """
 
 from __future__ import annotations

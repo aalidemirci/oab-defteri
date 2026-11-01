@@ -7,8 +7,8 @@
 
 Tarih indirmeyle kendiliğinden yazılır (`encrypted_backup.create_encrypted_backup`);
 burada elle "indirdim" işareti YOKTUR — kart yalnız programın gördüğü olayı söyler.
-Uç görevli kipi izin listesinde DEĞİLDİR (varsayılan kapalı, `kip_izinleri`) ve
-kilitliyken kilit kapısı keser (`backups/external/` kilit muafiyeti taşımaz).
+Kilitliyken kilit kapısı keser (`backups/external/` kilit muafiyeti taşımaz); rol
+izni (yalnız program yöneticisi) F1b 2. adımın rol matrisindedir (tasarım §4.4.2).
 """
 
 from __future__ import annotations

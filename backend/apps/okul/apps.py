@@ -1,8 +1,14 @@
 """Okul çekirdeği uygulama tanımı.
 
-`ready()` bu sürecin başlangıcını işaretler (T15, tasarım §13 D4): beklenmedik
-kapanıştan sonra panodaki "son oturumdaki kayıtları kontrol edin" kartı
-(`apps.okul.son_oturum`) bu damgayı "son oturum"un üst sınırı sayar.
+`ready()`:
+
+* bu sürecin başlangıcını işaretler (T15, tasarım §13 D4): beklenmedik kapanıştan
+  sonra panodaki "son oturumdaki kayıtları kontrol edin" kartı (`apps.okul.son_oturum`)
+  bu damgayı "son oturum"un üst sınırı sayar;
+* oturumun kapanış kilidini masaüstü kancasına kaydeder (tasarım §4.2 kapanış sırası:
+  `od-gunluk` durur → oturum açıksa kilitlenir → yönetim sunucusu);
+* `SchoolConfig` kaydedilince boşta kilit süresinin önbelleğini boşaltır (TK14): ayar
+  değişikliği yeniden başlatma istemez.
 """
 
 from __future__ import annotations
@@ -16,7 +22,16 @@ class OkulConfig(AppConfig):
     verbose_name = "Okul çekirdeği"
 
     def ready(self) -> None:
-        from apps.okul import son_oturum
+        from django.db.models.signals import post_save
+
+        from apps.okul import masaustu_kanca, oturum, son_oturum
+        from apps.okul.models import SchoolConfig
 
         # T15: bu oturumun başlangıcı — "son oturumdaki kayıtlar" bundan öncekilerdir.
         son_oturum.mark_process_start()
+        masaustu_kanca.kapanis_kilidi_kaydet(oturum.kapanista_kilitle)
+        post_save.connect(
+            oturum.bosta_suresi_onbellegini_bosalt,
+            sender=SchoolConfig,
+            dispatch_uid="oab_defteri.okul.bosta_suresi",
+        )
