@@ -52,7 +52,7 @@ tek yerde durur. `/api/` altındaki her istekte sırasıyla:
 4. `X-OD-Etkinlik` başlıklı ve kapıdan geçen istek boşta sayacını tazeler; reddedilen
    istek tazelemez. Başlığı yalnız ön yüz, kullanıcı etkileşiminden hemen sonra gönderir.
 5. Yazar bağlamı (`oturum.yazar_olarak`): oturum açıksa hesap + rol, değilse yok. Denetim
-   izi yazıcısı (alt commit c) okur; istek boyunca değişmez.
+   izi yazıcısı (`apps.okul.denetim_izi`) okur; istek boyunca değişmez.
 
 API dışı yollar (SPA'nın kendisi, statik dosyalar) daima serbesttir — kilit ekranı
 yüklenebilmelidir. **Yerel yedekleme etkilenmez**: günlük yedek bir HTTP ucu değildir;

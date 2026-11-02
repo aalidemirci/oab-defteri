@@ -16,29 +16,45 @@ OTOMATİK FİXTÜR `guvenlik_ortami` (her teste uygulanır, DB İSTEMEZ):
   eşlik eden `yedekleme.json` (yedek açık anahtarı).
 * Oturum `TEST_HESAP_ID` (program yöneticisi) hesabıyla AÇIKTIR (`oturum.OTURUM`;
   DEK ve iz anahtarı `TEST_IA` bellekte). Test sonunda kilitlenir.
+* Yazar bağlamı (TK16) o hesaptır (`VARSAYILAN_YAZAR`): test, oturumdaki hesabın
+  isteği gibi koşar. Üretimde bağlamı istek başında ara katman kurar
+  (`lock_middleware`); servisi doğrudan çağıran test de aynı yazarla yazar. Bağlamsız
+  yazmayı sınayan test `yazar_olarak(None)` ile bağlamı kaldırır.
 * Kademeli yanlış parola gecikmesi sıfırlanır ve `FAILURE_DELAYS=(0.0,)`
   (gerçek `sleep` yok; davranışı ayrı test kendisi kurar).
 * Süreç içi bozuk okuma kaydı (`crypto.corrupt_reads`), "yeniden başlat" kapısı
-  (`restart_gate`), oturum nesnesi (saat, boşta süre önbelleği, kurulum bilgisi) ve
-  uzun iş sayacı sıfırlanır; ortak bakım kapısı (`shared.bakim.KAPI`) test sonunda
-  yeniden açılır.
+  (`restart_gate`), oturum nesnesi (saat, boşta süre önbelleği, kurulum bilgisi),
+  denetim izi yazıcısının anahtar doğrulama önbelleği ve uzun iş sayacı sıfırlanır;
+  ortak bakım kapısı (`shared.bakim.KAPI`) test sonunda yeniden açılır.
 
-İKİ DEPO KURALI yüzünden kilit açma veritabanı ister (`Account` satırı, mühür, iz
-anahtarı). Varsayılan ortam DB'ye YAZMAZ: "dosya var, satır yok" hâlidir. Kilit
-açan, parola değiştiren ya da hesap servisi çağıran testler `yonetici_hesabi`
-fixtürünü ister: `TEST_HESAP_ID`'nin mühürlü `Account` satırı, `TEST_IA`'lı
-`AuditKey` ve parmak izi yazılır (DB gerekir).
+OTOMATİK FİXTÜR `varsayilan_hesap` (yalnız VERİTABANI kullanan testte): İKİ DEPO KURALI
+ve denetim izi veritabanı ister. Her yazma iz satırı yazar; satırın hesabı `Account`'a
+bağlıdır (PROTECT) ve mührü `AuditKey`'deki İA'dır. Bu yüzden veritabanı kullanan her
+testte `yonetici_hesabi` kurulur: `TEST_HESAP_ID`'nin mühürlü `Account` satırı,
+`TEST_IA`'lı `AuditKey` ve parmak izi. Satırlar fixtürle yazılır, iz satırı yazmaz:
+zincir boş başlar. Hesabı ve iz anahtarı OLMAYAN veritabanı isteyen test ya `parolasiz`'ı
+ister (hiç kurulmamış ilk açılış) ya da `@pytest.mark.hesapsiz` işaretini taşır (ör.
+"güvenlik dosyasını sıfırla" koşulu şifreli tabloların boş olmasını ister). DB
+kullanmayan test veritabanına dokunmaz: güvenlik dosyası var, satır yok.
+
+DENETİM İZİ VE `flush` (`iz_tetikleyicili_flush`, oturum boyu): `AuditTrail`'in `BEFORE
+DELETE` tetikleyicisi `transaction=True` testlerinin sonundaki `flush`'ı (`DELETE FROM`)
+keserdi. Yalnız test sürecinde SQLite arka ucunun `execute_sql_flush`'ı sarılır: aynı
+işlemde tetikleyiciler `sqlite_master`'daki tanımlarıyla düşürülür, tablolar boşaltılır,
+tanımlar AYNEN yeniden kurulur. Üretimde tetikleyicileri kapatan bir yol yoktur; göçün
+kurduğu tanım test sonunda da yerindedir (`test_denetim_izi.py` sınar).
 
 EK FİXTÜRLER (testin istemesi gerekir):
 
 * `parolasiz` — güvenlik dosyası ve `yedekleme.json` YOK, anahtar YOK: hesap hiç
   kurulmamış ilk açılış ("kurulum" durumu). Kişi yazan uçlar 409 döner,
-  `Student.save()` `KeyMissingError` yükseltir.
+  `Student.save()` `KeyMissingError` yükseltir. Veritabanında hesap kurulmaz.
 * `kilitli` — güvenlik dosyası VAR, anahtar YOK (program kilitli). Açmak için
-  `app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)` (+ `yonetici_hesabi`).
+  `app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)`.
 * `parmak_izi_yazili` — DB'ye `TEST_DEK`'in parmak izini yazar (DB gerekir);
   "güvenlik dosyası kayıp" senaryosu bunun üstüne dosyayı siler.
-* `yonetici_hesabi` — yukarıda; `Account` satırını döndürür.
+* `yonetici_hesabi` — yukarıda; `Account` satırını döndürür (veritabanı kullanan
+  testte zaten kuruludur; aynı satırı verir).
 
 Oturumu doğrudan açan yardımcı `oturumu_ac_test`'tir (kilit ekranısız; Argon2 ve
 veritabanı istemez).
@@ -50,9 +66,12 @@ import base64
 import json
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
+
+if TYPE_CHECKING:
+    from django.db.backends.sqlite3.operations import DatabaseOperations
 
 # Sabit test anahtarları (32 bayt). Gerçek bir sır DEĞİLDİR; yalnız testlerde.
 TEST_DEK = bytes(range(32))
@@ -63,6 +82,8 @@ TEST_KURTARMA_ANAHTARI = "TEST-KURT-ARMA-ANAH-TARI-ABCD-EFGH-JKLM"
 TEST_HESAP_ID = "6f1c2a3b-4d5e-4f60-8a71-0b2c3d4e5f60"
 TEST_TANITICI = "yonetici"
 TEST_HESAP_ADI = "Örnek Yönetici"
+#: Varsayılan yazar bağlamının rolü (`VARSAYILAN_YAZAR`; modül başlığı).
+TEST_ROL = "yonetici"
 
 _UCUZ_KDF: dict[str, int] = {"time_cost": 1, "memory_cost": 8, "parallelism": 1}
 
@@ -104,6 +125,13 @@ def _oturum_sifirla() -> None:
     bakim.UZUN_ISLER._reset_for_tests()
 
 
+def varsayilan_yazar() -> Any:
+    """Varsayılan ortamın yazar bağlamı: oturumdaki program yöneticisi (modül başlığı)."""
+    from apps.okul.oturum import Yazar
+
+    return Yazar(hesap_id=TEST_HESAP_ID, rol=TEST_ROL)
+
+
 def oturumu_ac_test(
     hesap_id: str = TEST_HESAP_ID, *, tanitici: str = TEST_TANITICI, rol: str = "yonetici"
 ) -> None:
@@ -127,7 +155,8 @@ def guvenlik_ortami(
     """
     from desktop.backup_crypto import ensure_public_config
 
-    from apps.okul import restart_gate
+    from apps.okul import denetim_izi, iz_durumu, restart_gate
+    from apps.okul.oturum import yazar_olarak
     from apps.okul.services import app_password
     from shared import bakim, crypto
 
@@ -145,16 +174,76 @@ def guvenlik_ortami(
     app_password._reset_failures()
     crypto._reset_corrupt_reads_for_tests()
     restart_gate._reset_for_tests()
+    denetim_izi._reset_for_tests()
+    iz_durumu._reset_for_tests()
     _oturum_sifirla()
     oturumu_ac_test()
-    yield guvenlik_dizini
+    with yazar_olarak(varsayilan_yazar()):
+        yield guvenlik_dizini
     app_password.lock()
     app_password._reset_failures()
     crypto._reset_corrupt_reads_for_tests()
     restart_gate._reset_for_tests()
+    denetim_izi._reset_for_tests()
+    iz_durumu._reset_for_tests()
     _oturum_sifirla()
     # Başarılı canlı geri yükleme bakım kapısını süreç boyunca kapalı bırakır (§13 D3).
     bakim.KAPI.bakimdan_cik()
+
+
+def _veritabani_kullanir(request: pytest.FixtureRequest) -> bool:
+    """Test veritabanı kullanıyor mu? (`django_db` işareti ya da `db`/`transactional_db`)"""
+    return (
+        request.node.get_closest_marker("django_db") is not None
+        or "_django_db_helper" in request.fixturenames
+    )
+
+
+@pytest.fixture(autouse=True)
+def varsayilan_hesap(request: pytest.FixtureRequest, guvenlik_ortami: Path) -> None:
+    """Veritabanı kullanan testte program yöneticisinin satırı ve iz anahtarı (modül başlığı).
+
+    `parolasiz` isteyen ya da `hesapsiz` işaretli testte kurulmaz.
+    """
+    if not _veritabani_kullanir(request):
+        return
+    if "parolasiz" in request.fixturenames or request.node.get_closest_marker("hesapsiz"):
+        return
+    request.getfixturevalue("yonetici_hesabi")
+
+
+@pytest.fixture(autouse=True, scope="session")
+def iz_tetikleyicili_flush() -> Iterator[None]:
+    """`transaction=True` testlerinin `flush`'ı denetim izinin tetikleyicisine takılmasın.
+
+    Yalnız test süreci (modül başlığı "DENETİM İZİ VE flush"): aynı işlemde
+    `okul_audittrail`'in tetikleyicileri `sqlite_master`'daki tanımlarıyla düşürülür,
+    tablolar boşaltılır, tanımlar AYNEN yeniden kurulur. Tabloda satır yokken de aynı
+    yol koşar (tanım değişmez).
+    """
+    from django.db import transaction
+    from django.db.backends.sqlite3.operations import DatabaseOperations
+
+    asil = DatabaseOperations.execute_sql_flush
+
+    def tetikleyicileri_koruyarak(self: DatabaseOperations, sql_list: list[str]) -> None:
+        with transaction.atomic(using=self.connection.alias):
+            with self.connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' "
+                    "AND tbl_name = 'okul_audittrail' ORDER BY name"
+                )
+                tetikleyiciler = [(str(ad), str(sql)) for ad, sql in cursor.fetchall()]
+                for ad, _ in tetikleyiciler:
+                    cursor.execute(f'DROP TRIGGER "{ad}"')
+            asil(self, sql_list)
+            with self.connection.cursor() as cursor:
+                for _, sql in tetikleyiciler:
+                    cursor.execute(sql)
+
+    with pytest.MonkeyPatch.context() as yama:
+        yama.setattr(DatabaseOperations, "execute_sql_flush", tetikleyicileri_koruyarak)
+        yield
 
 
 @pytest.fixture
@@ -197,7 +286,8 @@ def yonetici_hesabi(parmak_izi_yazili: str) -> Any:
     """`TEST_HESAP_ID`'nin mühürlü `Account` satırı + `TEST_IA`'lı `AuditKey` (DB gerekir).
 
     Şifreli ad DEK ister: kilitli bir testte de çağrılabilsin diye anahtar geçici
-    olarak yüklenir ve önceki hâl (kilitli ya da açık) korunur.
+    olarak yüklenir ve önceki hâl (kilitli ya da açık) korunur. Satırlar fixtürle
+    yazılır, iz satırı yazılmaz (zincir boş başlar; modül başlığı).
     """
     from django.utils import timezone
 

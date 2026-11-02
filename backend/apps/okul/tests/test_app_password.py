@@ -275,6 +275,7 @@ class TestEnable:
             kur(tanitici="1 yonetici")
         assert app_password.read_state() is None
 
+    @pytest.mark.hesapsiz  # kişi tabloları dolu ama hesap ve parmak izi yok
     def test_ogrenci_varken_reddedilir(self) -> None:
         ogrenci_olustur()
         parolasiz_yap()
@@ -282,12 +283,14 @@ class TestEnable:
             kur()
         assert app_password.read_state() is None
 
+    @pytest.mark.hesapsiz  # kişi tabloları dolu ama hesap ve parmak izi yok
     def test_personel_varken_reddedilir(self) -> None:
         Personnel.objects.create(first_name="AYŞE", last_name="KAYA")
         parolasiz_yap()
         with pytest.raises(app_password.AppPasswordError, match="diğer personel ya da hesap"):
             kur()
 
+    @pytest.mark.hesapsiz  # kişi tabloları dolu ama hesap ve parmak izi yok
     def test_silinmis_ogrenci_varken_de_reddedilir(self) -> None:
         """Yumuşak silinmiş kişinin adı da kişisel veridir (`all_objects`)."""
         ogrenci_olustur().delete()
@@ -486,6 +489,7 @@ class TestYarimKurulum:
         assert durum()["gecis"] is None
         assert arsivler() == []
 
+    @pytest.mark.hesapsiz  # veritabanı boş: hesap ve parmak izi yok
     def test_damgasiz_dosya_bos_veritabaninda_arsivlenmez(self) -> None:
         """Veritabanı silinip boş açıldıysa dosya, hesap parolasıyla geri yüklemenin anahtarıdır."""
         assert SchoolConfig.load().app_password_hash == ""
@@ -1562,6 +1566,7 @@ def test_parmak_izi_yokken_bozuk_dosya_da_kayip_sayilir_ve_db_istemez() -> None:
 
 
 @pytest.mark.django_db
+@pytest.mark.hesapsiz  # sıfırlama koşulu: parmak izi ve şifreli tablolar boş
 def test_parmak_izi_yokken_bozuk_dosya_durum_ozetinde_kayip_ve_sifirlanabilir() -> None:
     """Durum özeti kayıp hâlinde sıfırlama yolunun koşullarını da sorar (DB'ye gider:
     parmak izi + şifreli tablolar). Parmak izi boş ve kişi yokken yol açıktır."""

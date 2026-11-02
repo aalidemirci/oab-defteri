@@ -192,16 +192,59 @@ BLIND_INDEX_INFO = b"od-kor-indeks"
 #: hesaplanmasını yasaklar. Sürüm eki yalnız DEK yenilemesiyle (F4) değişebilir.
 ACCOUNT_SEAL_INFO = b"od-hesap-muhru/v1"
 
+# İz anahtarından (İA; tasarım §4.6.3) türeyen anahtarların HKDF bağlamları. İA DEK'ten
+# TÜREMEZ; bu dizgeler yalnız İA'ya (kilitli kipte çapadan türeyen tohuma) uygulanır.
+# Değişirse kâğıda inmiş zincir başları ve var olan bütün MAC'ler tutmaz olur.
+#: Açık kipte zincir MAC'i: `HMAC(HKDF(İA, "od-denetim-izi/v1"), kanonik(satır) ‖ prev_mac)`.
+AUDIT_CHAIN_INFO = b"od-denetim-izi/v1"
+#: İçerik MAC'i ("kaydın özeti", §4.6.2): `HMAC(HKDF(İA, "od-kayit-ozeti/v1"), kanonik(...))`.
+RECORD_SUMMARY_INFO = b"od-kayit-ozeti/v1"
+#: Çapanın mührü (`iz-durumu.json`): `HMAC(HKDF(İA, "od-iz-capa/v1"), seq ‖ mac)`.
+AUDIT_ANCHOR_INFO = b"od-iz-capa/v1"
+#: Kilitli kip tohumu: `tohum₀ = HKDF(İA, "od-iz-kilitli/v1", tuz = seq ‖ mac)`.
+AUDIT_LOCKED_SEED_INFO = b"od-iz-kilitli/v1"
+#: Kilitli kipteki k'ıncı satırın anahtarı: `HKDF(tohumₖ, "od-iz-kilitli-mac/v1")`.
+AUDIT_LOCKED_MAC_INFO = b"od-iz-kilitli-mac/v1"
 
-def derive_subkey(key: bytes, *, info: bytes) -> bytes:
-    """Adlı amaç için 32 baytlık alt anahtar: HKDF-SHA256(salt=None, info=amaç).
+
+def derive_subkey(key: bytes, *, info: bytes, salt: bytes | None = None) -> bytes:
+    """Adlı amaç için 32 baytlık alt anahtar: HKDF-SHA256(salt, info=amaç).
 
     DEK'ten türeyen bütün anahtarların (kör indeks, hesap mührü; F3'te hareket
     parmak izi, 3. adımda dosya sarmalı) ve iz anahtarı türevlerinin (§4.6.3)
     tek kapısıdır. Bilgi dizgeleri kimlik tablosundadır (tasarım §2.3.1); her amaç
-    ayrı dizge kullanır, bir amacın anahtarı ötekini vermez.
+    ayrı dizge kullanır, bir amacın anahtarı ötekini vermez. Tuz yalnız kilitli kip
+    tohumunda verilir (`tuz = seq ‖ mac`, §4.6.3); öteki türevlerde yoktur (None).
     """
-    return HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=info).derive(key)
+    return HKDF(algorithm=hashes.SHA256(), length=32, salt=salt, info=info).derive(key)
+
+
+def audit_chain_key(audit_key: bytes) -> bytes:
+    """İA'dan açık kip zincir anahtarı (`od-denetim-izi/v1`; tasarım §4.6.3)."""
+    return derive_subkey(audit_key, info=AUDIT_CHAIN_INFO)
+
+
+def record_summary_key(audit_key: bytes) -> bytes:
+    """İA'dan içerik MAC'i anahtarı (`od-kayit-ozeti/v1`; tasarım §4.6.2)."""
+    return derive_subkey(audit_key, info=RECORD_SUMMARY_INFO)
+
+
+def audit_anchor_key(audit_key: bytes) -> bytes:
+    """İA'dan çapanın mühür anahtarı (`od-iz-capa/v1`; tasarım §4.6.3)."""
+    return derive_subkey(audit_key, info=AUDIT_ANCHOR_INFO)
+
+
+def audit_locked_seed(audit_key: bytes, anchor_bytes: bytes) -> bytes:
+    """Kilitli kip tohumu: `tohum₀ = HKDF(İA, "od-iz-kilitli/v1", tuz = seq ‖ mac)` (§4.6.3).
+
+    `anchor_bytes` çapanın `seq ‖ mac` baytlarıdır (`shared.kanonik.capa_baytlari`).
+    """
+    return derive_subkey(audit_key, info=AUDIT_LOCKED_SEED_INFO, salt=anchor_bytes)
+
+
+def audit_locked_mac_key(seed: bytes) -> bytes:
+    """Kilitli kipteki k'ıncı satırın zincir anahtarı: `HKDF(tohumₖ, "od-iz-kilitli-mac/v1")`."""
+    return derive_subkey(seed, info=AUDIT_LOCKED_MAC_INFO)
 
 
 def _derive_blind_index_key(data_key: bytes) -> bytes:
@@ -308,7 +351,7 @@ def load_key(raw_key: bytes, *, audit_key: bytes | None = None) -> None:
 
     İki anahtar tek adımda yüklenir: önceki oturumun iz anahtarı yeni DEK'le
     birlikte bellekte kalmaz. İz anahtarı verilmezse bellekte iz anahtarı yoktur
-    (denetim izi yazıcısı alt commit (c)'de bunu "iz yazılamaz" sayar).
+    (denetim izi yazıcısı bunu "iz yazılamaz" sayar; `apps.okul.denetim_izi`).
     """
     _holder.load(raw_key, audit_key)
 

@@ -16,6 +16,7 @@ ucuz Argon2 profili ve gecikmesiz deneme `backend/conftest.py`'dendir.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -626,3 +627,179 @@ def test_komut_bellek_ici_veritabanini_reddeder(
 def test_komut_okunamayan_dosyada_turkce_hata_verir(tmp_path: Path) -> None:
     with pytest.raises(CommandError, match="okunamadı"):
         call_command("restore_backup", str(tmp_path / "yok.odbak"), "--yes")
+
+
+# ---------------------------------------------------------------------------
+# Geri yükleme notu (tasarım §4.4.4; plan F1b-1 alt commit c)
+# ---------------------------------------------------------------------------
+def _izli_sqlite(dizin: Path, satirlar: list[tuple[int, str]]) -> bytes:
+    """Denetim izi tablosu taşıyan (yalnız `seq`, `mac`) gerçek bir SQLite dosyası."""
+    yol = dizin / f"izli-{len(satirlar)}.sqlite3"
+    with closing(sqlite3.connect(yol)) as baglanti:
+        baglanti.execute("CREATE TABLE okul_audittrail (seq INTEGER PRIMARY KEY, mac TEXT)")
+        baglanti.executemany("INSERT INTO okul_audittrail VALUES (?, ?)", satirlar)
+        baglanti.commit()
+    return yol.read_bytes()
+
+
+def _not(veri_dizini: Path) -> dict[str, Any]:
+    return cast(
+        "dict[str, Any]",
+        json.loads((veri_dizini / "geri-yukleme-notu.json").read_text(encoding="utf-8")),
+    )
+
+
+def test_geri_yukleme_notu_kenara_alinanin_ozetini_zincir_basini_ve_hesabi_yazar(
+    tmp_path: Path, veri_dizini: Path
+) -> None:
+    db = veri_dizini / "db.sqlite3"
+    db.write_bytes(_izli_sqlite(tmp_path, [(1, "aa" * 32), (7, "bb" * 32)]))
+    dek, durum = _dek_ile_durum(PAROLA)
+    _guncel_yaz(veri_dizini, durum)
+    yedek = tmp_path / "gunluk-2026-10-30.odbak"
+    yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni"), dek, durum))
+
+    sonuc = backup_restore.restore_database(yedek, db, hesap=HESAP, password=PAROLA)
+
+    assert sonuc.old_db_path is not None
+    (kayit,) = _not(veri_dizini)["geri_yuklemeler"]
+    assert kayit["yedek"] == "gunluk-2026-10-30.odbak"
+    assert kayit["onceki"] == {
+        "dosya": sonuc.old_db_path.name,
+        "sha256": hashlib.sha256(sonuc.old_db_path.read_bytes()).hexdigest(),
+        "zincir_basi": {"seq": 7, "mac": "bb" * 32},
+    }
+    assert kayit["yol"] == {"tur": "hesap", "hesap": HESAP_ID, "tanitici": HESAP}
+    assert _not(veri_dizini)["bekleyen_olaylar"] == []
+    if os.name == "posix":
+        kip = (veri_dizini / "geri-yukleme-notu.json").stat().st_mode & 0o777
+        assert kip == 0o600
+
+
+def test_kurtarma_yolunda_not_anahtarin_no_sunu_yazar_ikinci_geri_yukleme_eklenir(
+    tmp_path: Path, veri_dizini: Path
+) -> None:
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
+    yedek = tmp_path / "gunluk.odbak"
+    yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni"), dek, durum))
+    db = veri_dizini / "db.sqlite3"
+
+    backup_restore.restore_database(yedek, db, recovery_key=kurtarma)  # hedef yokken
+    backup_restore.restore_database(yedek, db, recovery_key=kurtarma)
+
+    ilk, ikinci = _not(veri_dizini)["geri_yuklemeler"]
+    assert ilk["onceki"] is None
+    assert ilk["yol"] == {"tur": "kurtarma", "no": 1}
+    # İkinci geri yüklemede kenara alınan, birincinin getirdiği (izsiz) veritabanıdır.
+    assert ikinci["onceki"]["zincir_basi"] is None
+    assert ikinci["onceki"]["dosya"].startswith("db-onceki-")
+
+
+def test_uygulama_icinde_kurtarma_yolunda_not_oturumdaki_hesabi_da_yazar(
+    tmp_path: Path, veri_dizini: Path
+) -> None:
+    """Hakkında "Açık oturum, sahibinin imzasıdır": oturum açıkken kurtarma anahtarıyla yapılan
+    geri yükleme de onu başlatan hesaba bağlanır (`oturum`); konsolda oturum yoktur."""
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
+    yedek = tmp_path / "gunluk.odbak"
+    yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni"), dek, durum))
+    db = veri_dizini / "db.sqlite3"
+
+    backup_restore.restore_database(yedek, db, recovery_key=kurtarma, oturum_hesabi=HESAP_ID)
+    backup_restore.restore_database(yedek, db, recovery_key=kurtarma)
+
+    ilk, ikinci = _not(veri_dizini)["geri_yuklemeler"]
+    assert ilk["yol"] == {"tur": "kurtarma", "no": 1} and ilk["oturum"] == HESAP_ID
+    assert "oturum" not in ikinci
+
+
+@pytest.mark.parametrize("capa", ["yok", "var", "bozuk"])
+def test_geri_yukleme_notu_takastan_onceki_capayi_yazar(
+    tmp_path: Path, veri_dizini: Path, capa: str
+) -> None:
+    """Bağımsız denetim bulgusu: kurulumdan sonra hiç kilitlenmeden yapılan geri yükleme ilk
+    kilit açılışında yanlış "kilit işareti bulunamadı" uyarısı veriyordu. Not takastan önceki
+    çapayı da yazar: yoksa `null` ("çapa yoktu"), varsa `{seq, mac}` (mühür ve tohum nota
+    GİRMEZ), okunamıyorsa alan hiç yazılmaz ("bilinmiyor")."""
+    iz = veri_dizini / "iz-durumu.json"
+    if capa == "var":
+        iz.write_text(
+            json.dumps(
+                {
+                    "surum": 1,
+                    "capa": {"seq": 7, "mac": "bb" * 32, "muhur": "cc" * 32},
+                    "tohum": "dd" * 32,
+                    "adim": 0,
+                }
+            ),
+            encoding="utf-8",
+        )
+    elif capa == "bozuk":
+        iz.write_text("{bozuk", encoding="utf-8")
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
+    yedek = tmp_path / "gunluk.odbak"
+    yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni"), dek, durum))
+
+    backup_restore.restore_database(yedek, veri_dizini / "db.sqlite3", recovery_key=kurtarma)
+
+    (kayit,) = _not(veri_dizini)["geri_yuklemeler"]
+    if capa == "yok":
+        assert kayit["capa"] is None
+    elif capa == "var":
+        assert kayit["capa"] == {"seq": 7, "mac": "bb" * 32}
+        assert "cc" * 32 not in json.dumps(kayit) and "dd" * 32 not in json.dumps(kayit)
+    else:
+        assert "capa" not in kayit
+
+
+def test_not_yazilamasa_da_geri_yukleme_basarilidir(
+    tmp_path: Path, veri_dizini: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from apps.okul.services import geri_yukleme_notu
+
+    def yazilamadi(*_a: object, **_k: object) -> None:
+        raise OSError("disk dolu")
+
+    monkeypatch.setattr(geri_yukleme_notu, "atomik_json_yaz", yazilamadi)
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
+    yeni = _sqlite_baytlari(tmp_path, "yeni")
+    yedek = tmp_path / "gunluk.odbak"
+    yedek.write_bytes(_sifreli_kapsayici(yeni, dek, durum))
+    db = veri_dizini / "db.sqlite3"
+
+    backup_restore.restore_database(yedek, db, recovery_key=kurtarma)
+
+    assert db.read_bytes() == yeni
+    assert not (veri_dizini / "geri-yukleme-notu.json").exists()
+
+
+def test_basarisiz_geri_yukleme_not_yazmaz(tmp_path: Path, veri_dizini: Path) -> None:
+    dek, durum = _dek_ile_durum(PAROLA)
+    _guncel_yaz(veri_dizini, durum)
+    yedek = tmp_path / "gunluk.odbak"
+    yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni"), dek, durum))
+
+    with pytest.raises(backup_restore.BackupRestoreError):
+        backup_restore.restore_database(
+            yedek, veri_dizini / "db.sqlite3", hesap=HESAP, password="Yanlis-Parola-9"
+        )
+
+    assert not (veri_dizini / "geri-yukleme-notu.json").exists()
+
+
+def test_bozuk_notun_ustune_yeni_kayit_isaretle_yazilir(tmp_path: Path, veri_dizini: Path) -> None:
+    (veri_dizini / "geri-yukleme-notu.json").write_text("{bozuk", encoding="utf-8")
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
+    yedek = tmp_path / "gunluk.odbak"
+    yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni"), dek, durum))
+
+    backup_restore.restore_database(yedek, veri_dizini / "db.sqlite3", recovery_key=kurtarma)
+
+    notu = _not(veri_dizini)
+    assert notu["bozuk_not_vardi"] is True
+    assert len(notu["geri_yuklemeler"]) == 1

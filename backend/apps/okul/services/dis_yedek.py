@@ -47,8 +47,11 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Final
 
+from django.db import transaction
 from django.utils import timezone
 
+from apps.okul import denetim_izi
+from apps.okul.models import AuditAction
 from apps.okul.services import app_password
 
 logger = logging.getLogger("oab_defteri.yedek")
@@ -166,11 +169,25 @@ def indirme_kaydet(an: datetime | None = None) -> None:
 
 
 def hatirlatma_suresini_ayarla(gun: int) -> DisYedekDurumu:
-    """Hatırlatma süresini değiştirir; aralık dışıysa `ValueError` (400)."""
+    """Hatırlatma süresini değiştirir; aralık dışıysa `ValueError` (400).
+
+    Ayar değişikliği oturumdaki hesabın `GUNCELLE` satırıdır (tasarım §4.6.2; nesne
+    `dis_yedek.ayar`, gün sayısı `[önce, sonra]` değeriyle). Sıra `guvenlik.json`
+    yazımlarındakiyle aynıdır: önce dosya kilidi, sonra veritabanı işlemi; satır dosyadan
+    ÖNCE eklenir, dosya yazılamazsa işlem geri sarılır (iz yapılmamış işi anlatmaz).
+    """
     if isinstance(gun, bool) or not EN_AZ_HATIRLATMA_GUN <= gun <= EN_COK_HATIRLATMA_GUN:
         raise ValueError(SURE_ARALIK_MESAJI)
-    with _kilit:
+    with _kilit, transaction.atomic():
         veri = _oku()
+        onceki = _hatirlatma_gun(veri)
+        denetim_izi.olay(
+            AuditAction.GUNCELLE,
+            model=denetim_izi.DIS_YEDEK_AYARI,
+            object_id="hatirlatma_gun",
+            changed_fields=["hatirlatma_gun"],
+            values={"hatirlatma_gun": [onceki, gun]},
+        )
         veri["surum"] = DOSYA_SURUMU
         veri["hatirlatma_gun"] = gun
         _yaz(veri)

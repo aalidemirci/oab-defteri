@@ -3,18 +3,22 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Iterable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 from unittest import mock
 
 import pytest
 from desktop.backup_crypto import MAGIC, decrypt_bytes, ensure_public_config
-from django.conf import settings
 from django.http import StreamingHttpResponse
 from rest_framework.test import APIClient
 
-from apps.okul.services import app_password, encrypted_backup
+from apps.okul import denetim_izi
+from apps.okul.models import AuditTrail
+from apps.okul.services import app_password, dis_yedek, encrypted_backup
+from conftest import TEST_HESAP_ID
 
 
+@pytest.mark.django_db
 def test_veritabani_ramde_sifrelenerek_odbak_uretilir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -30,7 +34,11 @@ def test_veritabani_ramde_sifrelenerek_odbak_uretilir(
     ensure_public_config(data_dir, data_key)
     monkeypatch.setattr(app_password, "state_path", lambda: data_dir / "guvenlik.json")
     monkeypatch.setattr(app_password, "is_locked", lambda: False)
-    monkeypatch.setitem(settings.DATABASES["default"], "NAME", database)
+    # Görüntü yalnız bu dosyadan alınır; iz satırı test veritabanının açık bağlantısına
+    # yazılır (ayarın kendisi değişmez, bağlantı yeniden kurulmaz).
+    monkeypatch.setattr(
+        encrypted_backup, "settings", SimpleNamespace(DATABASES={"default": {"NAME": database}})
+    )
 
     content, filename = encrypted_backup.create_encrypted_backup()
 
@@ -40,6 +48,37 @@ def test_veritabani_ramde_sifrelenerek_odbak_uretilir(
     restored = decrypt_bytes(content, data_key)
     assert restored.startswith(b"SQLite format 3")
     assert secret.encode() in restored
+    # Kullanıcının istediği yedek oturumdaki hesabın `YEDEK` satırıdır (tasarım §4.6.3).
+    satir = AuditTrail.objects.get()
+    assert (satir.action, satir.model, satir.object_id) == (
+        "YEDEK",
+        denetim_izi.YEDEK_DOSYASI,
+        filename,
+    )
+    assert str(satir.account_id) == TEST_HESAP_ID
+    assert satir.key_mode == "ACIK"
+
+
+@pytest.mark.django_db
+def test_iz_yazilamazsa_yedek_verilmez(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """İzsiz yedek yoktur: satır yazılamazsa indirme verilmez, dış yedek tarihi de yazılmaz."""
+    database = tmp_path / "db.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE kayit (deger TEXT)")
+    monkeypatch.setattr(
+        encrypted_backup, "settings", SimpleNamespace(DATABASES={"default": {"NAME": database}})
+    )
+    indirmeler: list[object] = []
+    monkeypatch.setattr(dis_yedek, "indirme_kaydet", indirmeler.append)
+
+    def yazilamadi(*_a: object, **_k: object) -> None:
+        raise denetim_izi.IzYazilamadi("deneme")
+
+    monkeypatch.setattr(denetim_izi, "olay", yazilamadi)
+    with pytest.raises(denetim_izi.IzYazilamadi):
+        encrypted_backup.create_encrypted_backup()
+    assert indirmeler == []
+    assert AuditTrail.objects.count() == 0
 
 
 def test_kilitliyken_yedek_olusturulmaz(monkeypatch: pytest.MonkeyPatch) -> None:

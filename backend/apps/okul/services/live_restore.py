@@ -150,12 +150,15 @@ def _restore(
         # Takas öncesi TÜM bağlantılar kapatılır; sonraki istekler zaten
         # restart_gate'e takılacağından yeniden açılmaları sorun olmaz.
         connections.close_all()
+        oturum = OTURUM.hesap_id()
         sonuc = backup_restore.restore_database(
             kaynak,
             hedef,
-            hesap=hesap or OTURUM.hesap_id(),
+            hesap=hesap or oturum,
             password=password or None,
             recovery_key=recovery_key or None,
+            # Geri yükleme onu başlatan oturumun hesabına bağlanır (kurtarma yolunda da).
+            oturum_hesabi=oturum,
         )
     except BaseException:
         # Hedefe dokunulmadı (çekirdek garantisi): gün işleri yeniden koşabilir.

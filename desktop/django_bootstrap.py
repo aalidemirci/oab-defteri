@@ -46,14 +46,23 @@ def prepare_django(backend_dir: Path, data_dir: Path) -> None:
     apply_access_log_policy()
 
 
-def has_pending_migrations() -> bool:
-    """Uygulanmamış göç var mı? (varsa `migrate` öncesi ayrı yedek alınır)"""
+def pending_migrations() -> list[str]:
+    """Uygulanmamış göçler (`uygulama.ad`, uygulanacakları sırayla).
+
+    Liste boş değilse `migrate` öncesi ayrı yedek alınır; göç başarılı olunca adlar denetim
+    izine `GOC` olayı olarak verilir (tasarım §4.2 adım 8, §4.6.3; `masaustu_kanca`).
+    """
     from django.db import connections
     from django.db.migrations.executor import MigrationExecutor
 
     executor = MigrationExecutor(connections["default"])
-    targets = executor.loader.graph.leaf_nodes()
-    return bool(executor.migration_plan(targets))
+    plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
+    return [f"{goc.app_label}.{goc.name}" for goc, geri_al in plan if not geri_al]
+
+
+def has_pending_migrations() -> bool:
+    """Uygulanmamış göç var mı? (`pending_migrations`'ın kısa yolu)"""
+    return bool(pending_migrations())
 
 
 def unknown_applied_migrations() -> list[str]:

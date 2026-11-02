@@ -27,6 +27,21 @@ SIRALAR (iki depo kuralı, §4.6.1):
 Mührü tutmayan satıra hiçbir servis dokunmaz (`AccountSealMismatch`): yeniden
 mühürlemek program dışından değiştirilmiş satırı meşrulaştırırdı (tehdit 19).
 
+DENETİM İZİ (tasarım §4.6.2; plan F1b-1 alt commit c). Her satır yazımı iz satırıyla AYNI
+işlemdedir (`apps.okul.denetim_izi`): açma, kapama ve askıdan çıkarma `HESAP`, parola
+sıfırlama `PAROLA`, parola yenilenme bildiriminin kapatılması `GUNCELLE`. Yazar istek
+başındaki bağlamdır (oturumdaki hesap); `by_hesap_id` işlemi yapan hesabın açık ve mühürlü
+olduğunu doğrulamak içindir ve yazarla AYNI hesap olmalıdır (`_actor`): satırın hesabı
+yazardan, `opened_by`/`closed_by`/`reset_by` `by_hesap_id`'den gelir; ikisi ayrışırsa
+servis reddeder (2. adımın Kullanıcılar uçlarının güvenlik ağı). İki depo sırası korunur:
+satır ve iz satırı birlikte, sonra dosya. Dosyadaki sayacı ve askıyı ya da sarmalı
+değiştiren adımlar (askıdan çıkarma, parola sıfırlamanın ve kapamanın dosya adımı,
+sahipsiz sarmalın silinmesi) `guvenlik.json` bölümünün (`denetim_izi.HESAP_SARMALI`)
+`HESAP` satırını önceki değerleriyle yazar (`app_password.sarmal_izi`; sayaç ve askı
+sıfırsa sıfırlama ve kapamada satır yok); satır dosyadan ÖNCE, aynı işlemde eklenir
+(`app_password.dosya_ve_iz_islemi`). Geri yüklemeden sonraki karşılaştırmanın durum
+düzeltmesi programın kendi işidir: yazar `SISTEM`'dir.
+
 KİLİT EKRANI LİSTESİ (`lock_screen_accounts`; tasarım §4.4.3, plan F1b-1 "Oturum"):
 kilitliyken çalışır, DEK istemez ve kişi adı döndürmez (şifreli ad-soyad okunmaz).
 Kurtarma anahtarıyla açılışın hesap listesi (`recovery_accounts`) aynı kurallarla
@@ -51,15 +66,17 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 
+from apps.okul import denetim_izi
 from apps.okul.models import (
     MAX_AUDIT_BOARD_ACCOUNTS,
     SINGLE_ACCOUNT_ROLES,
     Account,
     AccountRole,
     AccountStatus,
+    AuditAction,
     ResetKind,
 )
-from apps.okul.oturum import rol_etiketi
+from apps.okul.oturum import rol_etiketi, sistem_olarak, yazar
 from apps.okul.services import app_password, hesap_kurallari
 from apps.okul.services.app_password import AccountSealMismatch, AppPasswordError
 from shared import crypto
@@ -82,8 +99,11 @@ _AUDIT_BOARD_LIMIT_MESSAGE = (
 _LAST_ADMIN_MESSAGE = "Son program yöneticisi hesabı kapatılamaz."
 _ROLE_MESSAGE = "Geçerli bir rol seçin."
 _SUSPENDED_RESET_MESSAGE = "Askıdaki hesabın parolası sıfırlanamaz; önce hesabı askıdan çıkarın."  # noqa: S105
+# Genel Bakış'ın "Hesaplar ve Güvenlik Dosyası" kartında görünür: "sarmal" kullanıcı metnine
+# girmez, kullanıcıdaki adı hesabın güvenlik dosyasındaki parola kaydıdır (sözlük §1 "Denetim izi").
 _NOT_ORPHAN_MESSAGE = (
-    "Silinmek istenen sarmal artık sahipsiz değil; listeyi yenileyip yeniden deneyin."
+    "Bu parola kaydı artık güvenlik dosyasından silinebilecek durumda değil; Genel Bakış'ı "
+    "yenileyip yeniden deneyin."
 )
 
 
@@ -108,9 +128,23 @@ def _active_data_key() -> bytes:
 
 
 def _actor(by_hesap_id: object, data_key: bytes) -> Account:
-    """İşlemi yapan hesap: var, `ACIK` ve mührü tutuyor. Rol denetimi 2. adımda (§4.4.2)."""
+    """İşlemi yapan hesap: var, `ACIK`, mührü tutuyor ve yazarla aynı. Rol denetimi 2. adımda.
+
+    Yazar bağlamı bir hesapsa (istek başındaki oturum hesabı) işlemi yapan o hesap olmalıdır:
+    iz satırının hesabı yazardan, kaydın `opened_by`/`closed_by`/`reset_by`'ı bu hesaptan
+    gelir; ayrışırlarsa kayıt başkasının adına yazılmış olurdu (modül başlığı). Bağlam
+    yoksa yazıcı yazmayı zaten reddeder.
+    """
     aktor = app_password.account_by_id(by_hesap_id)
     if aktor is None or aktor.status != AccountStatus.ACIK:
+        raise AccountServiceError(_ACTOR_MESSAGE)
+    kim = yazar()
+    if (
+        kim is not None
+        and not kim.sistem_mi
+        and denetim_izi.kimlik_metni_ya_da_none(Account, kim.hesap_id) != str(aktor.id)
+    ):
+        logger.warning("İşlemi yapan hesap yazar bağlamındaki hesap değil; işlem yapılmadı.")
         raise AccountServiceError(_ACTOR_MESSAGE)
     if not aktor.seal_matches(data_key):
         raise AccountSealMismatch(_SEAL_MESSAGE)
@@ -184,6 +218,7 @@ def open_account(
             )
             hesap.seal = hesap.compute_seal(dek)
             hesap.save(force_insert=True)
+            denetim_izi.kayit(AuditAction.HESAP, hesap, onceki=None)
     except IntegrityError as exc:  # yarış: DB kısıtı son sözü söyler
         raise AccountServiceError(_LOGIN_NAME_TAKEN_MESSAGE) from exc
     app_password.write_account_wrap(
@@ -198,6 +233,12 @@ def close_account(*, by_hesap_id: object, hesap_id: object) -> Account:
 
     Önce veritabanı (`KAPALI`, `closed_at`, kapatan, mühür), sonra dosyalar. Satır
     kalır (denetim izi için; altın kural 4). Son açık program yöneticisi kapatılamaz.
+
+    Sarmalda hatalı deneme sayacı ya da askı varsa silinirken izi düşer: dosya adımının
+    işleminde, dosyadan ÖNCE `guvenlik.sarmal` satırı (`app_password.sarmal_izi`; modül
+    başlığı). Ana dosya yazılamazsa o satır geri alınır, sarmalı kilit açılışındaki
+    temizlik siler (o da iz yazar); sarmal ana dosyadan silinip bir arşiv kopyası
+    temizlenemediyse satır kalır, hata yine çağırana döner.
     """
     dek = _active_data_key()
     aktor = _actor(by_hesap_id, dek)
@@ -211,13 +252,26 @@ def close_account(*, by_hesap_id: object, hesap_id: object) -> Account:
     ):
         raise AccountServiceError(_LAST_ADMIN_MESSAGE)
     with transaction.atomic():
+        onceki = denetim_izi.anlik(hesap)
         hesap.status = AccountStatus.KAPALI
         hesap.suspend_reason = ""
         hesap.closed_at = timezone.now()
         hesap.closed_by = aktor
         hesap.seal = hesap.compute_seal(dek)
         hesap.save(update_fields=["status", "suspend_reason", "closed_at", "closed_by", "seal"])
-    app_password.remove_account_wraps({str(hesap.id)})
+        denetim_izi.kayit(AuditAction.HESAP, hesap, onceki=onceki)
+    kimlik = str(hesap.id)
+    arsiv_hatasi: OSError | None = None
+    with app_password.dosya_ve_iz_islemi():
+        app_password.sarmal_izi(kimlik, silindi=True)
+        try:
+            app_password.remove_account_wraps({kimlik})
+        except OSError as exc:
+            if kimlik in app_password.wrap_ids():
+                raise  # ana dosya yazılmadı: sarmalın satırı da geri alınır
+            arsiv_hatasi = exc
+    if arsiv_hatasi is not None:
+        raise arsiv_hatasi
     logger.info("Hesap kapatıldı (%s).", hesap.login_name)
     return hesap
 
@@ -231,6 +285,11 @@ def reset_password(*, by_hesap_id: object, hesap_id: object, temp_password: str)
     hatalı deneme sayacı ve askısı sıfırlanır. Sahibi ilk girişinde parolasını
     değiştirir ve sıfırlama bildirimini görür. `ASKIDA` durumundaki hesap önce
     askıdan çıkarılır.
+
+    Sarmalda sayaç ya da askı varsa izi kalkarken düşer: sarmal yazımının işleminde,
+    dosyadan ÖNCE `guvenlik.sarmal` satırı (`app_password.sarmal_izi`). İki işlemdir:
+    veritabanı satırı sarmaldan ÖNCE commit edilir (modül başlığı "Parola sıfırlama");
+    sarmal yazılamazsa yalnız ikinci işlem (sayacın satırı) geri alınır.
     """
     dek = _active_data_key()
     aktor = _actor(by_hesap_id, dek)
@@ -239,6 +298,7 @@ def reset_password(*, by_hesap_id: object, hesap_id: object, temp_password: str)
         raise AccountServiceError(_SUSPENDED_RESET_MESSAGE)
     parola = _kural(hesap_kurallari.validate_password, temp_password)
     with transaction.atomic():
+        onceki = denetim_izi.anlik(hesap)
         hesap.status = AccountStatus.PAROLA_YENILENMELI
         hesap.reset_at = timezone.now()
         hesap.reset_by = aktor
@@ -255,9 +315,12 @@ def reset_password(*, by_hesap_id: object, hesap_id: object, temp_password: str)
                 "seal",
             ]
         )
-    app_password.write_account_wrap(
-        data_key=dek, hesap_id=hesap.id, tanitici=hesap.login_name, password=parola
-    )
+        denetim_izi.kayit(AuditAction.PAROLA, hesap, onceki=onceki)
+    with app_password.dosya_ve_iz_islemi():
+        app_password.sarmal_izi(hesap.id)
+        app_password.write_account_wrap(
+            data_key=dek, hesap_id=hesap.id, tanitici=hesap.login_name, password=parola
+        )
     logger.info("Hesabın parolası sıfırlandı (%s).", hesap.login_name)
     return hesap
 
@@ -266,15 +329,22 @@ def unsuspend(*, by_hesap_id: object, hesap_id: object) -> Account:
     """Hesabı askıdan çıkarır: iki kaynak birlikte (plan F1b-1 "Oturum").
 
     `Account.status = ASKIDA` ise satır `ACIK`'a (geçici parolası değişmemişse
-    `PAROLA_YENILENMELI`'ye) döner, askı nedeni silinir, mühür yenilenir; sonra
-    dosyadaki hatalı deneme sayacı ve askısı kaldırılır (arşivlenmez). Askıda olmayan
-    hesapta yalnız sayaç sıfırlanır (fikirdeş).
+    `PAROLA_YENILENMELI`'ye) döner, askı nedeni silinir, mühür yenilenir (`HESAP` satırı);
+    sonra dosyadaki hatalı deneme sayacı ve askısı kaldırılır (arşivlenmez). Askıda
+    olmayan hesapta yalnız sayaç sıfırlanır (fikirdeş).
+
+    Hatalı deneme askısı kilitliyken, DEK yokken dosyaya yazılır; o an iz yazılamaz
+    (`app_password` modül başlığı). Askının izi kalkarken düşer (burada, parola
+    sıfırlamada ve kapamada da): dosyada sayaç ya da askı varsa `guvenlik.json` bölümünün
+    `HESAP` satırı önceki değerleri taşır (`hatali`, `askida`; `app_password.sarmal_izi`);
+    dosya yazımından önce ve aynı işlemde yazılır.
     """
     dek = _active_data_key()
     _actor(by_hesap_id, dek)
     hesap = _target(hesap_id, dek)
     if hesap.status == AccountStatus.ASKIDA:
         with transaction.atomic():
+            onceki = denetim_izi.anlik(hesap)
             hesap.status = (
                 AccountStatus.PAROLA_YENILENMELI
                 if _needs_password_renewal(hesap)
@@ -283,8 +353,34 @@ def unsuspend(*, by_hesap_id: object, hesap_id: object) -> Account:
             hesap.suspend_reason = ""
             hesap.seal = hesap.compute_seal(dek)
             hesap.save(update_fields=["status", "suspend_reason", "seal"])
-    app_password.clear_failed_attempts(hesap.id)
+            denetim_izi.kayit(AuditAction.HESAP, hesap, onceki=onceki)
+    with app_password.dosya_ve_iz_islemi():
+        app_password.sarmal_izi(hesap.id)
+        app_password.clear_failed_attempts(hesap.id)
     logger.info("Hesap askıdan çıkarıldı (%s).", hesap.login_name)
+    return hesap
+
+
+def acknowledge_reset_notice(*, hesap_id: object) -> Account:
+    """Parola yenilenme bildirimini kapatır: sahibi "Gördüm" dedi (tasarım §4.4.3, tehdit 12).
+
+    Yalnız oturumdaki hesabın KENDİ bildirimi kapanır (çağıran `OTURUM.hesap_id()` verir);
+    hesap açık ve mührü tutuyor olmalıdır (`_actor`; mührü tutmayan satıra dokunulmaz).
+    `reset_notice_pending` mühre girmez: mühür yenilenmez. Satır ve `GUNCELLE` iz satırı
+    (`reset_notice_pending: [true, false]`) aynı işlemdedir; yazar istek başındaki bağlamdır
+    (oturumdaki hesap). Bildirim beklemiyorsa hiçbir şey yazılmaz (fikirdeş; iz satırı yok).
+    `reset_at` ve `reset_kind` kalır: sıfırlamanın ne zaman yapıldığı kayıtta durur.
+    """
+    dek = _active_data_key()
+    hesap = _actor(hesap_id, dek)
+    if not hesap.reset_notice_pending:
+        return hesap
+    with transaction.atomic():
+        onceki = denetim_izi.anlik(hesap)
+        hesap.reset_notice_pending = False
+        hesap.save(update_fields=["reset_notice_pending"])
+        denetim_izi.kayit(AuditAction.GUNCELLE, hesap, onceki=onceki)
+    logger.info("Parola yenilenme bildirimi görüldü (%s).", hesap.login_name)
     return hesap
 
 
@@ -301,8 +397,13 @@ class TwoStoreDifferences:
     * `wraps_of_closed`: satırı `KAPALI` (mührü tutan) sarmallar;
     * `seal_mismatch`: mührü tutmayan satırlar — hiçbir işleme konu olmaz.
 
-    İlk iki sarmal listesi yalnız program yöneticisinin onayıyla silinir
-    (`remove_orphan_wraps`).
+    `wraps_without_row` yalnız program yöneticisinin onayıyla silinir (`remove_orphan_wraps`).
+    `wraps_of_closed`'ı ise program her kilit açılışında kendisi siler (`app_password.
+    _cleanup_closed_wraps`; §4.6.1 kural 3'ün "kapalı hesabın sarmalı duruyor" denetimi):
+    listede yalnız o silme tamamlanamadıysa (ör. dosyayı başka bir program tuttu) görünür ve
+    onayla hemen de silinebilir. Tasarımın kural 4'ü geri yüklemeden sonra bunu da onaya
+    bağlıyordu; kural 3'ün kendiliğinden temizliği her açılışta koştuğu için iki kural
+    örtüşür, uygulama kural 3'ü izler (Genel Bakış kartının metni bunu söyler).
     """
 
     rows_without_wrap: list[str] = field(default_factory=list)
@@ -325,10 +426,16 @@ class TwoStoreDifferences:
         return sorted({*self.wraps_without_row, *self.wraps_of_closed})
 
 
-def two_store_differences() -> TwoStoreDifferences:
-    """İki deponun farkını hesaplar; HİÇBİR ŞEY yazmaz (kilit açık olmalı: mühür DEK ister)."""
+def two_store_differences(
+    *, sarmali_yazilacak: frozenset[str] = frozenset()
+) -> TwoStoreDifferences:
+    """İki deponun farkını hesaplar; HİÇBİR ŞEY yazmaz (kilit açık olmalı: mühür DEK ister).
+
+    `sarmali_yazilacak`: sarmalı çağıranın işleminin sonunda yazılacak hesaplar
+    (`reconcile_two_stores`); sarmallı sayılır.
+    """
     dek = _active_data_key()
-    sarmallar = set(app_password.wrap_ids())
+    sarmallar = set(app_password.wrap_ids()) | set(sarmali_yazilacak)
     satirlar = {str(hesap.id): hesap for hesap in Account.objects.all()}
     sarmalsiz: list[str] = []
     satirsiz: list[str] = []
@@ -354,20 +461,28 @@ def two_store_differences() -> TwoStoreDifferences:
     )
 
 
-def reconcile_two_stores() -> TwoStoreDifferences:
+def reconcile_two_stores(*, sarmali_yazilacak: frozenset[str] = frozenset()) -> TwoStoreDifferences:
     """Farkı hesaplar ve sarmalı olmayan `ACIK` hesapları `PAROLA_YENILENMELI` yapar.
 
-    Geri yüklemeden sonraki ilk kilit açılışında koşar (çağıran oturum katmanıdır;
-    geri yükleme notu alt commit (c)'de). Sarmalı olmayan hesabın sahibi giremez;
-    program yöneticisi geçici parola verir (`reset_password` sarmalı kurar). Sarmal
-    silmez: o, listenin gösterilip onaylanmasıyla `remove_orphan_wraps`'tadır.
+    Geri yüklemeden sonraki ilk kilit açılışında, geri yükleme notu işlenirken koşar
+    (`iz_dogrulama.yaz`, kilit açılışının işleminde). Kurtarma anahtarıyla açılışta
+    açılan hesabın sarmalı aynı işlemin SONUNDA yazılır (`sarmali_yazilacak`): o hesap
+    sarmallı sayılır, yeni parolasıyla açtığı oturumda parola yenilemeye çekilmez.
+    Sarmalı olmayan hesabın sahibi giremez; program yöneticisi geçici parola verir
+    (`reset_password` sarmalı kurar). Sarmal silmez: o, listenin Genel Bakış'ta gösterilip
+    onaylanmasıyla `remove_orphan_wraps`'tadır (`POST security/integrity/orphan-wraps/`).
+    Durum düzeltmesi programın kendi işidir: her hesabın satırı ve `HESAP` satırı tek
+    işlemde, yazar `SISTEM` (plan F1b-1 "Denetim izi").
     """
     dek = _active_data_key()
-    fark = two_store_differences()
+    fark = two_store_differences(sarmali_yazilacak=sarmali_yazilacak)
     for hesap in Account.objects.filter(pk__in=fark.rows_without_wrap, status=AccountStatus.ACIK):
-        hesap.status = AccountStatus.PAROLA_YENILENMELI
-        hesap.seal = hesap.compute_seal(dek)
-        hesap.save(update_fields=["status", "seal"])
+        with sistem_olarak(), transaction.atomic():
+            onceki = denetim_izi.anlik(hesap)
+            hesap.status = AccountStatus.PAROLA_YENILENMELI
+            hesap.seal = hesap.compute_seal(dek)
+            hesap.save(update_fields=["status", "seal"])
+            denetim_izi.kayit(AuditAction.HESAP, hesap, onceki=onceki)
         logger.info("Sarmalı olmayan hesap parola yenilemeye çekildi (%s).", hesap.login_name)
     return fark
 
@@ -379,6 +494,12 @@ def remove_orphan_wraps(*, by_hesap_id: object, hesap_idler: list[str]) -> list[
     durum değiştiyse ret); mührü tutmayan satırın sarmalı asla silinmez. Silme
     `guvenlik.json`'dan ve bütün arşivlerden yapılır. Silinen kimlikleri döndürür.
     Rol denetimi (yalnız program yöneticisi) 2. adımdadır (§4.4.2).
+
+    Her silinen sarmal için `guvenlik.json` bölümünün `HESAP` satırı dosyadan ÖNCE, aynı
+    işlemde yazılır (yazar onaylayan hesap; sarmalda sayaç ya da askı varsa önceki değerleri
+    de, `app_password.sarmal_izi`). Ana dosya yazılamazsa işlem geri sarılır;
+    sarmal ana dosyadan silinmiş ama bir arşiv kopyası yazılamamışsa iz kalır (sarmal
+    artık kilit açmaz), arşivin uyarısı günlüğe düşer.
     """
     dek = _active_data_key()
     _actor(by_hesap_id, dek)
@@ -387,7 +508,19 @@ def remove_orphan_wraps(*, by_hesap_id: object, hesap_idler: list[str]) -> list[
     if not istenen <= silinebilir:
         raise AccountServiceError(_NOT_ORPHAN_MESSAGE)
     if istenen:
-        app_password.remove_account_wraps(istenen)
+        with app_password.dosya_ve_iz_islemi():
+            for hesap_id in sorted(istenen):
+                app_password.sarmal_izi(hesap_id, silindi=True, her_zaman=True)
+            try:
+                app_password.remove_account_wraps(istenen)
+            except OSError:
+                if istenen & set(app_password.wrap_ids()):
+                    raise
+                logger.warning(
+                    "Sahipsiz sarmallar güvenlik dosyasından silindi; bazı arşiv kopyaları "
+                    "temizlenemedi.",
+                    exc_info=True,
+                )
         logger.info("Sahipsiz hesap sarmalları onayla silindi (%d).", len(istenen))
     return sorted(istenen)
 

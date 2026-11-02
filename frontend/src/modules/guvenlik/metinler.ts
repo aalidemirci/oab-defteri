@@ -174,6 +174,20 @@ export const DOSYA_KAYIP_SIFIRLA_METNI =
  * Hakkında'daki "Dürüst Sınırlar" kartı (tasarım §4.4.6; kılavuza da girer). Sade dille,
  * iç kod olmadan; yalnız bugün doğru olan söylenir (anahtar yenilemesinin eski zarfı
  * imha eden kolu ve ihlal dökümü sonraki fazlardadır, burada vaat edilmez).
+ *
+ * Denetim izi (F1b 1. adım, alt commit c): okul çekirdeğinin bütün yazmaları oturumdaki
+ * hesabın adına denetim izine yazılır; tek istisna plan gereği 5. adımda yeniden yazılacak
+ * katı silme ve birleştirmedir (öğrenci ve personelin sicilden silinmesi, iki kişi kaydının
+ * birleştirilmesi — backend `test_izsiz_yazim.py` `MUAF_ISLEVLER`). Bu istisna metinde açıkça
+ * yazar; istisna kalkınca cümle kısalır. Yedekten geri yükleme veritabanını değiştirdiği için
+ * satırı ancak geri yüklemeden sonraki ilk girişte yazılır; uygulama içinden yapıldıysa satır
+ * onu başlatan oturumun hesabını taşır (kurtarma anahtarı yolunda da; backend
+ * `iz_dogrulama._geri_yukleme_satiri`), metin bunu da söyler. "Denetim izi değişikliği gösterir, önlemez" maddesi
+ * tasarım §4.6.3 "Kalan risk"in sade dilidir: veritabanı kilit işaretiyle birlikte eski bir
+ * kopyayla değiştirilirse program fark etmez, parolasını bilen biri zinciri program dışında
+ * yeniden hesaplayabilir (tehdit 6); son katman kâğıda inen "Kayıt no · Zincir" satırıdır.
+ * Kâğıt bugün kullanıcının elle not ettiğidir (Genel Bakış → Son Girişler); aylık bildirim
+ * ve devir tutanağı gibi belgelere basılması sonraki fazlardadır, burada vaat edilmez.
  */
 export const DURUST_SINIRLAR: readonly { baslik: string; metin: string }[] = [
   {
@@ -193,9 +207,21 @@ export const DURUST_SINIRLAR: readonly { baslik: string; metin: string }[] = [
   {
     baslik: "Açık oturum, sahibinin imzasıdır.",
     metin:
-      "Oturum açıkken yapılan her iş o hesabın adına kaydedilir. Bilgisayar başından " +
-      "kalkarken Kilitle'ye basın (Ctrl+Shift+L); program boşta kalınca da kendiliğinden " +
-      "kilitlenir.",
+      "Oturum açıkken yapılan her iş o hesabın adına denetim izine yazılır (bugün tek " +
+      "istisna: öğrenci ve personelin sicilden silinmesi ile iki kişi kaydının " +
+      "birleştirilmesi). Yedekten geri yükleme, ardından yapılan ilk girişte, onu başlatan " +
+      "hesapla birlikte yazılır. Bilgisayar başından kalkarken Kilitle'ye basın " +
+      "(Ctrl+Shift+L); program boşta kalınca da kendiliğinden kilitlenir.",
+  },
+  {
+    baslik: "Denetim izi değişikliği gösterir, önlemez.",
+    metin:
+      "Program her kaydı bir öncekine bağlayarak yazar ve kilit açılırken son kayıtları " +
+      "denetler; program dışından yapılan değişikliği çoğu zaman fark edip Genel Bakış'ta " +
+      "uyarır. Ama veritabanı, kilit işaretiyle birlikte eski bir kopyayla değiştirilirse " +
+      "fark etmez; parolasını bilen biri de denetim izini programın dışında baştan " +
+      "hesaplayabilir. Son katman kâğıttır: Genel Bakış'taki Son Girişler kartında yazan " +
+      "“Kayıt no · Zincir” satırını zaman zaman tarihiyle birlikte kâğıda not edin.",
   },
   {
     baslik: "Kurtarma anahtarını yenilemek önceki yedekleri kapatmaz.",

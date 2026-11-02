@@ -41,6 +41,8 @@ import argparse
 import json
 import os
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +68,23 @@ def _django(veri_koku: str) -> Path:
     return paths.data
 
 
+@contextmanager
+def _oturum_istegi() -> Iterator[None]:
+    """Açık oturumdaki hesabın isteği gibi: yazar bağlamı istek başında kurulur.
+
+    Programda bunu ara katman yapar (`lock_middleware`); betik servisi doğrudan çağırdığı
+    için bağlamı kendisi kurar. Denetim izi yazarsız yazmayı reddeder (tasarım §4.6.2):
+    kurtarma anahtarı damgası `KURTARMA`, dış yedek `YEDEK` satırı yazar.
+    """
+    from apps.okul.oturum import OTURUM, Yazar, yazar_olarak
+
+    hesap = OTURUM.hesap()
+    if hesap is None:
+        raise SystemExit("oturum açık değil")
+    with yazar_olarak(Yazar.hesaptan(hesap)):
+        yield
+
+
 def _ozet() -> dict[str, Any]:
     """Veri eşitliğinin ölçüsü: şifreli adlar ÇÖZÜLMÜŞ olarak, TR sırasıyla değil pk ile."""
     from apps.okul.models import Personnel, Student
@@ -88,7 +107,8 @@ def hazirla(args: argparse.Namespace) -> dict[str, Any]:
     run_migrations()
     crypto.DEFAULT_KDF = crypto.KdfParams.from_dict(_UCUZ_KDF)
     kurtarma = app_password.enable(tanitici=TANITICI, display_name=HESAP_ADI, password=PAROLA)
-    app_password.confirm_recovery_key(kurtarma)
+    with _oturum_istegi():
+        app_password.confirm_recovery_key(kurtarma)
 
     Student.objects.create(
         first_name="Deneme Çağla",
@@ -109,7 +129,8 @@ def hazirla(args: argparse.Namespace) -> dict[str, Any]:
     )
 
     # Dış yedek: kullanıcının Ayarlar → Güvenlik'ten indirip USB'ye aldığı şifreli yedek.
-    icerik, ad = encrypted_backup.create_encrypted_backup()
+    with _oturum_istegi():
+        icerik, ad = encrypted_backup.create_encrypted_backup()
     usb = Path(args.usb)
     usb.mkdir(parents=True, exist_ok=True)
     yedek = usb / ad
@@ -158,7 +179,8 @@ def gelecek_yedek(args: argparse.Namespace) -> dict[str, Any]:
     kayit = MigrationRecorder(connection)
     kayit.record_applied(*GELECEK_GOC)
     try:
-        icerik, _ad = encrypted_backup.create_encrypted_backup()
+        with _oturum_istegi():
+            icerik, _ad = encrypted_backup.create_encrypted_backup()
     finally:
         kayit.record_unapplied(*GELECEK_GOC)
     usb = Path(args.usb)
@@ -178,7 +200,8 @@ def sihirbaz(args: argparse.Namespace) -> dict[str, Any]:
     kurtarma = app_password.enable(
         tanitici=TANITICI, display_name="Deneme Başka Yönetici", password=args.parola
     )
-    app_password.confirm_recovery_key(kurtarma)
+    with _oturum_istegi():
+        app_password.confirm_recovery_key(kurtarma)
     return {"durum": app_password.status()}
 
 

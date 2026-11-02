@@ -223,6 +223,41 @@ def test_hesap_muhru_anahtari_tasarimdaki_hkdf_dizgesiyle_turer() -> None:
     assert crypto.derive_subkey(TEST_DEK, info=b"od-kor-indeks") != beklenen
 
 
+def test_iz_anahtari_turevlerinin_hkdf_dizgeleri_tasarimdakidir() -> None:
+    """Tasarım §4.6.2-§4.6.3: beş dizge AYNEN; değişirse kâğıttaki zincir başları tutmaz."""
+    assert crypto.AUDIT_CHAIN_INFO == b"od-denetim-izi/v1"
+    assert crypto.RECORD_SUMMARY_INFO == b"od-kayit-ozeti/v1"
+    assert crypto.AUDIT_ANCHOR_INFO == b"od-iz-capa/v1"
+    assert crypto.AUDIT_LOCKED_SEED_INFO == b"od-iz-kilitli/v1"
+    assert crypto.AUDIT_LOCKED_MAC_INFO == b"od-iz-kilitli-mac/v1"
+
+
+def test_zincir_ve_icerik_anahtarlari_ia_dan_hkdf_ile_turer() -> None:
+    ia = bytes(range(64, 96))
+    for info, turet in (
+        (b"od-denetim-izi/v1", crypto.audit_chain_key),
+        (b"od-kayit-ozeti/v1", crypto.record_summary_key),
+    ):
+        beklenen = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=info).derive(ia)
+        assert turet(ia) == beklenen
+    # DONMUŞ değer: HKDF kullanımı (tuzsuz, 32 bayt) sessizce değişmesin.
+    assert crypto.audit_chain_key(ia).hex() == (
+        "7c51685fa9b15f0940115b95fc21821cf5c38700d79e465de1800e416ecd9a69"
+    )
+    assert crypto.audit_chain_key(ia) != crypto.record_summary_key(ia)
+
+
+def test_kilitli_kip_tohumu_tuzla_turer() -> None:
+    """Kilitli kip tohumu `HKDF(İA, "od-iz-kilitli/v1", tuz = seq ‖ mac)` (§4.6.3)."""
+    ia = bytes(range(64, 96))
+    tuz = b"7" + b"a" * 64
+    beklenen = HKDF(
+        algorithm=hashes.SHA256(), length=32, salt=tuz, info=crypto.AUDIT_LOCKED_SEED_INFO
+    ).derive(ia)
+    assert crypto.derive_subkey(ia, info=crypto.AUDIT_LOCKED_SEED_INFO, salt=tuz) == beklenen
+    assert crypto.derive_subkey(ia, info=crypto.AUDIT_LOCKED_SEED_INFO) != beklenen
+
+
 def test_iz_anahtari_dek_ile_yuklenir_ve_dusurulur() -> None:
     crypto.load_key(TEST_DEK, audit_key=b"\x05" * 32)
     assert crypto.active_audit_key() == b"\x05" * 32
@@ -238,3 +273,62 @@ def test_decrypt_with_bellekteki_anahtardan_bagimsizdir() -> None:
     assert crypto.decrypt_with(b"\x03" * 32, token) == b"iz"
     with pytest.raises(InvalidToken):
         crypto.decrypt_with(TEST_DEK, token)
+
+
+#: Kilitli kip türevlerinin altın vektörleri (İA = bytes(64..95), çapa 7 + altın zincir MAC'i;
+#: `shared/tests/test_kanonik.py`). Değerler DONMUŞTUR: çapa ve kilitli satırların mührü bunlara bağlı.
+_ALTIN_CAPA_BAYTLARI = b"7:c3ed8364e85586483986d3656d9f64519d34dd96d8be6305468a4fded57fa3b6"
+
+
+def test_altin_vektor_capa_ve_kilitli_kip_anahtarlari() -> None:
+    """Tasarım §4.6.3: çapa anahtarı, `tohum₀` (tuz = seq ‖ mac) ve k'ıncı satırın anahtarı."""
+    ia = bytes(range(64, 96))
+    capa = crypto.audit_anchor_key(ia)
+    assert capa == HKDF(
+        algorithm=hashes.SHA256(), length=32, salt=None, info=b"od-iz-capa/v1"
+    ).derive(ia)
+    assert capa.hex() == "806ddf4aed2a13bc0b126107ed1654ea7f871a47e99f5c4e457de9092447bb5e"
+    tohum = crypto.audit_locked_seed(ia, _ALTIN_CAPA_BAYTLARI)
+    assert tohum == HKDF(
+        algorithm=hashes.SHA256(), length=32, salt=_ALTIN_CAPA_BAYTLARI, info=b"od-iz-kilitli/v1"
+    ).derive(ia)
+    assert tohum.hex() == "ec1aae25e0300364fd71ef6ca149c2aab049286ff9a25b202f43ff6a3711ae0e"
+    anahtar = crypto.audit_locked_mac_key(tohum)
+    assert anahtar.hex() == "e5873077c47dd0f08aaedf95ee5bdcccb0d15e0c1ab510cfd85e912d02a7c75f"
+    # Üç amaç birbirinden ayrıdır; zincir anahtarı da hiçbiri değildir.
+    assert len({capa, tohum, anahtar, crypto.audit_chain_key(ia)}) == 4
+
+
+def test_altin_vektor_kilitli_kip_satirinin_mac_i() -> None:
+    """Uçtan uca: çapa 7'nin ilk kilitli satırı (`GOC`, `key_ref = "7:0"`) — DONMUŞ MAC."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from shared import kanonik
+
+    ia = bytes(range(64, 96))
+    onceki = "c3ed8364e85586483986d3656d9f64519d34dd96d8be6305468a4fded57fa3b6"
+    satir = {
+        "seq": 8,
+        "at": datetime(2026, 11, 1, 10, 31, tzinfo=ZoneInfo("Europe/Istanbul")),
+        "actor": "SISTEM",
+        "account": None,
+        "role": "",
+        "action": "GOC",
+        "model": "sema.goc",
+        "object_id": "0.2.0",
+        "term": None,
+        "changed_fields": ["gocler"],
+        "values": {"gocler": [None, ["okul.0010_ornek"]]},
+        "record_mac": "",
+        "compliance_item": None,
+        "label": "",
+        "key_mode": "KILITLI",
+        "key_ref": "7:0",
+    }
+    anahtar = crypto.audit_locked_mac_key(
+        crypto.audit_locked_seed(ia, kanonik.capa_baytlari(7, onceki))
+    )
+    assert kanonik.iz_mac(anahtar, satir, onceki) == (
+        "e637ed638195fdb0fa5ed25b0b0b5856e2d58b7adb08694a89e6a947068a485f"
+    )

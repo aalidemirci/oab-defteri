@@ -30,6 +30,11 @@ girmez). Arife AÇIK GÜNDÜR ve tohumlanmaz:
      yarım günlük tatili bütün güne çevirir ve süre hesaplarını bir gün kaydırırdı.
   Okul arife günü kapalıysa o günü elle "İdari izin / diğer" ya da "öğrenciye
   kapalı gün" olarak ekler.
+
+DENETİM İZİ (tasarım §4.6.2; plan F1b-1 alt commit c): tohumlamanın eklediği her kayıt
+ve elle eklenen kayıt `OLUSTUR`, silme (yumuşak) `deleted_at`'li `DURUM` satırıdır; satır
+veriyle aynı işlemde yazılır (`denetim_izi.degisiklik`). Kaydın adı serbest metindir,
+satıra yalnız alan adıyla girer (`Holiday.IZ_DEGER_ALANLARI`).
 """
 
 from __future__ import annotations
@@ -42,6 +47,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 
+from apps.okul import denetim_izi
 from apps.okul.models import Holiday, HolidayKind
 from shared.working_days import ClosedPeriod
 
@@ -153,7 +159,10 @@ def seed_holidays(year: int) -> SeedResult:
         if _official_exists(name, day):
             skipped += 1
             continue
-        Holiday.objects.create(name=name, start_date=day, end_date=day, kind=HolidayKind.OFFICIAL)
+        resmi = Holiday.objects.create(
+            name=name, start_date=day, end_date=day, kind=HolidayKind.OFFICIAL
+        )
+        denetim_izi.degisiklik(resmi, onceki=None)
         created += 1
 
     religious = religious_rows_for(year)
@@ -161,13 +170,14 @@ def seed_holidays(year: int) -> SeedResult:
         if _religious_exists(name, start, end):
             skipped += 1
             continue
-        Holiday.objects.create(
+        bayram = Holiday.objects.create(
             name=name,
             start_date=start,
             end_date=end,
             kind=HolidayKind.RELIGIOUS,
             is_estimated=is_estimated,
         )
+        denetim_izi.degisiklik(bayram, onceki=None)
         created += 1
     return SeedResult(
         year=year, created=created, skipped=skipped, religious_available=bool(religious)
@@ -206,11 +216,15 @@ def create_holiday(*, name: str, start_date: date, end_date: date, kind: str) ->
                 kind=kind,
                 is_estimated=False,
             )
+            denetim_izi.degisiklik(holiday, onceki=None)
     except IntegrityError as exc:  # yarışta teklik kısıtı — aynı Türkçe ret
         raise ValidationError({"name": [DUPLICATE_MESSAGE]}) from exc
     return holiday
 
 
+@transaction.atomic
 def delete_holiday(holiday: Holiday) -> None:
     """Kaydı kaldırır (yumuşak silme — BaseModel); kapalı gün kaynağından düşer."""
+    onceki = denetim_izi.anlik(holiday)
     holiday.delete()
+    denetim_izi.degisiklik(holiday, onceki=onceki)

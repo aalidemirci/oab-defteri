@@ -33,6 +33,32 @@
   (`lock_middleware.KILITLI_IZINLI`; kilitliyken 423). Yazmayı yalnız program
   yöneticisine bırakan rol kuralı (tasarım §4.4.2) 2. adımdadır.
 
+* `GET  security/integrity/` → Genel Bakış'ın bütünlük kartları (`iz_dogrulama.pano_ozeti`;
+  tasarım §4.6.3, plan F1b-1 "Bütünlük ve mühür kartları 1. adımda Genel Bakış'tadır"):
+  `butunluk` (oturumdaki hesabın bir önceki girişinden beri yazılmış `BUTUNLUK` satırları:
+  kilit açılışı doğrulamasının bulgu kodları ve düzeyi ya da girişte tutmayan hesap mührü),
+  `geri_yukleme` (son `GERI_YUKLEME` satırı: geri yüklemenin anı nottan, satırın anı ilk
+  girişten; yedeği açan yol hesap ya da kurtarma anahtarı no'su; uygulama içinden
+  yapıldıysa başlatan oturumun hesabı; Denetleme Kurulu "gördüm" diyene dek — o düğme 2.
+  adımda), `iki_depo` (canlı fark; onayla silinebilir sarmallar), `kagit_capasi`
+  (`kayit_no`, `zincir`: "Kayıt no: N · Zincir: XXXX-XXXX"), `son_girisler` (yalnız
+  oturumdaki hesabın) ve `parola_yenilenme` (sıfırlama ya da kurtarma bildirimi ve o
+  tarihten sonraki girişler). Kişi adı ve bulgu metni DÖNMEZ: kodları ön yüz sözlükteki
+  metne çevirir. Kartlar yalnız iz anahtarıyla mühürlü ve doğrulanan satırları okur
+  (`denetim_izi.acik_satir_dogrulayici`). Yalnız açık oturumda (kilitliyken 423).
+* `POST security/integrity/orphan-wraps/` `{hesaplar: [kimlik]}` → program yöneticisinin
+  onayıyla sahipsiz (satırı olmayan ya da `KAPALI`) hesap sarmallarının silinmesi (tasarım
+  §4.6.1 kural 4; `hesaplar.remove_orphan_wraps`, `HESAP` satırı). Rol denetimi 2. adımda.
+  Kartlardaki hesaplar kişisizdir: `{id, tanitici, rol_etiketi}` (iki depo satırlarında ek
+  olarak `kapali`); ad-soyad dönmez.
+* `GET|POST security/integrity/reset-notice/` → oturumdaki hesabın parola yenilenme
+  bildirimi (tasarım §4.4.3, §4.3 tehdit 12): `{parola_yenilenme: {tur, zaman, girisler} |
+  null}` (`iz_dogrulama.yenilenme_bildirimi`; girişler YALNIZ bu hesabın). POST sahibinin
+  "Gördüm"üdür: bayrak izli bir yazımla kalkar (`hesaplar.acknowledge_reset_notice`,
+  `GUNCELLE` satırı); bildirim beklemiyorsa bir şey yazmaz. Başka hesabın bildirimi bu uçtan
+  ne okunur ne kapatılır. Ön yüz bildirimi kilit ekranından açılıştan sonra pencerede
+  gösterir. Yalnız açık oturumda (kilitliyken 423).
+
 Parolalar ve kurtarma anahtarı YALNIZ istek gövdesinde taşınır; hiçbir yanıtta,
 günlükte ya da hata iletisinde yankılanmaz. Gövde anahtarları Türkçedir (oturum
 sözleşmesi); ilk hesabın kurulumu ve kurtarma anahtarı belgesi uçları `views.py`'dedir.
@@ -54,6 +80,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.okul import iz_dogrulama
 from apps.okul.models import IDLE_LOCK_MINUTES_MAX, IDLE_LOCK_MINUTES_MIN
 from apps.okul.oturum import OTURUM
 from apps.okul.services import app_password, hesaplar
@@ -209,6 +236,49 @@ class SecurityChangePasswordView(APIView):
                 new_password=veri["yeni_parola"],
             )
         return Response(OTURUM.ozet())
+
+
+class SahipsizSarmalSerializer(serializers.Serializer[dict[str, Any]]):
+    """Sahipsiz sarmalların onayla silinmesi: silinecek hesap kimlikleri (listeden)."""
+
+    hesaplar = serializers.ListField(child=serializers.UUIDField(), allow_empty=False)
+
+
+class ButunlukDurumuView(APIView):
+    """`GET /api/v1/security/integrity/` — Genel Bakış'ın bütünlük kartları (modül başlığı)."""
+
+    def get(self, request: Request) -> Response:
+        return Response(iz_dogrulama.pano_ozeti(OTURUM.hesap_id()))
+
+
+class SahipsizSarmalView(APIView):
+    """`POST /api/v1/security/integrity/orphan-wraps/` — sahipsiz sarmalları onayla siler."""
+
+    def post(self, request: Request) -> Response:
+        req = SahipsizSarmalSerializer(data=request.data)
+        req.is_valid(raise_exception=True)
+        with guvenlik_hatalari():
+            silinen = hesaplar.remove_orphan_wraps(
+                by_hesap_id=OTURUM.hesap_id() or "",
+                hesap_idler=[str(kimlik) for kimlik in req.validated_data["hesaplar"]],
+            )
+        return Response({"silinen": silinen, **iz_dogrulama.pano_ozeti(OTURUM.hesap_id())})
+
+
+class ParolaBildirimiView(APIView):
+    """`GET|POST /api/v1/security/integrity/reset-notice/` — parola yenilenme bildirimi.
+
+    Yalnız oturumdaki hesabın bildirimi (modül başlığı). POST "Gördüm"dür; yanıt güncel
+    bildirimdir (kapandıysa `null`).
+    """
+
+    def get(self, request: Request) -> Response:
+        return Response({"parola_yenilenme": iz_dogrulama.yenilenme_bildirimi(OTURUM.hesap_id())})
+
+    def post(self, request: Request) -> Response:
+        with guvenlik_hatalari():
+            hesaplar.acknowledge_reset_notice(hesap_id=OTURUM.hesap_id() or "")
+        return Response({"parola_yenilenme": iz_dogrulama.yenilenme_bildirimi(OTURUM.hesap_id())})
 
 
 class BostaKilitSuresiView(APIView):

@@ -45,6 +45,12 @@ python_files = ["test_*.py", "*_test.py"]
 # `--strict-markers` açık: işaretsiz ad yazım hatası sayılır. Aile iskeletinin `yavas`
 # işareti (katalog ve kütüphane ölçümleri) F1a-2'de onlarla birlikte söküldü.
 addopts = "--reuse-db --strict-markers -ra --cov=apps --cov=shared --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=75"
+# `hesapsiz`: veritabanı kullanan testte program yöneticisinin hesabı ve iz anahtarı
+# KURULMAZ (kök `conftest.py`, `varsayilan_hesap`); şifreli tabloların boş olmasını
+# isteyen senaryolar içindir.
+markers = [
+    "hesapsiz: veritabanında varsayılan hesap ve iz anahtarı kurulmaz (kök conftest)",
+]
 testpaths = ["apps", "shared"]
 
 [tool.coverage.run]

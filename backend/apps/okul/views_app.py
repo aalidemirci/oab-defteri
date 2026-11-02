@@ -11,7 +11,9 @@ geri yüklemeden sonra. Aile iskeletinin görevli kipindeki parola dalı görevl
 birlikte söküldü. Kilit kapısı ve yeniden başlat kapısı bu yolu geçirir
 (`lock_middleware`, `restart_gate`): kilitliyken de programdan çıkılabilmelidir.
 Oturum açıksa kapanış sırasında kilitlenir (`oturum.kapanista_kilitle`, masaüstü
-kabuğu çağırır; §4.2 kapanış sırası).
+kabuğu çağırır; §4.2 kapanış sırası). Çık açık oturumdan istendiyse o kilidin `KILIT`
+satırı oturumdaki hesabındır (`OTURUM.cikisi_hesap_istedi`; kullanıcının kendi eylemi);
+çarpı, kurucu ve SIGTERM kapanışında `SISTEM`'indir (`apps.okul.oturum` "KİLİDİN İZİ").
 
 Başarıda 202 döner ve kapanış masaüstü kancasıyla (`masaustu_kanca.cikis_iste`)
 AYRI bir iş parçacığında başlar: yanıt önce gönderilir, sonra pencere, oturum kilidi,
@@ -29,6 +31,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.okul import masaustu_kanca, son_oturum
+from apps.okul.oturum import OTURUM, yazar
 
 logger = logging.getLogger("oab_defteri.cikis")
 
@@ -49,6 +52,8 @@ class AppQuitView(APIView):
             return _hata(
                 "cikis_kullanilamiyor", CIKIS_KULLANILAMIYOR, status.HTTP_503_SERVICE_UNAVAILABLE
             )
+        # Kapanış kilidi bu istek bitene dek bekler (uçuştaki istek): kayıt ondan önce düşer.
+        OTURUM.cikisi_hesap_istedi(yazar())
         logger.info("Arayüzden çıkış istendi; program düzenli kapanıyor.")
         return Response({"durum": "kapaniyor"}, status=status.HTTP_202_ACCEPTED)
 

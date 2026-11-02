@@ -201,6 +201,14 @@ export default function HakkindaPage() {
                 HMAC-SHA256 kör indeksle numaranın tamamı üzerinden yapılır.
               </li>
               <li>
+                Denetim izinin her kaydı, bir önceki kaydın mührüyle birlikte HMAC-SHA256 ile
+                mühürlenir (zincir); kaydın içeriğinin özeti de aynı anahtardan türeyen ayrı bir
+                HMAC-SHA256 ile satıra yazılır. Mühür anahtarı kayıtların anahtarıyla şifreli olarak
+                veritabanında durur. Program kilitliyken yazılan sistem olayları (yedek, güncelleme)
+                her adımda ileri giden ayrı bir anahtarla mühürlenir. Kâğıda not edilen “Zincir” son
+                kaydın mührünün ilk sekiz onaltılık hanesidir.
+              </li>
+              <li>
                 Şifreli yedekler (<span className="font-mono">.odbak</span>) X25519 ve AES-256-GCM
                 ile şifrelenir. Yedeğin başlığı yalnız kurtarma anahtarının sarmalını ve
                 no&apos;sunu taşır, hesapların sarmallarını taşımaz: yedek bu bilgisayarda program

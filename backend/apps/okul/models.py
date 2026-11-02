@@ -31,7 +31,7 @@ tasarımının §5.1 ve §12.B'sindedir (öğrenci ve kütüphane alanları F1b'
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, ClassVar
 
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -114,9 +114,51 @@ class SchoolConfig(BaseModel):
     RASTGELE portta dinler, köken (origin) değiştiği için `localStorage`
     açılışlar arasında taşınmaz; pencere profili de silinebilir önbellektedir.
     Kişisel veri İÇERMEZ (madde anahtarı + tarih).
+
+    DENETİM İZİ (tasarım §4.6.2, §5.1 "her değişiklik denetim izine düşer"): her yazma
+    servisi (`services.setup`, ilk hesabın parmak izi `app_password.enable`) iz satırı
+    yazar (`apps.okul.denetim_izi`). `IZ_DEGER_ALANLARI` önce/sonra değeri satıra giren
+    kişisiz alanlardır (sayı, kod, durum, numara, tarih); okul adı, il, ilçe, kısa ad ve
+    kütüphane saatleri serbest metindir, müdür adı kişi adıdır, parmak izi güvenlik
+    öğesidir, yol haritası JSON'dur: satıra yalnız adları girer. İçerik MAC'i kimlik
+    dışındaki bütün alanları kapsar (`IZ_OZET_ALANLARI`; KVKK silme kümesinde alan yok).
     """
 
     SINGLETON_PK = 1
+
+    #: Denetim izinde önce/sonra değeri yazılabilen kişisiz alanlar (tasarım §4.6.2, §5 O4).
+    IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "has_prep_class",
+        "kademe",
+        "demirbas_onayi",
+        "demirbas_no",
+        "setup_completed",
+        "idle_lock_minutes",
+        "deleted_at",
+    )
+    #: Durum alanları (`denetim_izi.degisiklik`: değişimleri ayrı `DURUM` satırıdır, §4.6.2
+    #: kural 3). Bugünkü yazımlar türü açıkça verir (kurulumun tamamlanması `DURUM`).
+    IZ_DURUM_ALANLARI: ClassVar[tuple[str, ...]] = ("setup_completed", "deleted_at")
+    #: İçerik MAC'ine giren alanlar (kimlik hariç; tasarım §4.6.2 "kaydın özeti").
+    IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "school_name",
+        "province",
+        "district",
+        "principal_name",
+        "has_prep_class",
+        "kademe",
+        "kisa_ad",
+        "demirbas_onayi",
+        "demirbas_no",
+        "yol_haritasi",
+        "kutuphane_saatleri",
+        "setup_completed",
+        "app_password_hash",
+        "idle_lock_minutes",
+    )
 
     school_name = models.CharField("okul adı", max_length=255, blank=True, default="")
     province = models.CharField("il", max_length=64, blank=True, default="")
@@ -185,7 +227,33 @@ class SchoolConfig(BaseModel):
 
 
 class SchoolYear(BaseModel):
-    """Ders yılı (örn. '2026-2027'). Tek-aktif kuralı hem serviste hem DB kısıtında."""
+    """Ders yılı (örn. '2026-2027'). Tek-aktif kuralı hem serviste hem DB kısıtında.
+
+    DENETİM İZİ (tasarım §4.6.2; plan F1b-1 alt commit c): her yazma servisi
+    (`services.school_year`) iz satırı yazar. Ad elle yazılan metindir (biçimi
+    denetlenmez): satıra yalnız alan adı girer; tarihler ve aktiflik değerleriyle.
+    Aktifleştirme ve yumuşak silme durum geçişidir (`DURUM`).
+    """
+
+    #: Denetim izinde önce/sonra değeri yazılabilen kişisiz alanlar (tasarım §4.6.2).
+    IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "start_date",
+        "end_date",
+        "is_active",
+        "deleted_at",
+    )
+    #: İçerik MAC'ine giren alanlar (kimlik hariç bütün alanlar).
+    IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "name",
+        "start_date",
+        "end_date",
+        "is_active",
+    )
+    #: Durum alanları: değişimleri ayrı `DURUM` satırıdır (§4.6.2 kural 3).
+    IZ_DURUM_ALANLARI: ClassVar[tuple[str, ...]] = ("is_active", "deleted_at")
 
     name = models.CharField("ad", max_length=32)
     start_date = models.DateField("başlangıç")
@@ -216,7 +284,32 @@ class SchoolYear(BaseModel):
 
 
 class SchoolTerm(BaseModel):
-    """Ders yılının iki dönemi — dönem bazlı raporlar ve tarih → dönem çözümü buna bağlanır."""
+    """Ders yılının iki dönemi — dönem bazlı raporlar ve tarih → dönem çözümü buna bağlanır.
+
+    DENETİM İZİ: `services.terms` her dönemin oluşturulmasını ve tarih değişikliğini
+    izler; bütün alanlar kişisizdir (ders yılı kimliği, sıra, tarihler).
+    """
+
+    #: Denetim izinde önce/sonra değeri yazılabilen kişisiz alanlar (tasarım §4.6.2).
+    IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "school_year",
+        "sequence",
+        "start_date",
+        "end_date",
+        "deleted_at",
+    )
+    #: İçerik MAC'ine giren alanlar (kimlik hariç bütün alanlar).
+    IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "school_year",
+        "sequence",
+        "start_date",
+        "end_date",
+    )
+    #: Durum alanları: değişimleri ayrı `DURUM` satırıdır (§4.6.2 kural 3).
+    IZ_DURUM_ALANLARI: ClassVar[tuple[str, ...]] = ("deleted_at",)
 
     school_year = models.ForeignKey(
         SchoolYear,
@@ -287,7 +380,33 @@ class Holiday(BaseModel):
     `is_estimated`: hicri takvime bağlı dini bayramlar Diyanet takvimi
     kesinleşmeden önce TAHMİNİDİR (2027 ve sonrası); arayüz "tahmini" rozetiyle
     gösterir. Yalnız tohumlama yazar; elle girilen kayıt kesin tarih sayılır.
+
+    DENETİM İZİ: `services.calendar` tohumlamayı, elle eklemeyi ve yumuşak silmeyi
+    (`DURUM`, `deleted_at`) izler. Ad serbest metindir (elle girilen "idari izin"
+    gerekçesi kişi adı taşıyabilir): satıra yalnız alan adı girer.
     """
+
+    #: Denetim izinde önce/sonra değeri yazılabilen kişisiz alanlar (tasarım §4.6.2).
+    IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "start_date",
+        "end_date",
+        "kind",
+        "is_estimated",
+        "deleted_at",
+    )
+    #: İçerik MAC'ine giren alanlar (kimlik hariç bütün alanlar).
+    IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "name",
+        "start_date",
+        "end_date",
+        "kind",
+        "is_estimated",
+    )
+    #: Durum alanları: değişimleri ayrı `DURUM` satırıdır (§4.6.2 kural 3).
+    IZ_DURUM_ALANLARI: ClassVar[tuple[str, ...]] = ("deleted_at",)
 
     name = models.CharField("ad", max_length=128)
     start_date = models.DateField("başlangıç", db_index=True)
@@ -349,7 +468,43 @@ class Personnel(BaseModel):
     önce ayrılış havuzuna girer (`leave_candidate_since`). Ad-soyad ŞİFRELİDİR (§5.3) — ada
     dayalı arama, sıralama ve eşleştirme Python katmanında yapılır. Unvan ve
     branş YOKTUR (§8.4).
+
+    DENETİM İZİ (tasarım §4.6.2): `Personnel` KVKK silme kümesindedir (§5.4: bağsız
+    ayrılan personel dönem kapanışında silinir), bu yüzden `values` BOŞTUR
+    (`IZ_DEGER_ALANLARI = ()`): satıra yalnız değişen alanların adları girer. Silme
+    kümesindeki kişi alanları (ad, soyad) içerik MAC'ine de GİRMEZ (`IZ_MAC_DISI_ALANLARI`;
+    tasarım §5 O4, §4.6.2 "KVKK gereği boşaltılan ya da silinen alanlar"): satır silindikten
+    sonra iz satırları kalır, İA'ya erişen biri bilinen öteki alanlarla (zaman damgaları
+    satırın anına yakındır, üye türü ve durum dar bir uzaydır) aday ad-soyad sözlüğünü
+    deneyerek silinen kişiyi geri bulabilirdi — silme anlamsızlaşırdı. İçerik MAC'i kalan
+    alanları kapsar. Dürüst sınır: ad-soyad sütununa program dışından yazılan değer ya da
+    başka satırdan taşınmış şifreli token içerik MAC'inde görünmez. Ayrılış ve havuz alanları
+    durum geçişidir (`DURUM`).
     """
+
+    #: Denetim izinde değeri yazılabilen alan YOK (KVKK silme kümesi; tasarım §4.6.2).
+    IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = ()
+    #: İçerik MAC'ine giren alanlar: kimlik ve KVKK silme kümesindeki kişi alanları hariç.
+    IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "member_kind",
+        "is_active",
+        "left_at",
+        "leave_candidate_since",
+        "leave_candidate_run",
+    )
+    #: İçerik MAC'inin DIŞINDAKİ alanlar: silinen kişi verisi (tasarım §5 O4; belge dizesi).
+    IZ_MAC_DISI_ALANLARI: ClassVar[tuple[str, ...]] = ("first_name", "last_name")
+    #: Durum alanları: ayrılış ve ayrılış havuzu (§4.6.2 kural 3; ayrı `DURUM` satırı).
+    IZ_DURUM_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "is_active",
+        "left_at",
+        "leave_candidate_since",
+        "leave_candidate_run",
+        "deleted_at",
+    )
 
     first_name = EncryptedCharField("ad", max_length=100)
     last_name = EncryptedCharField("soyad", max_length=100)
@@ -403,7 +558,29 @@ class ClassSection(BaseModel):
 
     İçe aktarma sonrası tohumlanır (`imports._ensure_class_sections`), elle de
     eklenebilir. Seçiciler ve şube bazlı listeler bu katalogdan beslenir.
+
+    DENETİM İZİ: oluşturma (elle ve tohumlama) ve yumuşak silme (`DURUM`) izlidir.
+    Şube adı ("A", "FEN") kısa bir koddur, değeriyle girer.
     """
+
+    #: Denetim izinde önce/sonra değeri yazılabilen kişisiz alanlar (tasarım §4.6.2).
+    IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "school_year",
+        "class_level",
+        "class_section",
+        "deleted_at",
+    )
+    #: İçerik MAC'ine giren alanlar (kimlik hariç bütün alanlar).
+    IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "school_year",
+        "class_level",
+        "class_section",
+    )
+    #: Durum alanları: değişimleri ayrı `DURUM` satırıdır (§4.6.2 kural 3).
+    IZ_DURUM_ALANLARI: ClassVar[tuple[str, ...]] = ("deleted_at",)
 
     school_year = models.ForeignKey(
         SchoolYear,
@@ -476,7 +653,47 @@ class Student(BaseModel):
     bulunmayan aktif öğrenci `leave_candidate_since` (+ hangi aktarımla)
     damgasıyla havuza girer, durumu AKTİF kalır. Ayrılış (LEFT + `left_at`)
     kaydı silmez.
+
+    DENETİM İZİ (tasarım §4.6.2): `Personnel` gibi KVKK silme kümesindedir (kullanıcının
+    katı silmesi; model T5 ile sökülür): `values` BOŞTUR, satıra yalnız değişen alanların
+    adları girer — okul no ve sınıf/şube dahil. Kişi alanları (ad, soyad, okul no ve onun
+    kör indeksi) içerik MAC'ine de GİRMEZ (`IZ_MAC_DISI_ALANLARI`; tasarım §5 O4, §4.6.2
+    "boşaltılan ya da silinen alanlar"): silinen öğrencinin iz satırları kalır, MAC'i İA'ya
+    erişen birine aday ad ve numara sözlüğüyle kişiyi geri buldururdu. İçerik MAC'i kalan
+    alanları kapsar. Dürüst sınır: bu sütunlara program dışından yazılan değer ya da başka
+    satırdan taşınmış token içerik MAC'inde görünmez. Ayrılış, durum ve havuz alanları durum
+    geçişidir (`DURUM`).
     """
+
+    #: Denetim izinde değeri yazılabilen alan YOK (KVKK silme kümesi; tasarım §4.6.2).
+    IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = ()
+    #: İçerik MAC'ine giren alanlar: kimlik ve KVKK silme kümesindeki kişi alanları hariç.
+    IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "class_level",
+        "class_section",
+        "status",
+        "left_at",
+        "leave_candidate_since",
+        "leave_candidate_run",
+    )
+    #: İçerik MAC'inin DIŞINDAKİ alanlar: silinen kişi verisi (tasarım §5 O4; belge dizesi).
+    IZ_MAC_DISI_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "first_name",
+        "last_name",
+        "student_number",
+        "student_number_index",
+    )
+    #: Durum alanları: ayrılış, yeniden aktifleşme ve ayrılış havuzu (§4.6.2 kural 3).
+    IZ_DURUM_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "status",
+        "left_at",
+        "leave_candidate_since",
+        "leave_candidate_run",
+        "deleted_at",
+    )
 
     first_name = EncryptedCharField("ad", max_length=100)
     last_name = EncryptedCharField("soyad", max_length=100)
@@ -588,7 +805,43 @@ class ImportRun(BaseModel):
     Aile kalıbı: aynı dosyanın yeniden COMMIT'i ENGELLENMEZ — `already_imported`
     yalnız UYARIDIR (güncelleme meşru). Kısıt bozulmasın diye yeniden commit
     MEVCUT COMPLETED satırı günceller (yeni satır açmaz).
+
+    DENETİM İZİ (`services.imports`): koşunun açılışı `OLUSTUR`, kapanışı ve yeniden
+    açılışı `DURUM` (durum, zamanlar ve sonuç raporu koşunun geçişidir). Dosya adı serbest
+    metindir (kişi adı taşıyabilir), rapor iç içe JSON'dur: satıra yalnız adları girer;
+    tür, içerik özeti (sha256), durum ve zamanlar değerleriyle.
     """
+
+    #: Denetim izinde önce/sonra değeri yazılabilen kişisiz alanlar (tasarım §4.6.2).
+    IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "source_type",
+        "file_hash",
+        "status",
+        "started_at",
+        "finished_at",
+        "deleted_at",
+    )
+    #: İçerik MAC'ine giren alanlar (kimlik hariç bütün alanlar; rapor JSON'uyla).
+    IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "source_type",
+        "file_name",
+        "file_hash",
+        "status",
+        "started_at",
+        "finished_at",
+        "report",
+    )
+    #: Durum alanları: koşunun yaşam döngüsü (açılış, kapanış, sonuç raporu).
+    IZ_DURUM_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "status",
+        "started_at",
+        "finished_at",
+        "report",
+        "deleted_at",
+    )
 
     source_type = models.CharField(
         "kaynak türü", max_length=16, choices=ImportSourceType.choices, db_index=True
@@ -709,7 +962,49 @@ class Account(models.Model):
     açık program yöneticisi (servis katmanı, `services.hesaplar`). SATIR SİLİNMEZ:
     `delete()` ve toplu silme `DeletionNotAllowed` yükseltir (TK11; altın kural 4).
     `BaseModel`'den türemez: yumuşak silme ve `updated_at` bu modele uymaz.
+
+    DENETİM İZİ (tasarım §4.6.2; plan F1b-1 alt commit c): her yazma (`app_password`,
+    `services.hesaplar`) satırla AYNI işlemde iz satırı yazar (`HESAP`, `PAROLA`,
+    `KURTARMA`, `GIRIS`; parola yenilenme bildiriminin kapatılması `GUNCELLE`). Önce/sonra değeri satıra giren alanlar yalnız durum, rol, kod
+    ve tarihlerdir (`IZ_DEGER_ALANLARI`): ad-soyad şifreli kişi verisidir, tanıtıcı
+    kişinin adını içerebilir (program yalnız uyarır), mühür ve hesap bağları değer
+    taşımaz — satıra yalnız adları girer. İçerik MAC'i kimlik dışındaki bütün alanları
+    çözülmüş değerleriyle kapsar (`IZ_OZET_ALANLARI`): şifreli sütuna yazılmış düz metin
+    ya da başka satırdan taşınmış ad token'ı burada görünür (denetim GA-9).
     """
+
+    #: Denetim izinde önce/sonra değeri yazılabilen kişisiz alanlar (tasarım §4.6.2).
+    IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "role",
+        "status",
+        "suspend_reason",
+        "opened_at",
+        "closed_at",
+        "password_changed_at",
+        "reset_at",
+        "reset_kind",
+        "reset_notice_pending",
+        "last_login_at",
+    )
+    #: İçerik MAC'ine giren alanlar (kimlik hariç; ad-soyad çözülmüş değeriyle).
+    IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "login_name",
+        "role",
+        "display_name",
+        "status",
+        "suspend_reason",
+        "opened_at",
+        "opened_by",
+        "closed_at",
+        "closed_by",
+        "password_changed_at",
+        "reset_at",
+        "reset_by",
+        "reset_kind",
+        "reset_notice_pending",
+        "last_login_at",
+        "seal",
+    )
 
     id = models.UUIDField("kimlik", primary_key=True, default=uuid.uuid4, editable=False)
     login_name = models.CharField("tanıtıcı", max_length=32)
@@ -849,8 +1144,8 @@ class AuditKey(models.Model):
     (Fernet) olarak burada durur: veritabanıyla birlikte yedeğe girer, geri yükleme
     hangi yoldan yapılırsa yapılsın zincir doğrulanabilir. `key` alanı base64
     kodlu anahtarın şifreli hâlidir. DEK yenilemesinde (F4) yeni İA eklenir, eskiler
-    yeni DEK'le yeniden şifrelenir ve `retired_at` alır. `AuditTrail` modeli
-    alt commit (c)'dedir. Satır silinmez.
+    yeni DEK'le yeniden şifrelenir ve `retired_at` alır. Açık kipteki her iz satırının
+    `key_ref`'i o satırı mühürleyen anahtarın kimliğidir (`AuditTrail`). Satır silinmez.
 
     İA kişisel veri değildir (§4.6.5): şifreli alanı Güvenlik ekranındaki
     "şifrelenen alanlar" listesine girmez (`ENCRYPTED_FIELDS_ARE_PERSONAL`).
@@ -876,3 +1171,198 @@ class AuditKey(models.Model):
 
     def delete(self, using: Any = None, keep_parents: bool = False) -> tuple[int, dict[str, int]]:
         raise DeletionNotAllowed("İz anahtarı silinmez (tasarım §4.6.3).")
+
+
+# ---------------------------------------------------------------------------
+# Denetim izi (tasarım §4.6.2-§4.6.3; TK16; plan F1b-1 alt commit c)
+# ---------------------------------------------------------------------------
+class ImmutableRecord(RuntimeError):
+    """Ekleme-yalnız modelde güncelleme ya da silme denendi (tasarım §4.6.2 yazma kuralı 2)."""
+
+
+class _AppendOnlyQuerySet(models.QuerySet):  # type: ignore[type-arg]  # Any davranışı korunur
+    """Toplu güncellemeyi ve silmeyi reddeden queryset (denetim izi ekleme-yalnızdır)."""
+
+    def update(self, **kwargs: Any) -> int:
+        raise ImmutableRecord("Denetim izi satırı değiştirilemez (tasarım §4.6.2).")
+
+    def bulk_update(self, objs: Any, fields: Any, batch_size: int | None = None) -> int:
+        raise ImmutableRecord("Denetim izi satırı değiştirilemez (tasarım §4.6.2).")
+
+    def delete(self) -> tuple[int, dict[str, int]]:
+        raise ImmutableRecord("Denetim izi satırı silinemez (tasarım §4.6.2).")
+
+
+class AuditActor(models.TextChoices):
+    """Yazmanın aktörü: hesap ya da kullanıcı eylemi olmadan programın kendi işi."""
+
+    HESAP = "HESAP", "Hesap"
+    SISTEM = "SISTEM", "Program"
+
+
+class AuditAction(models.TextChoices):
+    """İz satırının türü — KAPALI KÜME (tasarım §4.6.2); yeni tür göçle eklenir.
+
+    Küme `test_denetim_izi.py`'deki anlık görüntüyle sabittir. Kilitliyken yalnız
+    `YEDEK`, `GOC`, `GUN_ISI` ve `BUTUNLUK` yazılabilir (§4.6.3, kilitli kip). Etiketler
+    iç belge içindir; kullanıcıya görünen adları denetim modülü (F4) sözlükten verir.
+    """
+
+    OLUSTUR = "OLUSTUR", "Oluşturma"
+    GUNCELLE = "GUNCELLE", "Güncelleme"
+    DURUM = "DURUM", "Durum değişikliği"
+    TERS_KAYIT = "TERS_KAYIT", "Ters kayıt"
+    ISARET = "ISARET", "İşaret"
+    BASIM = "BASIM", "Basım"
+    KVKK_SILME = "KVKK_SILME", "Kişisel veri silme"
+    GIRIS = "GIRIS", "Giriş"
+    KILIT = "KILIT", "Kilit"
+    HESAP = "HESAP", "Hesap işlemi"
+    PAROLA = "PAROLA", "Parola"
+    KURTARMA = "KURTARMA", "Kurtarma anahtarı"
+    YEDEK = "YEDEK", "Yedek"
+    GOC = "GOC", "Şema göçü"
+    GERI_YUKLEME = "GERI_YUKLEME", "Geri yükleme"
+    DEK_YENILEME = "DEK_YENILEME", "Veri anahtarı yenileme"
+    BUTUNLUK = "BUTUNLUK", "Bütünlük denetimi"
+    GUN_ISI = "GUN_ISI", "Gün işi"
+
+
+class AuditLabel(models.TextChoices):
+    """İz satırının etiketi (tasarım §4.6.2); boş değer etiketsizdir. F1b'de kullanılmaz."""
+
+    GECIS = "GECIS", "Geçiş kurulumu"
+    KISA_YOL = "KISA_YOL", "Genel karar kapsamında kısa yol"
+    KAPALI_DONEM = "KAPALI_DONEM", "Kapanmış döneme beyaz listedeki yazma"
+
+
+class AuditKeyMode(models.TextChoices):
+    """Satırın hangi anahtarla mühürlendiği (tasarım §4.6.3)."""
+
+    ACIK = "ACIK", "İz anahtarı"
+    KILITLI = "KILITLI", "Kilitli kip anahtarı"
+
+
+#: Kilitliyken yazılabilen kişisiz sistem olayları — KAPALI KÜME (tasarım §4.6.3): yedek
+#: alındı ya da döndürüldü, şema göçü uygulandı, gün işi DEK istediği için ertelendi,
+#: bütünlük denetiminin bulgusu. Kilitli kip satırı yalnız `SISTEM`'indir; yazıcı ve
+#: veritabanı kısıtı (`ck_audittrail_locked_closed_set`) birlikte zorlar.
+KILITLI_KIP_TURLERI: tuple[str, ...] = (
+    AuditAction.YEDEK.value,
+    AuditAction.GOC.value,
+    AuditAction.GUN_ISI.value,
+    AuditAction.BUTUNLUK.value,
+)
+
+
+class AuditTrail(models.Model):
+    """Denetim izi — ekleme-yalnız, HMAC zincirli, kişisel veri taşımayan kayıt (tasarım §4.6.2).
+
+    Tek yazarı `apps.okul.denetim_izi`'dir (açık çağrı; sinyal ya da `save()` kancası
+    YOK: toplu güncelleme ve yumuşak silme sinyali atlardı). Kurallar orada ve
+    tasarımdadır; burada şema ve ekleme-yalnızlık:
+
+    * `seq` birincil anahtardır ve yazıcı tarafından, işlemin İÇİNDE veritabanındaki son
+      satırdan +1 olarak verilir (MAC `seq`'i kapsar; önce bilinmelidir). Geri alınan
+      işlemin satırı kalmaz, sıra boşluk bırakmaz.
+    * `at` UTC saklanır (USE_TZ); kanonik biçim UTC `Z`'dir, ekranlar Europe/Istanbul gösterir.
+    * `term` (→ OabTerm) ve `compliance_item` (→ ComplianceItem) sütunları hedef
+      modelleriyle F1c'de gelir; kanonik biçim onları bugünden `null` olarak taşır
+      (`shared.kanonik.IZ_SATIRI_ALANLARI`): sütunlar eklenince var olan MAC'ler değişmez.
+    * `values` yalnız modelin izinli kişisiz alanlarının `[önce, sonra]` değerlerini,
+      kanonik ilkel biçimde (`kanonik.duz`) taşır; `changed_fields` yalnız alan adlarıdır.
+    * `key_ref` metindir: açık kipte `AuditKey` kimliği, kilitli kipte `"<çapa seq>:<adım>"`;
+      `iz-durumu.json` yokken yazılan mühürsüz kilitli satırda boş (`apps.okul.iz_durumu`).
+    * Kilitli kip satırı yalnız `KILITLI_KIP_TURLERI`'ndeki bir `SISTEM` olayıdır ve içerik
+      MAC'i taşımaz (iki veritabanı kısıtı).
+    * `record_mac` ve `prev_mac` boş dize olabilir (içerik MAC'i olmayan olay; ilk satır).
+
+    EKLEME-YALNIZ (yazma kuralı 2): var olan satırda `save()`, `delete()`, toplu
+    `update()`/`delete()` `ImmutableRecord` yükseltir; ayrıca SQLite tetikleyicileri
+    (`BEFORE UPDATE`, `BEFORE DELETE` → `RAISE(ABORT)`, göç 0009) program içi kazayı
+    veritabanında keser. Program dışındaki değişikliği zincir yakalar. Tetikleyicileri
+    kapatan bir üretim yolu YOKTUR; testlerin `flush`'ı kök `conftest.py`'dedir.
+    """
+
+    seq = models.PositiveBigIntegerField("sıra", primary_key=True)
+    at = models.DateTimeField("zaman")
+    actor = models.CharField("aktör", max_length=8, choices=AuditActor.choices)
+    account = models.ForeignKey(
+        Account,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="hesap",
+    )
+    role = models.CharField("rol", max_length=24, blank=True, default="")
+    action = models.CharField("tür", max_length=16, choices=AuditAction.choices)
+    model = models.CharField("model", max_length=64)
+    object_id = models.CharField("kayıt kimliği", max_length=64)
+    changed_fields = models.JSONField("değişen alanlar", default=list, blank=True)
+    values = models.JSONField("değerler", default=dict, blank=True)
+    record_mac = models.CharField("içerik MAC'i", max_length=64, blank=True, default="")
+    label = models.CharField(
+        "etiket", max_length=16, choices=AuditLabel.choices, blank=True, default=""
+    )
+    key_mode = models.CharField("anahtar kipi", max_length=8, choices=AuditKeyMode.choices)
+    key_ref = models.CharField("anahtar başvurusu", max_length=64)
+    prev_mac = models.CharField("önceki MAC", max_length=64, blank=True, default="")
+    mac = models.CharField("MAC", max_length=64)
+
+    objects = _AppendOnlyQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = "denetim izi satırı"
+        verbose_name_plural = "denetim izi"
+        ordering = ["seq"]
+        indexes = [
+            models.Index(fields=["model", "object_id", "seq"], name="okul_audittrail_kayit_idx"),
+            models.Index(fields=["action", "account", "seq"], name="okul_audittrail_tur_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(action__in=AuditAction.values), name="ck_audittrail_action"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(actor__in=AuditActor.values), name="ck_audittrail_actor"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(key_mode__in=AuditKeyMode.values),
+                name="ck_audittrail_key_mode",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(label__in=[*AuditLabel.values, ""]),
+                name="ck_audittrail_label",
+            ),
+            # Hesap satırında hesap ve rol dolu; SISTEM satırında ikisi de boş.
+            models.CheckConstraint(
+                condition=(models.Q(actor="HESAP", account__isnull=False) & ~models.Q(role=""))
+                | models.Q(actor="SISTEM", account__isnull=True, role=""),
+                name="ck_audittrail_actor_account",
+            ),
+            # Kilitli kip satırı içerik MAC'i taşımaz (hiçbir veri değişikliğini meşrulaştıramaz).
+            models.CheckConstraint(
+                condition=models.Q(key_mode="ACIK") | models.Q(record_mac=""),
+                name="ck_audittrail_locked_no_record_mac",
+            ),
+            # Kilitli kip satırı yalnız kapalı kümedeki SISTEM olayıdır (tasarım §4.6.3).
+            models.CheckConstraint(
+                condition=models.Q(key_mode="ACIK")
+                | models.Q(actor="SISTEM", action__in=KILITLI_KIP_TURLERI),
+                name="ck_audittrail_locked_closed_set",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.seq}. {self.action} {self.model} {self.object_id}"
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Yalnız YENİ satır yazılır; var olan satırın kaydı `ImmutableRecord` yükseltir."""
+        if not self._state.adding:
+            raise ImmutableRecord("Denetim izi satırı değiştirilemez (tasarım §4.6.2).")
+        kwargs["force_insert"] = True
+        super().save(*args, **kwargs)
+
+    def delete(self, using: Any = None, keep_parents: bool = False) -> tuple[int, dict[str, int]]:
+        raise ImmutableRecord("Denetim izi satırı silinemez (tasarım §4.6.2).")

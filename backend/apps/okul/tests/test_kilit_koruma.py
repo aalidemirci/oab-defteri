@@ -221,7 +221,17 @@ def test_hesap_kurulmadan_kilit_kapisi_gecirir(parolasiz: None) -> None:
         assert _yalniz_kilit_kapisi("GET", yol).content == b"gecti", yol
 
 
-@pytest.mark.parametrize("ortam", ["acik", "kilitli", "parolasiz", "kayip"])
+@pytest.mark.parametrize(
+    "ortam",
+    [
+        "acik",
+        "kilitli",
+        # `parolasiz` burada istenerek yüklenir: varsayılan hesabın satırı ve parmak izi
+        # kurulmasın, yoksa durum "kurulum" değil "güvenlik dosyası kayıp" olurdu.
+        pytest.param("parolasiz", marks=pytest.mark.hesapsiz),
+        "kayip",
+    ],
+)
 def test_saglik_yolu_her_durumda_acik(ortam: str, request: pytest.FixtureRequest) -> None:
     if ortam == "kayip":
         request.getfixturevalue("parmak_izi_yazili")

@@ -10,8 +10,8 @@
 // KİŞİSİZDİR: yalnız sayı söylenir; hangi kaydın hangi alanı olduğu kartta yazmaz (sözlük
 // §5). Nedenini kesin bilemez: kayıt program dışından değiştirilmiş (SQLite'ta şifreli
 // sütuna yazılmış düz metin) ya da veritabanı bozulmuş olabilir; kart bunu söyler ve
-// kaydı yeniden yazmadan önce bildirilmesini ister. Bütünlük (zincir) ve hesap mührü
-// kartları denetim iziyle gelir; rol süzmesi 2. adımda, pano kabuğu F1c'de.
+// kaydı yeniden yazmadan önce bildirilmesini ister. Denetim izinin bütünlük (zincir) ve
+// hesap mührü kartları `modules/butunluk`'tadır; rol süzmesi 2. adımda, pano kabuğu F1c'de.
 
 import { useEffect, useState } from "react";
 

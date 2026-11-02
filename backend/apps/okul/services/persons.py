@@ -55,6 +55,15 @@ silinmez, ayrılış yoluna yönlendirilir (`MEMBER_DELETE_MESSAGE`; birlik kayd
 silinmez — CLAUDE.md §2 altın kural 4); bağı yoksa katı silinir. Katı silme
 BİLİNÇLİDİR: yanlış girilmiş kaydın yumuşak silmesi kişi verisini süresiz
 tutardı.
+
+DENETİM İZİ (tasarım §4.6.2; plan F1b-1 alt commit c). Her yazım veriyle AYNI işlemde iz
+satırı yazar (`denetim_izi.degisiklik`): oluşturma `OLUSTUR`, ad/şube/üye türü değişikliği
+`GUNCELLE`, ayrılış ve havuza giriş-çıkış `DURUM` (durum alanları modeldedir). Öğrenci ve
+personel KVKK silme kümesindedir: satır yalnız alan ADLARINI taşır, değer taşımaz.
+Önceki hâl yazmadan önce, aynı işlemde alınır. Toplu karar (`resolve_leave_pool`) kişi
+başına satır yazar. **İzsiz kalan iki yol** plan gereği adıyla muaftır (5. adımda yeniden
+yazılır): kullanıcının katı silmesi (`delete_student`, `delete_personnel`) ve personel
+birleştirmesi (`merge_personnel`); muafiyet listesi `tests/test_izsiz_yazim.py`'dedir.
 """
 
 from __future__ import annotations
@@ -68,6 +77,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
+from apps.okul import denetim_izi
 from apps.okul.models import (
     ImportRun,
     MemberKind,
@@ -223,24 +233,33 @@ def add_to_leave_pool(person: Person, *, run: ImportRun | None) -> bool:
         raise ValidationError(ALREADY_LEFT_MESSAGE)
     if in_leave_pool(person):
         return False
-    person.leave_candidate_since = timezone.localdate()
-    person.leave_candidate_run = run
-    person.save(update_fields=[*POOL_FIELDS, "updated_at"])
+    with transaction.atomic():
+        onceki = denetim_izi.anlik(person)
+        person.leave_candidate_since = timezone.localdate()
+        person.leave_candidate_run = run
+        person.save(update_fields=[*POOL_FIELDS, "updated_at"])
+        denetim_izi.degisiklik(person, onceki=onceki)
     return True
 
 
 def remove_from_leave_pool(person: Person, *, save: bool = True) -> bool:
     """Kişiyi havuzdan çıkarır (dosyada görüldü ya da "Aktif kalsın"). Havuzdaysa True.
 
-    `save=False`: çağıran aynı kaydı başka alanlarla birlikte kendisi kaydeder
+    `save=False`: çağıran aynı kaydı başka alanlarla birlikte kendisi kaydeder ve izler
     (e-Okul aktarımı; `POOL_FIELDS`'i kendi `update_fields`'ine ekler).
     """
     if not in_leave_pool(person):
         return False
-    person.leave_candidate_since = None
-    person.leave_candidate_run = None
-    if save:
+    if not save:
+        person.leave_candidate_since = None
+        person.leave_candidate_run = None
+        return True
+    with transaction.atomic():
+        onceki = denetim_izi.anlik(person)
+        person.leave_candidate_since = None
+        person.leave_candidate_run = None
         person.save(update_fields=[*POOL_FIELDS, "updated_at"])
+        denetim_izi.degisiklik(person, onceki=onceki)
     return True
 
 
@@ -351,6 +370,7 @@ def create_student(**fields: Any) -> Student:
     if fields.get("status", StudentStatus.ACTIVE) == StudentStatus.ACTIVE:
         ensure_student_number_free(str(fields.get("student_number") or ""))
     student: Student = Student.objects.create(**fields)
+    denetim_izi.degisiklik(student, onceki=None)
     return student
 
 
@@ -365,9 +385,11 @@ def update_student(student: Student, **fields: Any) -> Student:
     if "student_number" in changed and student.status == StudentStatus.ACTIVE:
         ensure_student_number_free(str(fields["student_number"] or ""), exclude_pk=student.pk)
     if changed:
+        onceki = denetim_izi.anlik(student)
         for name in changed:
             setattr(student, name, fields[name])
         student.save(update_fields=[*changed, "updated_at"])
+        denetim_izi.degisiklik(student, onceki=onceki)
     return student
 
 
@@ -380,10 +402,12 @@ def leave_student(student: Student, *, log: bool = True) -> Student:
     """
     if student.status == StudentStatus.LEFT:
         raise ValidationError(ALREADY_LEFT_MESSAGE)
+    onceki = denetim_izi.anlik(student)
     student.status = StudentStatus.LEFT
     student.left_at = timezone.localdate()
     remove_from_leave_pool(student, save=False)
     student.save(update_fields=["status", "left_at", *POOL_FIELDS, "updated_at"])
+    denetim_izi.degisiklik(student, onceki=onceki)
     _run_leave_hooks(student)
     if log:
         logger.info("Öğrenci ayrılışı işlendi; kayıt saklandı.")
@@ -401,7 +425,10 @@ def reactivate_student(student: Student) -> None:
 
 @transaction.atomic
 def delete_student(student: Student) -> None:
-    """Kullanıcı silmesi: açık yükümlülük ve birlik bağı yoksa KATI silinir."""
+    """Kullanıcı silmesi: açık yükümlülük ve birlik bağı yoksa KATI silinir.
+
+    İZSİZDİR — plan F1b-1 gereği adıyla muaf (5. adımda yeniden yazılır; modül başlığı).
+    """
     _ensure_deletable(student)
     student.hard_delete()
     logger.info("Öğrenci kaydı silindi.")
@@ -415,6 +442,7 @@ def create_personnel(**fields: Any) -> Personnel:
     app_password.require_password_set()
     fields.setdefault("member_kind", MemberKind.TEACHER)
     person: Personnel = Personnel.objects.create(**fields)
+    denetim_izi.degisiklik(person, onceki=None)
     return person
 
 
@@ -423,9 +451,11 @@ def update_personnel(person: Personnel, **fields: Any) -> Personnel:
     """Yalnız DEĞİŞEN alanı yazar. Ayrılış `leave_personnel` ile olur."""
     changed = _changed_fields(person, fields)
     if changed:
+        onceki = denetim_izi.anlik(person)
         for name in changed:
             setattr(person, name, fields[name])
         person.save(update_fields=[*changed, "updated_at"])
+        denetim_izi.degisiklik(person, onceki=onceki)
     return person
 
 
@@ -438,10 +468,12 @@ def leave_personnel(person: Personnel, *, log: bool = True) -> Personnel:
     """
     if not person.is_active:
         raise ValidationError(ALREADY_LEFT_MESSAGE)
+    onceki = denetim_izi.anlik(person)
     person.is_active = False
     person.left_at = timezone.localdate()
     remove_from_leave_pool(person, save=False)
     person.save(update_fields=["is_active", "left_at", *POOL_FIELDS, "updated_at"])
+    denetim_izi.degisiklik(person, onceki=onceki)
     _run_leave_hooks(person)
     if log:
         logger.info("Personel ayrılışı işlendi; kayıt saklandı.")
@@ -456,7 +488,10 @@ def reactivate_personnel(person: Personnel) -> None:
 
 @transaction.atomic
 def delete_personnel(person: Personnel) -> None:
-    """Kullanıcı silmesi: açık yükümlülük ve birlik bağı yoksa KATI silinir."""
+    """Kullanıcı silmesi: açık yükümlülük ve birlik bağı yoksa KATI silinir.
+
+    İZSİZDİR — plan F1b-1 gereği adıyla muaf (5. adımda yeniden yazılır; modül başlığı).
+    """
     _ensure_deletable(person)
     person.hard_delete()
     logger.info("Personel kaydı silindi.")
@@ -472,6 +507,8 @@ def merge_personnel(source: Personnel, target: Personnel) -> Personnel:
     İki kayıt da canlı olmalıdır (görünüm yalnız canlı kayıtları çözer) ve aynı
     kişi olamaz. Taşıma birleştirme kancalarıyla yapılır (OAB modelleri F1c'den
     itibaren kaydeder); bugün kayıtlı kanca yoktur.
+
+    İZSİZDİR — plan F1b-1 gereği adıyla muaf (5. adımda yeniden yazılır; modül başlığı).
     """
     if source.pk == target.pk:
         raise ValidationError(SELF_MERGE_MESSAGE)

@@ -30,7 +30,7 @@ from typing import Any
 import pytest
 from rest_framework.test import APIClient
 
-from apps.okul.models import SchoolConfig, SchoolLevel
+from apps.okul.models import SchoolConfig, SchoolLevel, SchoolTerm, SchoolYear
 from apps.okul.services import app_password
 from apps.okul.services import school_year as school_year_service
 from apps.okul.services import setup as setup_service
@@ -109,7 +109,29 @@ class TestKurulumKapisi:
         assert client.post("/api/v1/setup/complete/").status_code == 200
 
     def test_parolasizken_ileti_parolayi_soyler(self, client: APIClient, parolasiz: Path) -> None:
-        _kurulum_hazir()
+        # Hesap kurulmadan servis yazamaz (iz anahtarı yok; tasarım §4.6.3): okul bilgileri
+        # ve ders yılı test verisi olarak doğrudan yazılır.
+        SchoolConfig.objects.update_or_create(
+            pk=SchoolConfig.SINGLETON_PK,
+            defaults={
+                "school_name": "Örnek Anadolu Lisesi",
+                "kademe": SchoolLevel.ORTAOGRETIM,
+                "kisa_ad": "Örnek AL",
+                "demirbas_onayi": True,
+            },
+        )
+        yil = SchoolYear.objects.create(
+            name="2026-2027",
+            start_date=date(2026, 9, 7),
+            end_date=date(2027, 6, 25),
+            is_active=True,
+        )
+        SchoolTerm.objects.create(
+            school_year=yil, sequence=1, start_date=yil.start_date, end_date=date(2027, 1, 22)
+        )
+        SchoolTerm.objects.create(
+            school_year=yil, sequence=2, start_date=date(2027, 2, 8), end_date=yil.end_date
+        )
         mesaj = client.post("/api/v1/setup/complete/").json()["message"]
         assert "1. adım (program yöneticisi hesabı): hesap kurulmadı." in mesaj
         assert "kurtarma anahtarı doğrulanmadı" not in mesaj

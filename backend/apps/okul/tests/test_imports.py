@@ -147,7 +147,9 @@ class TestStudentCommit:
     def test_hazirlik_sinifi_config_bayragina_bagli(self, aktif_yil: SchoolYear) -> None:
         from apps.okul.models import SchoolConfig
 
-        SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, has_prep_class=True)
+        SchoolConfig.objects.update_or_create(
+            pk=SchoolConfig.SINGLETON_PK, defaults={"has_prep_class": True}
+        )
         rapor = import_service.commit_students_text(text=_metin("HAZIRLIK/A\t101\tALİ VELİ"))
         assert rapor.created_students == 1
         assert _no("101").class_level == 0

@@ -88,6 +88,11 @@ describe("HakkindaPage", () => {
     // Veri anahtarı her hesap için ayrı sarılır (tasarım TK9); yedek başlığı hesap
     // sarmalı taşımaz, başka bilgisayarda yalnız kurtarma anahtarı açar (TK10).
     expect(screen.getByText(/Şifreleme anahtarı her hesap için ayrı sarılır/)).toBeInTheDocument();
+    // Denetim izinin yöntemi de yalnız bu kartta adıyla geçer (sözlük §1 "Denetim izi").
+    expect(
+      screen.getByText(/Denetim izinin her kaydı, bir önceki kaydın mührüyle birlikte HMAC-SHA256/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/mührünün ilk sekiz onaltılık hanesidir/)).toBeInTheDocument();
     expect(
       screen.getByText(/başka bir bilgisayarda yalnız kurtarma\s+anahtarıyla açılır/),
     ).toBeInTheDocument();
@@ -106,6 +111,8 @@ describe("HakkindaPage", () => {
     expect(metin).toContain("Rol bir şifreleme önlemi değildir.");
     expect(metin).toContain("Şifreli alanlar en zayıf hesap parolası kadar korunur.");
     expect(metin).toContain("Açık oturum, sahibinin imzasıdır.");
+    expect(metin).toMatch(/her iş o hesabın adına denetim izine yazılır/);
+    expect(metin).toContain("Denetim izi değişikliği gösterir, önlemez.");
     expect(metin).toContain("Kurtarma anahtarını yenilemek önceki yedekleri kapatmaz.");
     expect(metin).toMatch(/Word, PDF ya da Excel/);
     expect(metin).toContain("KVKK md. 12/5");

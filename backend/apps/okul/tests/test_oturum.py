@@ -21,10 +21,10 @@ from django.db import DatabaseError
 from django.http import HttpRequest, HttpResponse
 from django.test import RequestFactory
 
-from apps.okul import masaustu_kanca
+from apps.okul import iz_dogrulama, masaustu_kanca
 from apps.okul import oturum as oturum_modulu
 from apps.okul.lock_middleware import AppLockMiddleware
-from apps.okul.models import Account, SchoolConfig
+from apps.okul.models import Account, AuditTrail, SchoolConfig
 from apps.okul.oturum import (
     ACIK,
     ERTELENDI,
@@ -183,6 +183,25 @@ class TestAcilis:
         assert (hesap.tanitici, hesap.rol) == ("yonetici", "yonetici")
         assert hesap.id == str(Account.objects.get().id)
         assert crypto.active_audit_key() is not None
+
+    def test_acik_oturumda_dusen_giris_acik_oturumu_kapatmaz(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Açık oturumdayken yapılan ve işlemi düşen bir giriş, kendisinden önce süren oturumun
+        anahtarlarına ve nesline dokunmaz (aynı DEK ve İA; bağımsız denetim bulgusu). Oturum
+        yokken düşen giriş ise kendi yüklediği anahtarları düşürür (`test_denetim_izi`)."""
+
+        def dustu(*_a: object, **_k: object) -> None:
+            raise DatabaseError("database is locked")
+
+        monkeypatch.setattr(iz_dogrulama, "yaz", dustu)
+        once = crypto.key_epoch()
+        with pytest.raises(DatabaseError):
+            app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
+
+        assert OTURUM.hesap() == YONETICI
+        assert crypto.is_unlocked() is True
+        assert crypto.key_epoch() > once  # anahtarlar (aynısı) yeniden yüklendi, düşmedi
 
     def test_reddedilen_kilit_acma_oturum_acmaz(
         self, kilitli: None, yonetici_hesabi: Account
@@ -577,8 +596,23 @@ def _ucusta_tut() -> tuple[threading.Thread, threading.Event]:
     return is_parcacigi, birak
 
 
+@pytest.fixture
+def kilit_izi_bellekte(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Yazar]]:
+    """`KILIT` satırını veritabanı yerine belleğe yazar (kilitleyen başka iş parçacığıysa).
+
+    Testin veritabanı işlemi test boyunca açıktır; başka bir iş parçacığının bağlantısı o
+    sürede SQLite'a yazamaz (yazma kilidi, `busy_timeout` 5 sn). Kilidin iz satırı
+    `test_denetim_izi.py`'de aynı iş parçacığında sınanır; burada yalnız çağrı görülür.
+    """
+    gorulen: list[tuple[str, Yazar]] = []
+    monkeypatch.setattr(OTURUM, "_kilit_izi", lambda hesap, kim: gorulen.append((hesap.id, kim)))
+    return gorulen
+
+
 class TestUcustakiIstekler:
-    def test_kilitle_ucustaki_istegin_bitmesini_bekler(self) -> None:
+    def test_kilitle_ucustaki_istegin_bitmesini_bekler(
+        self, kilit_izi_bellekte: list[tuple[str, Yazar]]
+    ) -> None:
         istek, birak = _ucusta_tut()
         sonuc: list[str] = []
         kilitleyen = threading.Thread(target=lambda: sonuc.append(OTURUM.kilitle()), daemon=True)
@@ -596,6 +630,8 @@ class TestUcustakiIstekler:
         kilitleyen.join(5)
         assert sonuc == [KILITLENDI]
         assert crypto.is_unlocked() is False
+        # İz satırı istek bittikten sonra, elle Kilitle olduğu için hesabın adına.
+        assert kilit_izi_bellekte == [(TEST_HESAP_ID, Yazar.hesaptan(YONETICI))]
 
     def test_bekleme_sinirlidir_sure_dolunca_yine_kilitlenir(
         self, caplog: pytest.LogCaptureFixture
@@ -616,8 +652,12 @@ class TestUcustakiIstekler:
             assert OTURUM.kilitle(bekleme_sn=5) == KILITLENDI
         assert time.monotonic() - baslangic < 2
 
-    def test_bekleme_sirasinda_acilan_oturum_dusurulmez(self) -> None:
-        """Kilit uçuştakileri beklerken açılan (yeni hesaplı) oturum, kilidin sonunda düşmez."""
+    def test_bekleme_sirasinda_acilan_oturum_dusurulmez(
+        self, kilit_izi_bellekte: list[tuple[str, Yazar]]
+    ) -> None:
+        """Kilit uçuştakileri beklerken açılan (yeni hesaplı) oturum, kilidin sonunda düşmez;
+        uygulanmayan kilit için `KILIT` satırı ve çapa da YAZILMAZ: iz açık bir oturumu
+        kilitlenmiş göstermez (hesap değiştirmenin olağan yolu gibi)."""
         istek, birak = _ucusta_tut()
         kilitleyen = threading.Thread(target=OTURUM.kilitle, daemon=True)
         kilitleyen.start()
@@ -631,6 +671,86 @@ class TestUcustakiIstekler:
         hesap = OTURUM.hesap()
         assert hesap is not None and hesap.rol == "muhasip"
         assert crypto.is_unlocked() is True
+        assert kilit_izi_bellekte == []
+
+    def test_ayni_hesapla_yeniden_giriste_de_kilit_satiri_yazilmaz(
+        self, kilit_izi_bellekte: list[tuple[str, Yazar]]
+    ) -> None:
+        """Yavaş bir istek uçuştayken kilit ekranından AYNI hesapla yeniden giriş: iz
+        `GIRIS(A) … KILIT(A)` sırasıyla açık oturumu kilitli göstermez."""
+        istek, birak = _ucusta_tut()
+        kilitleyen = threading.Thread(target=OTURUM.kilitle, daemon=True)
+        kilitleyen.start()
+        assert _bekle(lambda: not OTURUM.acik_mi())
+
+        oturumu_ac_test()
+        birak.set()
+        istek.join(5)
+        kilitleyen.join(5)
+
+        assert OTURUM.hesap_id() == TEST_HESAP_ID
+        assert kilit_izi_bellekte == []
+
+    def test_bekleme_sirasinda_servis_kapatirsa_kilit_satiri_yazilmaz_zaten_kilitli(
+        self, kilit_izi_bellekte: list[tuple[str, Yazar]], caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Oturum servis içinden kapatıldıysa (geri yükleme, güvenlik dosyasının sıfırlanması)
+        bu yeniden giriş DEĞİLDİR: satır yazılmaz, yanıt `zaten_kilitli`, günlük doğrusunu
+        söyler (bağımsız denetim bulgusu: "oturum yeniden açıldı" yazıyordu)."""
+        caplog.set_level(logging.INFO, logger="oab_defteri.okul")
+        istek, birak = _ucusta_tut()
+        sonuc: list[str] = []
+        kilitleyen = threading.Thread(target=lambda: sonuc.append(OTURUM.kilitle()), daemon=True)
+        kilitleyen.start()
+        assert _bekle(lambda: not OTURUM.acik_mi())
+
+        OTURUM.kapat()
+        birak.set()
+        istek.join(5)
+        kilitleyen.join(5)
+
+        assert sonuc == [ZATEN_KILITLI]
+        assert kilit_izi_bellekte == []
+        assert "servis içinden kapatıldı" in caplog.text
+        assert "yeniden açıldı" not in caplog.text
+
+    def test_bekleyen_kilit_sirasinda_dusen_giris_kilidi_ve_ucustaki_isi_bozmaz(
+        self,
+        kilit_izi_bellekte: list[tuple[str, Yazar]],
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Bağımsız denetim bulgusu: uzun bir yazma uçuştayken Kilitle'ye basılır, kilit
+        ekranından yapılan giriş işlemini kuramayıp düşer ("database is locked"). Düşen giriş
+        `OTURUM.kapat()` ile DEK'i uçuştaki yazmanın ortasında düşürüyor, nesli değiştirip
+        bekleyen kilidin `KILIT` satırını ve çapasını iptal ediyordu. Artık kendisinden önce süren
+        oturuma dokunmaz: DEK uçuştaki iş bitene dek bellektedir, kilidin satırı yazılır."""
+        caplog.set_level(logging.INFO, logger="oab_defteri.okul")
+
+        def kilitli_vt(*_a: object, **_k: object) -> None:
+            raise DatabaseError("database is locked")
+
+        istek, birak = _ucusta_tut()
+        sonuc: list[str] = []
+        kilitleyen = threading.Thread(target=lambda: sonuc.append(OTURUM.kilitle()), daemon=True)
+        kilitleyen.start()
+        assert _bekle(lambda: not OTURUM.acik_mi())
+
+        monkeypatch.setattr(iz_dogrulama, "yaz", kilitli_vt)
+        with pytest.raises(DatabaseError):
+            app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
+        # Uçuştaki iş sürüyor: DEK düşmedi, kilit hâlâ bekliyor.
+        assert crypto.is_unlocked() is True
+        assert sonuc == [] and kilit_izi_bellekte == []
+
+        birak.set()
+        istek.join(5)
+        kilitleyen.join(5)
+
+        assert sonuc == [KILITLENDI]
+        assert kilit_izi_bellekte == [(TEST_HESAP_ID, Yazar.hesaptan(YONETICI))]
+        assert crypto.is_unlocked() is False
+        assert "yeniden açıldı" not in caplog.text
 
     def test_sayac_istek_bitince_duser(self) -> None:
         sayac = UcustakiIstekler()
@@ -656,27 +776,36 @@ def _yazari_yakala(gorulen: list[Yazar | None]) -> Callable[[HttpRequest], HttpR
 
 class TestYazar:
     def test_baglam_yoksa_yazar_yok(self) -> None:
-        assert yazar() is None
+        # Varsayılan test ortamı oturumdaki hesabın bağlamıyla koşar (kök conftest).
+        assert yazar() == Yazar(hesap_id=TEST_HESAP_ID, rol="yonetici")
+        with yazar_olarak(None):
+            assert yazar() is None
 
     def test_sistem_ve_ic_ice_baglam(self) -> None:
-        hesap_yazari = Yazar.hesaptan(YONETICI)
+        hesap_yazari = Yazar.hesaptan(
+            OturumHesabi(
+                id="0b4c2d1e-7a3f-4e5d-9c8b-1a2b3c4d5e6f", tanitici="muhasip", rol="muhasip"
+            )
+        )
+        dis = yazar()
         with yazar_olarak(hesap_yazari):
             assert yazar() == hesap_yazari
             with sistem_olarak():
                 kim = yazar()
                 assert kim is SISTEM and kim.sistem_mi
             assert yazar() == hesap_yazari
-        assert yazar() is None
+        assert yazar() == dis
         assert hesap_yazari.sistem_mi is False
 
     def test_ara_katman_oturum_hesabini_istek_boyunca_yazar_yapar(self) -> None:
         gorulen: list[Yazar | None] = []
         katman = AppLockMiddleware(_yazari_yakala(gorulen))
 
-        katman(RequestFactory().get("/api/v1/grade-levels/"))
+        with yazar_olarak(None):
+            katman(RequestFactory().get("/api/v1/grade-levels/"))
+            assert yazar() is None  # bağlam istekten sızmaz
 
         assert gorulen == [Yazar(hesap_id=TEST_HESAP_ID, rol="yonetici")]
-        assert yazar() is None  # bağlam istekten sızmaz
 
     def test_kilitliyken_izinli_istekte_yazar_yok(self, kilitli: None) -> None:
         gorulen: list[Yazar | None] = []
@@ -719,6 +848,173 @@ class TestKapanis:
             assert crypto.is_unlocked() is True
         finally:
             masaustu_kanca.kapanis_kilidi_kaydet(kapanista_kilitle)
+
+    def test_kapanis_suren_elle_kilidin_satirini_ve_capasini_bekler(
+        self, kilit_izi_bellekte: list[tuple[str, Yazar]]
+    ) -> None:
+        """Bağımsız denetim bulgusu: elle kilit uçuştaki isteği beklerken pencere kapatılınca
+        kapanış kilidi HEMEN dönüyordu; masaüstü sunucuyu durdurup temiz kapanış işaretini
+        yazıyor, bekleyen kilit (daemon iş parçacığı) süreçle ölüyor, `KILIT` satırı ve çapa hiç
+        yazılmıyordu. Kapanış artık süren kilidin bitmesini bekler."""
+        istek, birak = _ucusta_tut()
+        kilitleyen = threading.Thread(target=OTURUM.kilitle, daemon=True)
+        kilitleyen.start()
+        assert _bekle(lambda: not OTURUM.acik_mi())
+        sonuc: list[bool] = []
+        kapanis = threading.Thread(target=lambda: sonuc.append(kapanista_kilitle()), daemon=True)
+        kapanis.start()
+
+        time.sleep(0.2)
+        assert sonuc == [] and kilit_izi_bellekte == []  # kapanış süren kilidi bekliyor
+
+        birak.set()
+        istek.join(5)
+        kilitleyen.join(5)
+        kapanis.join(5)
+
+        assert sonuc == [False]  # kilidi elle kilit uyguladı
+        assert kilit_izi_bellekte == [(TEST_HESAP_ID, Yazar.hesaptan(YONETICI))]
+        assert crypto.is_unlocked() is False
+
+    def test_kapanis_suren_kilit_acilisini_bekler_acilan_oturumu_kilitler(
+        self,
+        kilitli: None,
+        kilit_izi_bellekte: list[tuple[str, Yazar]],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Bağımsız denetim bulgusu: kilit açılışı sürerken kapanış kilidi oturum kapalı diye
+        hemen dönüyor, açılış ondan SONRA oturumu açıyordu: süreç oturum açık ve çapasız
+        bitiyordu. Kapanış artık uçuştaki istekleri (süren açılış) bekler ve açılan oturumu da
+        kilitler (`KILIT` satırı ve çapa)."""
+        asil = iz_dogrulama.hazirla
+        icerde = threading.Event()
+
+        def yavas(anahtar: Any) -> Any:
+            icerde.set()
+            time.sleep(0.3)
+            return asil(anahtar)
+
+        monkeypatch.setattr(iz_dogrulama, "hazirla", yavas)
+        sonuc: list[bool] = []
+
+        def kapanis() -> None:
+            assert icerde.wait(5)
+            sonuc.append(kapanista_kilitle())
+
+        kapanan = threading.Thread(target=kapanis, daemon=True)
+        kapanan.start()
+        with OTURUM.istek():  # kilit açılışı uçuştaki bir istektir (ara katman sayar)
+            app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
+        kapanan.join(10)
+
+        assert sonuc == [True]
+        assert OTURUM.acik_mi() is False and crypto.is_unlocked() is False
+        assert kilit_izi_bellekte == [(TEST_HESAP_ID, SISTEM)]
+
+    def test_kapanis_suresi_dolunca_bu_arada_acilan_oturumu_beklemeden_kilitler(
+        self,
+        kilitli: None,
+        kilit_izi_bellekte: list[tuple[str, Yazar]],
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Bağımsız denetim bulgusu: oturum kapalıyken uzun bir istek (büyük dışa aktarım)
+        uçuştayken kilit açılışı biter. Kapanış uzun isteği beklerken açılan oturumu görmüyor,
+        süre dolunca oturum AÇIK ve `KILIT` satırsız dönüyordu; masaüstü temiz kapanış işaretini
+        yazdığı için "Son Oturumu Kontrol Edin" kartı da çıkmıyordu. Süre dolunca açık oturum
+        artık beklemeden kilitlenir (fail-closed)."""
+        caplog.set_level(logging.WARNING, logger="oab_defteri.okul")
+        asil = iz_dogrulama.hazirla
+        icerde = threading.Event()
+
+        def yavas(anahtar: Any) -> Any:
+            icerde.set()  # açılış kapanış işaretini geçti, oturumu henüz açmadı
+            time.sleep(0.2)
+            return asil(anahtar)
+
+        monkeypatch.setattr(iz_dogrulama, "hazirla", yavas)
+        uzun, birak = _ucusta_tut()
+        sonuc: list[bool] = []
+
+        def kapanis() -> None:
+            assert icerde.wait(5)
+            sonuc.append(OTURUM.kapanis_kilidi(bekleme_sn=2.0))
+
+        kapanan = threading.Thread(target=kapanis, daemon=True)
+        kapanan.start()
+        try:
+            with OTURUM.istek():  # kilit açılışı uçuştaki bir istektir (ara katman sayar)
+                app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
+            assert OTURUM.acik_mi() is True  # açılış bitti, uzun istek sürüyor
+            kapanan.join(10)
+
+            assert sonuc == [True]
+            assert OTURUM.acik_mi() is False and crypto.is_unlocked() is False
+            assert kilit_izi_bellekte == [(TEST_HESAP_ID, SISTEM)]
+            assert "bitmedi" in caplog.text
+        finally:
+            birak.set()
+            uzun.join(5)
+
+    def test_kapanis_once_ucustakileri_sonra_oturumu_okur_arada_acilan_kacmaz(
+        self, kilitli: None
+    ) -> None:
+        """Bağımsız denetim bulgusu (dar yarış): kapanış oturumu kapalı okuyup bıraktıktan
+        sonra, uçuştaki sayıyı okumadan önce bir kilit açılışı oturumu açıp biterse kapanış
+        açık oturumla dönüyordu. Artık önce uçuştaki istekler, SONRA oturum okunur; yarışın en
+        kötü anı, açılışın uçuştaki sayı okunurken bitmesidir."""
+        gorulen: list[tuple[str, Yazar]] = []
+        oturum: OturumDurumu
+
+        class _AcilisYarisi(UcustakiIstekler):
+            """Uçuştaki istekler İLK kez okunurken bir kilit açılışı oturumu açıp biter."""
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.acildi = False
+
+            def _yaris(self) -> None:
+                if not self.acildi:
+                    self.acildi = True
+                    oturum.ac(YONETICI, veri_anahtari=TEST_DEK, iz_anahtari=TEST_IA)
+
+            @property
+            def sayi(self) -> int:
+                self._yaris()
+                return super().sayi
+
+            def bosalmasini_bekle(self, *, bekleme_sn: float) -> bool:
+                self._yaris()
+                return super().bosalmasini_bekle(bekleme_sn=bekleme_sn)
+
+        sayac = _AcilisYarisi()
+        oturum = OturumDurumu(
+            ucusta=sayac,
+            kilit_izi=lambda hesap, kim: gorulen.append((hesap.id, kim)),
+            hesap_kurulu=lambda: True,
+            dosya_kayip=lambda: False,
+        )
+        baslangic = time.monotonic()
+
+        assert oturum.kapanis_kilidi(bekleme_sn=5.0) is True
+
+        assert sayac.acildi is True
+        assert oturum.acik_mi() is False and crypto.is_unlocked() is False
+        assert gorulen == [(TEST_HESAP_ID, SISTEM)]
+        assert time.monotonic() - baslangic < 2  # beklemeden: uçuşta istek yoktu
+
+    def test_kapanis_basladiktan_sonra_kilit_acilisi_hicbir_sey_yazmadan_reddedilir(
+        self, kilitli: None
+    ) -> None:
+        """Kapanış işareti tek yönlüdür: sonra gelen kilit açılışı oturum açmaz, iz yazmaz."""
+        assert kapanista_kilitle() is False
+        once = AuditTrail.objects.count()
+
+        with pytest.raises(app_password.ProgramClosing, match="Program kapanıyor"):
+            app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
+
+        assert OTURUM.acik_mi() is False and crypto.is_unlocked() is False
+        assert AuditTrail.objects.count() == once
 
     def test_masaustu_kancalarinin_sifirlanmasi_kapanis_kilidini_dusurmez(self) -> None:
         masaustu_kanca._reset_for_tests()

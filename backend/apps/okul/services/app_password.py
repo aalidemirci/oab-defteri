@@ -111,6 +111,31 @@ tanıtıcısıyla seçilir (`unlock_with_recovery` kimliği de tanıtıcıyı da
 Sahibine ilk girişte "parolanız … tarihinde kurtarma anahtarıyla yenilendi"
 bildirimi düşer (`reset_notice_pending`, `reset_kind`).
 
+DENETİM İZİ (tasarım §4.6.2, §4.4.3; plan F1b-1 alt commit c). Her veritabanı yazımı
+iz satırıyla AYNI işlemdedir (`apps.okul.denetim_izi`): ilk hesap `HESAP` + ilk kurtarma
+anahtarı için `KURTARMA` (+ okul kartına yazılan parmak izi), kilit açılışı `GIRIS`
+(geçici ya da süresi dolmuş parola o anda yenilendiyse önce `PAROLA`), kurtarma
+anahtarıyla açılış `KURTARMA` + `GIRIS`, kendi parolasını değiştirme `PAROLA`, kurtarma
+anahtarının yenilenmesi ve saklandığının doğrulanması `KURTARMA`. Bu satırlar o hesabındır: ilk hesap, kilit açılışı ve
+kurtarma oturum açılmadan yazılır, yazar açıkça verilir (`yazar_olarak`). Kilit
+açılışında DEK ve İA önce belleğe alınır, satırlar yazılır, oturum SONRA açılır;
+yazılamazsa anahtarlar düşer ve oturum açılmaz (iz yazılamazsa yazma yapılamaz). Girişte
+hesap mührü tutmazsa olay `BUTUNLUK` satırı olarak düşer (`SISTEM`; DEK sarmaldan
+açıldığı için İA çözülebilir), satıra dokunulmaz. Hatalı deneme sayacı ve askısı DEK
+istemeden, kilitliyken dosyaya yazılır; o an iz yazılamaz (kilitli kip yalnız kişisiz
+sistem olaylarını yazar, §4.6.3): askı `guvenlik.json`'da ve kilit ekranında görünür. İzi
+KALDIRILIRKEN düşer: sayacı ya da askıyı silen her program yöneticisi işlemi (askıdan
+çıkarma, parola sıfırlama, hesabın kapanması, sahipsiz sarmalın silinmesi) ve kapalı hesap
+sarmalının temizliği, önceki değerleri `guvenlik.sarmal` bölümünün `HESAP` satırına yazar
+(`sarmal_izi`; değer sıfırsa ve sarmal silinmiyorsa satır yok). Başarılı girişin sayacı
+sıfırlaması bu kuralın dışındadır: girişin izi `GIRIS` satırıdır.
+`guvenlik.json`'u değiştiren ve iz yazan işlemlerde sıra hep aynıdır: önce dosya kilidi,
+sonra veritabanı işlemi (`dosya_ve_iz_islemi`); iz satırı dosya yazımından önce eklenir,
+dosya yazılamazsa işlem geri sarılır. Kilit açılışında, hesap bütünlüğü denetimlerinden
+SONRA, denetim izi kendiliğinden doğrulanır (çapa, kilitli satırlar, son 200 satır; geri
+yükleme notu; tasarım §4.6.3) — bulgular `BUTUNLUK` satırı ve kart olur, girişi engellemez
+(`apps.okul.iz_dogrulama`, `_start_session`).
+
 Güvenlik dosyasını değiştiren işlemler süreç içi bir kilitle sıralanır: oku-
 değiştir-yaz arasına başka bir yazım girip onu ezmesin.
 
@@ -133,7 +158,8 @@ import sqlite3
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, TypeVar
@@ -155,21 +181,29 @@ from desktop.backup_crypto import (
 from django.apps import apps as django_apps
 from django.conf import settings
 from django.db import DatabaseError, connection, models, transaction
-from django.db.models.functions import Cast
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 
+from apps.okul import denetim_izi, iz_dogrulama
 from apps.okul.models import (
     Account,
     AccountRole,
     AccountStatus,
+    AuditAction,
     AuditKey,
     Personnel,
     ResetKind,
     SchoolConfig,
     Student,
 )
-from apps.okul.oturum import OTURUM, OturumHesabi
+from apps.okul.oturum import (
+    IZ_KIP_KILIDI,
+    OTURUM,
+    OturumHesabi,
+    Yazar,
+    sistem_olarak,
+    yazar_olarak,
+)
 from apps.okul.services import hesap_kurallari
 from shared import crypto, kanonik
 from shared.exceptions import PASSWORD_REQUIRED_MESSAGE
@@ -205,6 +239,49 @@ STATE_ARCHIVE_PREFIX = "guvenlik-arsiv-"
 # Güvenlik dosyasını oku-değiştir-yaz işlemlerinin süreç içi sırası (modül başlığı).
 _state_lock = threading.RLock()
 
+
+@contextmanager
+def dosya_ve_iz_islemi() -> Iterator[None]:
+    """`guvenlik.json` yazımı ile iz satırı birlikte: önce dosya kilidi, sonra veritabanı işlemi.
+
+    Sıra her yerde aynıdır (kilitlenme olmasın): dosya kilidini tutan iş veritabanının
+    yazma kilidini bekleyebilir, tersi olmaz. İçeride iz satırı dosya yazımından ÖNCE
+    eklenir; dosya yazımı hata verirse işlem geri sarılır, iz yapılmamış işi anlatmaz.
+    """
+    with _state_lock, transaction.atomic():
+        yield
+
+
+def sarmal_izi(hesap_id: object, *, silindi: bool = False, her_zaman: bool = False) -> bool:
+    """Sarmalın hatalı deneme sayacı ve askısı kalkarken `guvenlik.sarmal` `HESAP` satırı.
+
+    Sayaç ve askı kilitliyken, izsiz yazılır (modül başlığı "DENETİM İZİ"); izleri kalkarken
+    düşer. Önceki değerler `values`'a girer: sıfırlanırken `[önceki, 0 | false]`, sarmal
+    silinirken `[önceki, null]` ve alan adlarının başında `sarmal`. Değerler sıfırsa satır
+    yazılmaz; `her_zaman` doğruysa (silmenin kendisi olaydır: kapalı hesap sarmalının
+    temizliği, sahipsiz sarmal) yine yazılır. Yazar çağıranın bağlamıdır. Çağıranın işleminde,
+    `_state_lock` altında ve dosya yazımından ÖNCE çağrılır (`dosya_ve_iz_islemi`). Satır
+    yazıldıysa True.
+    """
+    hatali, askida = wrap_failure_state(hesap_id)
+    sonra: tuple[int | None, bool | None] = (None, None) if silindi else (0, False)
+    degisen = {
+        ad: [once, yeni]
+        for ad, once, yeni in (("hatali", hatali, sonra[0]), ("askida", askida, sonra[1]))
+        if once
+    }
+    if not degisen and not her_zaman:
+        return False
+    denetim_izi.olay(
+        AuditAction.HESAP,
+        model=denetim_izi.HESAP_SARMALI,
+        object_id=str(hesap_id),
+        changed_fields=(["sarmal"] if silindi else []) + list(degisen),
+        values=degisen,
+    )
+    return True
+
+
 # Kurtarma anahtarı: 20 rastgele bayt → base32 (32 karakter) → 8 dörtlü grup.
 RECOVERY_KEY_BYTES = 20
 RECOVERY_GROUP_SIZE = 4
@@ -216,8 +293,9 @@ _RECOVERY_FIXUPS = str.maketrans({"0": "O", "1": "I", "8": "B"})
 #: (`frontend/src/modules/guvenlik/kurtarma.ts`).
 _RECOVERY_TURKISH_I = str.maketrans({"İ": "I", "ı": "I"})
 
-#: İz anahtarının (İA) uzunluğu; DEK'ten türemez, kurulumda ayrı üretilir (§4.6.3).
-AUDIT_KEY_BYTES = 32
+#: İz anahtarının (İA) uzunluğu; DEK'ten türemez, kurulumda ayrı üretilir (§4.6.3). Tek
+#: kaynak denetim izi yazıcısıdır (çözülen anahtarın uzunluğunu o denetler).
+AUDIT_KEY_BYTES = denetim_izi.IZ_ANAHTARI_BAYT
 
 # Art arda yanlış denemede uygulanan gecikme (saniye). Son değer tavandır. Hesap
 # başına sayaç `guvenlik.json`'dadır; kurtarma ve geri yükleme denemeleri süreç
@@ -274,6 +352,8 @@ _RECOVERY_ONLY_ADMIN_MESSAGE = (
     "Kurtarma anahtarıyla yalnız var olan bir program yöneticisi hesabının parolası yenilenir."
 )
 _RENEW_ONLY_ADMIN_MESSAGE = "Kurtarma anahtarını yalnız program yöneticisi yeniler."
+#: Düzenli kapanış başladıktan sonra gelen kilit açılışı (`ProgramClosing`; sözlük §4.2).
+PROGRAM_CLOSING_MESSAGE = "Program kapanıyor; kilit açılmadı."
 RESET_NOT_ALLOWED_MESSAGE = (
     "Güvenlik dosyası sıfırlanamaz: bu yol yalnız hiç kişi kaydı girilmemiş ve kayıtların "
     "anahtarı henüz veritabanına işlenmemiş bir kurulumda, güvenlik dosyası okunamıyorken "
@@ -338,6 +418,10 @@ class PasswordRenewalRequired(UnlockRefused):
 
     code = "parola_yenilenmeli"
     status_code = 409
+
+
+class ProgramClosing(AppPasswordError):
+    """Düzenli kapanış başladı: kilit açılışı hiçbir şey yazmadan reddedilir (`_start_session`)."""
 
 
 class PasswordRequired(crypto.KeyMissingError):
@@ -823,9 +907,13 @@ def protected_field_labels() -> list[str]:
 
 
 def _write_fingerprint(value: str) -> None:
-    config, _ = SchoolConfig.objects.get_or_create(pk=SchoolConfig.SINGLETON_PK)
+    """Parmak izini okul kartına yazar ve iz satırını ekler (çağıranın işleminde; `enable`)."""
+    config, olustu = SchoolConfig.objects.get_or_create(pk=SchoolConfig.SINGLETON_PK)
+    onceki = None if olustu else denetim_izi.anlik(config)
     config.app_password_hash = value
     config.save(update_fields=["app_password_hash", "updated_at"])
+    eylem = AuditAction.OLUSTUR if olustu else AuditAction.GUNCELLE
+    denetim_izi.kayit(eylem, config, onceki=onceki)
 
 
 def _stored_fingerprint() -> str:
@@ -1276,6 +1364,38 @@ def _recovery_account(hesap: object) -> Account | None:
 
 
 # ---------------------------------------------------------------------------
+# Kurtarma bölümünün iz satırı
+# ---------------------------------------------------------------------------
+def _kimlik_degeri(deger: object) -> int | str | None:
+    """Kurtarma bölümünün `no`/`tarih` değeri izdeki biçimiyle; başka tür izlenmez (None)."""
+    if isinstance(deger, bool) or not isinstance(deger, int | str):
+        return None
+    return deger
+
+
+def _kurtarma_izi(eski: object, yeni: dict[str, Any]) -> None:
+    """Yeni kurtarma anahtarının `KURTARMA` satırı (çağıranın işleminde; tasarım §4.4.4).
+
+    Satır yalnız anahtarın kimliğini (no, üretim günü; TK10) değer olarak taşır; tuz,
+    sarmal ve doğrulama damgası yalnız adlarıyla görünür. Belgenin basımı iz yazmaz
+    (plan F1b-1: birlik evrakı değildir, tasarım §9.7).
+    """
+    onceki = eski if isinstance(eski, dict) else {}
+    degisen = sorted(ad for ad in {*onceki, *yeni} if onceki.get(ad) != yeni.get(ad))
+    denetim_izi.olay(
+        AuditAction.KURTARMA,
+        model=denetim_izi.KURTARMA_ANAHTARI,
+        object_id=str(_kimlik_degeri(yeni.get("no"))),
+        changed_fields=degisen,
+        values={
+            ad: [_kimlik_degeri(onceki.get(ad)), _kimlik_degeri(yeni.get(ad))]
+            for ad in ("no", "tarih")
+            if ad in degisen
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
 # İlk hesap (kurulum sihirbazının 1. adımı)
 # ---------------------------------------------------------------------------
 def _require_first_setup() -> None:
@@ -1323,7 +1443,9 @@ def enable(*, tanitici: str, display_name: str, password: str) -> str:
     SIRA (plan F1b-1; modül başlığı): (1) `guvenlik.json` `gecis: "KURULUM"` ile;
     yedek açık anahtarı ve `pre-parola` yedeği; (2) TEK veritabanı işlemi: mühürlü
     `Account` (`yonetici`, `ACIK`), DEK'le şifreli ilk iz anahtarı (`AuditKey`; İA
-    DEK'ten türemez, ayrı üretilir) ve parmak izi; (3) damga kalkar. Oturum bu
+    DEK'ten türemez, ayrı üretilir), parmak izi ve zincirin ilk satırları (`HESAP`,
+    ilk kurtarma anahtarı için `KURTARMA`, okul kartının yazımı; yazar bu hesap);
+    (3) damga kalkar. Oturum bu
     hesapla açılır (`OTURUM.ac`; DEK ve İA bellekte). Kurulumda boşta kilit yoktur
     (tasarım §13 D15): kurtarma anahtarı ekrandayken oturum kendiliğinden kapanmaz.
 
@@ -1386,11 +1508,15 @@ def enable(*, tanitici: str, display_name: str, password: str) -> str:
             _geri_al()
             raise
 
-        # (2) TEK veritabanı işlemi. Şifreli alanlar (ad-soyad, iz anahtarı) için DEK
-        # belleğe alınır; işlem düşerse geri bırakılır.
+        # (2) TEK veritabanı işlemi. Şifreli alanlar (ad-soyad, iz anahtarı) ve içerik
+        # MAC'i için DEK ve İA belleğe alınır; işlem düşerse geri bırakılır. İlk iz
+        # satırları (zincirin başı) bu hesabındır (plan F1b-1 "Denetim izi").
         crypto.load_key(veri_anahtari, audit_key=iz_anahtari)
         try:
-            with transaction.atomic():
+            with (
+                yazar_olarak(Yazar(hesap_id=str(hesap_id), rol=AccountRole.YONETICI.value)),
+                transaction.atomic(),
+            ):
                 simdi = timezone.now()
                 hesap = Account(
                     id=hesap_id,
@@ -1408,6 +1534,8 @@ def enable(*, tanitici: str, display_name: str, password: str) -> str:
                     valid_from_seq=1,
                     created_at=simdi,
                 )
+                denetim_izi.kayit(AuditAction.HESAP, hesap, onceki=None)
+                _kurtarma_izi(None, state["kurtarma"])
                 _write_fingerprint(crypto.key_fingerprint(veri_anahtari))
         except Exception:
             _geri_al()
@@ -1450,25 +1578,52 @@ def _check_fingerprint(data_key: bytes) -> None:
         raise TwoStoreMismatch(_FOREIGN_DB_MESSAGE)
 
 
-def _sealed_account(hesap_id: object, data_key: bytes) -> Account:
+def _sealed_account(hesap_id: object, data_key: bytes, *, giris: bool = False) -> Account:
     """Satırı okur ve mührünü DEK'le doğrular (DEK belleğe alınmadan). Satıra dokunmaz.
 
-    Satır yoksa `TwoStoreMismatch`, mühür tutmazsa `AccountSealMismatch` (olay günlüğe;
-    denetim izine yazımı alt commit (c)'de).
+    Satır yoksa `TwoStoreMismatch`, mühür tutmazsa `AccountSealMismatch`. Girişte
+    (`giris`) mühür tutmazsa olay ayrıca denetim izine `BUTUNLUK` satırı olarak düşer
+    (`_muhur_bozuk_izi`; tasarım §4.6.1 kural 1, tehdit 19).
     """
     hesap = account_by_id(hesap_id)
     if hesap is None:
         raise TwoStoreMismatch(_NO_ROW_MESSAGE)
     if not hesap.seal_matches(data_key):
         logger.warning("Hesap mührü tutmadı; giriş reddedildi, satıra dokunulmadı (%s).", hesap_id)
+        if giris:
+            _muhur_bozuk_izi(hesap, data_key)
         raise AccountSealMismatch(_SEAL_MISMATCH_MESSAGE)
     return hesap
+
+
+def _muhur_bozuk_izi(hesap: Account, data_key: bytes) -> None:
+    """Girişte mühür tutmadı: `BUTUNLUK` satırı (`SISTEM`), satıra dokunulmadan (§4.6.1 kural 1).
+
+    DEK sarmaldan açıldığı için İA çözülebilir; satır oturum açılmadan, o DEK'ten çözülen
+    İA ile yazılır (iz bellekteki anahtarı beklemez). Aktör `SISTEM`'dir: mührü tutmayan
+    satırın hesabı kanıtlanmış bir yazar değildir. Satır kaydın kimliğini ve mühür
+    alanının adını taşır; program yöneticisinin panosundaki kart bu satırdan okunur.
+    Yazılamazsa (İA çözülemiyor, veritabanı yazılamıyor) giriş yine reddedilir, olay
+    günlüğe düşer.
+    """
+    try:
+        anahtar = denetim_izi.anahtari_coz(data_key)
+        with sistem_olarak(), transaction.atomic():
+            denetim_izi.olay(
+                AuditAction.BUTUNLUK,
+                model=denetim_izi.model_etiketi(Account),
+                object_id=str(hesap.id),
+                changed_fields=["seal"],
+                anahtar=anahtar,
+            )
+    except Exception:  # noqa: BLE001 — giriş zaten reddediliyor; iz yazılamadığı günlüğe düşer
+        logger.exception("Hesap mührünün tutmadığı denetim izine yazılamadı.")
 
 
 def _open_account_for_login(hesap_id: object, data_key: bytes) -> Account:
     """İki depo kuralının veritabanı yarısı: parmak izi, satır, mühür, durum (§4.6.1 kural 1)."""
     _check_fingerprint(data_key)
-    hesap = _sealed_account(hesap_id, data_key)
+    hesap = _sealed_account(hesap_id, data_key, giris=True)
     if hesap.status == AccountStatus.ASKIDA:
         raise AccountSuspended(_SUSPENDED_MESSAGE)
     if hesap.status not in (AccountStatus.ACIK, AccountStatus.PAROLA_YENILENMELI):
@@ -1476,28 +1631,17 @@ def _open_account_for_login(hesap_id: object, data_key: bytes) -> Account:
     return hesap
 
 
-def _decrypt_audit_key(data_key: bytes) -> bytes:
+def _decrypt_audit_key(data_key: bytes) -> denetim_izi.AcikAnahtar:
     """Etkin iz anahtarını aday DEK'le çözer (DEK belleğe alınmadan; tasarım §4.6.3).
 
-    Ham sütun okunur (`Cast` alanın `from_db_value`'sunu atlar): bellekte başka bir
-    anahtar yüklüyken bile yalnız aday DEK denenir. İA yoksa ya da çözülemezse
-    `AuditKeyUnreadable`: iz yazılamazsa yazma yapılamaz (hesap bütünlüğü).
+    Çözüm `denetim_izi.anahtari_coz`'dadır (yazıcı aynı kuralla doğrular). İA yoksa ya
+    da çözülemezse `AuditKeyUnreadable`: iz yazılamazsa yazma yapılamaz (hesap
+    bütünlüğü), giriş açılmaz.
     """
-    token = (
-        AuditKey.objects.filter(retired_at__isnull=True)
-        .order_by("-valid_from_seq")
-        .values_list(Cast("key", output_field=models.TextField()), flat=True)
-        .first()
-    )
-    if not token:
-        raise AuditKeyUnreadable(_AUDIT_KEY_MESSAGE)
     try:
-        anahtar = base64.b64decode(crypto.decrypt_with(data_key, str(token)), validate=True)
-    except Exception as exc:  # noqa: BLE001 — InvalidToken, biçim ve base64 hataları aynı ret
+        return denetim_izi.anahtari_coz(data_key)
+    except denetim_izi.IzAnahtariOkunamadi as exc:
         raise AuditKeyUnreadable(_AUDIT_KEY_MESSAGE) from exc
-    if len(anahtar) != AUDIT_KEY_BYTES:
-        raise AuditKeyUnreadable(_AUDIT_KEY_MESSAGE)
-    return anahtar
 
 
 def _replace_wrap(
@@ -1554,6 +1698,14 @@ def _cleanup_closed_wraps(data_key: bytes) -> None:
 
     Dosya hatası (`OSError`; ör. virüs tarayıcısının tuttuğu arşiv) girişi
     durdurmaz: günlüğe düşer, temizlik bir sonraki kilit açılışında yinelenir.
+
+    DENETİM İZİ: silinen her sarmal için `guvenlik.sarmal` `HESAP` satırı (`sarmal_izi`;
+    sarmal yalnız arşivde kalmışsa da), yazar `SISTEM` (programın kendi düzeltmesi; iki depo
+    karşılaştırmasının durum düzeltmesi gibi). Kilit açılışının işleminin EN SONUNDA, bir
+    kayıt noktasında (`savepoint`) koşar (`_start_session`): satırlar dosyadan önce eklenir;
+    ana dosya yazılamazsa yalnız bu satırlar geri alınır, giriş sürer. Sarmal ana dosyadan
+    silinip yalnız bir arşiv kopyası temizlenemediyse satırlar kalır (sarmal artık kilit
+    açmaz; kalan kopyayı sonraki açılış siler ve yeniden yazar).
     """
     with _state_lock:
         state = read_state()
@@ -1566,11 +1718,23 @@ def _cleanup_closed_wraps(data_key: bytes) -> None:
             if hesap.seal_matches(data_key)
         }
         try:
-            if silinecek:
-                _remove_wraps(silinecek)
-                logger.info("Kapalı hesapların kalan sarmalı silindi (%d).", len(silinecek))
-            else:
+            if not silinecek:
                 _remove_leftover_temps()
+                return
+            with sistem_olarak(), transaction.atomic():
+                for kimlik in sorted(silinecek):
+                    sarmal_izi(kimlik, silindi=True, her_zaman=True)
+                try:
+                    _remove_wraps(silinecek)
+                except OSError:
+                    if silinecek & set(wrap_ids()):
+                        raise  # ana dosya yazılmadı: satırlar da geri alınır
+                    logger.warning(
+                        "Kapalı hesapların sarmalı güvenlik dosyasından silindi; bazı arşiv "
+                        "kopyaları temizlenemedi, bir sonraki kilit açılışında yinelenecek.",
+                        exc_info=True,
+                    )
+            logger.info("Kapalı hesapların kalan sarmalı silindi (%d).", len(silinecek))
         except OSError:
             logger.warning(
                 "Kapalı hesap sarmallarının temizliği tamamlanamadı; bir sonraki kilit "
@@ -1579,23 +1743,91 @@ def _cleanup_closed_wraps(data_key: bytes) -> None:
             )
 
 
-def _start_session(hesap: Account, data_key: bytes, audit_key: bytes) -> Account:
-    """Bütün denetimlerden SONRA: yedek anahtarı, temizlik, sayaç, son giriş; sonra oturum.
+def _start_session(
+    hesap: Account,
+    data_key: bytes,
+    anahtar: denetim_izi.AcikAnahtar,
+    *,
+    giris_oncesi: Callable[[Account], None] | None = None,
+    yeni_sarmal: Callable[[], None] | None = None,
+) -> Account:
+    """Bütün denetimlerden SONRA: yedek anahtarı, sayaç; iz satırları ve temizlik; sonra oturum.
 
-    Oturum en sonda açılır (`OTURUM.ac`: DEK ve İA hesapla aynı anda belleğe alınır).
-    Önceki adımlar DEK'i açıkça alır, bellekte olmasını beklemez: biri düşerse oturum
-    açılmamış ve DEK belleğe alınmamış olur.
+    Baştan sona `IZ_KIP_KILIDI` tutulur (kilitli kip yazıcısı ve bekleyen bir kilidin satırı ile
+    çapası araya girmesin). İz satırları içerik MAC'i için kaydın çözülmüş değerini ister: DEK ve
+    İA önce belleğe alınır (`crypto.load_key`). Sonra tasarım §4.4.3 "Kilit açılışında sıra"nın
+    kalan adımları:
+
+    1. çapa, kilitli satırlar ve son 200 satır doğrulanır (`iz_dogrulama.hazirla`; yalnız
+       okur, girişi ENGELLEMEZ);
+    2. TEK işlemde: girişten önceki yazım (`giris_oncesi`: kilit açılışında parola yenileme
+       `PAROLA`, kurtarmada `KURTARMA`), bulgu varsa `BUTUNLUK` (`SISTEM`), geri yükleme
+       notu varsa `GERI_YUKLEME` + bekleyen sistem olayları + iki depo karşılaştırması
+       (`iz_dogrulama.yaz`), son giriş anı ve `GIRIS` satırı; yazar bu hesaptır (plan F1b-1
+       "Denetim izi"); işlemin EN SONUNDA, hâlâ işlemin içinde, yeni parolanın sarmalı
+       `guvenlik.json`'a yazılır (`yeni_sarmal`; modül başlığı "DENETİM İZİ": iz satırı dosya
+       yazımından önce, dosya yazılamazsa işlem geri sarılır) ve kapalı hesapların kalan
+       sarmalları `SISTEM` satırlarıyla silinir (`_cleanup_closed_wraps`; kendi kayıt
+       noktasında, dosya hatası girişi durdurmaz). İkisi de dosyaya yazar: işlemin sonunda
+       olmaları, sonraki bir adım düşüp satırlar geri alındığında dosyanın izsiz değişmiş
+       kalmaması içindir;
+    3. işlem commit edildikten sonra not silinir, gerekiyorsa çapa yenilenir
+       (`iz_dogrulama.tamamla`); oturum EN SONDA açılır (`OTURUM.ac`).
+
+    İşlem düşerse oturum açılmaz ve bu çağrının belleğe aldığı anahtarlar düşer (`OTURUM.kapat`):
+    iz yazılamazsa yazma yapılamaz; not yerinde kalır, sonraki açılış yeniden işler. Çağrıdan
+    ÖNCE süren bir oturum (açık ya da uçuştakileri bekleyen bir kilit; `OTURUM.suruyor_mu`)
+    varsa anahtarlar onundur (aynı DEK ve İA): düşen giriş ona dokunmaz, nesli değiştirmez.
+    Bekleyen kilidin `KILIT` satırı ve çapası böylece yazılır, uçuştaki iş de DEK'siz kalmaz
+    (`apps.okul.oturum` modül başlığı "KİLİDİN İZİ"). Düzenli kapanış başladıysa
+    (`OTURUM.kapaniyor_mu`) açılış hiçbir şey yazmadan reddedilir (`ProgramClosing`): kapanış
+    kilidi bu kilidin altında açılan oturumu görmeden süreç bitmesin. Sarmal ancak işlemin bütün
+    satırlarından sonra yazıldığı için işlem düşen girişte parola DEĞİŞMEZ (kurtarma anahtarı
+    elinde olan biri parolayı izsiz ve bildirimsiz yenileyemez); süreç sarmal yazımıyla
+    commit arasında ölürse yeni parola geçerlidir, satır eskide kalır (`change_password` ile
+    aynı kesinti hâli). O ana dek ara katman oturumu kapalı görür; açık olmayan oturumun
+    istekleri 423 alır. Ertelenen gün işleri bugün saatlik denemesinde koşar (DEK artık
+    bellektedir; `masaustu_kanca`).
+
+    Kilit sırası `_state_lock` → `IZ_KIP_KILIDI` → veritabanı → oturum kilidi: dosya
+    kilidi en dışta (modül başlığı "DENETİM İZİ"; `dosya_ve_iz_islemi` ile aynı yön), ters
+    yönde alan yol yoktur.
     """
-    # replace=True: DEK bu noktada DB parmak izine ve hesabın mührüne karşı
-    # KANITLANDI — otorite dosya değil anahtardır. Bayat/uyumsuz yedekleme.json
-    # (ör. çapraz-DEK geri yükleme artığı) burada sessizce onarılır.
-    ensure_public_config(_data_dir(), data_key, replace=True)
-    _cleanup_closed_wraps(data_key)
-    _clear_failures(hesap.id)
-    # Son giriş mührün dışındadır (§4.6.1); yalnız bu sütun yazılır (şifreli ad yazılmaz).
-    hesap.last_login_at = timezone.now()
-    hesap.save(update_fields=["last_login_at"])
-    OTURUM.ac(OturumHesabi.hesaptan(hesap), veri_anahtari=data_key, iz_anahtari=audit_key)
+    with _state_lock, IZ_KIP_KILIDI:
+        if OTURUM.kapaniyor_mu():
+            raise ProgramClosing(PROGRAM_CLOSING_MESSAGE)
+        # replace=True: DEK bu noktada DB parmak izine ve hesabın mührüne karşı
+        # KANITLANDI — otorite dosya değil anahtardır. Bayat/uyumsuz yedekleme.json
+        # (ör. çapraz-DEK geri yükleme artığı) burada sessizce onarılır.
+        ensure_public_config(_data_dir(), data_key, replace=True)
+        _clear_failures(hesap.id)
+        oturum_hesabi = OturumHesabi.hesaptan(hesap)
+        sarmali_yazilacak = frozenset({str(hesap.id)}) if yeni_sarmal is not None else frozenset()
+        # Süren oturumun (açık ya da kilitlenmekte) anahtarları aynıdır: düşen giriş onlara
+        # dokunmaz (belge dizesi). `IZ_KIP_KILIDI` altında okunur: bekleyen kilit satırını ve
+        # çapasını bu kilidin altında yazar, arada oturum kapanmaz.
+        onceden_suruyordu = OTURUM.suruyor_mu()
+        crypto.load_key(data_key, audit_key=anahtar.ia)
+        try:
+            acilis = iz_dogrulama.hazirla(anahtar)
+            with yazar_olarak(Yazar.hesaptan(oturum_hesabi)), transaction.atomic():
+                if giris_oncesi is not None:
+                    giris_oncesi(hesap)
+                iz_dogrulama.yaz(acilis, anahtar=anahtar, sarmali_yazilacak=sarmali_yazilacak)
+                onceki = denetim_izi.anlik(hesap)
+                # Son giriş mührün dışındadır (§4.6.1); yalnız bu sütun yazılır.
+                hesap.last_login_at = timezone.now()
+                hesap.save(update_fields=["last_login_at"])
+                denetim_izi.kayit(AuditAction.GIRIS, hesap, onceki=onceki, anahtar=anahtar)
+                if yeni_sarmal is not None:
+                    yeni_sarmal()
+                _cleanup_closed_wraps(data_key)
+            iz_dogrulama.tamamla(acilis)
+            OTURUM.ac(oturum_hesabi, veri_anahtari=data_key, iz_anahtari=anahtar.ia)
+        except BaseException:
+            if not onceden_suruyordu:
+                OTURUM.kapat()
+            raise
     _reset_failures()
     return hesap
 
@@ -1605,17 +1837,20 @@ def unlock(*, hesap_id: object, password: str, new_password: str | None = None) 
     """Seçilen hesabın parolasıyla kilidi açar; oturumdaki hesabı döndürür.
 
     Sıra (modül başlığı, İKİ DEPO KURALI 1): askı → yalnız bu hesabın sarmalı
-    (Argon2id bir kez) → parmak izi, satır, mühür, durum → iz anahtarı → parola
-    yenileme gereği → kapalı hesap sarmalı temizliği, sayaç, son giriş → oturum açılır
-    (DEK ve İA belleğe; `OTURUM.ac`). Herhangi bir ret hâlinde DEK belleğe ALINMAZ ve
-    satıra dokunulmaz. Oturum açıkken çağrılırsa oturum bu hesaba geçer (parolayla
-    kanıtlanmış "Kilitle + aç"; `apps.okul.oturum` modül başlığı).
+    (Argon2id bir kez) → parmak izi, satır, mühür (tutmazsa `BUTUNLUK` satırı), durum →
+    iz anahtarı → parola yenileme gereği → sayaç → tek işlemde son giriş ve `GIRIS` satırı,
+    sonunda kapalı hesap sarmalı temizliği → oturum açılır (`_start_session`). Herhangi bir
+    ret hâlinde DEK belleğe ALINMAZ ve satıra dokunulmaz. Oturum açıkken çağrılırsa
+    oturum bu hesaba geçer (parolayla kanıtlanmış "Kilitle + aç"; `apps.okul.oturum`
+    modül başlığı).
 
     Hesap `PAROLA_YENILENMELI` ise ya da parolası 180 günden eskiyse
     `new_password` zorunludur (yoksa `PasswordRenewalRequired`, 409
     `parola_yenilenmeli`); yeni parola politikaya uymalı ve eskisinden farklı
-    olmalıdır. Önce sarmal (arşiv kopyası önce), sonra satır (`ACIK`, değişim anı,
-    mühür) yazılır: arada kesilirse yeni parola geçerlidir ve bir sonraki girişte
+    olmalıdır. Satır (`ACIK`, değişim anı, mühür) ve `PAROLA` satırı `GIRIS` ile aynı
+    işlemde, sarmal (arşiv kopyası önce) o işlemin EN SONUNDA yazılır (`_start_session`
+    `yeni_sarmal`): işlem düşerse parola değişmez, satır `PAROLA_YENILENMELI` kalır; süreç
+    sarmal yazımıyla commit arasında ölürse yeni parola geçerlidir ve bir sonraki girişte
     yenileme yeniden istenir. Gerek yokken verilen `new_password` yok sayılır.
     """
     resolve_interrupted_setup()
@@ -1630,13 +1865,26 @@ def unlock(*, hesap_id: object, password: str, new_password: str | None = None) 
         raise _failure_outcome(hesap_id)
     hesap = _open_account_for_login(hesap_id, veri_anahtari)
     iz_anahtari = _decrypt_audit_key(veri_anahtari)
+    giris_oncesi: Callable[[Account], None] | None = None
+    yeni_sarmal: Callable[[], None] | None = None
     if hesap.status == AccountStatus.PAROLA_YENILENMELI or _password_expired(hesap):
         if not new_password:
             raise PasswordRenewalRequired(_RENEWAL_REQUIRED_MESSAGE)
         yeni = validate_password(new_password)
         if yeni == password:
             raise AppPasswordError(_SAME_PASSWORD_MESSAGE)
-        with _state_lock:
+
+        def _parolayi_yenile(satir: Account) -> None:
+            """Satır yazımı ve `PAROLA` satırı `GIRIS` ile aynı işlemde (`_start_session`)."""
+            onceki = denetim_izi.anlik(satir)
+            satir.status = AccountStatus.ACIK
+            satir.password_changed_at = timezone.now()
+            satir.seal = satir.compute_seal(veri_anahtari)
+            satir.save(update_fields=["status", "password_changed_at", "seal"])
+            denetim_izi.kayit(AuditAction.PAROLA, satir, onceki=onceki, anahtar=iz_anahtari)
+
+        def _sarmali_yaz() -> None:
+            """Yeni parolanın sarmalı: işlemin sonunda, satırlardan sonra (`_start_session`)."""
             _replace_wrap(
                 _require_state(),
                 veri_anahtari,
@@ -1644,12 +1892,13 @@ def unlock(*, hesap_id: object, password: str, new_password: str | None = None) 
                 tanitici=hesap.login_name,
                 password=yeni,
             )
-        hesap.status = AccountStatus.ACIK
-        hesap.password_changed_at = timezone.now()
-        hesap.seal = hesap.compute_seal(veri_anahtari)
-        hesap.save(update_fields=["status", "password_changed_at", "seal"])
-        logger.info("Kilit açılışında parola yenilendi.")
-    _start_session(hesap, veri_anahtari, iz_anahtari)
+            logger.info("Kilit açılışında parola yenilendi.")
+
+        giris_oncesi, yeni_sarmal = _parolayi_yenile, _sarmali_yaz
+
+    _start_session(
+        hesap, veri_anahtari, iz_anahtari, giris_oncesi=giris_oncesi, yeni_sarmal=yeni_sarmal
+    )
     logger.info("Kilit açıldı.")
     return hesap
 
@@ -1703,10 +1952,13 @@ def change_password(*, hesap_id: object, current_password: str, new_password: st
 
     Yalnız açık oturumda ve o hesabın parolasıyla (plan F1b-1; ailede kilitliyken de
     açıktı ve ikinci bir kilit açma yoluydu; uç da artık kilit kapısından muaf
-    değildir). Yeni parola politikaya uymalı ve eskisinden farklı olmalıdır. Önce
-    sarmal (arşiv kopyası önce), sonra satır: `password_changed_at`,
-    `PAROLA_YENILENMELI` ise `ACIK` + yeni mühür. Mührü tutmayan satıra dokunulmaz. DEK
-    ve oturum değişmez (yeni açılış sayılmaz; boşta sayacı da sıfırlanmaz).
+    değildir). Yeni parola politikaya uymalı ve eskisinden farklı olmalıdır. Parola
+    doğrulandıktan sonra TEK veritabanı işleminde satır (`password_changed_at`,
+    `PAROLA_YENILENMELI` ise `ACIK` + yeni mühür) ve `PAROLA` iz satırı, EN SONDA sarmal
+    (arşiv kopyası önce) yazılır: dosya yazılamazsa satır ve iz satırı geri alınır; süreç
+    dosya yazımıyla işlemin sonu arasında ölürse yeni parola geçerlidir, satır eskide
+    kalır (aile sırasının kesinti hâliyle aynı). Mührü tutmayan satıra dokunulmaz. DEK ve
+    oturum değişmez (yeni açılış sayılmaz; boşta sayacı da sıfırlanmaz).
     """
     if not OTURUM.acik_mi():
         raise AppPasswordError(_LOCKED_MESSAGE)
@@ -1714,23 +1966,28 @@ def change_password(*, hesap_id: object, current_password: str, new_password: st
     if yeni == current_password:
         raise AppPasswordError(_SAME_PASSWORD_MESSAGE)
     with _state_lock:
+        # Parola işlemin DIŞINDA doğrulanır: yanlış parolanın gecikmesi veritabanının yazma
+        # kilidini tutmasın. Sıra yine dosya kilidi → veritabanı işlemidir.
         veri_anahtari = _check_session_password(_require_state(), hesap_id, current_password)
-        hesap = _sealed_account(hesap_id, veri_anahtari)
-        # Doğrulama sayacı sıfırlayıp dosyayı yazmış olabilir: güncel hâl yeniden okunur.
-        _replace_wrap(
-            _require_state(),
-            veri_anahtari,
-            hesap_id=hesap.id,
-            tanitici=hesap.login_name,
-            password=yeni,
-        )
-    hesap.password_changed_at = timezone.now()
-    alanlar = ["password_changed_at"]
-    if hesap.status == AccountStatus.PAROLA_YENILENMELI:
-        hesap.status = AccountStatus.ACIK
-        hesap.seal = hesap.compute_seal(veri_anahtari)
-        alanlar += ["status", "seal"]
-    hesap.save(update_fields=alanlar)
+        with transaction.atomic():
+            hesap = _sealed_account(hesap_id, veri_anahtari)
+            onceki = denetim_izi.anlik(hesap)
+            hesap.password_changed_at = timezone.now()
+            alanlar = ["password_changed_at"]
+            if hesap.status == AccountStatus.PAROLA_YENILENMELI:
+                hesap.status = AccountStatus.ACIK
+                hesap.seal = hesap.compute_seal(veri_anahtari)
+                alanlar += ["status", "seal"]
+            hesap.save(update_fields=alanlar)
+            denetim_izi.kayit(AuditAction.PAROLA, hesap, onceki=onceki)
+            # Doğrulama sayacı sıfırlayıp dosyayı yazmış olabilir: güncel hâl yeniden okunur.
+            _replace_wrap(
+                _require_state(),
+                veri_anahtari,
+                hesap_id=hesap.id,
+                tanitici=hesap.login_name,
+                password=yeni,
+            )
     logger.info("Hesap parolası değiştirildi.")
 
 
@@ -1789,6 +2046,9 @@ def confirm_recovery_key(recovery_key: str) -> None:
     arada bir yenileme olsaydı eski anahtarın damgası yeni sarmala yazılırdı.
     Damga yapı değildir, arşivlenmez; fikirdeştir (yeniden doğrulamada zaman
     güncellenir).
+
+    Damga oturumdaki hesabın `KURTARMA` satırıdır (anahtarın no'su kimlik; damga yalnız
+    alan adıyla, `dogrulandi`): satır dosyadan ÖNCE, aynı işlemde (`dosya_ve_iz_islemi`).
     """
     with _state_lock:
         state = _require_state()
@@ -1796,8 +2056,11 @@ def confirm_recovery_key(recovery_key: str) -> None:
         bolum = state.get("kurtarma")
         if not isinstance(bolum, dict):  # pragma: no cover — sarmal açıldıysa bölüm vardır
             raise AppPasswordError("Güvenlik dosyasının kurtarma bölümü okunamadı.")
+        eski = dict(bolum)
         bolum[RECOVERY_CONFIRMED_FIELD] = timezone.localtime().isoformat(timespec="seconds")
-        _write_state(state)
+        with dosya_ve_iz_islemi():
+            _kurtarma_izi(eski, bolum)
+            _write_state(state)
     logger.info("Kurtarma anahtarının saklandığı doğrulandı.")
 
 
@@ -1830,7 +2093,10 @@ def renew_recovery_key(*, hesap_id: object, password: str) -> str:
         state["kurtarma"] = _recovery_section(
             veri_anahtari, recovery_key=yeni_anahtar, no=no, kdf=_kdf_of(state)
         )
-        _write_structural(state)
+        # `KURTARMA` satırı dosyadan ÖNCE, aynı işlemde: dosya yazılamazsa satır geri alınır.
+        with dosya_ve_iz_islemi():
+            _kurtarma_izi(eski, state["kurtarma"])
+            _write_structural(state)
     logger.info("Kurtarma anahtarı yenilendi (no %d).", no)
     return yeni_anahtar
 
@@ -1850,6 +2116,19 @@ def unlock_with_recovery(*, recovery_key: str, hesap_id: object, new_password: s
     (tehdit 12 deseni). Kurtarma sarmalı DEĞİŞMEZ: elindeki kâğıt geçerli kalır.
 
     Kurtarma anahtarının yanlış denemeleri süreç içi gecikmeye tabidir (aile).
+
+    DENETİM İZİ (tasarım §4.4.3 "hangi hesap, yeni mi"): satır yazımı `KURTARMA` satırıdır
+    (kayıt kimliği hangi hesap olduğunu; değerler `reset_kind`, durum ve tarihleri; var
+    olan hesapta açılış alanları değişmez, yeni hesabı açan kol F4'te `OLUSTUR` değerleri
+    taşır), ardından aynı işlemde `GIRIS` (`_start_session`). İkisi de o hesabındır.
+    Mühür tutmazsa `BUTUNLUK` satırı düşer, giriş açılmaz.
+
+    SIRA (modül başlığı "DENETİM İZİ"): yeni parolanın sarmalı `KURTARMA` ve `GIRIS`
+    satırlarından SONRA, aynı işlemin en sonunda yazılır (`_start_session` `yeni_sarmal`).
+    İşlem düşerse (iz yazılamadı, veritabanı kilitli, disk dolu) parola DEĞİŞMEZ: eski parola
+    açmayı sürdürür, kurtarma anahtarını elinde tutan biri parolayı izsiz ve bildirimsiz
+    yenileyemez (tasarım §4.3 tehdit 10 ve 12). Süreç sarmal yazımıyla commit arasında
+    ölürse yeni parola geçerlidir, satır eskide kalır (`change_password` ile aynı kesinti).
     """
     resolve_interrupted_setup()
     parola = validate_password(new_password)
@@ -1862,31 +2141,50 @@ def unlock_with_recovery(*, recovery_key: str, hesap_id: object, new_password: s
         state = _require_state()
         veri_anahtari = _unwrap_with_recovery(state, recovery_key)
         _check_fingerprint(veri_anahtari)
-        hesap = _sealed_account(hesap.id, veri_anahtari)
+        hesap = _sealed_account(hesap.id, veri_anahtari, giris=True)
         iz_anahtari = _decrypt_audit_key(veri_anahtari)
+
+    def _sarmali_yaz() -> None:
+        """Yeni parolanın sarmalı (yoksa eklenir): işlemin sonunda, satırlardan sonra.
+
+        Durum yeniden okunur: `_start_session` sayacı sıfırlamış olabilir; eski okunmuş durum
+        onu geri yazardı. Kapalı hesap sarmallarının temizliği bundan SONRA koşar.
+        """
         _replace_wrap(
-            state, veri_anahtari, hesap_id=hesap.id, tanitici=hesap.login_name, password=parola
+            _require_state(),
+            veri_anahtari,
+            hesap_id=hesap.id,
+            tanitici=hesap.login_name,
+            password=parola,
         )
-    simdi = timezone.now()
-    hesap.status = AccountStatus.ACIK
-    hesap.password_changed_at = simdi
-    hesap.reset_at = simdi
-    hesap.reset_by = None
-    hesap.reset_kind = ResetKind.KURTARMA
-    hesap.reset_notice_pending = True
-    hesap.seal = hesap.compute_seal(veri_anahtari)
-    hesap.save(
-        update_fields=[
-            "status",
-            "password_changed_at",
-            "reset_at",
-            "reset_by",
-            "reset_kind",
-            "reset_notice_pending",
-            "seal",
-        ]
+
+    def _kurtarma_yaz(satir: Account) -> None:
+        """Satır yazımı ve `KURTARMA` satırı `GIRIS` ile aynı işlemde (`_start_session`)."""
+        onceki = denetim_izi.anlik(satir)
+        simdi = timezone.now()
+        satir.status = AccountStatus.ACIK
+        satir.password_changed_at = simdi
+        satir.reset_at = simdi
+        satir.reset_by = None
+        satir.reset_kind = ResetKind.KURTARMA
+        satir.reset_notice_pending = True
+        satir.seal = satir.compute_seal(veri_anahtari)
+        satir.save(
+            update_fields=[
+                "status",
+                "password_changed_at",
+                "reset_at",
+                "reset_by",
+                "reset_kind",
+                "reset_notice_pending",
+                "seal",
+            ]
+        )
+        denetim_izi.kayit(AuditAction.KURTARMA, satir, onceki=onceki, anahtar=iz_anahtari)
+
+    _start_session(
+        hesap, veri_anahtari, iz_anahtari, giris_oncesi=_kurtarma_yaz, yeni_sarmal=_sarmali_yaz
     )
-    _start_session(hesap, veri_anahtari, iz_anahtari)
     logger.info("Kurtarma anahtarıyla giriş yapıldı; program yöneticisinin parolası yenilendi.")
     return hesap
 
@@ -1953,9 +2251,23 @@ def account_wraps() -> list[dict[str, Any]]:
 
 def wrap_is_suspended(hesap_id: object) -> bool:
     """Hesabın sarmalında hatalı deneme askısı var mı? (dosya yoksa ya da sarmal yoksa hayır)"""
+    return wrap_failure_state(hesap_id)[1]
+
+
+def wrap_failure_state(hesap_id: object) -> tuple[int, bool]:
+    """Sarmalın hatalı deneme sayacı ve askısı: `(hatali, askida)`; dosya ya da sarmal yoksa (0, False).
+
+    Sayacı ve askıyı kaldıran işlemlerin iz satırı önceki değerleri buradan alır (`sarmal_izi`).
+    """
     try:
         state = read_state()
     except AppPasswordError:
-        return False
+        return 0, False
     sarmal = _find_wrap(state, hesap_id) if state is not None else None
-    return bool(sarmal and sarmal.get("askida"))
+    if not sarmal:
+        return 0, False
+    try:
+        hatali = int(sarmal.get("hatali", 0))
+    except (TypeError, ValueError):
+        hatali = 0
+    return hatali, bool(sarmal.get("askida"))

@@ -55,6 +55,14 @@ kalıbından uyarlamış, mutabakatla genişletmişti; OAB'de tasarım §8.4):
   ardından kalıcı PREVIEWED izi yazılır. Ingest zincirine `transaction.on_commit`
   EKLENEMEZ.
 - Boş/çözülemeyen hücre mevcut veriyi SİLMEZ (import silmez ilkesi).
+- **Denetim izi** (tasarım §4.6.2; plan F1b-1 alt commit c): her kayıt yazımı aynı
+  işlemde KAYIT BAŞINA iz satırı yazar (`denetim_izi.degisiklik`): yeni öğrenci ve
+  personel `OLUSTUR`; ad, şube ya da üye türü değişikliği `GUNCELLE`; yeniden aktifleşme,
+  havuza giriş ve havuzdan çıkış `DURUM` (ikisi birden değiştiyse iki satır); koşunun
+  açılışı `OLUSTUR`, kapanışı `DURUM`; tohumlanan şube `OLUSTUR`. Değişmeyen kayıt
+  yazılmaz, satırı da yoktur. Önizlemenin satırları veriyle birlikte geri sarılır;
+  kalıcı PREVIEWED ve FAILED izleri kendi işlemlerinde `OLUSTUR` yazar. Kişi satırları
+  değer taşımaz (KVKK silme kümesi); dosya adı ve rapor yalnız alan adıyla görünür.
 """
 
 from __future__ import annotations
@@ -70,7 +78,15 @@ from django.db import transaction
 from django.utils import timezone
 from openpyxl.utils.exceptions import InvalidFileException
 
-from apps.okul import eokul, excel_ogrenci, excel_personel, name_match, normalize, selectors
+from apps.okul import (
+    denetim_izi,
+    eokul,
+    excel_ogrenci,
+    excel_personel,
+    name_match,
+    normalize,
+    selectors,
+)
 from apps.okul.excel_ogrenci import ColumnMapping, ParsedRow, ParserError
 from apps.okul.excel_personel import ParsedPersonnelRow, PersonnelColumnMapping
 from apps.okul.models import (
@@ -397,6 +413,7 @@ def _open_run(*, source_type: str, source_hash: str, file_name: str) -> tuple[Im
         source_type=source_type, file_hash=source_hash, status=ImportStatus.COMPLETED
     ).first()
     if existing is not None:
+        onceki = denetim_izi.anlik(existing)
         existing.status = ImportStatus.RUNNING
         existing.started_at = timezone.now()
         existing.finished_at = None
@@ -405,6 +422,7 @@ def _open_run(*, source_type: str, source_hash: str, file_name: str) -> tuple[Im
         existing.save(
             update_fields=["status", "started_at", "finished_at", "file_name", "updated_at"]
         )
+        denetim_izi.degisiklik(existing, onceki=onceki)
         return existing, True
     run = ImportRun.objects.create(
         source_type=source_type,
@@ -412,14 +430,17 @@ def _open_run(*, source_type: str, source_hash: str, file_name: str) -> tuple[Im
         file_hash=source_hash,
         status=ImportStatus.RUNNING,
     )
+    denetim_izi.degisiklik(run, onceki=None)
     return run, False
 
 
 def _close_run(run: ImportRun, report_dict: dict[str, Any]) -> None:
+    onceki = denetim_izi.anlik(run)
     run.status = ImportStatus.COMPLETED
     run.finished_at = timezone.now()
     run.report = report_dict
     run.save(update_fields=["status", "finished_at", "report", "updated_at"])
+    denetim_izi.degisiklik(run, onceki=onceki)
 
 
 # ---------------------------------------------------------------------------
@@ -565,6 +586,7 @@ def _process_student_row(row: ParsedRow, kosu: _StudentRun) -> None:
             reactivated = True
     if student is None:
         created = Student.objects.create(**fields, student_number=row.student_number)
+        denetim_izi.degisiklik(created, onceki=None)
         kosu.matched_ids.add(created.pk)
         report.created_students += 1
         impact.created += 1
@@ -578,8 +600,11 @@ def _process_student_row(row: ParsedRow, kosu: _StudentRun) -> None:
         havuzdan = persons.remove_from_leave_pool(student, save=False)
         yazilacak = [*changed, *(persons.POOL_FIELDS if havuzdan else ())]
         if yazilacak:
+            # Önceki hâl veritabanından okunur: bellekteki örnek yukarıda değişti.
+            onceki = denetim_izi.anlik(student)
             # Okul no yazılmaz: kör indeks zaten eşit (yalnız yazım farkı olabilir).
             student.save(update_fields=[*yazilacak, "updated_at"])
+            denetim_izi.degisiklik(student, onceki=onceki)
         if changed:
             report.updated_students += 1
             impact.updated += 1
@@ -679,11 +704,13 @@ def _ensure_class_sections() -> None:
         .values_list("class_level", "class_section")
     )
     for level, section in sorted(class_pairs):
-        ClassSection.objects.get_or_create(
+        sube, olustu = ClassSection.objects.get_or_create(
             school_year=year,
             class_level=level,
             class_section=section,
         )
+        if olustu:
+            denetim_izi.degisiklik(sube, onceki=None)
 
 
 # ---------------------------------------------------------------------------
@@ -832,6 +859,7 @@ def _process_personnel_row(row: ParsedPersonnelRow, kosu: _PersonnelRun) -> None
             last_name=row.last_name,
             member_kind=row.member_kind or MemberKind.TEACHER,
         )
+        denetim_izi.degisiklik(person, onceki=None)
         kosu.created.append((row, person))
         kosu.matched_ids.add(person.pk)
         report.created_personnel += 1
@@ -850,7 +878,10 @@ def _process_personnel_row(row: ParsedPersonnelRow, kosu: _PersonnelRun) -> None
     havuzdan = persons.remove_from_leave_pool(person, save=False)
     yazilacak = [*changed, *(persons.POOL_FIELDS if havuzdan else ())]
     if yazilacak:
+        # Önceki hâl veritabanından okunur: bellekteki örnek yukarıda değişti.
+        onceki = denetim_izi.anlik(person)
         person.save(update_fields=[*yazilacak, "updated_at"])
+        denetim_izi.degisiklik(person, onceki=onceki)
     if changed:
         report.updated_personnel += 1
         if reactivated:
@@ -933,7 +964,8 @@ def _student_entry(
     """Ortak giriş: ParserError'da kalıcı FAILED izi bırakır ve hatayı yükseltir.
 
     Ingest atomiktir — hata rollback'i RUNNING satırını da siler; FAILED izi bu
-    yüzden transaction DIŞINDA, burada yazılır (geçmiş görünümü boş kalmasın).
+    yüzden ingest işleminin DIŞINDA, kendi işleminde yazılır (geçmiş görünümü boş
+    kalmasın; iz satırı ile aynı işlemde).
     """
     try:
         grid = grid_supplier()
@@ -1015,11 +1047,13 @@ def _preview_personnel(
     return report
 
 
+@transaction.atomic
 def _record_preview(
     source_type: str, source_hash: str, file_name: str, report_dict: dict[str, Any]
 ) -> None:
-    """Kalıcı PREVIEWED izi (geçmiş görünümü) — rollback DIŞINDA yazılır; ad içermez."""
-    ImportRun.objects.create(
+    """Kalıcı PREVIEWED izi (geçmiş görünümü) — geri sarılan işlemin DIŞINDA, kendi
+    işleminde iz satırıyla yazılır; ad içermez."""
+    run = ImportRun.objects.create(
         source_type=source_type,
         file_name=file_name,
         file_hash=source_hash,
@@ -1027,11 +1061,14 @@ def _record_preview(
         finished_at=timezone.now(),
         report=report_dict,
     )
+    denetim_izi.degisiklik(run, onceki=None)
 
 
+@transaction.atomic
 def _record_failed(source_type: str, source_hash: str, file_name: str, error: Exception) -> None:
-    """Kalıcı FAILED izi. `error` metni yalnız yapısal bilgidir (sütun adları) — PII yok."""
-    ImportRun.objects.create(
+    """Kalıcı FAILED izi (kendi işleminde, iz satırıyla). `error` metni yalnız yapısal
+    bilgidir (sütun adları) — PII yok."""
+    run = ImportRun.objects.create(
         source_type=source_type,
         file_name=file_name,
         file_hash=source_hash,
@@ -1039,3 +1076,4 @@ def _record_failed(source_type: str, source_hash: str, file_name: str, error: Ex
         finished_at=timezone.now(),
         report={"error": str(error)},
     )
+    denetim_izi.degisiklik(run, onceki=None)

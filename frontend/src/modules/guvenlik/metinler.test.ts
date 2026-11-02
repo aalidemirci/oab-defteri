@@ -53,6 +53,28 @@ describe("güvenlik metinleri", () => {
     expect(sinirlar).toContain("Açık oturum, sahibinin imzasıdır.");
   });
 
+  it("dürüst sınır: her iş denetim izine yazılır (bugünkü istisnasıyla); iz değişikliği gösterir, önlemez", () => {
+    const sinir = (baslik: string) =>
+      metinler.DURUST_SINIRLAR.find((s) => s.baslik === baslik)?.metin ?? "";
+    // F1b alt commit c'den beri doğru: yazmalar oturumdaki hesabın adına denetim izinde.
+    const oturum = sinir("Açık oturum, sahibinin imzasıdır.");
+    expect(oturum).toMatch(/her iş o hesabın adına denetim izine yazılır/);
+    // Plan F1b-1: kişi silme ve birleştirme 5. adıma dek izsiz — metin bunu saklamaz.
+    expect(oturum).toMatch(/tek\s+istisna: öğrenci ve personelin sicilden silinmesi/);
+    // Geri yükleme ilk girişte, başlatan hesapla birlikte yazılır (kurtarma yolunda da).
+    expect(oturum).toMatch(
+      /Yedekten geri yükleme, ardından yapılan ilk girişte, onu başlatan\s+hesapla/,
+    );
+    // Tasarım §4.6.3 "Kalan risk": eski kopya + kilit işareti fark edilmez; son katman kâğıt.
+    const iz = sinir("Denetim izi değişikliği gösterir, önlemez.");
+    expect(iz).toMatch(/eski bir kopyayla değiştirilirse\s+fark etmez/);
+    expect(iz).toMatch(/baştan\s+hesaplayabilir/);
+    expect(iz).toContain("“Kayıt no · Zincir” satırını");
+    expect(iz).toContain("Son Girişler kartında");
+    // Teknik terimler bu kartta yok (sözlük §1 "Denetim izi").
+    expect(`${oturum} ${iz}`).not.toMatch(/çapa|tohum|sarmal|mühür|HMAC/i);
+  });
+
   it("dürüst sınırlar iç kod taşımaz, yalnız bugün olanı söyler", () => {
     const metin = metinler.DURUST_SINIRLAR.map((s) => `${s.baslik} ${s.metin}`).join("\n");
     // Sözlük §2: karar, faz, denetim kodları yüzeye çıkmaz.

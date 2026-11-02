@@ -12,6 +12,7 @@ import { Route, Routes } from "react-router-dom";
 import AppShell from "./AppShell";
 import KurulumKapisi from "./KurulumKapisi";
 import AyarlarPage from "./modules/ayarlar/AyarlarPage";
+import ParolaYenilenmeBildirimi from "./modules/butunluk/ParolaYenilenmeBildirimi";
 import GuvenlikKapisi from "./modules/guvenlik/GuvenlikKapisi";
 import YenidenBaslatEkrani from "./modules/guvenlik/YenidenBaslatEkrani";
 import HakkindaPage from "./modules/hakkinda/HakkindaPage";
@@ -27,6 +28,10 @@ export default function App() {
           DIŞINDA: kilit/kurulum durumu ne olursa olsun her şeyi örtmelidir. */}
       <YenidenBaslatEkrani />
       <GuvenlikKapisi>
+        {/* Parola yenilenme bildirimi (tasarım §4.4.3, tehdit 12): parolası sıfırlanan ya da
+            kurtarma anahtarıyla yenilenen hesabın sahibine, kilit ekranından açılıştan sonra
+            hangi sayfada olursa olsun pencere olarak çıkar; bildirim yoksa hiçbir şey çizmez. */}
+        <ParolaYenilenmeBildirimi />
         <KurulumKapisi>
           <Routes>
             <Route path="/" element={<PanelPage />} />

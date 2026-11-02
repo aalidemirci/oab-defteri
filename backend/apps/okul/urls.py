@@ -133,6 +133,25 @@ urlpatterns = [
         views_oturum.BostaKilitSuresiView.as_view(),
         name="security-idle-lock",
     ),
+    # Bütünlük kartları ve sahipsiz sarmalların onayla silinmesi (tasarım §4.6.1 kural 4,
+    # §4.6.3; plan F1b-1 alt commit c). Kilitliyken KAPALIDIR (açık listede değildir).
+    path(
+        "security/integrity/",
+        views_oturum.ButunlukDurumuView.as_view(),
+        name="security-integrity",
+    ),
+    path(
+        "security/integrity/orphan-wraps/",
+        views_oturum.SahipsizSarmalView.as_view(),
+        name="security-integrity-orphan-wraps",
+    ),
+    # Parola yenilenme bildirimi (tasarım §4.4.3, tehdit 12): oturumdaki hesabın bildirimi ve
+    # "Gördüm" (izli). Kilitliyken KAPALIDIR.
+    path(
+        "security/integrity/reset-notice/",
+        views_oturum.ParolaBildirimiView.as_view(),
+        name="security-integrity-reset-notice",
+    ),
     # Kurtarma anahtarı belgesi (tasarım §9.7): anahtar kurtarma sarmalını açıyorsa PDF.
     # KİLİTLİYKEN KAPALIDIR (lock_middleware.KILITLI_IZINLI'de değildir).
     path(

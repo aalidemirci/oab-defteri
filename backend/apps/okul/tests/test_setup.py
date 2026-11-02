@@ -10,11 +10,17 @@ HANGİ adımın eksik olduğunu söyler — her dal ayrı testtedir.
 
 Bu dosyada kurtarma anahtarı DOĞRULANMIŞ başlanır (`anahtar_dogrulanmis`,
 otomatik): 1. adımın ikinci koşulu (tasarım §4.4.4 `kurtarma.dogrulandi`) ve damgasız kurulumun
-reddi `test_kurtarma_dogrulama.py`'dedir.
+reddi `test_kurtarma_dogrulama.py`'dedir. Damga test verisi olarak doğrudan dosyaya yazılır:
+servisi (`confirm_recovery_key`) `KURTARMA` iz satırı yazar, veritabanı ve hesap ister.
+
+Hesap kurulmadan (`parolasiz`) servisler yazamaz (iz anahtarı yok; tasarım §4.6.3): o
+testlerde okul bilgileri ve ders yılı test verisi olarak ORM ile yazılır
+(`_aktif_yil_dogrudan`), kapının kendisi uçtan sınanır.
 """
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -23,14 +29,22 @@ import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.okul.models import Holiday, HolidayKind, SchoolConfig, SchoolLevel, Student
+from apps.okul.models import (
+    Holiday,
+    HolidayKind,
+    SchoolConfig,
+    SchoolLevel,
+    SchoolTerm,
+    SchoolYear,
+    Student,
+)
 from apps.okul.oturum import OTURUM
 from apps.okul.services import app_password
 from apps.okul.services import school_year as school_year_service
 from apps.okul.services import setup as setup_service
 from apps.okul.services import terms as term_service
 from apps.okul.tests.oturum_ortak import SahteSaat, oturum_saatini_kur
-from conftest import TEST_HESAP_ID, TEST_KURTARMA_ANAHTARI, TEST_PAROLA
+from conftest import TEST_HESAP_ID, TEST_PAROLA
 
 DURUM_ALANLARI = {
     "setup_completed",
@@ -67,7 +81,10 @@ def client() -> APIClient:
 @pytest.fixture(autouse=True)
 def anahtar_dogrulanmis(guvenlik_ortami: Path) -> None:
     """Varsayılan ortamın kurtarma anahtarı saklandı olarak damgalanır (modül başlığı)."""
-    app_password.confirm_recovery_key(TEST_KURTARMA_ANAHTARI)
+    yol = app_password.state_path()
+    durum = json.loads(yol.read_text(encoding="utf-8"))
+    durum["kurtarma"][app_password.RECOVERY_CONFIRMED_FIELD] = "2026-11-01T10:00:00+03:00"
+    yol.write_text(json.dumps(durum, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _okul_bilgileri(**degisiklik: Any) -> None:
@@ -83,6 +100,19 @@ def _aktif_yil(*, donemler: bool = True) -> int:
             yil, first_end=date(2027, 1, 22), second_start=date(2027, 2, 8)
         )
     return yil.pk
+
+
+def _aktif_yil_dogrudan() -> None:
+    """Hesapsız ortamda aktif yıl ve iki dönem (test verisi; servisler iz ister)."""
+    yil = SchoolYear.objects.create(
+        name="2026-2027", start_date=date(2026, 9, 7), end_date=date(2027, 6, 25), is_active=True
+    )
+    SchoolTerm.objects.create(
+        school_year=yil, sequence=1, start_date=yil.start_date, end_date=date(2027, 1, 22)
+    )
+    SchoolTerm.objects.create(
+        school_year=yil, sequence=2, start_date=date(2027, 2, 8), end_date=yil.end_date
+    )
 
 
 def _tamamla(client: APIClient) -> Any:
@@ -183,8 +213,10 @@ class TestSetupComplete:
         assert SchoolConfig.load().setup_completed is True
 
     def test_parola_adimi_olmadan_tamamlanmaz(self, client: APIClient, parolasiz: Path) -> None:
-        _okul_bilgileri()
-        _aktif_yil()
+        # Hesap kurulmadan servis yazamaz (iz anahtarı yok; tasarım §4.6.3): okul bilgileri
+        # ve ders yılı test verisi olarak doğrudan yazılır, kapının kendisi uçtan sınanır.
+        SchoolConfig.objects.update_or_create(pk=SchoolConfig.SINGLETON_PK, defaults=TAM_OKUL)
+        _aktif_yil_dogrudan()
         yanit = _tamamla(client)
         assert yanit.status_code == 400
         govde = yanit.json()
@@ -604,11 +636,12 @@ def test_spa_catchall_arayuz_derlenmemisken_503_ve_turkce_yonerge() -> None:
 
 @pytest.mark.django_db
 def test_update_school_config_whitelist_disi_alan_yazmaz() -> None:
+    parmak_izi = SchoolConfig.load().app_password_hash  # varsayılan ortamın parmak izi
     setup_service.update_school_config(
         fields={"school_name": "X", "app_password_hash": "hack", "setup_completed": True}
     )
     config = SchoolConfig.load()
-    assert config.app_password_hash == ""
+    assert config.app_password_hash == parmak_izi != "hack"
     assert config.setup_completed is False
 
 

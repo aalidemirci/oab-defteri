@@ -50,6 +50,7 @@ def _toplu_okul_no_yazimlari(kaynak: str) -> list[int]:
 
 
 @pytest.mark.django_db
+@pytest.mark.hesapsiz  # satır yokken davranış: varsayılan hesabın parmak izi satırı kurulmaz
 class TestSchoolConfig:
     def test_load_kayit_yokken_kaydedilmemis_varsayilan_doner(self) -> None:
         config = SchoolConfig.load()

@@ -62,6 +62,7 @@ zinciri, kantin, servis) ekranları geldiği fazda eklenir; o güne dek terim i�
 | Kurtarma anahtarı | **kurtarma anahtarı**; kimliği **anahtar no** ve **üretim tarihi**; kilit ekranındaki yolu **"Parolamı unuttum"** → **"Kurtar ve aç"** (geri dönüş **"Parolayla açmaya dön"**) | "kurtarma kodu", "yedek parola", "ana anahtar" | Yalnız program yöneticisi içindir (kilit ekranında "Parolamı unuttum" yalnız program yöneticisi hesabı seçiliyken görünür; öteki hesaplarda **"Parolanızı unuttuysanız program yöneticisine başvurun."** yazar) ve **üç durumda** kullanılır: parolası unutulduğunda, kayıtlar yeni bilgisayara taşınırken ve bu bilgisayarın güvenlik dosyası kaybolduğunda ya da bozulduğunda yedekten geri yüklemede (o durumda parola yolu işlemez; tasarım §4.4.4). Anahtar panelinin uyarısı ve kurtarma anahtarı belgesi bu üçünü sayar; zarf "yalnız bu üç durumda" açılır; herkes programı kendi hesabıyla açar, öteki hesaplarda parolasını unutan program yöneticisine başvurur (tasarım §4.4.3). No her yeni anahtarda bir artar; belge ve yedek listesi hangi anahtarın hangi yedeği açtığını no ve tarihle gösterir (tasarım TK10). Ekranda kimlik **"Anahtar no 3 · üretim tarihi 01.11.2026"** biçimindedir (yeni anahtarın üstünde, Kurtarma anahtarı belgesi kartında ve yedek satırında); seçilen yedek için **"Bu yedek 3 numaralı, 01.11.2026 tarihli kurtarma anahtarıyla açılır."** yazar, bilinmiyorsa **"Bu yedeği hangi kurtarma anahtarının açtığı okunamadı."** Basılıp **okul müdürlüğünde kapalı zarfta** saklanır, veliye geçmez (T1, D3); PDF dosyası bilgisayarda bırakılmaz (tasarım §9.7). Panelden **Yazdır**'la basılan kâğıt da anahtarın altında **"Okul müdürlüğünde kapalı zarfta saklanır; veliye geçmez. Yalnız program yöneticisi içindir; parola paylaşılmaz, herkes programı kendi hesabıyla açar."** satırını taşır (tasarım §13 D50). Anahtar programda saklanmaz; hiçbir günlüğe, iletiye ya da dosya adına yazılmaz |
 | Kurtarma anahtarı işlemleri | kart adları **Kurtarma Anahtarını Doğrula** ve **Kurtarma Anahtarını Yenile**; eylem **"yenileme"** (onay diyaloğu oturumu açan hesabın parolasını sorar: alan **"Parolanız"**); uyarı **"Kurtarma anahtarı doğrulanmadı"** | "anahtarı sıfırla", "anahtarı değiştir" | Bugünkü yenileme kayıtların anahtarını değiştirmez, kayıtlar yeniden şifrelenmez; yenilemeden önce alınmış yedekler başka bilgisayarda eski anahtarla açılır ve metin bunu söyler (tasarım §4.4.6). F1b'den sonra anahtarı yalnız program yöneticisi yeniler (tasarım TK9) |
 | Şifreleme | **şifreli**, **şifrelenen alanlar**; "güçlü şifrelemeyle korunur"; dürüst sınır **"Şifreli alanlar en zayıf hesap parolası kadar korunur"**; çözülemeyen şifreli alanın ekrandaki karşılığı **"okunamadı"** (kişinin adı okunamazsa metinde **"Adı okunamayan kayıt"**, eylem adında **"Adı okunamayan kaydı düzenle"**; "kayıt kaydını" ikilemesi kurulmaz) | ayar ekranında ve iletide yöntem adları (Fernet, AES, X25519, Argon2id, HMAC); "veritabanı şifreli"; okunamayan alan için boş hücre | Şifrelenen şey belirli kişisel veri alanlarıdır; bu **tam disk şifrelemesi değildir** ve metin bunu açıkça söyler; tam koruma BitLocker ya da LUKS'tur (tasarım §4.4.6). Her hesabın parolası kayıtların anahtarını tek başına açar; Ayarlar → Güvenlik'in **Şifreleme** kartı ve Hakkında'nın **Dürüst Sınırlar** kartı bunu söyler. Okunamayan alan program dışından değiştirilmiş ya da bozulmuş kaydı gösterir (tasarım §13 D48); ekran onu "veri yok"la karıştırmaz, Genel Bakış'ta **Okunamayan Kayıt Alanları** kartı kişisiz sayıyı verir. Yöntem adları yalnız Hakkında'nın **Teknik Bilgiler** kartında geçer |
+| Denetim izi (F1b) | **denetim izi** (her kaydın kimin hesabıyla, ne zaman ve ne türde yazıldığını gösteren, silinmeyen ve kayıtları birbirine bağlayarak yazılan kayıt); program her kilitlenmede ve düzenli kapanışta denetim izinin son kaydını işaretler: **kilit işareti**; kâğıda inen satır **"Kayıt no: N · Zincir: XXXX-XXXX"** (N son kaydın sırası, binlik ayırıcısız — kâğıda aynen geçirilen kimliktir; Zincir son kaydın mührünün ilk sekiz onaltılık hanesi, büyük harf, dörder dörder; Son Girişler kartında başlığı **"Denetim izinin son kaydı"**); kilit açılışındaki denetimin bulguları sade cümleyle: **"Denetim izinin son kayıtları silinmiş ya da veritabanı daha eski bir kopyayla değiştirilmiş (geri sarılmış) görünüyor."** · **"Program kilitliyken yazılan olaylardan bazıları denetim izinde yok; silinmiş olabilir."** · **"Denetim izinin zinciri kırık: kayıtlar arasındaki bağ tutmuyor."** · **"Kilit işareti bulunamadı; denetim izinin sonu denetlenemedi. …"** · yalnız bilgi olan **"Program kilitliyken bir sistem olayının (ör. günlük yedek) denetim izine yazımı yarıda kalmış: program kapanmış ya da kayıt yazılamamış (elektrik kesintisi, zorla kapatma ya da dolu disk olabilir). …"** · sırrı olmayan birinin eklediği kayıt **"Denetim izinde, türüne ya da yazılış biçimine uymayan bir kayıt var; program dışından eklenmiş olabilir."** · **"Kilit işareti son kilitlenmede yenilenememiş ya da eski bir kopyayla değiştirilmiş; denetim izinin sonu tam denetlenemedi."** (bütün bulgu cümleleri `modules/butunluk/metinler.ts`'te; tanınmayan bulguda **"Denetim izinde tanınmayan bir bulgu var."**); hesabın güvenlik dosyasındaki parolalı kaydı **parola kaydı** (düğme **"Güvenlik dosyasından sil"** — erişilebilir adı hangi hesabın kaydı olduğunu söyler: **"“eski-hesap” tanıtıcılı hesabın parola kaydını güvenlik dosyasından sil"**, tanıtıcı okunamazsa "Bu hesabın …"; sürerken **"Siliniyor…"**, snackbar **"Parola kaydı güvenlik dosyasından silindi."**); parola yenilenme bildirimi **"Parolanız gg.aa.yyyy tarihinde sıfırlandı."** / **"Parolanız gg.aa.yyyy tarihinde kurtarma anahtarıyla yenilendi."**, altında **"O tarihten bu yana hesabınızla yapılan girişler:"**, düğme **"Gördüm"**; giriş listelerinde oturumun kendi girişi **"· bu oturum"** | kullanıcı metninde "çapa", "tohum", "sarmal", "kip", "zincir başı", "log", "audit"; bulgu kodları (`kuyruk_kesik`, `capa_yok`, `seal`…); "mühür" (yalnız Hakkında'nın **Teknik Bilgiler** kartında, yöntem adlarıyla birlikte) | Tasarım §4.6.2-4.6.3, §4.4.3. Okul çekirdeğinin bütün yazmaları oturumdaki hesabın adına denetim izine yazılır; **bugünkü tek istisna** öğrenci ve personelin sicilden silinmesi ile iki kişi kaydının birleştirilmesidir (F1b 5. adımda yeniden yazılır; plan §2.2 "Denetim izi") — Hakkında'nın **Dürüst Sınırlar** kartı bunu açıkça söyler. Yedekten geri yükleme veritabanını değiştirdiği için satırı geri yüklemeden sonraki ilk girişte yazılır; uygulama içinden yapıldıysa satır onu başlatan oturumun hesabını taşır (kurtarma anahtarı yolunda da) — Dürüst Sınırlar: **"Yedekten geri yükleme, ardından yapılan ilk girişte, onu başlatan hesapla birlikte yazılır."** Kartlar ve bildirim yalnız programın kendi anahtarıyla yazdığı ve doğrulanan kayıtları okur: program dışından eklenen bir giriş "Son Girişler"de görünmez, bulgu olur. Bugün denetim izinin kullanıcıya görünen yüzü Genel Bakış kartları (§4.5) ve parola yenilenme bildirimidir; denetim izini okuma ekranı Denetleme Kurulu modülüyle gelir. Kişisizdir: hesap **rol etiketi** ve **tanıtıcı**yla anılır ("Muhasip · tanıtıcı muhasip"; mührü tutmayan hesapta "Tanıtıcısı “muhasip” olan hesap (kayıtta yazan rol: Sekreter)"), ad-soyad hiçbir kartta ve bildirimde yoktur (§5). Kâğıda inen satırı bugün kullanıcı elle not eder; aylık bildirime, deftere geçirilecek baskıya ve devir-teslim tutanağına basılması o belgelerle gelir (tasarım §4.6.3). Dürüst sınır **"Denetim izi değişikliği gösterir, önlemez."**: veritabanı kilit işaretiyle birlikte eski bir kopyayla değiştirilirse program fark etmez, kâğıttaki satır fark ettirir (tasarım §4.6.3 "Kalan risk") |
 | Yedek | **yedek**, **şifreli yedek**; bugün türleri **günlük yedek** (program günde bir kez kendiliğinden alır: açılışta ya da açıkken gün değişince) ve indirilen şifreli yedek; indirileni **"USB bellekteki yedek"** (ya da okulun ağ diskindeki); hatırlatma kartı **Şifreli Yedeği USB Belleğe Alın**; geri yüklemede kenara alınan **önceki veritabanı** (`db-onceki-…`) | kullanıcı metninde dosya uzantısı (`.odbak`), "kapsayıcı", yöntem adları; "dış yedek" (ekranda ve kılavuzda; kod yorumunda serbest); "harici yedek", "bulut yedeği" | Teknik adlar yalnız Hakkında sayfasında geçer. Yedek bulut depolama hizmetine yüklenmez ([BSG Yön. md. 11/23](mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-11)); taşınabilir ortamdaki veri şifreli saklanır ([BSG Yön. md. 10/5](mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-10)), programın yedeği zaten şifrelidir ve şifresiz kopya üretilmez. **USB bellekteki yedek programın dışındadır:** program ona ulaşamaz, onu silemez; saklanması okulun sorumluluğundadır. Yedek bu bilgisayarda program yöneticisinin parolasıyla (geri yüklemede alan **"Parolanız"**), başka bir bilgisayarda ya da güvenlik dosyası kayıpken yalnız yedeğin alındığı gün geçerli olan kurtarma anahtarıyla açılır (yedek başlığı hesap taşımaz; tasarım TK10). Program açılmıyorsa geri yükleme Windows'ta Başlat menüsündeki **"OAB Defteri — Yedekten Geri Yükle"** kısayoluyla, Pardus'ta `oab-defteri --geri-yukle` komutuyla yapılır. F1b 3. adımda dışarı çıkan yedek dosya deposunu da taşır (tasarım §4.4.7); yeni türlerin adları o adımda işlenir |
 | Eski program, yeni veri (`SchemaTooNewError`, çıkış kodu 4) | açılış iletisinin başlığı **"Program sürümü eski"**; çözüm "programı güncel sürüme yükseltip yeniden açın" | kullanıcı metninde "şema", "migration", "göç", "sürüm uyuşmazlığı" | İki durumda çıkar: daha yeni sürümün yazdığı veriyi eski program açmaya çalışınca ve daha yeni sürümle alınmış yedek eski programa geri yüklenince. Program veriyi korumak için açılmaz. İleti "tanımadığı **değişiklikler**" der; tanınmayan değişikliklerin adları iletide GEÇMEZ (§2), yalnız günlüğe (`logs/uygulama.log`) yazılır ve ipucu günlük dosyasını anar |
 | Sürüm | **"yayımlanan son sürüm"**, **"kurulu sürüm"**, **"kurulum dosyası"**; düğmeler **"Şimdi denetle"** · **"Doğrula ve indir"**; elle denetlemenin bağlantısı **okulapp.org/oab-defteri** (programın sayfası; dosyalar indir.okulapp.org'dan iner) | "GitHub sürümü", "Release", "kurucu"; özet algoritmasının adı; düğme adı olarak tek başına "Denetle" | Güncelleme denetimi yalnız düğmeyle yapılır, program açılışta internete çıkmaz (tasarım TK4). Hizmetin adı (GitHub) Güncelleme ekranının açıklama metninde geçmez. **Bugünkü sapma:** sunucunun denetim hata iletileri (ulaşılamama, güvenli bağlantı, sınırlama, HTTP hatası, beklenmeyen yanıt; `services/updates.py`) GitHub adını, doğrulama hata iletileri "SHA-256" ve "SHA256SUMS.txt" adlarını anar; iletiler F1b 6. adımda bu satıra uydurulur ve satır güncellenir. Program indir.okulapp.org'a ve programın sayfasına istek atmaz: bağlantıyı dış tarayıcı açar. Ekran adları §4.7 |
@@ -197,7 +198,7 @@ sayfaların h1'leri ve sekme tanımlarıdır.*
 | Kişiler | Kişiler | `/kisiler` | Bugün öğrenci, öğretmen ve diğer personel sicili ile e-Okul aktarımı (aile iskeleti; F1b 5. adımda personel ve veli listesine döner) |
 | Ayarlar | Ayarlar | `/ayarlar` | Altında "Diğer Ayarlar" bölümü ve **Kurulum Sihirbazı** kartı |
 | Kılavuz | Kullanım Kılavuzu | `/kilavuz` | Bugün tek bölüm: **Programın Konumu**. Bölümler her fazın özellikleriyle yazılır |
-| Hakkında ve Lisans | Hakkında ve Lisans | `/hakkinda` | Kenar çubuğunun altında, ana gezinmenin dışında. Kartları: **Program** (tanım ve konum) · **Geliştirici** (iletişim) · **Ücretsiz ve Ticari Olmayan Kullanım** · **Üçüncü Taraf Bileşenler** · **Dürüst Sınırlar** (tasarım §4.4.6, sade dille: rol bir şifreleme önlemi değildir · şifreli alanlar en zayıf hesap parolası kadar korunur · açık oturum, sahibinin imzasıdır · kurtarma anahtarını yenilemek önceki yedekleri kapatmaz · çıktı, programın dışına çıkınca korumadan da çıkar · kayıp ya da çalınmada bildirim programın işi değildir, KVKK md. 12/5) · **Teknik Bilgiler** |
+| Hakkında ve Lisans | Hakkında ve Lisans | `/hakkinda` | Kenar çubuğunun altında, ana gezinmenin dışında. Kartları: **Program** (tanım ve konum) · **Geliştirici** (iletişim) · **Ücretsiz ve Ticari Olmayan Kullanım** · **Üçüncü Taraf Bileşenler** · **Dürüst Sınırlar** (tasarım §4.4.6, sade dille: rol bir şifreleme önlemi değildir · şifreli alanlar en zayıf hesap parolası kadar korunur · açık oturum, sahibinin imzasıdır — her iş o hesabın adına denetim izine yazılır, bugünkü istisnasıyla; yedekten geri yükleme ilk girişte, başlatan hesapla birlikte yazılır (§1 "Denetim izi") · denetim izi değişikliği gösterir, önlemez — tasarım §4.6.3 "Kalan risk", "Kayıt no · Zincir" satırını kâğıda not etme öğüdüyle · kurtarma anahtarını yenilemek önceki yedekleri kapatmaz · çıktı, programın dışına çıkınca korumadan da çıkar · kayıp ya da çalınmada bildirim programın işi değildir, KVKK md. 12/5) · **Teknik Bilgiler** (yöntem adları; denetim izinin zinciri dahil) |
 | — | Kurulum Sihirbazı | `/kurulum` | Menüde yoktur. İlk açılışta kurulum kapısı buraya getirir; kurulumdan sonra Ayarlar'ın altındaki **Kurulum Sihirbazı** kartıyla açılır |
 
 Ana gezinmenin sırası: Genel Bakış · Kişiler · Ayarlar · Kılavuz. Role göre gezinme F1b 2. adımda gelir (tasarım
@@ -232,7 +233,9 @@ askı iletisi de orada kalır ve seçim bırakılır (başka hesap kendiliğinde
 Üst çubuktaki **oturum göstergesi** (yalnız açık oturumda): rol etiketi ve tanıtıcı, boşta kilide geri sayım (kurulumdan
 sonra), **"İşlem bitince kilitlenecek"** (kilit ertelenmişse), düğme **Kilitle** (ipucu "Kilitle (Ctrl+Shift+L)").
 Her durumda görünen **Çık** düğmesinin pencereleri: **Programdan çıkılsın mı?** (onay; her durumda parolasız) ·
-**Program kapanıyor**.
+**Program kapanıyor**. Kapanış başladıktan sonra gelen kilit açılışı hiçbir şey yazmadan reddedilir: **"Program
+kapanıyor; kilit açılmadı."** (kapanış, süren kilidin ve kilit açılışının bitmesini bekler; oturum kilitlenip işaret
+yazılmadan program kapanmaz).
 
 ### 4.3 Sekmeler
 
@@ -246,11 +249,13 @@ Her durumda görünen **Çık** düğmesinin pencereleri: **Programdan çıkıls
 Kişiler'in Öğrenciler sekmesi F1b 5. adımda sökülür (plan §2.2).
 
 Pencere başlıkları (Dialog): **Yeni öğrenci** / **Öğrenciyi düzenle** · **Yeni kişi** / **Kişiyi düzenle** ·
-**Parolayı değiştir**. Onay diyaloglarının başlıkları (soru, §3): **Program kilitlensin mi?** · **Ders yılı
-aktifleştirilsin mi?** · **Şube katalogdan kaldırılsın mı?** · **Kapalı gün silinsin mi?** · **Öğrenci ayrıldı olarak
-işaretlensin mi?** · **Öğrenci sicilden silinsin mi?** · **Kişi ayrıldı olarak işaretlensin mi?** · **Kişi sicilden
-silinsin mi?** · **Bu iki kayıt aynı kişi mi?** · **Kurtarma anahtarı yenilensin mi?** · **Yedekten geri yüklensin
-mi?** · **Güvenlik dosyası sıfırlansın mı?**. Kişiler'deki içe aktarma panelleri: **e-Okul Raporundan veya Şablondan
+**Parolayı değiştir** · **Parola yenilenme bildirimi** (kilit ekranından açılıştan sonra hangi sayfada olunursa
+olsun kendiliğinden açılır; düğme **"Gördüm"**; §1 "Denetim izi"). Onay diyaloglarının başlıkları (soru, §3):
+**Program kilitlensin mi?** · **Ders yılı aktifleştirilsin mi?** · **Şube katalogdan kaldırılsın mı?** · **Kapalı
+gün silinsin mi?** · **Öğrenci ayrıldı olarak işaretlensin mi?** · **Öğrenci sicilden silinsin mi?** · **Kişi ayrıldı
+olarak işaretlensin mi?** · **Kişi sicilden silinsin mi?** · **Bu iki kayıt aynı kişi mi?** · **Kurtarma anahtarı
+yenilensin mi?** · **Yedekten geri yüklensin mi?** · **Güvenlik dosyası sıfırlansın mı?** · **Parola kaydı güvenlik
+dosyasından silinsin mi?** (onay düğmesi **"Sil"**). Kişiler'deki içe aktarma panelleri: **e-Okul Raporundan veya Şablondan
 Öğrenci Aktar** · **e-Okul Raporundan veya Şablondan Öğretmen ve Diğer Personeli Aktar**.
 
 ### 4.4 Kurulum Sihirbazı adımları
@@ -275,17 +280,63 @@ buraya işlenir.
 Sırasıyla: **Başlangıç Yol Haritası** (kurulumdan sonra; bütün maddeler bitince gizlenebilir; kurtarma anahtarı
 doğrulanmamışsa uyarı kartın başındadır. Maddeler bugün: e-Okul aktarımları, öğrenciye kapalı günler ve kurtarma
 anahtarının müdürlükte kapalı zarfta saklanması; parolanın paylaşılmasını öğütleyen madde yoktur — §1 "Parola") ·
-**Son Oturumu Kontrol Edin** (yalnız önceki oturum düzgün kapanmadıysa; düğme **"Kontrol ettim"**) · **Okunamayan
+**Son Oturumu Kontrol Edin** (yalnız önceki oturum düzgün kapanmadıysa; düğme **"Kontrol ettim"**) · denetim izinin
+uyarı kartları (§1 "Denetim izi"; yalnız söyleyecekleri varken): **Bütünlük Durumu Okunamadı** (kartlardan biri ya
+da hepsi — Son Girişler ve denetim izinin son kaydı da — okunamadıysa; bir uyarı ya da giriş sessizce kaybolmaz;
+kilitliyken çıkmaz: "Denetim izinin kartları tam okunamadı; bir uyarı ya da giriş gösterilemiyor olabilir. Program
+yöneticisine ve Denetleme Kuruluna bildirin.") · **Denetim İzi Bütünlüğü**
+(oturumdaki hesabın bir önceki girişinden beri kilit açılışındaki denetimin bulguları, her biri sade cümlesi ve
+gg.aa.yyyy SS:dd anıyla; "Bulgu denetim izinde kayıtlıdır; bu kart bir sonraki girişinizde kalkar."). Giriş cümlesi
+bulgunun türüne göredir: yalnız bilgi varsa bilgi tonunda "Kilit açılırken yapılan denetim bir bilgi verdi:";
+bulgulardan biri değişiklik gösteriyorsa (kayıtların silinmesi, zincirin kırılması, değiştirilmiş kayıt ya da kilit
+işareti, eksik ya da fazla olay, kuralına uymayan kayıt, yenilenmemiş kilit işareti, denetlemek için gereken anahtarı
+bulunamayan kayıt — "Denetim izinde, denetlemek için gereken anahtarı bulunamayan kayıt var; kayıt ya da anahtarı
+program dışından değiştirilmiş olabilir."; tanınmayan bulgu da) "Kilit
+açılırken yapılan denetim, denetim izinde program dışından yapılmış olabilecek bir değişiklik buldu:" ve dipte "Kayıtlar
+program dışından değiştirilmiş ya da veritabanı eski bir kopyayla değiştirilmiş olabilir. Program yöneticisine ve
+Denetleme Kuruluna bildirin; gerekirse sağlam bir yedekten geri yüklenir."; yalnız denetleyemeyen bulgular varsa
+(kilit işareti yok ya da okunamadı, denetimin kendisi düştü, kilit işareti yokken yazılmış olaylar) uyarı tonunda
+"Kilit açılırken yapılan denetim, denetim izinin bir bölümünü denetleyemedi:" ve dipte "Denetlenemeyen bölümde
+değişiklik olup olmadığı bilinmiyor; orada yapılmış bir değişiklik görünmez. Durum sonraki girişlerde de sürerse
+program yöneticisine bildirin." — değişiklik iddia edilmez, geri yükleme öğütlenmez; "değişiklik yok" da denmez
+(denetimi program dışından düşürülmüş bir iz de bu kartı verir) ·
+**Değiştirilmiş Hesap Kaydı** (girişte hesap kaydının program dışından değiştirildiği görüldü: "Kaydı program dışından değiştirilmiş görünen hesapla
+giriş denendi; giriş açılmadı ve program kayda dokunmadı:") · **Yedekten Geri Yükleme Yapıldı** (son geri yükleme:
+**Geri yükleme anı** (geri yükleme notundan) · **Denetim izine yazıldığı an** (geri yüklemeden sonraki ilk giriş) ·
+**Yedek** — programın ürettiği yedeğin adı, yoksa "Elden getirilen dosya (adı kayda geçmez)" · **Yedeği açan** —
+"Program yöneticisi · tanıtıcı yonetici hesabının parolası" ya da "Kurtarma anahtarı (anahtar no 3)" · **Başlatan
+oturum** — uygulama içinden yapıldıysa onu başlatan oturumun hesabı, "Program yöneticisi · tanıtıcı yonetici"
+(konsoldan yapılan geri yüklemede oturum yoktur, satır çizilmez) · **Kenara
+alınan önceki veritabanı** · **Önceki veritabanının son kaydı** "Kayıt no: N · Zincir: XXXX-XXXX". Aralarında
+giriş yapılmadan birden çok geri yükleme olduysa hepsi sırasıyla yazılır ("Kayıtlar, aralarında giriş yapılmadan N kez
+yedekten geri yüklendi; …", alt başlıklar **"1. geri yükleme"** … **"N. geri yükleme (son)"**); ayrıntıları
+okunamayan geri yükleme "Geri yüklemenin ayrıntıları okunamadı; olgu denetim izinde kayıtlıdır." der. Dip cümlesi:
+"Yedeğin alındığı günden sonra girilen kayıtlar ekrandan kalkmıştır; kenara alınan önceki veritabanında durur."
+(birden çok geri yüklemede "… ilk geri yüklemede kenara alınan veritabanında durur."); ilk geri yüklemede kenara
+alınacak veritabanı yoktuysa ya da izi boştuysa (yeni bilgisayara taşıma) yerine **"Geri yüklemeden önce bu
+bilgisayarda kayıt yoktu."**; ardından "Geri yüklemeyi kimin ve neden yaptığını Denetleme Kuruluna bildirin." Kart
+kalır — Denetleme Kurulunun "gördüm" düğmesi F1b 2. adımda gelir, metin bugün "Kart, son geri yüklemeyi göstermeyi
+sürdürür." der) · **Hesaplar ve Güvenlik Dosyası** (iki depo farkı; alt başlıklar **"Giriş yapamayan hesaplar"** ·
+**"Güvenlik dosyasında kalan eski parola kayıtları"** — her satırda neden "hesap kapalı" ya da "veritabanında kaydı
+yok" ve **"Güvenlik dosyasından sil"** (erişilebilir adı hesabı anar; §1 "Denetim izi"); açıklama listedeki nedenlere
+göredir: "Kapalı hesapların parola kaydını program her kilit açılışında kendisi siler; burada görünen kaydın silinmesi
+tamamlanamadı (ör. dosyayı başka bir program tutuyordu), bir sonraki kilit açılışında yinelenir." · "Veritabanında
+kaydı olmayan hesapların parola kaydını program kendiliğinden silmez." · "Program yöneticisi onaylarsa hemen
+silinir." · **"Kaydı değiştirilmiş görünen hesaplar"**) · **Okunamayan
 Kayıt Alanları** (yalnız çözülemeyen şifreli alan varken; kişisiz, yalnız sayı: "Program açıldığından beri N şifreli
 alan okunamadı; bu alanlar ekranda “okunamadı” diye görünür." — §1 "Şifreleme") · **Ayrılış
 Havuzu** (yalnız havuz boş değilken, yalnız sayı: "N kişi ayrılış kararı bekliyor" → Kişiler → Ayrılış Havuzu) ·
 **Şifreli Yedeği USB Belleğe Alın** (yalnız son şifreli yedek indirmesinden hatırlatma süresi — varsayılan 30 gün,
 ayarla 7-90 — geçince; hiç indirme yoksa program yöneticisi hesabı kurulduktan 7 gün sonra: "Son şifreli yedek gg.aa.yyyy
 tarihinde indirildi (N gün önce)." / "Bu bilgisayarda henüz şifreli yedek indirilmedi."; bağlantı **"Ayarlar →
-Güvenlik'i aç"**; program dosyanın USB belleğe kopyalandığını bilemez, kart "son indirme" der) · **Kişiler** ·
-**Ayarlar** (gezinme kartları).
+Güvenlik'i aç"**; program dosyanın USB belleğe kopyalandığını bilemez, kart "son indirme" der) · **Son Girişler**
+(her zaman; oturumdaki hesabın kilit ekranından yaptığı son girişler, ilki "· bu oturum"; hiç yoksa "Bu hesapla
+henüz kilit ekranından giriş yapılmadı."; okunamadıysa — "hiç yok" demez — "Son girişler okunamadı; tanımadığınız bir
+giriş burada gösterilemiyor olabilir."; altında **"Denetim izinin son kaydı"** ve "Kayıt no: N · Zincir:
+XXXX-XXXX" satırı, kâğıda not etme öğüdüyle; son kayıt okunamadıysa "Denetim izinin son kaydı okunamadı.") · **Kişiler** · **Ayarlar** (gezinme kartları).
 
-OAB'nin pano kartları F1c'de gelir (tasarım §7.10).
+Denetim izi kartlarının yalnız program yöneticisine ve Denetleme Kuruluna görünmesi F1b 2. adımda gelir; bugün açık
+oturumdaki her hesap görür. OAB'nin pano kartları F1c'de gelir (tasarım §7.10).
 
 ### 4.6 Ayarlar → Güvenlik kartları
 
@@ -343,6 +394,8 @@ Dayanak CLAUDE.md §2 altın kural 5 ve tasarım §3.4, §9.1-5'tir.
   belgesi F2'de (plan §2.2).
 - **Kilit ekranı ve üst çubuk kişi adı göstermez;** hesaplar rol etiketi ve tanıtıcıyla listelenir (tasarım §4.4.3).
   Hesap sahibinin ad-soyadı şifreli saklanır; Ayarlar → Güvenlik de oturumu rol etiketi ve tanıtıcıyla yazar.
+  Genel Bakış'ın denetim izi kartları ve parola yenilenme bildirimi de hesabı yalnız rol etiketi ve tanıtıcıyla anar;
+  "Son Girişler" ve bildirim yalnız oturumdaki hesabın girişlerini gösterir (§1 "Denetim izi").
 - **Okunamayan ad tahmin edilmez:** çözülemeyen şifreli alan "okunamadı" diye görünür; onay diyaloğu "Adı okunamayan
   bu kayıt", erişilebilir ad "Adı okunamayan kayıt" der (eylemde belirtme hâliyle: "Adı okunamayan kaydı düzenle"). Genel Bakış kartı yalnız sayıyı verir (§1 "Şifreleme").
 - **Şifreleme dürüst anlatılır:** metin olduğundan güçlü bir koruma vadetmez; şifrelenen alanları ve şifrelenmeyenleri

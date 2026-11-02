@@ -156,12 +156,23 @@ def _parse_date(path: Path) -> date | None:
         return None
 
 
+def daily_backup_path(backup_dir: Path, day: date) -> Path:
+    """Günün yedeğinin yolu (`gunluk-<tarih>.odbak`); açılış "yeni mi alındı"yı buradan sorar."""
+    return backup_dir / f"{DAILY_PREFIX}-{day.isoformat()}{BACKUP_SUFFIX}"
+
+
+def pre_migrate_backup_path(backup_dir: Path, app_version: str, day: date) -> Path:
+    """Göç öncesi yedeğin yolu (`pre-migrate-<sürüm>-<tarih>.odbak`)."""
+    name = f"{PRE_MIGRATE_PREFIX}-{_safe_name(app_version)}-{day.isoformat()}{BACKUP_SUFFIX}"
+    return backup_dir / name
+
+
 def daily_backup(db_path: Path, backup_dir: Path, *, today: date | None = None) -> Path | None:
     """Günün yedeğini alır. Veritabanı yoksa veya yedek zaten varsa yeniden üretmez."""
     if not db_path.exists():
         return None
     day = today or date.today()
-    target = backup_dir / f"{DAILY_PREFIX}-{day.isoformat()}{BACKUP_SUFFIX}"
+    target = daily_backup_path(backup_dir, day)
     if target.exists():
         return target
     if not _copy_database(db_path, target):
@@ -181,8 +192,7 @@ def pre_migrate_backup(
     if not db_path.exists():
         return None
     day = today or date.today()
-    name = f"{PRE_MIGRATE_PREFIX}-{_safe_name(app_version)}-{day.isoformat()}{BACKUP_SUFFIX}"
-    target = backup_dir / name
+    target = pre_migrate_backup_path(backup_dir, app_version, day)
     if target.exists():
         return target
     if not _copy_database(db_path, target):

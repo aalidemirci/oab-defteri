@@ -33,6 +33,13 @@ sayılar, okul adı ve yol haritası işaretleri.
 Boşta kilit süresi (`SchoolConfig.idle_lock_minutes`) de bu tek satırdadır ama
 sihirbaz alanı değildir (`UPDATABLE_FIELDS`'te yoktur): Ayarlar → Güvenlik'teki
 ayrı uçtan yazılır (`set_idle_lock_minutes`).
+
+DENETİM İZİ (tasarım §4.6.2, §5.1 "her değişiklik denetim izine düşer"; plan F1b-1 alt
+commit c): her yazma servisi satırla AYNI işlemde iz satırı yazar (`_satiri_al` →
+yazım → `_izle`). Satır bu işlemde oluşturulduysa `OLUSTUR`, kurulumun tamamlanması
+`DURUM`, öteki yazımlar `GUNCELLE`. Değeri satıra giren alanlar modeldedir
+(`SchoolConfig.IZ_DEGER_ALANLARI`): okul adı, il, ilçe, kısa ad ve müdür adı yalnız
+adlarıyla görünür. Yazar istek başındaki bağlamdır (oturumdaki hesap).
 """
 
 from __future__ import annotations
@@ -42,10 +49,11 @@ from typing import Any
 from django.db import transaction
 from django.utils import timezone
 
-from apps.okul import selectors
+from apps.okul import denetim_izi, selectors
 from apps.okul.models import (
     IDLE_LOCK_MINUTES_MAX,
     IDLE_LOCK_MINUTES_MIN,
+    AuditAction,
     SchoolConfig,
     SchoolLevel,
 )
@@ -85,17 +93,35 @@ def get_school_config() -> SchoolConfig:
     return SchoolConfig.load()
 
 
+def _satiri_al() -> tuple[SchoolConfig, denetim_izi.Anlik | None]:
+    """Yazılacak tek satır ve yazmadan önceki hâli (bu işlemde oluşturulduysa None).
+
+    Çağıranın işlemi içinde çağrılır; önceki hâl iz satırının `[önce, sonra]` değerleri
+    içindir (modül başlığı "DENETİM İZİ").
+    """
+    config: SchoolConfig
+    config, olustu = SchoolConfig.objects.get_or_create(pk=SchoolConfig.SINGLETON_PK)
+    return config, None if olustu else denetim_izi.anlik(config)
+
+
+def _izle(
+    config: SchoolConfig, onceki: denetim_izi.Anlik | None, *, eylem: str = AuditAction.GUNCELLE
+) -> None:
+    """Yazımın iz satırı (aynı işlemde); satır bu işlemde oluşturulduysa `OLUSTUR`."""
+    denetim_izi.kayit(AuditAction.OLUSTUR if onceki is None else eylem, config, onceki=onceki)
+
+
 @transaction.atomic
 def update_school_config(*, fields: dict[str, Any]) -> SchoolConfig:
     """Kurum yapılandırmasını günceller (whitelist alanları). Satır yoksa oluşturur."""
-    config: SchoolConfig
-    config, _created = SchoolConfig.objects.get_or_create(pk=SchoolConfig.SINGLETON_PK)
+    config, onceki = _satiri_al()
     update_fields: list[str] = ["updated_at"]
     for name in UPDATABLE_FIELDS:
         if name in fields:
             setattr(config, name, fields[name])
             update_fields.append(name)
     config.save(update_fields=update_fields)
+    _izle(config, onceki)
     return config
 
 
@@ -194,13 +220,13 @@ def mark_setup_completed() -> SchoolConfig:
     Kapı sunucudadır: ön yüzün adım kapıları atlanarak (ör. doğrudan istekle)
     parolasız ya da demirbaş onaysız bir kurulum tamamlanamaz.
     """
-    config: SchoolConfig
-    config, _created = SchoolConfig.objects.get_or_create(pk=SchoolConfig.SINGLETON_PK)
+    config, onceki = _satiri_al()
     eksik = missing_setup_steps(config=config)
     if eksik:
         raise SetupIncomplete(eksik, setup_incomplete_message(eksik, config=config))
     config.setup_completed = True
     config.save(update_fields=["setup_completed", "updated_at"])
+    _izle(config, onceki, eylem=AuditAction.DURUM)
     return config
 
 
@@ -281,9 +307,12 @@ def roadmap_auto_items(status: dict[str, Any]) -> dict[str, bool]:
     }
 
 
-def _save_roadmap(config: SchoolConfig, state: dict[str, Any]) -> None:
+def _save_roadmap(
+    config: SchoolConfig, onceki: denetim_izi.Anlik | None, state: dict[str, Any]
+) -> None:
     config.yol_haritasi = {_ROADMAP_MARKS: state["marks"], _ROADMAP_HIDDEN: state["hidden"]}
     config.save(update_fields=["yol_haritasi", "updated_at"])
+    _izle(config, onceki)
 
 
 @transaction.atomic
@@ -291,15 +320,14 @@ def set_roadmap_mark(item: str, *, done: bool) -> dict[str, Any]:
     """Kullanıcının işaretlediği bir maddeyi işaretler ya da işareti kaldırır."""
     if item not in ROADMAP_MANUAL_ITEMS:
         raise RoadmapError("Bu madde elle işaretlenemez.")
-    config: SchoolConfig
-    config, _created = SchoolConfig.objects.get_or_create(pk=SchoolConfig.SINGLETON_PK)
+    config, onceki = _satiri_al()
     state = _stored_roadmap(config)
     if done:
         state["marks"][item] = timezone.localdate().isoformat()
     else:
         state["marks"].pop(item, None)
         state["hidden"] = False  # eksik madde varken kart gizli kalmaz
-    _save_roadmap(config, state)
+    _save_roadmap(config, onceki, state)
     return roadmap_state(config)
 
 
@@ -311,8 +339,7 @@ def set_roadmap_hidden(*, hidden: bool) -> dict[str, Any]:
     Kapı hem burada hem `roadmap_state`'tedir — eski bir kurulumda
     damgasızken kart zaten gizli kaydedilmiş olabilir.
     """
-    config: SchoolConfig
-    config, _created = SchoolConfig.objects.get_or_create(pk=SchoolConfig.SINGLETON_PK)
+    config, onceki = _satiri_al()
     state = _stored_roadmap(config)
     if hidden:
         durum = setup_status()
@@ -326,7 +353,7 @@ def set_roadmap_hidden(*, hidden: bool) -> dict[str, Any]:
         if otomatik_eksik or elle_eksik:
             raise RoadmapError("Başlangıç yol haritası bütün maddeler tamamlanınca gizlenebilir.")
     state["hidden"] = hidden
-    _save_roadmap(config, state)
+    _save_roadmap(config, onceki, state)
     return roadmap_state(config)
 
 
@@ -363,7 +390,8 @@ def set_idle_lock_minutes(*, dakika: int) -> int:
     yazar. Aralık doğrulayıcıları ve veritabanı kısıtı modeldedir; burada da
     denetlenir ki program dışı bir çağrı kısıt hatasına (500) düşmesin. Kayıt
     `post_save` ile oturumun önbelleğini boşaltır (`apps.okul.apps`): yeni süre bir
-    sonraki istekte geçerlidir, yeniden başlatma gerekmez.
+    sonraki istekte geçerlidir, yeniden başlatma gerekmez. Değişiklik iz satırı yazar
+    (`GUNCELLE`; süre izinli kişisiz alandır, `[önce, sonra]` değeriyle).
     """
     if not OTURUM.acik_mi():
         raise IdleLockError(IDLE_LOCK_SESSION_MESSAGE)
@@ -373,10 +401,11 @@ def set_idle_lock_minutes(*, dakika: int) -> int:
         or not IDLE_LOCK_MINUTES_MIN <= dakika <= IDLE_LOCK_MINUTES_MAX
     ):
         raise IdleLockError(IDLE_LOCK_RANGE_MESSAGE)
-    config: SchoolConfig
-    config, _created = SchoolConfig.objects.get_or_create(pk=SchoolConfig.SINGLETON_PK)
-    config.idle_lock_minutes = dakika
-    config.save(update_fields=["idle_lock_minutes", "updated_at"])
+    with transaction.atomic():
+        config, onceki = _satiri_al()
+        config.idle_lock_minutes = dakika
+        config.save(update_fields=["idle_lock_minutes", "updated_at"])
+        _izle(config, onceki)
     return dakika
 
 

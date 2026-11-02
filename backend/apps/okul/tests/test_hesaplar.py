@@ -27,9 +27,11 @@ from apps.okul.models import (
     AccountRole,
     AccountStatus,
     AuditKey,
+    AuditTrail,
     DeletionNotAllowed,
     ResetKind,
 )
+from apps.okul.oturum import Yazar, yazar_olarak
 from apps.okul.services import app_password, hesap_kurallari, hesaplar
 from apps.okul.tests.hesap_ortak import (
     GECICI_PAROLA,
@@ -104,6 +106,45 @@ class TestHesapAcma:
                 display_name="Örnek Muhasip",
                 temp_password=GECICI_PAROLA,
             )
+
+    def test_islemi_yapan_yazar_baglamindaki_hesap_olmali(self, yonetici_hesabi: Account) -> None:
+        """Satırın hesabı yazardan (istek başındaki oturum hesabı), `opened_by`/`closed_by`/
+        `reset_by` `by_hesap_id`'den gelir: ikisi ayrışırsa kayıt başkasının adına yazılırdı.
+        Açık ve mühürlü başka bir program yöneticisi adına yapılan her hesap işlemi reddedilir,
+        hiçbir şey yazılmaz (2. adımın Kullanıcılar uçlarının güvenlik ağı)."""
+        ikinci = hesap_ac(AccountRole.YONETICI, ad="Örnek İkinci Yönetici")
+        muhurle(Account.objects.get(pk=ikinci.id), status=AccountStatus.ACIK)
+        hedef = hesap_ac()
+        once = (AuditTrail.objects.count(), ham_satir(hedef.id), sarmal(hedef.id))
+        islemler: list[Callable[[], object]] = [
+            lambda: hesaplar.open_account(
+                by_hesap_id=ikinci.id,
+                role=AccountRole.SEKRETER,
+                tanitici="sekreter",
+                display_name="Örnek Sekreter",
+                temp_password=GECICI_PAROLA,
+            ),
+            lambda: hesaplar.close_account(by_hesap_id=ikinci.id, hesap_id=hedef.id),
+            lambda: hesaplar.reset_password(
+                by_hesap_id=ikinci.id, hesap_id=hedef.id, temp_password=YENI_PAROLA
+            ),
+            lambda: hesaplar.unsuspend(by_hesap_id=ikinci.id, hesap_id=hedef.id),
+            lambda: hesaplar.remove_orphan_wraps(by_hesap_id=ikinci.id, hesap_idler=[]),
+            lambda: hesaplar.acknowledge_reset_notice(hesap_id=ikinci.id),
+        ]
+
+        for islem in islemler:  # varsayılan yazar: oturumdaki ilk program yöneticisi
+            with pytest.raises(hesaplar.AccountServiceError, match="açık değil"):
+                islem()
+
+        assert (AuditTrail.objects.count(), ham_satir(hedef.id), sarmal(hedef.id)) == once
+        assert not Account.objects.filter(role=AccountRole.SEKRETER).exists()
+        # Yazar o hesapsa işlem yapılır; satır da o hesabındır.
+        with yazar_olarak(Yazar(hesap_id=str(ikinci.id), rol="yonetici")):
+            kapali = hesaplar.close_account(by_hesap_id=ikinci.id, hesap_id=hedef.id)
+        assert kapali.closed_by_id == ikinci.id
+        satir = AuditTrail.objects.filter(object_id=str(hedef.id)).order_by("-seq").first()
+        assert satir is not None and str(satir.account_id) == str(ikinci.id)
 
     def test_islemi_yapanin_muhru_tutmazsa_reddedilir(self, yonetici_hesabi: Account) -> None:
         ham_guncelle(TEST_HESAP_ID, login_name="baska-ad")
@@ -306,11 +347,12 @@ class TestSifirlamaVeAski:
         with pytest.raises(app_password.PasswordRenewalRequired):
             app_password.unlock(hesap_id=hesap.id, password=YENI_PAROLA)
 
-    def test_kilit_acilisindaki_yenilemede_once_sarmal_sonra_satir(
+    def test_kilit_acilisindaki_yenilemede_once_satir_ve_iz_sonra_sarmal(
         self, yonetici_hesabi: Account, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Satır yazımı kesilirse yeni parola geçerlidir ve bir sonraki girişte yenileme
-        yeniden istenir (`app_password.unlock`); geçici parola artık açmaz."""
+        """Satır yazımı kesilirse parola DEĞİŞMEZ: sarmal işlemin sonunda, satır ve `PAROLA`
+        satırından sonra yazılır (`app_password._start_session`); geçici parola açmayı ve
+        yenilemeyi istemeyi sürdürür, yeni parola açmaz."""
         hesap = hesap_ac()
         app_password.lock()
         gercek_kayit = Account.save
@@ -328,6 +370,35 @@ class TestSifirlamaVeAski:
                 )
 
         assert crypto.is_unlocked() is False
+        assert Account.objects.get(pk=hesap.id).status == AccountStatus.PAROLA_YENILENMELI
+        with pytest.raises(app_password.WrongPassword):  # sarmal yazılmadı
+            app_password.unlock(hesap_id=hesap.id, password=YENI_PAROLA)
+        with pytest.raises(app_password.PasswordRenewalRequired):
+            app_password.unlock(hesap_id=hesap.id, password=GECICI_PAROLA)
+        app_password.unlock(hesap_id=hesap.id, password=GECICI_PAROLA, new_password=UCUNCU_PAROLA)
+        assert Account.objects.get(pk=hesap.id).status == AccountStatus.ACIK
+
+    def test_kilit_acilisindaki_yenilemede_sarmal_ile_commit_arasi_kesinti(
+        self, yonetici_hesabi: Account, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Süreç sarmal yazımıyla işlemin sonu arasında ölürse (taklit: sarmal yazıldıktan
+        hemen sonra işlem düşer) yeni parola geçerlidir, satır `PAROLA_YENILENMELI` kalır ve
+        bir sonraki girişte yenileme yeniden istenir; geçici parola artık açmaz."""
+        hesap = hesap_ac()
+        app_password.lock()
+        gercek = app_password._replace_wrap
+
+        def yazip_dus(*args: Any, **kwargs: Any) -> None:
+            gercek(*args, **kwargs)
+            raise OSError("süreç öldü")
+
+        with monkeypatch.context() as yama:
+            yama.setattr(app_password, "_replace_wrap", yazip_dus)
+            with pytest.raises(OSError):
+                app_password.unlock(
+                    hesap_id=hesap.id, password=GECICI_PAROLA, new_password=YENI_PAROLA
+                )
+
         assert Account.objects.get(pk=hesap.id).status == AccountStatus.PAROLA_YENILENMELI
         with pytest.raises(app_password.WrongPassword):  # sarmal yeni parolayla yazılmıştı
             app_password.unlock(
@@ -687,7 +758,7 @@ def _hal_geri_yukleme_sonrasi(yonetici: Account, monkeypatch: pytest.MonkeyPatch
     assert yenilenen.seal_matches(TEST_DEK)
     assert {hayalet, str(kapali.id)} <= set(sarmal_kimlikleri())  # onaysız silinmez
 
-    with pytest.raises(hesaplar.AccountServiceError, match="sahipsiz değil"):
+    with pytest.raises(hesaplar.AccountServiceError, match="silinebilecek durumda değil"):
         hesaplar.remove_orphan_wraps(by_hesap_id=TEST_HESAP_ID, hesap_idler=[TEST_HESAP_ID])
     silinen = hesaplar.remove_orphan_wraps(
         by_hesap_id=TEST_HESAP_ID, hesap_idler=fark.removable_wraps

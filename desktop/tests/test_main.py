@@ -23,6 +23,7 @@ import pytest
 from desktop import main as main_mod
 from desktop import qt_kurulum as qt_kurulum_mod
 from desktop import restore as restore_mod
+from desktop.backup import daily_backup_path
 from desktop.clean_shutdown import ENV_PREVIOUS_SESSION, MARKER_FILE_NAME
 from desktop.django_bootstrap import is_parcacigi_baglantisiyla, wal_checkpoint
 from desktop.errors import (
@@ -84,10 +85,13 @@ def izlenen_adimlar(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     monkeypatch.setattr(main_mod, "prepare_django", kaydet("django-hazirla"))
     monkeypatch.setattr(main_mod, "unknown_applied_migrations", kaydet("taninmayan-goc", []))
     monkeypatch.setattr(main_mod, "ensure_no_unknown_migrations", kaydet("goc-surumu"))
-    monkeypatch.setattr(main_mod, "has_pending_migrations", kaydet("bekleyen-goc-var-mi", True))
+    monkeypatch.setattr(
+        main_mod, "pending_migrations", kaydet("bekleyen-goc-var-mi", ["okul.0010_ornek"])
+    )
     monkeypatch.setattr(main_mod, "pre_migrate_backup", kaydet("goc-oncesi-yedek"))
     monkeypatch.setattr(main_mod, "run_migrations", kaydet("goc"))
     monkeypatch.setattr(main_mod, "write_version_stamp", kaydet("damga-yaz"))
+    monkeypatch.setattr(main_mod, "_acilis_olaylarini_yaz", kaydet("iz-olaylari"))
     return sira
 
 
@@ -110,6 +114,8 @@ def test_acilis_sirasi_tasarimla_birebir(tmp_path: Path, izlenen_adimlar: list[s
         "goc-oncesi-yedek",
         "goc",
         "damga-yaz",
+        # §4.6.3: 7-8'in olguları göçten SONRA denetim izine (masaustu_kanca).
+        "iz-olaylari",
     ]
 
 
@@ -134,12 +140,71 @@ def test_gunluk_yedek_alinmadiysa_rotasyon_kosmaz(
 def test_bekleyen_goc_yoksa_ek_yedek_alinmaz(
     tmp_path: Path, izlenen_adimlar: list[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(main_mod, "has_pending_migrations", lambda: False)
+    monkeypatch.setattr(main_mod, "pending_migrations", lambda: [])
     paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
 
     main_mod.prepare_data(paths, "0.1.0")
 
     assert "goc-oncesi-yedek" not in izlenen_adimlar
+
+
+def _acilis_olaylarini_topla(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    """`_acilis_olaylarini_yaz`'a giden olguları toplar (backend yok; §4.6.3)."""
+    gorulen: list[Any] = []
+    monkeypatch.setattr(
+        main_mod, "_acilis_olaylarini_yaz", lambda olaylar, surum: gorulen.append((olaylar, surum))
+    )
+    return gorulen
+
+
+def test_acilisin_yedek_ve_goc_olgulari_gocten_sonra_denetim_izine_verilir(
+    tmp_path: Path, izlenen_adimlar: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Tasarım §4.2 adım 7-8, §4.6.3; plan F1b-1: günlük ve göç öncesi yedek Django ve tablo
+    hazır olmadan alınır; olgular tamponlanır, göçten sonra `masaustu_kanca`'ya verilir."""
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    monkeypatch.setattr(
+        main_mod, "rotate_backups", lambda *a, **k: [paths.backups / "gunluk-2026-09-08.odbak"]
+    )
+    monkeypatch.setattr(
+        main_mod,
+        "pre_migrate_backup",
+        lambda *a, **k: paths.backups / "pre-migrate-0.2.0-2026-09-22.odbak",
+    )
+    gorulen = _acilis_olaylarini_topla(monkeypatch)
+
+    main_mod.prepare_data(paths, "0.2.0")
+
+    ((olaylar, surum),) = gorulen
+    assert surum == "0.2.0"
+    assert olaylar.alinan_yedekler == [
+        "gunluk-2026-09-22.odbak",
+        "pre-migrate-0.2.0-2026-09-22.odbak",
+    ]
+    assert olaylar.silinen_yedekler == ["gunluk-2026-09-08.odbak"]
+    assert olaylar.gocler == ["okul.0010_ornek"]
+
+
+def test_bugunun_yedegi_zaten_varsa_alindi_olayi_yazilmaz(
+    tmp_path: Path, izlenen_adimlar: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Aynı gün ikinci açılış yedeği yeniden üretmez: "alındı" olayı da yinelenmez."""
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    paths.ensure()
+    daily_backup_path(paths.backups, date.today()).write_bytes(b"x")
+    monkeypatch.setattr(main_mod, "pending_migrations", lambda: [])
+    gorulen = _acilis_olaylarini_topla(monkeypatch)
+
+    main_mod.prepare_data(paths, "0.1.0")
+
+    ((olaylar, _surum),) = gorulen
+    assert olaylar.alinan_yedekler == [] and olaylar.gocler == []
+
+
+def test_backend_yoksa_acilis_olaylari_sessizce_atlanir() -> None:
+    """Masaüstü birim testinde `apps.okul` içe aktarılamaz: açılış durmaz."""
+    main_mod._acilis_olaylarini_yaz(main_mod.AcilisOlaylari(gocler=["okul.0010_ornek"]), "0.2.0")
+    main_mod._yedek_olaylarini_yaz(alinan=["gunluk-2026-09-22.odbak"], silinen=[])
 
 
 # ------------------------------------------------------------ hata senaryoları
@@ -852,6 +917,33 @@ def test_gunluk_yedek_isi_yedek_alinmazsa_rotasyon_kosmaz(
     monkeypatch.setattr(main_mod, "daily_backup", lambda *a, **k: tmp_path / "gunluk.odbak")
     assert main_mod.gunluk_yedek_isi(paths, bugun=lambda: date(2026, 9, 24))() is True
     assert olaylar == ["rotasyon"]
+
+
+def test_gunluk_yedek_isi_yeni_yedegi_ve_silinenleri_denetim_izine_verir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`od-gunluk`'un yedeği de `YEDEK` olayıdır (kip backend'de seçilir; §4.6.3)."""
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    paths.ensure()
+    _sahte_gunluk_yedek(monkeypatch)
+    monkeypatch.setattr(
+        main_mod, "rotate_backups", lambda *a, **k: [paths.backups / "gunluk-2026-09-09.odbak"]
+    )
+    gorulen: list[tuple[list[str], list[str]]] = []
+    monkeypatch.setattr(
+        main_mod,
+        "_yedek_olaylarini_yaz",
+        lambda *, alinan, silinen: gorulen.append((alinan, silinen)),
+    )
+    is_ = main_mod.gunluk_yedek_isi(paths, bugun=lambda: date(2026, 9, 24))
+
+    assert is_() is True
+    assert is_() is True  # aynı gün: yedek zaten var, "alındı" yinelenmez
+
+    assert gorulen == [
+        (["gunluk-2026-09-24.odbak"], ["gunluk-2026-09-09.odbak"]),
+        ([], ["gunluk-2026-09-09.odbak"]),
+    ]
 
 
 def _sahte_gunluk_yedek(monkeypatch: pytest.MonkeyPatch) -> None:

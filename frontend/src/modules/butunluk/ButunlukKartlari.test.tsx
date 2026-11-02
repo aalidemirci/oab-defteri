@@ -1,0 +1,422 @@
+// Denetim izi uyarı kartları (tasarım §4.6.3, §4.6.1 kural 1 ve 4, §4.4.4): görünen metin
+// sade Türkçedir, iç kod (`kuyruk_kesik`, `seal`…) ve kişi adı yoktur, tarih gg.aa.yyyy
+// SS:dd (Europe/Istanbul). Söyleyecek bir şeyi olmayan kart çizilmez.
+
+import { render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+import { gorunenMetin } from "../../test/gorunenMetin";
+import { ConfirmProvider } from "../../ui/ConfirmProvider";
+import { SnackbarProvider } from "../../ui/SnackbarProvider";
+import type { ButunlukBulgusu, ButunlukDurumu, GeriYuklemeOzeti } from "./api";
+import ButunlukKartlari, {
+  DegistirilmisHesapKarti,
+  DenetimIziKarti,
+  GeriYuklemeKarti,
+} from "./ButunlukKartlari";
+import {
+  DEGISTIRILMIS_HESAP_KARTI_BASLIGI,
+  DENETIM_DEGISIKLIK_CUMLESI,
+  DENETIM_DENETLENEMEDI_CUMLESI,
+  DENETIM_DENETLENEMEDI_DIP_CUMLESI,
+  DENETIM_IZI_KARTI_BASLIGI,
+  GERI_YUKLEME_KARTI_BASLIGI,
+  IKI_DEPO_KARTI_BASLIGI,
+  OKUNAMAYAN_BUTUNLUK_KARTI_BASLIGI,
+} from "./metinler";
+
+/** UTC 07:15 → Europe/Istanbul 10:15. */
+const ZAMAN = "2026-11-01T07:15:00Z";
+const YONETICI = { id: "h-1", tanitici: "yonetici", rol_etiketi: "Program yöneticisi" };
+/** Snake_case iç kodlar ve backend'in mühür alan adı ekrana çıkmaz (sözlük §2). */
+const IC_KOD = /[a-z]+_[a-z]+|\bseal\b|SIFIRLAMA|KURTARMA|BUTUNLUK/;
+
+function dogrulama(bulgular: string[], duzey: "uyari" | "bilgi" = "uyari"): ButunlukBulgusu {
+  return { seq: 12, zaman: ZAMAN, tur: "dogrulama", duzey, bulgular, hesap: null };
+}
+
+const BOS: ButunlukDurumu = {
+  butunluk: [],
+  geri_yukleme: null,
+  iki_depo: {
+    fark_var: false,
+    sarmalsiz_hesaplar: [],
+    silinebilir_sarmallar: [],
+    muhru_tutmayan: [],
+  },
+  kagit_capasi: { kayit_no: 7, zincir: "C3ED-8364" },
+  son_girisler: [],
+  parola_yenilenme: null,
+  okunamayan: [],
+};
+
+const GERI: GeriYuklemeOzeti = {
+  seq: 40,
+  zaman: ZAMAN,
+  geri_yukleme_ani: "2026-10-31T19:15:00Z",
+  hesap: YONETICI,
+  yol: "hesap",
+  yol_hesap: YONETICI,
+  oturum_hesap: null,
+  kurtarma_no: null,
+  yedek: "gunluk-2026-10-31.odbak",
+  onceki_dosya: "db-onceki-2026-11-01-101530.sqlite3",
+  onceki_sha256: "ab".repeat(32),
+  onceki_kayit_no: 42,
+  onceki_zincir: "CDCD-CDCD",
+  ayrintisiz: false,
+  onceki_geri_yuklemeler: [],
+};
+
+describe("Denetim İzi Bütünlüğü kartı", () => {
+  it("bulgular sade cümleyle ve anıyla yazılır; iç kod yok", () => {
+    const { container } = render(
+      <DenetimIziKarti
+        bulgular={[dogrulama(["kuyruk_kesik", "kilitli_satir_eksik", "zincir_kopuk", "capa_yok"])]}
+      />,
+    );
+
+    const kart = screen.getByRole("region", { name: DENETIM_IZI_KARTI_BASLIGI });
+    expect(
+      within(kart).getByText(/son kayıtları silinmiş .* \(geri sarılmış\)/),
+    ).toBeInTheDocument();
+    expect(within(kart).getByText(/kilitliyken yazılan olaylardan bazıları/)).toBeInTheDocument();
+    expect(within(kart).getByText(/zinciri kırık/)).toBeInTheDocument();
+    expect(within(kart).getByText(/Kilit işareti bulunamadı/)).toBeInTheDocument();
+    expect(within(kart).getByText("01.11.2026 10:15")).toBeInTheDocument();
+    expect(within(kart).getByText(/Denetleme Kuruluna bildirin/)).toBeInTheDocument();
+    expect(within(kart).getByText(/bir sonraki girişinizde kalkar/)).toBeInTheDocument();
+    expect(gorunenMetin(container)).not.toMatch(IC_KOD);
+  });
+
+  it("yalnız kesinti varsa bilgi olarak yazılır, bildirim öğüdü yoktur", () => {
+    render(<DenetimIziKarti bulgular={[dogrulama(["kesinti"], "bilgi")]} />);
+
+    const kart = screen.getByRole("region", { name: DENETIM_IZI_KARTI_BASLIGI });
+    expect(within(kart).getByText(/bir bilgi verdi/)).toBeInTheDocument();
+    expect(within(kart).getByText("01.11.2026 10:15 · bilgi")).toBeInTheDocument();
+    expect(within(kart).queryByText(/Denetleme Kuruluna bildirin/)).not.toBeInTheDocument();
+  });
+
+  it("yalnız denetleyemeyen bulgu varsa değişiklik iddia etmez, geri yüklemeyi öğütlemez", () => {
+    // Bağımsız denetim bulgusu: kurulumdan sonra ilk kilitlenmeden önce elektrik kesintisi →
+    // "kilit işareti yok" + "işaret yokken yazılmış olaylar". Kart "değişiklik buldu" ve
+    // "sağlam bir yedekten geri yüklenir" diyordu.
+    render(<DenetimIziKarti bulgular={[dogrulama(["capa_yok", "muhursuz_satir"])]} />);
+
+    const kart = screen.getByRole("region", { name: DENETIM_IZI_KARTI_BASLIGI });
+    expect(within(kart).getByText(DENETIM_DENETLENEMEDI_CUMLESI)).toBeInTheDocument();
+    expect(within(kart).queryByText(DENETIM_DEGISIKLIK_CUMLESI)).not.toBeInTheDocument();
+    expect(within(kart).queryByText(/geri yüklenir/)).not.toBeInTheDocument();
+    expect(within(kart).queryByText(/program dışından değiştirilmiş/)).not.toBeInTheDocument();
+    expect(within(kart).getByText(DENETIM_DENETLENEMEDI_DIP_CUMLESI)).toBeInTheDocument();
+    expect(within(kart).getByText(/Kilit işareti bulunamadı/)).toBeInTheDocument();
+  });
+
+  it("denetleyemeyen bulguda kart değişiklik olmadığını da söylemez", () => {
+    // Bağımsız denetim bulgusu: "Bu bir değişiklik bulgusu değildir" cümlesi, denetimi
+    // düşüren program dışı bir yazımda yanlış bir güvence veriyordu.
+    for (const kod of ["capa_yok", "dogrulama_yapilamadi", "muhursuz_satir"]) {
+      const { unmount } = render(<DenetimIziKarti bulgular={[dogrulama([kod])]} />);
+      const kart = screen.getByRole("region", { name: DENETIM_IZI_KARTI_BASLIGI });
+      expect(within(kart).queryByText(/değişiklik bulgusu değildir/)).not.toBeInTheDocument();
+      expect(
+        within(kart).getByText(/değişiklik olup olmadığı bilinmiyor/),
+        kod,
+      ).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it("doğrulamanın kendi hatası değişiklik iddia etmez, denetlenemedi diye yazılır", () => {
+    render(<DenetimIziKarti bulgular={[dogrulama(["dogrulama_yapilamadi"])]} />);
+    expect(screen.getByText(DENETIM_DENETLENEMEDI_CUMLESI)).toBeInTheDocument();
+    expect(screen.queryByText(/geri yüklenir/)).not.toBeInTheDocument();
+  });
+
+  it("anahtarı bulunamayan kayıt değişiklik olarak yazılır, geri yükleme öğütlenir", () => {
+    // Bağımsız denetim bulgusu: içeriği değiştirilip anahtar başvurusu bozulan kayıt kartta
+    // "denetleyemedi … Bu bir değişiklik bulgusu değildir" diye çıkıyordu.
+    const { container } = render(<DenetimIziKarti bulgular={[dogrulama(["anahtar_yok"])]} />);
+
+    const kart = screen.getByRole("region", { name: DENETIM_IZI_KARTI_BASLIGI });
+    expect(within(kart).getByText(DENETIM_DEGISIKLIK_CUMLESI)).toBeInTheDocument();
+    expect(within(kart).queryByText(DENETIM_DENETLENEMEDI_CUMLESI)).not.toBeInTheDocument();
+    expect(within(kart).getByText(/anahtarı bulunamayan kayıt var/)).toBeInTheDocument();
+    expect(
+      within(kart).getByText(/gerekirse sağlam bir\s+yedekten geri yüklenir/),
+    ).toBeInTheDocument();
+    expect(gorunenMetin(container)).not.toMatch(IC_KOD);
+  });
+
+  it("denetleyemeyen bulgunun yanında değişiklik gösteren bulgu varsa değişiklik der", () => {
+    render(
+      <DenetimIziKarti
+        bulgular={[dogrulama(["capa_yok"]), { ...dogrulama(["mac_tutmadi"]), seq: 14 }]}
+      />,
+    );
+    expect(screen.getByText(DENETIM_DEGISIKLIK_CUMLESI)).toBeInTheDocument();
+    expect(screen.getByText(/gerekirse sağlam bir\s+yedekten geri yüklenir/)).toBeInTheDocument();
+  });
+
+  it("tanınmayan ya da boş bulgu kodu yazmaz, genel cümleyi yazar", () => {
+    const { container } = render(
+      <DenetimIziKarti bulgular={[dogrulama(["yeni_bir_bulgu"]), { ...dogrulama([]), seq: 13 }]} />,
+    );
+
+    expect(screen.getAllByText("Denetim izinde tanınmayan bir bulgu var.")).toHaveLength(2);
+    // Tanınmayan ya da okunamayan bulgu değişiklik sayılır (fail-closed).
+    expect(screen.getByText(DENETIM_DEGISIKLIK_CUMLESI)).toBeInTheDocument();
+    expect(gorunenMetin(container)).not.toMatch(IC_KOD);
+  });
+
+  it("doğrulama bulgusu yoksa kart çizilmez", () => {
+    const { container } = render(<DenetimIziKarti bulgular={[]} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("Değiştirilmiş Hesap Kaydı kartı", () => {
+  it("hesap tanıtıcı ve kaydın söylediği rolle anılır; mühür kodu ve kişi adı yok", () => {
+    const { container } = render(
+      <DegistirilmisHesapKarti
+        bulgular={[
+          {
+            seq: 9,
+            zaman: ZAMAN,
+            tur: "muhur",
+            duzey: "uyari",
+            bulgular: ["seal"],
+            hesap: { id: "h-2", tanitici: "muhasip", rol_etiketi: "Sekreter" },
+          },
+        ]}
+      />,
+    );
+
+    const kart = screen.getByRole("region", { name: DEGISTIRILMIS_HESAP_KARTI_BASLIGI });
+    expect(
+      within(kart).getByText(/giriş açılmadı ve\s+program kayda dokunmadı/),
+    ).toBeInTheDocument();
+    expect(
+      within(kart).getByText(
+        "Tanıtıcısı “muhasip” olan hesap (kayıtta yazan rol: Sekreter) · 01.11.2026 10:15",
+      ),
+    ).toBeInTheDocument();
+    expect(gorunenMetin(container)).not.toMatch(IC_KOD);
+  });
+
+  it("kaydı okunamayan hesap da anılır; doğrulama bulguları bu kartta değildir", () => {
+    render(
+      <DegistirilmisHesapKarti
+        bulgular={[
+          dogrulama(["capa_yok"]),
+          { seq: 10, zaman: ZAMAN, tur: "muhur", duzey: "uyari", bulgular: [], hesap: null },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(/^Kaydı okunamayan bir hesap/)).toBeInTheDocument();
+    expect(screen.queryByText(/Kilit işareti/)).not.toBeInTheDocument();
+  });
+});
+
+describe("Yedekten Geri Yükleme Yapıldı kartı", () => {
+  it("yedeğin adını, açan hesabı, önceki veritabanını ve son kaydını yazar", () => {
+    const { container } = render(<GeriYuklemeKarti geri={GERI} />);
+
+    const kart = screen.getByRole("region", { name: GERI_YUKLEME_KARTI_BASLIGI });
+    expect(within(kart).getByText(/Kayıtlar bir yedekten geri yüklendi/)).toBeInTheDocument();
+    // Geri yüklemenin anı (nottan) ile denetim izine yazıldığı an (ilk giriş) ayrı yazılır.
+    expect(within(kart).getByText("Geri yükleme anı").nextElementSibling).toHaveTextContent(
+      "31.10.2026 22:15",
+    );
+    expect(
+      within(kart).getByText("Denetim izine yazıldığı an").nextElementSibling,
+    ).toHaveTextContent("01.11.2026 10:15");
+    expect(within(kart).getByText("gunluk-2026-10-31.odbak")).toBeInTheDocument();
+    expect(
+      within(kart).getByText("Program yöneticisi · tanıtıcı yonetici hesabının parolası"),
+    ).toBeInTheDocument();
+    expect(within(kart).getByText("db-onceki-2026-11-01-101530.sqlite3")).toBeInTheDocument();
+    expect(within(kart).getByText("Kayıt no: 42 · Zincir: CDCD-CDCD")).toBeInTheDocument();
+    // Denetleme Kurulunun "gördüm" düğmesi 2. adımda: bugün kart kalır, düğme yok.
+    expect(within(kart).getByText(/göstermeyi sürdürür/)).toBeInTheDocument();
+    expect(within(kart).queryByRole("button")).not.toBeInTheDocument();
+    expect(gorunenMetin(container)).not.toMatch(IC_KOD);
+  });
+
+  it("kurtarma anahtarı yolunda anahtar no'sunu, elden getirilen dosyada adın kayda geçmediğini yazar", () => {
+    render(
+      <GeriYuklemeKarti
+        geri={{ ...GERI, yol: "kurtarma", yol_hesap: null, kurtarma_no: 3, yedek: null }}
+      />,
+    );
+
+    expect(screen.getByText("Kurtarma anahtarı (anahtar no 3)")).toBeInTheDocument();
+    expect(screen.getByText("Elden getirilen dosya (adı kayda geçmez)")).toBeInTheDocument();
+    // Konsoldan yapılan geri yüklemede oturum yoktur: satır çizilmez.
+    expect(screen.queryByText("Başlatan oturum")).not.toBeInTheDocument();
+  });
+
+  it("uygulama içinden yapılan geri yüklemeyi başlatan oturumun hesabını yazar (kurtarma yolunda da)", () => {
+    render(
+      <GeriYuklemeKarti
+        geri={{ ...GERI, yol: "kurtarma", yol_hesap: null, kurtarma_no: 3, oturum_hesap: YONETICI }}
+      />,
+    );
+
+    expect(screen.getByText("Başlatan oturum").nextElementSibling).toHaveTextContent(
+      "Program yöneticisi · tanıtıcı yonetici",
+    );
+  });
+
+  it("ayrıntısız geri yüklemede olgu yine yazılır", () => {
+    render(
+      <GeriYuklemeKarti
+        geri={{ ...GERI, ayrintisiz: true, yol: null, yedek: null, onceki_dosya: null }}
+      />,
+    );
+
+    expect(
+      screen.getByText(/ayrıntıları okunamadı; olgu denetim izinde kayıtlıdır/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Yedeği açan")).not.toBeInTheDocument();
+  });
+
+  it("aralarında giriş yapılmadan yapılan geri yüklemelerin hepsini sırasıyla yazar", () => {
+    // Bağımsız denetim bulgusu: kart yalnız son satırı gösteriyordu; yedekten sonraki kayıtlar
+    // İLK geri yüklemenin kenara aldığı veritabanındadır.
+    const ilk = {
+      ...GERI,
+      seq: 38,
+      yedek: "gunluk-2026-10-30.odbak",
+      onceki_dosya: "db-onceki-2026-11-01-091000.sqlite3",
+      onceki_kayit_no: 120,
+      onceki_zincir: "AAAA-1111",
+    };
+    const { container } = render(
+      <GeriYuklemeKarti geri={{ ...GERI, onceki_geri_yuklemeler: [ilk] }} />,
+    );
+
+    const kart = screen.getByRole("region", { name: GERI_YUKLEME_KARTI_BASLIGI });
+    expect(within(kart).getByText(/aralarında giriş yapılmadan 2 kez/)).toBeInTheDocument();
+    const basliklar = within(kart)
+      .getAllByRole("heading", { level: 3 })
+      .map((h) => h.textContent);
+    expect(basliklar).toEqual(["1. geri yükleme", "2. geri yükleme (son)"]);
+    expect(within(kart).getByText("db-onceki-2026-11-01-091000.sqlite3")).toBeInTheDocument();
+    expect(within(kart).getByText("Kayıt no: 120 · Zincir: AAAA-1111")).toBeInTheDocument();
+    expect(within(kart).getByText("db-onceki-2026-11-01-101530.sqlite3")).toBeInTheDocument();
+    expect(
+      within(kart).getByText(/ilk geri yüklemede kenara alınan veritabanında durur/),
+    ).toBeInTheDocument();
+    expect(gorunenMetin(container)).not.toMatch(IC_KOD);
+  });
+
+  it("bozuk notun ayrıntısız geri yüklemesi önce, okunabilen sonuncusu son yazılır", () => {
+    const ayrintisiz = {
+      ...GERI,
+      seq: 39,
+      ayrintisiz: true,
+      geri_yukleme_ani: null,
+      yol: null,
+      yedek: null,
+      onceki_dosya: null,
+      onceki_kayit_no: null,
+      onceki_zincir: null,
+    };
+    render(<GeriYuklemeKarti geri={{ ...GERI, onceki_geri_yuklemeler: [ayrintisiz] }} />);
+
+    const [birinci, ikinci] = screen.getAllByRole("listitem");
+    expect(within(birinci).getByText(/ayrıntıları okunamadı/)).toBeInTheDocument();
+    expect(within(ikinci).getByText("gunluk-2026-10-31.odbak")).toBeInTheDocument();
+    // Asıl dönüş yolu bilinmiyor: "kayıt yoktu" denmez.
+    expect(screen.queryByText(/kayıt yoktu/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["kenara alınacak veritabanı yoktu", { onceki_dosya: null, onceki_kayit_no: null }],
+    ["kenara alınan veritabanının izi boştu", { onceki_kayit_no: 0, onceki_zincir: null }],
+  ])("%s: “kayıtlar ekrandan kalktı” demez, önceden kayıt olmadığını söyler", (_ad, degisen) => {
+    // Bağımsız denetim bulgusu: yeni bilgisayara taşımada kaybolan kayıt yoktur.
+    render(<GeriYuklemeKarti geri={{ ...GERI, ...degisen }} />);
+
+    expect(
+      screen.getByText(/Geri yüklemeden önce bu bilgisayarda kayıt yoktu\./),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/ekrandan kalkmıştır/)).not.toBeInTheDocument();
+    expect(screen.getByText(/göstermeyi sürdürür/)).toBeInTheDocument();
+  });
+
+  it("geri yükleme yoksa kart çizilmez", () => {
+    const { container } = render(<GeriYuklemeKarti geri={null} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("ButunlukKartlari", () => {
+  it("söyleyecek bir şey yoksa hiçbir kart çizilmez", () => {
+    const { container } = render(<ButunlukKartlari durum={BOS} onDurum={vi.fn()} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("iki depo farkı kendiliğinden hesaplanamadıysa (null) kart çizilmez", () => {
+    const { container } = render(
+      <ButunlukKartlari durum={{ ...BOS, iki_depo: null }} onDurum={vi.fn()} />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("okunamayan kart varsa uyarı kartı çizilir (uyarı sessizce kaybolmaz)", () => {
+    render(<ButunlukKartlari durum={{ ...BOS, okunamayan: ["geri_yukleme"] }} onDurum={vi.fn()} />);
+
+    const kart = screen.getByRole("region", { name: OKUNAMAYAN_BUTUNLUK_KARTI_BASLIGI });
+    expect(within(kart).getByText(/kartları tam okunamadı/)).toBeInTheDocument();
+    // Son Girişler de kapsanır: metin yalnız "uyarı kartları" demez.
+    expect(within(kart).getByText(/bir uyarı ya da giriş gösterilemiyor/)).toBeInTheDocument();
+    expect(gorunenMetin(kart)).not.toMatch(IC_KOD);
+  });
+
+  it("dört kart sırasıyla çizilir", () => {
+    render(
+      <SnackbarProvider>
+        <ConfirmProvider>
+          <ButunlukKartlari
+            durum={{
+              ...BOS,
+              butunluk: [
+                dogrulama(["kuyruk_kesik"]),
+                {
+                  seq: 9,
+                  zaman: ZAMAN,
+                  tur: "muhur",
+                  duzey: "uyari",
+                  bulgular: ["seal"],
+                  hesap: { id: "h-2", tanitici: "muhasip", rol_etiketi: "Muhasip" },
+                },
+              ],
+              geri_yukleme: GERI,
+              iki_depo: {
+                fark_var: true,
+                sarmalsiz_hesaplar: [
+                  { id: "h-2", tanitici: "muhasip", rol_etiketi: "Muhasip", kapali: false },
+                ],
+                silinebilir_sarmallar: [],
+                muhru_tutmayan: [],
+              },
+            }}
+            onDurum={vi.fn()}
+          />
+        </ConfirmProvider>
+      </SnackbarProvider>,
+    );
+
+    const basliklar = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+    expect(basliklar).toEqual([
+      DENETIM_IZI_KARTI_BASLIGI,
+      DEGISTIRILMIS_HESAP_KARTI_BASLIGI,
+      GERI_YUKLEME_KARTI_BASLIGI,
+      IKI_DEPO_KARTI_BASLIGI,
+    ]);
+  });
+});

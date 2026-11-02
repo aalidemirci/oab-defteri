@@ -4,7 +4,7 @@ Aile iskeletinin kip katmanının (görevli kipi / yönetici kipi) yerini alır;
 kavramı bilinçli olarak kalkar (tasarım §12.B). Programda aynı anda en çok BİR
 oturum vardır: kilidi açan hesap (kimlik, tanıtıcı, rol). Kullanıcı değiştirmek =
 Kilitle + başka hesapla açmak (TK14). Kilit kapısı (`lock_middleware`), 2. adımın
-`RolMiddleware`'i, denetim izi yazıcısı (alt commit c) ve uzun iş sayacı aynı nesneyi
+`RolMiddleware`'i, denetim izi yazıcısı (`denetim_izi`) ve uzun iş sayacı aynı nesneyi
 okur (`OTURUM`); ikinci bir durum kaynağı açılmaz.
 
 DURUMLAR (API ve arayüz bu dizeleri kullanır; `durum()`):
@@ -85,11 +85,59 @@ kilidi bırakılmış hâlde yapılır; bekleme sürerken oturuma yeniden açıl
 hesap, bekleyen kilidin sonunda düşürülmez (`_nesil`).
 
 YAZAR BAĞLAMI (TK16, §4.1). Her yazma, oturumdaki hesabı "yazar" olarak denetim izine
-verir (alt commit c). Yazar istek başında alınır (bağlam değişkeni; ara katman
+verir (`apps.okul.denetim_izi`). Yazar istek başında alınır (bağlam değişkeni; ara katman
 `yazar_olarak` ile kurar) ve istek boyunca değişmez: istek sürerken oturum kilitlense
 de o isteğin yazarı açılıştaki hesaptır. Kullanıcı eylemi olmayan iş (gün işleri,
 `od-gunluk`) `sistem_olarak()` ile `SISTEM`'i açıkça verir. Bağlam yoksa `yazar()`
-None döner; yazar bağlamı olmayan yazma alt commit (c)'de reddedilir.
+None döner; yazar bağlamı olmayan yazmayı denetim izi yazıcısı reddeder.
+
+KİLİDİN İZİ (tasarım §4.6.2; plan F1b-1 alt commit c). Her kilitlenme `KILIT` satırı
+yazar: elle Kilitle oturumdaki hesabın, boşta kilit `SISTEM`'in (kullanıcı eylemi yoktur);
+uzun iş yüzünden ertelenip sonra uygulanan kilit ilk nedenin yazarını taşır (elle
+istendiyse hesap). Düzenli kapanışın kilidi, kapanışı bu oturumun içinden arayüzdeki Çık
+istediyse (`POST app/quit/`; `cikisi_hesap_istedi`) hesabın, öteki kaynaklarda `SISTEM`'in
+satırıdır. Kaynağı backend yalnız Çık'ta bilir: pencerenin çarpısı (pywebview `closing`
+olayı), kurucunun `OABDefteri.Kapat` olayı, tek kopya kanalının `kapat` komutu ve SIGTERM
+masaüstünde aynı `request_quit` yoluna iner; `closing` olayı nedenini taşımaz (Windows'ta
+oturum kapanışı ve görev yöneticisi de pencereyi aynı olayla kapatır), çarpıyı kullanıcının
+eylemi diye ayırmanın güvenilir yolu yoktur. Bu yüzden çarpının kilidi `SISTEM`'dir.
+
+Satır uçuştaki istekler bittikten sonra, DEK ve İA DÜŞMEDEN ÖNCE, açık anahtarla ve oturum
+kilidinin DIŞINDA (SQLite yazımı) yazılır. Yazılamazsa (veritabanı yazılamıyor) kilit yine
+uygulanır ve olay günlüğe düşer: kilit bir güvenlik eylemidir, iz satırının yazılamaması
+onu durdurmaz (fail-closed). Satır yalnız kilit gerçekten uygulanacaksa yazılır:
+uçuştakiler beklenirken kilit ekranından yeniden giriş yapılırsa (nesil değişti) eski
+oturumun kilidi düşer, satır da çapa da yazılmaz (hesap değiştirmenin olağan yolu da eski
+hesaba `KILIT` yazmaz). Servis içi hemen kapatma (`kapat`: geri yükleme sonrası, güvenlik
+dosyasının sıfırlanması) satır yazmaz: veritabanı artık o oturumun değildir; bekleyen kilit
+bunu yeniden girişten ayırır (oturum açık değil) ve `zaten_kilitli` döner. Kilit ekranından
+yapılıp DÜŞEN bir giriş, kendisinden önce süren oturuma (açık ya da kilitlenmekte) dokunmaz
+(`app_password._start_session`): bekleyen kilidin satırı ve çapası yazılır.
+
+DÜZENLİ KAPANIŞ (`kapanis_kilidi`; tasarım §4.2 kapanış sırası). Kapanış önce işaret koyar
+(`kapaniyor_mu`; tek yönlü): `IZ_KIP_KILIDI`'ne bu işaretten sonra giren kilit açılışı
+reddedilir. Sonra oturum açıksa kilitler; başka bir iş parçacığının kilidi sürüyorsa onun
+bitmesini, oturum kapalıysa uçuştaki istekleri (süren bir kilit açılışı ya da kurulumun ilk
+hesabı da uçuştaki bir istektir) bekler ve bu arada açılan oturumu da kilitler. Yalnız aynı
+turda önce uçuşta istek kalmadığını, SONRA oturumun kapalı olduğunu görünce döner (ters sırada
+iki okuma arasında açılıp biten bir açılış gözden kaçardı). Bekleme `UCUSTA_BEKLEME_SN` ile
+sınırlıdır; süre dolduğunda açık olan oturum (uzun bir isteğin yanında biten kilit açılışının
+oturumu da) beklemeden kilitlenir. Böylece masaüstü yönetim sunucusunu durdurduğunda
+(`desktop/main.py` `serve`) bu oturumun `KILIT` satırı ve çapası yazılmıştır; süren bir kilit
+ya da açılış kapanışın arkasında kalıp süreçle birlikte ölmez.
+
+ÇAPA (tasarım §4.6.3; plan F1b-1 "Denetim izi"). `KILIT` satırından hemen sonra, yine
+anahtarlar düşmeden, zincir başı `iz-durumu.json`'a çapa olarak yazılır ve kilitli kip
+tohumu sıfırlanır (`apps.okul.iz_durumu.capa_yaz`); düzenli kapanışın kilidi de aynı yoldan
+geçer. Çapa yazılamazsa kilit yine uygulanır (olay günlüğe düşer) ve ESKİ çapa silinir: ilk
+kilit açılışı "çapa yok" der; silinemezse, çapadan sonra kalan bu `KILIT` satırını görüp
+"çapa bayat" der (`iz_durumu.capa_yaz`, `iz_dogrulama`). Eski çapa sessizce geçerli
+kalsaydı bu oturumun kuyruğunun silinmesi görünmezdi. Satır, çapa ve anahtarların düşmesi
+`IZ_KIP_KILIDI` altında, tek parça yapılır: aynı anda yazmak isteyen bir sistem olayı (gün
+işi, yedek) ya hepsinden önce açık anahtarla ya da hepsinden sonra yeni çapanın tohumuyla
+yazılır; arada eski çapanın tohumuyla yazılan satır olmaz. Kilit sırası: (güvenlik dosyası
+kilidi, `app_password._start_session`) → `IZ_KIP_KILIDI` → veritabanı → oturum kilidi; ters
+yönde alan yol yoktur.
 
 SAAT: UYKU DA SÜREDİR (aile iskeletinin denetim bulgusu). Tasarım §4.5 kapak
 kapatmayı ve kullanıcının başlattığı uykuyu engellemez. `time.monotonic` Linux'ta
@@ -145,7 +193,8 @@ KILITLENDI: Final = "kilitlendi"
 ERTELENDI: Final = "ertelendi"
 ZATEN_KILITLI: Final = "zaten_kilitli"
 
-#: Kilidin nedeni (günlük; alt commit c'de `KILIT` iz satırı da taşır).
+#: Kilidin nedeni (günlük; `KILIT` iz satırının yazarını belirler: "elle" hesabındır,
+#: "kapanis" yalnız arayüzdeki Çık bu oturumdan istendiyse; modül başlığı "KİLİDİN İZİ").
 KilitNedeni = Literal["elle", "bosta", "bekleyen", "kapanis"]
 
 #: Kilitlemenin uçuştaki istekleri en çok bekleyeceği süre (sn; modül başlığı).
@@ -222,11 +271,22 @@ class Yazar:
 #: Kullanıcı eylemi olmayan işlerin yazarı (gün işleri, sistem olayları).
 SISTEM: Final = Yazar(hesap_id=None, rol=None)
 
+#: Kilitlenmenin iz satırını (ve çapayı) yazan işlev: (kilitlenen hesap, yazar). Testte
+#: taklit edilir.
+KilitIzi = Callable[[OturumHesabi, Yazar], None]
+
+#: Kilitli kip ile oturumun kilitlenmesini sıralayan süreç içi kilit (modül başlığı "ÇAPA").
+#: Sahipleri: kilitlenmenin satır + çapa + anahtar düşürme parçası, sistem olayının kip seçimi
+#: ve kilitli yazımı (`iz_durumu`), kilit açılışındaki doğrulama ve çapa yenilemesi
+#: (`app_password._start_session`). Yeniden girilebilir: kip seçen yazıcı kilitli yazıcıyı
+#: aynı kilit altında çağırır.
+IZ_KIP_KILIDI: Final = threading.RLock()
+
 _yazar: ContextVar[Yazar | None] = ContextVar("od_yazar", default=None)
 
 
 def yazar() -> Yazar | None:
-    """Bu isteğin ya da işin yazarı; bağlam kurulmamışsa None (yazma reddedilir, alt commit c)."""
+    """Bu isteğin ya da işin yazarı; bağlam kurulmamışsa None (denetim izi yazıcısı reddeder)."""
     return _yazar.get()
 
 
@@ -376,6 +436,21 @@ def _guvenlik_dosyasi_kayip_mi() -> bool:
     return app_password.security_file_missing()
 
 
+def _kilit_izini_yaz(hesap: OturumHesabi, kim: Yazar) -> None:
+    """`KILIT` iz satırı ve çapa (modül başlığı "KİLİDİN İZİ", "ÇAPA").
+
+    Satır kendi işleminde, açık anahtarla yazılır; satır yazılamasa da çapa denenir (zincir
+    başı ne ise çapa odur). Çapa hata yükseltmez (`iz_durumu.capa_yaz`).
+    """
+    # Geç içe aktarım: denetim izi yazıcısı ve kilitli kip yazar bağlamını bu modülden alır.
+    from apps.okul import denetim_izi, iz_durumu
+
+    try:
+        denetim_izi.kilit_olayi(hesap_id=hesap.id, kim=kim)
+    finally:
+        iz_durumu.capa_yaz()
+
+
 # ---------------------------------------------------------------------------
 # Saat
 # ---------------------------------------------------------------------------
@@ -453,6 +528,7 @@ class OturumDurumu:
         ucusta: UcustakiIstekler | None = None,
         hesap_kurulu: Callable[[], bool] = _hesap_kurulu_mu,
         dosya_kayip: Callable[[], bool] = _guvenlik_dosyasi_kayip_mi,
+        kilit_izi: KilitIzi = _kilit_izini_yaz,
     ) -> None:
         self._kilit = threading.RLock()
         self._saat: Callable[[], float] = saat if saat is not None else UykuyuSayanSaat()
@@ -464,12 +540,22 @@ class OturumDurumu:
         self._ucusta = ucusta if ucusta is not None else UCUSTA
         self._hesap_kurulu = hesap_kurulu
         self._dosya_kayip = dosya_kayip
+        self._kilit_izi = kilit_izi
         self._hesap: OturumHesabi | None = None
         self._son_etkinlik = 0.0
         self._kilit_bekliyor = False
+        # Ertelenen kilidin ilk nedeni ("elle" öncelikli): uygulanınca iz satırının yazarı.
+        self._bekleyen_neden: KilitNedeni | None = None
         self._kilitleniyor = False
+        # Oturum açıldı, kapandı ya da kilit bitti: bekleyenleri uyandırır (kapanış kilidi
+        # süren bir kilidin bitmesini bununla bekler; modül başlığı "DÜZENLİ KAPANIŞ").
+        self._degisti = threading.Condition(self._kilit)
+        # Düzenli kapanış başladı (tek yönlü): yeni kilit açılışı reddedilir.
+        self._kapaniyor = False
         # Her açılış ve kapanışta artar: bekleyen bir kilit, arada açılan oturumu düşürmez.
         self._nesil = 0
+        # Arayüzdeki Çık'ı isteyen oturum: (nesil, hesap kimliği); kapanış kilidinin yazarı.
+        self._cikis_isteyen: tuple[int, str] | None = None
         # Kurulumun tamamlandığı BİR KEZ görüldü mü? (D15; modül başlığı)
         self._kurulum_gorulen = False
 
@@ -480,7 +566,10 @@ class OturumDurumu:
             logger.warning("Veri anahtarı oturum dışında bellekten düştü; oturum kapandı.")
             self._hesap = None
             self._kilit_bekliyor = False
+            self._bekleyen_neden = None
+            self._kilitleniyor = False
             self._nesil += 1
+            self._degisti.notify_all()
 
     def _acik(self) -> bool:
         """Kilit tutulurken: oturum yeni istekler için açık mı?"""
@@ -527,14 +616,32 @@ class OturumDurumu:
         crypto.unload_key()
         self._hesap = None
         self._kilit_bekliyor = False
+        self._bekleyen_neden = None
         self._kilitleniyor = False
+        self._cikis_isteyen = None
         self._nesil += 1
+        self._degisti.notify_all()
 
     # ------------------------------------------------------------ sorgular (yan etkisiz)
     def acik_mi(self) -> bool:
         """Oturum açık mı? (ara katmanın sıcak yolu; tembel kilidi UYGULAMAZ)"""
         with self._kilit:
             return self._acik()
+
+    def suruyor_mu(self) -> bool:
+        """Bir oturum sürüyor mu: açık YA DA kilitlenmekte (DEK uçuştakiler bitince düşecek)?
+
+        Kilit açılışı düşerse yalnız kendi açtığı anahtarları düşürür; kendisinden önce süren
+        oturumun anahtarlarına ve bekleyen kilidine dokunmaz (`app_password._start_session`).
+        """
+        with self._kilit:
+            self._tutarli_kil()
+            return self._hesap is not None
+
+    def kapaniyor_mu(self) -> bool:
+        """Düzenli kapanış başladı mı? (modül başlığı "DÜZENLİ KAPANIŞ"; kilit açılışı reddedilir)"""
+        with self._kilit:
+            return self._kapaniyor
 
     def hesap(self) -> OturumHesabi | None:
         """Oturumdaki hesap; oturum yoksa (ya da kilitleniyorsa) None."""
@@ -549,6 +656,21 @@ class OturumDurumu:
         """Uzun iş yüzünden ertelenmiş bir kilit var mı?"""
         with self._kilit:
             return self._acik() and self._kilit_bekliyor
+
+    def cikisi_hesap_istedi(self, kim: Yazar | None) -> bool:
+        """Arayüzdeki Çık bu oturumun hesabınca istendi (`POST app/quit/`; modül başlığı).
+
+        Kapanış kilidinin `KILIT` satırı o zaman hesabın olur. Yalnız açık oturumda ve yazar
+        oturumdaki hesapsa kaydedilir (kaydedildiyse True); kayıt oturuma (nesle) bağlıdır:
+        arada kilitlenip yeniden açılan oturumun kapanışı `SISTEM`'in kalır.
+        """
+        with self._kilit:
+            if not self._acik() or self._hesap is None or kim is None or kim.sistem_mi:
+                return False
+            if kim.hesap_id != self._hesap.id:
+                return False
+            self._cikis_isteyen = (self._nesil, self._hesap.id)
+            return True
 
     # ------------------------------------------------------------ tam durum
     def durum(self) -> OturumDurumAdi:
@@ -601,8 +723,10 @@ class OturumDurumu:
             self._hesap = hesap
             self._son_etkinlik = self._saat()
             self._kilit_bekliyor = False
+            self._bekleyen_neden = None
             self._kilitleniyor = False
             self._nesil += 1
+            self._degisti.notify_all()
 
     def kapat(self) -> None:
         """Oturumu HEMEN kapatır, DEK ve İA düşer (beklemesiz, ertelemesiz).
@@ -621,11 +745,13 @@ class OturumDurumu:
         ertelenebilir: bool = True,
         bekleme_sn: float = UCUSTA_BEKLEME_SN,
     ) -> KilitSonucu:
-        """Oturumu kilitler: uçuştaki istekleri bekler, sonra DEK ve İA düşer.
+        """Oturumu kilitler: uçuştaki istekleri bekler, `KILIT` satırı yazılır, DEK ve İA düşer.
 
         Uzun iş sürerken (ve `ertelenebilir` iken) kilit ertelenir: `kilit_bekliyor`
-        işaretlenir, iş bitince ilk istekte uygulanır (`degerlendir`). Oturum yoksa ya
-        da başka bir iş parçacığı zaten kilitliyorsa `zaten_kilitli`.
+        işaretlenir, iş bitince ilk istekte uygulanır (`degerlendir`). Oturum yoksa, başka
+        bir iş parçacığı zaten kilitliyorsa ya da beklerken oturum servis içinden
+        kapatıldıysa `zaten_kilitli`. İz satırının yazarı nedenden çıkar (modül başlığı
+        "KİLİDİN İZİ").
         """
         return self._kilitle(neden=neden, ertelenebilir=ertelenebilir, bekleme_sn=bekleme_sn)
 
@@ -637,31 +763,150 @@ class OturumDurumu:
         bekleme_sn: float,
         nesil: int | None = None,
     ) -> KilitSonucu:
+        return self._kilitle_ayrintili(
+            neden=neden, ertelenebilir=ertelenebilir, bekleme_sn=bekleme_sn, nesil=nesil
+        )[0]
+
+    def _kilitle_ayrintili(
+        self,
+        *,
+        neden: KilitNedeni,
+        ertelenebilir: bool,
+        bekleme_sn: float,
+        nesil: int | None = None,
+    ) -> tuple[KilitSonucu, bool]:
+        """`_kilitle`; ikinci değer kilidi BU çağrının uygulayıp uygulamadığıdır (satır + çapa)."""
         with self._kilit:
             if not self._acik() or (nesil is not None and nesil != self._nesil):
-                return ZATEN_KILITLI
+                return ZATEN_KILITLI, False
             if ertelenebilir and self._uzun_is_sayisi() > 0:
                 if not self._kilit_bekliyor:
                     logger.info(
                         "Uzun iş sürüyor; oturum kilidi iş bitince uygulanacak (%s).", neden
                     )
                 self._kilit_bekliyor = True
-                return ERTELENDI
+                if neden == "elle" or self._bekleyen_neden is None:
+                    self._bekleyen_neden = neden
+                return ERTELENDI, False
+            etkin_neden: KilitNedeni = (
+                self._bekleyen_neden
+                if neden == "bekleyen" and self._bekleyen_neden is not None
+                else neden
+            )
+            hesap = self._hesap
             self._kilitleniyor = True
             beklenen_nesil = self._nesil
-        bitti = False
+        bitti = uygulanacak = kapatildi = False
         try:
             bitti = self._ucusta.bosalmasini_bekle(bekleme_sn=bekleme_sn)
         finally:
-            with self._kilit:
-                if self._nesil == beklenen_nesil:
-                    self._kapat_kilitli()
+            # Satır + çapa + anahtarların düşmesi tek parça (modül başlığı "ÇAPA"). Satır ve
+            # çapa YALNIZ kilit uygulanacaksa yazılır: bekleme sürerken kilit ekranından
+            # yeniden giriş yapıldıysa (`ac`, nesil değişti) kilit uygulanmaz, açık oturumu
+            # kilitlenmiş gösteren bir `KILIT` satırı da yazılmaz. Yeniden giriş
+            # `IZ_KIP_KILIDI`'ni tutan `_start_session`'dan geçer: denetim ile kapanış
+            # arasında nesil bu yoldan değişemez. Nesil oturum servis içinden kapatıldığı
+            # için değiştiyse (`kapat`; açık oturum yok) bu yeniden giriş DEĞİLDİR.
+            with IZ_KIP_KILIDI:
+                with self._kilit:
+                    uygulanacak = self._nesil == beklenen_nesil
+                    kapatildi = not uygulanacak and self._hesap is None
+                    # Çık'ı isteyen istek uçuştaydı; kayıt beklemeden SONRA okunur.
+                    cikis_hesabin = hesap is not None and self._cikis_isteyen == (
+                        beklenen_nesil,
+                        hesap.id,
+                    )
+                if uygulanacak and hesap is not None:
+                    self._kilidi_ize_yaz(
+                        hesap, etkin_neden, cikis_hesabin=etkin_neden == "kapanis" and cikis_hesabin
+                    )
+                with self._kilit:
+                    if self._nesil == beklenen_nesil:
+                        self._kapat_kilitli()
+        if kapatildi:
+            logger.info("Kilit beklerken oturum servis içinden kapatıldı; kilit satırı yazılmadı.")
+            return ZATEN_KILITLI, False
+        if not uygulanacak:
+            logger.info("Kilit beklerken oturum yeniden açıldı; önceki oturumun kilidi düştü.")
+            return KILITLENDI, False
         if not bitti:
             logger.warning(
                 "Uçuştaki istekler %.0f sn içinde bitmedi; oturum yine de kilitlendi.", bekleme_sn
             )
         logger.info("Oturum kilitlendi (%s).", neden)
-        return KILITLENDI
+        return KILITLENDI, True
+
+    def kapanis_kilidi(self, *, bekleme_sn: float = UCUSTA_BEKLEME_SN) -> bool:
+        """Düzenli kapanışın kilidi (modül başlığı "DÜZENLİ KAPANIŞ"); bu çağrı kilitlediyse True.
+
+        İşaret konur; oturum açıksa kilitlenir (ertelenmez). Başka bir iş parçacığının kilidi
+        sürüyorsa bitmesi, oturum kapalıyken uçuştaki istekler (süren bir kilit açılışı)
+        beklenir; bu arada açılan oturum da kilitlenir. Yalnız AYNI turda hem uçuşta istek
+        yok hem oturum kapalı görülünce döner. Toplam bekleme `bekleme_sn` ile sınırlıdır: süre
+        dolarsa o ana dek açılmış oturum beklemeden kilitlenir (fail-closed), günlüğe uyarı
+        düşer, kapanış sürer.
+        """
+        bitis = time.monotonic() + bekleme_sn
+        with self._kilit:
+            self._kapaniyor = True
+        kilitledi = False
+        while True:
+            _, uygulandi = self._kilitle_ayrintili(
+                neden="kapanis",
+                ertelenebilir=False,
+                bekleme_sn=max(bitis - time.monotonic(), 0.0),
+            )
+            kilitledi = kilitledi or uygulandi
+            with self._degisti:
+                # Başka bir iş parçacığının kilidi (elle, boşta) sürüyor: satırı ve çapası
+                # yazılıp anahtarlar düşene dek (ya da yeniden giriş olana dek) beklenir.
+                self._degisti.wait_for(
+                    lambda: not self._kilitleniyor, timeout=max(bitis - time.monotonic(), 0.0)
+                )
+            # ÖNCE uçuştaki istekler, SONRA oturum okunur (ikisi ayrı kilitlerdedir). Uçuşta
+            # istek yokken okunan kapalı oturum bir daha açılamaz: işaretten sonra başlayan
+            # kilit açılışı reddedilir, önce başlayan uçuşta sayılırdı. Ters sırada iki okuma
+            # arasında açılıp biten bir kilit açılışı, açık oturumu kapanışın arkasında bırakırdı.
+            bos = self._ucusta.bosalmasini_bekle(bekleme_sn=0.0)
+            with self._kilit:
+                kapali = not self._acik() and not self._kilitleniyor
+            if kapali and bos:
+                return kilitledi
+            if time.monotonic() >= bitis:
+                break
+            if kapali:
+                # Süren bir açılış ya da başka bir istek: bitince (ya da süre dolunca) oturum
+                # yeniden okunur; bu arada açılan oturum bir sonraki turda kilitlenir.
+                self._ucusta.bosalmasini_bekle(bekleme_sn=max(bitis - time.monotonic(), 0.0))
+        # Süre doldu: o ana dek açılmış oturum (uçuştaki uzun bir isteğin yanında biten kilit
+        # açılışı da) beklemeden kilitlenir (fail-closed); kapalıysa bu çağrı bir şey yapmaz.
+        _, uygulandi = self._kilitle_ayrintili(neden="kapanis", ertelenebilir=False, bekleme_sn=0.0)
+        kilitledi = kilitledi or uygulandi
+        logger.warning(
+            "Kapanışta uçuştaki istekler ya da süren bir kilit %.0f sn içinde bitmedi; program "
+            "yine de kapanıyor.",
+            bekleme_sn,
+        )
+        return kilitledi
+
+    def _kilidi_ize_yaz(
+        self, hesap: OturumHesabi, neden: KilitNedeni, *, cikis_hesabin: bool = False
+    ) -> None:
+        """`KILIT` satırı: anahtarlar düşmeden önce, oturum kilidi DIŞINDA (modül başlığı).
+
+        Elle Kilitle ve bu oturumun arayüzden istediği Çık'ın kapanış kilidi (`cikis_hesabin`)
+        oturumdaki hesabın, öteki nedenler `SISTEM`'indir. Yazılamazsa kilit yine uygulanır
+        (fail-closed); olay günlüğe düşer.
+        """
+        kim = Yazar.hesaptan(hesap) if neden == "elle" or cikis_hesabin else SISTEM
+        try:
+            self._kilit_izi(hesap, kim)
+        except Exception:  # noqa: BLE001 — kilit güvenlik eylemidir, iz yazılamasa da uygulanır
+            logger.warning(
+                "Kilit denetim izine yazılamadı; oturum yine de kilitlendi (%s).",
+                neden,
+                exc_info=True,
+            )
 
     # ------------------------------------------------------------ istek başı (ara katman)
     def degerlendir(self) -> None:
@@ -724,6 +969,7 @@ class OturumDurumu:
         saat: Callable[[], float] | None = None,
         bosta_dk: Callable[[], int] | None = None,
         kurulum_tamam: Callable[[], bool | None] | None = None,
+        kilit_izi: KilitIzi | None = None,
     ) -> None:
         """Yalnız testler için: nesne süreç içi olduğundan durum testler arasında sızar.
 
@@ -735,12 +981,17 @@ class OturumDurumu:
             self._saat = saat if saat is not None else UykuyuSayanSaat()
             self._bosta_dk = bosta_dk if bosta_dk is not None else bosta_suresi_dk
             self._kurulum_tamam = kurulum_tamam if kurulum_tamam is not None else kurulum_durumu
+            self._kilit_izi = kilit_izi if kilit_izi is not None else _kilit_izini_yaz
             self._hesap = None
             self._son_etkinlik = 0.0
             self._kilit_bekliyor = False
+            self._bekleyen_neden = None
             self._kilitleniyor = False
+            self._kapaniyor = False
+            self._cikis_isteyen = None
             self._nesil += 1
             self._kurulum_gorulen = False
+            self._degisti.notify_all()
 
 
 def _kalan_sn(deger: float) -> int:
@@ -757,7 +1008,14 @@ def kapanista_kilitle() -> bool:
 
     Masaüstü kabuğu `od-gunluk` durduktan sonra, yönetim sunucusu durmadan önce
     `masaustu_kanca.kapanista_kilitle` üzerinden çağırır (`OkulConfig.ready` kaydeder).
-    Uçuştaki istekleri bekler, uzun işte ERTELENMEZ: süreç zaten bitmektedir. Çapanın
-    `iz-durumu.json`'a yazımı alt commit (c)'de bu kilide eklenir.
+    Uçuştaki istekleri bekler, uzun işte ERTELENMEZ: süreç zaten bitmektedir. `KILIT`
+    satırı, kapanışı bu oturumdan arayüzdeki Çık istediyse hesabın, değilse (çarpı, kurucu,
+    SIGTERM) `SISTEM`'indir (modül başlığı "KİLİDİN İZİ"); ardından çapa `iz-durumu.json`'a
+    yazılır (tasarım §4.2 kapanış sırası, §4.6.3: "oturum açıkken düzenli kapanışta").
+    Süren bir kilit (başka iş parçacığında) ya da kilit açılışı varsa onun bitmesi beklenir,
+    açılan oturum da kilitlenir (`OturumDurumu.kapanis_kilidi`; modül başlığı "DÜZENLİ
+    KAPANIŞ"): dönüşte bu oturumun kuyruğu çapalanmıştır. Oturum kapalıysa ve süren bir iş
+    yoksa çapa yazılmaz: son kilitlenmenin çapası yerindedir, bu açılışın kilitli satırları
+    onun tohumunu ilerletmiştir.
     """
-    return OTURUM.kilitle(neden="kapanis", ertelenebilir=False) == KILITLENDI
+    return OTURUM.kapanis_kilidi()

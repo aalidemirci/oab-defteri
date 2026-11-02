@@ -44,6 +44,14 @@ yöneticinin sarmalını yeniden kurar (kilit ekranı listesi boştur; hesap kil
 açık kurtarma listesinden seçilir, `GET security/recover/`); iki depo karşılaştırması
 öteki hesapları parola yenilemeye çeker (`hesaplar.reconcile_two_stores`).
 
+GERİ YÜKLEME NOTU (tasarım §4.4.4; plan F1b-1 alt commit c): başarılı geri yükleme
+`geri-yukleme-notu.json`'a yedeğin adını, kenara alınan `db-onceki-*` dosyasının adını ve
+sha256'sını, kullanılan yolu (parolası verilen hesap ya da kurtarma anahtarı no'su) ve
+kenara alınan veritabanının zincir başını yazar (`geri_yukleme_notu`; zincir başı takastan
+önce salt okunur `sqlite3` ile, ORM'siz). Not ilk kilit açılışında `GERI_YUKLEME` satırı
+olur (`apps.okul.iz_dogrulama`). Üç giriş kapısı da bu çekirdekten geçtiği için not her
+yolda yazılır.
+
 KVKK: çözülen içerik diske YALNIZ hedef veritabanı dosyası olarak yazılır
 (aynı dizinde .tmp → atomik yer değiştirme; hata hâlinde .tmp silinir).
 Ayrı bir düz kopya bırakılmaz. Mevcut (bozuk) veritabanı da SİLİNMEZ:
@@ -89,7 +97,7 @@ from desktop.backup_crypto import (
 from desktop.paths import VERSION_STAMP_FILE_NAME
 from django.utils import timezone
 
-from apps.okul.services import app_password
+from apps.okul.services import app_password, geri_yukleme_notu
 
 logger = logging.getLogger("oab_defteri.restore")
 
@@ -174,11 +182,15 @@ def restore_database(
     hesap: str | None = None,
     password: str | None = None,
     recovery_key: str | None = None,
+    oturum_hesabi: str | None = None,
 ) -> RestoreResult:
     """Yedeği hedef veritabanının yerine koyar; eski dosyayı KENARA ALIR (silmez).
 
     Sır ikisinden biridir: `hesap` (tanıtıcı ya da kimlik) + `password` — güncel
     `guvenlik.json`'daki o hesabın sarmalı denenir — YA DA `recovery_key`.
+    `oturum_hesabi`: uygulama içi geri yüklemede oturumdaki hesabın kimliği (kurtarma
+    anahtarı yolunda da); geri yükleme notuna ve `GERI_YUKLEME` satırına geçer: geri yükleme
+    onu başlatan oturumun hesabına bağlanır. Konsol yolunda oturum yoktur (None).
     """
     hesap_adi = (hesap or "").strip() or None
     parola = password or None
@@ -199,7 +211,7 @@ def restore_database(
             "Parolayla açmak için hesabın tanıtıcısını da verin; ya da kurtarma anahtarını "
             "kullanın."
         )
-    icerik, kaynak, dek = _decrypt_container(
+    icerik, kaynak, dek, acan_durum = _decrypt_container(
         container, info, hesap=hesap_adi, password=parola, recovery_key=anahtar
     )
     if not icerik.startswith(SQLITE_MAGIC):
@@ -207,6 +219,10 @@ def restore_database(
             "Yedek çözüldü ama içeriği SQLite veritabanı çıkmadı; dosya bozulmuş olabilir."
         )
 
+    # Kenara alınacak veritabanının zincir başı ve çapa takastan ÖNCE, salt okunur (geri
+    # yükleme notu).
+    onceki_bas = geri_yukleme_notu.zincir_basi_oku(db_path)
+    onceki_capa = _capa_durumu()
     eski = _swap_database_files(db_path, icerik)
     yazildi = _ensure_state_file(info, kaynak)
     # KARDEŞ DOSYA da eşitlenir (birleşme incelemesi bulgusu): yedekleme.json
@@ -220,6 +236,14 @@ def restore_database(
     # sürümle yazıldığı bilinmez). Eksik damga açılışa engel DEĞİLDİR
     # (desktop/version.py); ilk başarılı migrate damgayı yeniden yazar.
     (db_path.parent / VERSION_STAMP_FILE_NAME).unlink(missing_ok=True)
+    _notu_yaz(
+        backup_path,
+        eski,
+        onceki_bas,
+        _yol_bilgisi(acan_durum, hesap=hesap_adi if parola else None),
+        oturum_hesabi=oturum_hesabi,
+        onceki_capa=onceki_capa,
+    )
     logger.info("Yedekten geri yükleme tamamlandı: %s.", backup_path.name)
     return RestoreResult(
         db_path=db_path,
@@ -356,11 +380,12 @@ def _decrypt_container(
     hesap: str | None,
     password: str | None,
     recovery_key: str | None,
-) -> tuple[bytes, str, bytes]:
-    """Kapsayıcıyı çözer; (düz içerik, DEK kaynağı, DEK) döndürür.
+) -> tuple[bytes, str, bytes, dict[str, Any]]:
+    """Kapsayıcıyı çözer; (düz içerik, DEK kaynağı, DEK, açan durum dosyası) döndürür.
 
     Parola yolu yalnız güncel `guvenlik.json`'un hesap sarmallarıyla işler (yedek
-    başlığında hesap yoktur, TK10); kurtarma anahtarı iki adayda da denenir.
+    başlığında hesap yoktur, TK10); kurtarma anahtarı iki adayda da denenir. Açan durum
+    geri yükleme notunun "kullanılan yol"udur (hangi hesap, hangi kurtarma anahtarı).
     """
     adaylar = _candidate_states(info)
     if not adaylar:
@@ -379,7 +404,7 @@ def _decrypt_container(
         except app_password.AppPasswordError:
             continue  # bu durum dosyası bu sırla açılmadı; diğer adaya geç
         try:
-            return decrypt_bytes(container, dek), kaynak, dek
+            return decrypt_bytes(container, dek), kaynak, dek, durum
         except BackupCryptoError:
             continue  # sarmal açıldı ama DEK bu yedeğe ait değil (başka kurulum)
     ileti = (
@@ -430,6 +455,70 @@ def _swap_database_files(db_path: Path, content: bytes) -> Path | None:
         ) from exc
     finally:
         temp.unlink(missing_ok=True)
+
+
+def _yol_bilgisi(durum: dict[str, Any], *, hesap: str | None) -> dict[str, Any]:
+    """Geri yükleme notunun "kullanılan yol"u: parolası verilen hesap ya da kurtarma anahtarı no'su.
+
+    Parola yolunda hesap güncel dosyanın sarmalından bulunur (tanıtıcı ya da kimlikle
+    verilmiş olabilir); notta kimlik ve tanıtıcı durur, iz satırına yalnız kimlik geçer.
+    """
+    if hesap is not None:
+        sarmal = app_password._find_wrap_by_login_name(durum, hesap) or {}
+        return {
+            "tur": geri_yukleme_notu.YOL_HESAP,
+            "hesap": str(sarmal.get("id", "")) or None,
+            "tanitici": str(sarmal.get("tanitici", "")) or None,
+        }
+    kimlik = recovery_key_identity(durum) or {}
+    return {"tur": geri_yukleme_notu.YOL_KURTARMA, "no": kimlik.get("no")}
+
+
+def _notu_yaz(
+    backup_path: Path,
+    eski: Path | None,
+    onceki_bas: dict[str, Any] | None,
+    yol_bilgisi: dict[str, Any],
+    *,
+    oturum_hesabi: str | None = None,
+    onceki_capa: dict[str, Any] | str | None = geri_yukleme_notu.CAPA_BILINMIYOR,
+) -> None:
+    """Geri yükleme notunu yazar (tasarım §4.4.4; `geri_yukleme_notu`). Hata yükseltmez.
+
+    Takas yapılmıştır: not yazılamazsa geri yükleme yine başarılıdır. O durumda ilk kilit
+    açılışı çapayı tutmayan zincir görür ve "kuyruk kesilmiş ya da veritabanı geri sarılmış"
+    uyarısını verir (fail-safe: olay yine görünür, yalnız adı farklıdır).
+    """
+    try:
+        kayit = geri_yukleme_notu.geri_yukleme_kaydi(
+            yedek=backup_path.name,
+            onceki_dosya=eski.name if eski is not None else None,
+            onceki_sha256=geri_yukleme_notu.dosya_ozeti(eski) if eski is not None else None,
+            onceki_zincir_basi=onceki_bas,
+            yol_bilgisi=yol_bilgisi,
+            oturum_hesabi=oturum_hesabi,
+            onceki_capa=onceki_capa,
+        )
+        geri_yukleme_notu.geri_yukleme_ekle(app_password.state_path().parent, kayit)
+    except OSError:
+        logger.warning("Geri yükleme notu yazılamadı; ilk kilit açılışı çapa uyarısı verecek.")
+    else:
+        logger.info("Geri yükleme notu yazıldı; ilk kilit açılışında denetim izine işlenir.")
+
+
+def _capa_durumu() -> dict[str, Any] | str | None:
+    """Takastan önceki çapa `{seq, mac}` (geri yükleme notu); dosya yoksa None, okunamıyorsa
+    `CAPA_BILINMIYOR`. Mühür ve tohum nota girmez. Hata yükseltmez."""
+    # Geç içe aktarım: kilitli kip modülü güvenlik çekirdeğini ve ORM'yi içe aktarır.
+    from apps.okul import iz_durumu
+
+    try:
+        durum = iz_durumu.oku()
+    except iz_durumu.IzDurumuYok:
+        return None
+    except Exception:  # noqa: BLE001 — okunamayan çapa "bilinmiyor"dur, geri yüklemeyi durdurmaz
+        return geri_yukleme_notu.CAPA_BILINMIYOR
+    return {"seq": durum.capa_seq, "mac": durum.capa_mac}
 
 
 def _creation_stamp(kurtarma: dict[str, Any]) -> str:

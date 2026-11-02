@@ -21,6 +21,12 @@ açılır, şifrelenecek düz satır yoktur (tasarım §13 D29; plan F1b-1).
 Parolalar VARSAYILAN OLARAK gizli istemle (getpass) alınır — komut satırı
 geçmişine ve süreç listesine düşmez. `--password/--new-password/--recovery-key`
 seçenekleri yalnız otomasyon/test içindir ve bu riski taşır.
+
+DENETİM İZİ (tasarım §4.6.2; plan F1b-1 alt commit c): konsolda istek yoktur, yazar
+bağlamını ara katman kurmaz. Komut yazarını AÇIKÇA verir: `SISTEM` (`sistem_olarak`).
+`enable` ve `recover`'ın kendi satırları plan gereği o hesabındır (ilk hesap ve kurtarmayla
+açılış yazarı servis içinde kendisi kurar); bağlamın işi, ileride bu komuta eklenecek bir
+yazımın yazarsız kalıp reddedilmesi yerine sistem işi olarak izlenmesidir.
 """
 
 from __future__ import annotations
@@ -30,6 +36,7 @@ from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 
+from apps.okul.oturum import sistem_olarak
 from apps.okul.services import app_password, hesap_kurallari
 
 ACTIONS = ("status", "enable", "recover")
@@ -54,7 +61,8 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         action = str(options["action"])
         try:
-            getattr(self, f"_{action}")(options)
+            with sistem_olarak():
+                getattr(self, f"_{action}")(options)
         except ValueError as exc:  # AppPasswordError ve kural ihlalleri
             raise CommandError(str(exc)) from exc
 

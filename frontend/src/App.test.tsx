@@ -9,7 +9,8 @@
 // iskeletinin dersi); (5) oturum (tasarım §4.4.3, TK14) — açık oturumda üst çubukta
 // oturum göstergesi (rol etiketi + tanıtıcı, Kilitle); Kilitle pencereyi yeniden
 // yükler (D53); oturum okunamazsa FAIL-OPEN. Aile iskeletinin görevli kipi (görevli
-// ekranı, gezinmesiz kabuk, gizli güncelleme bandı) yoktur.
+// ekranı, gezinmesiz kabuk, gizli güncelleme bandı) yoktur; (6) parola yenilenme
+// bildirimi (tasarım §4.4.3, tehdit 12) Genel Bakış dışındaki sayfada da pencere olarak çıkar.
 
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -61,6 +62,20 @@ const oturumApiMock = vi.hoisted(() => ({
 }));
 
 vi.mock("./modules/oturum/api", () => ({ oturumApi: oturumApiMock }));
+
+// Denetim izi (Genel Bakış kartları, parola yenilenme bildirimi): varsayılan "okunamadı",
+// yani kartlar ve bildirim görünmez; bildirimin kendi testi aşağıda.
+const butunlukApiMock = vi.hoisted(() => ({
+  durum: vi.fn(),
+  sahipsizSarmallariSil: vi.fn(),
+  parolaBildirimi: vi.fn(),
+  parolaBildiriminiGordum: vi.fn(),
+}));
+
+vi.mock("./modules/butunluk/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./modules/butunluk/api")>()),
+  butunlukApi: butunlukApiMock,
+}));
 
 import App from "./App";
 import { denetimSonucunuYayinla } from "./modules/guncelleme/denetimOlayi";
@@ -152,6 +167,8 @@ beforeEach(() => {
   okulApiMock.listPersonnel.mockResolvedValue(bosSayfa);
   okulApiMock.getLeavePoolSummary.mockResolvedValue({ student_count: 0, personnel_count: 0 });
   oturumApiMock.ozet.mockResolvedValue(ACIK_OTURUM);
+  butunlukApiMock.durum.mockRejectedValue(new TypeError("çevrimdışı"));
+  butunlukApiMock.parolaBildirimi.mockResolvedValue({ parola_yenilenme: null });
 });
 
 describe("App — oturum", () => {
@@ -209,6 +226,25 @@ describe("App — oturum", () => {
     );
     expect(await screen.findByText(/OAB Defteri 2026\.10\.0 hazır\./)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Güncellemeyi indir" })).toBeInTheDocument();
+  });
+
+  it("parola yenilenme bildirimi Genel Bakış dışındaki sayfada da pencere olarak çıkar", async () => {
+    // Kilit ekranından açılış pencereyi önceki adreste yeniden yükler (tasarım §13 D53):
+    // bildirim pano kartı olsaydı sahibi onu göremeyebilirdi (tasarım §4.4.3, tehdit 12).
+    butunlukApiMock.parolaBildirimi.mockResolvedValue({
+      parola_yenilenme: {
+        tur: "SIFIRLAMA",
+        zaman: "2026-10-30T16:00:00+03:00",
+        girisler: ["2026-11-01T09:05:00+03:00"],
+      },
+    });
+    ekranaBas("/kilavuz");
+
+    const pencere = await screen.findByRole("dialog", { name: "Parola yenilenme bildirimi" });
+    expect(
+      within(pencere).getByText("Parolanız 30.10.2026 tarihinde sıfırlandı."),
+    ).toBeInTheDocument();
+    expect(within(pencere).getByText("01.11.2026 09:05 · bu oturum")).toBeInTheDocument();
   });
 
   it("oturum okunamazsa sayfalar açılır, gösterge görünmez (fail-open)", async () => {

@@ -32,6 +32,48 @@ BİÇİM (bu adımda DONAR; kâğıda inen zincir başı buna bağlıdır):
 Biçim değişirse var olan bütün mühürler tutmaz olur; tasarım tutmayan mührün
 yeniden hesaplanmasını yasaklar (§4.6.1 kural 1). Bu yüzden biçim
 `test_kanonik.py`'deki donmuş örnekle (altın vektör) sabitlenir.
+
+DENETİM İZİ (tasarım §4.6.2-§4.6.3; plan F1b-1 alt commit c). Aynı kodlayıcı üç
+yerde kullanılır, üçü de altın vektörle donar:
+
+* **Zincir** — `iz_mac`: `HMAC(HKDF(İA, "od-denetim-izi/v1"), kanonik(satır) ‖
+  prev_mac)`. `kanonik(satır)` `IZ_SATIRI_ALANLARI`'nın sözlüğüdür; `prev_mac`
+  kanoniğe GİRMEZ, onaltılık metninin ASCII baytları olarak SONA eklenir (ilk satırda
+  boş dize). `term` ve `compliance_item` hedef modelleri F1c'de gelir; anahtarlar
+  bugünden `null` olarak kanoniktedir (hesap mührünün `person`/`membership`/`term`
+  deseni): sütunlar eklenince var olan MAC'ler değişmez. Hesap kimliği (`account`)
+  UUID'nin TİRELİ metnidir (`str(uuid)`); SQLite sütunu tiresiz 32 hane saklar, salt
+  okunur `sqlite3` denetimi tireli biçime çevirir.
+* **İçerik MAC'i** — `kayit_mac`: `HMAC(HKDF(İA, "od-kayit-ozeti/v1"),
+  kanonik({"model", "object_id", "fields"}))`; `fields` modelin özet alanlarının
+  YAZMADAN SONRAKİ çözülmüş değerleridir (alan listesi modelde, `IZ_OZET_ALANLARI`).
+* **Çözülemeyen şifreli alan** (tasarım §13 D48) — `bozuk_alan`: `CorruptField`
+  metin değildir ve düz metne çevrilmez; içerik MAC'ine `{"bozuk": sha256(ham)}`
+  sözlüğü olarak girer. Belirlenimcidir (aynı ham değer aynı MAC'i verir) ve şifreli
+  alanın meşru değeri daima metin olduğu için meşru bir değerle çakışamaz. Düz metin
+  yazılmış sütun ya da başka satırdan taşınmış token böylece MAC'i değiştirir;
+  ham değerin kendisi hiçbir yere yazılmaz.
+
+ÇAPA VE KİLİTLİ KİP (tasarım §4.6.3; plan F1b-1 alt commit c). Üç bayt biçimi daha
+burada donar (altın vektörler `test_kanonik.py`'de):
+
+* **`seq ‖ mac`** — `capa_baytlari`: çapanın mührünün (`muhur = HMAC(HKDF(İA,
+  "od-iz-capa/v1"), seq ‖ mac)`) ve kilitli kip tohumunun tuzunun (`tohum₀ = HKDF(İA,
+  "od-iz-kilitli/v1", tuz = seq ‖ mac)`) girdisi. Biçim: `seq`'in ondalık ASCII metni,
+  `:` ayırıcısı, `mac`'in 64 haneli küçük harf onaltılık ASCII metni (`b"42:3fa1…"`).
+  `mac` sabit uzunlukta olduğu için ayırıcısız da tek anlamlı olurdu; ayırıcı, değerin
+  başka bir araçla elle yeniden üretilmesini kolaylaştırır.
+* **İleri tohum** — `ileri_tohum`: `tohumₖ₊₁ = SHA-256("ileri" ‖ tohumₖ)`; "ileri"
+  ASCII baytlarıdır, tohum 32 ham bayttır. Tek yönlüdür: bugünkü tohumdan dünkü
+  bulunmaz (ileriye dönük güvenli mühür).
+* **Mühürsüz kilitli satır** — `MUHURSUZ_ANAHTAR`: `iz-durumu.json` yok ya da bozukken
+  kilitli kip satırı zincire yine bağlanır, ama sırsız (herkesin bildiği) bu anahtarla:
+  `SHA-256("od-iz-muhursuz/v1")`. Satırın `key_ref`'i boştur; doğrulama onu "çapa yok"
+  bulgusuyla gösterir. Zincir böylece kopmaz, satır da mühürlü gibi görünmez.
+
+Kâğıt çapasının zincir parçası (`zincir_kisaltmasi`: "Kayıt no: N · Zincir: XXXX-XXXX")
+`mac`'in ilk 8 onaltılık hanesidir, büyük harfle ve dörder hane tireyle (elle yazımda
+okunurluk; tasarım §4.6.3 "Kâğıt çapası").
 """
 
 from __future__ import annotations
@@ -92,8 +134,15 @@ def hmac_sha256(key: bytes, data: bytes) -> str:
     return hmac.new(key, data, sha256).hexdigest()
 
 
-def esit(a: str, b: str) -> bool:
-    """İki mührün sabit sürede karşılaştırılması (zamanlama sızıntısı olmasın)."""
+def esit(a: object, b: object) -> bool:
+    """İki mührün sabit sürede karşılaştırılması (zamanlama sızıntısı olmasın).
+
+    Mühür metindir. Metin olmayan değer (program dışından metin sütununa yazılmış ikili değer:
+    SQLite BLOB'u çevirmeden saklar) hiçbir mühre eşit değildir: False (fail-closed), hata
+    yükseltip doğrulamayı yarıda kesmez.
+    """
+    if not isinstance(a, str) or not isinstance(b, str):
+        return False
     return hmac.compare_digest(a.encode("ascii", "replace"), b.encode("ascii", "replace"))
 
 
@@ -142,3 +191,191 @@ def hesap_muhru(seal_key: bytes, fields: Mapping[str, Any]) -> str:
             )
     yuk = {ad: fields[ad] for ad in HESAP_MUHRU_ALANLARI}
     return hmac_sha256(seal_key, kodla(yuk))
+
+
+def duz(value: Any) -> Any:
+    """Değeri JSON'a yazılacak İLKEL kanonik biçimine çevirir (zaman UTC `Z` metni vb.).
+
+    Denetim izinin `values` sütunu değerleri bu biçimde saklar: satır doğrulanırken
+    veritabanından okunan JSON aynı baytlara kodlanır (biçim modül başlığında).
+    """
+    return _deger(value)
+
+
+# ---------------------------------------------------------------------------
+# Denetim izi satırı (tasarım §4.6.2-§4.6.3)
+# ---------------------------------------------------------------------------
+#: Zincir MAC'inin kapsadığı `AuditTrail` alanları — satırın kanonik biçimi. `prev_mac`
+#: kanoniğe girmez, sona eklenir; `mac` satırın kendi sonucudur (modül başlığı).
+IZ_SATIRI_ALANLARI: tuple[str, ...] = (
+    "seq",
+    "at",
+    "actor",
+    "account",
+    "role",
+    "action",
+    "model",
+    "object_id",
+    "term",
+    "changed_fields",
+    "values",
+    "record_mac",
+    "compliance_item",
+    "label",
+    "key_mode",
+    "key_ref",
+)
+#: Satırın yabancı anahtar alanları: değer kimliğin METNİ ya da `None`dır. `term` ve
+#: `compliance_item` F1c'ye dek daima `None`dır.
+IZ_SATIRI_YABANCI_ANAHTARLARI: tuple[str, ...] = ("account", "term", "compliance_item")
+#: Satırın metin alanları (boş olabilir, `None` olamaz).
+_IZ_SATIRI_METINLERI: tuple[str, ...] = (
+    "actor",
+    "role",
+    "action",
+    "model",
+    "object_id",
+    "record_mac",
+    "label",
+    "key_mode",
+    "key_ref",
+)
+_ONALTILIK = frozenset("0123456789abcdef")
+
+
+def _mac_metni_mi(deger: object) -> bool:
+    """64 haneli küçük harf onaltılık metin mi? (HMAC-SHA256 çıktısı)"""
+    return isinstance(deger, str) and len(deger) == 64 and set(deger) <= _ONALTILIK
+
+
+def iz_satiri(fields: Mapping[str, Any]) -> bytes:
+    """Denetim izi satırının kanonik baytları (`IZ_SATIRI_ALANLARI`; fazlası GİRMEZ).
+
+    Eksik alan, tamsayı olmayan `seq`, metin olmayan yabancı anahtar, metin listesi
+    olmayan `changed_fields`, `{alan: [önce, sonra]}` olmayan `values` HATADIR: biçim
+    tektir, ORM yolu ile salt okunur `sqlite3` denetimi aynı satıra aynı baytı üretmelidir.
+    """
+    eksik = [ad for ad in IZ_SATIRI_ALANLARI if ad not in fields]
+    if eksik:
+        raise KanonikHata(f"Denetim izi satırında eksik alan: {', '.join(eksik)}")
+    seq = fields["seq"]
+    if isinstance(seq, bool) or not isinstance(seq, int) or seq < 1:
+        raise KanonikHata("Denetim izi satırının sırası (seq) en az 1 olan bir tamsayıdır.")
+    if not isinstance(fields["at"], datetime):
+        raise KanonikHata("Denetim izi satırının zamanı (at) saat dilimli bir zamandır.")
+    for ad in IZ_SATIRI_YABANCI_ANAHTARLARI:
+        deger = fields[ad]
+        if deger is not None and not isinstance(deger, str):
+            raise KanonikHata(
+                f"Yabancı anahtar ({ad}) kimliğin metni olarak verilir (str(pk)); "
+                f"verilen tür: {type(deger).__name__}"
+            )
+    for ad in _IZ_SATIRI_METINLERI:
+        if not isinstance(fields[ad], str):
+            raise KanonikHata(f"Denetim izi satırının {ad} alanı metindir.")
+    degisen = fields["changed_fields"]
+    if not isinstance(degisen, list | tuple) or not all(isinstance(a, str) for a in degisen):
+        raise KanonikHata("changed_fields alan adlarının listesidir.")
+    degerler = fields["values"]
+    if not isinstance(degerler, Mapping) or not all(
+        isinstance(cift, list | tuple) and len(cift) == 2 for cift in degerler.values()
+    ):
+        raise KanonikHata("values {alan: [önce, sonra]} biçimindedir.")
+    return kodla({ad: fields[ad] for ad in IZ_SATIRI_ALANLARI})
+
+
+def iz_mac(chain_key: bytes, fields: Mapping[str, Any], prev_mac: str) -> str:
+    """Zincir MAC'i: `HMAC(zincir anahtarı, kanonik(satır) ‖ prev_mac)` (tasarım §4.6.3).
+
+    `chain_key` İA'dan `od-denetim-izi/v1` bilgisiyle türeyen anahtardır (kilitli kipte
+    kilitli kip tohumundan türeyen anahtar; alt commit c'nin kilitli kipi); bu modül İA
+    görmez. `prev_mac` önceki satırın MAC'idir, ilk satırda boş dize.
+    """
+    if prev_mac != "" and not _mac_metni_mi(prev_mac):
+        raise KanonikHata("prev_mac boş ya da 64 haneli küçük harf onaltılık metindir.")
+    return hmac_sha256(chain_key, iz_satiri(fields) + prev_mac.encode("ascii"))
+
+
+# ---------------------------------------------------------------------------
+# İçerik MAC'i — "kaydın özeti" (tasarım §4.6.2)
+# ---------------------------------------------------------------------------
+#: `CorruptField`'ın içerik MAC'indeki temsilinin anahtarı (modül başlığı).
+BOZUK_ALAN_ANAHTARI = "bozuk"
+
+
+def bozuk_alan(ham: str) -> dict[str, str]:
+    """Çözülemeyen şifreli alanın içerik MAC'indeki temsili: `{"bozuk": sha256(ham)}`.
+
+    Ham değer düz metin kişi verisi olabilir: kendisi değil özeti girer, o da yalnız
+    anahtarlı MAC'in girdisidir (hiçbir sütuna yazılmaz).
+    """
+    return {BOZUK_ALAN_ANAHTARI: sha256(ham.encode("utf-8")).hexdigest()}
+
+
+def kayit_ozeti(model: str, object_id: str, fields: Mapping[str, Any]) -> bytes:
+    """İçerik MAC'inin kanonik baytları: `{"fields", "model", "object_id"}`.
+
+    `model` modelin etiketi (`okul.Account`), `object_id` kaydın kimliğinin metnidir;
+    `fields` özet alanlarının değerleridir (yabancı anahtar kimliğin metni, şifreli alan
+    çözülmüş metni ya da `bozuk_alan` temsili).
+    """
+    if not isinstance(model, str) or not isinstance(object_id, str):
+        raise KanonikHata("İçerik MAC'inde model ve object_id metindir.")
+    if not isinstance(fields, Mapping):
+        raise KanonikHata("İçerik MAC'inin alanları sözlüktür.")
+    return kodla({"model": model, "object_id": object_id, "fields": fields})
+
+
+def kayit_mac(summary_key: bytes, model: str, object_id: str, fields: Mapping[str, Any]) -> str:
+    """İçerik MAC'i: `HMAC(HKDF(İA, "od-kayit-ozeti/v1"), kayit_ozeti(...))` (§4.6.2).
+
+    `summary_key` İA'dan `od-kayit-ozeti/v1` bilgisiyle türeyen anahtardır; bu modül İA
+    görmez.
+    """
+    return hmac_sha256(summary_key, kayit_ozeti(model, object_id, fields))
+
+
+# ---------------------------------------------------------------------------
+# Çapa ve kilitli kip (tasarım §4.6.3)
+# ---------------------------------------------------------------------------
+#: İleri tohumun öneki (`tohumₖ₊₁ = SHA-256("ileri" ‖ tohumₖ)`).
+ILERI_ONEKI = b"ileri"
+#: Kilitli kip tohumunun uzunluğu (bayt; HKDF ve SHA-256 çıktısı).
+TOHUM_BAYT = 32
+#: Mühürsüz kilitli satırın zincir anahtarı — sırsızdır (modül başlığı).
+MUHURSUZ_ANAHTAR = sha256(b"od-iz-muhursuz/v1").digest()
+
+
+def capa_baytlari(seq: int, mac: str) -> bytes:
+    """`seq ‖ mac` — çapanın mührünün ve kilitli kip tohumunun tuzunun baytları (modül başlığı).
+
+    `seq` en az 1 olan tamsayı, `mac` 64 haneli küçük harf onaltılık metindir; başkası
+    HATADIR (biçim tektir).
+    """
+    if isinstance(seq, bool) or not isinstance(seq, int) or seq < 1:
+        raise KanonikHata("Çapanın sırası (seq) en az 1 olan bir tamsayıdır.")
+    if not _mac_metni_mi(mac):
+        raise KanonikHata("Çapanın MAC'i 64 haneli küçük harf onaltılık metindir.")
+    return f"{seq}:{mac}".encode("ascii")
+
+
+def capa_muhru(anchor_key: bytes, seq: int, mac: str) -> str:
+    """Çapanın mührü: `HMAC(HKDF(İA, "od-iz-capa/v1"), seq ‖ mac)` (tasarım §4.6.3).
+
+    `anchor_key` İA'dan `od-iz-capa/v1` bilgisiyle türeyen anahtardır; bu modül İA görmez.
+    """
+    return hmac_sha256(anchor_key, capa_baytlari(seq, mac))
+
+
+def ileri_tohum(tohum: bytes) -> bytes:
+    """Bir sonraki kilitli kip tohumu: `SHA-256("ileri" ‖ tohum)` (tasarım §4.6.3)."""
+    if not isinstance(tohum, bytes) or len(tohum) != TOHUM_BAYT:
+        raise KanonikHata("Kilitli kip tohumu 32 baytlık bir bayt dizisidir.")
+    return sha256(ILERI_ONEKI + tohum).digest()
+
+
+def zincir_kisaltmasi(mac: str) -> str:
+    """Kâğıt çapasının zincir parçası: `mac`'in ilk 8 hanesi, büyük harf, `XXXX-XXXX`."""
+    if not _mac_metni_mi(mac):
+        raise KanonikHata("Zincir başının MAC'i 64 haneli küçük harf onaltılık metindir.")
+    return f"{mac[:4]}-{mac[4:8]}".upper()
