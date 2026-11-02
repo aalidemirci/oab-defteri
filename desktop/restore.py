@@ -18,11 +18,15 @@ Django BURADA AYAĞA KALDIRILIR ama veritabanına DOKUNULMAZ: `prepare_django`
 yalnız ayarları ve uygulama kayıt defterini yükler; göç ve bütünlük denetimi
 bu kipte KOŞULMAZ (bozuk veritabanı bu kipin varlık sebebidir).
 
-Yedekler daima şifrelidir (tasarım §4.4.7; düz yedek dalı söküldü, §13 D29): bir
-hesabın tanıtıcısı ve parolası (`--hesap` + `--parola`; aynı bilgisayarda güncel
+Yedekler daima şifrelidir (tasarım §4.4.7; düz yedek dalı söküldü, §13 D29): program
+yöneticisi hesabının tanıtıcısı ve parolası (`--hesap` + `--parola`; aynı bilgisayarda güncel
 `guvenlik.json` ile) ya da kurtarma anahtarı her geri yüklemede istenir (tasarım
-§4.4.4, TK10). Rol denetimi (konsol geri yüklemesini yalnız program yöneticisi
-yapar; salt okunur `sqlite3` ile) 2. adımdadır. Güvenlik dosyası kayıpsa (tasarım
+§4.4.4, TK10). Parola yolunda geri yüklemeyi yalnız program yöneticisi yapar: rol denetimi
+çekirdektedir (`geri_yukleme_yetkisi`; güncel veritabanı salt okunur `sqlite3` ile, ORM'siz,
+okunamazsa yedeğin görüntüsü), parola doğrulandıktan sonra ve kenara alma yapılmadan önce koşar.
+Ret `GeriYuklemeYetkisiz`'dir (bir `BackupRestoreError`): hiçbir dosya değişmez, ileti
+gösterilir, çıkış kodu 9'dur. Kurtarma anahtarı yolunda rol denetimi yoktur (anahtarın
+kendisi yetkidir). Güvenlik dosyası kayıpsa (tasarım
 §4.3 tehdit 8) bu kip de çıkış yoludur: çekirdek `guvenlik.json`'u yedeğin kurtarma
 başlığından (yalnız kurtarma bölümüyle) yeniden yazar.
 """
@@ -116,8 +120,8 @@ def _run_steps(paths: AppPaths, args: argparse.Namespace, interactive: bool) -> 
     anahtar: str | None = str(getattr(args, "kurtarma_anahtari", "") or "") or None
     if parola and not hesap:
         raise RestoreCliError(
-            "--parola ile birlikte hesabın tanıtıcısını da verin (--hesap); ya da "
-            "--kurtarma-anahtari kullanın."
+            "--parola ile birlikte program yöneticisi hesabının tanıtıcısını da verin "
+            "(--hesap); ya da --kurtarma-anahtari kullanın."
         )
     if not parola and not anahtar:
         if not interactive:
@@ -295,7 +299,9 @@ def _read_secret(prompt: str) -> str:
 def _ask_secret() -> tuple[str | None, str | None, str | None]:
     """(hesap tanıtıcısı, parola, kurtarma anahtarı) — parola ya da anahtar dolu döner."""
     try:
-        hesap = input("Hesabınızın tanıtıcısı (kurtarma anahtarıyla açmak için boş bırakın): ")
+        hesap = input(
+            "Program yöneticisi hesabının tanıtıcısı (kurtarma anahtarıyla açmak için boş bırakın): "
+        )
     except EOFError:
         hesap = ""
     hesap = hesap.strip()

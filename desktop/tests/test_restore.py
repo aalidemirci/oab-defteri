@@ -229,7 +229,9 @@ def test_akis_parola_hesapsiz_verilirse_reddedilir(
 
     assert restore_mod._restore_flow(paths, args) == EXIT_RESTORE_FAILED
     assert "cagri" not in sahte_ortam
-    assert "--hesap" in capsys.readouterr().out
+    cikti = capsys.readouterr().out
+    assert "--hesap" in cikti
+    assert "program yöneticisi hesabının tanıtıcısını" in cikti
 
 
 def test_akis_yalniz_dosya_adiyla_yedek_klasorunde_arar(
@@ -265,10 +267,21 @@ def test_akis_sir_verilmezse_her_yedekte_sorar(
 
 
 def test_sir_istemi_once_hesabi_sonra_parolayi_sorar(monkeypatch: pytest.MonkeyPatch) -> None:
+    """İstem parola yolunun yalnız program yöneticisine açık olduğunu baştan söyler (sözlük
+    "Yedek"; tasarım §4.4.4): Başlat menüsündeki kısayolun gösterdiği metin budur."""
+    istemler: list[str] = []
+
+    def girdi(istem: str = "") -> str:
+        istemler.append(istem)
+        return next(girdiler)
+
     girdiler = iter(["  yonetici "])
-    monkeypatch.setattr("builtins.input", lambda *args: next(girdiler))
+    monkeypatch.setattr("builtins.input", girdi)
     monkeypatch.setattr(restore_mod, "_read_secret", lambda istem: "Gizli-Parola-1")
     assert restore_mod._ask_secret() == ("yonetici", "Gizli-Parola-1", None)
+    assert istemler == [
+        "Program yöneticisi hesabının tanıtıcısı (kurtarma anahtarıyla açmak için boş bırakın): "
+    ]
 
     girdiler = iter(["", "KURT-ARMA"])
     assert restore_mod._ask_secret() == (None, None, "KURT-ARMA")
@@ -322,6 +335,51 @@ def test_servis_hatasi_kullaniciya_mesajla_doner(
 
     assert kod == EXIT_RESTORE_FAILED
     assert "Yedek anahtarı yanlış." in capsys.readouterr().out
+
+
+class SahteYetkisiz(SahteServisHatasi):
+    """Çekirdeğin `GeriYuklemeYetkisiz`'inin karşılığı (bir `BackupRestoreError`)."""
+
+
+def test_yetkisiz_geri_yuklemenin_cikis_kodu_9(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Tasarım §4.4.4 ve §12.B: parolası verilen hesap program yöneticisi değilse çekirdek
+    `GeriYuklemeYetkisiz` yükseltir; kip iletiyi olduğu gibi gösterir ve 9 ile çıkar (çıkış
+    kodu 9 "geri yükleme başarısız ya da yetkisiz"dir). Gerçek çekirdekle aynı ret
+    `test_geri_yukleme_yetkisi.py`'nin konsol kolundadır."""
+    ileti = (
+        "Yedekten geri yüklemeyi yalnız program yöneticisi hesabıyla ya da kurtarma "
+        "anahtarıyla yapabilirsiniz."
+    )
+    paths = _paths(tmp_path)
+    yedek = paths.backups / "gunluk.odbak"
+    yedek.write_bytes(MAGIC)
+
+    def reddeden(*_a: Any, **_k: Any) -> Any:
+        raise SahteYetkisiz(ileti)
+
+    servis = SimpleNamespace(BackupRestoreError=SahteServisHatasi, restore_database=reddeden)
+    monkeypatch.setattr(restore_mod, "prepare_django", lambda *a, **k: None)
+    monkeypatch.setattr(restore_mod, "_load_service", lambda: servis)
+    args = main_mod.build_parser().parse_args(
+        ["--geri-yukle", str(yedek), "--evet", "--hesap", "muhasip", "--parola", "Gizli-Parola-1"]
+    )
+
+    kod = restore_mod._restore_flow(paths, args)
+
+    assert kod == EXIT_RESTORE_FAILED == 9
+    cikti = capsys.readouterr().out
+    assert f"HATA: {ileti}" in cikti
+    assert "beklenmeyen" not in cikti
+
+
+def test_hesap_yardim_metni_program_yoneticisini_anar() -> None:
+    """`--hesap` yalnız program yöneticisi hesabının tanıtıcısıdır (tasarım §4.4.4)."""
+    eylem = next(
+        eylem for eylem in main_mod.build_parser()._actions if "--hesap" in eylem.option_strings
+    )
+    assert eylem.help is not None and "program yöneticisi hesabının tanıtıcısı" in eylem.help
 
 
 def test_onay_reddinde_servis_cagrilmaz(

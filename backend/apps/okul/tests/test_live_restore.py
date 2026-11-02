@@ -13,15 +13,18 @@ açılır (aynı bilgisayar yolu; tasarım §4.4.4). Başka DEK'le alınan yede�
 dosya açamaz; başlık yalnız kurtarma bölümünü taşıdığı için (TK10) o yedek yalnız
 kurtarma anahtarıyla açılır ve `guvenlik.json` yalnız kurtarma bölümüyle yazılır.
 Güvenlik dosyası KAYIPKEN geri yükleme `test_app_password.py::TestGuvenlikDosyasiKayip`'tadır.
+
+Parola yolunda çekirdek hesabı program yöneticisi olarak ORM'siz doğrular (tasarım §4.4.4;
+`geri_yukleme_yetkisi`): buradaki bütün SQLite görüntüleri bu kurulumun DEK'iyle mühürlü
+program yöneticisi satırını (`TEST_HESAP_ID`) ve okul kartını taşır (`geri_yukleme_ortak`).
+Yetkinin kendi testleri `test_geri_yukleme_yetkisi.py`'dedir.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import sqlite3
 from collections.abc import Iterator
-from contextlib import closing
 from pathlib import Path
 from typing import Any, cast
 
@@ -38,7 +41,8 @@ from rest_framework.test import APIClient
 
 from apps.okul import restart_gate
 from apps.okul.services import app_password, backup_restore, live_restore
-from conftest import TEST_DEK, TEST_KURTARMA_ANAHTARI, TEST_PAROLA, TEST_TANITICI
+from apps.okul.tests.geri_yukleme_ortak import HesapSatiri, yetkili_sqlite
+from conftest import TEST_DEK, TEST_HESAP_ID, TEST_KURTARMA_ANAHTARI, TEST_PAROLA, TEST_TANITICI
 from shared import bakim, crypto
 
 PAROLA = TEST_PAROLA
@@ -60,12 +64,13 @@ def ortam(
 
 
 def _sqlite_baytlari(dizin: Path, isaret: str) -> bytes:
-    yol = dizin / f"kaynak-{isaret}.sqlite3"
-    with closing(sqlite3.connect(yol)) as baglanti:
-        baglanti.execute("CREATE TABLE kayit (deger TEXT)")
-        baglanti.execute("INSERT INTO kayit VALUES (?)", (isaret,))
-        baglanti.commit()
-    return yol.read_bytes()
+    """`isaret` değerini ve bu kurulumun mühürlü program yöneticisi satırını taşıyan SQLite."""
+    return yetkili_sqlite(
+        dizin / f"kaynak-{isaret}.sqlite3",
+        dek=TEST_DEK,
+        hesaplar=[HesapSatiri(TEST_HESAP_ID, TEST_TANITICI)],
+        isaret=isaret,
+    )
 
 
 def _sifreli_kapsayici(icerik: bytes, *, yabanci: bool = False) -> tuple[bytes, dict[str, Any]]:
@@ -254,7 +259,10 @@ def test_sirsiz_istek_400_ile_reddedilir(tmp_path: Path, ortam: dict[str, Path])
     yanit = APIClient().post(GERI_YUKLE_URL, {"name": "gunluk.odbak"}, format="json")
 
     assert yanit.status_code == 400
-    assert "tanıtıcısı ve parolası ya da kurtarma anahtarı" in yanit.json()["message"]
+    assert (
+        "program yöneticisi hesabının tanıtıcısı ve parolası ya da kurtarma anahtarı"
+        in yanit.json()["message"]
+    )
 
 
 def test_yol_ayracli_ad_reddedilir(tmp_path: Path, ortam: dict[str, Path]) -> None:

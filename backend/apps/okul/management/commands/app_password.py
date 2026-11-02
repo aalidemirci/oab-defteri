@@ -2,8 +2,12 @@
 
 Arayüz açılamadığında (kayıp güvenlik dosyası şüphesi, kilitli veriyle destek
 çağrısı) destek elinin yoludur; komut yalnız veri klasörüne erişebilen kişi
-tarafından çalıştırılabilir. Rol denetimi (konsol işlerini yalnız program
-yöneticisi yapar) 2. adımdadır (tasarım §4.4.2).
+tarafından çalıştırılabilir. Komuta hesap ve parola EKLENMEZ (tasarım §12.B; plan F1b-2
+"Yönetim komutları"): `status` kişisiz bir okumadır, `enable` yalnız ilk kurulumda çalışır
+(yetkisini soracak hesap yoktur), `recover` yalnız var olan, kapanmamış bir program
+yöneticisini kabul eder (kurtarma anahtarının kendisi yetkidir). Var olan bir hesabın
+parolasını alan tek yönetim komutu `restore_backup`'tır; onun rol denetimi geri yükleme
+çekirdeğindedir.
 
 Kullanım (paketlenmiş kurulumda `manage.py` yoktur; bu araç geliştirme ve
 destek senaryosu içindir):

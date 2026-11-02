@@ -40,7 +40,7 @@ from apps.okul.models import (
     SchoolYear,
     Student,
 )
-from apps.okul.oturum import OTURUM
+from apps.okul.oturum import OTURUM, yazar
 from apps.okul.permissions import RequiresAdminPassword
 from apps.okul.serializers import (
     ClassSectionSerializer,
@@ -583,15 +583,20 @@ class SecurityRecoveryKeyRenewView(APIView):
     doğrulanır (yanlışsa "Parola hatalı." + kademeli gecikme). Yanıttaki `recovery_key` TEK SEFERLİKTİR: sunucu onu saklamaz, bir
     daha üretemez; yanıt önbelleğe alınmaz. Yeni anahtar doğrulanana dek
     `recovery_key_confirmed` yanlıştır; `recovery_key_no` bir artar. Kişi yazmaz.
+
+    Parolası sorulan hesap yazar bağlamının hesabıdır (`live_restore` ile aynı): rol kararı ve
+    parolanın hesabı istek başındaki aynı görüntüden okunur (plan F1b-2 "Yetki kapısı").
     """
 
     @sensitive_variables("req", "anahtar")
     def post(self, request: Request) -> Response:
         req = AppPasswordRequestSerializer(data=request.data)
         req.is_valid(raise_exception=True)
+        kim = yazar()
         with guvenlik_hatalari():
             anahtar = app_password_service.renew_recovery_key(
-                hesap_id=OTURUM.hesap_id() or "", password=req.validated_data["password"]
+                hesap_id=(kim.hesap_id if kim is not None else None) or "",
+                password=req.validated_data["password"],
             )
         yanit = Response({"recovery_key": anahtar, **app_password_service.status()})
         yanit["Cache-Control"] = "no-store"
@@ -685,7 +690,8 @@ class BackupRestoreView(APIView):
     dosyası kayıpken de açıktır: geri yükleme `guvenlik.json`'u yedeğin kurtarma
     başlığından yeniden yazar. Açık oturumda yalnız program yöneticisi; parola yolunda
     servis de yazarın rolünü ve hesabını denetler, kurtarma anahtarı yolunda denetlemez
-    (`live_restore` modül başlığı "YETKİ").
+    (`live_restore` modül başlığı "YETKİ"). Parola yolunda çekirdeğin ORM'siz hesap denetimi
+    reddederse (`GeriYuklemeYetkisiz`, bir `ValueError`) yanıt 400'dür.
     """
 
     def post(self, request: Request) -> Response:

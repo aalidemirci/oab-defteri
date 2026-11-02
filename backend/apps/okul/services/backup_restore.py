@@ -23,15 +23,30 @@ tarih) durur (`backup_crypto.recovery_header_from_state`); hesap sarmalları
 yedeğe girmez. Çözerken aday sırası:
 
     1. Veri dizinindeki GÜNCEL guvenlik.json + bir hesabın tanıtıcısı ve
-       parolası (aynı bilgisayar). DEK parola değişiminde DEĞİŞMEDİĞİ için
+       parolası (aynı bilgisayar; her hesabın parolası çözer, geri yüklemeyi ise
+       yalnız program yöneticisi hesabı yapar — aşağıda "GERİ YÜKLEME
+       YETKİSİ"). DEK parola değişiminde DEĞİŞMEDİĞİ için
        güncel parola yedekten önceki veriyi de açar. Güncel dosyanın kurtarma
        bölümü kurtarma anahtarıyla da denenir.
     2. Yedeğe GÖMÜLÜ başlık + kurtarma anahtarı (yeni bilgisayar, kayıp ya da
        başka kuruluma ait dosya). Yedek "<no> numaralı, <tarih> tarihli kurtarma
        anahtarıyla açılır" diye kendini tarif eder (`BackupInfo.recovery_key_label`).
 
-Rol denetimi (geri yüklemeyi yalnız program yöneticisi yapar) 2. adımdadır;
-yanlış denemelerin gecikmesi hesapsız ve süreç içidir (plan F1b-1). AES-GCM
+GERİ YÜKLEME YETKİSİ (tasarım §4.4.4; plan F1b-2): parola yolunda geri yüklemeyi yalnız
+program yöneticisi yapar. Denetim bu çekirdektedir, üç giriş kapısı da ondan geçer
+(`geri_yukleme_yetkisi`; ORM'siz): yedek parolayla çözüldükten SONRA (yanlış parola rolü
+sızdırmaz) ve zincir başı okunmadan, veritabanı kenara alınmadan, `guvenlik.json`,
+`yedekleme.json`, sürüm damgası ve not yazılmadan ÖNCE. Hesabın satırı güncel veritabanından
+salt okunur okunur; okunamıyorsa yedeğin görüntüsünden. Ret `GeriYuklemeYetkisiz`'dir: hiçbir
+dosya değişmez (salt okunur okuma, program kapalıyken WAL başlıklı dosyanın yanında 0 baytlık
+`-wal` ve 32 KiB'lık `-shm` bırakabilir; `geri_yukleme_yetkisi` başlığı, F1b-2 ekleri),
+masaüstünde çıkış 9, komutta `CommandError`,
+uygulama içinde 400 (`BackupRestoreError` bir `ValueError`'dır; uygulama içinde rol kapısı ve
+servis kapısı zaten 403 verir, bu ret ancak oturumdaki program yöneticisinin kaydı tutmazsa
+düşer). Ret günlüğe sırsız uyarı olarak yazılır; konsolda denetim izi satırı yazılmaz (ORM
+yok). KURTARMA ANAHTARI YOLUNDA ROL DENETİMİ YOKTUR: anahtarın kendisi yetkidir.
+
+Yanlış denemelerin gecikmesi hesapsız ve süreç içidir (plan F1b-1). AES-GCM
 kimlik doğrulaması nihai hakemdir: yanlış DEK açık hata verir, sessizce bozuk
 çıktı üretilemez.
 
@@ -97,7 +112,7 @@ from desktop.backup_crypto import (
 from desktop.paths import VERSION_STAMP_FILE_NAME
 from django.utils import timezone
 
-from apps.okul.services import app_password, geri_yukleme_notu
+from apps.okul.services import app_password, geri_yukleme_notu, geri_yukleme_yetkisi
 
 logger = logging.getLogger("oab_defteri.restore")
 
@@ -121,6 +136,18 @@ _SOURCE_EMBEDDED = "gomulu"
 
 class BackupRestoreError(ValueError):
     """Kullanıcıya gösterilecek Türkçe geri yükleme hatası."""
+
+
+class GeriYuklemeYetkisiz(BackupRestoreError):
+    """Parola yolunda hesap program yöneticisi olarak doğrulanmadı (tasarım §4.4.4).
+
+    `kod` ret nedenidir (`geri_yukleme_yetkisi.RET_*`; günlüğe ve teste, kullanıcı metnine
+    çıkmaz). Masaüstünde çıkış 9, komutta `CommandError`, uygulama içinde 400 (modül başlığı).
+    """
+
+    def __init__(self, message: str, *, kod: str) -> None:
+        super().__init__(message)
+        self.kod = kod
 
 
 @dataclass(frozen=True)
@@ -191,6 +218,10 @@ def restore_database(
     `oturum_hesabi`: uygulama içi geri yüklemede oturumdaki hesabın kimliği (kurtarma
     anahtarı yolunda da); geri yükleme notuna ve `GERI_YUKLEME` satırına geçer: geri yükleme
     onu başlatan oturumun hesabına bağlanır. Konsol yolunda oturum yoktur (None).
+
+    Parola yolunda hesap, parola doğrulandıktan sonra ve hiçbir dosyaya dokunulmadan önce
+    program yöneticisi olarak doğrulanır; değilse `GeriYuklemeYetkisiz` (modül başlığı
+    "GERİ YÜKLEME YETKİSİ"). Kurtarma anahtarı yolunda rol denetimi yoktur.
     """
     hesap_adi = (hesap or "").strip() or None
     parola = password or None
@@ -203,13 +234,13 @@ def restore_database(
     info = inspect_backup(container)
     if not parola and not anahtar:
         raise BackupRestoreError(
-            "Bu yedek şifreli; açmak için hesabınızın tanıtıcısı ve parolası ya da kurtarma "
-            "anahtarı gerekli."
+            "Bu yedek şifreli; açmak için program yöneticisi hesabının tanıtıcısı ve parolası "
+            "ya da kurtarma anahtarı gerekli."
         )
     if parola and not hesap_adi:
         raise BackupRestoreError(
-            "Parolayla açmak için hesabın tanıtıcısını da verin; ya da kurtarma anahtarını "
-            "kullanın."
+            "Parolayla açmak için program yöneticisi hesabının tanıtıcısını da verin; ya da "
+            "kurtarma anahtarını kullanın."
         )
     icerik, kaynak, dek, acan_durum = _decrypt_container(
         container, info, hesap=hesap_adi, password=parola, recovery_key=anahtar
@@ -218,6 +249,9 @@ def restore_database(
         raise BackupRestoreError(
             "Yedek çözüldü ama içeriği SQLite veritabanı çıkmadı; dosya bozulmuş olabilir."
         )
+    if parola:
+        # Geri yükleme yetkisi (modül başlığı): parola doğrulandı, hiçbir dosya değişmedi.
+        _yetkiyi_denetle(db_path, icerik, dek, acan_durum, hesap_adi or "")
 
     # Kenara alınacak veritabanının zincir başı ve çapa takastan ÖNCE, salt okunur (geri
     # yükleme notu).
@@ -416,6 +450,40 @@ def _decrypt_container(
     if kimlik:
         ileti += f" Bu yedek {kimlik} kurtarma anahtarıyla açılır."
     raise BackupRestoreError(ileti)
+
+
+def _yetkiyi_denetle(
+    db_path: Path, icerik: bytes, dek: bytes, durum: dict[str, Any], hesap: str
+) -> None:
+    """Parolası doğrulanan hesap program yöneticisi mi? Değilse `GeriYuklemeYetkisiz`.
+
+    Hesap, yedeği açan güncel `guvenlik.json`'un sarmalından bulunur (tanıtıcı ya da kimlikle
+    verilmiş olabilir); sarmalın hatalı deneme askısı da kabul koşuludur. Ret günlüğe sırsız
+    uyarı olarak düşer: neden kodu ve kararı veren kaynak, hesabın kimliği (tanıtıcı kişinin
+    adını içerebilir, yazılmaz).
+    """
+    sarmal = app_password._find_wrap_by_login_name(durum, hesap) or {}
+    try:
+        kaynak = geri_yukleme_yetkisi.yonetici_dogrula(
+            db_path=db_path,
+            goruntu=icerik,
+            dek=dek,
+            hesap_id=sarmal.get("id"),
+            askida=bool(sarmal.get("askida")),
+        )
+    except geri_yukleme_yetkisi.YetkiReddi as ret:
+        logger.warning(
+            "Geri yükleme reddedildi: parolası verilen hesap (%s) program yöneticisi olarak "
+            "doğrulanmadı (neden: %s; denetlenen: %s); geri yükleme yapılmadı.",
+            sarmal.get("id"),
+            ret.kod,
+            ret.kaynak,
+        )
+        raise GeriYuklemeYetkisiz(ret.ileti, kod=ret.kod) from ret
+    if kaynak == geri_yukleme_yetkisi.KAYNAK_GORUNTU:
+        logger.info(
+            "Güncel veritabanı okunamadı; program yöneticisi yedeğin görüntüsünde doğrulandı."
+        )
 
 
 def _swap_database_files(db_path: Path, content: bytes) -> Path | None:

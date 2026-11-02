@@ -36,7 +36,10 @@ aynı görüntüdür. KURTARMA ANAHTARI YOLUNDA ROL DENETİMİ YOKTUR (konsolla 
 kendisi yetkidir): güvenlik dosyası kayıp kilidinde oturumsuz ya da açık kalmış bir organ
 oturumuyla da çıkış yolu açık kalır (rol kapısı o kipte kesmez, kilit kapısının listesi
 geçerlidir; plan F1b-1 "Kayıp dosya kipinde yedekten geri yükleme yalnız kurtarma anahtarı
-ister").
+ister"). Parola yolunda çekirdek de hesabı konsoldaki gibi ORM'siz doğrular
+(`backup_restore` → `geri_yukleme_yetkisi`; bağlantılar kapatıldıktan sonra, salt okunur):
+oturumdaki program yöneticisinin kaydı tutmazsa (ör. program dışından değiştirilmişse) ret
+`GeriYuklemeYetkisiz`'dir, bir `ValueError` olduğu için 400 döner; hiçbir dosya değişmez.
 
 Geri yükleme UZUN İŞTİR (`shared.bakim.UZUN_ISLER`; tasarım §4.2, §4.4.3): sürerken
 oturumun boşta ve elle kilidi ertelenir, DEK işin ortasında silinmez. Başarıda oturum

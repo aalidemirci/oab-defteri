@@ -70,6 +70,7 @@ from typing import Any, Final
 from django.utils import timezone
 
 from apps.okul.gizli_dosya import atomik_json_yaz
+from shared import sqlite_adres
 
 DOSYA_ADI: Final = "geri-yukleme-notu.json"
 SURUM: Final = 1
@@ -225,7 +226,9 @@ def zincir_basi_oku(db_path: Path) -> dict[str, Any] | None:
     """
     if not db_path.is_file():
         return None
-    adres = f"{db_path.resolve().as_uri()}?mode=ro"
+    # Adres `geri_yukleme_yetkisi` ile ortaktır (`shared.sqlite_adres`): `resolve()` edilmez,
+    # UNC yol authority'siz yazılır; yoksa ağdaki veri dizininde zincir başı "bilinmiyor" kalırdı.
+    adres = sqlite_adres.salt_okunur_adres(db_path)
     try:
         with closing(sqlite3.connect(adres, uri=True, timeout=5)) as baglanti:
             satir = baglanti.execute(

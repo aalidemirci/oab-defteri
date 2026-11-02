@@ -301,6 +301,28 @@ def test_program_yoneticisi_olmayan_hesap_yenileyemez(client: APIClient) -> None
     assert app_password.read_state() == once
 
 
+def test_gorunum_parolasi_sorulan_hesabi_yazar_baglamindan_verir(
+    client: APIClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Plan F1b-2 "Yetki kapısı": rol kararı ve parolası sorulan hesap istek başındaki aynı
+    görüntüden (yazar bağlamı) okunur, `live_restore` gibi. `OTURUM`'un istek ortasındaki hâli
+    (kilitlenmiş ya da başka hesaba geçmiş) servise verilen hesabı değiştirmez."""
+    verilen: dict[str, object] = {}
+
+    def sahte_yenileme(*, hesap_id: object, password: str) -> str:
+        verilen["hesap_id"] = hesap_id
+        return "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH"
+
+    monkeypatch.setattr(app_password, "renew_recovery_key", sahte_yenileme)
+    # Görünüm çağrıldığında `OTURUM` artık hesap vermiyor (istek ortasında kilitlenmiş gibi).
+    monkeypatch.setattr(OTURUM, "hesap_id", lambda: None)
+
+    yanit = _yenile(client)
+
+    assert yanit.status_code == 200, yanit.json()
+    assert verilen["hesap_id"] == TEST_HESAP_ID
+
+
 def test_kilitliyken_kilit_kapisi_keser(client: APIClient, kilitli: Path) -> None:
     once = app_password.state_path().read_bytes()
     yanit = _yenile(client)

@@ -10,6 +10,12 @@ Yedek başlığı yalnız kurtarma bölümünü taşır (tasarım TK10, §4.4.4)
 kurtarma anahtarı. Başlıkla açılınca `guvenlik.json` yalnız kurtarma bölümüyle
 yazılır.
 
+Parola yolunda geri yüklemeyi yalnız program yöneticisi yapar (tasarım §4.4.4; plan F1b-2):
+çekirdek hesabı ORM'siz okuyucuyla güncel veritabanında, o okunamıyorsa yedeğin görüntüsünde
+doğrular. Bu yüzden parola yolunda BAŞARI bekleyen testlerin görüntüsü, o testin DEK'iyle
+mühürlü bir program yöneticisi satırı ve okul kartı taşır (`_sqlite_baytlari(..., dek=...)`;
+`geri_yukleme_ortak`). Yetkinin kendi testleri `test_geri_yukleme_yetkisi.py`'dedir.
+
 Her test kendi (başlangıçta `guvenlik.json` içermeyen) veri dizininde koşar;
 ucuz Argon2 profili ve gecikmesiz deneme `backend/conftest.py`'dendir.
 """
@@ -38,7 +44,9 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.utils import timezone
 
+from apps.okul.management.commands.restore_backup import Command as RestoreBackupCommand
 from apps.okul.services import app_password, backup_restore
+from apps.okul.tests.geri_yukleme_ortak import HesapSatiri, yetkili_sqlite
 from shared import crypto
 
 PAROLA = "Deneme-Parola-1"
@@ -56,9 +64,15 @@ def veri_dizini(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return veri
 
 
-def _sqlite_baytlari(dizin: Path, isaret: str) -> bytes:
-    """`isaret` değerini taşıyan gerçek bir SQLite dosyasının baytları."""
+def _sqlite_baytlari(dizin: Path, isaret: str, dek: bytes | None = None) -> bytes:
+    """`isaret` değerini taşıyan gerçek bir SQLite dosyasının baytları.
+
+    `dek` verilirse dosya o DEK'le mühürlü program yöneticisi satırını (`HESAP_ID`, `HESAP`) ve
+    okul kartını da taşır: parola yolunda geri yükleme hesabı bu görüntüde doğrular.
+    """
     yol = dizin / f"kaynak-{isaret}.sqlite3"
+    if dek is not None:
+        return yetkili_sqlite(yol, dek=dek, hesaplar=[HesapSatiri(HESAP_ID, HESAP)], isaret=isaret)
     with closing(sqlite3.connect(yol)) as baglanti:
         baglanti.execute("CREATE TABLE kayit (deger TEXT)")
         baglanti.execute("INSERT INTO kayit VALUES (?)", (isaret,))
@@ -123,8 +137,8 @@ def test_yedek_geri_yuklenir_eski_dosya_ve_wal_kenara_alinir(
     (veri_dizini / "db.sqlite3-wal").write_bytes(b"wal-kalintisi")
     (veri_dizini / "db.sqlite3-shm").write_bytes(b"shm-kalintisi")
     (veri_dizini / "surum.json").write_text("{}", encoding="utf-8")
-    yeni = _sqlite_baytlari(tmp_path, "yeni")
     dek, durum = _dek_ile_durum(PAROLA)
+    yeni = _sqlite_baytlari(tmp_path, "yeni", dek)
     _guncel_yaz(veri_dizini, durum)
     yedek = tmp_path / "gunluk-2026-08-01.odbak"
     yedek.write_bytes(_sifreli_kapsayici(yeni, dek, durum))
@@ -341,7 +355,7 @@ def test_parola_hesapsiz_verilirse_reddedilir(tmp_path: Path, veri_dizini: Path)
 def test_hesap_kimligiyle_de_acilir(tmp_path: Path, veri_dizini: Path) -> None:
     dek, durum = _dek_ile_durum(PAROLA)
     _guncel_yaz(veri_dizini, durum)
-    icerik = _sqlite_baytlari(tmp_path, "gizli")
+    icerik = _sqlite_baytlari(tmp_path, "gizli", dek)
     yedek = tmp_path / "gunluk.odbak"
     yedek.write_bytes(_sifreli_kapsayici(icerik, dek, durum))
 
@@ -406,7 +420,7 @@ def test_parola_degisse_de_guncel_dosya_ile_acilir(tmp_path: Path, veri_dizini: 
     eski_durum = _durum(dek, "Eski-Parola-1", kurtarma)
     yeni_durum = _durum(dek, "Yeni-Parola-2!", kurtarma)
     _guncel_yaz(veri_dizini, yeni_durum)
-    icerik = _sqlite_baytlari(tmp_path, "gizli")
+    icerik = _sqlite_baytlari(tmp_path, "gizli", dek)
     yedek = tmp_path / "eski-donem.odbak"
     yedek.write_bytes(_sifreli_kapsayici(icerik, dek, eski_durum))
     db = veri_dizini / "db.sqlite3"
@@ -479,7 +493,7 @@ def test_capraz_dek_geri_yukleme_yedekleme_json_u_da_esitler(
 def test_bassiz_yedek_guncel_guvenlik_dosyasiyla_acilir(tmp_path: Path, veri_dizini: Path) -> None:
     dek, durum = _dek_ile_durum(PAROLA)
     _guncel_yaz(veri_dizini, durum)
-    icerik = _sqlite_baytlari(tmp_path, "gizli")
+    icerik = _sqlite_baytlari(tmp_path, "gizli", dek)
     yedek = tmp_path / "bassiz.odbak"
     yedek.write_bytes(_sifreli_kapsayici(icerik, dek, None))
     db = veri_dizini / "db.sqlite3"
@@ -556,7 +570,7 @@ def test_komut_sifreli_yedegi_hesap_ve_parolayla_acar(
     monkeypatch.setitem(settings.DATABASES["default"], "NAME", str(db))
     dek, durum = _dek_ile_durum(PAROLA)
     _guncel_yaz(veri_dizini, durum)
-    icerik = _sqlite_baytlari(tmp_path, "gizli")
+    icerik = _sqlite_baytlari(tmp_path, "gizli", dek)
     yedek = tmp_path / "gunluk.odbak"
     yedek.write_bytes(_sifreli_kapsayici(icerik, dek, durum))
     cikti = StringIO()
@@ -612,6 +626,42 @@ def test_komut_onay_reddinde_dokunmaz(
     assert db.read_bytes() == orijinal
 
 
+def test_komut_istemi_ve_yardimi_program_yoneticisini_anar(
+    tmp_path: Path, veri_dizini: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Parolayla geri yüklemeyi yalnız program yöneticisi yapar (sözlük "Yedek"; tasarım
+    §4.4.4): istem, yardım ve sırsız ret iletisi bunu baştan söyler."""
+    db = veri_dizini / "db.sqlite3"
+    monkeypatch.setitem(settings.DATABASES["default"], "NAME", str(db))
+    dek, durum = _dek_ile_durum(PAROLA)
+    yedek = tmp_path / "gunluk.odbak"
+    yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni"), dek, durum))
+    istemler: list[str] = []
+
+    def girdi(istem: str = "") -> str:
+        istemler.append(istem)
+        return ""
+
+    monkeypatch.setattr("builtins.input", girdi)
+
+    with pytest.raises(CommandError) as hata:
+        call_command("restore_backup", str(yedek), "--yes", stdout=StringIO())
+
+    assert istemler[0] == (
+        "Program yöneticisi hesabının tanıtıcısı (kurtarma anahtarıyla açmak için boş bırakın): "
+    )
+    assert "program yöneticisi hesabının tanıtıcısı ve parolası ya da kurtarma anahtarı" in str(
+        hata.value
+    )
+    assert not db.exists()
+    yardim = {
+        eylem.dest: eylem.help
+        for eylem in RestoreBackupCommand().create_parser("manage.py", "restore_backup")._actions
+    }
+    assert yardim["hesap"] == "Program yöneticisi hesabının tanıtıcısı (parola yolu)."
+    assert str(yardim["password"]).startswith("Program yöneticisi hesabının parolası")
+
+
 def test_komut_bellek_ici_veritabanini_reddeder(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -657,7 +707,7 @@ def test_geri_yukleme_notu_kenara_alinanin_ozetini_zincir_basini_ve_hesabi_yazar
     dek, durum = _dek_ile_durum(PAROLA)
     _guncel_yaz(veri_dizini, durum)
     yedek = tmp_path / "gunluk-2026-10-30.odbak"
-    yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni"), dek, durum))
+    yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni", dek), dek, durum))
 
     sonuc = backup_restore.restore_database(yedek, db, hesap=HESAP, password=PAROLA)
 

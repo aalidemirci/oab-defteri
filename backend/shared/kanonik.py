@@ -1,12 +1,12 @@
 """Kanonik kodlama — hesap mührünün, içerik MAC'inin ve zincirin tek biçimi (tasarım §4.6).
 
 F1b-1 uygulama kararı (plan §2.2, "guvenlik.json şema 2"): mühür ve MAC'lerin
-kodlaması TEK ve ORM'SİZ bir işlevdedir. Bugün hesap mührü (`Account.seal`,
-tasarım §4.6.1) bu modülü kullanır; denetim izinin içerik MAC'i ve zinciri
-(§4.6.2-§4.6.3) ve 2. adımda konsol geri yüklemesinin salt okunur `sqlite3`
-denetimi (§4.4.4) aynı işlevi kullanacaktır. Bu yüzden modül yalnız standart
-kitaplığa dayanır: Django içe aktarmaz, model örneği tanımaz; çağıran değerleri
-sözlük olarak verir.
+kodlaması TEK ve ORM'SİZ bir işlevdedir. Hesap mührü (`Account.seal`, tasarım
+§4.6.1), denetim izinin içerik MAC'i ve zinciri (§4.6.2-§4.6.3) ve geri yüklemenin
+salt okunur `sqlite3` ile yaptığı hesap denetimi (§4.4.4;
+`apps.okul.services.geri_yukleme_yetkisi`, F1b-2) aynı işlevleri kullanır. Bu yüzden
+modül yalnız standart kitaplığa dayanır: Django içe aktarmaz, model örneği tanımaz;
+çağıran değerleri sözlük olarak verir.
 
 BİÇİM (bu adımda DONAR; kâğıda inen zincir başı buna bağlıdır):
 
@@ -20,7 +20,7 @@ BİÇİM (bu adımda DONAR; kâğıda inen zincir başı buna bağlıdır):
 * `UUID`: tireli metin.
 * Yabancı anahtar kimliği YALNIZ kimliğin metnidir (çağıran `str(pk)` verir) ya da
   `null`; tamsayı verilmez. Aynı anahtar `5` ve `"5"` diye iki ayrı baytla
-  kodlanabilseydi ORM yolu ile 2. adımın salt okunur `sqlite3` denetimi aynı satır
+  kodlanabilseydi ORM yolu ile geri yüklemenin salt okunur `sqlite3` denetimi aynı satır
   için farklı mühür hesaplardı. Kodlayıcı alanın yabancı anahtar olduğunu bilemez
   (sayaç gibi alanlar meşru tamsayıdır); kuralı alanları adıyla tanıyan işlev
   uygular (`hesap_muhru`, `HESAP_MUHRU_YABANCI_ANAHTARLARI`).

@@ -154,7 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--hesap",
         default=None,
         metavar="TANITICI",
-        help="Geri yükleme: parolası verilecek hesabın tanıtıcısı (ör. yonetici).",
+        help="Geri yükleme: program yöneticisi hesabının tanıtıcısı (ör. yonetici).",
     )
     parser.add_argument(
         "--parola",

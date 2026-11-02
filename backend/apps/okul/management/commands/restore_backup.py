@@ -12,8 +12,13 @@ geliştirme ortamı ve uzaktan destek senaryosu içindir:
 Komut veritabanına ORM üzerinden HİÇ dokunmaz — hedef dosya bozuk olabilir,
 geri yüklemenin varlık sebebi de budur. Parola yolu güncel `guvenlik.json`'daki
 hesabın sarmalıyla işler (`--hesap` tanıtıcıdır); başka bilgisayarda alınmış yedek
-yalnız kurtarma anahtarıyla açılır (tasarım TK10). Rol denetimi (yalnız program
-yöneticisi) 2. adımdadır. Sırlar varsayılan olarak gizli istemle (getpass)
+yalnız kurtarma anahtarıyla açılır (tasarım TK10). Parola yolunda geri yüklemeyi yalnız
+program yöneticisi yapar: rol denetimi `desktop/restore.py` ile aynıdır, çünkü ikisi de aynı
+çekirdekten geçer (`backup_restore`, `geri_yukleme_yetkisi`; ORM'siz). Ret
+`GeriYuklemeYetkisiz` bir `BackupRestoreError`'dır, `CommandError` olarak döner; hiçbir dosya
+değişmez. Kurtarma anahtarı yolunda rol denetimi yoktur. Var olan bir hesabın parolasını alan
+TEK yönetim komutu budur (`app_password` komutunun başlığı). Sırlar varsayılan olarak gizli
+istemle (getpass)
 alınır; `--password/--recovery-key` yalnız otomasyon/test içindir ve komut
 geçmişine düşme riskini taşır (bkz. app_password komutu).
 
@@ -38,9 +43,13 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("backup", help="Geri yüklenecek yedek dosyası (.odbak).")
-        parser.add_argument("--hesap", default=None, help="Hesabın tanıtıcısı (parola yolu).")
         parser.add_argument(
-            "--password", default=None, help="Hesabın parolası (otomasyon; risklidir)."
+            "--hesap", default=None, help="Program yöneticisi hesabının tanıtıcısı (parola yolu)."
+        )
+        parser.add_argument(
+            "--password",
+            default=None,
+            help="Program yöneticisi hesabının parolası (otomasyon; risklidir).",
         )
         parser.add_argument("--recovery-key", default=None, help="Kurtarma anahtarı (otomasyon).")
         parser.add_argument("--yes", action="store_true", help="Onay sorusunu atlar.")
@@ -73,7 +82,10 @@ class Command(BaseCommand):
         anahtar = options.get("recovery_key")
         if not parola and not anahtar:
             if not hesap:
-                hesap = input("Hesabın tanıtıcısı (kurtarma anahtarıyla açmak için boş bırakın): ")
+                hesap = input(
+                    "Program yöneticisi hesabının tanıtıcısı "
+                    "(kurtarma anahtarıyla açmak için boş bırakın): "
+                )
             if hesap:
                 parola = getpass("Hesabın parolası: ")
             else:
