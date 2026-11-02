@@ -12,7 +12,8 @@ gerekçesiyle yazılıdır (plan F1b-1: kişi silme ve birleştirme 5. adımda y
 Giriş noktaları: `degisiklik` (okul çekirdeğinin kayıtları; tür modelin durum
 alanlarından seçilir: `OLUSTUR`, `GUNCELLE`, `DURUM`), `kayit` (türü çağıranın verdiği
 kayıt yazımı: hesap olayları), `olay` (kayıt yazımı olmayan olay: kilit, mühür bulgusu,
-`guvenlik.json` bölümü, yedek, dosyadaki ayar).
+`guvenlik.json` bölümü, yedek, dosyadaki ayar), `kvkk_silme` (KVKK silmesi: model, alan
+adları, adet, tetik; değer yok — bugün erişim günlüğünün saklama süresi dolan satırları).
 
 KURALLAR (her biri bu modülde zorlanır):
 
@@ -83,7 +84,7 @@ import threading
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Final
 
 from django.apps import apps as django_apps
@@ -641,6 +642,66 @@ def kilitli_olay(
         record_mac="",
         label="",
         anahtar=muhur,
+    )
+
+
+#: `KVKK_SILME` satırının değerleri (tasarım §4.6.2 kural 4: "model, alan adları, adet, tetik;
+#: değer yok"; §4.6.4: "silinen satır sayısı ve en yeni tarih"). Hepsi kişisizdir: silinen
+#: kayıt SAYISI, silinenlerin en yenisinin GÜNÜ (an değil) ve silmeyi başlatan tetik.
+KVKK_SILME_DEGERLERI: Final = ("adet", "en_yeni", "tetik")
+#: Silmenin tetikleri — KAPALI KÜME. Bugün yalnız gün işi (erişim günlüğünün saklama süresi);
+#: dönem kapanışının silmeleri (F4) ve kişi silme (5. adım) kendi tetikleriyle gelir.
+KVKK_SILME_TETIKLERI: Final = ("GUN_ISI",)
+
+
+def kvkk_silme(
+    model: type[models.Model],
+    *,
+    adet: int,
+    en_yeni: date,
+    tetik: str,
+    alanlar: Sequence[str] | None = None,
+) -> AuditTrail:
+    """KVKK silmesinin satırı (açık kip; tasarım §4.6.2 kural 4): değer YOK.
+
+    Silmeyle AYNI işlemde çağrılır (yazma kuralı 1). `model` silinen kayıtların modelidir;
+    `alanlar` silinen ya da boşaltılan alanların ADLARIDIR (`None`: bütün satır — kimlik
+    dışındaki bütün alanlar). `values` yalnız `KVKK_SILME_DEGERLERI`'ni taşır: adet (pozitif
+    tamsayı), en yeni silinen kaydın günü (saatsiz tarih) ve kapalı kümeden tetik. Toplu
+    silmede tek bir kaydın kimliği yoktur: `object_id` boştur (silinen kayıtların kimlikleri
+    satıra girmez). İçerik MAC'i yoktur: silinen kaydın özeti kalsaydı olasılık uzayı dar
+    değer anahtarla yeniden bulunabilirdi (§4.6.2 "MAC dışı alanlar").
+    """
+    etiket = model_etiketi(model)
+    try:
+        kayitli = django_apps.get_model(etiket) is model
+    except (LookupError, ValueError):
+        kayitli = False
+    if not kayitli:
+        raise IzYazilamadi("KVKK silmesinin modeli kayıtlı bir model olmalıdır.")
+    adlar = [alan.name for alan in _izli_alanlar(model)]
+    secilen = adlar if alanlar is None else list(alanlar)
+    if not secilen or not set(secilen) <= set(adlar) or len(set(secilen)) != len(secilen):
+        raise IzYazilamadi(f"KVKK silmesinin alanları {etiket} modelinin alan adlarıdır.")
+    if isinstance(adet, bool) or not isinstance(adet, int) or adet < 1:
+        raise IzYazilamadi("KVKK silmesinin adedi pozitif bir tamsayıdır.")
+    if isinstance(en_yeni, datetime) or not isinstance(en_yeni, date):
+        raise IzYazilamadi("KVKK silmesinin en yeni kaydı saatsiz bir tarihtir.")
+    if tetik not in KVKK_SILME_TETIKLERI:
+        raise IzYazilamadi(f"Bilinmeyen KVKK silmesi tetiği: {tetik}")
+    return _ekle(
+        AuditAction.KVKK_SILME,
+        model=etiket,
+        object_id="",
+        changed_fields=secilen,
+        values={
+            "adet": [None, adet],
+            "en_yeni": [None, kanonik.duz(en_yeni)],
+            "tetik": [None, tetik],
+        },
+        record_mac="",
+        label="",
+        anahtar=_bellekteki_anahtar(),
     )
 
 

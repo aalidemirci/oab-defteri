@@ -16,9 +16,9 @@ Yeni bir izsiz yazma yolu eklenince bu dosyadaki testlerden en az biri düşer:
    tutmalıdır — iki kayıt yazıp birini izleyen uç düşer.
 2. **Kaynak taraması** — `apps/` altındaki bütün uygulamalar, `shared` ve masaüstü kabuğu
    (testler ve göçler hariç; modeller DAHİL) AST ile taranır: ORM yazma çağrısı (kural
-   `_orm_yazimi_mi`'de: `update`, `create`, `delete`… HER alıcıda — queryset değişkeni,
-   ilişki yöneticisi, seçicinin queryset'i) taşıyan her birim ya yazıcıyı (`denetim_izi.
-   kayit`, `olay`, `degisiklik`, `kilit_olayi`) doğrudan ya da `SAF_IZ_YARDIMCILARI`'nda
+   `_orm_yazimi_mi`'de: `update`, `create`, `delete`, modelin adlı yazım ilkeleri… HER
+   alıcıda — queryset değişkeni, ilişki yöneticisi, seçicinin queryset'i) taşıyan her birim
+   ya yazıcıyı (`denetim_izi.kayit`, `olay`, `degisiklik`, `kilit_olayi`) doğrudan ya da `SAF_IZ_YARDIMCILARI`'nda
    ADIYLA duran bir yardımcıyla çağırmalı, ya izi çağıranları düşen modüle özel bir
    yardımcı olmalı (kurallar `_tara`'da) ya da `MUAF_ISLEVLER`'de (plan muafiyeti) ya da
    `ILKELLER`'de (yazıcı ve model ilkelleri) adıyla durmalıdır. Çağrılar (modül, işlev)
@@ -35,7 +35,21 @@ Yeni bir izsiz yazma yolu eklenince bu dosyadaki testlerden en az biri düşer:
    ve serbest metinle yazılır, güncellenir, durumu değişir; sonra `AuditTrail`'in BÜTÜN
    sütunlarında bu değerler aranır — sonuç sıfır. Arşiv paketinin "denetim izi dökümü"
    (§8.5) henüz yoktur (F4); döküm gelince aynı arama ona da uygulanır. KVKK silmesi
-   (`KVKK_SILME`) dönem kapanışıyla gelir; bugün kişi silme izsizdir (muafiyet).
+   (`KVKK_SILME`, `denetim_izi.kvkk_silme`) bugün yalnız erişim günlüğünün saklama süresi
+   silmesindedir (`apps.okul.erisim_gunlugu`; uydurma veriyle araması
+   `test_erisim_gunlugu.py`'de); kişi silmenin satırı dönem kapanışıyla ve 5. adımla gelir,
+   bugün kişi silme izsizdir (muafiyet).
+
+ERİŞİM GÜNLÜĞÜ (`AccessLog`, tasarım §4.6.4) ZİNCİR DIŞIDIR: yazıcısı (`erisim_gunlugu.yaz`)
+iz satırı yazmaz ve `MUAF_ISLEVLER`'de adıyla durur; model izin listesi taşımaz
+(`LISTESIZ_MODELLER`). Uçların tablo karşılaştırmasında erişim günlüğünün yalnız EKLENEN
+satırı izsiz geçer; silinen ya da değişen satırı ucu düşürür (`_YALNIZ_EKLENEN`). Saklama
+süresi silmesi İZLİDİR: `KVKK_SILME` satırını yazıcının `kvkk_silme` girişiyle aynı işlemde
+yazar; modelin silme ilkesi (`_AccessLogQuerySet._saklama_disini_sil`) `ILKELLER`'dedir, ilkelin
+çağrısı bu taramada yazım sayılır (`_ILKEL_YAZIMLARI`). Bu tarama izli bir işlevin BÜTÜN
+yazımlarını izli sayar: erişim günlüğüne doğrudan yazımı ve silmeyi izli işlevde de yakalayan
+kaynak taraması (tek yazar `yaz`, tek silme yolu `suresi_dolanlari_sil`)
+`test_erisim_gunlugu.py`'dedir.
 
 Kişi adları, numaralar ve adresler UYDURMADIR.
 """
@@ -47,7 +61,7 @@ import json
 import time
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -57,12 +71,15 @@ import pytest
 from django.apps import apps as django_apps
 from django.db import connection, transaction
 from django.urls import URLPattern, URLResolver, get_resolver
+from django.utils import timezone
 from openpyxl import Workbook
 from rest_framework.test import APIClient
 
-from apps.okul import denetim_izi
+from apps.okul import denetim_izi, erisim_gunlugu
 from apps.okul.excel_ogrenci import ParserError
 from apps.okul.models import (
+    AccessKind,
+    AccessLog,
     Account,
     AccountRole,
     AuditTrail,
@@ -502,6 +519,10 @@ def _parametreler() -> list[Any]:
 #: Tablo karşılaştırmasının dışında kalan okul modelleri: izin kendisi ve iz anahtarı
 #: (`LISTESIZ_MODELLER`; anahtar ilk hesapla aynı işlemde yazılır).
 _KARSILASTIRMA_DISI = frozenset({"AuditTrail", "AuditKey"})
+#: Satırı iz satırı DOĞURMAYAN, yalnız eklenen modeller: zincir dışı erişim günlüğü (tasarım
+#: §4.6.4). Eklenen satırı izsiz geçer; silinen ya da değişen satırı ucu düşürür (satır
+#: değişmez, yalnız saklama süresinin gün işi siler — `KVKK_SILME`; bir uç silmez).
+_YALNIZ_EKLENEN = frozenset({"okul.AccessLog"})
 
 
 def _tablolar() -> dict[str, dict[str, tuple[Any, ...]]]:
@@ -542,6 +563,31 @@ def _degisen_kayitlar(
     return degisen
 
 
+def _eklenen_gunluk_satirlari(
+    once: dict[str, dict[str, tuple[Any, ...]]], degisen: set[tuple[str, str]]
+) -> set[tuple[str, str]]:
+    """Değişenlerden yalnız eklenen erişim günlüğü satırları (önceki görüntüde olmayanlar)."""
+    return {
+        (etiket, kimlik)
+        for etiket, kimlik in degisen
+        if etiket in _YALNIZ_EKLENEN and kimlik not in once.get(etiket, {})
+    }
+
+
+def _izsiz_degisiklikler(
+    once: dict[str, dict[str, tuple[Any, ...]]],
+    sonra: dict[str, dict[str, tuple[Any, ...]]],
+    izlenen: set[tuple[str, str]],
+) -> set[tuple[str, str]]:
+    """İzi olmayan değişiklikler: eklenen erişim günlüğü satırı dışında değişen her kayıt.
+
+    Silinen ya da değişen erişim günlüğü satırı burada kalır: onun iz satırı yoktur
+    (`KVKK_SILME`'nin kimliği boştur), uç düşer.
+    """
+    degisen = _degisen_kayitlar(once, sonra)
+    return degisen - _eklenen_gunluk_satirlari(once, degisen) - izlenen
+
+
 @pytest.mark.django_db
 @pytest.mark.parametrize("uc", _parametreler())
 def test_izli_yazma_ucu_iz_satiri_yazar(
@@ -576,13 +622,14 @@ def test_izli_yazma_ucu_iz_satiri_yazar(
         assert satir.actor == "HESAP", (uc, satir)
         assert str(satir.account_id) == hesap, (uc, satir)
     # Değişen her kaydın bu istekte yazılmış bir iz satırı vardır (iki kayıt yazıp birini
-    # izleyen uç burada düşer).
-    degisen = _degisen_kayitlar(once, _tablolar())
-    izsiz = degisen - {(satir.model, satir.object_id) for satir in yeni}
+    # izleyen uç burada düşer); erişim günlüğünde yalnız ekleme izsiz geçer.
+    sonra = _tablolar()
+    degisen = _degisen_kayitlar(once, sonra)
+    izsiz = _izsiz_degisiklikler(once, sonra, {(satir.model, satir.object_id) for satir in yeni})
     assert not izsiz, (uc, sorted(izsiz))
     if crypto.is_unlocked():
         assert denetim_izi.zinciri_dogrula() == []
-        for etiket, kimlik in sorted(degisen):
+        for etiket, kimlik in sorted(degisen - _eklenen_gunluk_satirlari(once, degisen)):
             model = django_apps.get_model(etiket)
             if model._base_manager.filter(pk=kimlik).exists():
                 assert denetim_izi.kaydi_dogrula(model, kimlik) is True, (uc, etiket, kimlik)
@@ -597,7 +644,9 @@ def test_izli_yazma_ucu_iz_satiri_yazar(
 # ============================================================ kaynak taraması
 
 #: Yazıcının giriş noktaları (`denetim_izi`).
-YAZICI_GIRISLERI = frozenset({"kayit", "olay", "degisiklik", "kilit_olayi", "kilitli_olay"})
+YAZICI_GIRISLERI = frozenset(
+    {"kayit", "olay", "degisiklik", "kilit_olayi", "kilitli_olay", "kvkk_silme"}
+)
 #: Model örneği yazımı (`save`, katı silme, geri alma): konumsal argümansız çağrı. Konumsal
 #: argümanlı `save` ORM dışıdır (openpyxl `kitap.save(tampon)`).
 _ORNEK_YAZIMLARI = frozenset({"save", "hard_delete", "restore"})
@@ -611,6 +660,9 @@ _TOPLU_YAZIMLAR = frozenset(
 )
 #: Ham SQL yazımı.
 _HAM_SQL = frozenset({"execute", "executemany", "executescript"})
+#: Modelin adlı yazım ilkeleri (`ILKELLER`'de duran ilkelin kendisi): çağrısı, alıcısı ne olursa
+#: olsun yazımdır — çağıran izlemiyorsa düşer.
+_ILKEL_YAZIMLARI = frozenset({"_saklama_disini_sil"})
 
 #: Yazım taşıyan ama izlenmesi gerekmeyen İLKELLER (göreli dosya yolu, birim) → gerekçe.
 #: Dosyanın tamamı taranır: modele yeni bir yazım eklenirse yakalanır, yalnız burada adı
@@ -629,6 +681,14 @@ ILKELLER: dict[tuple[str, str], str] = {
     ("shared/models.py", "BaseModel.restore"): _MODEL_ILKELI,
     ("shared/models.py", "SoftDeleteQuerySet.delete"): _MODEL_ILKELI,
     ("shared/models.py", "SoftDeleteQuerySet.hard_delete"): _MODEL_ILKELI,
+    ("apps/okul/models.py", "_AccessLogQuerySet._saklama_disini_sil"): (
+        "Erişim günlüğünün tek silme ilkesi (saklama süresi dolan satırlar): kendisi siler, "
+        "izini (`KVKK_SILME`) çağıranı düşer. Bu tarama ilkelin çağrısını yazım sayar "
+        "(`_ILKEL_YAZIMLARI`): çağıran yazıcıyı (`denetim_izi.kvkk_silme`) çağırmıyorsa düşer — "
+        "bugün tek çağıranı `erisim_gunlugu.suresi_dolanlari_sil` izlidir. Çağıranın TEK "
+        "olduğunu ve iz satırının silmeyle AYNI işlemde yazıldığını tarama göremez; onları "
+        "`test_erisim_gunlugu.py` sınar (kaynak taraması ve geri alma testi)."
+    ),
 }
 
 #: İzsiz kalabilen işlevler (göreli dosya yolu, birim) → gerekçe. Başka muafiyet yoktur.
@@ -636,6 +696,10 @@ MUAF_ISLEVLER: dict[tuple[str, str], str] = {
     ("apps/okul/services/persons.py", "delete_student"): PLAN_MUAFIYETI,
     ("apps/okul/services/persons.py", "delete_personnel"): PLAN_MUAFIYETI,
     ("apps/okul/services/persons.py", "merge_personnel"): PLAN_MUAFIYETI,
+    ("apps/okul/erisim_gunlugu.py", "yaz"): (
+        "Erişim günlüğünün tek yazıcısı: günlük zincir dışıdır (tasarım §4.6.4), satırı iz "
+        "satırı doğurmaz; silmesi izlidir (`KVKK_SILME`)."
+    ),
 }
 
 #: Yazımın izini düşen SAF iz yardımcıları (göreli dosya yolu, birim) → gerekçe. Yalnız
@@ -700,7 +764,7 @@ def _orm_yazimi_mi(cagri: ast.Call) -> bool:
         return not (ad == "execute" and _salt_okuma_sorgusu_mu(cagri))
     if ad in _ORNEK_YAZIMLARI or ad == "delete":
         return not cagri.args
-    return ad in _TOPLU_YAZIMLAR
+    return ad in _TOPLU_YAZIMLAR or ad in _ILKEL_YAZIMLARI
 
 
 def _yazici_cagrisi_mi(cagri: ast.Call) -> bool:
@@ -1031,7 +1095,7 @@ def test_saf_iz_yardimcilari_gercekten_saftir() -> None:
 #: Gerçek ağaca eklenen izsiz yazımlar (inceleme bulguları): her biri yakalanmalıdır.
 _SONDA = """
 from apps.okul import denetim_izi, iz_durumu, iz_dogrulama, selectors
-from apps.okul.models import Holiday, SchoolYear
+from apps.okul.models import AccessLog, Holiday, SchoolYear
 from apps.okul.services import hesaplar
 
 
@@ -1111,6 +1175,15 @@ def izli_silme(gun):
     onceki = denetim_izi.anlik(gun)
     gun.delete()
     denetim_izi.degisiklik(gun, onceki=onceki)
+
+
+def izsiz_gunluk_silme(sinir):
+    AccessLog.objects.all()._saklama_disini_sil(sinir)
+
+
+def izli_gunluk_silme(sinir, gun):
+    adet = AccessLog.objects.all()._saklama_disini_sil(sinir)
+    denetim_izi.kvkk_silme(AccessLog, adet=adet, en_yeni=gun, tetik="GUN_ISI")
 """
 
 
@@ -1120,10 +1193,12 @@ def test_gercek_agaca_eklenen_izsiz_yazimlar_yakalanir() -> None:
     Eşleme artık (modül, işlev) çiftiyledir; ORM yazımının adı iz çağrısı sayılmaz; queryset
     değişkeni, ilişki yöneticisi ve seçicinin queryset'i de yazımdır. Aynı kalıplar `_` önekli
     bir yardımcının arkasına alınınca da yakalanır (bağımsız denetim bulgusu): sistem olayı
-    kapısını, doğrulama yazısını ya da başka modülün servisini çağıran birim izci değildir."""
+    kapısını, doğrulama yazısını ya da başka modülün servisini çağıran birim izci değildir.
+    Erişim günlüğünün silme ilkesini `KVKK_SILME` yazmadan çağıran birim de yakalanır."""
     kaynaklar = {**_taranan_kaynaklar(), "apps/okul/services/sonda.py": _SONDA}
     bulunan = {ad for yol, ad, _ in _izsiz_yazimlar(kaynaklar) if yol.endswith("sonda.py")}
     assert bulunan == {
+        "izsiz_gunluk_silme",
         "izsiz_yumusak_silme",
         "izsiz_toplu_silme",
         "izsiz_sube_silme",
@@ -1160,6 +1235,38 @@ def test_tablo_karsilastirmasi_iki_kayit_yazip_birini_izleyen_yolu_yakalar() -> 
         )
     izlenen = {(satir.model, satir.object_id) for satir in AuditTrail.objects.filter(seq__gt=bas)}
     assert _degisen_kayitlar(once, _tablolar()) - izlenen == {("okul.Holiday", str(izsiz.pk))}
+
+
+@pytest.mark.django_db
+def test_tablo_karsilastirmasi_erisim_gunlugunde_yalniz_eklemeyi_gecirir() -> None:
+    """Zincir dışı erişim günlüğü karşılaştırmadan bütünüyle çıkmaz (inceleme bulgusu): izli
+    bir yolda eklenen satır izsiz geçer, SİLİNEN satır yakalanır. `_base_manager` modelin
+    silme reddini atlar ve DELETE tetikleyicisi yoktur; bu yolu ancak karşılaştırma görür."""
+    eski = AccessLog.objects.create(
+        at=timezone.now() - timedelta(days=30),
+        account_id=TEST_HESAP_ID,
+        role="yonetici",
+        kind=AccessKind.KISI_DOKUMU,
+        model="okul.Holiday",
+        object_id="1",
+    )
+    once = _tablolar()
+    assert ("okul.AccessLog" in once) and str(eski.pk) in once["okul.AccessLog"]
+    bas = _son_seq()
+    with transaction.atomic():
+        gun = calendar_service.create_holiday(
+            name="Uydurma izli gün",
+            start_date=date(2026, 11, 20),
+            end_date=date(2026, 11, 20),
+            kind="OTHER",
+        )
+        yeni = erisim_gunlugu.yaz(AccessKind.KISI_DOKUMU, model=Holiday, object_id=gun.pk)
+        AccessLog._base_manager.filter(pk=eski.pk).delete()
+    izlenen = {(satir.model, satir.object_id) for satir in AuditTrail.objects.filter(seq__gt=bas)}
+
+    sonra = _tablolar()
+    assert ("okul.AccessLog", str(yeni.pk)) in _degisen_kayitlar(once, sonra)
+    assert _izsiz_degisiklikler(once, sonra, izlenen) == {("okul.AccessLog", str(eski.pk))}
 
 
 def test_tarayici_izsiz_yazimi_yakalar_yardimciyi_ve_baska_kaydi_ayirir() -> None:
@@ -1545,6 +1652,9 @@ def test_iki_bin_satirlik_aktarim_kayit_basina_iz_yazar_ve_makul_surer(
 LISTESIZ_MODELLER = {
     "AuditTrail": "İzin kendisi (ekleme-yalnız; tek yazarı denetim_izi).",
     "AuditKey": "İz anahtarı: ilk hesapla aynı işlemde yazılır, iz satırı mühürünün anahtarıdır.",
+    "AccessLog": (
+        "Erişim günlüğü: zincir dışı, değer tutmaz (tasarım §4.6.4); silmesi `KVKK_SILME`."
+    ),
 }
 IZLI_MODELLER = (
     Account,

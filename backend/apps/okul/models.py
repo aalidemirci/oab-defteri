@@ -26,15 +26,20 @@ tasarımının §5.1 ve §12.B'sindedir (öğrenci ve kütüphane alanları F1b'
   sınıfı aile iskeletindeki gibi 0 koduyla temsil edilir ve `SchoolConfig.has_prep_class`
   açıkken geçerli kümeye girer.
 - Koşullu UniqueConstraint'ler SQLite partial index ile çalışır (ailede kanıtlı).
+- Güvenlik çekirdeği (tasarım §4.6, F1b-1): `Account`, `AuditKey`, `AuditTrail` ve
+  `AccessLog` (erişim günlüğü; zincir dışı, değer tutmaz, 2 yıl saklanır).
 """
 
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any, ClassVar
 
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models.functions import Length
+from django.db.models.lookups import Exact
 from django.utils import timezone
 
 from apps.okul.normalize import GRADE_LEVELS, PREP_LEVEL, normalize_student_number
@@ -1177,7 +1182,11 @@ class AuditKey(models.Model):
 # Denetim izi (tasarım §4.6.2-§4.6.3; TK16; plan F1b-1 alt commit c)
 # ---------------------------------------------------------------------------
 class ImmutableRecord(RuntimeError):
-    """Ekleme-yalnız modelde güncelleme ya da silme denendi (tasarım §4.6.2 yazma kuralı 2)."""
+    """Ekleme-yalnız modelde güncelleme ya da silme denendi (tasarım §4.6.2 yazma kuralı 2).
+
+    Erişim günlüğü (`AccessLog`, §4.6.4) de aynı hatayı verir: satırı değiştirilemez, saklama
+    süresi dolmadan silinemez, toplu eklenemez (satırı tek tek yazıcı yazar).
+    """
 
 
 class _AppendOnlyQuerySet(models.QuerySet):  # type: ignore[type-arg]  # Any davranışı korunur
@@ -1366,3 +1375,161 @@ class AuditTrail(models.Model):
 
     def delete(self, using: Any = None, keep_parents: bool = False) -> tuple[int, dict[str, int]]:
         raise ImmutableRecord("Denetim izi satırı silinemez (tasarım §4.6.2).")
+
+
+# ---------------------------------------------------------------------------
+# Erişim günlüğü (tasarım §4.6.4; plan F1b-1 alt commit d)
+# ---------------------------------------------------------------------------
+class AccessKind(models.TextChoices):
+    """Hassas okumanın ya da kişisel veri içeren çıktının türü — KAPALI KÜME (tasarım §4.6.4).
+
+    Küme `test_erisim_gunlugu.py`'deki anlık görüntüyle sabittir; yeni tür göçle eklenir (DB
+    kısıtı da aynı kümedir). Etiketler iç belge içindir; kullanıcıya görünen adları okuma
+    ekranı (2. adım) sözlükten verir.
+    """
+
+    MASKESIZ_TCKN = "MASKESIZ_TCKN", "Maskesiz T.C. kimlik no"
+    KISI_DOKUMU = "KISI_DOKUMU", "Kişi dökümü"
+    #: Adlı E07 (davet teslim çizelgesi) ve E08 (katılım cetveli).
+    VELI_LISTESI_CIKTISI = "VELI_LISTESI_CIKTISI", "Veli listesi çıktısı"
+    KISISEL_DISA_AKTARIM = "KISISEL_DISA_AKTARIM", "Kişisel veri dışa aktarımı"
+    IHLAL_DOKUMU = "IHLAL_DOKUMU", "İhlal dökümü"
+    OZEL_NITELIKLI_EK = "OZEL_NITELIKLI_EK", "Özel nitelikli ek"
+    #: Kantin isteklisinin katılım engeli dayanağı, organ üyesinin görev alma engeli dayanağı.
+    OZEL_NITELIKLI_ALAN = "OZEL_NITELIKLI_ALAN", "Özel nitelikli alan"
+
+
+class _AccessLogQuerySet(models.QuerySet):  # type: ignore[type-arg]  # Any davranışı korunur
+    """Erişim günlüğünün queryset'i: toplu ekleme, güncelleme ve silme reddedilir (`AccessLog`).
+
+    Toplu ekleme `save()`'i ve yazıcının biçim denetimini atlardı; yazıcı satırı tek tek
+    `create` ile yazar. Tek silme yolu `_saklama_disini_sil`'dir; onu yalnız saklama süresini
+    hesaplayan silme servisi çağırır (`apps.okul.erisim_gunlugu.suresi_dolanlari_sil`; tek
+    çağıranı ve tek yazarı `test_erisim_gunlugu.py`'nin kaynak taraması sınar).
+    """
+
+    def bulk_create(self, objs: Any, *args: Any, **kwargs: Any) -> list[Any]:
+        raise ImmutableRecord(
+            "Erişim günlüğüne toplu yazılmaz; satırı yalnız yazıcı yazar (tasarım §4.6.4)."
+        )
+
+    def update(self, **kwargs: Any) -> int:
+        raise ImmutableRecord("Erişim günlüğü satırı değiştirilemez (tasarım §4.6.4).")
+
+    def bulk_update(self, objs: Any, fields: Any, batch_size: int | None = None) -> int:
+        raise ImmutableRecord("Erişim günlüğü satırı değiştirilemez (tasarım §4.6.4).")
+
+    def delete(self) -> tuple[int, dict[str, int]]:
+        raise ImmutableRecord(
+            "Erişim günlüğü satırı yalnız saklama süresi dolunca silinir (tasarım §4.6.4)."
+        )
+
+    def _saklama_disini_sil(self, sinir: datetime) -> int:
+        """`at`'i `sinir`'den ÖNCE olan satırları siler; silinen satır sayısını döndürür.
+
+        Sınırı saklama süresinden silme servisi hesaplar; burada süre bilinmez (tek kaynak
+        `erisim_gunlugu.SAKLAMA_SURESI_YIL`). Satırın ilişkisi olmadığı için silme tek
+        `DELETE … WHERE at < ?` ifadesidir.
+        """
+        eskiler = self.filter(at__lt=sinir)
+        return super(_AccessLogQuerySet, eskiler).delete()[0]
+
+
+class AccessLog(models.Model):
+    """Erişim günlüğü — hassas okumanın ve kişisel veri içeren çıktının kaydı (tasarım §4.6.4).
+
+    KVKK md. 12 güvenlik tedbiridir (OYS'nin "okuma ≠ yönetme ≠ hassas detay" ayrımı). Tek
+    yazarı `apps.okul.erisim_gunlugu.yaz`'dır; okuyan hesap ve rol yazar bağlamından gelir.
+
+    * **Zincir dışıdır**: denetim izine bağlı değildir, satır mühürlenmez; süresi dolunca
+      silinir (2 yıl, `erisim_gunlugu.SAKLAMA_SURESI_YIL`; §15 B-9 DOĞRULANMADI) ve silmenin
+      kendisi denetim izine `KVKK_SILME` satırı olarak düşer. Arşiv paketine girmez (§8.5).
+    * **Şifresizdir ve değer tutmaz**: kişisel veri olarak yalnız okuyan hesabın bağı ve
+      okunan kaydın kimliği (takma ad düzeyinde) durur; okunan değer, ad, serbest metin
+      hiçbir sütuna girmez. `model` uygulama etiketli model adı (`okul.Student`), `object_id`
+      kimliğin metni, `field` modelin alan adıdır; çıktıda belgenin sha256'sı ve satır sayısı.
+
+    KORUMA — SATIR DEĞİŞMEZ, YALNIZ SÜRESİ DOLUNCA SİLİNİR:
+
+    * Model: var olan satırda `save()` ve `delete()`, queryset'te `bulk_create()`, `update()`,
+      `bulk_update()` ve `delete()` `ImmutableRecord` yükseltir. Tek silme yolu queryset'in
+      `_saklama_disini_sil`'idir; onu yalnız silme servisi çağırır.
+    * Veritabanı: `BEFORE UPDATE` tetikleyicisi (`RAISE(ABORT)`, göç 0010) model yöntemlerini
+      atlayan program içi güncellemeyi de (`_base_manager`, ham SQL) keser.
+    * DELETE için tetikleyici YOKTUR, bilerek: koşulsuz bir tetikleyici meşru silmeyi (saklama
+      süresinin dolması) de keserdi; "yalnız süresi dolan satır" koşulunu tetikleyiciye yazmak
+      saklama süresini ve gün sınırını (Europe/Istanbul, 29 Şubat) SQL'de ikinci kez
+      tanımlamak olurdu — süre DOĞRULANMADI'dır, değişirse iki tanım ayrışırdı. Program içi
+      yazımı ve silmeyi model yöntemleri ile iki test tutar: kaynak taraması
+      (`tests/test_erisim_gunlugu.py`: kökü `AccessLog` olan her yazım ve silme zinciri —
+      `_base_manager` ve kurucu dahil — yalnız yazıcıda ve silme servisinde durur; takma adla
+      ya da dizeyle başvuru yoktur) ve uçların tablo karşılaştırması
+      (`tests/test_izsiz_yazim.py`: uç erişim günlüğüne yalnız EKLER; sildiği ya da değiştirdiği
+      satır ucu düşürür). Program dışından silme zincir dışı bir tabloda görünmez; tasarımın
+      kabul ettiği sınırdır (§4.6.4 "zincir dışıdır").
+    """
+
+    at = models.DateTimeField("zaman", default=timezone.now)
+    account = models.ForeignKey(
+        Account,
+        on_delete=models.PROTECT,
+        related_name="+",
+        verbose_name="okuyan hesap",
+    )
+    role = models.CharField("rol", max_length=24)
+    kind = models.CharField("tür", max_length=24, choices=AccessKind.choices)
+    model = models.CharField("model", max_length=64, blank=True, default="")
+    object_id = models.CharField("kayıt kimliği", max_length=64, blank=True, default="")
+    field = models.CharField("alan", max_length=64, blank=True, default="")
+    document_sha256 = models.CharField("belgenin sha256'sı", max_length=64, blank=True, default="")
+    row_count = models.PositiveIntegerField("satır sayısı", null=True, blank=True)
+
+    objects = _AccessLogQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = "erişim günlüğü satırı"
+        verbose_name_plural = "erişim günlüğü"
+        ordering = ["at", "id"]
+        indexes = [models.Index(fields=["at"], name="okul_accesslog_at_idx")]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(kind__in=AccessKind.values), name="ck_accesslog_kind"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(role__in=AccountRole.values), name="ck_accesslog_role"
+            ),
+            # Çıktının özeti ve satır sayısı birliktedir; özet 64 onaltılık hanedir (biçimini
+            # yazıcı denetler, SQLite `max_length`'i zorlamaz).
+            models.CheckConstraint(
+                condition=models.Q(document_sha256="", row_count__isnull=True)
+                | models.Q(
+                    Exact(Length("document_sha256"), 64),
+                    row_count__isnull=False,
+                ),
+                name="ck_accesslog_document",
+            ),
+            # Kayıt kimliği yalnız bir modelle, alan adı yalnız bir kayıt kimliğiyle.
+            models.CheckConstraint(
+                condition=models.Q(object_id="") | ~models.Q(model=""),
+                name="ck_accesslog_object_model",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(field="") | ~models.Q(object_id=""),
+                name="ck_accesslog_field_object",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.kind} {self.model} {self.object_id}"
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Yalnız YENİ satır yazılır; var olan satırın kaydı `ImmutableRecord` yükseltir."""
+        if not self._state.adding:
+            raise ImmutableRecord("Erişim günlüğü satırı değiştirilemez (tasarım §4.6.4).")
+        kwargs["force_insert"] = True
+        super().save(*args, **kwargs)
+
+    def delete(self, using: Any = None, keep_parents: bool = False) -> tuple[int, dict[str, int]]:
+        raise ImmutableRecord(
+            "Erişim günlüğü satırı yalnız saklama süresi dolunca silinir (tasarım §4.6.4)."
+        )

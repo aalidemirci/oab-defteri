@@ -18,16 +18,19 @@ import json
 import os
 import stat
 import threading
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
+from django.apps import apps as django_apps
 from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
 
-from apps.okul import denetim_izi, iz_durumu, masaustu_kanca
-from apps.okul.models import AuditAction, AuditTrail, Holiday
+from apps.okul import denetim_izi, erisim_gunlugu, iz_durumu, masaustu_kanca
+from apps.okul.models import AccessLog, AuditAction, AuditTrail, Holiday
 from apps.okul.oturum import (
     IZ_KIP_KILIDI,
     OTURUM,
@@ -420,44 +423,76 @@ def test_masaustu_kancasi_iz_yazilamasa_da_hata_yukseltmez(
 # ============================================================ gün işinin ertelenmesi
 
 
-@pytest.fixture
-def gun_isi() -> Any:
-    """DEK isteyen bir gün işi: kapalı günleri tohumlar (izli iş verisi yazar)."""
+@dataclass(frozen=True)
+class GunIsi:
+    """Sınanan gün işi: kapının kaydı, işin izlediği model ve işin veriye dokunup dokunmadığı."""
 
-    def tohumla() -> bool:
-        return calendar_service.seed_holidays(2026).created > 0
+    kayit: masaustu_kanca.GunlukIsKaydi
+    model: str
+    yapildi: Callable[[], bool]
 
-    masaustu_kanca.gunluk_is_kaydet("deneme-tohum", tohumla)
+
+@pytest.fixture(params=["deneme-tohum", erisim_gunlugu.SILME_ISI])
+def gun_isi(request: pytest.FixtureRequest) -> Iterator[GunIsi]:
+    """DEK isteyen iki gün işi: kapalı günleri tohumlayan deneme işi (izli iş verisi yazar) ve
+    ÜRETİMDEKİ erişim günlüğü silmesi (`OkulConfig.ready`'nin kaydettiği; süresi dolmuş satırı
+    siler, `KVKK_SILME` yazar)."""
+    masaustu_kanca._reset_for_tests()
+    yapildi: Callable[[], bool]
+    if request.param == "deneme-tohum":
+
+        def tohumla() -> bool:
+            return calendar_service.seed_holidays(2026).created > 0
+
+        masaustu_kanca.gunluk_is_kaydet("deneme-tohum", tohumla)
+        model, yapildi = "okul.Holiday", Holiday.objects.exists
+    else:
+        django_apps.get_app_config("okul").ready()  # üretimdeki kayıt yolu
+        eski = AccessLog.objects.create(
+            at=timezone.now() - timedelta(days=3 * 366),
+            account_id=TEST_HESAP_ID,
+            role="yonetici",
+            kind="KISI_DOKUMU",
+            model="okul.Student",
+            object_id="7",
+        )
+
+        def silindi() -> bool:
+            return not AccessLog.objects.filter(pk=eski.pk).exists()
+
+        model, yapildi = "okul.AccessLog", silindi
+
     try:
-        (kayit,) = [is_ for is_ in masaustu_kanca.gunluk_isler() if is_.ad == "deneme-tohum"]
-        yield kayit
+        (kayit,) = [is_ for is_ in masaustu_kanca.gunluk_isler() if is_.ad == request.param]
+        yield GunIsi(kayit=kayit, model=model, yapildi=yapildi)
     finally:
         masaustu_kanca._reset_for_tests()
 
 
-def test_kilitliyken_gun_isi_is_verisi_yazmaz(gun_isi: Any) -> None:
+def test_kilitliyken_gun_isi_is_verisi_yazmaz(gun_isi: GunIsi) -> None:
     """Tasarım §10.6/§14 F1b kapısı: DEK isteyen gün işi kilitliyken iş verisi yazmaz; ertelenir,
     `GUN_ISI` satırı iş başına günde bir kez (kilitli kipte, `SISTEM`) yazılır. Kilit açılınca
-    sonraki deneme işi yapar."""
+    sonraki deneme işi yapar. Gerçek erişim günlüğü silmesiyle de sınanır (plan F1b-1)."""
     capa = kilitle()
 
-    assert gun_isi.calistir() is False
-    assert gun_isi.calistir() is False  # saat sonraki deneme: ikinci satır yok
+    assert gun_isi.kayit.calistir() is False
+    assert gun_isi.kayit.calistir() is False  # saat sonraki deneme: ikinci satır yok
 
-    assert not Holiday.objects.exists()
+    assert not gun_isi.yapildi()
     (ertele,) = satirlar(seq__gt=capa.seq)
     assert (ertele.action, ertele.model, ertele.object_id) == (
         "GUN_ISI",
         denetim_izi.GUN_ISI_ERTELEME,
-        "deneme-tohum",
+        gun_isi.kayit.ad,
     )
     assert (ertele.actor, ertele.key_mode, ertele.key_ref) == ("SISTEM", "KILITLI", f"{capa.seq}:0")
 
     ac()
     assert not satirlar(action="BUTUNLUK")  # kilitli satır çapanın tohumuyla doğrulandı
-    assert gun_isi.calistir() is True
-    assert Holiday.objects.exists()
-    assert all(s.actor == "SISTEM" for s in satirlar(model="okul.Holiday"))
+    assert gun_isi.kayit.calistir() is True
+    assert gun_isi.yapildi()
+    izleri = satirlar(model=gun_isi.model)
+    assert izleri and all(s.actor == "SISTEM" and s.key_mode == "ACIK" for s in izleri)
 
 
 def test_gun_isi_ertelemesi_acik_oturumda_da_gunde_bir_kezdir() -> None:

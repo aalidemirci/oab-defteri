@@ -18,8 +18,10 @@
        üzerinden yazılır (kilitli kipte; tasarım §4.6.3, plan F1b-1 "Denetim izi")
     9. Gömülü sunucu (waitress, 127.0.0.1, boş port) + sağlık denetimi
    10. Çıkış kancası backend'e kaydolur (`masaustu_kanca`, §4.2 adım 10); `od-gunluk`
-       başlar: gün değişimi kapısını koşar (günlük yedek + rotasyon; saatte bir
-       yinelenir, her iş ortak bakım kapısından geçer — `shared/bakim.py`)
+       başlar: gün değişimi kapısını koşar (günlük yedek + rotasyon + backend'in kaydettiği
+       işler, ör. erişim günlüğünün saklama silmesi; saatte bir yinelenir, her iş ortak bakım
+       kapısından geçer — `shared/bakim.py`). Kapının "ertelenenleri şimdi dene" sinyali de
+       kaydolur: kilit açılışı onu verir, kilitliyken ertelenen iş hemen denenir (TK19)
    11. Linux: Qt uygulaması + SIGTERM köprüsü (`desktop/qt_kurulum.py`)
    12. Pencere (pywebview)
    `--autotest` kipinde 1-9 + sağlık denetimi koşar, pencere açılmaz (§13 D5).
@@ -451,6 +453,9 @@ def serve(
         require_window_runtime()
         kapi = gun_kapisi_kur(paths)
         kapi.baslat()
+        # TK19: kilit açılışı ertelenen gün işlerini bu sinyalle hemen denetir (engellemez;
+        # iş `od-gunluk`'ta koşar). Kapanışta `_kancalari_birak` kapıdan ÖNCE düşürür.
+        _kancalari_kaydet(ertelenenleri_dene=kapi.ertelenenleri_dene)
         run_window_session(
             window_url(server.base_url, token),
             paths.webview_storage_path,

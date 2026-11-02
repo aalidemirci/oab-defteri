@@ -1045,6 +1045,9 @@ class _SahteKapi:
     def durdur(self) -> None:
         self.sira.append("od-gunluk-dur")
 
+    def ertelenenleri_dene(self) -> None:
+        self.sira.append("ertelenenleri-dene")
+
 
 @pytest.fixture
 def sahte_servis(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
@@ -1066,6 +1069,13 @@ def sahte_servis(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, A
     monkeypatch.setattr(main_mod, "gun_kapisi_kur", lambda paths, **_: _SahteKapi(sira))
     monkeypatch.setattr(main_mod, "wal_checkpoint", lambda yol: sira.append("wal-checkpoint"))
     monkeypatch.setattr(main_mod, "_oturumu_kilitle", lambda: sira.append("oturum-kilidi"))
+
+    def kancalar(**kanca: Any) -> None:
+        sira.extend(f"kanca:{ad}" for ad in sorted(kanca))
+        kayit.setdefault("kancalar", {}).update(kanca)
+
+    monkeypatch.setattr(main_mod, "_kancalari_kaydet", kancalar)
+    monkeypatch.setattr(main_mod, "_kancalari_birak", lambda: sira.append("kancalar-birak"))
     return kayit
 
 
@@ -1079,12 +1089,23 @@ def test_kapanis_sirasi_gun_kapisi_oturum_sunucu_ve_wal_checkpoint(
         "yonetim-basla",
         "saglik",
         "od-gunluk",  # yönetim ayakta ve korumalı olduktan SONRA
+        "kanca:ertelenenleri_dene",  # TK19: kilit açılışının sinyali kapı başladıktan sonra
         "pencere",
+        "kancalar-birak",  # kanca kapı durmadan ÖNCE düşer
         "od-gunluk-dur",
         "oturum-kilidi",  # §4.2: od-gunluk durduktan SONRA, sunucudan ÖNCE
         "yonetim-dur",
         "wal-checkpoint",  # TB14: sunucu durduktan SONRA
     ]
+
+
+def test_kilit_acilisinin_sinyali_gun_kapisina_baglanir(sahte_servis: dict[str, Any]) -> None:
+    """TK19: backend'e kaydolan "ertelenenleri şimdi dene" kancası kapının kendi sinyalidir."""
+    main_mod.serve(sahte_servis["paths"], "belirtec", False)
+
+    sahte_servis["kancalar"]["ertelenenleri_dene"]()
+
+    assert sahte_servis["sira"][-1] == "ertelenenleri-dene"
 
 
 def test_autotest_pencere_ve_gun_kapisi_acmaz_ag_dinleyicisi_kurmaz(
@@ -1097,6 +1118,7 @@ def test_autotest_pencere_ve_gun_kapisi_acmaz_ag_dinleyicisi_kurmaz(
     assert sahte_servis["sira"] == [
         "yonetim-basla",
         "saglik",
+        "kancalar-birak",
         "oturum-kilidi",  # oturum açılmadığı için etkisizdir; sıra aynı kalır
         "yonetim-dur",
         "wal-checkpoint",

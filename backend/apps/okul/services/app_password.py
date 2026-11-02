@@ -184,7 +184,7 @@ from django.db import DatabaseError, connection, models, transaction
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 
-from apps.okul import denetim_izi, iz_dogrulama
+from apps.okul import denetim_izi, iz_dogrulama, masaustu_kanca
 from apps.okul.models import (
     Account,
     AccountRole,
@@ -1786,8 +1786,14 @@ def _start_session(
     elinde olan biri parolayı izsiz ve bildirimsiz yenileyemez); süreç sarmal yazımıyla
     commit arasında ölürse yeni parola geçerlidir, satır eskide kalır (`change_password` ile
     aynı kesinti hâli). O ana dek ara katman oturumu kapalı görür; açık olmayan oturumun
-    istekleri 423 alır. Ertelenen gün işleri bugün saatlik denemesinde koşar (DEK artık
-    bellektedir; `masaustu_kanca`).
+    istekleri 423 alır.
+
+    4. ertelenen gün işleri (tasarım §4.4.3 sırasının son adımı, TK19): oturum açılıp
+       kilitler BIRAKILDIKTAN sonra masaüstünün gün kapısına "ertelenenleri şimdi dene"
+       sinyali verilir (`masaustu_kanca.ertelenen_gun_islerini_dene`). Sinyal engellemez ve
+       hata yükseltmez: iş `od-gunluk` iş parçacığında, bakım kapısından geçerek ve bu
+       kilitleri kendisi alarak koşar; isteğin iş parçacığında uzun iş koşmaz. Masaüstü
+       yoksa (testler, konsol) etkisizdir; tetiklenen iş düşerse saatlik deneme sürer.
 
     Kilit sırası `_state_lock` → `IZ_KIP_KILIDI` → veritabanı → oturum kilidi: dosya
     kilidi en dışta (modül başlığı "DENETİM İZİ"; `dosya_ve_iz_islemi` ile aynı yön), ters
@@ -1829,6 +1835,7 @@ def _start_session(
                 OTURUM.kapat()
             raise
     _reset_failures()
+    masaustu_kanca.ertelenen_gun_islerini_dene()  # (4): kilitlerin DIŞINDA, yalnız sinyal
     return hesap
 
 

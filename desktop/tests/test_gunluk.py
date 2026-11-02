@@ -337,3 +337,162 @@ def _bekle(kosul: Any, sure: float = 5.0) -> None:
     while not kosul() and time.monotonic() < son:
         time.sleep(0.01)
     assert kosul()
+
+
+# ------------------------------------------- ertelenenleri şimdi dene (TK19)
+
+
+def _sirali(sonuclar: list[bool], kayit: list[str], ad: str) -> Callable[[], bool]:
+    """Her çağrıda sıradaki sonucu veren iş taklidi; liste bitince son sonuç yinelenir."""
+
+    def calistir() -> bool:
+        kayit.append(ad)
+        return sonuclar.pop(0) if len(sonuclar) > 1 else sonuclar[0]
+
+    return calistir
+
+
+def _biten_gecisler(monkeypatch: pytest.MonkeyPatch, kapi: GunDegisimiKapisi) -> list[list[str]]:
+    """`gunu_eskiyenleri_kos`'un BİTEN her geçişinin sonucu (tik ve sinyal ikisi de geçer).
+
+    Sonuç damga yazıldıktan SONRA eklenir: sinyalin işlendiği uykuyla değil bu olumlu işaretle
+    beklenir ("hiç koşmadı" denetimi boş geçmez, damga okuması yarışmaz).
+    """
+    gecisler: list[list[str]] = []
+    asil = kapi.gunu_eskiyenleri_kos
+
+    def sayan() -> list[str]:
+        biten = asil()
+        gecisler.append(biten)
+        return biten
+
+    monkeypatch.setattr(kapi, "gunu_eskiyenleri_kos", sayan)
+    return gecisler
+
+
+def test_ertelenenleri_dene_gunu_eskiyeni_saatlik_takvimi_beklemeden_kosar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Kilit açılışının sinyali: ertelenen (bugün bitmemiş) iş hemen denenir; bugün biten iş ve
+    saatlik iş koşmaz; saatlik takvim kaymaz — sinyal saatin ORTASINDA (1800. sn) gelir,
+    olağan tik yine 3600'de koşar (takvimi sinyalde sıfırlayan döngü 5400'ü beklerdi)."""
+    gun = _Gun(date(2026, 9, 24))
+    saat = [0.0]
+    olaylar: list[str] = []
+    kapi = _kapi(tmp_path, gun, aralik_sn=3600.0, monoton=lambda: saat[0])
+    gecisler = _biten_gecisler(monkeypatch, kapi)
+    kapi.kaydet("ertelenen", _sirali([False, True], olaylar, "ertelenen"))
+    kapi.kaydet("biten", _sirali([True], olaylar, "biten"))
+    kapi.saatlik_kaydet("saatlik", _sirali([True], olaylar, "saatlik"))
+
+    kapi.baslat()
+    try:
+        _bekle(lambda: olaylar == ["ertelenen", "biten", "saatlik"])
+        _bekle(lambda: len(gecisler) == 1)
+
+        saat[0] = 1800.0  # yarım saat geçti; kilit açıldı
+        kapi.ertelenenleri_dene()
+        _bekle(lambda: len(gecisler) == 2)
+        assert gecisler[-1] == ["ertelenen"]
+        assert olaylar == ["ertelenen", "biten", "saatlik", "ertelenen"]
+        assert kapi.damgalar() == {"ertelenen": "2026-09-24", "biten": "2026-09-24"}
+
+        # Sinyal yinelenirse geçiş koşar ama bugün biten iş yeniden koşmaz (damga kuralı).
+        kapi.ertelenenleri_dene()
+        _bekle(lambda: len(gecisler) == 3)
+        assert gecisler[-1] == []
+        assert len(olaylar) == 4
+
+        # Saatlik takvim kaymadı: ilk tikten bir saat sonra olağan tik (saatlik iş dahil) koşar.
+        saat[0] = 3601.0
+        kapi.uyandir()
+        _bekle(lambda: olaylar[-1:] == ["saatlik"])
+        assert len(gecisler) == 4
+    finally:
+        kapi.durdur()
+
+
+def test_tetiklenen_is_yine_duserse_saatlik_deneme_surer(tmp_path: Path) -> None:
+    """Sinyalle tetiklenen iş yine düşerse saatlik deneme ilk tikin takvimiyle sürer (sinyal
+    1800. sn'de; olağan deneme 3600'de)."""
+    gun = _Gun(date(2026, 9, 24))
+    saat = [0.0]
+    olaylar: list[str] = []
+    kapi = _kapi(tmp_path, gun, aralik_sn=3600.0, monoton=lambda: saat[0])
+    kapi.kaydet("ertelenen", _sirali([False], olaylar, "ertelenen"))
+
+    kapi.baslat()
+    try:
+        _bekle(lambda: len(olaylar) == 1)
+        saat[0] = 1800.0
+        kapi.ertelenenleri_dene()
+        _bekle(lambda: len(olaylar) == 2)
+        assert "ertelenen" not in kapi.damgalar()
+
+        saat[0] = 3601.0
+        kapi.uyandir()
+        _bekle(lambda: len(olaylar) == 3)
+    finally:
+        kapi.durdur()
+
+
+def test_baslamadan_once_gelen_sinyal_kaybolmaz(tmp_path: Path) -> None:
+    """Sinyal kapının ilk geçişinden önce gelirse ilk geçiş bitince denenir (saat ilerlemez)."""
+    olaylar: list[str] = []
+    kapi = _kapi(tmp_path, _Gun(date(2026, 9, 24)), monoton=lambda: 0.0)
+    kapi.kaydet("ertelenen", _sirali([False, True], olaylar, "ertelenen"))
+
+    kapi.ertelenenleri_dene()
+    kapi.baslat()
+    try:
+        # Damga işten SONRA yazılır: olayın değil damganın kendisi beklenir (yarış yok).
+        _bekle(lambda: kapi.damgalar() == {"ertelenen": "2026-09-24"})
+        assert len(olaylar) == 2
+    finally:
+        kapi.durdur()
+
+
+def test_is_surerken_gelen_sinyal_kaybolmaz(tmp_path: Path) -> None:
+    """Sinyalle başlayan deneme SÜRERKEN gelen ikinci sinyal kaybolmaz (`_dongu`: işaret işten
+    ÖNCE düşer): ör. iş sürerken oturum kilitlendi, deneme yine ertelendi, sonra kilit yeniden
+    açıldı. Deneme bitince saat ilerlemeden bir deneme daha yapılır; işaret işten sonra
+    düşseydi ikinci sinyal yutulur, iş bir saat beklerdi."""
+    olaylar: list[str] = []
+    basladi = threading.Event()
+    birak = threading.Event()
+
+    def is_() -> bool:
+        olaylar.append("ertelenen")
+        if len(olaylar) == 2:  # sinyalle başlayan deneme
+            basladi.set()
+            birak.wait(5)
+            return False  # deneme sürerken kilitlendi: yine ertelendi
+        return len(olaylar) >= 3  # ilk geçiş kilitli; üçüncü deneme kilit açıkken
+
+    kapi = _kapi(tmp_path, _Gun(date(2026, 9, 24)), aralik_sn=3600.0, monoton=lambda: 0.0)
+    kapi.kaydet("ertelenen", is_)
+    kapi.baslat()
+    try:
+        _bekle(lambda: olaylar == ["ertelenen"])
+        kapi.ertelenenleri_dene()  # ilk kilit açılışı
+        assert basladi.wait(5)
+        kapi.ertelenenleri_dene()  # ikinci kilit açılışı, deneme sürerken
+        birak.set()
+
+        _bekle(lambda: kapi.damgalar() == {"ertelenen": "2026-09-24"})
+        assert len(olaylar) == 3
+    finally:
+        birak.set()
+        kapi.durdur()
+
+
+def test_ertelenenleri_dene_baslamamis_ya_da_durmus_kapida_etkisizdir(tmp_path: Path) -> None:
+    olaylar: list[str] = []
+    kapi = _kapi(tmp_path, _Gun(date(2026, 9, 24)))
+    kapi.kaydet("is", _sirali([True], olaylar, "is"))
+
+    kapi.ertelenenleri_dene()  # iş parçacığı yok: hiçbir şey koşmaz, hata yok
+    kapi.durdur()
+    kapi.ertelenenleri_dene()
+
+    assert olaylar == []

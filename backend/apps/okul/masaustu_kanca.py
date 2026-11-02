@@ -15,8 +15,14 @@ kontrol kanalı doğmaz:
   `SISTEM` ile koşar (denetim izi; plan F1b-1: gün işi `SISTEM`'i açıkça verir). DEK
   isteyen iş kilitliyken `KeyMissingError` ile düşerse ERTELENMİŞ sayılır: `GUN_ISI` satırı
   iş başına günde en çok bir kez yazılır (kilitli kipte; `iz_durumu.gun_isi_ertelendi`),
-  iş veritabanına hiçbir şey yazmamıştır (işlemi geri sarılır) ve bir saat sonra yeniden
-  denenir — ilk kilit açılışından sonraki denemede DEK bellektedir.
+  iş veritabanına hiçbir şey yazmamıştır (işlemi geri sarılır) ve yeniden denenir.
+* **Ertelenenleri şimdi dene** (TK19: "ilk kilit açılışında koşar"; tasarım §4.4.3 kilit
+  açılışı sırasının son adımı): masaüstü kabuğu `od-gunluk` kapısını başlatınca kapının
+  sinyalini kaydeder (`kaydet(ertelenenleri_dene=…)`); kilit açılışı oturum açıldıktan ve
+  kilitleri bıraktıktan SONRA çağırır (`ertelenen_gun_islerini_dene`;
+  `app_password._start_session`). Kanca ENGELLEMEZ: yalnız kapıyı uyandırır, iş `od-gunluk`
+  iş parçacığında, bakım kapısından geçerek koşar; isteğin iş parçacığında uzun iş
+  koşmaz. Tetiklenen iş düşerse saatlik deneme sürer (kapının takvimi kaymaz).
 * **Sistem olayları** (tasarım §4.2 adım 7-8, §4.6.3; plan F1b-1 "Açılıştaki YEDEK ve GOC
   olayları göçten sonra `masaustu_kanca` üzerinden yazılır"): açılıştaki günlük yedek ve
   göç öncesi yedek Django ve tablo hazır olmadan alınır, göç tabloyu kurar. Masaüstü kabuğu
@@ -41,9 +47,9 @@ kontrol kanalı doğmaz:
 Geri yükleme ile gün işlerinin dışlaşması bu kanaldan değil, ortak bakım
 kapısından (`shared/bakim.py`) geçer.
 
-Kanca yoksa (geliştirme sunucusu, testler) işlevler "yok" der; çağıran uç bunu
-kullanıcıya Türkçe iletiyle bildirir (ör. 503). Kayıt süreç içidir ve
-açılışta bir kez yapılır; `_reset_for_tests` yalnız testler içindir.
+Kanca yoksa (geliştirme sunucusu, testler, konsol) işlevler "yok" der; çağıran uç bunu
+kullanıcıya Türkçe iletiyle bildirir (ör. 503), kilit açılışının sinyali etkisiz kalır.
+Kayıt süreç içidir ve açılışta bir kez yapılır; `_reset_for_tests` yalnız testler içindir.
 """
 
 from __future__ import annotations
@@ -71,23 +77,36 @@ class GunlukIsKaydi:
 
 _kilit = threading.Lock()
 _cikis: Callable[[], None] | None = None
+_ertelenenleri_dene: Callable[[], None] | None = None
 _gunluk_isler: dict[str, GunlukIsKaydi] = {}
 _kapanis_kilidi: Callable[[], bool] | None = None
 
 
-def kaydet(*, cikis: Callable[[], None] | None = None) -> None:
-    """Masaüstü kabuğu açılışta kancalarını kaydeder (verilmeyen kanca değişmez)."""
-    global _cikis
+def kaydet(
+    *,
+    cikis: Callable[[], None] | None = None,
+    ertelenenleri_dene: Callable[[], None] | None = None,
+) -> None:
+    """Masaüstü kabuğu açılışta kancalarını kaydeder (verilmeyen kanca değişmez).
+
+    Kayıt iki çağrıdır: `serve` kapının sinyalini, ardından `run_window_session` çıkış
+    kancasını kaydeder; ikincisi birincisini silmemelidir (sıranın taklitsiz testi
+    `test_erisim_gunlugu.py`'de).
+    """
+    global _cikis, _ertelenenleri_dene
     with _kilit:
         if cikis is not None:
             _cikis = cikis
+        if ertelenenleri_dene is not None:
+            _ertelenenleri_dene = ertelenenleri_dene
 
 
 def kaldir() -> None:
-    """Kapanışta kancaları bırakır: kapanan sunucuya istek yönlendirilmez."""
-    global _cikis
+    """Kapanışta kancaları bırakır: kapanan sunucuya ve duran kapıya istek yönlendirilmez."""
+    global _cikis, _ertelenenleri_dene
     with _kilit:
         _cikis = None
+        _ertelenenleri_dene = None
 
 
 def cikis_iste() -> bool:
@@ -104,15 +123,35 @@ def cikis_iste() -> bool:
     return True
 
 
+def ertelenen_gun_islerini_dene() -> bool:
+    """Kilit açılışı çağırır: `od-gunluk` günü eskiyen işleri hemen denesin; kanca yoksa False.
+
+    ENGELLEMEZ ve HATA YÜKSELTMEZ (modül başlığı "Ertelenenleri şimdi dene"): kanca yalnız
+    kapıya sinyal verir; sinyal verilemese de kilit açılışı düşmez, iş saatlik denemede koşar.
+    Kilit açılışı bunu kilitlerini (`_state_lock`, `IZ_KIP_KILIDI`) bıraktıktan sonra
+    çağırır: iş o kilitleri kendi iş parçacığında alır.
+    """
+    with _kilit:
+        dene = _ertelenenleri_dene
+    if dene is None:
+        return False
+    try:
+        dene()
+    except Exception:  # noqa: BLE001 — sinyal düşse de iş saatlik denemede koşar
+        logger.warning("Ertelenen gün işleri için kapıya sinyal verilemedi.", exc_info=True)
+        return False
+    return True
+
+
 def _sistem_adina(ad: str, calistir: GunlukIs) -> GunlukIs:
     """İşi yazar bağlamı `SISTEM` olarak koşturur; DEK yoksa ertelenmiş sayar (modül başlığı).
 
     Gün işi kullanıcı eylemi değildir: yazdığı iz satırının yazarı `SISTEM`'dir ve bu
     açıkça verilir. `od-gunluk` iş parçacığının bağlam değişkeni boş başlar; sarmalayıcı
     olmasaydı yazıcı yazarsız yazmayı reddederdi. İş `KeyMissingError` ile düşerse (kilitli:
-    DEK ya da İA bellekte değil) `GUN_ISI` satırı günde bir kez yazılır ve False döner (bir
-    saat sonra yeniden). Oturum ve kripto modülleri çağrı anında içe aktarılır: bu modül
-    masaüstünden Django kurulmadan da içe aktarılabilir kalır.
+    DEK ya da İA bellekte değil) `GUN_ISI` satırı günde bir kez yazılır ve False döner (kilit
+    açılışının sinyalinde ya da bir saat sonra yeniden). Oturum ve kripto modülleri çağrı
+    anında içe aktarılır: bu modül masaüstünden Django kurulmadan da içe aktarılabilir kalır.
     """
 
     def kos() -> bool | None:
@@ -248,10 +287,13 @@ def kapanista_kilitle() -> bool:
 def _reset_for_tests() -> None:
     """Yalnız testler için: kayıt süreç içi olduğundan testler arasında sızar.
 
-    Masaüstünün kaydettikleri (çıkış, gün işleri) temizlenir; backend'in açılışta
-    kaydettiği kapanış kilidi YERİNDE kalır (süreç boyunca tek kayıttır).
+    Masaüstünün kaydettikleri (çıkış, ertelenenleri deneme) ve gün işleri temizlenir —
+    `OkulConfig.ready`'nin kaydettiği gün işi de (erişim günlüğünün silmesi; onu sınayan test
+    `ready`'yi yeniden çağırır). Backend'in açılışta kaydettiği kapanış kilidi YERİNDE kalır
+    (süreç boyunca tek kayıttır).
     """
-    global _cikis
+    global _cikis, _ertelenenleri_dene
     with _kilit:
         _cikis = None
+        _ertelenenleri_dene = None
         _gunluk_isler.clear()
