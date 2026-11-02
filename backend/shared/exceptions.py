@@ -11,6 +11,15 @@ girişimi (`shared.crypto.KeyMissingError`, alt sınıfı
 `app_password.PasswordRequired` dahil) **409 `parola_gerekli`** olur. İlk hesap
 kuruluysa kilitli durum zaten ara katmanda (423) kesildiği için bu yanıt
 pratikte "önce program yöneticisi hesabını kurun" demektir (plan F1b-1).
+
+Rol reddi (tasarım §4.4.2 "iki katman", §2.3.1; plan F1b-2): servis katmanının yetki kapısı
+(`apps.okul.rol_izinleri.yetki`) `RolYetkisiz` yükseltir; burada **403 `rol_yetkisiz`** olur
+(işlem geri alınır) ve gövde uç katmanının (`RolMiddleware`) reddiyle AYNIDIR: tek ileti
+`ROL_YETKISIZ_MESAJI`. `RolYetkisiz` bilerek `ValueError` ya da `OSError` alt sınıfı DEĞİLDİR:
+görünümlerin servis hata sarmalayıcıları (`views._service_errors`,
+`views_oturum.guvenlik_hatalari`) ve yönetim komutları `ValueError`'ı 400'e (ya da
+`CommandError`'a), hesap servisleri `OSError`'ı dosya hatası diye yakalar; rol reddi
+onlarda yutulmaz. Tür burada durur: `shared` → `apps` ters bağımlılığı doğmaz.
 """
 
 from __future__ import annotations
@@ -33,6 +42,36 @@ PASSWORD_REQUIRED_CODE = "parola_gerekli"  # noqa: S105
 PASSWORD_REQUIRED_MESSAGE = (
     "Kişi kaydı için önce program yöneticisi hesabını kurun (Kurulum Sihirbazı'nın ilk adımı)."  # noqa: S105
 )
+
+
+#: Rol reddinin sözleşme kodu ve tek iletisi (sözlük §1 "Program yöneticisi ve roller").
+#: Rol reddi koduyla tanınır (kilit açmanın `hesap_askida`'sı ve belirteç kapısı da 403'tür);
+#: ileti role göre değişmez, ucu yankılamaz.
+ROL_YETKISIZ_KODU = "rol_yetkisiz"
+ROL_YETKISIZ_MESAJI = "Bu işlem hesabınızın rolüne açık değil."
+
+
+def rol_yetkisiz_govdesi() -> dict[str, Any]:
+    """Rol reddinin sabit gövdesi (uç ve servis katmanı aynı)."""
+    return {"code": ROL_YETKISIZ_KODU, "message": ROL_YETKISIZ_MESAJI, "fields": {}}
+
+
+class RolYetkisiz(Exception):
+    """Rol yetki kapısının reddi → 403 `rol_yetkisiz` (modül başlığı).
+
+    `ValueError`/`OSError` alt sınıfı DEĞİLDİR; ileti sabittir.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(ROL_YETKISIZ_MESAJI)
+
+
+class RolYetkisizResponse(APIException):
+    """`RolYetkisiz`'in DRF karşılığı: 403 `rol_yetkisiz` (işlem geri alınır)."""
+
+    status_code = status.HTTP_403_FORBIDDEN
+    default_code = ROL_YETKISIZ_KODU
+    default_detail = ROL_YETKISIZ_MESAJI
 
 
 class PasswordRequiredResponse(APIException):
@@ -95,6 +134,11 @@ def od_exception_handler(exc: Exception, context: dict[str, Any]) -> Response | 
         converted_key = PasswordRequiredResponse()
         converted_key.__cause__ = exc
         exc = converted_key
+    if isinstance(exc, RolYetkisiz):
+        # Aynı yol: DRF işlemi geri alınacak diye işaretler; gövde sabittir.
+        converted_role = RolYetkisizResponse()
+        converted_role.__cause__ = exc
+        exc = converted_role
     service_error = _service_error(exc)
     if isinstance(exc, DjangoValidationError):
         # Servis katmanı Django `ValidationError` fırlatır; DRF onu TANIMAZ (handler

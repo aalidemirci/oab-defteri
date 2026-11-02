@@ -1,7 +1,10 @@
 """DRF izin sınıfları — kişi yazan uçların ilk hesap kapısı (tasarım §5.3).
 
-Rol izinleri 2. adımdadır (tasarım §4.4.2; o güne dek açık oturum her uca erişir);
-buradaki izin sınıfı kimlik sormaz, **programın durumunu** sorar: ilk program
+Rol izni bu sınıfın işi değildir: açık oturumda rol kapısı (`RolMiddleware`, tasarım §4.4.2)
+görünümden önce keser. Tasarım §12.B'deki "`RequiresAdminPassword` → rol izinleri" satırı
+böyle okunur (plan F1b-2): rol işi `RolMiddleware`'e geçti, bu sınıf kurulum durumunun 409
+kapısı olarak kaldı — rol kapısı yalnız açık oturumda çalıştığı için kurulumdaki 409'u
+başka hiçbir şey vermez. Buradaki izin sınıfı kimlik sormaz, **programın durumunu** sorar: ilk program
 yöneticisi hesabı kurulmadan kişi yazan bir uç (öğrenci/personel oluşturma, güncelleme,
 silme, içe aktarma önizleme ve uygulama) çalışmaz, **409 `parola_gerekli`**
 döner. Okuma yöntemleri serbesttir.
@@ -28,7 +31,7 @@ from apps.okul.services import app_password
 
 
 class RequiresAdminPassword(BasePermission):
-    """Yazma yöntemlerinde (POST/PUT/PATCH/DELETE) ilk hesap kurulu olmalı (rol izinleri 2. adımda)."""
+    """Yazma yöntemlerinde (POST/PUT/PATCH/DELETE) ilk hesap kurulu olmalı (rol: `RolMiddleware`)."""
 
     def has_permission(self, request: Request, view: Any) -> bool:
         if request.method in SAFE_METHODS:

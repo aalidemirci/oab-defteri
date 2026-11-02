@@ -28,7 +28,13 @@ function ozetOlustur(durum: OturumDurumAdi, ek: Partial<OturumOzeti> = {}): Otur
   return {
     durum,
     hesap: acik
-      ? { id: "h-1", tanitici: "dk-2", rol: "denetleme_kurulu", rol_etiketi: "Denetleme Kurulu 2" }
+      ? {
+          id: "h-1",
+          tanitici: "dk-2",
+          rol: "denetleme_kurulu",
+          rol_etiketi: "Denetleme Kurulu 2",
+          yetenekler: [],
+        }
       : null,
     bosta_dk: 10,
     bosta_kalan_sn: acik ? 161 : null,

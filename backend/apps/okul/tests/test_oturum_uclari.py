@@ -105,6 +105,25 @@ def test_oturum_ozetinin_anahtarlari_sabittir(client: APIClient) -> None:
         "tanitici": TEST_TANITICI,
         "rol": "yonetici",
         "rol_etiketi": "Program yöneticisi",
+        # Ön yüz süzmesinin tek kaynağı (plan F1b-2; `rol_izinleri.YETENEKLER`).
+        "yetenekler": [
+            "ayrilis_havuzu",
+            "bosta_sure_yazma",
+            "butunluk_denetim",
+            "ders_yili_yazma",
+            "eokul_aktarimi",
+            "guncelleme",
+            "guvenlik",
+            "iki_depo",
+            "kapali_gun_yazma",
+            "kisi_yazma",
+            "kurulum_tamamlama",
+            "ogrenciler",
+            "okul_karti_yazma",
+            "son_oturum_onay",
+            "sube_yazma",
+            "yol_haritasi",
+        ],
     }
     assert veri["bosta_dk"] == 10
     assert veri["kilit_bekliyor"] is False
@@ -133,8 +152,14 @@ def test_kip_uclari_kaldirildi(client: APIClient) -> None:
     for ad in ("security-mode", "security-mode-staff", "security-mode-admin"):
         with pytest.raises(NoReverseMatch):
             reverse(ad)
-    assert client.get("/api/v1/security/mode/").status_code == 404
-    assert client.post("/api/v1/security/mode/admin/", {}, format="json").status_code == 404
+    # Açık oturumda çözülemeyen `/api/` yolu rol kapısında 403'tür (var olmayan uç ile kapalı
+    # uç ayırt edilmez; `test_rol_koruma.py`).
+    for yanit in (
+        client.get("/api/v1/security/mode/"),
+        client.post("/api/v1/security/mode/admin/", {}, format="json"),
+    ):
+        assert yanit.status_code == 403
+        assert yanit.json()["code"] == "rol_yetkisiz"
 
 
 # ============================================================ kilit ekranının hesap listesi

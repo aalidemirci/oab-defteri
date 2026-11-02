@@ -5,8 +5,8 @@ Plan F1b-1 "Oturum": kilitliyken açık kalan uçlar bir AÇIK listededir (yol +
 Uç listesi ELLE TUTULMAZ: URL desenleri çalışma anında dolaşılır
 (`apps/okul/tests/api_gezgini.py`; dönüştürücüler örnek değerle doldurulur). Eklenen
 her yeni uç bu teste kendiliğinden girer ve listeye bilinçli eklenmedikçe kilitliyken
-kapalıdır. Rol kapısı (`RolMiddleware`, 403 `rol_yetkisiz`) ve onun dolaşan testi 2.
-adımdadır.
+kapalıdır. Rol kapısı (`RolMiddleware`, 403 `rol_yetkisiz`) kilit kapısından sonra durur;
+onun dolaşan testi `test_rol_koruma.py`'dedir.
 
 Boşta kilit uçtan uca: `X-OD-Etkinlik` başlığı olmayan periyodik istekler oturumu canlı
 tutmaz, başlıklılar tutar; süre dolunca oturum kilitlenir (423) ve DEK bellekten düşer
@@ -65,7 +65,7 @@ def _kod(yanit: HttpResponse) -> str | None:
 
 def test_ara_katman_sirasi_tasarimdaki_gibidir() -> None:
     """Tasarım §4.4.3: belirteç → güvenlik → whitenoise → common → RestartRequired (503) →
-    AppLock (423) → RolMiddleware (403, 2. adım). Kip kapısı söküldü."""
+    AppLock (423) → RolMiddleware (403 `rol_yetkisiz`). Kip kapısı söküldü."""
     zincir = [m for m in settings.MIDDLEWARE if m != "desktop.session_guard.SessionTokenMiddleware"]
     assert zincir == [
         "django.middleware.security.SecurityMiddleware",
@@ -73,6 +73,7 @@ def test_ara_katman_sirasi_tasarimdaki_gibidir() -> None:
         "django.middleware.common.CommonMiddleware",
         "apps.okul.restart_gate.RestartRequiredMiddleware",
         "apps.okul.lock_middleware.AppLockMiddleware",
+        "apps.okul.rol_middleware.RolMiddleware",
     ]
     if "desktop.session_guard.SessionTokenMiddleware" in settings.MIDDLEWARE:
         assert settings.MIDDLEWARE[0] == "desktop.session_guard.SessionTokenMiddleware"

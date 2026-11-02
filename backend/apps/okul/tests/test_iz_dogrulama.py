@@ -121,6 +121,16 @@ def notu_yaz(**degistir: Any) -> None:
     geri_yukleme_notu.geri_yukleme_ekle(iz_durumu.dizin(), not_kaydi(**degistir))
 
 
+def pano(hesap_id: str | None) -> dict[str, Any]:
+    """Üç bütünlük ucunun servis yanıtı tek sözlükte (kendi, denetim, iki depo kartları; plan
+    F1b-2'de bölünmeden önceki biçim): `okunamayan` listeleri birleşir."""
+    kendi = iz_dogrulama.kendi_kartlari(hesap_id)
+    denetim = iz_dogrulama.denetim_kartlari(hesap_id)
+    iki_depo = iz_dogrulama.iki_depo_karti()
+    okunamayan = [*kendi["okunamayan"], *denetim["okunamayan"], *iki_depo["okunamayan"]]
+    return {**kendi, **denetim, **iki_depo, "okunamayan": okunamayan}
+
+
 # ============================================================ tutarlı iz
 
 
@@ -599,7 +609,7 @@ def test_oturum_acikken_eklenen_sahte_giris_kilit_acilisinda_bulgu_olur_karta_ge
     (satir,) = butunluk()
     assert {"satir_kurali", "muhursuz_satir"} <= set(deger(satir, "bulgular"))
     assert sahte.seq in deger(satir, "bulgu_satirlari")
-    ozet = iz_dogrulama.pano_ozeti(TEST_HESAP_ID)
+    ozet = pano(TEST_HESAP_ID)
     assert len(ozet["son_girisler"]) == 2  # yalnız iki gerçek giriş
     assert all(not z.startswith("2026-11-01T10:30") for z in ozet["son_girisler"])
 
@@ -624,7 +634,7 @@ def test_oturum_acikken_eklenen_kurala_uyan_muhursuz_satir_bir_kez_bildirilir() 
     (satir,) = [s for s in butunluk() if s.key_mode == "ACIK"]
     assert deger(satir, "bulgular") == ["muhursuz_satir"]
     assert deger(satir, "bulgu_satirlari") == [sahte.seq]
-    kart = iz_dogrulama.pano_ozeti(TEST_HESAP_ID)["butunluk"]
+    kart = pano(TEST_HESAP_ID)["butunluk"]
     assert [k["seq"] for k in kart] == [satir.seq]  # sahte satır kart olmaz
 
     kilitle()
@@ -642,7 +652,7 @@ def test_kilitliyken_gecersiz_kipli_sahte_giris_bulgudur() -> None:
     (satir,) = butunluk()
     assert "satir_kurali" in deger(satir, "bulgular")
     assert sahte.seq in deger(satir, "bulgu_satirlari")
-    assert len(iz_dogrulama.pano_ozeti(TEST_HESAP_ID)["son_girisler"]) == 1
+    assert len(pano(TEST_HESAP_ID)["son_girisler"]) == 1
 
 
 def test_sahte_giris_bir_onceki_girisi_kaydirip_gercek_bulguyu_gizleyemez() -> None:
@@ -653,7 +663,7 @@ def test_sahte_giris_bir_onceki_girisi_kaydirip_gercek_bulguyu_gizleyemez() -> N
     ac()
     sahte_satir(**SAHTE_GIRIS)
 
-    kart = iz_dogrulama.pano_ozeti(TEST_HESAP_ID)["butunluk"]
+    kart = pano(TEST_HESAP_ID)["butunluk"]
 
     assert [(k["tur"], k["bulgular"]) for k in kart] == [("dogrulama", ["capa_yok"])]
 
@@ -662,7 +672,7 @@ def test_sahte_geri_yukleme_satiri_karta_gecmez() -> None:
     kilitle()
     ac()
     sahte_satir(action="GERI_YUKLEME", model=denetim_izi.GERI_YUKLEME_KAYDI)
-    assert iz_dogrulama.pano_ozeti(TEST_HESAP_ID)["geri_yukleme"] is None
+    assert pano(TEST_HESAP_ID)["geri_yukleme"] is None
 
 
 # ============================================================ yazılamayan çapa
@@ -803,7 +813,7 @@ def test_aralarinda_giris_olmayan_geri_yuklemeler_kartta_birlikte_ilki_asil_donu
 
     ac()
 
-    kart = iz_dogrulama.pano_ozeti(TEST_HESAP_ID)["geri_yukleme"]
+    kart = pano(TEST_HESAP_ID)["geri_yukleme"]
     assert kart["onceki_dosya"] == ONCEKI and kart["onceki_kayit_no"] == 80
     (ilk,) = kart["onceki_geri_yuklemeler"]
     assert ilk["onceki_dosya"] == ilk_onceki
@@ -814,7 +824,7 @@ def test_aralarinda_giris_olmayan_geri_yuklemeler_kartta_birlikte_ilki_asil_donu
     notu_yaz(yol_bilgisi={"tur": "kurtarma", "no": 2})
     ac()
 
-    sonraki = iz_dogrulama.pano_ozeti(TEST_HESAP_ID)["geri_yukleme"]
+    sonraki = pano(TEST_HESAP_ID)["geri_yukleme"]
     assert sonraki["kurtarma_no"] == 2 and sonraki["onceki_geri_yuklemeler"] == []
 
 
@@ -834,7 +844,7 @@ def test_bozuk_notun_ustune_geri_yuklemede_ayrintisiz_satir_once_yazilir_kart_so
     ayrintisiz, okunan = satirlar(action="GERI_YUKLEME")
     assert ayrintisiz.changed_fields == ["not_okunamadi"]
     assert okunan.object_id == ONCEKI
-    kart = iz_dogrulama.pano_ozeti(TEST_HESAP_ID)["geri_yukleme"]
+    kart = pano(TEST_HESAP_ID)["geri_yukleme"]
     assert kart["ayrintisiz"] is False
     assert (kart["yedek"], kart["onceki_dosya"]) == (GUNLUK, ONCEKI)
     (onceki,) = kart["onceki_geri_yuklemeler"]
@@ -857,7 +867,7 @@ def test_geri_yukleme_ani_karta_yerel_saatle_gelir_bicimsiz_an_satira_girmez() -
     ilk, ikinci = satirlar(action="GERI_YUKLEME")
     assert ilk.values["zaman"] == [None, "2026-10-30T19:15:30.000000Z"]
     assert "zaman" not in ikinci.values
-    kart = iz_dogrulama.pano_ozeti(TEST_HESAP_ID)["geri_yukleme"]
+    kart = pano(TEST_HESAP_ID)["geri_yukleme"]
     assert kart["geri_yukleme_ani"] is None  # son geri yüklemenin anı okunamadı
     assert kart["zaman"].endswith("+03:00")
     assert iz_dogrulama._not_zamani("2026-10-30T22:15:30+03:00") is not None
@@ -873,7 +883,7 @@ def test_geri_yukleme_karti_anini_ve_acan_hesabi_kisisiz_verir() -> None:
 
     ac()
 
-    kart = iz_dogrulama.pano_ozeti(TEST_HESAP_ID)["geri_yukleme"]
+    kart = pano(TEST_HESAP_ID)["geri_yukleme"]
     assert kart["geri_yukleme_ani"] == "2026-10-30T22:15:30+03:00"
     assert kart["yol"] == "hesap" and kart["yol_hesap"] == YONETICI_OZETI
     assert (kart["onceki_kayit_no"], kart["onceki_zincir"]) == (42, "CDCD-CDCD")
@@ -891,7 +901,7 @@ def test_kurtarma_yoluyla_uygulama_ici_geri_yukleme_oturumdaki_hesaba_baglanir()
     (geri,) = satirlar(action="GERI_YUKLEME")
     assert geri.values["oturum_hesap"] == [None, TEST_HESAP_ID]
     assert "hesap" not in geri.values  # parola yolu değil
-    kart = iz_dogrulama.pano_ozeti(TEST_HESAP_ID)["geri_yukleme"]
+    kart = pano(TEST_HESAP_ID)["geri_yukleme"]
     assert (kart["yol"], kart["kurtarma_no"]) == ("kurtarma", 3)
     assert kart["oturum_hesap"] == YONETICI_OZETI and kart["yol_hesap"] is None
 
@@ -921,7 +931,7 @@ def test_kullanicinin_sectigi_ya_da_adlandirdigi_yedek_adi_satira_girmez(ad: str
     (geri,) = satirlar(action="GERI_YUKLEME")
     assert "yedek" not in geri.values
     assert "Uydurma" not in json.dumps(geri.values) + geri.object_id
-    assert iz_dogrulama.pano_ozeti(TEST_HESAP_ID)["geri_yukleme"]["yedek"] is None
+    assert pano(TEST_HESAP_ID)["geri_yukleme"]["yedek"] is None
 
 
 @pytest.mark.parametrize(
@@ -1087,7 +1097,7 @@ def test_geri_yuklemeden_sonra_iki_depo_karsilastirilir_sahipsiz_sarmal_onayla_s
     (hesap_izi,) = satirlar(seq__gt=bas, action="HESAP")
     assert (hesap_izi.actor, hesap_izi.object_id) == ("SISTEM", str(muhasip.id))
     assert SAHIPSIZ in sarmal_kimlikleri()  # onaysız silinmez
-    iki_depo = iz_dogrulama.pano_ozeti(TEST_HESAP_ID)["iki_depo"]
+    iki_depo = pano(TEST_HESAP_ID)["iki_depo"]
     assert iki_depo["fark_var"] is True
     assert iki_depo["silinebilir_sarmallar"] == [
         {"id": SAHIPSIZ, "tanitici": "eski-hesap", "rol_etiketi": None, "kapali": False}
@@ -1137,7 +1147,7 @@ def test_geri_yuklemeden_sonra_kurtarmayla_acilan_yonetici_yenilemeye_cekilmez()
     assert Account.objects.get(pk=TEST_HESAP_ID).status == AccountStatus.ACIK
     assert [s.action for s in satirlar(seq__gt=bas)] == ["KURTARMA", "GERI_YUKLEME", "GIRIS"]
     assert TEST_HESAP_ID in sarmal_kimlikleri()
-    assert iz_dogrulama.pano_ozeti(TEST_HESAP_ID)["iki_depo"]["fark_var"] is False
+    assert pano(TEST_HESAP_ID)["iki_depo"]["fark_var"] is False
 
 
 def test_sahipsiz_olmayan_sarmalin_silinmesi_reddedilir() -> None:
@@ -1159,25 +1169,23 @@ def test_butunluk_ucu_kartlari_kagit_capasini_ve_son_girisleri_verir() -> None:
 
     assert yanit.status_code == 200
     veri = yanit.json()
-    assert set(veri) == {
-        "butunluk",
-        "geri_yukleme",
-        "iki_depo",
-        "kagit_capasi",
-        "son_girisler",
-        "parola_yenilenme",
-        "okunamayan",
-    }
+    # Kısmi yetki ayrı uçla (plan F1b-2): kendi kartları, denetim kartları, iki depo kartı.
+    assert set(veri) == {"kagit_capasi", "son_girisler", "parola_yenilenme", "okunamayan"}
     bas = son_satir()
     assert veri["kagit_capasi"] == {
         "kayit_no": bas.seq,
         "zincir": f"{bas.mac[:4]}-{bas.mac[4:8]}".upper(),
     }
     assert len(veri["son_girisler"]) == 1 and veri["son_girisler"][0].endswith("+03:00")
-    assert veri["butunluk"] == [] and veri["geri_yukleme"] is None
     assert veri["parola_yenilenme"] is None
-    assert veri["iki_depo"]["fark_var"] is False
     assert veri["okunamayan"] == []
+    denetim = APIClient().get("/api/v1/security/integrity/audit/").json()
+    assert denetim == {"butunluk": [], "geri_yukleme": None, "muhru_tutmayan": [], "okunamayan": []}
+    iki_depo = APIClient().get("/api/v1/security/integrity/two-store/").json()
+    assert iki_depo == {
+        "iki_depo": {"fark_var": False, "sarmalsiz_hesaplar": [], "silinebilir_sarmallar": []},
+        "okunamayan": [],
+    }
 
 
 @pytest.mark.parametrize(
@@ -1214,7 +1222,8 @@ def test_bicimsiz_sutunlu_satir_ucu_ve_kilit_acilisini_dusurmez(ham: dict[str, A
         assert "satir_kurali" in deger(satir, "bulgular")
         assert bozuk.seq in deger(satir, "bulgu_satirlari")
         assert "dogrulama_yapilamadi" not in deger(satir, "bulgular")
-        yanit = APIClient().get("/api/v1/security/integrity/")
+        assert APIClient().get("/api/v1/security/integrity/").status_code == 200
+        yanit = APIClient().get("/api/v1/security/integrity/audit/")
         assert yanit.status_code == 200
         veri = yanit.json()
         assert veri["okunamayan"] == [] and veri["geri_yukleme"] is None
@@ -1241,7 +1250,7 @@ def test_ikili_macli_sahte_giris_son_girisleri_silmez_kilit_acilisinda_degisikli
     )
     sahte_satir(prev_mac="0" * 64)
 
-    ozet = iz_dogrulama.pano_ozeti(TEST_HESAP_ID)
+    ozet = pano(TEST_HESAP_ID)
     assert ozet["okunamayan"] == []
     assert len(ozet["son_girisler"]) == 1 and ozet["kagit_capasi"] is not None
 
@@ -1252,7 +1261,7 @@ def test_ikili_macli_sahte_giris_son_girisleri_silmez_kilit_acilisinda_degisikli
     bulgular = deger(satir, "bulgular")
     assert "satir_kurali" in bulgular and "dogrulama_yapilamadi" not in bulgular
     assert sahte.seq in deger(satir, "bulgu_satirlari")
-    ozet = iz_dogrulama.pano_ozeti(TEST_HESAP_ID)
+    ozet = pano(TEST_HESAP_ID)
     assert ozet["okunamayan"] == [] and len(ozet["son_girisler"]) == 2
     assert "satir_kurali" in ozet["butunluk"][0]["bulgular"]
 
@@ -1269,7 +1278,7 @@ def test_okunamayan_kart_otekileri_dusurmez_adi_okunamayan_listesine_girer(
         raise ValueError("badly formed hexadecimal UUID string")
 
     monkeypatch.setattr(iz_dogrulama, "_geri_yukleme_karti", dustu)
-    ozet = iz_dogrulama.pano_ozeti(TEST_HESAP_ID)
+    ozet = pano(TEST_HESAP_ID)
     assert ozet["okunamayan"] == ["geri_yukleme"] and ozet["geri_yukleme"] is None
     assert ozet["kagit_capasi"] is not None and len(ozet["son_girisler"]) == 1
 
@@ -1278,12 +1287,13 @@ def test_okunamayan_kart_otekileri_dusurmez_adi_okunamayan_listesine_girer(
 
     monkeypatch.setattr(iz_dogrulama, "_kagit_capasi", anahtar_yok)
     with pytest.raises(denetim_izi.IzAnahtariBellekteDegil):
-        iz_dogrulama.pano_ozeti(TEST_HESAP_ID)
+        pano(TEST_HESAP_ID)
 
 
 def test_butunluk_ucu_kilitliyken_kapalidir() -> None:
     kilitle()
-    assert APIClient().get("/api/v1/security/integrity/").status_code == 423
+    for ek in ("", "audit/", "two-store/"):
+        assert APIClient().get(f"/api/v1/security/integrity/{ek}").status_code == 423
     yanit = APIClient().post(
         "/api/v1/security/integrity/orphan-wraps/", {"hesaplar": [SAHIPSIZ]}, format="json"
     )
@@ -1296,7 +1306,7 @@ def test_butunluk_karti_bir_sonraki_giriste_kalkar_geri_yukleme_karti_kalir() ->
     kilitle()
     notu_yaz()  # not çapayı açıklar (çapa notun zincir başının gerisinde): kart geri yüklemedir
     ac()
-    ozet = iz_dogrulama.pano_ozeti(TEST_HESAP_ID)
+    ozet = pano(TEST_HESAP_ID)
     assert ozet["butunluk"] == []
     assert ozet["geri_yukleme"]["onceki_zincir"] == "CDCD-CDCD"
     assert ozet["geri_yukleme"]["onceki_kayit_no"] == 42
@@ -1306,14 +1316,40 @@ def test_butunluk_karti_bir_sonraki_giriste_kalkar_geri_yukleme_karti_kalir() ->
     kilitle()
     iz_durumu.yol().unlink()  # çapa yok → bu açılışta bütünlük bulgusu
     ac()
-    kart = iz_dogrulama.pano_ozeti(TEST_HESAP_ID)
+    kart = pano(TEST_HESAP_ID)
     assert [(k["tur"], k["bulgular"]) for k in kart["butunluk"]] == [("dogrulama", ["capa_yok"])]
 
     kilitle()
     ac()
-    sonraki = iz_dogrulama.pano_ozeti(TEST_HESAP_ID)
+    sonraki = pano(TEST_HESAP_ID)
     assert sonraki["butunluk"] == []
     assert sonraki["geri_yukleme"] is not None
+
+
+def test_muhru_tutmayan_hesap_denetim_kartlarindadir_iki_depo_kartinda_degil() -> None:
+    """Tasarım §4.6.1 kural 1: mührü tutmayan hesabın kartı program yöneticisi ve Denetleme
+    Kurulu panosuna (denetim kartları ucu); iki depo kartı (kural 4) yalnız program
+    yöneticisinindir ve sarmalsız hesaplarla silinebilir kayıtları taşır (plan F1b-2)."""
+    muhasip = hesap_ac(AccountRole.MUHASIP)
+    ham_guncelle(muhasip.id, role="sekreter")  # program dışından rol değişimi (tehdit 19)
+
+    denetim = iz_dogrulama.denetim_kartlari(TEST_HESAP_ID)
+    iki_depo = iz_dogrulama.iki_depo_karti()
+
+    assert denetim["muhru_tutmayan"] == [
+        {
+            "id": str(muhasip.id),
+            "tanitici": muhasip.login_name,
+            "rol_etiketi": "Sekreter",
+            "kapali": False,
+        }
+    ]
+    assert iki_depo["iki_depo"] == {
+        "fark_var": False,
+        "sarmalsiz_hesaplar": [],
+        "silinebilir_sarmallar": [],
+    }
+    assert denetim["okunamayan"] == [] and iki_depo["okunamayan"] == []
 
 
 def test_girista_muhur_tutmazsa_program_yoneticisi_kart_gorur() -> None:
@@ -1325,7 +1361,7 @@ def test_girista_muhur_tutmazsa_program_yoneticisi_kart_gorur() -> None:
 
     ac()
 
-    (kart,) = iz_dogrulama.pano_ozeti(TEST_HESAP_ID)["butunluk"]
+    (kart,) = pano(TEST_HESAP_ID)["butunluk"]
     assert (kart["tur"], kart["bulgular"], kart["duzey"]) == ("muhur", ["seal"], "uyari")
     # Rol etiketi kaydın SÖYLEDİĞİdir (program dışından "sekreter" yapıldı); ad-soyad yok.
     assert kart["hesap"] == {
@@ -1344,13 +1380,13 @@ def test_parola_sifirlanan_hesabin_sahibi_bildirimi_ve_sonraki_girisleri_gorur()
     kilitle()
     app_password.unlock(hesap_id=muhasip.id, password=GECICI_PAROLA, new_password=YENI_PAROLA)
 
-    ozet = iz_dogrulama.pano_ozeti(str(muhasip.id))
+    ozet = pano(str(muhasip.id))
 
     bildirim = ozet["parola_yenilenme"]
     assert bildirim is not None and bildirim["tur"] == "SIFIRLAMA"
     assert len(bildirim["girisler"]) == 1
     assert len(ozet["son_girisler"]) == 1
-    assert iz_dogrulama.pano_ozeti(TEST_HESAP_ID)["son_girisler"] == []
+    assert pano(TEST_HESAP_ID)["son_girisler"] == []
 
 
 # ============================================================ parola yenilenme bildirimi
@@ -1427,7 +1463,7 @@ def test_kurtarma_bildirimi_kurtarma_turundedir_ve_yalniz_sonraki_girisleri_saya
 
     assert bildirim["tur"] == "KURTARMA"
     assert len(bildirim["girisler"]) == 1
-    assert len(iz_dogrulama.pano_ozeti(TEST_HESAP_ID)["son_girisler"]) == 2
+    assert len(pano(TEST_HESAP_ID)["son_girisler"]) == 2
 
 
 def test_baska_hesabin_bildirimi_bu_uctan_ne_okunur_ne_kapatilir() -> None:

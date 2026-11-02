@@ -10,8 +10,8 @@ listede bulunmayan aktif kişi ayrılış havuzuna girer, karar burada verilir.
   personnel: {leave, keep}}`. Kişi yazar → `RequiresAdminPassword` (parola
   kurulmadan 409 `parola_gerekli`).
 
-Karar program yöneticisinin işidir; rol izni F1b 2. adımın rol matrisindedir
-(tasarım §4.4.2).
+Karar program yöneticisinin işidir: havuz (özet dahil) ve karar yalnız program
+yöneticisine açıktır (tasarım §8.1 A7; `rol_izinleri.KURALLAR`, plan F1b-2).
 """
 
 from __future__ import annotations

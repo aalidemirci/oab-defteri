@@ -1,7 +1,7 @@
 // `butunluk` modülü API istemcisi — denetim izinin kullanıcıya görünen yüzü (tasarım §4.6.3,
 // §4.6.1 kural 1 ve 4, §4.4.3, §4.3 tehdit 7 ve 12; plan F1b-1 "Denetim izi"). Backend
 // `apps/okul/views_oturum.py` "security/integrity/*" bloğu ve `apps/okul/iz_dogrulama.py`
-// (`pano_ozeti`, `yenilenme_bildirimi`) ile BİREBİR.
+// (`kendi_kartlari`, `denetim_kartlari`, `iki_depo_karti`, `yenilenme_bildirimi`) ile BİREBİR.
 //
 // KİŞİSİZDİR: yanıtlarda ad-soyad YOKTUR; hesaplar kimlik, tanıtıcı ve rol etiketiyle gelir
 // (kilit ekranındaki gibi; sözlük §5). Bulgu kodları (`kuyruk_kesik`, `capa_yok`…) iç koddur,
@@ -11,10 +11,19 @@
 // Okumalar kullanıcı eylemi değildir (`X-OD-Etkinlik` gitmez; pano sorguları oturumu canlı
 // tutmaz — tasarım §4.4.3). Yazmalar (sahipsiz sarmalın silinmesi, bildirimin "Gördüm"ü)
 // denetim izine düşer (backend `test_izsiz_yazim.py`). Uçlar kilitliyken kapalıdır (423).
-// Rol süzmesi (kartları yalnız program yöneticisi ve Denetleme Kurulu görür, silmeyi yalnız
-// program yöneticisi yapar) F1b 2. adımdadır; bugün açık oturumdaki her hesaba görünür.
+//
+// ROLE GÖRE ÜÇ UÇ (tasarım §4.4.2 "kısmi yetki ayrı uçla verilir"; plan F1b-2): kendi kartları
+// (`security/integrity/`: son girişler, parola yenilenme, kâğıt çapası) her role açıktır;
+// denetim kartları (`audit/`: bütünlük, geri yükleme, mührü tutmayan hesaplar) program
+// yöneticisi ve Denetleme Kuruluna; iki depo kartı (`two-store/`) ve sahipsiz kaydın
+// silinmesi yalnız program yöneticisine. Hangi ucun çağrılacağını oturum özetindeki
+// yetenekler söyler (`butunluk_denetim`, `iki_depo`; `oturum/useOturum.useYetenekler`): rolün
+// açamadığı uç ÇAĞRILMAZ. Kartlar tek bir bileşik durumdan beslenir (`ButunlukDurumu`,
+// `birlestir`); mührü tutmayan hesaplar denetim kartlarından gelir ve "Hesaplar ve Güvenlik
+// Dosyası" kartının listesinde durur (program yöneticisinde iki depo farkıyla birlikte).
 
 import { api } from "../../lib/api";
+import type { YetenekAdi } from "../oturum/api";
 
 /** Bulgunun düzeyi: yalnız kesinti bilgidir, öteki her bulgu uyarıdır (`iz_dogrulama`). */
 export type BulguDuzeyi = "uyari" | "bilgi";
@@ -91,13 +100,21 @@ export interface IkiDepoHesabi extends HesapOzeti {
   kapali: boolean;
 }
 
-/** `guvenlik.json` ile veritabanındaki hesapların canlı farkı (tasarım §4.6.1 kural 4). */
-export interface IkiDepoFarki {
+/** `GET /security/integrity/two-store/`'un `iki_depo`'su (tasarım §4.6.1 kural 4). */
+export interface IkiDepoKaydi {
+  /** Sarmalsız hesap ya da silinebilir kayıt var mı? */
   fark_var: boolean;
   /** Kaydı açık ama güvenlik dosyasında parolası olmayan hesaplar (giriş yapamaz). */
   sarmalsiz_hesaplar: IkiDepoHesabi[];
   /** Kaydı olmayan ya da kapalı hesapların güvenlik dosyasında kalan parola kayıtları. */
   silinebilir_sarmallar: IkiDepoHesabi[];
+}
+
+/**
+ * "Hesaplar ve Güvenlik Dosyası" kartının durumu: iki depo farkı (yalnız program yöneticisi)
+ * ve mührü tutmayan hesaplar (denetim kartlarından; program yöneticisi ve Denetleme Kurulu).
+ */
+export interface IkiDepoFarki extends IkiDepoKaydi {
   /** Kaydı program dışından değiştirilmiş görünen hesaplar (hiçbir işleme konu olmaz). */
   muhru_tutmayan: IkiDepoHesabi[];
 }
@@ -119,11 +136,55 @@ export interface ParolaYenilenme {
   girisler: string[];
 }
 
-/** `GET /security/integrity/` — Genel Bakış'ın bütünlük kartları. */
+/** `GET /security/integrity/` — oturumdaki hesabın kendi kartları (her rol). */
+export interface KendiKartlari {
+  kagit_capasi: KagitCapasi | null;
+  son_girisler: string[];
+  parola_yenilenme: ParolaYenilenme | null;
+  okunamayan: string[];
+}
+
+/** `GET /security/integrity/audit/` — denetim kartları (program yöneticisi, Denetleme Kurulu). */
+export interface DenetimKartlari {
+  butunluk: ButunlukBulgusu[];
+  geri_yukleme: GeriYuklemeOzeti | null;
+  muhru_tutmayan: IkiDepoHesabi[];
+  okunamayan: string[];
+}
+
+/** `GET /security/integrity/two-store/` — iki depo kartı (yalnız program yöneticisi). */
+export interface IkiDepoYaniti {
+  /** Fark hesaplanamazsa null. */
+  iki_depo: IkiDepoKaydi | null;
+  okunamayan: string[];
+}
+
+/** Rolün açabildiği bütünlük uçları (oturum özetinin yeteneklerinden). */
+export interface ButunlukYetkisi {
+  /** `audit/` (yetenek `butunluk_denetim`). */
+  denetim: boolean;
+  /** `two-store/` ve sahipsiz kaydın silinmesi (yetenek `iki_depo`). */
+  ikiDepo: boolean;
+}
+
+/** Denetim kartlarının yeteneği (`audit/`). Ad `YetenekAdi` türüyle bağlıdır. */
+export const DENETIM_YETENEGI: YetenekAdi = "butunluk_denetim";
+/** İki depo kartının ve sahipsiz kaydın silinmesinin yeteneği. */
+export const IKI_DEPO_YETENEGI: YetenekAdi = "iki_depo";
+
+/** Oturum özetinin yeteneklerinden bütünlük uçlarının yetkisi (ön yüz matrisi kopyalamaz). */
+export function butunlukYetkisi(yetenekler: readonly string[]): ButunlukYetkisi {
+  return {
+    denetim: yetenekler.includes(DENETIM_YETENEGI),
+    ikiDepo: yetenekler.includes(IKI_DEPO_YETENEGI),
+  };
+}
+
+/** Genel Bakış'ın bütünlük kartlarının bileşik durumu (üç ucun yanıtı birleşir; `birlestir`). */
 export interface ButunlukDurumu {
   butunluk: ButunlukBulgusu[];
   geri_yukleme: GeriYuklemeOzeti | null;
-  /** Kilit kapalıyken ya da fark hesaplanamazsa null. */
+  /** Kilit kapalıyken, fark hesaplanamazsa ya da rol iki ucu da açamıyorsa null. */
   iki_depo: IkiDepoFarki | null;
   /** Zincir boşsa null. */
   kagit_capasi: KagitCapasi | null;
@@ -132,13 +193,13 @@ export interface ButunlukDurumu {
   parola_yenilenme: ParolaYenilenme | null;
   /**
    * Okunamayan kartların adları (`butunluk`, `geri_yukleme`…): backend tek kartın hatasını
-   * öteki kartlara yaymaz, adını buraya yazar; ön yüz uyarı kartıyla söyler.
+   * öteki kartlara yaymaz, adını o ucun yanıtına yazar; ön yüz uyarı kartıyla söyler.
    */
   okunamayan: string[];
 }
 
-/** `POST /security/integrity/orphan-wraps/` yanıtı: silinenler + güncel kartlar. */
-export interface SahipsizSarmalSonucu extends ButunlukDurumu {
+/** `POST /security/integrity/orphan-wraps/` yanıtı: silinenler + güncel iki depo kartı. */
+export interface SahipsizSarmalSonucu extends IkiDepoYaniti {
   silinen: string[];
 }
 
@@ -148,15 +209,115 @@ export interface ParolaBildirimiYaniti {
 }
 
 export const BUTUNLUK_YOLU = "/security/integrity/";
+export const DENETIM_KARTLARI_YOLU = "/security/integrity/audit/";
+export const IKI_DEPO_YOLU = "/security/integrity/two-store/";
 export const SAHIPSIZ_SARMAL_YOLU = "/security/integrity/orphan-wraps/";
 export const PAROLA_BILDIRIMI_YOLU = "/security/integrity/reset-notice/";
 
+type Nesne = Record<string, unknown>;
+
+function nesneMi(deger: unknown): deger is Nesne {
+  return deger !== null && typeof deger === "object" && !Array.isArray(deger);
+}
+
+function liste<T>(deger: unknown): T[] {
+  return Array.isArray(deger) ? [...(deger as T[])] : [];
+}
+
+/** Denetim kartları ucunun kartları (yanıtı okunamazsa adları `okunamayan`'a yazılır). */
+const DENETIM_KARTLARI = ["butunluk", "geri_yukleme", "muhru_tutmayan"] as const;
+
+/**
+ * "Hesaplar ve Güvenlik Dosyası" kartının durumu: iki depo kaydı (eksik liste boş) ve mührü
+ * tutmayan hesaplar. Kayıt yoksa ve mührü tutmayan hesap da yoksa null.
+ */
+export function ikiDepoFarki(
+  kayit: IkiDepoKaydi | null | undefined,
+  muhruTutmayan: readonly IkiDepoHesabi[],
+): IkiDepoFarki | null {
+  if ((kayit === null || kayit === undefined) && muhruTutmayan.length === 0) return null;
+  return {
+    fark_var: Boolean(kayit?.fark_var) || muhruTutmayan.length > 0,
+    sarmalsiz_hesaplar: liste<IkiDepoHesabi>(kayit?.sarmalsiz_hesaplar),
+    silinebilir_sarmallar: liste<IkiDepoHesabi>(kayit?.silinebilir_sarmallar),
+    muhru_tutmayan: [...muhruTutmayan],
+  };
+}
+
+/**
+ * Üç ucun yanıtını kartların bileşik durumuna çevirir. Çağrılmayan uç `null`'dır (kartları
+ * boş). Kendi kartları nesne değilse durum okunamamıştır (null); çağrılan öteki uç nesne
+ * değilse kartlarının adı `okunamayan`'a girer (uyarı sessizce kaybolmaz). Eksik alan boştur.
+ */
+export function birlestir(
+  kendi: unknown,
+  denetim: unknown,
+  ikiDepo: unknown,
+): ButunlukDurumu | null {
+  if (!nesneMi(kendi)) return null;
+  const okunamayan = liste<string>(kendi.okunamayan);
+  const d: Nesne = nesneMi(denetim) ? denetim : {};
+  if (denetim !== null && !nesneMi(denetim)) okunamayan.push(...DENETIM_KARTLARI);
+  else okunamayan.push(...liste<string>(d.okunamayan));
+  const i: Nesne = nesneMi(ikiDepo) ? ikiDepo : {};
+  if (ikiDepo !== null && !nesneMi(ikiDepo)) okunamayan.push("iki_depo");
+  else okunamayan.push(...liste<string>(i.okunamayan));
+  return {
+    butunluk: liste<ButunlukBulgusu>(d.butunluk),
+    geri_yukleme: (d.geri_yukleme as GeriYuklemeOzeti | null | undefined) ?? null,
+    iki_depo: ikiDepoFarki(
+      i.iki_depo as IkiDepoKaydi | null | undefined,
+      liste<IkiDepoHesabi>(d.muhru_tutmayan),
+    ),
+    kagit_capasi: (kendi.kagit_capasi as KagitCapasi | null | undefined) ?? null,
+    son_girisler: liste<string>(kendi.son_girisler),
+    parola_yenilenme: (kendi.parola_yenilenme as ParolaYenilenme | null | undefined) ?? null,
+    okunamayan,
+  };
+}
+
+/**
+ * Sahipsiz kaydın silinmesinden dönen iki depo kartını bileşik duruma yazar: mührü tutmayan
+ * hesaplar (denetim kartlarından) korunur, iki depo kartının okunamayan adı yenilenir.
+ */
+export function ikiDepoyuBirlestir(durum: ButunlukDurumu, yanit: unknown): ButunlukDurumu {
+  const y: Nesne = nesneMi(yanit) ? yanit : {};
+  return {
+    ...durum,
+    iki_depo: ikiDepoFarki(
+      y.iki_depo as IkiDepoKaydi | null | undefined,
+      durum.iki_depo?.muhru_tutmayan ?? [],
+    ),
+    okunamayan: [
+      ...durum.okunamayan.filter((ad) => ad !== "iki_depo"),
+      ...(nesneMi(yanit) ? liste<string>(y.okunamayan) : ["iki_depo"]),
+    ],
+  };
+}
+
 export const butunlukApi = {
-  /** Kartların durumu (kullanıcı eylemi değil). */
-  durum: () => api.get<ButunlukDurumu>(BUTUNLUK_YOLU, { etkinlik: false }),
+  /** Oturumdaki hesabın kendi kartları (her rol; kullanıcı eylemi değil). */
+  kendiKartlari: () => api.get<KendiKartlari>(BUTUNLUK_YOLU, { etkinlik: false }),
+  /** Denetim kartları (program yöneticisi ve Denetleme Kurulu; kullanıcı eylemi değil). */
+  denetimKartlari: () => api.get<DenetimKartlari>(DENETIM_KARTLARI_YOLU, { etkinlik: false }),
+  /** İki depo kartı (yalnız program yöneticisi; kullanıcı eylemi değil). */
+  ikiDepo: () => api.get<IkiDepoYaniti>(IKI_DEPO_YOLU, { etkinlik: false }),
+  /**
+   * Kartların bileşik durumu: YALNIZ rolün açabildiği uçlar çağrılır (`yetki`). Bir uç
+   * düşerse hepsi düşer; çağıran "okunamadı" ya da kilit diye değerlendirir.
+   */
+  durum: async (yetki: ButunlukYetkisi): Promise<ButunlukDurumu | null> => {
+    const [kendi, denetim, ikiDepo] = await Promise.all([
+      butunlukApi.kendiKartlari(),
+      yetki.denetim ? butunlukApi.denetimKartlari() : Promise.resolve(null),
+      yetki.ikiDepo ? butunlukApi.ikiDepo() : Promise.resolve(null),
+    ]);
+    return birlestir(kendi, denetim, ikiDepo);
+  },
   /**
    * Program yöneticisinin onayıyla güvenlik dosyasında kalan sahipsiz parola kayıtlarını
-   * siler (her biri `HESAP` satırı). Onaydan sonra fark değiştiyse 400.
+   * siler (her biri `HESAP` satırı). Onaydan sonra fark değiştiyse 400. Yanıt güncel iki
+   * depo kartıdır (`ikiDepoyuBirlestir`).
    */
   sahipsizSarmallariSil: (hesaplar: string[]) =>
     api.post<SahipsizSarmalSonucu>(SAHIPSIZ_SARMAL_YOLU, { hesaplar }),

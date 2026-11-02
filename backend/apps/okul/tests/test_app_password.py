@@ -1242,13 +1242,17 @@ class TestSecurityApi:
 
     @pytest.mark.django_db
     def test_kurulu_hesap_yeniden_kurulamaz(self, client: APIClient) -> None:
+        """Açık oturumda ilk hesap ucu hiçbir role açık değildir (rol kapısı, 403); servisin
+        ön koşulu da reddeder (derin savunma)."""
         resp = client.post(
             "/api/v1/security/enable/",
             {"ad_soyad": KURAN_AD, "parola": YENI_PAROLA},
             format="json",
         )
-        assert resp.status_code == 400
-        assert "zaten kurulu" in resp.json()["message"]
+        assert resp.status_code == 403
+        assert resp.json()["code"] == "rol_yetkisiz"
+        with pytest.raises(app_password.AppPasswordError, match="zaten kurulu"):
+            app_password.enable(tanitici="yonetici-2", display_name=KURAN_AD, password=YENI_PAROLA)
 
     @pytest.mark.django_db
     def test_kurtarma_ucu(self, client: APIClient, yonetici_hesabi: Account, kilitli: Path) -> None:
@@ -1270,7 +1274,9 @@ class TestSecurityApi:
         with pytest.raises(NoReverseMatch):
             reverse("security-disable")
         resp = client.post("/api/v1/security/disable/", {"password": TEST_PAROLA}, format="json")
-        assert resp.status_code == 404
+        # Açık oturumda çözülemeyen `/api/` yolu rol kapısında 403'tür (fail-closed).
+        assert resp.status_code == 403
+        assert resp.json()["code"] == "rol_yetkisiz"
 
     @pytest.mark.django_db
     def test_parola_degistirme_ucu(self, client: APIClient, yonetici_hesabi: Account) -> None:
@@ -1448,8 +1454,9 @@ class TestGuvenlikDosyasiKayip:
             {"name": yedek.name, "hesap": TEST_TANITICI, "password": TEST_PAROLA},
             format="json",
         )
-        assert parolali.status_code == 400  # başlıkta hesap sarmalı yok (TK10)
-        assert "1 numaralı" in parolali.json()["message"]
+        # Oturum yokken parola yolu reddedilir (başlıkta hesap sarmalı da yoktur, TK10).
+        assert parolali.status_code == 400
+        assert "kurtarma anahtarıyla" in parolali.json()["message"]
         resp = client.post(
             "/api/v1/backups/restore/",
             {"name": yedek.name, "recovery_key": TEST_KURTARMA_ANAHTARI},

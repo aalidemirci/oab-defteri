@@ -21,6 +21,7 @@ from apps.okul import masaustu_kanca, restart_gate
 from apps.okul.oturum import OTURUM
 from apps.okul.services import app_password
 from apps.okul.tests.oturum_ortak import kurulum_durumunu_yaz
+from apps.okul.views_app import AppQuitView
 from conftest import oturumu_ac_test
 
 pytestmark = pytest.mark.django_db
@@ -93,8 +94,13 @@ def test_govdede_parola_gelse_de_dogrulanmaz(
 
 
 def test_cikis_ucu_yalniz_post_kabul_eder(client: APIClient, kancalar: list[str]) -> None:
+    """Açık oturumda öteki yöntemleri rol kapısı keser (kural tablosunda yalnız POST; 403
+    `rol_yetkisiz`); görünüm de yalnız POST sunar (405)."""
     for yontem in ("get", "put", "patch", "delete"):
-        assert getattr(client, yontem)(CIK).status_code == 405
+        yanit = getattr(client, yontem)(CIK)
+        assert yanit.status_code == 403
+        assert yanit.json()["code"] == "rol_yetkisiz"
+    assert not hasattr(AppQuitView, "get") and not hasattr(AppQuitView, "delete")
     assert kancalar == []
 
 

@@ -49,10 +49,15 @@ tek yerde durur. `/api/` altındaki her istekte sırasıyla:
 2. Tembel kilit (`OTURUM.degerlendir`): uzun iş bitmişse bekleyen kilit, boşta süre
    dolmuşsa boşta kilit bu istekte uygulanır (yalnız durum yoklaması olsa da).
 3. Kapı kararı (yukarıdaki iki kilit).
-4. `X-OD-Etkinlik` başlıklı ve kapıdan geçen istek boşta sayacını tazeler; reddedilen
-   istek tazelemez. Başlığı yalnız ön yüz, kullanıcı etkileşiminden hemen sonra gönderir.
+4. `X-OD-Etkinlik` başlıklı ve kapıdan geçen istek boşta sayacını tazeler; bu kapıda
+   reddedilen istek tazelemez (rol kapısında reddedilen istek tazelemeyi geri almaz:
+   tıklama gerçek bir etkinliktir). Başlığı yalnız ön yüz, kullanıcı etkileşiminden hemen
+   sonra gönderir.
 5. Yazar bağlamı (`oturum.yazar_olarak`): oturum açıksa hesap + rol, değilse yok. Denetim
-   izi yazıcısı (`apps.okul.denetim_izi`) okur; istek boyunca değişmez.
+   izi yazıcısı (`apps.okul.denetim_izi`), rol kapısı (`rol_middleware`) ve servislerin
+   yetki kapısı (`rol_izinleri.yetki_oturum`) okur; istek boyunca değişmez.
+6. Kapı kararı isteğe yazılır (`guvenlik_dosyasi_kayip_karari`): rol kapısı güvenlik
+   dosyası kayıp kararını diskten yeniden okumaz, bu isteğin kararını kullanır.
 
 API dışı yollar (SPA'nın kendisi, statik dosyalar) daima serbesttir — kilit ekranı
 yüklenebilmelidir. **Yerel yedekleme etkilenmez**: günlük yedek bir HTTP ucu değildir;
@@ -60,12 +65,13 @@ masaüstü kabuğu onu açık yedek anahtarıyla alır (`desktop/main.py`).
 
 `config/settings.py` MIDDLEWARE sırası (tasarım §4.4.3): belirteç → güvenlik →
 whitenoise → common → `RestartRequired` (503) → **`AppLock` (423)** → `RolMiddleware`
-(403 `rol_yetkisiz`, 2. adım).
+(403 `rol_yetkisiz`; yalnız açık oturumda keser, `rol_middleware`).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from typing import Final
 
 from desktop.server import HEALTH_PATH
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -127,6 +133,16 @@ _SECURITY_FILE_MISSING_BODY = {
 }
 
 
+#: Kilit kapısının bu istek için verdiği "güvenlik dosyası kayıp" kararı (istek özniteliği;
+#: modül başlığı madde 6). Rol kapısı okur.
+_KAYIP_KARARI: Final = "od_guvenlik_dosyasi_kayip"
+
+
+def guvenlik_dosyasi_kayip_karari(request: HttpRequest) -> bool:
+    """Kilit kapısı bu isteği güvenlik dosyası kayıp kilidinde mi geçirdi? (yoksa hayır)"""
+    return getattr(request, _KAYIP_KARARI, False) is True
+
+
 def izinli_mi(liste: Mapping[str, frozenset[str]], path: str, method: str) -> bool:
     """Yol + yöntem açık listede mi? (tam yol; yöntem büyük harfe çevrilir)"""
     return method.upper() in liste.get(path, _HIC)
@@ -146,8 +162,10 @@ class AppLockMiddleware:
         with OTURUM.istek():
             OTURUM.degerlendir()
             hesap = OTURUM.hesap()
+            kayip = app_password.security_file_missing()
+            setattr(request, _KAYIP_KARARI, kayip)
             # Gövdeler sabit: hangi ucun istendiği yankılanmaz.
-            if app_password.security_file_missing():
+            if kayip:
                 if not izinli_mi(KAYIP_IZINLI, path, yontem):
                     return JsonResponse(_SECURITY_FILE_MISSING_BODY, status=423)
             elif (

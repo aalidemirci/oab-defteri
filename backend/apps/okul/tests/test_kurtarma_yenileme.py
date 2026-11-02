@@ -18,7 +18,8 @@ oturumdaki hesabınkine karşı doğrulanır (tasarım TK9; plan F1b-1). Kanıtl
   (güncel dosya yerindeyken) yeni anahtarla da açılır — Ayarlar → Güvenlik'teki
   yenileme metni bu davranışı anlatır;
 * anahtar hiçbir günlüğe düşmez; kilitliyken 423 (yalnız açık oturumda); program
-  yöneticisi olmayan hesap yenileyemez (rol matrisi 2. adımda).
+  yöneticisi olmayan hesap yenileyemez (rol kapısı 403 `rol_yetkisiz`; servis de reddeder,
+  `test_yetki_kapisi`).
 """
 
 from __future__ import annotations
@@ -281,7 +282,9 @@ def test_bos_parola_reddedilir(client: APIClient) -> None:
 
 
 def test_program_yoneticisi_olmayan_hesap_yenileyemez(client: APIClient) -> None:
-    """Kurtarma anahtarını yalnız program yöneticisi yeniler (tasarım TK9)."""
+    """Kurtarma anahtarını yalnız program yöneticisi yeniler (tasarım TK9, §4.4.2 Güvenlik
+    satırı): muhasip oturumunda rol kapısı 403 `rol_yetkisiz` verir (servis de reddeder,
+    `test_yetki_kapisi.py`); dosya değişmez."""
     muhasip = hesap_ac()
     app_password.lock()
     app_password.unlock(hesap_id=muhasip.id, password=GECICI_PAROLA, new_password=YENI_PAROLA)
@@ -289,8 +292,12 @@ def test_program_yoneticisi_olmayan_hesap_yenileyemez(client: APIClient) -> None
 
     yanit = _yenile(client, YENI_PAROLA)
 
-    assert yanit.status_code == 400
-    assert yanit.json()["message"] == "Kurtarma anahtarını yalnız program yöneticisi yeniler."
+    assert yanit.status_code == 403
+    assert yanit.json() == {
+        "code": "rol_yetkisiz",
+        "message": "Bu işlem hesabınızın rolüne açık değil.",
+        "fields": {},
+    }
     assert app_password.read_state() == once
 
 

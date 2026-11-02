@@ -3,6 +3,7 @@
 // Haritası" (kurulumdan sonra; işaretler backend'de saklanır, bütün maddeler
 // tamamlanınca kart gizlenebilir). Aile iskeletinin kütüphane kartları F1a-2'de söküldü.
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
@@ -13,6 +14,7 @@ import { KURULU_DURUM } from "../../test/kurulumDurumu";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import type { ButunlukDurumu } from "../butunluk/api";
 import type { RoadmapState, SetupStatus } from "../okul/api";
+import type { OturumOzeti } from "../oturum/api";
 
 const oapi = vi.hoisted(() => ({
   getSetupStatus: vi.fn(),
@@ -23,8 +25,15 @@ const oapi = vi.hoisted(() => ({
 const papi = vi.hoisted(() => ({ sonOturum: vi.fn(), kontrolEttim: vi.fn() }));
 // Güvenlik durumu (okunamayan alan kartı) ve dış yedek hatırlatması kendi uçlarından okur.
 const gapi = vi.hoisted(() => ({ durum: vi.fn(), disYedek: vi.fn() }));
-// Denetim izi kartları tek `GET security/integrity/` okumasından beslenir.
+// Denetim izi kartları bütünlük uçlarının tek bileşik okumasından beslenir (`durum`); hangi
+// uçların çağrılacağını oturum özetinin yetenekleri söyler.
 const bapi = vi.hoisted(() => ({ durum: vi.fn(), sahipsizSarmallariSil: vi.fn() }));
+const otapi = vi.hoisted(() => ({ ozet: vi.fn() }));
+
+vi.mock("../oturum/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../oturum/api")>()),
+  oturumApi: otapi,
+}));
 
 vi.mock("../okul/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../okul/api")>()),
@@ -72,13 +81,32 @@ const TEMIZ_IZ: ButunlukDurumu = {
   okunamayan: [],
 };
 
+/** Açık oturum: program yöneticisi (bütünlük uçlarının üçü de açık). */
+const YONETICI_OTURUMU: OturumOzeti = {
+  durum: "acik",
+  hesap: {
+    id: "h-1",
+    tanitici: "yonetici",
+    rol: "yonetici",
+    rol_etiketi: "Program yöneticisi",
+    yetenekler: ["butunluk_denetim", "iki_depo", "son_oturum_onay"],
+  },
+  bosta_dk: 10,
+  bosta_kalan_sn: 600,
+  kilit_bekliyor: false,
+  kurulum_tamam: true,
+};
+
 function bas() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter>
-      <SnackbarProvider>
-        <PanelPage />
-      </SnackbarProvider>
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <SnackbarProvider>
+          <PanelPage />
+        </SnackbarProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -96,6 +124,7 @@ beforeEach(() => {
   gapi.durum.mockResolvedValue({ corrupt_field_count: 0 });
   gapi.disYedek.mockResolvedValue({ remind: false });
   bapi.durum.mockResolvedValue(TEMIZ_IZ);
+  otapi.ozet.mockResolvedValue(YONETICI_OTURUMU);
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -135,6 +164,60 @@ describe("Genel Bakış", () => {
     expect(screen.queryByRole("region", { name: "Denetim İzi Bütünlüğü" })).toBeNull();
     expect(screen.queryByRole("region", { name: "Yedekten Geri Yükleme Yapıldı" })).toBeNull();
     expect(bapi.durum).toHaveBeenCalledTimes(1);
+    // Program yöneticisinin yetenekleri: denetim kartları ve iki depo kartı da okunur.
+    expect(bapi.durum).toHaveBeenCalledWith({ denetim: true, ikiDepo: true });
+  });
+
+  it("bütünlük uçları oturum özetinin yetenekleriyle çağrılır (rolün açamadığı uç gitmez)", async () => {
+    otapi.ozet.mockResolvedValue({
+      ...YONETICI_OTURUMU,
+      hesap: {
+        id: "h-7",
+        tanitici: "muhasip",
+        rol: "muhasip",
+        rol_etiketi: "Muhasip",
+        yetenekler: ["son_oturum_onay"],
+      },
+    } satisfies OturumOzeti);
+    bas();
+
+    await screen.findByRole("region", { name: "Son Girişler" });
+    expect(bapi.durum).toHaveBeenCalledTimes(1);
+    expect(bapi.durum).toHaveBeenCalledWith({ denetim: false, ikiDepo: false });
+  });
+
+  it("oturum özeti okunamazsa “Bütünlük Durumu Okunamadı” çıkar; yalnız kendi kartları okunur", async () => {
+    // Bağımsız denetim bulgusu: yetenekler bilinmeyince hiçbir uç çağrılmıyor, uyarı kartları
+    // da "okunamadı" kartı da sessizce kayboluyordu (fail-closed kuralına aykırı).
+    otapi.ozet.mockRejectedValue(new ApiError(500, "500", "Sunucu hatası."));
+    bas();
+
+    const kart = await screen.findByRole("region", { name: "Bütünlük Durumu Okunamadı" });
+    expect(within(kart).getByText(/kartları tam okunamadı/)).toBeInTheDocument();
+    // Her role açık kendi kartları okunur; denetim ve iki depo uçları yetenek bilinmeden gitmez.
+    expect(await screen.findByRole("region", { name: "Son Girişler" })).toBeInTheDocument();
+    expect(bapi.durum).toHaveBeenCalledTimes(1);
+    expect(bapi.durum).toHaveBeenCalledWith({ denetim: false, ikiDepo: false });
+    expect(screen.getAllByRole("region", { name: "Bütünlük Durumu Okunamadı" })).toHaveLength(1);
+  });
+
+  it("oturum özeti beklenirken bütünlük uçları çağrılmaz, “okunamadı” kartı çıkmaz", async () => {
+    otapi.ozet.mockReturnValue(new Promise(() => {}));
+    bas();
+
+    await screen.findByRole("heading", { name: "Başlangıç Yol Haritası" });
+    await waitFor(() => expect(otapi.ozet).toHaveBeenCalled());
+    expect(bapi.durum).not.toHaveBeenCalled();
+    expect(screen.queryByRole("region", { name: "Bütünlük Durumu Okunamadı" })).toBeNull();
+  });
+
+  it("özet okunamaz, kendi kartları da okunamayan bölüm taşırsa tek uyarı kartı çizilir", async () => {
+    otapi.ozet.mockRejectedValue(new ApiError(500, "500", "Sunucu hatası."));
+    bapi.durum.mockResolvedValue({ ...TEMIZ_IZ, okunamayan: ["kagit_capasi"] });
+    bas();
+
+    await screen.findByRole("region", { name: "Son Girişler" });
+    expect(screen.getAllByRole("region", { name: "Bütünlük Durumu Okunamadı" })).toHaveLength(1);
   });
 
   it("kilit açılışındaki denetimin bulgusu ve geri yükleme kartı Son Girişler'den önce gelir", async () => {

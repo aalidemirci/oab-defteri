@@ -78,7 +78,13 @@ const PAROLALI = {
 /** Açık oturumun kişisiz özeti (kişi adı yok; tanıtıcı uydurma). */
 const ACIK_OTURUM = {
   durum: "acik",
-  hesap: { id: "h1", tanitici: "yonetici", rol: "yonetici", rol_etiketi: "Program yöneticisi" },
+  hesap: {
+    id: "h1",
+    tanitici: "yonetici",
+    rol: "yonetici",
+    rol_etiketi: "Program yöneticisi",
+    yetenekler: [],
+  },
   bosta_dk: 10,
   bosta_kalan_sn: 600,
   kilit_bekliyor: false,

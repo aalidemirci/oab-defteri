@@ -1,6 +1,6 @@
 // "Hesaplar ve Güvenlik Dosyası" kartı (tasarım §4.6.1 kural 4): farkın üç listesi kişisizdir;
 // güvenlik dosyasında kalan eski parola kaydı yalnız onay diyaloğundan geçince silinir
-// (`POST security/integrity/orphan-wraps/`), kart yanıttaki güncel durumla yenilenir.
+// (`POST security/integrity/orphan-wraps/`), kart yanıttaki güncel iki depo kartıyla yenilenir.
 // "Sarmal" ve iç kodlar ekrana çıkmaz (sözlük §1 "Denetim izi").
 
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -12,7 +12,7 @@ import { gorunenMetin } from "../../test/gorunenMetin";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import { butunlukApi } from "./api";
-import type { ButunlukDurumu, IkiDepoFarki } from "./api";
+import type { IkiDepoFarki, IkiDepoYaniti } from "./api";
 import IkiDepoKarti, {
   SILME_ONAY_BASLIGI,
   eskiKayitlarAciklamasi,
@@ -33,25 +33,25 @@ const FARK: IkiDepoFarki = {
   muhru_tutmayan: [{ id: "h-4", tanitici: "dk-1", rol_etiketi: "Denetleme Kurulu", kapali: false }],
 };
 
-const GUNCEL: ButunlukDurumu = {
-  butunluk: [],
-  geri_yukleme: null,
-  iki_depo: { ...FARK, silinebilir_sarmallar: FARK.silinebilir_sarmallar.slice(1) },
-  kagit_capasi: null,
-  son_girisler: [],
-  parola_yenilenme: null,
+/** Silmeden dönen iki depo kartı (`two-store/` biçimi; mührü tutmayanlar denetim kartında). */
+const GUNCEL: IkiDepoYaniti = {
+  iki_depo: {
+    fark_var: true,
+    sarmalsiz_hesaplar: FARK.sarmalsiz_hesaplar,
+    silinebilir_sarmallar: FARK.silinebilir_sarmallar.slice(1),
+  },
   okunamayan: [],
 };
 
-function bas(fark: IkiDepoFarki = FARK, onDurum = vi.fn()) {
+function bas(fark: IkiDepoFarki = FARK, onIkiDepo = vi.fn()) {
   const sonuc = render(
     <SnackbarProvider>
       <ConfirmProvider>
-        <IkiDepoKarti fark={fark} onDurum={onDurum} />
+        <IkiDepoKarti fark={fark} onIkiDepo={onIkiDepo} />
       </ConfirmProvider>
     </SnackbarProvider>,
   );
-  return { ...sonuc, onDurum };
+  return { ...sonuc, onIkiDepo };
 }
 
 function kart(): HTMLElement {
@@ -103,7 +103,7 @@ describe("Hesaplar ve Güvenlik Dosyası kartı", () => {
       ...GUNCEL,
       silinen: [ESKI],
     });
-    const { onDurum } = bas();
+    const { onIkiDepo } = bas();
 
     await user.click(
       within(kart()).getByRole("button", { name: silDugmesiAdi(FARK.silinebilir_sarmallar[0]) }),
@@ -116,7 +116,7 @@ describe("Hesaplar ve Güvenlik Dosyası kartı", () => {
     await user.click(within(diyalog).getByRole("button", { name: "Sil" }));
 
     await waitFor(() => expect(sil).toHaveBeenCalledWith([ESKI]));
-    await waitFor(() => expect(onDurum).toHaveBeenCalledWith({ ...GUNCEL, silinen: [ESKI] }));
+    await waitFor(() => expect(onIkiDepo).toHaveBeenCalledWith({ ...GUNCEL, silinen: [ESKI] }));
     expect(
       await screen.findByText("Parola kaydı güvenlik dosyasından silindi."),
     ).toBeInTheDocument();
@@ -125,7 +125,7 @@ describe("Hesaplar ve Güvenlik Dosyası kartı", () => {
   it("Vazgeç'te hiçbir şey silinmez", async () => {
     const user = userEvent.setup();
     const sil = vi.spyOn(butunlukApi, "sahipsizSarmallariSil");
-    const { onDurum } = bas();
+    const { onIkiDepo } = bas();
 
     await user.click(
       within(kart()).getByRole("button", { name: silDugmesiAdi(FARK.silinebilir_sarmallar[1]) }),
@@ -134,7 +134,7 @@ describe("Hesaplar ve Güvenlik Dosyası kartı", () => {
     await user.click(within(diyalog).getByRole("button", { name: "Vazgeç" }));
 
     expect(sil).not.toHaveBeenCalled();
-    expect(onDurum).not.toHaveBeenCalled();
+    expect(onIkiDepo).not.toHaveBeenCalled();
   });
 
   it("silme reddedilirse sunucunun iletisi kartta görünür", async () => {
@@ -146,7 +146,7 @@ describe("Hesaplar ve Güvenlik Dosyası kartı", () => {
         "Bu parola kaydı artık güvenlik dosyasından silinebilecek durumda değil; Genel Bakış'ı yenileyip yeniden deneyin.",
       ),
     );
-    const { onDurum } = bas();
+    const { onIkiDepo } = bas();
 
     await user.click(
       within(kart()).getByRole("button", { name: silDugmesiAdi(FARK.silinebilir_sarmallar[0]) }),
@@ -160,7 +160,7 @@ describe("Hesaplar ve Güvenlik Dosyası kartı", () => {
     expect(await within(kart()).findByRole("alert")).toHaveTextContent(
       /silinebilecek durumda değil/,
     );
-    expect(onDurum).not.toHaveBeenCalled();
+    expect(onIkiDepo).not.toHaveBeenCalled();
   });
 
   it("kapalı hesabın kaydını programın kendisinin sildiğini, kaydı olmayanınkini silmediğini söyler", () => {

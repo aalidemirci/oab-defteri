@@ -79,6 +79,7 @@ from conftest import (
     oturumu_ac_test,
 )
 from shared import bakim, crypto, kanonik
+from shared.exceptions import RolYetkisiz
 
 pytestmark = pytest.mark.django_db
 
@@ -270,9 +271,13 @@ def test_yazar_baglami_yoksa_yazilmaz() -> None:
         with pytest.raises(denetim_izi.IzYazilamadi, match="Yazar bağlamı"):
             denetim_izi.olay(AuditAction.KILIT, model=HESAP, object_id=TEST_HESAP_ID)
         with pytest.raises(denetim_izi.IzYazilamadi):
+            setup_service.set_roadmap_mark("kurtarma_zarfi", done=True)
+        # Yetki kapısı olan servis yazarsız çağrıyı izden de önce keser (plan F1b-2).
+        with pytest.raises(RolYetkisiz):
             setup_service.set_idle_lock_minutes(dakika=15)
     assert AuditTrail.objects.count() == 0
-    assert SchoolConfig.load().idle_lock_minutes == 10  # veri yazımı da geri alındı
+    config = SchoolConfig.load()  # veri yazımı da geri alındı
+    assert (config.idle_lock_minutes, config.yol_haritasi) == (10, {})
 
 
 def test_sistem_yazari_hesapsiz_ve_rolsuz_yazilir() -> None:

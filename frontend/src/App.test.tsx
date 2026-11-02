@@ -84,7 +84,13 @@ import type { OturumOzeti } from "./modules/oturum/api";
 
 const ACIK_OTURUM: OturumOzeti = {
   durum: "acik",
-  hesap: { id: "h-1", tanitici: "yonetici", rol: "yonetici", rol_etiketi: "Program yöneticisi" },
+  hesap: {
+    id: "h-1",
+    tanitici: "yonetici",
+    rol: "yonetici",
+    rol_etiketi: "Program yöneticisi",
+    yetenekler: [],
+  },
   bosta_dk: 10,
   bosta_kalan_sn: 600,
   kilit_bekliyor: false,

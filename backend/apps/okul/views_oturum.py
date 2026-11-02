@@ -1,7 +1,8 @@
 """Oturum uçları (tasarım §4.4.3, TK14; plan F1b-1 "Oturum") — aile iskeletinin kip uçlarının yerine.
 
 * `GET  security/session/`  → oturum özeti (`OTURUM.ozet()`): `durum`, `hesap` {id,
-  tanitici, rol, rol_etiketi} (kişi adı yok), `bosta_dk`, `bosta_kalan_sn`,
+  tanitici, rol, rol_etiketi, yetenekler} (kişi adı yok; `yetenekler` rolün yetenek adları,
+  `rol_izinleri.yetenekler` — ön yüz süzmesinin tek kaynağı), `bosta_dk`, `bosta_kalan_sn`,
   `kilit_bekliyor`, `kurulum_tamam`. Ön yüz bunu kısa aralıkla yoklar ve
   `X-OD-Etkinlik` GÖNDERMEZ (yoklama oturumu canlı tutmaz). Kilitliyken ve güvenlik
   dosyası kayıpken de yanıt verir (`lock_middleware`); yanıtı vermeden önce tembel
@@ -30,27 +31,38 @@
 * `GET|PUT security/idle-lock/` `{dakika}` → boşta kilit süresi (3-30, varsayılan 10;
   `SchoolConfig.idle_lock_minutes`, tasarım TK14, §13 D11). Ayarlar → Güvenlik okur
   ve yazar. Yalnız açık oturumda: kilit ekranının açık listesinde DEĞİLDİR
-  (`lock_middleware.KILITLI_IZINLI`; kilitliyken 423). Yazmayı yalnız program
-  yöneticisine bırakan rol kuralı (tasarım §4.4.2) 2. adımdadır.
+  (`lock_middleware.KILITLI_IZINLI`; kilitliyken 423). Her rol okur; yazmayı yalnız program
+  yöneticisi yapar (tasarım §4.4.2 Ayarlar satırı; rol kapısı ve servisin yetki kapısı).
 
-* `GET  security/integrity/` → Genel Bakış'ın bütünlük kartları (`iz_dogrulama.pano_ozeti`;
-  tasarım §4.6.3, plan F1b-1 "Bütünlük ve mühür kartları 1. adımda Genel Bakış'tadır"):
-  `butunluk` (oturumdaki hesabın bir önceki girişinden beri yazılmış `BUTUNLUK` satırları:
-  kilit açılışı doğrulamasının bulgu kodları ve düzeyi ya da girişte tutmayan hesap mührü),
-  `geri_yukleme` (son `GERI_YUKLEME` satırı: geri yüklemenin anı nottan, satırın anı ilk
-  girişten; yedeği açan yol hesap ya da kurtarma anahtarı no'su; uygulama içinden
-  yapıldıysa başlatan oturumun hesabı; Denetleme Kurulu "gördüm" diyene dek — o düğme 2.
-  adımda), `iki_depo` (canlı fark; onayla silinebilir sarmallar), `kagit_capasi`
-  (`kayit_no`, `zincir`: "Kayıt no: N · Zincir: XXXX-XXXX"), `son_girisler` (yalnız
-  oturumdaki hesabın) ve `parola_yenilenme` (sıfırlama ya da kurtarma bildirimi ve o
-  tarihten sonraki girişler). Kişi adı ve bulgu metni DÖNMEZ: kodları ön yüz sözlükteki
-  metne çevirir. Kartlar yalnız iz anahtarıyla mühürlü ve doğrulanan satırları okur
-  (`denetim_izi.acik_satir_dogrulayici`). Yalnız açık oturumda (kilitliyken 423).
+BÜTÜNLÜK KARTLARI üç uçtadır (tasarım §4.4.2 "kısmi yetki ayrı uçla verilir"; plan F1b-2
+"Bütünlük ucu bölünür"; `iz_dogrulama`). Her uç kendi `okunamayan` listesini döndürür (tek
+kartın hatası öteki kartları düşürmez; ön yüz "Bütünlük Durumu Okunamadı" der):
+
+* `GET  security/integrity/` → oturumdaki hesabın KENDİ kartları, her rol
+  (`iz_dogrulama.kendi_kartlari`): `son_girisler` (yalnız bu hesabın), `parola_yenilenme`
+  (sıfırlama ya da kurtarma bildirimi ve o tarihten sonraki girişler) ve `kagit_capasi`
+  (`kayit_no`, `zincir`: "Kayıt no: N · Zincir: XXXX-XXXX").
+* `GET  security/integrity/audit/` → denetim kartları, program yöneticisi ve Denetleme Kurulu
+  (`iz_dogrulama.denetim_kartlari`; tasarım §4.6.3, §4.6.1 kural 1, §4.4.4): `butunluk`
+  (oturumdaki hesabın bir önceki girişinden beri yazılmış `BUTUNLUK` satırları: kilit açılışı
+  doğrulamasının bulgu kodları ve düzeyi ya da girişte tutmayan hesap mührü), `geri_yukleme`
+  (son `GERI_YUKLEME` satırı: geri yüklemenin anı nottan, satırın anı ilk girişten; yedeği açan
+  yol hesap ya da kurtarma anahtarı no'su; uygulama içinden yapıldıysa başlatan oturumun hesabı;
+  Denetleme Kurulu "gördüm" diyene dek) ve `muhru_tutmayan` (kaydı program dışından
+  değiştirilmiş görünen hesaplar, canlı).
+* `GET  security/integrity/two-store/` → iki depo kartı, yalnız program yöneticisi
+  (`iz_dogrulama.iki_depo_karti`; §4.6.1 kural 4): `iki_depo` {`fark_var`,
+  `sarmalsiz_hesaplar`, `silinebilir_sarmallar`} (canlı fark; fark hesaplanamazsa `null`).
 * `POST security/integrity/orphan-wraps/` `{hesaplar: [kimlik]}` → program yöneticisinin
   onayıyla sahipsiz (satırı olmayan ya da `KAPALI`) hesap sarmallarının silinmesi (tasarım
-  §4.6.1 kural 4; `hesaplar.remove_orphan_wraps`, `HESAP` satırı). Rol denetimi 2. adımda.
-  Kartlardaki hesaplar kişisizdir: `{id, tanitici, rol_etiketi}` (iki depo satırlarında ek
-  olarak `kapali`); ad-soyad dönmez.
+  §4.6.1 kural 4; `hesaplar.remove_orphan_wraps`, `HESAP` satırı); yalnız program yöneticisi
+  (rol kapısı ve servisin yetki kapısı). Yanıt `{silinen, …iki depo kartı}`'dır.
+
+Kişi adı ve bulgu metni DÖNMEZ: kodları ön yüz sözlükteki metne çevirir. Kartlardaki hesaplar
+kişisizdir: `{id, tanitici, rol_etiketi}` (iki depo ve mührü tutmayan satırlarında ek olarak
+`kapali`). Kartlar yalnız iz anahtarıyla mühürlü ve doğrulanan satırları okur
+(`denetim_izi.acik_satir_dogrulayici`). Yalnız açık oturumda (kilitliyken 423).
+
 * `GET|POST security/integrity/reset-notice/` → oturumdaki hesabın parola yenilenme
   bildirimi (tasarım §4.4.3, §4.3 tehdit 12): `{parola_yenilenme: {tur, zaman, girisler} |
   null}` (`iz_dogrulama.yenilenme_bildirimi`; girişler YALNIZ bu hesabın). POST sahibinin
@@ -62,9 +74,13 @@
 Parolalar ve kurtarma anahtarı YALNIZ istek gövdesinde taşınır; hiçbir yanıtta,
 günlükte ya da hata iletisinde yankılanmaz. Gövde anahtarları Türkçedir (oturum
 sözleşmesi); ilk hesabın kurulumu ve kurtarma anahtarı belgesi uçları `views.py`'dedir.
-Rol denetimi (`RolMiddleware`) 2. adımdadır; boşta kilit süresinin yazımı dışındaki
-bu uçların hepsi her role açık olacaktır (§4.4.2 "Kendi parolasını değiştirme, Kilitle,
-Çık").
+
+ROL TABLOSU (`rol_izinleri.KURALLAR`; rol kapısı `RolMiddleware`): oturum özeti, kilit
+ekranının hesap listesi, kilit açma, kurtarma, Kilitle, kendi parolası, boşta süreyi okuma,
+kendi kartları ve parola yenilenme bildirimi her role açıktır (§4.4.2 "Kendi parolasını
+değiştirme, Kilitle, Çık"; kilitliyken açık olan her uç açık oturumda her role açıktır).
+Boşta süre yazımı, iki depo kartı ve sahipsiz parola kayıtlarının silinmesi yalnız program
+yöneticisine; denetim kartları program yöneticisi ve Denetleme Kuruluna açıktır.
 """
 
 from __future__ import annotations
@@ -82,7 +98,7 @@ from rest_framework.views import APIView
 
 from apps.okul import iz_dogrulama
 from apps.okul.models import IDLE_LOCK_MINUTES_MAX, IDLE_LOCK_MINUTES_MIN
-from apps.okul.oturum import OTURUM
+from apps.okul.oturum import OTURUM, yazar
 from apps.okul.services import app_password, hesaplar
 from apps.okul.services import setup as setup_service
 
@@ -244,11 +260,31 @@ class SahipsizSarmalSerializer(serializers.Serializer[dict[str, Any]]):
     hesaplar = serializers.ListField(child=serializers.UUIDField(), allow_empty=False)
 
 
+def _yazar_hesabi() -> str | None:
+    """İsteğin yazarı olan hesap (istek başındaki görüntü; `SISTEM` ya da bağlamsız: yok)."""
+    kim = yazar()
+    return None if kim is None or kim.sistem_mi else kim.hesap_id
+
+
 class ButunlukDurumuView(APIView):
-    """`GET /api/v1/security/integrity/` — Genel Bakış'ın bütünlük kartları (modül başlığı)."""
+    """`GET /api/v1/security/integrity/` — oturumdaki hesabın kendi kartları (modül başlığı)."""
 
     def get(self, request: Request) -> Response:
-        return Response(iz_dogrulama.pano_ozeti(OTURUM.hesap_id()))
+        return Response(iz_dogrulama.kendi_kartlari(_yazar_hesabi()))
+
+
+class DenetimKartlariView(APIView):
+    """`GET /api/v1/security/integrity/audit/` — denetim kartları (modül başlığı)."""
+
+    def get(self, request: Request) -> Response:
+        return Response(iz_dogrulama.denetim_kartlari(_yazar_hesabi()))
+
+
+class IkiDepoKartiView(APIView):
+    """`GET /api/v1/security/integrity/two-store/` — iki depo kartı (modül başlığı)."""
+
+    def get(self, request: Request) -> Response:
+        return Response(iz_dogrulama.iki_depo_karti())
 
 
 class SahipsizSarmalView(APIView):
@@ -262,7 +298,7 @@ class SahipsizSarmalView(APIView):
                 by_hesap_id=OTURUM.hesap_id() or "",
                 hesap_idler=[str(kimlik) for kimlik in req.validated_data["hesaplar"]],
             )
-        return Response({"silinen": silinen, **iz_dogrulama.pano_ozeti(OTURUM.hesap_id())})
+        return Response({"silinen": silinen, **iz_dogrulama.iki_depo_karti()})
 
 
 class ParolaBildirimiView(APIView):

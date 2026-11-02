@@ -50,8 +50,14 @@ beklenmedik biçimde düşerse de bulgu (`dogrulama_yapilamadi`) olur. Sert enge
 bütünlüğündedir (mühür, iki depo, İA çözülemezse; `app_password`). Satırlar yazılamazsa giriş
 açılmaz: iz yazılamazsa yazma yapılamaz.
 
-KARTLAR (`pano_ozeti`; `GET security/integrity/`): durum ayrı bir dosyada değil denetim
-izinin kendisinde kalıcıdır. Kartlar ve parola yenilenme bildirimi YALNIZ açık kipte, iz
+KARTLAR: durum ayrı bir dosyada değil denetim izinin kendisinde kalıcıdır. Kartlar rolüne
+göre üç uçtan okunur (tasarım §4.4.2 "kısmi yetki ayrı uçla verilir"; plan F1b-2 "Bütünlük ucu
+bölünür"): oturumdaki hesabın kendi kartları (`kendi_kartlari`; `GET security/integrity/`, her
+rol: son girişler, parola yenilenme bildirimi, kâğıt çapası), denetim kartları
+(`denetim_kartlari`; `GET security/integrity/audit/`, program yöneticisi ve Denetleme Kurulu:
+bütünlük, geri yükleme ve mührü tutmayan hesaplar — §4.6.3, §4.6.1 kural 1, §4.4.4) ve iki depo
+kartı (`iki_depo_karti`; `GET security/integrity/two-store/`, yalnız program yöneticisi:
+sarmalı olmayan hesaplar ve silinebilir sarmallar — §4.6.1 kural 4). Kartlar ve parola yenilenme bildirimi YALNIZ açık kipte, iz
 anahtarıyla mühürlü, kuralına uyan ve MAC'i tutan satırları okur
 (`denetim_izi.acik_satir_dogrulayici`): kilitli kip ya da mühürsüz anahtarla (sırsız) eklenmiş
 sahte bir `GIRIS`, `BUTUNLUK` ya da `GERI_YUKLEME` satırı karta çıkmaz, (3). denetimin
@@ -59,12 +65,12 @@ bulgusu olur. Bütünlük kartı oturumdaki hesabın bir önceki girişinden ber
 yazılmış `BUTUNLUK` satırlarıdır (doğrulama bulgusu ve girişte hesap mührü tutmadı); her hesap
 kendi bir sonraki girişinde görür. Geri yükleme kartı son `GERI_YUKLEME` satırıdır (aynı kilit
 açılışında yazılmış öncekilerle birlikte: iki geri yükleme arasında kilit açılmadıysa asıl dönüş
-yolu ilkinin kenara aldığı veritabanıdır) ve Denetleme Kurulu "gördüm" diyene dek kalır — Denetleme Kurulu hesapları ve o düğme 2. adımdadır, kart
-bugün hep görünür. İki depo kartı canlı hesaplanır (`hesaplar.two_store_differences`); sahipsiz
-sarmalların silinmesi program yöneticisinin onayıyladır (`POST security/integrity/orphan-wraps/`).
-Kartlar birbirinden bağımsız okunur: biri okunamazsa adı `okunamayan` listesine girer, ön yüz
-bunu uyarı kartıyla söyler (`pano_ozeti`).
-Rol süzmesi (yalnız program yöneticisi ve Denetleme Kurulu) 2. adımdadır. Bulgu kodları iç
+yolu ilkinin kenara aldığı veritabanıdır) ve Denetleme Kurulu "gördüm" diyene dek kalır — o düğmenin
+ucu 2. adımda gelir, kart bugün hep görünür. İki depo kartı ve mührü tutmayan hesaplar canlı
+hesaplanır (`hesaplar.two_store_differences`); sahipsiz sarmalların silinmesi program
+yöneticisinin onayıyladır (`POST security/integrity/orphan-wraps/`). Kartlar birbirinden
+bağımsız okunur: biri okunamazsa adı o ucun `okunamayan` listesine girer, ön yüz bunu uyarı
+kartıyla söyler ("Bütünlük Durumu Okunamadı"; `_kartlar`). Bulgu kodları iç
 koddur, kullanıcı metnine çıkmaz: ön yüz sözlükteki metni yazar (`modules/butunluk/metinler`).
 Kartlardaki hesap kişisizdir (`_hesap_ozeti`): kimlik, tanıtıcı ve rol etiketi; ad-soyad yok.
 
@@ -82,7 +88,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from django.db.models import QuerySet
 from django.utils import timezone
@@ -99,6 +105,9 @@ from apps.okul.models import (
 from apps.okul.oturum import rol_etiketi, sistem_olarak
 from apps.okul.services import geri_yukleme_notu
 from shared import crypto, kanonik
+
+if TYPE_CHECKING:
+    from apps.okul.services.hesaplar import TwoStoreDifferences
 
 logger = logging.getLogger("oab_defteri.okul")
 
@@ -833,42 +842,63 @@ def _geri_yukleme_ozeti(satir: AuditTrail) -> dict[str, Any]:
     }
 
 
-def _iki_depo_karti() -> dict[str, Any] | None:
-    from apps.okul.services import app_password, hesaplar
+def _iki_depo_ozeti(kimlikler: list[str]) -> list[dict[str, Any]]:
+    """Kişisiz satırlar: tanıtıcı (satırdan, yoksa sarmaldan), rol etiketi (satır yoksa `None`)
+    ve hesabın kapalı olup olmadığı (silinebilir sarmalın iki nedeni ayrılsın)."""
+    from apps.okul.services import app_password
 
-    try:
-        fark = hesaplar.two_store_differences()
-    except (app_password.AppPasswordError, crypto.KeyMissingError):
-        return None
     sarmal_tanitici = {sarmal["id"]: sarmal["tanitici"] for sarmal in app_password.account_wraps()}
     satirlar = {
         str(satir["id"]): satir
         for satir in Account.objects.values("id", "login_name", "role", "status")
     }
+    sonuc: list[dict[str, Any]] = []
+    for kimlik in kimlikler:
+        satir = satirlar.get(kimlik)
+        sonuc.append(
+            {
+                "id": kimlik,
+                "tanitici": (satir["login_name"] if satir else None) or sarmal_tanitici.get(kimlik),
+                "rol_etiketi": rol_etiketi(satir["role"]) if satir else None,
+                "kapali": satir is not None and satir["status"] == AccountStatus.KAPALI,
+            }
+        )
+    return sonuc
 
-    def ozet(kimlikler: list[str]) -> list[dict[str, Any]]:
-        """Kişisiz satır: tanıtıcı (satırdan, yoksa sarmaldan), rol etiketi (satır yoksa
-        `None`) ve hesabın kapalı olup olmadığı (silinebilir sarmalın iki nedeni ayrılsın)."""
-        sonuc: list[dict[str, Any]] = []
-        for kimlik in kimlikler:
-            satir = satirlar.get(kimlik)
-            sonuc.append(
-                {
-                    "id": kimlik,
-                    "tanitici": (satir["login_name"] if satir else None)
-                    or sarmal_tanitici.get(kimlik),
-                    "rol_etiketi": rol_etiketi(satir["role"]) if satir else None,
-                    "kapali": satir is not None and satir["status"] == AccountStatus.KAPALI,
-                }
-            )
-        return sonuc
 
+def _iki_depo_farki() -> TwoStoreDifferences | None:
+    """Canlı fark; hesaplanamazsa (güvenlik dosyası ya da DEK yok) None."""
+    from apps.okul.services import app_password, hesaplar
+
+    try:
+        return hesaplar.two_store_differences()
+    except (app_password.AppPasswordError, crypto.KeyMissingError):
+        return None
+
+
+def _iki_depo_karti() -> dict[str, Any] | None:
+    """Sarmalı olmayan açık hesaplar ve onayla silinebilir sarmallar (§4.6.1 kural 4).
+
+    Mührü tutmayan hesaplar bu kartta değildir: onlar kural 1'in kartıdır, denetim kartlarıyla
+    program yöneticisine ve Denetleme Kuruluna gider (`_muhru_tutmayan`).
+    """
+    fark = _iki_depo_farki()
+    if fark is None:
+        return None
+    sarmalsiz = list(fark.rows_without_wrap)
+    silinebilir = list(fark.removable_wraps)
     return {
-        "fark_var": not fark.empty,
-        "sarmalsiz_hesaplar": ozet(fark.rows_without_wrap),
-        "silinebilir_sarmallar": ozet(fark.removable_wraps),
-        "muhru_tutmayan": ozet(fark.seal_mismatch),
+        "fark_var": bool(sarmalsiz or silinebilir),
+        "sarmalsiz_hesaplar": _iki_depo_ozeti(sarmalsiz),
+        "silinebilir_sarmallar": _iki_depo_ozeti(silinebilir),
     }
+
+
+def _muhru_tutmayan() -> list[dict[str, Any]]:
+    """Mührü tutmayan hesaplar (§4.6.1 kural 1: hiçbir işleme konu olmaz; kart program
+    yöneticisi ve Denetleme Kurulu panosuna). Fark hesaplanamazsa boş liste."""
+    fark = _iki_depo_farki()
+    return [] if fark is None else _iki_depo_ozeti(list(fark.seal_mismatch))
 
 
 def _kagit_capasi() -> dict[str, Any] | None:
@@ -913,45 +943,73 @@ def _yenilenme_bildirimi(hesap_id: object, gecerli: Suzgec | None) -> dict[str, 
     }
 
 
-def pano_ozeti(hesap_id: str | None) -> dict[str, Any]:
-    """Genel Bakış'ın bütünlük kartlarının kişisiz özeti (modül başlığı "KARTLAR").
+def _kartlar(uretenler: dict[str, tuple[Callable[[], Any], Any]]) -> dict[str, Any]:
+    """Kartları birbirinden bağımsız üretir; okunamayanın adı `okunamayan` listesine girer.
 
-    Oturumdaki hesaba özgü kısımlar (bütünlük kartının alt sınırı, son girişler, yenilenme
-    bildirimi) yalnız hesap kimliği verildiyse doludur; başka hesabın girişleri dönmez.
-    Kartlar yalnız doğrulanan açık kip satırlarını okur (`acik_satir_dogrulayici`; DEK ister).
-
-    Her kart ayrı okunur: beklenmeyen bir hata (program dışından bozulmuş bir satır) yalnız o
-    kartı boş bırakır, adı `okunamayan` listesine girer ve ön yüz bunu bir uyarı kartıyla
-    söyler — kartlar sessizce kaybolmaz, uç 500 dönmez. DEK düşmüşse (oturum istek ortasında
-    kilitlendi) ret olduğu gibi yükselir (409).
+    Beklenmeyen bir hata (program dışından bozulmuş bir satır) yalnız o kartı boş bırakır, ön
+    yüz bunu uyarı kartıyla söyler — kartlar sessizce kaybolmaz, uç 500 dönmez. DEK düşmüşse
+    (oturum istek ortasında kilitlendi) ret olduğu gibi yükselir (409).
     """
-    kimlik = denetim_izi.kimlik_metni_ya_da_none(Account, hesap_id) if hesap_id else None
-    gecerli = denetim_izi.acik_satir_dogrulayici()
     okunamayan: list[str] = []
-
-    def kart(ad: str, uret: Callable[[], Any], bos: Any) -> Any:
+    ozet: dict[str, Any] = {}
+    for ad, (uret, bos) in uretenler.items():
         try:
-            return uret()
+            ozet[ad] = uret()
         except crypto.KeyMissingError:
             raise
         except Exception:  # noqa: BLE001 — tek kartın hatası öteki kartları düşürmez
             logger.exception("Genel Bakış'ın bütünlük kartı okunamadı (%s).", ad)
             okunamayan.append(ad)
-            return bos
-
-    ozet = {
-        "butunluk": kart("butunluk", lambda: _butunluk_kartlari(kimlik, gecerli), []),
-        "geri_yukleme": kart("geri_yukleme", lambda: _geri_yukleme_karti(gecerli), None),
-        "iki_depo": kart("iki_depo", _iki_depo_karti, None),
-        "kagit_capasi": kart("kagit_capasi", _kagit_capasi, None),
-        "son_girisler": (
-            kart("son_girisler", lambda: _girisler(kimlik, gecerli), []) if kimlik else []
-        ),
-        "parola_yenilenme": (
-            kart("parola_yenilenme", lambda: _yenilenme_bildirimi(kimlik, gecerli), None)
-            if kimlik
-            else None
-        ),
-    }
+            ozet[ad] = bos
     ozet["okunamayan"] = okunamayan
     return ozet
+
+
+def _hesap_kimligi(hesap_id: str | None) -> str | None:
+    return denetim_izi.kimlik_metni_ya_da_none(Account, hesap_id) if hesap_id else None
+
+
+def kendi_kartlari(hesap_id: str | None) -> dict[str, Any]:
+    """Oturumdaki hesabın kendi kartları (`GET security/integrity/`; her rol; modül başlığı).
+
+    `son_girisler` ve `parola_yenilenme` YALNIZ bu hesabındır (başka hesabın girişi dönmez);
+    hesap kimliği verilmezse boştur. `kagit_capasi` denetim izinin son kaydıdır (tasarım
+    §4.6.3: son girişler kartında görünür). Yalnız doğrulanan açık kip satırları okunur.
+    """
+    kimlik = _hesap_kimligi(hesap_id)
+    gecerli = denetim_izi.acik_satir_dogrulayici()
+    uretenler: dict[str, tuple[Callable[[], Any], Any]] = {"kagit_capasi": (_kagit_capasi, None)}
+    if kimlik:
+        uretenler["son_girisler"] = (lambda: _girisler(kimlik, gecerli), [])
+        uretenler["parola_yenilenme"] = (lambda: _yenilenme_bildirimi(kimlik, gecerli), None)
+    ozet = _kartlar(uretenler)
+    ozet.setdefault("son_girisler", [])
+    ozet.setdefault("parola_yenilenme", None)
+    return ozet
+
+
+def denetim_kartlari(hesap_id: str | None) -> dict[str, Any]:
+    """Denetim kartları (`GET security/integrity/audit/`; program yöneticisi ve Denetleme Kurulu).
+
+    `butunluk`: oturumdaki hesabın bir önceki girişinden beri yazılmış `BUTUNLUK` satırları;
+    `geri_yukleme`: son geri yükleme kartı; `muhru_tutmayan`: kaydı program dışından
+    değiştirilmiş görünen hesaplar (canlı).
+    """
+    kimlik = _hesap_kimligi(hesap_id)
+    gecerli = denetim_izi.acik_satir_dogrulayici()
+    return _kartlar(
+        {
+            "butunluk": (lambda: _butunluk_kartlari(kimlik, gecerli), []),
+            "geri_yukleme": (lambda: _geri_yukleme_karti(gecerli), None),
+            "muhru_tutmayan": (_muhru_tutmayan, []),
+        }
+    )
+
+
+def iki_depo_karti() -> dict[str, Any]:
+    """İki depo kartı (`GET security/integrity/two-store/`; yalnız program yöneticisi).
+
+    `iki_depo` fark hesaplanamazsa (güvenlik dosyası ya da DEK yok) `None`'dır; sahipsiz
+    sarmalın onayla silinmesinin yanıtı da bu karttır.
+    """
+    return _kartlar({"iki_depo": (_iki_depo_karti, None)})

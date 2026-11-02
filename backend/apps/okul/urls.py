@@ -5,7 +5,9 @@
 güncellenir. Kilitliyken açık kalan uçlar bir AÇIK listededir (yol + yöntem;
 `lock_middleware.KILITLI_IZINLI`): durum, oturum özeti, hesap listesi, kilit açma,
 kurtarma anahtarıyla açılış ve Çık. `security/` ön eki artık muaf değildir: buraya
-eklenen yeni bir uç kilitliyken kendiliğinden kapalıdır (`test_kilit_koruma.py`).
+eklenen yeni bir uç kilitliyken kendiliğinden kapalıdır (`test_kilit_koruma.py`). Açık
+oturumda her uç ADIYLA rol tablosundadır (`rol_izinleri.KURALLAR`; tasarım §4.4.2): yeni bir
+uç oraya bilinçli eklenmedikçe her role kapalıdır (`test_rol_koruma.py`). Adlar tekildir.
 """
 
 from __future__ import annotations
@@ -133,12 +135,24 @@ urlpatterns = [
         views_oturum.BostaKilitSuresiView.as_view(),
         name="security-idle-lock",
     ),
-    # Bütünlük kartları ve sahipsiz sarmalların onayla silinmesi (tasarım §4.6.1 kural 4,
-    # §4.6.3; plan F1b-1 alt commit c). Kilitliyken KAPALIDIR (açık listede değildir).
+    # Bütünlük kartları (tasarım §4.6.3, §4.6.1 kural 1 ve 4, §4.4.4): kısmi yetki ayrı uçla
+    # (§4.4.2; plan F1b-2) — kendi kartları her rol, denetim kartları program yöneticisi ve
+    # Denetleme Kurulu, iki depo kartı ve sahipsiz sarmalların onayla silinmesi yalnız program
+    # yöneticisi (`rol_izinleri`). Kilitliyken KAPALIDIR (açık listede değildir).
     path(
         "security/integrity/",
         views_oturum.ButunlukDurumuView.as_view(),
         name="security-integrity",
+    ),
+    path(
+        "security/integrity/audit/",
+        views_oturum.DenetimKartlariView.as_view(),
+        name="security-integrity-audit",
+    ),
+    path(
+        "security/integrity/two-store/",
+        views_oturum.IkiDepoKartiView.as_view(),
+        name="security-integrity-two-store",
     ),
     path(
         "security/integrity/orphan-wraps/",

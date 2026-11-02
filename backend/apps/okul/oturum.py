@@ -3,9 +3,9 @@
 Aile iskeletinin kip katmanının (görevli kipi / yönetici kipi) yerini alır; "kip"
 kavramı bilinçli olarak kalkar (tasarım §12.B). Programda aynı anda en çok BİR
 oturum vardır: kilidi açan hesap (kimlik, tanıtıcı, rol). Kullanıcı değiştirmek =
-Kilitle + başka hesapla açmak (TK14). Kilit kapısı (`lock_middleware`), 2. adımın
-`RolMiddleware`'i, denetim izi yazıcısı (`denetim_izi`) ve uzun iş sayacı aynı nesneyi
-okur (`OTURUM`); ikinci bir durum kaynağı açılmaz.
+Kilitle + başka hesapla açmak (TK14). Kilit kapısı (`lock_middleware`), rol kapısı
+(`rol_middleware`; yazar bağlamı üzerinden), denetim izi yazıcısı (`denetim_izi`) ve uzun iş
+sayacı aynı nesneyi okur (`OTURUM`); ikinci bir durum kaynağı açılmaz.
 
 DURUMLAR (API ve arayüz bu dizeleri kullanır; `durum()`):
 
@@ -239,13 +239,21 @@ class OturumHesabi:
     def hesaptan(cls, hesap: Account) -> OturumHesabi:
         return cls(id=str(hesap.id), tanitici=hesap.login_name, rol=str(hesap.role))
 
-    def ozet(self) -> dict[str, str]:
-        """`security/session/` yanıtındaki `hesap` nesnesi."""
+    def ozet(self) -> dict[str, Any]:
+        """`security/session/` yanıtındaki `hesap` nesnesi.
+
+        `yetenekler`: rolün yetenek adları (`rol_izinleri.yetenekler`; plan F1b-2). Ön yüz
+        süzmesinin tek kaynağıdır: ön yüz matrisi kopyalamaz.
+        """
+        # Döngüsel içe aktarım olmasın: rol_izinleri yazar bağlamı için bu modülü içe aktarır.
+        from apps.okul.rol_izinleri import yetenekler
+
         return {
             "id": self.id,
             "tanitici": self.tanitici,
             "rol": self.rol,
             "rol_etiketi": rol_etiketi(self.rol),
+            "yetenekler": yetenekler(self.rol),
         }
 
 

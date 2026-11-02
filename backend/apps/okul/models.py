@@ -108,8 +108,8 @@ class SchoolConfig(BaseModel):
 
     `idle_lock_minutes`: oturumun boşta kilit süresi (dakika; tasarım TK14, plan F1b-1
     "Oturum"). Ayarlar → Güvenlik'te program yöneticisi değiştirir (uç
-    `security/idle-lock/`, servis `services.setup.set_idle_lock_minutes`; rol kuralı
-    2. adımda). Oturum katmanı değeri süreç içinde önbelleğe alır; satır
+    `security/idle-lock/`, servis `services.setup.set_idle_lock_minutes`; her rol okur,
+    yalnız program yöneticisi yazar). Oturum katmanı değeri süreç içinde önbelleğe alır; satır
     kaydedilince önbellek boşalır (`apps.okul.oturum.bosta_suresi_onbellegini_bosalt`).
 
     `yol_haritasi`: Genel Bakış'taki "Başlangıç Yol Haritası" kartının

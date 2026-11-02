@@ -25,6 +25,35 @@ export type RolKodu =
   | "denetleme_kurulu"
   | "mudur";
 
+/**
+ * Backend `apps/okul/rol_izinleri.YETENEKLER`'in adları (tasarım §4.4.2; plan F1b-2): ön yüz
+ * süzmesinin TEK kaynağı oturum özetindeki `hesap.yetenekler`'dir, ön yüz rol matrisini
+ * kopyalamaz. İki listenin eşitliğini backend testi sınar (`test_rol_izinleri.
+ * test_yetenek_adlari_on_yuzle_birebir`, bu diziyi kaynaktan okur: dizi yalnız çift tırnaklı
+ * adlardan oluşur). Ön yüzde aranan her ad `YetenekAdi` türüyle yazılır: listeden düşen ad
+ * typecheck'i kırar (adı değişen yetenek sessizce "yok" sayılmasın).
+ */
+export const YETENEK_ADLARI = [
+  "ayrilis_havuzu",
+  "bosta_sure_yazma",
+  "butunluk_denetim",
+  "ders_yili_yazma",
+  "eokul_aktarimi",
+  "guncelleme",
+  "guvenlik",
+  "iki_depo",
+  "kapali_gun_yazma",
+  "kisi_yazma",
+  "kurulum_tamamlama",
+  "ogrenciler",
+  "okul_karti_yazma",
+  "son_oturum_onay",
+  "sube_yazma",
+  "yol_haritasi",
+] as const;
+
+export type YetenekAdi = (typeof YETENEK_ADLARI)[number];
+
 /** Oturumdaki hesabın kişisiz özeti (`OturumHesabi.ozet`). */
 export interface OturumHesabi {
   id: string;
@@ -33,6 +62,11 @@ export interface OturumHesabi {
   rol: RolKodu;
   /** Kullanıcıya görünen rol adı; `yonetici` için kısa "Program yöneticisi". */
   rol_etiketi: string;
+  /**
+   * Rolün yetenekleri (`YETENEK_ADLARI`'ndan; sunucu türetir). Bilinmeyen ad yok sayılır,
+   * olmayan yetenek "açık değil" demektir (fail-closed).
+   */
+  yetenekler: string[];
 }
 
 /** `GET /security/session/` yanıtı (`OturumDurumu.ozet`). */

@@ -1,6 +1,6 @@
 // Genel Bakış'ın denetim izi uyarı kartları (tasarım §4.6.3 "Kilit açılışında kendiliğinden
 // doğrulama", §4.6.1 kural 1 ve 4, §4.4.4 geri yükleme notu; plan F1b-1 "Bütünlük ve mühür
-// kartları 1. adımda Genel Bakış'tadır"). Hepsi `GET security/integrity/` durumundan beslenir
+// kartları 1. adımda Genel Bakış'tadır"). Hepsi bütünlük uçlarının bileşik durumundan beslenir
 // (`useButunlukDurumu`); söyleyecek bir şeyi olmayan kart hiçbir şey çizmez.
 //
 // * **Denetim İzi Bütünlüğü** — oturumdaki hesabın bir önceki girişinden beri kilit
@@ -21,14 +21,17 @@
 //   yapılmadan birden çok geri yükleme olduysa hepsi sırasıyla yazılır: yedekten sonraki
 //   kayıtlar İLKİNİN kenara aldığı veritabanındadır. O veritabanı yoktuysa ya da izi boştuysa
 //   (yeni bilgisayara taşıma) kart "kayıtlar ekrandan kalktı" demez. Kart Denetleme Kurulu
-//   "gördüm" diyene dek kalır; Denetleme Kurulu hesapları ve o düğme F1b 2. adımdadır — bugün
-//   kart hep durur.
-// * **Hesaplar ve Güvenlik Dosyası** — iki depo farkı (`IkiDepoKarti`; onaylı silme orada).
+//   "gördüm" diyene dek kalır; o düğme F1b 2. adımda gelir — bugün kart hep durur.
+// * **Hesaplar ve Güvenlik Dosyası** — iki depo farkı ve mührü tutmayan hesaplar
+//   (`IkiDepoKarti`; onaylı silme orada).
 // * **Bütünlük Durumu Okunamadı** — kartlardan biri ya da hepsi okunamadı (`okunamayan`,
 //   `useButunlukDurumu.okunamadi`; Son Girişler ve denetim izinin son kaydı da): bir uyarı ya
 //   da giriş sessizce kaybolmaz (fail-closed).
 //
-// Rol süzmesi (yalnız program yöneticisi ve Denetleme Kurulu görür) 2. adımdadır.
+// ROL: ilk üç kart ve mührü tutmayan hesaplar denetim kartları ucundandır (program yöneticisi
+// ve Denetleme Kurulu), iki depo farkı ve silme yalnız program yöneticisinde; öteki rollerde o
+// uçlar çağrılmaz, kartları boş kalır (`butunluk/api.ts` "ROLE GÖRE ÜÇ UÇ"). "Bütünlük Durumu
+// Okunamadı" her rolde kalır.
 
 import { formatDateTime } from "../../lib/format";
 import type {
@@ -37,6 +40,7 @@ import type {
   GeriYuklemeKaydi,
   GeriYuklemeOzeti,
   HesapOzeti,
+  IkiDepoYaniti,
 } from "./api";
 import IkiDepoKarti from "./IkiDepoKarti";
 import KartKabugu from "./KartKabugu";
@@ -329,12 +333,12 @@ export function OkunamayanButunlukKarti() {
 
 interface ButunlukKartlariProps {
   durum: ButunlukDurumu;
-  /** Sahipsiz parola kaydı silinince gelen güncel durum. */
-  onDurum: (durum: ButunlukDurumu) => void;
+  /** Sahipsiz parola kaydı silinince gelen güncel iki depo kartı. */
+  onIkiDepo: (yanit: IkiDepoYaniti) => void;
 }
 
 /** Uyarı kartları, sırasıyla; söyleyecek bir şeyi olmayan çizilmez. */
-export default function ButunlukKartlari({ durum, onDurum }: ButunlukKartlariProps) {
+export default function ButunlukKartlari({ durum, onIkiDepo }: ButunlukKartlariProps) {
   return (
     <>
       {durum.okunamayan.length > 0 && <OkunamayanButunlukKarti />}
@@ -342,7 +346,7 @@ export default function ButunlukKartlari({ durum, onDurum }: ButunlukKartlariPro
       <DegistirilmisHesapKarti bulgular={durum.butunluk} />
       <GeriYuklemeKarti geri={durum.geri_yukleme} />
       {durum.iki_depo !== null && durum.iki_depo.fark_var && (
-        <IkiDepoKarti fark={durum.iki_depo} onDurum={onDurum} />
+        <IkiDepoKarti fark={durum.iki_depo} onIkiDepo={onIkiDepo} />
       )}
     </>
   );

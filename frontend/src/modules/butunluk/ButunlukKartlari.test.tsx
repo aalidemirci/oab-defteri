@@ -356,19 +356,21 @@ describe("Yedekten Geri Yükleme Yapıldı kartı", () => {
 
 describe("ButunlukKartlari", () => {
   it("söyleyecek bir şey yoksa hiçbir kart çizilmez", () => {
-    const { container } = render(<ButunlukKartlari durum={BOS} onDurum={vi.fn()} />);
+    const { container } = render(<ButunlukKartlari durum={BOS} onIkiDepo={vi.fn()} />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it("iki depo farkı kendiliğinden hesaplanamadıysa (null) kart çizilmez", () => {
     const { container } = render(
-      <ButunlukKartlari durum={{ ...BOS, iki_depo: null }} onDurum={vi.fn()} />,
+      <ButunlukKartlari durum={{ ...BOS, iki_depo: null }} onIkiDepo={vi.fn()} />,
     );
     expect(container).toBeEmptyDOMElement();
   });
 
   it("okunamayan kart varsa uyarı kartı çizilir (uyarı sessizce kaybolmaz)", () => {
-    render(<ButunlukKartlari durum={{ ...BOS, okunamayan: ["geri_yukleme"] }} onDurum={vi.fn()} />);
+    render(
+      <ButunlukKartlari durum={{ ...BOS, okunamayan: ["geri_yukleme"] }} onIkiDepo={vi.fn()} />,
+    );
 
     const kart = screen.getByRole("region", { name: OKUNAMAYAN_BUTUNLUK_KARTI_BASLIGI });
     expect(within(kart).getByText(/kartları tam okunamadı/)).toBeInTheDocument();
@@ -405,7 +407,7 @@ describe("ButunlukKartlari", () => {
                 muhru_tutmayan: [],
               },
             }}
-            onDurum={vi.fn()}
+            onIkiDepo={vi.fn()}
           />
         </ConfirmProvider>
       </SnackbarProvider>,

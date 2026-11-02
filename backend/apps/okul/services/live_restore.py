@@ -22,10 +22,21 @@ hiç açılmadan `--geri-yukle`); bu modül programın AÇILABİLDİĞİ senaryo
 (yanlış veri girişi sonrası eski güne dönme; güvenlik dosyası kayıp kilidinden
 çıkış — iki uç da o kilitte açıktır, `lock_middleware`). Yedekler daima
 şifrelidir (düz yedek dalı yok, §13 D29); bir hesabın parolası ya da kurtarma
-anahtarı gerekir. Parola yolunda hesap verilmezse oturumdaki hesap kullanılır
-(tasarım §4.4.4: aynı bilgisayarda güncel `guvenlik.json` + hesap parolası; rol
-denetimi 2. adımda). Parola/kurtarma anahtarı yalnız parametre olarak akar; hiçbir
+anahtarı gerekir. Parola/kurtarma anahtarı yalnız parametre olarak akar; hiçbir
 günlük satırına ve hata metnine yazılmaz.
+
+YETKİ (tasarım §4.4.4 "Geri yükleme yetkisi"; plan F1b-2). Uygulama içi geri yükleme
+rol kapısından geçer (`RolMiddleware`: açık oturumda yalnız program yöneticisi). Servisin
+kendi denetimi YALNIZ PAROLA YOLUNDADIR: parolası verilen hesap isteğin yazarı olan hesap
+olmalıdır ve rolü program yöneticisidir (`rol_izinleri.Eylem.GERI_YUKLEME`; değilse 403
+`rol_yetkisiz`); hesap verilmezse yazarın hesabı kullanılır, başka hesabın parolası geçmez
+(400). Yazar yoksa (oturum yok) parola yolu reddedilir. Oturumdaki hesap `OTURUM`'dan değil
+yazar bağlamından okunur: rol kararı, parolanın hesabı ve geri yüklemenin bağlandığı oturum
+aynı görüntüdür. KURTARMA ANAHTARI YOLUNDA ROL DENETİMİ YOKTUR (konsolla aynı; anahtarın
+kendisi yetkidir): güvenlik dosyası kayıp kilidinde oturumsuz ya da açık kalmış bir organ
+oturumuyla da çıkış yolu açık kalır (rol kapısı o kipte kesmez, kilit kapısının listesi
+geçerlidir; plan F1b-1 "Kayıp dosya kipinde yedekten geri yükleme yalnız kurtarma anahtarı
+ister").
 
 Geri yükleme UZUN İŞTİR (`shared.bakim.UZUN_ISLER`; tasarım §4.2, §4.4.3): sürerken
 oturumun boşta ve elle kilidi ertelenir, DEK işin ortasında silinmez. Başarıda oturum
@@ -51,8 +62,8 @@ from django.conf import settings
 from django.db import connections
 from django.utils import timezone
 
-from apps.okul import restart_gate
-from apps.okul.oturum import OTURUM
+from apps.okul import restart_gate, rol_izinleri
+from apps.okul.oturum import yazar
 from apps.okul.services import app_password, backup_restore
 from shared import bakim
 
@@ -60,6 +71,15 @@ logger = logging.getLogger("oab_defteri.restore")
 
 #: Uçuştaki gün işinin bitmesi için en çok bekleme (sn).
 BAKIM_BEKLEME_SN = 10.0
+
+
+#: Parola yolunda başka hesabın parolası (sözlük: kod yok, "hesap" ve "oturum").
+PAROLA_YALNIZ_OTURUM_HESABI = "Parola yalnız oturumdaki hesap için doğrulanır."
+#: Oturum yokken parola yolu (kayıp kilidi ya da kurulum).
+PAROLA_YOLU_OTURUM_ISTER = (
+    "Parolayla geri yükleme yalnız açık oturumda, program yöneticisi hesabıyla yapılır; "
+    "yedeği kurtarma anahtarıyla açın."
+)
 
 
 class LiveRestoreError(ValueError):
@@ -117,16 +137,53 @@ def restore_and_require_restart(
     Kaynak ikisinden biridir: `name` (yedek klasöründen) YA DA `content`
     (kullanıcının yüklediği dosyanın baytları). Hata hâlinde hedefe dokunulmaz
     (çekirdek garantisi) ve kapı KURULMAZ — kullanıcı yeniden dener. İş uzun iş
-    sayacındadır (modül başlığı).
+    sayacındadır (modül başlığı). Yetki (modül başlığı "YETKİ") hiçbir dosyaya ve bakım
+    kapısına dokunmadan önce denetlenir.
     """
+    kim = yazar()
+    oturum_hesabi = None if kim is None or kim.sistem_mi else kim.hesap_id
+    if password:
+        if oturum_hesabi is None:
+            raise LiveRestoreError(PAROLA_YOLU_OTURUM_ISTER)
+        rol_izinleri.yetki_oturum(rol_izinleri.Eylem.GERI_YUKLEME)
+        hesap = _parola_hesabi(hesap, oturum_hesabi)
     with bakim.UZUN_ISLER.is_():
         return _restore(
-            name=name, content=content, hesap=hesap, password=password, recovery_key=recovery_key
+            name=name,
+            content=content,
+            hesap=hesap,
+            password=password,
+            recovery_key=recovery_key,
+            oturum_hesabi=oturum_hesabi,
         )
 
 
+def _parola_hesabi(hesap: str, oturum_hesabi: str) -> str:
+    """Parola yolunun hesabı: verilmediyse ya da oturumdaki hesabı anıyorsa o (kimliğiyle).
+
+    `hesap` kimlik ya da tanıtıcıdır (çekirdeğin `--hesap` kuralı); güncel güvenlik
+    dosyasındaki sarmallardan çözülür. Başka bir hesabı anıyorsa ret (400): parolası sorulan
+    hesap yazarın hesabıdır (yetki kararı onun rolüyle verildi).
+    """
+    istenen = hesap.strip()
+    if not istenen or istenen == oturum_hesabi:
+        return oturum_hesabi
+    for sarmal in app_password.account_wraps():
+        if istenen in (sarmal["tanitici"], sarmal["id"]):
+            if sarmal["id"] == oturum_hesabi:
+                return oturum_hesabi
+            break
+    raise LiveRestoreError(PAROLA_YALNIZ_OTURUM_HESABI)
+
+
 def _restore(
-    *, name: str, content: bytes | None, hesap: str, password: str, recovery_key: str
+    *,
+    name: str,
+    content: bytes | None,
+    hesap: str,
+    password: str,
+    recovery_key: str,
+    oturum_hesabi: str | None,
 ) -> dict[str, Any]:
     hedef = _database_path()
     gecici: Path | None = None
@@ -150,15 +207,14 @@ def _restore(
         # Takas öncesi TÜM bağlantılar kapatılır; sonraki istekler zaten
         # restart_gate'e takılacağından yeniden açılmaları sorun olmaz.
         connections.close_all()
-        oturum = OTURUM.hesap_id()
         sonuc = backup_restore.restore_database(
             kaynak,
             hedef,
-            hesap=hesap or oturum,
+            hesap=hesap or None,
             password=password or None,
             recovery_key=recovery_key or None,
             # Geri yükleme onu başlatan oturumun hesabına bağlanır (kurtarma yolunda da).
-            oturum_hesabi=oturum,
+            oturum_hesabi=oturum_hesabi,
         )
     except BaseException:
         # Hedefe dokunulmadı (çekirdek garantisi): gün işleri yeniden koşabilir.

@@ -1,11 +1,13 @@
 """`okul` API uçları — İNCE view'lar (View → Service → Model; ORM selectors'ta).
 
 Kişisel hesaplar ve oturum F1b-1'de geldi (`apps.okul.oturum`, uçları
-`views_oturum`); rol izinleri (`RolMiddleware`) 2. adımdadır, o güne dek settings
-AllowAny ve açık oturumdaki hesap bütün uçlara erişir (arada yalnız program
-yöneticisi hesabı açılabilir; plan F1b-1 "Sıra ve sınır"). Tek izin sınıfı kişi
-yazan uçlardadır: ilk program yöneticisi hesabı kurulmadan yazma yöntemleri 409
-`parola_gerekli` döner (`permissions.RequiresAdminPassword`, tasarım §5.3). Hata gövdesi `shared.exceptions.od_exception_handler` ile
+`views_oturum`). Rol izni ara katmandadır: açık oturumda her uç ADIYLA rol tablosundadır
+(`rol_izinleri.KURALLAR`, `RolMiddleware`; 403 `rol_yetkisiz`); DRF izni AllowAny kalır.
+Tek izin sınıfı kişi yazan uçlardadır ve kurulum durumunun kapısıdır: ilk program
+yöneticisi hesabı kurulmadan yazma yöntemleri 409 `parola_gerekli` döner
+(`permissions.RequiresAdminPassword`, tasarım §5.3). Servislerin yetki kapısının reddi
+(`RolYetkisiz`) `ValueError` değildir: `_service_errors` onu 400'e çevirmez, 403 olarak
+geçer. Hata gövdesi `shared.exceptions.od_exception_handler` ile
 `{code, message, fields}` sözleşmesine çevrilir; parser hataları
 ValidationError olarak yükseltilir.
 
@@ -76,7 +78,10 @@ TRUE_VALUES = frozenset({"true", "1"})
 
 @contextmanager
 def _service_errors() -> Iterator[None]:
-    """Servis `ValueError`'larını sözleşmeli 400'e çevirir (Türkçe mesaj korunur)."""
+    """Servis `ValueError`'larını sözleşmeli 400'e çevirir (Türkçe mesaj korunur).
+
+    Yetki kapısının reddi (`RolYetkisiz`) `ValueError` değildir: buradan geçer, 403 olur.
+    """
     try:
         yield
     except ValueError as exc:
@@ -574,7 +579,7 @@ class SecurityRecoveryKeyRenewView(APIView):
     """`POST /api/v1/security/recovery-key/renew/` `{password}` — kurtarma anahtarını yeniler.
 
     Yalnız açık oturumda (kilitliyken 423) ve yalnız program yöneticisi hesabıyla
-    (servis denetler; rol matrisi 2. adımda). Parola oturumdaki hesabınkine karşı
+    (rol kapısı ve servisin yetki kapısı; 403 `rol_yetkisiz`). Parola oturumdaki hesabınkine karşı
     doğrulanır (yanlışsa "Parola hatalı." + kademeli gecikme). Yanıttaki `recovery_key` TEK SEFERLİKTİR: sunucu onu saklamaz, bir
     daha üretemez; yanıt önbelleğe alınmaz. Yeni anahtar doğrulanana dek
     `recovery_key_confirmed` yanlıştır; `recovery_key_no` bir artar. Kişi yazmaz.
@@ -678,7 +683,9 @@ class BackupRestoreView(APIView):
     tüm API istekleri 503 `restart_required` döner, kullanıcı programı kapatıp
     yeniden açar. Hata hâlinde hedefe dokunulmaz ve kapı kurulmaz. Güvenlik
     dosyası kayıpken de açıktır: geri yükleme `guvenlik.json`'u yedeğin kurtarma
-    başlığından yeniden yazar.
+    başlığından yeniden yazar. Açık oturumda yalnız program yöneticisi; parola yolunda
+    servis de yazarın rolünü ve hesabını denetler, kurtarma anahtarı yolunda denetlemez
+    (`live_restore` modül başlığı "YETKİ").
     """
 
     def post(self, request: Request) -> Response:

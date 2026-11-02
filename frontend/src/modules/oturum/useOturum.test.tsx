@@ -9,7 +9,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { etkinlikSaatleriniSifirla } from "../../lib/api";
+import { ApiError, etkinlikSaatleriniSifirla } from "../../lib/api";
 import {
   KILIT_KAPISI_OLAYI,
   oturumAcikSan,
@@ -20,17 +20,34 @@ import type { OturumDurumAdi, OturumOzeti } from "./api";
 
 const oturum = vi.hoisted(() => ({ ozet: vi.fn() }));
 
-vi.mock("./api", () => ({ oturumApi: oturum }));
+vi.mock("./api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./api")>()),
+  oturumApi: oturum,
+}));
 
+import { YETENEK_ADLARI } from "./api";
 import { OTURUM_DEGISTI_OLAYI } from "./eylemler";
-import { kalanSaniye, sureBicimle, useEtkinlikNabzi, useOturum } from "./useOturum";
+import {
+  kalanSaniye,
+  sureBicimle,
+  useEtkinlikNabzi,
+  useOturum,
+  useYetenekler,
+  yeteneklerOku,
+} from "./useOturum";
 
 function ozetOlustur(durum: OturumDurumAdi, ek: Partial<OturumOzeti> = {}): OturumOzeti {
   const acik = durum === "acik";
   return {
     durum,
     hesap: acik
-      ? { id: "h-1", tanitici: "yonetici", rol: "yonetici", rol_etiketi: "Program yöneticisi" }
+      ? {
+          id: "h-1",
+          tanitici: "yonetici",
+          rol: "yonetici",
+          rol_etiketi: "Program yöneticisi",
+          yetenekler: [],
+        }
       : null,
     bosta_dk: 10,
     bosta_kalan_sn: acik ? 600 : null,
@@ -194,4 +211,114 @@ describe("useEtkinlikNabzi", () => {
       expect(oturum.ozet).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("yetenekler (ön yüz süzmesinin tek kaynağı; plan F1b-2)", () => {
+  it("özet okunmadıysa bilinmez (null); açık oturumda hesabın listesi, yoksa boş", () => {
+    expect(yeteneklerOku(null)).toBeNull();
+    expect(yeteneklerOku(undefined)).toBeNull();
+    expect(yeteneklerOku(ozetOlustur("kilitli"))).toEqual([]);
+    const hesap = {
+      id: "h-1",
+      tanitici: "yonetici",
+      rol: "yonetici" as const,
+      rol_etiketi: "Program yöneticisi",
+      yetenekler: ["iki_depo"],
+    };
+    const acik = ozetOlustur("acik");
+    expect(yeteneklerOku({ ...acik, hesap })).toEqual(["iki_depo"]);
+    // Eski sunucu alanı göndermezse hiçbir yetenek yoktur (fail-closed).
+    const eski = JSON.parse(
+      JSON.stringify({ ...acik, hesap: { ...hesap, yetenekler: undefined } }),
+    );
+    expect(yeteneklerOku(eski as OturumOzeti)).toEqual([]);
+  });
+
+  it("ön yüzün yetenek adı listesi (anlık görüntü; arka yüzle eşitliğini backend `test_yetenek_adlari_on_yuzle_birebir` sınar)", () => {
+    expect([...YETENEK_ADLARI]).toEqual([
+      "ayrilis_havuzu",
+      "bosta_sure_yazma",
+      "butunluk_denetim",
+      "ders_yili_yazma",
+      "eokul_aktarimi",
+      "guncelleme",
+      "guvenlik",
+      "iki_depo",
+      "kapali_gun_yazma",
+      "kisi_yazma",
+      "kurulum_tamamlama",
+      "ogrenciler",
+      "okul_karti_yazma",
+      "son_oturum_onay",
+      "sube_yazma",
+      "yol_haritasi",
+    ]);
+  });
+});
+
+function YetenekYazici() {
+  const { yetenekler, hata } = useYetenekler();
+  const liste = yetenekler === null ? "bilinmiyor" : yetenekler.join(",") || "boş";
+  return <p>{`yetenekler: ${liste} · hata: ${hata === null ? "yok" : hata.message}`}</p>;
+}
+
+function yetenekliOzet(yetenekler: string[]): OturumOzeti {
+  return {
+    ...ozetOlustur("acik"),
+    hesap: {
+      id: "h-1",
+      tanitici: "yonetici",
+      rol: "yonetici",
+      rol_etiketi: "Program yöneticisi",
+      yetenekler,
+    },
+  };
+}
+
+function yetenekleriBas() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <YetenekYazici />
+    </QueryClientProvider>,
+  );
+  return queryClient;
+}
+
+describe("useYetenekler (yükleniyor, okundu, okunamadı ayrıdır)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("özet beklenirken yetenekler bilinmez ve hata yoktur", async () => {
+    oturum.ozet.mockReturnValue(new Promise(() => {}));
+    yetenekleriBas();
+    expect(await screen.findByText("yetenekler: bilinmiyor · hata: yok")).toBeInTheDocument();
+  });
+
+  it("özet okununca hesabın yetenekleri gelir", async () => {
+    oturum.ozet.mockResolvedValue(yetenekliOzet(["butunluk_denetim", "iki_depo"]));
+    yetenekleriBas();
+    expect(
+      await screen.findByText("yetenekler: butunluk_denetim,iki_depo · hata: yok"),
+    ).toBeInTheDocument();
+  });
+
+  it("özet hiç okunamazsa hata verilir (çağıran “okunamadı” kartını seçer)", async () => {
+    oturum.ozet.mockRejectedValue(new ApiError(500, "500", "Sunucu hatası."));
+    yetenekleriBas();
+    expect(
+      await screen.findByText("yetenekler: bilinmiyor · hata: Sunucu hatası."),
+    ).toBeInTheDocument();
+  });
+
+  it("özet bir kez okunduysa sonraki yoklamanın hatası son bilinen yetenekleri düşürmez", async () => {
+    oturum.ozet.mockResolvedValue(yetenekliOzet(["iki_depo"]));
+    const queryClient = yetenekleriBas();
+    await screen.findByText("yetenekler: iki_depo · hata: yok");
+
+    oturum.ozet.mockRejectedValue(new ApiError(500, "500", "Sunucu hatası."));
+    await act(() => queryClient.refetchQueries({ queryKey: ["oturum"] }));
+
+    await waitFor(() => expect(oturum.ozet).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("yetenekler: iki_depo · hata: yok")).toBeInTheDocument();
+  });
 });

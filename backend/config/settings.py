@@ -99,8 +99,10 @@ MIDDLEWARE = [
     # bağlamını kurar. Hesap hiç kurulmamışsa kapı geçirir; kişi yazan uçları izin
     # sınıfı 409 parola_gerekli ile keser.
     "apps.okul.lock_middleware.AppLockMiddleware",
-    # Rol kapısı (`RolMiddleware`, 403 rol_yetkisiz) F1b 2. adımda buraya, kilit
-    # kapısından SONRA gelir (tasarım §4.4.3 ara katman sırası).
+    # Rol kapısı (tasarım §4.4.2-§4.4.3): kilit kapısından SONRA durur ve yalnız açık
+    # oturumda keser; rolün matriste açık olmayan uçları 403 rol_yetkisiz alır
+    # (`apps.okul.rol_izinleri`; yeni uç varsayılan kapalıdır).
+    "apps.okul.rol_middleware.RolMiddleware",
 ]
 
 # Yerel oturum belirteci koruması (tasarım §4.3 tehdit 1). API'de istek başına
@@ -211,7 +213,7 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 # Django REST Framework
 # ---------------------------------------------------------------------------
 # DRF kimlik doğrulaması kullanılmaz: istek kapıları ara katmandadır (oturum
-# belirteci, kilit ve oturum, 2. adımda rol). Kişisel hesabın oturumu süreç içi tek
+# belirteci, kilit ve oturum, rol). Kişisel hesabın oturumu süreç içi tek
 # nesnededir (`apps.okul.oturum`; tasarım TK14), Django oturumu ve çerezi
 # kullanılmaz. DEFAULT_AUTHENTICATION_CLASSES boş + UNAUTHENTICATED_USER None: DRF
 # hiçbir kimlik doğrulama denemesi yapmaz.

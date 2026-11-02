@@ -49,7 +49,7 @@ from typing import Any
 from django.db import transaction
 from django.utils import timezone
 
-from apps.okul import denetim_izi, selectors
+from apps.okul import denetim_izi, rol_izinleri, selectors
 from apps.okul.models import (
     IDLE_LOCK_MINUTES_MAX,
     IDLE_LOCK_MINUTES_MIN,
@@ -385,9 +385,9 @@ def set_idle_lock_minutes(*, dakika: int) -> int:
     """Boşta kilit süresini yazar (3-30 dakika); yeni değeri döndürür.
 
     Yalnız açık oturumda (kilitliyken uç zaten 423 alır; hesap kurulmadan da ayar
-    yazılmaz). Yazmayı yalnız program yöneticisinin yapması (rol-izin matrisi, tasarım
-    §4.4.2) 2. adımın `RolMiddleware`'iyle gelir; o güne dek açık oturumdaki hesap
-    yazar. Aralık doğrulayıcıları ve veritabanı kısıtı modeldedir; burada da
+    yazılmaz) ve yalnız program yöneticisi (tasarım §4.4.2 Ayarlar satırı: öteki roller
+    okur): rol kapısının ardından servis de isteğin yazarının rolünü yetki kapısına sorar
+    (`RolYetkisiz`, 403). Aralık doğrulayıcıları ve veritabanı kısıtı modeldedir; burada da
     denetlenir ki program dışı bir çağrı kısıt hatasına (500) düşmesin. Kayıt
     `post_save` ile oturumun önbelleğini boşaltır (`apps.okul.apps`): yeni süre bir
     sonraki istekte geçerlidir, yeniden başlatma gerekmez. Değişiklik iz satırı yazar
@@ -395,6 +395,7 @@ def set_idle_lock_minutes(*, dakika: int) -> int:
     """
     if not OTURUM.acik_mi():
         raise IdleLockError(IDLE_LOCK_SESSION_MESSAGE)
+    rol_izinleri.yetki_oturum(rol_izinleri.Eylem.BOSTA_SURE_YAZMA)
     if (
         isinstance(dakika, bool)
         or not isinstance(dakika, int)

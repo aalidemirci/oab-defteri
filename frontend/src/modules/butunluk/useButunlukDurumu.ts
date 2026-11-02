@@ -1,26 +1,36 @@
-// Genel Bakış'ın bütünlük kartlarının durumu: `GET security/integrity/` sayfa açılınca TEK
-// kez okunur (kullanıcı eylemi değil). Kartlar aynı durumdan beslenir; sahipsiz parola
-// kaydının silinmesi güncel durumu döndürür, çağıran `yaz` ile yerine koyar.
+// Genel Bakış'ın bütünlük kartlarının durumu: rolün açabildiği uçlar (`yetki`; oturum
+// özetinin yeteneklerinden, `butunlukYetkisi`) sayfa açılınca TEK kez okunur (kullanıcı eylemi
+// değil) ve tek bileşik durumda birleşir (`butunlukApi.durum`, `birlestir`). Yetki henüz
+// bilinmiyorsa (oturum özeti yükleniyor) hiçbir uç çağrılmaz; rolün açamadığı uç hiç çağrılmaz.
+// Kartlar aynı durumdan beslenir; sahipsiz parola kaydının silinmesi güncel iki depo kartını
+// döndürür, çağıran `ikiDepoyuYaz` ile yerine koyar (mührü tutmayan hesaplar korunur).
 //
 // OKUNAMAZSA GİZLENMEZ (fail-closed): uyarı kartları denetim izinin bulgusunu taşır; okuma
 // beklenmedik biçimde düşerse (sunucu hatası, ağ) `okunamadi` doğru olur ve Genel Bakış
 // "Bütünlük Durumu Okunamadı" kartını gösterir — bir uyarı sessizce kaybolmaz. Oturum
 // kilitliyken (423) ya da anahtar düşmüşken (409) kart yoktur: kilit ekranı gelir. Backend tek
-// kartın hatasını öteki kartlara yaymaz, adını `okunamayan`'a yazar (aynı uyarı kartı).
-// Eksik alanlı yanıt (eski sürüm, beklenmeyen gövde) kartları düşürmez: eksik liste boş,
-// eksik nesne null sayılır (`duzenle`).
+// kartın hatasını öteki kartlara yaymaz, adını o ucun `okunamayan`'ına yazar (aynı uyarı
+// kartı). Eksik alanlı yanıt (eski sürüm, beklenmeyen gövde) kartları düşürmez: eksik liste
+// boş, eksik nesne null sayılır (`duzenle`).
+//
+// YETKİ OKUNAMAZSA (oturum özeti düştü, `yetkiHatasi`; aynı 423/409 kuralı): `okunamadi` yine
+// doğrudur — denetim kartlarının bu role açık olup olmadığı bilinmez, bir uyarı sessizce
+// kaybolmamalıdır. Yalnız her role açık kendi kartları okunur ("Son Girişler"); denetim ve iki
+// depo uçları yetenek bilinmeden çağrılmaz (süzmenin kaynağı yeteneklerdir, plan F1b-2).
+// Özet sonradan okununca kart kalkar ve rolün uçları okunur.
 
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError } from "../../lib/api";
-import { butunlukApi } from "./api";
-import type { ButunlukDurumu, GeriYuklemeOzeti } from "./api";
+import { butunlukApi, ikiDepoyuBirlestir } from "./api";
+import type { ButunlukDurumu, ButunlukYetkisi, GeriYuklemeOzeti, IkiDepoYaniti } from "./api";
 
 export interface ButunlukDurumuKancasi {
   durum: ButunlukDurumu | null;
   /** Durum okunamadı (kilit ve anahtar dışındaki bir hata): uyarı kartı gösterilir. */
   okunamadi: boolean;
-  yaz: (durum: ButunlukDurumu) => void;
+  /** Sahipsiz kaydın silinmesinden dönen iki depo kartını duruma yazar. */
+  ikiDepoyuYaz: (yanit: IkiDepoYaniti) => void;
 }
 
 /** Geri yükleme kartı; eski yanıtta öncekiler listesi yoksa boş. */
@@ -34,7 +44,7 @@ function geriYukleme(geri: GeriYuklemeOzeti | null | undefined): GeriYuklemeOzet
   };
 }
 
-/** Yanıtı kartların beklediği biçime getirir; nesne değilse null. */
+/** Bileşik durumu kartların beklediği biçime getirir; nesne değilse null. */
 export function duzenle(yanit: unknown): ButunlukDurumu | null {
   if (yanit === null || typeof yanit !== "object") return null;
   const d = yanit as Partial<ButunlukDurumu>;
@@ -54,14 +64,32 @@ export function okunamadiSayilir(hata: unknown): boolean {
   return !(hata instanceof ApiError && (hata.status === 423 || hata.status === 409));
 }
 
-export default function useButunlukDurumu(): ButunlukDurumuKancasi {
+/**
+ * `yetki`: rolün açabildiği bütünlük uçları; `null` → oturum özeti okunmadı. `yetkiHatasi`:
+ * özet okunamadıysa okuma hatası (yükleniyorsa null; `useYetenekler().hata`). Yetki yükleniyorsa
+ * hiçbir uç çağrılmaz; okunamadıysa yalnız kendi kartları okunur ve `okunamadi` doğrudur
+ * (dosya başı). Yetki yalnız değeri değişince yeniden okunur (özetin her yoklaması değil).
+ */
+export default function useButunlukDurumu(
+  yetki: ButunlukYetkisi | null,
+  yetkiHatasi: unknown = null,
+): ButunlukDurumuKancasi {
   const [durum, setDurum] = useState<ButunlukDurumu | null>(null);
   const [okunamadi, setOkunamadi] = useState(false);
+  const yetkiOkunamadi =
+    yetki === null &&
+    yetkiHatasi !== null &&
+    yetkiHatasi !== undefined &&
+    okunamadiSayilir(yetkiHatasi);
+  const hazir = yetki !== null || yetkiOkunamadi;
+  const denetim = yetki?.denetim ?? false;
+  const ikiDepo = yetki?.ikiDepo ?? false;
 
   useEffect(() => {
+    if (!hazir) return;
     let iptal = false;
     butunlukApi
-      .durum()
+      .durum({ denetim, ikiDepo })
       .then((d) => {
         if (iptal) return;
         const duzenli = duzenle(d);
@@ -74,12 +102,11 @@ export default function useButunlukDurumu(): ButunlukDurumuKancasi {
     return () => {
       iptal = true;
     };
+  }, [hazir, denetim, ikiDepo]);
+
+  const ikiDepoyuYaz = useCallback((yanit: IkiDepoYaniti) => {
+    setDurum((d) => (d === null ? d : ikiDepoyuBirlestir(d, yanit)));
   }, []);
 
-  const yaz = useCallback((d: ButunlukDurumu) => {
-    setDurum(duzenle(d));
-    setOkunamadi(false);
-  }, []);
-
-  return { durum, okunamadi, yaz };
+  return { durum, okunamadi: okunamadi || yetkiOkunamadi, ikiDepoyuYaz };
 }

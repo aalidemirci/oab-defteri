@@ -78,7 +78,13 @@ function oturumOzeti(): OturumOzeti {
   return {
     durum: hesapKurulu ? "acik" : "kurulum",
     hesap: hesapKurulu
-      ? { id: "h-1", tanitici: "yonetici", rol: "yonetici", rol_etiketi: "Program yöneticisi" }
+      ? {
+          id: "h-1",
+          tanitici: "yonetici",
+          rol: "yonetici",
+          rol_etiketi: "Program yöneticisi",
+          yetenekler: [],
+        }
       : null,
     bosta_dk: 10,
     // Kurulum sihirbazı bitene dek süre işlemez (D15).

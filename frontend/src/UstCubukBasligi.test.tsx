@@ -97,7 +97,13 @@ beforeEach(() => {
   okulApiMock.getLeavePoolSummary.mockResolvedValue({ student_count: 0, personnel_count: 0 });
   oturumApiMock.ozet.mockResolvedValue({
     durum: "acik",
-    hesap: { id: "h-1", tanitici: "yonetici", rol: "yonetici", rol_etiketi: "Program yöneticisi" },
+    hesap: {
+      id: "h-1",
+      tanitici: "yonetici",
+      rol: "yonetici",
+      rol_etiketi: "Program yöneticisi",
+      yetenekler: [],
+    },
     bosta_dk: 10,
     bosta_kalan_sn: 600,
     kilit_bekliyor: false,

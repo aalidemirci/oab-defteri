@@ -6,7 +6,8 @@ durur (F1 dosya sahipliği). İnce görünümler: okuma `selectors`, yazma
 servisin Django `ValidationError`'ı `od_exception_handler`'da 400'e çevrilir.
 
 Kişisel veri taşımaz → parola kapısı (409) gerekmez. Kapalı gün yönetimi program
-yöneticisinin işidir; rol izni F1b 2. adımın rol matrisindedir (tasarım §4.4.2 M1).
+yöneticisinin işidir: her rol okur, yalnız program yöneticisi yazar (tasarım §4.4.2 M1;
+`rol_izinleri.KURALLAR`).
 """
 
 from __future__ import annotations

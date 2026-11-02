@@ -5,10 +5,15 @@ ve askıdan çıkarma servisleri 1. adımdadır; uçları, Kullanıcılar ekran�
 teslim pusulası 2. adımda"). Dosya ayağı (`guvenlik.json` sarmalları ve arşivler)
 `app_password`'tedir; burası veritabanı ayağını ve iki deponun SIRASINI yönetir.
 
-**Rol denetimi 2. adımda (tasarım §4.4.2):** bu servisler işlemi yapan hesabı
-(`by_hesap_id`) yalnız açık (`ACIK`) ve mührü tutan bir hesap olarak doğrular;
-kimin hangi işi yapabileceği (`yonetici`) rol matrisinin işidir. Her servis kilit
-açıkken çalışır (DEK bellekte; mühür ve şifreli ad onu ister).
+**İşlemi yapan ve rolü** (`_actor`, `_yonetici_aktor`): işlemi yapan hesap (`by_hesap_id`)
+açık (`ACIK`), mührü tutan ve isteğin yazarıyla aynı hesap olmalıdır; yazar yoksa ya da
+`SISTEM` ise ret (hesap işlemi kullanıcı eylemidir). Hesap yönetimi — açma, kapama, parola
+sıfırlama, askıdan çıkarma, sahipsiz sarmalın silinmesi — yalnız program yöneticisinindir
+(tasarım §4.4.2 Kullanıcılar satırı): rol kapısının (`RolMiddleware`) ardından servis de
+mühürlü satırın rolüyle yetki kapısına sorar (`rol_izinleri.Eylem.HESAP_YONETIMI`; derin
+savunma, ret 403 `rol_yetkisiz`). Parola yenilenme bildiriminin kapatılması her rolde açıktır
+(sahibinin kendi bildirimi). Her servis kilit açıkken çalışır (DEK bellekte; mühür ve şifreli
+ad onu ister).
 
 SIRALAR (iki depo kuralı, §4.6.1):
 
@@ -33,7 +38,7 @@ sıfırlama `PAROLA`, parola yenilenme bildiriminin kapatılması `GUNCELLE`. Ya
 başındaki bağlamdır (oturumdaki hesap); `by_hesap_id` işlemi yapan hesabın açık ve mühürlü
 olduğunu doğrulamak içindir ve yazarla AYNI hesap olmalıdır (`_actor`): satırın hesabı
 yazardan, `opened_by`/`closed_by`/`reset_by` `by_hesap_id`'den gelir; ikisi ayrışırsa
-servis reddeder (2. adımın Kullanıcılar uçlarının güvenlik ağı). İki depo sırası korunur:
+servis reddeder (Kullanıcılar uçlarının güvenlik ağı). İki depo sırası korunur:
 satır ve iz satırı birlikte, sonra dosya. Dosyadaki sayacı ve askıyı ya da sarmalı
 değiştiren adımlar (askıdan çıkarma, parola sıfırlamanın ve kapamanın dosya adımı,
 sahipsiz sarmalın silinmesi) `guvenlik.json` bölümünün (`denetim_izi.HESAP_SARMALI`)
@@ -77,9 +82,11 @@ from apps.okul.models import (
     ResetKind,
 )
 from apps.okul.oturum import rol_etiketi, sistem_olarak, yazar
+from apps.okul.rol_izinleri import Eylem, yetki
 from apps.okul.services import app_password, hesap_kurallari
 from apps.okul.services.app_password import AccountSealMismatch, AppPasswordError
 from shared import crypto
+from shared.exceptions import RolYetkisiz
 
 logger = logging.getLogger("oab_defteri.guvenlik")
 
@@ -128,26 +135,37 @@ def _active_data_key() -> bytes:
 
 
 def _actor(by_hesap_id: object, data_key: bytes) -> Account:
-    """İşlemi yapan hesap: var, `ACIK`, mührü tutuyor ve yazarla aynı. Rol denetimi 2. adımda.
+    """İşlemi yapan hesap: var, `ACIK`, mührü tutuyor ve yazarla aynı (rol sorulmaz).
 
-    Yazar bağlamı bir hesapsa (istek başındaki oturum hesabı) işlemi yapan o hesap olmalıdır:
-    iz satırının hesabı yazardan, kaydın `opened_by`/`closed_by`/`reset_by`'ı bu hesaptan
-    gelir; ayrışırlarsa kayıt başkasının adına yazılmış olurdu (modül başlığı). Bağlam
-    yoksa yazıcı yazmayı zaten reddeder.
+    Yazar bağlamı istek başındaki oturum hesabıdır; işlemi yapan o hesap olmalıdır: iz
+    satırının hesabı yazardan, kaydın `opened_by`/`closed_by`/`reset_by`'ı bu hesaptan gelir;
+    ayrışırlarsa kayıt başkasının adına yazılmış olurdu (modül başlığı). Yazar yoksa ya da
+    `SISTEM` ise ret (`RolYetkisiz`): hesap işlemi gün işi ya da sistem işi değildir (plan
+    F1b-1 "by_hesap_id yazar bağlamındaki hesaba eşit olmalıdır"). Rolü soran
+    `_yonetici_aktor`'dur; parola yenilenme bildiriminin kapatılması her role açık kalır.
     """
+    kim = yazar()
+    if kim is None or kim.sistem_mi:
+        raise RolYetkisiz
     aktor = app_password.account_by_id(by_hesap_id)
     if aktor is None or aktor.status != AccountStatus.ACIK:
         raise AccountServiceError(_ACTOR_MESSAGE)
-    kim = yazar()
-    if (
-        kim is not None
-        and not kim.sistem_mi
-        and denetim_izi.kimlik_metni_ya_da_none(Account, kim.hesap_id) != str(aktor.id)
-    ):
+    if denetim_izi.kimlik_metni_ya_da_none(Account, kim.hesap_id) != str(aktor.id):
         logger.warning("İşlemi yapan hesap yazar bağlamındaki hesap değil; işlem yapılmadı.")
         raise AccountServiceError(_ACTOR_MESSAGE)
     if not aktor.seal_matches(data_key):
         raise AccountSealMismatch(_SEAL_MESSAGE)
+    return aktor
+
+
+def _yonetici_aktor(by_hesap_id: object, data_key: bytes) -> Account:
+    """`_actor` + hesap yönetimi yetkisi (yalnız program yöneticisi; modül başlığı).
+
+    Rol mühürlü satırdandır (`aktor.role`; açılışta doğrulanan mühre girer): yazarın rolüyle
+    aynıdır, satır program dışından değiştirildiyse mühür zaten tutmaz.
+    """
+    aktor = _actor(by_hesap_id, data_key)
+    yetki(str(aktor.role), Eylem.HESAP_YONETIMI)
     return aktor
 
 
@@ -190,7 +208,7 @@ def open_account(
     olur; bugün hesap rolle açılır (tasarım §4.4.1).
     """
     dek = _active_data_key()
-    aktor = _actor(by_hesap_id, dek)
+    aktor = _yonetici_aktor(by_hesap_id, dek)
     if role not in AccountRole.values:
         raise AccountServiceError(_ROLE_MESSAGE)
     login = _kural(hesap_kurallari.validate_login_name, tanitici)
@@ -241,7 +259,7 @@ def close_account(*, by_hesap_id: object, hesap_id: object) -> Account:
     temizlenemediyse satır kalır, hata yine çağırana döner.
     """
     dek = _active_data_key()
-    aktor = _actor(by_hesap_id, dek)
+    aktor = _yonetici_aktor(by_hesap_id, dek)
     hesap = _target(hesap_id, dek)
     if (
         hesap.role == AccountRole.YONETICI
@@ -292,7 +310,7 @@ def reset_password(*, by_hesap_id: object, hesap_id: object, temp_password: str)
     sarmal yazılamazsa yalnız ikinci işlem (sayacın satırı) geri alınır.
     """
     dek = _active_data_key()
-    aktor = _actor(by_hesap_id, dek)
+    aktor = _yonetici_aktor(by_hesap_id, dek)
     hesap = _target(hesap_id, dek)
     if hesap.status == AccountStatus.ASKIDA:
         raise AccountServiceError(_SUSPENDED_RESET_MESSAGE)
@@ -340,7 +358,7 @@ def unsuspend(*, by_hesap_id: object, hesap_id: object) -> Account:
     dosya yazımından önce ve aynı işlemde yazılır.
     """
     dek = _active_data_key()
-    _actor(by_hesap_id, dek)
+    _yonetici_aktor(by_hesap_id, dek)
     hesap = _target(hesap_id, dek)
     if hesap.status == AccountStatus.ASKIDA:
         with transaction.atomic():
@@ -365,7 +383,8 @@ def acknowledge_reset_notice(*, hesap_id: object) -> Account:
     """Parola yenilenme bildirimini kapatır: sahibi "Gördüm" dedi (tasarım §4.4.3, tehdit 12).
 
     Yalnız oturumdaki hesabın KENDİ bildirimi kapanır (çağıran `OTURUM.hesap_id()` verir);
-    hesap açık ve mührü tutuyor olmalıdır (`_actor`; mührü tutmayan satıra dokunulmaz).
+    hesap açık ve mührü tutuyor olmalıdır (`_actor`; mührü tutmayan satıra dokunulmaz). Her
+    rolde açıktır: rol sorulmaz (sahibinin kendi bildirimi; tasarım §4.4.3, tehdit 12).
     `reset_notice_pending` mühre girmez: mühür yenilenmez. Satır ve `GUNCELLE` iz satırı
     (`reset_notice_pending: [true, false]`) aynı işlemdedir; yazar istek başındaki bağlamdır
     (oturumdaki hesap). Bildirim beklemiyorsa hiçbir şey yazılmaz (fikirdeş; iz satırı yok).
@@ -493,7 +512,7 @@ def remove_orphan_wraps(*, by_hesap_id: object, hesap_idler: list[str]) -> list[
     Yalnız güncel farkta silinebilir görünen kimlikler kabul edilir (onaydan sonra
     durum değiştiyse ret); mührü tutmayan satırın sarmalı asla silinmez. Silme
     `guvenlik.json`'dan ve bütün arşivlerden yapılır. Silinen kimlikleri döndürür.
-    Rol denetimi (yalnız program yöneticisi) 2. adımdadır (§4.4.2).
+    Yalnız program yöneticisi (§4.6.1 kural 4; `_yonetici_aktor`).
 
     Her silinen sarmal için `guvenlik.json` bölümünün `HESAP` satırı dosyadan ÖNCE, aynı
     işlemde yazılır (yazar onaylayan hesap; sarmalda sayaç ya da askı varsa önceki değerleri
@@ -502,7 +521,7 @@ def remove_orphan_wraps(*, by_hesap_id: object, hesap_idler: list[str]) -> list[
     artık kilit açmaz), arşivin uyarısı günlüğe düşer.
     """
     dek = _active_data_key()
-    _actor(by_hesap_id, dek)
+    _yonetici_aktor(by_hesap_id, dek)
     istenen = {str(h) for h in hesap_idler}
     silinebilir = set(two_store_differences().removable_wraps)
     if not istenen <= silinebilir:

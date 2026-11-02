@@ -184,7 +184,7 @@ from django.db import DatabaseError, connection, models, transaction
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 
-from apps.okul import denetim_izi, iz_dogrulama, masaustu_kanca
+from apps.okul import denetim_izi, iz_dogrulama, masaustu_kanca, rol_izinleri
 from apps.okul.models import (
     Account,
     AccountRole,
@@ -206,7 +206,7 @@ from apps.okul.oturum import (
 )
 from apps.okul.services import hesap_kurallari
 from shared import crypto, kanonik
-from shared.exceptions import PASSWORD_REQUIRED_MESSAGE
+from shared.exceptions import PASSWORD_REQUIRED_MESSAGE, RolYetkisiz
 from shared.text import tr_lower
 
 logger = logging.getLogger("oab_defteri.guvenlik")
@@ -351,7 +351,6 @@ _SESSION_UNKNOWN_MESSAGE = "Oturumdaki hesap bilinmiyor. Kilitleyip hesabınızl
 _RECOVERY_ONLY_ADMIN_MESSAGE = (
     "Kurtarma anahtarıyla yalnız var olan bir program yöneticisi hesabının parolası yenilenir."
 )
-_RENEW_ONLY_ADMIN_MESSAGE = "Kurtarma anahtarını yalnız program yöneticisi yeniler."
 #: Düzenli kapanış başladıktan sonra gelen kilit açılışı (`ProgramClosing`; sözlük §4.2).
 PROGRAM_CLOSING_MESSAGE = "Program kapanıyor; kilit açılmadı."
 RESET_NOT_ALLOWED_MESSAGE = (
@@ -2022,7 +2021,8 @@ def verify_recovery_key(recovery_key: str) -> list[str]:
     yazılmış anahtarın kâğıda basılmasını önler) VE çıkan DEK bellekteki
     anahtarla aynı olmalı (başka kurulumun dosyasıyla doğrulama yapılamaz).
     Yanlışsa `AppPasswordError` + süreç içi kademeli gecikme. Kilitliyken doğrulama
-    yapılmaz (kilit ara katmanı zaten 423 ile keser).
+    yapılmaz (kilit ara katmanı zaten 423 ile keser). Yalnız program yöneticisi
+    (`verify_recovery_key_identity`).
 
     Anahtar hiçbir iletiye, günlüğe ya da istisnaya yazılmaz.
     """
@@ -2037,8 +2037,14 @@ def verify_recovery_key_identity(recovery_key: str) -> tuple[list[str], dict[str
     anahtarın kâğıdına yenisinin no'su basılırdı. Kimlik `backup_crypto.
     recovery_key_identity` kuralıyla okunur; tuz ve sarmal dönmez. Ret
     `verify_recovery_key` ile aynıdır.
+
+    Yalnız program yöneticisi (tasarım §4.4.2 Güvenlik satırı; rol kapısının ardından derin
+    savunma): rol isteğin yazarından okunur, değilse `RolYetkisiz` (403) ve anahtar
+    denenmez (gecikme sayacına dokunulmaz). Hesap kurulmamışsa önce o söylenir (yan etkisiz
+    okuma; kurulumda yazar yoktur).
     """
     state = _require_state()
+    rol_izinleri.yetki_oturum(rol_izinleri.Eylem.KURTARMA_ANAHTARI)
     _check_recovery_key(state, recovery_key)
     return recovery_key_groups(recovery_key), recovery_key_identity(state)
 
@@ -2056,9 +2062,11 @@ def confirm_recovery_key(recovery_key: str) -> None:
 
     Damga oturumdaki hesabın `KURTARMA` satırıdır (anahtarın no'su kimlik; damga yalnız
     alan adıyla, `dogrulandi`): satır dosyadan ÖNCE, aynı işlemde (`dosya_ve_iz_islemi`).
+    Yalnız program yöneticisi (`RolYetkisiz`, 403; anahtar denenmez).
     """
     with _state_lock:
         state = _require_state()
+        rol_izinleri.yetki_oturum(rol_izinleri.Eylem.KURTARMA_ANAHTARI)
         _check_recovery_key(state, recovery_key)
         bolum = state.get("kurtarma")
         if not isinstance(bolum, dict):  # pragma: no cover — sarmal açıldıysa bölüm vardır
@@ -2075,7 +2083,8 @@ def confirm_recovery_key(recovery_key: str) -> None:
 def renew_recovery_key(*, hesap_id: object, password: str) -> str:
     """Kurtarma anahtarını yeniler; YENİ anahtarı döndürür (yanıtta BİR KEZ gösterilir).
 
-    Yalnız program yöneticisi (tasarım TK9) ve yalnız kilit açıkken: parola
+    Yalnız program yöneticisi (tasarım TK9, §4.4.2 Güvenlik satırı; değilse `RolYetkisiz`,
+    403, parola denenmez) ve yalnız kilit açıkken: parola
     oturumdaki hesabınkine karşı doğrulanır (başka hesabın parolası geçmez);
     yanlışsa "Parola hatalı." + hesap sayacı ve hiçbir dosya değişmez. Sonra aynı
     DEK YENİ anahtar ve YENİ tuzla sarılır: `kurtarma.no` bir artar, `tarih` bugün,
@@ -2088,8 +2097,10 @@ def renew_recovery_key(*, hesap_id: object, password: str) -> str:
     """
     with _state_lock:
         state = _require_state()
+        rol_izinleri.yetki_oturum(rol_izinleri.Eylem.KURTARMA_ANAHTARI)
+        # Derin savunma: parolası sorulacak hesabın kayıttaki rolü de program yöneticisi.
         if _account_role(hesap_id) != AccountRole.YONETICI:
-            raise AppPasswordError(_RENEW_ONLY_ADMIN_MESSAGE)
+            raise RolYetkisiz
         veri_anahtari = _check_session_password(state, hesap_id, password)
         # Doğrulama sayacı sıfırlayıp dosyayı yazmış olabilir: güncel hâl yeniden okunur.
         state = _require_state()

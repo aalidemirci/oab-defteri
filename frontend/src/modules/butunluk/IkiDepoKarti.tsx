@@ -12,12 +12,16 @@
 //   KAPALI hesabınkini program her kilit açılışında kendisi siler (backend `app_password.
 //   _cleanup_closed_wraps`, tasarım §4.6.1 kural 3); listede yalnız o silme tamamlanamadıysa
 //   (ör. dosyayı başka bir program tutuyordu) görünür, onayla hemen de silinebilir. Metin bu
-//   ikisini ayırır. Kart yanıttaki güncel durumla yenilenir.
+//   ikisini ayırır. Kart yanıttaki güncel iki depo kartıyla yenilenir.
 // * Kaydı program dışından değiştirilmiş görünen hesaplar: program onlara dokunmaz.
+//
+// ROL: ilk iki liste ve silme yalnız program yöneticisindedir (`security/integrity/two-store/`;
+// tasarım §4.6.1 kural 4); mührü tutmayan hesaplar denetim kartlarından gelir ve Denetleme
+// Kurulunda da görünür (kural 1). Öteki rollerde liste boş gelir, kart çizilmez.
 //
 // "Sarmal" kullanıcı metnine girmez: kullanıcıdaki adı hesabın güvenlik dosyasındaki
 // **parola kaydı**dır (sözlük §1 "Denetim izi"). Hesaplar rol etiketi ve tanıtıcıyla anılır;
-// ad-soyad yok. Silmeyi yalnız program yöneticisine bırakan rol kuralı 2. adımdadır.
+// ad-soyad yok.
 
 import { useState } from "react";
 
@@ -27,7 +31,7 @@ import ErrorBand, { hataOku } from "../../ui/ErrorBand";
 import type { SayfaHatasi } from "../../ui/ErrorBand";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import { butunlukApi } from "./api";
-import type { ButunlukDurumu, IkiDepoFarki, IkiDepoHesabi } from "./api";
+import type { IkiDepoFarki, IkiDepoHesabi, IkiDepoYaniti } from "./api";
 import KartKabugu from "./KartKabugu";
 import { IKI_DEPO_KARTI_BASLIGI, hesapEtiketi } from "./metinler";
 
@@ -95,10 +99,11 @@ function HesapListesi({ hesaplar }: { hesaplar: readonly IkiDepoHesabi[] }) {
 
 interface IkiDepoKartiProps {
   fark: IkiDepoFarki;
-  onDurum: (durum: ButunlukDurumu) => void;
+  /** Silmeden dönen güncel iki depo kartı (`useButunlukDurumu.ikiDepoyuYaz`). */
+  onIkiDepo: (yanit: IkiDepoYaniti) => void;
 }
 
-export default function IkiDepoKarti({ fark, onDurum }: IkiDepoKartiProps) {
+export default function IkiDepoKarti({ fark, onIkiDepo }: IkiDepoKartiProps) {
   const confirm = useConfirm();
   const snackbar = useSnackbar();
   const [silinen, setSilinen] = useState<string | null>(null);
@@ -116,7 +121,7 @@ export default function IkiDepoKarti({ fark, onDurum }: IkiDepoKartiProps) {
     setSilinen(hesap.id);
     setHata(null);
     try {
-      onDurum(await butunlukApi.sahipsizSarmallariSil([hesap.id]));
+      onIkiDepo(await butunlukApi.sahipsizSarmallariSil([hesap.id]));
       snackbar.success("Parola kaydı güvenlik dosyasından silindi.");
     } catch (e) {
       setHata(hataOku(e, "Parola kaydı silinemedi."));

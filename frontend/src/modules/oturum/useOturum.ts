@@ -94,6 +94,46 @@ export function useOturum(): OturumBilgisi {
 }
 
 /**
+ * Oturum özetinden yetenekler (tasarım §4.4.2; plan F1b-2 "Yetenekler: ön yüz süzmesinin tek
+ * kaynağı"). `null`: özet henüz okunmadı ya da okunamadı — çağıran yetkiye bağlı uçları
+ * çağırmaz. Açık oturum yoksa ya da alan eksikse boş liste (fail-closed).
+ */
+export function yeteneklerOku(ozet: OturumOzeti | null | undefined): readonly string[] | null {
+  if (ozet === null || ozet === undefined) return null;
+  const yetenekler = ozet.hesap?.yetenekler;
+  return Array.isArray(yetenekler) ? yetenekler : [];
+}
+
+export interface YetenekBilgisi {
+  /** Rolün yetenekleri; özet henüz okunmadıysa ya da okunamadıysa null (`yeteneklerOku`). */
+  yetenekler: readonly string[] | null;
+  /**
+   * Özet HİÇ okunamadıysa okuma hatası; yükleme sürerken ve özet (bir kez de olsa) okunduysa
+   * null. "Bilinmiyor" ile "okunamadı" ayrı tutulur: yetki bilinmeyen ekran yükleme sürerken
+   * bekler, okunamayınca ne yapacağını (ör. "Bütünlük Durumu Okunamadı" kartı) kendisi seçer.
+   */
+  hata: Error | null;
+}
+
+/**
+ * Oturumdaki hesabın yetenekleri: oturum göstergesinin sorgusuyla AYNI önbellekten okunur
+ * (yoklama aralığı içinde ikinci istek gitmez; yan etkisiz — kilit ve olay dinleyicileri
+ * `useOturum`'dadır).
+ */
+export function useYetenekler(): YetenekBilgisi {
+  const sorgu = useQuery({
+    queryKey: OTURUM_SORGU_ANAHTARI,
+    queryFn: () => oturumApi.ozet(false),
+    staleTime: OTURUM_YOKLAMA_MS,
+    retry: false,
+  });
+  return {
+    yetenekler: yeteneklerOku(sorgu.data),
+    hata: sorgu.data === undefined && sorgu.isError ? sorgu.error : null,
+  };
+}
+
+/**
  * Açık oturumda gerçek etkileşimin ardından (en sık `NABIZ_ARALIGI_MS`'de bir) oturum
  * sorgusunu `X-OD-Etkinlik` ile gönderir. Başlığı `lib/api` ekler: etkileşim yakalama
  * evresinde kaydedildiği için bu istek "kullanıcı eylemi" sayılır. Yalnız bir yerde

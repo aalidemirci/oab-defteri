@@ -9,6 +9,10 @@ adı). Satır yedek şifrelendikten SONRA, indirme verilmeden ÖNCE kendi işlem
 yazılamazsa yedek verilmez (izsiz yedek yoktur). Yedek görüntüsü satırdan önce
 alındığı için yedeğin içinde kendi `YEDEK` satırı yoktur. Açılıştaki günlük ve göç öncesi
 yedekler kilitli kipte, masaüstü kancası üzerinden yazılır (§4.6.3).
+
+YETKİ (tasarım §4.4.2 Güvenlik satırı "yedek indirme"): yalnız program yöneticisi. Rol
+kapısının ardından servis de isteğin yazarının rolünü yetki kapısına sorar (`RolYetkisiz`,
+403); ret görüntü alınmadan verilir.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ from desktop.backup_crypto import encrypt_bytes, load_public_key, recovery_metad
 from django.conf import settings
 from django.db import transaction
 
-from apps.okul import denetim_izi
+from apps.okul import denetim_izi, rol_izinleri
 from apps.okul.models import AuditAction
 from apps.okul.services import app_password, dis_yedek
 
@@ -35,6 +39,7 @@ def create_encrypted_backup() -> tuple[bytes, str]:
     """Tutarlı veritabanı görüntüsünü RAM'de şifreleyip indirmeye hazırlar."""
     if app_password.is_locked():
         raise EncryptedBackupError("Şifreli yedek oluşturmak için önce hesabınızla kilidi açın.")
+    rol_izinleri.yetki_oturum(rol_izinleri.Eylem.YEDEK_INDIRME)
 
     data_dir = app_password.state_path().parent
     database_path = Path(str(settings.DATABASES["default"]["NAME"]))

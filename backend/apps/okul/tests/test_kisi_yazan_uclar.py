@@ -80,12 +80,15 @@ DIGER_UCLAR = frozenset(
         "security-enable",
         # Boşta kilit süresi (Ayarlar → Güvenlik): okul ayarı, kişi yazmaz.
         "security-idle-lock",
-        # Bütünlük kartları (tasarım §4.6.3): denetim izinden kişisiz özet; sahipsiz sarmalın
-        # onayla silinmesi `guvenlik.json`'a yazar — kişi sicili yazmaz.
+        # Bütünlük kartları (tasarım §4.6.3; kendi, denetim ve iki depo kartları): denetim
+        # izinden kişisiz özet; sahipsiz sarmalın onayla silinmesi `guvenlik.json`'a yazar —
+        # kişi sicili yazmaz.
         "security-integrity",
+        "security-integrity-audit",
         "security-integrity-orphan-wraps",
         # Parola yenilenme bildirimi: oturumdaki hesabın bayrağı (izli), kişi sicili yazmaz.
         "security-integrity-reset-notice",
+        "security-integrity-two-store",
         "security-lock",
         "security-recover",
         "security-recovery-key-confirm",
