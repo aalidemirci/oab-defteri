@@ -52,7 +52,29 @@ KURALLAR (her biri bu modülde zorlanır):
 (`IZ_OZET_ALANLARI`); yeni bir sütun listeye eklenirse var olan kayıtların yeniden
 hesaplanan MAC'i son iz satırındakini tutmaz. Listeye alan ekleyen değişiklik, ilk kilit
 açılışında koşan veri göçüyle her kayda yeni MAC'li bir satır yazmalıdır (tasarım §4.1
-"veri göçü ilk kilit açılışında"); listeler bu yüzden modelde, göçle birlikte değişir.
+"veri göçü ilk kilit açılışında"); listeler bu yüzden modelde, göçle birlikte değişir. `Account`
+için bu kural GİRİŞİ bağlar (kullanıcı kararı 03.11.2026 "Girişte reddet"; `hesap_izi_tutuyor`,
+`services.satir_izi`): hesap satırı son içerik MAC'li iz satırını tutmazsa giriş, oturum işlemi ve
+hesap işlemi reddedilir. `Account` için "ilk kilit açılışında veri göçü" yolu KAPALIDIR: satırın
+izi kilit açılışında, DEK belleğe alınmadan ve her veri göçünden ÖNCE denetlenir; şema göçü
+kilitliyken iz yazamaz. `Account.IZ_OZET_ALANLARI`'nı ya da var olan satırların bu alanlardaki
+değerini değiştiren her değişiklik (F4'ün DEK yenilemesindeki mühür, özet ve ad-soyad yeniden
+yazımı dahil) `KAPALI` olanlar DAHİL BÜTÜN hesap satırlarının izini aynı işlemde yeniden kurmalıdır
+(her satıra yeni hâlinin içerik MAC'ini taşıyan, o sırada yürürlükteki iz anahtarıyla mühürlü bir
+iz satırı), ama YALNIZ satırı önce ESKİ alan kümesiyle ve eski anahtarla son içerik MAC'li kaydına
+karşı doğrulayıp tutanlara (doğrulamasız yeniden kurma geri sarılmış satırı aklar). Yoksa açık
+satırların girişi reddedilir, `KAPALI` satırlar iki depo kartında "kaydı program dışından
+değiştirilmiş görünen hesaplar" listesine düşer ve sarmallarının temizliği durur. Böyle bir adım
+tasarlanmadan küme değiştirilmez (kullanıcı kararı bekler; F1c'nin `person`/`membership`/`term`
+alanları buna girer). Program sahaya çıkana dek deneme kurulumları silinip yeniden kurulur
+(kullanıcı kararı 03.11.2026).
+
+TEK YAZARIN ORM'SİZ EŞİ: geri yüklemenin özet onarımı (`services.ozet_onarimi`) takastan önce,
+oturumu olmayan `.tmp` veritabanında yazar; değiştirdiği hesap satırlarının iz satırını
+`services.satir_izi.hesap_satirlarini_izle` ekler. Biçim bu modülün `_ekle`'siyle BİREBİRDİR
+(`SISTEM`, açık kip, etkin `AuditKey`, `kanonik.kayit_mac` ve `kanonik.iz_mac`; sütunlar Django'nun
+yazdığı biçimde); eşitliği `test_satir_izi.py` sınar, izsiz yazım taraması ilkeller listesinde
+adıyla tanır.
 
 KİLİTLİ KİP (`key_mode = KILITLI`, §4.6.3: `YEDEK`, `GOC`, `GUN_ISI`, `BUTUNLUK`) bu
 modülün ikinci giriş noktasıdır (`kilitli_olay`). Çekirdek (`_ekle`) mührü dışarıdan
@@ -106,6 +128,7 @@ from apps.okul.models import (
     AuditTrail,
 )
 from apps.okul.oturum import Yazar, yazar, yazar_olarak
+from apps.okul.services import satir_izi
 from shared import crypto, kanonik
 
 logger = logging.getLogger("oab_defteri.okul")
@@ -1262,6 +1285,8 @@ def kaydi_dogrula(model: type[models.Model], pk: Any) -> bool | None:
     Program dışından yapılan değişiklik, şifreli sütuna yazılmış düz metin ve bir satırdan
     ötekine taşınmış Fernet token'ı burada görünür (tasarım §4.6.2; denetim GA-9). Kaydın
     içerik MAC'li iz satırı yoksa None. Doğrulama, satırı mühürleyen iz anahtarıyla yapılır.
+    Denetleme Kurulunun (DK modülü, F4) ve testlerin denetimidir; hesap satırının GİRİŞTEKİ katı
+    eşi `hesap_izi_tutuyor`'dur (iz satırı yoksa False, okunan satırların zincir MAC'i de doğrulanır).
     """
     son = (
         AuditTrail.objects.filter(model=model_etiketi(model), object_id=kimlik_metni(model, pk))
@@ -1295,6 +1320,30 @@ def kaydi_dogrula(model: type[models.Model], pk: Any) -> bool | None:
     except ObjectDoesNotExist:
         return False
     return kanonik.esit(str(son[0]), guncel)
+
+
+def hesap_izi_tutuyor(
+    hesap_id: Any, *, veri_anahtari: bytes, beklenen_muhur: str | None = None
+) -> bool:
+    """Hesap satırı denetim izindeki son içerik MAC'li kaydını tutuyor mu? (kullanıcı kararı
+    03.11.2026 "Girişte reddet"; `app_password` modül başlığı "SATIRIN İZİ")
+
+    `kaydi_dogrula`'nın hesap satırı için GİRİŞTE kullanılan katı eşidir: karar ORM'siz tek
+    işlevdedir (`services.satir_izi.hesap_izi_tutuyor`; geri yüklemenin parola yolu da onu
+    çağırır), burada Django'nun bağlantısı verilir — açık bir işlemin içindeyse işlemin
+    gördüğünü görür, değilse okumalar tek bir okuma işleminde (tek anlık görüntü) yapılır. DEK
+    açıkça verilir: kilit açılışında henüz belleğe alınmamıştır (aday DEK, tasarım §4.6.3).
+    `beklenen_muhur`: çağıranın ORM'le okuyup kararı verdiği satırın mührü; ham okumadaki mühür
+    ona eşit değilse False (`satir_izi` modül başlığı adım 5). `kaydi_dogrula`'dan farkı: içerik
+    MAC'li iz satırı yoksa None değil False'tur (fail-closed) ve okunan her iz satırının sırasının
+    türü ve kendi zincir MAC'i de doğrulanır (son satırın `record_mac`'ini boşaltmak, `key_ref`'ini
+    değiştirmek ya da eski bir satırın sırasını BLOB'a çevirmek denetimi eski bir satıra
+    kaydırmasın).
+    """
+    connection.ensure_connection()
+    return satir_izi.hesap_izi_tutuyor(
+        connection.connection, hesap_id, veri_anahtari, beklenen_muhur=beklenen_muhur
+    )
 
 
 def _reset_for_tests() -> None:

@@ -842,8 +842,17 @@ def test_basarisiz_geri_yukleme_not_yazmaz(tmp_path: Path, veri_dizini: Path) ->
     assert not (veri_dizini / "geri-yukleme-notu.json").exists()
 
 
-def test_bozuk_notun_ustune_yeni_kayit_isaretle_yazilir(tmp_path: Path, veri_dizini: Path) -> None:
-    (veri_dizini / "geri-yukleme-notu.json").write_text("{bozuk", encoding="utf-8")
+#: Bozuk not içerikleri: biçimsiz JSON ve derin iç içe dizi (`json.loads`'un `RecursionError`'ı;
+#: bağımsız denetim bulgusu: takastan SONRA notun yazımında düşüyordu).
+_BOZUK_NOTLAR = {"bicimsiz": "{bozuk", "derin_ic_ice": "[" * 30_000 + "]" * 30_000}
+
+
+@pytest.mark.parametrize("icerik", sorted(_BOZUK_NOTLAR))
+def test_bozuk_notun_ustune_yeni_kayit_isaretle_yazilir(
+    icerik: str, tmp_path: Path, veri_dizini: Path
+) -> None:
+    """Bozuk not geri yüklemeyi düşürmez: takas yapılır, yeni not `bozuk_not_vardi` taşır."""
+    (veri_dizini / "geri-yukleme-notu.json").write_text(_BOZUK_NOTLAR[icerik], encoding="utf-8")
     kurtarma = app_password.generate_recovery_key()
     dek, durum = _dek_ile_durum(PAROLA, kurtarma)
     yedek = tmp_path / "gunluk.odbak"
@@ -854,3 +863,4 @@ def test_bozuk_notun_ustune_yeni_kayit_isaretle_yazilir(tmp_path: Path, veri_diz
     notu = _not(veri_dizini)
     assert notu["bozuk_not_vardi"] is True
     assert len(notu["geri_yuklemeler"]) == 1
+    assert (veri_dizini / "db.sqlite3").is_file()  # takas yapıldı, hata yükselmedi

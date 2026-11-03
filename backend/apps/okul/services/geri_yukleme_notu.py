@@ -127,13 +127,18 @@ def _bos() -> dict[str, Any]:
 
 
 def oku(dizin: Path) -> dict[str, Any] | None:
-    """Notu okur; yoksa None, bozuksa `NotOkunamadi`."""
+    """Notu okur; yoksa None, bozuksa `NotOkunamadi`.
+
+    Derin iç içe JSON (`json.loads`'un `RecursionError`'ı) da bozuk nottur (aile kuralı;
+    `app_password.read_state`): yoksa geri yükleme takastan SONRA notu yazarken düşer, her açılışta
+    da notun okunması iz doğrulamasını keserdi.
+    """
     dosya = yol(dizin)
     if not dosya.exists():
         return None
     try:
         veri: Any = json.loads(dosya.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError) as exc:
         raise NotOkunamadi("Geri yükleme notu okunamadı.") from exc
     if (
         not isinstance(veri, dict)

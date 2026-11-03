@@ -15,7 +15,7 @@ from rest_framework.test import APIClient
 from apps.okul import denetim_izi
 from apps.okul.models import AuditTrail
 from apps.okul.services import app_password, dis_yedek, encrypted_backup
-from conftest import TEST_HESAP_ID
+from conftest import KURULUM_IZI, TEST_HESAP_ID
 
 
 @pytest.mark.django_db
@@ -49,7 +49,7 @@ def test_veritabani_ramde_sifrelenerek_odbak_uretilir(
     assert restored.startswith(b"SQLite format 3")
     assert secret.encode() in restored
     # Kullanıcının istediği yedek oturumdaki hesabın `YEDEK` satırıdır (tasarım §4.6.3).
-    satir = AuditTrail.objects.get()
+    satir = AuditTrail.objects.get(seq__gt=KURULUM_IZI)
     assert (satir.action, satir.model, satir.object_id) == (
         "YEDEK",
         denetim_izi.YEDEK_DOSYASI,
@@ -78,7 +78,7 @@ def test_iz_yazilamazsa_yedek_verilmez(tmp_path: Path, monkeypatch: pytest.Monke
     with pytest.raises(denetim_izi.IzYazilamadi):
         encrypted_backup.create_encrypted_backup()
     assert indirmeler == []
-    assert AuditTrail.objects.count() == 0
+    assert AuditTrail.objects.count() == KURULUM_IZI
 
 
 def test_kilitliyken_yedek_olusturulmaz(monkeypatch: pytest.MonkeyPatch) -> None:

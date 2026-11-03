@@ -776,8 +776,10 @@ class TestUnlock:
         app_password.unlock(hesap_id=muhasip.id, password=YENI_PAROLA)
 
     def test_180_gunu_dolan_parola_yenilenir(self, yonetici_hesabi: Account, kilitli: Path) -> None:
-        Account.objects.filter(pk=TEST_HESAP_ID).update(
-            password_changed_at=timezone.now() - timedelta(days=181)
+        # Zamanın geçmesi: meşru yazım gibi satırla iz satırı birlikte (satırın izi tutmalı).
+        muhurle(
+            Account.objects.get(pk=TEST_HESAP_ID),
+            password_changed_at=timezone.now() - timedelta(days=181),
         )
         with pytest.raises(app_password.PasswordRenewalRequired):
             ac()
@@ -787,8 +789,10 @@ class TestUnlock:
     def test_179_gunluk_parola_yenileme_istemez(
         self, yonetici_hesabi: Account, kilitli: Path
     ) -> None:
-        Account.objects.filter(pk=TEST_HESAP_ID).update(
-            password_changed_at=timezone.now() - timedelta(days=179)
+        # Zamanın geçmesi: meşru yazım gibi satırla iz satırı birlikte (satırın izi tutmalı).
+        muhurle(
+            Account.objects.get(pk=TEST_HESAP_ID),
+            password_changed_at=timezone.now() - timedelta(days=179),
         )
         ac()
 

@@ -123,12 +123,25 @@ def _deger(value: Any) -> Any:
 
 
 def kodla(value: Mapping[str, Any]) -> bytes:
-    """Sözlüğü kanonik UTF-8 JSON baytlarına çevirir (biçim modül başlığında)."""
+    """Sözlüğü kanonik UTF-8 JSON baytlarına çevirir (biçim modül başlığında).
+
+    Python özyinelemesinin sınırını aşan derin iç içe değer (program dışından yazılmış bir iz
+    satırının `values`'ı: `json.loads` C tarayıcısıyla açabildiğini `_deger` açamaz) de
+    `KanonikHata`'dır: bütün çağıranlar onu "tutmuyor" sayar; `RecursionError` 500 olarak girişe,
+    geri yüklemeye ya da karta sızmaz (aile kuralı: derin JSON bozuk dosyadır).
+    """
     if not isinstance(value, Mapping):
         raise KanonikHata("Kanonik kodlamanın girdisi sözlük olmalıdır.")
-    metin = json.dumps(
-        _deger(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
-    )
+    try:
+        metin = json.dumps(
+            _deger(value),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+    except RecursionError as exc:
+        raise KanonikHata("Kanonik biçime giremeyecek kadar derin iç içe değer.") from exc
     return metin.encode("utf-8")
 
 

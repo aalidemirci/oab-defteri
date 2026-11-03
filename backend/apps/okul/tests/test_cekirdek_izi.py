@@ -7,7 +7,8 @@ durum alanı (`IZ_DURUM_ALANLARI`: ayrılış, aktiflik, havuz, yumuşak silme, 
 ortak değişmezi `butun_kayitlar_dogrulanir`'dır: izi olan her kaydın bugünkü içerik MAC'i
 son iz satırını tutar (izsiz bir güncelleme MAC'i bozar ve burada görünür).
 
-Varsayılan ortam kök `conftest.py`'dedir (oturum program yöneticisiyle açık, zincir boş).
+Varsayılan ortam kök `conftest.py`'dedir (oturum program yöneticisiyle açık); modül `bos_zincir`
+işaretlidir: hesabın iz satırı yazılmaz, zincir boş başlar (yazıcının satırları sırayla sayılır).
 Kişi adları ve numaralar UYDURMADIR.
 """
 
@@ -48,7 +49,7 @@ from apps.okul.services import terms as term_service
 from apps.okul.tests.hesap_ortak import YENI_PAROLA
 from conftest import TEST_HESAP_ID, TEST_KURTARMA_ANAHTARI
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.bos_zincir]
 
 OGRENCI_BASLIGI = "Sınıf\tOkul No\tAdı Soyadı"
 

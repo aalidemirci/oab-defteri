@@ -116,35 +116,113 @@ süreç ölürse ya da commit düşerse (sarmal yazımından sonra commit dış�
 yoktur: kapalı hesap temizliği hatasını yutar, okunamayan arşiv atlanır), ilk kilit açılışına
 dek eski sarmal da (asıl özet onundur) yeni sarmal da açar; arşivdeki eski sarmalı geri koyan
 biri o pencerede eski parolayla açar ve açılış onu asıl bırakır, yeni parola geçersiz kalır
-(çıkış parola sıfırlaması). Kesintisiz yazımda pencere yoktur. (b) SATIR GERİ SARMA —
-veritabanına yazabilen biri hesabın satırının mühre giren sütunlarını ve mührünü eski bir düz
-kopyadan (kendi aldığı `db.sqlite3` kopyası ya da `db-onceki-*`) geri koyarsa mühür tutar ve o
-günün parola kaydı o günün parolasıyla açılır. Sıfırlama ile sahibinin ilk girişi arasında
-satırda yalnız `status`, `wrap_digest`, `wrap_digest_pending` ve `seal` değiştiği için bu dört
-sütun yeter. Senaryo 1 bu yoldan açık kalır: parolayı sıfırlayan program yöneticisi sıfırlamadan
-hemen sonra veritabanını kopyalayıp satırı sonra geri sarabilir. Yalnız `guvenlik.json`'a yazmak
-yetmez; veritabanına yazmak ve eski bir kopya gerekir. Kilit açılışında `BUTUNLUK` satırı
-düşmez; iz yalnız o hesabın `HESAP`, `PAROLA` ve `GIRIS` satırlarıdır. Satırın son iz satırının
-içerik MAC'ini tutmadığı kayıt bütünlüğü denetiminde (`denetim_izi.kaydi_dogrula`; tasarım
-§4.6.2, DK modülü §7.8) görünür; bu denetim F1b'de hiçbir üretim yolundan çağrılmaz. (c) GERİ
-YÜKLEME — özet onarımı (`backup_restore` modül başlığı "ÖZET ONARIMI", `ozet_onarimi`) çapası
-okunamadığında (güncel veritabanı yok ya da bozuk), çapa bayatsa (geri yüklenen yedeğin zincir
-başını içermiyorsa: önceden değiştirilmiş eski bir kopya ya da çift geri yükleme) ya da hesabın
-çapadaki satırının mührü bozuksa o satırlara dokunmaz: geri yüklenen satırlar yedekteki özeti
-taşır ve o günün parola kaydı (arşivden geri konursa) o günün parolasıyla açılır. Çapayı okunamaz
-kılmak ya da bir satırın mührünü bozmak kod istemez; görünürlüğü geri yükleme kartıdır. (d)
-Parola sıfırlaması, yalnız `guvenlik.json`'a yazabilen birine karşı eski parolayı ve eski
-parola kaydını hemen geçersiz kılar; satır geri sarmaya (b) ve geri yüklemenin kalan hâllerine
-(c) karşı kılmaz. DEK yenilemesi (TK12, F4) eski yedekleri açan sarmalları yine kapatmaz.
+(çıkış parola sıfırlaması). Kesintisiz yazımda pencere yoktur. (b) SATIR GERİ SARMA artık
+REDDEDİLİR ("SATIRIN İZİ"): mührü ve özeti tutsa da eski bir kopyadan geri konmuş satır kilit
+açılışını, oturumdaki parola doğrulamasını, kurtarma anahtarıyla açılışı, hesap işlemlerini ve
+geri yüklemenin parola yolunu açmaz. KALAN — veritabanının BÜTÜNÜYLE (iz dahil) eski bir kopyayla
+değiştirilmesi ya da iz kuyruğunun satırla birlikte kesilmesi (satır geri sarılır, ondan sonraki
+iz satırları silinir) bu denetimle yakalanmaz: satır kopyanın son iz satırını tutar. Kopyadan
+sonraki her kayıt kaybolur. Görünür kılanlar: kilit açılışındaki çapa denetimi (`iz-durumu.json`
+çapası kopyadan yeniyse "kuyruk kesik", çapadan sonra açık kipte `KILIT` varsa "çapa bayat",
+dosya yoksa "çapa yok" — `BUTUNLUK` kartı; `iz-durumu.json` da kopya anındaki hâliyle geri
+konursa program fark etmez), geri yükleme kartının OLMAMASI (veritabanı geri yüklemeyle değil,
+program dışından değişmiştir), aylık kâğıt çapası (zincir başı kâğıttakinden geridedir; tasarım
+§4.6.3 "Kalan risk"), kopyadan sonra alınmış günlük yedekler (yeni zinciri taşır), hesap
+sahiplerinin "Son girişler" kartından düşen girişler ve kopyadan sonra parolası değişen
+hesapların parola kaydının özeti (eski sarmallar arşivden de geri konmazsa giriş
+`WrapDigestMismatch` ile reddedilir). Çapa denetimi ve geri yükleme kartı bu saldırgana karşı
+bağımsız değildir. Geri yükleme notu MAC'siz bir dosyadır: önceki zincir başını çapanın ilerisinde
+gösteren sahte bir not çapa denetimini atlatır ve yerine alanları boş bir geri yükleme kartı
+çıkarır. Gerçek bir geri yüklemeden sonra not silinip `iz-durumu.json` eski bir kopyasıyla
+değiştirilirse kart da çıkmaz. Kalıcı sinyaller aylık kâğıt çapası, günlük yedekler, `db-onceki-*`
+dosyası ve onarımın `SISTEM` `HESAP` satırlarıdır. Hesabın yeni iz satırlarını silmek ya da
+`model`/`object_id`'lerini değiştirip onları hesabın satırı olmaktan çıkarmak, satır geri sarmayla
+birlikte yapılırsa bu denetimden geçer (`satir_izi` modül başlığı "KAPSAMIN SINIRI"). Silinen
+satırdan sonrakiler yeniden numaralanırsa kayma zincir başına ulaşır; çapa (`kuyruk_kesik`) ve son
+200 satır onu her zaman `BUTUNLUK` bulgusu olarak gösterir. Yeniden numaralamasız silme ve
+`model`/`object_id` değişikliği ise yalnız değişen satır kilit açılışının 200 satırlık doğrulama
+penceresindeyse (ya da hemen önündeyse) bulgu olur. Bulgu girişi engellemez (altın kural 3).
+Pencerenin dışındaysa F1b'de hiçbir yerde görünmez: çapa ve kâğıt çapası yalnız zincir başını
+görür, zincirin tam doğrulamasının üretim yolu Denetleme Kurulu modülüyle gelir (F3/F4, plan).
+Geri yükleme yollarında (geri yükleme yetkisi ve özet onarımının çapası) kenara alınan
+veritabanının zinciri hiç doğrulanmaz; bu varyant orada pencere içinde de görünmez, görünürlüğü
+yalnız geri yükleme kartı ve onarım satırlarıdır (çapa kolunu `ozet_onarimi`'nin sıra kuralı
+kapatır; geri yükleme yetkisinde, askıya alınmış ya da kapatılmış bir program yöneticisinin geri
+sarılmış satırıyla, kalan risktir). Bu bölümü girişte sert engele çevirmek kullanıcı kararını
+bekler. DENETİM İLE YAZIM ARASINDAKİ YARIŞ: satırın izi denetlendikten sonra, yazım işleminden
+önce satırı değiştiren bir betik (ör. girişin `GIRIS` yazımı satırın o anki hâlinin içerik MAC'ini
+yazar) kod ve zamanlama ister; başarısız denemeler `BUTUNLUK` satırı bırakır (tehdit 6/19 çıtası).
+Denetimin kendi iki okuması (çağıranın ORM okuması ve iz okuması) beklenen mühürle aynı hâle
+bağlıdır ("SATIRIN İZİ"). (c) GERİ YÜKLEME — özet onarımı (`backup_restore` modül başlığı "ÖZET
+ONARIMI", `ozet_onarimi`) çapası kullanılamadığında (güncel veritabanı okunamıyor, çapa bayat, ya
+da hesabın çapadaki satırının mührü, izi ya da sırası tutmuyor) geri yüklenen satırın özetlerini
+ancak güncel `guvenlik.json`'daki sarmal onlardan birini tutuyorsa bırakır, tutmuyorsa boşaltır
+(K-a, fail-closed). KALAN: geri yüklemeden ÖNCE `guvenlik.json`'a konmuş yedek günü sarmalı (o
+günün parolasını bilen biri, çapayı okunamaz kılıp ya da bir satırın mührünü bozup) geri yüklenen
+satırın özetini tutar ve o günün parolasıyla açar; geri yüklemeden SONRA arşivden geri konan yedek
+günü sarmalı açmaz. Kapatılmış hesap da bu yoldan döner: kapanıştan önce saklanmış sarmal geri
+yüklemeden ÖNCE dosyaya konur ve çapa kullanılamaz kılınırsa (dosyayı kaldırmak ya da o satırın
+mührünü bozmak tek bir yazımdır), kapanıştan önceki yedekle hesap `ACIK` olarak eski parolayla
+açılır ("çapada `KAPALI` → boşalt" kuralı yalnız kullanılabilen çapada işler). Çapayı okunamaz
+kılmak kod istemez; görünürlüğü geri yükleme kartı ve onarımın `SISTEM` `HESAP` satırlarıdır. (d)
+Parola sıfırlaması, yalnız `guvenlik.json`'a yazabilen birine karşı eski parolayı ve eski parola
+kaydını hemen geçersiz kılar; satırı geri sarılmış hesabı AKLAMAZ (izi tutmayan satır
+sıfırlanmaz: `AccountRecordStale`); (b)'nin ve (c)'nin kalan hâllerine karşı kılmaz. DEK
+yenilemesi (TK12, F4) eski yedekleri açan sarmalları yine kapatmaz.
+
+SATIRIN İZİ (kullanıcı kararı 03.11.2026 "Girişte reddet"; `services.satir_izi` modül başlığı).
+Mühür satırın bir zamanlar program tarafından yazıldığını kanıtlar, BUGÜNKÜ hâli olduğunu
+kanıtlamaz. Hesap satırı bu yüzden denetim izindeki SON içerik MAC'li kaydını da tutmalıdır
+(tasarım §4.6.2 "içerik MAC'i"; `denetim_izi.hesap_izi_tutuyor` → ORM'siz tek karar işlevi
+`satir_izi.hesap_izi_tutuyor`): hesabın iz satırları en yeniden geriye okunur, okunan her satırın
+sırası tamsayı türünde ve kendi zincir MAC'i (açık kip, `key_ref`'teki yürürlükteki İA) tutmalıdır,
+ilk içerik MAC'li satırın `record_mac`'i satırın bugünkü alanlarından hesaplanana eşit olmalıdır;
+içerik MAC'li satır hiç yoksa satır tutmaz (fail-closed; meşru hiçbir hâl böyle doğmaz — her hesap
+`HESAP` satırıyla açılır). Satır, iz anahtarları ve iz satırları tek anlık görüntüde okunur;
+çağıranın ORM'le okuduğu mühür beklenen mühürdür (ham okumadaki mühür ona eşit olmalı: izi
+doğrulanan hâl kararın verildiği hâldir). İlk denetim tutmazsa yanlış alarm ayıklanır
+(`_yaristan_sonraki_satir`): arada meşru bir yazım satırı değiştirdiyse denetim yazıcılarla sıralı
+bir işlemde yinelenir, doğrulanan GÜNCEL satır döner ve kararlar ondan verilir. Tutmazsa
+MÜHÜR UYUŞMAZLIĞIYLA AYNI muamele: işlem reddedilir (`AccountRecordStale`, `AccountSealMismatch`'in
+alt sınıfı, 409 `hesap_muhru_tutmadi`, mühür iletisi), `BUTUNLUK` satırı düşer (`SISTEM`, alan
+`kayit_mac`; `_muhur_bozuk_izi`), satıra dokunulmaz, hatalı deneme sayacı ve gecikme yok. Denetim
+noktaları mühür denetiminin olduğu her yerdir: kilit açılışı (`_open_account_for_login`: parmak
+izi → satır → mühür → iz anahtarı → SATIRIN İZİ → özet → durum; sıranın gerekçesi orada),
+kurtarma anahtarıyla açılış, oturumdaki parola doğrulaması ve parola değiştirme (`_sealed_account`),
+hesap servisleri (işlemi yapan ve işlem gören; `hesaplar` modül başlığı), iki depo karşılaştırması
+(izi tutmayan satır `seal_mismatch`'tedir, hiçbir işleme girmez), kapalı hesap sarmalının temizliği
+(izi tutmayan `KAPALI` satır sarmal sildiremez) ve geri yüklemenin parola yolu
+(`geri_yukleme_yetkisi`, `RET_KAYIT_IZI`). Reddedilen hesabın ÇIKIŞI yedekten geri yüklemedir
+(zarfın üçüncü durumu): parola sıfırlaması, askıdan çıkarma ve kapama izi tutmayan satıra
+dokunmaz; tek hesaplı roldeki (ör. muhasip) satır `KAPALI` olmadığı için o role yeni hesap da
+açılamaz. Kurtarma anahtarıyla geri yükleme rol ve satır izi denetlemez.
+
+YANLIŞ ALARM YOK: her meşru `Account` yazımı aynı işlemde satırın SON hâlinin içerik MAC'ini taşıyan
+iz satırını yazar — ilk hesap ve hesap açma `HESAP`, kilit açılışı `GIRIS` (son giriş anı, özet
+terfisi ve temizliği aynı yazımda), yenileme ve parola değiştirme `PAROLA`, kurtarma `KURTARMA`,
+iki aşamalı özetin 1. adımı ve sıfırlamanın 2. adımı `HESAP` (`write_wrap_digests`), sıfırlama
+`PAROLA`, kapama, askıdan çıkarma ve iki depo düzeltmesi `HESAP`, bildirimin kapanması `GUNCELLE`,
+geri yüklemenin özet onarımı ORM'siz `SISTEM` `HESAP` (`satir_izi.hesap_satirlarini_izle`). Kilitli
+kip satırları (`YEDEK`, `GOC`, `GUN_ISI`, `BUTUNLUK`) `Account` yazmaz. İçerik MAC'ine giren alan
+kümesini (`Account.IZ_OZET_ALANLARI` = `satir_izi.HESAP_OZET_ALANLARI`, altın liste) ya da var olan
+satırların bu alanlardaki değerini değiştiren her değişiklik (F4'ün DEK yenilemesi dahil) `KAPALI`
+olanlar DAHİL BÜTÜN hesap satırlarının izini aynı işlemde yeniden kurmalıdır — her satırı önce eski
+hâliyle son kaydına karşı doğrulayıp yalnız tutanlara (`satir_izi.HESAP_OZET_ALANLARI` yorumu);
+yoksa açık satırların girişi reddedilir, `KAPALI` satırlar iki depo kartında yanlış alarm verir ve
+sarmallarının temizliği durur. Bu adımın bugün yeri yoktur (kullanıcı kararı bekler; `denetim_izi`
+modül başlığı "ÖZET ALANLARI VE ŞEMA DEĞİŞİMİ"). Eşzamanlı meşru yazım da alarm doğurmaz:
+denetimin okumaları tek anlık görüntüdedir ve ayıklama yazıcılarla sıralı işlemde yinelenir
+("SATIRIN İZİ").
 
 İKİ DEPO KURALI (tasarım §4.6.1; `guvenlik.json` ↔ `Account`):
 
 1. **Giriş** (`unlock`): yalnız seçilen hesabın sarmalı denenir (Argon2id bir kez;
    süre hesap sayısıyla büyümez). Sarmal açılınca, DEK belleğe ALINMADAN önce:
-   parmak izi bu veritabanınınki mi, `Account` satırı var mı, mührü tutuyor mu, açılan
-   sarmalın özeti satırın asıl ya da bekleyen özetini tutuyor mu ("SARMALIN TAZELİĞİ"),
-   durumu `ACIK` ya da `PAROLA_YENILENMELI` mi, iz anahtarı (İA) bu DEK'le
-   çözülüyor mu. Biri tutmazsa giriş reddedilir ve satıra DOKUNULMAZ (mühür
+   parmak izi bu veritabanınınki mi, `Account` satırı var mı, mührü tutuyor mu, iz
+   anahtarı (İA) bu DEK'le çözülüyor mu, satır denetim izindeki son içerik MAC'li kaydını
+   tutuyor mu ("SATIRIN İZİ"), açılan sarmalın özeti satırın asıl ya da bekleyen özetini
+   tutuyor mu ("SARMALIN TAZELİĞİ"), durumu `ACIK` ya da `PAROLA_YENILENMELI` mi.
+   Biri tutmazsa giriş reddedilir ve satıra DOKUNULMAZ (mühür
    tutmazsa yeniden mühürlemek değiştirilmiş rolü meşrulaştırırdı; tehdit 19).
    Ret kodları (`UnlockRefused.code`; kullanıcı metnine çıkmaz): `parola_yanlis`,
    `hesap_askida`, `hesap_muhru_tutmadi`, `iki_depo_tutarsiz`; geçici ya da 180
@@ -158,8 +236,9 @@ parola kaydını hemen geçersiz kılar; satır geri sarmaya (b) ve geri yüklem
    (TK11). Dosya adımı yarıda kalırsa her kilit açılışında koşan temizlik siler;
    adayları ana dosyayla birlikte bütün arşivlerden toplar (sarmal yalnız arşivde
    kalmış olabilir) ve kesilmiş yazımların `.tmp` artıklarını da siler. Temizlik
-   YALNIZ mührü tutan `KAPALI` satır için koşar: veritabanında durumu program
-   dışından `KAPALI`'ya çevrilmiş satır, meşru bir sarmalı sildiremez.
+   YALNIZ mührü ve izi (denetim izindeki son içerik MAC'li kaydı) tutan `KAPALI` satır
+   için koşar: veritabanında durumu program dışından `KAPALI`'ya çevrilmiş satır, meşru
+   bir sarmalı sildiremez.
 4. **Geri yüklemeden sonra** (`hesaplar.reconcile_two_stores`): fark listelenir;
    sarmalı olmayan açık hesap `PAROLA_YENILENMELI` olur; satırı olmayan ya da
    satırı `KAPALI` olan sarmal yalnız program yöneticisinin onayıyla silinir. Sarmalının
@@ -228,8 +307,9 @@ ilk hesap, kilit açılışı ve
 kurtarma oturum açılmadan yazılır, yazar açıkça verilir (`yazar_olarak`). Kilit
 açılışında DEK ve İA önce belleğe alınır, satırlar yazılır, oturum SONRA açılır;
 yazılamazsa anahtarlar düşer ve oturum açılmaz (iz yazılamazsa yazma yapılamaz). Girişte
-hesap mührü tutmazsa olay `BUTUNLUK` satırı olarak düşer (`SISTEM`; DEK sarmaldan
-açıldığı için İA çözülebilir), satıra dokunulmaz. Hatalı deneme sayacı ve askısı DEK
+hesap mührü, satırın izi ya da sarmal özeti tutmazsa olay `BUTUNLUK` satırı olarak düşer
+(`SISTEM`; alan `seal`, `kayit_mac` ya da `wrap_digest`; DEK sarmaldan açıldığı için İA
+çözülebilir), satıra dokunulmaz. Hatalı deneme sayacı ve askısı DEK
 istemeden, kilitliyken dosyaya yazılır; o an iz yazılamaz (kilitli kip yalnız kişisiz
 sistem olaylarını yazar, §4.6.3): askı `guvenlik.json`'da ve kilit ekranında görünür. İzi
 KALDIRILIRKEN düşer: sayacı ya da askıyı silen her program yöneticisi işlemi (askıdan
@@ -542,6 +622,23 @@ class WrapDigestMismatch(AccountSealMismatch):
     status_code = 409
 
 
+class AccountRecordStale(AccountSealMismatch):
+    """Hesap satırı denetim izindeki son içerik MAC'li kaydını tutmadı (kullanıcı kararı 03.11.2026
+    "Girişte reddet"; modül başlığı "SATIRIN İZİ", `satir_izi`): mührü tutan ama eski bir
+    kopyadan geri konmuş (ya da izi program dışından değiştirilmiş) satır.
+
+    Mühür uyuşmazlığının alt sınıfıdır ve kodunu, durumunu ve iletisini taşır (409
+    `hesap_muhru_tutmadi`; `_SEAL_MISMATCH_MESSAGE`, hesap servislerinde onların iletisi): kullanıcı
+    kararı onu mühür uyuşmazlığıyla AYNI muameleye bağlar — işlem reddedilir, `BUTUNLUK` satırı
+    düşer (`_muhur_bozuk_izi`, alan adı `kayit_mac`), satıra dokunulmaz, hatalı deneme sayacı ve
+    gecikme yok. Ayrı sınıf yalnız günlüğün, testin ve kartın ayırt etmesi içindir; plan F1b-1'in
+    kod listesine yeni kod eklenmez.
+    """
+
+    code = "hesap_muhru_tutmadi"
+    status_code = 409
+
+
 class TwoStoreMismatch(UnlockRefused):
     """`guvenlik.json` ile veritabanı tutarsız (satır yok, kapalı, başka veritabanı)."""
 
@@ -643,7 +740,11 @@ def read_state() -> dict[str, Any] | None:
         return None
     try:
         data: Any = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError) as exc:
+        # Derin iç içe JSON (`[[[[…]]]]`) `json.loads`'ta `RecursionError` yükseltir; o da
+        # bozuk dosyadır (aile kuralı: `desktop.backup_crypto.parse_security_state`). Yakalanmasaydı
+        # veri dizinine konmuş tek bir zehirli `guvenlik.json` kilit ekranının hesap listesini
+        # (`account_wraps`) ve kilit açılışını Türkçe ret yerine 500'e düşürürdü.
         raise AppPasswordError(
             "Güvenlik dosyası (guvenlik.json) okunamadı ya da bozuk. Dosyanın sağlam bir "
             "kopyasını veri klasörüne geri koyun ya da bir yedekten geri yükleyin; dosya "
@@ -1989,12 +2090,13 @@ def _check_fingerprint(data_key: bytes) -> None:
         raise TwoStoreMismatch(_FOREIGN_DB_MESSAGE)
 
 
-def _sealed_account(hesap_id: object, data_key: bytes, *, giris: bool = False) -> Account:
+def _muhurlu_satir(hesap_id: object, data_key: bytes, *, giris: bool = False) -> Account:
     """Satırı okur ve mührünü DEK'le doğrular (DEK belleğe alınmadan). Satıra dokunmaz.
 
     Satır yoksa `TwoStoreMismatch`, mühür tutmazsa `AccountSealMismatch`. Girişte
     (`giris`) mühür tutmazsa olay ayrıca denetim izine `BUTUNLUK` satırı olarak düşer
-    (`_muhur_bozuk_izi`; tasarım §4.6.1 kural 1, tehdit 19).
+    (`_muhur_bozuk_izi`; tasarım §4.6.1 kural 1, tehdit 19). Satırın izini SORMAZ: o,
+    çağıranın sırasıyla `satir_izini_denetle`'dir (kilit açılışı ve kurtarma önce İA'yı çözer).
     """
     hesap = account_by_id(hesap_id)
     if hesap is None:
@@ -2007,16 +2109,94 @@ def _sealed_account(hesap_id: object, data_key: bytes, *, giris: bool = False) -
     return hesap
 
 
+def _sealed_account(hesap_id: object, data_key: bytes, *, giris: bool = False) -> Account:
+    """Mühürlü ve izi tutan satır: `_muhurlu_satir` + `satir_izini_denetle` (modül başlığı
+    "SATIRIN İZİ"). Oturumdaki parola doğrulaması ve parola değiştirme kullanır (İA bellekte).
+    Döndürülen satır kararın satırıdır (`satir_izini_denetle`)."""
+    hesap = _muhurlu_satir(hesap_id, data_key, giris=giris)
+    return satir_izini_denetle(hesap, data_key)
+
+
+#: Satır izi tutmadığında `BUTUNLUK` satırının alan adı (kart onu mühür ve özetten ayırır).
+KAYIT_MAC_ALANI = "kayit_mac"
+
+
+def satir_izini_denetle(
+    hesap: Account, data_key: bytes, *, ileti: str = _SEAL_MISMATCH_MESSAGE
+) -> Account:
+    """Satır denetim izindeki son içerik MAC'li kaydını tutmalı (modül başlığı "SATIRIN İZİ").
+
+    Karar `denetim_izi.hesap_izi_tutuyor`'dadır (ORM'siz tek işlev `satir_izi.hesap_izi_tutuyor`;
+    DEK verilir, kilit açılışında henüz belleğe alınmamıştır). Çağıranın okuduğu mühür beklenen
+    mühürdür: izi doğrulanan hâl, kararın verildiği hâlin AYNISIDIR (`satir_izi` adım 5). Tutmazsa
+    önce yanlış alarm ayıklanır (`_yaristan_sonraki_satir`); yine tutmazsa mühür uyuşmazlığıyla
+    AYNI muamele (kullanıcı kararı 03.11.2026): `BUTUNLUK` satırı (`SISTEM`, alan `kayit_mac`;
+    `_muhur_bozuk_izi`) ve `AccountRecordStale` (409 `hesap_muhru_tutmadi`); satıra dokunulmaz,
+    hatalı deneme sayacına ve gecikmeye dokunulmaz. Çağıran mührü önceden doğrulamıştır. Hesap
+    servisleri kendi iletilerini verir (`ileti`).
+
+    DÖNÜŞ kararın satırıdır: çoğu kez verilen `hesap`; arada meşru bir yazım satırı değiştirdiyse
+    yazıcılarla sıralı işlemde yeniden okunup mührü ve izi doğrulanmış GÜNCEL satır. Çağıran sonraki
+    kararlarını (özet, durum, rol) dönen satırdan verir.
+    """
+    if denetim_izi.hesap_izi_tutuyor(hesap.id, veri_anahtari=data_key, beklenen_muhur=hesap.seal):
+        return hesap
+    guncel = _yaristan_sonraki_satir(hesap, data_key)
+    if guncel is not None:
+        logger.info(
+            "Hesap satırı denetim sırasında programca değişti; karar güncel satırdan verildi (%s).",
+            hesap.id,
+        )
+        return guncel
+    logger.warning(
+        "Hesap satırı denetim izindeki son kaydını tutmadı; işlem reddedildi, satıra "
+        "dokunulmadı (%s).",
+        hesap.id,
+    )
+    _muhur_bozuk_izi(hesap, data_key, alan=KAYIT_MAC_ALANI)
+    raise AccountRecordStale(ileti)
+
+
+def _yaristan_sonraki_satir(hesap: Account, data_key: bytes) -> Account | None:
+    """Yanlış alarm ayıklaması (modül başlığı "SATIRIN İZİ"; bağımsız denetim bulgusu): ilk denetim
+    işlem dışında koşar ve çağıranın ORM okumasından ayrı bir anlık görüntüdür. Arada aynı hesaba
+    commit edilen MEŞRU bir yazım (çift tıklanan giriş ya da askıdan çıkarma) satırın mührünü
+    değiştirmişse ilk denetim tutmaz — oysa satır ve izi tutarlıdır; silinemez bir `BUTUNLUK`
+    satırı yanlış alarm olurdu.
+
+    Denetim bu yüzden yazıcılarla SIRALI bir işlemde (`atomic`; ayarlarda `BEGIN IMMEDIATE`, arada
+    yazım commit edilemez) yinelenir: satır yeniden okunur; var, mührü bu DEK'le tutuyor ve AYNI
+    anlık görüntüde izini tutuyorsa (beklenen mühür onun mührü) güncel satır döner — karar ondan
+    verilir, alarm yazılmaz. Değilse None (satır program dışından değişmiştir). Dönen satır
+    doğrulanmış güncel hâldir: iki hâl arasında satırı gidip getiren biri de kararı ancak doğrulanmış
+    hâlden aldırabilir (ör. Senaryo 1'in geçici parolası güncel satırın özetini tutmaz). Çağıran bir
+    işlemin içindeyse kayıt noktasıdır ve aynı anlık görüntüyü görür (ayıklama bir şey değiştirmez).
+    """
+    with transaction.atomic():
+        guncel = account_by_id(hesap.id)
+        if (
+            guncel is None
+            or not guncel.seal_matches(data_key)
+            or not denetim_izi.hesap_izi_tutuyor(
+                guncel.id, veri_anahtari=data_key, beklenen_muhur=guncel.seal
+            )
+        ):
+            return None
+    return guncel
+
+
 def _muhur_bozuk_izi(hesap: Account, data_key: bytes, *, alan: str = "seal") -> None:
-    """Mühür (`seal`) ya da sarmal özeti (`wrap_digest`) tutmadı: `BUTUNLUK` satırı (`SISTEM`),
-    satıra dokunulmadan (§4.6.1 kural 1; modül başlığı "SARMALIN TAZELİĞİ").
+    """Mühür (`seal`), sarmal özeti (`wrap_digest`) ya da satırın izi (`kayit_mac`) tutmadı:
+    `BUTUNLUK` satırı (`SISTEM`), satıra dokunulmadan (§4.6.1 kural 1; modül başlığı "SARMALIN
+    TAZELİĞİ", "SATIRIN İZİ").
 
     DEK sarmaldan açıldığı için İA çözülebilir; satır oturum açılmadan, o DEK'ten çözülen
-    İA ile yazılır (iz bellekteki anahtarı beklemez). Aktör `SISTEM`'dir: mührü ya da özeti
-    tutmayan satırın hesabı kanıtlanmış bir yazar değildir. Satır kaydın kimliğini ve tutmayan
-    alanın adını taşır; program yöneticisinin panosundaki kart bu satırdan okunur.
+    İA ile yazılır (iz bellekteki anahtarı beklemez). Aktör `SISTEM`'dir: mührü, özeti ya da
+    izi tutmayan satırın hesabı kanıtlanmış bir yazar değildir. Satır kaydın kimliğini ve
+    tutmayan alanın adını taşır; program yöneticisinin panosundaki kart bu satırdan okunur.
     Yazılamazsa (İA çözülemiyor, veritabanı yazılamıyor) giriş yine reddedilir, olay
-    günlüğe düşer.
+    günlüğe düşer. Kendi işlemindedir: çağıranın açık bir işlemi geri alınırsa satır da gider
+    (hesap servislerinin uçları istek boyu işlem açmamalıdır).
     """
     try:
         anahtar = denetim_izi.anahtari_coz(data_key)
@@ -2032,17 +2212,30 @@ def _muhur_bozuk_izi(hesap: Account, data_key: bytes, *, alan: str = "seal") -> 
         logger.exception("Hesap kaydının tutmadığı denetim izine yazılamadı.")
 
 
-def _open_account_for_login(hesap_id: object, data_key: bytes, ozet: str | None) -> Account:
-    """İki depo kuralının veritabanı yarısı: parmak izi, satır, mühür, sarmal özeti, durum
-    (§4.6.1 kural 1; modül başlığı "SARMALIN TAZELİĞİ"). `ozet` açılan sarmalınkidir."""
+def _open_account_for_login(
+    hesap_id: object, data_key: bytes, ozet: str | None
+) -> tuple[Account, denetim_izi.AcikAnahtar]:
+    """İki depo kuralının veritabanı yarısı: parmak izi, satır, mühür, iz anahtarı, satırın izi,
+    sarmal özeti, durum (§4.6.1 kural 1; modül başlığı "İKİ DEPO KURALI" 1). `ozet` açılan
+    sarmalınkidir. Satırı ve çözülen iz anahtarını döndürür.
+
+    Sıranın gerekçesi: mühür tutmuyorsa satırın hiçbir değerine güvenilmez; satırın izi tutmuyorsa
+    (eski bir kopyadan geri konmuş satır) özetine ve durumuna da güvenilmez — özet ve durum ancak
+    güncel olduğu kanıtlanmış satırdan okunur, eski satırın durumu (ör. kapanmadan önceki `ACIK`)
+    karar vermez ve her geri sarma `BUTUNLUK` satırıyla izlenir. İz anahtarı satırın izinden ÖNCE
+    çözülür: çözülemiyorsa ret `AuditKeyUnreadable`'dır (veritabanının DEK'e bağlı parçası okunamıyor;
+    iz yazılamaz), satırın izi suçlanmaz. Meşru satırda durum iletisi değişmez (askı, kapalı hesap).
+    """
     _check_fingerprint(data_key)
-    hesap = _sealed_account(hesap_id, data_key, giris=True)
+    hesap = _muhurlu_satir(hesap_id, data_key, giris=True)
+    anahtar = _decrypt_audit_key(data_key)
+    hesap = satir_izini_denetle(hesap, data_key)
     _check_wrap_digest(hesap, ozet, data_key)
     if hesap.status == AccountStatus.ASKIDA:
         raise AccountSuspended(_SUSPENDED_MESSAGE)
     if hesap.status not in (AccountStatus.ACIK, AccountStatus.PAROLA_YENILENMELI):
         raise TwoStoreMismatch(_NO_ROW_MESSAGE)
-    return hesap
+    return hesap, anahtar
 
 
 def _decrypt_audit_key(data_key: bytes) -> denetim_izi.AcikAnahtar:
@@ -2110,8 +2303,9 @@ def _cleanup_closed_wraps(data_key: bytes) -> None:
     `guvenlik-arsiv-*` kopyalarındaki sarmallardır: kapamanın dosya adımı ana
     dosyayı yazıp arşivlerde yarıda kaldıysa ya da kurtarma anahtarıyla geri
     yükleme eski dosyayı arşive taşıdıysa sarmal yalnız arşivde durur (TK11).
-    YALNIZ mührü tutan `KAPALI` satırın sarmalı silinir: durumu program dışından
-    değiştirilmiş satır meşru bir sarmalı sildiremez (tehdit 19; plan F1b-1).
+    YALNIZ mührü ve izi (denetim izindeki son içerik MAC'li kaydı) tutan `KAPALI` satırın
+    sarmalı silinir: durumu program dışından değiştirilmiş satır meşru bir sarmalı
+    sildiremez (tehdit 19; plan F1b-1).
     Kesilmiş yazımların `.tmp` artıkları da silinir.
 
     HİÇBİR HATA girişi durdurmaz (yalnız dosya hatası değil; bağımsız denetim bulgusu): temizlik
@@ -2154,6 +2348,9 @@ def _kapali_sarmallari_temizle(data_key: bytes) -> None:
         str(hesap.id)
         for hesap in Account.objects.filter(pk__in=idler, status=AccountStatus.KAPALI)
         if hesap.seal_matches(data_key)
+        and denetim_izi.hesap_izi_tutuyor(
+            hesap.id, veri_anahtari=data_key, beklenen_muhur=hesap.seal
+        )
     }
     if not silinecek:
         _remove_leftover_temps()
@@ -2303,8 +2500,9 @@ def unlock(*, hesap_id: object, password: str, new_password: str | None = None) 
     Sıra (modül başlığı, İKİ DEPO KURALI 1): askı → bağsız sarmal (`UnboundWrap`, sayaçsız)
     → yalnız bu hesabın sarmalı, KENDİ kimliğine bağlı (Argon2id bir kez; kimliği
     değiştirilmiş sarmal yanlış parola sayılır) → parmak izi, satır, mühür (tutmazsa
-    `BUTUNLUK` satırı), sarmal özeti (tutmazsa `WrapDigestMismatch` + `BUTUNLUK` satırı,
-    sayaçsız; modül başlığı "SARMALIN TAZELİĞİ"), durum → iz anahtarı → parola yenileme
+    `BUTUNLUK` satırı), iz anahtarı, satırın izi (tutmazsa `AccountRecordStale` + `BUTUNLUK`
+    satırı, sayaçsız; modül başlığı "SATIRIN İZİ"), sarmal özeti (tutmazsa `WrapDigestMismatch` +
+    `BUTUNLUK` satırı, sayaçsız; modül başlığı "SARMALIN TAZELİĞİ"), durum → parola yenileme
     gereği → sayaç → tek işlemde son giriş ve `GIRIS` satırı (gerekiyorsa özet düzeltmesiyle),
     sonunda kapalı hesap sarmalı temizliği → oturum açılır (`_start_session`). Herhangi bir
     ret hâlinde DEK belleğe ALINMAZ ve satıra dokunulmaz. Oturum açıkken çağrılırsa
@@ -2334,8 +2532,7 @@ def unlock(*, hesap_id: object, password: str, new_password: str | None = None) 
     if veri_anahtari is None:
         raise _failure_outcome(hesap_id)
     acilan_ozet = wrap_digest(veri_anahtari, sarmal)
-    hesap = _open_account_for_login(hesap_id, veri_anahtari, acilan_ozet)
-    iz_anahtari = _decrypt_audit_key(veri_anahtari)
+    hesap, iz_anahtari = _open_account_for_login(hesap_id, veri_anahtari, acilan_ozet)
     giris_oncesi: Callable[[Account], None] | None = None
     yeni_sarmal: Callable[[], None] | None = None
     ozet_plani: tuple[str, str] | None = None
@@ -2662,8 +2859,17 @@ def unlock_with_recovery(*, recovery_key: str, hesap_id: object, new_password: s
         state = _require_state()
         veri_anahtari = _unwrap_with_recovery(state, recovery_key)
         _check_fingerprint(veri_anahtari)
-        hesap = _sealed_account(hesap.id, veri_anahtari, giris=True)
+        hesap = _muhurlu_satir(hesap.id, veri_anahtari, giris=True)
         iz_anahtari = _decrypt_audit_key(veri_anahtari)
+        # Satırın izi (modül başlığı "SATIRIN İZİ"): eski bir kopyadan geri konmuş satırın
+        # parolası kurtarma anahtarıyla da yenilenmez; çıkış yedekten geri yüklemedir. Rol ve
+        # durum doğrulanmış (dönen) satırda yeniden sorulur: yukarıdaki ön denetim mühürsüz okumadır.
+        hesap = satir_izini_denetle(hesap, veri_anahtari)
+        if hesap.role != AccountRole.YONETICI or hesap.status not in (
+            AccountStatus.ACIK,
+            AccountStatus.PAROLA_YENILENMELI,
+        ):
+            raise AppPasswordError(_RECOVERY_ONLY_ADMIN_MESSAGE)
         # İki aşamalı özet (modül başlığı): dosyada şu an duran sarmal meşruysa (özeti satırınkini
         # tutuyorsa) kesintide açılabilir kalır; yoksa ya da tutmuyorsa asıl özet değişmez.
         mevcut = _find_wrap(state, hesap.id)

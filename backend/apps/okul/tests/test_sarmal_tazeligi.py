@@ -19,7 +19,8 @@ girer (`app_password` modül başlığı "SARMALIN TAZELİĞİ", "İKİ AŞAMALI
   yükleme (güncel `guvenlik.json` ile ve başlıktan);
 * BAĞIMSIZ DENETİMİN BULGULARINI (dosyanın sonu): çapa ikamesi (bayat çapa özet vermez), çift
   geri yükleme (çapada olmayan hesabın özeti boşalır), kapanan hesap (çapada `KAPALI` → boşalır),
-  mührü bozuk çapa satırı (taşınmaz; kalan risk sabitlenir), taşıma dalı, onarım yazılamazsa
+  mührü bozuk çapa satırı (taşınmaz; K-a: dosyadakini tutmayan özetler boşaltılır, geri
+  yüklemeden önce konan yedek günü sarmalı kalan risk olarak sabitlenir), taşıma dalı, onarım yazılamazsa
   geri yükleme, kilitte özet/durum sırası, korunan asıl özetin meşruluğu (`_kept_digest`) ve
   zehirli arşiv / kapalı hesap temizliğinin hatası (sarmal yazımından sonra düşen adım yok).
 
@@ -33,16 +34,10 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Callable
-from contextlib import closing
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from desktop.backup_crypto import (
-    encrypt_bytes,
-    private_key_from_data_key,
-    recovery_header_from_state,
-)
 from django.db import connection
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -57,6 +52,11 @@ from apps.okul.services import (
     hesaplar,
     ozet_onarimi,
 )
+from apps.okul.tests.geri_yukleme_ortak import geri_yukle as _geri_yukle
+from apps.okul.tests.geri_yukleme_ortak import goruntu as _goruntu
+from apps.okul.tests.geri_yukleme_ortak import hesap_satiri_oku as _hesap_satiri
+from apps.okul.tests.geri_yukleme_ortak import programa_al as _programa_al
+from apps.okul.tests.geri_yukleme_ortak import sifreli_yedek as _kapsayici
 from apps.okul.tests.hesap_ortak import (
     GECICI_PAROLA,
     UCUNCU_PAROLA,
@@ -467,70 +467,6 @@ def test_bekleyen_ozet_yazilamazsa_hicbir_sey_degismez(
 # ============================================================ geri yükleme onarımı
 
 
-def _goruntu(yol: Path) -> bytes:
-    """ORM'in yazdığı test veritabanının o anki görüntüsü (gerçek SQLite dosyası)."""
-    yol.parent.mkdir(parents=True, exist_ok=True)
-    yol.unlink(missing_ok=True)
-    connection.ensure_connection()
-    with closing(sqlite3.connect(yol)) as hedef:
-        connection.connection.backup(hedef)
-    return yol.read_bytes()
-
-
-def _kapsayici(icerik: bytes) -> bytes:
-    """Bu kurulumun DEK'iyle, güncel kurtarma başlığını gömen şifreli yedek."""
-    baslik = json.dumps(recovery_header_from_state(durum()), ensure_ascii=False).encode("utf-8")
-    acik = private_key_from_data_key(TEST_DEK).public_key()
-    return cast("bytes", encrypt_bytes(icerik, acik, recovery_header=baslik))
-
-
-def _geri_yukle(
-    tmp_path: Path,
-    yedek: bytes,
-    guncel: bytes | None,
-    *,
-    kapsayici: bytes | None = None,
-    **sir: str,
-) -> Path:
-    """`guncel` (yoksa veritabanı dosyası yok) yerine `yedek`i geri yükler; hedefin yolunu döndürür.
-
-    `kapsayici` verilmezse yedek güncel güvenlik dosyasının kurtarma başlığıyla şifrelenir."""
-    db = tmp_path / "canli" / "db.sqlite3"
-    db.parent.mkdir(parents=True, exist_ok=True)
-    db.unlink(missing_ok=True)
-    if guncel is not None:
-        db.write_bytes(guncel)
-    kap = tmp_path / "gunluk-2026-11-03.odbak"
-    kap.write_bytes(_kapsayici(yedek) if kapsayici is None else kapsayici)
-    backup_restore.restore_database(kap, db, **sir)
-    return db
-
-
-def _hesap_satiri(db: Path, hesap_id: object) -> Any:
-    with closing(sqlite3.connect(db)) as baglanti:
-        satir = geri_yukleme_yetkisi.hesap_satiri(baglanti, str(hesap_id).replace("-", ""))
-    assert satir is not None
-    return satir
-
-
-def _programa_al(db: Path) -> None:
-    """Geri yüklenen dosyanın hesap satırlarını programın veritabanına koyar (durum, kapanış,
-    özetler, mühür, değişim anı): girişin geri yüklenen kayıtla sınanması."""
-    with closing(sqlite3.connect(db)) as baglanti:
-        satirlar = baglanti.execute(
-            "SELECT id, status, closed_at, closed_by_id, wrap_digest, wrap_digest_pending, seal, "
-            "password_changed_at FROM okul_account"
-        ).fetchall()
-    with connection.cursor() as cursor:
-        for kimlik, status, kapanis, kapatan, ozet, bekleyen, muhur, degisim in satirlar:
-            cursor.execute(
-                "UPDATE okul_account SET status = %s, closed_at = %s, closed_by_id = %s, "
-                "wrap_digest = %s, wrap_digest_pending = %s, seal = %s, "
-                "password_changed_at = %s WHERE id = %s",
-                [status, kapanis, kapatan, ozet, bekleyen, muhur, degisim, kimlik],
-            )
-
-
 def _muhasip_parolasini_degistirir(muhasip: Account) -> None:
     app_password.lock()
     app_password.unlock(hesap_id=muhasip.id, password=GECICI_PAROLA)
@@ -634,8 +570,11 @@ def test_dususte_yedekten_sonra_degisen_yonetici_parolasi_reddedilir_kurtarma_ac
     """(iv): güncel veritabanı yok ya da bozuk (görüntüye düşüş) ve program yöneticisi
     parolasını yedekten sonra değiştirmiş: görüntüdeki satır yedek gününün özetini taşır, parola
     yolu reddedilir (`RET_OZET`; ileti kurtarma anahtarı yolunu anar), hiçbir dosya değişmez.
-    Kurtarma anahtarı yolu açıktır: geri yükler; çapa okunamadığı için satırlara dokunulmaz
-    (yedekteki özet kalır) ve program yöneticisi kurtarma anahtarıyla açar."""
+    Kurtarma anahtarı yolu açıktır: geri yükler; çapa okunamadığı için K-a uygulanır — güncel
+    `guvenlik.json`'daki sarmal (yeni parolanınki) yedek gününün özetini tutmadığı için İKİ ÖZET
+    BOŞALTILIR (fail-closed) ve onarım `SISTEM` `HESAP` satırıyla izlenir; ne yeni parola ne
+    arşivden geri konan yedek günü sarmalı açar, program yöneticisi kurtarma anahtarıyla açar.
+    (b3'te yedekteki özet kalıyordu: arşivden geri konan yedek günü sarmalı açardı.)"""
     yedek = _goruntu(tmp_path / "yedek.sqlite3")
     yedekteki = Account.objects.get(pk=TEST_HESAP_ID).wrap_digest
     app_password.change_password(
@@ -655,11 +594,21 @@ def test_dususte_yedekten_sonra_degisen_yonetici_parolasi_reddedilir_kurtarma_ac
 
     db = _geri_yukle(tmp_path, yedek, guncel, recovery_key=TEST_KURTARMA_ANAHTARI)
     satir = _hesap_satiri(db, TEST_HESAP_ID)
-    assert satir[geri_yukleme_yetkisi.SIRA_OZET] == yedekteki
+    assert yedekteki != ""
+    assert (satir[geri_yukleme_yetkisi.SIRA_OZET], satir[geri_yukleme_yetkisi.SIRA_BEKLEYEN]) == (
+        "",
+        "",
+    )
+    assert geri_yukleme_yetkisi.muhurlu_satir_mi(satir, TEST_DEK)
     _programa_al(db)
     app_password.lock()
     with pytest.raises(app_password.WrapDigestMismatch):
         app_password.unlock(hesap_id=TEST_HESAP_ID, password=YENI_PAROLA)
+    yeni_sarmal = _sarmal(TEST_HESAP_ID)
+    _geri_koy(_arsivdeki_sarmal(TEST_HESAP_ID, TEST_PAROLA))
+    with pytest.raises(app_password.WrapDigestMismatch):
+        app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
+    _geri_koy(yeni_sarmal)
     hesap = app_password.unlock_with_recovery(
         recovery_key=TEST_KURTARMA_ANAHTARI, hesap_id=TEST_HESAP_ID, new_password=UCUNCU_PAROLA
     )
@@ -749,6 +698,7 @@ def test_onarim_modulu_orm_ve_django_ice_aktarmaz() -> None:
         "collections.abc",
         "contextlib",
         "dataclasses",
+        "datetime",
         "pathlib",
         "typing",
     }
@@ -759,7 +709,7 @@ def test_onarim_modulu_orm_ve_django_ice_aktarmaz() -> None:
             if dugum.module == "shared":
                 assert {ad.name for ad in dugum.names} <= {"crypto", "kanonik", "sqlite_adres"}
             elif dugum.module == "apps.okul.services":
-                assert {ad.name for ad in dugum.names} == {"geri_yukleme_yetkisi"}
+                assert {ad.name for ad in dugum.names} <= {"geri_yukleme_yetkisi", "satir_izi"}
             else:
                 assert dugum.module in izinli, dugum.module
 
@@ -798,8 +748,9 @@ def test_capa_ikamesi_eski_ozeti_taze_yedege_tasimaz(
     parolanın sarmalınındır). Muhasip geçici parolayla girip parolasını yeniler; TAZE yedek alınır.
     Program kapalıyken `db.sqlite3` eski kopyayla değiştirilir, arşivdeki geçici parola sarmalı
     `guvenlik.json`'a konur ve taze yedek geri yüklenir. Eski kopya taze yedeğin zincir başını
-    içermez: çapa BAYATTIR, özet taşınmaz; geri yüklenen satır taze yedeğin özetini taşır, geçici
-    parola açmaz. (Çapa tazelik denetimi olmadan geçici parolanın özeti taze yedeğe aklanırdı.)"""
+    içermez: çapa BAYATTIR, özet taşınmaz. Dosyadaki (geri konmuş) sarmal geri yüklenen satırın
+    özetini tutmadığı için iki özet BOŞALTILIR (K-a, fail-closed); geçici parola açmaz. (Çapa
+    tazelik denetimi olmadan geçici parolanın özeti taze yedeğe aklanırdı.)"""
     muhasip = _muhasip()
     hesaplar.reset_password(
         by_hesap_id=TEST_HESAP_ID, hesap_id=muhasip.id, temp_password=UCUNCU_PAROLA
@@ -817,8 +768,9 @@ def test_capa_ikamesi_eski_ozeti_taze_yedege_tasimaz(
 
     assert "bayat çapa" in caplog.text
     satir = _hesap_satiri(db, muhasip.id)
+    assert taze.wrap_digest != ""
     assert (satir[geri_yukleme_yetkisi.SIRA_OZET], satir[geri_yukleme_yetkisi.SIRA_BEKLEYEN]) == (
-        taze.wrap_digest,
+        "",
         "",
     )
     assert geri_yukleme_yetkisi.muhurlu_satir_mi(satir, TEST_DEK)
@@ -902,34 +854,70 @@ def test_kapali_durum_sabiti_modeldekiyle_ayni() -> None:
     assert ozet_onarimi.DURUM_KAPALI == AccountStatus.KAPALI.value
 
 
-@pytest.mark.django_db(transaction=True)
-def test_capadaki_muhru_bozuk_satirin_ozeti_tasinmaz(tmp_path: Path) -> None:
-    """Çapa satırının mühür şartı (bağımsız denetim bulgusu): muhasip W1 (geçici) → W2 → W3 geçer;
-    yedek W2 günündendir. Güncel veritabanında muhasibin özeti program dışından W1'inkine
-    çevrilir (mühür bozulur) ve W1 `guvenlik.json`'a geri konur. Onarım mührü tutmayan çapa
-    satırının özetini TAŞIMAZ: geri yüklenen satır yedekteki (W2) özeti taşır, W1 açılmaz.
-
-    KALAN RİSK (kullanıcı kararını bekler: çapa satırının mührü bozukken boşaltma): bu hâlde yedek
-    günündeki W2 geri konursa o günün parolasıyla açar. Test riski sabitler."""
+def _muhru_bozuk_capa(
+    tmp_path: Path,
+) -> tuple[Account, dict[str, Any], dict[str, Any], bytes, bytes]:
+    """Muhasip W1 (geçici) → W2 → W3 geçer; yedek W2 günündendir. Güncel veritabanında muhasibin
+    özeti program dışından W1'inkine çevrilir (çapa satırının mührü bozulur). (muhasip, W1, W2,
+    yedek, güncel) döner."""
     muhasip = _muhasip()
     w1 = _sarmal(muhasip.id)
     _muhasip_yeniden_degistirir(muhasip.id, GECICI_PAROLA, YENI_PAROLA)
     w2 = _sarmal(muhasip.id)
     yedek = _goruntu(tmp_path / "yedek.sqlite3")
-    yedekteki = Account.objects.get(pk=muhasip.id).wrap_digest
     _muhasip_yeniden_degistirir(muhasip.id, YENI_PAROLA, UCUNCU_PAROLA)
     ham_guncelle(muhasip.id, wrap_digest=app_password.wrap_digest(TEST_DEK, w1))
     guncel = _goruntu(tmp_path / "guncel.sqlite3")
+    return muhasip, w1, w2, yedek, guncel
+
+
+@pytest.mark.django_db(transaction=True)
+def test_capadaki_muhru_bozuk_satirin_ozeti_tasinmaz_bosaltilir(tmp_path: Path) -> None:
+    """Çapa satırının mühür şartı ve K-a (orkestratör kararı, b4): çapadaki satırın mührü bozuksa
+    çapa o hesap için KULLANILAMAZ; özet taşınmaz. Dosyada W1 (geri konmuş) durur ve geri yüklenen
+    satırın (W2 günü) özetini tutmaz: iki özet BOŞALTILIR (fail-closed), onarım `SISTEM` `HESAP`
+    satırıyla izlenir. W1 açılmaz; geri yüklemeden SONRA arşivden geri konan W2 de açılmaz (b3'te
+    açıyordu: kapanan kalan risk). Çıkış program yöneticisinin parola sıfırlamasıdır."""
+    muhasip, w1, w2, yedek, guncel = _muhru_bozuk_capa(tmp_path)
     _geri_koy(w1)
 
     db = _geri_yukle(tmp_path, yedek, guncel, hesap="yonetici", password=TEST_PAROLA)
 
     satir = _hesap_satiri(db, muhasip.id)
-    assert satir[geri_yukleme_yetkisi.SIRA_OZET] == yedekteki
+    assert (satir[geri_yukleme_yetkisi.SIRA_OZET], satir[geri_yukleme_yetkisi.SIRA_BEKLEYEN]) == (
+        "",
+        "",
+    )
+    assert geri_yukleme_yetkisi.muhurlu_satir_mi(satir, TEST_DEK)
     _programa_al(db)
     app_password.lock()
     _acilmaz(muhasip.id, GECICI_PAROLA)
     _geri_koy(w2)
+    _acilmaz(muhasip.id, YENI_PAROLA)
+    app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
+    hesaplar.reset_password(
+        by_hesap_id=TEST_HESAP_ID, hesap_id=muhasip.id, temp_password=UCUNCU_PAROLA
+    )
+    app_password.lock()
+    assert _acilir(muhasip.id, UCUNCU_PAROLA).id == muhasip.id
+
+
+@pytest.mark.django_db(transaction=True)
+def test_bilinen_sinir_geri_yuklemeden_once_konan_yedek_gunu_sarmali_acar(tmp_path: Path) -> None:
+    """KALAN RİSK (K-a; `app_password` modül başlığı "KALAN RİSKLER" (c)): çapa kullanılamazken
+    (burada çapadaki satırın mührü bozuk) yedek günündeki sarmal (W2) geri yüklemeden ÖNCE
+    `guvenlik.json`'a konursa geri yüklenen satırın özetini tutar, özetler kalır ve o günün
+    parolası açar. Görünürlüğü geri yükleme kartıdır. Test riski sabitler: kapanırsa ret testine
+    döner."""
+    muhasip, _w1, w2, yedek, guncel = _muhru_bozuk_capa(tmp_path)
+    _geri_koy(w2)
+
+    db = _geri_yukle(tmp_path, yedek, guncel, hesap="yonetici", password=TEST_PAROLA)
+
+    satir = _hesap_satiri(db, muhasip.id)
+    assert satir[geri_yukleme_yetkisi.SIRA_OZET] == app_password.wrap_digest(TEST_DEK, w2)
+    _programa_al(db)
+    app_password.lock()
     assert _acilir(muhasip.id, YENI_PAROLA).id == muhasip.id  # kalan risk
 
 

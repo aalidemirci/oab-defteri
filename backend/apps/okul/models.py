@@ -968,6 +968,18 @@ class Account(models.Model):
     boşsa hesap parolayla açılmaz (fail-closed). İki alan mühre girer: satırdaki özet tek başına
     eski değerle değiştirilemez.
 
+    SATIRIN İZİ (kullanıcı kararı 03.11.2026 "Girişte reddet"; `services.satir_izi`): mühür satırın
+    bir zamanlar program tarafından yazıldığını kanıtlar, bugünkü hâli olduğunu kanıtlamaz. Satır
+    denetim izindeki SON içerik MAC'li kaydını da tutmalıdır (`IZ_OZET_ALANLARI` üzerinden); eski bir
+    kopyadan geri konmuş satır giriş, oturum işlemi, kurtarma ve hesap işlemi açmaz. Bu yüzden her
+    yazım satırla aynı işlemde iz satırı yazar (aşağıda "DENETİM İZİ") ve `IZ_OZET_ALANLARI`'nı ya
+    da var olan satırların bu alanlardaki değerini değiştiren her değişiklik (F4'ün DEK yenilemesi
+    dahil) `KAPALI` olanlar DAHİL BÜTÜN satırların izini aynı işlemde yeniden kurmalıdır — her
+    satırı önce eski hâliyle son kaydına karşı doğrulayıp yalnız tutanlara; yoksa açık satırların
+    girişi reddedilir, `KAPALI` satırlar iki depo kartında yanlış alarm verir. Bu adımın bugün yeri
+    yoktur, küme o tasarlanmadan değişmez (`satir_izi.HESAP_OZET_ALANLARI` yorumu; kullanıcı kararı
+    bekler).
+
     KISITLAR (sert; sistem bütünlüğü): açık (`KAPALI` olmayan) hesaplar arasında
     `login_name` tekil · başkan, başkan yardımcısı, muhasip, sekreter ve okul müdürü
     için tek açık hesap (DB kısıtı) · Denetleme Kurulu için en çok üç ve en az bir

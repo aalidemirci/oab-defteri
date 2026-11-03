@@ -38,7 +38,9 @@ program yöneticisi yapar. Denetim bu çekirdektedir, üç giriş kapısı da on
 (`geri_yukleme_yetkisi`; ORM'siz): yedek parolayla çözüldükten SONRA (yanlış parola rolü
 sızdırmaz) ve zincir başı okunmadan, veritabanı kenara alınmadan, `guvenlik.json`,
 `yedekleme.json`, sürüm damgası ve not yazılmadan ÖNCE. Hesabın satırı güncel veritabanından
-salt okunur okunur; okunamıyorsa yedeğin görüntüsünden. Ret `GeriYuklemeYetkisiz`'dir: hiçbir
+salt okunur okunur; okunamıyorsa yedeğin görüntüsünden. Satır mührünün yanında denetim
+izindeki son içerik MAC'li kaydını da tutmalıdır (eski bir kopyadan geri konmuş satır reddedilir;
+kullanıcı kararı 03.11.2026 "Girişte reddet"). Ret `GeriYuklemeYetkisiz`'dir: hiçbir
 dosya değişmez (salt okunur okuma, program kapalıyken WAL başlıklı dosyanın yanında 0 baytlık
 `-wal` ve 32 KiB'lık `-shm` bırakabilir; `geri_yukleme_yetkisi` başlığı, F1b-2 ekleri),
 masaüstünde çıkış 9, komutta `CommandError`,
@@ -65,16 +67,22 @@ satırı güncel sarmalın özetini taşır. Geri yükleme GÜNCEL `guvenlik.jso
 birleştirdiği için (parola yolunda ve güncel dosyanın kullanıldığı kurtarma anahtarı yolunda)
 yedekten sonra parolası değişen hesabın geri yüklenen satırı yedek günündeki sarmalın özetini
 taşırdı. Onarım, takastan ÖNCE `.tmp` dosyasında, güven çapası olarak geri yüklemeden önceki
-(kenara alınacak) veritabanının mühürlü satırlarını kullanır. Çapa yalnız geri yüklenen yedeğin
-zincir başını içeriyorsa (yedekten türemişse) TAZEDİR; taze çapada dosyadaki sarmal çapayı
-tutuyorsa özet ona çekilir, tutmuyorsa çapanın özetleri aynen geçer. Bayat çapa (eski bir düz
-kopyayla değiştirilmiş ya da önceki bir geri yüklemenin veritabanı) özet vermez. Çapada satırı
-olmayan ya da çapada `KAPALI` olan hesabın özetleri boşaltılır; çapa okunamıyorsa, bayatsa ya da
-hesabın çapadaki satırının mührü bozuksa o satırlara dokunulmaz (kalan risk; `ozet_onarimi`
-modül başlığı). Kurtarma başlığından yazılacak dosyada (hesaplar boş) onarılacak sarmal yoktur;
-taze çapanın özetleri yine geçer. Onarım yazılamazsa geri yükleme yarıda kalır, hiçbir dosya
-değişmez. Onarım parola yolunun yanında kurtarma anahtarı yollarında da (güncel dosyayla ve
-yedek başlığından) koşar.
+(kenara alınacak) veritabanının mührü ve izi tutan satırlarını kullanır. Çapa yalnız geri
+yüklenen yedeğin zincir başını içeriyorsa (yedekten türemişse) TAZEDİR; baş satırın varlığı tek
+başına soy kanıtı olmadığı için taze çapada da hesabın çapadaki satırının eşleştiği iz satırı geri
+yüklenen satırınkinden eski olamaz (sıra kuralı; eskiyse çapa o hesap için kullanılamaz). Taze
+çapada dosyadaki sarmal çapayı tutuyorsa özet ona çekilir, tutmuyorsa çapanın özetleri aynen
+geçer. Çapada satırı olmayan ya da çapada `KAPALI` olan hesabın özetleri boşaltılır. Çapa
+kullanılamıyorsa (okunamıyor, bayat, ya da hesabın çapadaki satırının mührü, izi ya da sırası
+tutmuyor) dosyadaki sarmal geri yüklenen satırın özetini tutuyorsa özetler kalır, tutmuyorsa
+boşaltılır (K-a; kalan risk `ozet_onarimi` modül başlığında). Mührü ya da izi tutmayan geri
+yüklenen satıra dokunulmaz (aklanmaz). Onarılan her satır aynı işlemde `SISTEM` `HESAP` iz
+satırını alır (`satir_izi.hesap_satirlarini_izle`): ilk kilit açılışı onu reddetmez; onarım
+denetim izinde `SISTEM` `HESAP` satırı olarak kalır (değişen alan adlarıyla; izi okuma ekranı
+Denetleme Kurulu modülüyle F4'te gelir). Kurtarma başlığından
+yazılacak dosyada (hesaplar boş) onarılacak sarmal yoktur; taze çapanın özetleri yine geçer.
+Onarım ya da izi yazılamazsa geri yükleme yarıda kalır, hiçbir dosya değişmez. Onarım parola
+yolunun yanında kurtarma anahtarı yollarında da (güncel dosyayla ve yedek başlığından) koşar.
 
 GERİ YÜKLEME NOTU (tasarım §4.4.4; plan F1b-1 alt commit c): başarılı geri yükleme
 `geri-yukleme-notu.json`'a yedeğin adını, kenara alınan `db-onceki-*` dosyasının adını ve

@@ -31,11 +31,17 @@ OTOMATİK FİXTÜR `varsayilan_hesap` (yalnız VERİTABANI kullanan testte): İK
 ve denetim izi veritabanı ister. Her yazma iz satırı yazar; satırın hesabı `Account`'a
 bağlıdır (PROTECT) ve mührü `AuditKey`'deki İA'dır. Bu yüzden veritabanı kullanan her
 testte `yonetici_hesabi` kurulur: `TEST_HESAP_ID`'nin mühürlü `Account` satırı,
-`TEST_IA`'lı `AuditKey` ve parmak izi. Satırlar fixtürle yazılır, iz satırı yazmaz:
-zincir boş başlar. Hesabı ve iz anahtarı OLMAYAN veritabanı isteyen test ya `parolasiz`'ı
+`TEST_IA`'lı `AuditKey`, parmak izi ve hesabın `HESAP` iz satırı (`enable` gibi: zincir bu
+satırla, `seq = 1`'den başlar). İz satırı zorunludur: hesap satırı denetim izindeki son içerik
+MAC'li kaydını tutmazsa giriş, oturum işlemi ve hesap işlemi reddedilir (kullanıcı kararı
+03.11.2026 "Girişte reddet"; `app_password` modül başlığı "SATIRIN İZİ"). Hesabı ve iz anahtarı
+OLMAYAN veritabanı isteyen test ya `parolasiz`'ı
 ister (hiç kurulmamış ilk açılış) ya da `@pytest.mark.hesapsiz` işaretini taşır (ör.
-"güvenlik dosyasını sıfırla" koşulu şifreli tabloların boş olmasını ister). DB
-kullanmayan test veritabanına dokunmaz: güvenlik dosyası var, satır yok.
+"güvenlik dosyasını sıfırla" koşulu şifreli tabloların boş olmasını ister). Yazıcının ve
+kilitli kipin ZİNCİR BAŞINI sınayan test (ilk satırın `prev_mac`'i boş, sıra 1'den) ise
+`@pytest.mark.bos_zincir` taşır: hesap ve iz anahtarı kurulur, hesabın iz satırı yazılmaz —
+o testte hesabın girişi ve hesap işlemleri satır izi yüzünden reddedilir. DB kullanmayan test
+veritabanına dokunmaz: güvenlik dosyası var, satır yok.
 
 DENETİM İZİ VE `flush` (`iz_tetikleyicili_flush`, oturum boyu): `AuditTrail`'in `BEFORE
 DELETE` tetikleyicisi `transaction=True` testlerinin sonundaki `flush`'ı (`DELETE FROM`)
@@ -203,13 +209,19 @@ def _veritabani_kullanir(request: pytest.FixtureRequest) -> bool:
 def varsayilan_hesap(request: pytest.FixtureRequest, guvenlik_ortami: Path) -> None:
     """Veritabanı kullanan testte program yöneticisinin satırı ve iz anahtarı (modül başlığı).
 
-    `parolasiz` isteyen ya da `hesapsiz` işaretli testte kurulmaz.
+    `parolasiz` isteyen ya da `hesapsiz` işaretli testte kurulmaz; `bos_zincir` işaretli testte
+    hesabın iz satırı yazılmaz.
     """
     if not _veritabani_kullanir(request):
         return
     if "parolasiz" in request.fixturenames or request.node.get_closest_marker("hesapsiz"):
         return
     request.getfixturevalue("yonetici_hesabi")
+
+
+#: Varsayılan ortamın yazdığı iz satırı sayısı (`yonetici_hesabi`: hesabın `HESAP` satırı). Testin
+#: kendi yazdığı ilk satırın sırası `KURULUM_IZI + 1`'dir (`bos_zincir` işaretli testte 1).
+KURULUM_IZI = 1
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -260,10 +272,18 @@ def parolasiz(guvenlik_ortami: Path) -> Path:
 
 
 @pytest.fixture
-def kilitli(guvenlik_ortami: Path) -> Path:
-    """Program kilitli: güvenlik dosyası var, anahtar bellekte değil."""
+def kilitli(request: pytest.FixtureRequest, guvenlik_ortami: Path) -> Path:
+    """Program kilitli: güvenlik dosyası var, anahtar bellekte değil.
+
+    Veritabanı kullanan testte kilitlenme düzenli kilit gibi önce çapayı yazar
+    (`iz_durumu.capa_yaz`): zincir varsayılan hesabın iz satırıyla başlar ve çapasız zincir ilk
+    kilit açılışında "çapa yok" bulgusu (`BUTUNLUK` satırı) olurdu.
+    """
+    from apps.okul import iz_durumu
     from apps.okul.services import app_password
 
+    if _veritabani_kullanir(request) and not request.node.get_closest_marker("hesapsiz"):
+        iz_durumu.capa_yaz()
     app_password.lock()
     return guvenlik_ortami
 
@@ -282,19 +302,23 @@ def parmak_izi_yazili(guvenlik_ortami: Path, db: None) -> str:
 
 
 @pytest.fixture
-def yonetici_hesabi(parmak_izi_yazili: str) -> Any:
+def yonetici_hesabi(request: pytest.FixtureRequest, parmak_izi_yazili: str) -> Any:
     """`TEST_HESAP_ID`'nin mühürlü `Account` satırı + `TEST_IA`'lı `AuditKey` (DB gerekir).
 
     Satır güvenlik dosyasındaki sarmalın özetini taşır (`wrap_digest`; kullanıcı kararı
     03.11.2026 "tazelik kapatılır"): satır ve sarmal ayrı kurulur, özet de kurulur.
 
     Şifreli ad DEK ister: kilitli bir testte de çağrılabilsin diye anahtar geçici
-    olarak yüklenir ve önceki hâl (kilitli ya da açık) korunur. Satırlar fixtürle
-    yazılır, iz satırı yazılmaz (zincir boş başlar; modül başlığı).
+    olarak yüklenir ve önceki hâl (kilitli ya da açık) korunur. Satır, ilk hesabın
+    (`app_password.enable`) yazdığı gibi `HESAP` iz satırıyla aynı işlemde yazılır: zincir
+    bu satırla başlar (modül başlığı); `bos_zincir` işaretli testte iz satırı yazılmaz.
     """
+    from django.db import transaction
     from django.utils import timezone
 
-    from apps.okul.models import Account, AccountRole, AccountStatus, AuditKey
+    from apps.okul import denetim_izi
+    from apps.okul.models import Account, AccountRole, AccountStatus, AuditAction, AuditKey
+    from apps.okul.oturum import Yazar, yazar_olarak
     from apps.okul.services import app_password
     from shared import crypto
 
@@ -315,10 +339,21 @@ def yonetici_hesabi(parmak_izi_yazili: str) -> Any:
         sarmal = app_password._find_wrap(app_password.read_state() or {}, TEST_HESAP_ID)
         hesap.wrap_digest = (app_password.wrap_digest(TEST_DEK, sarmal) or "") if sarmal else ""
         hesap.seal = hesap.compute_seal(TEST_DEK)
-        hesap.save(force_insert=True)
-        AuditKey.objects.create(
-            key=base64.b64encode(TEST_IA).decode("ascii"), valid_from_seq=1, created_at=simdi
-        )
+        with (
+            yazar_olarak(Yazar(hesap_id=TEST_HESAP_ID, rol=TEST_ROL)),
+            transaction.atomic(),
+        ):
+            hesap.save(force_insert=True)
+            anahtar = AuditKey.objects.create(
+                key=base64.b64encode(TEST_IA).decode("ascii"), valid_from_seq=1, created_at=simdi
+            )
+            if request.node.get_closest_marker("bos_zincir") is None:
+                denetim_izi.kayit(
+                    AuditAction.HESAP,
+                    hesap,
+                    onceki=None,
+                    anahtar=denetim_izi.AcikAnahtar(ia=TEST_IA, kayit_id=anahtar.pk),
+                )
     finally:
         if kilitliydi:
             crypto.unload_key()

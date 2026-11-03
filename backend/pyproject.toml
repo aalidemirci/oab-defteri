@@ -47,9 +47,12 @@ python_files = ["test_*.py", "*_test.py"]
 addopts = "--reuse-db --strict-markers -ra --cov=apps --cov=shared --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=75"
 # `hesapsiz`: veritabanı kullanan testte program yöneticisinin hesabı ve iz anahtarı
 # KURULMAZ (kök `conftest.py`, `varsayilan_hesap`); şifreli tabloların boş olmasını
-# isteyen senaryolar içindir.
+# isteyen senaryolar içindir. `bos_zincir`: hesap ve iz anahtarı kurulur ama hesabın iz
+# satırı YAZILMAZ (zincir boş başlar); yazıcının ve kilitli kipin zincir başını sınayan
+# testler içindir — o testte hesabın girişi ve hesap işlemleri satır izi yüzünden reddedilir.
 markers = [
     "hesapsiz: veritabanında varsayılan hesap ve iz anahtarı kurulmaz (kök conftest)",
+    "bos_zincir: varsayılan hesabın iz satırı yazılmaz, zincir boş başlar (kök conftest)",
 ]
 testpaths = ["apps", "shared"]
 

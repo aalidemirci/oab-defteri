@@ -173,6 +173,20 @@ def test_girdi_sozluk_olmali() -> None:
         kanonik.kodla(["liste"])  # type: ignore[arg-type]
 
 
+def test_derin_ic_ice_deger_kanonik_hatadir() -> None:
+    """Program dışından yazılmış bir iz satırının `values`'ı `json.loads`'un açabildiği (C
+    tarayıcısı) ama Python özyinelemesinin açamadığı derinlikte olabilir: `RecursionError` değil
+    `KanonikHata` (çağıranlar "tutmuyor" sayar; bağımsız denetim bulgusu). İçerik MAC'i ve zincir
+    MAC'i de aynı hatayı verir."""
+    derin: object = 0
+    for _ in range(5_000):
+        derin = [derin]
+    with pytest.raises(kanonik.KanonikHata, match="derin"):
+        kanonik.kodla({"x": derin})
+    with pytest.raises(kanonik.KanonikHata):
+        kanonik.kayit_mac(b"k" * 32, "okul.Account", "x", {"x": derin})
+
+
 def test_anahtar_sirasi_kodlamayi_degistirmez() -> None:
     assert kanonik.kodla({"b": 1, "a": 2}) == kanonik.kodla({"a": 2, "b": 1})
 

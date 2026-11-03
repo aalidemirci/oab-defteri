@@ -592,6 +592,14 @@ SAHTE_GIRIS: dict[str, Any] = {
     "model": "okul.Account",
     "object_id": TEST_HESAP_ID,
 }
+#: Kilit açılışından ÖNCE eklenen sahte giriş, satırın kendi izine girmesin diye başka bir
+#: (uydurma) kaydın kimliğini taşır: hesabın kendi iz satırları arasındaki sahte satır girişi
+#: açmaz (satırın izi tutmaz, fail-closed; `test_satir_izi.py`). "Son Girişler" kartı girişi
+#: aktörün hesabından (`account`) süzer: kartın sınaması değişmez.
+SAHTE_GIRIS_BASKA_KAYIT: dict[str, Any] = {
+    **SAHTE_GIRIS,
+    "object_id": "0e1d2c3b-4a59-4687-9a8b-7c6d5e4f3a2b",
+}
 
 
 def test_oturum_acikken_eklenen_sahte_giris_kilit_acilisinda_bulgu_olur_karta_gecmez() -> None:
@@ -601,7 +609,7 @@ def test_oturum_acikken_eklenen_sahte_giris_kilit_acilisinda_bulgu_olur_karta_ge
     "Son Girişler" kartı ve parola bildirimi onu göstermez (tasarım §4.6.2 kural 2)."""
     kilitle()
     ac()
-    sahte = sahte_satir(**SAHTE_GIRIS)
+    sahte = sahte_satir(**SAHTE_GIRIS_BASKA_KAYIT)
     kilitle()
 
     ac()
@@ -645,7 +653,7 @@ def test_oturum_acikken_eklenen_kurala_uyan_muhursuz_satir_bir_kez_bildirilir() 
 def test_kilitliyken_gecersiz_kipli_sahte_giris_bulgudur() -> None:
     """Çapadan sonra kipi ne açık ne kilitli olan satır kilitli sayılmaz, gözden kaçmaz."""
     kilitle()
-    sahte = sahte_satir(**{**SAHTE_GIRIS, "key_mode": "XYZ"})
+    sahte = sahte_satir(**{**SAHTE_GIRIS_BASKA_KAYIT, "key_mode": "XYZ"})
 
     ac()
 
@@ -972,9 +980,12 @@ def test_rotasyonun_sildigi_elle_konmus_dosyanin_adi_yedek_satirina_girmez() -> 
         assert "Uydurma" not in json.dumps([list(map(str, s)) for s in cursor.fetchall()])
 
 
-def test_bozuk_not_ayrintisiz_geri_yukleme_satiri_yazar() -> None:
+@pytest.mark.parametrize("icerik", ["{bozuk", "[" * 30_000 + "]" * 30_000])
+def test_bozuk_not_ayrintisiz_geri_yukleme_satiri_yazar(icerik: str) -> None:
+    """Biçimsiz ya da derin iç içe (`RecursionError`) not ayrıntısız `GERI_YUKLEME` satırıdır; not
+    tüketilir, çapa ve son satırların doğrulaması kesilmez (bulgu yok)."""
     kilitle()
-    geri_yukleme_notu.yol(iz_durumu.dizin()).write_text("{bozuk", encoding="utf-8")
+    geri_yukleme_notu.yol(iz_durumu.dizin()).write_text(icerik, encoding="utf-8")
 
     ac()
 
@@ -1258,7 +1269,7 @@ def test_ikili_macli_sahte_giris_son_girisleri_silmez_kilit_acilisinda_degisikli
     ac()
     gercek = satirlar(action="GIRIS")[-1]
     sahte = sahte_satir(
-        **{**SAHTE_GIRIS, "key_mode": "ACIK", "key_ref": gercek.key_ref},
+        **{**SAHTE_GIRIS_BASKA_KAYIT, "key_mode": "ACIK", "key_ref": gercek.key_ref},
         ham={"mac": b"\x00" * 32},
     )
     sahte_satir(prev_mac="0" * 64)

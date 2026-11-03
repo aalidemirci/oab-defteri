@@ -9,14 +9,17 @@ from __future__ import annotations
 
 import base64
 import json
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
-from django.db import connection
+from django.db import connection, transaction
 
-from apps.okul.models import Account, AccountRole
+from apps.okul import denetim_izi
+from apps.okul.models import Account, AccountRole, AuditAction
+from apps.okul.oturum import sistem_olarak, yazar
 from apps.okul.services import app_password, hesaplar
-from conftest import TEST_DEK, TEST_HESAP_ID
+from conftest import TEST_DEK, TEST_HESAP_ID, TEST_IA
 from shared import crypto
 
 GECICI_PAROLA = "Gecici-Parola-1"
@@ -42,11 +45,34 @@ def hesap_ac(
 
 
 def muhurle(hesap: Account, **alanlar: Any) -> Account:
-    """Alanları yazar ve satırı test DEK'iyle YENİDEN mühürler (meşru program yazımı gibi)."""
-    for ad, deger in alanlar.items():
-        setattr(hesap, ad, deger)
-    hesap.seal = hesap.compute_seal(TEST_DEK)
-    hesap.save(update_fields=[*alanlar, "seal"])
+    """Alanları yazar, satırı test DEK'iyle YENİDEN mühürler ve `HESAP` iz satırını yazar.
+
+    Meşru program yazımı gibidir: satır ve satırın son hâlinin içerik MAC'ini taşıyan iz satırı
+    aynı işlemde (kullanıcı kararı 03.11.2026 "Girişte reddet": izi tutmayan satır giriş açmaz;
+    `app_password` modül başlığı "SATIRIN İZİ"). Yazar o anki bağlamdır, yoksa `SISTEM`. Kilitli
+    bir testte de çağrılabilsin diye DEK ve İA geçici olarak yüklenir (içerik MAC'i çözülmüş adı
+    ister), önceki hâl korunur. Program DIŞINDAN yazım taklidi `ham_guncelle`'dir.
+    """
+    kilitliydi = not crypto.is_unlocked()
+    if kilitliydi:
+        crypto.load_key(TEST_DEK, audit_key=TEST_IA)
+    try:
+        baglam = sistem_olarak() if yazar() is None else nullcontext()
+        with baglam, transaction.atomic():
+            onceki = denetim_izi.anlik(hesap)
+            for ad, deger in alanlar.items():
+                setattr(hesap, ad, deger)
+            hesap.seal = hesap.compute_seal(TEST_DEK)
+            hesap.save(update_fields=[*alanlar, "seal"])
+            denetim_izi.kayit(
+                AuditAction.HESAP,
+                hesap,
+                onceki=onceki,
+                anahtar=denetim_izi.anahtari_coz(TEST_DEK),
+            )
+    finally:
+        if kilitliydi:
+            crypto.unload_key()
     return hesap
 
 

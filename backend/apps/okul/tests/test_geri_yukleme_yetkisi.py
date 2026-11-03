@@ -52,11 +52,11 @@ from desktop.paths import VERSION_STAMP_FILE_NAME, AppPaths
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import connection, connections
+from django.db import connection, connections, transaction
 from rest_framework.test import APIClient
 
-from apps.okul import restart_gate
-from apps.okul.models import Account, AccountRole, AccountStatus
+from apps.okul import denetim_izi, restart_gate
+from apps.okul.models import Account, AccountRole, AccountStatus, AuditAction
 from apps.okul.oturum import Yazar, yazar_olarak
 from apps.okul.services import (
     app_password,
@@ -64,6 +64,7 @@ from apps.okul.services import (
     geri_yukleme_notu,
     geri_yukleme_yetkisi,
     live_restore,
+    satir_izi,
 )
 from apps.okul.services.geri_yukleme_yetkisi import (
     ILETI_DURUM,
@@ -78,7 +79,10 @@ from apps.okul.tests.geri_yukleme_ortak import (
     ACILIS,
     HesapSatiri,
     duz_sqlite,
+    iz_satiri_ekle,
     muhur,
+    ozet_alanlari,
+    ozetli,
     program_disindan,
     sarmal_ozeti,
     yetkili_sqlite,
@@ -684,6 +688,173 @@ def test_ozet_rolden_ve_durumdan_sonra_denetlenir(tmp_path: Path) -> None:
     assert ret.value.kod == geri_yukleme_yetkisi.RET_MUHUR
 
 
+# ============================================================ satırın izi (kullanıcı kararı 03.11.2026)
+
+
+def _geri_sarilmis_ikinci_yonetici(db: Path) -> None:
+    """Satır geri sarma ("Girişte reddet"): güncel veritabanında ikinci program yöneticisi ACIK
+    açılmış (iz satırı), sonra askıya alınmıştır (programın yazımı gibi: `ASKIDA` hâlinin içerik
+    MAC'iyle iz satırı); satır ise askıdan önceki ACIK kopyasına geri konmuştur — mührü ve özeti
+    tutar, son iz kaydını tutmaz. Sarmalı (parolası `TEST_PAROLA`) güvenlik dosyasındadır."""
+    yetkili_sqlite(db, dek=TEST_DEK, hesaplar=[YONETICI, MUHASIP, YONETICI_2], isaret="eski")
+    askida = replace(ozetli(TEST_DEK, YONETICI_2), status="ASKIDA")
+    with closing(sqlite3.connect(db)) as baglanti:
+        iz_satiri_ekle(
+            baglanti,
+            hesap_id=YONETICI_2.id,
+            alanlar=ozet_alanlari(TEST_DEK, askida, muhur(TEST_DEK, askida)),
+        )
+        baglanti.commit()
+
+
+@pytest.mark.parametrize("kol", ["konsol", "masaustu", "uygulama_ici"])
+def test_geri_sarilmis_yonetici_satiri_parolayla_geri_yukleyemez(
+    kol: str,
+    ortam: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Satırın izi geri yüklemenin parola yolunda da sorulur (`RET_KAYIT_IZI`; ileti mührünkü):
+    mührü, rolü, durumu ve özeti tutan ama eski bir kopyadan geri konmuş program yöneticisi satırı
+    geri yükleme yapamaz, HİÇBİR dosya değişmez (not da yazılmaz). Üç kol: konsol komutu, masaüstü
+    kipi (çıkış 9) ve uygulama içi (400)."""
+    _sarmal_ekle(YONETICI_2)
+    _geri_sarilmis_ikinci_yonetici(ortam["db"])
+    ortam["eski"] = ortam["db"].read_bytes()
+    once = _anlik(ortam["db"])
+
+    if kol == "konsol":
+        with pytest.raises(CommandError) as hata:
+            call_command(
+                "restore_backup",
+                str(ortam["yedek"]),
+                "--yes",
+                "--hesap",
+                YONETICI_2.login_name,
+                "--password",
+                TEST_PAROLA,
+                stdout=StringIO(),
+            )
+        assert str(hata.value) == ILETI_MUHUR
+    elif kol == "masaustu":
+        paths = AppPaths(
+            root=tmp_path,
+            data=ortam["db"].parent,
+            backups=app_password.backup_dir(),
+            logs=tmp_path / "gunlukler",
+            cache=tmp_path / "onbellek",
+        )
+        monkeypatch.setattr(restore_mod, "prepare_django", lambda *a, **k: None)
+        args = build_parser().parse_args(
+            [
+                "--geri-yukle",
+                YEDEK,
+                "--evet",
+                "--hesap",
+                YONETICI_2.login_name,
+                "--parola",
+                TEST_PAROLA,
+            ]
+        )
+        assert restore_mod._restore_flow(paths, args) == EXIT_RESTORE_FAILED
+        assert f"HATA: {ILETI_MUHUR}" in capsys.readouterr().out
+    else:
+        # Uygulama içinde parola oturumdaki hesabınkidir: oturum geri sarılmış satırın hesabıdır
+        # (satır, oturum açıldıktan sonra geri sarıldı).
+        oturumu_ac_test(YONETICI_2.id, tanitici=YONETICI_2.login_name, rol="yonetici")
+        yanit = APIClient().post(
+            GERI_YUKLE_URL,
+            {"name": YEDEK, "hesap": YONETICI_2.login_name, "password": TEST_PAROLA},
+            format="json",
+        )
+        assert yanit.status_code == 400, yanit.json()
+        assert yanit.json()["message"] == ILETI_MUHUR
+        _degismedi(ortam)
+
+    assert _anlik(ortam["db"]) == once
+    assert geri_yukleme_notu.oku(app_password.state_path().parent) is None
+    with pytest.raises(YetkiReddi) as ret:
+        _dogrula(ortam["db"], hesap_id=YONETICI_2.id)
+    assert (ret.value.kod, ret.value.kaynak) == (geri_yukleme_yetkisi.RET_KAYIT_IZI, KAYNAK_GUNCEL)
+
+
+def test_eski_iz_satirinin_sirasi_blob_yapilinca_geri_yukleme_yetkisi_aldanmaz(
+    tmp_path: Path,
+) -> None:
+    """Bağımsız denetim bulgusu (BLOB sıra; `satir_izi` adım 2): askıya alınmış ikinci program
+    yöneticisinin satırı askıdan önceki ACIK kopyasına geri sarılır ve satırın eşleştiği (askıdan
+    önceki) iz satırının sırası BLOB'a çevrilir: SQLite sıralamasında BLOB en büyüktür, o satır "en
+    yeni" okunsaydı askı satırı hiç okunmaz, satır kabul edilirdi. Okunan ilk satırın sırası
+    tamsayı değildir: `RET_KAYIT_IZI`, karar güncel veritabanınındır (görüntüye düşülmez)."""
+    db = tmp_path / "db.sqlite3"
+    _sarmal_ekle(YONETICI_2)
+    _geri_sarilmis_ikinci_yonetici(db)
+    ozet = sarmal_ozeti(TEST_DEK, YONETICI_2.id)
+    assert ozet  # geri sarılmış satırın özeti dosyadaki sarmalı tutar: reddi yalnız iz verir
+    with closing(sqlite3.connect(db)) as baglanti:
+        (ilk,) = baglanti.execute(
+            "SELECT MIN(seq) FROM okul_audittrail WHERE object_id = ?", (YONETICI_2.id,)
+        ).fetchone()
+        baglanti.execute("UPDATE okul_audittrail SET seq = CAST(seq AS BLOB) WHERE seq = ?", (ilk,))
+        baglanti.commit()
+
+    with pytest.raises(YetkiReddi) as ret:
+        _dogrula(db, hesap_id=YONETICI_2.id, ozet=ozet)
+
+    assert (ret.value.kod, ret.value.kaynak) == (geri_yukleme_yetkisi.RET_KAYIT_IZI, KAYNAK_GUNCEL)
+
+
+def test_satirin_izi_muhurden_sonra_rolden_once_denetlenir(tmp_path: Path) -> None:
+    """Sıra mühür, satırın izi, rol, durum, özet (modül başlığı): mührü tutmayan satır mühür
+    reddidir; izi olmayan (içerik MAC'li iz satırı hiç yok: fail-closed) ya da izi tutmayan satırın
+    rolüne, durumuna ve özetine güvenilmez — ret `kayit_izi`'dir."""
+    db = tmp_path / "db.sqlite3"
+    yetkili_sqlite(db, dek=TEST_DEK, hesaplar=[replace(YONETICI, iz=False)])
+    with pytest.raises(YetkiReddi) as ret:
+        _dogrula(db)
+    assert ret.value.kod == geri_yukleme_yetkisi.RET_KAYIT_IZI
+    yetkili_sqlite(db, dek=TEST_DEK, hesaplar=[replace(YONETICI, iz=False, role="muhasip")])
+    with pytest.raises(YetkiReddi) as ret:
+        _dogrula(db)
+    assert ret.value.kod == geri_yukleme_yetkisi.RET_KAYIT_IZI
+    yetkili_sqlite(
+        db, dek=TEST_DEK, hesaplar=[replace(YONETICI, iz=False, muhur="0" * 64, role="muhasip")]
+    )
+    with pytest.raises(YetkiReddi) as ret:
+        _dogrula(db)
+    assert ret.value.kod == geri_yukleme_yetkisi.RET_MUHUR
+
+
+def test_izi_tutmayan_guncel_satir_goruntuye_dusurmez_goruntudeki_de_reddedilir(
+    tmp_path: Path,
+) -> None:
+    """İzi tutmayan satır OKUNAMAMA DEĞİLDİR, RETTİR (modül başlığı): güncel veritabanındaki geri
+    sarılmış satır, görüntüde sağlam olsa da reddedilir (`KAYNAK_GUNCEL`). Güncel veritabanı
+    okunamıyorsa görüntüdeki satırın izi görüntünün kendi izine karşı denetlenir."""
+    db = tmp_path / "db.sqlite3"
+    _sarmal_ekle(YONETICI_2)
+    saglam = yetkili_sqlite(
+        tmp_path / "saglam.sqlite3", dek=TEST_DEK, hesaplar=[YONETICI, YONETICI_2]
+    )
+    _geri_sarilmis_ikinci_yonetici(db)
+    with pytest.raises(YetkiReddi) as ret:
+        _dogrula(db, goruntu=saglam, hesap_id=YONETICI_2.id)
+    assert (ret.value.kod, ret.value.kaynak) == (geri_yukleme_yetkisi.RET_KAYIT_IZI, KAYNAK_GUNCEL)
+
+    _geri_sarilmis_ikinci_yonetici(tmp_path / "goruntu.sqlite3")
+    goruntu = (tmp_path / "goruntu.sqlite3").read_bytes()
+    with pytest.raises(YetkiReddi) as ret:
+        _dogrula(tmp_path / "yok.sqlite3", goruntu=goruntu, hesap_id=YONETICI_2.id)
+    assert (ret.value.kod, ret.value.kaynak) == (
+        geri_yukleme_yetkisi.RET_KAYIT_IZI,
+        KAYNAK_GORUNTU,
+    )
+    assert _dogrula(tmp_path / "yok.sqlite3", goruntu=saglam, hesap_id=YONETICI_2.id) == (
+        KAYNAK_GORUNTU
+    )
+
+
 #: Kanonik olmayan yazımlar: satırı bulan okuyucu (`uuid.UUID`) çoğunu aynı satıra çevirir.
 #: Başka hesabın kimliğinin yazımıyla BAĞIN yazım oyunuyla atlatılamadığını, kendi kimliğinin
 #: yazımıyla KANONİK KATILIĞI (okuyucu kimliği Argon2id'den önce kurala sokar) sınarlar.
@@ -1082,7 +1253,9 @@ def test_iki_orm_siz_okuyucu_ortak_salt_okunur_adresi_kullanir(
     monkeypatch.setattr(sqlite_adres, "salt_okunur_adres", izleyen)
 
     assert _dogrula(db) == KAYNAK_GUNCEL
-    assert geri_yukleme_notu.zincir_basi_oku(db) is None  # iz tablosu yok: "bilinmiyor"
+    # Dosya hesabın iz satırını taşır (satırın izi; `geri_yukleme_ortak`): zincir başı okunur.
+    bas = geri_yukleme_notu.zincir_basi_oku(db)
+    assert bas is not None and bas["seq"] == 1
 
     assert gorulen == [db, db]
     assert "/bag/" in asil(db) and "/gercek/" not in asil(db)
@@ -1189,6 +1362,12 @@ def test_guncel_veritabaninda_wal_daki_son_yazim_gorunur(tmp_path: Path) -> None
                 muhur(TEST_DEK, kapali),
                 uuid.UUID(TEST_HESAP_ID).hex,
             ),
+        )
+        # Programın kapaması gibi satırla birlikte iz satırı (satırın izi tutar; karar durumdur).
+        iz_satiri_ekle(
+            yazan,
+            hesap_id=TEST_HESAP_ID,
+            alanlar=ozet_alanlari(TEST_DEK, kapali, muhur(TEST_DEK, kapali)),
         )
         yazan.commit()
         # Yazan bağlantı açıkken son yazım yalnız `-wal`'dadır.
@@ -1340,7 +1519,10 @@ def test_orm_siz_okuyucu_orm_muhruyle_ayni(mikrosaniye: int) -> None:
         wrap_digest_pending="cd" * 32,
     )
     hesap.seal = hesap.compute_seal(TEST_DEK)
-    hesap.save(force_insert=True)
+    with transaction.atomic():
+        hesap.save(force_insert=True)
+        # Programın hesap açması gibi satırın `HESAP` iz satırı (satırın izi tutar; karar roldür).
+        denetim_izi.kayit(AuditAction.HESAP, hesap, onceki=None)
     hesap.refresh_from_db()
     db = Path(str(connection.settings_dict["NAME"]))
     adres = sqlite_adres.salt_okunur_adres(db)
@@ -1405,8 +1587,36 @@ def test_okuyucu_orm_ve_django_ice_aktarmaz() -> None:
         elif isinstance(dugum, ast.ImportFrom):
             if dugum.module == "shared":
                 assert {ad.name for ad in dugum.names} <= {"crypto", "kanonik", "sqlite_adres"}
+            elif dugum.module == "apps.okul.services":
+                assert {ad.name for ad in dugum.names} == {"satir_izi"}
             else:
                 assert dugum.module in izinli, dugum.module
+    # Satırın izinin ORM'siz karar işlevi de yalnız standart kitaplığa, `cryptography`'nin
+    # Fernet hatasına ve `shared.crypto`/`shared.kanonik`'e dayanır (`satir_izi` modül başlığı).
+    izi_kaynagi = Path(satir_izi.__file__).read_text(encoding="utf-8")
+    izi_izinli = {
+        "__future__",
+        "base64",
+        "binascii",
+        "json",
+        "sqlite3",
+        "uuid",
+        "collections.abc",
+        "contextlib",
+        "dataclasses",
+        "datetime",
+        "typing",
+    }
+    for dugum in ast.walk(ast.parse(izi_kaynagi)):
+        if isinstance(dugum, ast.Import):
+            assert {ad.name for ad in dugum.names} <= izi_izinli
+        elif isinstance(dugum, ast.ImportFrom):
+            if dugum.module == "shared":
+                assert {ad.name for ad in dugum.names} <= {"crypto", "kanonik"}
+            elif dugum.module == "cryptography.fernet":
+                assert {ad.name for ad in dugum.names} == {"InvalidToken"}
+            else:
+                assert dugum.module in izi_izinli, dugum.module
 
 
 def _depo_koku() -> Path:

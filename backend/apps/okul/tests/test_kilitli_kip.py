@@ -168,6 +168,7 @@ def test_capa_yazilamasa_da_kilit_uygulanir(monkeypatch: pytest.MonkeyPatch) -> 
     assert not iz_durumu.yol().exists()
 
 
+@pytest.mark.bos_zincir
 def test_zincir_bosken_capa_yazilmaz() -> None:
     assert iz_durumu.capa_yaz() is False
     assert not iz_durumu.yol().exists()
@@ -297,6 +298,7 @@ def test_kilitliyken_yazma_hata_verir() -> None:
     assert son_satir().seq == kapa.seq
 
 
+@pytest.mark.bos_zincir
 def test_ilk_hesaptan_once_kilitli_olay_yazilmaz() -> None:
     """Zincir boşken (ilk hesaptan önce; İA yok) olay yazılmaz (plan F1b-1)."""
     app_password.lock()

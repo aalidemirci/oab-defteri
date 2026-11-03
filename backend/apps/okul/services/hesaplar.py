@@ -31,13 +31,25 @@ SIRALAR (iki depo kuralı, §4.6.1):
   Başarılı sıfırlamadan sonra hesabın eski sarmalı (arşivdeki dahil) programda açılmaz:
   sıfırlama, ele geçmiş bir parolayı ve özeti tutmayan sarmalı
   (`TwoStoreDifferences.digest_mismatch`) da geçersiz kılar — yalnız `guvenlik.json`'a
-  yazabilen birine karşı; satır geri sarma ve geri yüklemenin kalan hâlleri `app_password`
-  modül başlığı "KALAN RİSKLER"dedir.
+  yazabilen birine karşı. Satırı eski bir kopyadan geri sarılmış hesabı sıfırlama aklamaz:
+  satırın izi tutmaz, sıfırlama reddedilir. Kalan hâller `app_password` modül başlığı "KALAN
+  RİSKLER"dedir.
 * **Askıdan çıkarma:** `Account.status = ASKIDA` ise satır, sonra dosyadaki hatalı
   deneme sayacı ve askısı (iki kaynak; plan F1b-1 "Oturum").
 
-Mührü tutmayan satıra hiçbir servis dokunmaz (`AccountSealMismatch`): yeniden
-mühürlemek program dışından değiştirilmiş satırı meşrulaştırırdı (tehdit 19).
+Mührü ya da son iz kaydı tutmayan satıra hiçbir servis dokunmaz (`AccountSealMismatch`; izi
+tutmayan satırda alt sınıfı `AccountRecordStale` ve `BUTUNLUK` satırı, alan `kayit_mac`): yeniden
+mühürlemek program dışından değiştirilmiş satırı meşrulaştırırdı (tehdit 19); eski bir kopyadan
+geri konmuş satırı (mührü tutar, son iz kaydını tutmaz; kullanıcı kararı 03.11.2026 "Girişte
+reddet") sıfırlamak, kapatmak, askıdan çıkarmak ya da iki depo karşılaştırmasında parola yenilemeye
+çekmek onu yeni bir iz satırıyla AKLARDI. Kural hem işlemi yapana (`_actor`) hem işlem görene
+(`_target`) uygulanır; iki depo karşılaştırması bu satırları `seal_mismatch`'e koyar. Satırın
+izi denetlenirken arada meşru bir yazım satırı değiştirdiyse (çift tıklanan işlem) yanlış alarm
+yazılmaz, karar doğrulanmış GÜNCEL satırdan verilir (`app_password.satir_izini_denetle`): işlemi
+yapan ve işlem gören o satırla yeniden sınanır (işlemi yapan açık değilse işlemi yapan iletisi,
+işlem gören kapanmışsa kapalı hesap iletisi; kapalı hesap yeniden açılmaz). Reddedilen
+hesabın çıkışı yedekten geri yüklemedir (zarfın üçüncü durumu): tek hesaplı roldeki (ör. muhasip)
+satır KAPALI olmadığı için o role yeni hesap da açılamaz.
 
 DENETİM İZİ (tasarım §4.6.2; plan F1b-1 alt commit c). Her satır yazımı iz satırıyla AYNI
 işlemdedir (`apps.okul.denetim_izi`): açma, kapama ve askıdan çıkarma `HESAP`, parola
@@ -162,6 +174,12 @@ def _actor(by_hesap_id: object, data_key: bytes) -> Account:
         raise AccountServiceError(_ACTOR_MESSAGE)
     if not aktor.seal_matches(data_key):
         raise AccountSealMismatch(_SEAL_MESSAGE)
+    # Satırın izi (`app_password` modül başlığı "SATIRIN İZİ"): eski bir kopyadan geri konmuş
+    # işlemi yapanın satırı (ör. rolü düşürülmeden önceki hâli) hiçbir hesap işlemi açmaz. Dönen
+    # satır kararın satırıdır (arada meşru bir yazımla değiştiyse güncel hâl): durum yeniden sorulur.
+    aktor = app_password.satir_izini_denetle(aktor, data_key, ileti=_SEAL_MESSAGE)
+    if aktor.status != AccountStatus.ACIK:
+        raise AccountServiceError(_ACTOR_MESSAGE)
     return aktor
 
 
@@ -177,7 +195,12 @@ def _yonetici_aktor(by_hesap_id: object, data_key: bytes) -> Account:
 
 
 def _target(hesap_id: object, data_key: bytes) -> Account:
-    """Üzerinde işlem yapılan hesap: var, kapalı değil, mührü tutuyor."""
+    """Üzerinde işlem yapılan hesap: var, kapalı değil, mührü ve izi tutuyor (modül başlığı).
+
+    İzi tutmayan (eski bir kopyadan geri konmuş) satır sıfırlanmaz, kapatılmaz, askıdan
+    çıkarılmaz: işlem satırı yeniden mühürleyip yeni bir iz satırı yazardı ve geri sarmayı
+    AKLARDI (`AccountRecordStale`, `BUTUNLUK` satırı; çıkış yedekten geri yüklemedir).
+    """
     hesap = app_password.account_by_id(hesap_id)
     if hesap is None:
         raise AccountServiceError(_NOT_FOUND_MESSAGE)
@@ -186,6 +209,10 @@ def _target(hesap_id: object, data_key: bytes) -> Account:
     if not hesap.seal_matches(data_key):
         logger.warning("Hesap mührü tutmadı; hesap işlemi yapılmadı (%s).", hesap.id)
         raise AccountSealMismatch(_SEAL_MESSAGE)
+    # Dönen satır kararın satırıdır (arada meşru bir yazımla değiştiyse güncel hâl).
+    hesap = app_password.satir_izini_denetle(hesap, data_key, ileti=_SEAL_MESSAGE)
+    if hesap.status == AccountStatus.KAPALI:
+        raise AccountServiceError(_CLOSED_MESSAGE)
     return hesap
 
 
@@ -443,8 +470,11 @@ class TwoStoreDifferences:
     * `rows_without_wrap`: açık (`KAPALI` olmayan) ama sarmalı olmayan hesaplar;
       `ACIK` olanlar karşılaştırmada `PAROLA_YENILENMELI`'ye çekilir.
     * `wraps_without_row`: satırı olmayan sarmallar;
-    * `wraps_of_closed`: satırı `KAPALI` (mührü tutan) sarmallar;
-    * `seal_mismatch`: mührü tutmayan satırlar — hiçbir işleme konu olmaz;
+    * `wraps_of_closed`: satırı `KAPALI` (mührü ve izi tutan) sarmallar;
+    * `seal_mismatch`: mührü ya da izi (denetim izindeki son içerik MAC'li kaydı; `app_password`
+      modül başlığı "SATIRIN İZİ") tutmayan satırlar — hiçbir işleme konu olmaz. İki hâl tek
+      listededir (kartı "kaydı program dışından değiştirilmiş görünen hesaplar"dır); ayrımı
+      `BUTUNLUK` satırının alan adı taşır (`seal`, `kayit_mac`);
     * `digest_mismatch`: mührü tutan, açık (`KAPALI` olmayan) ve sarmalı dosyada duran ama
       sarmalının özeti satırın asıl ya da bekleyen özetini tutmayan hesaplar (eski ya da program
       dışından konmuş parola kaydı; özeti boş satır dahil; `app_password` modül başlığı
@@ -491,29 +521,38 @@ def two_store_differences(
     `sarmali_yazilacak`: sarmalı çağıranın işleminin sonunda yazılacak hesaplar
     (`reconcile_two_stores`); sarmallı sayılır, özetleri de o işlemde yazılır (karşılaştırılmaz).
     Sarmalın özeti dosyadaki İLK sarmalınkidir (kilit açılışı da ilkini dener).
+
+    Satırlar ve izleri TEK anlık görüntüde okunur (`atomic`; çağıran bir işlemdeyse kayıt noktası)
+    ve her satırın izi okunan mührüne bağlıdır (`beklenen_muhur`; `satir_izi` modül başlığı adım
+    5): kartlar işlem dışında çağırır, arada commit edilen meşru bir yazım satırı geçici olarak
+    "kaydı program dışından değiştirilmiş görünen hesaplar"a düşürmesin.
     """
     dek = _active_data_key()
     ozetler = app_password.wrap_digests(dek)
     sarmallar = set(ozetler) | set(sarmali_yazilacak)
-    satirlar = {str(hesap.id): hesap for hesap in Account.objects.all()}
     sarmalsiz: list[str] = []
     satirsiz: list[str] = []
     kapali: list[str] = []
     muhursuz: list[str] = []
     ozeti_tutmayan: list[str] = []
-    for hesap_id, hesap in satirlar.items():
-        if not hesap.seal_matches(dek):
-            muhursuz.append(hesap_id)
-            continue
-        if hesap.status == AccountStatus.KAPALI:
-            if hesap_id in sarmallar:
-                kapali.append(hesap_id)
-        elif hesap_id not in sarmallar:
-            sarmalsiz.append(hesap_id)
-        elif hesap_id not in sarmali_yazilacak and not app_password.digest_matches(
-            hesap, ozetler[hesap_id]
-        ):
-            ozeti_tutmayan.append(hesap_id)
+    with transaction.atomic():
+        satirlar = {str(hesap.id): hesap for hesap in Account.objects.all()}
+        for hesap_id, hesap in satirlar.items():
+            if not hesap.seal_matches(dek) or not denetim_izi.hesap_izi_tutuyor(
+                hesap.id, veri_anahtari=dek, beklenen_muhur=hesap.seal
+            ):
+                # Mührü ya da izi tutmayan satır hiçbir listeye ve işleme girmez (modül başlığı).
+                muhursuz.append(hesap_id)
+                continue
+            if hesap.status == AccountStatus.KAPALI:
+                if hesap_id in sarmallar:
+                    kapali.append(hesap_id)
+            elif hesap_id not in sarmallar:
+                sarmalsiz.append(hesap_id)
+            elif hesap_id not in sarmali_yazilacak and not app_password.digest_matches(
+                hesap, ozetler[hesap_id]
+            ):
+                ozeti_tutmayan.append(hesap_id)
     for hesap_id in sarmallar:
         if hesap_id not in satirlar:
             satirsiz.append(hesap_id)

@@ -1,8 +1,10 @@
 """Denetim izi (TK16; tasarım §4.6.2-§4.6.3; plan F1b-1 alt commit c) — çekirdek testleri.
 
 Varsayılan test ortamı kök `conftest.py`'dedir: oturum program yöneticisi hesabıyla açık,
-yazar bağlamı o hesap; veritabanı kullanan testte hesabın satırı ve `TEST_IA`'lı iz
-anahtarı kurulu, zincir boş. Kişi adları ve numaralar UYDURMADIR.
+yazar bağlamı o hesap; veritabanı kullanan testte hesabın satırı, `TEST_IA`'lı iz anahtarı ve
+hesabın `HESAP` iz satırı kurulu (`KURULUM_IZI` satır). Zincirin başını sınayan testler
+`bos_zincir` işaretlidir (hesabın iz satırı yazılmaz, zincir boş başlar). Kişi adları ve
+numaralar UYDURMADIR.
 
 Bölümler: model ve göç (kapalı tür kümesi, ekleme-yalnızlık, tetikleyiciler) · yazıcı
 (zincir, işlem ve yazar şartı, geri alınan işlem) · içerik MAC'i (program dışı değişiklik,
@@ -69,6 +71,7 @@ from apps.okul.tests.hesap_ortak import (
 from apps.okul.tests.iz_ortak import sahte_satir
 from apps.okul.tests.oturum_ortak import SahteSaat, kurulum_durumunu_yaz, oturum_saatini_kur
 from conftest import (
+    KURULUM_IZI,
     TEST_DEK,
     TEST_HESAP_ADI,
     TEST_HESAP_ID,
@@ -213,6 +216,7 @@ def test_flush_tetikleyicileri_korur() -> None:
 # ============================================================ yazıcı: zincir ve şartlar
 
 
+@pytest.mark.bos_zincir
 def test_zincir_satirlari_birbirine_baglanir_ve_dogrulanir() -> None:
     bir, iki, uc = olay_yaz(), olay_yaz(), olay_yaz()
     assert (bir.seq, iki.seq, uc.seq) == (1, 2, 3)
@@ -236,6 +240,7 @@ def test_mac_satirin_kanonik_bicimi_ve_ia_ile_hesaplanir() -> None:
     )
 
 
+@pytest.mark.bos_zincir
 def test_geri_alinan_islemden_sonra_bosluk_ve_bayat_kuyruk_yok() -> None:
     """Önizleme işlemi geri sarar: kuyruk bellekte tutulsaydı geri alınan satıra bağlanırdı."""
     bir = olay_yaz()
@@ -252,6 +257,7 @@ def test_geri_alinan_islemden_sonra_bosluk_ve_bayat_kuyruk_yok() -> None:
 
 
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.bos_zincir
 def test_islem_disinda_yazilmaz_islemler_arasi_zincir_bozulmaz() -> None:
     """Yazma kuralı 1: iz satırı veri satırıyla aynı işlemde; işlem dışında yazılmaz."""
     with pytest.raises(denetim_izi.IzYazilamadi, match="işlem"):
@@ -266,6 +272,7 @@ def test_islem_disinda_yazilmaz_islemler_arasi_zincir_bozulmaz() -> None:
     assert denetim_izi.zinciri_dogrula() == []
 
 
+@pytest.mark.bos_zincir
 def test_yazar_baglami_yoksa_yazilmaz() -> None:
     with yazar_olarak(None), transaction.atomic():
         with pytest.raises(denetim_izi.IzYazilamadi, match="Yazar bağlamı"):
@@ -491,6 +498,7 @@ def test_sifreli_sutuna_duz_metin_bozuk_alan_olarak_ozetlenir() -> None:
     )
 
 
+@pytest.mark.bos_zincir
 def test_izsiz_kayit_dogrulanamaz() -> None:
     assert denetim_izi.kaydi_dogrula(Account, TEST_HESAP_ID) is None
 
@@ -498,6 +506,7 @@ def test_izsiz_kayit_dogrulanamaz() -> None:
 # ============================================================ zincir doğrulama bulguları
 
 
+@pytest.mark.bos_zincir
 def test_program_disindan_degistirilen_satir_mac_tutmaz() -> None:
     olay_yaz()
     iki = olay_yaz()
@@ -506,6 +515,7 @@ def test_program_disindan_degistirilen_satir_mac_tutmaz() -> None:
     assert denetim_izi.zinciri_dogrula() == [denetim_izi.ZincirBulgusu(2, denetim_izi.MAC_TUTMADI)]
 
 
+@pytest.mark.bos_zincir
 def test_silinen_ara_satir_sira_boslugu_ve_kopuk_zincirdir() -> None:
     olay_yaz()
     iki = olay_yaz()
@@ -539,6 +549,7 @@ def _ham_kilitli_satir(seq: int, prev_mac: str, key_ref: str) -> None:
         )
 
 
+@pytest.mark.bos_zincir
 def test_kilitli_kip_satirinin_anahtari_veritabanindan_turer_sahtesi_tutmaz() -> None:
     """Kilitli satırın anahtarı çapa satırından ve İA'dan türer (`kilitli_zincir_anahtarlari`):
     sahte MAC tutmaz; biçimsiz başvurunun anahtarı yoktur; verilen çözücü kullanılır."""
@@ -551,6 +562,7 @@ def test_kilitli_kip_satirinin_anahtari_veritabanindan_turer_sahtesi_tutmaz() ->
 
 
 @pytest.mark.parametrize("key_ref", ["bozuk", "1:x", "0:0", f"1:{denetim_izi.AZAMI_ADIM + 1}"])
+@pytest.mark.bos_zincir
 def test_kilitli_kip_satirinin_bicimsiz_ya_da_sinir_disi_basvurusu_anahtarsizdir(
     key_ref: str,
 ) -> None:
@@ -690,6 +702,7 @@ def test_satirin_beklenmeyen_hatasi_o_satirin_bulgusudur_denetim_surer(
     ],
     ids=["sahte-giris", "kume-disi", "icerik-maci", "gecersiz-kip"],
 )
+@pytest.mark.bos_zincir
 def test_kuralina_uymayan_satir_mac_tutsa_da_bulgudur(alanlar: dict[str, Any]) -> None:
     """Tasarım §4.6.3 "satır da mühürlü gibi görünmez": mühürsüz (sırsız) anahtarla MAC'i
     doğru hesaplanmış satır yalnız kapalı kümedeki kişisiz SISTEM olayı olabilir. Kuralı
@@ -714,6 +727,7 @@ def test_kuralina_uymayan_satir_mac_tutsa_da_bulgudur(alanlar: dict[str, Any]) -
     assert denetim_izi.acik_satir_dogrulayici()(satir) is False
 
 
+@pytest.mark.bos_zincir
 def test_kurala_uyan_muhursuz_satir_yalniz_muhursuz_bulgusudur_kartlara_gecmez() -> None:
     """Kısıtları kapatmadan da eklenebilen satır (kapalı kümedeki SISTEM olayı): kurala uyar,
     bulgusu `muhursuz`; açık kipte mühürlü olmadığı için kart süzgecinden geçmez."""
@@ -773,10 +787,11 @@ def test_kilit_acilisi_o_hesabin_giris_satirini_yazar(kilitli: object) -> None:
 
 def test_parola_yenilenerek_acilista_parola_ve_giris_satirlari(kilitli: object) -> None:
     muhurle(Account.objects.get(pk=TEST_HESAP_ID), status=AccountStatus.PAROLA_YENILENMELI)
+    bas = son_satir().seq  # `muhurle` meşru yazım gibi kendi `HESAP` satırını yazar
     app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA, new_password=YENI_PAROLA)
     # İki aşamalı sarmal özeti (`app_password` modül başlığı): bekleyen özet AYRI işlemde
     # (`HESAP`), asıl özet `PAROLA` yazımında.
-    ozet, parola, giris = satirlar()
+    ozet, parola, giris = satirlar(seq__gt=bas)
     assert (ozet.action, parola.action, giris.action) == ("HESAP", "PAROLA", "GIRIS")
     assert ozet.changed_fields == ["wrap_digest_pending", "seal"]
     assert parola.values["status"] == ["PAROLA_YENILENMELI", "ACIK"]
@@ -857,7 +872,7 @@ def test_kurtarma_anahtariyla_acilis_kurtarma_ve_giris_satirlari(kilitli: object
     app_password.unlock_with_recovery(
         recovery_key=TEST_KURTARMA_ANAHTARI, hesap_id=TEST_TANITICI, new_password=YENI_PAROLA
     )
-    ozet, kurtarma, giris = satirlar()
+    ozet, kurtarma, giris = satirlar(seq__gt=KURULUM_IZI)
     assert (ozet.action, ozet.model, ozet.object_id) == ("HESAP", HESAP, TEST_HESAP_ID)
     assert (kurtarma.action, kurtarma.model, kurtarma.object_id) == (
         "KURTARMA",
@@ -911,7 +926,7 @@ def test_elle_kilit_hesabin_bosta_kilit_sistemin_satiridir() -> None:
 def test_ertelenen_elle_kilit_uygulaninca_hesabin_satiridir() -> None:
     with bakim.UZUN_ISLER.is_():
         assert OTURUM.kilitle(neden="elle") == "ertelendi"
-        assert AuditTrail.objects.count() == 0
+        assert AuditTrail.objects.count() == KURULUM_IZI
     OTURUM.degerlendir()  # iş bitti: ilk istekte bekleyen kilit
     satir = son_satir()
     assert (satir.action, str(satir.account_id)) == ("KILIT", TEST_HESAP_ID)
@@ -992,7 +1007,7 @@ def test_kilit_izi_yazilamasa_da_kilit_uygulanir(caplog: pytest.LogCaptureFixtur
 def test_servis_ici_kapatma_satir_yazmaz() -> None:
     """Geri yükleme sonrası ve sıfırlamada `kapat`: veritabanı artık o oturumun değildir."""
     app_password.lock()
-    assert AuditTrail.objects.count() == 0
+    assert AuditTrail.objects.count() == KURULUM_IZI
 
 
 def test_kendi_parolasini_degistirme_parola_satiridir() -> None:
@@ -1022,7 +1037,9 @@ def test_parola_dosyaya_yazilamazsa_satir_ve_iz_geri_alinir(
         )
     # `PAROLA` satırı geri alındı; kalan tek satır iki aşamalı özetin bekleyen adımıdır (yeni
     # sarmalın özeti; dosyaya girmedi, eski parola açmayı sürdürür).
-    assert list(AuditTrail.objects.values_list("action", flat=True)) == ["HESAP"]
+    assert list(
+        AuditTrail.objects.filter(seq__gt=KURULUM_IZI).values_list("action", flat=True)
+    ) == ["HESAP"]
     app_password.verify_password(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
 
 
@@ -1294,7 +1311,7 @@ def test_kume_disi_tur_etiket_ve_alan_adi_yazilmaz(
         denetim_izi.olay(
             eylem, model=HESAP, object_id=TEST_HESAP_ID, changed_fields=alanlar, label=etiket
         )
-    assert AuditTrail.objects.count() == 0
+    assert AuditTrail.objects.count() == KURULUM_IZI
 
 
 def test_bilinmeyen_nesnenin_degeri_yazilamaz() -> None:
@@ -1369,7 +1386,7 @@ def test_sahipsiz_sarmal_ana_dosyadan_silinemezse_iz_geri_alinir(
     monkeypatch.setattr(app_password, "remove_account_wraps", yazilamadi)
     with pytest.raises(OSError):
         hesaplar.remove_orphan_wraps(by_hesap_id=TEST_HESAP_ID, hesap_idler=[hayalet])
-    assert AuditTrail.objects.count() == 0
+    assert AuditTrail.objects.count() == KURULUM_IZI
     assert hayalet in app_password.wrap_ids()
 
 

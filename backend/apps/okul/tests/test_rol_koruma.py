@@ -430,8 +430,10 @@ def test_parola_bildirimini_her_rol_kapatir(rol: str) -> None:
     """Regresyon (plan F1b-2): hesap yönetimine rol denetimi gelince sahibinin kendi parola
     yenilenme bildirimini kapatması her rolde açık kalır (uç ve servis)."""
     hesap = hesap_ac(rol, ad="Örnek Hesap")
-    hesap = muhurle(Account.objects.get(pk=hesap.id), status=AccountStatus.ACIK)
-    Account.objects.filter(pk=hesap.id).update(reset_notice_pending=True)
+    # Meşru yazım gibi satır ve iz satırı birlikte (satırın izi tutmalı; `muhurle`).
+    hesap = muhurle(
+        Account.objects.get(pk=hesap.id), status=AccountStatus.ACIK, reset_notice_pending=True
+    )
     client = _oturum(str(rol), str(hesap.id))
 
     yanit = client.post("/api/v1/security/integrity/reset-notice/", {}, format="json")

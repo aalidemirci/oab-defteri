@@ -75,7 +75,7 @@ from django.utils import timezone
 from openpyxl import Workbook
 from rest_framework.test import APIClient
 
-from apps.okul import denetim_izi, erisim_gunlugu
+from apps.okul import denetim_izi, erisim_gunlugu, iz_durumu
 from apps.okul.excel_ogrenci import ParserError
 from apps.okul.models import (
     AccessKind,
@@ -602,6 +602,9 @@ def test_izli_yazma_ucu_iz_satiri_yazar(
         request.getfixturevalue("parolasiz")
     istek = senaryo.kur(monkeypatch)
     if senaryo.ortam == "kilitli":
+        # Düzenli kilitlenme gibi çapa yazılır (zincir varsayılan hesabın satırıyla başlar):
+        # kilit açılışı çapasız zinciri "çapa yok" bulgusuyla `BUTUNLUK` satırına yazardı.
+        iz_durumu.capa_yaz()
         app_password.lock()
     bas = _son_seq()
     once = _tablolar()
@@ -678,6 +681,12 @@ ILKELLER: dict[tuple[str, str], str] = {
     ("apps/okul/denetim_izi.py", "_ekle"): (
         "Yazıcının kendisi: zincirin satırını ekler (iz satırının izi olmaz)."
     ),
+    ("apps/okul/services/satir_izi.py", "hesap_satirlarini_izle"): (
+        "Yazıcının geri yüklemedeki ORM'siz eşi (kullanıcı kararı 03.11.2026, K-e): özet "
+        "onarımının değiştirdiği her hesap satırı için zincirin sonuna `SISTEM` `HESAP` satırı "
+        "ekler (iz satırının izi olmaz). Biçimi `_ekle`'ninkiyle birebirdir; eşitliği "
+        "`test_satir_izi.py` sınar."
+    ),
     ("shared/models.py", "BaseModel.delete"): _MODEL_ILKELI,
     ("shared/models.py", "BaseModel.hard_delete"): _MODEL_ILKELI,
     ("shared/models.py", "BaseModel.restore"): _MODEL_ILKELI,
@@ -700,9 +709,11 @@ MUAF_ISLEVLER: dict[tuple[str, str], str] = {
     ("apps/okul/services/persons.py", "merge_personnel"): PLAN_MUAFIYETI,
     ("apps/okul/services/ozet_onarimi.py", "ozetleri_onar"): (
         "Geri yüklemenin parola kaydı özeti onarımı (kullanıcı kararı 03.11.2026): ORM'siz, "
-        "takastan ÖNCE geri yüklenecek `.tmp` dosyasında; o veritabanında oturum ve iz anahtarı "
-        "yoktur. Geri yüklemenin kendisi ilk kilit açılışında `GERI_YUKLEME` satırıyla izlenir; "
-        "onarım sırsız günlüğe yazılır."
+        "takastan ÖNCE geri yüklenecek `.tmp` dosyasında; o veritabanında oturum yoktur, "
+        "`denetim_izi` yazıcısı çağrılamaz. Değiştirdiği her satırın izi aynı `sqlite3` "
+        "işleminde ORM'siz yazıcının `SISTEM` `HESAP` satırıdır "
+        "(`satir_izi.hesap_satirlarini_izle`, ilkeller listesinde); geri yüklemenin kendisi ilk "
+        "kilit açılışında `GERI_YUKLEME` satırıyla izlenir."
     ),
     ("apps/okul/erisim_gunlugu.py", "yaz"): (
         "Erişim günlüğünün tek yazıcısı: günlük zincir dışıdır (tasarım §4.6.4), satırı iz "
@@ -731,6 +742,10 @@ ORM_DISI_CAGRILAR: dict[tuple[str, str, str], str] = {
     ),
     ("apps/okul/services/geri_yukleme_notu.py", "dosya_ozeti", "ozet.update"): (
         "`hashlib.sha256().update`: kenara alınan dosyanın özeti."
+    ),
+    ("apps/okul/services/satir_izi.py", "okuma_islemi", "baglanti.execute"): (
+        "Okuma işleminin sınırları (`BEGIN`, `COMMIT`, hata yolunda `ROLLBACK`): kayıt yazmaz; "
+        "satırın izinin okumaları tek anlık görüntüdedir (bağımsız denetim bulgusu: yanlış alarm)."
     ),
     ("desktop/django_bootstrap.py", "unknown_applied_migrations", "bilinen.update"): (
         "Python kümesi (`set.update`): bilinen göç adları."
