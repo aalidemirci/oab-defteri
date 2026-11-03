@@ -258,24 +258,43 @@ def _hepsi_izli() -> None:
             crypto.unload_key()
 
 
-def _tek_butunluk(hesap_id: object, son: int) -> None:
-    """`son`'dan sonra yalnız `BUTUNLUK` satırı: hesabın kaydı, alanı `kayit_mac`, `SISTEM`."""
+def _tek_butunluk(hesap_id: object, son: int, alan: str = app_password.KAYIT_MAC_ALANI) -> None:
+    """`son`'dan sonra yalnız `BUTUNLUK` satırı: hesabın kaydı, alanı `alan` (satırın izi
+    `kayit_mac`, izdeki boşluk `iz_boslugu`; orkestratör maddesi C-4), `SISTEM`."""
     yeni = list(AuditTrail.objects.filter(seq__gt=son).order_by("seq"))
     assert [satir.action for satir in yeni] == [AuditAction.BUTUNLUK], yeni
     (satir,) = yeni
     assert (satir.model, satir.object_id, satir.changed_fields, satir.actor) == (
         "okul.Account",
         str(hesap_id),
-        [app_password.KAYIT_MAC_ALANI],
+        [alan],
         AuditActor.SISTEM,
     )
 
 
-def _reddedilir(hata: pytest.ExceptionInfo[app_password.AccountRecordStale], ileti: str) -> None:
+def _reddedilir(
+    hata: pytest.ExceptionInfo[app_password.AccountRecordStale],
+    ileti: str,
+    *,
+    neden: satir_izi.IzRetNedeni = satir_izi.IzRetNedeni.SATIR_IZI,
+) -> None:
+    """Satırın izinin reddi: kod, durum, ileti ve NEDEN (izdeki boşluk `AuditTrailGap`'tır; `satir_izi`
+    "RET NEDENİ"). Neden karışırsa test düşer (satırın izi ile boşluk ayrı iletidir)."""
     assert isinstance(hata.value, app_password.AccountSealMismatch)
     assert not isinstance(hata.value, app_password.WrapDigestMismatch)
     assert (hata.value.code, hata.value.status_code) == ("hesap_muhru_tutmadi", 409)
     assert str(hata.value) == ileti
+    assert hata.value.neden is neden
+    assert isinstance(hata.value, app_password.AuditTrailGap) is neden.bosluk_mu
+    assert hata.value.alan == (
+        app_password.IZ_BOSLUGU_ALANI if neden.bosluk_mu else app_password.KAYIT_MAC_ALANI
+    )
+
+
+#: İz boşluğunun nedenleri (`satir_izi.IzRetNedeni`).
+_SILME = satir_izi.IzRetNedeni.SILME
+_TUR = satir_izi.IzRetNedeni.TUR
+_KAYMA = satir_izi.IzRetNedeni.KAYMA
 
 
 def _acik_muhasip() -> Account:
@@ -759,9 +778,71 @@ def test_son_iz_satirini_silmek_tek_basina_girisi_kapatir() -> None:
     muhasip = _acik_muhasip()
     muhurle(Account.objects.get(pk=muhasip.id), password_changed_at=timezone.now())
     _tetikleyicisiz("DELETE FROM okul_audittrail WHERE seq = %s", [_son_seq()])
+    dek = crypto.active_key() or TEST_DEK
+    # Zincir başı silindi: ondan sonra izde boşluk görünmez, neden satırın izidir ("RET NEDENİ").
+    karar = denetim_izi.hesap_izi_karari(muhasip.id, veri_anahtari=dek)
+    assert karar == satir_izi.IzKarari(None, satir_izi.IzRetNedeni.SATIR_IZI)
     app_password.lock()
-    with pytest.raises(app_password.AccountRecordStale):
+    with pytest.raises(app_password.AccountRecordStale) as hata:
         app_password.unlock(hesap_id=muhasip.id, password=GECICI_PAROLA)
+    _reddedilir(hata, app_password._SEAL_MISMATCH_MESSAGE)
+
+
+def _kendi_son_kaydi_ortadan_silinmis_muhasip() -> str:
+    """Açık muhasip; meşru bir yazım muhasibin KENDİ son içerik MAC'li iz satırını (S2) yazar,
+    ardından ilgisiz satırlar yazılır ve S2 zincirin ORTASINDAN silinir (SQLite tarayıcısı taklidi;
+    hesap satırına dokunulmaz). Muhasibin kimliğini döndürür."""
+    kimlik = str(_acik_muhasip().id)
+    muhurle(Account.objects.get(pk=kimlik), password_changed_at=timezone.now())
+    s2 = _hesabin_son_kaydi(kimlik)
+    _dolgu(2)
+    _tetikleyicisiz("DELETE FROM okul_audittrail WHERE seq = %s", [s2])
+    return kimlik
+
+
+def test_kendi_son_kaydi_ortadan_silinen_hesabin_girisi_iz_boslugudur() -> None:
+    """Orkestratör maddesi C-4 (bağımsız denetim bulgusu): hesabın KENDİ son içerik MAC'li iz
+    satırı zincirin ortasından silinir, satıra dokunulmaz. Yürüyüş bir önceki kendi satırına iner;
+    onun içerik MAC'i bugünkü alanları tutmaz — ama değişen hesap kaydı değil denetim izidir (o
+    satırdan sonra izde boşluk var): neden `SILME`, ileti iz boşluğunun, `BUTUNLUK` alanı
+    `iz_boslugu` (`satir_izi` "RET NEDENİ"). Karar aynıdır: ret, hatalı deneme sayılmaz, satır
+    değişmez. Kuyruk kesmede (zincir başı silinir) neden satırın izi kalır (bir önceki test)."""
+    kimlik = _kendi_son_kaydi_ortadan_silinmis_muhasip()
+    dek = crypto.active_key() or TEST_DEK
+    assert denetim_izi.hesap_izi_karari(kimlik, veri_anahtari=dek) == satir_izi.IzKarari(
+        None, _SILME
+    )
+    app_password.lock()
+    iz_durumu.yol().unlink(missing_ok=True)
+    once, son = _ham(kimlik), _son_seq()
+
+    with pytest.raises(app_password.AccountRecordStale) as hata:
+        app_password.unlock(hesap_id=kimlik, password=GECICI_PAROLA)
+
+    _reddedilir(hata, app_password.IZ_BOSLUGU_MESSAGE, neden=_SILME)
+    _tek_butunluk(kimlik, son, app_password.IZ_BOSLUGU_ALANI)
+    assert _ham(kimlik) == once and app_password.wrap_failure_state(kimlik) == (0, False)
+
+
+def test_kendi_son_kaydi_ortadan_silinen_hesabin_islemi_iz_boslugudur() -> None:
+    """Aynı silme, program yöneticisinin oturumu açıkken (onun kaydı boşluktan SONRA tazelenir):
+    muhasibin parolasının sıfırlanması iz boşluğu iletisiyle reddedilir (`hesaplar._GAP_MESSAGE`,
+    `BUTUNLUK` alanı `iz_boslugu`), Kullanıcılar satırı da boşluğun nedenini söyler."""
+    kimlik = _kendi_son_kaydi_ortadan_silinmis_muhasip()
+    muhurle(Account.objects.get(pk=TEST_HESAP_ID), password_changed_at=timezone.now())
+    once, son = _ham(kimlik), _son_seq()
+
+    with pytest.raises(app_password.AccountRecordStale) as hata:
+        hesaplar.reset_password(
+            by_hesap_id=TEST_HESAP_ID, hesap_id=kimlik, temp_password=_DORDUNCU_PAROLA
+        )
+
+    _reddedilir(hata, hesaplar._GAP_MESSAGE, neden=_SILME)
+    _tek_butunluk(kimlik, son, app_password.IZ_BOSLUGU_ALANI)
+    assert _ham(kimlik) == once
+    satir = hesaplar.kullanici_satiri(kimlik)
+    assert satir is not None
+    assert satir["eylemler"]["parola_sifirla"]["neden"] == hesaplar._ROW_GAP_MESSAGE
 
 
 def test_bilinen_sinir_kuyruk_satirla_birlikte_kesilirse_giris_acilir_capa_gosterir() -> None:
@@ -786,9 +867,10 @@ def test_bilinen_sinir_kuyruk_satirla_birlikte_kesilirse_giris_acilir_capa_goste
 def test_ara_satir_silinirse_giris_acilmaz_pencere_icinde() -> None:
     """Kullanıcı kararı 03.11.2026 "Boşluğu engelle" (b4'te kalan riskti): satır geri sarılır ve
     hesabın yeni iz satırı (R) zincirin ORTASINDAN silinir. Satır daha eski satırı tutar ama ondan
-    sonra izde boşluk vardır (`satir_izi` "İZ BOŞLUĞU" (a)): giriş açılmaz, ret satırın izinindir
-    (`AccountRecordStale`, `BUTUNLUK` alanı `kayit_mac`), hatalı deneme sayılmaz, satır değişmez.
-    Çapa da yoktur: kuyruk ya da çapa bulgusu değil, boşluk reddeder."""
+    sonra izde boşluk vardır (`satir_izi` "İZ BOŞLUĞU" (a)): giriş açılmaz, ret izdeki boşluğundur
+    (`AuditTrailGap`, iz boşluğu iletisi, `BUTUNLUK` alanı `iz_boslugu`; orkestratör maddesi C-4),
+    hatalı deneme sayılmaz, satır değişmez. Çapa da yoktur: kuyruk ya da çapa bulgusu değil,
+    boşluk reddeder."""
     hesap_id, r_seq = _geri_sarilmis_muhasip()
     app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
     app_password.lock()
@@ -799,8 +881,8 @@ def test_ara_satir_silinirse_giris_acilmaz_pencere_icinde() -> None:
     with pytest.raises(app_password.AccountRecordStale) as hata:
         app_password.unlock(hesap_id=hesap_id, password=GECICI_PAROLA)
 
-    _reddedilir(hata, app_password._SEAL_MISMATCH_MESSAGE)
-    _tek_butunluk(hesap_id, son)
+    _reddedilir(hata, app_password.IZ_BOSLUGU_MESSAGE, neden=_SILME)
+    _tek_butunluk(hesap_id, son, app_password.IZ_BOSLUGU_ALANI)
     assert _ham(hesap_id) == once and app_password.wrap_failure_state(hesap_id) == (0, False)
     # Program yöneticisinin son kaydı (girişi) boşluktan YENİDİR: o girer, doğrulama boşluğu
     # bulgu olarak gösterir (bedel yalnız son kaydı boşluktan eski hesaplaradır).
@@ -828,11 +910,12 @@ def test_ara_satir_pencere_disinda_silinirse_de_giris_acilmaz() -> None:
     _tetikleyicisiz("DELETE FROM okul_audittrail WHERE seq = %s", [r_seq])
     son = _son_seq()
 
-    with pytest.raises(app_password.AccountRecordStale):
+    with pytest.raises(app_password.AccountRecordStale) as hata:
         app_password.unlock(hesap_id=hesap_id, password=GECICI_PAROLA)
 
+    _reddedilir(hata, app_password.IZ_BOSLUGU_MESSAGE, neden=_SILME)
     assert OTURUM.hesap_id() is None
-    _tek_butunluk(hesap_id, son)
+    _tek_butunluk(hesap_id, son, app_password.IZ_BOSLUGU_ALANI)
 
 
 # ============================================================ iz boşluğu (kullanıcı kararı "Boşluğu engelle")
@@ -842,6 +925,14 @@ def test_ara_satir_pencere_disinda_silinirse_de_giris_acilmaz() -> None:
 #: numaralama); eşleşen satırın gerisine REAL sıralarla taşınır ve boşlukları ilgisiz satırlarla
 #: doldurulur; sıraları BLOB'a çevrilir.
 DEGISIMLER = ("silme", "yeniden_numaralama", "real_tasima", "blob_sira")
+#: Her değişikliğin ret nedeni (`satir_izi` "RET NEDENİ"; orkestratör maddesi C-4): silme (a),
+#: kaydırma (c), REAL sıra ve BLOB sıra (b).
+DEGISIMIN_NEDENI = {
+    "silme": satir_izi.IzRetNedeni.SILME,
+    "yeniden_numaralama": satir_izi.IzRetNedeni.KAYMA,
+    "real_tasima": satir_izi.IzRetNedeni.TUR,
+    "blob_sira": satir_izi.IzRetNedeni.TUR,
+}
 #: Program dışı değişikliklerin dolgu satırları (ilgisiz, programın meşru yazdığı satırlar).
 _DOLGU_ADEDI = 12
 
@@ -928,8 +1019,8 @@ def _senaryo1_degistirilmis(degisim: str) -> tuple[str, int, int]:
 def _boslukta_butunluk(
     hesap_id: str, degisim: str, sayi: int, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Reddin `BUTUNLUK` satırı (alan `kayit_mac`); BLOB sıralı zincir başında yazıcı yazmaz
-    (O-3, Türkçe `IzYazilamadi`): olay günlüğe düşer."""
+    """Reddin `BUTUNLUK` satırı (alan `iz_boslugu`; orkestratör maddesi C-4); BLOB sıralı zincir
+    başında yazıcı yazmaz (O-3, Türkçe `IzYazilamadi`): olay günlüğe düşer."""
     if degisim == "blob_sira":
         assert _butunluk_sayisi() == sayi
         assert "Hesap kaydının tutmadığı denetim izine yazılamadı." in caplog.text
@@ -938,7 +1029,7 @@ def _boslukta_butunluk(
     assert _butunluk_sayisi() == sayi + 1
     assert (satir.object_id, satir.changed_fields, satir.actor) == (
         hesap_id,
-        [app_password.KAYIT_MAC_ALANI],
+        [app_password.IZ_BOSLUGU_ALANI],
         AuditActor.SISTEM,
     )
 
@@ -949,15 +1040,15 @@ def test_iz_boslugu_girisi_acmaz(degisim: str, caplog: pytest.LogCaptureFixture)
     muhasibin sıfırlamadan sonraki iz satırları silinir, silinip sonrakiler aşağı kaydırılır,
     eşleşen satırın gerisine REAL sıralarla taşınır (boşlukları ilgisiz satırlarla doldurulur) ya
     da sıraları BLOB'a çevrilir. Yürüyüş eski satırı en yeni sanardı; izde boşluk vardır: giriş
-    açılmaz (`AccountRecordStale`, mühür iletisi), `BUTUNLUK` satırı (`kayit_mac`), sayaç ve satır
-    değişmez, T'nin sarmalı yerinde kalır."""
+    açılmaz (`AuditTrailGap`, iz boşluğu iletisi, neden değişikliğin türü; orkestratör maddesi C-4),
+    `BUTUNLUK` satırı (`iz_boslugu`), sayaç ve satır değişmez, T'nin sarmalı yerinde kalır."""
     kimlik, _sira, sayi = _senaryo1_degistirilmis(degisim)
     once, sarmal = _ham(kimlik), _sarmal(kimlik)
 
     with pytest.raises(app_password.AccountRecordStale) as hata:
         app_password.unlock(hesap_id=kimlik, password=UCUNCU_PAROLA, new_password=_SONRAKI_PAROLA)
 
-    _reddedilir(hata, app_password._SEAL_MISMATCH_MESSAGE)
+    _reddedilir(hata, app_password.IZ_BOSLUGU_MESSAGE, neden=DEGISIMIN_NEDENI[degisim])
     assert OTURUM.hesap_id() is None and crypto.is_unlocked() is False
     _boslukta_butunluk(kimlik, degisim, sayi, caplog)
     assert (_ham(kimlik), _sarmal(kimlik)) == (once, sarmal)
@@ -981,7 +1072,8 @@ def test_iz_boslugu_hesap_islemini_acmaz(degisim: str, caplog: pytest.LogCapture
             by_hesap_id=TEST_HESAP_ID, hesap_id=kimlik, temp_password=_DORDUNCU_PAROLA
         )
 
-    _reddedilir(hata, hesaplar._SEAL_MESSAGE)
+    # Hesap servisinin iz boşluğu iletisi (mühür iletisinin kalıbı; orkestratör maddesi C-4).
+    _reddedilir(hata, hesaplar._GAP_MESSAGE, neden=DEGISIMIN_NEDENI[degisim])
     assert (_ham(kimlik), _sarmal(kimlik)) == (once, sarmal)
     if degisim == "blob_sira":
         assert "Hesap kaydının tutmadığı denetim izine yazılamadı." in caplog.text
@@ -1016,13 +1108,14 @@ def test_iz_boslugu_oturumdaki_parola_ve_kurtarma_yolunu_acmaz(degisim: str) -> 
         pytest.raises(app_password.AccountRecordStale) as hata,
     ):
         app_password.verify_password(hesap_id=kimlik, password=GECICI_PAROLA)
-    _reddedilir(hata, app_password._SEAL_MISMATCH_MESSAGE)
+    _reddedilir(hata, app_password.IZ_BOSLUGU_MESSAGE, neden=DEGISIMIN_NEDENI[degisim])
 
     app_password.lock()
-    with pytest.raises(app_password.AccountRecordStale):
+    with pytest.raises(app_password.AccountRecordStale) as hata:
         app_password.unlock_with_recovery(
             recovery_key=TEST_KURTARMA_ANAHTARI, hesap_id=kimlik, new_password=_SONRAKI_PAROLA
         )
+    _reddedilir(hata, app_password.IZ_BOSLUGU_MESSAGE, neden=DEGISIMIN_NEDENI[degisim])
     assert OTURUM.hesap_id() is None
     assert (_ham(kimlik), _sarmal(kimlik)) == (once, sarmal)
 
@@ -1183,7 +1276,7 @@ def test_sahte_emekli_anahtar_kaymayi_ortmez() -> None:
     with pytest.raises(app_password.AccountRecordStale) as hata:
         app_password.unlock(hesap_id=kimlik, password=UCUNCU_PAROLA, new_password=_SONRAKI_PAROLA)
 
-    _reddedilir(hata, app_password._SEAL_MISMATCH_MESSAGE)
+    _reddedilir(hata, app_password.IZ_BOSLUGU_MESSAGE, neden=_KAYMA)
     assert OTURUM.hesap_id() is None
     assert _butunluk_sayisi() == sayi + 1
     assert (_ham(kimlik), _sarmal(kimlik)) == (once, sarmal)
@@ -1232,7 +1325,7 @@ def test_birincil_anahtarsiz_tabloda_birebir_kopya_silmeyi_ortmez(tmp_path: Path
 def test_iz_boslugu_cikisi_kurtarma_anahtariyla_eski_yedektir(tmp_path: Path) -> None:
     """Çıkış gerçekten vardır (kabul edilen bedelin çıkışı): ilgisiz bir satır silinmiş izde ne
     muhasip ne program yöneticisi girer; program yöneticisinin PAROLA yolu geri yüklemede de güncel
-    veritabanındaki boşluğu görür (`RET_KAYIT_IZI`, hiçbir dosya değişmez). Kurtarma anahtarıyla,
+    veritabanındaki boşluğu görür (`RET_IZ_BOSLUGU`, hiçbir dosya değişmez). Kurtarma anahtarıyla,
     değişiklikten ÖNCE alınmış yedek geri yüklenir; ardından ikisi de girer."""
     muhasip = _acik_muhasip()
     kimlik = str(muhasip.id)
@@ -1247,7 +1340,7 @@ def test_iz_boslugu_cikisi_kurtarma_anahtariyla_eski_yedektir(tmp_path: Path) ->
 
     with pytest.raises(backup_restore.GeriYuklemeYetkisiz) as ret:
         geri_yukle(tmp_path, yedek, guncel, hesap="yonetici", password=TEST_PAROLA)
-    assert ret.value.kod == geri_yukleme_yetkisi.RET_KAYIT_IZI
+    assert ret.value.kod == geri_yukleme_yetkisi.RET_IZ_BOSLUGU
     assert (tmp_path / "canli" / "db.sqlite3").read_bytes() == guncel
 
     db = geri_yukle(tmp_path, yedek, guncel, recovery_key=TEST_KURTARMA_ANAHTARI)
@@ -2090,7 +2183,8 @@ def test_eski_iz_satirinin_sirasi_blob_yapilinca_giris_acilmaz(
     Senaryo 1'in geri sarmasına ek olarak sıfırlamanın (geri sarılmış satırın eşleştiği) iz
     satırının sırası BLOB'a çevrilir (`CAST(seq AS BLOB)`: aynı baytlar, aynı zincir MAC'i); o satır
     "en yeni" okunsaydı T açardı. Okunan ilk satırın sırası tamsayı değildir: giriş açılmaz
-    (`AccountRecordStale`, mühür iletisi), sayaç artmaz, satır değişmez.
+    (`AuditTrailGap`, neden tür, iz boşluğu iletisi; orkestratör maddesi C-4), sayaç artmaz, satır
+    değişmez.
 
     Zincirin başına oturan BLOB sıralı satırda yazıcı (`denetim_izi._ekle`) yazmaz (O-3: Türkçe
     `IzYazilamadi`; eskiden `int(b"…") + 1` sırayı çakıştırıyordu): `BUTUNLUK` satırı yazılamaz,
@@ -2107,7 +2201,7 @@ def test_eski_iz_satirinin_sirasi_blob_yapilinca_giris_acilmaz(
     with pytest.raises(app_password.AccountRecordStale) as hata:
         app_password.unlock(hesap_id=kimlik, password=UCUNCU_PAROLA, new_password=_SONRAKI_PAROLA)
 
-    _reddedilir(hata, app_password._SEAL_MISMATCH_MESSAGE)
+    _reddedilir(hata, app_password.IZ_BOSLUGU_MESSAGE, neden=_TUR)
     assert OTURUM.hesap_id() is None and crypto.is_unlocked() is False
     assert _ham(kimlik) == once
     assert app_password.wrap_failure_state(kimlik) == (0, False)
@@ -2214,7 +2308,7 @@ def test_sahte_taze_capa_gecici_parolayi_taze_yedege_tasimaz(
         # daha takastan önce reddedilir, hiçbir dosya değişmez; çıkış kurtarma anahtarıdır.
         with pytest.raises(backup_restore.GeriYuklemeYetkisiz) as ret:
             geri_yukle(tmp_path, taze_yedek, guncel, hesap="yonetici", password=TEST_PAROLA)
-        assert ret.value.kod == geri_yukleme_yetkisi.RET_KAYIT_IZI
+        assert ret.value.kod == geri_yukleme_yetkisi.RET_IZ_BOSLUGU
         assert (tmp_path / "canli" / "db.sqlite3").read_bytes() == guncel
         sir = "kurtarma"
     if sir == "parola":

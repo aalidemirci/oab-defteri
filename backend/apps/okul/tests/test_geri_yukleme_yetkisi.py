@@ -68,6 +68,7 @@ from apps.okul.services import (
 )
 from apps.okul.services.geri_yukleme_yetkisi import (
     ILETI_DURUM,
+    ILETI_IZ_BOSLUGU,
     ILETI_MUHUR,
     ILETI_OZET,
     ILETI_ROL,
@@ -730,9 +731,13 @@ def _uc_kolda_kayit_izi_reddi(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    *,
+    kod: str = geri_yukleme_yetkisi.RET_KAYIT_IZI,
+    ileti: str = ILETI_MUHUR,
 ) -> None:
-    """İkinci program yöneticisinin parolasıyla geri yükleme üç kolda `RET_KAYIT_IZI` (ileti
-    mührünkü) ile reddedilir, hiçbir dosya değişmez (not da yazılmaz); karar güncelindir."""
+    """İkinci program yöneticisinin parolasıyla geri yükleme üç kolda `kod` ile (satırın izi:
+    `RET_KAYIT_IZI`, ileti mührünkü; izdeki boşluk: `RET_IZ_BOSLUGU`, kendi iletisi) reddedilir,
+    hiçbir dosya değişmez (not da yazılmaz); karar güncelindir."""
     ortam["eski"] = ortam["db"].read_bytes()
     once = _anlik(ortam["db"])
 
@@ -748,7 +753,7 @@ def _uc_kolda_kayit_izi_reddi(
                 TEST_PAROLA,
                 stdout=StringIO(),
             )
-        assert str(hata.value) == ILETI_MUHUR
+        assert str(hata.value) == ileti
     elif kol == "masaustu":
         paths = AppPaths(
             root=tmp_path,
@@ -770,7 +775,7 @@ def _uc_kolda_kayit_izi_reddi(
             ]
         )
         assert restore_mod._restore_flow(paths, args) == EXIT_RESTORE_FAILED
-        assert f"HATA: {ILETI_MUHUR}" in capsys.readouterr().out
+        assert f"HATA: {ileti}" in capsys.readouterr().out
     else:
         # Uygulama içinde parola oturumdaki hesabınkidir: oturum geri sarılmış satırın hesabıdır
         # (satır, oturum açıldıktan sonra geri sarıldı).
@@ -781,14 +786,14 @@ def _uc_kolda_kayit_izi_reddi(
             format="json",
         )
         assert yanit.status_code == 400, yanit.json()
-        assert yanit.json()["message"] == ILETI_MUHUR
+        assert yanit.json()["message"] == ileti
         _degismedi(ortam)
 
     assert _anlik(ortam["db"]) == once
     assert geri_yukleme_notu.oku(app_password.state_path().parent) is None
     with pytest.raises(YetkiReddi) as ret:
         _dogrula(ortam["db"], hesap_id=YONETICI_2.id)
-    assert (ret.value.kod, ret.value.kaynak) == (geri_yukleme_yetkisi.RET_KAYIT_IZI, KAYNAK_GUNCEL)
+    assert (ret.value.kod, ret.value.kaynak) == (kod, KAYNAK_GUNCEL)
 
 
 # ============================================================ iz boşluğu (kullanıcı kararı 03.11.2026)
@@ -865,11 +870,19 @@ def test_izinde_bosluk_olan_geri_sarilmis_yonetici_parolayla_geri_yukleyemez(
     satırı askıdan önceki kopyasına geri sarılır VE askı satırı izden silinir, silinip sonraki
     satır aşağı kaydırılır (iz anahtarı tablosuna sahte, emekli bir satır da eklenerek), eşleşen
     satırın gerisine REAL bir sırayla taşınır ya da sırası BLOB'a çevrilir. Kilit açılışıyla aynı
-    işlev: parola yolu üç kolda reddedilir (`RET_KAYIT_IZI`), görüntüye düşülmez, hiçbir dosya
-    değişmez."""
+    işlev: parola yolu üç kolda reddedilir — ret izdeki boşluğundur (`RET_IZ_BOSLUGU`, kendi
+    iletisi; orkestratör maddesi C-4) —, görüntüye düşülmez, hiçbir dosya değişmez."""
     _sarmal_ekle(YONETICI_2)
     _bosluklu_ikinci_yonetici(ortam["db"], degisim)
-    _uc_kolda_kayit_izi_reddi(kol, ortam, tmp_path, monkeypatch, capsys)
+    _uc_kolda_kayit_izi_reddi(
+        kol,
+        ortam,
+        tmp_path,
+        monkeypatch,
+        capsys,
+        kod=geri_yukleme_yetkisi.RET_IZ_BOSLUGU,
+        ileti=geri_yukleme_yetkisi.ILETI_IZ_BOSLUGU,
+    )
 
 
 def test_ilgisiz_satir_silinmisse_program_yoneticisi_parolayla_geri_yukleyemez(
@@ -877,7 +890,7 @@ def test_ilgisiz_satir_silinmisse_program_yoneticisi_parolayla_geri_yukleyemez(
 ) -> None:
     """Kabul edilen bedel (kullanıcı kararı 03.11.2026): güncel veritabanının izinden program
     yöneticisinin son kaydından SONRAKİ ilgisiz bir satır silinmişse onun parola yolu da reddedilir
-    (`RET_KAYIT_IZI`, karar güncelindir — sağlam görüntüye düşülmez); çıkış kurtarma anahtarıdır.
+    (`RET_IZ_BOSLUGU`, karar güncelindir — sağlam görüntüye düşülmez); çıkış kurtarma anahtarıdır.
     Silinen satır son kaydından ESKİYSE kabul edilir."""
     db = tmp_path / "db.sqlite3"
     _sarmal_ekle(YONETICI_2)
@@ -892,8 +905,54 @@ def test_ilgisiz_satir_silinmisse_program_yoneticisi_parolayla_geri_yukleyemez(
 
     with pytest.raises(YetkiReddi) as ret:
         _dogrula(db, goruntu=saglam)
-    assert (ret.value.kod, ret.value.kaynak) == (geri_yukleme_yetkisi.RET_KAYIT_IZI, KAYNAK_GUNCEL)
+    assert (ret.value.kod, ret.value.kaynak) == (geri_yukleme_yetkisi.RET_IZ_BOSLUGU, KAYNAK_GUNCEL)
     assert _dogrula(db, goruntu=saglam, hesap_id=YONETICI_2.id) == KAYNAK_GUNCEL
+
+
+def test_kendi_son_kaydi_ortadan_silinen_yonetici_parolayla_geri_yukleyemez(
+    tmp_path: Path,
+) -> None:
+    """Orkestratör maddesi C-4 (bağımsız denetim bulgusu): ikinci program yöneticisinin KENDİ son
+    içerik MAC'li iz satırı (meşru bir yazım: son giriş anı) zincirin ortasından silinir, satıra
+    dokunulmaz. Satır bir önceki kendi kaydını tutmaz, ama değişen hesap kaydı değil denetim izidir:
+    ret `RET_IZ_BOSLUGU`'dur (`RET_KAYIT_IZI` değil; `satir_izi` "RET NEDENİ"), karar güncelindir."""
+    db = tmp_path / "db.sqlite3"
+    _sarmal_ekle(YONETICI_2)
+    yetkili_sqlite(db, dek=TEST_DEK, hesaplar=[YONETICI, MUHASIP, YONETICI_2])
+    giris = ACILIS + timedelta(hours=2)
+    yonetici_2, muhasip = ozetli(TEST_DEK, YONETICI_2), ozetli(TEST_DEK, MUHASIP)
+    with closing(sqlite3.connect(db)) as baglanti:
+        iz_satiri_ekle(
+            baglanti,
+            hesap_id=YONETICI_2.id,
+            alanlar={
+                **ozet_alanlari(TEST_DEK, yonetici_2, muhur(TEST_DEK, yonetici_2)),
+                "last_login_at": giris,
+            },
+            an=giris,
+        )
+        (kendi_son_kaydi,) = baglanti.execute("SELECT MAX(seq) FROM okul_audittrail").fetchone()
+        # Programın aynı işlemdeki satır yazımı (son giriş anı mühre girmez).
+        baglanti.execute(
+            "UPDATE okul_account SET last_login_at = ? WHERE id = ?",
+            (str(giris.replace(tzinfo=None)), uuid.UUID(YONETICI_2.id).hex),
+        )
+        iz_satiri_ekle(
+            baglanti,
+            hesap_id=MUHASIP.id,
+            alanlar=ozet_alanlari(TEST_DEK, muhasip, muhur(TEST_DEK, muhasip)),
+            an=giris,
+        )
+        baglanti.commit()
+    assert _dogrula(db, hesap_id=YONETICI_2.id) == KAYNAK_GUNCEL  # silmeden önce kabul
+    with closing(sqlite3.connect(db)) as baglanti:
+        baglanti.execute("DELETE FROM okul_audittrail WHERE seq = ?", (kendi_son_kaydi,))
+        baglanti.commit()
+
+    with pytest.raises(YetkiReddi) as ret:
+        _dogrula(db, hesap_id=YONETICI_2.id)
+
+    assert (ret.value.kod, ret.value.kaynak) == (geri_yukleme_yetkisi.RET_IZ_BOSLUGU, KAYNAK_GUNCEL)
 
 
 def test_eski_iz_satirinin_sirasi_blob_yapilinca_geri_yukleme_yetkisi_aldanmaz(
@@ -903,7 +962,7 @@ def test_eski_iz_satirinin_sirasi_blob_yapilinca_geri_yukleme_yetkisi_aldanmaz(
     yöneticisinin satırı askıdan önceki ACIK kopyasına geri sarılır ve satırın eşleştiği (askıdan
     önceki) iz satırının sırası BLOB'a çevrilir: SQLite sıralamasında BLOB en büyüktür, o satır "en
     yeni" okunsaydı askı satırı hiç okunmaz, satır kabul edilirdi. Okunan ilk satırın sırası
-    tamsayı değildir: `RET_KAYIT_IZI`, karar güncel veritabanınındır (görüntüye düşülmez)."""
+    tamsayı değildir: `RET_IZ_BOSLUGU` (tür), karar güncel veritabanınındır (görüntüye düşülmez)."""
     db = tmp_path / "db.sqlite3"
     _sarmal_ekle(YONETICI_2)
     _geri_sarilmis_ikinci_yonetici(db)
@@ -919,7 +978,7 @@ def test_eski_iz_satirinin_sirasi_blob_yapilinca_geri_yukleme_yetkisi_aldanmaz(
     with pytest.raises(YetkiReddi) as ret:
         _dogrula(db, hesap_id=YONETICI_2.id, ozet=ozet)
 
-    assert (ret.value.kod, ret.value.kaynak) == (geri_yukleme_yetkisi.RET_KAYIT_IZI, KAYNAK_GUNCEL)
+    assert (ret.value.kod, ret.value.kaynak) == (geri_yukleme_yetkisi.RET_IZ_BOSLUGU, KAYNAK_GUNCEL)
 
 
 def test_satirin_izi_muhurden_sonra_rolden_once_denetlenir(tmp_path: Path) -> None:
@@ -1722,6 +1781,7 @@ def test_okuyucu_orm_ve_django_ice_aktarmaz() -> None:
         "contextlib",
         "dataclasses",
         "datetime",
+        "enum",
         "typing",
     }
     for dugum in ast.walk(ast.parse(izi_kaynagi)):
@@ -1748,7 +1808,7 @@ def _depo_koku() -> Path:
 def test_iletiler_sozlukte_yazilidir() -> None:
     """Kullanıcı metni sözlükten (docs/sozluk.md "Yedek" satırı) sapmaz."""
     sozluk = (_depo_koku() / "docs" / "sozluk.md").read_text(encoding="utf-8")
-    for ileti in (ILETI_ROL, ILETI_DURUM, ILETI_MUHUR, ILETI_OZET):
+    for ileti in (ILETI_ROL, ILETI_DURUM, ILETI_MUHUR, ILETI_IZ_BOSLUGU, ILETI_OZET):
         assert re.search(re.escape(f'**"{ileti}"**'), sozluk), ileti
 
 

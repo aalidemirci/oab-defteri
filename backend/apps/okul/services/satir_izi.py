@@ -18,8 +18,9 @@ işlemi, kurtarma ve hesap işlemi açılmaz; `app_password.AccountRecordStale`,
 `hesap_muhru_tutmadi`; `BUTUNLUK` satırının alanı `kayit_mac`; geri yüklemenin parola yolunda
 `geri_yukleme_yetkisi.RET_KAYIT_IZI`). Çıkış yedekten geri yüklemedir (zarfın üçüncü durumu).
 
-`hesap_izi_tutuyor` (gövdesi `hesap_izi_sirasi`; eşleşen iz satırının sırasını da verir) TEK karar
-işlevidir: kilit açılışında (DEK belleğe alınmadan, aday DEK'le), oturumdaki parola doğrulamasında,
+`hesap_izi_karari` (eşleşen iz satırının sırası ya da retin NEDENİ; `hesap_izi_sirasi` ve
+`hesap_izi_tutuyor` onun ince sarmalayıcılarıdır) TEK karar işlevidir: kilit açılışında (DEK
+belleğe alınmadan, aday DEK'le), oturumdaki parola doğrulamasında,
 hesap servislerinde (`denetim_izi.hesap_izi_tutuyor` Django'nun bağlantısını verir), geri
 yüklemenin parola yolunda (`geri_yukleme_yetkisi`; salt okunur `sqlite3`) ve özet onarımında
 (`ozet_onarimi`) AYNI işlev koşar; iz boşluğu kararı da burada verilir ("İZ BOŞLUĞU"). Adımları:
@@ -139,6 +140,23 @@ eski satırın gerisine taşırsa yürüyüş eski satırı en yeni sanardı. E�
     yazımın "kesintisi" (tohum ilerledi, satır yazılmadı) sıra boşluğu bırakmaz (satır hiç sıra
     almadı); geri yükleme veritabanını bütünüyle değiştirir (kendi kesintisiz izini taşır).
 
+RET NEDENİ (orkestratör maddesi C-4; `IzRetNedeni`, `IzKarari`). Karar retin nedenini de taşır:
+`SATIR_IZI` (satırın kendisi ya da hesabın KENDİ iz satırları tutmuyor: satır yok ya da biçimsiz,
+beklenen mühür değil, iz anahtarı tablosu biçimsiz, içerik MAC'li iz satırı yok, satırın zincir MAC'i
+ya da içerik MAC'i tutmuyor) ya da İZ BOŞLUĞU'nun üç hâli — `SILME` ((a)), `TUR` ((b); yürüyüşte
+okunan tamsayı olmayan sıra da: program yazmaz, BLOB/metin en yeni sıralanır) ve `KAYMA` ((c); hesabın
+KENDİ iz satırının zincir MAC'i bugünkü sırasında tutmayıp `seq + d`'de tutuyorsa da — silinen bölgenin
+üstündeki satırı aşağı kaydırılmış hesap). Neden kararı DEĞİŞTİRMEZ (ret yine rettir); yalnız
+kullanıcının gördüğü iletiyi ve `BUTUNLUK` satırının alan adını seçer: izden ilgisiz bir satır silinince
+son kaydı ondan eski hesapların "kaydı değişmiş" değil "denetim izinden kayıt silinmiş ya da sırası
+değiştirilmiş" iletisini görmesi için (`app_password.AuditTrailGap`, alan `iz_boslugu`;
+`geri_yukleme_yetkisi.RET_IZ_BOSLUGU`). Kendi satırında kayma araması yalnız ret yolunda koşar (en
+çok `KAYMA_SINIRI` HMAC; meşru izde maliyet yok). İçerik MAC'i tutmayan kendi satırından sonra izde
+boşluk varsa neden boşluktur (`SILME`, `TUR`, `KAYMA`; ör. hesabın KENDİ son kaydı ortadan
+silinmiş, satır bir önceki kaydını tutmaz); satır ayrıca geri sarılmış olabilir, karar aynıdır.
+Boşluk yoksa (kuyruk kesme dahil) neden `SATIR_IZI`'dir (F1b-2 (c) alt commit'inin bağımsız
+denetim bulgusu).
+
 Kayma denetiminin maliyeti meşru izde birkaç satır okuması ve TEK HMAC'tir; dayanak bozuksa en çok
 `KAYMA_SINIRI` HMAC — yalnız değiştirilmiş bir izde. Ölçüm (Docker, hesabın son kaydından sonra
 25 000 satır; `test_iz_boslugu_denetiminin_suresi_uzun_izde`): kapsam ölçümü kapalıyken meşru izde
@@ -241,6 +259,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, Final, Protocol
 
 from cryptography.fernet import InvalidToken
@@ -321,6 +340,41 @@ EN_BUYUK_SIRA: Final = 2**63 - 1
 #: verir (dönüşüm sınırı). Program dışından yazılmış böyle bir hücre kararı istisnayla
 #: düşürmesin, biçimsiz sayılsın (son sınama bulgusu: zincir başının `key_ref`'i).
 AZAMI_HANE: Final = 19
+
+
+class IzRetNedeni(StrEnum):
+    """Satırın izi neden tutmadı? (modül başlığı "RET NEDENİ"). Kararı değiştirmez, iletiyi seçer."""
+
+    #: Satır ya da hesabın kendi iz satırları (adım 1-5).
+    SATIR_IZI = "satir_izi"
+    #: İZ BOŞLUĞU (a): eşleşen (ya da içerik MAC'i tutmayan) kendi satırından sonra silinmiş (ya da
+    #: birebir kopyalanmış) satır.
+    SILME = "silme"
+    #: İZ BOŞLUĞU (b): tamsayı olmayan sıra (yürüyüşte okunan da).
+    TUR = "tur"
+    #: İZ BOŞLUĞU (c): aşağı kaydırılmış satır (dayanak ya da hesabın kendi satırı).
+    KAYMA = "kayma"
+
+    @property
+    def bosluk_mu(self) -> bool:
+        """Retin nedeni izdeki bir boşluk mu (silme, tür, kayma)?"""
+        return self is not IzRetNedeni.SATIR_IZI
+
+
+@dataclass(frozen=True)
+class IzKarari:
+    """`hesap_izi_karari`'nın sonucu: tutuyorsa eşleşen iz satırının sırası, tutmuyorsa neden."""
+
+    sira: int | None
+    neden: IzRetNedeni | None = None
+
+    @property
+    def tutuyor(self) -> bool:
+        return self.sira is not None
+
+
+#: Satırın kendi izinin tutmadığı karar (en sık ret; nedeni `SATIR_IZI`).
+_SATIR_TUTMUYOR: Final = IzKarari(None, IzRetNedeni.SATIR_IZI)
 
 
 class _Bicimsiz(Exception):
@@ -689,47 +743,58 @@ def hesap_izi_tutuyor(
 ) -> bool:
     """Hesap satırı denetim izindeki son içerik MAC'li kaydını tutuyor mu? (modül başlığı)
 
-    `hesap_izi_sirasi(...) is not None`; ayrıntılar orada.
+    `hesap_izi_karari(...).tutuyor`; ayrıntılar orada.
     """
-    return hesap_izi_sirasi(baglanti, hesap_id, dek, beklenen_muhur=beklenen_muhur) is not None
+    return hesap_izi_karari(baglanti, hesap_id, dek, beklenen_muhur=beklenen_muhur).tutuyor
 
 
 def hesap_izi_sirasi(
     baglanti: Baglanti, hesap_id: object, dek: bytes, *, beklenen_muhur: str | None = None
 ) -> int | None:
-    """Satırın tuttuğu (eşleştiği) iz satırının sırası; tutmuyorsa None (modül başlığı).
+    """Satırın tuttuğu (eşleştiği) iz satırının sırası; tutmuyorsa None (`hesap_izi_karari`).
+
+    Sıra, geri yüklemenin özet onarımında çapanın soyunu sınar (`ozet_onarimi` modül başlığı
+    "SIRA KURALI").
+    """
+    return hesap_izi_karari(baglanti, hesap_id, dek, beklenen_muhur=beklenen_muhur).sira
+
+
+def hesap_izi_karari(
+    baglanti: Baglanti, hesap_id: object, dek: bytes, *, beklenen_muhur: str | None = None
+) -> IzKarari:
+    """TEK karar (modül başlığı): satırın tuttuğu iz satırının sırası ya da retin nedeni.
 
     Satır yoksa, biçimsizse, mührü verilen `beklenen_muhur`'a eşit değilse (adım 5), hesabın okunan
-    bir iz satırının sırası tamsayı değilse ya da zincir MAC'i tutmuyorsa, iz anahtarı tablosunda
-    biçimsiz satır varsa, içerik MAC'li iz satırı yoksa ya da eşleşen satırdan sonra izde boşluk
-    varsa (silinmiş satır, tekrarlanan ya da tamsayı olmayan sıra, kaydırılmış dayanak; adım 6,
-    "İZ BOŞLUĞU") None (fail-closed). Bütün okumalar tek anlık görüntüdedir (`okuma_islemi`).
-    Hiçbir şey yazmaz. Veritabanı hatası (tablo yok, dosya kilitli) çağırana yükselir. Sıra, geri
-    yüklemenin özet onarımında çapanın soyunu sınar (`ozet_onarimi` modül başlığı "SIRA KURALI").
+    bir iz satırının zincir MAC'i tutmuyorsa, iz anahtarı tablosunda biçimsiz satır varsa ya da
+    içerik MAC'li iz satırı yoksa ret, neden `SATIR_IZI`; hesabın okunan bir iz satırının sırası
+    tamsayı değilse ya da eşleşen satırdan sonra izde boşluk varsa (adım 6, "İZ BOŞLUĞU") ret, neden
+    boşluğun türü (`SILME`, `TUR`, `KAYMA`; zincir MAC'i tutmayan kendi satırı aşağı kaydırılmışsa
+    da `KAYMA`); içerik MAC'i tutmayan kendi satırından sonra izde boşluk varsa da neden boşluğun
+    türüdür ("RET NEDENİ"). Fail-closed: her şüphede ret. Bütün okumalar tek anlık görüntüdedir
+    (`okuma_islemi`). Hiçbir şey yazmaz. Veritabanı hatası (tablo yok, dosya kilitli) çağırana
+    yükselir.
     """
     kimlik = kanonik_kimlik(hesap_id)
     if kimlik is None:
-        return None
+        return _SATIR_TUTMUYOR
     with okuma_islemi(baglanti):
-        return _eslesen_sira(baglanti, kimlik, dek, beklenen_muhur)
+        return _karar(baglanti, kimlik, dek, beklenen_muhur)
 
 
-def _eslesen_sira(
-    baglanti: Baglanti, kimlik: str, dek: bytes, beklenen_muhur: str | None
-) -> int | None:
-    """`hesap_izi_sirasi`'nın gövdesi; çağıran okuma işlemini açmıştır."""
+def _karar(baglanti: Baglanti, kimlik: str, dek: bytes, beklenen_muhur: str | None) -> IzKarari:
+    """`hesap_izi_karari`'nın gövdesi; çağıran okuma işlemini açmıştır."""
     ham = _hesap_satiri(baglanti, kimlik)
     if ham is None:
-        return None
+        return _SATIR_TUTMUYOR
     try:
         alanlar = hesap_ozet_alanlari(ham, dek)
     except _Bicimsiz:
-        return None
+        return _SATIR_TUTMUYOR
     if beklenen_muhur is not None and not kanonik.esit(alanlar["seal"], beklenen_muhur):
-        return None  # çağıranın kararı verdiği hâl bu hâl değil (adım 5)
+        return _SATIR_TUTMUYOR  # çağıranın kararı verdiği hâl bu hâl değil (adım 5)
     anahtarlar = _IzAnahtarlari(baglanti, dek)
     if anahtarlar.bozuk:
-        return None
+        return _SATIR_TUTMUYOR
     imlec = baglanti.execute(
         "SELECT typeof(seq) = 'integer', "
         'CAST(seq AS BLOB), CAST("at" AS BLOB), CAST(actor AS BLOB), '
@@ -746,16 +811,22 @@ def _eslesen_sira(
         while True:
             satir_ham = imlec.fetchone()
             if satir_ham is None:
-                return None  # içerik MAC'li iz satırı yok (adım 4)
+                return _SATIR_TUTMUYOR  # içerik MAC'li iz satırı yok (adım 4)
             if satir_ham[0] != 1:
-                return None  # sırası tamsayı değil: metin/BLOB en yeni sıralanır (adım 2)
+                # Sırası tamsayı değil: metin/BLOB en yeni sıralanır (adım 2). Program yazmaz;
+                # "İZ BOŞLUĞU" (b)'nin tablo taramasıyla aynı hâl.
+                return IzKarari(None, IzRetNedeni.TUR)
             try:
                 satir = _iz_satiri(satir_ham[1:])
             except _Bicimsiz:
-                return None
+                return _SATIR_TUTMUYOR
             ia = anahtarlar.satirin(satir.key_ref, satir.seq)
             if satir.key_mode != KIP_ACIK or ia is None or not _mac_tutuyor(ia, satir):
-                return None  # hesabın satırı program dışından değişmiş (adım 2)
+                # Hesabın satırı program dışından değişmiş (adım 2) — ya da aşağı kaydırılmış:
+                # zincir MAC'i eski sırasında tutuyorsa neden kaymadır ("RET NEDENİ").
+                if satir.key_mode == KIP_ACIK and _kaymis_mi(anahtarlar, satir):
+                    return IzKarari(None, IzRetNedeni.KAYMA)
+                return _SATIR_TUTMUYOR
             if not satir.record_mac:
                 continue
             try:
@@ -763,18 +834,26 @@ def _eslesen_sira(
                     crypto.record_summary_key(ia), HESAP_MODELI, kimlik, alanlar
                 )
             except kanonik.KanonikHata:
-                return None
+                return _SATIR_TUTMUYOR
             if not kanonik.esit(satir.record_mac, guncel):
-                return None
+                # Satır bu kaydı tutmuyor. Ondan sonra izde boşluk varsa (ör. hesabın KENDİ son
+                # kaydı ortadan silinmiş) değişen denetim izidir: neden boşluğun türüdür ("RET
+                # NEDENİ"; orkestratör maddesi C-4). Yalnız ret yolunda koşar; karar aynıdır.
+                bosluk = _iz_boslugu_nedeni(baglanti, anahtarlar, satir.seq)
+                return _SATIR_TUTMUYOR if bosluk is None else IzKarari(None, bosluk)
             eslesen = satir.seq
             break
     finally:
         imlec.close()
-    return eslesen if _iz_boslugu_yok(baglanti, anahtarlar, eslesen) else None
+    neden = _iz_boslugu_nedeni(baglanti, anahtarlar, eslesen)
+    return IzKarari(eslesen) if neden is None else IzKarari(None, neden)
 
 
-def _iz_boslugu_yok(baglanti: Baglanti, anahtarlar: _IzAnahtarlari, sira: int) -> bool:
-    """Eşleşen satırdan (`sira`) sonra izde boşluk YOK mu? (modül başlığı "İZ BOŞLUĞU")
+def _iz_boslugu_nedeni(
+    baglanti: Baglanti, anahtarlar: _IzAnahtarlari, sira: int
+) -> IzRetNedeni | None:
+    """Eşleşen satırdan (`sira`) sonra izde boşluk varsa türü, yoksa None (modül başlığı "İZ
+    BOŞLUĞU").
 
     (b) tür, (a) silme, (c) kayma; sıra (b) → (a) → (c)'dir: (a)'nın sayımı ancak bütün sıralar
     tamsayıysa kesintisizliği kanıtlar. Çağıranın okuma işlemindedir (tek anlık görüntü).
@@ -783,17 +862,37 @@ def _iz_boslugu_yok(baglanti: Baglanti, anahtarlar: _IzAnahtarlari, sira: int) -
         "SELECT EXISTS (SELECT 1 FROM okul_audittrail WHERE typeof(seq) <> 'integer')"
     ).fetchone()
     if bicimsiz_var != 0:
-        return False  # (b) tamsayı olmayan sıra: program yazmaz
+        return IzRetNedeni.TUR  # (b) tamsayı olmayan sıra: program yazmaz
     adet, farkli, en_buyuk = baglanti.execute(
         "SELECT COUNT(*), COUNT(DISTINCT seq), MAX(seq) FROM okul_audittrail WHERE seq > ?",
         (sira,),
     ).fetchone()
     beklenen = 0 if en_buyuk is None else en_buyuk - sira
     if not all(isinstance(sayi, int) for sayi in (adet, farkli, beklenen)):
-        return False
+        return IzRetNedeni.TUR  # sayım tamsayı değil: (b)'den sonra olmaz, savunma
     if not adet == farkli == beklenen:
-        return False  # (a) S'den sonra silinmiş satır (ya da yerine konmuş birebir kopya)
-    return not _dayanak_kaymis(baglanti, anahtarlar, sira)
+        return IzRetNedeni.SILME  # (a) S'den sonra silinmiş satır (ya da yerine konmuş kopya)
+    return IzRetNedeni.KAYMA if _dayanak_kaymis(baglanti, anahtarlar, sira) else None
+
+
+def _kaymis_mi(anahtarlar: _IzAnahtarlari, satir: _IzSatiri) -> bool:
+    """Açık kip satırın zincir MAC'i bugünkü sırasında tutmayıp `seq + d`'de (1 ≤ d ≤
+    `KAYMA_SINIRI`) tutuyor mu? (modül başlığı "İZ BOŞLUĞU" (c), "RET NEDENİ")
+
+    İA `key_ref`'teki kayıttan yürürlük şartı OLMADAN çözülür (`_IzAnahtarlari.dogrudan`): sahte,
+    emekli bir anahtar satırı aramayı anahtarsız bırakamaz. Anahtar bulunamıyor ya da çözülmüyorsa,
+    MAC bugünkü sırasında tutuyorsa ya da hiçbir sırada tutmuyorsa kayma YOKTUR.
+    """
+    ia = anahtarlar.dogrudan(satir.key_ref)
+    if ia is None:
+        return False  # anahtarı bulunamıyor: kayma işareti değil
+    zincir = crypto.audit_chain_key(ia)
+    if _mac_tutuyor(ia, satir, zincir=zincir):
+        return False
+    return any(
+        _mac_tutuyor(ia, satir, seq=satir.seq + kayma, zincir=zincir)
+        for kayma in range(1, KAYMA_SINIRI + 1)
+    )
 
 
 def _dayanak_kaymis(baglanti: Baglanti, anahtarlar: _IzAnahtarlari, sira: int) -> bool:
@@ -835,16 +934,7 @@ def _dayanak_kaymis(baglanti: Baglanti, anahtarlar: _IzAnahtarlari, sira: int) -
         dayanak = _iz_satiri(dayanak_ham[1:])
     except _Bicimsiz:
         return False
-    ia = anahtarlar.dogrudan(dayanak.key_ref)
-    if ia is None:
-        return False  # anahtarı bulunamıyor: kayma işareti değil
-    zincir = crypto.audit_chain_key(ia)
-    if _mac_tutuyor(ia, dayanak, zincir=zincir):
-        return False
-    return any(
-        _mac_tutuyor(ia, dayanak, seq=dayanak.seq + kayma, zincir=zincir)
-        for kayma in range(1, KAYMA_SINIRI + 1)
-    )
+    return _kaymis_mi(anahtarlar, dayanak)
 
 
 # ---------------------------------------------------------------------------

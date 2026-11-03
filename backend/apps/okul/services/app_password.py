@@ -143,8 +143,10 @@ konsa da), silinenden sonrakileri aşağı KAYDIRMAK (silinen bölgeden sonra a�
 dışı bir satır kaldıysa, o dayanak satırı bozulmadıysa ve değişiklikten sonra giriş açılmadıysa;
 iz anahtarı tablosuna eklenen sahte bir anahtar bunu örtmez) ya da bir satırı REAL bir sıraya
 taşımak ve tabloda tamsayı olmayan herhangi bir sıra, satır izinin
-tutmaması sayılır: aynı ret, aynı `BUTUNLUK` satırı (alan `kayit_mac`), aynı çıkış — bütün
-denetim noktalarında, geri yükleme yetkisinde (güncel veritabanı ve görüntü) ve özet onarımının
+tutmamasıyla aynı karardır: aynı kod (409 `hesap_muhru_tutmadi`, hatalı deneme sayılmaz) ve aynı
+çıkış; ama hata `AuditTrailGap`, ileti `IZ_BOSLUGU_MESSAGE` (hesap servislerinde ve geri yüklemede
+kendi kalıpları; `RET_IZ_BOSLUGU`), `BUTUNLUK` alanı `iz_boslugu`dur — değişen hesap kaydı değil
+denetim izidir (orkestratör maddesi C-4; "SATIRIN İZİ") — bütün denetim noktalarında, geri yükleme yetkisinde (güncel veritabanı ve görüntü) ve özet onarımının
 çapasında (boşluklu çapa K-a'ya düşer) da. Bu, "zincir bulgusu girişi engellemez" ilkesinin (altın
 kural 3; tasarım §4.6.2-§4.6.3) kullanıcı kararına dayanan DAR istisnasıdır; kuyruk kesme ve çapa
 bulguları engellemez. Bedel (kabul edildi): izden tek bir satır silinmişse son kaydı ondan eski
@@ -197,14 +199,17 @@ doğrulanan hâl kararın verildiği hâldir). İlk denetim tutmazsa yanlış al
 bir işlemde yinelenir, doğrulanan GÜNCEL satır döner ve kararlar ondan verilir. Tutmazsa
 MÜHÜR UYUŞMAZLIĞIYLA AYNI muamele: işlem reddedilir (`AccountRecordStale`, `AccountSealMismatch`'in
 alt sınıfı, 409 `hesap_muhru_tutmadi`, mühür iletisi), `BUTUNLUK` satırı düşer (`SISTEM`, alan
-`kayit_mac`; `_muhur_bozuk_izi`), satıra dokunulmaz, hatalı deneme sayacı ve gecikme yok. Denetim
-noktaları mühür denetiminin olduğu her yerdir: kilit açılışı (`_open_account_for_login`: parmak
+`kayit_mac`; `_muhur_bozuk_izi`), satıra dokunulmaz, hatalı deneme sayacı ve gecikme yok. Retin
+nedeni izdeki bir boşluksa (silme, tür, kayma; `satir_izi` "RET NEDENİ") muamele aynıdır ama hata
+`AuditTrailGap`, ileti `IZ_BOSLUGU_MESSAGE` (hesap servislerinde ve geri yüklemede kendi kalıpları),
+`BUTUNLUK` alanı `iz_boslugu`dur: değişen hesap kaydı değil denetim izidir (orkestratör maddesi C-4).
+Denetim noktaları mühür denetiminin olduğu her yerdir: kilit açılışı (`_open_account_for_login`: parmak
 izi → satır → mühür → iz anahtarı → SATIRIN İZİ → özet → durum; sıranın gerekçesi orada),
 kurtarma anahtarıyla açılış, oturumdaki parola doğrulaması ve parola değiştirme (`_sealed_account`),
 hesap servisleri (işlemi yapan ve işlem gören; `hesaplar` modül başlığı), iki depo karşılaştırması
 (izi tutmayan satır `seal_mismatch`'tedir, hiçbir işleme girmez), kapalı hesap sarmalının temizliği
 (izi tutmayan `KAPALI` satır sarmal sildiremez) ve geri yüklemenin parola yolu
-(`geri_yukleme_yetkisi`, `RET_KAYIT_IZI`). Reddedilen hesabın ÇIKIŞI yedekten geri yüklemedir
+(`geri_yukleme_yetkisi`, `RET_KAYIT_IZI`; boşlukta `RET_IZ_BOSLUGU`). Reddedilen hesabın ÇIKIŞI yedekten geri yüklemedir
 (zarfın üçüncü durumu): parola sıfırlaması, askıdan çıkarma ve kapama izi tutmayan satıra
 dokunmaz; tek hesaplı roldeki (ör. muhasip) satır `KAPALI` olmadığı için o role yeni hesap da
 açılamaz. Kurtarma anahtarıyla geri yükleme rol ve satır izi denetlemez.
@@ -406,7 +411,7 @@ from apps.okul.oturum import (
     sistem_olarak,
     yazar_olarak,
 )
-from apps.okul.services import hesap_kurallari
+from apps.okul.services import hesap_kurallari, satir_izi
 from shared import crypto, kanonik
 from shared.exceptions import PASSWORD_REQUIRED_MESSAGE, RolYetkisiz
 from shared.text import tr_lower
@@ -559,6 +564,13 @@ _SEAL_MISMATCH_MESSAGE = (
     "Hesap kaydı program dışından değiştirilmiş görünüyor; giriş açılmadı. Program "
     "yöneticisine ve Denetleme Kuruluna bildirin."
 )
+#: İz boşluğu (`AuditTrailGap`; orkestratör maddesi C-4, sözlük §1 "Hesap kaydının ve denetim
+#: izinin tutmaması"): değişen hesap kaydı değil denetim izidir — izden ilgisiz bir satır silinince
+#: son kaydı ondan eski BÜTÜN hesaplar bu iletiyi görür. Kalıp mühür iletisinindir.
+IZ_BOSLUGU_MESSAGE = (
+    "Denetim izinden kayıt silinmiş ya da kayıtların sırası program dışından değiştirilmiş "
+    "görünüyor; giriş açılmadı. Program yöneticisine ve Denetleme Kuruluna bildirin."
+)
 _FOREIGN_DB_MESSAGE = (
     "Bu güvenlik dosyası bu veritabanına ait değil (anahtar eşleşmiyor). Doğru "
     "guvenlik.json dosyasını veri klasörüne koyup yeniden deneyin ya da bir yedekten geri "
@@ -653,14 +665,41 @@ class AccountRecordStale(AccountSealMismatch):
     `ertelenen`: denetim bir veritabanı işleminin İÇİNDEN yapıldıysa (`satir_izini_denetle(...,
     iz_yaz=False)`) `BUTUNLUK` satırı henüz yazılmamıştır; satırı, işlem geri alındıktan SONRA
     `_ertelenen_butunluk` bu hesap için yazar (orkestratör kararı O-4). Öteki hâllerde None.
+
+    `neden`: kararın ret nedeni (`satir_izi.IzRetNedeni`); `alan`: `BUTUNLUK` satırının alan adı.
+    İzdeki boşluk alt sınıfla (`AuditTrailGap`) ayrılır (orkestratör maddesi C-4).
     """
 
     code = "hesap_muhru_tutmadi"
     status_code = 409
+    #: `BUTUNLUK` satırının alan adı (`KAYIT_MAC_ALANI`; alt sınıf `IZ_BOSLUGU_ALANI`).
+    alan = "kayit_mac"
 
-    def __init__(self, message: str = "", *, ertelenen: Account | None = None) -> None:
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        ertelenen: Account | None = None,
+        neden: satir_izi.IzRetNedeni | None = None,
+    ) -> None:
         super().__init__(message)
         self.ertelenen = ertelenen
+        self.neden = neden
+
+
+class AuditTrailGap(AccountRecordStale):
+    """Hesabın son kaydından sonra denetim izinde boşluk var: silinmiş satır, tamsayı olmayan sıra
+    ya da aşağı kaydırılmış satır (kullanıcı kararı 03.11.2026 "Boşluğu engelle"; `satir_izi` "İZ
+    BOŞLUĞU", "RET NEDENİ"; orkestratör maddesi C-4).
+
+    Kodu, durumu ve muamelesi `AccountRecordStale`'inkidir (409 `hesap_muhru_tutmadi`, hatalı deneme
+    sayılmaz, satıra dokunulmaz; plan F1b-1'in kod listesine yeni kod eklenmez). Ayrılan iki şey
+    vardır: ileti (`IZ_BOSLUGU_MESSAGE`; hesap servislerinde ve geri yüklemede kendi kalıpları) —
+    değişen hesap kaydı değil denetim izidir; izden ilgisiz bir satır silinince son kaydı ondan eski
+    BÜTÜN hesaplar bu reddi alır — ve `BUTUNLUK` satırının alan adı (`IZ_BOSLUGU_ALANI`).
+    """
+
+    alan = "iz_boslugu"
 
 
 class TwoStoreMismatch(UnlockRefused):
@@ -2145,7 +2184,9 @@ def _sealed_account(
 
 
 #: Satır izi tutmadığında `BUTUNLUK` satırının alan adı (kart onu mühür ve özetten ayırır).
-KAYIT_MAC_ALANI = "kayit_mac"
+KAYIT_MAC_ALANI = AccountRecordStale.alan
+#: İzde boşluk varken `BUTUNLUK` satırının alan adı (orkestratör maddesi C-4; `AuditTrailGap`).
+IZ_BOSLUGU_ALANI = AuditTrailGap.alan
 
 
 def satir_izini_denetle(
@@ -2153,6 +2194,7 @@ def satir_izini_denetle(
     data_key: bytes,
     *,
     ileti: str = _SEAL_MISMATCH_MESSAGE,
+    bosluk_iletisi: str = IZ_BOSLUGU_MESSAGE,
     iz_yaz: bool = True,
 ) -> Account:
     """Satır denetim izindeki son içerik MAC'li kaydını tutmalı (modül başlığı "SATIRIN İZİ").
@@ -2166,7 +2208,11 @@ def satir_izini_denetle(
     hatalı deneme sayacına ve gecikmeye dokunulmaz. Çağıran mührü önceden doğrulamıştır. Hesap
     servisleri kendi iletilerini verir (`ileti`). İzde boşluk (hesabın son kaydından sonra silinmiş
     ya da sırası değiştirilmiş satır) aynı karardır (kullanıcı kararı 03.11.2026 "Boşluğu engelle";
-    `satir_izi` "İZ BOŞLUĞU").
+    `satir_izi` "İZ BOŞLUĞU") ama retin nedeni ayrılır (orkestratör maddesi C-4; `satir_izi` "RET
+    NEDENİ"): `AuditTrailGap`, ileti `bosluk_iletisi`, `BUTUNLUK` alanı `iz_boslugu` — değişen
+    hesap kaydı değil denetim izidir. Neden, karar reddedildikten SONRA ayrı bir okumayla
+    (`denetim_izi.hesap_izi_karari`) bulunur: kararın kendisi `denetim_izi.hesap_izi_tutuyor`'dan
+    gelir; neden yalnız iletiyi ve alan adını seçer (bulunamazsa satırın izi sayılır).
 
     `iz_yaz=False` (orkestratör kararı O-4): çağıran bir veritabanı işleminin İÇİNDEDİR; orada
     yazılan `BUTUNLUK` satırı işlemle birlikte geri alınırdı. Satır yazılmaz, hata `ertelenen`
@@ -2186,15 +2232,41 @@ def satir_izini_denetle(
             hesap.id,
         )
         return guncel
-    logger.warning(
-        "Hesap satırı denetim izindeki son kaydını tutmadı; işlem reddedildi, satıra "
-        "dokunulmadı (%s).",
-        hesap.id,
-    )
+    neden = _ret_nedeni(hesap, data_key)
+    hata: type[AccountRecordStale]
+    if neden.bosluk_mu:
+        hata, mesaj = AuditTrailGap, bosluk_iletisi
+        logger.warning(
+            "Denetim izinde hesabın son kaydından sonra boşluk var (%s); işlem reddedildi, "
+            "satıra dokunulmadı (%s).",
+            neden.value,
+            hesap.id,
+        )
+    else:
+        hata, mesaj = AccountRecordStale, ileti
+        logger.warning(
+            "Hesap satırı denetim izindeki son kaydını tutmadı; işlem reddedildi, satıra "
+            "dokunulmadı (%s).",
+            hesap.id,
+        )
     if not iz_yaz:
-        raise AccountRecordStale(ileti, ertelenen=hesap)
-    _muhur_bozuk_izi(hesap, data_key, alan=KAYIT_MAC_ALANI)
-    raise AccountRecordStale(ileti)
+        raise hata(mesaj, ertelenen=hesap, neden=neden)
+    _muhur_bozuk_izi(hesap, data_key, alan=hata.alan)
+    raise hata(mesaj, neden=neden)
+
+
+def _ret_nedeni(hesap: Account, data_key: bytes) -> satir_izi.IzRetNedeni:
+    """Reddedilen satırın izinin NEDEN tutmadığı (`satir_izi` "RET NEDENİ"): kararın satırına
+    (beklenen mühür) bağlı ikinci bir okuma. Karar artık tutuyorsa (arada bir yazım) ya da okuma
+    düşerse satırın izi sayılır (`SATIR_IZI`: eski ileti, eski alan adı)."""
+    try:
+        karar = denetim_izi.hesap_izi_karari(
+            hesap.id, veri_anahtari=data_key, beklenen_muhur=hesap.seal
+        )
+    except (DatabaseError, sqlite3.Error):  # ham bağlantı `sqlite3` hatası yükseltir
+        logger.warning("Satır izinin ret nedeni okunamadı (%s).", hesap.id, exc_info=True)
+        return satir_izi.IzRetNedeni.SATIR_IZI
+    return karar.neden or satir_izi.IzRetNedeni.SATIR_IZI
 
 
 @contextmanager
@@ -2204,14 +2276,15 @@ def _ertelenen_butunluk(data_key: bytes) -> Iterator[None]:
     Veritabanı işleminin DIŞINDA kullanılır (`with _ertelenen_butunluk(dek), transaction.atomic():`
     ya da iç içe): içerideki `satir_izini_denetle(..., iz_yaz=False)` reddi işlemi geri aldırır,
     çıkışta — işlem geri alındıktan SONRA — `BUTUNLUK` satırı kendi işleminde yazılır
-    (`_muhur_bozuk_izi`, alan `kayit_mac`) ve hata aynen yükselir. Böylece ret, işlem içindeki
+    (`_muhur_bozuk_izi`, alan hatanın `alan`ı: satırın izinde `kayit_mac`, izdeki boşlukta
+    `iz_boslugu`) ve hata aynen yükselir. Böylece ret, işlem içindeki
     öteki denetimlerin retleri gibi denetim izinde kalır.
     """
     try:
         yield
     except AccountRecordStale as exc:
         if exc.ertelenen is not None:
-            _muhur_bozuk_izi(exc.ertelenen, data_key, alan=KAYIT_MAC_ALANI)
+            _muhur_bozuk_izi(exc.ertelenen, data_key, alan=exc.alan)
         raise
 
 
@@ -2244,9 +2317,9 @@ def _yaristan_sonraki_satir(hesap: Account, data_key: bytes) -> Account | None:
 
 
 def _muhur_bozuk_izi(hesap: Account, data_key: bytes, *, alan: str = "seal") -> None:
-    """Mühür (`seal`), sarmal özeti (`wrap_digest`) ya da satırın izi (`kayit_mac`) tutmadı:
-    `BUTUNLUK` satırı (`SISTEM`), satıra dokunulmadan (§4.6.1 kural 1; modül başlığı "SARMALIN
-    TAZELİĞİ", "SATIRIN İZİ").
+    """Mühür (`seal`), sarmal özeti (`wrap_digest`), satırın izi (`kayit_mac`) ya da izdeki
+    boşluk (`iz_boslugu`) tutmadı: `BUTUNLUK` satırı (`SISTEM`), satıra dokunulmadan (§4.6.1 kural
+    1; modül başlığı "SARMALIN TAZELİĞİ", "SATIRIN İZİ").
 
     DEK sarmaldan açıldığı için İA çözülebilir; satır oturum açılmadan, o DEK'ten çözülen
     İA ile yazılır (iz bellekteki anahtarı beklemez). Aktör `SISTEM`'dir: mührü, özeti ya da

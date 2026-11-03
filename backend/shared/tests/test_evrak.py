@@ -5,7 +5,9 @@ akışı modelinkine EŞİTTİR — gövde blokları belge sırasıyla, tablo h�
 satır; altlık ve sayfa numarası karşılaştırmaya girmez (UY-18); (2) Word çıktısında
 `w:caps` yoktur, belge dili `tr-TR`'dir; (3) içerik özeti modelin kanonik JSON'undan
 çıkar ve kararlıdır; (4) python-docx'e uygulama kodunda yalnız `shared/docx.py`
-kapısından gidilir.
+kapısından gidilir; (5) dipnot (`Dipnot`; plan F1b-2 "E63") belgenin sonunda durur, iki
+çizicide gövdenin son paragrafıdır ve metin akışına girer (örnek belge onu taşır: eşdeğerlik
+testleri dipnotu da sınar).
 """
 
 from __future__ import annotations
@@ -139,6 +141,37 @@ def test_konum_cumlesi_imzanin_hemen_ustunde_olmali() -> None:
         )
     with pytest.raises(ValueError, match="imza bloğunun hemen üstünde"):
         evrak.Belge(kod="E01", antet=antet, bloklar=(evrak.KonumCumlesi("x"),))
+
+
+def test_dipnot_belgenin_sonunda_durur() -> None:
+    """Dipnottan sonra yalnız başka dipnot gelebilir; imzadan sonra iki dipnot geçerlidir."""
+    antet = evrak.Antet(
+        tc="T.C.", authority="ÖRNEK KAYMAKAMLIĞI", unit_line="Örnek Okulu Müdürlüğü"
+    )
+    imza = evrak.Imza(sahipler=(evrak.ImzaSahibi("Teslim eden", "Program yöneticisi"),))
+    evrak.Belge(
+        kod="E63",
+        antet=antet,
+        bloklar=(imza, evrak.Dipnot("birinci"), evrak.Dipnot("ikinci")),
+    )
+    with pytest.raises(ValueError, match="Dipnot belgenin sonunda durur"):
+        evrak.Belge(kod="E63", antet=antet, bloklar=(evrak.Dipnot("x"), imza))
+    with pytest.raises(ValueError, match="Dipnot belgenin sonunda durur"):
+        evrak.Belge(kod="E63", antet=antet, bloklar=(evrak.Dipnot("x"), evrak.Paragraf("y")))
+
+
+def test_dipnot_kanonik_bicimde_ve_akista(belge: evrak.Belge, docx_bayt: bytes) -> None:
+    """Örnek belgenin son bloğu kişisel veri dipnotudur: kanonik JSON'da `dipnot` türüyle, metin
+    akışının sonunda; Word'de gövdenin son paragrafı, 8 punto (PDF'teki `.dipnot` gibi)."""
+    assert isinstance(belge.bloklar[-1], evrak.Dipnot)
+    assert '"tur":"dipnot"' in evrak.kanonik_json(belge)
+    assert evrak.metin_akisi(belge)[-1] == evrak.KISISEL_VERI_DIPNOTU
+    son = [p for p in cizici.ac(docx_bayt).paragraphs if p.text.strip()][-1]
+    assert son.text == evrak.KISISEL_VERI_DIPNOTU
+    boyutlar = {run.font.size for run in son.runs if run.text}
+    assert {None if b is None else b.pt for b in boyutlar} == {cizici.DIPNOT_PUNTO}
+    html = evrak.html_ciz(belge)
+    assert html.count('class="dipnot dipnot-ilk"') == 1
 
 
 def test_tablo_satiri_baslik_sayisina_uymali() -> None:

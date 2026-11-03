@@ -52,6 +52,18 @@ KISI_YAZAN_UCLAR = frozenset(
 # Anlık görüntü: kişi YAZMAYAN bütün `/api/` uçları. Yeni uç → bilinçli sınıflandırma.
 DIGER_UCLAR = frozenset(
     {
+        # Erişim günlüğünün okuma ekranı (plan F1b-2): yalnız okur (GET), iz bırakmaz.
+        "access-log",
+        # Kullanıcılar (plan F1b-2): hesap yazar, kişi sicili (öğrenci/personel) yazmaz. Açık
+        # oturumda rol kapısı ve servisin yetki kapısı keser; kurulumda yazar ve veri anahtarı
+        # yoktur (servis reddeder).
+        "account-close",
+        "account-detail",
+        "account-handover-slip",
+        "account-list",
+        "account-options",
+        "account-reset-password",
+        "account-unsuspend",
         # Çık (tasarım §4.2): kişi yazmaz; her oturum durumunda parolasız.
         "app-quit",
         "backup-list",
@@ -88,6 +100,8 @@ DIGER_UCLAR = frozenset(
         "security-integrity-orphan-wraps",
         # Parola yenilenme bildirimi: oturumdaki hesabın bayrağı (izli), kişi sicili yazmaz.
         "security-integrity-reset-notice",
+        # Geri yükleme kartının "Gördüm"ü (plan F1b-2): yalnız `ISARET` iz satırı yazar.
+        "security-integrity-restore-seen",
         "security-integrity-two-store",
         "security-lock",
         "security-recover",

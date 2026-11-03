@@ -18,7 +18,7 @@ Yeni bir izsiz yazma yolu eklenince bu dosyadaki testlerden en az biri düşer:
    (testler ve göçler hariç; modeller DAHİL) AST ile taranır: ORM yazma çağrısı (kural
    `_orm_yazimi_mi`'de: `update`, `create`, `delete`, modelin adlı yazım ilkeleri… HER
    alıcıda — queryset değişkeni, ilişki yöneticisi, seçicinin queryset'i) taşıyan her birim
-   ya yazıcıyı (`denetim_izi.kayit`, `olay`, `degisiklik`, `kilit_olayi`) doğrudan ya da `SAF_IZ_YARDIMCILARI`'nda
+   ya yazıcıyı (`denetim_izi.kayit`, `olay`, `degisiklik`, `kilit_olayi`, `basim`) doğrudan ya da `SAF_IZ_YARDIMCILARI`'nda
    ADIYLA duran bir yardımcıyla çağırmalı, ya izi çağıranları düşen modüle özel bir
    yardımcı olmalı (kurallar `_tara`'da) ya da `MUAF_ISLEVLER`'de (plan muafiyeti) ya da
    `ILKELLER`'de (yazıcı ve model ilkelleri) adıyla durmalıdır. Çağrılar (modül, işlev)
@@ -82,6 +82,7 @@ from apps.okul.models import (
     AccessLog,
     Account,
     AccountRole,
+    AccountStatus,
     AuditTrail,
     ClassSection,
     Holiday,
@@ -91,6 +92,7 @@ from apps.okul.models import (
     SchoolTerm,
     SchoolYear,
     Student,
+    SuspendReason,
 )
 from apps.okul.services import app_password, encrypted_backup, persons
 from apps.okul.services import calendar as calendar_service
@@ -100,8 +102,8 @@ from apps.okul.services import sections as section_service
 from apps.okul.services import setup as setup_service
 from apps.okul.services import terms as term_service
 from apps.okul.services.templates import STUDENT_TEMPLATE_HEADERS
-from apps.okul.tests.hesap_ortak import YENI_PAROLA, hesap_ac
-from conftest import TEST_HESAP_ID, TEST_KURTARMA_ANAHTARI, TEST_PAROLA
+from apps.okul.tests.hesap_ortak import GECICI_PAROLA, YENI_PAROLA, hesap_ac, muhurle
+from conftest import TEST_HESAP_ID, TEST_KURTARMA_ANAHTARI, TEST_PAROLA, oturumu_ac_test
 from shared import crypto
 
 YAZMA_YONTEMLERI = ("post", "put", "patch", "delete")
@@ -321,6 +323,55 @@ def _parola_bildirimi(_: pytest.MonkeyPatch) -> Istek:
     return Istek("/api/v1/security/integrity/reset-notice/", None, _turler("GUNCELLE"))
 
 
+def _hesabi_kapat(_: pytest.MonkeyPatch) -> Istek:
+    """Kullanıcılar: uydurma muhasibin hesabı kapatılır (`HESAP`; sarmalda sayaç yok)."""
+    return Istek(f"/api/v1/accounts/{hesap_ac().id}/close/", None, _turler("HESAP"))
+
+
+def _askidan_cikar(_: pytest.MonkeyPatch) -> Istek:
+    """Kullanıcılar: üyeliği düşmüş (mühürlü, izli `ASKIDA`) uydurma muhasip askıdan çıkarılır."""
+    hesap = muhurle(
+        hesap_ac(), status=AccountStatus.ASKIDA, suspend_reason=SuspendReason.UYELIK_DUSTU
+    )
+    return Istek(f"/api/v1/accounts/{hesap.id}/unsuspend/", None, _turler("HESAP"))
+
+
+def _parolayi_sifirla(_: pytest.MonkeyPatch) -> Istek:
+    """Kullanıcılar: `PAROLA` ve iki aşamalı sarmal özetinin `HESAP` satırı (`hesaplar`)."""
+    return Istek(
+        f"/api/v1/accounts/{hesap_ac().id}/reset-password/",
+        {"gecici_parola": YENI_PAROLA},
+        _turler("PAROLA", "HESAP"),
+    )
+
+
+def _teslim_pusulasi(_: pytest.MonkeyPatch) -> Istek:
+    """Kullanıcılar: uydurma muhasibin hesap teslim pusulası (E63) — tek izi `BASIM` satırıdır
+    (dosya saklanmaz; hesap satırı değişmez)."""
+    return Istek(f"/api/v1/accounts/{hesap_ac().id}/handover-slip/", None, _turler("BASIM"))
+
+
+def _geri_yuklemeyi_gordum(_: pytest.MonkeyPatch) -> Istek:
+    """Denetleme Kurulu: geri yükleme kartının "Gördüm"ü — tek izi `ISARET` satırıdır (kaydı
+    denetim izinin kendi satırı; hiçbir tablo değişmez). Oturum uydurma DK üyesinindir."""
+    dk = muhurle(
+        hesap_ac(AccountRole.DENETLEME_KURULU, ad="Uydurma Denetçi"), status=AccountStatus.ACIK
+    )
+    with transaction.atomic():
+        geri = denetim_izi.olay(
+            "GERI_YUKLEME",
+            model=denetim_izi.GERI_YUKLEME_KAYDI,
+            object_id="db-onceki-2026-11-01-091000.sqlite3",
+        )
+    oturumu_ac_test(str(dk.id), tanitici=dk.login_name, rol=AccountRole.DENETLEME_KURULU.value)
+    return Istek(
+        "/api/v1/security/integrity/restore-seen/",
+        {"seq": geri.seq},
+        _turler("ISARET"),
+        hesap=str(dk.id),
+    )
+
+
 def _sabit(yol: str, govde: dict[str, Any] | None, *turler: str) -> Senaryo:
     return Senaryo(lambda _m: Istek(yol, govde, _turler(*turler)))
 
@@ -453,9 +504,26 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     ("encrypted-backup-download", "POST"): Senaryo(_sifreli_yedek),
     ("security-integrity-orphan-wraps", "POST"): Senaryo(_sahipsiz_sarmal),
     ("security-integrity-reset-notice", "POST"): Senaryo(_parola_bildirimi),
+    ("security-integrity-restore-seen", "POST"): Senaryo(_geri_yuklemeyi_gordum),
     ("backup-external-reminder", "PUT"): _sabit(
         "/api/v1/backups/external/", {"reminder_days": 14}, "GUNCELLE"
     ),
+    # Kullanıcılar (plan F1b-2): hesap açma, kapama, askıdan çıkarma, parola sıfırlama, hesap
+    # teslim pusulası.
+    ("account-list", "POST"): _sabit(
+        "/api/v1/accounts/",
+        {
+            "rol": "muhasip",
+            "tanitici": "muhasip",
+            "ad_soyad": "Uydurma Muhasip",
+            "gecici_parola": GECICI_PAROLA,
+        },
+        "HESAP",
+    ),
+    ("account-close", "POST"): Senaryo(_hesabi_kapat),
+    ("account-unsuspend", "POST"): Senaryo(_askidan_cikar),
+    ("account-reset-password", "POST"): Senaryo(_parolayi_sifirla),
+    ("account-handover-slip", "POST"): Senaryo(_teslim_pusulasi),
 }
 
 #: Plan F1b-1'in adıyla muaf tuttuğu yollar: kişi silme ve birleştirme 5. adımda yeniden
@@ -650,7 +718,7 @@ def test_izli_yazma_ucu_iz_satiri_yazar(
 
 #: Yazıcının giriş noktaları (`denetim_izi`).
 YAZICI_GIRISLERI = frozenset(
-    {"kayit", "olay", "degisiklik", "kilit_olayi", "kilitli_olay", "kvkk_silme"}
+    {"kayit", "olay", "degisiklik", "kilit_olayi", "kilitli_olay", "kvkk_silme", "basim"}
 )
 #: Model örneği yazımı (`save`, katı silme, geri alma): konumsal argümansız çağrı. Konumsal
 #: argümanlı `save` ORM dışıdır (openpyxl `kitap.save(tampon)`).

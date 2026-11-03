@@ -57,6 +57,13 @@ kartın hatası öteki kartları düşürmez; ön yüz "Bütünlük Durumu Okuna
   onayıyla sahipsiz (satırı olmayan ya da `KAPALI`) hesap sarmallarının silinmesi (tasarım
   §4.6.1 kural 4; `hesaplar.remove_orphan_wraps`, `HESAP` satırı); yalnız program yöneticisi
   (rol kapısı ve servisin yetki kapısı). Yanıt `{silinen, …iki depo kartı}`'dır.
+* `POST security/integrity/restore-seen/` `{seq}` → geri yükleme kartının "Gördüm"ü (plan
+  F1b-2 "Gördüm."; tasarım §4.4.4, §4.4.2 M8 ⁵): yalnız Denetleme Kurulu (rol kapısı ve servisin
+  yetki kapısı `Eylem.GERI_YUKLEME_GORDUM`; `hesaplar.acknowledge_restore`). `seq` kartın
+  gösterdiği (doğrulanan son) `GERI_YUKLEME` satırıdır; `ISARET` satırı yazılır, kart herkes için
+  kalkar (bir üye yeter; kimin gördüğü izde kalır). Aynı geri yüklemeye ikinci "Gördüm" satır
+  yazmaz (200); eski ya da olmayan `seq` 409 `geri_yukleme_guncel_degil`; biçimsiz `seq` 400.
+  Yanıt güncel denetim kartlarıdır.
 
 Kişi adı ve bulgu metni DÖNMEZ: kodları ön yüz sözlükteki metne çevirir. Kartlardaki hesaplar
 kişisizdir: `{id, tanitici, rol_etiketi}` (iki depo ve mührü tutmayan satırlarında ek olarak
@@ -80,7 +87,8 @@ ekranının hesap listesi, kilit açma, kurtarma, Kilitle, kendi parolası, boş
 kendi kartları ve parola yenilenme bildirimi her role açıktır (§4.4.2 "Kendi parolasını
 değiştirme, Kilitle, Çık"; kilitliyken açık olan her uç açık oturumda her role açıktır).
 Boşta süre yazımı, iki depo kartı ve sahipsiz parola kayıtlarının silinmesi yalnız program
-yöneticisine; denetim kartları program yöneticisi ve Denetleme Kuruluna açıktır.
+yöneticisine; denetim kartları program yöneticisi ve Denetleme Kuruluna, geri yükleme kartının
+"Gördüm"ü yalnız Denetleme Kuruluna açıktır.
 """
 
 from __future__ import annotations
@@ -99,7 +107,7 @@ from rest_framework.views import APIView
 from apps.okul import iz_dogrulama
 from apps.okul.models import IDLE_LOCK_MINUTES_MAX, IDLE_LOCK_MINUTES_MIN
 from apps.okul.oturum import OTURUM, yazar
-from apps.okul.services import app_password, hesaplar
+from apps.okul.services import app_password, hesaplar, satir_izi
 from apps.okul.services import setup as setup_service
 
 
@@ -247,7 +255,7 @@ class SecurityChangePasswordView(APIView):
         veri = req.validated_data
         with guvenlik_hatalari():
             app_password.change_password(
-                hesap_id=OTURUM.hesap_id() or "",
+                hesap_id=_yazar_hesabi() or "",
                 current_password=veri["parola"],
                 new_password=veri["yeni_parola"],
             )
@@ -261,7 +269,13 @@ class SahipsizSarmalSerializer(serializers.Serializer[dict[str, Any]]):
 
 
 def _yazar_hesabi() -> str | None:
-    """İsteğin yazarı olan hesap (istek başındaki görüntü; `SISTEM` ya da bağlamsız: yok)."""
+    """İsteğin yazarı olan hesap (istek başındaki görüntü; `SISTEM` ya da bağlamsız: yok).
+
+    Oturumdaki hesabı isteyen BÜTÜN uçlar buradan okur (kendi parolası, kendi kartları, kendi
+    parola bildirimi, sahipsiz parola kayıtlarının silinmesi; orkestratör maddesi C-5): yetki
+    kapısının ilkesiyle aynı (`rol_izinleri` modül başlığı) — istek ortasındaki kilit ya da hesap
+    değişimi kararı değiştirmez, `OTURUM.hesap_id()` o anın oturumunu verirdi.
+    """
     kim = yazar()
     return None if kim is None or kim.sistem_mi else kim.hesap_id
 
@@ -295,10 +309,60 @@ class SahipsizSarmalView(APIView):
         req.is_valid(raise_exception=True)
         with guvenlik_hatalari():
             silinen = hesaplar.remove_orphan_wraps(
-                by_hesap_id=OTURUM.hesap_id() or "",
+                by_hesap_id=_yazar_hesabi() or "",
                 hesap_idler=[str(kimlik) for kimlik in req.validated_data["hesaplar"]],
             )
         return Response({"silinen": silinen, **iz_dogrulama.iki_depo_karti()})
+
+
+#: "Gördüm"ün gövdesindeki sıranın iletileri (sözlük §1 "Geri yükleme kartının “Gördüm”ü (F1b)").
+GORDUM_SIRASI_EKSIK = "Geri yükleme kaydı belirtilmedi."
+GORDUM_SIRASI_GECERSIZ = "Geri yükleme kaydının numarası geçersiz."
+
+
+class GeriYuklemeGordumSerializer(serializers.Serializer[dict[str, Any]]):
+    """ "Gördüm": kartın gösterdiği geri yüklemenin denetim izindeki sırası (`seq`)."""
+
+    seq = serializers.IntegerField(
+        min_value=1,
+        max_value=satir_izi.EN_BUYUK_SIRA,
+        error_messages={
+            "required": GORDUM_SIRASI_EKSIK,
+            "null": GORDUM_SIRASI_EKSIK,
+            "invalid": GORDUM_SIRASI_GECERSIZ,
+            "max_string_length": GORDUM_SIRASI_GECERSIZ,
+            "min_value": GORDUM_SIRASI_GECERSIZ,
+            "max_value": GORDUM_SIRASI_GECERSIZ,
+        },
+    )
+
+
+class GeriYuklemeKartiGuncelDegilResponse(APIException):
+    """`hesaplar.RestoreCardStale`: 409 `geri_yukleme_guncel_degil` (eski ya da olmayan `seq`)."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "geri_yukleme_guncel_degil"
+    default_detail = hesaplar.RESTORE_CARD_STALE_MESSAGE
+
+
+class GeriYuklemeGordumView(APIView):
+    """`POST /api/v1/security/integrity/restore-seen/` `{seq}` — geri yükleme kartının "Gördüm"ü.
+
+    Yalnız Denetleme Kurulu (modül başlığı). Yanıt güncel denetim kartlarıdır
+    (`iz_dogrulama.denetim_kartlari`; görülen kart `geri_yukleme: null`).
+    """
+
+    def post(self, request: Request) -> Response:
+        req = GeriYuklemeGordumSerializer(data=request.data)
+        req.is_valid(raise_exception=True)
+        try:
+            with guvenlik_hatalari():
+                hesaplar.acknowledge_restore(
+                    by_hesap_id=_yazar_hesabi() or "", seq=req.validated_data["seq"]
+                )
+        except hesaplar.RestoreCardStale as exc:
+            raise GeriYuklemeKartiGuncelDegilResponse from exc
+        return Response(iz_dogrulama.denetim_kartlari(_yazar_hesabi()))
 
 
 class ParolaBildirimiView(APIView):
@@ -309,12 +373,12 @@ class ParolaBildirimiView(APIView):
     """
 
     def get(self, request: Request) -> Response:
-        return Response({"parola_yenilenme": iz_dogrulama.yenilenme_bildirimi(OTURUM.hesap_id())})
+        return Response({"parola_yenilenme": iz_dogrulama.yenilenme_bildirimi(_yazar_hesabi())})
 
     def post(self, request: Request) -> Response:
         with guvenlik_hatalari():
-            hesaplar.acknowledge_reset_notice(hesap_id=OTURUM.hesap_id() or "")
-        return Response({"parola_yenilenme": iz_dogrulama.yenilenme_bildirimi(OTURUM.hesap_id())})
+            hesaplar.acknowledge_reset_notice(hesap_id=_yazar_hesabi() or "")
+        return Response({"parola_yenilenme": iz_dogrulama.yenilenme_bildirimi(_yazar_hesabi())})
 
 
 class BostaKilitSuresiView(APIView):

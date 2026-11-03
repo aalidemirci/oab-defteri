@@ -278,7 +278,8 @@ def test_kayip_kilidinde_rol_kapisi_kesmez(parmak_izi_yazili: str) -> None:
 
 #: Rolün bugün yazabildiği satırlar (tasarım §14 F1b: "DK yalnız denetim modülüne, müdür yalnız
 #: kendi yazılarına yazar"). Kendi hesabı ve oturum satırları her roldedir; DK'nin denetim
-#: modülündeki ilk ucu ("Gördüm", M8) ve müdürün yazıları sonraki alt adımlarda ve fazlardadır.
+#: modülündeki ilk ucu geri yükleme kartının "Gördüm"üdür (M8, F1b-2 c3); müdürün yazıları
+#: sonraki fazlardadır.
 #: Müdürün yazıları M3 (¹), M6 (⁴) ve müdür yazısı (⁶) satırlarındadır. M10 (gelen-giden evrak)
 #: burada YOKTUR: hücresi O⁷'dir, müdürün yazısını evrak defterine program işler (yazının
 #: eyleminin yan etkisi; ucu yoktur) — müdüre açılan bir M10 yazma ucu bu testi düşürür.
@@ -313,8 +314,9 @@ def test_kisitli_roller_yalniz_kendi_satirlarina_yazar(rol: str) -> None:
         for yontem in YAZMA_YONTEMLERI:
             if _yalniz_rol_kapisi(yontem, ornek, rol).content == b"gecti":
                 acik_yazma.add(ad)
-    # Bugün açık olanlar yalnız kendi hesabı ve oturum uçlarıdır.
-    assert acik_yazma == {
+    # Bugün açık olanlar kendi hesabı ve oturum uçlarıdır; DK'de ek olarak denetim modülünün
+    # (M8) "Gördüm"ü.
+    ortak = {
         "app-quit",
         "security-change-password",
         "security-integrity-reset-notice",
@@ -322,6 +324,8 @@ def test_kisitli_roller_yalniz_kendi_satirlarina_yazar(rol: str) -> None:
         "security-recover",
         "security-unlock",
     }
+    ek = {"security-integrity-restore-seen"} if rol == AccountRole.DENETLEME_KURULU else set()
+    assert acik_yazma == ortak | ek
 
 
 # ============================================================ tam zincir dumanları

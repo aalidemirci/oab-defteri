@@ -1423,7 +1423,7 @@ class AccessKind(models.TextChoices):
 
     Küme `test_erisim_gunlugu.py`'deki anlık görüntüyle sabittir; yeni tür göçle eklenir (DB
     kısıtı da aynı kümedir). Etiketler iç belge içindir; kullanıcıya görünen adları okuma
-    ekranı (2. adım) sözlükten verir.
+    ucunun `apps.okul.erisim_gunlugu.TUR_ADLARI`'ndadır (sözlük §1 "Erişim günlüğü (F1b)").
     """
 
     MASKESIZ_TCKN = "MASKESIZ_TCKN", "Maskesiz T.C. kimlik no"

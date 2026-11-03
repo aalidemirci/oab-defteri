@@ -72,14 +72,26 @@ bulgusu olur. Bütünlük kartı oturumdaki hesabın bir önceki girişinden ber
 yazılmış `BUTUNLUK` satırlarıdır (doğrulama bulgusu ve girişte hesap mührü tutmadı); her hesap
 kendi bir sonraki girişinde görür. Geri yükleme kartı son `GERI_YUKLEME` satırıdır (aynı kilit
 açılışında yazılmış öncekilerle birlikte: iki geri yükleme arasında kilit açılmadıysa asıl dönüş
-yolu ilkinin kenara aldığı veritabanıdır) ve Denetleme Kurulu "gördüm" diyene dek kalır — o düğmenin
-ucu 2. adımda gelir, kart bugün hep görünür. İki depo kartı ve mührü tutmayan hesaplar canlı
+yolu ilkinin kenara aldığı veritabanıdır) ve Denetleme Kurulu "gördüm" diyene dek kalır (aşağıda
+"GÖRDÜM"). İki depo kartı ve mührü tutmayan hesaplar canlı
 hesaplanır (`hesaplar.two_store_differences`); sahipsiz sarmalların silinmesi program
 yöneticisinin onayıyladır (`POST security/integrity/orphan-wraps/`). Kartlar birbirinden
 bağımsız okunur: biri okunamazsa adı o ucun `okunamayan` listesine girer, ön yüz bunu uyarı
 kartıyla söyler ("Bütünlük Durumu Okunamadı"; `_kartlar`). Bulgu kodları iç
 koddur, kullanıcı metnine çıkmaz: ön yüz sözlükteki metni yazar (`modules/butunluk/metinler`).
 Kartlardaki hesap kişisizdir (`_hesap_ozeti`): kimlik, tanıtıcı ve rol etiketi; ad-soyad yok.
+
+GÖRDÜM (`geri_yukleme_goruldu_mu`, `son_geri_yukleme`; yazımı `hesaplar.acknowledge_restore`,
+`POST security/integrity/restore-seen/` `{seq}`; plan F1b-2 "Gördüm."; tasarım §4.4.4): geri
+yükleme kartı, Denetleme Kurulunun bir üyesi son geri yüklemeye "Gördüm" deyince HERKES İÇİN
+kalkar — program yöneticisinde de öteki üyelerde de (kullanıcı kararı 02.11.2026: bir üye yeter);
+kimin gördüğü denetim izinde kalır (`ISARET` satırı: model denetim izinin kendisi, kimlik geri
+yüklemenin `seq`'i, yazar o üyenin hesabı). Kart yalnız DOĞRULANAN bir `ISARET` satırıyla kalkar
+(açık kipte, iz anahtarıyla mühürlü, yazarı Denetleme Kurulu hesabı; mühürsüz ya da başka rolün
+satırı kaldırmaz) ve yalnız doğrulanan son `GERI_YUKLEME` satırına bağlanır. Aynı geri yüklemeye
+ikinci "Gördüm" satır yazmaz; eski ya da olmayan bir `seq` reddedilir (409). Yeni bir geri
+yükleme kendi kartını açar. Açık Denetleme Kurulu hesabı yoksa kart program yöneticisinde kalır:
+program yöneticisi kartı kaldıramaz (rol kapısı ve servisin yetki kapısı).
 
 PAROLA YENİLENME BİLDİRİMİ (`yenilenme_bildirimi`; `GET|POST security/integrity/reset-notice/`;
 tasarım §4.4.3, §4.3 tehdit 12): parolası sıfırlanan ya da kurtarma anahtarıyla yenilenen
@@ -104,8 +116,10 @@ from apps.okul import denetim_izi, iz_durumu
 from apps.okul.models import (
     KILITLI_KIP_TURLERI,
     Account,
+    AccountRole,
     AccountStatus,
     AuditAction,
+    AuditActor,
     AuditKeyMode,
     AuditTrail,
 )
@@ -787,9 +801,48 @@ def _hesap_ozeti(hesap_id: object) -> dict[str, Any]:
     }
 
 
+#: "Gördüm"ün `ISARET` satırının modeli: işaretlenen kayıt denetim izinin kendi satırıdır (kimlik
+#: geri yüklemenin `seq`'i; plan F1b-2 "Gördüm.").
+IZ_SATIRI_MODELI: Final = denetim_izi.model_etiketi(AuditTrail)
+#: "Gördüm" diyebilen rol (tasarım §4.4.2 M8 ⁵; `rol_izinleri.Eylem.GERI_YUKLEME_GORDUM`).
+_GOREN_ROL: Final = AccountRole.DENETLEME_KURULU.value
+
+
+def son_geri_yukleme(gecerli: Suzgec) -> AuditTrail | None:
+    """Doğrulanan son `GERI_YUKLEME` satırı (kartın konusu); yoksa None."""
+    bulunan = _dogrulanmis(AuditTrail.objects.filter(action=AuditAction.GERI_YUKLEME), 1, gecerli)
+    return bulunan[0] if bulunan else None
+
+
+def geri_yukleme_goruldu_mu(geri_yukleme: AuditTrail, gecerli: Suzgec) -> bool:
+    """Denetleme Kurulunun bir üyesi bu geri yüklemeye "Gördüm" dedi mi? (modül başlığı "GÖRDÜM")
+
+    Yalnız DOĞRULANAN bir `ISARET` satırı sayılır: açık kipte, iz anahtarıyla mühürlü, kuralına
+    uyan; modeli denetim izinin kendisi, kimliği geri yüklemenin sırası, geri yükleme satırından
+    SONRA yazılmış ve yazarı bir Denetleme Kurulu hesabı (rol ve hesap satırın MAC'ine girer).
+    Mühürsüz ya da başka rolün `ISARET`'i kartı kaldırmaz.
+    """
+    sorgu = AuditTrail.objects.filter(
+        action=AuditAction.ISARET,
+        model=IZ_SATIRI_MODELI,
+        object_id=str(geri_yukleme.seq),
+        seq__gt=geri_yukleme.seq,
+    )
+    return bool(
+        _dogrulanmis(
+            sorgu,
+            1,
+            lambda satir: (
+                satir.actor == AuditActor.HESAP and satir.role == _GOREN_ROL and gecerli(satir)
+            ),
+        )
+    )
+
+
 def _geri_yukleme_karti(gecerli: Suzgec) -> dict[str, Any] | None:
     """Son geri yükleme kartı: zamanca SON geri yüklemenin özeti + aynı kilit açılışında yazılmış
-    öncekiler (`onceki_geri_yuklemeler`, eskiden yeniye).
+    öncekiler (`onceki_geri_yuklemeler`, eskiden yeniye). Denetleme Kurulunun bir üyesi son geri
+    yüklemeye "Gördüm" dediyse kart HERKES İÇİN kalkar (None; modül başlığı "GÖRDÜM").
 
     İki geri yükleme arasında kilit açılmazsa ilk kilit açılışı notun her kaydı için bir satır
     yazar (`_notu_oku`; satır sırası geri yüklemelerin sırasıdır). Yedeğin alındığı günden
@@ -803,6 +856,8 @@ def _geri_yukleme_karti(gecerli: Suzgec) -> dict[str, Any] | None:
     if not bulunan:
         return None
     son = bulunan[0]
+    if geri_yukleme_goruldu_mu(son, gecerli):
+        return None
     giris = _dogrulanmis(
         AuditTrail.objects.filter(action=AuditAction.GIRIS, seq__lt=son.seq), 1, gecerli
     )
@@ -925,6 +980,17 @@ def _girisler(hesap_id: str, gecerli: Suzgec, *, sonra: Any = None) -> list[str]
     if sonra is not None:
         sorgu = sorgu.filter(at__gte=sonra)
     return [_yerel(satir.at) for satir in _dogrulanmis(sorgu, SON_GIRIS_SAYISI, gecerli)]
+
+
+def hesabin_girisleri(hesap_id: object) -> list[str]:
+    """Hesabın kilit ekranından yaptığı son girişler (Kullanıcılar → hesap ayrıntısı; plan F1b-2
+    "Kullanıcılar uçları"): YALNIZ o hesabın `GIRIS` satırları, en yeni önce, en çok
+    `SON_GIRIS_SAYISI`; yalnız doğrulanan açık kip satırları (modül başlığı "KARTLAR"). Kimlik
+    biçimsizse boş liste. Yalnız okur."""
+    kimlik = denetim_izi.kimlik_metni_ya_da_none(Account, hesap_id)
+    if kimlik is None:
+        return []
+    return _girisler(kimlik, denetim_izi.acik_satir_dogrulayici())
 
 
 def yenilenme_bildirimi(hesap_id: object) -> dict[str, Any] | None:

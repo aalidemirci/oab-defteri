@@ -20,10 +20,21 @@ görünümlerin servis hata sarmalayıcıları (`views._service_errors`,
 `views_oturum.guvenlik_hatalari`) ve yönetim komutları `ValueError`'ı 400'e (ya da
 `CommandError`'a), hesap servisleri `OSError`'ı dosya hatası diye yakalar; rol reddi
 onlarda yutulmaz. Tür burada durur: `shared` → `apps` ters bağımlılığı doğmaz.
+
+Denetim izinin yazılamaması (tasarım §4.6.2 yazma kuralı 1: iz yazılamazsa yazma yapılmaz;
+orkestratör maddesi C-3): yazıcının reddi (`apps.okul.denetim_izi.IzYazilamadi`, ortak tabanı
+`KayitIziYazilamadi`) **409 `iz_yazilamadi`** olur; ileti tek ve sabittir (`IZ_YAZILAMADI_MESAJI`),
+yazıcının iç iletisi (model ve alan adları, iç kurallar; sözlük §2) yankılanmaz, günlüğe düşer.
+Tipik nedeni program dışından değiştirilmiş zincir başıdır (sırası tamsayı değil, en büyük tamsayıda
+ya da `mac`'i metin değil); eskiden 500 dönüyordu. Kayıtlar kilitliyken iz yazılamaması
+(`IzAnahtariBellekteDegil`) `KeyMissingError`'ın da alt sınıfıdır ve 409 `parola_gerekli` kalır.
+Tür burada durur (`shared` → `apps` ters bağımlılığı doğmaz); `RuntimeError`'dır, `ValueError`
+değildir: servis hata sarmalayıcıları onu 400'e çevirmez.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -49,6 +60,32 @@ PASSWORD_REQUIRED_MESSAGE = (
 #: ileti role göre değişmez, ucu yankılamaz.
 ROL_YETKISIZ_KODU = "rol_yetkisiz"
 ROL_YETKISIZ_MESAJI = "Bu işlem hesabınızın rolüne açık değil."
+
+
+#: Denetim izinin yazılamamasının sözleşme kodu ve tek iletisi (modül başlığı; sözlük §1 "Hesap
+#: kaydının ve denetim izinin tutmaması").
+IZ_YAZILAMADI_KODU = "iz_yazilamadi"
+IZ_YAZILAMADI_MESAJI = (
+    "Denetim izine yazılamadığı için işlem yapılmadı. Denetim izi program dışından değiştirilmiş "
+    "olabilir; program yöneticisine ve Denetleme Kuruluna bildirin."
+)
+
+logger = logging.getLogger("oab_defteri.api")
+
+
+class KayitIziYazilamadi(RuntimeError):
+    """Denetim izi yazılamadı; yazma yapılmadı (ortak taban; modül başlığı) → 409 `iz_yazilamadi`.
+
+    İletisi iç ayrıntıdır (günlüğe gider), kullanıcıya `IZ_YAZILAMADI_MESAJI` gider.
+    """
+
+
+class IzYazilamadiResponse(APIException):
+    """`KayitIziYazilamadi`'nın DRF karşılığı: 409 `iz_yazilamadi`, sabit ileti."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = IZ_YAZILAMADI_KODU
+    default_detail = IZ_YAZILAMADI_MESAJI
 
 
 def rol_yetkisiz_govdesi() -> dict[str, Any]:
@@ -139,6 +176,12 @@ def od_exception_handler(exc: Exception, context: dict[str, Any]) -> Response | 
         converted_role = RolYetkisizResponse()
         converted_role.__cause__ = exc
         exc = converted_role
+    if isinstance(exc, KayitIziYazilamadi):
+        # İç ileti (model, alan, kural adı) yankılanmaz, günlüğe düşer; gövde sabittir.
+        logger.warning("Denetim izi yazılamadı; işlem yapılmadı: %s", exc)
+        converted_trail = IzYazilamadiResponse()
+        converted_trail.__cause__ = exc
+        exc = converted_trail
     service_error = _service_error(exc)
     if isinstance(exc, DjangoValidationError):
         # Servis katmanı Django `ValidationError` fırlatır; DRF onu TANIMAZ (handler

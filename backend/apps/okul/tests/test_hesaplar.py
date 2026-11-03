@@ -247,11 +247,22 @@ class TestHesapKapama:
         assert [a for a in artiklar if a.exists()] == []
         assert str(hesap.id) not in sarmal_kimlikleri()
 
-    def test_son_program_yoneticisi_kapatilamaz(self, yonetici_hesabi: Account) -> None:
-        with pytest.raises(hesaplar.AccountServiceError, match="Son program yöneticisi"):
+    def test_son_program_yoneticisi_kapatilamaz(
+        self, yonetici_hesabi: Account, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Oturumdaki hesap kendi hesabını kapatamaz (plan F1b-2 "Kendi hesabı"): son program
+        yöneticisi kuralı bugün servis yolundan erişilmez, derin savunma olarak kalır — kendi
+        hesabı kuralı devre dışıyken sınanır."""
+        with pytest.raises(hesaplar.AccountServiceError) as hata:
             hesaplar.close_account(by_hesap_id=TEST_HESAP_ID, hesap_id=TEST_HESAP_ID)
+        assert str(hata.value) == hesaplar._OWN_CLOSE_MESSAGE
+        with monkeypatch.context() as yama:
+            yama.setattr(hesaplar, "_kendi_hesabi_mi", lambda _aktor, _hesap_id: False)
+            with pytest.raises(hesaplar.AccountServiceError, match="Son program yöneticisi"):
+                hesaplar.close_account(by_hesap_id=TEST_HESAP_ID, hesap_id=TEST_HESAP_ID)
         ikinci = hesap_ac(AccountRole.YONETICI, ad="Örnek İkinci Yönetici")
         hesaplar.close_account(by_hesap_id=TEST_HESAP_ID, hesap_id=ikinci.id)
+        assert Account.objects.get(pk=TEST_HESAP_ID).status == AccountStatus.ACIK
 
     def test_kapali_hesap_yeniden_kapatilmaz_ve_kapali_kalir(
         self, yonetici_hesabi: Account

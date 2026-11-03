@@ -6,7 +6,9 @@ rol-özel işaretler ve kayıt sahipliği tek kapıdan geçer; ret `RolYetkisiz`
 F3, DK modülü F4): F1b'de her dipnot KAPININ KENDİSİYLE sahte kayıtla sınanır
 (`test_rol_matrisi_dipnot_servis_testi`; plan F1b-2 kullanıcı kararı). Bağlı servisler
 (hesap yönetimi, kurtarma anahtarı, boşta süre, yedek indirme, uygulama içi geri yükleme)
-ayrıca gerçek çağrıyla sınanır: rol kapısının ardından servis de reddeder (derin savunma).
+ayrıca gerçek çağrıyla sınanır: rol kapısının ardından servis de reddeder (derin savunma). ⁵
+gerçek serviste de sınanır: Denetleme Kurulunun geri yükleme kartındaki "Gördüm"ü
+(`test_dipnot_bes_gercek_serviste_yalniz_denetleme_kurulu`; plan F1b-2 kullanıcı kararı).
 """
 
 from __future__ import annotations
@@ -158,7 +160,8 @@ def test_her_dipnotun_eylemi_var_ve_kume_kapali() -> None:
     }
     for eylem in dipnotsuz:
         assert _gecen_roller(eylem) == {"yonetici"}, eylem
-    assert set(BAGLANMAMIS_EYLEMLER) == set(Eylem) - dipnotsuz
+    # Dipnotlu eylemlerden bugün yalnız DK'nin "Gördüm"ü (⁵) servise bağlıdır (F1b-2 c3).
+    assert set(BAGLANMAMIS_EYLEMLER) == set(Eylem) - dipnotsuz - {Eylem.GERI_YUKLEME_GORDUM}
 
 
 def test_eylemler_matrisi_asmaz() -> None:
@@ -366,3 +369,51 @@ def test_yedek_indirme_yalniz_program_yoneticisi() -> None:
     with yazar_olarak(MUHASIP_YAZARI), pytest.raises(RolYetkisiz):
         encrypted_backup.create_encrypted_backup()
     assert AuditTrail.objects.count() == once
+
+
+# ============================================================ ⁵ gerçek serviste: DK'nin "Gördüm"ü
+
+
+def _geri_yukleme_satiri() -> AuditTrail:
+    """Programın yazdığı (iz anahtarıyla mühürlü) bir `GERI_YUKLEME` satırı (uydurma dosya adı)."""
+    from django.db import transaction
+
+    from apps.okul import denetim_izi
+
+    with transaction.atomic():
+        return denetim_izi.olay(
+            "GERI_YUKLEME",
+            model=denetim_izi.GERI_YUKLEME_KAYDI,
+            object_id="db-onceki-2026-11-01-091000.sqlite3",
+        )
+
+
+@pytest.mark.django_db
+def test_dipnot_bes_gercek_serviste_yalniz_denetleme_kurulu() -> None:
+    """Plan F1b-2 kullanıcı kararı: "⁵ (DK) gerçek serviste sınanır: DK'nin 'Gördüm'ü". Servis
+    (`hesaplar.acknowledge_restore`) rol kapısını atlayan çağrıda da yalnız Denetleme Kurulunu
+    geçirir: öteki her rolün yazarıyla `RolYetkisiz`, hiçbir satır yazılmaz; DK'nin açık, mühürlü
+    hesabıyla `ISARET` satırı yazılır. Yazar DK görünse de işlemi yapanın MÜHÜRLÜ satırının rolü
+    de DK olmalıdır (derin savunma: rol iki kez sorulur)."""
+    geri = _geri_yukleme_satiri()
+    dk = muhurle(
+        hesap_ac(AccountRole.DENETLEME_KURULU, ad="Örnek Denetçi"), status=AccountStatus.ACIK
+    )
+    once = AuditTrail.objects.count()
+    for rol in set(ROLLER) - {"denetleme_kurulu"}:
+        with yazar_olarak(Yazar(hesap_id=str(dk.id), rol=rol)), pytest.raises(RolYetkisiz):
+            hesaplar.acknowledge_restore(by_hesap_id=dk.id, seq=geri.seq)
+    # Yazar DK diyor, işlemi yapanın satırı program yöneticisi: ikinci kapı reddeder.
+    with (
+        yazar_olarak(Yazar(hesap_id=TEST_HESAP_ID, rol="denetleme_kurulu")),
+        pytest.raises(RolYetkisiz),
+    ):
+        hesaplar.acknowledge_restore(by_hesap_id=TEST_HESAP_ID, seq=geri.seq)
+    assert AuditTrail.objects.count() == once
+
+    with yazar_olarak(Yazar(hesap_id=str(dk.id), rol="denetleme_kurulu")):
+        isaret = hesaplar.acknowledge_restore(by_hesap_id=dk.id, seq=geri.seq)
+
+    assert isaret is not None and isaret.action == "ISARET"
+    assert (str(isaret.account_id), isaret.role) == (str(dk.id), "denetleme_kurulu")
+    assert AuditTrail.objects.count() == once + 1

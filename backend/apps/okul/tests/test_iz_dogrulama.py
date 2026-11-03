@@ -526,20 +526,20 @@ def test_birden_fazla_eksik_kilitli_satir_uyaridir() -> None:
 def test_ortadaki_kilitli_satir_silinirse_giris_acilmaz() -> None:
     """Kullanıcı kararı 03.11.2026 "Boşluğu engelle": hesabın son kaydından SONRA izden satır
     silinmişse (burada çapadan sonra kilitliyken yazılmış bir yedek satırı) giriş açılmaz. Ret
-    satırın izinindir, girişten önce verilir (`AccountRecordStale`, `BUTUNLUK` alanı `kayit_mac`):
-    bu modülün doğrulaması koşmaz, `kilitli_satir_eksik` bulgusu yazılmaz. Silinen satır son
-    kaydından ESKİYSE giriş açılır ve bulgu düşer (bir sonraki test)."""
+    izdeki boşluğundur, girişten önce verilir (`AuditTrailGap`, `BUTUNLUK` alanı `iz_boslugu`;
+    orkestratör maddesi C-4): bu modülün doğrulaması koşmaz, `kilitli_satir_eksik` bulgusu
+    yazılmaz. Silinen satır son kaydından ESKİYSE giriş açılır ve bulgu düşer (bir sonraki test)."""
     capa = kilitle()
     masaustu_kanca.yedek_olaylarini_yaz(alinan=["a.odbak", "b.odbak", "c.odbak"])
     orta = satirlar(seq__gt=capa.seq)[1]
     tetikleyicisiz("DELETE FROM okul_audittrail WHERE seq = %s", [orta.seq])
 
-    with pytest.raises(app_password.AccountRecordStale):
+    with pytest.raises(app_password.AuditTrailGap):
         ac()
 
     assert OTURUM.hesap() is None and not butunluk()
     (ret,) = satirlar(action="BUTUNLUK", model="okul.Account")
-    assert ret.changed_fields == [app_password.KAYIT_MAC_ALANI]
+    assert ret.changed_fields == [app_password.IZ_BOSLUGU_ALANI]
 
 
 def test_son_kayittan_eski_satir_silinirse_giris_acilir_zincir_bulgusu() -> None:

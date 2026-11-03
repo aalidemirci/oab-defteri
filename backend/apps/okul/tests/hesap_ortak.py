@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from django.db import connection, transaction
+from django.utils import timezone
 
 from apps.okul import denetim_izi
 from apps.okul.models import Account, AccountRole, AuditAction
@@ -150,3 +151,64 @@ def arsiv_yaz(ad: str, veri: dict[str, Any]) -> Path:
 def arsivdeki_kimlikler(yol: Path) -> list[str]:
     veri = json.loads(yol.read_text(encoding="utf-8"))
     return [str(h["id"]) for h in veri.get("hesaplar", [])]
+
+
+# ============================================================ program dışı değişiklik taklitleri
+#: (Kullanıcılar uçlarının ve hesap teslim pusulasının testleri; F1b-2 c1'den taşındı.)
+
+
+def iz_tetikleyicisiz(sql: str, params: list[Any]) -> None:
+    """Program DIŞINDAN iz tablosu düzenlemesi (SQLite tarayıcısı taklidi; tetikleyiciler bu
+    işlemde düşürülür, sonra aynen kurulur)."""
+    with transaction.atomic(), connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' "
+            "AND tbl_name = 'okul_audittrail'"
+        )
+        tetikleyiciler = cursor.fetchall()
+        for ad, _ in tetikleyiciler:
+            cursor.execute(f'DROP TRIGGER "{ad}"')
+        cursor.execute(sql, params)
+        for _, tanim in tetikleyiciler:
+            cursor.execute(tanim)
+
+
+def iz_dolgusu(adet: int) -> list[int]:
+    """Programın meşru yazdığı, hesaplarla ilgisiz açık kip satırları; sıraları."""
+    siralar: list[int] = []
+    for _ in range(adet):
+        with sistem_olarak(), transaction.atomic():
+            siralar.append(
+                int(denetim_izi.olay(AuditAction.HESAP, model="okul.Deneme", object_id="dolgu").seq)
+            )
+    return siralar
+
+
+def geri_sarilmis(hesap: Account) -> Account:
+    """Satırın izi tutmaz: satırın baytları kopyalanır, meşru bir yazım (izli) yapılır, satır
+    kopyaya geri sarılır (mühür tutar, son iz kaydı tutmaz; `satir_izi` "SORUN")."""
+    tablo = f"kopya_{str(hesap.id).replace('-', '')}"
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"CREATE TEMP TABLE {tablo} AS SELECT * FROM okul_account WHERE id = %s",  # noqa: S608
+            [str(hesap.id).replace("-", "")],
+        )
+    muhurle(Account.objects.get(pk=hesap.id), reset_notice_pending=True, status=hesap.status)
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT name FROM pragma_table_info('okul_account') WHERE name != 'id'")
+        adlar = ", ".join(f'"{ad}"' for (ad,) in cursor.fetchall())
+        cursor.execute(
+            f"UPDATE okul_account SET ({adlar}) = (SELECT {adlar} FROM {tablo}) "  # noqa: S608
+            "WHERE id = %s",
+            [str(hesap.id).replace("-", "")],
+        )
+    return Account.objects.get(pk=hesap.id)
+
+
+def izde_bosluk_sonra_yoneticiyi_tazele() -> None:
+    """İzden ilgisiz bir satır silinir (iz boşluğu); program yöneticisinin kaydı boşluktan SONRA
+    meşru bir yazımla tazelenir (oturumdaki hesap boşluktan etkilenmez, son kaydı eski hesaplar
+    etkilenir)."""
+    dolgu = iz_dolgusu(3)
+    iz_tetikleyicisiz("DELETE FROM okul_audittrail WHERE seq = %s", [dolgu[1]])
+    muhurle(Account.objects.get(pk=TEST_HESAP_ID), password_changed_at=timezone.now())

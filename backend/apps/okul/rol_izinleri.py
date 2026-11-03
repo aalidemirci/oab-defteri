@@ -38,8 +38,10 @@ fazlardadır (müdür yazıları F2/F4, mali kayıtlar F3, DK modülü F4…). U
 olmayan Y hücresi `BEKLEYEN_HUCRELER`'de, gerçek servisi olmayan dipnot
 `BEKLEYEN_DIPNOTLAR`'da, servise bağlanmamış eylem `BAGLANMAMIS_EYLEMLER`'de fazıyla durur
 (plan F1b-2 kullanıcı kararı). Listeler testte anlık görüntüdür ve yalnız küçülebilir; her
-fazın kapısında "bu fazın hücreleri ve dipnotları bağlandı" maddesi vardır. Faz değeri
-"F1b" olanları 2. adımın Kullanıcılar ve "Gördüm" uçları bağlar. `etkin_hucreler(rol)`
+fazın kapısında "bu fazın hücreleri ve dipnotları bağlandı" maddesi vardır. F1b'nin 2. adımının
+kapısı: faz değeri "F1b" olan bekleyen KALMAZ (testle sabit) — Kullanıcılar hücresi uçlarıyla
+(alt commit c1-c2), Denetleme Kurulunun M8 hücresi, ⁵ dipnotu ve `GERI_YUKLEME_GORDUM` eylemi geri
+yükleme kartının "Gördüm"üyle (c3) bağlandı. `etkin_hucreler(rol)`
 bekleyende olmayan Y hücreleridir: hesap teslim pusulasının "bu programda sizin işiniz"
 özeti ve hücre anlık görüntüsü bu tek yüklemi kullanır; ikinci bir matris doğmaz.
 
@@ -357,6 +359,11 @@ _DAYANAK_DENETIM_KARTLARI = (
     "(mührü tutmayan hesap kartı), §4.4.4 (geri yükleme kartı DK 'gördüm' diyene dek); "
     "plan F1b-2 'Bütünlük ucu bölünür'. Pano kalemi daraltmasıdır."
 )
+_DAYANAK_GORDUM = (
+    "Tasarım §4.4.4 (geri yükleme kartı DK 'gördüm' diyene dek kalır), §4.4.2 ⁵ (DK kendi "
+    "modülünde yazar, kayıt bütünlüğü denetimi M8'dedir; YK rolleri DK modülüne yazamaz); plan "
+    "F1b-2 '\"Gördüm.\"' ve kullanıcı kararı 02.11.2026 (bir DK üyesi yeter)."
+)
 
 #: Bugünkü BÜTÜN `/api/` uçlarının kuralları (plan F1b-2 "Bugünkü uçların eşlemi").
 #: `ACIK_OTURUMDA_KAPALI`'daki uç dışında her ad burada olmalıdır (test).
@@ -387,6 +394,20 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
         yalniz=_YONETICI_VE_DK,
         dayanak=_DAYANAK_DENETIM_KARTLARI,
     ),
+    # ------------------------------------------------ M8: Denetleme Kurulu (⁵)
+    # Geri yükleme kartının "Gördüm"ü (plan F1b-2): yalnız Denetleme Kurulu; satırın öteki
+    # hücreleri "O"dur (program yöneticisi kartı görür, kaldıramaz).
+    _yaz(
+        "security-integrity-restore-seen",
+        "POST",
+        Satir.M8,
+        dipnot=5,
+        dayanak=_DAYANAK_GORDUM,
+    ),
+    # ------------------------------------------------ erişim günlüğü (§4.6.4)
+    # Okuma ekranı (plan F1b-2 "Erişim günlüğü okuma ucu"): satırın "O" hücreleri program
+    # yöneticisi ve Denetleme Kuruludur, öteki hücreler "—". Okuma iz bırakmaz.
+    _oku("access-log", Satir.ERISIM_GUNLUGU),
     # ------------------------------------------------ M1: okul kartı, ders yılı, kapalı günler
     _oku("setup-school-config", Satir.M1),
     _yaz("setup-school-config", "PUT", Satir.M1),
@@ -471,6 +492,19 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     # ------------------------------------------------ Ayarlar (boşta süre)
     _oku("security-idle-lock", Satir.AYARLAR),
     _yaz("security-idle-lock", "PUT", Satir.AYARLAR),
+    # ------------------------------------------------ Kullanıcılar (yalnız program yöneticisi)
+    # Plan F1b-2 "Kullanıcılar uçları": liste (giriş yapamayanlar ve kapalılar dahil), rol
+    # seçenekleri, ayrıntı ve son girişler; hesap açma, kapama, askıdan çıkarma, parola sıfırlama;
+    # hesap teslim pusulası (E63; satırın adında: "hesap açma (hesap teslim pusulası E63)").
+    # Okuma da yalnız program yöneticisinindir: satırın öteki hücreleri "—"dir.
+    _oku("account-list", Satir.KULLANICILAR),
+    _yaz("account-list", "POST", Satir.KULLANICILAR),
+    _oku("account-options", Satir.KULLANICILAR),
+    _oku("account-detail", Satir.KULLANICILAR),
+    _yaz("account-close", "POST", Satir.KULLANICILAR),
+    _yaz("account-unsuspend", "POST", Satir.KULLANICILAR),
+    _yaz("account-reset-password", "POST", Satir.KULLANICILAR),
+    _yaz("account-handover-slip", "POST", Satir.KULLANICILAR),
     # ------------------------------------------------ Güvenlik (yalnız program yöneticisi)
     _yaz("security-recovery-key-pdf", "POST", Satir.GUVENLIK),
     _yaz("security-recovery-key-confirm", "POST", Satir.GUVENLIK),
@@ -597,9 +631,10 @@ BEKLEYEN_HUCRELER: Final[Mapping[tuple[Satir, str], str]] = {
     **_bekleyen(Satir.M15, (YONETICI, *sorted(YK_ROLLERI)), "F8+"),
     # Kişisel veri içeren çıktı: veli listesi çıktısı (5. adım) ya da adlı E07/E08.
     **_bekleyen(Satir.KISISEL_VERI, (YONETICI,), "F2"),
-    # 2. adımın uçları: Kullanıcılar ve DK'nin geri yükleme kartındaki "Gördüm"ü (⁵).
-    **_bekleyen(Satir.KULLANICILAR, (YONETICI,), "F1b"),
-    **_bekleyen(Satir.M8, (DENETLEME_KURULU,), "F1b"),
+    # F1b'de bekleyen kalmadı: Kullanıcılar (program yöneticisi) uçlarıyla, Denetleme Kurulunun
+    # M8 hücresi geri yükleme kartının "Gördüm"üyle bağlandı (F1b-2 alt commit c1-c3). DK
+    # modülünün öteki işleri (görev bölümü, denetim planı, rapor, md. 14/5 çağrısı) F4'tedir; M8
+    # hücresi satır düzeyindedir, ilk ucu bağlayınca bekleyenden çıkar.
 }
 
 #: Gerçek servisi henüz olmayan dipnotlar → faz. Dipnotun kapı testi bugünden vardır
@@ -609,7 +644,7 @@ BEKLEYEN_DIPNOTLAR: Final[Mapping[int, str]] = {
     2: "F3",
     3: "F4",
     4: "F4",
-    5: "F1b",
+    # 5: bağlı — DK'nin "Gördüm"ü (`Eylem.GERI_YUKLEME_GORDUM`, `hesaplar.acknowledge_restore`).
     6: "F4",
     7: "F2",
     8: "F4",
@@ -638,11 +673,25 @@ def _ciftler(*ciftler: tuple[str, str | Iterable[str]]) -> frozenset[tuple[str, 
 
 
 #: Yetenek adı → (uç, yöntem) kümesi. Rolün yeteneği kümedeki HER çift ona açıksa vardır
-#: (`yetenekler`); değer kurallardan türer. Ön yüzün kullandığı adlar; Kullanıcılar, erişim
-#: günlüğü ve "Gördüm" yetenekleri uçlarıyla birlikte gelir.
+#: (`yetenekler`); değer kurallardan türer. Ön yüzün kullandığı adlar.
 YETENEKLER: Final[Mapping[str, frozenset[tuple[str, str]]]] = {
+    # Kullanıcılar ekranı: liste, seçenekler, ayrıntı, hesap işlemleri ve hesap teslim pusulası
+    # (hepsi birlikte).
+    "kullanicilar": _ciftler(
+        ("account-list", ("GET", "POST")),
+        ("account-options", "GET"),
+        ("account-detail", "GET"),
+        ("account-close", "POST"),
+        ("account-unsuspend", "POST"),
+        ("account-reset-password", "POST"),
+        ("account-handover-slip", "POST"),
+    ),
     # Bütünlük kartları: denetim kartları (program yöneticisi ve DK) ve iki depo farkı.
     "butunluk_denetim": _ciftler(("security-integrity-audit", "GET")),
+    # Geri yükleme kartının "Gördüm" düğmesi (yalnız Denetleme Kurulu).
+    "geri_yukleme_gordum": _ciftler(("security-integrity-restore-seen", "POST")),
+    # Erişim Günlüğü ekranı (program yöneticisi ve Denetleme Kurulu).
+    "erisim_gunlugu": _ciftler(("access-log", "GET")),
     "iki_depo": _ciftler(
         ("security-integrity-two-store", "GET"), ("security-integrity-orphan-wraps", "POST")
     ),
@@ -868,7 +917,7 @@ EYLEM_KURALLARI: Final[Mapping[Eylem, EylemKurali]] = {
 
 #: Gerçek servise henüz bağlanmamış eylemler → faz (yalnız küçülebilir; test kaynakta
 #: `Eylem.<AD>` çağrısını arar). Bağlı olanlar: hesap yönetimi, kurtarma anahtarı, geri
-#: yükleme, yedek indirme, boşta süre yazımı.
+#: yükleme, yedek indirme, boşta süre yazımı, geri yükleme kartının "Gördüm"ü (⁵).
 BAGLANMAMIS_EYLEMLER: Final[Mapping[Eylem, str]] = {
     Eylem.GENEL_KURUL_YAZMA: "F2",
     Eylem.GENEL_KURUL_YENI_OKUL_DAVETI: "F2",
@@ -882,7 +931,6 @@ BAGLANMAMIS_EYLEMLER: Final[Mapping[Eylem, str]] = {
     Eylem.HARCAMA_KARAR_KOMISYON_BELGE: "F4",
     Eylem.HARCAMA_TALEP: "F4",
     Eylem.DENETIM_YAZMA: "F4",
-    Eylem.GERI_YUKLEME_GORDUM: "F1b",
     Eylem.MUDUR_UYARISI: "F4",
     Eylem.EVRAK_KAYDI: "F2",
     Eylem.DONEM_KILIDI: "F4",

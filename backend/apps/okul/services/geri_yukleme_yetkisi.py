@@ -35,7 +35,8 @@ KABUL (tasarım §4.6.1 kural 1'in giriş koşullarıyla aynı; hepsi birden):
 * satır denetim izindeki son içerik MAC'li kaydını tutar ve o kayıttan sonra izde boşluk yoktur
   (kullanıcı kararları 03.11.2026 "Girişte reddet", "Boşluğu engelle";
   `satir_izi.hesap_izi_tutuyor`, aynı salt okunur bağlantıda): eski bir kopyadan geri konmuş satır
-  mührü ve özeti tutsa da reddedilir (`RET_KAYIT_IZI`, ileti mührünkü);
+  mührü ve özeti tutsa da reddedilir (`RET_KAYIT_IZI`, ileti mührünkü); izdeki boşlukta ret
+  `RET_IZ_BOSLUGU`, ileti kendisinindir (`ILETI_IZ_BOSLUGU`; orkestratör maddesi C-4);
 * durumu `ACIK` ya da `PAROLA_YENILENMELI`dir (`ASKIDA`, `KAPALI` ret);
 * parolanın açtığı sarmalın özeti satırın asıl ya da bekleyen özetini tutar (`wrap_digest`,
   `wrap_digest_pending`; kullanıcı kararı 03.11.2026 "tazelik kapatılır", `app_password` modül
@@ -126,7 +127,7 @@ satırlarını izin ARASINDAN SİLMEK (kuyruk değil), silinenden sonrakileri a�
 bölgeden sonra açık kipte, `BUTUNLUK` dışı bir satır kaldıysa ve o dayanak satırı bozulmadıysa;
 iz anahtarı tablosuna eklenen sahte bir anahtar bunu örtmez) ya da bir satırı REAL bir sıraya
 taşımak da geçmez (kullanıcı kararı 03.11.2026 "Boşluğu engelle"; `satir_izi` "İZ BOŞLUĞU", aynı
-tek işlev): izinde boşluk olan güncel veritabanında ret `RET_KAYIT_IZI`'dir, görüntüye düşülmez;
+tek işlev): izinde boşluk olan güncel veritabanında ret `RET_IZ_BOSLUGU`'dur, görüntüye düşülmez;
 izde ilgisiz bir satır silinmişse de son kaydı ondan eski program yöneticisi parolayla geri
 yükleyemez (çıkış kurtarma anahtarı yoludur). Kalan risk (`app_password` modül başlığı "KALAN
 RİSKLER" (b); liste orada ve `satir_izi` modül başlığı "KAPSAMIN SINIRI"nda aynıdır):
@@ -191,6 +192,14 @@ ILETI_MUHUR: Final = (
     "Hesap kaydı program dışından değiştirilmiş görünüyor; geri yükleme yapılmadı. Program "
     "yöneticisine ve Denetleme Kuruluna bildirin."
 )
+#: Hesabın son kaydından sonra denetim izinde boşluk var (`satir_izi` "İZ BOŞLUĞU", "RET NEDENİ";
+#: orkestratör maddesi C-4): değişen hesap kaydı değil denetim izidir; parola yolu her eski hesapta
+#: aynı boşluğu görür, çıkış değişiklikten önceki yedeğin kurtarma anahtarıyla geri yüklenmesidir.
+ILETI_IZ_BOSLUGU: Final = (
+    "Denetim izinden kayıt silinmiş ya da kayıtların sırası program dışından değiştirilmiş "
+    "görünüyor; geri yükleme yapılmadı. Yedeği kurtarma anahtarıyla geri yükleyin ve Denetleme "
+    "Kuruluna bildirin."
+)
 #: Parola kaydının özeti satırınkini tutmuyor (eski ya da program dışından konmuş sarmal; görüntüye
 #: düşüşte yedekten sonra değişmiş parola). Çıkış kurtarma anahtarı yoludur (zarfın üçüncü durumu).
 ILETI_OZET: Final = (
@@ -210,12 +219,15 @@ RET_OZET: Final = "ozet"
 #: Satır denetim izindeki son içerik MAC'li kaydını tutmuyor (eski bir kopyadan geri konmuş satır;
 #: `satir_izi`). İleti mührünküdür (kullanıcı kararı 03.11.2026: mühür uyuşmazlığıyla aynı muamele).
 RET_KAYIT_IZI: Final = "kayit_izi"
+#: Eşleşen satırdan sonra izde boşluk (silme, tür, kayma); ileti kendisinindir (`ILETI_IZ_BOSLUGU`).
+RET_IZ_BOSLUGU: Final = "iz_boslugu"
 _ILETILER: Final[dict[str, str]] = {
     RET_SATIR_YOK: ILETI_ROL,
     RET_OKUNAMADI: ILETI_ROL,
     RET_ROL: ILETI_ROL,
     RET_MUHUR: ILETI_MUHUR,
     RET_KAYIT_IZI: ILETI_MUHUR,
+    RET_IZ_BOSLUGU: ILETI_IZ_BOSLUGU,
     RET_DURUM: ILETI_DURUM,
     RET_ASKIDA: ILETI_DURUM,
     RET_OZET: ILETI_OZET,
@@ -498,10 +510,13 @@ def _satir_karari(
     if not muhurlu_satir_mi(satir, dek):
         return RET_MUHUR
     # Satırın izi okunan mühre bağlıdır (`satir_izi` adım 5): kararın satırı izi doğrulanan satırdır.
-    if not satir_izi.hesap_izi_tutuyor(
+    # Retin nedeni iletiyi seçer (`satir_izi` "RET NEDENİ"): izdeki boşluk kendi iletisini alır.
+    karar = satir_izi.hesap_izi_karari(
         baglanti, satir_kimligi(satir), dek, beklenen_muhur=satir[SIRA_MUHUR]
-    ):
-        return RET_KAYIT_IZI
+    )
+    if not karar.tutuyor:
+        bosluk = karar.neden is not None and karar.neden.bosluk_mu
+        return RET_IZ_BOSLUGU if bosluk else RET_KAYIT_IZI
     if satir[_SIRA_ROL] != ROL_YONETICI:
         return RET_ROL
     if satir[_SIRA_DURUM] not in GIRIS_DURUMLARI:

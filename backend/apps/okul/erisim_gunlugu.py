@@ -50,7 +50,26 @@ işlenmesi; programın verisinin çıktısı değildir), boş şablonlar ve kurt
 satırındadır, izi denetim izinde `YEDEK` satırıdır — erişim günlüğü türlerinde yoktur).
 T.C. kimlik no (K9, F3), veli listesi ve adlı E07/E08 (F2), kişi dökümü ve ihlal dökümü,
 özel nitelikli alan ve ek (F1c-F5) henüz yoktur; o okumaları getiren adımlar bu yazıcıya
-bağlar. Okuma ekranı (rol: yönetici, DK) 2. adımdadır.
+bağlar.
+
+OKUMA (`liste`; ucu `GET access-log/`, `views_erisim_gunlugu`; plan F1b-2 "Erişim günlüğü okuma
+ucu"; tasarım §4.6.4 "Okuyan: yonetici ve DK"):
+
+* Yalnız program yöneticisi ve Denetleme Kurulu: rol kapısının (matrisin "Erişim günlüğü"
+  satırı, `rol_izinleri.Satir.ERISIM_GUNLUGU`) ardından servis de yazarın rolünü aynı satırın
+  okuyabilen rolleriyle sınar (derin savunma; satırın Y hücresi olmadığı için eylem değildir).
+  Yazar yoksa ya da `SISTEM` ise ret (`RolYetkisiz`).
+* Süzgeçler: tarih aralığı (iki uç dahil; gün Europe/Istanbul'a göredir: başlangıç gününün
+  00.00'ından bitiş gününün ertesi 00.00'ına dek), tür (`AccessKind`), okuyan hesap. Sayfalıdır
+  (`SAYFA_BOYUTU`), en yeni önce gelir.
+* KİŞİSİZDİR: okuyan hesap rol etiketi (sıra no'suz, satırdaki rolden) ve tanıtıcıyla anılır;
+  ad-soyad (şifreli `display_name`) okunmaz. Okunan kaydın kimliği satırda olduğu gibidir (model,
+  kimlik, alan adı; değer yoktur — yazıcı tutmaz).
+* OKUMA İZ BIRAKMAZ: ne denetim izine ne erişim günlüğüne satır yazar (günlüğü okumak tasarımın
+  hassas okuma türlerinden değildir; §4.6.4). DEK istemez (tablo şifresizdir); uç yalnız açık
+  oturumdadır (kilit kapısı).
+* Türlerin görünen adları `TUR_ADLARI`'ndadır (sözlük §1 "Erişim günlüğü (F1b)"); özel nitelikli
+  türlerde KVKK md. 6/1'in sözü ("özel nitelikli kişisel veri") kullanılır.
 """
 
 from __future__ import annotations
@@ -58,8 +77,9 @@ from __future__ import annotations
 import logging
 import re
 import uuid
-from datetime import date, datetime, time
-from typing import Final
+from collections.abc import Mapping
+from datetime import UTC, date, datetime, time, timedelta
+from typing import Any, Final
 
 from django.apps import apps as django_apps
 from django.core.exceptions import FieldDoesNotExist
@@ -67,10 +87,11 @@ from django.db import models, transaction
 from django.db.models import Max
 from django.utils import timezone
 
-from apps.okul import denetim_izi, masaustu_kanca
-from apps.okul.models import AccessKind, AccessLog, AccountRole
-from apps.okul.oturum import IZ_KIP_KILIDI, sistem_olarak, yazar
+from apps.okul import denetim_izi, masaustu_kanca, rol_izinleri
+from apps.okul.models import AccessKind, AccessLog, Account, AccountRole
+from apps.okul.oturum import IZ_KIP_KILIDI, rol_etiketi, sistem_olarak, yazar
 from shared import crypto
+from shared.exceptions import RolYetkisiz
 
 logger = logging.getLogger("oab_defteri.okul")
 
@@ -267,3 +288,160 @@ def gun_isini_kaydet() -> None:
     iş `SISTEM` adına ve ertelemeyle sarılır (`masaustu_kanca._sistem_adina`).
     """
     masaustu_kanca.gunluk_is_kaydet(SILME_ISI, gun_isi)
+
+
+# ---------------------------------------------------------------------------
+# Okuma ekranı (modül başlığı "OKUMA")
+# ---------------------------------------------------------------------------
+#: Bir sayfadaki satır sayısı.
+SAYFA_BOYUTU: Final = 50
+#: Sayfa numarasının üst sınırı (biçimsiz büyük sayı SQLite'ın OFFSET sınırını aşmasın).
+AZAMI_SAYFA: Final = 1_000_000
+
+#: Türlerin görünen adları (sözlük §1 "Erişim günlüğü (F1b)"). Özel nitelikli türlerde KVKK
+#: md. 6/1'in sözü: "… özel nitelikli kişisel veridir." Kişi dökümü KVKK md. 11 başvurusunun,
+#: ihlal dökümü KVKK md. 12/5 bildiriminin yardımıdır (tasarım §8.6); veli listesi çıktısı adlı davet
+#: teslim çizelgesi (E07) ve katılım cetvelidir (E08).
+TUR_ADLARI: Final[Mapping[str, str]] = {
+    AccessKind.MASKESIZ_TCKN.value: "Maskesiz T.C. kimlik numarası",
+    AccessKind.KISI_DOKUMU.value: "Kişi dökümü",
+    AccessKind.VELI_LISTESI_CIKTISI.value: "Veli listesi çıktısı",
+    AccessKind.KISISEL_DISA_AKTARIM.value: "Kişisel veri içeren dışa aktarım",
+    AccessKind.IHLAL_DOKUMU.value: "İhlal dökümü",
+    AccessKind.OZEL_NITELIKLI_EK.value: "Özel nitelikli kişisel veri içeren ek",
+    AccessKind.OZEL_NITELIKLI_ALAN.value: "Özel nitelikli kişisel veri alanı",
+}
+#: Kapalı kümede olmayan tür (program dışından yazılmış satır; DB kısıtı da reddeder).
+BILINMEYEN_TUR_ADI: Final = "Bilinmeyen tür"
+
+#: Süzgeçlerin iletileri (sözlük §1 "Erişim günlüğü (F1b)"; uç da bunları verir).
+TARIH_SIRASI_MESAJI: Final = "Bitiş tarihi başlangıç tarihinden önce olamaz."
+TARIH_MESAJI: Final = "Tarih geçersiz."
+TUR_MESAJI: Final = "Geçerli bir tür seçin."
+HESAP_MESAJI: Final = "Geçerli bir hesap seçin."
+SAYFA_MESAJI: Final = "Sayfa numarası geçersiz."
+
+
+def _okuma_yetkisi() -> None:
+    """Yazarın rolü erişim günlüğünü okuyabilir mi? (matrisin satırı; modül başlığı "OKUMA")"""
+    kim = yazar()
+    if kim is None or kim.sistem_mi:
+        raise RolYetkisiz
+    if kim.rol not in rol_izinleri.okuyabilen_roller(rol_izinleri.Satir.ERISIM_GUNLUGU):
+        raise RolYetkisiz
+
+
+def _gun_basi(gun: date) -> datetime:
+    """Günün yerel (Europe/Istanbul) başlangıcı, saat dilimli."""
+    return timezone.make_aware(datetime.combine(gun, time.min))
+
+
+def _aralik(baslangic: date | None, bitis: date | None) -> tuple[datetime | None, datetime | None]:
+    """Süzgecin UTC sınırları: başlangıç gününün 00.00'ı (dahil) ve bitiş gününün ertesi 00.00'ı
+    (hariç), Europe/Istanbul'a göre.
+
+    Takvimin uçlarında sınır kurulamaz: 9999-12-31'in ertesi günü yoktur, 0001-01-01'in yerel
+    00.00'ı UTC'de 1. yıldan öncedir (`OverflowError`). Bu `ValueError` değildir, uçta 500 olurdu;
+    tarih geçersiz sayılır (`TARIH_MESAJI`, 400; bağımsız denetim bulgusu).
+    """
+    try:
+        alt = None if baslangic is None else _gun_basi(baslangic).astimezone(UTC)
+        ust = None if bitis is None else _gun_basi(bitis + timedelta(days=1)).astimezone(UTC)
+    except OverflowError as exc:
+        raise ValueError(TARIH_MESAJI) from exc
+    return alt, ust
+
+
+def _rol_sirasi(rol: str) -> int:
+    try:
+        return list(AccountRole.values).index(rol)
+    except ValueError:
+        return len(AccountRole.values)
+
+
+def _hesap_ozetleri(kimlikler: set[Any]) -> dict[str, dict[str, Any]]:
+    """Okuyan hesapların kişisiz özeti: kimlik → {id, tanitici, rol_etiketi}; ad-soyad okunmaz."""
+    ozetler: dict[str, dict[str, Any]] = {}
+    for satir in Account.objects.filter(pk__in=kimlikler).values("id", "login_name", "role"):
+        kimlik = str(satir["id"])
+        ozetler[kimlik] = {
+            "id": kimlik,
+            "tanitici": satir["login_name"],
+            "rol_etiketi": rol_etiketi(satir["role"]),
+            "_rol": satir["role"],
+        }
+    return ozetler
+
+
+def _satir_ozeti(satir: AccessLog, hesaplar: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
+    kimlik = str(satir.account_id)
+    hesap = hesaplar.get(kimlik)
+    return {
+        "id": satir.pk,
+        "zaman": timezone.localtime(satir.at).isoformat(),
+        "hesap": {
+            "id": kimlik,
+            "tanitici": None if hesap is None else hesap["tanitici"],
+            # Okuma anındaki rol (satırın kendi sütunu; hesabın rolü açılıştan sonra değişmez).
+            "rol_etiketi": rol_etiketi(satir.role),
+        },
+        "tur": satir.kind,
+        "tur_adi": TUR_ADLARI.get(satir.kind, BILINMEYEN_TUR_ADI),
+        "model": satir.model or None,
+        "kayit": satir.object_id or None,
+        "alan": satir.field or None,
+        "belge_ozeti": satir.document_sha256 or None,
+        "satir_sayisi": satir.row_count,
+    }
+
+
+def liste(
+    *,
+    baslangic: date | None = None,
+    bitis: date | None = None,
+    tur: str | None = None,
+    hesap: object = None,
+    sayfa: int = 1,
+) -> dict[str, Any]:
+    """Okuma ekranının bir sayfası (modül başlığı "OKUMA"); yalnız okur, iz bırakmaz.
+
+    Yanıt: `satirlar` (en yeni önce; `{id, zaman, hesap: {id, tanitici, rol_etiketi}, tur,
+    tur_adi, model, kayit, alan, belge_ozeti, satir_sayisi}`), `toplam` (süzgece uyan satır),
+    `sayfa`, `sayfa_sayisi` (en az 1), `sayfa_boyutu`; süzgeç seçenekleri `turler` (kapalı küme,
+    görünen adıyla) ve `hesaplar` (günlükte satırı olan hesaplar, rol sırasıyla). Sayfa son
+    sayfadan büyükse `satirlar` boştur. Bitiş başlangıçtan önceyse `ValueError`.
+    """
+    _okuma_yetkisi()
+    if baslangic is not None and bitis is not None and bitis < baslangic:
+        raise ValueError(TARIH_SIRASI_MESAJI)
+    if isinstance(sayfa, bool) or not isinstance(sayfa, int) or not 1 <= sayfa <= AZAMI_SAYFA:
+        raise ValueError(SAYFA_MESAJI)
+    alt, ust = _aralik(baslangic, bitis)
+    sorgu = AccessLog.objects.all()
+    if alt is not None:
+        sorgu = sorgu.filter(at__gte=alt)
+    if ust is not None:
+        sorgu = sorgu.filter(at__lt=ust)
+    if tur is not None:
+        sorgu = sorgu.filter(kind=tur)
+    if hesap is not None:
+        sorgu = sorgu.filter(account_id=hesap)
+    toplam = sorgu.count()
+    bas = (sayfa - 1) * SAYFA_BOYUTU
+    satirlar = list(sorgu.order_by("-at", "-id")[bas : bas + SAYFA_BOYUTU])
+    okuyanlar = set(AccessLog.objects.order_by().values_list("account_id", flat=True).distinct())
+    hesaplar = _hesap_ozetleri(okuyanlar)
+    return {
+        "satirlar": [_satir_ozeti(satir, hesaplar) for satir in satirlar],
+        "toplam": toplam,
+        "sayfa": sayfa,
+        "sayfa_sayisi": max(1, -(-toplam // SAYFA_BOYUTU)),
+        "sayfa_boyutu": SAYFA_BOYUTU,
+        "turler": [{"tur": tur_, "tur_adi": TUR_ADLARI[tur_]} for tur_ in AccessKind.values],
+        "hesaplar": [
+            {ad: deger for ad, deger in ozet.items() if not ad.startswith("_")}
+            for ozet in sorted(
+                hesaplar.values(), key=lambda o: (_rol_sirasi(o["_rol"]), o["tanitici"], o["id"])
+            )
+        ],
+    }

@@ -38,6 +38,8 @@ YAZI_TIPI = "Times New Roman"
 GOVDE_PUNTO = 12
 #: Konum cümlesinin boyutu (tasarım §9.2: 9 punto).
 KONUM_PUNTO = 9
+#: Dipnotun boyutu (`shared.evrak.Dipnot`; PDF şablonunun `.dipnot`'u 8 punto).
+DIPNOT_PUNTO = 8
 #: Kenar boşlukları (cm) — PDF taban şablonunun `@page` boşluklarıyla aynı.
 KENAR_CM = {"top": 1.4, "right": 1.8, "bottom": 1.5, "left": 1.8}
 
@@ -181,6 +183,20 @@ def imza(belge: DocxDocument, tarih: str, sahipler: Sequence[tuple[str, str]]) -
         gorev_p = hucre.add_paragraph()
         gorev_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         _calistir(gorev_p, gorev)
+
+
+def dipnot(belge: DocxDocument, metin: str) -> None:
+    """Belgenin sonundaki dipnot (`shared.evrak.Dipnot`): sola yaslı, küçük punto.
+
+    Word'ün dipnot nesnesi değildir: gövdenin son paragrafıdır, böylece metin akışına PDF'teki
+    gibi girer (içerik eşdeğerliği).
+    """
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt
+
+    p = belge.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    _calistir(p, metin, Pt(DIPNOT_PUNTO))
 
 
 def _alan(paragraf: Any, komut: str, boyut: Any) -> None:

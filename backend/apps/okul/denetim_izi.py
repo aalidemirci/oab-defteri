@@ -12,8 +12,11 @@ gerekçesiyle yazılıdır (plan F1b-1: kişi silme ve birleştirme 5. adımda y
 Giriş noktaları: `degisiklik` (okul çekirdeğinin kayıtları; tür modelin durum
 alanlarından seçilir: `OLUSTUR`, `GUNCELLE`, `DURUM`), `kayit` (türü çağıranın verdiği
 kayıt yazımı: hesap olayları), `olay` (kayıt yazımı olmayan olay: kilit, mühür bulgusu,
-`guvenlik.json` bölümü, yedek, dosyadaki ayar), `kvkk_silme` (KVKK silmesi: model, alan
-adları, adet, tetik; değer yok — bugün erişim günlüğünün saklama süresi dolan satırları).
+`guvenlik.json` bölümü, yedek, dosyadaki ayar, geri yükleme kartının "Gördüm"ü — `ISARET`, kaydı
+denetim izinin kendi satırı: model `okul.AuditTrail`, kimlik `seq`), `kvkk_silme` (KVKK silmesi: model, alan
+adları, adet, tetik; değer yok — bugün erişim günlüğünün saklama süresi dolan satırları),
+`basim` (evrak basımı: `BASIM`, yalnız evrak kodu ve dosyanın sha256'sı — bugün saklanmayan
+hesap teslim pusulası; plan F1b-2 "E63").
 
 KURALLAR (her biri bu modülde zorlanır):
 
@@ -136,6 +139,7 @@ from apps.okul.models import (
 from apps.okul.oturum import Yazar, yazar, yazar_olarak
 from apps.okul.services import satir_izi
 from shared import crypto, kanonik
+from shared.exceptions import KayitIziYazilamadi
 
 logger = logging.getLogger("oab_defteri.okul")
 
@@ -244,8 +248,12 @@ _GUNCELLENME_ALANI: Final = "updated_at"
 Anlik = dict[str, Any]
 
 
-class IzYazilamadi(RuntimeError):
-    """İz satırı yazılamadı; çağıranın yazması da yapılmaz (tasarım §4.6.2 yazma kuralı 1)."""
+class IzYazilamadi(KayitIziYazilamadi):
+    """İz satırı yazılamadı; çağıranın yazması da yapılmaz (tasarım §4.6.2 yazma kuralı 1).
+
+    API'de 409 `iz_yazilamadi`, sabit Türkçe ileti (`shared.exceptions.KayitIziYazilamadi`;
+    orkestratör maddesi C-3): buradaki iç ileti günlüğe gider, kullanıcıya gitmez.
+    """
 
 
 class IzAnahtariOkunamadi(IzYazilamadi):
@@ -624,6 +632,40 @@ def olay(
         record_mac="",
         label=label,
         anahtar=acik,
+    )
+
+
+#: Evrak basımının satırının değerleri (tasarım §4.6.2 kural 3: "evrak basımı `BASIM` satırıdır
+#: (tür, sha256)"): YALNIZ evrak kodu ve basılan dosyanın SHA-256'sı. İkisi de kişisel veri
+#: değildir; biçimleri `basim`'de denetlenir (kod `E01`…`E79` biçiminde, özet 64 küçük onaltılık).
+BASIM_DEGERLERI: Final = ("kod", "sha256")
+_EVRAK_KODU: Final = re.compile(r"E\d{2}")
+_SHA256_OZETI: Final = re.compile(r"[0-9a-f]{64}")
+
+
+def basim(*, model: str, object_id: str, kod: str, sha256: str) -> AuditTrail:
+    """Evrak basımı (`BASIM`; açık kip, içerik MAC'siz): saklanmayan belgenin TEK izi.
+
+    Kaydın kimliği belgenin konusudur (hesap teslim pusulasında hesap: `okul.Account` ve hesabın
+    kimliği; plan F1b-2 "E63": "izi `BASIM` satırıdır (kod ve PDF'in sha256'sı)"). `values`
+    yalnız `BASIM_DEGERLERI`'dir (`[None, değer]`); `changed_fields` boştur. İçerik MAC'i
+    taşımadığı için kaydın son içerik MAC'li satırı değişmez (hesabın satır izi denetimi bu satırı
+    atlar; `services.satir_izi`). Biçimsiz kod ya da özet `IzYazilamadi`'dır: dosya o zaman da
+    verilmez (iz yazılamazsa yazma yapılmaz). Çağıranın işlemindedir.
+    """
+    if not (isinstance(kod, str) and _EVRAK_KODU.fullmatch(kod)):
+        raise IzYazilamadi("Evrak basımının kodu biçimsiz.")
+    if not (isinstance(sha256, str) and _SHA256_OZETI.fullmatch(sha256)):
+        raise IzYazilamadi("Evrak basımının özeti biçimsiz.")
+    return _ekle(
+        AuditAction.BASIM,
+        model=model,
+        object_id=object_id,
+        changed_fields=[],
+        values={"kod": [None, kod], "sha256": [None, sha256]},
+        record_mac="",
+        label="",
+        anahtar=_bellekteki_anahtar(),
     )
 
 
@@ -1401,8 +1443,20 @@ def hesap_izi_tutuyor(
     False'tur (kullanıcı kararı 03.11.2026 "Boşluğu engelle"; `satir_izi` "İZ BOŞLUĞU"):
     `kaydi_dogrula` bunu sormaz.
     """
+    return hesap_izi_karari(
+        hesap_id, veri_anahtari=veri_anahtari, beklenen_muhur=beklenen_muhur
+    ).tutuyor
+
+
+def hesap_izi_karari(
+    hesap_id: Any, *, veri_anahtari: bytes, beklenen_muhur: str | None = None
+) -> satir_izi.IzKarari:
+    """`hesap_izi_tutuyor`'un kararı retin nedeniyle (`satir_izi.IzKarari`; `satir_izi` modül
+    başlığı "RET NEDENİ"): neden kararı değiştirmez, kullanıcıya giden iletiyi ve `BUTUNLUK`
+    satırının alan adını seçer (satırın izi mi tutmuyor, izde mi boşluk var). Django'nun bağlantısı
+    `hesap_izi_tutuyor`'daki gibi verilir."""
     connection.ensure_connection()
-    return satir_izi.hesap_izi_tutuyor(
+    return satir_izi.hesap_izi_karari(
         connection.connection, hesap_id, veri_anahtari, beklenen_muhur=beklenen_muhur
     )
 

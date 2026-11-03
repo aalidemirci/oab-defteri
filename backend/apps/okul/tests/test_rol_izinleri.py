@@ -58,7 +58,8 @@ HER = frozenset(ROLLER)
 Y = frozenset({"yonetici"})
 Y_YK = YK_ROLLERI | Y
 Y_DK = frozenset({"yonetici", "denetleme_kurulu"})
-_KISALTMA = {"H": HER, "Y": Y, "Y+YK": Y_YK, "Y+DK": Y_DK}
+DK = frozenset({"denetleme_kurulu"})
+_KISALTMA = {"H": HER, "Y": Y, "Y+YK": Y_YK, "Y+DK": Y_DK, "DK": DK}
 
 
 def _depo_koku() -> Path:
@@ -347,9 +348,18 @@ def test_okur_hucresine_yalniz_iki_numarali_dipnot_yazma_verir() -> None:
 
 
 #: Türetilmiş rol tablosu: uç → yöntem → roller (H: her rol; Y: program yöneticisi; Y+YK:
-#: program yöneticisi ve yönetim kurulu rolleri; Y+DK: program yöneticisi ve Denetleme Kurulu).
+#: program yöneticisi ve yönetim kurulu rolleri; Y+DK: program yöneticisi ve Denetleme Kurulu; DK:
+#: yalnız Denetleme Kurulu).
 #: Listede olmayan (uç, yöntem) her rolde kapalıdır (OPTIONS dahil).
 ROL_TABLOSU: dict[str, dict[str, str]] = {
+    "access-log": {"GET": "Y+DK", "HEAD": "Y+DK"},
+    "account-close": {"POST": "Y"},
+    "account-detail": {"GET": "Y", "HEAD": "Y"},
+    "account-handover-slip": {"POST": "Y"},
+    "account-list": {"GET": "Y", "HEAD": "Y", "POST": "Y"},
+    "account-options": {"GET": "Y", "HEAD": "Y"},
+    "account-reset-password": {"POST": "Y"},
+    "account-unsuspend": {"POST": "Y"},
     "app-quit": {"POST": "H"},
     "backup-external-reminder": {"GET": "Y", "HEAD": "Y", "PUT": "Y"},
     "backup-list": {"GET": "Y", "HEAD": "Y"},
@@ -382,6 +392,7 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     "security-integrity-audit": {"GET": "Y+DK", "HEAD": "Y+DK"},
     "security-integrity-orphan-wraps": {"POST": "Y"},
     "security-integrity-reset-notice": {"GET": "H", "HEAD": "H", "POST": "H"},
+    "security-integrity-restore-seen": {"POST": "DK"},
     "security-integrity-two-store": {"GET": "Y", "HEAD": "Y"},
     "security-lock": {"POST": "H"},
     "security-recover": {"GET": "H", "HEAD": "H", "POST": "H"},
@@ -422,9 +433,9 @@ def test_rol_tablosu_anlik_goruntusu() -> None:
 # ============================================================ bekleyenler ve hücreler
 
 #: Ucu ya da servisi olmayan Y hücreleri, fazlarıyla (plan F1b-2 kullanıcı kararı). YALNIZ
-#: KÜÇÜLEBİLİR; "F1b" fazlıları 2. adımın Kullanıcılar ve "Gördüm" uçları bağlar.
+#: KÜÇÜLEBİLİR; "F1b" fazlısı kalmadı (Kullanıcılar c1'de, DK'nin M8 hücresi c3'te "Gördüm"le
+#: bağlandı; `test_f1b_fazli_bekleyen_kalmadi`).
 BEKLEYEN_HUCRE_GORUNTUSU: dict[str, dict[str, set[str]]] = {
-    "F1b": {"KULLANICILAR": {"yonetici"}, "M8": {"denetleme_kurulu"}},
     "F1c": {"M2": set(YK_ROLLERI)},
     "F2": {
         "M3": {*Y_YK, "mudur"},
@@ -483,6 +494,7 @@ def test_etkin_hucreler_bekleyende_olmayan_y_hucreleridir() -> None:
         "M1",
         "M2",
         "M9",
+        "KULLANICILAR",
         "GUVENLIK",
         "AYARLAR",
         "GUNCELLEME",
@@ -490,7 +502,8 @@ def test_etkin_hucreler_bekleyende_olmayan_y_hucreleridir() -> None:
     ]
     for rol in YK_ROLLERI:
         assert [s.value for s in etkin_hucreler(rol)] == ["M9", "KENDI"]
-    assert [s.value for s in etkin_hucreler("denetleme_kurulu")] == ["KENDI"]
+    # DK'nin M8 hücresi geri yükleme kartının "Gördüm"üyle bağlandı (F1b-2 c3).
+    assert [s.value for s in etkin_hucreler("denetleme_kurulu")] == ["M8", "KENDI"]
     assert [s.value for s in etkin_hucreler("mudur")] == ["KENDI"]
     for rol in ROLLER:
         assert set(etkin_hucreler(rol)) == {
@@ -506,7 +519,6 @@ def test_bekleyen_dipnotlar_anlik_goruntusu() -> None:
         2: "F3",
         3: "F4",
         4: "F4",
-        5: "F1b",
         6: "F4",
         7: "F2",
         8: "F4",
@@ -519,6 +531,34 @@ def test_bekleyen_dipnotlar_anlik_goruntusu() -> None:
             for eylem, kural in EYLEM_KURALLARI.items()
         )
         assert bagli != (dipnot in BEKLEYEN_DIPNOTLAR), dipnot
+
+
+def test_f1b_fazli_bekleyen_kalmadi() -> None:
+    """F1b'nin 2. adımının kapısı (plan F1b-2 kullanıcı kararı: "her fazın kapısına 'bu fazın
+    hücreleri ve dipnotları bağlandı' maddesi girer"): üç bekleyen listesinde de faz değeri "F1b"
+    olan kalmaz — Kullanıcılar hücresi uçlarıyla, Denetleme Kurulunun M8 hücresi, ⁵ dipnotu ve
+    `GERI_YUKLEME_GORDUM` eylemi geri yükleme kartının "Gördüm"üyle bağlandı."""
+    assert "F1b" not in set(BEKLEYEN_HUCRELER.values())
+    assert "F1b" not in set(BEKLEYEN_DIPNOTLAR.values())
+    assert "F1b" not in set(BAGLANMAMIS_EYLEMLER.values())
+    assert (Satir.M8, "denetleme_kurulu") not in BEKLEYEN_HUCRELER
+    assert 5 not in BEKLEYEN_DIPNOTLAR
+    assert Eylem.GERI_YUKLEME_GORDUM not in BAGLANMAMIS_EYLEMLER
+
+
+def test_gordum_m8_hucresinin_tek_yazma_ucudur_ve_yalniz_dk_ya_aciktir() -> None:
+    """M8'in bugünkü tek yazma kuralı "Gördüm"dür; ⁵ dipnotunu adıyla anar, yalnız Denetleme
+    Kuruluna açılır (YK rolleri DK modülüne yazamaz, program yöneticisi de; tasarım §4.4.2 ⁵)."""
+    (kural,) = [k for k in KURALLAR if k.satir is Satir.M8 and k.tur is KuralTuru.YAZMA]
+    assert (kural.uc, kural.yontemler, kural.dipnot) == (
+        "security-integrity-restore-seen",
+        frozenset({"POST"}),
+        5,
+    )
+    assert kural_rolleri(kural) == frozenset({"denetleme_kurulu"})
+    erisim = [k for k in KURALLAR if k.satir is Satir.ERISIM_GUNLUGU]
+    assert [(k.uc, k.tur) for k in erisim] == [("access-log", KuralTuru.OKUMA)]
+    assert kural_rolleri(erisim[0]) == okuyabilen_roller(Satir.ERISIM_GUNLUGU) == Y_DK
 
 
 # ============================================================ eylemlerin servise bağlanışı
@@ -607,6 +647,7 @@ def test_eylem_baglama_anlik_goruntusu() -> None:
         Eylem.GERI_YUKLEME,
         Eylem.YEDEK_INDIRME,
         Eylem.BOSTA_SURE_YAZMA,
+        Eylem.GERI_YUKLEME_GORDUM,
     }
 
 
@@ -655,11 +696,14 @@ def test_yetenek_adlari_ve_rollerin_yetenekleri_anlik_goruntusu() -> None:
         "butunluk_denetim",
         "ders_yili_yazma",
         "eokul_aktarimi",
+        "erisim_gunlugu",
+        "geri_yukleme_gordum",
         "guncelleme",
         "guvenlik",
         "iki_depo",
         "kapali_gun_yazma",
         "kisi_yazma",
+        "kullanicilar",
         "kurulum_tamamlama",
         "ogrenciler",
         "okul_karti_yazma",
@@ -667,11 +711,31 @@ def test_yetenek_adlari_ve_rollerin_yetenekleri_anlik_goruntusu() -> None:
         "sube_yazma",
         "yol_haritasi",
     ]
-    assert yetenekler("yonetici") == tum
+    # "Gördüm" yalnız Denetleme Kurulunundur; program yöneticisi kartı görür, kaldıramaz.
+    assert yetenekler("yonetici") == [ad for ad in tum if ad != "geri_yukleme_gordum"]
     for rol in YK_ROLLERI:
         assert yetenekler(rol) == ["son_oturum_onay"]
-    assert yetenekler("denetleme_kurulu") == ["butunluk_denetim"]
+    assert yetenekler("denetleme_kurulu") == [
+        "butunluk_denetim",
+        "erisim_gunlugu",
+        "geri_yukleme_gordum",
+    ]
     assert yetenekler("mudur") == []
+
+
+def test_kullanicilar_yetenegi_satirin_butun_uclarini_kapsar() -> None:
+    """Kullanıcılar ekranı tek yetenektir (`kullanicilar`): Kullanıcılar satırına bağlı her (uç,
+    yöntem) — hesap teslim pusulası dahil (plan F1b-2 "E63") — o yeteneğe girer; ön yüz bir eylemi
+    yetenekte olmadığı için sessizce gizlemesin. HEAD okumanın eşidir, ayrı sayılmaz."""
+    satirin_uclari = {
+        (kural.uc, yontem)
+        for kural in KURALLAR
+        if kural.satir is Satir.KULLANICILAR
+        for yontem in kural.yontemler
+        if yontem != "HEAD"
+    }
+    assert satirin_uclari == set(YETENEKLER["kullanicilar"])
+    assert ("account-handover-slip", "POST") in YETENEKLER["kullanicilar"]
 
 
 def test_yetenegin_kuralsiz_cifti_reddedilir(monkeypatch: pytest.MonkeyPatch) -> None:

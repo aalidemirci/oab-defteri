@@ -14,7 +14,16 @@ from __future__ import annotations
 
 from django.urls import path
 
-from apps.okul import views, views_app, views_calendar, views_oturum, views_pool, views_yedek
+from apps.okul import (
+    views,
+    views_app,
+    views_calendar,
+    views_erisim_gunlugu,
+    views_hesaplar,
+    views_oturum,
+    views_pool,
+    views_yedek,
+)
 
 urlpatterns = [
     # Arayüzden düzenli çıkış (tasarım §4.2 "Kapanış", §4.5): her oturum durumunda
@@ -159,12 +168,56 @@ urlpatterns = [
         views_oturum.SahipsizSarmalView.as_view(),
         name="security-integrity-orphan-wraps",
     ),
+    # Geri yükleme kartının "Gördüm"ü (plan F1b-2; tasarım §4.4.4): yalnız Denetleme Kurulu,
+    # `ISARET` satırı. Kilitliyken KAPALIDIR.
+    path(
+        "security/integrity/restore-seen/",
+        views_oturum.GeriYuklemeGordumView.as_view(),
+        name="security-integrity-restore-seen",
+    ),
+    # Erişim günlüğünün okuma ekranı (plan F1b-2; tasarım §4.6.4): program yöneticisi ve
+    # Denetleme Kurulu; okuma iz bırakmaz. Kilitliyken KAPALIDIR.
+    path("access-log/", views_erisim_gunlugu.ErisimGunluguView.as_view(), name="access-log"),
     # Parola yenilenme bildirimi (tasarım §4.4.3, tehdit 12): oturumdaki hesabın bildirimi ve
     # "Gördüm" (izli). Kilitliyken KAPALIDIR.
     path(
         "security/integrity/reset-notice/",
         views_oturum.ParolaBildirimiView.as_view(),
         name="security-integrity-reset-notice",
+    ),
+    # Kullanıcılar (plan F1b-2 "Kullanıcılar uçları"; tasarım §4.4.2 Kullanıcılar satırı): yalnız
+    # program yöneticisi (`rol_izinleri`), yalnız açık oturumda (kilitliyken KAPALIDIR).
+    path("accounts/", views_hesaplar.KullanicilarView.as_view(), name="account-list"),
+    path(
+        "accounts/options/",
+        views_hesaplar.KullaniciSecenekleriView.as_view(),
+        name="account-options",
+    ),
+    path(
+        "accounts/<uuid:hesap_id>/",
+        views_hesaplar.KullaniciAyrintisiView.as_view(),
+        name="account-detail",
+    ),
+    path(
+        "accounts/<uuid:hesap_id>/close/",
+        views_hesaplar.KullaniciKapatView.as_view(),
+        name="account-close",
+    ),
+    path(
+        "accounts/<uuid:hesap_id>/unsuspend/",
+        views_hesaplar.KullaniciAskidanCikarView.as_view(),
+        name="account-unsuspend",
+    ),
+    path(
+        "accounts/<uuid:hesap_id>/reset-password/",
+        views_hesaplar.KullaniciParolaSifirlaView.as_view(),
+        name="account-reset-password",
+    ),
+    # Hesap teslim pusulası (E63; plan F1b-2): yalnız PDF, saklanmaz; izi `BASIM` satırıdır.
+    path(
+        "accounts/<uuid:hesap_id>/handover-slip/",
+        views_hesaplar.KullaniciTeslimPusulasiView.as_view(),
+        name="account-handover-slip",
     ),
     # Kurtarma anahtarı belgesi (tasarım §9.7): anahtar kurtarma sarmalını açıyorsa PDF.
     # KİLİTLİYKEN KAPALIDIR (lock_middleware.KILITLI_IZINLI'de değildir).
