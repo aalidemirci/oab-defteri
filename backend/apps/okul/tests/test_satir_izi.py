@@ -14,8 +14,18 @@ meşru hiçbir akış yanlış alarm vermez. Bu dosya:
   karşılaştırması; çıkış: kurtarma anahtarıyla geri yükleme;
 * İZİN DÜZENLENMESİ: `record_mac`'i boşaltmak, `key_ref`'i başka bir iz anahtarına çevirmek,
   kipi değiştirmek, sahte satır eklemek, biçimsiz değer yazmak, hesabın bütün iz satırlarını
-  silmek fail-open'a çevirmez; kuyruğun ve ara satırların (200 satırlık pencerenin içinde ve
-  dışında) satırla birlikte silinmesi kalan risktir (sabitlenir);
+  silmek fail-open'a çevirmez;
+* İZ BOŞLUĞU (kullanıcı kararı 03.11.2026 "Boşluğu engelle", b5): hesabın son kaydından sonraki
+  satırların silinmesi (200 satırlık pencerenin içinde ve dışında, ilgisiz satır da), silinip
+  sonrakilerin aşağı kaydırılması, REAL sıraya taşınması ve BLOB sıra girişi, hesap işlemini,
+  oturumdaki parola doğrulamasını ve kurtarma anahtarıyla açılışı kapatır; ilk reddin `BUTUNLUK`
+  satırı, açılıştaki kilitli satır ve iz anahtarı tablosuna eklenen sahte, emekli anahtar kaymayı
+  örtmez; birincil anahtarsız yeniden kurulmuş tabloda birebir kopya silmeyi örtmez; boşluklu çapa
+  K-a'ya düşer; çıkış kurtarma anahtarıyla eski yedektir. Kuyruk kesme ENGELLEMEZ (çapa kartı),
+  bozuk dayanak engellemez; tamsayı takası kalan risktir (sabitlenir); denetimin maliyeti HMAC
+  sayısıyla sınırlıdır. Zincir başı tamsayı değilse, en büyük tamsayıdaysa ya da `mac`'i metin
+  değilse yazıcılar Türkçe reddeder (O-3); parola değiştirmenin işlem içi reddi `BUTUNLUK` bırakır
+  (O-4);
 * YANLIŞ ALARM YOK: ilk kurulumdan kapanışa her meşru akış ve iki aşamalı yazımın kesintileri;
   geri yükleme ve onarım her çapa hâlinde (onarımın `SISTEM` `HESAP` satırları; ilk açılış
   açılır, zincir bulgusuz, kayıt bütünlüğü tutar);
@@ -38,6 +48,7 @@ import json
 import re
 import sqlite3
 import threading
+import time
 import uuid
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
@@ -48,7 +59,7 @@ import pytest
 from django.db import connection, connections, transaction
 from django.utils import timezone
 
-from apps.okul import denetim_izi, iz_dogrulama, iz_durumu
+from apps.okul import denetim_izi, iz_dogrulama, iz_durumu, masaustu_kanca
 from apps.okul.models import (
     Account,
     AccountRole,
@@ -63,7 +74,9 @@ from apps.okul.models import (
 from apps.okul.oturum import OTURUM, Yazar, sistem_olarak, yazar_olarak
 from apps.okul.services import (
     app_password,
+    backup_restore,
     geri_yukleme_notu,
+    geri_yukleme_yetkisi,
     hesaplar,
     ozet_onarimi,
     satir_izi,
@@ -770,34 +783,40 @@ def test_bilinen_sinir_kuyruk_satirla_birlikte_kesilirse_giris_acilir_capa_goste
     assert "kuyruk_kesik" in bulgu.values["bulgular"][1]
 
 
-def test_bilinen_sinir_ara_satirlar_silinirse_giris_acilir_zincir_bulgusu_duser() -> None:
-    """KALAN RİSK (kullanıcı kararını bekler; plan F1b-2 ekleri): satır geri sarılır ve hesabın yeni
-    iz satırı (R) zincirin ORTASINDAN silinirse satır daha eski satırı tutar, giriş açılır; denetim
-    zincirin geri kalanını doğrulamaz. R kilit açılışının 200 satırlık doğrulama PENCERESİNİN
-    İÇİNDEYSE son satırların doğrulaması boşluğu `BUTUNLUK` bulgusu olarak gösterir
-    (`sira_boslugu`, `zincir_kopuk`); pencerenin dışındaki hâl bir sonraki testtedir."""
+def test_ara_satir_silinirse_giris_acilmaz_pencere_icinde() -> None:
+    """Kullanıcı kararı 03.11.2026 "Boşluğu engelle" (b4'te kalan riskti): satır geri sarılır ve
+    hesabın yeni iz satırı (R) zincirin ORTASINDAN silinir. Satır daha eski satırı tutar ama ondan
+    sonra izde boşluk vardır (`satir_izi` "İZ BOŞLUĞU" (a)): giriş açılmaz, ret satırın izinindir
+    (`AccountRecordStale`, `BUTUNLUK` alanı `kayit_mac`), hatalı deneme sayılmaz, satır değişmez.
+    Çapa da yoktur: kuyruk ya da çapa bulgusu değil, boşluk reddeder."""
     hesap_id, r_seq = _geri_sarilmis_muhasip()
     app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
     app_password.lock()
     _tetikleyicisiz("DELETE FROM okul_audittrail WHERE seq = %s", [r_seq])
     iz_durumu.yol().unlink(missing_ok=True)
+    once, son = _ham(hesap_id), _son_seq()
 
-    app_password.unlock(hesap_id=hesap_id, password=GECICI_PAROLA)
+    with pytest.raises(app_password.AccountRecordStale) as hata:
+        app_password.unlock(hesap_id=hesap_id, password=GECICI_PAROLA)
 
-    assert OTURUM.hesap_id() == hesap_id
+    _reddedilir(hata, app_password._SEAL_MISMATCH_MESSAGE)
+    _tek_butunluk(hesap_id, son)
+    assert _ham(hesap_id) == once and app_password.wrap_failure_state(hesap_id) == (0, False)
+    # Program yöneticisinin son kaydı (girişi) boşluktan YENİDİR: o girer, doğrulama boşluğu
+    # bulgu olarak gösterir (bedel yalnız son kaydı boşluktan eski hesaplaradır).
+    app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
     bulgu = AuditTrail.objects.filter(
         action=AuditAction.BUTUNLUK, model=denetim_izi.IZ_DOGRULAMASI
     ).latest("seq")
     assert {"sira_boslugu", "zincir_kopuk"} <= set(bulgu.values["bulgular"][1])
-    assert r_seq + 1 in bulgu.values["bulgu_satirlari"][1]
+    assert r_seq + 1 in bulgu.values["bulgu_satirlari"][1]  # pencere boşluğun yerini gösterir
 
 
-def test_bilinen_sinir_ara_satir_pencere_disinda_silinirse_bulgusuz_acar() -> None:
-    """KALAN RİSK (bağımsız denetim bulgusu; `satir_izi` "KAPSAMIN SINIRI"): hesabın yeni iz satırı
-    (R) silinir ama ondan sonra 200'den çok satır yazılmıştır. Kilit açılışı yalnız son 200 satırı
-    doğrular (`iz_dogrulama.SON_SATIR`), çapa yalnız zincir başını görür, zincirin tam
-    doğrulamasının üretim yolu F1b'de yoktur: geri sarılmış satır girer ve HİÇBİR bulgu düşmez.
-    Test riski sabitler: kullanıcı kararıyla kapanırsa ret testine döner."""
+def test_ara_satir_pencere_disinda_silinirse_de_giris_acilmaz() -> None:
+    """Kullanıcı kararı 03.11.2026 "Boşluğu engelle" (b4'te bağımsız denetimin bulgusu, kalan
+    riskti): hesabın yeni iz satırı (R) silinir ve ondan sonra 200'den çok satır yazılmıştır —
+    kilit açılışının 200 satırlık penceresinin ve çapanın göremediği yer. Boşluk denetimi pencereye
+    bağlı değildir (S'den zincir başına sayım): giriş açılmaz."""
     hesap_id, r_seq = _geri_sarilmis_muhasip()
     app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
     for _ in range(210):  # programın meşru, izli olayları
@@ -807,12 +826,744 @@ def test_bilinen_sinir_ara_satir_pencere_disinda_silinirse_bulgusuz_acar() -> No
     son = _son_seq()
     assert son - r_seq > iz_dogrulama.SON_SATIR
     _tetikleyicisiz("DELETE FROM okul_audittrail WHERE seq = %s", [r_seq])
+    son = _son_seq()
 
-    app_password.unlock(hesap_id=hesap_id, password=GECICI_PAROLA)
+    with pytest.raises(app_password.AccountRecordStale):
+        app_password.unlock(hesap_id=hesap_id, password=GECICI_PAROLA)
 
-    assert OTURUM.hesap_id() == hesap_id  # kalan risk
-    yeni = AuditTrail.objects.filter(seq__gt=son)
-    assert yeni.exists() and not yeni.filter(action=AuditAction.BUTUNLUK).exists()
+    assert OTURUM.hesap_id() is None
+    _tek_butunluk(hesap_id, son)
+
+
+# ============================================================ iz boşluğu (kullanıcı kararı "Boşluğu engelle")
+
+#: Geri sarmayı gizlemek için hesabın yeni iz satırlarına yapılan program dışı değişiklikler
+#: (`satir_izi` "İZ BOŞLUĞU"): satırlar silinir; silinir ve sonrakiler aşağı kaydırılır (yeniden
+#: numaralama); eşleşen satırın gerisine REAL sıralarla taşınır ve boşlukları ilgisiz satırlarla
+#: doldurulur; sıraları BLOB'a çevrilir.
+DEGISIMLER = ("silme", "yeniden_numaralama", "real_tasima", "blob_sira")
+#: Program dışı değişikliklerin dolgu satırları (ilgisiz, programın meşru yazdığı satırlar).
+_DOLGU_ADEDI = 12
+
+
+def _dolgu(adet: int = _DOLGU_ADEDI) -> list[int]:
+    """Programın meşru yazdığı, hesaplarla ilgisiz `adet` açık kip satırı; sıralarını döndürür."""
+    sira: list[int] = []
+    for _ in range(adet):
+        with sistem_olarak(), transaction.atomic():
+            satir = denetim_izi.olay(AuditAction.HESAP, model="okul.Deneme", object_id="dolgu")
+        sira.append(int(satir.seq))
+    return sira
+
+
+def _yeni_satirlari(hesap_id: object, sira: int) -> list[int]:
+    """Hesabın `sira`'dan SONRAKİ iz satırlarının sıraları (geri sarmayı gizlemek için oynanır)."""
+    return sorted(
+        int(s)
+        for s in AuditTrail.objects.filter(
+            model="okul.Account", object_id=str(hesap_id), seq__gt=sira
+        ).values_list("seq", flat=True)
+    )
+
+
+def _sira_tasi(eski: object, yeni: object) -> None:
+    _tetikleyicisiz("UPDATE okul_audittrail SET seq = %s WHERE seq = %s", [yeni, eski])
+
+
+def _izi_degistir(hesap_id: object, sira: int, degisim: str, dolgu: list[int]) -> None:
+    """SQLite tarayıcısı taklidi (kod gerekmez): hesabın `sira`'dan sonraki iz satırları yürüyüşten
+    çıkarılır (`DEGISIMLER`; `tamsayi_takasi` bilinen sınırdır). `dolgu` eşleşen satırdan ÖNCE
+    yazılmış ilgisiz satırlardır (boşlukları doldurmak için)."""
+    yeniler = _yeni_satirlari(hesap_id, sira)
+    assert yeniler, "hesabın eşleşen satırdan sonra iz satırı olmalı"
+    if degisim in ("silme", "yeniden_numaralama"):
+        for seq in yeniler:
+            _tetikleyicisiz("DELETE FROM okul_audittrail WHERE seq = %s", [seq])
+        if degisim == "yeniden_numaralama":
+            # Artan sırayla: her satır bir alttaki boş yere iner (birincil anahtar çakışmaz).
+            kalan = sorted(
+                int(s)
+                for s in AuditTrail.objects.filter(seq__gt=sira).values_list("seq", flat=True)
+            )
+            for yeni, eski in enumerate(kalan, start=sira + 1):
+                if eski != yeni:
+                    _sira_tasi(eski, yeni)
+    elif degisim == "real_tasima":
+        assert len(yeniler) <= len(dolgu)
+        for i, seq in enumerate(yeniler):
+            _sira_tasi(seq, sira - 0.5 - i / 1000)  # eşleşen satırın gerisi (REAL)
+        for bosluk, eski in zip(yeniler, dolgu, strict=False):
+            _sira_tasi(eski, bosluk)  # boşluklar ilgisiz satırlarla dolar: sayım tutar
+    elif degisim == "tamsayi_takasi":
+        assert len(yeniler) <= len(dolgu)
+        for bosluk, eski in zip(yeniler, dolgu, strict=False):
+            _sira_tasi(bosluk, -1)
+            _sira_tasi(eski, bosluk)
+            _sira_tasi(-1, eski)
+    else:
+        assert degisim == "blob_sira"
+        for seq in yeniler:
+            _tetikleyicisiz(
+                "UPDATE okul_audittrail SET seq = CAST(seq AS BLOB) WHERE seq = %s", [seq]
+            )
+
+
+def _butunluk_sayisi() -> int:
+    return AuditTrail.objects.filter(action=AuditAction.BUTUNLUK).count()
+
+
+def _senaryo1_degistirilmis(degisim: str) -> tuple[str, int, int]:
+    """Senaryo 1'in geri sarması + izin değiştirilmesi; program kilitlidir, T'nin sarmalı
+    dosyadadır. (muhasip kimliği, eşleşen satırın sırası S, değişiklikten sonraki BUTUNLUK
+    sayısı) döner. Dolgu satırları S'den önce yazılır."""
+    dolgu = _dolgu()
+    kimlik, sifirlama, kopya, gecici = _sifirlanmis_muhasip()
+    app_password.lock()
+    _geri_sar(kimlik, kopya)
+    _geri_koy(gecici)
+    _izi_degistir(kimlik, sifirlama, degisim, dolgu)
+    return kimlik, sifirlama, _butunluk_sayisi()
+
+
+def _boslukta_butunluk(
+    hesap_id: str, degisim: str, sayi: int, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Reddin `BUTUNLUK` satırı (alan `kayit_mac`); BLOB sıralı zincir başında yazıcı yazmaz
+    (O-3, Türkçe `IzYazilamadi`): olay günlüğe düşer."""
+    if degisim == "blob_sira":
+        assert _butunluk_sayisi() == sayi
+        assert "Hesap kaydının tutmadığı denetim izine yazılamadı." in caplog.text
+        return
+    satir = AuditTrail.objects.filter(action=AuditAction.BUTUNLUK).latest("seq")
+    assert _butunluk_sayisi() == sayi + 1
+    assert (satir.object_id, satir.changed_fields, satir.actor) == (
+        hesap_id,
+        [app_password.KAYIT_MAC_ALANI],
+        AuditActor.SISTEM,
+    )
+
+
+@pytest.mark.parametrize("degisim", DEGISIMLER)
+def test_iz_boslugu_girisi_acmaz(degisim: str, caplog: pytest.LogCaptureFixture) -> None:
+    """Kullanıcı kararı 03.11.2026 "Boşluğu engelle": Senaryo 1'in geri sarmasıyla birlikte
+    muhasibin sıfırlamadan sonraki iz satırları silinir, silinip sonrakiler aşağı kaydırılır,
+    eşleşen satırın gerisine REAL sıralarla taşınır (boşlukları ilgisiz satırlarla doldurulur) ya
+    da sıraları BLOB'a çevrilir. Yürüyüş eski satırı en yeni sanardı; izde boşluk vardır: giriş
+    açılmaz (`AccountRecordStale`, mühür iletisi), `BUTUNLUK` satırı (`kayit_mac`), sayaç ve satır
+    değişmez, T'nin sarmalı yerinde kalır."""
+    kimlik, _sira, sayi = _senaryo1_degistirilmis(degisim)
+    once, sarmal = _ham(kimlik), _sarmal(kimlik)
+
+    with pytest.raises(app_password.AccountRecordStale) as hata:
+        app_password.unlock(hesap_id=kimlik, password=UCUNCU_PAROLA, new_password=_SONRAKI_PAROLA)
+
+    _reddedilir(hata, app_password._SEAL_MISMATCH_MESSAGE)
+    assert OTURUM.hesap_id() is None and crypto.is_unlocked() is False
+    _boslukta_butunluk(kimlik, degisim, sayi, caplog)
+    assert (_ham(kimlik), _sarmal(kimlik)) == (once, sarmal)
+    assert app_password.wrap_failure_state(kimlik) == (0, False)
+
+
+@pytest.mark.parametrize("degisim", DEGISIMLER)
+def test_iz_boslugu_hesap_islemini_acmaz(degisim: str, caplog: pytest.LogCaptureFixture) -> None:
+    """Aynı değişiklik program yöneticisinin oturumu açıkken yapılır: muhasibin parolasının
+    sıfırlanması (hesap servisi) reddedilir — işlem gören ya da (kaydırmada son kaydı da kayan)
+    işlemi yapan satırın izi tutmaz; satır ve sarmal değişmez."""
+    dolgu = _dolgu()
+    kimlik, sifirlama, kopya, gecici = _sifirlanmis_muhasip()
+    _geri_sar(kimlik, kopya)
+    _geri_koy(gecici)
+    _izi_degistir(kimlik, sifirlama, degisim, dolgu)
+    once, sarmal = _ham(kimlik), _sarmal(kimlik)
+
+    with pytest.raises(app_password.AccountRecordStale) as hata:
+        hesaplar.reset_password(
+            by_hesap_id=TEST_HESAP_ID, hesap_id=kimlik, temp_password=_DORDUNCU_PAROLA
+        )
+
+    _reddedilir(hata, hesaplar._SEAL_MESSAGE)
+    assert (_ham(kimlik), _sarmal(kimlik)) == (once, sarmal)
+    if degisim == "blob_sira":
+        assert "Hesap kaydının tutmadığı denetim izine yazılamadı." in caplog.text
+
+
+@pytest.mark.parametrize("degisim", DEGISIMLER)
+def test_iz_boslugu_oturumdaki_parola_ve_kurtarma_yolunu_acmaz(degisim: str) -> None:
+    """Yetkisi düşürülen ikinci program yöneticisi (oturumu açıkken askıya alınır, satırı askıdan
+    önceki kopyasına geri sarılır, askı ve giriş satırları izden çıkarılır): oturumdaki parola
+    doğrulaması ve — kilitlendikten sonra — kurtarma anahtarıyla açılış reddedilir; satır ve
+    sarmal değişmez."""
+    dolgu = _dolgu()
+    ikinci = _ikinci_yonetici()
+    kimlik = str(ikinci.id)
+    sira = _hesabin_son_kaydi(kimlik)
+    kopya = _kopyala(kimlik)
+    app_password.lock()
+    app_password.unlock(hesap_id=kimlik, password=GECICI_PAROLA)
+    with sistem_olarak():
+        muhurle(
+            Account.objects.get(pk=kimlik),
+            status=AccountStatus.ASKIDA,
+            suspend_reason=SuspendReason.GOREV_BOLUMU,
+        )
+    _dolgu(2)  # askıdan sonra da ilgisiz satırlar (silme kuyruk kesmesi olmasın)
+    _geri_sar(kimlik, kopya)
+    _izi_degistir(kimlik, sira, degisim, dolgu)
+    once, sarmal = _ham(kimlik), _sarmal(kimlik)
+
+    with (
+        yazar_olarak(Yazar(hesap_id=kimlik, rol=AccountRole.YONETICI)),
+        pytest.raises(app_password.AccountRecordStale) as hata,
+    ):
+        app_password.verify_password(hesap_id=kimlik, password=GECICI_PAROLA)
+    _reddedilir(hata, app_password._SEAL_MISMATCH_MESSAGE)
+
+    app_password.lock()
+    with pytest.raises(app_password.AccountRecordStale):
+        app_password.unlock_with_recovery(
+            recovery_key=TEST_KURTARMA_ANAHTARI, hesap_id=kimlik, new_password=_SONRAKI_PAROLA
+        )
+    assert OTURUM.hesap_id() is None
+    assert (_ham(kimlik), _sarmal(kimlik)) == (once, sarmal)
+
+
+def test_bilinen_sinir_tamsayi_takasi_girisi_acar_pencere_gosterir() -> None:
+    """KALAN RİSK (kullanıcı kararı 03.11.2026: girişte görünmeyebilir; `satir_izi` "KAPSAMIN
+    SINIRI"): muhasibin sıfırlamadan sonraki iz satırları, eşleşen satırdan önce yazılmış ilgisiz
+    satırlarla TAMSAYI sıralarıyla yer değiştirir. Boşluk yoktur, bütün sıralar tamsayıdır,
+    dayanak satırı kaymamıştır: geri sarılmış satır girer. Taşınan satırların kendi MAC'i bozulur:
+    kilit açılışının 200 satırlık penceresindeyse `BUTUNLUK` bulgusu olur (dışındaysa yalnız
+    Denetleme Kurulu modülünün tam zincir denetimi gösterir). Test riski sabitler."""
+    kimlik, _sira, _sayi = _senaryo1_degistirilmis("tamsayi_takasi")
+
+    app_password.unlock(hesap_id=kimlik, password=UCUNCU_PAROLA, new_password=_SONRAKI_PAROLA)
+
+    assert OTURUM.hesap_id() == kimlik  # kalan risk
+    bulgu = AuditTrail.objects.filter(
+        action=AuditAction.BUTUNLUK, model=denetim_izi.IZ_DOGRULAMASI
+    ).latest("seq")
+    assert "mac_tutmadi" in bulgu.values["bulgular"][1]
+
+
+def test_bilinen_sinir_dayanagi_bozulan_kaydirma_girisi_acar_pencere_gosterir() -> None:
+    """KALAN RİSK (dayanak denetimi FAIL-CLOSED değildir; `satir_izi` "İZ BOŞLUĞU" (c), "KAPSAMIN
+    SINIRI"; bağımsız denetim sondası P1): kaydırmaya (yeniden numaralama) ek olarak dayanak
+    satırının tek bir hücresi (`label`) program dışından değiştirilir. Dayanağın MAC'i hiçbir
+    sırada tutmaz: kayma işareti yoktur, geri sarılmış satır girer. Kaydırılan satırların kendi
+    MAC'i bozuktur: 200 satırlık pencerede `BUTUNLUK` bulgusu olur. Test riski sabitler (hangi
+    yolun kapanacağı kullanıcı kararıdır); kapanırsa ret testine döner."""
+    kimlik, sira, _sayi = _senaryo1_degistirilmis("yeniden_numaralama")
+    dayanak = (
+        AuditTrail.objects.filter(seq__gt=sira, key_mode=AuditKeyMode.ACIK)
+        .exclude(action=AuditAction.BUTUNLUK)
+        .order_by("-seq")
+        .values_list("seq", flat=True)
+        .first()
+    )
+    assert dayanak is not None
+    _tetikleyicisiz("UPDATE okul_audittrail SET label = 'x' WHERE seq = %s", [dayanak])
+
+    app_password.unlock(hesap_id=kimlik, password=UCUNCU_PAROLA, new_password=_SONRAKI_PAROLA)
+
+    assert OTURUM.hesap_id() == kimlik  # kalan risk
+    bulgu = AuditTrail.objects.filter(
+        action=AuditAction.BUTUNLUK, model=denetim_izi.IZ_DOGRULAMASI
+    ).latest("seq")
+    assert "mac_tutmadi" in bulgu.values["bulgular"][1]
+
+
+def test_ilgisiz_satirin_silinmesi_son_kaydi_eski_hesaplari_reddeder() -> None:
+    """Kabul edilen bedel (kullanıcı kararı 03.11.2026): izden İLGİSİZ tek bir satır silinmişse
+    (hesap satırı geri sarılmamış olsa da) son kaydı o satırdan ESKİ her hesap reddedilir; son
+    kaydı silinen satırdan YENİ olan girer. Çıkış (kurtarma anahtarıyla değişiklikten önceki
+    yedeğin geri yüklenmesi) `test_iz_boslugu_cikisi_kurtarma_anahtariyla_eski_yedektir`'te."""
+    muhasip = _acik_muhasip()
+    kimlik = str(muhasip.id)
+    dolgu = _dolgu(3)
+    app_password.lock()
+    app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)  # yöneticinin kaydı yenilenir
+    app_password.lock()
+    _tetikleyicisiz("DELETE FROM okul_audittrail WHERE seq = %s", [dolgu[1]])
+
+    with pytest.raises(app_password.AccountRecordStale):
+        app_password.unlock(hesap_id=kimlik, password=GECICI_PAROLA)
+
+    assert app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA) is not None
+
+
+def test_kuyruk_kesme_girisi_engellemez_capa_gosterir() -> None:
+    """Orkestratör kararı O-2: en yeni satırların (kuyruğun) silinmesi boşluk bırakmaz, yeni zincir
+    başı meşru ve MAC'i tutan bir satırdır — giriş AÇILIR, çapa `kuyruk_kesik` kartını verir. Ardından
+    program açılışta kilitli kipte satır yazsa da (tohumu veritabanında olmayan çapadan; günlük
+    yedeğin satırı) dayanak denetimi yanlış alarm vermez."""
+    _dolgu(3)
+    assert OTURUM.kilitle(neden="elle") == "kilitlendi"
+    capa = _son_seq()
+    _tetikleyicisiz("DELETE FROM okul_audittrail WHERE seq >= %s", [capa - 1])
+    assert masaustu_kanca.yedek_olaylarini_yaz(alinan=["gunluk-2026-11-03.odbak"]) == 1
+
+    app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
+
+    assert OTURUM.hesap_id() == TEST_HESAP_ID
+    bulgu = AuditTrail.objects.filter(
+        action=AuditAction.BUTUNLUK, model=denetim_izi.IZ_DOGRULAMASI
+    ).latest("seq")
+    assert "kuyruk_kesik" in bulgu.values["bulgular"][1]
+
+
+def test_dayanak_ilk_reddin_butunluk_satiriyla_ortulmez() -> None:
+    """Yalnız zincir başını doğrulamak yetmezdi: reddedilen her giriş başa (açık kipte) bir
+    `BUTUNLUK` satırı ekler, program açılışta günlük yedeğin kilitli satırını ekler. Kaydırmadan
+    sonra eklenen bu satırlar dayanak sayılmaz (programın giriş olmadan yazdığı satırlar): ikinci,
+    üçüncü deneme de reddedilir ("iki kez dene" yolu yoktur)."""
+    kimlik, _sira, _sayi = _senaryo1_degistirilmis("yeniden_numaralama")
+    for _ in range(2):
+        with pytest.raises(app_password.AccountRecordStale):
+            app_password.unlock(
+                hesap_id=kimlik, password=UCUNCU_PAROLA, new_password=_SONRAKI_PAROLA
+            )
+    # Program açılır: günlük yedeğin kilitli satırı başa yazılır (kimse girmeden).
+    assert masaustu_kanca.yedek_olaylarini_yaz(alinan=["gunluk-2026-11-03.odbak"]) == 1
+    bas = AuditTrail.objects.order_by("-seq").first()
+    assert bas is not None and bas.key_mode == AuditKeyMode.KILITLI
+
+    with pytest.raises(app_password.AccountRecordStale):
+        app_password.unlock(hesap_id=kimlik, password=UCUNCU_PAROLA, new_password=_SONRAKI_PAROLA)
+
+
+def test_dayanak_bozuksa_giris_engellenmez() -> None:
+    """Dayanak denetimi FAIL-CLOSED DEĞİLDİR (`satir_izi` "İZ BOŞLUĞU" (c)): zincirin başına
+    program dışından eklenmiş, MAC'i hiçbir sırada tutmayan açık kip satırı (kayma işareti değil)
+    girişi kapatmaz; kilit açılışının doğrulaması onu bulgu olarak gösterir (altın kural 3)."""
+    app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
+    gercek = AuditTrail.objects.order_by("-seq").first()
+    assert gercek is not None
+    sahte_satir(
+        action="GIRIS",
+        actor="HESAP",
+        account=TEST_HESAP_ID,
+        role="yonetici",
+        model="okul.Account",
+        object_id=_BASKA_KAYIT,
+        key_mode="ACIK",
+        key_ref=gercek.key_ref,
+    )
+    app_password.lock()  # `KILIT` yazmaz: sahte satır zincir başında, dayanak odur
+
+    app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
+
+    assert OTURUM.hesap_id() == TEST_HESAP_ID
+    bulgu = AuditTrail.objects.filter(
+        action=AuditAction.BUTUNLUK, model=denetim_izi.IZ_DOGRULAMASI
+    ).latest("seq")
+    assert "mac_tutmadi" in bulgu.values["bulgular"][1]
+
+
+#: Program dışından `okul_auditkey`'e eklenen sahte, emekli, çözülemeyen anahtar satırı (tek
+#: INSERT, kod gerekmez); geçerli ilk sırası verilir.
+_SAHTE_EMEKLI_ANAHTAR = (
+    'INSERT INTO okul_auditkey (id, "key", valid_from_seq, created_at, retired_at) '
+    "VALUES (99, 'x', %s, '2026-11-03 08:00:00', '2026-11-03 08:00:00')"
+)
+
+
+def test_sahte_emekli_anahtar_kaymayi_ortmez() -> None:
+    """Bağımsız denetim bulgusu (b5): kaydırmayla (yeniden numaralama) birlikte, İLK denemeden önce
+    iz anahtarı tablosuna sahte, emekli bir satır (geçerli ilk sırası S+1) eklenir. Yürürlük
+    kuralıyla çözülseydi dayanağın sırası ve `seq + d`'lerin hepsi o çözülemeyen anahtara bağlanır,
+    kayma araması anahtarsız kalır, giriş açılırdı (hesabın kendi satırları S'nin gerisinde, gerçek
+    anahtarla doğrulanır; etkin anahtar değişmediği için yazım da bozulmaz). Kayma araması İA'yı
+    `key_ref`'ten yürürlüksüz çözer (`satir_izi` "İZ BOŞLUĞU" (c)): giriş açılmaz; satır, sayaç ve
+    sarmal değişmez. Sahte anahtarsız kol `test_iz_boslugu_girisi_acmaz[yeniden_numaralama]`'dır."""
+    kimlik, sira, sayi = _senaryo1_degistirilmis("yeniden_numaralama")
+    with connection.cursor() as cursor:
+        cursor.execute(_SAHTE_EMEKLI_ANAHTAR, [sira + 1])
+    once, sarmal = _ham(kimlik), _sarmal(kimlik)
+
+    with pytest.raises(app_password.AccountRecordStale) as hata:
+        app_password.unlock(hesap_id=kimlik, password=UCUNCU_PAROLA, new_password=_SONRAKI_PAROLA)
+
+    _reddedilir(hata, app_password._SEAL_MISMATCH_MESSAGE)
+    assert OTURUM.hesap_id() is None
+    assert _butunluk_sayisi() == sayi + 1
+    assert (_ham(kimlik), _sarmal(kimlik)) == (once, sarmal)
+    assert app_password.wrap_failure_state(kimlik) == (0, False)
+
+
+def _birincil_anahtarsiz_yeniden_kur(baglanti: sqlite3.Connection) -> None:
+    """SQLite tarayıcısının "Tabloyu değiştir" işlemi taklidi (kod gerekmez): `okul_audittrail`
+    aynı sütunlar ve verilerle, BİRİNCİL ANAHTARSIZ yeniden kurulur; sıranın (tekil olmayan)
+    indeksi yeniden kurulur."""
+    baglanti.execute("CREATE TABLE yeni_iz AS SELECT * FROM okul_audittrail")
+    baglanti.execute("DROP TABLE okul_audittrail")
+    baglanti.execute("ALTER TABLE yeni_iz RENAME TO okul_audittrail")
+    baglanti.execute("CREATE INDEX iz_sira ON okul_audittrail (seq)")
+
+
+def test_birincil_anahtarsiz_tabloda_birebir_kopya_silmeyi_ortmez(tmp_path: Path) -> None:
+    """Bağımsız denetim bulgusu (b5): silme sayımı ("İZ BOŞLUĞU" (a)) birincil anahtarın
+    tekilliğine GÜVENMEZ. Tablo birincil anahtarsız yeniden kurulur (yanlış alarm yok: karar
+    değişmez), hesabın son kaydından sonraki satırlar silinir ve yerlerine S'den sonraki ilgisiz
+    bir satırın BİREBİR kopyaları (aynı sıra, aynı MAC) eklenir: `COUNT(*)` ve `MAX` tutar, bütün
+    sıralar tamsayıdır, dayanak (zincir başı) dokunulmamıştır. Farklı sıraların sayısı tutmaz:
+    satır tutmaz."""
+    db = tmp_path / "iz.sqlite3"
+    _uzun_iz(db, 10)  # program yöneticisinin kaydı 1, ardından 2…11 ilgisiz satır
+    with closing(sqlite3.connect(db)) as baglanti:
+        assert satir_izi.hesap_izi_sirasi(baglanti, TEST_HESAP_ID, TEST_DEK) == 1
+        _birincil_anahtarsiz_yeniden_kur(baglanti)
+        baglanti.commit()
+        assert satir_izi.hesap_izi_sirasi(baglanti, TEST_HESAP_ID, TEST_DEK) == 1
+
+        baglanti.execute("DELETE FROM okul_audittrail WHERE seq IN (3, 4, 6)")
+        for _ in range(3):
+            baglanti.execute(
+                "INSERT INTO okul_audittrail SELECT * FROM okul_audittrail WHERE seq = 5 LIMIT 1"
+            )
+        baglanti.commit()
+        assert baglanti.execute(
+            "SELECT COUNT(*), MAX(seq) FROM okul_audittrail WHERE seq > 1"
+        ).fetchone() == (10, 11)
+
+        assert satir_izi.hesap_izi_sirasi(baglanti, TEST_HESAP_ID, TEST_DEK) is None
+
+
+@pytest.mark.django_db(transaction=True)
+def test_iz_boslugu_cikisi_kurtarma_anahtariyla_eski_yedektir(tmp_path: Path) -> None:
+    """Çıkış gerçekten vardır (kabul edilen bedelin çıkışı): ilgisiz bir satır silinmiş izde ne
+    muhasip ne program yöneticisi girer; program yöneticisinin PAROLA yolu geri yüklemede de güncel
+    veritabanındaki boşluğu görür (`RET_KAYIT_IZI`, hiçbir dosya değişmez). Kurtarma anahtarıyla,
+    değişiklikten ÖNCE alınmış yedek geri yüklenir; ardından ikisi de girer."""
+    muhasip = _acik_muhasip()
+    kimlik = str(muhasip.id)
+    yedek = goruntu(tmp_path / "yedek.sqlite3")
+    dolgu = _dolgu(3)
+    app_password.lock()
+    _tetikleyicisiz("DELETE FROM okul_audittrail WHERE seq = %s", [dolgu[1]])
+    for hesap_id, parola in ((kimlik, GECICI_PAROLA), (TEST_HESAP_ID, TEST_PAROLA)):
+        with pytest.raises(app_password.AccountRecordStale):
+            app_password.unlock(hesap_id=hesap_id, password=parola)
+    guncel = goruntu(tmp_path / "guncel.sqlite3")
+
+    with pytest.raises(backup_restore.GeriYuklemeYetkisiz) as ret:
+        geri_yukle(tmp_path, yedek, guncel, hesap="yonetici", password=TEST_PAROLA)
+    assert ret.value.kod == geri_yukleme_yetkisi.RET_KAYIT_IZI
+    assert (tmp_path / "canli" / "db.sqlite3").read_bytes() == guncel
+
+    db = geri_yukle(tmp_path, yedek, guncel, recovery_key=TEST_KURTARMA_ANAHTARI)
+
+    _dosyada_hepsi_izli(db)
+    programa_al(db)
+    app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
+    app_password.lock()
+    app_password.unlock(hesap_id=kimlik, password=GECICI_PAROLA)
+    assert OTURUM.hesap_id() == kimlik
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("capa", ["bosluksuz", "bosluklu"])
+def test_bosluklu_capa_k_a_ya_duser(capa: str, tmp_path: Path) -> None:
+    """Özet onarımının çapası da aynı işlevden geçer: muhasip yedekten SONRA parolasını değiştirir;
+    boşluksuz taze çapada yeni parolasının özeti geri yüklenen satıra taşınır (yeni parolayla
+    girer). Çapanın izinde muhasibin son kaydından sonra bir satır silinmişse çapa o hesap için
+    kullanılamaz (K-a): dosyadaki yeni sarmal geri yüklenen satırın (yedek günündeki) özetini
+    tutmaz, iki özet boşaltılır — yeni parola açmaz (`WrapDigestMismatch`)."""
+    muhasip = _acik_muhasip()
+    kimlik = str(muhasip.id)
+    yedek = goruntu(tmp_path / "yedek.sqlite3")
+    _muhasip_degistirir(kimlik, GECICI_PAROLA, YENI_PAROLA)
+    dolgu = _dolgu(3)
+    if capa == "bosluklu":
+        _tetikleyicisiz("DELETE FROM okul_audittrail WHERE seq = %s", [dolgu[1]])
+    guncel = goruntu(tmp_path / "guncel.sqlite3")
+
+    db = geri_yukle(tmp_path, yedek, guncel, recovery_key=TEST_KURTARMA_ANAHTARI)
+
+    satir = hesap_satiri_oku(db, kimlik)
+    _dosyada_hepsi_izli(db)
+    programa_al(db)
+    app_password.lock()
+    if capa == "bosluksuz":
+        assert satir[6] == app_password.wrap_digest(TEST_DEK, _sarmal(kimlik))
+        assert app_password.unlock(hesap_id=kimlik, password=YENI_PAROLA).id == muhasip.id
+    else:
+        assert (satir[6], satir[7]) == ("", "")
+        with pytest.raises(app_password.WrapDigestMismatch):
+            app_password.unlock(hesap_id=kimlik, password=YENI_PAROLA)
+
+
+#: Performans ölçümünün iz uzunluğu (görev: 20 000+ satır).
+_OLCUM_SATIRI = 25_000
+
+
+def _uzun_iz(db: Path, adet: int) -> None:
+    """Program yöneticisinin satırından sonra `adet` meşru (MAC'i tutan, açık kip, `SISTEM`)
+    ilgisiz satır: hesabın son kaydından zincir başına uzun bir aralık (en kötü sayım)."""
+    yetkili_sqlite(db, dek=TEST_DEK, hesaplar=[HesapSatiri(TEST_HESAP_ID, "yonetici")])
+    zincir = crypto.audit_chain_key(TEST_IA)
+    with closing(sqlite3.connect(db)) as baglanti:
+        seq, prev = baglanti.execute(
+            "SELECT seq, mac FROM okul_audittrail ORDER BY seq DESC LIMIT 1"
+        ).fetchone()
+        an = datetime(2026, 11, 3, 8, 0, tzinfo=UTC)
+        satirlar: list[tuple[Any, ...]] = []
+        for _ in range(adet):
+            seq += 1
+            alanlar = {
+                "seq": seq,
+                "at": an,
+                "actor": "SISTEM",
+                "account": None,
+                "role": "",
+                "action": "HESAP",
+                "model": "okul.Deneme",
+                "object_id": "olcum",
+                "term": None,
+                "changed_fields": [],
+                "values": {},
+                "record_mac": "",
+                "compliance_item": None,
+                "label": "",
+                "key_mode": "ACIK",
+                "key_ref": "1",
+            }
+            mac = kanonik.iz_mac(zincir, alanlar, prev)
+            satirlar.append(
+                (seq, satir_izi.django_zamani(an), "SISTEM", "", "HESAP", "okul.Deneme", "olcum")
+                + ("[]", "{}", "", "", "ACIK", "1", prev, mac)
+            )
+            prev = mac
+        baglanti.executemany(
+            "INSERT INTO okul_audittrail VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            satirlar,
+        )
+        baglanti.commit()
+
+
+#: Duvar saati sınırları GEVŞEKTİR (gerilemeyi yakalar; kapı `--cov` ve dal kapsamıyla koşar, kayma
+#: araması saf Python döngüsü olduğu için kapsam altında ~3 kat yavaşlar — bağımsız denetim bulgusu).
+#: Asıl sınır algoritmiktir: HMAC sayısı (`_mac_cagrilari`).
+_MESRU_SURE_SINIRI = 0.5
+_BOZUK_SURE_SINIRI = 5.0
+
+
+def _sure(baglanti: sqlite3.Connection) -> tuple[float, int | None]:
+    """`hesap_izi_sirasi`'nın en iyi süresi (5 deneme) ve sonucu."""
+    en_iyi, sonuc = float("inf"), None
+    for _ in range(5):
+        basla = time.perf_counter()
+        sonuc = satir_izi.hesap_izi_sirasi(baglanti, TEST_HESAP_ID, TEST_DEK)
+        en_iyi = min(en_iyi, time.perf_counter() - basla)
+    return en_iyi, sonuc
+
+
+def _mac_cagrilari(baglanti: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch) -> int:
+    """Bir `hesap_izi_sirasi` çağrısındaki zincir MAC hesabı (`_mac_tutuyor`) sayısı."""
+    asil = satir_izi._mac_tutuyor
+    sayac = 0
+
+    def sayan(*args: Any, **kwargs: Any) -> bool:
+        nonlocal sayac
+        sayac += 1
+        return asil(*args, **kwargs)
+
+    with monkeypatch.context() as yama:
+        yama.setattr(satir_izi, "_mac_tutuyor", sayan)
+        satir_izi.hesap_izi_sirasi(baglanti, TEST_HESAP_ID, TEST_DEK)
+    return sayac
+
+
+def test_iz_boslugu_denetiminin_suresi_uzun_izde(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Kullanıcı kararı: "ucuz olmalı, girişi yavaşlatmamalı". Program yöneticisinin son kaydından
+    sonra 25 000 satır. Algoritmik sınır: meşru izde denetim hesabın kendi satırları ve dayanak
+    için birer HMAC yapar (doğrusal yürüyüş yok); dayanak bozuksa kayma araması en çok
+    `KAYMA_SINIRI` HMAC, kaymışsa ilk bulduğunda durur. Duvar saati sınırları gevşektir (kapsam
+    ölçümü altında da geçer); süreler `-s` ile yazdırılır (raporda)."""
+    db = tmp_path / "uzun.sqlite3"
+    _uzun_iz(db, _OLCUM_SATIRI)
+    with closing(sqlite3.connect(db)) as baglanti:
+        mesru, sonuc = _sure(baglanti)
+        assert sonuc == 1
+        assert _mac_cagrilari(baglanti, monkeypatch) == 2  # hesabın satırı + dayanak
+        # Dayanak (zincir başı) program dışından değiştirilir: MAC hiçbir sırada tutmaz.
+        baglanti.execute(
+            "UPDATE okul_audittrail SET object_id = 'baska' WHERE seq = "
+            "(SELECT MAX(seq) FROM okul_audittrail)"
+        )
+        baglanti.commit()
+        bozuk, sonuc = _sure(baglanti)
+        assert sonuc == 1  # bozuk dayanak kayma işareti değildir
+        assert _mac_cagrilari(baglanti, monkeypatch) == 2 + satir_izi.KAYMA_SINIRI
+        # Kaydırma: bir satır silinir, sonrakiler aşağı kayar (dayanak kaymıştır).
+        baglanti.execute(
+            "UPDATE okul_audittrail SET object_id = 'olcum' WHERE seq = "
+            "(SELECT MAX(seq) FROM okul_audittrail)"
+        )
+        baglanti.execute("DELETE FROM okul_audittrail WHERE seq = 5000")
+        # İki adımda (eksiye, sonra bir aşağı): toplu güncellemede birincil anahtar çakışmasın.
+        baglanti.execute("UPDATE okul_audittrail SET seq = -seq WHERE seq > 5000")
+        baglanti.execute("UPDATE okul_audittrail SET seq = -seq - 1 WHERE seq < 0")
+        baglanti.commit()
+        kayma, sonuc = _sure(baglanti)
+        assert sonuc is None
+        assert _mac_cagrilari(baglanti, monkeypatch) == 3  # d = 1'de bulunur
+    print(
+        f"\nİz boşluğu denetimi, {_OLCUM_SATIRI} satır: meşru {mesru * 1000:.1f} ms, "
+        f"bozuk dayanak {bozuk * 1000:.1f} ms, kaymış dayanak {kayma * 1000:.1f} ms"
+    )
+    assert mesru < _MESRU_SURE_SINIRI
+    assert bozuk < _BOZUK_SURE_SINIRI and kayma < _BOZUK_SURE_SINIRI
+
+
+# ============================================================ O-3 ve O-4
+
+
+@pytest.mark.parametrize("bicim", ["blob_orta", "blob_bas", "metin", "real", "azami_tamsayi"])
+def test_zincir_basi_tamsayi_degilse_yazici_turkce_reddeder(
+    bicim: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Orkestratör kararı O-3: zincirin başına oturan tamsayı olmayan sıra (program dışından:
+    ortadaki bir satırın sırası BLOB'a çevrilir — eskiden `int(b"57") + 1` var olan bir sırayla
+    çakışır, her iz yazımı `IntegrityError` verirdi; baş satırınki BLOB'a, metne ya da kesirli
+    REAL'e çevrilir — eskiden zincir sessizce yanlış yere uzar ya da `ValueError` verirdi) yazıcıyı
+    ve zincir başı okuyucusunu Türkçe `IzYazilamadi` ile durdurur: satır yazılmaz. Reddedilen
+    girişin `BUTUNLUK` satırı da yazılamaz, olay günlüğe düşer; giriş zaten açılmaz.
+
+    Bağımsız denetim bulgusu (b5): baş satırın sırası SQLite'ın en büyük tamsayısıysa
+    (`satir_izi.EN_BUYUK_SIRA`; `CHECK seq >= 0` ve tetikleyiciler kesmez) `+ 1` taşardı
+    (`OverflowError`): yazıcı aynı Türkçe iletiyle reddeder. Okuyucu böyle bir başı okur (değeri
+    tamsayıdır); giriş (a)'nın sayımıyla kapanır."""
+    _dolgu(3)
+    son = _son_seq()
+    if bicim == "blob_orta":
+        hedef = son - 1
+        _tetikleyicisiz(
+            "UPDATE okul_audittrail SET seq = CAST(seq AS BLOB) WHERE seq = %s", [hedef]
+        )
+    elif bicim == "blob_bas":
+        _tetikleyicisiz("UPDATE okul_audittrail SET seq = CAST(seq AS BLOB) WHERE seq = %s", [son])
+    elif bicim == "metin":
+        _tetikleyicisiz("UPDATE okul_audittrail SET seq = 'son satir' WHERE seq = %s", [son])
+    elif bicim == "azami_tamsayi":
+        _sira_tasi(son, satir_izi.EN_BUYUK_SIRA)
+    else:
+        _tetikleyicisiz("UPDATE okul_audittrail SET seq = %s WHERE seq = %s", [son + 0.5, son])
+    adet = AuditTrail.objects.count()
+
+    with (
+        pytest.raises(denetim_izi.IzYazilamadi, match="Denetim izinin son kaydı bozuk"),
+        sistem_olarak(),
+        transaction.atomic(),
+    ):
+        denetim_izi.olay(AuditAction.BUTUNLUK, model="okul.Deneme", object_id="x")
+    if bicim == "azami_tamsayi":
+        bas = denetim_izi.zincir_basi()
+        assert bas is not None and bas[0] == satir_izi.EN_BUYUK_SIRA
+    else:
+        with pytest.raises(denetim_izi.IzYazilamadi, match="Denetim izinin son kaydı bozuk"):
+            denetim_izi.zincir_basi()
+    assert AuditTrail.objects.count() == adet
+
+    app_password.lock()
+    with pytest.raises(app_password.AccountRecordStale):
+        app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
+    assert AuditTrail.objects.count() == adet
+    assert "Hesap kaydının tutmadığı denetim izine yazılamadı." in caplog.text
+
+
+def test_zincir_basinin_mac_i_metin_degilse_yazici_turkce_reddeder() -> None:
+    """O-3'ün uzantısı (bağımsız denetim bulgusu, b5): baş satırın `mac`'i program dışından ikili
+    değere (BLOB) çevrilirse yazıcı onu `prev_mac` yapmaz — eskiden ham kanonik hatası
+    (`KanonikHata`) çıkardı; Türkçe `IzYazilamadi` verir, satır yazılmaz. (Tamsayı değeri sütun
+    yakınlığıyla metin saklanır, bu dalı sınamaz: ikili değer `CAST(mac AS BLOB)` ile yazılır.)"""
+    _dolgu(3)
+    son = _son_seq()
+    _tetikleyicisiz("UPDATE okul_audittrail SET mac = CAST(mac AS BLOB) WHERE seq = %s", [son])
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT typeof(mac) FROM okul_audittrail WHERE seq = %s", [son])
+        assert cursor.fetchone() == ("blob",)
+    adet = AuditTrail.objects.count()
+
+    with (
+        pytest.raises(denetim_izi.IzYazilamadi, match="Denetim izinin son kaydı bozuk"),
+        sistem_olarak(),
+        transaction.atomic(),
+    ):
+        denetim_izi.olay(AuditAction.BUTUNLUK, model="okul.Deneme", object_id="x")
+
+    assert AuditTrail.objects.count() == adet
+
+
+def test_onarim_yazicisi_en_buyuk_sirada_turkce_reddeder(tmp_path: Path) -> None:
+    """Bağımsız denetim bulgusu (b5): onarımın ORM'siz yazıcısı (`hesap_satirlarini_izle`), zincir
+    başının sırası yeni satırlara yer bırakmıyorsa (SQLite'ın en büyük tamsayısı) `OverflowError`
+    yerine `IzYazilamadi` verir (`ozet_onarimi` onu `OnarimYazilamadi`'ye çevirir); satır eklenmez.
+    (`ozetleri_onar` bu başa varamaz: böyle bir izde hiçbir satırın izi tutmaz, onarılacak satır
+    yoktur — denetim yazıcının kendi sözleşmesidir.)"""
+    db = tmp_path / "iz.sqlite3"
+    yetkili_sqlite(db, dek=TEST_DEK, hesaplar=[HesapSatiri(TEST_HESAP_ID, "yonetici")], wal=False)
+    with closing(sqlite3.connect(db)) as baglanti:
+        baglanti.execute(
+            "UPDATE okul_audittrail SET seq = ? WHERE seq = (SELECT MAX(seq) FROM okul_audittrail)",
+            (satir_izi.EN_BUYUK_SIRA,),
+        )
+        baglanti.commit()
+        adet = baglanti.execute("SELECT COUNT(*) FROM okul_audittrail").fetchone()
+
+        with pytest.raises(satir_izi.IzYazilamadi, match="zincir başı biçimsiz"):
+            satir_izi.hesap_satirlarini_izle(
+                baglanti,
+                {TEST_HESAP_ID: ["seal"]},
+                TEST_DEK,
+                an=datetime(2026, 11, 3, 8, 0, tzinfo=UTC),
+            )
+        baglanti.rollback()
+
+        assert baglanti.execute("SELECT COUNT(*) FROM okul_audittrail").fetchone() == adet
+
+
+def test_parola_degistirmenin_ikinci_adiminda_ret_butunluk_satiri_birakir(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Orkestratör kararı O-4: `change_password`'ün 2. adımı satırın izini işlemin İÇİNDE yeniden
+    denetler. 1. adım commit edildikten sonra satır program dışından eski kopyasına geri sarılırsa
+    ret o işlemin içinde doğar; reddin `BUTUNLUK` satırı eskiden işlemle birlikte geri alınıyordu.
+    Artık işlem geri alındıktan sonra yazılır: tek `BUTUNLUK` satırı (`SISTEM`, `kayit_mac`),
+    parola değişmez (satır ve sarmal)."""
+    muhasip = _acik_muhasip()
+    kimlik = str(muhasip.id)
+    app_password.lock()
+    app_password.unlock(hesap_id=kimlik, password=GECICI_PAROLA)
+    kopya = _kopyala(kimlik)
+    sarmal = _sarmal(kimlik)
+    asil = app_password.write_wrap_digests
+    durum_: dict[str, Any] = {}
+
+    def birinci_adimdan_sonra(*args: Any, **kwargs: Any) -> bool:
+        yazdi = asil(*args, **kwargs)
+        # 1. adımın işlemi (bekleyen özet ve `HESAP` satırı) commit edilmeden hemen önce satır
+        # program dışından eski kopyasına geri sarılır: 2. adım geri sarılmış satırı görür.
+        _geri_sar(kimlik, kopya)
+        durum_["geri_sarildi"] = True
+        durum_["son"] = _son_seq()
+        return yazdi
+
+    monkeypatch.setattr(app_password, "write_wrap_digests", birinci_adimdan_sonra)
+
+    with (
+        yazar_olarak(Yazar(hesap_id=kimlik, rol=AccountRole.MUHASIP)),
+        pytest.raises(app_password.AccountRecordStale) as hata,
+    ):
+        app_password.change_password(
+            hesap_id=kimlik, current_password=GECICI_PAROLA, new_password=YENI_PAROLA
+        )
+
+    _reddedilir(hata, app_password._SEAL_MISMATCH_MESSAGE)
+    assert durum_.get("geri_sarildi") is True
+    _tek_butunluk(kimlik, durum_["son"])
+    assert _sarmal(kimlik) == sarmal
 
 
 # ============================================================ yanlış alarm yok: yaşam döngüsü
@@ -1341,8 +2092,9 @@ def test_eski_iz_satirinin_sirasi_blob_yapilinca_giris_acilmaz(
     "en yeni" okunsaydı T açardı. Okunan ilk satırın sırası tamsayı değildir: giriş açılmaz
     (`AccountRecordStale`, mühür iletisi), sayaç artmaz, satır değişmez.
 
-    BİLİNEN SINIR (açık kalan): zincirin başına oturan BLOB sıralı satır yazıcının (`denetim_izi.
-    _ekle`) sırasını da bozar — `BUTUNLUK` satırı yazılamaz, olay günlüğe düşer."""
+    Zincirin başına oturan BLOB sıralı satırda yazıcı (`denetim_izi._ekle`) yazmaz (O-3: Türkçe
+    `IzYazilamadi`; eskiden `int(b"…") + 1` sırayı çakıştırıyordu): `BUTUNLUK` satırı yazılamaz,
+    olay günlüğe düşer."""
     kimlik, sifirlama, kopya, gecici = _sifirlanmis_muhasip()
     app_password.lock()
     _geri_sar(kimlik, kopya)
@@ -1455,6 +2207,16 @@ def test_sahte_taze_capa_gecici_parolayi_taze_yedege_tasimaz(
         guncel = goruntu(tmp_path / "guncel.sqlite3")
     _geri_koy(gecici)
 
+    if sir == "parola" and yol != "kayit_cevrilir":
+        # Kullanıcı kararı 03.11.2026 "Boşluğu engelle": çapanın izinde boşluk (`bas_eklenir`:
+        # yedeğin başı kopyanın başından kopuk bir sırayla eklendi) ya da tamsayı olmayan sıra
+        # (`sira_blob`) varsa program yöneticisinin satırı da izini tutmuş sayılmaz — parola yolu
+        # daha takastan önce reddedilir, hiçbir dosya değişmez; çıkış kurtarma anahtarıdır.
+        with pytest.raises(backup_restore.GeriYuklemeYetkisiz) as ret:
+            geri_yukle(tmp_path, taze_yedek, guncel, hesap="yonetici", password=TEST_PAROLA)
+        assert ret.value.kod == geri_yukleme_yetkisi.RET_KAYIT_IZI
+        assert (tmp_path / "canli" / "db.sqlite3").read_bytes() == guncel
+        sir = "kurtarma"
     if sir == "parola":
         db = geri_yukle(tmp_path, taze_yedek, guncel, hesap="yonetici", password=TEST_PAROLA)
     else:
@@ -1554,6 +2316,88 @@ def test_derin_ic_ice_iz_satiri_ve_geri_yukleme_notu_girisi_dusurmez() -> None:
 
     assert OTURUM.hesap_id() == TEST_HESAP_ID
     assert kimlik in hesaplar.two_store_differences().seal_mismatch
+
+
+#: SQLite tamsayısından uzun, `int()`'in dönüşüm sınırını (4300 hane) aşan rakam dizisi.
+_UZUN_KEY_REF = "1" * 4301
+
+
+def _uzun_key_ref_li_bas_satiri() -> None:
+    """SQLite tarayıcısı taklidi: zincirin başına `key_ref`'i 4301 haneli, açık kipte ilgisiz bir
+    kaydın satırı eklenir (zincir MAC'i önemsiz). Kayma denetiminin dayanağı olur."""
+    son = AuditTrail.objects.order_by("-seq").values_list("seq", "mac").first()
+    assert son is not None
+    _tetikleyicisiz(
+        'INSERT INTO okul_audittrail (seq, "at", actor, account_id, role, action, model, '
+        'object_id, changed_fields, "values", record_mac, label, key_mode, key_ref, prev_mac, '
+        "mac) VALUES (%s, %s, 'SISTEM', NULL, '', 'GUNCELLE', 'okul.SchoolConfig', '1', '[]', "
+        "'{}', '', '', 'ACIK', %s, %s, %s)",
+        [int(son[0]) + 1, "2026-11-03 08:00:00", _UZUN_KEY_REF, son[1], "a" * 64],
+    )
+
+
+def test_uzun_rakam_dizisi_anahtar_basvurusu_degildir() -> None:
+    """Son sınama bulgusu: `int()` 4300 haneden uzun metinde `ValueError` verir. SQLite
+    tamsayısından (19 hane) uzun başvuru biçimsizdir; doğrulama istisnayla yarıda kesilmez."""
+    assert denetim_izi.acik_ref_coz(_UZUN_KEY_REF) is None
+    assert denetim_izi.acik_ref_coz("1" * 20) is None
+    assert denetim_izi.acik_ref_coz("1" * 19) == int("1" * 19)
+    assert denetim_izi.kilitli_ref_coz(f"{_UZUN_KEY_REF}:1") is None
+    assert denetim_izi.kilitli_ref_coz(f"1:{_UZUN_KEY_REF}") is None
+
+
+def test_uzun_key_ref_li_bas_satiri_girisi_dusurmez() -> None:
+    """Son sınama bulgusu: zincir başının `key_ref`'i 4301 hane olunca kayma denetimi ham
+    `ValueError` (500) veriyordu, bütün hesapların girişi tek hücreyle düşüyordu. Başvuru
+    biçimsizdir: dayanağın MAC'i doğrulanamaz, kayma işareti değildir ("İZ BOŞLUĞU" (c)); giriş
+    açılır, satır son 200 satırın doğrulamasında bulgu olur."""
+    muhasip = _acik_muhasip()
+    kimlik = str(muhasip.id)
+    app_password.lock()
+    _uzun_key_ref_li_bas_satiri()
+
+    assert app_password.unlock(hesap_id=kimlik, password=GECICI_PAROLA).id == muhasip.id
+    assert OTURUM.hesap_id() == kimlik
+
+
+def test_hesabin_son_kaydinin_uzun_key_ref_i_satiri_tutmaz() -> None:
+    """Hesabın KENDİ son iz satırının `key_ref`'i 4301 hane: satırı mühürleyen İA bulunamaz, satır
+    tutmaz — `AccountRecordStale` ve tek `BUTUNLUK` (`kayit_mac`); `ValueError` değil."""
+    muhasip = _acik_muhasip()
+    kimlik = str(muhasip.id)
+    app_password.lock()
+    _tetikleyicisiz(
+        "UPDATE okul_audittrail SET key_ref = %s WHERE seq = %s",
+        [_UZUN_KEY_REF, _hesabin_son_kaydi(kimlik)],
+    )
+    son = _son_seq()
+
+    with pytest.raises(app_password.AccountRecordStale):
+        app_password.unlock(hesap_id=kimlik, password=GECICI_PAROLA)
+
+    _tek_butunluk(kimlik, son)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("sir", ["parola", "kurtarma"])
+def test_uzun_key_ref_li_bas_satiri_geri_yuklemeyi_dusurmez(sir: str, tmp_path: Path) -> None:
+    """Son sınama bulgusu: aynı hücre geri yükleme yetkisini ve özet onarımının çapasını da ham
+    `ValueError`'la düşürüyor, kurtarma anahtarıyla geri yükleme dahil (kullanıcı kararındaki
+    çıkış) hiçbir geri yükleme tamamlanmıyordu. Artık iki yol da tamamlanır, muhasip girer."""
+    muhasip = _acik_muhasip()
+    kimlik = str(muhasip.id)
+    yedek = goruntu(tmp_path / "yedek.sqlite3")
+    app_password.lock()
+    _uzun_key_ref_li_bas_satiri()
+    guncel = goruntu(tmp_path / "guncel.sqlite3")
+
+    if sir == "parola":
+        db = geri_yukle(tmp_path, yedek, guncel, hesap="yonetici", password=TEST_PAROLA)
+    else:
+        db = geri_yukle(tmp_path, yedek, guncel, recovery_key=TEST_KURTARMA_ANAHTARI)
+
+    programa_al(db)
+    assert app_password.unlock(hesap_id=kimlik, password=GECICI_PAROLA).id == muhasip.id
 
 
 def test_satirin_izi_kararin_verildigi_hale_baglidir(monkeypatch: pytest.MonkeyPatch) -> None:

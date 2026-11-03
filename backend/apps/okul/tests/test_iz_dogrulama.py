@@ -523,16 +523,42 @@ def test_birden_fazla_eksik_kilitli_satir_uyaridir() -> None:
     assert deger(satir, "duzey") == "uyari"
 
 
-def test_ortadaki_kilitli_satir_silinirse_eksik_ve_zincir_bulgusu() -> None:
+def test_ortadaki_kilitli_satir_silinirse_giris_acilmaz() -> None:
+    """Kullanıcı kararı 03.11.2026 "Boşluğu engelle": hesabın son kaydından SONRA izden satır
+    silinmişse (burada çapadan sonra kilitliyken yazılmış bir yedek satırı) giriş açılmaz. Ret
+    satırın izinindir, girişten önce verilir (`AccountRecordStale`, `BUTUNLUK` alanı `kayit_mac`):
+    bu modülün doğrulaması koşmaz, `kilitli_satir_eksik` bulgusu yazılmaz. Silinen satır son
+    kaydından ESKİYSE giriş açılır ve bulgu düşer (bir sonraki test)."""
     capa = kilitle()
     masaustu_kanca.yedek_olaylarini_yaz(alinan=["a.odbak", "b.odbak", "c.odbak"])
     orta = satirlar(seq__gt=capa.seq)[1]
     tetikleyicisiz("DELETE FROM okul_audittrail WHERE seq = %s", [orta.seq])
 
+    with pytest.raises(app_password.AccountRecordStale):
+        ac()
+
+    assert OTURUM.hesap() is None and not butunluk()
+    (ret,) = satirlar(action="BUTUNLUK", model="okul.Account")
+    assert ret.changed_fields == [app_password.KAYIT_MAC_ALANI]
+
+
+def test_son_kayittan_eski_satir_silinirse_giris_acilir_zincir_bulgusu() -> None:
+    """Boşluk denetimi yalnız hesabın son kaydından SONRASINA bakar (kullanıcı kararı 03.11.2026):
+    ortadaki bir satır silinir ama program yöneticisi ondan sonra girmiştir (son kaydı yenidir).
+    Giriş açılır; kilit açılışının doğrulaması boşluğu bulgu olarak gösterir (altın kural 3)."""
+    acik_olay()
+    orta = acik_olay()
+    acik_olay()
+    kilitle()
+    ac()  # son kaydı (GIRIS) silinecek satırdan yeni
+    kilitle()
+    tetikleyicisiz("DELETE FROM okul_audittrail WHERE seq = %s", [orta.seq])
+
     ac()
 
-    (satir,) = butunluk()
-    assert {"kilitli_satir_eksik", "sira_boslugu", "zincir_kopuk"} <= set(deger(satir, "bulgular"))
+    assert OTURUM.hesap() is not None
+    satir = butunluk()[-1]
+    assert {"sira_boslugu", "zincir_kopuk"} <= set(deger(satir, "bulgular"))
 
 
 def test_dosyadaki_adim_geri_alinirsa_fazla_satir_ve_tohum_bulgusu() -> None:

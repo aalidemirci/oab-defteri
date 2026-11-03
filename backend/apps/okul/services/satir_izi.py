@@ -22,7 +22,7 @@ işlemi, kurtarma ve hesap işlemi açılmaz; `app_password.AccountRecordStale`,
 işlevidir: kilit açılışında (DEK belleğe alınmadan, aday DEK'le), oturumdaki parola doğrulamasında,
 hesap servislerinde (`denetim_izi.hesap_izi_tutuyor` Django'nun bağlantısını verir), geri
 yüklemenin parola yolunda (`geri_yukleme_yetkisi`; salt okunur `sqlite3`) ve özet onarımında
-(`ozet_onarimi`) AYNI işlev koşar. Adımları:
+(`ozet_onarimi`) AYNI işlev koşar; iz boşluğu kararı da burada verilir ("İZ BOŞLUĞU"). Adımları:
 
 1. Satırın içerik MAC'ine giren alanlar (`HESAP_OZET_ALANLARI`; `Account.IZ_OZET_ALANLARI` ile
    birebir, altın listeyle sabit) ham sütunlardan okunur ve ORM'in verdiği değerlere çevrilir
@@ -42,13 +42,18 @@ yüklemenin parola yolunda (`geri_yukleme_yetkisi`; salt okunur `sqlite3`) ve ö
    satıra kaydıramaz: o satırın kendi MAC'i bozulur; DEK yenilemesinden (F4) kalan eski bir İA'yı
    bilen biri de satırı o anahtarla yeniden mühürleyemez (yürürlükteki anahtar o değildir).
    TÜR ŞARTI (bağımsız denetim bulgusu): `seq` sütunu `bigint unsigned PRIMARY KEY`'dir, rowid
-   takma adı değildir; program dışından BLOB ya da metin değer saklayabilir ve SQLite'ın
-   sıralamasında BLOB ve metin bütün tamsayılardan BÜYÜKTÜR. Eski eşleşen satırın sırası BLOB'a
-   çevrilseydi (`CAST(seq AS BLOB)` aynı baytları, dolayısıyla aynı zincir MAC'ini verir) o satır
-   "en yeni" okunur, hesabın yeni satırları hiç okunmazdı. Bu yüzden her satırın `typeof(seq)`'i
-   okunur, tamsayı olmayan ilk satırda karar "tutmuyor"dur (sorguya tür süzgeci KONMAZ: süzgeç yeni
-   satırları BLOB'a çevirip gizlemenin yolu olurdu; tamsayı olmayan değerler üstte sıralandığı için
-   önce onlar okunur). Aynı şart iz anahtarı satırlarının `valid_from_seq`'i için de geçerlidir:
+   takma adı değildir; tamsayı yakınlığı (affinity) yalnız tamsayıya benzeyen METNİ ve tam değerli
+   REAL'i tamsayıya çevirir, program dışından yazılmış BLOB, sayıya benzemeyen metin, kesirli REAL
+   (NOT NULL kısıtı kaldırılmış bir tabloda NULL da) olduğu gibi saklanır. SQLite'ın sıralaması
+   NULL < sayılar (INTEGER ve REAL birlikte, DEĞERLERİYLE) < metin < BLOB'dur. Eski eşleşen satırın
+   sırası BLOB'a çevrilseydi (`CAST(seq AS BLOB)` aynı baytları, dolayısıyla aynı zincir MAC'ini
+   verir) o satır "en yeni" okunur, hesabın yeni satırları hiç okunmazdı. Bu yüzden yürüyüşte her
+   satırın `typeof(seq)`'i okunur, tamsayı olmayan ilk satırda karar "tutmuyor"dur (sorguya tür
+   süzgeci KONMAZ: süzgeç yeni satırları BLOB'a çevirip gizlemenin yolu olurdu). Metin ve BLOB
+   bütün sayılardan büyük sıralandığı için yürüyüş onları ilk okur; kesirli REAL ise tamsayıların
+   ARASINA, değerinin yerine sıralanır: hesabın yeni satırı eşleşen satırın gerisine küçük bir REAL
+   değerle (S - 0,5) taşınırsa yürüyüş ona hiç varmaz — onu bütün tabloya bakan tür denetimi yakalar
+   ("İZ BOŞLUĞU" (b)). Aynı şart iz anahtarı satırlarının `valid_from_seq`'i için de geçerlidir:
    biçimsiz bir anahtar satırı varsa hiçbir hesabın izi doğrulanamaz.
 3. İçerik MAC'i boş satır (kilitlenmenin `KILIT`'i, mühür bulgusunun `BUTUNLUK`'u) atlanır; ilk
    içerik MAC'li satır KARŞILAŞTIRMANIN satırıdır: `record_mac`, satırın bugünkü alanlarının o
@@ -63,6 +68,83 @@ yüklemenin parola yolunda (`geri_yukleme_yetkisi`; salt okunur `sqlite3`) ve ö
    sabit sürede eşit değilse satır tutmaz sayılır. Mühür kararın bütün alanlarını (rol, durum,
    özetler) kapsadığı için böylece çağıranın kararı verdiği hâl ile izi doğrulanan hâl AYNI hâldir
    (iki okuma arasında satırı değiştiren biri denetimi bir hâlde, kararı öbür hâlde geçiremez).
+6. Eşleşen satır bulunduktan sonra, aynı anlık görüntüde, izde BOŞLUK aranır ("İZ BOŞLUĞU"):
+   eşleşen satırdan sonra silinmiş ya da sırası değiştirilmiş iz satırı varsa satır tutmaz sayılır.
+
+İZ BOŞLUĞU (kullanıcı kararı 03.11.2026 "Boşluğu engelle"). Adım 2-3'ün yürüyüşü yalnız hesabın
+KENDİ iz satırlarını okur. Satırı eski bir kopyadan geri koyan biri hesabın daha yeni iz satırlarını
+da silerse, sonrakileri bir aşağı kaydırarak (yeniden numaralayarak) silerse ya da onları eşleşen
+eski satırın gerisine taşırsa yürüyüş eski satırı en yeni sanardı. Eşleşen satırın sırası S ise:
+
+(a) SİLME: S'den sonraki satırlar zincir başına dek KESİNTİSİZ olmalıdır: `seq > S` aralığında
+    `COUNT(*)` = `COUNT(DISTINCT seq)` = `MAX(seq) - S` (sıranın indeksinde aralık sayımı). (b)
+    bütün sıraların tamsayı olduğunu, ilk eşitlik her sıranın TEK olduğunu güvenceler; ikisi
+    birlikte S+1…MAX'ın her birinin TAM BİR KEZ bulunması demektir. Silinmiş satırın açtığı boşluk
+    tutmaz. Tekillik birincil anahtara BIRAKILMAZ (bağımsız denetim bulgusu): SQLite tarayıcısının
+    "tabloyu değiştir" işlemi tabloyu birincil anahtarsız yeniden kurabilir (kod gerekmez); o
+    zaman silinen satırların yerine S'den sonraki bir satırın BİREBİR kopyası (aynı sıra, aynı MAC;
+    hiçbir satırın kendi MAC'i bozulmaz) `COUNT(*)`'u tamamlardı.
+(b) TÜR: tabloda sırası tamsayı olmayan HİÇBİR iz satırı olmamalıdır (`typeof(seq) <> 'integer'`;
+    program hiç yazmaz). Hesabın yeni satırı S'nin gerisine bir REAL değerle taşınmışsa (yürüyüş
+    ona varmaz) ya da S'den sonraki bir REAL değer (a)'nın sayımını şaşırtacaksa böyle yakalanır.
+    Bütün tablo, sıranın kapsayan indeksi üzerinden taranır (ölçüm, Docker'da: 20 000 satırda
+    ~0,6 ms, 50 000 satırda ~1,4 ms, 200 000 satırda ~6,5 ms; sayım aynı mertebede).
+(c) KAYMA (yeniden numaralama): silinen satırdan sonrakiler `seq = seq - d` ile aşağı kaydırılırsa
+    boşluk kalmaz. Ama sıra ve önceki MAC zincir MAC'ine girer (`kanonik.iz_mac`: `seq`
+    `IZ_SATIRI_ALANLARI`'ndadır, `prev_mac` sona eklenir): kaydırılan her satırın kendi MAC'i bugünkü
+    sırasında tutmaz, ESKİ sırasında (`seq + d`) tutar; bağlar (`prev_mac`) birlikte kaydıkları için
+    bozulmaz. Bunu DAYANAK SATIRI gösterir: zincir başından aşağı, programın GİRİŞ OLMADAN yazdığı
+    satırlar — kilitli kip satırları (açılıştaki günlük yedek, göç, ertelenen gün işi, kilitliyken
+    bütünlük) ve açık kipte `BUTUNLUK` satırları (reddedilen girişin ve doğrulamanın satırları) —
+    atlanır; S'den sonraki ilk öteki satır (çoğu kez son oturumun `KILIT` satırı) dayanaktır.
+    Dayanağın kendi zincir MAC'i bugünkü sırasında tutmuyor ama `seq + d`'de (1 ≤ d ≤
+    `KAYMA_SINIRI`) tutuyorsa satır tutmaz. İA, `key_ref`'teki kayıttan YÜRÜRLÜK ŞARTI OLMADAN
+    çözülür (`_IzAnahtarlari.dogrudan`; bağımsız denetim bulgusu): yürürlük kuralı (adım 2) eski
+    bir anahtarla yeniden mühürlemeye karşıdır, kaymayı saptamak için gerekmez; uygulansaydı
+    program dışından `okul_auditkey`'e eklenen tek bir sahte, emekli satır (geçerli ilk sırası
+    S+1; iz satırlarına dokunmadan) dayanağın sırasını ve `seq + d`'leri çözülemeyen o anahtara
+    bağlar, kayma araması anahtarsız kalırdı. Yürürlüksüz çözüm yalnız DAHA ÇOK kayma bulur:
+    meşru satırın MAC'i kendi sırasında tutar.
+    Neden yalnız baş satır değil: program, değişiklikten SONRA kimse girmeden de satır yazar
+    (açılıştaki günlük yedeğin kilitli satırı; hatta ilk reddedilen denemenin `BUTUNLUK` satırı);
+    yalnız başı doğrulamak kaymayı ilk böyle satırda örterdi ("iki kez dene"). Oturum satırı ise
+    ancak başarılı bir girişten sonra yazılır ve her giriş bu denetimden geçer: değişiklikten sonra
+    hiçbir giriş açılmadıysa dayanak değişiklikten ÖNCE yazılmış bir satırdır ve silinen bölgenin
+    ÜSTÜNDEYSE — silinen bölgeden sonra açık kipte, `BUTUNLUK` dışı bir satır kaldıysa —
+    kaydırılmıştır. Açık kip satırlar zincir başına dek silinmiş, üstte yalnız girişsiz satırlar
+    (kilitli kip, `BUTUNLUK`) kalmışsa dayanak silinen bölgenin altındadır (ya da yoktur),
+    kaydırılmamıştır: kayma görünmez. Bu, açık kip satırlar açısından KUYRUK KESMEDİR ((d); çapa,
+    varsa, gösterir).
+    Dayanak denetimi FAIL-CLOSED DEĞİLDİR: MAC'i hiçbir sırada tutmayan, `key_ref`'teki anahtarı
+    bulunamayan ya da biçimsiz dayanak (program dışından eklenmiş ya da değiştirilmiş satır) kayma
+    işareti değildir, girişi engellemez — kilit açılışındaki son 200 satırın doğrulaması onu bulgu
+    olarak gösterir (altın kural 3; kullanıcı kararı yalnız silme ve sıra değişikliğini engeller).
+    Doğrusal yürüyüş YOKTUR: S ile baş arasındaki satırların MAC'i doğrulanmaz (kullanıcı kararı:
+    süre kayıt sayısıyla büyür, ilgisiz bozulma girişi kapatır).
+(d) KUYRUK: en yeni satırların (kuyruğun) silinmesi boşluk bırakmaz ve yeni baş meşru, MAC'i
+    tutan bir satırdır: bu denetim onu engellemez (orkestratör kararı O-2), çapa (`kuyruk_kesik`,
+    `capa_bayat`, `capa_yok`) kartta gösterir. Gerekçe: veritabanı ayarı `synchronous=FULL`'dur
+    (`config/settings.py`; WAL'da her commit diske senkronlanır): commit edilmiş işlem elektrik
+    kesintisinde NORMALDE kaybolmaz. Ama veritabanının çapanın gerisinde kalması program dışı ve
+    kötü niyetsiz hâllerde de doğar — yazma önbelleği senkronu onurlandırmayan disk, program
+    kapalıyken silinen ya da kaybolan `-wal` dosyası, veri klasörünün elle eski bir kopyayla
+    değiştirilmesi — ve çapa ile veritabanı tek işlemde yazılmaz; kuyruğu kesilmiş veritabanının
+    ilk açılışında çapanın tohumuyla yazılan kilitli satır da veritabanından doğrulanamaz. Kuyruk
+    kesmeyi engellemek böyle bir hâlde herkesi kilitlerdi.
+(e) YANLIŞ ALARM YOK: program sırayı boşluksuz yazar — `denetim_izi._ekle` ve onarımın yazıcısı
+    (`hesap_satirlarini_izle`) zincir başının +1'ini, işlemin İÇİNDE ve (Django'da) `BEGIN
+    IMMEDIATE` işlemde verir; `AUTOINCREMENT` yoktur, geri alınan işlem numara yakmaz (satırı
+    kalmaz, sonraki yazım aynı numarayı alır); tetikleyiciler güncellemeyi ve silmeyi keser;
+    kilitli kip satırları (`YEDEK`, `GOC`, `GUN_ISI`, `BUTUNLUK`) da `_ekle`'den geçer; kilitli
+    yazımın "kesintisi" (tohum ilerledi, satır yazılmadı) sıra boşluğu bırakmaz (satır hiç sıra
+    almadı); geri yükleme veritabanını bütünüyle değiştirir (kendi kesintisiz izini taşır).
+
+Kayma denetiminin maliyeti meşru izde birkaç satır okuması ve TEK HMAC'tir; dayanak bozuksa en çok
+`KAYMA_SINIRI` HMAC — yalnız değiştirilmiş bir izde. Ölçüm (Docker, hesabın son kaydından sonra
+25 000 satır; `test_iz_boslugu_denetiminin_suresi_uzun_izde`): kapsam ölçümü kapalıyken meşru izde
+kararın tamamı ~7 ms, bozuk dayanakta ~0,15 sn; kapının biçiminde (`--cov`, dal kapsamı) kayma
+araması saf Python döngüsü olduğu için bozuk dayanak ~0,4-0,5 sn. Test duvar saatine değil HMAC
+sayısına bağlıdır.
 
 TEK ANLIK GÖRÜNTÜ (`okuma_islemi`; bağımsız denetim bulgusu "yanlış alarm"). Satır, iz anahtarları
 ve hesabın iz satırları TEK okuma işleminde okunur: bağlantı bir işlemde değilse `BEGIN … COMMIT`
@@ -75,25 +157,54 @@ arasındaki yarış (beklenen mühür değişmiş) ayrıca `app_password.satir_i
 sıralı bir işlemde yinelenen denetimle ayrılır.
 
 KAPSAMIN SINIRI (dürüst; `app_password` modül başlığı "KALAN RİSKLER" (b)). Denetim hesabın KENDİ
-iz satırlarını doğrular; zincirin geri kalanını doğrulamaz. Zinciri F1b'de yalnız kilit açılışı
-doğrular: son 200 satır (`iz_dogrulama.SON_SATIR`) ve çapa; bulgu girişi engellemez (altın kural
-3). Zincirin tamamını doğrulayan Denetleme Kurulu denetiminin üretim yolu F3/F4'tedir (plan). Bu
-yüzden:
+iz satırlarının MAC'ini, S'den sonrası için yalnız sıraların kesintisizliğini, tekliğini ve türünü
+ve dayanak satırının kaymasını doğrular; aradaki satırların MAC'ini doğrulamaz. Zinciri F1b'de
+yalnız kilit açılışı doğrular: son 200 satır (`iz_dogrulama.SON_SATIR`) ve çapa; bulgusu girişi
+engellemez (altın kural 3). "Boşluğu engelle" bu ilkenin DAR bir istisnasıdır (kullanıcı kararı 03.11.2026):
+hesabın son kaydından sonra izde silinmiş ya da sırası değiştirilmiş satır girişi kapatır; öteki
+zincir bulguları kapatmaz. Zincirin tamamını doğrulayan Denetleme Kurulu denetiminin üretim yolu
+F3/F4'tedir (plan).
 
-* veritabanının BÜTÜNÜYLE (iz dahil) eski bir kopyayla değiştirilmesi ve iz kuyruğunun satırla
-  birlikte kesilmesi bu denetimle yakalanmaz (satır, kopyanın son iz satırını tutar);
-* hesabın yeni iz satırlarını silmek ya da `model`/`object_id`'lerini değiştirip onları hesabın
-  satırı olmaktan çıkarmak, satırı geri sarmakla birlikte yapılırsa bu denetimden geçer. Silinen
-  satırdan sonrakiler yeniden numaralanırsa kayma zincir başına ulaşır; çapa (`kuyruk_kesik`) ve son
-  200 satır onu her zaman `BUTUNLUK` bulgusu olarak gösterir. Yeniden numaralamasız silme ve
-  `model`/`object_id` değişikliği ise yalnız değişen satır kilit açılışının 200 satırlık doğrulama
-  penceresindeyse (ya da hemen önündeyse) bulgu olur. Bulgu girişi engellemez (altın kural 3).
-  Pencerenin dışındaysa F1b'de HİÇBİR yerde görünmez: çapa ve kâğıt çapası yalnız zincir başını
-  görür. Hesabın son kaydından sonra 200'den çok satır yazılmışsa geri sarma bütünüyle sessizdir.
-  Geri yükleme yollarında (geri yükleme yetkisi ve özet onarımının çapası) kenara alınan
-  veritabanının zinciri hiç doğrulanmaz; bu varyant orada pencere içinde de görünmez, görünürlüğü
-  yalnız geri yükleme kartı ve onarım satırlarıdır (çapa kolunu `ozet_onarimi`'nin sıra kuralı
-  kapatır). Bu bölümü girişte sert engele çevirmek kullanıcı kararını bekler (plan F1b-2 ekleri).
+ENGELLENENLER: hesabın son kaydından sonra izin ARASINDAN satır SİLMEK (kuyruk değil: (d); hesabın
+kendi satırı da, ilgisiz bir satır da; yeniden numaralamasız; birincil anahtarsız yeniden kurulmuş
+tabloda yerine birebir kopya konsa da), silinenden sonrakileri AŞAĞI KAYDIRMAK (silinen bölgeden
+sonra açık kipte, `BUTUNLUK` dışı bir satır kaldıysa ve o dayanak satırı bozulmadıysa — o zaman,
+değişiklikten sonra giriş açılmadıkça dayanak kaydırılmıştır; iz anahtarı tablosuna eklenen sahte
+bir anahtar bunu örtmez), bir satırı REAL bir sıraya taşımak ve tabloda tamsayı olmayan herhangi
+bir sıra. Kilit açılışı, oturumdaki parola doğrulaması, kurtarma anahtarıyla açılış, hesap
+servisleri, iki depo karşılaştırması, kapalı hesap temizliği, geri yükleme yetkisi (güncel
+veritabanı ve görüntü) ve özet onarımının çapası (boşluklu çapa → K-a) bu tek işlevden geçtiği için
+hepsi aynı kuralı alır. BEDEL (kullanıcı kararıyla kabul edildi): izden
+TEK bir satır silinmişse son kaydı ondan eski BÜTÜN hesaplar reddedilir; çıkış, değişiklikten
+önceki bir yedeğin kurtarma anahtarıyla geri yüklenmesidir (parola yolu da güncel veritabanındaki
+boşluğu görür).
+
+KALANLAR (kalan risk; girişte görünmez):
+
+* veritabanının BÜTÜNÜYLE (iz dahil) eski bir kopyayla değiştirilmesi: satır kopyanın son iz
+  satırını tutar, boşluk yoktur;
+* iz kuyruğunun satırla birlikte kesilmesi ("İZ BOŞLUĞU" (d)) — açık kip satırların zincir başına
+  dek silinip ardından kalan girişsiz satırların (kilitli kip, `BUTUNLUK`) aşağı kaydırılması da:
+  çapa (varsa) kartta gösterir;
+* hesabın yeni iz satırlarını silmeden başka kayda ÇEVİRMEK (`model`/`object_id` değişikliği) ya da
+  içeriğini değiştirmek; iki satırın sırasını TAMSAYI olarak takas etmek, hesabın yeni satırını
+  S'nin gerisinde boş bir tamsayıya taşımak ya da silinen satırın yerine başka bir satırı (kuyruktan
+  ya da S'nin gerisinden; kopyasını, boşluğun sırasıyla) koymak: boşluk ve tür sorunu kalmaz;
+  taşınan ya da değiştirilen satırın KENDİ MAC'i bozulur — kilit açılışının 200 satırlık
+  penceresindeyse `BUTUNLUK` kartı olur, dışındaysa yalnız Denetleme Kurulu modülünün tam zincir
+  denetiminde görünür;
+* dayanağı bozan (`key_ref`'ini ya da içeriğini; tek hücre yeter) ya da zincir başına program
+  dışından açık kipte bir satır ekleyen (tek INSERT; hiçbir satır değişmez, eklenen satır dayanak
+  olur ve MAC'i hiçbir sırada tutmaz), `KAYMA_SINIRI`'nı aşan ya da oturum açıkken yapılan
+  (oturumun sonraki satırı dayanak olur) kaydırma: kayma işareti vermez, yukarıdaki sınıfa düşer
+  (kaydırılan satırların MAC'i bozuktur). Kip ya da tür değiştirerek atlatmak (dayanağı `KILITLI`
+  ya da `BUTUNLUK` yapmak) yetmez: bir sonraki açık kip, `BUTUNLUK` dışı satır dayanak olur; silinen
+  bölgenin üstündeki BÜTÜN böyle satırların değiştirilmesi gerekir. Biçimsiz bir `key_ref` (sayı
+  değil ya da `AZAMI_HANE`'den uzun) kararı istisnayla düşürmez: dayanakta kayma işareti değildir,
+  hesabın kendi satırında satırı tutmaz kılar.
+
+Hepsi program dışından, veritabanına yazabilen biri içindir (SQLite tarayıcısı yeter, kod
+gerekmez).
 
 ONARIMIN İZİ (`hesap_satirlarini_izle`; K-e). Geri yüklemenin özet onarımı (`ozet_onarimi`)
 satırları ORM'siz, takastan ÖNCE `.tmp`'de yazar; o veritabanında oturum yoktur. Değiştirdiği her
@@ -190,6 +301,26 @@ ONARIM_ALANLARI: Final[tuple[str, ...]] = ("wrap_digest", "wrap_digest_pending",
 
 #: İz anahtarının uzunluğu (`denetim_izi.IZ_ANAHTARI_BAYT`; eşitliği test sabitler).
 IZ_ANAHTARI_BAYT: Final = 32
+
+#: Kayma denetiminde ("İZ BOŞLUĞU" (c)) denenen en büyük sıra farkı: dayanak satırının MAC'i
+#: bugünkü sırasında tutmazsa `seq + 1 … seq + KAYMA_SINIRI` denenir. Maliyet yalnız değiştirilmiş
+#: izde doğar (her deneme bir HMAC, ~16 µs; sınırda kapsam ölçümü kapalıyken ~0,15 sn). Daha büyük
+#: kaydırma (on binden çok satırın silinip yeniden numaralanması) kayma işareti vermez: kalan risk
+#: ("KAPSAMIN SINIRI").
+KAYMA_SINIRI: Final = 10_000
+#: Programın GİRİŞ OLMADAN da yazdığı açık kip satırının türü (`AuditAction.BUTUNLUK`; reddedilen
+#: girişin ve kilit açılışındaki doğrulamanın satırı). Kayma denetiminin dayanağı olamaz.
+TUR_BUTUNLUK: Final = "BUTUNLUK"
+#: SQLite'ın en büyük tamsayısı (64 bit, işaretli). Zincir başının sırası buna ulaşmışsa (program
+#: dışından yazılmış; program bu sıraya hiç varmaz) yeni satır sıra alamaz (`+ 1` taşar,
+#: `OverflowError`): yazıcılar Türkçe `IzYazilamadi` verir (`hesap_satirlarini_izle`,
+#: `denetim_izi._zincir_basi_satiri`; orkestratör kararı O-3'ün uzantısı).
+EN_BUYUK_SIRA: Final = 2**63 - 1
+#: SQLite tamsayısının en çok ondalık hanesi (`EN_BUYUK_SIRA` 19 hanedir). Daha uzun rakam dizisi
+#: hiçbir kimlik ya da sıra değildir; Python'un `int()`'i 4300 haneden uzun metinde `ValueError`
+#: verir (dönüşüm sınırı). Program dışından yazılmış böyle bir hücre kararı istisnayla
+#: düşürmesin, biçimsiz sayılsın (son sınama bulgusu: zincir başının `key_ref`'i).
+AZAMI_HANE: Final = 19
 
 
 class _Bicimsiz(Exception):
@@ -291,7 +422,7 @@ def _mantiksal(ham: object) -> bool:
 
 def _tamsayi(ham: object) -> int:
     metin = _metin(ham)
-    if not metin.isascii() or not metin.isdigit():
+    if not metin.isascii() or not metin.isdigit() or len(metin) > AZAMI_HANE:
         raise _Bicimsiz
     return int(metin)
 
@@ -483,11 +614,27 @@ class _IzAnahtarlari:
         `record_mac` ve `mac` birlikte) eski bir hâli aklatamasın. Program her satırı yürürlükteki
         (etkin) anahtarla yazar.
         """
-        if not key_ref or not (key_ref.isascii() and key_ref.isdigit()):
+        kayit_id = _anahtar_kimligi(key_ref)
+        if kayit_id is None or self._yururlukteki(seq) != kayit_id:
             return None
-        kayit_id = int(key_ref)
+        return self._coz(kayit_id)
+
+    def dogrudan(self, key_ref: str) -> bytes | None:
+        """`key_ref`'teki kaydın İA'sı, YÜRÜRLÜK ŞARTI OLMADAN; kayıt yoksa ya da çözülmüyorsa None.
+
+        Yalnız kayma araması içindir (modül başlığı "İZ BOŞLUĞU" (c)): yürürlük kuralı eski bir
+        anahtarla yeniden mühürlemeye karşıdır, kaymayı saptamak için gerekmez. Uygulansaydı program
+        dışından eklenen tek bir sahte, emekli `AuditKey` satırı (geçerli ilk sırası S+1) dayanağın
+        sırasını ve `seq + d`'leri o anahtara bağlar, arama anahtarsız kalırdı (bağımsız denetim
+        bulgusu). Bu çözüm yalnız DAHA ÇOK kayma bulur: meşru satırın MAC'i kendi sırasında tutar.
+        """
+        kayit_id = _anahtar_kimligi(key_ref)
+        return None if kayit_id is None else self._coz(kayit_id)
+
+    def _coz(self, kayit_id: int) -> bytes | None:
+        """Kaydın İA'sı (önbellekte); kayıt yoksa ya da DEK'le çözülmüyorsa None."""
         kayit = self._kayitlar.get(kayit_id)
-        if kayit is None or self._yururlukteki(seq) != kayit_id:
+        if kayit is None:
             return None
         if kayit_id not in self._cozulen:
             ia: bytes | None = None
@@ -500,10 +647,27 @@ class _IzAnahtarlari:
         return self._cozulen[kayit_id]
 
 
-def _mac_tutuyor(ia: bytes, satir: _IzSatiri) -> bool:
-    """Satırın zincir MAC'i İA'nın zincir anahtarıyla yeniden hesaplanınca tutuyor mu?"""
+def _anahtar_kimligi(key_ref: str) -> int | None:
+    """Açık kip satırının `key_ref`'i ASCII ondalık bir kimlikse (en çok `AZAMI_HANE` hane) o
+    kimlik; değilse None."""
+    if not key_ref or not (key_ref.isascii() and key_ref.isdigit()) or len(key_ref) > AZAMI_HANE:
+        return None
+    return int(key_ref)
+
+
+def _mac_tutuyor(
+    ia: bytes, satir: _IzSatiri, *, seq: int | None = None, zincir: bytes | None = None
+) -> bool:
+    """Satırın zincir MAC'i İA'nın zincir anahtarıyla yeniden hesaplanınca tutuyor mu?
+
+    `seq` verilirse MAC satırın o sırada yazıldığı varsayılarak hesaplanır (kayma denetimi;
+    "İZ BOŞLUĞU" (c)); verilmezse satırın bugünkü sırası. `zincir` İA'nın önceden türetilmiş
+    zincir anahtarıdır (kayma denetiminin döngüsünde her denemede yeniden türetilmesin).
+    """
+    alanlar = satir.alanlar if seq is None else {**satir.alanlar, "seq": seq}
+    anahtar = crypto.audit_chain_key(ia) if zincir is None else zincir
     try:
-        beklenen = kanonik.iz_mac(crypto.audit_chain_key(ia), satir.alanlar, satir.prev_mac)
+        beklenen = kanonik.iz_mac(anahtar, alanlar, satir.prev_mac)
     except kanonik.KanonikHata:
         return False
     return kanonik.esit(satir.mac, beklenen)
@@ -537,10 +701,11 @@ def hesap_izi_sirasi(
 
     Satır yoksa, biçimsizse, mührü verilen `beklenen_muhur`'a eşit değilse (adım 5), hesabın okunan
     bir iz satırının sırası tamsayı değilse ya da zincir MAC'i tutmuyorsa, iz anahtarı tablosunda
-    biçimsiz satır varsa ya da içerik MAC'li iz satırı yoksa None (fail-closed). Bütün okumalar tek
-    anlık görüntüdedir (`okuma_islemi`). Hiçbir şey yazmaz. Veritabanı hatası (tablo yok, dosya
-    kilitli) çağırana yükselir. Sıra, geri yüklemenin özet onarımında çapanın soyunu sınar
-    (`ozet_onarimi` modül başlığı "SIRA KURALI").
+    biçimsiz satır varsa, içerik MAC'li iz satırı yoksa ya da eşleşen satırdan sonra izde boşluk
+    varsa (silinmiş satır, tekrarlanan ya da tamsayı olmayan sıra, kaydırılmış dayanak; adım 6,
+    "İZ BOŞLUĞU") None (fail-closed). Bütün okumalar tek anlık görüntüdedir (`okuma_islemi`).
+    Hiçbir şey yazmaz. Veritabanı hatası (tablo yok, dosya kilitli) çağırana yükselir. Sıra, geri
+    yüklemenin özet onarımında çapanın soyunu sınar (`ozet_onarimi` modül başlığı "SIRA KURALI").
     """
     kimlik = kanonik_kimlik(hesap_id)
     if kimlik is None:
@@ -576,13 +741,14 @@ def _eslesen_sira(
         "ORDER BY seq DESC",
         (HESAP_MODELI, kimlik),
     )
+    eslesen: int
     try:
         while True:
             satir_ham = imlec.fetchone()
             if satir_ham is None:
                 return None  # içerik MAC'li iz satırı yok (adım 4)
             if satir_ham[0] != 1:
-                return None  # sırası tamsayı değil: BLOB/metin en yeni sıralanır (adım 2)
+                return None  # sırası tamsayı değil: metin/BLOB en yeni sıralanır (adım 2)
             try:
                 satir = _iz_satiri(satir_ham[1:])
             except _Bicimsiz:
@@ -598,9 +764,87 @@ def _eslesen_sira(
                 )
             except kanonik.KanonikHata:
                 return None
-            return satir.seq if kanonik.esit(satir.record_mac, guncel) else None
+            if not kanonik.esit(satir.record_mac, guncel):
+                return None
+            eslesen = satir.seq
+            break
     finally:
         imlec.close()
+    return eslesen if _iz_boslugu_yok(baglanti, anahtarlar, eslesen) else None
+
+
+def _iz_boslugu_yok(baglanti: Baglanti, anahtarlar: _IzAnahtarlari, sira: int) -> bool:
+    """Eşleşen satırdan (`sira`) sonra izde boşluk YOK mu? (modül başlığı "İZ BOŞLUĞU")
+
+    (b) tür, (a) silme, (c) kayma; sıra (b) → (a) → (c)'dir: (a)'nın sayımı ancak bütün sıralar
+    tamsayıysa kesintisizliği kanıtlar. Çağıranın okuma işlemindedir (tek anlık görüntü).
+    """
+    (bicimsiz_var,) = baglanti.execute(
+        "SELECT EXISTS (SELECT 1 FROM okul_audittrail WHERE typeof(seq) <> 'integer')"
+    ).fetchone()
+    if bicimsiz_var != 0:
+        return False  # (b) tamsayı olmayan sıra: program yazmaz
+    adet, farkli, en_buyuk = baglanti.execute(
+        "SELECT COUNT(*), COUNT(DISTINCT seq), MAX(seq) FROM okul_audittrail WHERE seq > ?",
+        (sira,),
+    ).fetchone()
+    beklenen = 0 if en_buyuk is None else en_buyuk - sira
+    if not all(isinstance(sayi, int) for sayi in (adet, farkli, beklenen)):
+        return False
+    if not adet == farkli == beklenen:
+        return False  # (a) S'den sonra silinmiş satır (ya da yerine konmuş birebir kopya)
+    return not _dayanak_kaymis(baglanti, anahtarlar, sira)
+
+
+def _dayanak_kaymis(baglanti: Baglanti, anahtarlar: _IzAnahtarlari, sira: int) -> bool:
+    """Dayanak satırı aşağı kaydırılmış mı? (modül başlığı "İZ BOŞLUĞU" (c))
+
+    Zincir başından aşağı, `sira`'dan sonraki satırlar okunur; programın giriş olmadan yazdığı
+    satırlar (kilitli kip ya da açık kipte `BUTUNLUK`) atlanır. İlk öteki satır dayanaktır: açık
+    kipteyse ve MAC'i bugünkü sırasında tutmayıp `seq + d`'de (1 ≤ d ≤ `KAYMA_SINIRI`) tutuyorsa
+    kaymıştır. İA `key_ref`'teki kayıttan yürürlük şartı OLMADAN çözülür
+    (`_IzAnahtarlari.dogrudan`): sahte, emekli bir anahtar satırı aramayı anahtarsız bırakamaz.
+    Dayanak yoksa, biçimsizse, `key_ref`'teki anahtar bulunamıyor ya da çözülmüyorsa ya da MAC'i
+    hiçbir sırada tutmuyorsa kayma işareti YOKTUR (fail-closed değildir: bozuk satır girişi
+    kapatmaz).
+    """
+    imlec = baglanti.execute(
+        "SELECT typeof(seq) = 'integer', "
+        'CAST(seq AS BLOB), CAST("at" AS BLOB), CAST(actor AS BLOB), '
+        "CAST(account_id AS BLOB), CAST(role AS BLOB), CAST(action AS BLOB), "
+        "CAST(model AS BLOB), CAST(object_id AS BLOB), CAST(changed_fields AS BLOB), "
+        'CAST("values" AS BLOB), CAST(record_mac AS BLOB), CAST(label AS BLOB), '
+        "CAST(key_mode AS BLOB), CAST(key_ref AS BLOB), CAST(prev_mac AS BLOB), "
+        "CAST(mac AS BLOB) FROM okul_audittrail WHERE seq > ? ORDER BY seq DESC",
+        (sira,),
+    )
+    acik = KIP_ACIK.encode("ascii")
+    butunluk = TUR_BUTUNLUK.encode("ascii")
+    dayanak_ham: Sequence[Any] | None = None
+    try:
+        while dayanak_ham is None:
+            satir_ham = imlec.fetchone()
+            if satir_ham is None:
+                return False  # S'den sonra yalnız girişsiz satırlar var
+            # Sütunlar: 0 tür, 6 action, 13 key_mode (`_iz_satiri`'nın sırası, bir kaydırmalı).
+            if satir_ham[13] == acik and satir_ham[6] != butunluk:
+                dayanak_ham = satir_ham
+    finally:
+        imlec.close()
+    try:
+        dayanak = _iz_satiri(dayanak_ham[1:])
+    except _Bicimsiz:
+        return False
+    ia = anahtarlar.dogrudan(dayanak.key_ref)
+    if ia is None:
+        return False  # anahtarı bulunamıyor: kayma işareti değil
+    zincir = crypto.audit_chain_key(ia)
+    if _mac_tutuyor(ia, dayanak, zincir=zincir):
+        return False
+    return any(
+        _mac_tutuyor(ia, dayanak, seq=dayanak.seq + kayma, zincir=zincir)
+        for kayma in range(1, KAYMA_SINIRI + 1)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -658,6 +902,8 @@ def hesap_satirlarini_izle(
             raise _Bicimsiz
         else:
             seq, prev_mac = _tamsayi(bas[1]), _metin(bas[2])
+        if seq > EN_BUYUK_SIRA - len(degisenler):
+            raise _Bicimsiz  # yeni satırların sırası SQLite tamsayısını aşardı
     except _Bicimsiz as exc:
         raise IzYazilamadi("Geri yüklenen veritabanının zincir başı biçimsiz.") from exc
     zincir = crypto.audit_chain_key(ia)

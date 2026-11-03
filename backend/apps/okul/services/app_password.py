@@ -135,21 +135,31 @@ bağımsız değildir. Geri yükleme notu MAC'siz bir dosyadır: önceki zincir 
 gösteren sahte bir not çapa denetimini atlatır ve yerine alanları boş bir geri yükleme kartı
 çıkarır. Gerçek bir geri yüklemeden sonra not silinip `iz-durumu.json` eski bir kopyasıyla
 değiştirilirse kart da çıkmaz. Kalıcı sinyaller aylık kâğıt çapası, günlük yedekler, `db-onceki-*`
-dosyası ve onarımın `SISTEM` `HESAP` satırlarıdır. Hesabın yeni iz satırlarını silmek ya da
-`model`/`object_id`'lerini değiştirip onları hesabın satırı olmaktan çıkarmak, satır geri sarmayla
-birlikte yapılırsa bu denetimden geçer (`satir_izi` modül başlığı "KAPSAMIN SINIRI"). Silinen
-satırdan sonrakiler yeniden numaralanırsa kayma zincir başına ulaşır; çapa (`kuyruk_kesik`) ve son
-200 satır onu her zaman `BUTUNLUK` bulgusu olarak gösterir. Yeniden numaralamasız silme ve
-`model`/`object_id` değişikliği ise yalnız değişen satır kilit açılışının 200 satırlık doğrulama
-penceresindeyse (ya da hemen önündeyse) bulgu olur. Bulgu girişi engellemez (altın kural 3).
-Pencerenin dışındaysa F1b'de hiçbir yerde görünmez: çapa ve kâğıt çapası yalnız zincir başını
-görür, zincirin tam doğrulamasının üretim yolu Denetleme Kurulu modülüyle gelir (F3/F4, plan).
-Geri yükleme yollarında (geri yükleme yetkisi ve özet onarımının çapası) kenara alınan
-veritabanının zinciri hiç doğrulanmaz; bu varyant orada pencere içinde de görünmez, görünürlüğü
-yalnız geri yükleme kartı ve onarım satırlarıdır (çapa kolunu `ozet_onarimi`'nin sıra kuralı
-kapatır; geri yükleme yetkisinde, askıya alınmış ya da kapatılmış bir program yöneticisinin geri
-sarılmış satırıyla, kalan risktir). Bu bölümü girişte sert engele çevirmek kullanıcı kararını
-bekler. DENETİM İLE YAZIM ARASINDAKİ YARIŞ: satırın izi denetlendikten sonra, yazım işleminden
+dosyası ve onarımın `SISTEM` `HESAP` satırlarıdır. İZ BOŞLUĞU ARTIK REDDEDİLİR (kullanıcı kararı
+03.11.2026 "Boşluğu engelle"; `satir_izi` modül başlığı "İZ BOŞLUĞU"): satır geri sarmayla
+birlikte hesabın son kaydından sonra izin ARASINDAN satır SİLMEK (kuyruk değil; hesabın kendi
+satırını da ilgisiz bir satırı da; birincil anahtarsız yeniden kurulmuş tabloda yerine birebir kopya
+konsa da), silinenden sonrakileri aşağı KAYDIRMAK (silinen bölgeden sonra açık kipte, `BUTUNLUK`
+dışı bir satır kaldıysa, o dayanak satırı bozulmadıysa ve değişiklikten sonra giriş açılmadıysa;
+iz anahtarı tablosuna eklenen sahte bir anahtar bunu örtmez) ya da bir satırı REAL bir sıraya
+taşımak ve tabloda tamsayı olmayan herhangi bir sıra, satır izinin
+tutmaması sayılır: aynı ret, aynı `BUTUNLUK` satırı (alan `kayit_mac`), aynı çıkış — bütün
+denetim noktalarında, geri yükleme yetkisinde (güncel veritabanı ve görüntü) ve özet onarımının
+çapasında (boşluklu çapa K-a'ya düşer) da. Bu, "zincir bulgusu girişi engellemez" ilkesinin (altın
+kural 3; tasarım §4.6.2-§4.6.3) kullanıcı kararına dayanan DAR istisnasıdır; kuyruk kesme ve çapa
+bulguları engellemez. Bedel (kabul edildi): izden tek bir satır silinmişse son kaydı ondan eski
+bütün hesaplar reddedilir; çıkış, değişiklikten önceki bir yedeğin kurtarma anahtarıyla geri
+yüklenmesidir. KALAN (girişte görünmez; `satir_izi` "KAPSAMIN SINIRI"): hesabın yeni iz
+satırlarını silmeden başka kayda çevirmek (`model`/`object_id`) ya da değiştirmek, iki satırın
+sırasını tamsayı olarak takas etmek, hesabın yeni satırını S'nin gerisinde boş bir tamsayıya
+taşımak, silinen satırın yerine başka bir satırı ya da kopyasını (boşluğun sırasıyla) koymak,
+dayanağı da bozan (tek hücre yeter) ya da zincir başına sahte bir açık kip satırı ekleyen (tek
+INSERT), on binden büyük ya da oturum açıkken yapılan kaydırma:
+taşınan ya da değişen satırın kendi MAC'i bozulur — kilit açılışının 200 satırlık penceresindeyse
+`BUTUNLUK` kartı, dışındaysa yalnız Denetleme Kurulu modülünün tam zincir denetimi (F3/F4, plan)
+gösterir; açık kip satırların zincir başına dek silinip kalan girişsiz satırların (kilitli kip,
+`BUTUNLUK`) aşağı kaydırılması kuyruk kesmedir (çapa, varsa, gösterir). DENETİM İLE YAZIM
+ARASINDAKİ YARIŞ: satırın izi denetlendikten sonra, yazım işleminden
 önce satırı değiştiren bir betik (ör. girişin `GIRIS` yazımı satırın o anki hâlinin içerik MAC'ini
 yazar) kod ve zamanlama ister; başarısız denemeler `BUTUNLUK` satırı bırakır (tehdit 6/19 çıtası).
 Denetimin kendi iki okuması (çağıranın ORM okuması ve iz okuması) beklenen mühürle aynı hâle
@@ -178,7 +188,9 @@ kanıtlamaz. Hesap satırı bu yüzden denetim izindeki SON içerik MAC'li kayd�
 sırası tamsayı türünde ve kendi zincir MAC'i (açık kip, `key_ref`'teki yürürlükteki İA) tutmalıdır,
 ilk içerik MAC'li satırın `record_mac`'i satırın bugünkü alanlarından hesaplanana eşit olmalıdır;
 içerik MAC'li satır hiç yoksa satır tutmaz (fail-closed; meşru hiçbir hâl böyle doğmaz — her hesap
-`HESAP` satırıyla açılır). Satır, iz anahtarları ve iz satırları tek anlık görüntüde okunur;
+`HESAP` satırıyla açılır). Eşleşen satırdan sonra izde silinmiş ya da sırası değiştirilmiş satır
+varsa da satır tutmaz (kullanıcı kararı 03.11.2026 "Boşluğu engelle"; "KALAN RİSKLER" (b)).
+Satır, iz anahtarları ve iz satırları tek anlık görüntüde okunur;
 çağıranın ORM'le okuduğu mühür beklenen mühürdür (ham okumadaki mühür ona eşit olmalı: izi
 doğrulanan hâl kararın verildiği hâldir). İlk denetim tutmazsa yanlış alarm ayıklanır
 (`_yaristan_sonraki_satir`): arada meşru bir yazım satırı değiştirdiyse denetim yazıcılarla sıralı
@@ -322,7 +334,9 @@ sonra veritabanı işlemi (`dosya_ve_iz_islemi`); iz satırı dosya yazımından
 dosya yazılamazsa işlem geri sarılır. Kilit açılışında, hesap bütünlüğü denetimlerinden
 SONRA, denetim izi kendiliğinden doğrulanır (çapa, kilitli satırlar, son 200 satır; geri
 yükleme notu; tasarım §4.6.3) — bulgular `BUTUNLUK` satırı ve kart olur, girişi engellemez
-(`apps.okul.iz_dogrulama`, `_start_session`).
+(`apps.okul.iz_dogrulama`, `_start_session`). Tek istisna hesabın son kaydından sonraki iz
+boşluğudur: satırın izinin parçası olarak girişten ÖNCE denetlenir ve girişi kapatır ("KALAN
+RİSKLER" (b); kullanıcı kararı 03.11.2026 "Boşluğu engelle").
 
 Güvenlik dosyasını değiştiren işlemler süreç içi bir kilitle sıralanır: oku-
 değiştir-yaz arasına başka bir yazım girip onu ezmesin.
@@ -632,11 +646,21 @@ class AccountRecordStale(AccountSealMismatch):
     kararı onu mühür uyuşmazlığıyla AYNI muameleye bağlar — işlem reddedilir, `BUTUNLUK` satırı
     düşer (`_muhur_bozuk_izi`, alan adı `kayit_mac`), satıra dokunulmaz, hatalı deneme sayacı ve
     gecikme yok. Ayrı sınıf yalnız günlüğün, testin ve kartın ayırt etmesi içindir; plan F1b-1'in
-    kod listesine yeni kod eklenmez.
+    kod listesine yeni kod eklenmez. İzde boşluk (hesabın son kaydından sonra silinmiş ya da sırası
+    değiştirilmiş satır; kullanıcı kararı 03.11.2026 "Boşluğu engelle") da bu rettir (orkestratör
+    kararı O-1: `satir_izi`'nin tek karar işlevi).
+
+    `ertelenen`: denetim bir veritabanı işleminin İÇİNDEN yapıldıysa (`satir_izini_denetle(...,
+    iz_yaz=False)`) `BUTUNLUK` satırı henüz yazılmamıştır; satırı, işlem geri alındıktan SONRA
+    `_ertelenen_butunluk` bu hesap için yazar (orkestratör kararı O-4). Öteki hâllerde None.
     """
 
     code = "hesap_muhru_tutmadi"
     status_code = 409
+
+    def __init__(self, message: str = "", *, ertelenen: Account | None = None) -> None:
+        super().__init__(message)
+        self.ertelenen = ertelenen
 
 
 class TwoStoreMismatch(UnlockRefused):
@@ -2109,12 +2133,15 @@ def _muhurlu_satir(hesap_id: object, data_key: bytes, *, giris: bool = False) ->
     return hesap
 
 
-def _sealed_account(hesap_id: object, data_key: bytes, *, giris: bool = False) -> Account:
+def _sealed_account(
+    hesap_id: object, data_key: bytes, *, giris: bool = False, iz_yaz: bool = True
+) -> Account:
     """Mühürlü ve izi tutan satır: `_muhurlu_satir` + `satir_izini_denetle` (modül başlığı
     "SATIRIN İZİ"). Oturumdaki parola doğrulaması ve parola değiştirme kullanır (İA bellekte).
-    Döndürülen satır kararın satırıdır (`satir_izini_denetle`)."""
+    Döndürülen satır kararın satırıdır (`satir_izini_denetle`). Bir işlemin içinden çağıran
+    `iz_yaz=False` verir ve `_ertelenen_butunluk` ile sarar (orkestratör kararı O-4)."""
     hesap = _muhurlu_satir(hesap_id, data_key, giris=giris)
-    return satir_izini_denetle(hesap, data_key)
+    return satir_izini_denetle(hesap, data_key, iz_yaz=iz_yaz)
 
 
 #: Satır izi tutmadığında `BUTUNLUK` satırının alan adı (kart onu mühür ve özetten ayırır).
@@ -2122,7 +2149,11 @@ KAYIT_MAC_ALANI = "kayit_mac"
 
 
 def satir_izini_denetle(
-    hesap: Account, data_key: bytes, *, ileti: str = _SEAL_MISMATCH_MESSAGE
+    hesap: Account,
+    data_key: bytes,
+    *,
+    ileti: str = _SEAL_MISMATCH_MESSAGE,
+    iz_yaz: bool = True,
 ) -> Account:
     """Satır denetim izindeki son içerik MAC'li kaydını tutmalı (modül başlığı "SATIRIN İZİ").
 
@@ -2133,7 +2164,14 @@ def satir_izini_denetle(
     AYNI muamele (kullanıcı kararı 03.11.2026): `BUTUNLUK` satırı (`SISTEM`, alan `kayit_mac`;
     `_muhur_bozuk_izi`) ve `AccountRecordStale` (409 `hesap_muhru_tutmadi`); satıra dokunulmaz,
     hatalı deneme sayacına ve gecikmeye dokunulmaz. Çağıran mührü önceden doğrulamıştır. Hesap
-    servisleri kendi iletilerini verir (`ileti`).
+    servisleri kendi iletilerini verir (`ileti`). İzde boşluk (hesabın son kaydından sonra silinmiş
+    ya da sırası değiştirilmiş satır) aynı karardır (kullanıcı kararı 03.11.2026 "Boşluğu engelle";
+    `satir_izi` "İZ BOŞLUĞU").
+
+    `iz_yaz=False` (orkestratör kararı O-4): çağıran bir veritabanı işleminin İÇİNDEDİR; orada
+    yazılan `BUTUNLUK` satırı işlemle birlikte geri alınırdı. Satır yazılmaz, hata `ertelenen`
+    alanında hesabı taşır; çağıran işlemi `_ertelenen_butunluk` ile sarar ve satır işlem geri
+    alındıktan SONRA yazılır.
 
     DÖNÜŞ kararın satırıdır: çoğu kez verilen `hesap`; arada meşru bir yazım satırı değiştirdiyse
     yazıcılarla sıralı işlemde yeniden okunup mührü ve izi doğrulanmış GÜNCEL satır. Çağıran sonraki
@@ -2153,8 +2191,28 @@ def satir_izini_denetle(
         "dokunulmadı (%s).",
         hesap.id,
     )
+    if not iz_yaz:
+        raise AccountRecordStale(ileti, ertelenen=hesap)
     _muhur_bozuk_izi(hesap, data_key, alan=KAYIT_MAC_ALANI)
     raise AccountRecordStale(ileti)
+
+
+@contextmanager
+def _ertelenen_butunluk(data_key: bytes) -> Iterator[None]:
+    """İşlem içinden yapılan satır izi denetiminin `BUTUNLUK` satırı (orkestratör kararı O-4).
+
+    Veritabanı işleminin DIŞINDA kullanılır (`with _ertelenen_butunluk(dek), transaction.atomic():`
+    ya da iç içe): içerideki `satir_izini_denetle(..., iz_yaz=False)` reddi işlemi geri aldırır,
+    çıkışta — işlem geri alındıktan SONRA — `BUTUNLUK` satırı kendi işleminde yazılır
+    (`_muhur_bozuk_izi`, alan `kayit_mac`) ve hata aynen yükselir. Böylece ret, işlem içindeki
+    öteki denetimlerin retleri gibi denetim izinde kalır.
+    """
+    try:
+        yield
+    except AccountRecordStale as exc:
+        if exc.ertelenen is not None:
+            _muhur_bozuk_izi(exc.ertelenen, data_key, alan=KAYIT_MAC_ALANI)
+        raise
 
 
 def _yaristan_sonraki_satir(hesap: Account, data_key: bytes) -> Account | None:
@@ -2673,9 +2731,10 @@ def change_password(*, hesap_id: object, current_password: str, new_password: st
         # (1) Bekleyen özet, sarmal yazımından ÖNCE commit edilir.
         with transaction.atomic():
             write_wrap_digests(hesap, veri_anahtari, asil=acilan_ozet, bekleyen=yeni_ozet)
-        # (2) Satır, `PAROLA` satırı, asıl özet; en sonda sarmal.
-        with transaction.atomic():
-            hesap = _sealed_account(hesap_id, veri_anahtari)
+        # (2) Satır, `PAROLA` satırı, asıl özet; en sonda sarmal. Satırın izi işlemin İÇİNDE
+        # yeniden denetlenir: reddin `BUTUNLUK` satırı işlem geri alındıktan sonra yazılır (O-4).
+        with _ertelenen_butunluk(veri_anahtari), transaction.atomic():
+            hesap = _sealed_account(hesap_id, veri_anahtari, iz_yaz=False)
             onceki = denetim_izi.anlik(hesap)
             hesap.password_changed_at = timezone.now()
             alanlar = ["password_changed_at"]

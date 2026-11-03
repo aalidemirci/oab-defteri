@@ -146,7 +146,7 @@ def oku() -> IzDurumu:
         raise IzDurumuYok(DOSYA_ADI)
     try:
         veri: Any = json.loads(dosya.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError) as exc:
         raise IzDurumuBozuk(DOSYA_ADI) from exc
     capa = veri.get("capa") if isinstance(veri, dict) else None
     if (

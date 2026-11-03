@@ -47,8 +47,14 @@ _start_session` DEK ve İA belleğe alındıktan sonra, `oturum.IZ_KIP_KILIDI` a
 
 GİRİŞ ENGELLENMEZ (altın kural 3): bu bulgular sert engel değildir; doğrulamanın kendisi
 beklenmedik biçimde düşerse de bulgu (`dogrulama_yapilamadi`) olur. Sert engel yalnız hesap
-bütünlüğündedir (mühür, iki depo, İA çözülemezse; `app_password`). Satırlar yazılamazsa giriş
-açılmaz: iz yazılamazsa yazma yapılamaz.
+bütünlüğündedir (mühür, iki depo, İA çözülemezse, satırın izi; `app_password`). Satırlar
+yazılamazsa giriş açılmaz: iz yazılamazsa yazma yapılamaz. DAR İSTİSNA (kullanıcı kararı 03.11.2026
+"Boşluğu engelle"): hesabın son kaydından sonra izde SİLİNMİŞ ya da SIRASI DEĞİŞTİRİLMİŞ satır
+(sıra boşluğu ya da tekrarlanan sıra, tamsayı olmayan sıra, kaydırılmış dayanak) girişi kapatır
+— ama bu modülde değil, satırın izinin parçası olarak girişten ÖNCE (`services.satir_izi` "İZ
+BOŞLUĞU"). Buradaki bulgular
+— kuyruk kesme ve çapa bulguları (`kuyruk_kesik`, `capa_bayat`, `capa_yok`), MAC'i tutmayan ya da
+kuralına uymayan satır, kilitli satır bulguları — girişi engellemez.
 
 KARTLAR: durum ayrı bir dosyada değil denetim izinin kendisinde kalıcıdır. Kartlar rolüne
 göre üç uçtan okunur (tasarım §4.4.2 "kısmi yetki ayrı uçla verilir"; plan F1b-2 "Bütünlük ucu

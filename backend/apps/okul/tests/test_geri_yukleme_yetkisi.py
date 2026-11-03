@@ -721,6 +721,18 @@ def test_geri_sarilmis_yonetici_satiri_parolayla_geri_yukleyemez(
     kipi (çıkış 9) ve uygulama içi (400)."""
     _sarmal_ekle(YONETICI_2)
     _geri_sarilmis_ikinci_yonetici(ortam["db"])
+    _uc_kolda_kayit_izi_reddi(kol, ortam, tmp_path, monkeypatch, capsys)
+
+
+def _uc_kolda_kayit_izi_reddi(
+    kol: str,
+    ortam: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """İkinci program yöneticisinin parolasıyla geri yükleme üç kolda `RET_KAYIT_IZI` (ileti
+    mührünkü) ile reddedilir, hiçbir dosya değişmez (not da yazılmaz); karar güncelindir."""
     ortam["eski"] = ortam["db"].read_bytes()
     once = _anlik(ortam["db"])
 
@@ -777,6 +789,111 @@ def test_geri_sarilmis_yonetici_satiri_parolayla_geri_yukleyemez(
     with pytest.raises(YetkiReddi) as ret:
         _dogrula(ortam["db"], hesap_id=YONETICI_2.id)
     assert (ret.value.kod, ret.value.kaynak) == (geri_yukleme_yetkisi.RET_KAYIT_IZI, KAYNAK_GUNCEL)
+
+
+# ============================================================ iz boşluğu (kullanıcı kararı 03.11.2026)
+
+#: Geri sarmayı gizlemek için ikinci yöneticinin askı satırına yapılan program dışı değişiklik
+#: (`satir_izi` "İZ BOŞLUĞU"; `test_satir_izi.DEGISIMLER` ile aynı adlar). `…_sahte_anahtar`:
+#: kaydırmaya ek olarak iz anahtarı tablosuna sahte, emekli bir satır (geçerli ilk sırası S+1)
+#: eklenir — kayma araması İA'yı yürürlüksüz çözer, örtülmez (bağımsız denetim bulgusu, b5).
+BOSLUK_DEGISIMLERI = (
+    "silme",
+    "yeniden_numaralama",
+    "yeniden_numaralama_sahte_anahtar",
+    "real_tasima",
+    "blob_sira",
+)
+
+
+def _bosluklu_ikinci_yonetici(db: Path, degisim: str) -> None:
+    """`_geri_sarilmis_ikinci_yonetici` + ardından ilgisiz bir satır (askı satırının silinmesi
+    kuyruk kesmesi olmasın) + askı satırının izden çıkarılması (SQLite tarayıcısı taklidi; kod
+    gerekmez). Satır askıdan önceki kaydını (S) tutar; S'den sonra izde boşluk vardır."""
+    _geri_sarilmis_ikinci_yonetici(db)
+    muhasip = ozetli(TEST_DEK, MUHASIP)
+    with closing(sqlite3.connect(db)) as baglanti:
+        iz_satiri_ekle(
+            baglanti,
+            hesap_id=MUHASIP.id,
+            alanlar=ozet_alanlari(TEST_DEK, muhasip, muhur(TEST_DEK, muhasip)),
+        )
+        (sira,) = baglanti.execute(
+            "SELECT MIN(seq) FROM okul_audittrail WHERE object_id = ?", (YONETICI_2.id,)
+        ).fetchone()
+        (askida,) = baglanti.execute(
+            "SELECT MAX(seq) FROM okul_audittrail WHERE object_id = ?", (YONETICI_2.id,)
+        ).fetchone()
+        assert askida > sira
+        if degisim == "silme" or degisim.startswith("yeniden_numaralama"):
+            baglanti.execute("DELETE FROM okul_audittrail WHERE seq = ?", (askida,))
+            if degisim.startswith("yeniden_numaralama"):
+                baglanti.execute(
+                    "UPDATE okul_audittrail SET seq = seq - 1 WHERE seq > ?", (askida,)
+                )
+            if degisim.endswith("_sahte_anahtar"):
+                baglanti.execute(
+                    "INSERT INTO okul_auditkey (id, key, valid_from_seq, created_at, retired_at) "
+                    "VALUES (99, 'x', ?, '2026-11-03 08:00:00', '2026-11-03 08:00:00')",
+                    (sira + 1,),
+                )
+        elif degisim == "real_tasima":
+            baglanti.execute(
+                "UPDATE okul_audittrail SET seq = ? WHERE seq = ?", (sira - 0.5, askida)
+            )
+            # Boşluk, S'den önceki ilgisiz bir satırla dolar (sayım tutar; yalnız tür yakalar).
+            baglanti.execute("UPDATE okul_audittrail SET seq = ? WHERE seq = 1", (askida,))
+        else:
+            assert degisim == "blob_sira"
+            baglanti.execute(
+                "UPDATE okul_audittrail SET seq = CAST(seq AS BLOB) WHERE seq = ?", (askida,)
+            )
+        baglanti.commit()
+
+
+@pytest.mark.parametrize("degisim", BOSLUK_DEGISIMLERI)
+@pytest.mark.parametrize("kol", ["konsol", "masaustu", "uygulama_ici"])
+def test_izinde_bosluk_olan_geri_sarilmis_yonetici_parolayla_geri_yukleyemez(
+    kol: str,
+    degisim: str,
+    ortam: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Kullanıcı kararı 03.11.2026 "Boşluğu engelle": askıya alınmış ikinci program yöneticisinin
+    satırı askıdan önceki kopyasına geri sarılır VE askı satırı izden silinir, silinip sonraki
+    satır aşağı kaydırılır (iz anahtarı tablosuna sahte, emekli bir satır da eklenerek), eşleşen
+    satırın gerisine REAL bir sırayla taşınır ya da sırası BLOB'a çevrilir. Kilit açılışıyla aynı
+    işlev: parola yolu üç kolda reddedilir (`RET_KAYIT_IZI`), görüntüye düşülmez, hiçbir dosya
+    değişmez."""
+    _sarmal_ekle(YONETICI_2)
+    _bosluklu_ikinci_yonetici(ortam["db"], degisim)
+    _uc_kolda_kayit_izi_reddi(kol, ortam, tmp_path, monkeypatch, capsys)
+
+
+def test_ilgisiz_satir_silinmisse_program_yoneticisi_parolayla_geri_yukleyemez(
+    tmp_path: Path,
+) -> None:
+    """Kabul edilen bedel (kullanıcı kararı 03.11.2026): güncel veritabanının izinden program
+    yöneticisinin son kaydından SONRAKİ ilgisiz bir satır silinmişse onun parola yolu da reddedilir
+    (`RET_KAYIT_IZI`, karar güncelindir — sağlam görüntüye düşülmez); çıkış kurtarma anahtarıdır.
+    Silinen satır son kaydından ESKİYSE kabul edilir."""
+    db = tmp_path / "db.sqlite3"
+    _sarmal_ekle(YONETICI_2)
+    saglam = yetkili_sqlite(
+        tmp_path / "saglam.sqlite3", dek=TEST_DEK, hesaplar=[YONETICI, MUHASIP, YONETICI_2]
+    )
+    yetkili_sqlite(db, dek=TEST_DEK, hesaplar=[YONETICI, MUHASIP, YONETICI_2])
+    assert _dogrula(db, goruntu=saglam) == KAYNAK_GUNCEL
+    with closing(sqlite3.connect(db)) as baglanti:
+        baglanti.execute("DELETE FROM okul_audittrail WHERE seq = 2")  # muhasibin satırı
+        baglanti.commit()
+
+    with pytest.raises(YetkiReddi) as ret:
+        _dogrula(db, goruntu=saglam)
+    assert (ret.value.kod, ret.value.kaynak) == (geri_yukleme_yetkisi.RET_KAYIT_IZI, KAYNAK_GUNCEL)
+    assert _dogrula(db, goruntu=saglam, hesap_id=YONETICI_2.id) == KAYNAK_GUNCEL
 
 
 def test_eski_iz_satirinin_sirasi_blob_yapilinca_geri_yukleme_yetkisi_aldanmaz(

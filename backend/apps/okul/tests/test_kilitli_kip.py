@@ -179,6 +179,8 @@ def test_zincir_bosken_capa_yazilmaz() -> None:
     [
         "{bozuk",
         "[]",
+        # Derin iç içe JSON `json.loads`'ta RecursionError verir: bozuk sayılır, 500 değil.
+        "[" * 100_000 + "]" * 100_000,
         json.dumps({"surum": 2}),
         json.dumps({"surum": 1, "capa": {"seq": 0, "mac": "0" * 64, "muhur": "0" * 64}}),
         json.dumps(

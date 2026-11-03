@@ -32,9 +32,10 @@ plan F1b-1).
 KABUL (tasarım §4.6.1 kural 1'in giriş koşullarıyla aynı; hepsi birden):
 
 * hesabın `okul_account` satırı vardır ve mührü bu DEK'le tutar;
-* satır denetim izindeki son içerik MAC'li kaydını tutar (kullanıcı kararı 03.11.2026 "Girişte
-  reddet"; `satir_izi.hesap_izi_tutuyor`, aynı salt okunur bağlantıda): eski bir kopyadan geri
-  konmuş satır mührü ve özeti tutsa da reddedilir (`RET_KAYIT_IZI`, ileti mührünkü);
+* satır denetim izindeki son içerik MAC'li kaydını tutar ve o kayıttan sonra izde boşluk yoktur
+  (kullanıcı kararları 03.11.2026 "Girişte reddet", "Boşluğu engelle";
+  `satir_izi.hesap_izi_tutuyor`, aynı salt okunur bağlantıda): eski bir kopyadan geri konmuş satır
+  mührü ve özeti tutsa da reddedilir (`RET_KAYIT_IZI`, ileti mührünkü);
 * durumu `ACIK` ya da `PAROLA_YENILENMELI`dir (`ASKIDA`, `KAPALI` ret);
 * parolanın açtığı sarmalın özeti satırın asıl ya da bekleyen özetini tutar (`wrap_digest`,
   `wrap_digest_pending`; kullanıcı kararı 03.11.2026 "tazelik kapatılır", `app_password` modül
@@ -120,12 +121,24 @@ parolasını bilen ve veri dizinine yazabilen biri o hesabın eski sarmalını
 satırınkini tutmaz: geri yükleme `RET_OZET` ile durur, hiçbir dosya değişmez. **Satır da son iz kaydına bağlıdır (kullanıcı kararı 03.11.2026 "Girişte reddet"):** satırın
 kendisinin eski bir kopyadan geri konması (rolü askıyla düşürülmüş program yöneticisinin askıdan
 önceki satırı, sıfırlamadan sonra kopyalanmış satır) mühür ve özet tutsa da `RET_KAYIT_IZI` ile
-durur (eski satırın iz sırasını BLOB'a çevirmek de geçmez: `satir_izi` adım 2). Kalan risk
-(`app_password` modül başlığı "KALAN RİSKLER"): veritabanının iziyle BİRLİKTE eski bir kopyayla
-değiştirilmesi, iz kuyruğunun satırla birlikte kesilmesi, hesabın yeni iz satırlarının satır geri
-sarmayla birlikte silinmesi ya da başka bir kayda çevrilmesi (burada güncel veritabanının zinciri
-doğrulanmaz; askıya alınmış ya da kapatılmış bir program yöneticisinin geri sarılmış satırı böyle
-geçer; `satir_izi` modül başlığı "KAPSAMIN SINIRI") ve görüntüye
+durur (eski satırın iz sırasını BLOB'a çevirmek de geçmez: `satir_izi` adım 2). Hesabın yeni iz
+satırlarını izin ARASINDAN SİLMEK (kuyruk değil), silinenden sonrakileri aşağı KAYDIRMAK (silinen
+bölgeden sonra açık kipte, `BUTUNLUK` dışı bir satır kaldıysa ve o dayanak satırı bozulmadıysa;
+iz anahtarı tablosuna eklenen sahte bir anahtar bunu örtmez) ya da bir satırı REAL bir sıraya
+taşımak da geçmez (kullanıcı kararı 03.11.2026 "Boşluğu engelle"; `satir_izi` "İZ BOŞLUĞU", aynı
+tek işlev): izinde boşluk olan güncel veritabanında ret `RET_KAYIT_IZI`'dir, görüntüye düşülmez;
+izde ilgisiz bir satır silinmişse de son kaydı ondan eski program yöneticisi parolayla geri
+yükleyemez (çıkış kurtarma anahtarı yoludur). Kalan risk (`app_password` modül başlığı "KALAN
+RİSKLER" (b); liste orada ve `satir_izi` modül başlığı "KAPSAMIN SINIRI"nda aynıdır):
+veritabanının iziyle BİRLİKTE eski bir kopyayla değiştirilmesi; iz kuyruğunun satırla birlikte
+kesilmesi (açık kip satırların zincir başına dek silinip kalan girişsiz satırların — kilitli kip,
+`BUTUNLUK` — aşağı kaydırılması dahil); hesabın yeni iz satırlarının silinmeden başka bir kayda
+çevrilmesi ya da değiştirilmesi, iki satırın tamsayı sırayla yer değiştirmesi, hesabın yeni
+satırının S'nin gerisinde boş bir tamsayıya taşınması, silinen satırın yerine başka bir satırın ya
+da kopyasının (boşluğun sırasıyla) konması; dayanağı da bozan (tek hücre yeter) ya da zincir
+başına sahte bir açık kip satırı ekleyen (tek INSERT), on binden büyük ya da oturum açıkken yapılan
+kaydırma (askıya alınmış ya da kapatılmış bir program yöneticisinin
+geri sarılmış satırı böyle geçer; satırların kendi MAC'i bozulur, burada doğrulanmaz) ve görüntüye
 düşüşte görüntünün yedek günündeki satırı — yedek günündeki sarmalı geri koyan, o günün parolasını
 bilen biri görüntüye düşürülmüş bir veritabanıyla geri yükler (görüntünün satırı görüntünün kendi
 izini tutar). Bu denetim kaza önleyicidir ve izlenebilirlik sağlar; GA-3'ü kriptografik olarak

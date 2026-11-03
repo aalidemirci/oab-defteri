@@ -23,7 +23,13 @@ KURALLAR (her biri bu modülde zorlanır):
 * **Zincirin sonu her seferinde veritabanından, işlemin içinde okunur.** Bellekte son
   MAC TUTULMAZ: içe aktarma önizlemesi işlemini `set_rollback` ile geri sarar; bellekte
   kalan bir "son MAC" geri alınmış satıra bağlanır, zincir kopardı. `seq` son satırın
-  +1'idir; geri alınan satır boşluk bırakmaz.
+  +1'idir; geri alınan satır boşluk bırakmaz (`AUTOINCREMENT` yok, numara yanmaz). Satırın izinin
+  boşluk denetimi bu kesintisizliğe dayanır (kullanıcı kararı 03.11.2026 "Boşluğu engelle";
+  `services.satir_izi` "İZ BOŞLUĞU"). Son satırın sırası tamsayı değilse (program dışından metin,
+  BLOB ya da REAL yazılmış), SQLite'ın en büyük tamsayısına ulaşmışsa (`satir_izi.EN_BUYUK_SIRA`;
+  `+ 1` taşardı) ya da `mac`'i metin değilse yazıcı YAZMAZ: `IzYazilamadi`
+  (`ZINCIR_BASI_BICIMSIZ`; orkestratör kararı O-3) — eskiden `int(b"57") + 1` sırayı çakıştırıp
+  her yazımı `IntegrityError`'a, en büyük tamsayı `OverflowError`'a düşürüyordu.
 * **Yazar bağlamı zorunludur.** Yazar `oturum.yazar()`'dır: istek başında ara katmanın
   kurduğu bağlam (oturum istek sürerken değişse de o isteğin yazarı açılıştaki hesaptır),
   gün işinde ve sistem işinde açıkça verilen `SISTEM` (`oturum.sistem_olarak`), kilit
@@ -112,7 +118,7 @@ from typing import Any, Final
 from django.apps import apps as django_apps
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import DatabaseError, connection, models, transaction
-from django.db.models import QuerySet
+from django.db.models import F, Func, QuerySet
 from django.db.models.functions import Cast
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -777,9 +783,9 @@ def _ekle(
         key_mode, key_ref = AuditKeyMode.ACIK, str(anahtar.kayit_id)
         zincir_anahtari = crypto.audit_chain_key(anahtar.ia)
     hesap_id = None if kim.hesap_id is None else str(uuid.UUID(str(kim.hesap_id)))
-    son = AuditTrail.objects.order_by("-seq").values_list("seq", "mac").first()
-    seq = 1 if son is None else int(son[0]) + 1
-    prev_mac = "" if son is None else str(son[1])
+    son = _zincir_basi_satiri(yazici=True)
+    seq = 1 if son is None else son[0] + 1
+    prev_mac = "" if son is None else son[1]
     satir = AuditTrail(
         seq=seq,
         at=timezone.now(),
@@ -955,7 +961,9 @@ def kilitli_ref_coz(key_ref: object) -> tuple[int, int] | None:
     if not isinstance(key_ref, str):
         return None
     parcalar = key_ref.split(":")
-    if len(parcalar) != 2 or not all(p.isascii() and p.isdigit() for p in parcalar):
+    if len(parcalar) != 2 or not all(
+        p.isascii() and p.isdigit() and len(p) <= satir_izi.AZAMI_HANE for p in parcalar
+    ):
         return None
     capa_seq, adim = int(parcalar[0]), int(parcalar[1])
     if capa_seq < 1 or adim > AZAMI_ADIM:
@@ -969,9 +977,13 @@ def acik_ref_coz(key_ref: object) -> int | None:
     `str.isdigit` tek başına yetmez: "²" ya da başka yazıların rakamları onu doğru yapar
     ama `int()` onları çeviremez. Program dışından yazılmış böyle bir başvuru doğrulamayı
     istisnayla yarıda kesmez, satırın bulgusu `anahtar_yok` olur (`kilitli_ref_coz` gibi).
-    Metin olmayan değer de (ikili `b"1"`; `bytes.isdigit` doğrudur) başvuru değildir.
+    Metin olmayan değer de (ikili `b"1"`; `bytes.isdigit` doğrudur) başvuru değildir; SQLite
+    tamsayısından uzun rakam dizisi de (`satir_izi.AZAMI_HANE`; `int()` 4300 haneden sonra
+    `ValueError` verir).
     """
     if not isinstance(key_ref, str) or not key_ref or not (key_ref.isascii() and key_ref.isdigit()):
+        return None
+    if len(key_ref) > satir_izi.AZAMI_HANE:
         return None
     return int(key_ref)
 
@@ -1274,9 +1286,56 @@ def son_satirlari_dogrula(
 
 
 def zincir_basi() -> tuple[int, str] | None:
-    """Zincirin son satırı: (`seq`, `mac`); iz boşsa None (kâğıt çapasının kaynağı, §4.6.3)."""
-    son = AuditTrail.objects.order_by("-seq").values_list("seq", "mac").first()
-    return None if son is None else (int(son[0]), str(son[1]))
+    """Zincirin son satırı: (`seq`, `mac`); iz boşsa None (kâğıt çapasının kaynağı, §4.6.3).
+
+    Baş satırın sırası tamsayı değilse `IzYazilamadi` (`ZINCIR_BASI_BICIMSIZ`; orkestratör kararı
+    O-3): çapa, kâğıt çapası ve doğrulama penceresi böyle bir başa kurulmaz.
+    """
+    return _zincir_basi_satiri(yazici=False)
+
+
+#: Zincir başı program dışından bozulmuş: yazıcı ve zincir başı okuyucusu yazmaz (O-3). İleti
+#: günlüğe düşer (kilitli kip satırı, `BUTUNLUK`) ya da işlemi geri aldırır; giriş bu hâlde zaten
+#: açılmaz (`satir_izi` "İZ BOŞLUĞU": tamsayı olmayan sıra (b), en büyük tamsayıdaki sıra (a);
+#: metin olmayan `mac`'te girişin kendi satırı yazılamaz). Çıkış yedekten geri yüklemedir.
+ZINCIR_BASI_BICIMSIZ: Final = (
+    "Denetim izinin son kaydı bozuk (sıra numarası ya da bağı program dışından değiştirilmiş "
+    "görünüyor); denetim izine yazılamıyor. Kayıtlar sağlam bir yedekten geri yüklenmelidir."
+)
+
+
+def _zincir_basi_satiri(*, yazici: bool) -> tuple[int, str] | None:
+    """Zincir başı (`seq`, `mac`) — sıra türü denetlenerek (orkestratör kararı O-3).
+
+    `seq` rowid takma adı değildir: program dışından yazılmış metin ya da BLOB bütün sayılardan,
+    kesirli REAL de kendi değerinden büyük tamsayılardan sonra sıralanır ve "son satır" okunurdu
+    (`satir_izi` modül başlığı "TÜR ŞARTI"). Eskiden `int(b"57") + 1` ile sıra çakışıyor, her iz
+    yazımı `IntegrityError` (500) veriyordu ya da zincir sessizce yanlış yere uzuyordu. Artık baş
+    satırın türü `typeof` ile okunur; tamsayı değilse `IzYazilamadi(ZINCIR_BASI_BICIMSIZ)`.
+    `yazici` (`_ekle`) iki şart daha koyar: baş satırın `mac`'i metin olmalıdır (ikili değer
+    `prev_mac` olamaz) ve sırası SQLite'ın en büyük tamsayısından küçük olmalıdır
+    (`satir_izi.EN_BUYUK_SIRA`; `+ 1` `OverflowError` verirdi). Okuyucu (`zincir_basi`) böyle bir
+    başı okur: değeri bir tamsayıdır, çapa ve pencere ona kurulabilir; yazım yine yapılamaz.
+    """
+    son = (
+        AuditTrail.objects.order_by("-seq")
+        .annotate(
+            seq_turu=Func(F("seq"), function="typeof", output_field=models.TextField()),
+            mac_turu=Func(F("mac"), function="typeof", output_field=models.TextField()),
+        )
+        .values_list("seq_turu", "seq", "mac_turu", "mac")
+        .first()
+    )
+    if son is None:
+        return None
+    seq_turu, seq, mac_turu, mac = son
+    if seq_turu != "integer" or isinstance(seq, bool) or not isinstance(seq, int):
+        raise IzYazilamadi(ZINCIR_BASI_BICIMSIZ)
+    if yazici and (
+        mac_turu != "text" or not isinstance(mac, str) or seq >= satir_izi.EN_BUYUK_SIRA
+    ):
+        raise IzYazilamadi(ZINCIR_BASI_BICIMSIZ)
+    return seq, str(mac)
 
 
 def kaydi_dogrula(model: type[models.Model], pk: Any) -> bool | None:
@@ -1338,7 +1397,9 @@ def hesap_izi_tutuyor(
     MAC'li iz satırı yoksa None değil False'tur (fail-closed) ve okunan her iz satırının sırasının
     türü ve kendi zincir MAC'i de doğrulanır (son satırın `record_mac`'ini boşaltmak, `key_ref`'ini
     değiştirmek ya da eski bir satırın sırasını BLOB'a çevirmek denetimi eski bir satıra
-    kaydırmasın).
+    kaydırmasın). Eşleşen satırdan sonra izde silinmiş ya da sırası değiştirilmiş satır varsa da
+    False'tur (kullanıcı kararı 03.11.2026 "Boşluğu engelle"; `satir_izi` "İZ BOŞLUĞU"):
+    `kaydi_dogrula` bunu sormaz.
     """
     connection.ensure_connection()
     return satir_izi.hesap_izi_tutuyor(
