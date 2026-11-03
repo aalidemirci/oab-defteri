@@ -953,13 +953,20 @@ class Account(models.Model):
     `services.hesaplar` modül başlıklarındadır.
 
     MÜHÜR (`seal`): `HMAC(HKDF(DEK, "od-hesap-muhru/v1"), kanonik(id, login_name,
-    role, status, person, membership, term, opened_at, closed_at))`
-    (`shared.kanonik.hesap_muhru`). Kilit açılışında seçilen hesabın mührü DEK
-    belleğe alınmadan doğrulanır; tutmazsa giriş reddedilir ve satıra DOKUNULMAZ
-    (yeniden mühürlemek program dışından değiştirilmiş rolü meşrulaştırırdı; §4.3
-    tehdit 19). `person`, `membership` ve `term` alanları hedef modelleriyle F1c'de
+    role, status, person, membership, term, opened_at, closed_at, wrap_digest,
+    wrap_digest_pending))` (`shared.kanonik.hesap_muhru`). Kilit açılışında seçilen
+    hesabın mührü DEK belleğe alınmadan doğrulanır; tutmazsa giriş reddedilir ve satıra
+    DOKUNULMAZ (yeniden mühürlemek program dışından değiştirilmiş rolü meşrulaştırırdı;
+    §4.3 tehdit 19). `person`, `membership` ve `term` alanları hedef modelleriyle F1c'de
     gelir; mühür onları bugünden `null` olarak taşır, alanlar eklenince var olan
     mühürler değişmez.
+
+    SARMAL ÖZETİ (kullanıcı kararı 03.11.2026 "tazelik kapatılır"; `app_password` modül
+    başlığı "SARMALIN TAZELİĞİ"): `wrap_digest` hesabın `guvenlik.json`'daki GÜNCEL parola
+    kaydının (sarmalın) DEK'li özetidir, `wrap_digest_pending` iki aşamalı yazımın bekleyen
+    özeti (kesinti hâli). Parolayla açılan sarmalın özeti ikisinden birini tutmalıdır; ikisi de
+    boşsa hesap parolayla açılmaz (fail-closed). İki alan mühre girer: satırdaki özet tek başına
+    eski değerle değiştirilemez.
 
     KISITLAR (sert; sistem bütünlüğü): açık (`KAPALI` olmayan) hesaplar arasında
     `login_name` tekil · başkan, başkan yardımcısı, muhasip, sekreter ve okul müdürü
@@ -1008,6 +1015,8 @@ class Account(models.Model):
         "reset_kind",
         "reset_notice_pending",
         "last_login_at",
+        "wrap_digest",
+        "wrap_digest_pending",
         "seal",
     )
 
@@ -1057,6 +1066,10 @@ class Account(models.Model):
     )
     reset_notice_pending = models.BooleanField("yenilenme bildirimi bekliyor", default=False)
     last_login_at = models.DateTimeField("son giriş", null=True, blank=True)
+    wrap_digest = models.CharField("parola kaydının özeti", max_length=64, blank=True, default="")
+    wrap_digest_pending = models.CharField(
+        "parola kaydının bekleyen özeti", max_length=64, blank=True, default=""
+    )
     seal = models.CharField("mühür", max_length=64, blank=True, default="")
 
     objects = _NoDeleteQuerySet.as_manager()
@@ -1125,6 +1138,8 @@ class Account(models.Model):
             "term": None,
             "opened_at": self.opened_at,
             "closed_at": self.closed_at,
+            "wrap_digest": self.wrap_digest,
+            "wrap_digest_pending": self.wrap_digest_pending,
         }
 
     def compute_seal(self, data_key: bytes) -> str:
@@ -1132,8 +1147,19 @@ class Account(models.Model):
         return kanonik.hesap_muhru(account_seal_key(data_key), self.seal_fields())
 
     def seal_matches(self, data_key: bytes) -> bool:
-        """Kayıtlı mühür verilen DEK'le hesaplanana eşit mi? (sabit sürede karşılaştırılır)"""
-        return bool(self.seal) and kanonik.esit(self.seal, self.compute_seal(data_key))
+        """Kayıtlı mühür verilen DEK'le hesaplanana eşit mi? (sabit sürede karşılaştırılır)
+
+        Mühre giren bir alan kanonik biçime giremiyorsa (program dışından metin sütununa yazılmış
+        ikili değer) mühür tutmuyor sayılır: hata yükseltip denetimi yarıda kesmez (ORM'siz
+        okuyucuyla aynı; `geri_yukleme_yetkisi`).
+        """
+        if not self.seal:
+            return False
+        try:
+            beklenen = self.compute_seal(data_key)
+        except kanonik.KanonikHata:
+            return False
+        return kanonik.esit(self.seal, beklenen)
 
     @property
     def display_name_text(self) -> str | None:

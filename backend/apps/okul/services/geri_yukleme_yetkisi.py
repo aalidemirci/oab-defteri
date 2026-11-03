@@ -33,7 +33,15 @@ KABUL (tasarım §4.6.1 kural 1'in giriş koşullarıyla aynı; hepsi birden):
 * hesabın `okul_account` satırı vardır ve mührü bu DEK'le tutar;
 * rolü `yonetici`dir;
 * durumu `ACIK` ya da `PAROLA_YENILENMELI`dir (`ASKIDA`, `KAPALI` ret);
+* parolanın açtığı sarmalın özeti satırın asıl ya da bekleyen özetini tutar (`wrap_digest`,
+  `wrap_digest_pending`; kullanıcı kararı 03.11.2026 "tazelik kapatılır", `app_password` modül
+  başlığı "SARMALIN TAZELİĞİ"); tutmazsa `RET_OZET`;
 * güvenlik dosyasındaki sarmalında hatalı deneme askısı (`askida`) yoktur.
+
+Sıra: mühür (tutmuyorsa öteki değerlere güvenilmez), rol, durum, özet. Özet rolden SONRADIR:
+program yöneticisi olmayan hesabın iletisi rolünkidir (geri yüklemeyi zaten yapamaz); özet ancak
+öteki koşulları tutan program yöneticisini ayırır. Kilit açılışında özet durumdan ÖNCEDİR ve
+`BUTUNLUK` satırı düşer; burada ORM yoktur, iz yazılmaz, ret günlüğe düşer.
 
 Geçici ya da 180 günü dolmuş parola engel DEĞİLDİR: konsolda parola yenileme adımı yoktur,
 yenileme geri yüklemeden sonraki ilk girişte istenir; geçici parolayı başka bir program
@@ -43,7 +51,8 @@ Satır, Django'nun SQLite'a yazdığı biçimden mühür sözleşmesinin biçimi
 (`satirdan_muhur_alanlari`; `Account.seal_fields()` ile aynı sözlük): kimlik tiresiz 32 hane
 → tireli UUID metni; zaman saat dilimsiz UTC metni (`2026-11-02 07:30:00[.ffffff]`; ayarlarda
 veritabanı saat dilimi verilmediği için bağlantı saat dilimi UTC'dir) → saat dilimli UTC
-`datetime`; `person`, `membership`, `term` F1c'ye dek `None`dır. Çevrilmezse her mühür tutmuyor
+`datetime`; `person`, `membership`, `term` F1c'ye dek `None`dır; sarmal özetleri metindir (`NULL`
+ya da metin olmayan değer mühür tutmamış sayılır). Çevrilmezse her mühür tutmuyor
 görünürdü; biçim eşitliği ORM'in yazdığı satırla testte sabitlenir. **F1c'de bu üç sütun
 gelince okuyucu da onları okumalıdır** (eski şemalı görüntüde sütun yoksa `None`); aksi hâlde
 mühürler tutmaz ve konsol geri yüklemesi kapanır (fail-closed).
@@ -78,6 +87,12 @@ nedeniyle (`dosya_yok`, `okul_karti`, `parmak_izi` ya da `sqlite3` hatasının s
 ileti ve yol yazılmaz) uyarı olarak yazılır: sessiz düşüş sonradan görülebilir. Görüntü de
 okunamıyorsa ret verilir.
 
+GÜNCEL VERİTABANI OKUNAMIYORSA VE PAROLA YEDEKTEN SONRA DEĞİŞTİYSE görüntüdeki satırın özeti
+yedeğin alındığı günün sarmalınındır ve güncel dosyadaki sarmalı tutmaz: parola yolu reddedilir
+(`RET_OZET`), ileti kurtarma anahtarı yolunu anar (zarfın üçüncü durumu: güvenlik dosyası ya da
+kayıtlar kaybolduğunda, bozulduğunda ya da program dışından değiştirildiğinde). Kurtarma anahtarı
+yolunda rol ve özet denetimi yoktur.
+
 Rol kriptografik bir önlem değildir (tasarım §4.4.6-1). **Sarmal kimliği parola kaydına
 bağlıdır (kullanıcı kararı 02.11.2026):** denetlenen hesap, parolanın açtığı SARMALIN `id`
 alanıdır ve sarmalın anahtarı bu kimliğe bağlıdır: `HKDF(Argon2id(parola, tuz),
@@ -91,12 +106,16 @@ kimlik açılan sarmalın kendi `id`'sidir (parolası bilinen hesabın kendisi).
 yazılmış (`turetim` alanı olmayan) sarmal parolayla hiç açılmaz; geri düşüş yoktur. Kalan risk
 (tehdit 6, 19): parolasını bildiği hesabın DEK'ini program dışında türetip başka bir kimlikle
 yeniden sarmalayan ya da bu DEK'le mühürlü sahte bir yönetici satırı taşıyan veritabanı üreten
-biri geçer — bu artık KOD ister (tasarımın tehdit 19 çıtası). Bağ kimliği bağlar, tazeliği
-bağlamaz: bir program yöneticisinin eski ya da geçici parolasını bilen ve veri dizinine
-yazabilen biri, o hesabın eski sarmalını (`guvenlik-arsiv-*.json`'dan ya da önceden aldığı
-kopyadan) geri koyup eski parolayla onun adına geri yükler (kod gerekmez; `app_password` modül
-başlığı "Kalan risk", tehdit 12). Bu denetim kaza önleyicidir ve izlenebilirlik sağlar; GA-3'ü
-kriptografik olarak kapatmaz.
+biri geçer — bu artık KOD ister (tasarımın tehdit 19 çıtası). **Sarmalın tazeliği de mühürlü
+satıra bağlıdır (kullanıcı kararı 03.11.2026):** bir program yöneticisinin eski ya da geçici
+parolasını bilen ve veri dizinine yazabilen biri o hesabın eski sarmalını
+(`guvenlik-arsiv-*.json`'dan ya da önceden aldığı kopyadan) geri koyarsa sarmal açılır ama özeti
+satırınkini tutmaz: geri yükleme `RET_OZET` ile durur, hiçbir dosya değişmez. Kalan risk
+(`app_password` modül başlığı "KALAN RİSKLER"): satırın kendisinin eski bir kopyadan geri konması
+(veritabanına da yazmayı ister) ve görüntüye düşüşte görüntünün yedek günündeki satırı — yedek
+günündeki sarmalı geri koyan, o günün parolasını bilen biri görüntüye düşürülmüş bir veritabanıyla
+geri yükler. Bu denetim kaza önleyicidir ve izlenebilirlik sağlar; GA-3'ü kriptografik olarak
+kapatmaz.
 
 YEDEĞİN GÖRÜNTÜSÜ BELLEKTE açılır: `sqlite3.connect(":memory:")` + `deserialize`. Programın
 yedeği WAL kipindeki kaynaktan `Connection.backup()` ile alındığı için görüntünün başlığı WAL
@@ -144,6 +163,13 @@ ILETI_MUHUR: Final = (
     "Hesap kaydı program dışından değiştirilmiş görünüyor; geri yükleme yapılmadı. Program "
     "yöneticisine ve Denetleme Kuruluna bildirin."
 )
+#: Parola kaydının özeti satırınkini tutmuyor (eski ya da program dışından konmuş sarmal; görüntüye
+#: düşüşte yedekten sonra değişmiş parola). Çıkış kurtarma anahtarı yoludur (zarfın üçüncü durumu).
+ILETI_OZET: Final = (
+    "Bu hesabın parola kaydı kayıtlardakiyle uyuşmuyor; geri yükleme yapılmadı. Güvenlik "
+    "dosyası ya da kayıtlar bozulduysa ya da program dışından değiştirildiyse yedeği kurtarma "
+    "anahtarıyla geri yükleyin ve Denetleme Kuruluna bildirin."
+)
 
 #: Ret nedenleri (günlüğe ve teste; kullanıcı metnine çıkmaz) → ileti.
 RET_SATIR_YOK: Final = "satir_yok"
@@ -152,6 +178,7 @@ RET_ROL: Final = "rol"
 RET_DURUM: Final = "durum"
 RET_ASKIDA: Final = "askida"
 RET_OKUNAMADI: Final = "okunamadi"
+RET_OZET: Final = "ozet"
 _ILETILER: Final[dict[str, str]] = {
     RET_SATIR_YOK: ILETI_ROL,
     RET_OKUNAMADI: ILETI_ROL,
@@ -159,6 +186,7 @@ _ILETILER: Final[dict[str, str]] = {
     RET_MUHUR: ILETI_MUHUR,
     RET_DURUM: ILETI_DURUM,
     RET_ASKIDA: ILETI_DURUM,
+    RET_OZET: ILETI_OZET,
 }
 
 #: Kararı veren kaynak.
@@ -225,25 +253,32 @@ def _metin(ham: bytes) -> str:
 
 
 def yonetici_dogrula(
-    *, db_path: Path, goruntu: bytes, dek: bytes, hesap_id: object, askida: bool
+    *,
+    db_path: Path,
+    goruntu: bytes,
+    dek: bytes,
+    hesap_id: object,
+    askida: bool,
+    sarmal_ozeti: str | None,
 ) -> str:
     """Hesabı program yöneticisi olarak doğrular; kararı veren kaynağı döndürür.
 
     Önce güncel veritabanı (`db_path`) okunur; okunamıyorsa (modül başlığındaki dört hâl)
     yedeğin görüntüsü (`goruntu`, çözülmüş veritabanı baytları). `hesap_id` parolası doğrulanan
-    sarmalın kimliğidir, `askida` o sarmalın hatalı deneme askısı. Kabulde `KAYNAK_GUNCEL` ya da
-    `KAYNAK_GORUNTU`; aksi hâlde `YetkiReddi`. Hiçbir dosyaya yazmaz.
+    sarmalın kimliğidir, `askida` o sarmalın hatalı deneme askısı, `sarmal_ozeti` o sarmalın DEK'li
+    özeti (`crypto.account_wrap_digest`; biçimsiz sarmalda None — hiçbir özeti tutmaz). Kabulde
+    `KAYNAK_GUNCEL` ya da `KAYNAK_GORUNTU`; aksi hâlde `YetkiReddi`. Hiçbir dosyaya yazmaz.
     """
     anahtar = _hesap_anahtari(hesap_id)
     kaynak = KAYNAK_GUNCEL
-    karar = _guncel_karari(db_path, dek, anahtar)
+    karar = _guncel_karari(db_path, dek, anahtar, sarmal_ozeti)
     if isinstance(karar, _Okunamaz):
         logger.warning(
             "Güncel veritabanı okunamadı (neden: %s); hesap yedeğin görüntüsünde denetleniyor.",
             karar.neden,
         )
         kaynak = KAYNAK_GORUNTU
-        karar = _goruntu_karari(db_path.parent, goruntu, dek, anahtar)
+        karar = _goruntu_karari(db_path.parent, goruntu, dek, anahtar, sarmal_ozeti)
         if isinstance(karar, _Okunamaz):
             logger.warning("Yedeğin görüntüsü de okunamadı (neden: %s).", karar.neden)
             raise YetkiReddi(RET_OKUNAMADI, kaynak=kaynak)
@@ -260,7 +295,7 @@ def satirdan_muhur_alanlari(satir: Sequence[Any]) -> dict[str, Any]:
     Sonuç `Account.seal_fields()` ile aynı sözlüktür (modül başlığı). Biçimsiz kimlik ya da
     zaman `ValueError`, beklenmeyen tür `TypeError` yükseltir (çağıran "mühür tutmadı" sayar).
     """
-    kimlik, tanitici, rol, durum, acilis, kapanis, _muhur = satir
+    kimlik, tanitici, rol, durum, acilis, kapanis, ozet, bekleyen, _muhur = satir
     return {
         "id": _kimlik(kimlik),
         "login_name": tanitici,
@@ -271,20 +306,82 @@ def satirdan_muhur_alanlari(satir: Sequence[Any]) -> dict[str, Any]:
         "term": None,
         "opened_at": _zaman(acilis),
         "closed_at": _zaman(kapanis),
+        "wrap_digest": ozet,
+        "wrap_digest_pending": bekleyen,
     }
 
 
+#: `hesap_satiri`'nın sütun sırası: mühre giren sütunlar, sarmal özetleri, mühür.
+HESAP_SATIRI_SUTUNLARI: Final = (
+    "id",
+    "login_name",
+    "role",
+    "status",
+    "opened_at",
+    "closed_at",
+    "wrap_digest",
+    "wrap_digest_pending",
+    "seal",
+)
+#: Satırdaki yerler (`satirdan_muhur_alanlari` sırayı açar).
+SIRA_KIMLIK: Final = 0
+_SIRA_ROL: Final = 2
+_SIRA_DURUM: Final = 3
+SIRA_OZET: Final = 6
+SIRA_BEKLEYEN: Final = 7
+_SIRA_MUHUR: Final = 8
+
+
 def hesap_satiri(baglanti: sqlite3.Connection, anahtar: str) -> Any:
-    """Hesabın mühre giren sütunları ve mührü (`satirdan_muhur_alanlari` bu sırayı açar).
+    """Hesabın mühre giren sütunları, sarmal özetleri ve mührü (`HESAP_SATIRI_SUTUNLARI`).
 
     `anahtar` SQLite'taki kimliktir (tiresiz 32 hane); satır yoksa None. Sorgu kaynakta sabit
     bir `SELECT`'tir (izsiz yazım taraması salt okuma sayar).
     """
     return baglanti.execute(
-        "SELECT id, login_name, role, status, opened_at, closed_at, seal "
-        "FROM okul_account WHERE id = ?",
+        "SELECT id, login_name, role, status, opened_at, closed_at, wrap_digest, "
+        "wrap_digest_pending, seal FROM okul_account WHERE id = ?",
         (anahtar,),
     ).fetchone()
+
+
+def hesap_satirlari(baglanti: sqlite3.Connection) -> list[Any]:
+    """Bütün hesap satırları, `hesap_satiri` sırasıyla (geri yüklemenin özet onarımı okur)."""
+    return baglanti.execute(
+        "SELECT id, login_name, role, status, opened_at, closed_at, wrap_digest, "
+        "wrap_digest_pending, seal FROM okul_account"
+    ).fetchall()
+
+
+def muhurlu_satir_mi(satir: Sequence[Any], dek: bytes) -> bool:
+    """Satırın mührü bu DEK'le tutuyor mu? Çevrilemeyen satır tutmaz (hata yükseltmez)."""
+    muhur = satir[_SIRA_MUHUR]
+    try:
+        beklenen = kanonik.hesap_muhru(crypto.account_seal_key(dek), satirdan_muhur_alanlari(satir))
+    except (TypeError, ValueError):  # KanonikHata bir TypeError'dır
+        return False
+    return bool(muhur) and kanonik.esit(muhur, beklenen)
+
+
+def satir_kimligi(satir: Sequence[Any]) -> str | None:
+    """Satırın (`hesap_satiri` sırası) kanonik kimliği; yalnız kimlik sütunundan, öteki sütunlar
+    biçimsiz olsa da (geri yüklemenin özet onarımı okur). Çevrilemezse None."""
+    try:
+        return _kimlik(satir[SIRA_KIMLIK])
+    except (TypeError, ValueError):
+        return None
+
+
+def ozet_tutuyor_mu(satir: Sequence[Any], sarmal_ozeti: str | None) -> bool:
+    """Sarmalın özeti satırın asıl ya da bekleyen özetini SABİT SÜREDE tutuyor mu? Boş alan hiçbir
+    özeti tutmaz (`app_password._digest_slot` ile aynı kural; çağıran mührü doğrulamıştır)."""
+    if not sarmal_ozeti:
+        return False
+    asil = satir[SIRA_OZET]
+    bekleyen = satir[SIRA_BEKLEYEN]
+    tutar_asil = bool(asil) and kanonik.esit(asil, sarmal_ozeti)
+    tutar_bekleyen = bool(bekleyen) and kanonik.esit(bekleyen, sarmal_ozeti)
+    return tutar_asil or tutar_bekleyen
 
 
 # ---------------------------------------------------------------------------
@@ -321,9 +418,10 @@ def _baglanti_hazirla(baglanti: sqlite3.Connection) -> sqlite3.Connection:
     return baglanti
 
 
-def _karar(baglanti: sqlite3.Connection, dek: bytes, anahtar: str | None) -> object:
-    """Tek kaynağın kararı: None (kabul), ret kodu ya da `_Okunamaz`.
+def okul_karti_okunamaz_mi(baglanti: sqlite3.Connection, dek: bytes) -> str | None:
+    """Okul kartı tek satır ve parmak izi bu DEK'inki değilse okunamamanın nedeni; öyleyse None.
 
+    Modül başlığındaki okunamama hâllerinden ikisi (dosya yok ve `sqlite3` hatası çağıranındır).
     `sqlite3.Error` yükseltebilir; çağıran onu okunamama sayar.
     """
     try:
@@ -331,11 +429,24 @@ def _karar(baglanti: sqlite3.Connection, dek: bytes, anahtar: str | None) -> obj
         parmak_izleri = kartlar.fetchall()
     except _GecersizMetin:
         # Okunamayan parmak izi bu DEK'inkine eşit değildir.
-        return _Okunamaz(OKUNAMAMA_PARMAK_IZI)
+        return OKUNAMAMA_PARMAK_IZI
     if len(parmak_izleri) != 1:
-        return _Okunamaz(OKUNAMAMA_OKUL_KARTI)
+        return OKUNAMAMA_OKUL_KARTI
     if not kanonik.esit(parmak_izleri[0][0], crypto.key_fingerprint(dek)):
-        return _Okunamaz(OKUNAMAMA_PARMAK_IZI)
+        return OKUNAMAMA_PARMAK_IZI
+    return None
+
+
+def _karar(
+    baglanti: sqlite3.Connection, dek: bytes, anahtar: str | None, sarmal_ozeti: str | None
+) -> object:
+    """Tek kaynağın kararı: None (kabul), ret kodu ya da `_Okunamaz`.
+
+    `sqlite3.Error` yükseltebilir; çağıran onu okunamama sayar.
+    """
+    neden = okul_karti_okunamaz_mi(baglanti, dek)
+    if neden is not None:
+        return _Okunamaz(neden)
     if anahtar is None:
         return RET_SATIR_YOK
     try:
@@ -344,42 +455,43 @@ def _karar(baglanti: sqlite3.Connection, dek: bytes, anahtar: str | None) -> obj
         return RET_MUHUR
     if satir is None:
         return RET_SATIR_YOK
-    return _satir_karari(satir, dek)
+    return _satir_karari(satir, dek, sarmal_ozeti)
 
 
-def _satir_karari(satir: Sequence[Any], dek: bytes) -> str | None:
-    """Mühür (önce: tutmuyorsa öteki değerlere güvenilmez), rol, durum."""
-    muhur = satir[6]
-    try:
-        beklenen = kanonik.hesap_muhru(crypto.account_seal_key(dek), satirdan_muhur_alanlari(satir))
-    except (TypeError, ValueError):  # KanonikHata bir TypeError'dır
+def _satir_karari(satir: Sequence[Any], dek: bytes, sarmal_ozeti: str | None) -> str | None:
+    """Mühür (önce: tutmuyorsa öteki değerlere güvenilmez), rol, durum, sarmal özeti."""
+    if not muhurlu_satir_mi(satir, dek):
         return RET_MUHUR
-    if not muhur or not kanonik.esit(muhur, beklenen):
-        return RET_MUHUR
-    if satir[2] != ROL_YONETICI:
+    if satir[_SIRA_ROL] != ROL_YONETICI:
         return RET_ROL
-    if satir[3] not in GIRIS_DURUMLARI:
+    if satir[_SIRA_DURUM] not in GIRIS_DURUMLARI:
         return RET_DURUM
+    if not ozet_tutuyor_mu(satir, sarmal_ozeti):
+        return RET_OZET
     return None
 
 
-def _guncel_karari(db_path: Path, dek: bytes, anahtar: str | None) -> object:
+def _guncel_karari(
+    db_path: Path, dek: bytes, anahtar: str | None, sarmal_ozeti: str | None
+) -> object:
     """Güncel veritabanının kararı; dosya yoksa ya da `sqlite3` hatasında `_Okunamaz`."""
     if not db_path.is_file():
         return _Okunamaz(OKUNAMAMA_DOSYA_YOK)
     adres = sqlite_adres.salt_okunur_adres(db_path)
     try:
         with closing(sqlite3.connect(adres, uri=True, timeout=5)) as baglanti:
-            return _karar(_baglanti_hazirla(baglanti), dek, anahtar)
+            return _karar(_baglanti_hazirla(baglanti), dek, anahtar, sarmal_ozeti)
     except sqlite3.Error as exc:
         return _sqlite_hatasi(exc)
 
 
-def _goruntu_karari(dizin: Path, goruntu: bytes, dek: bytes, anahtar: str | None) -> object:
+def _goruntu_karari(
+    dizin: Path, goruntu: bytes, dek: bytes, anahtar: str | None, sarmal_ozeti: str | None
+) -> object:
     """Yedeğin görüntüsünün kararı (bellekte; `deserialize` yoksa geçici dizinde)."""
     try:
         with _goruntu_baglantisi(dizin, wal_basligini_yama(goruntu)) as baglanti:
-            return _karar(_baglanti_hazirla(baglanti), dek, anahtar)
+            return _karar(_baglanti_hazirla(baglanti), dek, anahtar, sarmal_ozeti)
     except sqlite3.Error as exc:
         return _sqlite_hatasi(exc)
     except OSError as exc:

@@ -803,7 +803,9 @@ class TestUnlock:
 # Parola doğrulama (kurtarma anahtarı yenileme; F4'te DEK işlemleri): yalnız oturumdaki hesap
 # ---------------------------------------------------------------------------
 class TestVerifyPassword:
+    @pytest.mark.django_db
     def test_dogru_parola_gecer(self) -> None:
+        """Doğrulama mühürlü satırı ve sarmal özetini de ister (kullanıcı kararı 03.11.2026)."""
         app_password.verify_password(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
 
     def test_yanlis_parola_reddedilir_ve_gecikme_uygulanir(

@@ -108,6 +108,12 @@ export interface IkiDepoKaydi {
   sarmalsiz_hesaplar: IkiDepoHesabi[];
   /** Kaydı olmayan ya da kapalı hesapların güvenlik dosyasında kalan parola kayıtları. */
   silinebilir_sarmallar: IkiDepoHesabi[];
+  /**
+   * Parola kaydı hesap kaydındaki özeti tutmayan hesaplar (eski ya da program dışından konmuş
+   * parola kaydı; giriş yapamaz, çaresi program yöneticisinin parola sıfırlamasıdır). Sunucu
+   * F1b-2 (b3)'ten beri yollar; yanıtta yoksa boş sayılır. Kartta gösterimi (d) alt commit'indedir.
+   */
+  ozeti_tutmayan_hesaplar?: IkiDepoHesabi[];
 }
 
 /**
@@ -240,6 +246,7 @@ export function ikiDepoFarki(
     fark_var: Boolean(kayit?.fark_var) || muhruTutmayan.length > 0,
     sarmalsiz_hesaplar: liste<IkiDepoHesabi>(kayit?.sarmalsiz_hesaplar),
     silinebilir_sarmallar: liste<IkiDepoHesabi>(kayit?.silinebilir_sarmallar),
+    ozeti_tutmayan_hesaplar: liste<IkiDepoHesabi>(kayit?.ozeti_tutmayan_hesaplar),
     muhru_tutmayan: [...muhruTutmayan],
   };
 }

@@ -57,7 +57,8 @@ rol: son girişler, parola yenilenme bildirimi, kâğıt çapası), denetim kart
 (`denetim_kartlari`; `GET security/integrity/audit/`, program yöneticisi ve Denetleme Kurulu:
 bütünlük, geri yükleme ve mührü tutmayan hesaplar — §4.6.3, §4.6.1 kural 1, §4.4.4) ve iki depo
 kartı (`iki_depo_karti`; `GET security/integrity/two-store/`, yalnız program yöneticisi:
-sarmalı olmayan hesaplar ve silinebilir sarmallar — §4.6.1 kural 4). Kartlar ve parola yenilenme bildirimi YALNIZ açık kipte, iz
+sarmalı olmayan hesaplar, silinebilir sarmallar — §4.6.1 kural 4 — ve parola kaydının özeti
+satırınkini tutmayan hesaplar). Kartlar ve parola yenilenme bildirimi YALNIZ açık kipte, iz
 anahtarıyla mühürlü, kuralına uyan ve MAC'i tutan satırları okur
 (`denetim_izi.acik_satir_dogrulayici`): kilitli kip ya da mühürsüz anahtarla (sırsız) eklenmiş
 sahte bir `GIRIS`, `BUTUNLUK` ya da `GERI_YUKLEME` satırı karta çıkmaz, (3). denetimin
@@ -877,7 +878,8 @@ def _iki_depo_farki() -> TwoStoreDifferences | None:
 
 
 def _iki_depo_karti() -> dict[str, Any] | None:
-    """Sarmalı olmayan açık hesaplar ve onayla silinebilir sarmallar (§4.6.1 kural 4).
+    """Sarmalı olmayan açık hesaplar, onayla silinebilir sarmallar (§4.6.1 kural 4) ve parola
+    kaydının özeti satırınkini tutmayan hesaplar ("SARMALIN TAZELİĞİ", `app_password`).
 
     Mührü tutmayan hesaplar bu kartta değildir: onlar kural 1'in kartıdır, denetim kartlarıyla
     program yöneticisine ve Denetleme Kuruluna gider (`_muhru_tutmayan`).
@@ -887,10 +889,14 @@ def _iki_depo_karti() -> dict[str, Any] | None:
         return None
     sarmalsiz = list(fark.rows_without_wrap)
     silinebilir = list(fark.removable_wraps)
+    ozeti_tutmayan = list(fark.digest_mismatch)
     return {
-        "fark_var": bool(sarmalsiz or silinebilir),
+        "fark_var": bool(sarmalsiz or silinebilir or ozeti_tutmayan),
         "sarmalsiz_hesaplar": _iki_depo_ozeti(sarmalsiz),
         "silinebilir_sarmallar": _iki_depo_ozeti(silinebilir),
+        # Parola kaydı satırdaki özeti tutmayan hesaplar (kullanıcı kararı 03.11.2026): giriş
+        # yapamaz; çaresi program yöneticisinin parola sıfırlamasıdır (ekran işi d'dedir).
+        "ozeti_tutmayan_hesaplar": _iki_depo_ozeti(ozeti_tutmayan),
     }
 
 

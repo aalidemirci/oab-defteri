@@ -285,6 +285,9 @@ def parmak_izi_yazili(guvenlik_ortami: Path, db: None) -> str:
 def yonetici_hesabi(parmak_izi_yazili: str) -> Any:
     """`TEST_HESAP_ID`'nin mühürlü `Account` satırı + `TEST_IA`'lı `AuditKey` (DB gerekir).
 
+    Satır güvenlik dosyasındaki sarmalın özetini taşır (`wrap_digest`; kullanıcı kararı
+    03.11.2026 "tazelik kapatılır"): satır ve sarmal ayrı kurulur, özet de kurulur.
+
     Şifreli ad DEK ister: kilitli bir testte de çağrılabilsin diye anahtar geçici
     olarak yüklenir ve önceki hâl (kilitli ya da açık) korunur. Satırlar fixtürle
     yazılır, iz satırı yazılmaz (zincir boş başlar; modül başlığı).
@@ -292,6 +295,7 @@ def yonetici_hesabi(parmak_izi_yazili: str) -> Any:
     from django.utils import timezone
 
     from apps.okul.models import Account, AccountRole, AccountStatus, AuditKey
+    from apps.okul.services import app_password
     from shared import crypto
 
     kilitliydi = not crypto.is_unlocked()
@@ -308,6 +312,8 @@ def yonetici_hesabi(parmak_izi_yazili: str) -> Any:
             opened_at=simdi,
             password_changed_at=simdi,
         )
+        sarmal = app_password._find_wrap(app_password.read_state() or {}, TEST_HESAP_ID)
+        hesap.wrap_digest = (app_password.wrap_digest(TEST_DEK, sarmal) or "") if sarmal else ""
         hesap.seal = hesap.compute_seal(TEST_DEK)
         hesap.save(force_insert=True)
         AuditKey.objects.create(

@@ -428,13 +428,15 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
                 "hesap": TEST_HESAP_ID,
                 "yeni_parola": YENI_PAROLA,
             },
-            _turler("KURTARMA", "GIRIS"),
+            # `HESAP`: iki aşamalı sarmal özetinin bekleyen adımı (ayrı işlem; `app_password`).
+            _turler("HESAP", "KURTARMA", "GIRIS"),
         ),
         "kilitli",
     ),
     ("security-change-password", "POST"): _sabit(
         "/api/v1/security/change-password/",
         {"parola": TEST_PAROLA, "yeni_parola": YENI_PAROLA},
+        "HESAP",  # iki aşamalı sarmal özetinin bekleyen adımı
         "PAROLA",
     ),
     ("security-idle-lock", "PUT"): _sabit(
@@ -696,6 +698,12 @@ MUAF_ISLEVLER: dict[tuple[str, str], str] = {
     ("apps/okul/services/persons.py", "delete_student"): PLAN_MUAFIYETI,
     ("apps/okul/services/persons.py", "delete_personnel"): PLAN_MUAFIYETI,
     ("apps/okul/services/persons.py", "merge_personnel"): PLAN_MUAFIYETI,
+    ("apps/okul/services/ozet_onarimi.py", "ozetleri_onar"): (
+        "Geri yüklemenin parola kaydı özeti onarımı (kullanıcı kararı 03.11.2026): ORM'siz, "
+        "takastan ÖNCE geri yüklenecek `.tmp` dosyasında; o veritabanında oturum ve iz anahtarı "
+        "yoktur. Geri yüklemenin kendisi ilk kilit açılışında `GERI_YUKLEME` satırıyla izlenir; "
+        "onarım sırsız günlüğe yazılır."
+    ),
     ("apps/okul/erisim_gunlugu.py", "yaz"): (
         "Erişim günlüğünün tek yazıcısı: günlük zincir dışıdır (tasarım §4.6.4), satırı iz "
         "satırı doğurmaz; silmesi izlidir (`KVKK_SILME`)."

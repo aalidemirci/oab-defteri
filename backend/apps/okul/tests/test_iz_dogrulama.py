@@ -1145,7 +1145,15 @@ def test_geri_yuklemeden_sonra_kurtarmayla_acilan_yonetici_yenilemeye_cekilmez()
     )
 
     assert Account.objects.get(pk=TEST_HESAP_ID).status == AccountStatus.ACIK
-    assert [s.action for s in satirlar(seq__gt=bas)] == ["KURTARMA", "GERI_YUKLEME", "GIRIS"]
+    # `HESAP`: iki aşamalı özetin bekleyen adımı (`app_password` modül başlığı); sarmalı olmayan
+    # hesabı parola yenilemeye çeken `HESAP` satırı değildir (o `SISTEM`'in olurdu).
+    assert [s.action for s in satirlar(seq__gt=bas)] == [
+        "HESAP",
+        "KURTARMA",
+        "GERI_YUKLEME",
+        "GIRIS",
+    ]
+    assert str(satirlar(seq__gt=bas)[0].account_id) == TEST_HESAP_ID
     assert TEST_HESAP_ID in sarmal_kimlikleri()
     assert pano(TEST_HESAP_ID)["iki_depo"]["fark_var"] is False
 
@@ -1183,7 +1191,12 @@ def test_butunluk_ucu_kartlari_kagit_capasini_ve_son_girisleri_verir() -> None:
     assert denetim == {"butunluk": [], "geri_yukleme": None, "muhru_tutmayan": [], "okunamayan": []}
     iki_depo = APIClient().get("/api/v1/security/integrity/two-store/").json()
     assert iki_depo == {
-        "iki_depo": {"fark_var": False, "sarmalsiz_hesaplar": [], "silinebilir_sarmallar": []},
+        "iki_depo": {
+            "fark_var": False,
+            "sarmalsiz_hesaplar": [],
+            "silinebilir_sarmallar": [],
+            "ozeti_tutmayan_hesaplar": [],
+        },
         "okunamayan": [],
     }
 
@@ -1348,6 +1361,7 @@ def test_muhru_tutmayan_hesap_denetim_kartlarindadir_iki_depo_kartinda_degil() -
         "fark_var": False,
         "sarmalsiz_hesaplar": [],
         "silinebilir_sarmallar": [],
+        "ozeti_tutmayan_hesaplar": [],
     }
     assert denetim["okunamayan"] == [] and iki_depo["okunamayan"] == []
 

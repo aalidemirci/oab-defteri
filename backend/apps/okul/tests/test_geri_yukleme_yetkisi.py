@@ -68,6 +68,7 @@ from apps.okul.services import (
 from apps.okul.services.geri_yukleme_yetkisi import (
     ILETI_DURUM,
     ILETI_MUHUR,
+    ILETI_OZET,
     ILETI_ROL,
     KAYNAK_GORUNTU,
     KAYNAK_GUNCEL,
@@ -79,6 +80,7 @@ from apps.okul.tests.geri_yukleme_ortak import (
     duz_sqlite,
     muhur,
     program_disindan,
+    sarmal_ozeti,
     yetkili_sqlite,
 )
 from apps.okul.tests.hesap_ortak import bagsiz_sarmal, durum_yaz
@@ -196,10 +198,22 @@ def _degismedi(ortam: dict[str, Any]) -> None:
 
 
 def _dogrula(
-    db: Path, *, goruntu: bytes = b"", hesap_id: str = TEST_HESAP_ID, askida: bool = False
+    db: Path,
+    *,
+    goruntu: bytes = b"",
+    hesap_id: str = TEST_HESAP_ID,
+    askida: bool = False,
+    ozet: str | None = None,
 ) -> str:
+    """Çekirdeğin denetimi; `ozet` verilmezse güvenlik dosyasındaki o kimliğin sarmalının özeti
+    (parolanın açtığı sarmal; `backup_restore._yetkiyi_denetle` gibi)."""
     return geri_yukleme_yetkisi.yonetici_dogrula(
-        db_path=db, goruntu=goruntu, dek=TEST_DEK, hesap_id=hesap_id, askida=askida
+        db_path=db,
+        goruntu=goruntu,
+        dek=TEST_DEK,
+        hesap_id=hesap_id,
+        askida=askida,
+        sarmal_ozeti=sarmal_ozeti(TEST_DEK, hesap_id) if ozet is None else ozet,
     )
 
 
@@ -426,6 +440,7 @@ def test_okunabilen_guncel_kabul_ederse_goruntuye_bakilmaz(
         _dogrula(tmp_path / "yok.sqlite3", goruntu=goruntu, hesap_id=YONETICI_2.id)
     assert (ret.value.kod, ret.value.kaynak) == ("satir_yok", KAYNAK_GORUNTU)
     db = tmp_path / "db.sqlite3"
+    _sarmal_ekle(YONETICI_2)  # sarmalı güncel dosyada; satırı onun özetini taşır
     yetkili_sqlite(db, dek=TEST_DEK, hesaplar=[YONETICI, YONETICI_2])
     monkeypatch.setattr(
         geri_yukleme_yetkisi,
@@ -550,6 +565,123 @@ def test_sarmal_kimligi_degistirilirse_geri_yukleme_reddedilir(
 
     assert _anlik(ortam["db"]) == once
     assert geri_yukleme_notu.oku(app_password.state_path().parent) is None
+
+
+# ============================================================ tazelik (kullanıcı kararı 03.11.2026)
+
+
+def _eski_sarmal_geri_konmus(ortam: dict[str, Any]) -> None:
+    """Program yöneticisi parolasını değiştirmiş (güncel veritabanındaki satırı YENİ sarmalın
+    özetini taşır) ama biri `guvenlik.json`'a ESKİ sarmalı (`TEST_PAROLA`'nınkini) geri koymuş:
+    güncel veritabanı yeni sarmalın özetiyle yeniden kurulur, dosyada eski sarmal kalır."""
+    durum = app_password.read_state() or {}
+    yeni_sarmal = app_password._account_wrap(
+        TEST_DEK,
+        hesap_id=TEST_HESAP_ID,
+        tanitici=TEST_TANITICI,
+        password="Yonetici-Yeni-Parola-8!",
+        kdf=app_password._kdf_of(durum),
+    )
+    yeni_ozet = app_password.wrap_digest(TEST_DEK, yeni_sarmal)
+    yetkili_sqlite(
+        ortam["db"],
+        dek=TEST_DEK,
+        hesaplar=[replace(YONETICI, ozet=yeni_ozet), MUHASIP],
+        isaret="eski",
+    )
+    ortam["eski"] = ortam["db"].read_bytes()
+
+
+@pytest.mark.parametrize("kol", ["konsol", "masaustu", "uygulama_ici"])
+def test_eski_yonetici_sarmali_eski_parolayla_geri_yukleyemez(
+    kol: str,
+    ortam: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Sarmalın tazeliği mühürlü satıra bağlıdır (kullanıcı kararı 03.11.2026; modül başlığı).
+    Eski parola eski sarmalı açar ve yedeği çözer; ama sarmalın özeti güncel veritabanındaki
+    program yöneticisi satırınkini tutmaz: geri yükleme `RET_OZET` ile reddedilir, ileti kurtarma
+    anahtarı yolunu anar, HİÇBİR dosya değişmez (not da yazılmaz). Üç kol: konsol komutu
+    (`restore_backup`), masaüstü kipi (`--geri-yukle`, çıkış 9) ve uygulama içi (400)."""
+    _eski_sarmal_geri_konmus(ortam)
+    (ortam["db"].parent / VERSION_STAMP_FILE_NAME).write_text("{}", encoding="utf-8")
+    once = _anlik(ortam["db"])
+
+    if kol == "konsol":
+        with pytest.raises(CommandError) as hata:
+            call_command(
+                "restore_backup",
+                str(ortam["yedek"]),
+                "--yes",
+                "--hesap",
+                TEST_TANITICI,
+                "--password",
+                TEST_PAROLA,
+                stdout=StringIO(),
+            )
+        assert str(hata.value) == ILETI_OZET
+    elif kol == "masaustu":
+        paths = AppPaths(
+            root=tmp_path,
+            data=ortam["db"].parent,
+            backups=app_password.backup_dir(),
+            logs=tmp_path / "gunlukler",
+            cache=tmp_path / "onbellek",
+        )
+        monkeypatch.setattr(restore_mod, "prepare_django", lambda *a, **k: None)
+        args = build_parser().parse_args(
+            ["--geri-yukle", YEDEK, "--evet", "--hesap", TEST_TANITICI, "--parola", TEST_PAROLA]
+        )
+        assert restore_mod._restore_flow(paths, args) == EXIT_RESTORE_FAILED
+        assert f"HATA: {ILETI_OZET}" in capsys.readouterr().out
+    else:
+        yanit = APIClient().post(
+            GERI_YUKLE_URL,
+            {"name": YEDEK, "hesap": TEST_TANITICI, "password": TEST_PAROLA},
+            format="json",
+        )
+        assert yanit.status_code == 400, yanit.json()
+        assert yanit.json()["message"] == ILETI_OZET
+        _degismedi(ortam)
+
+    assert _anlik(ortam["db"]) == once
+    assert geri_yukleme_notu.oku(app_password.state_path().parent) is None
+    with pytest.raises(YetkiReddi) as ret:
+        _dogrula(ortam["db"])
+    assert (ret.value.kod, ret.value.kaynak) == (geri_yukleme_yetkisi.RET_OZET, KAYNAK_GUNCEL)
+
+
+def test_ozet_rolden_ve_durumdan_sonra_denetlenir(tmp_path: Path) -> None:
+    """Sıra mühür, rol, durum, özet (modül başlığı): program yöneticisi olmayan hesabın iletisi
+    rolünkidir; özet ancak öteki koşulları tutan program yöneticisini ayırır. Bekleyen özet de
+    kabul edilir (kesinti hâli), boş özet hiçbir sarmalı kabul etmez."""
+    db = tmp_path / "db.sqlite3"
+    ozet = sarmal_ozeti(TEST_DEK, TEST_HESAP_ID)
+    yetkili_sqlite(db, dek=TEST_DEK, hesaplar=[replace(YONETICI, ozet="", bekleyen_ozet=ozet)])
+    assert _dogrula(db) == KAYNAK_GUNCEL
+    yetkili_sqlite(db, dek=TEST_DEK, hesaplar=[replace(YONETICI, ozet="")])
+    with pytest.raises(YetkiReddi) as ret:
+        _dogrula(db)
+    assert ret.value.kod == geri_yukleme_yetkisi.RET_OZET
+    yetkili_sqlite(db, dek=TEST_DEK, hesaplar=[replace(YONETICI, ozet="", role="muhasip")])
+    with pytest.raises(YetkiReddi) as ret:
+        _dogrula(db)
+    assert ret.value.kod == geri_yukleme_yetkisi.RET_ROL
+    yetkili_sqlite(db, dek=TEST_DEK, hesaplar=[replace(YONETICI, ozet="", status="ASKIDA")])
+    with pytest.raises(YetkiReddi) as ret:
+        _dogrula(db)
+    assert ret.value.kod == geri_yukleme_yetkisi.RET_DURUM
+    # Satırdaki özeti program dışından değiştirilmiş satır: mühür tutmaz (özet mühre girer).
+    yetkili_sqlite(
+        db,
+        dek=TEST_DEK,
+        hesaplar=[replace(YONETICI, ozet="ab" * 32, muhur=muhur(TEST_DEK, YONETICI))],
+    )
+    with pytest.raises(YetkiReddi) as ret:
+        _dogrula(db, ozet="ab" * 32)
+    assert ret.value.kod == geri_yukleme_yetkisi.RET_MUHUR
 
 
 #: Kanonik olmayan yazımlar: satırı bulan okuyucu (`uuid.UUID`) çoğunu aynı satıra çevirir.
@@ -1103,10 +1235,12 @@ def _izleyen_karar(monkeypatch: pytest.MonkeyPatch, gorulen: list[Path | None]) 
     """`_karar`'ı sarar: görüntünün hangi dosyadan açıldığını kaydeder (bellekteyse None)."""
     asil = geri_yukleme_yetkisi._karar
 
-    def izleyen(baglanti: sqlite3.Connection, dek: bytes, anahtar: str | None) -> object:
+    def izleyen(
+        baglanti: sqlite3.Connection, dek: bytes, anahtar: str | None, ozet: str | None
+    ) -> object:
         dosya = str(baglanti.execute("PRAGMA database_list").fetchone()[2])
         gorulen.append(Path(dosya) if dosya else None)
-        return asil(baglanti, dek, anahtar)
+        return asil(baglanti, dek, anahtar, ozet)
 
     monkeypatch.setattr(geri_yukleme_yetkisi, "_karar", izleyen)
 
@@ -1151,13 +1285,15 @@ def test_deserialize_yokken_gecici_dizin_kullanilir_ve_silinir(
     kipler: list[int] = []
     asil = geri_yukleme_yetkisi._karar
 
-    def izleyen(baglanti: sqlite3.Connection, dek: bytes, anahtar: str | None) -> object:
+    def izleyen(
+        baglanti: sqlite3.Connection, dek: bytes, anahtar: str | None, ozet: str | None
+    ) -> object:
         dosya = Path(str(baglanti.execute("PRAGMA database_list").fetchone()[2]))
         gorulen.append(dosya)
         kipler.append(stat.S_IMODE(dosya.parent.stat().st_mode))
         if yol == "beklenmeyen_hata":
             raise RuntimeError("beklenmeyen hata")
-        return asil(baglanti, dek, anahtar)
+        return asil(baglanti, dek, anahtar, ozet)
 
     monkeypatch.setattr(geri_yukleme_yetkisi, "_karar", izleyen)
 
@@ -1199,6 +1335,9 @@ def test_orm_siz_okuyucu_orm_muhruyle_ayni(mikrosaniye: int) -> None:
         status=AccountStatus.KAPALI,
         opened_at=an,
         closed_at=an + timedelta(days=3),
+        # Sarmal özetleri de mühürdedir (kullanıcı kararı 03.11.2026); ikisi dolu sınanır.
+        wrap_digest="ab" * 32,
+        wrap_digest_pending="cd" * 32,
     )
     hesap.seal = hesap.compute_seal(TEST_DEK)
     hesap.save(force_insert=True)
@@ -1212,6 +1351,10 @@ def test_orm_siz_okuyucu_orm_muhruyle_ayni(mikrosaniye: int) -> None:
     kesir = f".{mikrosaniye:06d}" if mikrosaniye else ""
     assert satir[0] == hesap.id.hex
     assert satir[4] == f"2026-10-31 07:15:30{kesir}"  # saat dilimsiz UTC
+    assert (satir[geri_yukleme_yetkisi.SIRA_OZET], satir[geri_yukleme_yetkisi.SIRA_BEKLEYEN]) == (
+        "ab" * 32,
+        "cd" * 32,
+    )
     alanlar = geri_yukleme_yetkisi.satirdan_muhur_alanlari(satir)
     assert kanonik.kodla(alanlar) == kanonik.kodla(hesap.seal_fields())
     assert kanonik.hesap_muhru(crypto.account_seal_key(TEST_DEK), alanlar) == hesap.seal
@@ -1278,7 +1421,7 @@ def _depo_koku() -> Path:
 def test_iletiler_sozlukte_yazilidir() -> None:
     """Kullanıcı metni sözlükten (docs/sozluk.md "Yedek" satırı) sapmaz."""
     sozluk = (_depo_koku() / "docs" / "sozluk.md").read_text(encoding="utf-8")
-    for ileti in (ILETI_ROL, ILETI_DURUM, ILETI_MUHUR):
+    for ileti in (ILETI_ROL, ILETI_DURUM, ILETI_MUHUR, ILETI_OZET):
         assert re.search(re.escape(f'**"{ileti}"**'), sozluk), ileti
 
 

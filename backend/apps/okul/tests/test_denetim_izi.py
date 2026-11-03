@@ -774,10 +774,15 @@ def test_kilit_acilisi_o_hesabin_giris_satirini_yazar(kilitli: object) -> None:
 def test_parola_yenilenerek_acilista_parola_ve_giris_satirlari(kilitli: object) -> None:
     muhurle(Account.objects.get(pk=TEST_HESAP_ID), status=AccountStatus.PAROLA_YENILENMELI)
     app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA, new_password=YENI_PAROLA)
-    parola, giris = satirlar()
-    assert (parola.action, giris.action) == ("PAROLA", "GIRIS")
+    # İki aşamalı sarmal özeti (`app_password` modül başlığı): bekleyen özet AYRI işlemde
+    # (`HESAP`), asıl özet `PAROLA` yazımında.
+    ozet, parola, giris = satirlar()
+    assert (ozet.action, parola.action, giris.action) == ("HESAP", "PAROLA", "GIRIS")
+    assert ozet.changed_fields == ["wrap_digest_pending", "seal"]
     assert parola.values["status"] == ["PAROLA_YENILENMELI", "ACIK"]
-    assert {str(parola.account_id), str(giris.account_id)} == {TEST_HESAP_ID}
+    assert {"wrap_digest", "wrap_digest_pending", "seal"} <= set(parola.changed_fields)
+    assert not {"wrap_digest", "wrap_digest_pending"} & set(parola.values)  # özet değer değil
+    assert {str(s.account_id) for s in (ozet, parola, giris)} == {TEST_HESAP_ID}
 
 
 def test_iz_yazilamazsa_oturum_acilmaz_anahtarlar_duser(
@@ -852,7 +857,8 @@ def test_kurtarma_anahtariyla_acilis_kurtarma_ve_giris_satirlari(kilitli: object
     app_password.unlock_with_recovery(
         recovery_key=TEST_KURTARMA_ANAHTARI, hesap_id=TEST_TANITICI, new_password=YENI_PAROLA
     )
-    kurtarma, giris = satirlar()
+    ozet, kurtarma, giris = satirlar()
+    assert (ozet.action, ozet.model, ozet.object_id) == ("HESAP", HESAP, TEST_HESAP_ID)
     assert (kurtarma.action, kurtarma.model, kurtarma.object_id) == (
         "KURTARMA",
         HESAP,
@@ -993,11 +999,12 @@ def test_kendi_parolasini_degistirme_parola_satiridir() -> None:
     app_password.change_password(
         hesap_id=TEST_HESAP_ID, current_password=TEST_PAROLA, new_password=YENI_PAROLA
     )
-    satir = son_satir()
+    ozet, satir = satirlar()[-2:]
+    assert (ozet.action, ozet.changed_fields) == ("HESAP", ["wrap_digest_pending", "seal"])
     assert (satir.action, satir.object_id, satir.changed_fields) == (
         "PAROLA",
         TEST_HESAP_ID,
-        ["password_changed_at"],
+        ["password_changed_at", "wrap_digest", "wrap_digest_pending", "seal"],
     )
     assert denetim_izi.kaydi_dogrula(Account, TEST_HESAP_ID) is True
 
@@ -1013,7 +1020,10 @@ def test_parola_dosyaya_yazilamazsa_satir_ve_iz_geri_alinir(
         app_password.change_password(
             hesap_id=TEST_HESAP_ID, current_password=TEST_PAROLA, new_password=YENI_PAROLA
         )
-    assert AuditTrail.objects.count() == 0
+    # `PAROLA` satırı geri alındı; kalan tek satır iki aşamalı özetin bekleyen adımıdır (yeni
+    # sarmalın özeti; dosyaya girmedi, eski parola açmayı sürdürür).
+    assert list(AuditTrail.objects.values_list("action", flat=True)) == ["HESAP"]
+    app_password.verify_password(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
 
 
 def test_kurtarma_anahtarinin_yenilenmesi_kurtarma_satiridir() -> None:
@@ -1039,15 +1049,18 @@ def test_hesap_acma_kapama_sifirlama_satirlari() -> None:
     hesaplar.reset_password(
         by_hesap_id=TEST_HESAP_ID, hesap_id=hesap.id, temp_password=GECICI_PAROLA
     )
-    sifirlama = son_satir()
+    sifirlama, terfi = satirlar()[-2:]
     assert sifirlama.action == "PAROLA"
     assert sifirlama.values["reset_kind"] == ["", "SIFIRLAMA"]
+    # İki aşamalı özetin 2. adımı: asıl özet geçici parolanın sarmalınınki (`HESAP`).
+    assert (terfi.action, terfi.model) == ("HESAP", HESAP)
+    assert terfi.changed_fields == ["wrap_digest", "wrap_digest_pending", "seal"]
 
     hesaplar.close_account(by_hesap_id=TEST_HESAP_ID, hesap_id=hesap.id)
     kapama = son_satir()
     assert kapama.action == "HESAP"
     assert kapama.values["status"] == ["PAROLA_YENILENMELI", "KAPALI"]
-    assert {str(s.account_id) for s in (acma, sifirlama, kapama)} == {TEST_HESAP_ID}
+    assert {str(s.account_id) for s in (acma, sifirlama, terfi, kapama)} == {TEST_HESAP_ID}
     assert denetim_izi.zinciri_dogrula() == []
     assert denetim_izi.kaydi_dogrula(Account, hesap.id) is True
 
@@ -1123,8 +1136,9 @@ def test_parola_sifirlama_ve_kapama_askinin_izini_onceki_degerlerle_yazar() -> N
         by_hesap_id=TEST_HESAP_ID, hesap_id=hesap.id, temp_password=GECICI_PAROLA
     )
 
-    parola, sarmal_izi = satirlar()[-2:]
+    parola, terfi, sarmal_izi = satirlar()[-3:]
     assert (parola.action, parola.model) == ("PAROLA", HESAP)
+    assert (terfi.action, terfi.model) == ("HESAP", HESAP)  # iki aşamalı özetin 2. adımı
     assert (sarmal_izi.action, sarmal_izi.model, sarmal_izi.object_id) == (
         "HESAP",
         denetim_izi.HESAP_SARMALI,

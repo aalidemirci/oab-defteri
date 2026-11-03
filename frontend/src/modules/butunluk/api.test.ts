@@ -126,6 +126,7 @@ describe("butunlukApi", () => {
       fark_var: true,
       sarmalsiz_hesaplar: [],
       silinebilir_sarmallar: [],
+      ozeti_tutmayan_hesaplar: [],
       muhru_tutmayan: [DK_1],
     });
   });
@@ -148,6 +149,7 @@ describe("butunlukApi", () => {
         fark_var: true,
         sarmalsiz_hesaplar: [MUHASIP],
         silinebilir_sarmallar: [],
+        ozeti_tutmayan_hesaplar: [],
         muhru_tutmayan: [DK_1],
       },
       kagit_capasi: KENDI.kagit_capasi,
@@ -234,8 +236,23 @@ describe("bütünlük yanıtlarının birleşmesi", () => {
       fark_var: false,
       sarmalsiz_hesaplar: [],
       silinebilir_sarmallar: [],
+      ozeti_tutmayan_hesaplar: [],
       muhru_tutmayan: [],
     });
+  });
+
+  it("parola kaydı özeti tutmayan hesaplar iki depo kaydından geçer, eksikse boş sayılır", () => {
+    const yanit = {
+      fark_var: true,
+      sarmalsiz_hesaplar: [],
+      silinebilir_sarmallar: [],
+      ozeti_tutmayan_hesaplar: [MUHASIP],
+    };
+    expect(ikiDepoFarki(yanit, [])?.ozeti_tutmayan_hesaplar).toEqual([MUHASIP]);
+    expect(
+      ikiDepoFarki({ fark_var: true, sarmalsiz_hesaplar: [MUHASIP], silinebilir_sarmallar: [] }, [])
+        ?.ozeti_tutmayan_hesaplar,
+    ).toEqual([]);
   });
 
   it("silmeden dönen iki depo kartı mührü tutmayan hesapları korur", () => {
@@ -252,6 +269,7 @@ describe("bütünlük yanıtlarının birleşmesi", () => {
       fark_var: true,
       sarmalsiz_hesaplar: [],
       silinebilir_sarmallar: [],
+      ozeti_tutmayan_hesaplar: [],
       muhru_tutmayan: [DK_1],
     });
     expect(sonra.son_girisler).toEqual(KENDI.son_girisler);

@@ -31,14 +31,20 @@ ALTIN_HESAP = {
     "term": None,
     "opened_at": datetime(2026, 11, 1, 10, 30, tzinfo=ZoneInfo("Europe/Istanbul")),
     "closed_at": None,
+    # Sarmal özetleri (kullanıcı kararı 03.11.2026): asıl dolu, bekleyen boş (olağan hâl).
+    "wrap_digest": "ab" * 32,
+    "wrap_digest_pending": "",
 }
 ALTIN_HESAP_BAYTLARI = (
     b'{"closed_at":null,"id":"6f1c2a3b-4d5e-4f60-8a71-0b2c3d4e5f60","login_name":"yonetici",'
     b'"membership":null,"opened_at":"2026-11-01T07:30:00.000000Z","person":null,'
-    b'"role":"yonetici","status":"ACIK","term":null}'
+    b'"role":"yonetici","status":"ACIK","term":null,'
+    b'"wrap_digest":"abababababababababababababababababababababababababababababababab",'
+    b'"wrap_digest_pending":""}'
 )
-#: `hesap_muhru(bytes(range(32)), ALTIN_HESAP)` — DONMUŞ değer.
-ALTIN_HESAP_MUHRU = "0f03c8e9d7e678e3c3296380c671a151070479fddac397971fc44ad8255a6f28"
+#: `hesap_muhru(bytes(range(32)), ALTIN_HESAP)` — DONMUŞ değer (03.11.2026'da özet alanlarıyla
+#: yeniden dondu: program sahada değil, göç gerekmez — kullanıcı kararı 3).
+ALTIN_HESAP_MUHRU = "2d0aa91ef58bdab7cfc2fc5c428823a7ed5e5c1ff0d87316b03d37043057d6c1"
 
 #: Yabancı anahtarları dolu hesap (F1c'de `person`, `membership`, `term` dolar): kimliğin
 #: METNİ (plan F1b-1). Uydurma kimlikler.
@@ -46,10 +52,25 @@ ALTIN_HESAP_BAGLI = {**ALTIN_HESAP, "person": "42", "membership": "7", "term": "
 ALTIN_HESAP_BAGLI_BAYTLARI = (
     b'{"closed_at":null,"id":"6f1c2a3b-4d5e-4f60-8a71-0b2c3d4e5f60","login_name":"yonetici",'
     b'"membership":"7","opened_at":"2026-11-01T07:30:00.000000Z","person":"42",'
-    b'"role":"yonetici","status":"ACIK","term":"3"}'
+    b'"role":"yonetici","status":"ACIK","term":"3",'
+    b'"wrap_digest":"abababababababababababababababababababababababababababababababab",'
+    b'"wrap_digest_pending":""}'
 )
 #: `hesap_muhru(bytes(range(32)), ALTIN_HESAP_BAGLI)` — DONMUŞ değer.
-ALTIN_HESAP_BAGLI_MUHRU = "8a224e5911fdb9714030aeff8881bdf65eea799910bded40d4a39d8da3475d92"
+ALTIN_HESAP_BAGLI_MUHRU = "4fa1fbe9d9a7ac52cec7b995aed7278f2f32a03df6a1c74501348ea67408de6b"
+
+#: Sarmal özeti (`kanonik.sarmal_ozeti`; kullanıcı kararı 03.11.2026). Uydurma tuz ve belirteç.
+ALTIN_SARMAL = {
+    "id": "6f1c2a3b-4d5e-4f60-8a71-0b2c3d4e5f60",
+    "salt": "AAECAwQFBgcICQoLDA0ODw==",
+    "sarmal": "gAAAAABu-ornek-belirtec",
+}
+ALTIN_SARMAL_BAYTLARI = (
+    b'{"id":"6f1c2a3b-4d5e-4f60-8a71-0b2c3d4e5f60","salt":"AAECAwQFBgcICQoLDA0ODw==",'
+    b'"sarmal":"gAAAAABu-ornek-belirtec"}'
+)
+#: `sarmal_ozeti(bytes(range(32)), ALTIN_SARMAL)` — DONMUŞ değer.
+ALTIN_SARMAL_OZETI = "7cb945435dd8b2e2d509323847d8e508b71db89ad8b61610393a6d99c98c425d"
 
 ALTIN_KARMA = {
     "ad": "Şükrü Çağlayan",
@@ -88,6 +109,34 @@ def test_hesap_muhrunde_yabanci_anahtar_yalniz_metin(alan: str, deger: object) -
     with pytest.raises(kanonik.KanonikHata, match=alan):
         kanonik.hesap_muhru(bytes(range(32)), {**ALTIN_HESAP, alan: deger})
     assert set(kanonik.HESAP_MUHRU_YABANCI_ANAHTARLARI) <= set(kanonik.HESAP_MUHRU_ALANLARI)
+
+
+def test_altin_vektor_sarmal_ozeti() -> None:
+    """Sarmal özetinin biçimi donar: ORM yolu (kilit açılışı) ile geri yüklemenin ORM'siz yolu
+    aynı sarmala aynı özeti üretir; fazla alan (sayaç, askı, tanıtıcı, etiket) girmez."""
+    assert kanonik.kodla(ALTIN_SARMAL) == ALTIN_SARMAL_BAYTLARI
+    assert kanonik.sarmal_ozeti(bytes(range(32)), ALTIN_SARMAL) == ALTIN_SARMAL_OZETI
+    beklenen = hmac.new(bytes(range(32)), ALTIN_SARMAL_BAYTLARI, sha256).hexdigest()
+    assert beklenen == ALTIN_SARMAL_OZETI
+    fazlali = {**ALTIN_SARMAL, "hatali": 3, "askida": True, "tanitici": "x", "turetim": "y"}
+    assert kanonik.sarmal_ozeti(bytes(range(32)), fazlali) == ALTIN_SARMAL_OZETI
+
+
+@pytest.mark.parametrize("alan", kanonik.SARMAL_OZETI_ALANLARI)
+def test_sarmal_ozetinde_alan_eksik_ya_da_metin_disi_hatadir(alan: str) -> None:
+    eksik = {ad: deger for ad, deger in ALTIN_SARMAL.items() if ad != alan}
+    with pytest.raises(kanonik.KanonikHata, match=alan):
+        kanonik.sarmal_ozeti(bytes(range(32)), eksik)
+    with pytest.raises(kanonik.KanonikHata, match=alan):
+        kanonik.sarmal_ozeti(bytes(range(32)), {**ALTIN_SARMAL, alan: b"bayt"})
+
+
+@pytest.mark.parametrize("alan", kanonik.HESAP_MUHRU_METINLERI)
+@pytest.mark.parametrize("deger", [None, b"ab", 42])
+def test_hesap_muhrunde_ozet_alanlari_yalniz_metin(alan: str, deger: object) -> None:
+    """Özet alanı metindir (boş metin "özet yok"); `None` ve ikili değer mühre girmez."""
+    with pytest.raises(kanonik.KanonikHata, match=alan):
+        kanonik.hesap_muhru(bytes(range(32)), {**ALTIN_HESAP, alan: deger})
 
 
 def test_altin_vektor_karma_turler() -> None:
@@ -139,7 +188,8 @@ def test_hesap_muhru_fazla_alani_almaz_eksik_alanda_hata_verir() -> None:
 
 def test_hesap_muhru_alanlari_tasarimdaki_listedir() -> None:
     """Tasarım §4.6.1: kanonik(id, login_name, role, status, person, membership, term,
-    opened_at, closed_at) — F1c alanları bugünden `null` olarak mühürdedir."""
+    opened_at, closed_at) — F1c alanları bugünden `null` olarak mühürdedir — ve sarmal özetleri
+    (kullanıcı kararı 03.11.2026 "tazelik kapatılır")."""
     assert kanonik.HESAP_MUHRU_ALANLARI == (
         "id",
         "login_name",
@@ -150,6 +200,8 @@ def test_hesap_muhru_alanlari_tasarimdaki_listedir() -> None:
         "term",
         "opened_at",
         "closed_at",
+        "wrap_digest",
+        "wrap_digest_pending",
     )
 
 
@@ -193,6 +245,11 @@ def test_modul_django_ice_aktarmaz() -> None:
 # ---------------------------------------------------------------------------
 # Denetim izi: zincir satırı ve içerik MAC'i (tasarım §4.6.2-§4.6.3; plan F1b-1 alt commit c)
 # ---------------------------------------------------------------------------
+#: Zincir vektörlerinin örnek MAC'leri: hesap mührünün özet alanlarından ÖNCEKİ altın değerleri
+#: (03.11.2026). Zincir satırının biçimi değişmedi; vektörü mühürden ayırmak için sabittir.
+ORNEK_RECORD_MAC = "0f03c8e9d7e678e3c3296380c671a151070479fddac397971fc44ad8255a6f28"
+ORNEK_PREV_MAC = "8a224e5911fdb9714030aeff8881bdf65eea799910bded40d4a39d8da3475d92"
+
 ALTIN_IZ_SATIRI: dict[str, object] = {
     "seq": 7,
     "at": datetime(2026, 11, 1, 10, 30, 15, 123456, tzinfo=ZoneInfo("Europe/Istanbul")),
@@ -205,7 +262,7 @@ ALTIN_IZ_SATIRI: dict[str, object] = {
     "term": None,
     "changed_fields": ["idle_lock_minutes", "updated_at"],
     "values": {"idle_lock_minutes": [10, 15]},
-    "record_mac": ALTIN_HESAP_MUHRU,
+    "record_mac": ORNEK_RECORD_MAC,
     "compliance_item": None,
     "label": "",
     "key_mode": "ACIK",
@@ -219,7 +276,7 @@ ALTIN_IZ_SATIRI_BAYTLARI = (
     b'"record_mac":"0f03c8e9d7e678e3c3296380c671a151070479fddac397971fc44ad8255a6f28",'
     b'"role":"yonetici","seq":7,"term":null,"values":{"idle_lock_minutes":[10,15]}}'
 )
-#: `iz_mac(bytes(range(32)), ALTIN_IZ_SATIRI, ALTIN_HESAP_BAGLI_MUHRU)` — DONMUŞ değer.
+#: `iz_mac(bytes(range(32)), ALTIN_IZ_SATIRI, ORNEK_PREV_MAC)` — DONMUŞ değer.
 ALTIN_IZ_MAC = "c3ed8364e85586483986d3656d9f64519d34dd96d8be6305468a4fded57fa3b6"
 #: Aynı satır zincirin ilk satırı olsaydı (`seq = 1`, `prev_mac` boş) — DONMUŞ değer.
 ALTIN_IZ_ILK_MAC = "a5f981a49fc97cef177fa32e203d83c5e3613e00a14d251fd00ad4ab1b5e5d6e"
@@ -248,12 +305,10 @@ ALTIN_OZET_MAC = "478cfa8eca3bf2666c0223e4aca7b4c66b8b9d4080537c0bb30f20184aae2b
 def test_altin_vektor_iz_satiri_ve_zincir_mac() -> None:
     """Zincir başı kâğıda iner (§4.6.3 kâğıt çapası): biçim bu vektörle DONAR."""
     assert kanonik.iz_satiri(ALTIN_IZ_SATIRI) == ALTIN_IZ_SATIRI_BAYTLARI
-    assert kanonik.iz_mac(bytes(range(32)), ALTIN_IZ_SATIRI, ALTIN_HESAP_BAGLI_MUHRU) == (
-        ALTIN_IZ_MAC
-    )
+    assert kanonik.iz_mac(bytes(range(32)), ALTIN_IZ_SATIRI, ORNEK_PREV_MAC) == (ALTIN_IZ_MAC)
     # MAC, kanonik baytlara önceki MAC'in ASCII baytları eklenerek alınan düz HMAC'tir.
     beklenen = hmac.new(
-        bytes(range(32)), ALTIN_IZ_SATIRI_BAYTLARI + ALTIN_HESAP_BAGLI_MUHRU.encode(), sha256
+        bytes(range(32)), ALTIN_IZ_SATIRI_BAYTLARI + ORNEK_PREV_MAC.encode(), sha256
     ).hexdigest()
     assert beklenen == ALTIN_IZ_MAC
 

@@ -11,6 +11,10 @@ aynı olduğunu `test_geri_yukleme_yetkisi.py::test_orm_siz_okuyucu_orm_muhruyle
 Dosya varsayılan olarak WAL kipinde kurulur: programın yedeği WAL kipindeki veritabanından
 alındığı için görüntünün başlığı WAL işaretlidir (18-19. baytlar 2) ve okuyucu bunu bellekte
 yamamak zorundadır. Adlar ve kimlikler uydurmadır; gerçek kişi değildir.
+
+Hesap satırı güvenlik dosyasındaki sarmalın özetini taşır (`wrap_digest`; kullanıcı kararı
+03.11.2026 "tazelik kapatılır"). `HesapSatiri.ozet` verilmezse satır KURULDUĞU ANDA güvenlik
+dosyasında o kimliği taşıyan ilk sarmalın özetiyle yazılır (sarmal yoksa boş); verilirse aynen.
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+from apps.okul.services import app_password
 from shared import crypto, kanonik
 
 #: Uydurma açılış anı (UTC; mikrosaniyesiz: Django kesirsiz yazar).
@@ -40,6 +45,25 @@ class HesapSatiri:
     opened_at: datetime = ACILIS
     closed_at: datetime | None = None
     muhur: str | None = None
+    #: Sarmal özeti; None ise güvenlik dosyasındaki sarmaldan hesaplanır (modül başlığı).
+    ozet: str | None = None
+    bekleyen_ozet: str = ""
+
+
+def sarmal_ozeti(dek: bytes, hesap_id: str) -> str:
+    """Güvenlik dosyasında bu kimliği taşıyan İLK sarmalın özeti; sarmal yoksa boş metin."""
+    sarmal = app_password._find_wrap(app_password.read_state() or {}, str(uuid.UUID(hesap_id)))
+    return (app_password.wrap_digest(dek, sarmal) or "") if sarmal is not None else ""
+
+
+def ozet(dek: bytes, satir: HesapSatiri) -> str:
+    """Satırın yazılacak asıl özeti (verilmediyse dosyadaki sarmalınki)."""
+    return sarmal_ozeti(dek, satir.id) if satir.ozet is None else satir.ozet
+
+
+def ozetli(dek: bytes, satir: HesapSatiri) -> HesapSatiri:
+    """Özeti BUGÜNKÜ dosyaya göre sabitlenmiş satır (dosya sonra değişse de satır değişmez)."""
+    return replace(satir, ozet=ozet(dek, satir))
 
 
 def muhur(dek: bytes, satir: HesapSatiri) -> str:
@@ -56,6 +80,8 @@ def muhur(dek: bytes, satir: HesapSatiri) -> str:
             "term": None,
             "opened_at": satir.opened_at,
             "closed_at": satir.closed_at,
+            "wrap_digest": ozet(dek, satir),
+            "wrap_digest_pending": satir.bekleyen_ozet,
         },
     )
 
@@ -65,11 +91,12 @@ def program_disindan(
 ) -> HesapSatiri:
     """Mührü eski değerlerle kalıp rolü ya da durumu değiştirilmiş satır (program dışından
     yazım taklidi; tehdit 19)."""
+    sabit = ozetli(dek, satir)
     return replace(
-        satir,
+        sabit,
         role=satir.role if role is None else role,
         status=satir.status if status is None else status,
-        muhur=muhur(dek, satir),
+        muhur=muhur(dek, sabit),
     )
 
 
@@ -114,10 +141,12 @@ def yetkili_sqlite(
             "CREATE TABLE okul_account (id char(32) NOT NULL PRIMARY KEY, "
             "login_name varchar(32) NOT NULL, role varchar(24) NOT NULL, "
             "status varchar(24) NOT NULL, opened_at datetime NOT NULL, closed_at datetime NULL, "
+            "wrap_digest varchar(64) NOT NULL, wrap_digest_pending varchar(64) NOT NULL, "
             "seal varchar(64) NOT NULL)"
         )
+        sabitler = [ozetli(dek, satir) for satir in hesaplar]
         baglanti.executemany(
-            "INSERT INTO okul_account VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO okul_account VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     uuid.UUID(satir.id).hex,
@@ -126,9 +155,11 @@ def yetkili_sqlite(
                     satir.status,
                     _django_zamani(satir.opened_at),
                     _django_zamani(satir.closed_at),
+                    satir.ozet,
+                    satir.bekleyen_ozet,
                     muhur(dek, satir) if satir.muhur is None else satir.muhur,
                 )
-                for satir in hesaplar
+                for satir in sabitler
             ],
         )
         baglanti.commit()

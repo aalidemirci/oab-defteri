@@ -6,7 +6,10 @@ kodlaması TEK ve ORM'SİZ bir işlevdedir. Hesap mührü (`Account.seal`, tasar
 salt okunur `sqlite3` ile yaptığı hesap denetimi (§4.4.4;
 `apps.okul.services.geri_yukleme_yetkisi`, F1b-2) aynı işlevleri kullanır. Bu yüzden
 modül yalnız standart kitaplığa dayanır: Django içe aktarmaz, model örneği tanımaz;
-çağıran değerleri sözlük olarak verir.
+çağıran değerleri sözlük olarak verir. Hesabın parola kaydının (sarmalın) özeti de
+(`sarmal_ozeti`; kullanıcı kararı 03.11.2026 "tazelik kapatılır") aynı kodlayıcıdan geçer:
+kilit açılışı, geri yüklemenin yetki denetimi ve geri yüklemenin özet onarımı onu aynı
+baytlarla hesaplar.
 
 BİÇİM (bu adımda DONAR; kâğıda inen zincir başı buna bağlıdır):
 
@@ -154,6 +157,9 @@ def esit(a: object, b: object) -> bool:
 #: mühürdedir: alanlar eklenince var olan mühürler değişmez. `last_login_at`,
 #: `password_changed_at`, sıfırlama alanları ve `display_name` mührün dışındadır
 #: (oturum ve bildirim izleri; ad şifrelidir ve DEK yenilemesinde yeniden yazılır).
+#: `wrap_digest` ve `wrap_digest_pending` hesabın `guvenlik.json`'daki parola kaydının (sarmalın)
+#: özetleridir (kullanıcı kararı 03.11.2026 "tazelik kapatılır"; `sarmal_ozeti`): mühürde
+#: olmasalar satırdaki özet tek başına eski değerle değiştirilebilirdi.
 HESAP_MUHRU_ALANLARI: tuple[str, ...] = (
     "id",
     "login_name",
@@ -164,9 +170,13 @@ HESAP_MUHRU_ALANLARI: tuple[str, ...] = (
     "term",
     "opened_at",
     "closed_at",
+    "wrap_digest",
+    "wrap_digest_pending",
 )
 #: Hesap mührünün yabancı anahtar alanları: değer kimliğin METNİ ya da `None`dır.
 HESAP_MUHRU_YABANCI_ANAHTARLARI: tuple[str, ...] = ("person", "membership", "term")
+#: Hesap mührünün metin alanları: değer metindir (`None` değil; boş metin "özet yok"tur).
+HESAP_MUHRU_METINLERI: tuple[str, ...] = ("wrap_digest", "wrap_digest_pending")
 
 
 def hesap_muhru(seal_key: bytes, fields: Mapping[str, Any]) -> str:
@@ -189,8 +199,38 @@ def hesap_muhru(seal_key: bytes, fields: Mapping[str, Any]) -> str:
                 f"Yabancı anahtar ({ad}) kimliğin metni olarak verilir (str(pk)); "
                 f"verilen tür: {type(deger).__name__}"
             )
+    for ad in HESAP_MUHRU_METINLERI:
+        if not isinstance(fields[ad], str):
+            raise KanonikHata(f"Hesap mührünün {ad} alanı metindir.")
     yuk = {ad: fields[ad] for ad in HESAP_MUHRU_ALANLARI}
     return hmac_sha256(seal_key, kodla(yuk))
+
+
+# ---------------------------------------------------------------------------
+# Sarmal özeti (kullanıcı kararı 03.11.2026; tasarım §4.4.4, §4.6.1)
+# ---------------------------------------------------------------------------
+#: Sarmal özetine giren `guvenlik.json` hesap sarmalı alanları: kanonik kimlik, tuzun kanonik
+#: base64'ü ve sarmalın (Fernet belirteci) metni. Hatalı deneme sayacı ve askı GİRMEZ (kilitliyken
+#: DEK'siz yazılırlar); `tanitici` ve `turetim` de girmez (tanıtıcı kimliği seçmez, etiket yalnız
+#: ret içindir; sarmalın anahtarı zaten kimliğe bağlıdır).
+SARMAL_OZETI_ALANLARI: tuple[str, ...] = ("id", "salt", "sarmal")
+
+
+def sarmal_ozeti(digest_key: bytes, fields: Mapping[str, Any]) -> str:
+    """Sarmal özeti: `HMAC(HKDF(DEK, "od-sarmal-ozeti/v1"), kanonik(id, salt, sarmal))`.
+
+    `digest_key` DEK'ten `od-sarmal-ozeti/v1` bilgisiyle türeyen anahtardır
+    (`shared.crypto.account_wrap_digest_key`); bu modül DEK görmez. Üç alan da metindir;
+    fazlası özete GİRMEZ, eksik ya da metin olmayan alan HATADIR (biçim tektir: ORM yolu ile
+    geri yüklemenin ORM'siz yolu aynı sarmala aynı özeti üretmelidir).
+    """
+    eksik = [ad for ad in SARMAL_OZETI_ALANLARI if ad not in fields]
+    if eksik:
+        raise KanonikHata(f"Sarmal özetinde eksik alan: {', '.join(eksik)}")
+    for ad in SARMAL_OZETI_ALANLARI:
+        if not isinstance(fields[ad], str):
+            raise KanonikHata(f"Sarmal özetinin {ad} alanı metindir.")
+    return hmac_sha256(digest_key, kodla({ad: fields[ad] for ad in SARMAL_OZETI_ALANLARI}))
 
 
 def duz(value: Any) -> Any:

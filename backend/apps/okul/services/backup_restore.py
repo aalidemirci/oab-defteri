@@ -26,8 +26,9 @@ yedeğe girmez. Çözerken aday sırası:
        parolası (aynı bilgisayar; her hesabın parolası çözer, geri yüklemeyi ise
        yalnız program yöneticisi hesabı yapar — aşağıda "GERİ YÜKLEME
        YETKİSİ"). DEK parola değişiminde DEĞİŞMEDİĞİ için
-       güncel parola yedekten önceki veriyi de açar. Güncel dosyanın kurtarma
-       bölümü kurtarma anahtarıyla da denenir.
+       güncel parola yedekten önceki veriyi de açar; geri yüklenen satırların
+       sarmal özetleri güncel dosyaya göre onarılır ("ÖZET ONARIMI"). Güncel
+       dosyanın kurtarma bölümü kurtarma anahtarıyla da denenir.
     2. Yedeğe GÖMÜLÜ başlık + kurtarma anahtarı (yeni bilgisayar, kayıp ya da
        başka kuruluma ait dosya). Yedek "<no> numaralı, <tarih> tarihli kurtarma
        anahtarıyla açılır" diye kendini tarif eder (`BackupInfo.recovery_key_label`).
@@ -58,6 +59,22 @@ Program açılınca "kurtarma anahtarıyla aç + program yöneticisi parolası" 
 yöneticinin sarmalını yeniden kurar (kilit ekranı listesi boştur; hesap kilitliyken
 açık kurtarma listesinden seçilir, `GET security/recover/`); iki depo karşılaştırması
 öteki hesapları parola yenilemeye çeker (`hesaplar.reconcile_two_stores`).
+
+ÖZET ONARIMI (kullanıcı kararı 03.11.2026 "tazelik kapatılır"; `ozet_onarimi`): hesabın mühürlü
+satırı güncel sarmalın özetini taşır. Geri yükleme GÜNCEL `guvenlik.json` ile ESKİ veritabanını
+birleştirdiği için (parola yolunda ve güncel dosyanın kullanıldığı kurtarma anahtarı yolunda)
+yedekten sonra parolası değişen hesabın geri yüklenen satırı yedek günündeki sarmalın özetini
+taşırdı. Onarım, takastan ÖNCE `.tmp` dosyasında, güven çapası olarak geri yüklemeden önceki
+(kenara alınacak) veritabanının mühürlü satırlarını kullanır. Çapa yalnız geri yüklenen yedeğin
+zincir başını içeriyorsa (yedekten türemişse) TAZEDİR; taze çapada dosyadaki sarmal çapayı
+tutuyorsa özet ona çekilir, tutmuyorsa çapanın özetleri aynen geçer. Bayat çapa (eski bir düz
+kopyayla değiştirilmiş ya da önceki bir geri yüklemenin veritabanı) özet vermez. Çapada satırı
+olmayan ya da çapada `KAPALI` olan hesabın özetleri boşaltılır; çapa okunamıyorsa, bayatsa ya da
+hesabın çapadaki satırının mührü bozuksa o satırlara dokunulmaz (kalan risk; `ozet_onarimi`
+modül başlığı). Kurtarma başlığından yazılacak dosyada (hesaplar boş) onarılacak sarmal yoktur;
+taze çapanın özetleri yine geçer. Onarım yazılamazsa geri yükleme yarıda kalır, hiçbir dosya
+değişmez. Onarım parola yolunun yanında kurtarma anahtarı yollarında da (güncel dosyayla ve
+yedek başlığından) koşar.
 
 GERİ YÜKLEME NOTU (tasarım §4.4.4; plan F1b-1 alt commit c): başarılı geri yükleme
 `geri-yukleme-notu.json`'a yedeğin adını, kenara alınan `db-onceki-*` dosyasının adını ve
@@ -93,7 +110,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -112,7 +129,7 @@ from desktop.backup_crypto import (
 from desktop.paths import VERSION_STAMP_FILE_NAME
 from django.utils import timezone
 
-from apps.okul.services import app_password, geri_yukleme_notu, geri_yukleme_yetkisi
+from apps.okul.services import app_password, geri_yukleme_notu, geri_yukleme_yetkisi, ozet_onarimi
 
 logger = logging.getLogger("oab_defteri.restore")
 
@@ -257,7 +274,15 @@ def restore_database(
     # yükleme notu).
     onceki_bas = geri_yukleme_notu.zincir_basi_oku(db_path)
     onceki_capa = _capa_durumu()
-    eski = _swap_database_files(db_path, icerik)
+    # Özet onarımı (modül başlığı): `.tmp`'de, takastan ÖNCE; çapa henüz yerinde duran veritabanı.
+    sarmal_ozetleri = _sarmal_ozetleri(acan_durum, dek) if kaynak == _SOURCE_CURRENT else {}
+
+    def _onar(gecici: Path) -> None:
+        ozet_onarimi.ozetleri_onar(
+            onceki_db=db_path, yeni_db=gecici, dek=dek, sarmal_ozetleri=sarmal_ozetleri
+        )
+
+    eski = _swap_database_files(db_path, icerik, hazirla=_onar)
     yazildi = _ensure_state_file(info, kaynak)
     # KARDEŞ DOSYA da eşitlenir (birleşme incelemesi bulgusu): yedekleme.json
     # bayat kalırsa (a) `_adopt_key` her kilit açılışında "anahtar eşleşmiyor"
@@ -460,7 +485,8 @@ def _yetkiyi_denetle(
     Hesap, yedeği açan güncel `guvenlik.json`'un sarmalından bulunur (tanıtıcı ya da kimlikle
     verilmiş olabilir); sarmal kendi kimliğine bağlı açıldığı için (`app_password` modül başlığı
     "HESAP SARMALI KİMLİĞE BAĞLIDIR") bu kimlik parolası doğrulanan hesabın kendisidir. Sarmalın
-    hatalı deneme askısı da kabul koşuludur. Ret günlüğe sırsız
+    hatalı deneme askısı ve özetinin satırınkini tutması da kabul koşuludur ("SARMALIN
+    TAZELİĞİ": eski ya da program dışından konmuş sarmal parolayla geri yükleyemez). Ret günlüğe sırsız
     uyarı olarak düşer: neden kodu ve kararı veren kaynak, hesabın kimliği (tanıtıcı kişinin
     adını içerebilir, yazılmaz).
     """
@@ -472,6 +498,7 @@ def _yetkiyi_denetle(
             dek=dek,
             hesap_id=sarmal.get("id"),
             askida=bool(sarmal.get("askida")),
+            sarmal_ozeti=app_password.wrap_digest(dek, sarmal) if sarmal else None,
         )
     except geri_yukleme_yetkisi.YetkiReddi as ret:
         logger.warning(
@@ -488,10 +515,23 @@ def _yetkiyi_denetle(
         )
 
 
-def _swap_database_files(db_path: Path, content: bytes) -> Path | None:
+def _sarmal_ozetleri(durum: dict[str, Any], dek: bytes) -> dict[str, str | None]:
+    """Durum dosyasındaki her hesabın İLK sarmalının özeti, kanonik kimlikle (özet onarımı)."""
+    ozetler: dict[str, str | None] = {}
+    for bolum in app_password._accounts_in(durum):
+        kimlik = str(bolum.get("id", ""))
+        if kimlik not in ozetler:
+            ozetler[kimlik] = app_password.wrap_digest(dek, bolum)
+    return ozetler
+
+
+def _swap_database_files(
+    db_path: Path, content: bytes, *, hazirla: Callable[[Path], None] | None = None
+) -> Path | None:
     """Yeni içeriği atomik yerleştirir; eskiyi ve WAL/SHM kalıntılarını kenara alır.
 
-    Sıra bilinçli: önce .tmp TAM yazılır (hata hâlinde hedefe dokunulmamış olur),
+    Sıra bilinçli: önce .tmp TAM yazılır (hata hâlinde hedefe dokunulmamış olur), varsa
+    `hazirla` .tmp üzerinde koşar (özet onarımı; eski dosya o an hâlâ yerindedir ve çapadır),
     sonra eski dosya kenara alınır, en son .tmp yerine konur. Eski veritabanının
     `-wal`/`-shm` dosyaları YENİ dosyaya uygulanmamalıdır — silinmez, kenara
     alınan dosyanın adıyla yanına taşınır (SQLite eşleşmeyi dosya adından yapar;
@@ -502,6 +542,8 @@ def _swap_database_files(db_path: Path, content: bytes) -> Path | None:
     temp.unlink(missing_ok=True)
     try:
         temp.write_bytes(content)
+        if hazirla is not None:
+            hazirla(temp)
         eski_hedef: Path | None = None
         if db_path.exists():
             damga = timezone.localtime().strftime(OLD_DB_STAMP_FORMAT)
@@ -525,6 +567,8 @@ def _swap_database_files(db_path: Path, content: bytes) -> Path | None:
         ) from exc
     finally:
         temp.unlink(missing_ok=True)
+        for ek in _SQLITE_EKLERI:
+            temp.with_name(temp.name + ek).unlink(missing_ok=True)
 
 
 def _yol_bilgisi(durum: dict[str, Any], *, hesap: str | None) -> dict[str, Any]:

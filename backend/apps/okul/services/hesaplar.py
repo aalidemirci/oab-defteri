@@ -17,15 +17,22 @@ ad onu ister).
 
 SIRALAR (iki depo kuralı, §4.6.1):
 
-* **Açma:** önce veritabanı (`PAROLA_YENILENMELI`, mühür), sonra sarmal (geçici
-  parolayla). Arada kesilirse satır sarmalsız kalır; giriş zaten açılmaz, program
-  yöneticisi yeniden geçici parola verir (`reset_password` sarmalı yeniden kurar).
+* **Açma:** sarmal önce bellekte kurulur; önce veritabanı (`PAROLA_YENILENMELI`, sarmalın
+  özeti, mühür), sonra sarmal (geçici parolayla). Tek aşamalıdır: yeni kimliğin önceki
+  sarmalı yoktur (`app_password` modül başlığı "İKİ AŞAMALI ÖZET"). Arada kesilirse satır
+  sarmalsız kalır; giriş zaten açılmaz, program yöneticisi yeniden geçici parola verir
+  (`reset_password` sarmalı yeniden kurar).
 * **Kapama:** önce veritabanı (`KAPALI`, `closed_at`, mühür), sonra sarmal
   `guvenlik.json`'dan ve bütün arşivlerden silinir (TK11). Arada kesilirse kilit
   açılışındaki temizlik siler (`app_password._cleanup_closed_wraps`).
-* **Parola sıfırlama:** önce veritabanı (`PAROLA_YENILENMELI`, yenilenme izi),
-  sonra sarmal. Ters sırada kesinti, program yöneticisinin bildiği geçici parolayı
-  zorunlu değişim OLMADAN geçerli bırakırdı.
+* **Parola sıfırlama:** önce veritabanı (`PAROLA_YENILENMELI`, yenilenme izi, bekleyen
+  özet), sonra sarmal (asıl özetle aynı işlemde; iki aşamalı özet). Ters sırada kesinti,
+  program yöneticisinin bildiği geçici parolayı zorunlu değişim OLMADAN geçerli bırakırdı.
+  Başarılı sıfırlamadan sonra hesabın eski sarmalı (arşivdeki dahil) programda açılmaz:
+  sıfırlama, ele geçmiş bir parolayı ve özeti tutmayan sarmalı
+  (`TwoStoreDifferences.digest_mismatch`) da geçersiz kılar — yalnız `guvenlik.json`'a
+  yazabilen birine karşı; satır geri sarma ve geri yüklemenin kalan hâlleri `app_password`
+  modül başlığı "KALAN RİSKLER"dedir.
 * **Askıdan çıkarma:** `Account.status = ASKIDA` ise satır, sonra dosyadaki hatalı
   deneme sayacı ve askısı (iki kaynak; plan F1b-1 "Oturum").
 
@@ -224,24 +231,26 @@ def open_account(
         and acik.filter(role=role).count() >= MAX_AUDIT_BOARD_ACCOUNTS
     ):
         raise AccountServiceError(_AUDIT_BOARD_LIMIT_MESSAGE)
+    hesap = Account(
+        login_name=login,
+        role=role,
+        display_name=ad,
+        status=AccountStatus.PAROLA_YENILENMELI,
+        opened_at=timezone.now(),
+        opened_by=aktor,
+    )
+    # Sarmal önce bellekte kurulur, özeti satıra girer (tek aşamalı: yeni kimliğin önceki
+    # sarmalı yoktur; `app_password` modül başlığı "İKİ AŞAMALI ÖZET").
+    sarmal = app_password.new_account_wrap(dek, hesap_id=hesap.id, tanitici=login, password=parola)
+    hesap.wrap_digest = app_password.wrap_digest(dek, sarmal) or ""
     try:
         with transaction.atomic():
-            hesap = Account(
-                login_name=login,
-                role=role,
-                display_name=ad,
-                status=AccountStatus.PAROLA_YENILENMELI,
-                opened_at=timezone.now(),
-                opened_by=aktor,
-            )
             hesap.seal = hesap.compute_seal(dek)
             hesap.save(force_insert=True)
             denetim_izi.kayit(AuditAction.HESAP, hesap, onceki=None)
     except IntegrityError as exc:  # yarış: DB kısıtı son sözü söyler
         raise AccountServiceError(_LOGIN_NAME_TAKEN_MESSAGE) from exc
-    app_password.write_account_wrap(
-        data_key=dek, hesap_id=hesap.id, tanitici=login, password=parola
-    )
+    app_password.write_account_wrap(data_key=dek, hesap_id=hesap.id, tanitici=login, sarmal=sarmal)
     logger.info("Hesap açıldı (%s, %s).", hesap.login_name, hesap.role)
     return hesap
 
@@ -305,9 +314,16 @@ def reset_password(*, by_hesap_id: object, hesap_id: object, temp_password: str)
     askıdan çıkarılır.
 
     Sarmalda sayaç ya da askı varsa izi kalkarken düşer: sarmal yazımının işleminde,
-    dosyadan ÖNCE `guvenlik.sarmal` satırı (`app_password.sarmal_izi`). İki işlemdir:
-    veritabanı satırı sarmaldan ÖNCE commit edilir (modül başlığı "Parola sıfırlama");
-    sarmal yazılamazsa yalnız ikinci işlem (sayacın satırı) geri alınır.
+    dosyadan ÖNCE `guvenlik.sarmal` satırı (`app_password.sarmal_izi`). İki işlemdir ve iki
+    aşamalı özettir (`app_password` modül başlığı "İKİ AŞAMALI ÖZET"): (1) veritabanı satırı,
+    `PAROLA` satırı ve bekleyen özet (geçici parolanın sarmalınınki; asıl özet dosyada şu an
+    duran sarmalınki, yalnız meşruysa) sarmaldan ÖNCE commit edilir (modül başlığı "Parola
+    sıfırlama"); (2) asıl özetin geçici parolanınkine çekilmesi (`HESAP` satırı), sayacın
+    satırı ve en sonda sarmal. Sarmal yazılamazsa yalnız ikinci işlem geri alınır: satır
+    `PAROLA_YENILENMELI`dir, eski parola yeni parola isteyerek açar. Başarılı sıfırlamadan
+    sonra eski sarmal (arşivdeki dahil) programda açılmaz (kalan hâller `app_password` modül
+    başlığı "KALAN RİSKLER"): parola sıfırlaması özeti tutmayan sarmalın da çaresidir
+    (`TwoStoreDifferences.digest_mismatch`).
     """
     dek = _active_data_key()
     aktor = _yonetici_aktor(by_hesap_id, dek)
@@ -315,30 +331,44 @@ def reset_password(*, by_hesap_id: object, hesap_id: object, temp_password: str)
     if hesap.status == AccountStatus.ASKIDA:
         raise AccountServiceError(_SUSPENDED_RESET_MESSAGE)
     parola = _kural(hesap_kurallari.validate_password, temp_password)
-    with transaction.atomic():
-        onceki = denetim_izi.anlik(hesap)
-        hesap.status = AccountStatus.PAROLA_YENILENMELI
-        hesap.reset_at = timezone.now()
-        hesap.reset_by = aktor
-        hesap.reset_kind = ResetKind.SIFIRLAMA
-        hesap.reset_notice_pending = True
-        hesap.seal = hesap.compute_seal(dek)
-        hesap.save(
-            update_fields=[
-                "status",
-                "reset_at",
-                "reset_by",
-                "reset_kind",
-                "reset_notice_pending",
-                "seal",
-            ]
-        )
-        denetim_izi.kayit(AuditAction.PAROLA, hesap, onceki=onceki)
-    with app_password.dosya_ve_iz_islemi():
-        app_password.sarmal_izi(hesap.id)
-        app_password.write_account_wrap(
-            data_key=dek, hesap_id=hesap.id, tanitici=hesap.login_name, password=parola
-        )
+    # Geçici parolanın sarmalı önce bellekte kurulur: özeti iki aşamalı yazımın 1. adımında
+    # bekleyen özet olur (`app_password` modül başlığı "İKİ AŞAMALI ÖZET").
+    sarmal = app_password.new_account_wrap(
+        dek, hesap_id=hesap.id, tanitici=hesap.login_name, password=parola
+    )
+    yeni_ozet = app_password.wrap_digest(dek, sarmal) or ""
+    with app_password.dosya_kilidi():
+        # (1) Satır, yenilenme izi, `PAROLA` satırı ve bekleyen özet. Asıl özet dosyada şu an
+        # duran sarmalınkidir — yalnız meşruysa (kesintide eski parola açılabilir kalır).
+        korunan = app_password.kept_wrap_digest(hesap, dek)
+        with transaction.atomic():
+            onceki = denetim_izi.anlik(hesap)
+            hesap.status = AccountStatus.PAROLA_YENILENMELI
+            hesap.reset_at = timezone.now()
+            hesap.reset_by = aktor
+            hesap.reset_kind = ResetKind.SIFIRLAMA
+            hesap.reset_notice_pending = True
+            ozet_alanlari = app_password.set_wrap_digests(hesap, asil=korunan, bekleyen=yeni_ozet)
+            hesap.seal = hesap.compute_seal(dek)
+            hesap.save(
+                update_fields=[
+                    "status",
+                    "reset_at",
+                    "reset_by",
+                    "reset_kind",
+                    "reset_notice_pending",
+                    *ozet_alanlari,
+                    "seal",
+                ]
+            )
+            denetim_izi.kayit(AuditAction.PAROLA, hesap, onceki=onceki)
+        # (2) Asıl özet (`HESAP` satırı), sayacın satırı ve en sonda sarmal.
+        with app_password.dosya_ve_iz_islemi():
+            app_password.write_wrap_digests(hesap, dek, asil=yeni_ozet, bekleyen="")
+            app_password.sarmal_izi(hesap.id)
+            app_password.write_account_wrap(
+                data_key=dek, hesap_id=hesap.id, tanitici=hesap.login_name, sarmal=sarmal
+            )
     logger.info("Hesabın parolası sıfırlandı (%s).", hesap.login_name)
     return hesap
 
@@ -414,7 +444,13 @@ class TwoStoreDifferences:
       `ACIK` olanlar karşılaştırmada `PAROLA_YENILENMELI`'ye çekilir.
     * `wraps_without_row`: satırı olmayan sarmallar;
     * `wraps_of_closed`: satırı `KAPALI` (mührü tutan) sarmallar;
-    * `seal_mismatch`: mührü tutmayan satırlar — hiçbir işleme konu olmaz.
+    * `seal_mismatch`: mührü tutmayan satırlar — hiçbir işleme konu olmaz;
+    * `digest_mismatch`: mührü tutan, açık (`KAPALI` olmayan) ve sarmalı dosyada duran ama
+      sarmalının özeti satırın asıl ya da bekleyen özetini tutmayan hesaplar (eski ya da program
+      dışından konmuş parola kaydı; özeti boş satır dahil; `app_password` modül başlığı
+      "SARMALIN TAZELİĞİ"). Bu hesaplar parolayla açılmaz; çaresi program yöneticisinin parola
+      sıfırlamasıdır (`reset_password` özeti yeniden yazar), program yöneticisinin kendi
+      hesabıysa kurtarma anahtarıyla açılış ya da başka bir program yöneticisinin sıfırlaması.
 
     `wraps_without_row` yalnız program yöneticisinin onayıyla silinir (`remove_orphan_wraps`).
     `wraps_of_closed`'ı ise program her kilit açılışında kendisi siler (`app_password.
@@ -429,6 +465,7 @@ class TwoStoreDifferences:
     wraps_without_row: list[str] = field(default_factory=list)
     wraps_of_closed: list[str] = field(default_factory=list)
     seal_mismatch: list[str] = field(default_factory=list)
+    digest_mismatch: list[str] = field(default_factory=list)
 
     @property
     def empty(self) -> bool:
@@ -437,6 +474,7 @@ class TwoStoreDifferences:
             or self.wraps_without_row
             or self.wraps_of_closed
             or self.seal_mismatch
+            or self.digest_mismatch
         )
 
     @property
@@ -451,15 +489,18 @@ def two_store_differences(
     """İki deponun farkını hesaplar; HİÇBİR ŞEY yazmaz (kilit açık olmalı: mühür DEK ister).
 
     `sarmali_yazilacak`: sarmalı çağıranın işleminin sonunda yazılacak hesaplar
-    (`reconcile_two_stores`); sarmallı sayılır.
+    (`reconcile_two_stores`); sarmallı sayılır, özetleri de o işlemde yazılır (karşılaştırılmaz).
+    Sarmalın özeti dosyadaki İLK sarmalınkidir (kilit açılışı da ilkini dener).
     """
     dek = _active_data_key()
-    sarmallar = set(app_password.wrap_ids()) | set(sarmali_yazilacak)
+    ozetler = app_password.wrap_digests(dek)
+    sarmallar = set(ozetler) | set(sarmali_yazilacak)
     satirlar = {str(hesap.id): hesap for hesap in Account.objects.all()}
     sarmalsiz: list[str] = []
     satirsiz: list[str] = []
     kapali: list[str] = []
     muhursuz: list[str] = []
+    ozeti_tutmayan: list[str] = []
     for hesap_id, hesap in satirlar.items():
         if not hesap.seal_matches(dek):
             muhursuz.append(hesap_id)
@@ -469,6 +510,10 @@ def two_store_differences(
                 kapali.append(hesap_id)
         elif hesap_id not in sarmallar:
             sarmalsiz.append(hesap_id)
+        elif hesap_id not in sarmali_yazilacak and not app_password.digest_matches(
+            hesap, ozetler[hesap_id]
+        ):
+            ozeti_tutmayan.append(hesap_id)
     for hesap_id in sarmallar:
         if hesap_id not in satirlar:
             satirsiz.append(hesap_id)
@@ -477,6 +522,7 @@ def two_store_differences(
         wraps_without_row=sorted(satirsiz),
         wraps_of_closed=sorted(kapali),
         seal_mismatch=sorted(muhursuz),
+        digest_mismatch=sorted(ozeti_tutmayan),
     )
 
 

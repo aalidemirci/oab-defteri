@@ -138,8 +138,9 @@ def test_yedek_geri_yuklenir_eski_dosya_ve_wal_kenara_alinir(
     (veri_dizini / "db.sqlite3-shm").write_bytes(b"shm-kalintisi")
     (veri_dizini / "surum.json").write_text("{}", encoding="utf-8")
     dek, durum = _dek_ile_durum(PAROLA)
-    yeni = _sqlite_baytlari(tmp_path, "yeni", dek)
+    # Önce güvenlik dosyası: görüntüdeki satır onun sarmalının özetini taşır (geri_yukleme_ortak).
     _guncel_yaz(veri_dizini, durum)
+    yeni = _sqlite_baytlari(tmp_path, "yeni", dek)
     yedek = tmp_path / "gunluk-2026-08-01.odbak"
     yedek.write_bytes(_sifreli_kapsayici(yeni, dek, durum))
 

@@ -58,8 +58,27 @@ kimliği, geri yükleme notu, iz satırı) aynı hesabı aynı metinle görür. 
 bölümünün sarmalı hesaba bağlı DEĞİLDİR ve değişmedi (`derive_key` ham hâliyle). Bağın
 çıtası: parolasını bildiği hesabın DEK'ini program dışında türetip başka kimlikle yeniden
 saran ya da mühürlü sahte satır üreten biri yine geçer; bu artık KOD ister (tehdit 6, 19).
-Bağ kimliği bağlar, tazeliği bağlamaz: aynı hesabın eski sarmalı eski parolasıyla açılır
-(`app_password` modül başlığı "Kalan risk"; tehdit 12).
+
+SARMALIN TAZELİĞİ MÜHÜRLÜ SATIRA BAĞLIDIR (kullanıcı kararı 03.11.2026: "Tazelik kapatılır").
+Kimlik bağı tek başına tazeliği bağlamıyordu: DEK parola değişiminde değişmediği için aynı
+hesabın ESKİ sarmalı (`guvenlik-arsiv-*.json`'da ya da önceden alınmış bir kopyada) da o kimliğe
+meşru biçimde bağlıdır ve eski parolasıyla açılırdı. Artık hesabın mühürlü `Account` satırı
+`guvenlik.json`'daki GÜNCEL sarmalın özetini taşır (`wrap_digest`; iki aşamalı yazımın ara hâli
+`wrap_digest_pending`) ve iki alan hesap mührüne girer (`shared.kanonik.HESAP_MUHRU_ALANLARI`).
+Özet `HMAC(HKDF(DEK, "od-sarmal-ozeti/v1"), kanonik(kanonik kimlik, tuz, sarmal))`'dır
+(`account_wrap_digest`; biçim `shared.kanonik.sarmal_ozeti`). Neden DEK'li HMAC (düz SHA-256
+değil): (1) özet DEK'siz hesaplanamaz — `guvenlik.json` ile veritabanına yazabilen ama DEK'i
+bilmeyen biri bir sarmal için tutan özeti üretemez; mühür zaten satırı korur, DEK'li özet ikinci
+bir kat olur ve bir hatada mühür denetimi atlansa da sahte özet üretilemez; (2) okul dışına
+çıkabilen bir veritabanı kopyasıyla bir arşivdeki sarmalların hangisinin güncel olduğu DEK'siz
+eşlenemez; (3) DEK'ten türeyen öteki anahtarlar gibi §2.3.1 kimlik tablosundaki kendi bilgi
+dizgesiyle `derive_subkey` kapısından geçer (amaç ayrımı: mühür anahtarı özet anahtarını vermez).
+Özete kimlik, tuz ve sarmal girer: tuz ya da belirteç metni değişen sarmal özeti tutmaz; sayaç
+ve askı girmez (kilitliyken DEK'siz yazılırlar). Karşılaştırma sabit sürededir (`kanonik.esit`).
+Tutmayan sarmal parolayla açılmaz (kilit açılışı, oturumdaki parola doğrulaması, geri yüklemenin
+parola yolu; `app_password` modül başlığı "SARMALIN TAZELİĞİ"). Özet bir PROGRAM kapısıdır: eski
+sarmal DEK'i sarmaladığı için eski parolayı bilen biri onu program dışında yine açar (tehdit 6);
+bunu DEK yenilemesi kapatır (TK12, F4).
 
 ANAHTARIN BELLEKTEKİ YERİ: anahtar süreç genelinde, bu modülün `_holder`
 nesnesinde tutulur ve kilit açıldıktan sonra kilitlenene dek bellekte kalır.
@@ -100,6 +119,8 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from django.db import models
 from django.db.models.signals import post_init
+
+from shared import kanonik
 
 # Veri anahtarı (DEK) uzunluğu — Fernet 32 baytlık anahtar ister.
 KEY_BYTES = 32
@@ -222,6 +243,11 @@ BLIND_INDEX_INFO = b"od-kor-indeks"
 #: Değişirse bütün mühürler tutmaz olur; tasarım tutmayan mührün yeniden
 #: hesaplanmasını yasaklar. Sürüm eki yalnız DEK yenilemesiyle (F4) değişebilir.
 ACCOUNT_SEAL_INFO = b"od-hesap-muhru/v1"
+#: Sarmal özeti anahtarının HKDF bağlamı (kullanıcı kararı 03.11.2026; modül başlığı "SARMALIN
+#: TAZELİĞİ"): `Account.wrap_digest` `HMAC(HKDF(DEK, "od-sarmal-ozeti/v1"), kanonik(id, salt,
+#: sarmal))`'dır (`account_wrap_digest`). Değişirse bütün özetler tutmaz olur ve hiçbir hesap
+#: parolayla açılmaz; sürüm eki yalnız DEK yenilemesiyle (F4) değişebilir.
+ACCOUNT_WRAP_DIGEST_INFO = b"od-sarmal-ozeti/v1"
 #: Hesap sarmalı anahtarının HKDF bağlamının öneki (tasarım §2.3.1, §4.4.4; kullanıcı kararı
 #: 02.11.2026): anahtar `HKDF(Argon2id(parola, tuz), ACCOUNT_WRAP_INFO ‖ kanonik kimlik)`'tir
 #: (`account_wrapping_key`). DEK'e değil parolanın Argon2id çıktısına uygulanır. Değişirse
@@ -247,7 +273,7 @@ AUDIT_LOCKED_MAC_INFO = b"od-iz-kilitli-mac/v1"
 def derive_subkey(key: bytes, *, info: bytes, salt: bytes | None = None) -> bytes:
     """Adlı amaç için 32 baytlık alt anahtar: HKDF-SHA256(salt, info=amaç).
 
-    DEK'ten türeyen bütün anahtarların (kör indeks, hesap mührü; F3'te hareket
+    DEK'ten türeyen bütün anahtarların (kör indeks, hesap mührü, sarmal özeti; F3'te hareket
     parmak izi, 3. adımda dosya sarmalı), iz anahtarı türevlerinin (§4.6.3) ve hesap
     sarmalı anahtarının (parolanın Argon2id çıktısından; `account_wrapping_key`) tek
     kapısıdır. Bilgi dizgeleri kimlik tablosundadır (tasarım §2.3.1); her amaç
@@ -293,6 +319,31 @@ def _derive_blind_index_key(data_key: bytes) -> bytes:
 def account_seal_key(data_key: bytes) -> bytes:
     """DEK'ten hesap mührü anahtarı (`od-hesap-muhru/v1`; tasarım §4.6.1)."""
     return derive_subkey(data_key, info=ACCOUNT_SEAL_INFO)
+
+
+def account_wrap_digest_key(data_key: bytes) -> bytes:
+    """DEK'ten sarmal özeti anahtarı (`od-sarmal-ozeti/v1`; modül başlığı "SARMALIN TAZELİĞİ")."""
+    return derive_subkey(data_key, info=ACCOUNT_WRAP_DIGEST_INFO)
+
+
+def account_wrap_digest(data_key: bytes, *, account_id: object, salt: bytes, wrapped: str) -> str:
+    """Hesap sarmalının özeti: `HMAC(HKDF(DEK, "od-sarmal-ozeti/v1"), kanonik(id, salt, sarmal))`.
+
+    Kimlik `canonical_account_id`'den geçer (çevrilemezse `ValueError`/`TypeError`); tuz ham
+    baytlardır ve kanonik base64 metniyle girer (dosyadaki yazımı ne olursa olsun aynı tuz aynı
+    özeti verir); sarmal dosyadaki Fernet belirtecinin metnidir. Saftır (ORM istemez): geri
+    yüklemenin ORM'siz yolu da bunu çağırır.
+    """
+    if not isinstance(wrapped, str):
+        raise TypeError("Sarmal metin olmalıdır.")
+    return kanonik.sarmal_ozeti(
+        account_wrap_digest_key(data_key),
+        {
+            "id": canonical_account_id(account_id),
+            "salt": base64.b64encode(salt).decode("ascii"),
+            "sarmal": wrapped,
+        },
+    )
 
 
 def canonical_account_id(value: object) -> str:

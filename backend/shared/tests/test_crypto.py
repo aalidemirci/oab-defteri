@@ -253,10 +253,48 @@ def test_hesap_sarmali_anahtari_kimlige_bagli_hkdf_ile_turer() -> None:
     assert beklenen != argon  # bağsız (F1b-1) türetim bu değildir
     assert crypto.ACCOUNT_WRAP_INFO not in {
         crypto.ACCOUNT_SEAL_INFO,
+        crypto.ACCOUNT_WRAP_DIGEST_INFO,
         crypto.BLIND_INDEX_INFO,
         crypto.AUDIT_CHAIN_INFO,
         crypto.RECORD_SUMMARY_INFO,
     }
+
+
+def test_sarmal_ozeti_tasarimdaki_hkdf_dizgesiyle_ve_bicimle_hesaplanir() -> None:
+    """Kullanıcı kararı 03.11.2026 "tazelik kapatılır": `HMAC(HKDF(DEK, "od-sarmal-ozeti/v1"),
+    kanonik(id, salt, sarmal))`. Formül açıkça yeniden hesaplanır: özet anahtarını mühür anahtarıyla
+    aynı bilgiden türeten (amaç ayrımını bozan), kimliği kanonik metne çevirmeyen ya da tuzu kanonik
+    base64 dışında yazan bir değişiklik bu testi düşürür (tasarım §2.3.1 kimlik tablosu)."""
+    import base64
+    import uuid
+
+    anahtar = HKDF(
+        algorithm=hashes.SHA256(), length=32, salt=None, info=b"od-sarmal-ozeti/v1"
+    ).derive(TEST_DEK)
+    assert crypto.ACCOUNT_WRAP_DIGEST_INFO == b"od-sarmal-ozeti/v1"
+    assert crypto.account_wrap_digest_key(TEST_DEK) == anahtar
+    assert anahtar != crypto.account_seal_key(TEST_DEK)
+    assert crypto.ACCOUNT_WRAP_DIGEST_INFO not in {
+        crypto.ACCOUNT_SEAL_INFO,
+        crypto.BLIND_INDEX_INFO,
+        crypto.AUDIT_CHAIN_INFO,
+        crypto.RECORD_SUMMARY_INFO,
+    }
+    assert base64.b64encode(_TUZ) == b"AAECAwQFBgcICQoLDA0ODw=="
+    yuk = (
+        b'{"id":"6f1c2a3b-4d5e-4f60-8a71-0b2c3d4e5f60",'
+        b'"salt":"AAECAwQFBgcICQoLDA0ODw==","sarmal":"gAAAAB-uydurma-belirtec"}'
+    )
+    beklenen = hmac.new(anahtar, yuk, sha256).hexdigest()
+    assert (
+        crypto.account_wrap_digest(
+            TEST_DEK,
+            account_id=uuid.UUID(_KIMLIK.upper()),
+            salt=_TUZ,
+            wrapped="gAAAAB-uydurma-belirtec",
+        )
+        == beklenen
+    )
 
 
 def test_farkli_kimlik_farkli_anahtar_verir_ve_sarmali_acmaz() -> None:

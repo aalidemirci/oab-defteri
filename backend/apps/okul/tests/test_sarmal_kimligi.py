@@ -8,8 +8,9 @@ açılmaz; tanıtıcıyı değiştirmek oturumun kimliğini değiştirmez; aynı
 sarmal ve kimliğin kanonik olmayan yazımları bağı atlatmaz. Okuyucu kimliği Argon2id'den önce
 kanonik kurala sokar; biçimsiz `kdf` alanı yanlış parola sayılmaz. Bağsız (`turetim`
 etiketsiz) sarmal parolayla hiç açılmaz: geri düşüş yoktur, ileti program dışı değişikliği anar
-ve bildirim ister. Bağ kimliği bağlar, tazeliği bağlamaz: aynı hesabın eski sarmalı eski
-parolasıyla açılır (bilinen sınır testi; `app_password` modül başlığı "Kalan risk").
+ve bildirim ister. Tazelik de bağlıdır (kullanıcı kararı 03.11.2026): aynı hesabın eski sarmalı
+eski parolasıyla açılmaz — satırın sarmal özeti tutmaz (`test_eski_sarmal_eski_parolayla_acilmaz`;
+`app_password` modül başlığı "SARMALIN TAZELİĞİ"; öteki kollar `test_sarmal_tazeligi.py`'de).
 Geri yükleme kolu `test_geri_yukleme_yetkisi.py`'dedir, türetimin birim testleri
 `shared/tests/test_crypto.py`'de.
 
@@ -317,9 +318,9 @@ def test_bagsiz_sarmal_dogru_parolayla_da_acilmaz_ve_yol_gosterir(
     """Bağsız sarmallı dosya kullanılabilir sayılır (kayıp kilidi değil; kurtarma bölümü sağlam),
     ama bağsız sarmal doğru parolayla da açılmaz. Ret Argon2id koşmadan, sayaca dokunmadan 409
     `iki_depo_tutarsiz`'dir. Program bağsız sarmal yazmadığı için sahada bu durum yalnız program
-    dışı değişiklikle doğar: ileti mühür iletisinin kalıbıyla değişikliği anar, program
-    yöneticisine ve Denetleme Kuruluna bildirim ister; kurtarma anahtarı ÖĞÜTLEMEZ (zarfın
-    kullanım durumları sözlük §1 "Kurtarma anahtarı"). Teknik olarak kurtarma anahtarıyla açılış
+    dışı değişiklikle doğar: ileti mühür iletisinin kalıbıyla değişikliği anar, Denetleme
+    Kuruluna bildirim ister ve çıkışı söyler (zarfın üçüncü durumu; kullanıcı kararı 03.11.2026:
+    program yöneticisi kurtarma anahtarıyla açar, öteki hesapları o sıfırlar). Teknik olarak kurtarma anahtarıyla açılış
     ve parola sıfırlaması sarmalı bağlı biçimde yeniden kurar: program yöneticisi kurtarma
     anahtarıyla açar, muhasibin parolasını sıfırlar; muhasip geçici parolasıyla açıp parolasını
     yeniler."""
@@ -329,7 +330,9 @@ def test_bagsiz_sarmal_dogru_parolayla_da_acilmaz_ve_yol_gosterir(
     assert app_password.security_file_missing() is False
     ileti = app_password.UNBOUND_WRAP_MESSAGE
     assert "program dışından değiştirilmiş" in ileti and "Denetleme Kuruluna bildirin" in ileti
-    assert "kurtarma" not in ileti.casefold()
+    # Zarf kararı (kullanıcı kararı 03.11.2026): ileti çıkışı söyler — program yöneticisi
+    # "Parolamı unuttum" yolundan kurtarma anahtarıyla açar, öteki hesapları o sıfırlar.
+    assert "“Parolamı unuttum”" in ileti and "program yöneticisi sıfırlar" in ileti
 
     with monkeypatch.context() as yama:
         yama.setattr(crypto, "derive_key", lambda *_a, **_k: pytest.fail("Argon2id koşmamalı"))
@@ -604,7 +607,7 @@ def test_kanonik_olmayan_kopya_sifirlamayla_silinmez_iki_depo_onayiyla_silinir()
     assert _sarmal_sayisi(muhasip.id) == 1
 
 
-# ============================================================ bilinen sınır: tazelik
+# ============================================================ tazelik (kullanıcı kararı 03.11.2026)
 
 
 def _arsivdeki_sarmal(hesap_id: object, parola: str) -> dict[str, Any]:
@@ -620,22 +623,40 @@ def _arsivdeki_sarmal(hesap_id: object, parola: str) -> dict[str, Any]:
     raise AssertionError("arşivde o parolanın sarmalı yok")
 
 
+def _ham_satir(hesap_id: object) -> dict[str, Any]:
+    satir = (
+        Account.objects.filter(pk=str(hesap_id))
+        .values(
+            "status",
+            "seal",
+            "wrap_digest",
+            "wrap_digest_pending",
+            "reset_notice_pending",
+            "reset_at",
+            "reset_kind",
+            "last_login_at",
+            "password_changed_at",
+        )
+        .first()
+    )
+    assert satir is not None
+    return dict(satir)
+
+
 @pytest.mark.parametrize("satir_durumu", ["acik", "parola_yenilenmeli"])
-def test_bilinen_sinir_eski_sarmal_eski_parolayla_acar(satir_durumu: str) -> None:
-    """BİLİNEN SINIR (`app_password` modül başlığı "Kalan risk"; tehdit 12; satırda sarmal izi
-    seçeneği kullanıcı kararı bekliyor). Bağ kimliği bağlar, TAZELİĞİ bağlamaz: aynı hesabın
-    eski sarmalı da o kimliğe meşru biçimde bağlıdır. Veri dizinine yazabilen ve eski ya da
-    geçici parolayı bilen biri arşivdeki eski sarmalı `guvenlik.json`'a geri koyup o parolayla
-    o hesap olarak açar (kod gerekmez; yetki yükselmez, hesap yine kendisidir).
+def test_eski_sarmal_eski_parolayla_acilmaz(satir_durumu: str) -> None:
+    """Eski "bilinen sınır" kapandı (kullanıcı kararı 03.11.2026 "Tazelik kapatılır"; `app_password`
+    modül başlığı "SARMALIN TAZELİĞİ"). Veri dizinine yazabilen ve eski ya da geçici parolayı
+    bilen biri arşivdeki eski sarmalı `guvenlik.json`'a geri koyar (kod gerekmez). Parola o
+    sarmalı açar ama sarmalın özeti mühürlü satırın asıl ya da bekleyen özetini tutmaz: oturum
+    AÇILMAZ, `BUTUNLUK` satırı (`SISTEM`, alan `wrap_digest`) düşer, satır ve parola yenilenme
+    bildirimi değişmez, hatalı deneme sayacı artmaz (mühür uyuşmazlığı yoluyla aynı).
 
     * `acik`: program yöneticisi geçici parola verir, muhasip açıp yeniler ve bildirimi kapatır;
-      geçici parolanın sarmalı arşivden geri konunca geçici parola yeniden açar. Açılış yalnız
-      `GIRIS` satırı bırakır; sıfırlama izi ve bildirimi doğmaz.
-    * `parola_yenilenmeli`: ele geçmiş parola sıfırlanır; eski sarmal geri konunca eski parola
-      yeni parola isteyerek açar, `PAROLA` satırı düşer. Sıfırlama bu yola karşı parolayı
-      geçersiz kılmaz (DEK yenilemesi, TK12/F4, kılar).
-
-    Sınır kapatılırsa (ör. mühürlü satırda sarmal izi) bu test ret testine döner."""
+      geçici parolanın sarmalı arşivden geri konur — geçici parola açmaz (K2: mali kayıtları yalnız
+      muhasip girer).
+    * `parola_yenilenmeli`: ele geçmiş parola sıfırlanır; eski sarmal geri konur — eski parola
+      (yeni parola verilse de) açmaz, `PAROLA` satırı düşmez."""
     muhasip = _muhasip()
     hesaplar.reset_password(
         by_hesap_id=TEST_HESAP_ID, hesap_id=muhasip.id, temp_password=UCUNCU_PAROLA
@@ -658,26 +679,30 @@ def test_bilinen_sinir_eski_sarmal_eski_parolayla_acar(satir_durumu: str) -> Non
         bilinen = _MUHASIBIN_YENI_PAROLASI
     eski = _arsivdeki_sarmal(muhasip.id, bilinen)
     _sarmallari_yaz(lambda liste: [eski if h["id"] == eski["id"] else h for h in liste])
+    once = _ham_satir(muhasip.id)
     son_sira = AuditTrail.objects.order_by("-seq").values_list("seq", flat=True).first()
 
-    if satir_durumu == "acik":
-        acilan = app_password.unlock(hesap_id=muhasip.id, password=bilinen)
-    else:
-        with pytest.raises(app_password.PasswordRenewalRequired):
-            app_password.unlock(hesap_id=muhasip.id, password=bilinen)
-        acilan = app_password.unlock(
-            hesap_id=muhasip.id, password=bilinen, new_password="Baska-Parola-6&"
-        )
+    for yeni_parola in (None, "Baska-Parola-6&"):
+        with pytest.raises(app_password.WrapDigestMismatch) as hata:
+            app_password.unlock(hesap_id=muhasip.id, password=bilinen, new_password=yeni_parola)
+        assert (hata.value.code, hata.value.status_code) == ("hesap_muhru_tutmadi", 409)
+        assert str(hata.value) == app_password.UNBOUND_WRAP_MESSAGE
+        _reddedildi_oturum_yok()
 
-    assert acilan.id == muhasip.id
-    assert OTURUM.hesap() == OturumHesabi(id=str(muhasip.id), tanitici="muhasip", rol="muhasip")
-    satir = Account.objects.get(pk=muhasip.id)
-    assert satir.status == AccountStatus.ACIK
-    turler = list(
-        AuditTrail.objects.filter(seq__gt=son_sira).order_by("seq").values_list("action", flat=True)
+    assert _ham_satir(muhasip.id) == once
+    assert app_password.wrap_failure_state(muhasip.id) == (0, False)
+    satirlar = list(AuditTrail.objects.filter(seq__gt=son_sira).order_by("seq"))
+    assert [s.action for s in satirlar] == [AuditAction.BUTUNLUK, AuditAction.BUTUNLUK]
+    for satir in satirlar:
+        assert (satir.model, satir.object_id, satir.changed_fields, satir.actor) == (
+            "okul.Account",
+            str(muhasip.id),
+            ["wrap_digest"],
+            "SISTEM",
+        )
+    # Uç da aynı ileti ve kodla reddeder.
+    yanit = APIClient().post(
+        "/api/v1/security/unlock/", {"hesap": str(muhasip.id), "parola": bilinen}, format="json"
     )
-    if satir_durumu == "acik":
-        assert turler == [AuditAction.GIRIS]
-        assert satir.reset_notice_pending is False
-    else:
-        assert turler == [AuditAction.PAROLA, AuditAction.GIRIS]
+    assert (yanit.status_code, yanit.json()["code"]) == (409, "hesap_muhru_tutmadi")
+    assert yanit.json()["message"] == app_password.UNBOUND_WRAP_MESSAGE
