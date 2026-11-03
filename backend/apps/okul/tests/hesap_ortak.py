@@ -7,6 +7,7 @@ yapan açık hesap ister). Adlar uydurmadır; gerçek kişi değildir.
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ from django.db import connection
 from apps.okul.models import Account, AccountRole
 from apps.okul.services import app_password, hesaplar
 from conftest import TEST_DEK, TEST_HESAP_ID
+from shared import crypto
 
 GECICI_PAROLA = "Gecici-Parola-1"
 YENI_PAROLA = "Yeni-Parola-2!"
@@ -89,6 +91,24 @@ def sarmal(hesap_id: object) -> dict[str, Any]:
 
 def durum_yaz(veri: dict[str, Any]) -> None:
     app_password._write_state(veri)
+
+
+def bagsiz_sarmal(
+    hesap_id: object, tanitici: str, parola: str, *, dek: bytes = TEST_DEK
+) -> dict[str, Any]:
+    """F1b-1'in BAĞSIZ hesap sarmalı (eski dosya taklidi): anahtar `Argon2id(parola, tuz)`'un
+    kendisidir, kimlik türetime girmez, `turetim` alanı yoktur. Program artık böyle sarmal
+    YAZMAZ ve AÇMAZ (`app_password` modül başlığı "HESAP SARMALI KİMLİĞE BAĞLIDIR")."""
+    tuz = crypto.new_salt()
+    anahtar = crypto.derive_key(parola, salt=tuz, params=app_password._kdf_of(durum()))
+    return {
+        "id": str(hesap_id),
+        "tanitici": tanitici,
+        "salt": base64.b64encode(tuz).decode("ascii"),
+        "sarmal": crypto.wrap_key(dek, wrapping_key=anahtar),
+        "hatali": 0,
+        "askida": False,
+    }
 
 
 def arsivler() -> list[Path]:

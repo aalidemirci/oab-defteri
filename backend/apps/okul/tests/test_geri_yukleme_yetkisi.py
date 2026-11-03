@@ -29,7 +29,7 @@ import re
 import sqlite3
 import stat
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import closing
 from dataclasses import replace
 from datetime import datetime, timedelta
@@ -81,7 +81,7 @@ from apps.okul.tests.geri_yukleme_ortak import (
     program_disindan,
     yetkili_sqlite,
 )
-from apps.okul.tests.hesap_ortak import durum_yaz
+from apps.okul.tests.hesap_ortak import bagsiz_sarmal, durum_yaz
 from conftest import (
     TEST_DEK,
     TEST_HESAP_ID,
@@ -95,10 +95,11 @@ from shared.exceptions import ROL_YETKISIZ_MESAJI, RolYetkisiz
 
 GERI_YUKLE_URL = "/api/v1/backups/restore/"
 YEDEK = "gunluk-2026-10-31.odbak"
-#: Uydurma muhasip hesabı: güvenlik dosyasında program yöneticisinin parolasıyla açılan bir
-#: sarmalı vardır — rol denetimi olmasaydı parola yolu bu hesapla geri yüklerdi.
+#: Uydurma muhasip hesabı: güvenlik dosyasında program yöneticisinin parolasıyla açılan, KENDİ
+#: kimliğine bağlı bir sarmalı vardır — rol denetimi olmasaydı parola yolu bu hesapla geri
+#: yüklerdi.
 MUHASIP_ID = "0b4c2d1e-7a3f-4e5d-9c8b-1a2b3c4d5e6f"
-#: Muhasibin KENDİ (uydurma) parolası: bilinen sınır testinde sarmalı bununla kurulur.
+#: Muhasibin KENDİ (uydurma) parolası: sarmal kimliği testlerinde sarmalı bununla kurulur.
 MUHASIP_PAROLASI = "Uydurma-Muhasip-Parolasi-2"
 YONETICI = HesapSatiri(TEST_HESAP_ID, TEST_TANITICI)
 MUHASIP = HesapSatiri(MUHASIP_ID, "muhasip", role="muhasip")
@@ -133,19 +134,26 @@ def ortam(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str,
     yield {"db": db, "eski": db.read_bytes(), "yeni": yeni, "yedek": yedekler / YEDEK}
 
 
-def _sarmal_kopyasi_ekle(hesap: HesapSatiri) -> None:
-    """Güvenlik dosyasına program yöneticisinin sarmalının kopyasını bu hesabın kimliği ve
-    tanıtıcısıyla ekler (aynı parola açar)."""
+def _sarmal_ekle(hesap: HesapSatiri, *, parola: str = TEST_PAROLA) -> None:
+    """Güvenlik dosyasına bu hesabın KENDİ kimliğine bağlı sarmalını ekler (programın yazıcısı,
+    `_account_wrap`). Varsayılan parola program yöneticisininkidir (tuz ayrıdır). Yöneticinin
+    sarmalını kopyalayıp kimliğini değiştirmek artık işe yaramaz: sarmal kimliğe bağlıdır."""
     durum = app_password.read_state() or {}
-    kopya = dict(durum["hesaplar"][0])
-    kopya.update({"id": hesap.id, "tanitici": hesap.login_name})
-    durum["hesaplar"].append(kopya)
+    durum["hesaplar"].append(
+        app_password._account_wrap(
+            TEST_DEK,
+            hesap_id=hesap.id,
+            tanitici=hesap.login_name,
+            password=parola,
+            kdf=app_password._kdf_of(durum),
+        )
+    )
     durum_yaz(durum)
 
 
 def _muhasip_sarmali_ekle() -> None:
-    """Güvenlik dosyasına program yöneticisinin sarmalının kopyasını muhasip adıyla ekler."""
-    _sarmal_kopyasi_ekle(MUHASIP)
+    """Güvenlik dosyasına muhasibin, program yöneticisinin parolasıyla açılan sarmalını ekler."""
+    _sarmal_ekle(MUHASIP)
 
 
 def _yan_dosyalar(db: Path) -> set[str]:
@@ -433,7 +441,7 @@ def test_yedekten_sonra_acilan_program_yoneticisi_parolasiyla_geri_yukler(
 ) -> None:
     """Uçtan uca: `yonetici-2` yedekte yoktur, güncel veritabanında açık program yöneticisidir;
     kendi parolasıyla (sarmalı güncel güvenlik dosyasında) geri yükler."""
-    _sarmal_kopyasi_ekle(YONETICI_2)
+    _sarmal_ekle(YONETICI_2)
     yetkili_sqlite(ortam["db"], dek=TEST_DEK, hesaplar=[YONETICI, MUHASIP, YONETICI_2])
 
     backup_restore.restore_database(
@@ -443,48 +451,214 @@ def test_yedekten_sonra_acilan_program_yoneticisi_parolasiyla_geri_yukler(
     assert ortam["db"].read_bytes() == ortam["yeni"]
 
 
-def test_bilinen_sinir_sarmal_kimligi_degistirilirse_yonetici_adina_gecer(
-    ortam: dict[str, Any],
-) -> None:
-    """BİLİNEN SINIR (`geri_yukleme_yetkisi` başlığı "Bilinen sınır"; F1b-2 ekleri, kullanıcı
-    kararı bekliyor). Denetlenen hesap, parolanın açtığı sarmalın `id` alanıdır ve bu alan
-    sarmalın türetimine bağlı değildir. Muhasip KENDİ parolasıyla önce rolden reddedilir;
-    `guvenlik.json`'da sarmalının `id`'si metin düzenleyiciyle program yöneticisininkine
-    çevrilince aynı parola geri yükler ve not program yöneticisini gösterir. Kimlik sarmalın
-    türetimine bağlanınca (kalıcı çözüm) bu test, ikinci denemenin de reddedildiğini sınayan
-    bir testle değiştirilir."""
+def _kimligi_degistir(eski: str, yeni: str, *, one_al: bool = False) -> None:
+    """Metin düzenleyici taklidi (kod gerekmez): güvenlik dosyasında TEK sarmalın `id` alanı.
+
+    `one_al`: değiştirilen sarmal listenin başına taşınır (kes-yapıştır); kimliğiyle arayan yol
+    (uygulama içi parola yolu) aynı kimliği taşıyan sarmallardan önce onu bulur.
+    """
     durum = app_password.read_state() or {}
-    durum["hesaplar"].append(
-        app_password._account_wrap(
-            TEST_DEK,
-            hesap_id=MUHASIP_ID,
-            tanitici="muhasip",
-            password=MUHASIP_PAROLASI,
-            kdf=app_password._kdf_of(durum),
-        )
-    )
+    (sarmal,) = [h for h in durum["hesaplar"] if h["id"] == eski]
+    sarmal["id"] = yeni
+    if one_al:
+        durum["hesaplar"].remove(sarmal)
+        durum["hesaplar"].insert(0, sarmal)
     durum_yaz(durum)
+
+
+def _rol_denetimi_kosmamali(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        geri_yukleme_yetkisi,
+        "yonetici_dogrula",
+        lambda **_k: pytest.fail("kimliği değiştirilmiş sarmal açılmamalı; denetime varılmamalı"),
+    )
+
+
+@pytest.mark.parametrize("kol", ["konsol", "uygulama_ici"])
+def test_sarmal_kimligi_degistirilirse_geri_yukleme_reddedilir(
+    kol: str,
+    ortam: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Sarmal kimliği parola kaydına bağlıdır (kullanıcı kararı 02.11.2026; `geri_yukleme_yetkisi`
+    başlığı). Muhasip KENDİ parolasıyla önce rolden reddedilir. `guvenlik.json`'da sarmalının
+    `id`'sini metin düzenleyiciyle program yöneticisininkine çevirince sarmal o kimlikle AÇILMAZ:
+    yanıt yanlış parolanınkidir ("açılamadı"), rol denetimine hiç varılmaz, hiçbir dosya değişmez,
+    not yazılmaz. Konsol kolu çekirdek, masaüstü kipi ve `restore_backup`'tır; uygulama içi kol
+    masada açık bırakılmış program yöneticisi oturumudur (rol ve servis kapısı geçer, parola yolu
+    oturum hesabının sarmalını kimliğiyle arar ve değiştirilmiş sarmalı bulur). Bağ kaldırılsaydı
+    (türetimden kimlik çıksaydı) iki kol da program yöneticisi adına geri yüklerdi."""
+    _sarmal_ekle(MUHASIP, parola=MUHASIP_PAROLASI)
     with pytest.raises(backup_restore.GeriYuklemeYetkisiz) as hata:
         backup_restore.restore_database(
             ortam["yedek"], ortam["db"], hesap="muhasip", password=MUHASIP_PAROLASI
         )
-    assert hata.value.kod == "rol"
+    assert hata.value.kod == "rol"  # ön koşul: parola sarmalı muhasibin kendi kimliğiyle açar
 
-    # Metin düzenleyiciyle TEK alan: muhasibin sarmalının kimliği (kod gerekmez).
-    dosya = app_password.state_path()
-    metin = dosya.read_text(encoding="utf-8")
-    eski, yeni = f'"id": "{MUHASIP_ID}"', f'"id": "{TEST_HESAP_ID}"'
-    assert metin.count(eski) == 1
-    dosya.write_text(metin.replace(eski, yeni), encoding="utf-8")
+    _kimligi_degistir(MUHASIP_ID, TEST_HESAP_ID, one_al=kol == "uygulama_ici")
+    _rol_denetimi_kosmamali(monkeypatch)
+    (ortam["db"].parent / VERSION_STAMP_FILE_NAME).write_text("{}", encoding="utf-8")
+    once = _anlik(ortam["db"])
+
+    if kol == "konsol":
+        with pytest.raises(backup_restore.BackupRestoreError) as ret:
+            backup_restore.restore_database(
+                ortam["yedek"], ortam["db"], hesap="muhasip", password=MUHASIP_PAROLASI
+            )
+        assert not isinstance(ret.value, backup_restore.GeriYuklemeYetkisiz)
+        assert "açılamadı" in str(ret.value)
+        assert _anlik(ortam["db"]) == once
+
+        paths = AppPaths(
+            root=tmp_path,
+            data=ortam["db"].parent,
+            backups=app_password.backup_dir(),
+            logs=tmp_path / "gunlukler",
+            cache=tmp_path / "onbellek",
+        )
+        monkeypatch.setattr(restore_mod, "prepare_django", lambda *a, **k: None)
+        args = build_parser().parse_args(
+            ["--geri-yukle", YEDEK, "--evet", "--hesap", "muhasip", "--parola", MUHASIP_PAROLASI]
+        )
+        assert restore_mod._restore_flow(paths, args) == EXIT_RESTORE_FAILED
+        cikti = capsys.readouterr().out
+        assert "HATA: Yedek açılamadı" in cikti and ILETI_ROL not in cikti
+        assert _anlik(ortam["db"]) == once
+
+        with pytest.raises(CommandError, match="açılamadı"):
+            call_command(
+                "restore_backup",
+                str(ortam["yedek"]),
+                "--yes",
+                "--hesap",
+                "muhasip",
+                "--password",
+                MUHASIP_PAROLASI,
+                stdout=StringIO(),
+            )
+    else:
+        for govde in (
+            {"name": YEDEK, "password": MUHASIP_PAROLASI},
+            {"name": YEDEK, "hesap": "muhasip", "password": MUHASIP_PAROLASI},
+        ):
+            yanit = APIClient().post(GERI_YUKLE_URL, govde, format="json")
+            assert yanit.status_code == 400, yanit.json()
+            assert "açılamadı" in yanit.json()["message"]
+            _degismedi(ortam)
+
+    assert _anlik(ortam["db"]) == once
+    assert geri_yukleme_notu.oku(app_password.state_path().parent) is None
+
+
+#: Kanonik olmayan yazımlar: satırı bulan okuyucu (`uuid.UUID`) çoğunu aynı satıra çevirir.
+#: Başka hesabın kimliğinin yazımıyla BAĞIN yazım oyunuyla atlatılamadığını, kendi kimliğinin
+#: yazımıyla KANONİK KATILIĞI (okuyucu kimliği Argon2id'den önce kurala sokar) sınarlar.
+KIMLIK_YAZIMLARI: dict[str, Callable[[str], str]] = {
+    "buyuk_harf": str.upper,
+    "tiresiz": lambda kimlik: kimlik.replace("-", ""),
+    "bosluklu": lambda kimlik: f" {kimlik} ",
+    "suslu_ayracli": lambda kimlik: f"{{{kimlik}}}",
+    "urn_onekli": lambda kimlik: f"urn:uuid:{kimlik}",
+}
+
+
+@pytest.mark.parametrize("yazim", sorted(KIMLIK_YAZIMLARI))
+def test_sarmal_kimligi_kanonik_olmayan_yazimla_da_gecmez(
+    yazim: str, ortam: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bağ kanonik biçim oyunuyla atlatılamaz: muhasibin sarmalı program yöneticisinin kimliğinin
+    büyük harfli, tiresiz, boşluklu, ayraçlı ya da önekli yazımını taşısa da açılmaz; meşru
+    program yöneticisi kendi parolasıyla geri yüklemeye devam eder. Bu test BAĞI sınar, kanonik
+    katılığı değil (sarmal muhasibin kimliğine bağlıdır; gevşek okuyucu da açamazdı); katılık
+    `test_kendi_kimliginin_kanonik_olmayan_yazimi_geri_yuklemede_de_acmaz`'dadır."""
+    _sarmal_ekle(MUHASIP, parola=MUHASIP_PAROLASI)
+    _kimligi_degistir(MUHASIP_ID, KIMLIK_YAZIMLARI[yazim](TEST_HESAP_ID))
+    with monkeypatch.context() as yama:
+        _rol_denetimi_kosmamali(yama)
+        with pytest.raises(backup_restore.BackupRestoreError, match="açılamadı") as ret:
+            backup_restore.restore_database(
+                ortam["yedek"], ortam["db"], hesap="muhasip", password=MUHASIP_PAROLASI
+            )
+    assert not isinstance(ret.value, backup_restore.GeriYuklemeYetkisiz)
 
     backup_restore.restore_database(
-        ortam["yedek"], ortam["db"], hesap="muhasip", password=MUHASIP_PAROLASI
+        ortam["yedek"], ortam["db"], hesap=TEST_TANITICI, password=TEST_PAROLA
     )
-
     assert ortam["db"].read_bytes() == ortam["yeni"]
-    notu = geri_yukleme_notu.oku(dosya.parent) or {}
-    (kayit,) = notu["geri_yuklemeler"]
-    assert kayit["yol"] == {"tur": "hesap", "hesap": TEST_HESAP_ID, "tanitici": "muhasip"}
+
+
+@pytest.mark.parametrize("yazim", sorted(KIMLIK_YAZIMLARI))
+def test_kendi_kimliginin_kanonik_olmayan_yazimi_geri_yuklemede_de_acmaz(
+    yazim: str, ortam: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """KANONİK KATILIK, geri yükleme kolu: program yöneticisinin KENDİ sarmalının `id`'si aynı
+    kimliğin kanonik olmayan bir yazımına çevrilince `--hesap yonetici` + doğru parola yedeği
+    açmaz ("açılamadı"); okuyucu kimliği Argon2id'den önce kanonik kurala sokar (türetim
+    koşmaz), rol denetimine varılmaz, hiçbir dosya değişmez. Kanonik metin geri gelince aynı
+    parola geri yükler."""
+    _kimligi_degistir(TEST_HESAP_ID, KIMLIK_YAZIMLARI[yazim](TEST_HESAP_ID))
+    with monkeypatch.context() as yama:
+        _rol_denetimi_kosmamali(yama)
+        yama.setattr(crypto, "derive_key", lambda *_a, **_k: pytest.fail("Argon2id koşmamalı"))
+        with pytest.raises(backup_restore.BackupRestoreError, match="açılamadı") as ret:
+            backup_restore.restore_database(
+                ortam["yedek"], ortam["db"], hesap=TEST_TANITICI, password=TEST_PAROLA
+            )
+    assert not isinstance(ret.value, backup_restore.GeriYuklemeYetkisiz)
+    assert ortam["db"].read_bytes() == ortam["eski"]
+    assert geri_yukleme_notu.oku(app_password.state_path().parent) is None
+
+    _kimligi_degistir(KIMLIK_YAZIMLARI[yazim](TEST_HESAP_ID), TEST_HESAP_ID)
+    backup_restore.restore_database(
+        ortam["yedek"], ortam["db"], hesap=TEST_TANITICI, password=TEST_PAROLA
+    )
+    assert ortam["db"].read_bytes() == ortam["yeni"]
+
+
+def test_tanitici_takasi_geri_yuklemede_yetki_yukseltmez(ortam: dict[str, Any]) -> None:
+    """Tanıtıcı yalnız sarmalı BULMAYA yarar. Muhasip, sarmalının tanıtıcısını `yonetici`, program
+    yöneticisininkini `muhasip` yaparsa `--hesap yonetici` muhasibin sarmalını bulur; sarmal
+    muhasibin KENDİ kimliğiyle açılır ve denetim o kimliği reddeder (rol). Hiçbir dosya değişmez."""
+    _sarmal_ekle(MUHASIP, parola=MUHASIP_PAROLASI)
+    durum = app_password.read_state() or {}
+    takas = {TEST_TANITICI: "muhasip", "muhasip": TEST_TANITICI}
+    for sarmal in durum["hesaplar"]:
+        sarmal["tanitici"] = takas[sarmal["tanitici"]]
+    durum_yaz(durum)
+    once = _anlik(ortam["db"])
+
+    with pytest.raises(backup_restore.GeriYuklemeYetkisiz) as hata:
+        backup_restore.restore_database(
+            ortam["yedek"], ortam["db"], hesap=TEST_TANITICI, password=MUHASIP_PAROLASI
+        )
+
+    assert (hata.value.kod, str(hata.value)) == ("rol", ILETI_ROL)
+    assert _anlik(ortam["db"]) == once
+
+
+def test_bagsiz_sarmalla_parola_yolu_acilmaz(
+    ortam: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bağdan önceki biçimde (F1b-1: kimlik türetime girmez, `turetim` alanı yok) yazılmış
+    sarmal doğru parolayla da açılmaz: geri düşüş yoktur. Yanıt yanlış parolanınkidir ve yedeği
+    açan kurtarma anahtarını anar; kurtarma anahtarı yolu açık kalır."""
+    durum = app_password.read_state() or {}
+    durum["hesaplar"] = [bagsiz_sarmal(TEST_HESAP_ID, TEST_TANITICI, TEST_PAROLA)]
+    durum_yaz(durum)
+    with monkeypatch.context() as yama:
+        _rol_denetimi_kosmamali(yama)
+        with pytest.raises(backup_restore.BackupRestoreError, match="kurtarma anahtarıyla"):
+            backup_restore.restore_database(
+                ortam["yedek"], ortam["db"], hesap=TEST_TANITICI, password=TEST_PAROLA
+            )
+    assert ortam["db"].read_bytes() == ortam["eski"]
+
+    backup_restore.restore_database(
+        ortam["yedek"], ortam["db"], recovery_key=TEST_KURTARMA_ANAHTARI
+    )
+    assert ortam["db"].read_bytes() == ortam["yeni"]
 
 
 def test_sarmalinda_askida_olan_program_yoneticisi_reddedilir(ortam: dict[str, Any]) -> None:

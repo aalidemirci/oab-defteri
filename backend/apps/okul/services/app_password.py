@@ -9,9 +9,10 @@ alanlar, kör indeks, alt anahtar) sağlar; bu modül BÜTÜN AKIŞI yönetir:
     guvenlik.json (veri dizini, şema 2)        SQLite (db.sqlite3)
     ├── surum: 2, olusturma, kdf               ├── okul_account   (rol, ad-soyad şifreli,
     ├── hesaplar: [{id, tanitici, salt,        │                   durum, tarihler, mühür)
-    │              sarmal, hatali, askida}]    ├── okul_auditkey  (iz anahtarı, DEK'le şifreli)
-    ├── kurtarma: {no, tarih, salt, sarmal,    └── okul_schoolconfig
-    │              dogrulandi}                       └── app_password_hash = DEK parmak izi
+    │              sarmal, turetim,            ├── okul_auditkey  (iz anahtarı, DEK'le şifreli)
+    │              hatali, askida}]            └── okul_schoolconfig
+    ├── kurtarma: {no, tarih, salt, sarmal,          └── app_password_hash = DEK parmak izi
+    │              dogrulandi}
     └── gecis: null | "KURULUM"
 
 **Rol, ad-soyad, organ bağı, durum ve tarihler veritabanındadır** (`Account`);
@@ -35,6 +36,41 @@ yazdırılabilir kurtarma anahtarından türetilenle ayrı ayrı sarılır. Her 
 tek başına verir: şifreli alanlar en zayıf hesap parolası kadar korunur (tasarım
 §4.4.6-5). DEK bu adımda değişmez (yenilemesi F4, TK12): parola değişimi ve
 kurtarma anahtarının yenilenmesi yalnız ilgili sarmalı yeniler.
+
+**HESAP SARMALI KİMLİĞE BAĞLIDIR** (kullanıcı kararı 02.11.2026; `shared.crypto` modül
+başlığı). Sarmalın anahtarı `HKDF(Argon2id(parola, tuz), "od-hesap-sarmali/v1" ‖ kanonik
+kimlik)`'tir: `id` alanı metin düzenleyiciyle başka hesabınkine çevrilen sarmal o kimlikle
+açılmaz, sonuç yanlış parolayla aynıdır (sayaç ve gecikme dahil). Kimlik yazımda ve okumada
+aynı kuraldan geçer (`crypto.canonical_account_id`; yalnız kanonik metin; okumada Argon2id'den
+önce, kanonik olmayan kimlikte türetim koşmaz). Bütün yazıcılar
+`_account_wrap`'ten (ilk kurulum, hesap açma, parola sıfırlama ve değiştirme, kilit
+açılışında yenileme, kurtarma anahtarıyla açılış), bütün okuyucular `_try_unwrap_account`'tan
+(kilit açılışı, parola doğrulama ve değiştirme, kurtarma anahtarının yenilenmesi, geri
+yükleme) geçer. Bağsız sarmalı kabul eden yol YOKTUR: eski türetime geri düşüş, tembel göç
+ya da sürüm alanına bakıp eski türetimi açma yoktur (dosya düz metindir; böyle bir yol açığı
+yeniden açardı). Sarmalın `turetim` alanı ("od-hesap-sarmali/v1") YALNIZ RET İÇİNDİR:
+türetimi seçmez, okuyucu tek türetimi bilir. Alanı taşımayan sarmal parolayla açılmaz: kilit
+açılışı Argon2id koşturmadan, sayaca dokunmadan `UnboundWrap` (409 `iki_depo_tutarsiz`) ile
+reddeder. Program bağsız sarmal yazmaz; böyle sarmal ya bağdan önceki (F1b-1) deneme
+kurulumundandır (plan F1b-1 "Eski veri": veri dizini silinip yeniden kurulur) ya da etiketi
+program dışından silinmiştir. İleti bu yüzden mühür iletisinin kalıbındadır: program dışı
+değişikliği anar, program yöneticisine ve Denetleme Kuruluna bildirim ister; kurtarma
+anahtarı öğütlemez (zarfın kullanım durumları sözlükte sayılıdır). Teknik olarak
+kurtarma anahtarıyla açılış ve parola sıfırlaması sarmalı bağlı biçimde yeniden kurar
+(`_replace_wrap`). Alanı sonradan eklenen bağsız sarmal yine açılmaz (anahtar tutmaz); alanı
+silinen bağlı sarmal yalnız reddedilir. Kurtarma bölümü hesaba bağlı değildir ve değişmedi.
+Şema sürümü 2 kalır (`SECURITY_STATE_VERSION`; yedek başlığı yalnız kurtarma bölümünü
+taşır ve o değişmedi).
+Kalan risk: parolasını bildiği hesabın DEK'ini program dışında türetip başka kimlikle
+sarmalayan ya da mühürlü sahte satır üreten biri geçer; bu KOD ister (tehdit 6, 19). Bağ
+kimliği bağlar, TAZELİĞİ bağlamaz: veri dizinine yazabilen ve bir hesabın eski ya da
+geçici parolasını bilen biri o hesabın eski sarmalını (`guvenlik-arsiv-*.json`'dan ya da
+önceden aldığı kopyadan) `guvenlik.json`'a geri koyup o parolayla o hesap olarak açar (kod
+gerekmez; tehdit 12; yetki yükselmez, hesap yine kendisidir). Satır `ACIK` ise açılış yalnız hesabın kendi `GIRIS` satırını bırakır,
+sıfırlama izi ve bildirimi doğmaz; satır `PAROLA_YENILENMELI` ise yeni parola istenir ve
+`PAROLA` satırı düşer. Parola sıfırlaması ele geçmiş bir parolayı bu yola karşı geçersiz
+kılmaz; DEK yenilemesi (TK12, F4) kılar. F1b-1'den beri vardır; satırda sarmal izi
+seçeneği kullanıcı kararı bekler (`test_sarmal_kimligi.py` "bilinen sınır" testi).
 
 İKİ DEPO KURALI (tasarım §4.6.1; `guvenlik.json` ↔ `Account`):
 
@@ -236,6 +272,12 @@ RECOVERY_CONFIRMED_FIELD = "dogrulandi"
 #: aynı deseni kullanır.
 STATE_ARCHIVE_PREFIX = "guvenlik-arsiv-"
 
+#: Hesap sarmalının türetim etiketi (modül başlığı "HESAP SARMALI KİMLİĞE BAĞLIDIR"). YALNIZ
+#: RET İÇİNDİR: değeri tutmayan sarmal açılmadan reddedilir; tutan sarmal yine tek türetimle
+#: (`crypto.account_wrapping_key`) açılır. Etiket türetimi SEÇMEZ.
+WRAP_DERIVATION_FIELD = "turetim"
+WRAP_DERIVATION = crypto.ACCOUNT_WRAP_INFO.decode("ascii")
+
 # Güvenlik dosyasını oku-değiştir-yaz işlemlerinin süreç içi sırası (modül başlığı).
 _state_lock = threading.RLock()
 
@@ -329,6 +371,14 @@ _NO_WRAP_MESSAGE = (
     "Bu hesabın parolası bu bilgisayarın güvenlik dosyasında yok. Program yöneticisine "  # noqa: S105
     "başvurun."
 )
+#: Bağsız parola kaydı (`turetim` yok): parolayla açılmaz (`UnboundWrap`; sözlük §1 "Hesap").
+#: Program bağsız kayıt yazmaz; sahada yalnız program dışı değişiklikle doğar. İleti bu yüzden
+#: mühür iletisinin kalıbındadır (plan F1b-2 kullanıcı kararı: "Denetleme Kuruluna bildirin");
+#: kurtarma anahtarı öğütlemez (zarfın kullanım durumları sözlük §1 "Kurtarma anahtarı").
+UNBOUND_WRAP_MESSAGE = (
+    "Bu hesabın parola kaydı program dışından değiştirilmiş görünüyor; giriş açılmadı. "
+    "Program yöneticisine ve Denetleme Kuruluna bildirin."
+)
 _NO_ROW_MESSAGE = (
     "Hesap kaydı bu veritabanında bulunamadı ya da hesap açık değil. Program "
     "yöneticisine başvurun."
@@ -409,6 +459,19 @@ class AuditKeyUnreadable(TwoStoreMismatch):
 
     Plan F1b-1'in kod listesinde ayrı kod yoktur: iz anahtarı veritabanının DEK'e
     bağlı parçasıdır, ret `iki_depo_tutarsiz` koduyla döner.
+    """
+
+
+class UnboundWrap(TwoStoreMismatch):
+    """Sarmal kimliğe bağlı türetim etiketini taşımıyor (`turetim` yok): parolayla açılmaz.
+
+    Program bağsız sarmal yazmaz: böyle sarmal ya bağdan önceki deneme kurulumundandır (plan
+    F1b-1 "Eski veri": silinip yeniden kurulur) ya da etiketi program dışından silinmiştir.
+    İleti bu yüzden program dışı değişikliği anar ve bildirim ister (`UNBOUND_WRAP_MESSAGE`).
+    Plan F1b-1'in kod listesine yeni kod eklenmez: ret `iki_depo_tutarsiz` (409) koduyla ve
+    kendi iletisiyle döner (ön yüz iletiyi yazar). Argon2id koşmaz, hatalı deneme sayacına
+    dokunulmaz: yanıt paroladan bağımsızdır, deneme sayılacak bir şey yoktur. Ret DEK
+    açılmadan verilir; yanlış parola reddinde olduğu gibi denetim izine satır yazılmaz.
     """
 
 
@@ -701,15 +764,25 @@ def _find_wrap_by_login_name(state: dict[str, Any], tanitici: str) -> dict[str, 
 def _account_wrap(
     data_key: bytes, *, hesap_id: object, tanitici: str, password: str, kdf: crypto.KdfParams
 ) -> dict[str, Any]:
-    """Hesap sarmalı: `{id, tanitici, salt, sarmal, hatali: 0, askida: false}`."""
+    """Hesap sarmalı: `{id, tanitici, salt, sarmal, turetim, hatali: 0, askida: false}`.
+
+    TEK hesap sarmalı yazıcısıdır (modül başlığı "HESAP SARMALI KİMLİĞE BAĞLIDIR"): anahtar
+    kanonik kimliğe bağlıdır (`crypto.account_wrapping_key`) ve `id` alanına AYNI kanonik
+    metin yazılır. Kanonik olmayan kimlikle sarmal yazılmaz (`ValueError`/`TypeError`).
+    """
+    kimlik = crypto.canonical_account_id(hesap_id)
     tuz = crypto.new_salt()
     return {
-        "id": str(hesap_id),
+        "id": kimlik,
         "tanitici": tanitici,
         "salt": base64.b64encode(tuz).decode("ascii"),
         "sarmal": crypto.wrap_key(
-            data_key, wrapping_key=crypto.derive_key(password, salt=tuz, params=kdf)
+            data_key,
+            wrapping_key=crypto.account_wrapping_key(
+                password, salt=tuz, account_id=kimlik, params=kdf
+            ),
         ),
+        WRAP_DERIVATION_FIELD: WRAP_DERIVATION,
         "hatali": 0,
         "askida": False,
     }
@@ -767,21 +840,88 @@ def _kdf_of(state: dict[str, Any]) -> crypto.KdfParams:
     return crypto.KdfParams.from_dict(dict(kdf) if isinstance(kdf, dict) else {})
 
 
-def _try_unwrap(bolum: dict[str, Any], state: dict[str, Any], secret: str) -> bytes | None:
-    """Sarmalı sırla açmayı dener; açılmazsa None (gecikme ve sayaç çağıranın işidir)."""
+def _wrap_parts(bolum: dict[str, Any]) -> tuple[bytes, str] | None:
+    """Sarmal bölümünün tuzu (çözülmüş) ve sarmalı; biri eksik ya da biçimsizse None."""
     tuz_b64 = str(bolum.get("salt", ""))
     sarmal = str(bolum.get("sarmal", ""))
     if not tuz_b64 or not sarmal:
         return None
     try:
-        tuz = base64.b64decode(tuz_b64)
+        return base64.b64decode(tuz_b64), sarmal
     except (binascii.Error, ValueError):
         return None
-    sarmalama = crypto.derive_key(secret, salt=tuz, params=_kdf_of(state))
+
+
+def _unwrap_or_none(sarmal: str, sarmalama: bytes) -> bytes | None:
     try:
         return crypto.unwrap_key(sarmal, wrapping_key=sarmalama)
     except Exception:  # noqa: BLE001 — InvalidToken ve biçim hataları aynı yanıta çıkar
         return None
+
+
+def wrap_is_bound(bolum: dict[str, Any]) -> bool:
+    """Sarmal kimliğe bağlı türetimle mi yazılmış? (`turetim` etiketi; YALNIZ ret içindir)
+
+    Etiket türetimi seçmez (modül başlığı): yanlışsa sarmal açılmadan reddedilir, doğruysa
+    yine tek türetimle açılır; sonradan eklenen etiket bağsız bir sarmalı açtırmaz.
+    """
+    return bolum.get(WRAP_DERIVATION_FIELD) == WRAP_DERIVATION
+
+
+def _require_bound(bolum: dict[str, Any]) -> None:
+    """Bağsız sarmalda Argon2id koşmadan, sayaca dokunmadan `UnboundWrap` (409)."""
+    if not wrap_is_bound(bolum):
+        raise UnboundWrap(UNBOUND_WRAP_MESSAGE)
+
+
+@sensitive_variables("password")
+def _try_unwrap_account(
+    bolum: dict[str, Any], state: dict[str, Any], password: str
+) -> bytes | None:
+    """HESAP sarmalını parolayla açmayı dener; açılmazsa None (gecikme ve sayaç çağıranındır).
+
+    TEK hesap sarmalı okuyucusudur. Anahtar sarmalın KENDİ `id` alanına bağlıdır
+    (`crypto.account_wrapping_key`): alan başka hesabın kimliğine çevrilmişse, kanonik değilse
+    ya da etiket (`turetim`) yoksa sarmal açılmaz — yanlış parolayla aynı sonuç. Bağsız
+    türetime geri düşen kol YOKTUR (modül başlığı).
+
+    Kimlik okumada da yazımdaki kuraldan geçer (`crypto.canonical_account_id`) ve bu denetim
+    Argon2id'den ÖNCE yapılır: kanonik olmayan kimlikte türetim hiç koşmaz. Yakalanan hata
+    YALNIZ kimliğinkidir: `kdf` alanı biçimsizse (`KdfParams.from_dict`'in `int(...)`'i) hata
+    çağırana çıkar, yanlış parola sayılmaz (sayaç artmaz, hesap askıya düşmez; kurtarma
+    yoluyla aynı davranış).
+    """
+    if not wrap_is_bound(bolum):
+        return None
+    parcalar = _wrap_parts(bolum)
+    if parcalar is None:
+        return None
+    tuz, sarmal = parcalar
+    try:
+        kimlik = crypto.canonical_account_id(bolum.get("id"))
+    except (TypeError, ValueError):  # kimlik kanonik değil: o sarmal açılmaz
+        return None
+    sarmalama = crypto.account_wrapping_key(
+        password, salt=tuz, account_id=kimlik, params=_kdf_of(state)
+    )
+    return _unwrap_or_none(sarmal, sarmalama)
+
+
+@sensitive_variables("recovery_key")
+def _try_unwrap_recovery(state: dict[str, Any], recovery_key: str) -> bytes | None:
+    """KURTARMA sarmalını (normalleştirilmiş) anahtarla açmayı dener; açılmazsa None.
+
+    Kurtarma bölümü hesaba bağlı değildir: anahtar `crypto.derive_key`'in kendisidir (değişmedi).
+    """
+    bolum = state.get("kurtarma")
+    parcalar = _wrap_parts(bolum) if isinstance(bolum, dict) else None
+    if parcalar is None:
+        return None
+    tuz, sarmal = parcalar
+    sarmalama = crypto.derive_key(
+        normalize_recovery_key(recovery_key), salt=tuz, params=_kdf_of(state)
+    )
+    return _unwrap_or_none(sarmal, sarmalama)
 
 
 @sensitive_variables("password")
@@ -790,10 +930,13 @@ def _unwrap_with_account(state: dict[str, Any], hesap: str, password: str) -> by
 
     Yalnız `backup_restore` çağırır: hesap sayacına DOKUNMAZ (geri yükleme denemesinin
     gecikmesi hesapsız ve süreç içidir; plan F1b-1). Yedek başlığında hesap yoktur
-    (TK10), bu yol yalnız güncel `guvenlik.json` ile işler.
+    (TK10), bu yol yalnız güncel `guvenlik.json` ile işler. Sarmal kendi `id`'sine bağlı
+    açılır (`_try_unwrap_account`): geri yüklemenin yetki denetimi (`geri_yukleme_yetkisi`)
+    aynı sarmalın `id`'sini denetler, yani parolanın gerçekten açtığı hesabı. Kimliği
+    değiştirilmiş ya da bağsız sarmal yanlış parolayla aynı yanıtı alır.
     """
     bolum = _find_wrap_by_login_name(state, hesap)
-    dek = _try_unwrap(bolum, state, password) if bolum is not None else None
+    dek = _try_unwrap_account(bolum, state, password) if bolum is not None else None
     if dek is None:
         _delay_after_failure()
         raise WrongPassword(_WRONG_PASSWORD_MESSAGE)
@@ -803,12 +946,7 @@ def _unwrap_with_account(state: dict[str, Any], hesap: str, password: str) -> by
 @sensitive_variables("recovery_key")
 def _unwrap_with_recovery(state: dict[str, Any], recovery_key: str) -> bytes:
     """Kurtarma sarmalını açar; yanlışsa süreç içi gecikme + `AppPasswordError`."""
-    bolum = state.get("kurtarma")
-    dek = (
-        _try_unwrap(bolum, state, normalize_recovery_key(recovery_key))
-        if isinstance(bolum, dict)
-        else None
-    )
+    dek = _try_unwrap_recovery(state, recovery_key)
     if dek is None:
         _delay_after_failure()
         raise AppPasswordError(_WRONG_RECOVERY_MESSAGE)
@@ -1648,19 +1786,26 @@ def _replace_wrap(
 ) -> None:
     """Hesabın sarmalını yeni parolayla yeniden kurar (yoksa ekler); sayaç ve askı sıfır.
 
-    Yapısal yazımdır (arşiv kopyası önce). Çağıran `_state_lock`'u tutar.
+    Yeni sarmal aynı kimliği taşıyan İLK sarmalın yerine geçer; aynı kimliği taşıyan öteki
+    sarmallar silinir. Program aynı kimliğe ikinci sarmal yazmaz; dosyada varsa program
+    dışından eklenmiştir (kilit açılışı ilkini dener). Yeniden kurulumdan sonra kalsaydı eski
+    parolanın açtığı bir kopya dosyada sessizce yaşardı. Yapısal yazımdır (arşiv kopyası
+    önce). Çağıran `_state_lock`'u tutar.
     """
     yeni = _account_wrap(
         data_key, hesap_id=hesap_id, tanitici=tanitici, password=password, kdf=_kdf_of(state)
     )
-    hesaplar = _accounts_in(state)
-    for sira, hesap in enumerate(hesaplar):
-        if str(hesap.get("id", "")) == str(hesap_id):
-            hesaplar[sira] = yeni
-            break
-    else:
-        hesaplar.append(yeni)
-    state["hesaplar"] = hesaplar
+    kalan: list[dict[str, Any]] = []
+    yerlesti = False
+    for hesap in _accounts_in(state):
+        if str(hesap.get("id", "")) != yeni["id"]:
+            kalan.append(hesap)
+        elif not yerlesti:
+            kalan.append(yeni)
+            yerlesti = True
+    if not yerlesti:
+        kalan.append(yeni)
+    state["hesaplar"] = kalan
     _write_structural(state)
 
 
@@ -1842,9 +1987,11 @@ def _start_session(
 def unlock(*, hesap_id: object, password: str, new_password: str | None = None) -> Account:
     """Seçilen hesabın parolasıyla kilidi açar; oturumdaki hesabı döndürür.
 
-    Sıra (modül başlığı, İKİ DEPO KURALI 1): askı → yalnız bu hesabın sarmalı
-    (Argon2id bir kez) → parmak izi, satır, mühür (tutmazsa `BUTUNLUK` satırı), durum →
-    iz anahtarı → parola yenileme gereği → sayaç → tek işlemde son giriş ve `GIRIS` satırı,
+    Sıra (modül başlığı, İKİ DEPO KURALI 1): askı → bağsız sarmal (`UnboundWrap`, sayaçsız)
+    → yalnız bu hesabın sarmalı, KENDİ kimliğine bağlı (Argon2id bir kez; kimliği
+    değiştirilmiş sarmal yanlış parola sayılır) → parmak izi, satır, mühür (tutmazsa
+    `BUTUNLUK` satırı), durum → iz anahtarı → parola yenileme gereği → sayaç → tek
+    işlemde son giriş ve `GIRIS` satırı,
     sonunda kapalı hesap sarmalı temizliği → oturum açılır (`_start_session`). Herhangi bir
     ret hâlinde DEK belleğe ALINMAZ ve satıra dokunulmaz. Oturum açıkken çağrılırsa
     oturum bu hesaba geçer (parolayla kanıtlanmış "Kilitle + aç"; `apps.okul.oturum`
@@ -1866,7 +2013,8 @@ def unlock(*, hesap_id: object, password: str, new_password: str | None = None) 
         raise TwoStoreMismatch(_NO_WRAP_MESSAGE)
     if sarmal.get("askida"):
         raise AccountSuspended(_SUSPENDED_MESSAGE)
-    veri_anahtari = _try_unwrap(sarmal, state, password)
+    _require_bound(sarmal)
+    veri_anahtari = _try_unwrap_account(sarmal, state, password)
     if veri_anahtari is None:
         raise _failure_outcome(hesap_id)
     hesap = _open_account_for_login(hesap_id, veri_anahtari)
@@ -1936,7 +2084,8 @@ def _check_session_password(state: dict[str, Any], hesap_id: object, password: s
         raise TwoStoreMismatch(_NO_WRAP_MESSAGE)
     if sarmal.get("askida"):
         raise AccountSuspended(_SUSPENDED_MESSAGE)
-    veri_anahtari = _try_unwrap(sarmal, state, password)
+    _require_bound(sarmal)
+    veri_anahtari = _try_unwrap_account(sarmal, state, password)
     if veri_anahtari is None or not kanonik.esit(crypto.key_fingerprint(veri_anahtari), aktif):
         raise _failure_outcome(hesap_id)
     _clear_failures(hesap_id)

@@ -121,7 +121,10 @@ def can_encrypt(data_dir: Path) -> bool:
 
 #: `guvenlik.json` şema sürümü (tasarım §2.3.1, §4.4.4). Şema 1 (tek yönetici
 #: parolası) KULLANILAMAZ sayılır: çevirici yazılmadı, deneme kurulumları yeniden
-#: kurulur (plan F1b-1 "Eski veri").
+#: kurulur (plan F1b-1 "Eski veri"). Hesap sarmalının kimliğe bağlanması (02.11.2026)
+#: sürümü DEĞİŞTİRMEDİ: sürüm yedek başlığında da geçer ve başlığın taşıdığı kurtarma
+#: bölümü değişmedi; yükseltmek eski yedekleri ve bağdan önceki dosyaların kurtarma
+#: yolunu kapatırdı. Bağsız sarmalı `app_password` kendi etiketiyle reddeder.
 SECURITY_STATE_VERSION = 2
 
 
@@ -145,7 +148,9 @@ def is_usable_security_state(data: object) -> bool:
     yalnız kurtarma bölümüyle kullanılabilir (kurtarma anahtarıyla aç + program
     yöneticisi parolası). Tek tam sarmal DEK'i açmaya yeter (o sırla); birini şart
     koşmak, açılabilecek bir dosyayı "kayıp" sayıp kilidi açtırmaz, yedeği de
-    durdururdu.
+    durdururdu. Hesap sarmalının kimliğe bağlı türetim etiketi (`turetim`) bu kurala
+    GİRMEZ: bağdan önce yazılmış sarmallı dosya kurtarma bölümüyle kullanılabilir kalır
+    (kurtarma anahtarı yolu açık); bağsız sarmalı parola yolunda `app_password` reddeder.
     """
     if not isinstance(data, dict):
         return False

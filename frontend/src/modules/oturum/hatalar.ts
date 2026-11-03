@@ -6,10 +6,11 @@
 // hesap listesinin tazelenmesi) `kod`a bakarak seçer; metni kodla kendileri kurmaz.
 //
 // Metnin kaynağı: backend iletileri Türkçedir, sözlüğe uyar ve kodun alt durumunu daha
-// kesin söyler (ör. `iki_depo_tutarsiz`'in dört nedeni: sarmal yok, satır yok, başka
-// veritabanı, iz anahtarı okunamadı; onuncu hatalı denemede askıya alındığını söyleyen
-// `hesap_askida`). Bu yüzden ileti doluysa o, boşsa ya da kod biçiminde geldiyse
-// (savunma derinliği) buradaki metin yazılır. Bilinmeyen kodda çağıranın varsayılanı.
+// kesin söyler (ör. `iki_depo_tutarsiz`'in beş nedeni: sarmal yok, satır yok, başka
+// veritabanı, iz anahtarı okunamadı, parola kaydı kimliğe bağlı biçimde değil (`UnboundWrap`;
+// iletisi program dışı değişikliği anar ve bildirim ister); onuncu hatalı denemede askıya
+// alındığını söyleyen `hesap_askida`). Bu yüzden ileti doluysa o, boşsa ya da kod biçiminde
+// geldiyse (savunma derinliği) buradaki metin yazılır. Bilinmeyen kodda çağıranın varsayılanı.
 
 import { ApiError, BEKLENMEYEN_HATA_ILETISI } from "../../lib/api";
 

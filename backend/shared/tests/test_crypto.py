@@ -223,6 +223,104 @@ def test_hesap_muhru_anahtari_tasarimdaki_hkdf_dizgesiyle_turer() -> None:
     assert crypto.derive_subkey(TEST_DEK, info=b"od-kor-indeks") != beklenen
 
 
+#: Uydurma hesap kimlikleri (gerçek kayıt değildir).
+_KIMLIK = "6f1c2a3b-4d5e-4f60-8a71-0b2c3d4e5f60"
+_BASKA_KIMLIK = "0b4c2d1e-7a3f-4e5d-9c8b-1a2b3c4d5e6f"
+_TUZ = bytes(range(16))
+_UCUZ = crypto.KdfParams(time_cost=1, memory_cost=8, parallelism=1)
+
+
+def _sarma_anahtari(
+    kimlik: object, *, parola: str = "Uydurma-Parola-1", tuz: bytes = _TUZ
+) -> bytes:
+    return crypto.account_wrapping_key(parola, salt=tuz, account_id=kimlik, params=_UCUZ)
+
+
+def test_hesap_sarmali_anahtari_kimlige_bagli_hkdf_ile_turer() -> None:
+    """Kullanıcı kararı 02.11.2026: `HKDF(Argon2id(parola, tuz), "od-hesap-sarmali/v1" ‖ kimlik)`.
+
+    Formül açıkça yeniden hesaplanır: bilgi dizgesinden kimliği çıkaran ya da Argon2id çıktısını
+    doğrudan kullanan bir değişiklik bu testi düşürür."""
+    argon = crypto.derive_key("Uydurma-Parola-1", salt=_TUZ, params=_UCUZ)
+    beklenen = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info=b"od-hesap-sarmali/v1" + _KIMLIK.encode("ascii"),
+    ).derive(argon)
+    assert crypto.ACCOUNT_WRAP_INFO == b"od-hesap-sarmali/v1"
+    assert _sarma_anahtari(_KIMLIK) == beklenen
+    assert beklenen != argon  # bağsız (F1b-1) türetim bu değildir
+    assert crypto.ACCOUNT_WRAP_INFO not in {
+        crypto.ACCOUNT_SEAL_INFO,
+        crypto.BLIND_INDEX_INFO,
+        crypto.AUDIT_CHAIN_INFO,
+        crypto.RECORD_SUMMARY_INFO,
+    }
+
+
+def test_farkli_kimlik_farkli_anahtar_verir_ve_sarmali_acmaz() -> None:
+    """Başka kimlikle türetilen anahtar sarmalı açmaz (Fernet'in HMAC'i tutmaz)."""
+    anahtar = _sarma_anahtari(_KIMLIK)
+    assert anahtar != _sarma_anahtari(_BASKA_KIMLIK)
+    assert anahtar != _sarma_anahtari(_KIMLIK, parola="Uydurma-Parola-2")
+    assert anahtar != _sarma_anahtari(_KIMLIK, tuz=bytes(16))
+    sarmal = crypto.wrap_key(TEST_DEK, wrapping_key=anahtar)
+    assert crypto.unwrap_key(sarmal, wrapping_key=anahtar) == TEST_DEK
+    with pytest.raises(InvalidToken):
+        crypto.unwrap_key(sarmal, wrapping_key=_sarma_anahtari(_BASKA_KIMLIK))
+
+
+def test_uuid_nesnesi_ve_kanonik_metin_ayni_anahtari_verir() -> None:
+    import uuid
+
+    assert crypto.canonical_account_id(uuid.UUID(_KIMLIK)) == _KIMLIK
+    assert crypto.canonical_account_id(_KIMLIK) == _KIMLIK
+    assert _sarma_anahtari(uuid.UUID(_KIMLIK)) == _sarma_anahtari(_KIMLIK)
+
+
+@pytest.mark.parametrize(
+    "yazim",
+    [
+        _KIMLIK.upper(),
+        _KIMLIK.replace("-", ""),
+        f" {_KIMLIK}",
+        f"{_KIMLIK} ",
+        f"{{{_KIMLIK}}}",
+        f"urn:uuid:{_KIMLIK}",
+        # ASCII dışı rakam: `uuid.UUID` onu da aynı kimliğe çevirir (int() Unicode rakam okur).
+        _KIMLIK.replace("6", "６"),
+        "",
+        "yonetici",
+    ],
+    ids=[
+        "buyuk_harf",
+        "tiresiz",
+        "bastaki_bosluk",
+        "sondaki_bosluk",
+        "suslu_ayracli",
+        "urn_onekli",
+        "ascii_disi_rakam",
+        "bos",
+        "kimlik_degil",
+    ],
+)
+def test_kanonik_olmayan_yazim_reddedilir(yazim: str) -> None:
+    """Kural tek kanonik biçimdir: varyant aynı anahtara çevrilmez, REDDEDİLİR (Argon2id koşmaz)."""
+    with pytest.raises(ValueError):
+        crypto.canonical_account_id(yazim)
+    with pytest.raises(ValueError):
+        _sarma_anahtari(yazim)
+
+
+@pytest.mark.parametrize("deger", [None, 42, b"6f1c2a3b", ["x"]])
+def test_metin_ve_uuid_disindaki_kimlik_reddedilir(deger: object) -> None:
+    with pytest.raises(TypeError):
+        crypto.canonical_account_id(deger)
+    with pytest.raises(TypeError):
+        _sarma_anahtari(deger)
+
+
 def test_iz_anahtari_turevlerinin_hkdf_dizgeleri_tasarimdakidir() -> None:
     """Tasarım §4.6.2-§4.6.3: beş dizge AYNEN; değişirse kâğıttaki zincir başları tutmaz."""
     assert crypto.AUDIT_CHAIN_INFO == b"od-denetim-izi/v1"

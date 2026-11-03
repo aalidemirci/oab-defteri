@@ -35,6 +35,32 @@ bu programın gerçeklerine uyarlar. KAYNAKTAN FARKLAR:
    dönmez. Hoşgörü 1. adımda hiçbir hâlde açılmaz: tek geçiş (`gecis:
    "KURULUM"`) kişi tabloları boşken koşar; DEK yenilemesinin geçişi F4'tedir.
 
+HESAP SARMALI KİMLİĞE BAĞLIDIR (kullanıcı kararı 02.11.2026: "Hesap kimliği parola
+kaydına bağlanır"; tasarım §4.4.4, tehdit 19 ve 21). Hesap sarmalının anahtarı
+`HKDF(Argon2id(parola, tuz), bilgi = "od-hesap-sarmali/v1" ‖ kanonik hesap kimliği)`'dir
+(`account_wrapping_key`). Eskiden kimlik ne KDF'ye ne Fernet'e giriyordu: `guvenlik.json`
+düz metin olduğu için herhangi bir hesabın parolasını bilen biri kendi sarmalının `id`
+alanını metin düzenleyiciyle program yöneticisininkine çevirip kilidi ve konsol geri
+yüklemesini onun adına açabiliyordu (kod gerekmeden; tehdit 19'un çıtasının altında).
+Artık başka kimlikle okunan sarmal açılmaz: Fernet'in HMAC'i tutmaz, sonuç yanlış
+parolayla aynıdır. Neden HKDF (tuza ya da Argon2 girdisine katmak değil): Argon2id
+çıktısı 32 baytlık tekdüze bir sırdır; HKDF-SHA256 onu bilgi dizgesiyle ayrışan
+bağımsız anahtarlara açar (bir PRF'tir), türetimler §2.3.1 kimlik tablosundaki öteki
+dizgelerle aynı kapıdan geçer (`derive_subkey`) ve Argon2id maliyeti değişmez. Bilgi
+dizgesi sabit önek + sabit uzunlukta (36 karakter) kanonik kimliktir: kimlikten bilgiye
+eşleme birebirdir, ayraç gerekmez. Kanonik biçim TEKTİR (`canonical_account_id`):
+`uuid.UUID` nesnesinin metni ya da tam olarak o metin (küçük harf, tireli, boşluksuz).
+Büyük harfli, tiresiz, boşluklu, süslü ayraçlı, `urn:uuid:` önekli ya da ASCII dışı
+rakamlı yazımlar REDDEDİLİR (o sarmal açılmaz): satırı bulan okuyucu (`uuid.UUID(...)`,
+Django `UUIDField`) bu yazımları aynı satıra çevirir; sarmalın açılması "kimlik metni
+kanoniktir" demek olduğu için kimliği metin olarak karşılaştıran her sonraki adım (oturum
+kimliği, geri yükleme notu, iz satırı) aynı hesabı aynı metinle görür. Kurtarma
+bölümünün sarmalı hesaba bağlı DEĞİLDİR ve değişmedi (`derive_key` ham hâliyle). Bağın
+çıtası: parolasını bildiği hesabın DEK'ini program dışında türetip başka kimlikle yeniden
+saran ya da mühürlü sahte satır üreten biri yine geçer; bu artık KOD ister (tehdit 6, 19).
+Bağ kimliği bağlar, tazeliği bağlamaz: aynı hesabın eski sarmalı eski parolasıyla açılır
+(`app_password` modül başlığı "Kalan risk"; tehdit 12).
+
 ANAHTARIN BELLEKTEKİ YERİ: anahtar süreç genelinde, bu modülün `_holder`
 nesnesinde tutulur ve kilit açıldıktan sonra kilitlenene dek bellekte kalır.
 Gerekçe: yönetim yüzeyi yalnız 127.0.0.1'de ve tek bilgisayara hizmet eder
@@ -62,6 +88,7 @@ import base64
 import hmac
 import secrets
 import threading
+import uuid
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import Any, cast
@@ -139,7 +166,11 @@ def new_salt() -> bytes:
 
 
 def derive_key(secret: str, *, salt: bytes, params: KdfParams | None = None) -> bytes:
-    """Parola/kurtarma anahtarından Argon2id ile 32 baytlık sarmalama anahtarı türetir."""
+    """Sırdan Argon2id ile 32 baytlık anahtar türetir.
+
+    Kurtarma bölümünün sarmalama anahtarı doğrudan budur. HESAP SARMALI bunu TEK BAŞINA
+    kullanmaz: hesap kimliğine bağlı `account_wrapping_key`'den geçer (modül başlığı).
+    """
     kdf = params or DEFAULT_KDF
     return hash_secret_raw(
         secret=secret.encode("utf-8"),
@@ -191,6 +222,12 @@ BLIND_INDEX_INFO = b"od-kor-indeks"
 #: Değişirse bütün mühürler tutmaz olur; tasarım tutmayan mührün yeniden
 #: hesaplanmasını yasaklar. Sürüm eki yalnız DEK yenilemesiyle (F4) değişebilir.
 ACCOUNT_SEAL_INFO = b"od-hesap-muhru/v1"
+#: Hesap sarmalı anahtarının HKDF bağlamının öneki (tasarım §2.3.1, §4.4.4; kullanıcı kararı
+#: 02.11.2026): anahtar `HKDF(Argon2id(parola, tuz), ACCOUNT_WRAP_INFO ‖ kanonik kimlik)`'tir
+#: (`account_wrapping_key`). DEK'e değil parolanın Argon2id çıktısına uygulanır. Değişirse
+#: bütün hesap sarmalları açılmaz olur (kurtarma bölümü etkilenmez); eski türetime geri
+#: düşen yol YOKTUR.
+ACCOUNT_WRAP_INFO = b"od-hesap-sarmali/v1"
 
 # İz anahtarından (İA; tasarım §4.6.3) türeyen anahtarların HKDF bağlamları. İA DEK'ten
 # TÜREMEZ; bu dizgeler yalnız İA'ya (kilitli kipte çapadan türeyen tohuma) uygulanır.
@@ -211,8 +248,9 @@ def derive_subkey(key: bytes, *, info: bytes, salt: bytes | None = None) -> byte
     """Adlı amaç için 32 baytlık alt anahtar: HKDF-SHA256(salt, info=amaç).
 
     DEK'ten türeyen bütün anahtarların (kör indeks, hesap mührü; F3'te hareket
-    parmak izi, 3. adımda dosya sarmalı) ve iz anahtarı türevlerinin (§4.6.3)
-    tek kapısıdır. Bilgi dizgeleri kimlik tablosundadır (tasarım §2.3.1); her amaç
+    parmak izi, 3. adımda dosya sarmalı), iz anahtarı türevlerinin (§4.6.3) ve hesap
+    sarmalı anahtarının (parolanın Argon2id çıktısından; `account_wrapping_key`) tek
+    kapısıdır. Bilgi dizgeleri kimlik tablosundadır (tasarım §2.3.1); her amaç
     ayrı dizge kullanır, bir amacın anahtarı ötekini vermez. Tuz yalnız kilitli kip
     tohumunda verilir (`tuz = seq ‖ mac`, §4.6.3); öteki türevlerde yoktur (None).
     """
@@ -255,6 +293,41 @@ def _derive_blind_index_key(data_key: bytes) -> bytes:
 def account_seal_key(data_key: bytes) -> bytes:
     """DEK'ten hesap mührü anahtarı (`od-hesap-muhru/v1`; tasarım §4.6.1)."""
     return derive_subkey(data_key, info=ACCOUNT_SEAL_INFO)
+
+
+def canonical_account_id(value: object) -> str:
+    """Hesap kimliğinin TEK kanonik metni: `uuid.UUID` nesnesinin `str()`'i (modül başlığı).
+
+    `uuid.UUID` nesnesi metnine çevrilir. Metin ancak tam olarak kanonik biçimdeyse (küçük
+    harf, tireli, 36 karakter, boşluksuz) kabul edilir; büyük harfli, tiresiz, boşluklu,
+    süslü ayraçlı, `urn:uuid:` önekli ya da ASCII dışı rakamlı yazım `ValueError`, metin ve
+    UUID dışındaki tür `TypeError` yükseltir. Hesap sarmalının YAZICISI da OKUYUCUSU da
+    kimliği buradan geçirir: çevrilemeyen kimlikle sarmal yazılmaz, açılmaz.
+    """
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if not isinstance(value, str):
+        raise TypeError("Hesap kimliği UUID ya da metin olmalıdır.")
+    kanonik = str(uuid.UUID(value))
+    if value != kanonik:
+        raise ValueError("Hesap kimliği kanonik biçimde değil.")
+    return kanonik
+
+
+def account_wrapping_key(
+    password: str, *, salt: bytes, account_id: object, params: KdfParams | None = None
+) -> bytes:
+    """Hesap sarmalının anahtarı: `HKDF(Argon2id(parola, tuz), "od-hesap-sarmali/v1" ‖ kimlik)`.
+
+    Kimlik `canonical_account_id`'den geçer (çevrilemezse `ValueError`/`TypeError`, Argon2id
+    koşmadan). Başka kimlikle türetilen anahtar sarmalı açmaz (modül başlığı "HESAP SARMALI
+    KİMLİĞE BAĞLIDIR"). Kurtarma bölümü bunu KULLANMAZ (hesaba bağlı değildir).
+    """
+    kimlik = canonical_account_id(account_id)
+    return derive_subkey(
+        derive_key(password, salt=salt, params=params),
+        info=ACCOUNT_WRAP_INFO + kimlik.encode("ascii"),
+    )
 
 
 def decrypt_with(raw_key: bytes, token: str) -> bytes:

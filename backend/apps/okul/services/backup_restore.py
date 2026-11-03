@@ -458,7 +458,9 @@ def _yetkiyi_denetle(
     """Parolası doğrulanan hesap program yöneticisi mi? Değilse `GeriYuklemeYetkisiz`.
 
     Hesap, yedeği açan güncel `guvenlik.json`'un sarmalından bulunur (tanıtıcı ya da kimlikle
-    verilmiş olabilir); sarmalın hatalı deneme askısı da kabul koşuludur. Ret günlüğe sırsız
+    verilmiş olabilir); sarmal kendi kimliğine bağlı açıldığı için (`app_password` modül başlığı
+    "HESAP SARMALI KİMLİĞE BAĞLIDIR") bu kimlik parolası doğrulanan hesabın kendisidir. Sarmalın
+    hatalı deneme askısı da kabul koşuludur. Ret günlüğe sırsız
     uyarı olarak düşer: neden kodu ve kararı veren kaynak, hesabın kimliği (tanıtıcı kişinin
     adını içerebilir, yazılmaz).
     """

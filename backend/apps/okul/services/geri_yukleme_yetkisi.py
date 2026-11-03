@@ -78,22 +78,25 @@ nedeniyle (`dosya_yok`, `okul_karti`, `parmak_izi` ya da `sqlite3` hatasının s
 ileti ve yol yazılmaz) uyarı olarak yazılır: sessiz düşüş sonradan görülebilir. Görüntü de
 okunamıyorsa ret verilir.
 
-Rol kriptografik bir önlem değildir (tasarım §4.4.6-1). **Bilinen sınır (F1b-2 ekleri;
-kullanıcı kararı bekliyor):** denetlenen hesap, parolanın açtığı SARMALIN `id` alanıdır ve bu
-alan sarmalın türetimine bağlı değildir (F1b-1'in sarmal biçimi: kimlik ne KDF'ye ne Fernet'e
-girer). Veri dizinine yazabilen ve HERHANGİ bir hesabın parolasını bilen biri,
-`guvenlik.json`'da kendi sarmalının `id`'sini metin düzenleyiciyle program yöneticisininkine
-çevirerek kilit açılışını ve konsol geri yüklemesini program yöneticisi adına yapabilir;
-denetim izi ve geri yükleme notunun hesap kimliği program yöneticisini gösterir (`tanitici` da
-değiştirilirse not bütünüyle). Bu kod gerektirmez, yani tasarımın tehdit 19 çıtasının ("kod
-yazmayı gerektiren bir iş") altındadır; tanıtıcıyı satırın `login_name`'iyle karşılaştırmak
-kapatmaz (tanıtıcı da aynı dosyadadır). Kalıcı çözüm kimliği
-sarmalın türetimine bağlamaktır (ör. KDF girdisine katmak); F1b-1'in giriş yolunu ve
-`guvenlik.json` türetimini değiştirdiği için kullanıcıya sorulur. O güne dek sınır
-`test_bilinen_sinir_sarmal_kimligi_degistirilirse_yonetici_adina_gecer` ile sabitlenir;
-bağlama yapılınca onun yerine ret testi gelir. Bunun ötesinde parolayı bilen DEK'i açar ve
-mühürlü sahte bir yönetici satırı taşıyan veritabanı da üretebilir (kod ister). Bu denetim kaza
-önleyicidir ve izlenebilirlik sağlar; GA-3'ü kesin olarak kapatmaz.
+Rol kriptografik bir önlem değildir (tasarım §4.4.6-1). **Sarmal kimliği parola kaydına
+bağlıdır (kullanıcı kararı 02.11.2026):** denetlenen hesap, parolanın açtığı SARMALIN `id`
+alanıdır ve sarmalın anahtarı bu kimliğe bağlıdır: `HKDF(Argon2id(parola, tuz),
+"od-hesap-sarmali/v1" ‖ kanonik kimlik)` (`shared.crypto.account_wrapping_key`). Bir hesabın
+parolasını bilen biri `guvenlik.json`'da kendi sarmalının `id`'sini metin düzenleyiciyle program
+yöneticisininkine çevirirse sarmal o kimlikle açılmaz: geri yükleme yanlış parolanın yanıtıyla
+("Yedek açılamadı …") durur, bu denetime hiç ulaşılmaz ve hiçbir dosya değişmez; kilit açılışı
+da aynı nedenle açılmaz (`app_password` modül başlığı "HESAP SARMALI KİMLİĞE BAĞLIDIR").
+Tanıtıcıyı değiştirmek de yetki yükseltmez: tanıtıcı yalnız sarmalı BULMAYA yarar, denetlenen
+kimlik açılan sarmalın kendi `id`'sidir (parolası bilinen hesabın kendisi). Bağdan önceki biçimde
+yazılmış (`turetim` alanı olmayan) sarmal parolayla hiç açılmaz; geri düşüş yoktur. Kalan risk
+(tehdit 6, 19): parolasını bildiği hesabın DEK'ini program dışında türetip başka bir kimlikle
+yeniden sarmalayan ya da bu DEK'le mühürlü sahte bir yönetici satırı taşıyan veritabanı üreten
+biri geçer — bu artık KOD ister (tasarımın tehdit 19 çıtası). Bağ kimliği bağlar, tazeliği
+bağlamaz: bir program yöneticisinin eski ya da geçici parolasını bilen ve veri dizinine
+yazabilen biri, o hesabın eski sarmalını (`guvenlik-arsiv-*.json`'dan ya da önceden aldığı
+kopyadan) geri koyup eski parolayla onun adına geri yükler (kod gerekmez; `app_password` modül
+başlığı "Kalan risk", tehdit 12). Bu denetim kaza önleyicidir ve izlenebilirlik sağlar; GA-3'ü
+kriptografik olarak kapatmaz.
 
 YEDEĞİN GÖRÜNTÜSÜ BELLEKTE açılır: `sqlite3.connect(":memory:")` + `deserialize`. Programın
 yedeği WAL kipindeki kaynaktan `Connection.backup()` ile alındığı için görüntünün başlığı WAL

@@ -1678,6 +1678,8 @@ def test_varsayilan_ortamin_guvenlik_dosyasi_sema_2_dir() -> None:
     veri = json.loads(app_password.state_path().read_text(encoding="utf-8"))
     assert veri["surum"] == 2 and veri["gecis"] is None
     assert [h["id"] for h in veri["hesaplar"]] == [TEST_HESAP_ID]
+    # Sarmal kimliğe bağlıdır (kullanıcı kararı 02.11.2026; `test_sarmal_kimligi.py`).
+    assert all(app_password.wrap_is_bound(h) for h in veri["hesaplar"])
     assert app_password._unwrap_with_account(veri, TEST_TANITICI, TEST_PAROLA) == TEST_DEK
     assert crypto.active_fingerprint() == crypto.key_fingerprint(TEST_DEK)
     assert OTURUM.hesap_id() == TEST_HESAP_ID
