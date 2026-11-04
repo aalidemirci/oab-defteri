@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 from django.db import connection, transaction
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.okul import denetim_izi, iz_dogrulama, iz_durumu, masaustu_kanca
@@ -49,12 +51,25 @@ from shared import kanonik
 
 pytestmark = pytest.mark.django_db
 
-#: Kartlardaki program yöneticisi hesabının kişisiz özeti (ad-soyad yok).
-YONETICI_OZETI = {
-    "id": TEST_HESAP_ID,
-    "tanitici": TEST_TANITICI,
-    "rol_etiketi": "Program yöneticisi",
-}
+
+def _gun(an: Any) -> str | None:
+    """Hesabın Europe/Istanbul günü, yyyy-aa-gg (kartın `acilis`/`kapanis` biçimi; F-3)."""
+    return None if an is None else f"{timezone.localtime(an):%Y-%m-%d}"
+
+
+def yonetici_ozeti() -> dict[str, Any]:
+    """Kartlardaki program yöneticisi hesabının kişisiz özeti (ad-soyad yok; açılış günü ve açık
+    hesapta boş kapanış — orkestratör maddesi F-3)."""
+    hesap = Account.objects.get(pk=TEST_HESAP_ID)
+    return {
+        "id": TEST_HESAP_ID,
+        "tanitici": TEST_TANITICI,
+        "rol_etiketi": "Program yöneticisi",
+        "acilis": _gun(hesap.opened_at),
+        "kapanis": None,
+    }
+
+
 GUNLUK = "gunluk-2026-11-01.odbak"
 ONCEKI = "db-onceki-2026-11-01-101530.sqlite3"
 SAHIPSIZ = "0d6c1f2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f"
@@ -919,7 +934,7 @@ def test_geri_yukleme_karti_anini_ve_acan_hesabi_kisisiz_verir() -> None:
 
     kart = pano(TEST_HESAP_ID)["geri_yukleme"]
     assert kart["geri_yukleme_ani"] == "2026-10-30T22:15:30+03:00"
-    assert kart["yol"] == "hesap" and kart["yol_hesap"] == YONETICI_OZETI
+    assert kart["yol"] == "hesap" and kart["yol_hesap"] == yonetici_ozeti()
     assert (kart["onceki_kayit_no"], kart["onceki_zincir"]) == (42, "CDCD-CDCD")
 
 
@@ -937,7 +952,7 @@ def test_kurtarma_yoluyla_uygulama_ici_geri_yukleme_oturumdaki_hesaba_baglanir()
     assert "hesap" not in geri.values  # parola yolu değil
     kart = pano(TEST_HESAP_ID)["geri_yukleme"]
     assert (kart["yol"], kart["kurtarma_no"]) == ("kurtarma", 3)
-    assert kart["oturum_hesap"] == YONETICI_OZETI and kart["yol_hesap"] is None
+    assert kart["oturum_hesap"] == yonetici_ozeti() and kart["yol_hesap"] is None
 
 
 @pytest.mark.parametrize(
@@ -1360,8 +1375,8 @@ def test_butunluk_karti_bir_sonraki_giriste_kalkar_geri_yukleme_karti_kalir() ->
     assert ozet["butunluk"] == []
     assert ozet["geri_yukleme"]["onceki_zincir"] == "CDCD-CDCD"
     assert ozet["geri_yukleme"]["onceki_kayit_no"] == 42
-    assert ozet["geri_yukleme"]["hesap"] == YONETICI_OZETI
-    assert ozet["geri_yukleme"]["yol_hesap"] == YONETICI_OZETI  # parola yolunu açan hesap
+    assert ozet["geri_yukleme"]["hesap"] == yonetici_ozeti()
+    assert ozet["geri_yukleme"]["yol_hesap"] == yonetici_ozeti()  # parola yolunu açan hesap
 
     kilitle()
     iz_durumu.yol().unlink()  # çapa yok → bu açılışta bütünlük bulgusu
@@ -1414,11 +1429,116 @@ def test_girista_muhur_tutmazsa_program_yoneticisi_kart_gorur() -> None:
 
     (kart,) = pano(TEST_HESAP_ID)["butunluk"]
     assert (kart["tur"], kart["bulgular"], kart["duzey"]) == ("muhur", ["seal"], "uyari")
-    # Rol etiketi kaydın SÖYLEDİĞİdir (program dışından "sekreter" yapıldı); ad-soyad yok.
+    # Rol etiketi kaydın SÖYLEDİĞİdir (program dışından "sekreter" yapıldı); ad-soyad yok; açık
+    # hesabın açılış günü var, kapanışı yok (F-3).
     assert kart["hesap"] == {
         "id": str(muhasip.id),
         "tanitici": muhasip.login_name,
         "rol_etiketi": "Sekreter",
+        "acilis": _gun(muhasip.opened_at),
+        "kapanis": None,
+    }
+
+
+#: Program dışından yazılmış anlar: biçime uyan ama geçersiz (30 Şubat; Django'nun dönüştürücüsü
+#: ValueError yükseltir) ve yerel güne çevrilemeyen (9999'un son saati; OverflowError).
+BOZUK_ANLAR = ["2026-02-30 10:00:00.000000", "9999-12-31 23:59:59.000000"]
+
+
+@pytest.mark.parametrize("bozuk", BOZUK_ANLAR)
+def test_hesabin_bozuk_acilis_ani_butunluk_kartini_dusurmez(bozuk: str) -> None:
+    """Bağımsız denetim bulgusu (F-3'ün gerilemesi): mühür kartını doğuran hesabın açılış ve kapanış
+    anı program dışından bozulursa kart `butunluk`'ta kalır, günleri None'dır (kaydın söylemediği);
+    bütünlük grubu (kilit açılışı doğrulamasının kartlarıyla) `okunamayan`'a düşmez. Eskiden hesap
+    özeti anı ORM'nin dönüştürücüsüyle okuyordu: tek değer bütün grubu düşürürdü."""
+    muhasip = hesap_ac(AccountRole.MUHASIP)
+    kilitle()
+    ham_guncelle(muhasip.id, role="sekreter")
+    with pytest.raises(app_password.AccountSealMismatch):
+        app_password.unlock(hesap_id=muhasip.id, password=GECICI_PAROLA, new_password=YENI_PAROLA)
+    ac()
+    # Kapanış da dolu olsun diye durum da program dışından KAPALI yapılır (veritabanı kısıtı).
+    ham_guncelle(muhasip.id, status=AccountStatus.KAPALI, opened_at=bozuk, closed_at=bozuk)
+
+    ozet = pano(TEST_HESAP_ID)
+
+    assert "butunluk" not in ozet["okunamayan"]
+    (kart,) = ozet["butunluk"]
+    assert (kart["tur"], kart["bulgular"]) == ("muhur", ["seal"])
+    assert kart["hesap"] == {
+        "id": str(muhasip.id),
+        "tanitici": muhasip.login_name,
+        "rol_etiketi": "Sekreter",
+        "acilis": None,
+        "kapanis": None,
+    }
+
+
+def test_geri_yuklemeyi_acan_hesabin_bozuk_acilis_ani_karti_dusurmez() -> None:
+    """Bağımsız denetim bulgusu (F-3'ün gerilemesi): geri yüklemeyi açan hesabın açılış anı program
+    dışından bozulursa geri yükleme kartı yine görünür (Denetleme Kurulu "Gördüm" diyebilir);
+    hesabın günü None'dır."""
+    muhasip = hesap_ac(AccountRole.MUHASIP)
+    kilitle()
+    notu_yaz(yol_bilgisi={"tur": "hesap", "hesap": str(muhasip.id), "tanitici": "muhasip"})
+    ac()
+    ham_guncelle(muhasip.id, opened_at=BOZUK_ANLAR[0])
+
+    ozet = pano(TEST_HESAP_ID)
+
+    assert "geri_yukleme" not in ozet["okunamayan"]
+    kart = ozet["geri_yukleme"]
+    assert kart is not None and kart["yol"] == "hesap"
+    assert kart["yol_hesap"] == {
+        "id": str(muhasip.id),
+        "tanitici": "muhasip",
+        "rol_etiketi": "Muhasip",
+        "acilis": None,
+        "kapanis": None,
+    }
+
+
+def test_kartlarda_ayni_taniticili_eski_ve_yeni_hesap_acilis_ve_kapanisla_ayrilir() -> None:
+    """Orkestratör maddesi F-3: tanıtıcı yalnız açık hesaplar arasında tekildir. Kapanan "muhasip"
+    ile yerine açılan yeni "muhasip"in kart özetleri aynı tanıtıcıyı ve rol etiketini taşır; ikisini
+    açılış ve kapanış günü (Europe/Istanbul, yyyy-aa-gg; açık hesapta kapanış yok) ayırır."""
+    eski = hesap_ac(AccountRole.MUHASIP)
+    hesaplar.close_account(by_hesap_id=TEST_HESAP_ID, hesap_id=eski.id)
+    # Eski hesap geçen yıl açılmış, geçen ay kapanmış; anlar UTC'de gece yarısından önce,
+    # Europe/Istanbul'da ertesi gündür (gün yerel gündür). Satır meşru yazım gibi mühürlenir.
+    eski = muhurle(
+        Account.objects.get(pk=eski.id),
+        opened_at=datetime(2025, 8, 31, 21, 30, tzinfo=UTC),
+        closed_at=datetime(2026, 10, 14, 22, 15, tzinfo=UTC),
+    )
+    yeni = hesap_ac(AccountRole.MUHASIP)
+    assert eski.login_name == yeni.login_name
+
+    ozet_eski = iz_dogrulama._hesap_ozeti(eski.id)
+    ozet_yeni = iz_dogrulama._hesap_ozeti(yeni.id)
+
+    assert ozet_eski == {
+        "id": str(eski.id),
+        "tanitici": "muhasip",
+        "rol_etiketi": "Muhasip",
+        "acilis": "2025-09-01",
+        "kapanis": "2026-10-15",
+    }
+    assert ozet_yeni == {
+        "id": str(yeni.id),
+        "tanitici": "muhasip",
+        "rol_etiketi": "Muhasip",
+        "acilis": _gun(yeni.opened_at),
+        "kapanis": None,
+    }
+    assert ozet_eski != ozet_yeni
+    # Biçimsiz ya da olmayan kimlik: günler de yoktur.
+    assert iz_dogrulama._hesap_ozeti("biçimsiz") == {
+        "id": "biçimsiz",
+        "tanitici": None,
+        "rol_etiketi": None,
+        "acilis": None,
+        "kapanis": None,
     }
 
 
@@ -1539,15 +1659,20 @@ def test_parola_bildirimi_ucu_kilitliyken_kapalidir() -> None:
 
 
 def test_muhru_tutmayan_hesabin_bildirimi_kapatilmaz() -> None:
-    """Mührü tutmayan satıra hiçbir servis dokunmaz (tehdit 19): ret, bayrak ve iz yerinde."""
+    """Mührü tutmayan satıra hiçbir servis dokunmaz (tehdit 19): ret ve bayrak yerinde; reddin
+    TEK izi `BUTUNLUK` satırıdır (`SISTEM`, alan `seal`; orkestratör maddesi F-1 — eskiden mühür
+    kolu satır yazmıyordu), `GUNCELLE` satırı yoktur."""
     ham_guncelle(TEST_HESAP_ID, reset_notice_pending=True, role="muhasip")
-    sayi = AuditTrail.objects.count()
+    bas = son_satir().seq
 
     yanit = APIClient().post(BILDIRIM_UCU, {}, format="json")
 
     assert yanit.status_code == 409
     assert Account.objects.get(pk=TEST_HESAP_ID).reset_notice_pending is True
-    assert AuditTrail.objects.count() == sayi
+    yeni = satirlar(seq__gt=bas)
+    assert [(s.action, s.actor, s.model, s.object_id, s.changed_fields) for s in yeni] == [
+        ("BUTUNLUK", "SISTEM", "okul.Account", TEST_HESAP_ID, ["seal"])
+    ]
 
 
 def test_kenara_alinan_veritabaninin_zincir_basi_salt_okunur_okunur(tmp_path: Any) -> None:

@@ -24,10 +24,17 @@ from django.db import transaction
 from rest_framework.test import APIClient
 
 from apps.okul import denetim_izi, iz_dogrulama, rol_izinleri
-from apps.okul.models import Account, AccountRole, AccountStatus, AuditAction, AuditTrail
+from apps.okul.models import (
+    Account,
+    AccountRole,
+    AccountStatus,
+    AuditAction,
+    AuditTrail,
+    SuspendReason,
+)
 from apps.okul.oturum import SISTEM, Yazar, yazar_olarak
 from apps.okul.services import app_password, hesaplar
-from apps.okul.tests.hesap_ortak import geri_sarilmis, hesap_ac, muhurle
+from apps.okul.tests.hesap_ortak import geri_sarilmis, ham_guncelle, hesap_ac, muhurle
 from apps.okul.tests.iz_ortak import sahte_satir
 from apps.okul.views_oturum import GORDUM_SIRASI_EKSIK, GORDUM_SIRASI_GECERSIZ
 from conftest import TEST_HESAP_ID, oturumu_ac_test
@@ -328,11 +335,24 @@ def test_servis_rolu_hesabi_denetlemeden_once_sorar() -> None:
 
 
 @pytest.mark.django_db(transaction=True)
-def test_reddedilen_gordum_butunluk_satirini_birakir() -> None:
-    """Orkestratör maddesi C-2 (otomatik commit kipinde, üretimdeki gibi): DK üyesinin satırı eski
-    kopyaya geri sarılmıştır; uç 409 `hesap_muhru_tutmadi` döner, reddin `BUTUNLUK` satırı (alan
-    `kayit_mac`) yanıttan SONRA da kalır, `ISARET` yazılmaz, kart kalır."""
-    dk = geri_sarilmis(_dk())
+@pytest.mark.parametrize("bozulma", ["satir_izi", "muhur", "durum"])
+def test_reddedilen_gordum_butunluk_satirini_birakir(bozulma: str) -> None:
+    """Orkestratör maddeleri C-2 ve F-1 (otomatik commit kipinde, üretimdeki gibi): DK üyesinin
+    satırı eski kopyaya geri sarılmıştır ya da program dışından değiştirilmiştir (mühür; `durum`
+    kolunda değişen durumdur — askıda gösterilir, ret yine "İşlemi yapan hesap açık değil…" değil
+    mühür reddidir); uç 409 `hesap_muhru_tutmadi` döner, reddin `BUTUNLUK` satırı (alan `kayit_mac`
+    ya da `seal`) yanıttan SONRA da kalır, `ISARET` yazılmaz, kart kalır."""
+    if bozulma == "muhur":
+        dk = _dk()
+        ham_guncelle(dk.id, login_name="program-disi")
+        alan = "seal"
+    elif bozulma == "durum":
+        dk = _dk()
+        ham_guncelle(dk.id, status=AccountStatus.ASKIDA, suspend_reason=SuspendReason.UYELIK_DUSTU)
+        alan = "seal"
+    else:
+        dk = geri_sarilmis(_dk())
+        alan = app_password.KAYIT_MAC_ALANI
     geri = _geri_yukleme()
     _oturum(dk)
     son = _son_seq()
@@ -342,9 +362,7 @@ def test_reddedilen_gordum_butunluk_satirini_birakir() -> None:
     assert yanit.status_code == 409, yanit.content
     assert yanit.json()["code"] == "hesap_muhru_tutmadi"
     satirlar = list(AuditTrail.objects.filter(seq__gt=son, action=AuditAction.BUTUNLUK))
-    assert [(s.object_id, s.changed_fields) for s in satirlar] == [
-        (str(dk.id), [app_password.KAYIT_MAC_ALANI])
-    ]
+    assert [(s.object_id, s.changed_fields) for s in satirlar] == [(str(dk.id), [alan])]
     assert _isaretler() == []
     assert _kart() is not None
 

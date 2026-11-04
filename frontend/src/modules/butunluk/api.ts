@@ -35,6 +35,13 @@ export interface HesapOzeti {
   tanitici: string | null;
   /** Kaydın söylediği rol etiketi ("Program yöneticisi", "Muhasip"); kayıt yoksa null. */
   rol_etiketi: string | null;
+  /**
+   * Hesabın açılış ve kapanış günü (yyyy-aa-gg, Europe/Istanbul; açık hesapta `kapanis` null,
+   * kayıt yoksa ikisi de null): kapanan hesapla aynı tanıtıcıyı alan yeni hesabı ayırır. Denetim
+   * kartlarının hesabında gelir; iki depo listelerinde yoktur (orada `kapali` ayırır).
+   */
+  acilis?: string | null;
+  kapanis?: string | null;
 }
 
 /**

@@ -79,7 +79,8 @@ yöneticisinin onayıyladır (`POST security/integrity/orphan-wraps/`). Kartlar 
 bağımsız okunur: biri okunamazsa adı o ucun `okunamayan` listesine girer, ön yüz bunu uyarı
 kartıyla söyler ("Bütünlük Durumu Okunamadı"; `_kartlar`). Bulgu kodları iç
 koddur, kullanıcı metnine çıkmaz: ön yüz sözlükteki metni yazar (`modules/butunluk/metinler`).
-Kartlardaki hesap kişisizdir (`_hesap_ozeti`): kimlik, tanıtıcı ve rol etiketi; ad-soyad yok.
+Kartlardaki hesap kişisizdir (`_hesap_ozeti`): kimlik, tanıtıcı, rol etiketi, açılış ve kapanış
+günü (aynı tanıtıcıyı alan eski ve yeni hesap ayrılsın; orkestratör maddesi F-3); ad-soyad yok.
 
 GÖRDÜM (`geri_yukleme_goruldu_mu`, `son_geri_yukleme`; yazımı `hesaplar.acknowledge_restore`,
 `POST security/integrity/restore-seen/` `{seq}`; plan F1b-2 "Gördüm."; tasarım §4.4.4): geri
@@ -123,7 +124,13 @@ from apps.okul.models import (
     AuditKeyMode,
     AuditTrail,
 )
-from apps.okul.oturum import rol_etiketi, sistem_olarak
+from apps.okul.oturum import (
+    ham_an_sutunlari,
+    hesap_ani,
+    hesap_gunu,
+    rol_etiketi,
+    sistem_olarak,
+)
 from apps.okul.services import geri_yukleme_notu
 from shared import crypto, kanonik
 
@@ -783,21 +790,34 @@ _HESAP_MODELI: Final = denetim_izi.model_etiketi(Account)
 
 
 def _hesap_ozeti(hesap_id: object) -> dict[str, Any]:
-    """Kartlardaki hesabın kişisiz özeti: kimlik, tanıtıcı ve rol etiketi (ad-soyad YOK).
+    """Kartlardaki hesabın kişisiz özeti: kimlik, tanıtıcı, rol etiketi, açılış ve kapanış günü
+    (ad-soyad YOK).
 
     Rol etiketi veritabanındaki satırınkidir (kilit ekranındaki gibi; `oturum.rol_etiketi`);
-    satır yoksa ya da kimlik biçimsizse tanıtıcı ve rol etiketi `None`'dır. Mührü tutmayan
+    satır yoksa ya da kimlik biçimsizse tanıtıcı, rol etiketi ve günler `None`'dır. Mührü tutmayan
     satırın rolü program dışından değiştirilmiş olabilir: kart onu "kaydın söylediği" diye
-    gösterir, doğrulanmış saymaz.
+    gösterir, doğrulanmış saymaz. Açılış ve kapanış günü (`acilis`, `kapanis`; Europe/Istanbul
+    günü, yyyy-aa-gg; açık hesapta `kapanis` None) kapanan hesapla aynı tanıtıcıyı alan yeni hesabı
+    ayırır (orkestratör maddesi F-3; erişim günlüğüyle aynı karar, `oturum.hesap_gunu`). İki an
+    ORM dönüştürücüsü olmadan, ham metin okunur (`oturum.ham_an_sutunlari`, `hesap_ani`): program
+    dışından yazılmış geçersiz tek bir an kartı — bütünlük grubunu, geri yükleme kartını — düşürmez,
+    o gün "kaydın söylemediği"dir (None; bağımsız denetim bulgusu).
     """
     kimlik = denetim_izi.kimlik_metni_ya_da_none(Account, hesap_id)
     satir = None
     if kimlik is not None:
-        satir = Account.objects.filter(pk=kimlik).values("login_name", "role").first()
+        satir = (
+            Account.objects.filter(pk=kimlik)
+            .annotate(**ham_an_sutunlari())
+            .values("login_name", "role", "ham_acilis", "ham_kapanis")
+            .first()
+        )
     return {
         "id": kimlik or str(hesap_id),
         "tanitici": None if satir is None else satir["login_name"],
         "rol_etiketi": None if satir is None else rol_etiketi(satir["role"]),
+        "acilis": None if satir is None else hesap_gunu(hesap_ani(satir["ham_acilis"])),
+        "kapanis": None if satir is None else hesap_gunu(hesap_ani(satir["ham_kapanis"])),
     }
 
 

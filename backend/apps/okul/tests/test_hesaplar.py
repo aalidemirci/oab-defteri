@@ -520,6 +520,31 @@ class TestTaniticiKurallari:
         uyari = hesap_kurallari.login_name_warning(tanitici, ad)
         assert (uyari is not None) is uyari_var
 
+    @pytest.mark.parametrize(
+        ("tanitici", "ad", "beklenen"),
+        [
+            # Sayılar uydurmadır; sağlamaları tutmaz (uyarı sağlamaya bakmaz).
+            ("kayit-12345678901", "Örnek Kişi", "tckn"),  # 11 ardışık rakam
+            ("x123456789012", "Örnek Kişi", "tckn"),  # 12'lik dizi bir 11'liyi içerir
+            ("a1234567890", "Örnek Kişi", None),  # 10 rakam: kimlik numarası değil
+            ("a12345-678901", "Örnek Kişi", None),  # araya giren tire diziyi böler
+            ("ornek-12345678901", "Örnek Kişi", "tckn"),  # iki uyarı birden: kimlik önce gelir
+            ("ornek-1", "Örnek Kişi", "ad"),
+        ],
+    )
+    def test_kimlik_numarasina_benzer_sayi_uyarilir_engellenmez(
+        self, tanitici: str, ad: str, beklenen: str | None
+    ) -> None:
+        """Orkestratör maddesi F-5: T.C. kimlik numarasına benzeyen 11 ardışık rakam uyarıdır
+        (ad-soyad uyarısının kalıbı; engel değil, tanıtıcı biçimi geçerlidir)."""
+        iletiler = {
+            "tckn": hesap_kurallari.LOGIN_NAME_TCKN_WARNING_MESSAGE,
+            "ad": hesap_kurallari.LOGIN_NAME_WARNING_MESSAGE,
+            None: None,
+        }
+        assert hesap_kurallari.login_name_warning(tanitici, ad) == iletiler[beklenen]
+        assert hesap_kurallari.validate_login_name(tanitici) == tanitici
+
     def test_tanitici_kucuk_harfe_cevrilir(self) -> None:
         assert hesap_kurallari.validate_login_name("  MUHASİP ") == "muhasip"
         assert hesap_kurallari.validate_login_name("Iğdır") == "ığdır"
@@ -800,7 +825,11 @@ def test_iki_depo_dort_hali(
 def test_kapali_temizligi_muhru_tutmayan_satirin_sarmalina_dokunmaz(
     yonetici_hesabi: Account,
 ) -> None:
-    """Durumu program dışından KAPALI'ya çevrilen satır meşru bir sarmalı sildiremez."""
+    """Durumu program dışından KAPALI'ya çevrilen satır meşru bir sarmalı sildiremez.
+
+    Silme istenirse ret öteki hesap işlemlerindeki gibidir (orkestratör maddesi F-1, son sınama
+    bulgusu): 409 mühür reddi ve işlem gören hesap için tek `BUTUNLUK` satırı (alan `seal`);
+    sarmal yerinde kalır."""
     hesap = hesap_ac()
     ham_guncelle(hesap.id, status="KAPALI", closed_at=timezone.now().isoformat(sep=" "))
     app_password.lock()
@@ -808,8 +837,18 @@ def test_kapali_temizligi_muhru_tutmayan_satirin_sarmalina_dokunmaz(
     assert str(hesap.id) in sarmal_kimlikleri()
     fark = hesaplar.two_store_differences()
     assert fark.seal_mismatch == [str(hesap.id)]
-    with pytest.raises(hesaplar.AccountServiceError):
+    son = int(AuditTrail.objects.order_by("-seq").values_list("seq", flat=True).first() or 0)
+
+    with pytest.raises(app_password.AccountSealMismatch) as hata:
         hesaplar.remove_orphan_wraps(by_hesap_id=TEST_HESAP_ID, hesap_idler=[str(hesap.id)])
+
+    assert (hata.value.code, hata.value.status_code) == ("hesap_muhru_tutmadi", 409)
+    assert str(hata.value) == app_password.ISLEMDE_KAYIT_MESSAGE
+    yeni = list(AuditTrail.objects.filter(seq__gt=son).order_by("seq"))
+    assert [(s.action, s.object_id, s.changed_fields) for s in yeni] == [
+        ("BUTUNLUK", str(hesap.id), ["seal"])
+    ]
+    assert str(hesap.id) in sarmal_kimlikleri()
 
 
 def test_bos_fark_listesi(yonetici_hesabi: Account) -> None:

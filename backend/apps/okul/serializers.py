@@ -13,6 +13,7 @@ from typing import Any
 from django.db.models import Model
 from django.utils import timezone
 from rest_framework import serializers
+from rest_framework.fields import empty
 
 from apps.okul import normalize, selectors
 from apps.okul.models import (
@@ -29,6 +30,37 @@ from apps.okul.models import (
 )
 from apps.okul.services import calendar as calendar_service
 from shared import crypto
+
+
+class _ServiseBirakanMetin(serializers.CharField):
+    """`servise_birakan_metin`'in alanı: JSON `null` da boş değerdir, servise `""` gider (bağımsız
+    denetim bulgusu: `allow_null` olmadan null, F-6'nın kaldırdığı "Bu alan boş bırakılmamalı."
+    iletisini alıyordu). Null varsayılana da dönmez: kurulumda null tanıtıcı "Tanıtıcı boş olamaz."
+    alır."""
+
+    def run_validation(self, data: Any = empty) -> Any:
+        return super().run_validation("" if data is None else data)
+
+
+def servise_birakan_metin(*, kirp: bool = False, **secenekler: Any) -> serializers.CharField:
+    """Boş, gönderilmemiş ya da null değeri servise bırakan metin alanı (orkestratör maddesi F-6).
+
+    Hesap uçlarında (ilk program yöneticisi hesabı, hesap açma, parola sıfırlama) DRF'nin genel
+    iletisi ("Bu alan boş bırakılmamalı.", "Bu alan zorunlu.") sözlükte yoktur ve alan adı olmadan
+    anlamsızdır: boş değer servisin kurallarına gider, ret servisin Türkçe iletisidir
+    (`hesap_kurallari`: "Tanıtıcı boş olamaz.", "Hesap sahibinin adı-soyadı boş olamaz.", "Parola en
+    az 8 karakter olmalıdır."; rolde "Geçerli bir rol seçin.") — boşlukla doldurulmuş değerle aynı
+    ileti. Aile kalıbı `views.BackupRestoreRequestSerializer`'ınkidir (`required=False,
+    allow_blank=True, default=""`). Değer varsayılan olarak kırpılmaz: tanıtıcıyı ve ad-soyadı servis
+    kırpar, parola hiç kırpılmaz; `kirp` yalnız kod değerleri (rol) içindir.
+
+    Metin olmayan değer (liste, sözlük, mantıksal değer) bu kalıbın dışındadır: DRF'nin alan
+    iletisini alır (ön yüz yalnız metin gönderir; açık kalan).
+    """
+    secenekler.setdefault("default", "")
+    return _ServiseBirakanMetin(
+        required=False, allow_blank=True, trim_whitespace=kirp, **secenekler
+    )
 
 
 def _validate_level(value: int) -> int:

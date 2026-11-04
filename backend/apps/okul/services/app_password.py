@@ -571,6 +571,18 @@ IZ_BOSLUGU_MESSAGE = (
     "Denetim izinden kayıt silinmiş ya da kayıtların sırası program dışından değiştirilmiş "
     "görünüyor; giriş açılmadı. Program yöneticisine ve Denetleme Kuruluna bildirin."
 )
+#: Açık oturumdaki ve hesap işlemlerindeki karşılıkları (son sınama bulgusu): kişi zaten
+#: oturumdadır, "giriş açılmadı" ve "program yöneticisine bildirin" ona uymaz. Oturumdaki parola
+#: doğrulaması (doğrulama, parola değiştirme, kurtarma anahtarının yenilenmesi; `_sealed_account`)
+#: ve hesap servisleri (`hesaplar._SEAL_MESSAGE`, `_GAP_MESSAGE`) bu iki metni verir (sözlük §1).
+ISLEMDE_KAYIT_MESSAGE = (
+    "Hesap kaydı program dışından değiştirilmiş görünüyor; kayda dokunulmadı. "
+    "Denetleme Kuruluna bildirin."
+)
+ISLEMDE_BOSLUK_MESSAGE = (
+    "Denetim izinden kayıt silinmiş ya da kayıtların sırası program dışından değiştirilmiş "
+    "görünüyor; kayda dokunulmadı. Denetleme Kuruluna bildirin."
+)
 _FOREIGN_DB_MESSAGE = (
     "Bu güvenlik dosyası bu veritabanına ait değil (anahtar eşleşmiyor). Doğru "
     "guvenlik.json dosyasını veri klasörüne koyup yeniden deneyin ya da bir yedekten geri "
@@ -625,10 +637,31 @@ class AccountSuspended(UnlockRefused):
 
 
 class AccountSealMismatch(UnlockRefused):
-    """`Account` satırının mührü tutmadı; satıra dokunulmaz (tasarım §4.6.1, tehdit 19)."""
+    """`Account` satırının mührü tutmadı; satıra dokunulmaz (tasarım §4.6.1, tehdit 19).
+
+    Bu ret denetim izine `BUTUNLUK` satırı olarak düşer (`_muhur_bozuk_izi`, alan `alan`): kilit
+    açılışı, kurtarma anahtarıyla açılış, oturumdaki parola doğrulaması (kurtarma anahtarının
+    yenilenmesinde kayıttaki rolün reddinden önce de: `_rol_reddinden_once_kayit`) ve hesap
+    işlemleri (`hesaplar._actor`, `_target`; orkestratör maddesi F-1). Bu noktalarda mühür ve iz,
+    kaydın durumundan ve rolünden ÖNCE sorulur (program dışından değiştirilmiş durum ya da rol de bu
+    reddi alır). Yazmayan iki yer: kurtarma anahtarıyla açılışın rol ve durum ön denetimi
+    (`unlock_with_recovery`, kurtarma anahtarından önce; olağan ret) ve yedekten geri yüklemenin
+    yetkisi (`geri_yukleme_yetkisi`, ORM'siz; ret günlüğe düşer).
+
+    `ertelenen`: denetim bir veritabanı işleminin İÇİNDEN yapıldıysa (`_muhurlu_satir(...,
+    iz_yaz=False)`, `satir_izini_denetle(..., iz_yaz=False)`) `BUTUNLUK` satırı henüz
+    yazılmamıştır; satırı, işlem geri alındıktan SONRA `_ertelenen_butunluk` bu hesap için yazar
+    (orkestratör kararı O-4). Öteki hâllerde None.
+    """
 
     code = "hesap_muhru_tutmadi"
     status_code = 409
+    #: `BUTUNLUK` satırının alan adı (alt sınıflar kendi alanını verir).
+    alan = "seal"
+
+    def __init__(self, message: str = "", *, ertelenen: Account | None = None) -> None:
+        super().__init__(message)
+        self.ertelenen = ertelenen
 
 
 class WrapDigestMismatch(AccountSealMismatch):
@@ -646,6 +679,7 @@ class WrapDigestMismatch(AccountSealMismatch):
 
     code = "hesap_muhru_tutmadi"
     status_code = 409
+    alan = "wrap_digest"
 
 
 class AccountRecordStale(AccountSealMismatch):
@@ -662,9 +696,7 @@ class AccountRecordStale(AccountSealMismatch):
     değiştirilmiş satır; kullanıcı kararı 03.11.2026 "Boşluğu engelle") da bu rettir (orkestratör
     kararı O-1: `satir_izi`'nin tek karar işlevi).
 
-    `ertelenen`: denetim bir veritabanı işleminin İÇİNDEN yapıldıysa (`satir_izini_denetle(...,
-    iz_yaz=False)`) `BUTUNLUK` satırı henüz yazılmamıştır; satırı, işlem geri alındıktan SONRA
-    `_ertelenen_butunluk` bu hesap için yazar (orkestratör kararı O-4). Öteki hâllerde None.
+    `ertelenen` üst sınıfınkidir (`AccountSealMismatch`; orkestratör kararı O-4).
 
     `neden`: kararın ret nedeni (`satir_izi.IzRetNedeni`); `alan`: `BUTUNLUK` satırının alan adı.
     İzdeki boşluk alt sınıfla (`AuditTrailGap`) ayrılır (orkestratör maddesi C-4).
@@ -682,8 +714,7 @@ class AccountRecordStale(AccountSealMismatch):
         ertelenen: Account | None = None,
         neden: satir_izi.IzRetNedeni | None = None,
     ) -> None:
-        super().__init__(message)
-        self.ertelenen = ertelenen
+        super().__init__(message, ertelenen=ertelenen)
         self.neden = neden
 
 
@@ -2153,34 +2184,48 @@ def _check_fingerprint(data_key: bytes) -> None:
         raise TwoStoreMismatch(_FOREIGN_DB_MESSAGE)
 
 
-def _muhurlu_satir(hesap_id: object, data_key: bytes, *, giris: bool = False) -> Account:
+def _muhurlu_satir(
+    hesap_id: object, data_key: bytes, *, iz_yaz: bool = True, ileti: str = _SEAL_MISMATCH_MESSAGE
+) -> Account:
     """Satırı okur ve mührünü DEK'le doğrular (DEK belleğe alınmadan). Satıra dokunmaz.
 
-    Satır yoksa `TwoStoreMismatch`, mühür tutmazsa `AccountSealMismatch`. Girişte
-    (`giris`) mühür tutmazsa olay ayrıca denetim izine `BUTUNLUK` satırı olarak düşer
-    (`_muhur_bozuk_izi`; tasarım §4.6.1 kural 1, tehdit 19). Satırın izini SORMAZ: o,
-    çağıranın sırasıyla `satir_izini_denetle`'dir (kilit açılışı ve kurtarma önce İA'yı çözer).
+    Satır yoksa `TwoStoreMismatch`, mühür tutmazsa `AccountSealMismatch`; olay ayrıca denetim
+    izine `BUTUNLUK` satırı olarak düşer (`_muhur_bozuk_izi`, alan `seal`; tasarım §4.6.1 kural 1,
+    tehdit 19) — kilit açılışında, kurtarma anahtarıyla açılışta ve oturumdaki parola
+    doğrulamasında aynı (orkestratör maddesi F-1: satırın izi ve sarmal özeti kollarıyla tutarlı;
+    oturumdaki parola doğrulaması eskiden mühür kolunda satır yazmıyordu). Bir veritabanı
+    işleminin içinden çağıran `iz_yaz=False` verir: satır yazılmaz, hata `ertelenen`'de hesabı
+    taşır, `_ertelenen_butunluk` işlem geri alındıktan SONRA yazar (orkestratör kararı O-4).
+    Satırın izini SORMAZ: o, çağıranın sırasıyla `satir_izini_denetle`'dir (kilit açılışı ve
+    kurtarma önce İA'yı çözer).
     """
     hesap = account_by_id(hesap_id)
     if hesap is None:
         raise TwoStoreMismatch(_NO_ROW_MESSAGE)
     if not hesap.seal_matches(data_key):
-        logger.warning("Hesap mührü tutmadı; giriş reddedildi, satıra dokunulmadı (%s).", hesap_id)
-        if giris:
-            _muhur_bozuk_izi(hesap, data_key)
-        raise AccountSealMismatch(_SEAL_MISMATCH_MESSAGE)
+        logger.warning("Hesap mührü tutmadı; işlem reddedildi, satıra dokunulmadı (%s).", hesap_id)
+        if not iz_yaz:
+            raise AccountSealMismatch(ileti, ertelenen=hesap)
+        _muhur_bozuk_izi(hesap, data_key)
+        raise AccountSealMismatch(ileti)
     return hesap
 
 
-def _sealed_account(
-    hesap_id: object, data_key: bytes, *, giris: bool = False, iz_yaz: bool = True
-) -> Account:
+def _sealed_account(hesap_id: object, data_key: bytes, *, iz_yaz: bool = True) -> Account:
     """Mühürlü ve izi tutan satır: `_muhurlu_satir` + `satir_izini_denetle` (modül başlığı
     "SATIRIN İZİ"). Oturumdaki parola doğrulaması ve parola değiştirme kullanır (İA bellekte).
-    Döndürülen satır kararın satırıdır (`satir_izini_denetle`). Bir işlemin içinden çağıran
-    `iz_yaz=False` verir ve `_ertelenen_butunluk` ile sarar (orkestratör kararı O-4)."""
-    hesap = _muhurlu_satir(hesap_id, data_key, giris=giris)
-    return satir_izini_denetle(hesap, data_key, iz_yaz=iz_yaz)
+    Döndürülen satır kararın satırıdır (`satir_izini_denetle`). Her kolun reddi (mühür, satırın
+    izi, izdeki boşluk) `BUTUNLUK` satırı yazar; bir işlemin içinden çağıran `iz_yaz=False` verir
+    ve `_ertelenen_butunluk` ile sarar (orkestratör kararı O-4). İletiler açık oturumunkidir
+    (`ISLEMDE_KAYIT_MESSAGE`, `ISLEMDE_BOSLUK_MESSAGE`): kişi zaten oturumdadır."""
+    hesap = _muhurlu_satir(hesap_id, data_key, iz_yaz=iz_yaz, ileti=ISLEMDE_KAYIT_MESSAGE)
+    return satir_izini_denetle(
+        hesap,
+        data_key,
+        ileti=ISLEMDE_KAYIT_MESSAGE,
+        bosluk_iletisi=ISLEMDE_BOSLUK_MESSAGE,
+        iz_yaz=iz_yaz,
+    )
 
 
 #: Satır izi tutmadığında `BUTUNLUK` satırının alan adı (kart onu mühür ve özetten ayırır).
@@ -2271,18 +2316,19 @@ def _ret_nedeni(hesap: Account, data_key: bytes) -> satir_izi.IzRetNedeni:
 
 @contextmanager
 def _ertelenen_butunluk(data_key: bytes) -> Iterator[None]:
-    """İşlem içinden yapılan satır izi denetiminin `BUTUNLUK` satırı (orkestratör kararı O-4).
+    """İşlem içinden yapılan mühür ve satır izi denetiminin `BUTUNLUK` satırı (orkestratör kararı
+    O-4).
 
     Veritabanı işleminin DIŞINDA kullanılır (`with _ertelenen_butunluk(dek), transaction.atomic():`
-    ya da iç içe): içerideki `satir_izini_denetle(..., iz_yaz=False)` reddi işlemi geri aldırır,
+    ya da iç içe): içerideki `_sealed_account(..., iz_yaz=False)` reddi işlemi geri aldırır,
     çıkışta — işlem geri alındıktan SONRA — `BUTUNLUK` satırı kendi işleminde yazılır
-    (`_muhur_bozuk_izi`, alan hatanın `alan`ı: satırın izinde `kayit_mac`, izdeki boşlukta
-    `iz_boslugu`) ve hata aynen yükselir. Böylece ret, işlem içindeki
+    (`_muhur_bozuk_izi`, alan hatanın `alan`ı: mühürde `seal`, satırın izinde `kayit_mac`, izdeki
+    boşlukta `iz_boslugu`) ve hata aynen yükselir. Böylece ret, işlem içindeki
     öteki denetimlerin retleri gibi denetim izinde kalır.
     """
     try:
         yield
-    except AccountRecordStale as exc:
+    except AccountSealMismatch as exc:
         if exc.ertelenen is not None:
             _muhur_bozuk_izi(exc.ertelenen, data_key, alan=exc.alan)
         raise
@@ -2358,7 +2404,7 @@ def _open_account_for_login(
     iz yazılamaz), satırın izi suçlanmaz. Meşru satırda durum iletisi değişmez (askı, kapalı hesap).
     """
     _check_fingerprint(data_key)
-    hesap = _muhurlu_satir(hesap_id, data_key, giris=True)
+    hesap = _muhurlu_satir(hesap_id, data_key)
     anahtar = _decrypt_audit_key(data_key)
     hesap = satir_izini_denetle(hesap, data_key)
     _check_wrap_digest(hesap, ozet, data_key)
@@ -2738,7 +2784,9 @@ def _check_session_password(
     Sarmal açıldıktan sonra satır mühürlü olmalı ve sarmalın özeti satırınkini tutmalıdır (modül
     başlığı "SARMALIN TAZELİĞİ"): oturum açıkken dosyaya eski sarmal konduysa eski parola parola
     doğrulamasını, parola değiştirmeyi ve kurtarma anahtarının yenilenmesini geçmez
-    (`WrapDigestMismatch`, `BUTUNLUK` satırı; sayaç artmaz).
+    (`WrapDigestMismatch`, `BUTUNLUK` satırı; sayaç artmaz). Mührü ya da izi tutmayan satır da
+    aynı muameleyi görür: ret ve `BUTUNLUK` satırı (alan `seal`, `kayit_mac` ya da `iz_boslugu`;
+    `_sealed_account`; orkestratör maddesi F-1 — mühür kolu eskiden satır yazmıyordu).
     """
     aktif = crypto.active_fingerprint()
     if aktif is None:
@@ -2905,6 +2953,24 @@ def confirm_recovery_key(recovery_key: str) -> None:
     logger.info("Kurtarma anahtarının saklandığı doğrulandı.")
 
 
+@sensitive_variables("dek")
+def _rol_reddinden_once_kayit(hesap_id: object) -> None:
+    """Kayıttaki rolün reddinden ÖNCE oturumdaki hesabın satırının mührü ve izi (orkestratör maddesi
+    F-1'in tutarlılığı; bağımsız denetim bulgusu): program dışından düşürülmüş rol, olağan rol
+    reddini (403) değil mühür reddini alır — `BUTUNLUK` satırı (alan `seal`, satırın izinde
+    `kayit_mac`, izdeki boşlukta `iz_boslugu`) ve 409 (`_sealed_account`). Mührü tutmayan satırın
+    hiçbir değerine güvenilmez (kilit açılışının sırası). DEK bellekteki anahtardır (parola
+    denenmez); meşru satırda hiçbir şey yazılmaz, çağıran rol reddini verir. Başka bir hesabın
+    kimliğiyle çağrılırsa (oturumdaki hesap değil) satır sorulmaz.
+    """
+    dek = crypto.active_key()
+    oturum = OTURUM.hesap_id()
+    if dek is None or oturum is None or str(hesap_id) != oturum:
+        return
+    if account_by_id(hesap_id) is not None:
+        _sealed_account(hesap_id, dek)
+
+
 @sensitive_variables("password", "veri_anahtari", "yeni_anahtar")
 def renew_recovery_key(*, hesap_id: object, password: str) -> str:
     """Kurtarma anahtarını yeniler; YENİ anahtarı döndürür (yanıtta BİR KEZ gösterilir).
@@ -2924,8 +2990,11 @@ def renew_recovery_key(*, hesap_id: object, password: str) -> str:
     with _state_lock:
         state = _require_state()
         rol_izinleri.yetki_oturum(rol_izinleri.Eylem.KURTARMA_ANAHTARI)
-        # Derin savunma: parolası sorulacak hesabın kayıttaki rolü de program yöneticisi.
+        # Derin savunma: parolası sorulacak hesabın kayıttaki rolü de program yöneticisi (parola
+        # denenmez). Rol burada mühürsüz okunur: tutmuyorsa ret, oturumdaki hesabın satırının
+        # mührü ve izi sorulduktan SONRA verilir (`_rol_reddinden_once_kayit`).
         if _account_role(hesap_id) != AccountRole.YONETICI:
+            _rol_reddinden_once_kayit(hesap_id)
             raise RolYetkisiz
         veri_anahtari, _ozet = _check_session_password(state, hesap_id, password)
         # Doğrulama sayacı sıfırlayıp dosyayı yazmış olabilir: güncel hâl yeniden okunur.
@@ -2991,7 +3060,7 @@ def unlock_with_recovery(*, recovery_key: str, hesap_id: object, new_password: s
         state = _require_state()
         veri_anahtari = _unwrap_with_recovery(state, recovery_key)
         _check_fingerprint(veri_anahtari)
-        hesap = _muhurlu_satir(hesap.id, veri_anahtari, giris=True)
+        hesap = _muhurlu_satir(hesap.id, veri_anahtari)
         iz_anahtari = _decrypt_audit_key(veri_anahtari)
         # Satırın izi (modül başlığı "SATIRIN İZİ"): eski bir kopyadan geri konmuş satırın
         # parolası kurtarma anahtarıyla da yenilenmez; çıkış yedekten geri yüklemedir. Rol ve

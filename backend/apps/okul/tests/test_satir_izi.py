@@ -534,7 +534,7 @@ def test_oturum_acikken_geri_sarilan_satir_parola_islemini_gecmez(islem: str) ->
         else:
             app_password.renew_recovery_key(hesap_id=ikinci.id, password=GECICI_PAROLA)
 
-    _reddedilir(hata, app_password._SEAL_MISMATCH_MESSAGE)
+    _reddedilir(hata, app_password.ISLEMDE_KAYIT_MESSAGE)
     _tek_butunluk(ikinci.id, son)
     assert (_ham(ikinci.id), _sarmal(ikinci.id), durum()["kurtarma"]) == (once, sarmal, kurtarma)
 
@@ -629,7 +629,8 @@ def test_iki_depo_karsilastirmasi_izi_bozuk_kapali_satirin_sarmalini_sildirmez()
     karşılaştırmasında da (kilit açılışındaki temizliğin eşi bir alttaki testte): kapanmış hesabın
     son iz satırı program dışından bozulur ve sarmalı geri konur. Satır "kaydı program dışından
     değiştirilmiş görünen hesaplar"dadır (`seal_mismatch`), silinebilir sarmallarda değildir;
-    program yöneticisinin onayı da sarmalı sildiremez."""
+    program yöneticisinin onayı da sarmalı sildiremez: ret öteki hesap işlemlerindeki gibi 409 ve
+    tek `BUTUNLUK` satırıdır (alan `kayit_mac`; orkestratör maddesi F-1, son sınama bulgusu)."""
     muhasip = _acik_muhasip()
     kimlik = str(muhasip.id)
     sarmal = _sarmal(kimlik)
@@ -644,8 +645,11 @@ def test_iki_depo_karsilastirmasi_izi_bozuk_kapali_satirin_sarmalini_sildirmez()
 
     assert kimlik in fark.seal_mismatch
     assert kimlik not in fark.wraps_of_closed and kimlik not in fark.removable_wraps
-    with pytest.raises(hesaplar.AccountServiceError):
+    son = _son_seq()
+    with pytest.raises(app_password.AccountRecordStale) as hata:
         hesaplar.remove_orphan_wraps(by_hesap_id=TEST_HESAP_ID, hesap_idler=[kimlik])
+    _reddedilir(hata, app_password.ISLEMDE_KAYIT_MESSAGE)
+    _tek_butunluk(kimlik, son)
     assert app_password._find_wrap(durum(), kimlik) is not None
 
 
@@ -1108,7 +1112,7 @@ def test_iz_boslugu_oturumdaki_parola_ve_kurtarma_yolunu_acmaz(degisim: str) -> 
         pytest.raises(app_password.AccountRecordStale) as hata,
     ):
         app_password.verify_password(hesap_id=kimlik, password=GECICI_PAROLA)
-    _reddedilir(hata, app_password.IZ_BOSLUGU_MESSAGE, neden=DEGISIMIN_NEDENI[degisim])
+    _reddedilir(hata, app_password.ISLEMDE_BOSLUK_MESSAGE, neden=DEGISIMIN_NEDENI[degisim])
 
     app_password.lock()
     with pytest.raises(app_password.AccountRecordStale) as hata:
@@ -1653,7 +1657,7 @@ def test_parola_degistirmenin_ikinci_adiminda_ret_butunluk_satiri_birakir(
             hesap_id=kimlik, current_password=GECICI_PAROLA, new_password=YENI_PAROLA
         )
 
-    _reddedilir(hata, app_password._SEAL_MISMATCH_MESSAGE)
+    _reddedilir(hata, app_password.ISLEMDE_KAYIT_MESSAGE)
     assert durum_.get("geri_sarildi") is True
     _tek_butunluk(kimlik, durum_["son"])
     assert _sarmal(kimlik) == sarmal

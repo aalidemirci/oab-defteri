@@ -26,8 +26,9 @@ PAROLA POLİTİKASI (tasarım TK15, §15 M-4; plan F1b-1 "Parola ve hatalı dene
 
 TANITICI (tasarım §4.4.4): kilit ekranında görünen hesap adıdır, gerçek ad olmaz.
 Varsayılanı rolden türer (`yonetici`, `yonetici-2`, `muhasip`, `dk-1`); program
-yöneticisi değiştirebilir. Tanıtıcı ad-soyaddaki üç harften uzun bir sözcüğü
-içeriyorsa program UYARIR, engellemez (`login_name_warning`; altın kural 3).
+yöneticisi değiştirebilir. Tanıtıcı ad-soyaddaki üç harften uzun bir sözcüğü ya da T.C.
+kimlik numarasına benzeyen 11 ardışık rakamı içeriyorsa program UYARIR, engellemez
+(`login_name_warning`; altın kural 3).
 """
 
 from __future__ import annotations
@@ -68,6 +69,15 @@ LOGIN_NAME_WARNING_MESSAGE = (
     "Tanıtıcı hesap sahibinin adını içeriyor. Tanıtıcı kilit ekranında herkese görünür; "
     "rolden türeyen bir tanıtıcı seçmeniz önerilir."
 )
+#: Tanıtıcıda 11 ardışık rakam (T.C. kimlik numarasına benzer; orkestratör maddesi F-5). Uyarıdır,
+#: engel değildir; kalıbı ad-soyad uyarısınınkidir.
+LOGIN_NAME_TCKN_WARNING_MESSAGE = (
+    "Tanıtıcı T.C. kimlik numarasına benzeyen 11 haneli bir sayı içeriyor. Tanıtıcı kilit "
+    "ekranında herkese görünür; rolden türeyen bir tanıtıcı seçmeniz önerilir."
+)
+#: T.C. kimlik numarasına benzeyen dizi: en az 11 ardışık onluk rakam (sağlama aranmaz; 12 ya da
+#: daha uzun dizi de bir 11'liyi içerir). Tanıtıcı biçimi yalnız ASCII rakamı kabul eder.
+_TCKN_BENZERI = re.compile(r"[0-9]{11}")
 
 #: Rolden türeyen varsayılan tanıtıcının kökü. Birden çok hesabı olabilen rollerde
 #: sıra eki gelir: ilk program yöneticisi `yonetici`, ikincisi `yonetici-2`;
@@ -138,11 +148,22 @@ def validate_display_name(value: str) -> str:
 
 
 def login_name_warning(login_name: str, display_name: str) -> str | None:
-    """Tanıtıcı ad-soyaddaki üç harften uzun bir sözcüğü içeriyorsa uyarı; yoksa None.
+    """Tanıtıcının kişisel veri uyarısı; yoksa None. Uyarı engel değildir (altın kural 3).
 
-    Karşılaştırma Türkçe harfleri ASCII'ye katlayarak yapılır ("Şükrü" ≡ "sukru"):
-    `sukru.k` de `ŞÜKRÜ` adını açık eder. Uyarı engel değildir (altın kural 3).
+    İki hâl, öncelik sırasıyla:
+
+    1. Tanıtıcıda T.C. kimlik numarasına benzeyen 11 ardışık rakam (`LOGIN_NAME_TCKN_WARNING_MESSAGE`;
+       orkestratör maddesi F-5; K9: kimlik numarası varsayılan kapalıdır, kilit ekranında hiç
+       görünmemeli).
+    2. Tanıtıcı ad-soyaddaki üç harften uzun bir sözcüğü içeriyor (`LOGIN_NAME_WARNING_MESSAGE`).
+       Karşılaştırma Türkçe harfleri ASCII'ye katlayarak yapılır ("Şükrü" ≡ "sukru"): `sukru.k`
+       de `ŞÜKRÜ` adını açık eder.
+
+    Alan tek iletidir (hesap açma yanıtının `uyari`'sı, kurulumun `login_name_warning`'i, yönetim
+    komutu): ikisi birden varsa birincisi verilir.
     """
+    if _TCKN_BENZERI.search(login_name):
+        return LOGIN_NAME_TCKN_WARNING_MESSAGE
     tanitici = normalize_header(login_name).replace(" ", "")
     for sozcuk in normalize_header(display_name).split():
         if len(sozcuk) >= _NAME_WORD_MIN and sozcuk in tanitici:

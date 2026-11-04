@@ -131,12 +131,20 @@ class SecurityRefusedResponse(APIException):
 
 @contextmanager
 def guvenlik_hatalari() -> Iterator[None]:
-    """Kilit açma retlerini kodlu yanıta, öteki servis hatalarını 400'e çevirir."""
+    """Kilit açma retlerini kodlu yanıta, öteki servis hatalarını 400'e çevirir.
+
+    Parola kaydının güvenlik dosyasından silinmesi yarıda kalırsa (`hesaplar.ParolaKaydiSilinemedi`,
+    bir `OSError`; kapama ve sahipsiz parola kayıtlarının silinmesi) servis retlerinin kalıbıyla 400
+    `validation_error` olur, ileti servisin Türkçe iletisidir (orkestratör maddesi F-7; eskiden 500).
+    Öteki `OSError`'lar burada yakalanmaz.
+    """
     try:
         yield
     except app_password.UnlockRefused as exc:
         raise SecurityRefusedResponse(exc) from exc
     except ValueError as exc:
+        raise serializers.ValidationError(str(exc)) from exc
+    except hesaplar.ParolaKaydiSilinemedi as exc:
         raise serializers.ValidationError(str(exc)) from exc
 
 

@@ -25,21 +25,25 @@ Hepsi yalnız program yöneticisine açıktır: rol kapısı (`rol_izinleri.KURA
   `HESAP` satırı) → `{hesap: satır}`. Oturumdaki hesap kendi hesabını kapatamaz, kendi parolasını
   buradan sıfırlayamaz (plan F1b-2 "Kendi hesabı"; servis reddeder, satırın eylemi de söyler).
 * `POST accounts/<id>/handover-slip/` → hesap teslim pusulası (E63; plan F1b-2 "E63 hesap teslim
-  pusulası"): yalnız PDF, ek olarak indirilir (`Cache-Control: no-store`); dosya SAKLANMAZ, bellekten
-  verilir; izi `BASIM` satırıdır (kod ve PDF'in sha256'sı; `hesaplar.teslim_pusulasi`), erişim
-  günlüğüne girmez. Kendi hesabına, kapalı hesaba ve kaydı ya da izi tutmayan hesaba basılmaz
+  pusulası"): yalnız PDF, ek olarak indirilir (`Cache-Control: no-store`); dosya adı rol etiketini
+  taşır (`Hesap-Teslim-Pusulası_Muhasip_03.11.2026.pdf`; tanıtıcı ve ad girmez); dosya SAKLANMAZ,
+  bellekten verilir; izi `BASIM` satırıdır (kod ve PDF'in sha256'sı; `hesaplar.teslim_pusulasi`),
+  erişim günlüğüne girmez. Kendi hesabına, kapalı hesaba ve kaydı ya da izi tutmayan hesaba basılmaz
   (satırın `pusula` eylemi aynı nedenleri söyler). İz satırı yazacağı için yöntem POST'tur.
 
 GEÇİCİ PAROLA (plan F1b-2 "Geçici parola"): istemci önerir; sunucu yalnız politikayı denetler
 (`hesap_kurallari.validate_password`) ve parolayı sarmala koyar. Parola HİÇBİR yanıtta, günlükte,
 iz satırında ya da iletide yoktur (`sensitive_variables`; doğrulama iletisi parolayı yankılamaz).
 
-RET KODLARI: servis reddi 400 `validation_error` (Türkçe ileti); kaydı ya da izi tutmayan hesap 409
-`hesap_muhru_tutmadi` (ileti mühür ya da iz boşluğu iletisi; satır izinde ve izdeki boşlukta
-`BUTUNLUK` satırı kalır, yalnız mührü tutmayan hesapta satır yazılmaz — o hesap
-`security/integrity/audit/`'in `muhru_tutmayan` listesinde canlı görünür; tasarım §4.4.5 olayı
-denetim izine kilit açılışında yazdırır); rol 403 `rol_yetkisiz`; denetim izi yazılamazsa 409
-`iz_yazilamadi`.
+RET KODLARI: servis reddi 400 `validation_error` (Türkçe ileti; boş, gönderilmemiş ya da null tanıtıcı,
+ad-soyad, rol ve geçici parola da servisin iletisini alır — serileştirici boş değeri servise bırakır,
+orkestratör maddesi F-6); kaydı ya da izi tutmayan hesap 409 `hesap_muhru_tutmadi` (ileti mühür ya
+da iz boşluğu iletisi; mühürde, satır izinde ve izdeki boşlukta `BUTUNLUK` satırı kalır —
+orkestratör maddesi F-1; mührü tutmayan hesap ayrıca `security/integrity/audit/`'in
+`muhru_tutmayan` listesinde canlı görünür); rol 403 `rol_yetkisiz`; denetim izi yazılamazsa 409
+`iz_yazilamadi`. Kapamada parola kaydı güvenlik dosyasından (ya da eski kopyalarından) silinemezse
+400 `validation_error`, ileti `hesaplar.CLOSE_WRAP_MESSAGE` (hesap kapanmıştır; orkestratör maddesi
+F-7, `hesaplar.ParolaKaydiSilinemedi`).
 
 İŞLEM SINIRI (orkestratör maddesi C-2): uçlar istek boyu işlem (`atomic`) AÇMAZ ve ayarlarda
 `ATOMIC_REQUESTS` yoktur. Servisler `BUTUNLUK` satırını ve yanlış alarm ayıklamasını KENDİ
@@ -62,7 +66,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.okul.models import AccountRole
-from apps.okul.services import hesap_kurallari, hesap_teslim_pusulasi, hesaplar
+from apps.okul.serializers import servise_birakan_metin
+from apps.okul.services import hesap_kurallari, hesaplar
 from apps.okul.views_oturum import _yazar_hesabi, guvenlik_hatalari
 
 #: Hesabı bulunamayan ayrıntı ve eylem yanıtı (404; sözlük §1 "Kullanıcılar").
@@ -70,18 +75,19 @@ _BULUNAMADI = "Hesap bulunamadı."
 
 
 class HesapAcmaSerializer(serializers.Serializer[dict[str, Any]]):
-    """Hesap açma: rol, tanıtıcı, ad-soyad ve geçici parola (parola kırpılmaz)."""
+    """Hesap açma: rol, tanıtıcı, ad-soyad ve geçici parola (parola kırpılmaz). Boş, null ya da
+    gönderilmemiş değer servise gider, ret servisin Türkçe iletisidir (`servise_birakan_metin`)."""
 
-    rol = serializers.CharField()
-    tanitici = serializers.CharField(trim_whitespace=False)
-    ad_soyad = serializers.CharField(trim_whitespace=False)
-    gecici_parola = serializers.CharField(trim_whitespace=False, write_only=True)
+    rol = servise_birakan_metin(kirp=True)
+    tanitici = servise_birakan_metin()
+    ad_soyad = servise_birakan_metin()
+    gecici_parola = servise_birakan_metin(write_only=True)
 
 
 class ParolaSifirlamaSerializer(serializers.Serializer[dict[str, Any]]):
-    """Parola sıfırlama: geçici parola (parola kırpılmaz)."""
+    """Parola sıfırlama: geçici parola (parola kırpılmaz; boş değer servise)."""
 
-    gecici_parola = serializers.CharField(trim_whitespace=False, write_only=True)
+    gecici_parola = servise_birakan_metin(write_only=True)
 
 
 def _satir(hesap_id: object) -> dict[str, Any]:
@@ -187,11 +193,15 @@ class KullaniciTeslimPusulasiView(APIView):
 
     def post(self, request: Request, hesap_id: UUID) -> FileResponse:
         with guvenlik_hatalari():
-            pdf = hesaplar.teslim_pusulasi(by_hesap_id=_yazar_hesabi() or "", hesap_id=hesap_id)
+            pusula = hesaplar.teslim_pusulasi(by_hesap_id=_yazar_hesabi() or "", hesap_id=hesap_id)
+        # Dosya adı rol etiketini taşır, tanıtıcıyı ve adı taşımaz (orkestratör maddesi F-2;
+        # `hesap_teslim_pusulasi.dosya_adi`). Türkçe harfli ad Content-Disposition'a Django'nun
+        # kodlamasıyla girer (`filename*=utf-8''…`, RFC 5987/6266; kurtarma anahtarı belgesinin
+        # kalıbı).
         yanit = FileResponse(
-            BytesIO(pdf),
+            BytesIO(pusula.pdf),
             as_attachment=True,
-            filename=hesap_teslim_pusulasi.dosya_adi(),
+            filename=pusula.dosya_adi,
             content_type="application/pdf",
         )
         yanit["Cache-Control"] = "no-store"

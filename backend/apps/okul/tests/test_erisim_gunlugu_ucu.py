@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date, datetime, timedelta
+import uuid
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +32,8 @@ from apps.okul.models import (
     Student,
 )
 from apps.okul.oturum import SISTEM, Yazar, yazar_olarak
-from apps.okul.tests.hesap_ortak import hesap_ac, muhurle
+from apps.okul.services import hesaplar
+from apps.okul.tests.hesap_ortak import ham_guncelle, hesap_ac, muhurle
 from conftest import TEST_HESAP_ID, TEST_TANITICI, oturumu_ac_test
 from shared.exceptions import RolYetkisiz
 
@@ -65,6 +67,11 @@ def satir(an: datetime, **alanlar: Any) -> AccessLog:
 
 def _oku(**sorgu: Any) -> Any:
     return APIClient().get(YOL, sorgu)
+
+
+def _gun(an: Any) -> str | None:
+    """Hesabın Europe/Istanbul günü, yyyy-aa-gg (hesap özetinin `acilis`/`kapanis` biçimi; F-3)."""
+    return None if an is None else f"{timezone.localtime(an):%Y-%m-%d}"
 
 
 def _muhasip() -> Account:
@@ -192,6 +199,8 @@ def test_satir_kisisizdir_hesap_rol_etiketi_ve_taniticiyla_anilir() -> None:
         "id": str(dk.id),
         "tanitici": "dk-1",
         "rol_etiketi": "Denetleme Kurulu",
+        "acilis": _gun(dk.opened_at),
+        "kapanis": None,
     }
     assert (yeni["tur"], yeni["tur_adi"]) == (
         "OZEL_NITELIKLI_ALAN",
@@ -199,7 +208,13 @@ def test_satir_kisisizdir_hesap_rol_etiketi_ve_taniticiyla_anilir() -> None:
     )
     assert (yeni["model"], yeni["kayit"], yeni["alan"]) == ("okul.Student", "7", "first_name")
     assert (yeni["belge_ozeti"], yeni["satir_sayisi"]) == (None, None)
-    assert eski["hesap"] == {"id": str(muhasip.id), "tanitici": "muhasip", "rol_etiketi": "Muhasip"}
+    assert eski["hesap"] == {
+        "id": str(muhasip.id),
+        "tanitici": "muhasip",
+        "rol_etiketi": "Muhasip",
+        "acilis": _gun(muhasip.opened_at),
+        "kapanis": None,
+    }
     assert (eski["model"], eski["kayit"], eski["alan"]) == (None, None, None)
     assert (eski["belge_ozeti"], eski["satir_sayisi"]) == (OZET, 12)
     assert eski["zaman"] == "2026-10-01T12:00:00+03:00"
@@ -232,11 +247,152 @@ def test_secenekler_turler_ve_gunlukte_satiri_olan_hesaplar() -> None:
     assert govde["turler"] == [
         {"tur": tur, "tur_adi": erisim_gunlugu.TUR_ADLARI[tur]} for tur in AccessKind.values
     ]
+    yonetici = Account.objects.get(pk=TEST_HESAP_ID)
     assert govde["hesaplar"] == [
-        {"id": TEST_HESAP_ID, "tanitici": TEST_TANITICI, "rol_etiketi": "Program yöneticisi"},
-        {"id": str(muhasip.id), "tanitici": "muhasip", "rol_etiketi": "Muhasip"},
-        {"id": str(dk.id), "tanitici": "dk-1", "rol_etiketi": "Denetleme Kurulu"},
+        {
+            "id": TEST_HESAP_ID,
+            "tanitici": TEST_TANITICI,
+            "rol_etiketi": "Program yöneticisi",
+            "acilis": _gun(yonetici.opened_at),
+            "kapanis": None,
+        },
+        {
+            "id": str(muhasip.id),
+            "tanitici": "muhasip",
+            "rol_etiketi": "Muhasip",
+            "acilis": _gun(muhasip.opened_at),
+            "kapanis": None,
+        },
+        {
+            "id": str(dk.id),
+            "tanitici": "dk-1",
+            "rol_etiketi": "Denetleme Kurulu",
+            "acilis": _gun(dk.opened_at),
+            "kapanis": None,
+        },
     ]
+
+
+#: Kimlik sırası açılış sırasının TERSİ (eski hesabın kimliği büyük): seçeneklerin sırası kimliğe
+#: kalsaydı yeni hesap önce gelirdi (F-3 testi her koşuda aynı sonucu verir).
+ESKI_KIMLIK = uuid.UUID("ffffffff-ffff-4fff-bfff-ffffffffffff")
+YENI_KIMLIK = uuid.UUID("00000000-0000-4000-8000-000000000001")
+
+
+def kimlikleri_sabitle(monkeypatch: pytest.MonkeyPatch, *kimlikler: uuid.UUID) -> None:
+    """Sonraki hesap açılışlarına sırayla bu kimlikleri verir (sonra rastgele `uuid4`)."""
+    kalan = iter(kimlikler)
+    monkeypatch.setattr(
+        Account._meta.get_field("id"), "_get_default", lambda: next(kalan, None) or uuid.uuid4()
+    )
+
+
+#: F-3'ün iki kolu: eski hesabın açılış ve kapanış anı, yeni hesabın açılış anı (UTC) ve üç an için
+#: beklenen Europe/Istanbul günleri.
+F3_KOLLARI: dict[str, tuple[datetime, datetime, datetime, tuple[str, str, str]]] = {
+    # Eski hesap geçen yıl açılmış, geçen ay kapanmış; anlar UTC'de gece yarısından önce,
+    # Europe/Istanbul'da ertesi gündür (gün yerel gündür).
+    "farkli_gun": (
+        datetime(2025, 8, 31, 21, 30, tzinfo=UTC),
+        datetime(2026, 10, 14, 22, 15, tzinfo=UTC),
+        datetime(2026, 10, 15, 6, 0, tzinfo=UTC),
+        ("2025-09-01", "2026-10-15", "2026-10-15"),
+    ),
+    # Yanlış kişiye açılan hesap aynı gün kapatılıp aynı tanıtıcıyla yeniden açılır: üç an aynı
+    # yerel gündedir, seçeneklerin sırasını gün değil an verir.
+    "ayni_gun": (
+        datetime(2026, 10, 15, 5, 0, tzinfo=UTC),
+        datetime(2026, 10, 15, 6, 0, tzinfo=UTC),
+        datetime(2026, 10, 15, 7, 0, tzinfo=UTC),
+        ("2026-10-15", "2026-10-15", "2026-10-15"),
+    ),
+}
+
+
+@pytest.mark.parametrize("kol", list(F3_KOLLARI))
+def test_ayni_taniticili_eski_ve_yeni_hesap_acilis_ve_kapanisla_ayrilir(
+    kol: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Orkestratör maddesi F-3: tanıtıcı yalnız açık hesaplar arasında tekildir; kapanan "muhasip"
+    hesabının yerine açılan yeni hesap da "muhasip"tir. Satırların hesap özeti ve hesap seçenekleri
+    ikisini açılış ve kapanış günüyle (Europe/Istanbul günü, yyyy-aa-gg; açık hesapta kapanış yok)
+    ayırır; seçeneklerde aynı tanıtıcı açılış ANI sırasıyladır — aynı gün kapatılıp yeniden açılan
+    hesapta da. Kimlik sırası bilerek açılış sırasının tersine kurulur: sıra kimliğe ya da güne
+    kalırsa test her koşuda düşer. Ad-soyad yine yoktur."""
+    eski_acilis, eski_kapanis, yeni_acilis, gunler = F3_KOLLARI[kol]
+    eski_acilis_gunu, eski_kapanis_gunu, yeni_acilis_gunu = gunler
+    kimlikleri_sabitle(monkeypatch, ESKI_KIMLIK, YENI_KIMLIK)
+    eski = _muhasip()
+    hesaplar.close_account(by_hesap_id=TEST_HESAP_ID, hesap_id=eski.id)
+    eski = muhurle(Account.objects.get(pk=eski.id), opened_at=eski_acilis, closed_at=eski_kapanis)
+    yeni = muhurle(
+        hesap_ac(AccountRole.MUHASIP, ad="Uydurmaca Yenigelen"),
+        status=AccountStatus.ACIK,
+        opened_at=yeni_acilis,
+    )
+    assert (eski.id, yeni.id) == (ESKI_KIMLIK, YENI_KIMLIK)
+    assert eski.login_name == yeni.login_name == "muhasip"
+    satir(yerel(2026, 10, 1), account_id=str(eski.id), role="muhasip")
+    satir(yerel(2026, 10, 20), account_id=str(yeni.id), role="muhasip")
+
+    govde = _oku().json()
+
+    son, ilk = govde["satirlar"]
+    assert son["hesap"] == {
+        "id": str(yeni.id),
+        "tanitici": "muhasip",
+        "rol_etiketi": "Muhasip",
+        "acilis": yeni_acilis_gunu,
+        "kapanis": None,
+    }
+    assert ilk["hesap"] == {
+        "id": str(eski.id),
+        "tanitici": "muhasip",
+        "rol_etiketi": "Muhasip",
+        "acilis": eski_acilis_gunu,
+        "kapanis": eski_kapanis_gunu,
+    }
+    assert [(h["id"], h["acilis"], h["kapanis"]) for h in govde["hesaplar"]] == [
+        (str(eski.id), eski_acilis_gunu, eski_kapanis_gunu),
+        (str(yeni.id), yeni_acilis_gunu, None),
+    ]
+    metin = json.dumps(govde, ensure_ascii=False)
+    assert MUHASIP_ADI not in metin and "Uydurmaca Yenigelen" not in metin
+
+
+@pytest.mark.parametrize(
+    "bozuk", ["2026-02-30 10:00:00.000000", "9999-12-31 23:59:59.000000", "zzz"]
+)
+def test_hesabin_bozuk_acilis_ani_ekrani_dusurmez(bozuk: str) -> None:
+    """Bağımsız denetim bulgusu (F-3'ün gerilemesi): hesabın açılış ve kapanış anı program dışından
+    biçime uyan ama geçersiz (30 Şubat), yerel güne çevrilemeyen (9999'un son saati) ya da biçimsiz
+    bir değerle yazılmışsa uç yine 200 döner; o hesabın günleri None'dır (kaydın söylemediği),
+    öteki hesaplar etkilenmez. Eskiden ORM'nin tarih dönüştürücüsü ValueError yükseltiyor, uç 400
+    ve İngilizce bir iç ileti veriyordu. Hesap kapalıdır: iki an da doludur (veritabanı kısıtı
+    kapanışı yalnız kapalı hesapta kabul eder)."""
+    muhasip = _muhasip()
+    dk = _dk()
+    satir(yerel(2026, 10, 1), account_id=str(muhasip.id), role="muhasip")
+    satir(yerel(2026, 10, 2), account_id=str(dk.id), role="denetleme_kurulu")
+    hesaplar.close_account(by_hesap_id=TEST_HESAP_ID, hesap_id=muhasip.id)
+    ham_guncelle(muhasip.id, opened_at=bozuk, closed_at=bozuk)
+
+    yanit = _oku()
+
+    assert yanit.status_code == 200, yanit.content
+    govde = yanit.json()
+    secenekler = {h["id"]: h for h in govde["hesaplar"]}
+    assert (secenekler[str(muhasip.id)]["acilis"], secenekler[str(muhasip.id)]["kapanis"]) == (
+        None,
+        None,
+    )
+    assert secenekler[str(muhasip.id)]["tanitici"] == "muhasip"
+    assert secenekler[str(dk.id)]["acilis"] == _gun(dk.opened_at)
+    ozetler = {s["hesap"]["id"]: s["hesap"] for s in govde["satirlar"]}
+    assert (ozetler[str(muhasip.id)]["acilis"], ozetler[str(muhasip.id)]["kapanis"]) == (None, None)
+    assert ozetler[str(dk.id)]["acilis"] == _gun(dk.opened_at)
+    # Okunamayan an seçeneklerin rol sırasını bozmaz (muhasip, sonra Denetleme Kurulu).
+    assert [h["id"] for h in govde["hesaplar"]][-2:] == [str(muhasip.id), str(dk.id)]
 
 
 # ============================================================ süzgeçler

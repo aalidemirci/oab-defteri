@@ -55,6 +55,7 @@ from apps.okul.serializers import (
     SchoolTermSerializer,
     SchoolYearSerializer,
     StudentSerializer,
+    servise_birakan_metin,
 )
 from apps.okul.services import app_password as app_password_service
 from apps.okul.services import encrypted_backup as encrypted_backup_service
@@ -475,11 +476,15 @@ class PersonnelTemplateView(APIView):
 # günlükte veya hata mesajında yankılanmaz. Hesap silme ve hesapsız kipe dönme ucu
 # YOKTUR (tasarım §5.3).
 class SecurityEnableSerializer(serializers.Serializer[dict[str, Any]]):
-    """İlk program yöneticisi hesabı: tanıtıcı (varsayılan `yonetici`), ad-soyad, parola."""
+    """İlk program yöneticisi hesabı: tanıtıcı (gönderilmezse `yonetici`), ad-soyad, parola.
 
-    tanitici = serializers.CharField(required=False, default="yonetici")
-    ad_soyad = serializers.CharField(trim_whitespace=False)
-    parola = serializers.CharField(trim_whitespace=False)
+    Boş değer servise gider, ret servisin Türkçe iletisidir (`servise_birakan_metin`; orkestratör
+    maddesi F-6): boş tanıtıcı "Tanıtıcı boş olamaz." alır, varsayılana dönmez.
+    """
+
+    tanitici = servise_birakan_metin(kirp=True, default="yonetici")
+    ad_soyad = servise_birakan_metin()
+    parola = servise_birakan_metin()
 
 
 class AppPasswordRequestSerializer(serializers.Serializer[dict[str, Any]]):

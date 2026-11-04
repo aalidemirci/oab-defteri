@@ -13,8 +13,15 @@ C-1..C-5).
 * C-3: denetim izi yazılamazsa 409 `iz_yazilamadi`, sabit Türkçe ileti (eskiden 500).
 * C-4: izdeki boşluk ayrı ileti ve ayrı `BUTUNLUK` alanı (`iz_boslugu`); satırın izi eskisi gibi.
 * C-5: oturumdaki hesabı isteyen oturum uçları yazar bağlamından okur.
+* F-1: mührü tutmayan hesabın reddi de `BUTUNLUK` satırı yazar (hesap işlemleri, oturumdaki parola
+  doğrulaması, işlem içi denetimin ertelenen satırı); mühür ve iz kaydın durumundan ve rolünden
+  ÖNCE sorulur (program dışından değiştirilmiş durum ya da rol de mühür reddini alır; meşru kapalı
+  hesabın iletisi değişmez; Kullanıcılar satırı aynı sırayı izler).
+* F-6'nın null kolu: JSON null da boş değerdir, servisin iletisini alır.
+* F-5: tanıtıcıda 11 haneli sayı uyarısı; F-6: boş alan servisin iletisini alır; F-7: parola kaydı
+  güvenlik dosyasından silinemezse Türkçe ileti (eskiden 500).
 
-Adlar ve parolalar uydurmadır; gerçek kişi değildir.
+Adlar, parolalar ve numaralar uydurmadır; gerçek kişi değildir.
 """
 
 from __future__ import annotations
@@ -541,18 +548,42 @@ def test_ayarlarda_istek_boyu_islem_yok() -> None:
         assert not ayar.get("ATOMIC_REQUESTS", False)
 
 
+#: Program dışından kapatılmış gibi yazılan satırın kapanış anı (ham SQL; mühür yenilenmez).
+HAM_KAPANIS = "2026-11-03 09:00:00.000000"
+
+
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("bozulma", ["satir_izi", "muhur", "durum"])
 @pytest.mark.parametrize("uc", ["acma", "kapat", "askidan_cikar", "sifirla", "pusula"])
-def test_reddedilen_islem_butunluk_satirini_birakir(uc: str) -> None:
-    """Orkestratör maddesi C-2 (otomatik commit kipinde, üretimdeki gibi): işlem gören hesabın satırı
-    eski kopyaya geri sarılmıştır (kapama, askıdan çıkarma, sıfırlama, teslim pusulası) ya da
-    izden ilgisiz bir satır silinmiş ve işlemi yapanın son kaydı ondan eskidir (açma). Uç 409
-    `hesap_muhru_tutmadi` döner; reddin `BUTUNLUK` satırı yanıttan SONRA da kalır (alan: satırın
-    izi `kayit_mac`, boşluk `iz_boslugu`); satır değişmez; pusulada `BASIM` satırı da yoktur."""
+def test_reddedilen_islem_butunluk_satirini_birakir(uc: str, bozulma: str) -> None:
+    """Orkestratör maddeleri C-2 ve F-1 (otomatik commit kipinde, üretimdeki gibi): işlem gören
+    hesabın satırı eski kopyaya geri sarılmıştır ya da program dışından değiştirilmiştir (mühür;
+    kapama, askıdan çıkarma, sıfırlama, teslim pusulası); açmada işlemi yapanın kaydı tutmaz (izden
+    ilgisiz bir satır silinmiş ve son kaydı ondan eskidir, ya da satırı program dışından
+    değiştirilmiştir). Uç 409 `hesap_muhru_tutmadi` döner; reddin `BUTUNLUK` satırı yanıttan SONRA
+    da kalır (alan: satırın izi `kayit_mac`, boşluk `iz_boslugu`, mühür `seal` — mühür kolu da
+    yazar, F-1); satır değişmez; pusulada `BASIM` satırı da yoktur.
+
+    `durum` kolu (bağımsız denetim bulgusu, F-1'in tutarlılığı): program dışından değiştirilen
+    DURUMDUR — işlem gören KAPALI, açmada işlemi yapan askıda gösterilir. Mührü tutmayan satırın
+    durumuna güvenilmez: ret olağan "Hesap kapalı…" / "İşlemi yapan hesap açık değil…" (400)
+    değil, mühür reddidir (409 ve `seal` satırı)."""
     if uc == "acma":
-        dolgu = _dolgu(3)
-        _tetikleyicisiz("DELETE FROM okul_audittrail WHERE seq = %s", [dolgu[1]])
         hedef = TEST_HESAP_ID
+        if bozulma == "muhur":
+            ham_guncelle(TEST_HESAP_ID, login_name="program-disi")
+            ileti, alan = hesaplar._SEAL_MESSAGE, "seal"
+        elif bozulma == "durum":
+            ham_guncelle(
+                TEST_HESAP_ID,
+                status=AccountStatus.ASKIDA,
+                suspend_reason=SuspendReason.UYELIK_DUSTU,
+            )
+            ileti, alan = hesaplar._SEAL_MESSAGE, "seal"
+        else:
+            dolgu = _dolgu(3)
+            _tetikleyicisiz("DELETE FROM okul_audittrail WHERE seq = %s", [dolgu[1]])
+            ileti, alan = hesaplar._GAP_MESSAGE, app_password.IZ_BOSLUGU_ALANI
         yol, govde = (
             API,
             {
@@ -562,14 +593,23 @@ def test_reddedilen_islem_butunluk_satirini_birakir(uc: str) -> None:
                 "gecici_parola": GECICI_PAROLA,
             },
         )
-        ileti, alan = hesaplar._GAP_MESSAGE, app_password.IZ_BOSLUGU_ALANI
     else:
         hesap = hesap_ac(AccountRole.MUHASIP, ad="Uydurma Muhasip")
         if uc == "askidan_cikar":
             hesap = muhurle(
                 hesap, status=AccountStatus.ASKIDA, suspend_reason=SuspendReason.UYELIK_DUSTU
             )
-        hesap = _geri_sarilmis(hesap)
+        if bozulma == "muhur":
+            ham_guncelle(hesap.id, login_name="program-disi")
+            alan = "seal"
+        elif bozulma == "durum":
+            ham_guncelle(
+                hesap.id, status=AccountStatus.KAPALI, suspend_reason="", closed_at=HAM_KAPANIS
+            )
+            alan = "seal"
+        else:
+            hesap = _geri_sarilmis(hesap)
+            alan = app_password.KAYIT_MAC_ALANI
         hedef = str(hesap.id)
         ek = {
             "kapat": "close",
@@ -579,7 +619,7 @@ def test_reddedilen_islem_butunluk_satirini_birakir(uc: str) -> None:
         }[uc]
         yol = f"{API}{hedef}/{ek}/"
         govde = {"gecici_parola": YENI_PAROLA} if uc == "sifirla" else {}
-        ileti, alan = hesaplar._SEAL_MESSAGE, app_password.KAYIT_MAC_ALANI
+        ileti = hesaplar._SEAL_MESSAGE
     son = _son_seq()
     once = Account.objects.filter(pk=hedef).values().first()
 
@@ -730,6 +770,173 @@ def test_islem_icindeki_denetimin_ertelenen_satiri_boslugun_alanini_tasir() -> N
     ]
 
 
+def test_islem_icindeki_muhur_denetiminin_ertelenen_satiri_muhrun_alanini_tasir() -> None:
+    """Orkestratör maddesi F-1, O-4'ün yolu: işlem içinden yapılan mühür denetimi (`iz_yaz=False`)
+    satırı İŞLEMİN İÇİNDE yazmaz (geri alınırdı); işlem geri alındıktan sonra `BUTUNLUK` satırı
+    alan `seal` ile kendi işleminde yazılır."""
+    hesap = muhurle(
+        hesap_ac(AccountRole.MUHASIP, ad="Uydurma Muhasip"),
+        status=AccountStatus.ACIK,
+        password_changed_at=timezone.now(),
+    )
+    ham_guncelle(hesap.id, login_name="program-disi")
+    son = _son_seq()
+    with (
+        pytest.raises(app_password.AccountSealMismatch) as hata,
+        app_password._ertelenen_butunluk(TEST_DEK),
+        transaction.atomic(),
+    ):
+        app_password._sealed_account(hesap.id, TEST_DEK, iz_yaz=False)
+    assert not isinstance(hata.value, app_password.AccountRecordStale)
+    assert hata.value.alan == "seal" and hata.value.ertelenen is not None
+    assert [(s.object_id, s.changed_fields) for s in _butunluk_satirlari(son)] == [
+        (str(hesap.id), ["seal"])
+    ]
+
+
+@pytest.mark.parametrize("islem", ["dogrulama", "degistirme"])
+def test_oturumdaki_parola_dogrulamasinda_muhur_reddi_butunluk_yazar(islem: str) -> None:
+    """Orkestratör maddesi F-1 (oturumdaki parola doğrulaması): oturum açıkken hesap satırı program
+    dışından değiştirilirse doğru parola da parola doğrulamasını ve parola değiştirmeyi geçmez;
+    ret 409 `hesap_muhru_tutmadi` ve `BUTUNLUK` satırıdır (`SISTEM`, alan `seal`) — satırın izi ve
+    sarmal özeti kollarıyla aynı (eskiden mühür kolu satır yazmıyordu). Satır ve sarmal değişmez,
+    hatalı deneme sayılmaz."""
+    ham_guncelle(TEST_HESAP_ID, login_name="program-disi")
+    once = (Account.objects.filter(pk=TEST_HESAP_ID).values().first(), sarmal(TEST_HESAP_ID))
+    son = _son_seq()
+
+    with pytest.raises(app_password.AccountSealMismatch) as hata:
+        if islem == "dogrulama":
+            app_password.verify_password(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
+        else:
+            app_password.change_password(
+                hesap_id=TEST_HESAP_ID, current_password=TEST_PAROLA, new_password=YENI_PAROLA
+            )
+
+    assert (hata.value.code, hata.value.status_code) == ("hesap_muhru_tutmadi", 409)
+    satirlar = list(AuditTrail.objects.filter(seq__gt=son).order_by("seq"))
+    assert [(s.action, s.actor, s.object_id, s.changed_fields) for s in satirlar] == [
+        (AuditAction.BUTUNLUK, "SISTEM", TEST_HESAP_ID, ["seal"])
+    ]
+    assert (
+        Account.objects.filter(pk=TEST_HESAP_ID).values().first(),
+        sarmal(TEST_HESAP_ID),
+    ) == once
+    assert app_password.wrap_failure_state(TEST_HESAP_ID) == (0, False)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_parola_degistirme_ucunda_muhur_reddi_satiri_kalir() -> None:
+    """Orkestratör maddeleri F-1 ve C-2 (otomatik commit kipinde): kendi parolasını değiştirme ucu
+    mührü tutmayan oturum hesabında 409 döner; `BUTUNLUK` satırı (alan `seal`) yanıttan sonra kalır."""
+    ham_guncelle(TEST_HESAP_ID, login_name="program-disi")
+    son = _son_seq()
+
+    yanit = _istemci().post(
+        "/api/v1/security/change-password/",
+        {"parola": TEST_PAROLA, "yeni_parola": YENI_PAROLA},
+        format="json",
+    )
+
+    assert yanit.status_code == 409, yanit.content
+    assert yanit.json()["code"] == "hesap_muhru_tutmadi"
+    assert [(s.object_id, s.changed_fields) for s in _butunluk_satirlari(son)] == [
+        (TEST_HESAP_ID, ["seal"])
+    ]
+
+
+@pytest.mark.parametrize("uc", ["kapat", "askidan_cikar", "sifirla", "pusula"])
+def test_mesru_kapali_hesapta_ret_kapali_hesap_iletisidir(uc: str) -> None:
+    """Sıra değişikliğinin (F-1'in tutarlılığı: mühür ve iz önce, durum en son) meşru yüzü: program
+    eliyle kapatılmış hesabın mührü ve izi tutar; ret eskisi gibi 400 "Hesap kapalı…"dır, `BUTUNLUK`
+    satırı yazılmaz. Satırın eylemi aynı nedeni söyler."""
+    hesap = hesap_ac(AccountRole.MUHASIP, ad="Uydurma Muhasip")
+    hesaplar.close_account(by_hesap_id=TEST_HESAP_ID, hesap_id=hesap.id)
+    ek = {
+        "kapat": "close",
+        "askidan_cikar": "unsuspend",
+        "sifirla": "reset-password",
+        "pusula": "handover-slip",
+    }[uc]
+    son = _son_seq()
+
+    yanit = _istemci().post(
+        f"{API}{hesap.id}/{ek}/",
+        {"gecici_parola": YENI_PAROLA} if uc == "sifirla" else {},
+        format="json",
+    )
+
+    assert yanit.status_code == 400, yanit.content
+    assert yanit.json()["message"] == hesaplar._CLOSED_MESSAGE
+    assert _butunluk_satirlari(son) == []
+    eylem = {
+        "kapat": hesaplar.EYLEM_KAPAT,
+        "askidan_cikar": hesaplar.EYLEM_ASKIDAN_CIKAR,
+        "sifirla": hesaplar.EYLEM_PAROLA_SIFIRLA,
+        "pusula": hesaplar.EYLEM_PUSULA,
+    }[uc]
+    satir = hesaplar.kullanici_satiri(hesap.id)
+    assert satir is not None
+    assert satir["eylemler"][eylem]["neden"] == hesaplar._CLOSED_MESSAGE
+    assert satir["giris"]["neden"] == hesaplar._LOGIN_CLOSED_MESSAGE
+
+
+def test_program_disindan_kapatilan_hesabin_satiri_kayit_iletisini_soyler() -> None:
+    """Kullanıcılar satırı servisle aynı sırayı izler (`_kullanici_satiri`; kayıt önce, durum en
+    son): program dışından KAPALI yapılmış satırın eylemleri ve giriş engeli "Hesap kapalı…"
+    değil, kaydı tutmayan hesabın iletisidir."""
+    hesap = hesap_ac(AccountRole.MUHASIP, ad="Uydurma Muhasip")
+    ham_guncelle(hesap.id, status=AccountStatus.KAPALI, closed_at=HAM_KAPANIS)
+
+    satir = hesaplar.kullanici_satiri(hesap.id)
+
+    assert satir is not None and satir["kayit_tutuyor"] is False
+    for eylem, neden in satir["eylemler"].items():
+        assert neden == {"yapilabilir": False, "neden": hesaplar._ROW_SEAL_MESSAGE}, eylem
+    assert satir["giris"] == {"yapabilir": False, "neden": hesaplar._ROW_SEAL_MESSAGE}
+
+
+def test_kurtarma_yenilemede_program_disindan_dusurulen_rol_muhur_reddidir() -> None:
+    """F-1'in tutarlılığı (oturumdaki parola doğrulaması): kurtarma anahtarının yenilenmesi rolü
+    önce mühürsüz okur. Oturumdaki program yöneticisinin rolü program dışından düşürülmüşse ret
+    olağan rol reddi (403) değil mühür reddidir: 409 ve `BUTUNLUK` satırı (alan `seal`); parola
+    denenmez (hatalı deneme sayılmaz), güvenlik dosyası değişmez. Meşru rol reddi ayrı testtedir
+    (`test_yetki_kapisi`)."""
+    ham_guncelle(TEST_HESAP_ID, role=AccountRole.MUHASIP)
+    once = app_password.state_path().read_bytes()
+    son = _son_seq()
+
+    with pytest.raises(app_password.AccountSealMismatch) as hata:
+        app_password.renew_recovery_key(hesap_id=TEST_HESAP_ID, password="Yanlis-Parola-9!")
+
+    assert (hata.value.code, hata.value.status_code) == ("hesap_muhru_tutmadi", 409)
+    # Kişi zaten oturumdadır: ileti kilit ekranınınki ("giriş açılmadı") değil, işleminkidir.
+    assert str(hata.value) == app_password.ISLEMDE_KAYIT_MESSAGE
+    assert [(s.object_id, s.changed_fields) for s in _butunluk_satirlari(son)] == [
+        (TEST_HESAP_ID, ["seal"])
+    ]
+    assert app_password.state_path().read_bytes() == once
+    assert app_password.wrap_failure_state(TEST_HESAP_ID) == (0, False)
+
+
+def test_bildirim_gordumu_program_disindan_degisen_durumda_muhur_reddidir() -> None:
+    """F-1'in tutarlılığı (işlemi yapan): oturumdaki hesabın durumu program dışından "açık değil"
+    yapılmışsa parola yenilenme bildiriminin "Gördüm"ü olağan "İşlemi yapan hesap açık değil…"
+    (400) iletisini değil mühür reddini alır: 409 ve `BUTUNLUK` satırı (alan `seal`); bayrak
+    yerinde kalır."""
+    ham_guncelle(TEST_HESAP_ID, status=AccountStatus.PAROLA_YENILENMELI, reset_notice_pending=True)
+    son = _son_seq()
+
+    yanit = _istemci().post("/api/v1/security/integrity/reset-notice/", {}, format="json")
+
+    assert yanit.status_code == 409, yanit.content
+    assert yanit.json()["code"] == "hesap_muhru_tutmadi"
+    assert [(s.object_id, s.changed_fields) for s in _butunluk_satirlari(son)] == [
+        (TEST_HESAP_ID, ["seal"])
+    ]
+    assert Account.objects.get(pk=TEST_HESAP_ID).reset_notice_pending is True
+
+
 def test_denetim_karti_iz_boslugunu_ayri_bulgu_olarak_tasir() -> None:
     """DK ve program yöneticisi kartı (`security/integrity/audit/`): satırın `bulgular`'ı
     `iz_boslugu`dur (kart metni F1b 2. adımın (d) alt commit'inde)."""
@@ -798,6 +1005,180 @@ def test_oturum_uclari_yazar_baglamindan_okur(
     assert baska_oturum not in gorulen.values()
 
 
+# ============================================================ F-5: tanıtıcıda 11 haneli sayı
+
+
+def test_hesap_acma_taniticida_kimlik_numarasina_benzer_sayiyi_uyarir() -> None:
+    """Orkestratör maddesi F-5: tanıtıcıda 11 ardışık rakam (T.C. kimlik numarasına benzer) hesap
+    açmayı ENGELLEMEZ; yanıtın `uyari`'sı sözlükteki iletidir (ad-soyad uyarısının yolu). Ad-soyad
+    uyarısı da varsa kimlik numarası uyarısı verilir. Sayı uydurmadır, sağlaması tutmaz."""
+    yanit = _istemci().post(
+        API,
+        {
+            "rol": "sekreter",
+            "tanitici": "uydurmaca-12345678901",
+            "ad_soyad": "Uydurmaca Örnekoğlu",
+            "gecici_parola": GIZLI_GECICI,
+        },
+        format="json",
+    )
+    assert yanit.status_code == 201, yanit.content
+    assert yanit.json()["uyari"] == hesap_kurallari.LOGIN_NAME_TCKN_WARNING_MESSAGE
+    assert Account.objects.filter(login_name="uydurmaca-12345678901").exists()
+
+
+# ============================================================ F-6: boş alanın iletisi
+
+
+@pytest.mark.parametrize(
+    ("alan", "ileti"),
+    [
+        ("rol", hesaplar._ROLE_MESSAGE),
+        ("tanitici", hesap_kurallari.LOGIN_NAME_EMPTY_MESSAGE),
+        ("ad_soyad", hesap_kurallari.DISPLAY_NAME_EMPTY_MESSAGE),
+        ("gecici_parola", hesap_kurallari.PASSWORD_TOO_SHORT_MESSAGE),
+    ],
+)
+@pytest.mark.parametrize("bicim", ["bos", "gonderilmedi", "null"])
+def test_hesap_acmada_bos_alan_servisin_iletisini_alir(alan: str, ileti: str, bicim: str) -> None:
+    """Orkestratör maddesi F-6: boş, gönderilmemiş ya da null alan DRF'nin genel iletisini ("Bu alan
+    boş bırakılmamalı.") değil servisin Türkçe iletisini alır; ileti `message`'tadır, alan sözlüğü
+    boştur (servis reddinin biçimi). Hiçbir şey yazılmaz. (`null` kolu bağımsız denetim bulgusudur:
+    JSON null da boştur.)"""
+    govde: dict[str, Any] = {
+        "rol": "muhasip",
+        "tanitici": "muhasip",
+        "ad_soyad": "Uydurma Muhasip",
+        "gecici_parola": GECICI_PAROLA,
+    }
+    if bicim == "bos":
+        govde[alan] = ""
+    elif bicim == "null":
+        govde[alan] = None
+    else:
+        del govde[alan]
+    son = _son_seq()
+
+    yanit = _istemci().post(API, govde, format="json")
+
+    assert yanit.status_code == 400, yanit.content
+    assert yanit.json() == {"code": "validation_error", "message": ileti, "fields": {}}
+    assert _son_seq() == son and not Account.objects.filter(role=AccountRole.MUHASIP).exists()
+
+
+@pytest.mark.parametrize("bicim", ["bos", "gonderilmedi", "null"])
+def test_parola_sifirlamada_bos_parola_servisin_iletisini_alir(bicim: str) -> None:
+    hesap = hesap_ac(AccountRole.MUHASIP, ad="Uydurma Muhasip")
+    govde: dict[str, Any] = {}
+    if bicim != "gonderilmedi":
+        govde["gecici_parola"] = "" if bicim == "bos" else None
+    yanit = _istemci().post(f"{API}{hesap.id}/reset-password/", govde, format="json")
+    assert yanit.status_code == 400, yanit.content
+    assert yanit.json() == {
+        "code": "validation_error",
+        "message": hesap_kurallari.PASSWORD_TOO_SHORT_MESSAGE,
+        "fields": {},
+    }
+
+
+# ============================================================ F-7: parola kaydı silinemedi
+
+
+def _sayacli_muhasip() -> Account:
+    """Açık muhasip; güvenlik dosyasındaki sarmalında 2 hatalı deneme (silinirken izi düşsün)."""
+    hesap = hesap_ac(AccountRole.MUHASIP, ad="Uydurma Muhasip")
+    veri = durum()
+    for bolum in veri["hesaplar"]:
+        if bolum["id"] == str(hesap.id):
+            bolum["hatali"] = 2
+    durum_yaz(veri)
+    return hesap
+
+
+@pytest.mark.parametrize("adim", ["ana_dosya", "arsiv"])
+def test_kapamada_parola_kaydi_silinemezse_turkce_ileti(
+    adim: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Orkestratör maddesi F-7: kapamanın dosya adımı yarıda kalırsa uç 500 değil 400
+    `validation_error` ve sözlükteki ileti döner (iç ayrıntı yok). Ne yazıldı: hesap KAPALI, `HESAP`
+    satırı kalır (veritabanı adımı commit edilmişti). Ne geri alındı: ana dosya yazılamadıysa
+    sarmalın `guvenlik.sarmal` satırı da geri alınır, sarmal ana dosyada kalır (kilit açılışındaki
+    temizlik siler); yalnız bir arşiv kopyası silinemediyse sarmal ana dosyadan gitmiştir ve satırı
+    kalır."""
+    hesap = _sayacli_muhasip()
+    son = _son_seq()
+
+    if adim == "ana_dosya":
+
+        def yazilamadi(_durum: dict[str, Any]) -> None:
+            raise PermissionError("C:/gizli/yol/guvenlik.json kilitli")
+
+        monkeypatch.setattr(app_password, "_write_structural", yazilamadi)
+    else:
+
+        def arsiv_kilitli(_idler: set[str]) -> int:
+            raise PermissionError("C:/gizli/yol/guvenlik-arsiv.json kilitli")
+
+        monkeypatch.setattr(app_password, "_remove_wraps_from_archives", arsiv_kilitli)
+
+    yanit = _istemci().post(f"{API}{hesap.id}/close/")
+
+    assert yanit.status_code == 400, yanit.content
+    assert yanit.json() == {
+        "code": "validation_error",
+        "message": hesaplar.CLOSE_WRAP_MESSAGE,
+        "fields": {},
+    }
+    assert "gizli" not in yanit.content.decode("utf-8")
+    assert Account.objects.get(pk=hesap.id).status == AccountStatus.KAPALI
+    yeni = list(AuditTrail.objects.filter(seq__gt=son).order_by("seq"))
+    assert [(s.action, s.model, s.object_id) for s in yeni][0] == (
+        AuditAction.HESAP,
+        "okul.Account",
+        str(hesap.id),
+    )
+    sarmal_satirlari = [s for s in yeni if s.model == denetim_izi.HESAP_SARMALI]
+    if adim == "ana_dosya":
+        assert sarmal_satirlari == []
+        assert str(hesap.id) in sarmal_kimlikleri()
+    else:
+        assert [(s.object_id, s.values) for s in sarmal_satirlari] == [
+            (str(hesap.id), {"hatali": [2, None]})
+        ]
+        assert str(hesap.id) not in sarmal_kimlikleri()
+    # Servis aynı hatayı dosya hatası olarak verir (çağıranlar `OSError` yakalar).
+    assert issubclass(hesaplar.ParolaKaydiSilinemedi, OSError)
+
+
+def test_sahipsiz_parola_kaydi_silinemezse_turkce_ileti(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Orkestratör maddesi F-7: sahipsiz parola kaydının silinmesinde ana dosya yazılamazsa uç 400
+    `validation_error` ve sözlükteki ileti döner; işlem geri sarılmıştır (iz satırı yok), kayıt
+    yerindedir. (Yalnız arşiv kopyası silinemezse silme başarılıdır; `test_denetim_izi`.)"""
+    hayalet = "3c5d7e9f-1a2b-4c3d-8e4f-5a6b7c8d9e0f"
+    app_password.write_account_wrap(
+        data_key=TEST_DEK, hesap_id=hayalet, tanitici="eski-hesap", password=GECICI_PAROLA
+    )
+    son = _son_seq()
+
+    def yazilamadi(_durum: dict[str, Any]) -> None:
+        raise PermissionError("C:/gizli/yol/guvenlik.json kilitli")
+
+    monkeypatch.setattr(app_password, "_write_structural", yazilamadi)
+
+    yanit = _istemci().post(
+        "/api/v1/security/integrity/orphan-wraps/", {"hesaplar": [hayalet]}, format="json"
+    )
+
+    assert yanit.status_code == 400, yanit.content
+    assert yanit.json() == {
+        "code": "validation_error",
+        "message": hesaplar.ORPHAN_WRAP_MESSAGE,
+        "fields": {},
+    }
+    assert _son_seq() == son
+    assert hayalet in sarmal_kimlikleri()
+
+
 # ============================================================ sözlük
 
 
@@ -848,6 +1229,11 @@ def test_kullanicilar_ve_iz_iletileri_sozlukte_yazilidir() -> None:
         hesap_kurallari.LOGIN_NAME_INVALID_MESSAGE,
         hesap_kurallari.DISPLAY_NAME_EMPTY_MESSAGE,
         hesap_kurallari.DISPLAY_NAME_TOO_LONG_MESSAGE,
+        # Orkestratör maddeleri F-5 ve F-7.
+        hesap_kurallari.LOGIN_NAME_WARNING_MESSAGE,
+        hesap_kurallari.LOGIN_NAME_TCKN_WARNING_MESSAGE,
+        hesaplar.CLOSE_WRAP_MESSAGE,
+        hesaplar.ORPHAN_WRAP_MESSAGE,
     ]
     eksik = [ileti for ileti in iletiler if f'**"{ileti}"**' not in sozluk]
     assert eksik == []

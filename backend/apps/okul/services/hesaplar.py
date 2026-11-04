@@ -38,14 +38,17 @@ SIRALAR (iki depo kuralı, §4.6.1):
 * **Askıdan çıkarma:** `Account.status = ASKIDA` ise satır, sonra dosyadaki hatalı
   deneme sayacı ve askısı (iki kaynak; plan F1b-1 "Oturum").
 
-Mührü ya da son iz kaydı tutmayan satıra hiçbir servis dokunmaz (`AccountSealMismatch`; izi
-tutmayan satırda alt sınıfı `AccountRecordStale` ve `BUTUNLUK` satırı, alan `kayit_mac`; izdeki
-boşlukta `AuditTrailGap`, alan `iz_boslugu`, ileti `_GAP_MESSAGE`; C-4): yeniden
+Mührü ya da son iz kaydı tutmayan satıra hiçbir servis dokunmaz; her üç kolun reddi kendi
+işleminde bir `BUTUNLUK` satırı yazar (`SISTEM`; orkestratör maddesi F-1: mühür kolu da —
+`_muhur_reddi`, `AccountSealMismatch`, alan `seal`; izi tutmayan satırda alt sınıfı
+`AccountRecordStale`, alan `kayit_mac`; izdeki boşlukta `AuditTrailGap`, alan `iz_boslugu`, ileti
+`_GAP_MESSAGE`; C-4): yeniden
 mühürlemek program dışından değiştirilmiş satırı meşrulaştırırdı (tehdit 19); eski bir kopyadan
 geri konmuş satırı (mührü tutar, son iz kaydını tutmaz; kullanıcı kararı 03.11.2026 "Girişte
 reddet") sıfırlamak, kapatmak, askıdan çıkarmak ya da iki depo karşılaştırmasında parola yenilemeye
 çekmek onu yeni bir iz satırıyla AKLARDI. Kural hem işlemi yapana (`_actor`) hem işlem görene
-(`_target`) uygulanır; iki depo karşılaştırması bu satırları `seal_mismatch`'e koyar. Satırın
+(`_target`; sahipsiz parola kaydının silinmesinde kapalı hesabın satırı da, `_kaydi_butun`)
+uygulanır; iki depo karşılaştırması bu satırları `seal_mismatch`'e koyar. Satırın
 izi denetlenirken arada meşru bir yazım satırı değiştirdiyse (çift tıklanan işlem) yanlış alarm
 yazılmaz, karar doğrulanmış GÜNCEL satırdan verilir (`app_password.satir_izini_denetle`): işlemi
 yapan ve işlem gören o satırla yeniden sınanır (işlemi yapan açık değilse işlemi yapan iletisi,
@@ -111,7 +114,7 @@ import logging
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, NoReturn
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -143,16 +146,11 @@ _LOCKED_MESSAGE = "Kayıtlar kilitli. Önce hesabınızla kilidi açın."
 _ACTOR_MESSAGE = "İşlemi yapan hesap açık değil. Kilitleyip hesabınızla yeniden açın."
 _NOT_FOUND_MESSAGE = "Hesap bulunamadı."
 _CLOSED_MESSAGE = "Hesap kapalı; kapalı hesap yeniden açılmaz, yeni hesap açılır."
-_SEAL_MESSAGE = (
-    "Hesap kaydı program dışından değiştirilmiş görünüyor; kayda dokunulmadı. "
-    "Denetleme Kuruluna bildirin."
-)
+#: Kaydı tutmayan hesabın iletisi oturumdaki parola doğrulamasınınkiyle tek kaynaktır.
+_SEAL_MESSAGE = app_password.ISLEMDE_KAYIT_MESSAGE
 #: İzde boşluk (`app_password.AuditTrailGap`; orkestratör maddesi C-4): mühür iletisinin kalıbı,
 #: değişen hesap kaydı değil denetim izidir.
-_GAP_MESSAGE = (
-    "Denetim izinden kayıt silinmiş ya da kayıtların sırası program dışından değiştirilmiş "
-    "görünüyor; kayda dokunulmadı. Denetleme Kuruluna bildirin."
-)
+_GAP_MESSAGE = app_password.ISLEMDE_BOSLUK_MESSAGE
 #: Kendi hesabı (plan F1b-2 "Kendi hesabı ve ikinci program yöneticisi"): oturumdaki hesap kendi
 #: hesabını kapatamaz, kendi parolasını Kullanıcılar'dan sıfırlayamaz.
 _OWN_CLOSE_MESSAGE = "Kendi hesabınızı kapatamazsınız."
@@ -178,8 +176,36 @@ _NOT_ORPHAN_MESSAGE = (
 )
 
 
+#: Kapamanın dosya adımı yarıda kaldı (orkestratör maddesi F-7): hesap KAPALI'dır (satır ve `HESAP`
+#: satırı commit edildi), parola kaydı güvenlik dosyasında ya da eski kopyalarında kaldı; kilit
+#: açılışındaki temizlik siler (`app_password._cleanup_closed_wraps`). Genel Bakış kartının
+#: cümlesiyle aynı söz (sözlük §4.5 "Hesaplar ve Güvenlik Dosyası").
+CLOSE_WRAP_MESSAGE = (
+    "Hesap kapatıldı, ancak parola kaydının güvenlik dosyasından silinmesi tamamlanamadı "
+    "(ör. dosyayı başka bir program tutuyor); program bir sonraki kilit açılışında yineler."
+)
+#: Sahipsiz parola kaydının silinmesinde güvenlik dosyası yazılamadı: hiçbir şey değişmedi (iz
+#: satırları geri alındı; orkestratör maddesi F-7).
+ORPHAN_WRAP_MESSAGE = (
+    "Parola kaydı güvenlik dosyasından silinemedi (ör. dosyayı başka bir program tutuyor); "
+    "hiçbir şey değişmedi. Biraz sonra yeniden deneyin."
+)
+
+
 class AccountServiceError(AppPasswordError):
     """Hesap servisinin Türkçe reddi (view katmanı 400'e çevirir)."""
+
+
+class ParolaKaydiSilinemedi(OSError):
+    """Parola kaydının (sarmalın) güvenlik dosyasından silinmesi yarıda kaldı (orkestratör maddesi
+    F-7); ileti Türkçedir ve neyin yapılıp neyin yapılmadığını söyler (`CLOSE_WRAP_MESSAGE`,
+    `ORPHAN_WRAP_MESSAGE`).
+
+    `OSError` alt sınıfıdır: dosya hatası olarak kalır (çağıranlar ve testler onu öyle yakalar),
+    kök neden `__cause__`'dadır. Uçta `views_oturum.guvenlik_hatalari` servis retlerinin kalıbıyla
+    400 `validation_error`'a çevirir (eskiden 500); ileti iç ayrıntı (yol, işletim sistemi iletisi)
+    taşımaz.
+    """
 
 
 def _kural(dogrulayici: Callable[[str], str], deger: str) -> str:
@@ -198,6 +224,19 @@ def _active_data_key() -> bytes:
     return dek
 
 
+def _muhur_reddi(hesap: Account, data_key: bytes) -> NoReturn:
+    """Mührü tutmayan hesabın (işlemi yapan ya da işlem gören) reddi: `BUTUNLUK` satırı ve 409.
+
+    Satır kendi işlemindedir (`app_password._muhur_bozuk_izi`, alan `seal`, yazar `SISTEM`); satırın
+    izi ve izdeki boşluk kollarıyla aynı muamele (orkestratör maddesi F-1; eskiden yalnız mühür kolu
+    satır yazmıyordu). Çağıran bir veritabanı işleminin içinde değildir (uçlar istek boyu işlem
+    açmaz; C-2): ret işlemi geri alınsa da satır kalır. Satıra dokunulmaz.
+    """
+    logger.warning("Hesap mührü tutmadı; hesap işlemi yapılmadı (%s).", hesap.id)
+    app_password._muhur_bozuk_izi(hesap, data_key)
+    raise AccountSealMismatch(_SEAL_MESSAGE)
+
+
 def _actor(by_hesap_id: object, data_key: bytes) -> Account:
     """İşlemi yapan hesap: var, `ACIK`, mührü tutuyor ve yazarla aynı (rol sorulmaz).
 
@@ -207,21 +246,27 @@ def _actor(by_hesap_id: object, data_key: bytes) -> Account:
     `SISTEM` ise ret (`RolYetkisiz`): hesap işlemi gün işi ya da sistem işi değildir (plan
     F1b-1 "by_hesap_id yazar bağlamındaki hesaba eşit olmalıdır"). Rolü soran
     `_yonetici_aktor`'dur; parola yenilenme bildiriminin kapatılması her role açık kalır.
+
+    SIRA (kilit açılışınınki, `app_password._open_account_for_login`): önce yalnız varlık ve kimlik
+    (satır var, yazarla aynı hesap), sonra mühür ve satırın izi, DURUM EN SON — doğrulanmış
+    satırdan. Mührü tutmayan satırın hiçbir değerine güvenilmez: program dışından "açık değil"
+    yapılmış durum da mühür reddini (`BUTUNLUK`, alan `seal`) verir, olağan ret iletisini değil
+    (orkestratör maddesi F-1'in tutarlılığı; bağımsız denetim bulgusu). Meşru satırda ileti değişmez.
     """
     kim = yazar()
     if kim is None or kim.sistem_mi:
         raise RolYetkisiz
     aktor = app_password.account_by_id(by_hesap_id)
-    if aktor is None or aktor.status != AccountStatus.ACIK:
+    if aktor is None:
         raise AccountServiceError(_ACTOR_MESSAGE)
     if denetim_izi.kimlik_metni_ya_da_none(Account, kim.hesap_id) != str(aktor.id):
         logger.warning("İşlemi yapan hesap yazar bağlamındaki hesap değil; işlem yapılmadı.")
         raise AccountServiceError(_ACTOR_MESSAGE)
     if not aktor.seal_matches(data_key):
-        raise AccountSealMismatch(_SEAL_MESSAGE)
+        _muhur_reddi(aktor, data_key)
     # Satırın izi (`app_password` modül başlığı "SATIRIN İZİ"): eski bir kopyadan geri konmuş
     # işlemi yapanın satırı (ör. rolü düşürülmeden önceki hâli) hiçbir hesap işlemi açmaz. Dönen
-    # satır kararın satırıdır (arada meşru bir yazımla değiştiyse güncel hâl): durum yeniden sorulur.
+    # satır kararın satırıdır (arada meşru bir yazımla değiştiyse güncel hâl): durum ondan sorulur.
     aktor = app_password.satir_izini_denetle(
         aktor, data_key, ileti=_SEAL_MESSAGE, bosluk_iletisi=_GAP_MESSAGE
     )
@@ -244,25 +289,36 @@ def _yonetici_aktor(by_hesap_id: object, data_key: bytes) -> Account:
 def _target(hesap_id: object, data_key: bytes) -> Account:
     """Üzerinde işlem yapılan hesap: var, kapalı değil, mührü ve izi tutuyor (modül başlığı).
 
-    İzi tutmayan (eski bir kopyadan geri konmuş) satır sıfırlanmaz, kapatılmaz, askıdan
-    çıkarılmaz: işlem satırı yeniden mühürleyip yeni bir iz satırı yazardı ve geri sarmayı
-    AKLARDI (`AccountRecordStale`, `BUTUNLUK` satırı; çıkış yedekten geri yüklemedir).
+    Mührü tutmayan satır (`_muhur_reddi`, `BUTUNLUK` alan `seal`) ve izi tutmayan (eski bir
+    kopyadan geri konmuş) satır sıfırlanmaz, kapatılmaz, askıdan çıkarılmaz: işlem satırı yeniden
+    mühürleyip yeni bir iz satırı yazardı ve değişikliği ya da geri sarmayı AKLARDI
+    (`AccountRecordStale`, `BUTUNLUK` satırı; çıkış yedekten geri yüklemedir).
+
+    SIRA `_actor`'unkidir: varlık, mühür, satırın izi, DURUM EN SON (doğrulanmış satırdan).
+    Program dışından KAPALI yapılmış satır olağan "Hesap kapalı…" iletisini değil mühür reddini
+    alır (`BUTUNLUK`, alan `seal`); meşru kapalı hesabın mührü tutar, iletisi değişmez.
+    """
+    hesap = _kaydi_butun(hesap_id, data_key)
+    if hesap.status == AccountStatus.KAPALI:
+        raise AccountServiceError(_CLOSED_MESSAGE)
+    return hesap
+
+
+def _kaydi_butun(hesap_id: object, data_key: bytes) -> Account:
+    """`_target`'ın kayıt yarısı: hesap var, mührü ve izi tutuyor; DURUM SORULMAZ.
+
+    Tutmazsa ret `BUTUNLUK` satırıyla verilir (`_muhur_reddi`, `app_password.satir_izini_denetle`).
+    Kapalı hesabın satırını da denetlemesi gereken yol (sahipsiz parola kaydının silinmesi) bunu
+    doğrudan çağırır. Dönen satır kararın satırıdır (arada meşru bir yazımla değiştiyse güncel hâl).
     """
     hesap = app_password.account_by_id(hesap_id)
     if hesap is None:
         raise AccountServiceError(_NOT_FOUND_MESSAGE)
-    if hesap.status == AccountStatus.KAPALI:
-        raise AccountServiceError(_CLOSED_MESSAGE)
     if not hesap.seal_matches(data_key):
-        logger.warning("Hesap mührü tutmadı; hesap işlemi yapılmadı (%s).", hesap.id)
-        raise AccountSealMismatch(_SEAL_MESSAGE)
-    # Dönen satır kararın satırıdır (arada meşru bir yazımla değiştiyse güncel hâl).
-    hesap = app_password.satir_izini_denetle(
+        _muhur_reddi(hesap, data_key)
+    return app_password.satir_izini_denetle(
         hesap, data_key, ileti=_SEAL_MESSAGE, bosluk_iletisi=_GAP_MESSAGE
     )
-    if hesap.status == AccountStatus.KAPALI:
-        raise AccountServiceError(_CLOSED_MESSAGE)
-    return hesap
 
 
 def _kendi_hesabi_mi(aktor: Account, hesap_id: object) -> bool:
@@ -346,7 +402,9 @@ def close_account(*, by_hesap_id: object, hesap_id: object) -> Account:
     işleminde, dosyadan ÖNCE `guvenlik.sarmal` satırı (`app_password.sarmal_izi`; modül
     başlığı). Ana dosya yazılamazsa o satır geri alınır, sarmalı kilit açılışındaki
     temizlik siler (o da iz yazar); sarmal ana dosyadan silinip bir arşiv kopyası
-    temizlenemediyse satır kalır, hata yine çağırana döner.
+    temizlenemediyse satır kalır. İki hâlde de hesap KAPALI'dır (veritabanı adımı commit
+    edilmiştir) ve hata çağırana `ParolaKaydiSilinemedi` olarak döner (`OSError`; ileti
+    `CLOSE_WRAP_MESSAGE`, uçta 400 `validation_error`; orkestratör maddesi F-7).
     """
     dek = _active_data_key()
     aktor = _yonetici_aktor(by_hesap_id, dek)
@@ -372,16 +430,26 @@ def close_account(*, by_hesap_id: object, hesap_id: object) -> Account:
         denetim_izi.kayit(AuditAction.HESAP, hesap, onceki=onceki)
     kimlik = str(hesap.id)
     arsiv_hatasi: OSError | None = None
-    with app_password.dosya_ve_iz_islemi():
-        app_password.sarmal_izi(kimlik, silindi=True)
-        try:
-            app_password.remove_account_wraps({kimlik})
-        except OSError as exc:
-            if kimlik in app_password.wrap_ids():
-                raise  # ana dosya yazılmadı: sarmalın satırı da geri alınır
-            arsiv_hatasi = exc
+    try:
+        with app_password.dosya_ve_iz_islemi():
+            app_password.sarmal_izi(kimlik, silindi=True)
+            try:
+                app_password.remove_account_wraps({kimlik})
+            except OSError as exc:
+                if kimlik in app_password.wrap_ids():
+                    raise  # ana dosya yazılmadı: sarmalın satırı da geri alınır
+                arsiv_hatasi = exc
+    except OSError as exc:
+        logger.warning(
+            "Kapanan hesabın parola kaydı güvenlik dosyasından silinemedi.", exc_info=True
+        )
+        raise ParolaKaydiSilinemedi(CLOSE_WRAP_MESSAGE) from exc
     if arsiv_hatasi is not None:
-        raise arsiv_hatasi
+        logger.warning(
+            "Kapanan hesabın parola kaydı güvenlik dosyasının bazı eski kopyalarından silinemedi.",
+            exc_info=arsiv_hatasi,
+        )
+        raise ParolaKaydiSilinemedi(CLOSE_WRAP_MESSAGE) from arsiv_hatasi
     logger.info("Hesap kapatıldı (%s).", hesap.login_name)
     return hesap
 
@@ -500,18 +568,31 @@ def unsuspend(*, by_hesap_id: object, hesap_id: object) -> Account:
     return hesap
 
 
-def teslim_pusulasi(*, by_hesap_id: object, hesap_id: object) -> bytes:
+@dataclass(frozen=True)
+class TeslimPusulasi:
+    """Basılan hesap teslim pusulası: bellekteki PDF ve indirme adı (dosya saklanmaz).
+
+    Ad, kararın verildiği (mührü ve izi doğrulanmış) satırın rolünden kurulur
+    (`hesap_teslim_pusulasi.dosya_adi`; orkestratör maddesi F-2): rol etiketi girer, tanıtıcı ve
+    ad girmez.
+    """
+
+    pdf: bytes
+    dosya_adi: str
+
+
+def teslim_pusulasi(*, by_hesap_id: object, hesap_id: object) -> TeslimPusulasi:
     """Hesap teslim pusulasının (E63) PDF'i; dosya saklanmaz (modül başlığı "HESAP TESLİM PUSULASI").
 
     Sıra kapamanınkidir: işlemi yapan (açık, mühürlü, izli program yöneticisi; yetki kapısı
     `Eylem.HESAP_YONETIMI`) → kendi hesabı değil → işlem gören (var, kapalı değil, mührü ve izi
-    tutuyor; tutmuyorsa 409 `hesap_muhru_tutmadi`, satır izinde ve izdeki boşlukta `BUTUNLUK`
-    satırıyla — yalnız mührü tutmayan hesapta satır yazılmaz). İçerik yalnız tanıtıcıdan, rolden,
+    tutuyor; tutmuyorsa 409 `hesap_muhru_tutmadi` ve `BUTUNLUK` satırı — alan mühürde `seal`,
+    satırın izinde `kayit_mac`, izdeki boşlukta `iz_boslugu`). İçerik yalnız tanıtıcıdan, rolden,
     açılış tarihinden, okul kartının antedinden ve boşta kilit süresinden kurulur
     (`hesap_teslim_pusulasi.pusula_belgesi`; ad-soyad okunmaz). PDF bellekte çizilir; sonra AYNI
     işlemde hesabın hâlâ kapalı olmadığı sorulur ve `BASIM` satırı (kod ve PDF'in sha256'sı)
     yazılır. Satır yazılamazsa PDF verilmez (iz yazılamazsa yazma yapılmaz; 409 `iz_yazilamadi`).
-    Hiçbir dosyaya ve erişim günlüğüne yazmaz.
+    Hiçbir dosyaya ve erişim günlüğüne yazmaz. Dönüş PDF ve indirme adıdır (`TeslimPusulasi`).
     """
     dek = _active_data_key()
     aktor = _yonetici_aktor(by_hesap_id, dek)
@@ -539,7 +620,7 @@ def teslim_pusulasi(*, by_hesap_id: object, hesap_id: object) -> bytes:
             sha256=hashlib.sha256(pdf).hexdigest(),
         )
     logger.info("Hesap teslim pusulası basıldı (%s).", hesap.login_name)
-    return pdf
+    return TeslimPusulasi(pdf=pdf, dosya_adi=hesap_teslim_pusulasi.dosya_adi(hesap.role))
 
 
 def acknowledge_reset_notice(*, hesap_id: object) -> Account:
@@ -592,8 +673,8 @@ def acknowledge_restore(*, by_hesap_id: object, seq: int) -> AuditTrail | None:
     Yalnız Denetleme Kurulu: rol istek başındaki yazardan ve işlemi yapanın mühürlü satırından iki
     kez sorulur (`Eylem.GERI_YUKLEME_GORDUM`; derin savunma). İşlemi yapan açık ve yazarla aynı
     hesaptır (`_actor`; yazar yoksa 403, işlemi yapan açık değilse ya da yazarla aynı değilse 400),
-    mührü ve izi tutar (tutmazsa 409 `hesap_muhru_tutmadi`; satır izinde ve izdeki boşlukta
-    `BUTUNLUK` satırı kendi işleminde yazılır ve kalır, yalnız mühürde satır yazılmaz). Sonra TEK
+    mührü ve izi tutar (tutmazsa 409 `hesap_muhru_tutmadi`; mühürde, satır izinde ve izdeki
+    boşlukta `BUTUNLUK` satırı kendi işleminde yazılır ve kalır — orkestratör maddesi F-1). Sonra TEK
     `IMMEDIATE` işlemde: `seq` doğrulanan son `GERI_YUKLEME` satırı
     değilse `RestoreCardStale` (409; eski bir geri yükleme ya da olmayan kayıt); o geri yüklemeye
     bir Denetleme Kurulu üyesi zaten "Gördüm" dediyse hiçbir şey yazılmaz (None); değilse `ISARET`
@@ -762,30 +843,44 @@ def remove_orphan_wraps(*, by_hesap_id: object, hesap_idler: list[str]) -> list[
 
     Her silinen sarmal için `guvenlik.json` bölümünün `HESAP` satırı dosyadan ÖNCE, aynı
     işlemde yazılır (yazar onaylayan hesap; sarmalda sayaç ya da askı varsa önceki değerleri
-    de, `app_password.sarmal_izi`). Ana dosya yazılamazsa işlem geri sarılır;
-    sarmal ana dosyadan silinmiş ama bir arşiv kopyası yazılamamışsa iz kalır (sarmal
-    artık kilit açmaz), arşivin uyarısı günlüğe düşer.
+    de, `app_password.sarmal_izi`). Ana dosya yazılamazsa işlem geri sarılır, hiçbir şey
+    değişmez ve hata `ParolaKaydiSilinemedi` olur (`OSError`; ileti `ORPHAN_WRAP_MESSAGE`, uçta
+    400 `validation_error`; orkestratör maddesi F-7); sarmal ana dosyadan silinmiş ama bir arşiv
+    kopyası yazılamamışsa iz kalır (sarmal artık kilit açmaz), arşivin uyarısı günlüğe düşer ve
+    silme başarılı döner.
+
+    İstenen kimliğin hesap satırı kaydı değiştirilmiş görünüyorsa (farkın `seal_mismatch`'i:
+    mührü, izi ya da izdeki boşluk tutmuyor) parola kaydı silinmez ve ret öteki hesap
+    işlemlerindeki gibi `BUTUNLUK` satırıyla 409 olur (`_kaydi_butun`; orkestratör maddesi F-1,
+    son sınama bulgusu). Satır arada düzelmişse olağan `_NOT_ORPHAN_MESSAGE` döner.
     """
     dek = _active_data_key()
     _yonetici_aktor(by_hesap_id, dek)
     istenen = {str(h) for h in hesap_idler}
-    silinebilir = set(two_store_differences().removable_wraps)
-    if not istenen <= silinebilir:
+    fark = two_store_differences()
+    for hesap_id in sorted(istenen & set(fark.seal_mismatch)):
+        _kaydi_butun(hesap_id, dek)
+    if not istenen <= set(fark.removable_wraps):
         raise AccountServiceError(_NOT_ORPHAN_MESSAGE)
     if istenen:
-        with app_password.dosya_ve_iz_islemi():
-            for hesap_id in sorted(istenen):
-                app_password.sarmal_izi(hesap_id, silindi=True, her_zaman=True)
-            try:
-                app_password.remove_account_wraps(istenen)
-            except OSError:
-                if istenen & set(app_password.wrap_ids()):
-                    raise
-                logger.warning(
-                    "Sahipsiz sarmallar güvenlik dosyasından silindi; bazı arşiv kopyaları "
-                    "temizlenemedi.",
-                    exc_info=True,
-                )
+        try:
+            with app_password.dosya_ve_iz_islemi():
+                for hesap_id in sorted(istenen):
+                    app_password.sarmal_izi(hesap_id, silindi=True, her_zaman=True)
+                try:
+                    app_password.remove_account_wraps(istenen)
+                except OSError:
+                    if istenen & set(app_password.wrap_ids()):
+                        raise
+                    logger.warning(
+                        "Sahipsiz sarmallar güvenlik dosyasından silindi; bazı arşiv kopyaları "
+                        "temizlenemedi.",
+                        exc_info=True,
+                    )
+        except OSError as exc:
+            # Ana dosya yazılamadı: işlem geri sarıldı (iz satırları yok), sarmallar yerinde.
+            logger.warning("Sahipsiz sarmallar güvenlik dosyasından silinemedi.", exc_info=True)
+            raise ParolaKaydiSilinemedi(ORPHAN_WRAP_MESSAGE) from exc
         logger.info("Sahipsiz hesap sarmalları onayla silindi (%d).", len(istenen))
     return sorted(istenen)
 
@@ -1101,15 +1196,18 @@ def _giris_engeli(
 ) -> str | None:
     """Hesap bugün kilit ekranından girebilir mi? Giremiyorsa nedeni (kullanıcı metni).
 
-    `PAROLA_YENILENMELI` girer (ilk girişte parolasını yeniler). Sıra kilit açılışınınkine
-    yakındır: kapalı, kaydı ya da izi tutmuyor, askıda, parola kaydı yok, parola kaydının özeti
-    tutmuyor (iki depo kartının "Giriş yapamayan hesaplar"ı ve özeti tutmayanlar).
+    `PAROLA_YENILENMELI` girer (ilk girişte parolasını yeniler). Sıra hesap servislerininkidir
+    (`_target`; kayıt önce, durum en son): kaydı ya da izi tutmuyor (mührü tutmayan satırın
+    durumuna güvenilmez), kapalı, askıda, parola kaydı yok, parola kaydının özeti tutmuyor (iki
+    depo kartının "Giriş yapamayan hesaplar"ı ve özeti tutmayanlar). Kilit ekranı parola kaydının
+    yokluğunu ve dosyadaki askıyı mühürden önce (parola denenmeden) sorar; orada aynı hesap
+    "askıda" ya da "parola kaydı yok" iletisini alabilir.
     """
     kimlik = str(hesap.id)
-    if hesap.status == AccountStatus.KAPALI:
-        return _LOGIN_CLOSED_MESSAGE
     if kayit_iletisi is not None:
         return kayit_iletisi
+    if hesap.status == AccountStatus.KAPALI:
+        return _LOGIN_CLOSED_MESSAGE
     if askida_nedeni is not None:
         return _LOGIN_SUSPENDED_MESSAGE
     if kimlik not in gorunum.ozetler:
@@ -1123,8 +1221,8 @@ def _kullanici_satiri(hesap: Account, gorunum: _Gorunum) -> dict[str, Any]:
     """Kullanıcılar satırı (kişisiz kodlar + kullanıcı metinleri; geçici parola YOK).
 
     Eylemlerin nedenleri servislerin sırasıyla ve iletileriyledir (`close_account`, `unsuspend`,
-    `reset_password`, `teslim_pusulasi`): kendi hesabı → kapalı → kaydı ya da izi tutmuyor →
-    (kapamada) son program yöneticisi; askıdaki hesabın parolası sıfırlanmaz; askıda olmayan hesap
+    `reset_password`, `teslim_pusulasi`): kendi hesabı → kaydı ya da izi tutmuyor → kapalı (durum
+    en son, doğrulanmış satırdan; `_target`) → (kapamada) son program yöneticisi; askıdaki hesabın parolası sıfırlanmaz; askıda olmayan hesap
     askıdan çıkarılmaz; teslim pusulası askıdaki hesaba da basılır.
     Kaydı tutmayan satırda ileti, servisin reddinin ("kayda dokunulmadı") önceden söylenişidir
     ("program bu kayda dokunmaz"); kayıt kodu (`KAYIT_*`) yalnız iletiyi seçer.
@@ -1144,9 +1242,9 @@ def _kullanici_satiri(hesap: Account, gorunum: _Gorunum) -> dict[str, Any]:
     def _ortak(kendi_iletisi: str | None) -> str | None:
         if kendi and kendi_iletisi is not None:
             return kendi_iletisi
-        if kapali:
-            return _CLOSED_MESSAGE
-        return kayit_iletisi
+        if kayit_iletisi is not None:
+            return kayit_iletisi
+        return _CLOSED_MESSAGE if kapali else None
 
     kapat = _ortak(_OWN_CLOSE_MESSAGE)
     if kapat is None and hesap.role == AccountRole.YONETICI and gorunum.acik_yonetici <= 1:

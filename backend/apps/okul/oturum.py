@@ -160,9 +160,14 @@ from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Final, Literal
 
-from django.db import DatabaseError
+from django.db import DatabaseError, connection
+from django.db.models import TextField
+from django.db.models.functions import Cast
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from apps.okul.models import (
     IDLE_LOCK_MINUTES_DEFAULT,
@@ -225,6 +230,57 @@ def rol_etiketi(rol: str | None) -> str:
         return str(AccountRole(rol).label)
     except ValueError:
         return ROL_OKUNAMADI_ETIKETI
+
+
+def ham_an_sutunlari() -> dict[str, Cast]:
+    """Hesap özetlerinin açılış ve kapanış anı, ORM'nin tarih dönüştürücüsü OLMADAN (ham metin):
+    `.annotate(**ham_an_sutunlari())` → `ham_acilis`, `ham_kapanis`; çevirisi `hesap_ani`'dır.
+
+    Django tarih sütununu kendi dönüştürücüsüyle (`parse_datetime`) okur: program dışından
+    yazılmış, biçime uyan ama geçersiz TEK bir değer (`"2026-02-30 10:00:00"`; SQLite tür
+    denetlemez, CHECK kısıtları bunu engellemez) ValueError yükseltir ve özeti kuran bütün okumayı
+    — denetim kartlarının bütünlük grubunu, geri yükleme kartını, erişim günlüğünü — düşürürdü.
+    Kalıp `denetim_izi.satirlari_oku`'nunkidir (bağımsız denetim bulgusu, F-3).
+    """
+    return {
+        "ham_acilis": Cast("opened_at", output_field=TextField()),
+        "ham_kapanis": Cast("closed_at", output_field=TextField()),
+    }
+
+
+def hesap_ani(ham: object) -> datetime | None:
+    """Ham metin an (`ham_an_sutunlari`) → saat dilimli an; boşsa ya da çevrilemezse None — HATA
+    YÜKSELTMEZ. Saf değer bağlantının saat dilimindedir (Django'nun SQLite dönüşümüyle aynı;
+    `denetim_izi._ham_an`). Çevrilemeyen an özette "kaydın söylemediği" gün olur (None)."""
+    if ham is None:
+        return None
+    try:
+        an = parse_datetime(str(ham))
+    except ValueError:
+        return None
+    if an is None:
+        return None
+    if timezone.is_naive(an):
+        an = timezone.make_aware(an, connection.timezone)
+    return an
+
+
+def hesap_gunu(an: datetime | None) -> str | None:
+    """Hesabın açılış ya da kapanış günü (kişisiz hesap özetleri): Europe/Istanbul günü, ISO
+    (yyyy-aa-gg; API'nin tarih biçimi, erişim günlüğü süzgeçleriyle aynı); an yoksa (açık hesabın
+    kapanışı) ya da yerel güne çevrilemiyorsa (program dışından yazılmış uç değer) None.
+
+    Tanıtıcı yalnız açık hesaplar arasında tekildir: kapanan "muhasip"in yerine açılan yeni hesap
+    da "muhasip" olabilir. Erişim günlüğü ve denetim kartları iki hesabı açılış ve kapanış günüyle
+    ayırır (orkestratör maddesi F-3; `erisim_gunlugu`, `iz_dogrulama._hesap_ozeti`). Özetler anı
+    ham okur (`ham_an_sutunlari`, `hesap_ani`): tek bir bozuk değer özeti düşürmez.
+    """
+    if an is None:
+        return None
+    try:
+        return timezone.localtime(an).date().isoformat()
+    except (OverflowError, ValueError):
+        return None
 
 
 @dataclass(frozen=True)

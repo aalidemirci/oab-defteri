@@ -11,8 +11,9 @@ BASILANLAR (planın lafzı):
 
 * tanıtıcı, rol (sıra no'suz etiket) ve açılış tarihi (gg.aa.yyyy, Europe/Istanbul günü);
 * "Bu programda sizin işiniz": rolün bugün yazabildiği matris satırları
-  (`rol_izinleri.etkin_hucreler`; ikinci bir matris doğmaz), satırların adları `IS_ADLARI`'ndadır
-  (tasarım §4.4.2 tablosunun "Alan" sütunu, kodsuz ve kısaltmasız);
+  (`rol_izinleri.etkin_hucreler`; ikinci bir matris doğmaz), satırların BUGÜNKÜ işleri
+  `BUGUNKU_ISLER`'dedir (orkestratör maddesi F-4): yalnız bugün programda yapılabilen işler yazılır,
+  her parça onu yapan uçlara bağlıdır, sonraki fazların işleri o fazlarla eklenir;
 * ilk giriş adımları (geçici parolayla giriş → parolayı yenileme; kilit ekranının metinleriyle);
 * parola kuralları (BSG Yön. md. 9/2-a, b, ç); yönergenin adı ilk atıfta açık yazılır, kısaltma
   ardından parantez içindedir (sözlük §3 "Kısaltma", RYUE md. 16/11; dipnotta değil);
@@ -39,11 +40,14 @@ elle doldurulur. Antet okulundur (birlik satırı yoktur).
 
 Bütün sabit metinler sözlüğe girer (sözlük §1 "Hesap teslim pusulası (F1b)"; testi
 `test_evrak_kurallari.py`). Değişken yerler (`<tanıtıcı>`, `N`) sözlükte yer tutucuyla yazılır.
+İndirme adı rol etiketini taşır, tanıtıcıyı ve adı taşımaz (`dosya_adi`; orkestratör maddesi F-2).
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Final
 
@@ -119,51 +123,166 @@ KAPALI_ZARF: Final = (
 TESLIM_EDEN: Final = ("Teslim eden", "Program yöneticisi (ad-soyad, imza, tarih)")
 TESLIM_ALAN: Final = ("Teslim alan", "Hesap sahibi (ad-soyad, imza, tarih)")
 
-#: Matris satırlarının pusuladaki adları (tasarım §4.4.2 tablosunun "Alan" sütunu; kodsuz,
-#: kısaltmasız, sözlüğe uygun: "okul kartı" ekranda "okul bilgileri"dir, "bütçe" tahmini
-#: bütçedir, "DEK yenileme" kayıtların anahtarının yenilenmesidir; ayraç içi açıklamalar düşer).
-#: Program yöneticisinin satırları tek sayfaya sığsın diye birer satırdır (sayfa bütçesi).
-#: `OTURUM` matriste yoktur, adı da yoktur. Satır düzeyindedir (`etkin_hucreler` satırı verir):
-#: adın bir parçasının ekranı sonraki fazdaysa da satır adıyla basılır.
-IS_ADLARI: Final[Mapping[Satir, str]] = {
-    Satir.M1: "Okul bilgileri, ders yılı, kapalı günler, birlik döneminin açılması ve kapanması",
-    Satir.M2: "Kişiler, organlar, temsilciler, yönetim kurulu görev bölümü, yedek üye çağrısı",
-    Satir.M3: "Genel kurul",
-    Satir.M4: "Yönetim kurulu toplantısı, katılım, karar taslağı",
-    Satir.M5: "Gelir-gider kaydı, banka eşleme, makbuz koçanı ve yaprağı, kasa",
-    Satir.M6: "Harcama zinciri",
-    Satir.M7: "Tahmini bütçe, ilan, aylık bildirim, faaliyet raporu",
-    Satir.M8: (
-        "Denetim: Denetleme Kurulu görev bölümü, denetim planı, kontrol listesi, bulgu, ara ve "
-        "nihai rapor, olağanüstü genel kurul çağrısı, kayıt bütünlüğü denetimi"
+
+@dataclass(frozen=True)
+class IsParcasi:
+    """Bugünkü işin bir parçası ("kapama", "ders yılı ve dönemler") ve onu bugün yapan uçlar.
+
+    `uclar` Django URL adlarıdır (`rol_izinleri.KURALLAR`'ın `uc`'u): her biri satırın, pusulası
+    basılan rolün yazabildiği bir yazma kuralıdır (test). Ad, ucu ya da ekranı olmayan bir işi
+    söyleyemez.
+    """
+
+    ad: str
+    uclar: frozenset[str]
+
+
+def _parca(ad: str, *uclar: str) -> IsParcasi:
+    return IsParcasi(ad, frozenset(uclar))
+
+
+@dataclass(frozen=True)
+class BugunkuIs:
+    """Bir matris satırının BUGÜN programda yapılabilen işi (orkestratör maddesi F-4).
+
+    Ad `baslik` + ": " + parçalardır (başlık yoksa yalnız parçalar); iki noktadan sonrası liste
+    olduğu için küçük harfle sürer.
+    """
+
+    parcalar: tuple[IsParcasi, ...]
+    baslik: str = ""
+
+    @property
+    def ad(self) -> str:
+        govde = ", ".join(parca.ad for parca in self.parcalar)
+        return f"{self.baslik}: {govde}" if self.baslik else govde
+
+
+#: Rolün bugün yazabildiği matris satırlarının pusuladaki işleri (orkestratör maddesi F-4): YALNIZ
+#: bugün programda yapılabilen işler yazılır, sonraki fazların işleri yazılmaz ("birlik döneminin
+#: açılması" F1c, "hesap geçişi" ve "kayıtların anahtarının yenilenmesi" F4, takvim ve uyum kaydı
+#: F2 …). Hangi satırların basılacağını `rol_izinleri.etkin_hucreler` söyler (tek yüklem; ikinci
+#: bir matris doğmaz); burası yalnız satırın bugünkü ADINI ve adın parçalarını yapan uçları tutar.
+#: FAZLARLA BÜYÜR: bir faz bir hücreyi bekleyenden çıkarınca ya da etkin bir satıra yeni bir yazma
+#: ucu ekleyince işin adı ve parçası buraya eklenir — testler (`test_evrak_kurallari.py`) her etkin
+#: satırın adını, her parçanın var olan bir uca karşılık geldiğini ve satırın her yazma ucunun bir
+#: parçada adlandığını (ya da `ADSIZ_UCLAR`'da gerekçesiyle durduğunu) sınar. Adlar sözlüğe uyar
+#: (sözlük §1 "Hesap teslim pusulası (F1b)"): kodsuz, kısaltmasız; ekran, kart ve düğme adları
+#: sözlükteki gibidir.
+BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
+    Satir.M1: BugunkuIs(
+        (
+            _parca("Okul bilgileri", "setup-school-config"),
+            _parca(
+                "ders yılı ve dönemler",
+                "school-year-list",
+                "school-year-terms",
+                "school-year-activate",
+            ),
+            _parca("kapalı günler", "holiday-list", "holiday-seed", "holiday-detail"),
+            _parca("şubeler", "class-section-list", "class-section-detail"),
+        )
     ),
-    Satir.MUDUR_YAZISI: "Müdür yazısı: birlik başkanına yazılı uyarı",
-    Satir.M9: "Takvim, pano ve uyum kaydı",
-    Satir.M10: "Gelen-giden evrak, belge dosyası",
-    Satir.M11: "Devir-teslim ve dönem kapanışı",
-    Satir.M13_M14: "Kantin ve servis",
-    Satir.M15: "Personel",
-    Satir.DENETIM_IZI: "Denetim izi",
-    Satir.ERISIM_GUNLUGU: "Erişim günlüğü",
-    Satir.KULLANICILAR: (
-        "Kullanıcılar: hesap açma, kapama, askıdan çıkarma, parola sıfırlama, hesap geçişi"
+    Satir.M2: BugunkuIs(
+        (
+            _parca(
+                "öğretmen ve diğer personel kaydı",
+                "personnel-list",
+                "personnel-detail",
+                "personnel-leave",
+                "personnel-merge",
+            ),
+            _parca("e-Okul aktarımı", "import-personnel-preview", "import-personnel-commit"),
+            _parca("ayrılış havuzu", "leave-pool-resolve"),
+        ),
+        baslik="Kişiler",
     ),
-    Satir.GUVENLIK: (
-        "Güvenlik: kurtarma anahtarı, yedek indirme, geri yükleme, kayıtların anahtarının "
-        "yenilenmesi"
+    Satir.M8: BugunkuIs(
+        (
+            _parca(
+                "yedekten geri yükleme kartını görüldü olarak işaretleme (“Gördüm”)",
+                "security-integrity-restore-seen",
+            ),
+        ),
+        baslik="Genel Bakış",
     ),
-    Satir.AYARLAR: (
-        "Ayarlar: boşta kilit süresi, küçük alım sınırı, kural sürümü, bağışçı kimlik numarası"
+    Satir.M9: BugunkuIs(
+        (_parca("son oturumun kontrolü (“Kontrol ettim”)", "dashboard-last-session"),),
+        baslik="Genel Bakış",
     ),
-    Satir.KISISEL_VERI: "Kişisel veri içeren çıktı ve dışa aktarım",
-    Satir.GUNCELLEME: "Güncelleme denetimi",
-    Satir.KENDI: "Kendi parolanızı değiştirme, Kilitle, Çık",
+    Satir.KULLANICILAR: BugunkuIs(
+        (
+            _parca("hesap açma", "account-list"),
+            _parca("kapama", "account-close"),
+            _parca("askıdan çıkarma", "account-unsuspend"),
+            _parca("parola sıfırlama", "account-reset-password"),
+            _parca("hesap teslim pusulası", "account-handover-slip"),
+        ),
+        baslik="Kullanıcılar",
+    ),
+    Satir.GUVENLIK: BugunkuIs(
+        (
+            _parca(
+                "kurtarma anahtarı",
+                "security-recovery-key-pdf",
+                "security-recovery-key-confirm",
+                "security-recovery-key-renew",
+            ),
+            _parca("şifreli yedek", "encrypted-backup-download", "backup-external-reminder"),
+            _parca("yedekten geri yükleme", "backup-restore"),
+            # Genel Bakış'ın "Hesaplar ve Güvenlik Dosyası" kartındaki liste ve "Güvenlik dosyasından
+            # sil" düğmesi (sözlük §4.5): ad kartın alt başlığıdır.
+            _parca(
+                "Genel Bakış'ta güvenlik dosyasında kalan eski parola kayıtlarının silinmesi",
+                "security-integrity-orphan-wraps",
+            ),
+        ),
+        baslik="Güvenlik",
+    ),
+    Satir.AYARLAR: BugunkuIs(
+        (_parca("boşta kilit süresi", "security-idle-lock"),), baslik="Ayarlar"
+    ),
+    Satir.GUNCELLEME: BugunkuIs(
+        (_parca("Güncelleme denetimi", "update-latest", "update-installer"),)
+    ),
+    Satir.KENDI: BugunkuIs(
+        (
+            _parca("Kendi parolanızı değiştirme", "security-change-password"),
+            _parca("Kilitle", "security-lock"),
+            _parca("Çık", "app-quit"),
+        )
+    ),
+}
+
+#: Etkin satırlarda bilerek ADLANMAYAN yazma uçları ve gerekçeleri (orkestratör maddesi F-4; test
+#: bunları satırın kapsamından düşer). Liste yalnız gerekçeyle büyür.
+ADSIZ_UCLAR: Final[Mapping[str, str]] = {
+    "setup-complete": (
+        "Kurulum Sihirbazı'nın son adımı; pusula kurulumdan sonra basılır, hesap sahibinin işi değildir."
+    ),
+    "setup-roadmap": (
+        "Genel Bakış'taki Başlangıç Yol Haritası işaretleri; okul bilgileri işinin yan ürünüdür."
+    ),
+    "student-list": "Tasarım T5: OAB öğrenci tutmaz; öğrenci uçları F1b 5. adımda sökülür.",
+    "student-detail": "Tasarım T5: OAB öğrenci tutmaz; öğrenci uçları F1b 5. adımda sökülür.",
+    "student-leave": "Tasarım T5: OAB öğrenci tutmaz; öğrenci uçları F1b 5. adımda sökülür.",
+    "import-students-preview": "Tasarım T5: OAB öğrenci tutmaz; öğrenci uçları F1b 5. adımda sökülür.",
+    "import-students-commit": "Tasarım T5: OAB öğrenci tutmaz; öğrenci uçları F1b 5. adımda sökülür.",
+    "security-state-reset": (
+        "Güvenlik dosyası kayıp ekranındaki sıfırlama; yalnız hiç hesap ve şifreli kayıt yokken "
+        "açıktır, açık oturumda 409 döner; hesap sahibinin işi değildir."
+    ),
+    "security-integrity-reset-notice": (
+        "Kendi parola yenilenme bildiriminin “Gördüm”ü; bildirim kendiliğinden açılır, ayrı iş "
+        "değildir."
+    ),
 }
 
 
 def isler(rol: str) -> tuple[str, ...]:
-    """Rolün "bu programda sizin işiniz" satırları (`etkin_hucreler` sırasıyla; ad `IS_ADLARI`)."""
-    return tuple(IS_ADLARI[satir] for satir in etkin_hucreler(rol))
+    """Rolün "bu programda sizin işiniz" satırları: `etkin_hucreler` sırasıyla, bugünkü adlarıyla
+    (`BUGUNKU_ISLER`). Etkin satırın adı yoksa `KeyError` (test her etkin satırın adını sınar)."""
+    return tuple(BUGUNKU_ISLER[satir].ad for satir in etkin_hucreler(rol))
 
 
 def _gun(an: datetime) -> str:
@@ -215,13 +334,28 @@ def pusula_belgesi(
     )
 
 
-def dosya_adi(gun: date | None = None) -> str:
-    """İndirme adı: 'Hesap-Teslim-Pusulası_03.11.2026.pdf' (yerel gün).
+#: Dosya adında kullanılamayan karakterler (Windows'un yasakladığı dokuz karakter; ön yüzün
+#: `lib/download.ts` `dosyaAdi` kuralı).
+_DOSYA_ADI_YASAK = re.compile(r'[\\/:*?"<>|]')
 
-    Ad tanıtıcıyı TAŞIMAZ: tanıtıcıda hesap sahibinin adı olabilir (program yalnız uyarır;
-    `hesap_kurallari.login_name_warning`); dosya adları klasör listelerinde ve son kullanılanlar
-    menüsünde görünür. Kalıp kurtarma anahtarı belgesininkidir (`recovery_key_document`).
+
+def _dosya_parcasi(metin: str) -> str:
+    """Dosya adının bir parçası (`dosyaAdi` kalıbı): yasak karakter atılır, boşluk tireye döner."""
+    return re.sub(r"\s+", "-", _DOSYA_ADI_YASAK.sub("", metin).strip())
+
+
+def dosya_adi(rol: str, gun: date | None = None) -> str:
+    """İndirme adı: 'Hesap-Teslim-Pusulası_Muhasip_03.11.2026.pdf' (yerel gün; orkestratör maddesi
+    F-2). Program yöneticisinde 'Hesap-Teslim-Pusulası_Program-yöneticisi_03.11.2026.pdf'.
+
+    Belge adı + kapsam + tarih (sözlük §3 "İndirilen dosya adı"): kapsam rol etiketidir (sıra
+    no'suz; `oturum.rol_etiketi`) — aynı gün birkaç hesaba basılan pusulalar klasörde ayrılır. Ad
+    tanıtıcıyı ve ad-soyadı TAŞIMAZ: tanıtıcıda hesap sahibinin adı ya da kimlik numarasına benzer
+    bir sayı olabilir (program yalnız uyarır; `hesap_kurallari.login_name_warning`); dosya adları
+    klasör listelerinde ve son kullanılanlar menüsünde görünür. Kalıp kurtarma anahtarı
+    belgesininkidir (`recovery_key_document`); Türkçe harfler korunur, Content-Disposition'daki
+    kodlamayı Django yapar (`filename*=utf-8''…`).
     """
     gun = gun or timezone.localdate()
     ad = "-".join(tr_upper(sozcuk[:1]) + sozcuk[1:] for sozcuk in BELGE_ADI.split())
-    return f"{ad}_{gun:%d.%m.%Y}.pdf"
+    return f"{ad}_{_dosya_parcasi(rol_etiketi(rol))}_{gun:%d.%m.%Y}.pdf"

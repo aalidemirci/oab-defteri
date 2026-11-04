@@ -654,7 +654,13 @@ BEKLEYEN_DIPNOTLAR: Final[Mapping[int, str]] = {
 
 
 def etkin_hucreler(rol: str) -> tuple[Satir, ...]:
-    """Rolün bugün programda yazabildiği satırlar: MATRIS'te Y olup bekleyende olmayanlar."""
+    """Rolün bugün programda yazabildiği satırlar: MATRIS'te Y olup bekleyende olmayanlar.
+
+    Hesap teslim pusulası (E63) bu satırları basar; her satırın BUGÜNKÜ işinin adı ve o işi yapan
+    uçlar `services.hesap_teslim_pusulasi.BUGUNKU_ISLER`'dedir (orkestratör maddesi F-4). Bir faz
+    bir hücreyi bekleyenden çıkarınca o satırın bugünkü adı da orada eklenir (`test_evrak_kurallari`
+    eksik adı ve uçsuz adı düşürür).
+    """
     return tuple(
         satir
         for satir, hucreler in MATRIS.items()

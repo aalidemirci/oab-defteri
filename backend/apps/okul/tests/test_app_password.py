@@ -58,7 +58,7 @@ from apps.okul.models import (
     Student,
 )
 from apps.okul.oturum import OTURUM
-from apps.okul.services import app_password
+from apps.okul.services import app_password, hesap_kurallari
 from apps.okul.tests.hesap_ortak import (
     GECICI_PAROLA,
     UCUNCU_PAROLA,
@@ -1208,6 +1208,49 @@ class TestSecurityApi:
         )
         assert resp.status_code == 201
         assert "adını içeriyor" in resp.json()["login_name_warning"]
+
+    @pytest.mark.django_db
+    def test_kurulum_yaniti_taniticidaki_kimlik_numarasi_benzerini_uyarir(
+        self, client: APIClient, parolasiz: Path
+    ) -> None:
+        """Orkestratör maddesi F-5: kurulumun yanıtı da (ad-soyad uyarısının yolu) 11 haneli
+        sayının uyarısını taşır; kurulum engellenmez. Sayı uydurmadır, sağlaması tutmaz."""
+        resp = client.post(
+            "/api/v1/security/enable/",
+            {"tanitici": "yonetici-12345678901", "ad_soyad": KURAN_AD, "parola": YENI_PAROLA},
+            format="json",
+        )
+        assert resp.status_code == 201
+        assert resp.json()["login_name_warning"] == hesap_kurallari.LOGIN_NAME_TCKN_WARNING_MESSAGE
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize(
+        ("alan", "ileti"),
+        [
+            ("tanitici", hesap_kurallari.LOGIN_NAME_EMPTY_MESSAGE),
+            ("ad_soyad", hesap_kurallari.DISPLAY_NAME_EMPTY_MESSAGE),
+            ("parola", hesap_kurallari.PASSWORD_TOO_SHORT_MESSAGE),
+        ],
+    )
+    def test_kurulumda_bos_alan_servisin_iletisini_alir(
+        self, client: APIClient, parolasiz: Path, alan: str, ileti: str
+    ) -> None:
+        """Orkestratör maddesi F-6: boş tanıtıcı, ad-soyad ya da parola DRF'nin genel iletisini
+        değil servisin Türkçe iletisini alır (alan sözlüğü boş); boş tanıtıcı varsayılana dönmez.
+        Gönderilmeyen ad-soyad ve parola da aynı iletiyi alır; gönderilmeyen tanıtıcı `yonetici`dir.
+        Hesap kurulmaz."""
+        govde = {"tanitici": "yonetici", "ad_soyad": KURAN_AD, "parola": YENI_PAROLA, alan: ""}
+        resp = client.post("/api/v1/security/enable/", govde, format="json")
+        assert resp.status_code == 400, resp.content
+        assert resp.json() == {"code": "validation_error", "message": ileti, "fields": {}}
+        # Null da boştur (bağımsız denetim bulgusu): null tanıtıcı da varsayılana dönmez.
+        bos_deger = client.post("/api/v1/security/enable/", {**govde, alan: None}, format="json")
+        assert bos_deger.json() == {"code": "validation_error", "message": ileti, "fields": {}}
+        if alan != "tanitici":
+            del govde[alan]
+            eksik = client.post("/api/v1/security/enable/", govde, format="json")
+            assert eksik.json() == {"code": "validation_error", "message": ileti, "fields": {}}
+        assert not Account.objects.exists()
 
     @pytest.mark.django_db
     def test_kilit_acma_ret_kodlari(self, client: APIClient, yonetici_hesabi: Account) -> None:

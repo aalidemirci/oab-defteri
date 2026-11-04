@@ -64,7 +64,11 @@ ucu"; tasarım §4.6.4 "Okuyan: yonetici ve DK"):
   (`SAYFA_BOYUTU`), en yeni önce gelir.
 * KİŞİSİZDİR: okuyan hesap rol etiketi (sıra no'suz, satırdaki rolden) ve tanıtıcıyla anılır;
   ad-soyad (şifreli `display_name`) okunmaz. Okunan kaydın kimliği satırda olduğu gibidir (model,
-  kimlik, alan adı; değer yoktur — yazıcı tutmaz).
+  kimlik, alan adı; değer yoktur — yazıcı tutmaz). Tanıtıcı yalnız açık hesaplar arasında tekil
+  olduğundan hesabın açılış ve kapanış günü de verilir (`acilis`, `kapanis`; Europe/Istanbul günü,
+  yyyy-aa-gg; açık hesapta `kapanis` None): kapanan hesapla aynı tanıtıcıyı alan yeni hesap
+  satırlarda ve hesap seçeneklerinde ayrılır (orkestratör maddesi F-3; `iz_dogrulama` kartlarındaki
+  hesap özetiyle aynı karar).
 * OKUMA İZ BIRAKMAZ: ne denetim izine ne erişim günlüğüne satır yazar (günlüğü okumak tasarımın
   hassas okuma türlerinden değildir; §4.6.4). DEK istemez (tablo şifresizdir); uç yalnız açık
   oturumdadır (kilit kapısı).
@@ -89,7 +93,15 @@ from django.utils import timezone
 
 from apps.okul import denetim_izi, masaustu_kanca, rol_izinleri
 from apps.okul.models import AccessKind, AccessLog, Account, AccountRole
-from apps.okul.oturum import IZ_KIP_KILIDI, rol_etiketi, sistem_olarak, yazar
+from apps.okul.oturum import (
+    IZ_KIP_KILIDI,
+    ham_an_sutunlari,
+    hesap_ani,
+    hesap_gunu,
+    rol_etiketi,
+    sistem_olarak,
+    yazar,
+)
 from shared import crypto
 from shared.exceptions import RolYetkisiz
 
@@ -360,17 +372,49 @@ def _rol_sirasi(rol: str) -> int:
 
 
 def _hesap_ozetleri(kimlikler: set[Any]) -> dict[str, dict[str, Any]]:
-    """Okuyan hesapların kişisiz özeti: kimlik → {id, tanitici, rol_etiketi}; ad-soyad okunmaz."""
+    """Okuyan hesapların kişisiz özeti: kimlik → {id, tanitici, rol_etiketi, acilis, kapanis};
+    ad-soyad okunmaz.
+
+    Açılış ve kapanış günü aynı tanıtıcıyı taşıyan hesapları ayırır (orkestratör maddesi F-3):
+    tanıtıcı yalnız AÇIK hesaplar arasında tekildir, kapanan "muhasip"in yerine açılan yeni hesap da
+    "muhasip" olabilir; günlükte ikisi ayrı hesaptır.
+
+    İki an ORM dönüştürücüsü olmadan, ham metin okunur (`oturum.ham_an_sutunlari`, `hesap_ani`):
+    program dışından yazılmış geçersiz tek bir an ekranı düşürmez, o gün None olur (bağımsız
+    denetim bulgusu). Açılış ANI yanıta girmeyen `_acilis_an`'da kalır: seçeneklerin sırası gün
+    değil andır (aynı gün kapatılıp yeniden açılan tanıtıcı da açılış sırasıyla gelir).
+    """
     ozetler: dict[str, dict[str, Any]] = {}
-    for satir in Account.objects.filter(pk__in=kimlikler).values("id", "login_name", "role"):
+    sorgu = Account.objects.filter(pk__in=kimlikler).annotate(**ham_an_sutunlari())
+    for satir in sorgu.values("id", "login_name", "role", "ham_acilis", "ham_kapanis"):
         kimlik = str(satir["id"])
+        acilis = hesap_ani(satir["ham_acilis"])
         ozetler[kimlik] = {
             "id": kimlik,
             "tanitici": satir["login_name"],
             "rol_etiketi": rol_etiketi(satir["role"]),
+            "acilis": hesap_gunu(acilis),
+            "kapanis": hesap_gunu(hesap_ani(satir["ham_kapanis"])),
             "_rol": satir["role"],
+            "_acilis_an": acilis,
         }
     return ozetler
+
+
+#: Açılış anı okunamayan hesap aynı tanıtıcının seçeneklerinde sona düşer (sıralama anahtarı).
+_EN_ESKI_AN: Final = datetime.min.replace(tzinfo=UTC)
+
+
+def _secenek_sirasi(ozet: Mapping[str, Any]) -> tuple[Any, ...]:
+    """Hesap seçeneklerinin sırası: rol sırası, tanıtıcı, açılış ANI (okunamayan sonda), kimlik."""
+    an = ozet["_acilis_an"]
+    return (
+        _rol_sirasi(ozet["_rol"]),
+        ozet["tanitici"],
+        an is None,
+        an or _EN_ESKI_AN,
+        ozet["id"],
+    )
 
 
 def _satir_ozeti(satir: AccessLog, hesaplar: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
@@ -384,6 +428,8 @@ def _satir_ozeti(satir: AccessLog, hesaplar: Mapping[str, dict[str, Any]]) -> di
             "tanitici": None if hesap is None else hesap["tanitici"],
             # Okuma anındaki rol (satırın kendi sütunu; hesabın rolü açılıştan sonra değişmez).
             "rol_etiketi": rol_etiketi(satir.role),
+            "acilis": None if hesap is None else hesap["acilis"],
+            "kapanis": None if hesap is None else hesap["kapanis"],
         },
         "tur": satir.kind,
         "tur_adi": TUR_ADLARI.get(satir.kind, BILINMEYEN_TUR_ADI),
@@ -405,11 +451,14 @@ def liste(
 ) -> dict[str, Any]:
     """Okuma ekranının bir sayfası (modül başlığı "OKUMA"); yalnız okur, iz bırakmaz.
 
-    Yanıt: `satirlar` (en yeni önce; `{id, zaman, hesap: {id, tanitici, rol_etiketi}, tur,
-    tur_adi, model, kayit, alan, belge_ozeti, satir_sayisi}`), `toplam` (süzgece uyan satır),
-    `sayfa`, `sayfa_sayisi` (en az 1), `sayfa_boyutu`; süzgeç seçenekleri `turler` (kapalı küme,
-    görünen adıyla) ve `hesaplar` (günlükte satırı olan hesaplar, rol sırasıyla). Sayfa son
-    sayfadan büyükse `satirlar` boştur. Bitiş başlangıçtan önceyse `ValueError`.
+    Yanıt: `satirlar` (en yeni önce; `{id, zaman, hesap: {id, tanitici, rol_etiketi, acilis,
+    kapanis}, tur, tur_adi, model, kayit, alan, belge_ozeti, satir_sayisi}`), `toplam` (süzgece
+    uyan satır), `sayfa`, `sayfa_sayisi` (en az 1), `sayfa_boyutu`; süzgeç seçenekleri `turler`
+    (kapalı küme, görünen adıyla) ve `hesaplar` (günlükte satırı olan hesaplar `{id, tanitici,
+    rol_etiketi, acilis, kapanis}`; rol sırasıyla, aynı tanıtıcıda açılış sırasıyla). `acilis` ve
+    `kapanis` hesabın Europe/Istanbul günüdür (yyyy-aa-gg; açık hesapta `kapanis` None): aynı
+    tanıtıcıyı alan eski ve yeni hesap ayrılır (orkestratör maddesi F-3). Sayfa son sayfadan
+    büyükse `satirlar` boştur. Bitiş başlangıçtan önceyse `ValueError`.
     """
     _okuma_yetkisi()
     if baslangic is not None and bitis is not None and bitis < baslangic:
@@ -440,8 +489,6 @@ def liste(
         "turler": [{"tur": tur_, "tur_adi": TUR_ADLARI[tur_]} for tur_ in AccessKind.values],
         "hesaplar": [
             {ad: deger for ad, deger in ozet.items() if not ad.startswith("_")}
-            for ozet in sorted(
-                hesaplar.values(), key=lambda o: (_rol_sirasi(o["_rol"]), o["tanitici"], o["id"])
-            )
+            for ozet in sorted(hesaplar.values(), key=_secenek_sirasi)
         ],
     }
