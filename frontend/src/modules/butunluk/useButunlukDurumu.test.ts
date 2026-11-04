@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../lib/api";
 import { butunlukApi } from "./api";
-import type { ButunlukDurumu, ButunlukYetkisi } from "./api";
+import type { ButunlukDurumu, ButunlukYetkisi, GeriYuklemeOzeti } from "./api";
 import useButunlukDurumu, { duzenle, okunamadiSayilir } from "./useButunlukDurumu";
 
 const DURUM: ButunlukDurumu = {
@@ -152,5 +152,60 @@ describe("useButunlukDurumu", () => {
       unmount();
     }
     expect(durum).not.toHaveBeenCalled();
+  });
+});
+
+describe("useButunlukDurumu — geri yükleme kartının “Gördüm”ü", () => {
+  const YETKI: ButunlukYetkisi = { denetim: true, ikiDepo: false };
+  const GERI = { seq: 40, onceki_geri_yuklemeler: [] } as unknown as GeriYuklemeOzeti;
+
+  it("“Gördüm”den dönen denetim kartları duruma yazılır (yeniden okuma yok)", async () => {
+    const durum = vi
+      .spyOn(butunlukApi, "durum")
+      .mockResolvedValue({ ...DURUM, geri_yukleme: GERI });
+    const { result } = renderHook(() => useButunlukDurumu(YETKI));
+    await waitFor(() => expect(result.current.durum?.geri_yukleme).toEqual(GERI));
+
+    act(() =>
+      result.current.denetimiYaz({
+        butunluk: [],
+        geri_yukleme: null,
+        muhru_tutmayan: [],
+        okunamayan: [],
+      }),
+    );
+
+    expect(result.current.durum?.geri_yukleme).toBeNull();
+    // İki depo kaydı korunur; mührü tutmayanlar yanıttan.
+    expect(result.current.durum?.iki_depo?.silinebilir_sarmallar).toHaveLength(1);
+    expect(result.current.durum?.iki_depo?.muhru_tutmayan).toEqual([]);
+    expect(durum).toHaveBeenCalledTimes(1);
+  });
+
+  it("yenile uçları aynı yetkiyle bir kez daha okutur", async () => {
+    const durum = vi.spyOn(butunlukApi, "durum").mockResolvedValue(DURUM);
+    const { result } = renderHook(() => useButunlukDurumu(YETKI));
+    await waitFor(() => expect(durum).toHaveBeenCalledTimes(1));
+
+    act(() => result.current.yenile());
+
+    await waitFor(() => expect(durum).toHaveBeenCalledTimes(2));
+    expect(durum).toHaveBeenLastCalledWith(YETKI);
+  });
+
+  it("durum henüz yoksa denetim yanıtı yazılmaz", () => {
+    vi.spyOn(butunlukApi, "durum").mockReturnValue(new Promise(() => undefined));
+    const { result } = renderHook(() => useButunlukDurumu(YETKI));
+
+    act(() =>
+      result.current.denetimiYaz({
+        butunluk: [],
+        geri_yukleme: null,
+        muhru_tutmayan: [],
+        okunamayan: [],
+      }),
+    );
+
+    expect(result.current.durum).toBeNull();
   });
 });

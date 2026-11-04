@@ -3,7 +3,9 @@
 // değil) ve tek bileşik durumda birleşir (`butunlukApi.durum`, `birlestir`). Yetki henüz
 // bilinmiyorsa (oturum özeti yükleniyor) hiçbir uç çağrılmaz; rolün açamadığı uç hiç çağrılmaz.
 // Kartlar aynı durumdan beslenir; sahipsiz parola kaydının silinmesi güncel iki depo kartını
-// döndürür, çağıran `ikiDepoyuYaz` ile yerine koyar (mührü tutmayan hesaplar korunur).
+// döndürür, çağıran `ikiDepoyuYaz` ile yerine koyar (mührü tutmayan hesaplar korunur). Geri
+// yükleme kartının "Gördüm"ü güncel denetim kartlarını döndürür (`denetimiYaz`; iki depo kaydı
+// korunur); kartın gösterdiği geri yükleme artık güncel değilse uçlar yeniden okunur (`yenile`).
 //
 // OKUNAMAZSA GİZLENMEZ (fail-closed): uyarı kartları denetim izinin bulgusunu taşır; okuma
 // beklenmedik biçimde düşerse (sunucu hatası, ağ) `okunamadi` doğru olur ve Genel Bakış
@@ -22,8 +24,14 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError } from "../../lib/api";
-import { butunlukApi, ikiDepoyuBirlestir } from "./api";
-import type { ButunlukDurumu, ButunlukYetkisi, GeriYuklemeOzeti, IkiDepoYaniti } from "./api";
+import { butunlukApi, denetimiBirlestir, ikiDepoyuBirlestir } from "./api";
+import type {
+  ButunlukDurumu,
+  ButunlukYetkisi,
+  DenetimKartlari,
+  GeriYuklemeOzeti,
+  IkiDepoYaniti,
+} from "./api";
 
 export interface ButunlukDurumuKancasi {
   durum: ButunlukDurumu | null;
@@ -31,6 +39,10 @@ export interface ButunlukDurumuKancasi {
   okunamadi: boolean;
   /** Sahipsiz kaydın silinmesinden dönen iki depo kartını duruma yazar. */
   ikiDepoyuYaz: (yanit: IkiDepoYaniti) => void;
+  /** Geri yükleme kartının "Gördüm"ünden dönen denetim kartlarını duruma yazar. */
+  denetimiYaz: (yanit: DenetimKartlari) => void;
+  /** Rolün uçlarını yeniden okur (kartın gösterdiği geri yükleme artık güncel değilse). */
+  yenile: () => void;
 }
 
 /** Geri yükleme kartı; eski yanıtta öncekiler listesi yoksa boş. */
@@ -76,6 +88,8 @@ export default function useButunlukDurumu(
 ): ButunlukDurumuKancasi {
   const [durum, setDurum] = useState<ButunlukDurumu | null>(null);
   const [okunamadi, setOkunamadi] = useState(false);
+  // Yeniden okuma isteği (`yenile`): her artış uçları bir kez daha okutur.
+  const [okuma, setOkuma] = useState(0);
   const yetkiOkunamadi =
     yetki === null &&
     yetkiHatasi !== null &&
@@ -102,11 +116,17 @@ export default function useButunlukDurumu(
     return () => {
       iptal = true;
     };
-  }, [hazir, denetim, ikiDepo]);
+  }, [hazir, denetim, ikiDepo, okuma]);
 
   const ikiDepoyuYaz = useCallback((yanit: IkiDepoYaniti) => {
     setDurum((d) => (d === null ? d : ikiDepoyuBirlestir(d, yanit)));
   }, []);
 
-  return { durum, okunamadi: okunamadi || yetkiOkunamadi, ikiDepoyuYaz };
+  const denetimiYaz = useCallback((yanit: DenetimKartlari) => {
+    setDurum((d) => (d === null ? d : denetimiBirlestir(d, yanit)));
+  }, []);
+
+  const yenile = useCallback(() => setOkuma((n) => n + 1), []);
+
+  return { durum, okunamadi: okunamadi || yetkiOkunamadi, ikiDepoyuYaz, denetimiYaz, yenile };
 }

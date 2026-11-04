@@ -46,7 +46,10 @@ const oturumApiMock = vi.hoisted(() => ({
   kurtarmaHesaplari: vi.fn(),
 }));
 
-vi.mock("./modules/oturum/api", () => ({ oturumApi: oturumApiMock }));
+vi.mock("./modules/oturum/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./modules/oturum/api")>()),
+  oturumApi: oturumApiMock,
+}));
 
 import App from "./App";
 import { KILIT_EKRANI_BASLIGI } from "./modules/guvenlik/KilitEkrani";

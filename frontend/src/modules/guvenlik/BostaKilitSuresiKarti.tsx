@@ -9,8 +9,9 @@
 //   çubuktaki geri sayım ve ipucu yeni süreyi göstersin (`eylemler.bostaKilitSuresiniDegistir`).
 // * Kurulum sihirbazı bitene dek süre işlemez (tasarım §13 D15); metin bunu söyler.
 // * Yalnız açık oturumda okunur ve yazılır (kilitliyken uç 423 döner; bu ekran zaten
-//   açık oturumdadır). Değiştirme yetkisinin program yöneticisine daralması rol kapısıyla
-//   2. adımda gelir (tasarım §4.4.2); bugün yalnız program yöneticisi hesabı açılabilir.
+//   açık oturumdadır). Süreyi her rol okur, yalnız `bosta_sure_yazma` yeteneği yazar (plan
+//   F1b-2 "Ayarlar"; `yazabilir`, Güvenlik sekmesi verir): öteki rollerde alan ve "Kaydet"
+//   yerine "Boşta kilit süresi N dakika." yazar.
 
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
@@ -52,7 +53,17 @@ export function bostaDakikaSorunu(deger: string): string | null {
   return dakika < BOSTA_DK_EN_AZ || dakika > BOSTA_DK_EN_COK ? BOSTA_DK_ARALIK_ILETISI : null;
 }
 
-export default function BostaKilitSuresiKarti() {
+/** Salt okur satırı (sözlük §1 "Kilit ve çıkış"). */
+export function bostaSuresiCumlesi(dakika: number): string {
+  return `Boşta kilit süresi ${dakika} dakika.`;
+}
+
+export default function BostaKilitSuresiKarti({
+  yazabilir,
+}: {
+  /** Süreyi yazabilir mi (`bosta_sure_yazma`)? Değilse yalnız okunur. */
+  yazabilir: boolean;
+}) {
   const snackbar = useSnackbar();
   const [kayitli, setKayitli] = useState<number | null>(null);
   const [okunamadi, setOkunamadi] = useState(false);
@@ -113,6 +124,8 @@ export default function BostaKilitSuresiKarti() {
         </p>
       ) : kayitli === null ? (
         <SkeletonList rows={1} className="mt-4" />
+      ) : !yazabilir ? (
+        <p className="mt-4 text-body-large text-on-surface">{bostaSuresiCumlesi(kayitli)}</p>
       ) : (
         // `noValidate`: tarayıcının kendi (İngilizce olabilen) aralık balonu yerine
         // sözlüğe uyan ileti alanın altında çıksın.

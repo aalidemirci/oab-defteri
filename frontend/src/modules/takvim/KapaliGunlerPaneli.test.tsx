@@ -61,11 +61,11 @@ const RAMAZAN_2027: Holiday = {
   is_estimated: true,
 };
 
-function ekranaBas(props: KapaliGunlerPaneliProps = {}) {
+function ekranaBas(props: Partial<KapaliGunlerPaneliProps> = {}) {
   return render(
     <SnackbarProvider>
       <ConfirmProvider>
-        <KapaliGunlerPaneli {...props} />
+        <KapaliGunlerPaneli saltOkur={false} {...props} />
       </ConfirmProvider>
     </SnackbarProvider>,
   );
@@ -390,5 +390,38 @@ describe("KapaliGunlerPaneli — sihirbazda yeniden kullanım", () => {
     expect(onYilChange).toHaveBeenCalledWith(2027);
     // Denetimli: çağıran `yil`'i değiştirmedikçe gösterilen yıl aynı kalır.
     expect(oapi.listHolidays).toHaveBeenLastCalledWith(2026);
+  });
+});
+
+describe("KapaliGunlerPaneli — salt okur (yazma yeteneği olmayan rol)", () => {
+  it("liste ve yıl seçici kalır; ekleme, silme ve tohumlama denetimleri çizilmez", async () => {
+    const user = userEvent.setup();
+    ekranaBas({ saltOkur: true });
+
+    const liste = await screen.findByRole("list", { name: "2026 kapalı günleri" });
+    expect(within(liste).getByText("Cumhuriyet Bayramı")).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent(
+      "Bu bölüm hesabınızın rolüne yalnız okuma için açık.",
+    );
+    expect(screen.queryByRole("button", { name: /Resmî ve dini tatilleri ekle/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /kaydını sil/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Ekle|Kaydet/ })).toBeNull();
+    expect(screen.queryByLabelText(/Başlangıç/)).toBeNull();
+
+    // Tahmini bayram notu düzeltme öğüdü vermez (düzeltmeyi yazabilen rol yapar).
+    await user.selectOptions(screen.getByLabelText("Yıl"), "2027");
+    expect(await screen.findByText("Ramazan Bayramı")).toBeInTheDocument();
+    const notlar = screen.getAllByRole("note").map((n) => n.textContent ?? "");
+    expect(notlar.some((n) => /bir gün kayabilir/.test(n))).toBe(true);
+    expect(notlar.some((n) => /kaydı silip/.test(n))).toBe(false);
+    expect(oapi.seedHolidays).not.toHaveBeenCalled();
+  });
+
+  it("boş yılda yalnız durumu söyler, eklemeyi öğütlemez", async () => {
+    oapi.listHolidays.mockResolvedValue([]);
+    ekranaBas({ saltOkur: true });
+
+    expect(await screen.findByText("2026 yılı için kayıtlı kapalı gün yok.")).toBeInTheDocument();
+    expect(screen.queryByText(/Resmî ve dini tatilleri ekleyin/)).toBeNull();
   });
 });

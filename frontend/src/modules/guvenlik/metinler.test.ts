@@ -87,9 +87,25 @@ describe("güvenlik metinleri", () => {
   });
 
   it("kurtarma uyarısı anahtarın üç kullanımını sayar (belgedekiyle aynı)", () => {
-    expect(metinler.KURTARMA_UYARISI).toMatch(/Program yöneticisi parolasını unutursa/);
-    expect(metinler.KURTARMA_UYARISI).toMatch(/yeni bir bilgisayara taşınırsa/);
-    expect(metinler.KURTARMA_UYARISI).toMatch(/güvenlik dosyası kaybolur veya bozulursa/);
+    expect(metinler.KURTARMA_UYARISI).toContain("Kayıtlara üç durumda bu anahtarla erişilir");
+    expect(metinler.KURTARMA_UYARISI).toContain("program yöneticisi parolasını unutursa");
+    expect(metinler.KURTARMA_UYARISI).toContain("kayıtlar yeni bir bilgisayara taşınırken");
+    // Zarfın üçüncü durumu ve çaresi kullanıcı kararlarının sözleriyle, BİREBİR (02.11.2026,
+    // 03.11.2026; belge ve sözlükle eşitliğini backend `test_kurtarma_anahtari_pdf` sınar).
+    expect(metinler.KURTARMA_UYARISI).toContain(metinler.ZARFIN_UCUNCU_DURUMU);
+    expect(metinler.KURTARMA_UYARISI).toContain(metinler.UCUNCU_DURUMUN_CARESI);
+    // Eski, dar söz kalmadı.
+    expect(metinler.KURTARMA_UYARISI).not.toMatch(/kaybolur veya bozulursa/);
+  });
+
+  it("zarfın üçüncü durumu ve çaresi kullanıcı kararlarının sözleridir", () => {
+    expect(metinler.ZARFIN_UCUNCU_DURUMU).toBe(
+      "bu bilgisayarın güvenlik dosyası ya da kayıtları kaybolduğunda, bozulduğunda ya da " +
+        "program dışından değiştirildiğinde",
+    );
+    expect(metinler.UCUNCU_DURUMUN_CARESI).toBe(
+      "yedekten geri yükleme ya da kurtarma anahtarıyla açılış",
+    );
   });
 
   it("eski yedek metni: yedek anahtarın no'sunu taşır, başka bilgisayarda yalnız eski anahtar açar", () => {

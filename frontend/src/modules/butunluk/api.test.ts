@@ -6,8 +6,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ETKINLIK_BASLIGI, etkinlikSaatleriniSifirla } from "../../lib/api";
-import { birlestir, butunlukApi, butunlukYetkisi, ikiDepoFarki, ikiDepoyuBirlestir } from "./api";
-import type { ButunlukDurumu, IkiDepoHesabi } from "./api";
+import {
+  birlestir,
+  butunlukApi,
+  butunlukYetkisi,
+  denetimiBirlestir,
+  ikiDepoFarki,
+  ikiDepoyuBirlestir,
+} from "./api";
+import type { ButunlukDurumu, GeriYuklemeOzeti, IkiDepoHesabi } from "./api";
 
 function yanit(govde: unknown): Response {
   return new Response(JSON.stringify(govde), {
@@ -278,5 +285,87 @@ describe("bütünlük yanıtlarının birleşmesi", () => {
       ikiDepoyuBirlestir({ ...(once as ButunlukDurumu), okunamayan: ["iki_depo"] }, IKI_DEPO)
         .okunamayan,
     ).toEqual([]);
+  });
+});
+
+describe("butunlukApi — geri yükleme kartının “Gördüm”ü", () => {
+  it("kartın sırasını POST eder (kullanıcı eylemi; etkinlik başlığı gider)", async () => {
+    const fetchSahte = vi.fn().mockResolvedValue(yanit(DENETIM));
+    vi.stubGlobal("fetch", fetchSahte);
+    window.dispatchEvent(new Event("pointerdown"));
+
+    await expect(butunlukApi.geriYuklemeyiGordum(40)).resolves.toEqual(DENETIM);
+
+    const [yol, istek] = cagri(fetchSahte, 0);
+    expect(yol).toMatch(/\/security\/integrity\/restore-seen\/$/);
+    expect(istek.method).toBe("POST");
+    expect(JSON.parse(String(istek.body))).toEqual({ seq: 40 });
+    expect((istek.headers as Record<string, string>)[ETKINLIK_BASLIGI]).toBe("1");
+  });
+});
+
+describe("denetimiBirlestir", () => {
+  const GERI = { seq: 40, onceki_geri_yuklemeler: [] } as unknown as GeriYuklemeOzeti;
+  const IKI_DEPO_OZETLI = {
+    iki_depo: {
+      fark_var: true,
+      sarmalsiz_hesaplar: [],
+      silinebilir_sarmallar: [],
+      ozeti_tutmayan_hesaplar: [MUHASIP],
+    },
+    okunamayan: [],
+  };
+
+  it("“Gördüm”den dönen kartlar yazılır; iki depo kaydı (program yöneticisi) korunur", () => {
+    const once = birlestir(KENDI, { ...DENETIM, geri_yukleme: GERI }, IKI_DEPO_OZETLI);
+    expect(once?.geri_yukleme).toEqual(GERI);
+
+    const sonra = denetimiBirlestir(once as ButunlukDurumu, {
+      butunluk: [],
+      geri_yukleme: null,
+      muhru_tutmayan: [],
+      okunamayan: [],
+    });
+
+    expect(sonra.geri_yukleme).toBeNull();
+    expect(sonra.iki_depo).toEqual({
+      fark_var: true,
+      sarmalsiz_hesaplar: [],
+      silinebilir_sarmallar: [],
+      ozeti_tutmayan_hesaplar: [MUHASIP],
+      muhru_tutmayan: [],
+    });
+    expect(sonra.son_girisler).toEqual(KENDI.son_girisler);
+    expect(sonra.kagit_capasi).toEqual(KENDI.kagit_capasi);
+  });
+
+  it("iki depo ucu çağrılmayan rolde (Denetleme Kurulu) mührü tutmayanlar yenilenir", () => {
+    const once = birlestir(KENDI, { ...DENETIM, geri_yukleme: GERI }, null) as ButunlukDurumu;
+    expect(once.iki_depo?.muhru_tutmayan).toEqual([DK_1]);
+
+    const bos = denetimiBirlestir(once, { ...DENETIM, muhru_tutmayan: [] });
+    expect(bos.iki_depo?.fark_var).toBe(false);
+
+    const ayni = denetimiBirlestir(
+      { ...once, iki_depo: null },
+      { ...DENETIM, muhru_tutmayan: [MUHASIP] },
+    );
+    expect(ayni.iki_depo?.muhru_tutmayan).toEqual([MUHASIP]);
+    expect(ayni.iki_depo?.fark_var).toBe(true);
+  });
+
+  it("okunamayan adlar yenilenir; yanıt nesne değilse denetim kartları okunamamış sayılır", () => {
+    const once = {
+      ...(birlestir(KENDI, DENETIM, IKI_DEPO) as ButunlukDurumu),
+      okunamayan: ["geri_yukleme", "iki_depo"],
+    };
+    expect(denetimiBirlestir(once, { ...DENETIM, okunamayan: ["butunluk"] }).okunamayan).toEqual([
+      "iki_depo",
+      "butunluk",
+    ]);
+    const bozuk = denetimiBirlestir(once, "beklenmeyen");
+    expect(bozuk.okunamayan).toEqual(["iki_depo", "butunluk", "geri_yukleme", "muhru_tutmayan"]);
+    expect(bozuk.butunluk).toEqual([]);
+    expect(bozuk.geri_yukleme).toBeNull();
   });
 });

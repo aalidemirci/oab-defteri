@@ -31,16 +31,39 @@ export const EN_ZAYIF_PAROLA_METNI =
   "yüzden her hesap güçlü bir parola seçer; parola paylaşılmaz.";
 
 /**
+ * Kurtarma anahtarı zarfının üçüncü durumu (kullanıcı kararı 02.11.2026) — sözler BİREBİR:
+ * kurtarma anahtarı belgesi (backend `recovery_key_document.UCUNCU_DURUM`), anahtar panelinin
+ * uyarısı (`KURTARMA_UYARISI`), kilit ekranının yol gösterme metni
+ * (`KurtarmaIleAcma.UCUNCU_DURUM_YOL_METNI`) ve sözlük (§1 "Kurtarma anahtarı", "Kurtarma anahtarı
+ * belgesi") aynı sözü taşır; backend `test_kurtarma_anahtari_pdf` dördünü ve bu sabiti sınar.
+ * Program yöneticisinin hesap kaydı ya da parola kaydı bozulmuş ya da program dışından
+ * değiştirilmişse kilit ekranında girilebilecek hesap kalmayabilir; çıkış bu durumdur.
+ */
+export const ZARFIN_UCUNCU_DURUMU =
+  "bu bilgisayarın güvenlik dosyası ya da kayıtları kaybolduğunda, bozulduğunda ya da " +
+  "program dışından değiştirildiğinde";
+
+/**
+ * Üçüncü durumun çaresi (kullanıcı kararı 03.11.2026): yedekten geri yükleme (güvenlik dosyası
+ * kayıpken parola yolu işlemez; tasarım §4.4.4) ya da kurtarma anahtarıyla açılış ("Parolamı
+ * unuttum"; program yöneticisinin parola kaydı program dışından değiştirildiğinde). Backend
+ * `recovery_key_document.UCUNCU_DURUMUN_CARESI` ile birebir.
+ */
+export const UCUNCU_DURUMUN_CARESI = "yedekten geri yükleme ya da kurtarma anahtarıyla açılış";
+
+/**
  * Kurtarma anahtarı panelinin uyarısı (kurulum sihirbazının ilk adımı ve yenileme).
  * Anahtarın üç kullanımı belgedekiyle aynıdır (tasarım §9.7, §4.4.4): unutulan parola,
- * yeni bilgisayar, güvenlik dosyasının kaybı ya da bozulması (o zaman parola yolu işlemez).
+ * yeni bilgisayar ve zarfın üçüncü durumu (`ZARFIN_UCUNCU_DURUMU`, çaresi
+ * `UCUNCU_DURUMUN_CARESI`; sözler birebir, dize düz yazılır: backend testi kaynağı okur).
  */
 export const KURTARMA_UYARISI =
-  "Bu anahtar bir daha gösterilmez. Program yöneticisi parolasını unutursa, kayıtlar yeni " +
-  "bir bilgisayara taşınırsa ya da bu bilgisayarın güvenlik dosyası kaybolur veya bozulursa " +
-  "kayıtlara erişmenin yolu budur. Şimdi saklayın: " +
-  "yazdırın, PDF olarak USB belleğe kaydedin ya da kâğıda elle yazın. Kâğıdı müdürlükte " +
-  "kapalı zarfta saklayın; anahtarı bu bilgisayarda bırakmayın.";
+  "Bu anahtar bir daha gösterilmez. Kayıtlara üç durumda bu anahtarla erişilir: program " +
+  "yöneticisi parolasını unutursa; kayıtlar yeni bir bilgisayara taşınırken; bu bilgisayarın " +
+  "güvenlik dosyası ya da kayıtları kaybolduğunda, bozulduğunda ya da program dışından " +
+  "değiştirildiğinde (çaresi yedekten geri yükleme ya da kurtarma anahtarıyla açılış). Şimdi " +
+  "saklayın: yazdırın, PDF olarak USB belleğe kaydedin ya da kâğıda elle yazın. Kâğıdı " +
+  "müdürlükte kapalı zarfta saklayın; anahtarı bu bilgisayarda bırakmayın.";
 
 /**
  * Pencere içi "Yazdır" kâğıdının saklama satırı. Zarfa giren kâğıt PDF belgesinin

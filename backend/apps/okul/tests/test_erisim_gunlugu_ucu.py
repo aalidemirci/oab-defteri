@@ -486,6 +486,55 @@ def test_bicimsiz_suzgec_400_ve_turkce_ileti(sorgu: dict[str, str], ileti: str) 
     assert yanit.json()["message"] == ileti
 
 
+@pytest.mark.parametrize(
+    ("sorgu", "alan", "ileti"),
+    [
+        ({"baslangic": "01.11.2026"}, "baslangic", erisim_gunlugu.TARIH_MESAJI),
+        ({"bitis": "2026-13-01"}, "bitis", erisim_gunlugu.TARIH_MESAJI),
+        # Takvimin uçları: ekran iletiyi o alanın altına yazar (F1b-2 (d3); eskiden alansızdı).
+        ({"bitis": "9999-12-31"}, "bitis", erisim_gunlugu.TARIH_MESAJI),
+        ({"baslangic": "0001-01-01"}, "baslangic", erisim_gunlugu.TARIH_MESAJI),
+        (
+            {"baslangic": "0001-01-01", "bitis": "2026-11-01"},
+            "baslangic",
+            erisim_gunlugu.TARIH_MESAJI,
+        ),
+        # Ters aralık bitiş alanınındır.
+        (
+            {"baslangic": "2026-11-02", "bitis": "2026-11-01"},
+            "bitis",
+            erisim_gunlugu.TARIH_SIRASI_MESAJI,
+        ),
+        ({"tur": "BILINMEYEN"}, "tur", erisim_gunlugu.TUR_MESAJI),
+        ({"hesap": "muhasip"}, "hesap", erisim_gunlugu.HESAP_MESAJI),
+        ({"sayfa": "0"}, "sayfa", erisim_gunlugu.SAYFA_MESAJI),
+    ],
+)
+def test_bicimsiz_suzgecin_iletisi_alanina_baglidir(
+    sorgu: dict[str, str], alan: str, ileti: str
+) -> None:
+    yanit = _oku(**sorgu)
+    assert yanit.status_code == 400, yanit.content
+    assert yanit.json()["code"] == "validation_error"
+    assert yanit.json()["fields"] == {alan: [ileti]}
+
+
+def test_tarih_suzgeci_hatalari_alan_adiyla_ve_yalniz_okuyarak() -> None:
+    hatalar = erisim_gunlugu.tarih_suzgeci_hatalari
+    assert hatalar(None, None) == {}
+    assert hatalar(date(2026, 11, 1), date(2026, 11, 1)) == {}
+    assert hatalar(date.min + timedelta(days=1), date.max - timedelta(days=1)) == {}
+    assert hatalar(date.min, None) == {"baslangic": erisim_gunlugu.TARIH_MESAJI}
+    assert hatalar(None, date.max) == {"bitis": erisim_gunlugu.TARIH_MESAJI}
+    assert hatalar(date.min, date.max) == {
+        "baslangic": erisim_gunlugu.TARIH_MESAJI,
+        "bitis": erisim_gunlugu.TARIH_MESAJI,
+    }
+    assert hatalar(date(2026, 11, 2), date(2026, 11, 1)) == {
+        "bitis": erisim_gunlugu.TARIH_SIRASI_MESAJI
+    }
+
+
 def test_servis_ters_aralik_ve_bicimsiz_sayfayi_reddeder() -> None:
     with pytest.raises(ValueError, match="Bitiş tarihi"):
         erisim_gunlugu.liste(baslangic=date(2026, 11, 2), bitis=date(2026, 11, 1))

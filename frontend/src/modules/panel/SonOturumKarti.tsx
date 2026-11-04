@@ -7,6 +7,10 @@
 //
 // Kart kişisel veri taşımaz. Durum okunamazsa kart gösterilmez; sayfanın geri
 // kalanı çalışır.
+//
+// Rol (plan F1b-2: son oturum kartı M9 sayılır): kartı her rol okur; "Kontrol ettim" yalnız
+// `son_oturum_onay` yeteneğinde çizilir (`kontrolEdebilir`; Genel Bakış verir). Öteki rollerde
+// kart düğmesiz kalır.
 
 import { useEffect, useState } from "react";
 
@@ -21,7 +25,12 @@ import type { SonOturumOzeti } from "./api";
 
 export const SON_OTURUM_KARTI_BASLIGI = "Son Oturumu Kontrol Edin";
 
-export default function SonOturumKarti() {
+export default function SonOturumKarti({
+  kontrolEdebilir,
+}: {
+  /** "Kontrol ettim" bu role açık mı (`son_oturum_onay`)? */
+  kontrolEdebilir: boolean;
+}) {
   const snackbar = useSnackbar();
   const [ozet, setOzet] = useState<SonOturumOzeti | null>(null);
   const [hata, setHata] = useState<SayfaHatasi | null>(null);
@@ -76,14 +85,16 @@ export default function SonOturumKarti() {
           </div>
         </div>
         {hata && <ErrorBand hata={hata} />}
-        <Button
-          variant="tonal"
-          icon="task_alt"
-          onClick={() => void kontrolEttim()}
-          disabled={mesgul}
-        >
-          Kontrol ettim
-        </Button>
+        {kontrolEdebilir && (
+          <Button
+            variant="tonal"
+            icon="task_alt"
+            onClick={() => void kontrolEttim()}
+            disabled={mesgul}
+          >
+            Kontrol ettim
+          </Button>
+        )}
       </Card>
     </section>
   );

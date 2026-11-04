@@ -54,6 +54,8 @@ vi.mock("../okul/api", async (importOriginal) => {
 
 vi.mock("../../lib/download", () => ({ saveBlob: vi.fn() }));
 
+import { YETENEK_ADLARI } from "../oturum/api";
+import { YetkiDegeri, hazirYetki } from "../oturum/yetki";
 import KisilerPage from "./KisilerPage";
 
 const STUDENT: Student = {
@@ -105,16 +107,19 @@ function page<T>(results: T[], count = results.length) {
   return { count, next: null, previous: null, results };
 }
 
-/** `route` derin bağlantıyı sınar: sekme URL'deki `tab` parametresinden okunur. */
-function renderPage(route = "/kisiler") {
+/** `route` derin bağlantıyı sınar: sekme URL'deki `tab` parametresinden okunur. Varsayılan
+ *  yetenekler program yöneticisininkidir (bütün yetenekler; süzme `oturum/yetki`'den). */
+function renderPage(route = "/kisiler", yetenekler: readonly string[] = YETENEK_ADLARI) {
   return render(
-    <MemoryRouter initialEntries={[route]}>
-      <SnackbarProvider>
-        <ConfirmProvider>
-          <KisilerPage />
-        </ConfirmProvider>
-      </SnackbarProvider>
-    </MemoryRouter>,
+    <YetkiDegeri value={hazirYetki(yetenekler)}>
+      <MemoryRouter initialEntries={[route]}>
+        <SnackbarProvider>
+          <ConfirmProvider>
+            <KisilerPage />
+          </ConfirmProvider>
+        </SnackbarProvider>
+      </MemoryRouter>
+    </YetkiDegeri>,
   );
 }
 
@@ -886,5 +891,78 @@ describe("KisilerPage — okunamayan şifreli alan", () => {
     expect(
       within(dialog).getByText("Kayıtlı değer okunamadı; kaydetmek için yeniden yazın."),
     ).toBeInTheDocument();
+  });
+});
+
+describe("KisilerPage — rol süzmesi (personeli her rol okur)", () => {
+  it("yazma yeteneği olmayan rolde yalnız personel sekmesi açılır; liste salt okurdur", async () => {
+    // Denetleme Kurulunun yetenekleri (sunucudan gelir gibi): Kişiler'de yazma yok.
+    renderPage("/kisiler", ["butunluk_denetim", "erisim_gunlugu", "geri_yukleme_gordum"]);
+
+    expect(await screen.findByText("Mehmet Demirci")).toBeInTheDocument();
+    const sekmeler = screen.getAllByRole("tab");
+    expect(sekmeler).toHaveLength(1);
+    expect(sekmeler[0]).toHaveAccessibleName(/Öğretmenler ve Diğer Personel/);
+    expect(okulApiMock.listStudents).not.toHaveBeenCalled();
+    expect(okulApiMock.getLeavePool).not.toHaveBeenCalled();
+    expect(screen.getByRole("note")).toHaveTextContent(
+      "Bu bölüm hesabınızın rolüne yalnız okuma için açık.",
+    );
+    expect(screen.queryByRole("button", { name: "Kişi ekle" })).toBeNull();
+    // Satır tıklanmaz: düzenleme penceresinin her eylemi yazmadır.
+    expect(screen.queryByRole("button", { name: /düzenle/ })).toBeNull();
+    // e-Okul aktarım paneli ve şablon yok.
+    expect(screen.queryByText(/Öğretmen ve Diğer Personeli Aktar/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Önizle|Aktar|şablon/i })).toBeNull();
+    expect(screen.getByText(/^Öğretmen ve diğer personel sicili\. TCKN/)).toBeInTheDocument();
+  });
+
+  it("yetkisiz sekmenin adresi rolün ilk sekmesine düşer (öğrenci ve havuz uçları çağrılmaz)", async () => {
+    renderPage("/kisiler?tab=havuz", []);
+
+    expect(await screen.findByText("Mehmet Demirci")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Öğretmenler/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(okulApiMock.getLeavePool).not.toHaveBeenCalled();
+    expect(okulApiMock.listStudents).not.toHaveBeenCalled();
+  });
+
+  it("boş listede salt okur rol aktarımı öğütlemez", async () => {
+    okulApiMock.listPersonnel.mockResolvedValue(page([]));
+    renderPage("/kisiler", []);
+
+    expect(await screen.findByText("Gösterilecek kişi yok")).toBeInTheDocument();
+    expect(screen.queryByText(/içe aktarın/)).toBeNull();
+  });
+
+  it("program yöneticisinde üç sekme ve yazma denetimleri durur", async () => {
+    const user = userEvent.setup();
+    renderPage("/kisiler?tab=personel");
+
+    expect(await screen.findByText("Mehmet Demirci")).toBeInTheDocument();
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "Kişi ekle" })).toBeInTheDocument();
+    expect(screen.queryByRole("note")).toBeNull();
+    await user.click(screen.getByRole("button", { name: /Mehmet Demirci.*düzenle/ }));
+    expect(await screen.findByRole("dialog", { name: "Kişiyi düzenle" })).toBeInTheDocument();
+  });
+
+  it("özet yüklenirken sekme ve liste çizilmez (yanlış sekme bir an açılmaz)", async () => {
+    render(
+      <MemoryRouter initialEntries={["/kisiler"]}>
+        <SnackbarProvider>
+          <ConfirmProvider>
+            <KisilerPage />
+          </ConfirmProvider>
+        </SnackbarProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("heading", { level: 1, name: "Kişiler" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(okulApiMock.listStudents).not.toHaveBeenCalled();
+    expect(okulApiMock.listPersonnel).not.toHaveBeenCalled();
   });
 });

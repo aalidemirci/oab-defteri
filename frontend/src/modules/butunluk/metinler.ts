@@ -148,6 +148,142 @@ export function hesapEtiketi(hesap: HesapOzeti): string {
   return `${hesap.rol_etiketi} · tanıtıcı ${hesap.tanitici}`;
 }
 
+/** Açılış günü kayıttan okunamadığında (program dışından yazılmış an; sözlük §1 "Denetim izi"). */
+export const ACILIS_GUNU_OKUNAMADI = "açılış günü okunamadı";
+
+/**
+ * Hesabın açılış ve kapanış günü (orkestratör maddesi F-3; sözlük §1 "Denetim izi"): tanıtıcı
+ * yalnız açık hesaplar arasında tekildir, kapanan "muhasip"in yerine açılan yeni hesap da
+ * "muhasip" olabilir — iki hesap bu günlerle ayrılır: "açılış 01.11.2026" · "açılış 01.11.2026,
+ * kapanış 03.11.2026". Açılış günü yoksa (kayıt söylemiyor) "açılış günü okunamadı"; kapanış
+ * günü yoksa hesap açıktır (ya da kapanışı okunamadı; ikisi ayrılamaz) ve yazılmaz.
+ *
+ * Özet günleri taşımıyorsa (iki depo listeleri, eski yanıt: alanlar YOK) ya da hesabın kaydı
+ * yoksa (tanıtıcı null) null: o hesabın günü bilinemez, ayrıca yazılmaz.
+ */
+export function hesapGunleri(hesap: HesapOzeti): string | null {
+  if (hesap.tanitici === null) return null;
+  if (hesap.acilis === undefined && hesap.kapanis === undefined) return null;
+  const parcalar = [hesap.acilis ? `açılış ${formatDate(hesap.acilis)}` : ACILIS_GUNU_OKUNAMADI];
+  if (hesap.kapanis) parcalar.push(`kapanış ${formatDate(hesap.kapanis)}`);
+  return parcalar.join(", ");
+}
+
+/**
+ * Hesabın kişisiz adı ve günleri: "Muhasip · tanıtıcı muhasip (açılış 01.11.2026, kapanış
+ * 03.11.2026)" (`hesapEtiketi` + `hesapGunleri`). Kartlardaki ve Erişim Günlüğü'ndeki hesap bu
+ * biçimle yazılır; günler yoksa yalnız ad.
+ */
+export function hesapEtiketiGunlu(hesap: HesapOzeti): string {
+  const gunler = hesapGunleri(hesap);
+  return gunler === null ? hesapEtiketi(hesap) : `${hesapEtiketi(hesap)} (${gunler})`;
+}
+
+// --- Değiştirilmiş Hesap Kaydı kartı (sözlük §4.5; §1 "Hesap kaydının ve denetim izinin
+// tutmaması") ---------------------------------------------------------------------------------
+// Girişte ya da bir hesap işleminde hesabın kaydı tutmadı; `BUTUNLUK` satırının alan adı bulgunun
+// türüdür (`app_password._muhur_bozuk_izi`): `seal` (mühür), `kayit_mac` (satır eski bir kopyadan
+// geri konmuş: denetim izindeki son kaydını tutmuyor), `iz_boslugu` (hesabın son kaydından sonra
+// denetim izinden kayıt silinmiş ya da sırası değiştirilmiş) ve `wrap_digest` (parola kaydı hesap
+// kaydındaki özeti tutmuyor). Metin nötrdür: olay giriş de olabilir hesap işlemi de (Kullanıcılar,
+// "Gördüm", sahipsiz kaydın silinmesi; parola kaydında açık oturumdaki parola işlemi). "Rol değiştirilmiş olabilir" yalnız mühür bulgusundadır:
+// öteki üçünde hesap kaydının mührü tutar, kayıttaki rol doğrudur.
+
+/** Bulgunun türü (kartın grubu). Tanınmayan ya da boş kod mühür sayılır (fail-closed). */
+export type HesapBulgusuTuru = "muhur" | "kayit" | "bosluk" | "parola_kaydi";
+
+/** Hesap bulgusunun tanınan alan adları (backend `AccountSealMismatch.alan` ve alt sınıfları). */
+const HESAP_BULGU_KODLARI: ReadonlySet<string> = new Set([
+  "seal",
+  "kayit_mac",
+  "iz_boslugu",
+  "wrap_digest",
+]);
+
+/** `BUTUNLUK` satırının alan adından kartın grubu (yukarıdaki not). */
+export function hesapBulgusuTuru(kodlar: readonly string[]): HesapBulgusuTuru {
+  if (kodlar.length === 0 || kodlar.some((k) => !HESAP_BULGU_KODLARI.has(k) || k === "seal")) {
+    return "muhur";
+  }
+  if (kodlar.includes("kayit_mac")) return "kayit";
+  if (kodlar.includes("iz_boslugu")) return "bosluk";
+  return "parola_kaydi";
+}
+
+/** Mühür ve satırın izi (kaydı değiştirilmiş görünen hesap). */
+export const KAYIT_DEGISMIS_GIRISI =
+  "Kaydı program dışından değiştirilmiş görünen hesapla giriş ya da hesap işlemi denendi; " +
+  "program işlemi yapmadı ve kayda dokunmadı:";
+/** Yalnız mühür bulgusunda: kayıttaki rolün kendisi değiştirilmiş olabilir. */
+export const ROL_DEGISMIS_OLABILIR = "Kayıtta yazan rol, değiştirilmiş rol olabilir.";
+/** İz boşluğu: değişen hesap kaydı değil denetim izidir. */
+export const IZ_BOSLUGU_GIRISI =
+  "Denetim izinden kayıt silinmiş ya da kayıtların sırası program dışından değiştirilmiş " +
+  "göründüğü için bu hesapla giriş ya da hesap işlemi açılmadı; program kayda dokunmadı:";
+/**
+ * Parola kaydının özeti tutmadı (kilit ekranında ya da açık oturumdaki parola işleminde: parola
+ * değiştirme, kurtarma anahtarının yenilenmesi — `app_password._check_session_password` aynı
+ * `wrap_digest` satırını yazar). Metin bu yüzden "giriş açılmadı" demez.
+ */
+export const PAROLA_KAYDI_GIRISI =
+  "Parola kaydı hesap kaydındakiyle uyuşmayan hesapla giriş ya da parola işlemi denendi; " +
+  "program işlemi yapmadı ve kayıtlara dokunmadı.";
+/** Parola kaydı bulgusunun açıklaması ve çaresi (ardından kartın ortak dip cümlesi gelir). */
+export const PAROLA_KAYDI_ACIKLAMASI =
+  "Parola kaydı program dışından değiştirilmiş ya da yedekten geri yüklemeden sonra eski kalmış " +
+  "olabilir; hesap kaydındaki rol doğrudur. Hesabın parolasını program yöneticisi sıfırlar " +
+  "(program yöneticisinin kendi hesabıysa “Parolamı unuttum” yolundan kurtarma anahtarıyla " +
+  "açılır).";
+/** Kartın ortak dip cümlesi (bütün türler). */
+export const DENETLEME_KURULUNA_BILDIRIN = "Durumu Denetleme Kuruluna bildirin.";
+
+// --- Yedekten Geri Yükleme Yapıldı kartının "Gördüm"ü (sözlük §1 "Geri yükleme kartının
+// “Gördüm”ü (F1b)", §4.5; plan F1b-2 "Gördüm."; kullanıcı kararı 02.11.2026) -----------------
+
+export const GORDUM_DUGMESI = "Gördüm";
+export const GORDUM_KAYDEDILIYOR = "Kaydediliyor…";
+/** "Gördüm" kartı kaldırdığında (snackbar). */
+export const GORDUM_KART_KALKTI = "Geri yükleme kartı herkes için kalktı.";
+/** Sunucunun iletisi yoksa. */
+export const GORDUM_KAYDEDILEMEDI = "“Gördüm” kaydedilemedi.";
+/** "Gördüm" diyebilen hesapta (Denetleme Kurulu) kartın dip cümlesi. */
+export const GORDUM_ACIKLAMASI =
+  "Denetleme Kurulundan bir üyenin “Gördüm” demesi yeter: kart herkes için kalkar, kimin " +
+  "gördüğü denetim izinde kalır.";
+/** "Gördüm" diyemeyen hesapta (program yöneticisi) kartın dip cümleleri. */
+export const GERI_YUKLEME_BILDIRIN =
+  "Geri yüklemeyi kimin ve neden yaptığını Denetleme Kuruluna bildirin. Kart, Denetleme " +
+  "Kurulunun bir üyesi “Gördüm” deyince herkes için kalkar; programda Denetleme Kurulunun açık " +
+  "hesabı yoksa kart kalır.";
+
+// --- Hesaplar ve Güvenlik Dosyası kartı (sözlük §4.5) ---------------------------------------
+
+/** Kartın giriş cümlesi: iki depo farkı (parola kaydı olmayan, kalan ya da tutmayan hesap). */
+export const IKI_DEPO_GIRISI =
+  "Bu bilgisayarın güvenlik dosyasındaki hesaplarla veritabanındaki hesap kayıtları uyuşmuyor.";
+/** Yalnız geri yüklemenin doğurduğu farklarda (giriş yapamayan ya da kalan eski kayıt). */
+export const IKI_DEPO_GERI_YUKLEME_CUMLESI = "Bu çoğunlukla yedekten geri yüklemeden sonra olur.";
+export const OZETI_TUTMAYAN_BASLIGI = "Parola kaydı hesap kaydıyla uyuşmayan hesaplar";
+export const OZETI_TUTMAYAN_ACIKLAMASI =
+  "Bu hesapların güvenlik dosyasındaki parola kaydı hesap kaydındakiyle uyuşmuyor; sahipleri " +
+  "giriş yapamaz. Parola kaydı program dışından değiştirilmiş ya da yedekten geri yüklemeden " +
+  "sonra eski kalmış olabilir. Parolalarını program yöneticisi Kullanıcılar ekranında hesabın " +
+  "ayrıntısından sıfırlar (“Parolayı sıfırla”); program yöneticisinin kendi hesabıysa kilit " +
+  "ekranındaki “Parolamı unuttum” yolundan kurtarma anahtarıyla açılır. Durumu Denetleme " +
+  "Kuruluna bildirin.";
+/**
+ * Kaydı ya da izi tutmayan hesaplar (backend `TwoStoreDifferences.seal_mismatch`: mührü tutmayan,
+ * eski bir kopyadan geri konmuş ya da son kaydından sonra denetim izinden kayıt silinmiş): değişen
+ * hesap kaydı da olabilir denetim izi de, metin ikisini de kapsar.
+ */
+export const MUHRU_TUTMAYAN_BASLIGI =
+  "Kaydı ya da denetim izi program dışından değiştirilmiş görünen hesaplar";
+export const MUHRU_TUTMAYAN_ACIKLAMASI =
+  "Bu hesapların kaydı ya da denetim izindeki kayıtları program dışından değiştirilmiş " +
+  "görünüyor; program onlara dokunmaz. Durumu Denetleme Kuruluna bildirin.";
+/** Kullanıcılar ekranına bağlantı (parolayı sıfırlanacak hesap varken; `kullanicilar` yeteneği). */
+export const KULLANICILARI_AC = "Kullanıcılar'ı aç";
+
 /**
  * Parola yenilenme bildiriminin ilk cümlesi (tasarım §4.4.3, tehdit 12): "Parolanız
  * gg.aa.yyyy tarihinde sıfırlandı." / "… kurtarma anahtarıyla yenilendi.".

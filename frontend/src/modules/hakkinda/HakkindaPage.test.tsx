@@ -85,9 +85,13 @@ describe("HakkindaPage", () => {
   it("teknik bilgiler kişisel hesapları anlatır: tek bir yönetici parolası yoktur", () => {
     const { container } = render(<HakkindaPage />);
 
-    // Veri anahtarı her hesap için ayrı sarılır (tasarım TK9); yedek başlığı hesap
-    // sarmalı taşımaz, başka bilgisayarda yalnız kurtarma anahtarı açar (TK10).
-    expect(screen.getByText(/Şifreleme anahtarı her hesap için ayrı sarılır/)).toBeInTheDocument();
+    // Veri anahtarı her hesap için ayrı şifrelenir, hesabın parola kaydında durur (tasarım
+    // TK9); yedek başlığı hesapların parola kayıtlarını taşımaz, başka bilgisayarda yalnız
+    // kurtarma anahtarı açar (TK10).
+    expect(
+      screen.getByText(/Şifreleme anahtarı her hesap için ayrı şifrelenir ve güvenlik dosyasında/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/hesapların parola kayıtlarını taşımaz/)).toBeInTheDocument();
     // Denetim izinin yöntemi de yalnız bu kartta adıyla geçer (sözlük §1 "Denetim izi").
     expect(
       screen.getByText(/Denetim izinin her kaydı, bir önceki kaydın mührüyle birlikte HMAC-SHA256/),
@@ -97,6 +101,15 @@ describe("HakkindaPage", () => {
       screen.getByText(/başka bir bilgisayarda yalnız kurtarma\s+anahtarıyla açılır/),
     ).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/yönetici parolası|görevli kipi/i);
+  });
+
+  it("Teknik Bilgiler de “sarmal” demez: adı parola kaydıdır (sözlüğün istisnası yalnız “mühür”)", () => {
+    const { container } = render(<HakkindaPage />);
+    // Sözlük §1 "Denetim izi": "sarmal" kullanıcı metninde yoktur; Teknik Bilgiler'in istisnası
+    // yalnız "mühür"ü (yöntem adlarıyla) kapsar, genişlemez (plan F1b-2 "Ön yüz").
+    expect(container.textContent).not.toMatch(/sarmal|sarıl/i);
+    const teknik = screen.getByRole("heading", { level: 2, name: "Teknik Bilgiler" }).parentElement;
+    expect(teknik?.textContent).toMatch(/parola kaydında durur/);
   });
 
   it("dürüst sınırlar kartı (tasarım §4.4.6) sade dille ve iç kod olmadan", () => {

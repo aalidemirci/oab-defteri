@@ -2,13 +2,23 @@
 // sade Türkçedir, iç kod (`kuyruk_kesik`, `seal`…) ve kişi adı yoktur, tarih gg.aa.yyyy
 // SS:dd (Europe/Istanbul). Söyleyecek bir şeyi olmayan kart çizilmez.
 
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "../../lib/api";
 import { gorunenMetin } from "../../test/gorunenMetin";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
-import type { ButunlukBulgusu, ButunlukDurumu, GeriYuklemeOzeti } from "./api";
+import { butunlukApi } from "./api";
+import type {
+  ButunlukBulgusu,
+  ButunlukDurumu,
+  DenetimKartlari,
+  GeriYuklemeOzeti,
+  HesapOzeti,
+} from "./api";
 import ButunlukKartlari, {
   DegistirilmisHesapKarti,
   DenetimIziKarti,
@@ -20,19 +30,50 @@ import {
   DENETIM_DENETLENEMEDI_CUMLESI,
   DENETIM_DENETLENEMEDI_DIP_CUMLESI,
   DENETIM_IZI_KARTI_BASLIGI,
+  GERI_YUKLEME_BILDIRIN,
   GERI_YUKLEME_KARTI_BASLIGI,
+  GORDUM_ACIKLAMASI,
+  GORDUM_KART_KALKTI,
+  GORDUM_KAYDEDILEMEDI,
   IKI_DEPO_KARTI_BASLIGI,
+  IZ_BOSLUGU_GIRISI,
+  KAYIT_DEGISMIS_GIRISI,
+  KULLANICILARI_AC,
   OKUNAMAYAN_BUTUNLUK_KARTI_BASLIGI,
+  PAROLA_KAYDI_ACIKLAMASI,
+  PAROLA_KAYDI_GIRISI,
+  ROL_DEGISMIS_OLABILIR,
 } from "./metinler";
+
+afterEach(() => vi.restoreAllMocks());
 
 /** UTC 07:15 → Europe/Istanbul 10:15. */
 const ZAMAN = "2026-11-01T07:15:00Z";
-const YONETICI = { id: "h-1", tanitici: "yonetici", rol_etiketi: "Program yöneticisi" };
+/** Sunucunun hesap özeti açılış ve kapanış gününü de taşır (`iz_dogrulama._hesap_ozeti`). */
+const YONETICI = {
+  id: "h-1",
+  tanitici: "yonetici",
+  rol_etiketi: "Program yöneticisi",
+  acilis: "2026-11-01",
+  kapanis: null,
+};
 /** Snake_case iç kodlar ve backend'in mühür alan adı ekrana çıkmaz (sözlük §2). */
 const IC_KOD = /[a-z]+_[a-z]+|\bseal\b|SIFIRLAMA|KURTARMA|BUTUNLUK/;
 
 function dogrulama(bulgular: string[], duzey: "uyari" | "bilgi" = "uyari"): ButunlukBulgusu {
   return { seq: 12, zaman: ZAMAN, tur: "dogrulama", duzey, bulgular, hesap: null };
+}
+
+/** Hesabın kaydı tutmadı: `BUTUNLUK` satırının alan adı (`seal`, `kayit_mac`…) ve hesabı. */
+function hesapBulgusu(kod: string, ek: Partial<HesapOzeti> = {}): ButunlukBulgusu {
+  return {
+    seq: 20,
+    zaman: ZAMAN,
+    tur: "muhur",
+    duzey: "uyari",
+    bulgular: [kod],
+    hesap: { id: "h-2", tanitici: "muhasip", rol_etiketi: "Muhasip", ...ek },
+  };
 }
 
 const BOS: ButunlukDurumu = {
@@ -194,15 +235,107 @@ describe("Değiştirilmiş Hesap Kaydı kartı", () => {
     );
 
     const kart = screen.getByRole("region", { name: DEGISTIRILMIS_HESAP_KARTI_BASLIGI });
-    expect(
-      within(kart).getByText(/giriş açılmadı ve\s+program kayda dokunmadı/),
-    ).toBeInTheDocument();
+    // Metin nötrdür: olay giriş de olabilir hesap işlemi de (eskiden "giriş açılmadı" diyordu).
+    expect(within(kart).getByText(KAYIT_DEGISMIS_GIRISI)).toBeInTheDocument();
+    expect(within(kart).queryByText(/giriş açılmadı/)).not.toBeInTheDocument();
     expect(
       within(kart).getByText(
         "Tanıtıcısı “muhasip” olan hesap (kayıtta yazan rol: Sekreter) · 01.11.2026 10:15",
       ),
     ).toBeInTheDocument();
+    // Yalnız mühür bulgusunda kayıttaki rolün kendisi değiştirilmiş olabilir.
+    expect(within(kart).getByText(ROL_DEGISMIS_OLABILIR)).toBeInTheDocument();
+    expect(within(kart).getByText(/Durumu Denetleme Kuruluna bildirin\./)).toBeInTheDocument();
     expect(gorunenMetin(container)).not.toMatch(IC_KOD);
+  });
+
+  it("satırın izi tutmayan hesap kaydı değiştirilmiş hesap gibi yazılır; rolü doğrudur", () => {
+    render(
+      <DegistirilmisHesapKarti
+        bulgular={[hesapBulgusu("kayit_mac", { acilis: "2026-11-01", kapanis: null })]}
+      />,
+    );
+
+    const kart = screen.getByRole("region", { name: DEGISTIRILMIS_HESAP_KARTI_BASLIGI });
+    expect(within(kart).getByText(KAYIT_DEGISMIS_GIRISI)).toBeInTheDocument();
+    expect(
+      within(kart).getByText("Muhasip · tanıtıcı muhasip (açılış 01.11.2026) · 01.11.2026 10:15"),
+    ).toBeInTheDocument();
+    expect(within(kart).queryByText(ROL_DEGISMIS_OLABILIR)).not.toBeInTheDocument();
+    expect(within(kart).queryByText(/kayıtta yazan rol/)).not.toBeInTheDocument();
+  });
+
+  it("iz boşluğu değişen denetim izini anar, hesap kaydını suçlamaz", () => {
+    const { container } = render(
+      <DegistirilmisHesapKarti bulgular={[hesapBulgusu("iz_boslugu")]} />,
+    );
+
+    const kart = screen.getByRole("region", { name: DEGISTIRILMIS_HESAP_KARTI_BASLIGI });
+    expect(within(kart).getByText(IZ_BOSLUGU_GIRISI)).toBeInTheDocument();
+    expect(within(kart).queryByText(KAYIT_DEGISMIS_GIRISI)).not.toBeInTheDocument();
+    expect(within(kart).queryByText(ROL_DEGISMIS_OLABILIR)).not.toBeInTheDocument();
+    expect(
+      within(kart).getByText("Muhasip · tanıtıcı muhasip · 01.11.2026 10:15"),
+    ).toBeInTheDocument();
+    expect(within(kart).getByText(/Durumu Denetleme Kuruluna bildirin\./)).toBeInTheDocument();
+    expect(gorunenMetin(container)).not.toMatch(IC_KOD);
+  });
+
+  it("parola kaydı bulgusu ayrı cümleyle yazılır: rol doğrudur, çaresi sıfırlama ya da kurtarma anahtarı", () => {
+    const { container } = render(
+      <DegistirilmisHesapKarti bulgular={[hesapBulgusu("wrap_digest")]} />,
+    );
+
+    const kart = screen.getByRole("region", { name: DEGISTIRILMIS_HESAP_KARTI_BASLIGI });
+    expect(within(kart).getByText(PAROLA_KAYDI_GIRISI)).toBeInTheDocument();
+    // Aynı bulgu açık oturumdaki parola işleminde de yazılır: kart "giriş açılmadı" demez.
+    expect(within(kart).queryByText(/giriş açılmadı/)).not.toBeInTheDocument();
+    expect(within(kart).getByText(PAROLA_KAYDI_ACIKLAMASI)).toBeInTheDocument();
+    expect(within(kart).getByText(/hesap kaydındaki rol doğrudur/)).toBeInTheDocument();
+    expect(within(kart).getByText(/“Parolamı unuttum” yolundan kurtarma/)).toBeInTheDocument();
+    // "Rol değiştirilmiş olabilir" yalnız mühür bulgusundadır.
+    expect(within(kart).queryByText(ROL_DEGISMIS_OLABILIR)).not.toBeInTheDocument();
+    expect(within(kart).queryByText(KAYIT_DEGISMIS_GIRISI)).not.toBeInTheDocument();
+    expect(within(kart).getByText(/Durumu Denetleme Kuruluna bildirin\./)).toBeInTheDocument();
+    expect(gorunenMetin(container)).not.toMatch(IC_KOD);
+  });
+
+  it("türler bir arada olunca her biri kendi cümlesiyle; tanınmayan kod mühür sayılır", () => {
+    render(
+      <DegistirilmisHesapKarti
+        bulgular={[
+          { ...hesapBulgusu("yeni_bir_alan"), seq: 21 },
+          { ...hesapBulgusu("iz_boslugu"), seq: 22 },
+          { ...hesapBulgusu("wrap_digest"), seq: 23 },
+        ]}
+      />,
+    );
+
+    const kart = screen.getByRole("region", { name: DEGISTIRILMIS_HESAP_KARTI_BASLIGI });
+    expect(within(kart).getByText(KAYIT_DEGISMIS_GIRISI)).toBeInTheDocument();
+    expect(within(kart).getByText(IZ_BOSLUGU_GIRISI)).toBeInTheDocument();
+    expect(within(kart).getByText(PAROLA_KAYDI_GIRISI)).toBeInTheDocument();
+    // Tanınmayan kodda (fail-closed) rol de değiştirilmiş olabilir.
+    expect(within(kart).getByText(ROL_DEGISMIS_OLABILIR)).toBeInTheDocument();
+    expect(
+      within(kart).getByText(/^Tanıtıcısı “muhasip” olan hesap \(kayıtta yazan rol: Muhasip\)/),
+    ).toBeInTheDocument();
+    expect(within(kart).getAllByRole("listitem")).toHaveLength(3);
+  });
+
+  it("mühür bulgusunda günler de kaydın söylediğidir; okunamayan açılış günü söylenir", () => {
+    render(
+      <DegistirilmisHesapKarti
+        bulgular={[hesapBulgusu("seal", { acilis: null, kapanis: "2026-11-03" })]}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Tanıtıcısı “muhasip” olan hesap (kayıtta yazan rol: Muhasip; açılış günü okunamadı, " +
+          "kapanış 03.11.2026) · 01.11.2026 10:15",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("kaydı okunamayan hesap da anılır; doğrulama bulguları bu kartta değildir", () => {
@@ -235,12 +368,21 @@ describe("Yedekten Geri Yükleme Yapıldı kartı", () => {
     ).toHaveTextContent("01.11.2026 10:15");
     expect(within(kart).getByText("gunluk-2026-10-31.odbak")).toBeInTheDocument();
     expect(
-      within(kart).getByText("Program yöneticisi · tanıtıcı yonetici hesabının parolası"),
+      within(kart).getByText(
+        "Program yöneticisi · tanıtıcı yonetici (açılış 01.11.2026) hesabının parolası",
+      ),
     ).toBeInTheDocument();
     expect(within(kart).getByText("db-onceki-2026-11-01-101530.sqlite3")).toBeInTheDocument();
     expect(within(kart).getByText("Kayıt no: 42 · Zincir: CDCD-CDCD")).toBeInTheDocument();
-    // Denetleme Kurulunun "gördüm" düğmesi 2. adımda: bugün kart kalır, düğme yok.
-    expect(within(kart).getByText(/göstermeyi sürdürür/)).toBeInTheDocument();
+    // "Gördüm" diyemeyen hesap (program yöneticisi): kart kimin kaldırdığını ve DK hesabı yoksa
+    // kalacağını söyler; düğme yok.
+    expect(
+      within(kart).getByText(/Denetleme Kuruluna bildirin. Kart, Denetleme/),
+    ).toBeInTheDocument();
+    expect(
+      within(kart).getByText(/Denetleme Kurulunun açık hesabı yoksa kart kalır/),
+    ).toBeInTheDocument();
+    expect(within(kart).queryByText(/göstermeyi sürdürür/)).not.toBeInTheDocument();
     expect(within(kart).queryByRole("button")).not.toBeInTheDocument();
     expect(gorunenMetin(container)).not.toMatch(IC_KOD);
   });
@@ -265,8 +407,8 @@ describe("Yedekten Geri Yükleme Yapıldı kartı", () => {
       />,
     );
 
-    expect(screen.getByText("Başlatan oturum").nextElementSibling).toHaveTextContent(
-      "Program yöneticisi · tanıtıcı yonetici",
+    expect(screen.getByText("Başlatan oturum").nextElementSibling?.textContent).toBe(
+      "Program yöneticisi · tanıtıcı yonetici (açılış 01.11.2026)",
     );
   });
 
@@ -345,7 +487,9 @@ describe("Yedekten Geri Yükleme Yapıldı kartı", () => {
       screen.getByText(/Geri yüklemeden önce bu bilgisayarda kayıt yoktu\./),
     ).toBeInTheDocument();
     expect(screen.queryByText(/ekrandan kalkmıştır/)).not.toBeInTheDocument();
-    expect(screen.getByText(/göstermeyi sürdürür/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Denetleme Kurulunun açık hesabı yoksa kart kalır/),
+    ).toBeInTheDocument();
   });
 
   it("geri yükleme yoksa kart çizilmez", () => {
@@ -420,5 +564,165 @@ describe("ButunlukKartlari", () => {
       GERI_YUKLEME_KARTI_BASLIGI,
       IKI_DEPO_KARTI_BASLIGI,
     ]);
+  });
+});
+
+describe("Yedekten Geri Yükleme Yapıldı kartının “Gördüm”ü", () => {
+  /** "Gördüm"den dönen güncel denetim kartları: kart kalktı. */
+  const KALKTI: DenetimKartlari = {
+    butunluk: [],
+    geri_yukleme: null,
+    muhru_tutmayan: [],
+    okunamayan: [],
+  };
+
+  function bas(geri: GeriYuklemeOzeti = GERI) {
+    const islem = { onDenetim: vi.fn(), onYenile: vi.fn() };
+    render(
+      <SnackbarProvider>
+        <GeriYuklemeKarti geri={geri} gordum={islem} />
+      </SnackbarProvider>,
+    );
+    return islem;
+  }
+
+  it("düğme yalnız “Gördüm” verilince çizilir; metin bir üyenin yettiğini söyler", () => {
+    bas();
+
+    const kart = screen.getByRole("region", { name: GERI_YUKLEME_KARTI_BASLIGI });
+    expect(within(kart).getByRole("button", { name: "Gördüm" })).toBeEnabled();
+    expect(within(kart).getByText(new RegExp(GORDUM_ACIKLAMASI))).toBeInTheDocument();
+    // "Gördüm" diyen hesaba "Denetleme Kuruluna bildirin" denmez.
+    expect(within(kart).queryByText(new RegExp(GERI_YUKLEME_BILDIRIN))).not.toBeInTheDocument();
+  });
+
+  it("kartın gösterdiği geri yüklemenin sırası gider; kart kalkınca snackbar söyler", async () => {
+    const user = userEvent.setup();
+    const gordum = vi.spyOn(butunlukApi, "geriYuklemeyiGordum").mockResolvedValue(KALKTI);
+    const islem = bas();
+
+    await user.click(screen.getByRole("button", { name: "Gördüm" }));
+
+    expect(gordum).toHaveBeenCalledWith(GERI.seq);
+    await waitFor(() => expect(islem.onDenetim).toHaveBeenCalledWith(KALKTI));
+    expect(await screen.findByText(GORDUM_KART_KALKTI)).toBeInTheDocument();
+    expect(islem.onYenile).not.toHaveBeenCalled();
+  });
+
+  it("kart yanıtta kalıyorsa snackbar “kalktı” demez; kart yanıtla yenilenir", async () => {
+    const user = userEvent.setup();
+    const kalan: DenetimKartlari = { ...KALKTI, geri_yukleme: { ...GERI, seq: 41 } };
+    vi.spyOn(butunlukApi, "geriYuklemeyiGordum").mockResolvedValue(kalan);
+    const islem = bas();
+
+    await user.click(screen.getByRole("button", { name: "Gördüm" }));
+
+    await waitFor(() => expect(islem.onDenetim).toHaveBeenCalledWith(kalan));
+    expect(screen.queryByText(GORDUM_KART_KALKTI)).not.toBeInTheDocument();
+  });
+
+  it("sürerken düğme kapalıdır ve süren işi söyler", async () => {
+    const user = userEvent.setup();
+    let bitir: (yanit: DenetimKartlari) => void = () => undefined;
+    vi.spyOn(butunlukApi, "geriYuklemeyiGordum").mockReturnValue(
+      new Promise((resolve) => {
+        bitir = resolve;
+      }),
+    );
+    bas();
+
+    await user.click(screen.getByRole("button", { name: "Gördüm" }));
+
+    expect(screen.getByRole("button", { name: "Kaydediliyor…" })).toBeDisabled();
+    bitir(KALKTI);
+    expect(await screen.findByRole("button", { name: "Gördüm" })).toBeEnabled();
+  });
+
+  it("kart artık güncel değilse (409) kartlar yeniden okunur, sunucunun iletisi kalır", async () => {
+    const user = userEvent.setup();
+    const ileti =
+      "Bu geri yükleme kartı artık güncel değil; Genel Bakış'ı yenileyip yeniden deneyin.";
+    vi.spyOn(butunlukApi, "geriYuklemeyiGordum").mockRejectedValue(
+      new ApiError(409, "geri_yukleme_guncel_degil", ileti),
+    );
+    const islem = bas();
+
+    await user.click(screen.getByRole("button", { name: "Gördüm" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(ileti);
+    expect(islem.onYenile).toHaveBeenCalledTimes(1);
+    expect(islem.onDenetim).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      new ApiError(403, "rol_yetkisiz", "Bu işlem hesabınızın rolüne açık değil."),
+      /rolüne açık değil/,
+    ],
+    [new ApiError(409, "hesap_muhru_tutmadi", ""), /program dışından değiştirilmiş/],
+    [new TypeError("Failed to fetch"), new RegExp(GORDUM_KAYDEDILEMEDI)],
+  ])(
+    "öteki retlerde ileti düğmenin altında kalır, kartlar yeniden okunmaz (%#)",
+    async (hata, metin) => {
+      const user = userEvent.setup();
+      vi.spyOn(butunlukApi, "geriYuklemeyiGordum").mockRejectedValue(hata);
+      const islem = bas();
+
+      await user.click(screen.getByRole("button", { name: "Gördüm" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(metin);
+      expect(islem.onYenile).not.toHaveBeenCalled();
+      // Kod ekrana çıkmaz.
+      expect(screen.getByRole("alert")).not.toHaveTextContent(/[a-z]+_[a-z]+/);
+    },
+  );
+});
+
+describe("ButunlukKartlari — yeteneğe bağlı denetimler", () => {
+  it("“Gördüm” ve Kullanıcılar bağlantısı yalnız verilince çizilir", () => {
+    const durum: ButunlukDurumu = {
+      ...BOS,
+      geri_yukleme: GERI,
+      iki_depo: {
+        fark_var: true,
+        sarmalsiz_hesaplar: [
+          { id: "h-2", tanitici: "muhasip", rol_etiketi: "Muhasip", kapali: false },
+        ],
+        silinebilir_sarmallar: [],
+        muhru_tutmayan: [],
+      },
+    };
+    const { unmount } = render(
+      <MemoryRouter>
+        <SnackbarProvider>
+          <ConfirmProvider>
+            <ButunlukKartlari durum={durum} onIkiDepo={vi.fn()} />
+          </ConfirmProvider>
+        </SnackbarProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole("button", { name: "Gördüm" })).toBeNull();
+    expect(screen.queryByRole("link", { name: KULLANICILARI_AC })).toBeNull();
+    unmount();
+
+    render(
+      <MemoryRouter>
+        <SnackbarProvider>
+          <ConfirmProvider>
+            <ButunlukKartlari
+              durum={durum}
+              onIkiDepo={vi.fn()}
+              gordum={{ onDenetim: vi.fn(), onYenile: vi.fn() }}
+              kullanicilarAcik
+            />
+          </ConfirmProvider>
+        </SnackbarProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("button", { name: "Gördüm" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: KULLANICILARI_AC })).toHaveAttribute(
+      "href",
+      "/kullanicilar",
+    );
   });
 });

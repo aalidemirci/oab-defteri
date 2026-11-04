@@ -84,7 +84,8 @@ işlem reddedilir, DEK elde olduğu için `BUTUNLUK` satırı düşer (`_muhur_b
 sarmalı açtı: bu bir tahmin değil; sonuç tahminle de değişmez — yanlış parola yine sayılır).
 Geri yüklemenin parola yolunda ret `RET_OZET`'tir: o yol ORM'sizdir, iz satırı yazılmaz, ret
 yalnız günlüğe düşer ve hiçbir dosya değişmez. İleti bağsız sarmalınkiyle AYNIDIR
-(`UNBOUND_WRAP_MESSAGE`). Özet bir PROGRAM kapısıdır: arşivdeki eski sarmal DEK'i sarmaladığı
+(`UNBOUND_WRAP_MESSAGE`; açık oturumdaki parola doğrulamasında ikisinin ortak karşılığı
+`ISLEMDE_PAROLA_KAYDI_MESSAGE`). Özet bir PROGRAM kapısıdır: arşivdeki eski sarmal DEK'i sarmaladığı
 için eski parolayı bilen biri onu program dışında yine açar (tehdit 6); bunu DEK yenilemesi
 kapatır (TK12, F4: yeni DEK eski sarmallarla açılmaz; eski sarmal eski DEK'i ve onunla şifreli
 eski yedekleri vermeyi sürdürür).
@@ -144,12 +145,13 @@ dışı bir satır kaldıysa, o dayanak satırı bozulmadıysa ve değişiklikte
 iz anahtarı tablosuna eklenen sahte bir anahtar bunu örtmez) ya da bir satırı REAL bir sıraya
 taşımak ve tabloda tamsayı olmayan herhangi bir sıra, satır izinin
 tutmamasıyla aynı karardır: aynı kod (409 `hesap_muhru_tutmadi`, hatalı deneme sayılmaz) ve aynı
-çıkış; ama hata `AuditTrailGap`, ileti `IZ_BOSLUGU_MESSAGE` (hesap servislerinde ve geri yüklemede
-kendi kalıpları; `RET_IZ_BOSLUGU`), `BUTUNLUK` alanı `iz_boslugu`dur — değişen hesap kaydı değil
-denetim izidir (orkestratör maddesi C-4; "SATIRIN İZİ") — bütün denetim noktalarında, geri yükleme yetkisinde (güncel veritabanı ve görüntü) ve özet onarımının
-çapasında (boşluklu çapa K-a'ya düşer) da. Bu, "zincir bulgusu girişi engellemez" ilkesinin (altın
-kural 3; tasarım §4.6.2-§4.6.3) kullanıcı kararına dayanan DAR istisnasıdır; kuyruk kesme ve çapa
-bulguları engellemez. Bedel (kabul edildi): izden tek bir satır silinmişse son kaydı ondan eski
+çıkış; ama hata `AuditTrailGap`, ileti `IZ_BOSLUGU_MESSAGE` (hesap servislerinde, oturumdaki parola
+doğrulamasında ve geri yüklemede kendi kalıpları; `RET_IZ_BOSLUGU`), `BUTUNLUK` alanı
+`iz_boslugu`dur — değişen hesap kaydı değil denetim izidir (orkestratör maddesi C-4; "SATIRIN
+İZİ") — bütün denetim noktalarında, geri yükleme yetkisinde (güncel veritabanı ve görüntü) ve özet
+onarımının çapasında (boşluklu çapa K-a'ya düşer) da. Bu, "zincir bulgusu girişi engellemez"
+ilkesinin (altın kural 3; tasarım §4.6.2-§4.6.3) kullanıcı kararına dayanan DAR istisnasıdır;
+kuyruk kesme ve çapa bulguları engellemez. Bedel (kabul edildi): izden tek bir satır silinmişse son kaydı ondan eski
 bütün hesaplar reddedilir; çıkış, değişiklikten önceki bir yedeğin kurtarma anahtarıyla geri
 yüklenmesidir. KALAN (girişte görünmez; `satir_izi` "KAPSAMIN SINIRI"): hesabın yeni iz
 satırlarını silmeden başka kayda çevirmek (`model`/`object_id`) ya da değiştirmek, iki satırın
@@ -201,8 +203,9 @@ MÜHÜR UYUŞMAZLIĞIYLA AYNI muamele: işlem reddedilir (`AccountRecordStale`, 
 alt sınıfı, 409 `hesap_muhru_tutmadi`, mühür iletisi), `BUTUNLUK` satırı düşer (`SISTEM`, alan
 `kayit_mac`; `_muhur_bozuk_izi`), satıra dokunulmaz, hatalı deneme sayacı ve gecikme yok. Retin
 nedeni izdeki bir boşluksa (silme, tür, kayma; `satir_izi` "RET NEDENİ") muamele aynıdır ama hata
-`AuditTrailGap`, ileti `IZ_BOSLUGU_MESSAGE` (hesap servislerinde ve geri yüklemede kendi kalıpları),
-`BUTUNLUK` alanı `iz_boslugu`dur: değişen hesap kaydı değil denetim izidir (orkestratör maddesi C-4).
+`AuditTrailGap`, ileti `IZ_BOSLUGU_MESSAGE` (hesap servislerinde, oturumdaki parola doğrulamasında
+ve geri yüklemede kendi kalıpları), `BUTUNLUK` alanı `iz_boslugu`dur: değişen hesap kaydı değil
+denetim izidir (orkestratör maddesi C-4).
 Denetim noktaları mühür denetiminin olduğu her yerdir: kilit açılışı (`_open_account_for_login`: parmak
 izi → satır → mühür → iz anahtarı → SATIRIN İZİ → özet → durum; sıranın gerekçesi orada),
 kurtarma anahtarıyla açılış, oturumdaki parola doğrulaması ve parola değiştirme (`_sealed_account`),
@@ -369,7 +372,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, Final, TypeVar
 
 from desktop.backup import database_snapshot
 from desktop.backup_crypto import (
@@ -388,6 +391,8 @@ from desktop.backup_crypto import (
 from django.apps import apps as django_apps
 from django.conf import settings
 from django.db import DatabaseError, connection, models, transaction
+from django.db.models import QuerySet, TextField
+from django.db.models.functions import Cast
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 
@@ -408,6 +413,7 @@ from apps.okul.oturum import (
     OTURUM,
     OturumHesabi,
     Yazar,
+    hesap_ani,
     sistem_olarak,
     yazar_olarak,
 )
@@ -548,7 +554,8 @@ _NO_WRAP_MESSAGE = (
 #: dışı değişiklikle (eski sarmalın geri konması dahil) doğar. Çıkış zarfın üçüncü durumudur
 #: (kullanıcı kararı 03.11.2026): program yöneticisinin hesabı kilit ekranının "Parolamı
 #: unuttum" yolundan kurtarma anahtarıyla açılır (ya da başka bir program yöneticisi sıfırlar),
-#: öteki hesapların parolasını program yöneticisi sıfırlar; Denetleme Kuruluna bildirilir.
+#: öteki hesapların parolasını program yöneticisi sıfırlar; Denetleme Kuruluna bildirilir. Açık
+#: oturumdaki karşılığı `ISLEMDE_PAROLA_KAYDI_MESSAGE`tir (kişi zaten oturumdadır).
 UNBOUND_WRAP_MESSAGE = (
     "Bu hesabın parola kaydı program dışından değiştirilmiş görünüyor; giriş açılmadı. "
     "Denetleme Kuruluna bildirin. Program yöneticisinin hesabıysa “Parolamı unuttum” yolundan "
@@ -582,6 +589,15 @@ ISLEMDE_KAYIT_MESSAGE = (
 ISLEMDE_BOSLUK_MESSAGE = (
     "Denetim izinden kayıt silinmiş ya da kayıtların sırası program dışından değiştirilmiş "
     "görünüyor; kayda dokunulmadı. Denetleme Kuruluna bildirin."
+)
+#: Bağsız ya da özeti tutmayan parola kaydının AÇIK OTURUMDAKİ karşılığı (`UNBOUND_WRAP_MESSAGE`'ın;
+#: orkestratör maddesi (d0)-3): oturumdaki parola doğrulaması (doğrulama, parola değiştirme,
+#: kurtarma anahtarının yenilenmesi; `_check_session_password`) bu metni verir. Kişi zaten
+#: oturumdadır: "giriş açılmadı" ve "Parolamı unuttum" yolu ona uymaz (`ISLEMDE_*`'nin gerekçesi);
+#: kilit ekranının iletisi değişmez. Kod ve yan etkiler aynıdır (`UnboundWrap`, `WrapDigestMismatch`).
+ISLEMDE_PAROLA_KAYDI_MESSAGE = (
+    "Bu hesabın parola kaydı program dışından değiştirilmiş görünüyor; işlem yapılmadı. "
+    "Denetleme Kuruluna bildirin."
 )
 _FOREIGN_DB_MESSAGE = (
     "Bu güvenlik dosyası bu veritabanına ait değil (anahtar eşleşmiyor). Doğru "
@@ -674,7 +690,8 @@ class WrapDigestMismatch(AccountSealMismatch):
     ve aynı yan etkiyi taşır — `BUTUNLUK` satırı (`_muhur_bozuk_izi`), satıra dokunulmaz, hatalı
     deneme sayacı ve gecikme yok. Bağsız sarmalın (`UnboundWrap`) koduna (`iki_depo_tutarsiz`)
     bağlanmadı: o ret DEK açılmadan, iz yazılmadan verilir. İleti ikisinde aynıdır
-    (`WRAP_DIGEST_MISMATCH_MESSAGE`); ön yüz kodla davranış seçmez, iletiyi yazar.
+    (`WRAP_DIGEST_MISMATCH_MESSAGE`; açık oturumda ikisinde `ISLEMDE_PAROLA_KAYDI_MESSAGE`); ön
+    yüz kodla davranış seçmez, iletiyi yazar.
     """
 
     code = "hesap_muhru_tutmadi"
@@ -688,12 +705,12 @@ class AccountRecordStale(AccountSealMismatch):
     kopyadan geri konmuş (ya da izi program dışından değiştirilmiş) satır.
 
     Mühür uyuşmazlığının alt sınıfıdır ve kodunu, durumunu ve iletisini taşır (409
-    `hesap_muhru_tutmadi`; `_SEAL_MISMATCH_MESSAGE`, hesap servislerinde onların iletisi): kullanıcı
-    kararı onu mühür uyuşmazlığıyla AYNI muameleye bağlar — işlem reddedilir, `BUTUNLUK` satırı
-    düşer (`_muhur_bozuk_izi`, alan adı `kayit_mac`), satıra dokunulmaz, hatalı deneme sayacı ve
-    gecikme yok. Ayrı sınıf yalnız günlüğün, testin ve kartın ayırt etmesi içindir; plan F1b-1'in
-    kod listesine yeni kod eklenmez. İzde boşluk (hesabın son kaydından sonra silinmiş ya da sırası
-    değiştirilmiş satır; kullanıcı kararı 03.11.2026 "Boşluğu engelle") da bu rettir (orkestratör
+    `hesap_muhru_tutmadi`; `_SEAL_MISMATCH_MESSAGE`; hesap servislerinde ve oturumdaki parola
+    doğrulamasında `ISLEMDE_KAYIT_MESSAGE`): kullanıcı kararı onu mühür uyuşmazlığıyla AYNI
+    muameleye bağlar — işlem reddedilir, `BUTUNLUK` satırı düşer (`_muhur_bozuk_izi`, alan adı
+    `kayit_mac`), satıra dokunulmaz, hatalı deneme sayacı ve gecikme yok. Ayrı sınıf yalnız
+    günlüğün, testin ve kartın ayırt etmesi içindir; plan F1b-1'in kod listesine yeni kod eklenmez.
+    İzde boşluk (hesabın son kaydından sonra silinmiş ya da sırası değiştirilmiş satır; kullanıcı kararı 03.11.2026 "Boşluğu engelle") da bu rettir (orkestratör
     kararı O-1: `satir_izi`'nin tek karar işlevi).
 
     `ertelenen` üst sınıfınkidir (`AccountSealMismatch`; orkestratör kararı O-4).
@@ -725,9 +742,10 @@ class AuditTrailGap(AccountRecordStale):
 
     Kodu, durumu ve muamelesi `AccountRecordStale`'inkidir (409 `hesap_muhru_tutmadi`, hatalı deneme
     sayılmaz, satıra dokunulmaz; plan F1b-1'in kod listesine yeni kod eklenmez). Ayrılan iki şey
-    vardır: ileti (`IZ_BOSLUGU_MESSAGE`; hesap servislerinde ve geri yüklemede kendi kalıpları) —
-    değişen hesap kaydı değil denetim izidir; izden ilgisiz bir satır silinince son kaydı ondan eski
-    BÜTÜN hesaplar bu reddi alır — ve `BUTUNLUK` satırının alan adı (`IZ_BOSLUGU_ALANI`).
+    vardır: ileti (`IZ_BOSLUGU_MESSAGE`; hesap servislerinde, oturumdaki parola doğrulamasında ve
+    geri yüklemede kendi kalıpları) — değişen hesap kaydı değil denetim izidir; izden ilgisiz bir
+    satır silinince son kaydı ondan eski BÜTÜN hesaplar bu reddi alır — ve `BUTUNLUK` satırının
+    alan adı (`IZ_BOSLUGU_ALANI`).
     """
 
     alan = "iz_boslugu"
@@ -753,7 +771,8 @@ class UnboundWrap(TwoStoreMismatch):
 
     Program bağsız sarmal yazmaz: böyle sarmal ya bağdan önceki deneme kurulumundandır (plan
     F1b-1 "Eski veri": silinip yeniden kurulur) ya da etiketi program dışından silinmiştir.
-    İleti bu yüzden program dışı değişikliği anar ve bildirim ister (`UNBOUND_WRAP_MESSAGE`).
+    İleti bu yüzden program dışı değişikliği anar ve bildirim ister (`UNBOUND_WRAP_MESSAGE`;
+    açık oturumdaki parola doğrulamasında `ISLEMDE_PAROLA_KAYDI_MESSAGE`).
     Plan F1b-1'in kod listesine yeni kod eklenmez: ret `iki_depo_tutarsiz` (409) koduyla ve
     kendi iletisiyle döner (ön yüz iletiyi yazar). Argon2id koşmaz, hatalı deneme sayacına
     dokunulmaz: yanıt paroladan bağımsızdır, deneme sayılacak bir şey yoktur. Ret DEK
@@ -1165,10 +1184,13 @@ def wrap_is_bound(bolum: dict[str, Any]) -> bool:
     return bolum.get(WRAP_DERIVATION_FIELD) == WRAP_DERIVATION
 
 
-def _require_bound(bolum: dict[str, Any]) -> None:
-    """Bağsız sarmalda Argon2id koşmadan, sayaca dokunmadan `UnboundWrap` (409)."""
+def _require_bound(bolum: dict[str, Any], *, ileti: str = UNBOUND_WRAP_MESSAGE) -> None:
+    """Bağsız sarmalda Argon2id koşmadan, sayaca dokunmadan `UnboundWrap` (409).
+
+    İleti kilit ekranınınkidir; açık oturumdaki parola doğrulaması kendi karşılığını verir
+    (`ISLEMDE_PAROLA_KAYDI_MESSAGE`; `_check_session_password`)."""
     if not wrap_is_bound(bolum):
-        raise UnboundWrap(UNBOUND_WRAP_MESSAGE)
+        raise UnboundWrap(ileti)
 
 
 @sensitive_variables("password")
@@ -1257,13 +1279,20 @@ def digest_matches(hesap: Account, ozet: str | None) -> bool:
     return _digest_slot(hesap, ozet) is not None
 
 
-def _check_wrap_digest(hesap: Account, ozet: str | None, data_key: bytes) -> str:
+def _check_wrap_digest(
+    hesap: Account,
+    ozet: str | None,
+    data_key: bytes,
+    *,
+    ileti: str = WRAP_DIGEST_MISMATCH_MESSAGE,
+) -> str:
     """Açılan sarmalın özeti satırınkini tutmalı; tutanın yerini döndürür (modül başlığı).
 
     Tutmazsa olay `BUTUNLUK` satırı olarak düşer (DEK elde: İA çözülebilir; `_muhur_bozuk_izi`)
     ve `WrapDigestMismatch` yükselir. Satıra dokunulmaz; hatalı deneme sayacına ve gecikmeye
     dokunulmaz (mühür uyuşmazlığı yoluyla aynı). Çağıran satırın mührünü önceden doğrulamıştır:
-    mührü tutmayan satırın özetine güvenilmez.
+    mührü tutmayan satırın özetine güvenilmez. İleti kilit ekranınınkidir; açık oturumdaki parola
+    doğrulaması kendi karşılığını verir (`ISLEMDE_PAROLA_KAYDI_MESSAGE`).
     """
     yer = _digest_slot(hesap, ozet)
     if yer is None:
@@ -1273,7 +1302,7 @@ def _check_wrap_digest(hesap: Account, ozet: str | None, data_key: bytes) -> str
             hesap.id,
         )
         _muhur_bozuk_izi(hesap, data_key, alan="wrap_digest")
-        raise WrapDigestMismatch(WRAP_DIGEST_MISMATCH_MESSAGE)
+        raise WrapDigestMismatch(ileti)
     return yer
 
 
@@ -1587,13 +1616,80 @@ def account_by_id(hesap_id: object) -> Account | None:
     """Kimliği verilen hesap satırı; kimlik UUID değilse ya da satır yoksa None (DEK istemez).
 
     Kimlik istemciden gelir: biçimsiz değer veritabanı doğrulama hatası yerine
-    "hesap yok" sayılır.
+    "hesap yok" sayılır. Zaman sütunu program dışından bozulmuş satır da okunur
+    (`hesap_satiri`; "OKUNAMAYAN AN").
     """
     anahtar = _uuid_or_none(hesap_id)
     if anahtar is None:
         return None
-    hesap: Account | None = Account.objects.filter(pk=anahtar).first()
+    return hesap_satiri(Account.objects.filter(pk=anahtar))
+
+
+# ---------------------------------------------------------------------------
+# OKUNAMAYAN AN (orkestratör maddesi (d0)-2; (c2)'nin F-3 kalıbı: `oturum.ham_an_sutunlari`)
+# ---------------------------------------------------------------------------
+#: Hesap satırının zaman sütunları (açılış, kapanış, parola değişimi, sıfırlama, son giriş).
+HESAP_ZAMANLARI: Final[tuple[str, ...]] = tuple(
+    alan.name for alan in Account._meta.get_fields() if isinstance(alan, models.DateTimeField)
+)
+
+
+def hesap_satiri(sorgu: QuerySet[Account]) -> Account | None:
+    """Sorgunun ilk hesap satırı; zaman sütunu program dışından bozulmuşsa da düşmez.
+
+    Django SQLite'ta tarih sütununu kendi dönüştürücüsüyle okur: program dışından yazılmış, biçime
+    uyan ama geçersiz TEK bir an (`"2026-02-30 10:00:00"`; SQLite tür denetlemez) `ValueError`
+    yükseltir ve satırı okuyan her yolu — kilit ekranından girişi, hesap işlemlerini, iki depo ve
+    "kaydı değiştirilmiş görünen hesaplar" kartlarını, Kullanıcılar listesini — İngilizce bir iç
+    iletiyle (400) ya da 500'le düşürürdü. Bu durumda satır zaman sütunları ertelenerek yeniden
+    okunur ve her an ham metinden çevrilir (`oturum.hesap_ani`; ORM'nin dönüştürücüsüyle aynı
+    sonuç, çevrilemeyen an None — hata yükseltmez).
+
+    Böyle satır KAYDI DEĞİŞTİRİLMİŞ sayılır, ayrı bir işarete gerek kalmadan: açılış anı hep
+    doludur (alanın varsayılanı var), kapanış anı yalnız kapalı satırda dolar (veritabanı kısıtı);
+    None'a düşen an mühürdekiyle tutmaz (`seal_matches` False). Mühre girmeyen bir an bozulmuşsa
+    satırın izi tutmaz: iz denetimi satırı ORM'siz, ham okur ve çevrilemeyen anı "tutmuyor" sayar
+    (`satir_izi.hesap_ozet_alanlari`). İki denetim de satırı okuyan her yolda vardır; reddin
+    kendisi ve `BUTUNLUK` satırı çağıranındır. Satır hiçbir yolda kaydedilmez: kayıt ancak mühür
+    ve iz denetiminden geçen satıra yapılır. Başka bir alanın hatası (zaman dışı) olduğu gibi
+    yükselir: ikinci okuma da onu verir.
+    """
+    try:
+        return sorgu.first()
+    except ValueError:
+        logger.warning(
+            "Hesap satırının bir zaman sütunu okunamadı (program dışından yazılmış an); "
+            "satır ham okunuyor, kaydı değiştirilmiş sayılacak."
+        )
+    ham = {f"ham_{alan}": Cast(alan, output_field=TextField()) for alan in HESAP_ZAMANLARI}
+    hesap = sorgu.defer(*HESAP_ZAMANLARI).annotate(**ham).first()
+    if hesap is None:
+        return None
+    for alan in HESAP_ZAMANLARI:
+        setattr(hesap, alan, hesap_ani(getattr(hesap, f"ham_{alan}")))
     return hesap
+
+
+def hesap_satirlari(sorgu: QuerySet[Account]) -> list[Account]:
+    """Sorgunun bütün hesap satırları, sırasıyla; zaman sütunu bozulmuş satır düşürmez.
+
+    Olağan yol tek sorgudur. Bir satırın anı çevrilemezse (`ValueError`; `hesap_satiri`) satırlar
+    kimlikleriyle teker teker okunur: bozuk satır ham okunur ve kaydı değiştirilmiş sayılır,
+    öteki satırlar etkilenmez. İki depo karşılaştırması, Kullanıcılar ekranı, hesap açmanın rol
+    sınırı ve kapalı hesap sarmallarının temizliği bunu kullanır.
+    """
+    try:
+        return list(sorgu)
+    except ValueError:
+        logger.warning(
+            "Hesap satırlarından birinin zaman sütunu okunamadı; satırlar tek tek okunuyor."
+        )
+    satirlar: list[Account] = []
+    for kimlik in sorgu.values_list("pk", flat=True):
+        satir = hesap_satiri(Account.objects.filter(pk=kimlik))
+        if satir is not None:
+            satirlar.append(satir)
+    return satirlar
 
 
 def _account_role(hesap_id: object) -> str | None:
@@ -2251,7 +2347,8 @@ def satir_izini_denetle(
     AYNI muamele (kullanıcı kararı 03.11.2026): `BUTUNLUK` satırı (`SISTEM`, alan `kayit_mac`;
     `_muhur_bozuk_izi`) ve `AccountRecordStale` (409 `hesap_muhru_tutmadi`); satıra dokunulmaz,
     hatalı deneme sayacına ve gecikmeye dokunulmaz. Çağıran mührü önceden doğrulamıştır. Hesap
-    servisleri kendi iletilerini verir (`ileti`). İzde boşluk (hesabın son kaydından sonra silinmiş
+    servisleri ve oturumdaki parola doğrulaması (`_sealed_account`) kendi iletilerini verir
+    (`ileti`, `bosluk_iletisi`). İzde boşluk (hesabın son kaydından sonra silinmiş
     ya da sırası değiştirilmiş satır) aynı karardır (kullanıcı kararı 03.11.2026 "Boşluğu engelle";
     `satir_izi` "İZ BOŞLUĞU") ama retin nedeni ayrılır (orkestratör maddesi C-4; `satir_izi` "RET
     NEDENİ"): `AuditTrailGap`, ileti `bosluk_iletisi`, `BUTUNLUK` alanı `iz_boslugu` — değişen
@@ -2521,9 +2618,13 @@ def _kapali_sarmallari_temizle(data_key: bytes) -> None:
     adaylar = {str(h.get("id", "")) for h in _accounts_in(state)} if state else set()
     adaylar |= _archived_wrap_ids()
     idler = [kimlik for kimlik in map(_uuid_or_none, adaylar) if kimlik is not None]
+    # Zaman sütunu program dışından bozulmuş tek bir kapalı satır öteki sarmalların temizliğini
+    # durdurmaz: o satır kaydı değiştirilmiş sayılır ve sarmalı silinmez (`hesap_satirlari`).
     silinecek = {
         str(hesap.id)
-        for hesap in Account.objects.filter(pk__in=idler, status=AccountStatus.KAPALI)
+        for hesap in hesap_satirlari(
+            Account.objects.filter(pk__in=idler, status=AccountStatus.KAPALI)
+        )
         if hesap.seal_matches(data_key)
         and denetim_izi.hesap_izi_tutuyor(
             hesap.id, veri_anahtari=data_key, beklenen_muhur=hesap.seal
@@ -2787,6 +2888,12 @@ def _check_session_password(
     (`WrapDigestMismatch`, `BUTUNLUK` satırı; sayaç artmaz). Mührü ya da izi tutmayan satır da
     aynı muameleyi görür: ret ve `BUTUNLUK` satırı (alan `seal`, `kayit_mac` ya da `iz_boslugu`;
     `_sealed_account`; orkestratör maddesi F-1 — mühür kolu eskiden satır yazmıyordu).
+
+    İLETİLER açık oturumunkidir (kişi zaten oturumdadır): bağsız ve özeti tutmayan parola kaydı
+    `ISLEMDE_PAROLA_KAYDI_MESSAGE` ("…; işlem yapılmadı. Denetleme Kuruluna bildirin."; orkestratör
+    maddesi (d0)-3), kaydı tutmayan satır `ISLEMDE_KAYIT_MESSAGE` / `ISLEMDE_BOSLUK_MESSAGE`. Kod ve
+    yan etkiler kilit ekranınınkidir (`UnboundWrap` 409 `iki_depo_tutarsiz`, `WrapDigestMismatch`
+    409 `hesap_muhru_tutmadi`); kilit ekranının ve kurtarma anahtarıyla açılışın iletileri değişmez.
     """
     aktif = crypto.active_fingerprint()
     if aktif is None:
@@ -2797,12 +2904,17 @@ def _check_session_password(
         raise TwoStoreMismatch(_NO_WRAP_MESSAGE)
     if sarmal.get("askida"):
         raise AccountSuspended(_SUSPENDED_MESSAGE)
-    _require_bound(sarmal)
+    _require_bound(sarmal, ileti=ISLEMDE_PAROLA_KAYDI_MESSAGE)
     veri_anahtari = _try_unwrap_account(sarmal, state, password)
     if veri_anahtari is None or not kanonik.esit(crypto.key_fingerprint(veri_anahtari), aktif):
         raise _failure_outcome(hesap_id)
     ozet = wrap_digest(veri_anahtari, sarmal)
-    _check_wrap_digest(_sealed_account(hesap_id, veri_anahtari), ozet, veri_anahtari)
+    _check_wrap_digest(
+        _sealed_account(hesap_id, veri_anahtari),
+        ozet,
+        veri_anahtari,
+        ileti=ISLEMDE_PAROLA_KAYDI_MESSAGE,
+    )
     _clear_failures(hesap_id)
     return veri_anahtari, str(ozet)
 

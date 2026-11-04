@@ -94,8 +94,8 @@ ikinci "Gördüm" satır yazmaz; eski ya da olmayan bir `seq` reddedilir (409). 
 yükleme kendi kartını açar. Açık Denetleme Kurulu hesabı yoksa kart program yöneticisinde kalır:
 program yöneticisi kartı kaldıramaz (rol kapısı ve servisin yetki kapısı).
 
-PAROLA YENİLENME BİLDİRİMİ (`yenilenme_bildirimi`; `GET|POST security/integrity/reset-notice/`;
-tasarım §4.4.3, §4.3 tehdit 12): parolası sıfırlanan ya da kurtarma anahtarıyla yenilenen
+PAROLA YENİLENME BİLDİRİMİ (`yenilenme_bildirimi`, uçta `bildirim_yaniti`; `GET|POST
+security/integrity/reset-notice/`; tasarım §4.4.3, §4.3 tehdit 12): parolası sıfırlanan ya da kurtarma anahtarıyla yenilenen
 hesabın sahibi, ilk girişinden sonra pencerede bildirimi ve o tarihten bu yana hesabıyla
 yapılan girişleri görür; "Gördüm" bayrağı izli bir yazımla kaldırır
 (`hesaplar.acknowledge_reset_notice`, `GUNCELLE` satırı).
@@ -982,8 +982,10 @@ def _iki_depo_karti() -> dict[str, Any] | None:
 
 
 def _muhru_tutmayan() -> list[dict[str, Any]]:
-    """Mührü tutmayan hesaplar (§4.6.1 kural 1: hiçbir işleme konu olmaz; kart program
-    yöneticisi ve Denetleme Kurulu panosuna). Fark hesaplanamazsa boş liste."""
+    """Kaydı ya da izi tutmayan hesaplar (mührü tutmayan, eski bir kopyadan geri konmuş ya da son
+    kaydından sonra denetim izinden kayıt silinmiş; `seal_mismatch`; §4.6.1 kural 1: hiçbir
+    işleme konu olmaz; kart program yöneticisi ve Denetleme Kurulu panosuna). Fark
+    hesaplanamazsa boş liste."""
     fark = _iki_depo_farki()
     return [] if fark is None else _iki_depo_ozeti(list(fark.seal_mismatch))
 
@@ -1020,24 +1022,50 @@ def yenilenme_bildirimi(hesap_id: object) -> dict[str, Any] | None:
     yazar; kod ekrana çıkmaz), yenilenme anı ve o andan bu yana YALNIZ bu hesabın `GIRIS`
     satırları (en yeni önce, en çok `SON_GIRIS_SAYISI`; yalnız doğrulanan satırlar, modül
     başlığı "KARTLAR"). Bildirim beklemiyorsa, hesap yoksa ya da kimlik biçimsizse `None`.
-    Yalnız okur; bayrağı `hesaplar.acknowledge_reset_notice` kaldırır.
+    Bildirim bekliyor ama sıfırlama anı okunamıyorsa hata yükselir (`bildirim_yaniti` ve kartlar
+    ucu onu `okunamayan`a çevirir). Yalnız okur; bayrağı `hesaplar.acknowledge_reset_notice`
+    kaldırır.
     """
     return _yenilenme_bildirimi(hesap_id, None)
+
+
+def bildirim_yaniti(hesap_id: object) -> dict[str, Any]:
+    """`GET|POST security/integrity/reset-notice/` yanıtı: `{parola_yenilenme, okunamayan}`.
+
+    Bildirim kartlar ucunun kalıbıyla okunur (`_kartlar`; orkestratör maddesi (d0)-2): program
+    dışından bozulmuş sıfırlama anı (geçersiz, yerel saate çevrilemeyen ya da biçimsiz) uç 500
+    vermez; `parola_yenilenme` None, `okunamayan` `["parola_yenilenme"]` olur (Genel Bakış'ın
+    kartı aynı durumu "okunamadı" diye söyler, bildirim sessizce kaybolmaz). DEK düşmüşse ret
+    olduğu gibi yükselir. Yalnız okur.
+    """
+    return _kartlar({"parola_yenilenme": (lambda: yenilenme_bildirimi(hesap_id), None)})
 
 
 def _yenilenme_bildirimi(hesap_id: object, gecerli: Suzgec | None) -> dict[str, Any] | None:
     kimlik = denetim_izi.kimlik_metni_ya_da_none(Account, hesap_id)
     if kimlik is None:
         return None
-    hesap = Account.objects.filter(pk=kimlik).first()
-    if hesap is None or not hesap.reset_notice_pending or hesap.reset_at is None:
+    # Yalnız bildirimin üç sütunu okunur (orkestratör maddesi (d0)-2): program dışından bozulmuş
+    # açılış ya da kapanış anı (ORM'nin dönüştürücüsü ValueError yükseltir) bildirimi düşürmez.
+    # Sıfırlama anının kendisi okunamıyorsa (geçersiz, yerel saate çevrilemeyen ya da biçimsiz an)
+    # okuma düşer; kartlar ucunda ve bildirim ucunda kart `okunamayan` listesine girer (sessizce
+    # kaybolmaz, uç 500 dönmez; `_kartlar`, `bildirim_yaniti`).
+    hesap = (
+        Account.objects.filter(pk=kimlik)
+        .values("reset_notice_pending", "reset_at", "reset_kind")
+        .first()
+    )
+    if hesap is None or not hesap["reset_notice_pending"]:
         return None
+    if hesap["reset_at"] is None:
+        # Program bildirimi anıyla birlikte yazar; biçimsiz an ORM'de None okunur ("zzz").
+        raise ValueError("Sıfırlama anı okunamadı.")
     if gecerli is None:
         gecerli = denetim_izi.acik_satir_dogrulayici()
     return {
-        "tur": hesap.reset_kind,
-        "zaman": _yerel(hesap.reset_at),
-        "girisler": _girisler(kimlik, gecerli, sonra=hesap.reset_at),
+        "tur": hesap["reset_kind"],
+        "zaman": _yerel(hesap["reset_at"]),
+        "girisler": _girisler(kimlik, gecerli, sonra=hesap["reset_at"]),
     }
 
 
@@ -1090,8 +1118,8 @@ def denetim_kartlari(hesap_id: str | None) -> dict[str, Any]:
     """Denetim kartları (`GET security/integrity/audit/`; program yöneticisi ve Denetleme Kurulu).
 
     `butunluk`: oturumdaki hesabın bir önceki girişinden beri yazılmış `BUTUNLUK` satırları;
-    `geri_yukleme`: son geri yükleme kartı; `muhru_tutmayan`: kaydı program dışından
-    değiştirilmiş görünen hesaplar (canlı).
+    `geri_yukleme`: son geri yükleme kartı; `muhru_tutmayan`: kaydı ya da denetim izi program
+    dışından değiştirilmiş görünen hesaplar (canlı).
     """
     kimlik = _hesap_kimligi(hesap_id)
     gecerli = denetim_izi.acik_satir_dogrulayici()

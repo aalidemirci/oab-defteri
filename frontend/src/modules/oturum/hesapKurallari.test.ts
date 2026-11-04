@@ -11,6 +11,7 @@ import {
   AD_SOYAD_UZUN_ILETISI,
   TANITICI_BOS_ILETISI,
   TANITICI_GECERSIZ_ILETISI,
+  TANITICI_TCKN_UYARISI,
   TANITICI_UYARISI,
   TANITICI_VARSAYILAN,
   adSoyadNormallestir,
@@ -56,6 +57,35 @@ describe("tanıtıcı uyarısı (ad-soyad içeriyor mu?)", () => {
     expect(asciiKatla("Şükrü ÖZTÜRK")).toBe("sukru ozturk");
     expect(asciiKatla("sukru.k")).toBe("sukru k");
     expect(asciiKatla("  İĞNE-ılgın  ")).toBe("igne ilgin");
+  });
+});
+
+// Orkestratör maddesi F-5: T.C. kimlik numarasına benzeyen 11 ardışık rakam uyarıdır (engel değil).
+// Tablo backend `TestTaniticiKurallari.test_kimlik_numarasina_benzer_sayi_uyarilir_engellenmez`
+// satırlarıdır (sayılar uydurmadır; sağlama aranmaz).
+describe("tanıtıcı uyarısı (kimlik numarasına benzeyen sayı)", () => {
+  const ILETILER = { tckn: TANITICI_TCKN_UYARISI, ad: TANITICI_UYARISI, yok: null } as const;
+
+  it.each([
+    ["kayit-12345678901", "Örnek Kişi", "tckn"],
+    ["x123456789012", "Örnek Kişi", "tckn"], // 12'lik dizi bir 11'liyi içerir
+    ["a1234567890", "Örnek Kişi", "yok"], // 10 rakam: kimlik numarası değil
+    ["a12345-678901", "Örnek Kişi", "yok"], // araya giren tire diziyi böler
+    ["ornek-12345678901", "Örnek Kişi", "tckn"], // iki uyarı birden: kimlik önce gelir
+    ["ornek-1", "Örnek Kişi", "ad"],
+    // Ön yüze özgü: ad-soyad girilmeden de çıkar (kurulum ve "Yeni hesap" alanları).
+    ["k12345678901", "", "tckn"],
+  ] as const)("%s + %s → %s", (tanitici, ad, beklenen) => {
+    expect(taniticiUyarisi(tanitici, ad)).toBe(ILETILER[beklenen]);
+    // Uyarı engel değildir: tanıtıcı kurala uyar.
+    expect(taniticiSorunu(tanitici)).toBeNull();
+  });
+
+  it('ileti sunucununkiyle birebirdir (sözlük §1 "Hesap")', () => {
+    expect(TANITICI_TCKN_UYARISI).toBe(
+      "Tanıtıcı T.C. kimlik numarasına benzeyen 11 haneli bir sayı içeriyor. Tanıtıcı kilit " +
+        "ekranında herkese görünür; rolden türeyen bir tanıtıcı seçmeniz önerilir.",
+    );
   });
 });
 

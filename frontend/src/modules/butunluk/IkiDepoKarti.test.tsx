@@ -5,6 +5,7 @@
 
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../lib/api";
@@ -14,12 +15,23 @@ import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import { butunlukApi } from "./api";
 import type { IkiDepoFarki, IkiDepoYaniti } from "./api";
 import IkiDepoKarti, {
+  KULLANICILAR_ADRESI,
   SILME_ONAY_BASLIGI,
   eskiKayitlarAciklamasi,
+  ikiDepoGirisi,
   silDugmesiAdi,
   silmeSonucu,
 } from "./IkiDepoKarti";
-import { IKI_DEPO_KARTI_BASLIGI } from "./metinler";
+import {
+  IKI_DEPO_GERI_YUKLEME_CUMLESI,
+  IKI_DEPO_GIRISI,
+  IKI_DEPO_KARTI_BASLIGI,
+  KULLANICILARI_AC,
+  MUHRU_TUTMAYAN_ACIKLAMASI,
+  MUHRU_TUTMAYAN_BASLIGI,
+  OZETI_TUTMAYAN_ACIKLAMASI,
+  OZETI_TUTMAYAN_BASLIGI,
+} from "./metinler";
 
 const ESKI = "0d6c1f2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f";
 
@@ -72,7 +84,13 @@ describe("Hesaplar ve Güvenlik Dosyası kartı", () => {
     expect(
       within(kart()).getByText("Sekreter · tanıtıcı sekreter · hesap kapalı"),
     ).toBeInTheDocument();
-    expect(within(kart()).getByText("Kaydı değiştirilmiş görünen hesaplar")).toBeInTheDocument();
+    expect(within(kart()).getByText(MUHRU_TUTMAYAN_BASLIGI)).toBeInTheDocument();
+    // Liste mühür ve satır izi yanında denetim izindeki boşluğu da taşır: metin ikisini de kapsar.
+    expect(MUHRU_TUTMAYAN_BASLIGI).toBe(
+      "Kaydı ya da denetim izi program dışından değiştirilmiş görünen hesaplar",
+    );
+    expect(within(kart()).getByText(MUHRU_TUTMAYAN_ACIKLAMASI)).toBeInTheDocument();
+    expect(MUHRU_TUTMAYAN_ACIKLAMASI).toMatch(/kaydı ya da denetim izindeki kayıtları/);
     expect(within(kart()).getByText("Denetleme Kurulu · tanıtıcı dk-1")).toBeInTheDocument();
     expect(
       within(kart()).getAllByRole("button", { name: /güvenlik dosyasından sil$/i }),
@@ -190,5 +208,107 @@ describe("Hesaplar ve Güvenlik Dosyası kartı", () => {
     expect(silmeSonucu({ id: "x", tanitici: null, rol_etiketi: null, kapali: false })).toMatch(
       /^Bu hesabın parola kaydı/,
     );
+  });
+});
+
+describe("Hesaplar ve Güvenlik Dosyası kartı — parola kaydı hesap kaydıyla uyuşmayan hesaplar", () => {
+  const OZETI_TUTMAYAN = {
+    id: "h-5",
+    tanitici: "sekreter",
+    rol_etiketi: "Sekreter",
+    kapali: false,
+  };
+  /** Fark YALNIZ parola kaydı özeti tutmayan hesaptadır. */
+  const YALNIZ_OZET: IkiDepoFarki = {
+    fark_var: true,
+    sarmalsiz_hesaplar: [],
+    silinebilir_sarmallar: [],
+    ozeti_tutmayan_hesaplar: [OZETI_TUTMAYAN],
+    muhru_tutmayan: [],
+  };
+
+  function basYonlendirmeli(fark: IkiDepoFarki, kullanicilarAcik: boolean) {
+    return render(
+      <MemoryRouter>
+        <SnackbarProvider>
+          <ConfirmProvider>
+            <IkiDepoKarti fark={fark} onIkiDepo={vi.fn()} kullanicilarAcik={kullanicilarAcik} />
+          </ConfirmProvider>
+        </SnackbarProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it("fark yalnız bu listedeyken kart hesabı ve çareyi anar; giriş geri yüklemeyi anmaz", () => {
+    const { container } = basYonlendirmeli(YALNIZ_OZET, true);
+
+    expect(within(kart()).getByText(OZETI_TUTMAYAN_BASLIGI)).toBeInTheDocument();
+    expect(within(kart()).getByText("Sekreter · tanıtıcı sekreter")).toBeInTheDocument();
+    // Çare: program yöneticisinin sıfırlaması; kendi hesabıysa kurtarma anahtarı yolu.
+    const aciklama = within(kart()).getByText(OZETI_TUTMAYAN_ACIKLAMASI);
+    expect(aciklama).toHaveTextContent(/program yöneticisi Kullanıcılar ekranında/);
+    expect(aciklama).toHaveTextContent(/“Parolayı sıfırla”/);
+    expect(aciklama).toHaveTextContent(/“Parolamı unuttum” yolundan kurtarma anahtarıyla/);
+    expect(aciklama).toHaveTextContent(/Denetleme Kuruluna bildirin/);
+    // Giriş metni: uyuşmazlık, ama "çoğunlukla yedekten geri yüklemeden sonra" denmez.
+    const giris = within(kart()).getByText(IKI_DEPO_GIRISI);
+    expect(giris).not.toHaveTextContent(/yedekten geri yükleme/);
+    expect(within(kart()).queryByText(new RegExp(IKI_DEPO_GERI_YUKLEME_CUMLESI))).toBeNull();
+    // Kullanıcılar'a bağlantı.
+    expect(within(kart()).getByRole("link", { name: KULLANICILARI_AC })).toHaveAttribute(
+      "href",
+      KULLANICILAR_ADRESI,
+    );
+    expect(gorunenMetin(container)).not.toMatch(/sarmal|[a-z]+_[a-z]+/i);
+  });
+
+  it("Kullanıcılar bağlantısı yalnız yetenek varken ve parolası sıfırlanacak hesap varken çizilir", () => {
+    const { unmount } = basYonlendirmeli(YALNIZ_OZET, false);
+    expect(within(kart()).queryByRole("link", { name: KULLANICILARI_AC })).toBeNull();
+    unmount();
+
+    // Fark yalnız kalan eski kayıtta: sıfırlanacak hesap yok.
+    basYonlendirmeli(
+      { ...FARK, sarmalsiz_hesaplar: [], muhru_tutmayan: [], ozeti_tutmayan_hesaplar: [] },
+      true,
+    );
+    expect(within(kart()).queryByRole("link", { name: KULLANICILARI_AC })).toBeNull();
+  });
+
+  it("geri yüklemenin doğurduğu farkta giriş geri yüklemeyi anar; yalnız mührü tutmayanda giriş yok", () => {
+    expect(ikiDepoGirisi(FARK)).toBe(`${IKI_DEPO_GIRISI} ${IKI_DEPO_GERI_YUKLEME_CUMLESI}`);
+    expect(
+      ikiDepoGirisi({ ...YALNIZ_OZET, silinebilir_sarmallar: FARK.silinebilir_sarmallar }),
+    ).toBe(`${IKI_DEPO_GIRISI} ${IKI_DEPO_GERI_YUKLEME_CUMLESI}`);
+    expect(ikiDepoGirisi(YALNIZ_OZET)).toBe(IKI_DEPO_GIRISI);
+    // Eski yanıt (liste yok) ve yalnız mührü tutmayan hesap: giriş cümlesi yok, alt başlık söyler.
+    const yalnizMuhur: IkiDepoFarki = {
+      fark_var: true,
+      sarmalsiz_hesaplar: [],
+      silinebilir_sarmallar: [],
+      muhru_tutmayan: FARK.muhru_tutmayan,
+    };
+    expect(ikiDepoGirisi(yalnizMuhur)).toBeNull();
+
+    bas(yalnizMuhur);
+    expect(within(kart()).queryByText(new RegExp(IKI_DEPO_GIRISI))).toBeNull();
+    expect(within(kart()).getByText(MUHRU_TUTMAYAN_BASLIGI)).toBeInTheDocument();
+  });
+
+  it("hesap özeti günleri taşıyorsa aynı yazımla anılır", () => {
+    basYonlendirmeli(
+      {
+        ...YALNIZ_OZET,
+        ozeti_tutmayan_hesaplar: [
+          { ...OZETI_TUTMAYAN, acilis: "2026-11-01", kapanis: "2026-11-03", kapali: true },
+        ],
+      },
+      false,
+    );
+    expect(
+      within(kart()).getByText(
+        "Sekreter · tanıtıcı sekreter (açılış 01.11.2026, kapanış 03.11.2026)",
+      ),
+    ).toBeInTheDocument();
   });
 });

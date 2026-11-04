@@ -364,6 +364,32 @@ def _aralik(baslangic: date | None, bitis: date | None) -> tuple[datetime | None
     return alt, ust
 
 
+def tarih_suzgeci_hatalari(baslangic: date | None, bitis: date | None) -> dict[str, str]:
+    """Tarih süzgeçlerinin alan hataları: `{alan adı: ileti}`; yoksa boş sözlük.
+
+    `liste`'nin iki tarih denetimi (takvimin uçları, ters aralık) burada ALAN ADIYLA verilir: uç
+    400'ü alana bağlar, ekran iletiyi o alanın altına yazar (F1b-2 (d3); eskiden ret alansızdı ve
+    takvimin ucundaki günün hangi alanda olduğu ekranda bilinmiyordu). Başlangıç gününün yerel
+    00.00'ı ya da bitiş gününün ertesi 00.00'ı kurulamıyorsa (`_aralik`) o alan `TARIH_MESAJI`
+    alır; ikisi de kurulabiliyor ve bitiş başlangıçtan önceyse bitiş `TARIH_SIRASI_MESAJI` alır.
+    `liste` aynı denetimleri kendisi de yapar (derin savunma); yalnız okur.
+    """
+    hatalar: dict[str, str] = {}
+    if baslangic is not None:
+        try:
+            _aralik(baslangic, None)
+        except ValueError:
+            hatalar["baslangic"] = TARIH_MESAJI
+    if bitis is not None:
+        try:
+            _aralik(None, bitis)
+        except ValueError:
+            hatalar["bitis"] = TARIH_MESAJI
+    if not hatalar and baslangic is not None and bitis is not None and bitis < baslangic:
+        hatalar["bitis"] = TARIH_SIRASI_MESAJI
+    return hatalar
+
+
 def _rol_sirasi(rol: str) -> int:
     try:
         return list(AccountRole.values).index(rol)

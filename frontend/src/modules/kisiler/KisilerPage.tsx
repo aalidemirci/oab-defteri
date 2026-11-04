@@ -10,6 +10,15 @@
 // tutulur (`?tab=personel`, `?tab=havuz`): başka ekranlar doğrudan o sekmeye bağlanır.
 // Aile iskeletinin kütüphane üyelik sekmeleri ve "Bakanlık sistemi" hatırlatması
 // F1a-2'de söküldü.
+//
+// Rol süzmesi (plan F1b-2 "Bugünkü uçların eşlemi" → Kişiler; kaynak `oturum/yetki`): personeli
+// her rol okur. Öğrenciler sekmesi yalnız `ogrenciler`'de (öğrenci uçları 5. adımda sökülene dek
+// yalnız program yöneticisine açık), Ayrılış Havuzu sekmesi yalnız `ayrilis_havuzu`'nda görünür;
+// adresle gelinirse rolün ilk sekmesi açılır. Personel sekmesinde "Kişi ekle" ve satırdan
+// düzenleme (ayrılış, silme dahil) `kisi_yazma`'ya, e-Okul aktarım paneli (şablon dahil)
+// `eokul_aktarimi`'na, "Birleştir" düğmeleri (aktarım raporu ve havuz) `kisi_yazma`'ya bağlıdır.
+// Yazamayan rolde liste salt okurdur (başta `SaltOkurNotu`, satır tıklanmaz). Özet yüklenirken
+// sekmeler yerine iskelet durur.
 
 import { useCallback, useEffect, useState } from "react";
 
@@ -35,6 +44,9 @@ import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import type { TabItem } from "../../ui/Tabs";
 import TextField from "../../ui/TextField";
 import { MEMBER_KIND_TR, okulApi } from "../okul/api";
+import { SaltOkurNotu } from "../oturum/RolKapisi";
+import type { YetenekAdi } from "../oturum/api";
+import { useYetki } from "../oturum/yetki";
 import type {
   GradeLevelOption,
   MemberKind,
@@ -72,6 +84,20 @@ const TABS: TabItem[] = [
   { key: "havuz", label: "Ayrılış Havuzu", icon: "pending_actions" },
 ];
 
+/** Sekmenin yeteneği (verilmeyen sekme her role açık; dosya başı "Rol süzmesi"). */
+const SEKME_YETENEGI: Partial<Record<TabKey, YetenekAdi>> = {
+  ogrenciler: "ogrenciler",
+  havuz: "ayrilis_havuzu",
+};
+
+/** Sayfanın açıklaması: yazabilen rolde ve salt okur rolde (sözlük §4.1). */
+export const KISILER_ACIKLAMASI =
+  "Öğrenci, öğretmen ve diğer personel sicili. Kayıtlar e-Okul listesinden toplu aktarılabilir " +
+  "ya da tek tek girilebilir. Aktarım kimseyi ayırmaz: listede bulunmayanlar Ayrılış Havuzu'nda " +
+  "karar bekler. TCKN, veli bilgisi, unvan ve branş bu programda tutulmaz.";
+export const KISILER_SALT_OKUR_ACIKLAMASI =
+  "Öğretmen ve diğer personel sicili. TCKN, veli bilgisi, unvan ve branş bu programda tutulmaz.";
+
 /** Ayrılış onayının ortak sonucu cümlesi (ayrılış yolu kaydı silmez). */
 const AYRILIS_SONUCU = "Kaydı silinmez; sicilde “Ayrıldı · gg.aa.yyyy” rozetiyle kalır.";
 
@@ -85,7 +111,15 @@ const OKUNAMAYAN_NUMARA_YARDIMI =
   "Kayıtlı numara okunamadı; boş bırakırsanız olduğu gibi kalır, yazarsanız yenisi kaydedilir.";
 
 export default function KisilerPage() {
-  const [active, setActive] = useTabParam<TabKey>("tab", TAB_KEYS, "ogrenciler");
+  const yetki = useYetki();
+  // Rolün sekmeleri; ilki varsayılandır (program yöneticisinde Öğrenciler, öteki rollerde
+  // personel). Yetkisiz sekmenin adresi varsayılana düşer (`useTabParam`).
+  const sekmeler = TAB_KEYS.filter((k) => {
+    const yetenek = SEKME_YETENEGI[k];
+    return yetenek === undefined || yetki.acik(yetenek);
+  });
+  const [active, setActive] = useTabParam<TabKey>("tab", sekmeler, sekmeler[0]);
+  const birlestirebilir = yetki.acik("kisi_yazma");
 
   return (
     <div className="space-y-[var(--od-page-gap)]">
@@ -93,27 +127,35 @@ export default function KisilerPage() {
         <div>
           <h1 className="od-page-title">Kişiler</h1>
           <p className="od-page-description">
-            Öğrenci, öğretmen ve diğer personel sicili. Kayıtlar e-Okul listesinden toplu
-            aktarılabilir ya da tek tek girilebilir. Aktarım kimseyi ayırmaz: listede bulunmayanlar
-            Ayrılış Havuzu&apos;nda karar bekler. TCKN, veli bilgisi, unvan ve branş bu programda
-            tutulmaz.
+            {yetki.acik("kisi_yazma") ? KISILER_ACIKLAMASI : KISILER_SALT_OKUR_ACIKLAMASI}
           </p>
         </div>
       </div>
 
-      <Tabs
-        items={TABS}
-        active={active}
-        onChange={(key) => setActive(key as TabKey)}
-        ariaLabel="Kişiler bölümleri"
-        idBase="kisiler"
-      />
+      {yetki.durum === "yukleniyor" ? (
+        <SkeletonList rows={5} />
+      ) : (
+        <>
+          <Tabs
+            items={TABS.filter((t) => (sekmeler as readonly string[]).includes(t.key))}
+            active={active}
+            onChange={(key) => setActive(key as TabKey)}
+            ariaLabel="Kişiler bölümleri"
+            idBase="kisiler"
+          />
 
-      <div {...tabPanelProps("kisiler", active)}>
-        {active === "ogrenciler" && <OgrencilerSekmesi />}
-        {active === "personel" && <PersonelSekmesi />}
-        {active === "havuz" && <AyrilisHavuzu />}
-      </div>
+          <div {...tabPanelProps("kisiler", active)}>
+            {active === "ogrenciler" && <OgrencilerSekmesi birlestirebilir={birlestirebilir} />}
+            {active === "personel" && (
+              <PersonelSekmesi
+                yazabilir={yetki.acik("kisi_yazma")}
+                aktarabilir={yetki.acik("eokul_aktarimi")}
+              />
+            )}
+            {active === "havuz" && <AyrilisHavuzu birlestirebilir={birlestirebilir} />}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -122,7 +164,7 @@ export default function KisilerPage() {
 // Öğrenciler sekmesi
 // ---------------------------------------------------------------------------
 
-function OgrencilerSekmesi() {
+function OgrencilerSekmesi({ birlestirebilir }: { birlestirebilir: boolean }) {
   const [searchInput, setSearchInput] = useState("");
   const search = useDebounced(searchInput);
   const [level, setLevel] = useState("");
@@ -284,7 +326,7 @@ function OgrencilerSekmesi() {
         </>
       )}
 
-      <AktarimPaneli kind="students" onImported={reload} />
+      <AktarimPaneli kind="students" onImported={reload} birlestirebilir={birlestirebilir} />
 
       {(creating || editing !== null) && (
         <OgrenciFormDialog
@@ -508,7 +550,15 @@ function OgrenciFormDialog({
 // Öğretmenler ve diğer personel sekmesi
 // ---------------------------------------------------------------------------
 
-function PersonelSekmesi() {
+function PersonelSekmesi({
+  yazabilir,
+  aktarabilir,
+}: {
+  /** "Kişi ekle" ve satırdan düzenleme (`kisi_yazma`). */
+  yazabilir: boolean;
+  /** e-Okul aktarım paneli (`eokul_aktarimi`). */
+  aktarabilir: boolean;
+}) {
   const [searchInput, setSearchInput] = useState("");
   const search = useDebounced(searchInput);
   const [offset, setOffset] = useState(0);
@@ -576,10 +626,14 @@ function PersonelSekmesi() {
             </p>
           )}
         </div>
-        <Button icon="person_add" onClick={() => setCreating(true)}>
-          Kişi ekle
-        </Button>
+        {yazabilir && (
+          <Button icon="person_add" onClick={() => setCreating(true)}>
+            Kişi ekle
+          </Button>
+        )}
       </div>
+
+      {!yazabilir && <SaltOkurNotu />}
 
       <Card
         elevation={0}
@@ -605,15 +659,21 @@ function PersonelSekmesi() {
         <EmptyState
           icon="badge"
           title="Gösterilecek kişi yok"
-          description="Aramayı değiştirin ya da e-Okul personel listesini aşağıdaki panelden içe aktarın."
+          description={
+            aktarabilir
+              ? "Aramayı değiştirin ya da e-Okul personel listesini aşağıdaki panelden içe aktarın."
+              : undefined
+          }
         />
       ) : (
         <>
+          {/* Salt okurda satır tıklanmaz: düzenleme penceresinin her eylemi bir yazmadır;
+              listenin sütunları kaydın okunabilen bütün alanlarını zaten gösterir. */}
           <DataTable<Personnel>
             columns={columns}
             rows={page.results}
-            onRowClick={(p) => setEditing(p)}
-            rowLabel={(p) => `${kisiKaydiniMetni(p)} düzenle`}
+            onRowClick={yazabilir ? (p) => setEditing(p) : undefined}
+            rowLabel={yazabilir ? (p) => `${kisiKaydiniMetni(p)} düzenle` : undefined}
           />
           <PaginationBar
             count={page.count}
@@ -624,9 +684,11 @@ function PersonelSekmesi() {
         </>
       )}
 
-      <AktarimPaneli kind="personnel" onImported={reload} />
+      {aktarabilir && (
+        <AktarimPaneli kind="personnel" onImported={reload} birlestirebilir={yazabilir} />
+      )}
 
-      {(creating || editing !== null) && (
+      {yazabilir && (creating || editing !== null) && (
         <PersonelFormDialog
           personnel={editing}
           onClose={() => {

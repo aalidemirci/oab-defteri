@@ -12,7 +12,19 @@ import {
   bulguMetinleri,
   bulguMetni,
   degisiklikGosterir,
+  ACILIS_GUNU_OKUNAMADI,
+  DENETLEME_KURULUNA_BILDIRIN,
+  GERI_YUKLEME_BILDIRIN,
+  GORDUM_ACIKLAMASI,
+  IZ_BOSLUGU_GIRISI,
+  KAYIT_DEGISMIS_GIRISI,
+  OZETI_TUTMAYAN_ACIKLAMASI,
+  PAROLA_KAYDI_ACIKLAMASI,
+  PAROLA_KAYDI_GIRISI,
+  hesapBulgusuTuru,
   hesapEtiketi,
+  hesapEtiketiGunlu,
+  hesapGunleri,
   kagitCapasiSatiri,
   parolaYenilenmeCumlesi,
   parolaYenilenmeOgudu,
@@ -168,5 +180,80 @@ describe("parola yenilenme bildirimi", () => {
     expect(parolaYenilenmeOgudu("KURTARMA")).toMatch(/okul müdürlüğüne ve Denetleme Kuruluna/);
     expect(parolaYenilenmeOgudu("KURTARMA")).toMatch(/zarf açılmış/);
     expect(parolaYenilenmeOgudu("SIFIRLAMA")).toMatch(/sıfırlanmasını siz istemediyseniz/);
+  });
+});
+
+describe("hesabın günleri (aynı tanıtıcılı eski ve yeni hesap ayrılır)", () => {
+  const MUHASIP = { id: "h-2", tanitici: "muhasip", rol_etiketi: "Muhasip" };
+
+  it("açılış ve kapanış günü gg.aa.yyyy yazılır; açık hesapta yalnız açılış", () => {
+    expect(hesapGunleri({ ...MUHASIP, acilis: "2026-11-01", kapanis: null })).toBe(
+      "açılış 01.11.2026",
+    );
+    expect(hesapGunleri({ ...MUHASIP, acilis: "2026-11-01", kapanis: "2026-11-03" })).toBe(
+      "açılış 01.11.2026, kapanış 03.11.2026",
+    );
+    expect(hesapEtiketiGunlu({ ...MUHASIP, acilis: "2026-11-01", kapanis: "2026-11-03" })).toBe(
+      "Muhasip · tanıtıcı muhasip (açılış 01.11.2026, kapanış 03.11.2026)",
+    );
+  });
+
+  it("kaydın söylemediği açılış günü “okunamadı” diye yazılır", () => {
+    expect(hesapGunleri({ ...MUHASIP, acilis: null, kapanis: null })).toBe(ACILIS_GUNU_OKUNAMADI);
+    expect(hesapGunleri({ ...MUHASIP, acilis: null, kapanis: "2026-11-03" })).toBe(
+      "açılış günü okunamadı, kapanış 03.11.2026",
+    );
+  });
+
+  it("özet günleri taşımıyorsa ya da hesabın kaydı yoksa gün yazılmaz", () => {
+    expect(hesapGunleri(MUHASIP)).toBeNull();
+    expect(hesapEtiketiGunlu(MUHASIP)).toBe("Muhasip · tanıtıcı muhasip");
+    expect(
+      hesapGunleri({ id: "x", tanitici: null, rol_etiketi: null, acilis: null, kapanis: null }),
+    ).toBeNull();
+  });
+});
+
+describe("hesap bulgusunun türü", () => {
+  it("alan adından grup: mühür, satırın izi, iz boşluğu, parola kaydı", () => {
+    expect(hesapBulgusuTuru(["seal"])).toBe("muhur");
+    expect(hesapBulgusuTuru(["kayit_mac"])).toBe("kayit");
+    expect(hesapBulgusuTuru(["iz_boslugu"])).toBe("bosluk");
+    expect(hesapBulgusuTuru(["wrap_digest"])).toBe("parola_kaydi");
+  });
+
+  it("tanınmayan ya da boş kod mühür sayılır (fail-closed); mühür önceliklidir", () => {
+    expect(hesapBulgusuTuru([])).toBe("muhur");
+    expect(hesapBulgusuTuru(["yeni_bir_alan"])).toBe("muhur");
+    expect(hesapBulgusuTuru(["wrap_digest", "seal"])).toBe("muhur");
+    expect(hesapBulgusuTuru(["wrap_digest", "kayit_mac"])).toBe("kayit");
+    expect(hesapBulgusuTuru(["wrap_digest", "iz_boslugu"])).toBe("bosluk");
+  });
+
+  it("kart metinleri nötrdür ve iç kod, “mühür”, “sarmal” taşımaz", () => {
+    for (const metin of [
+      KAYIT_DEGISMIS_GIRISI,
+      IZ_BOSLUGU_GIRISI,
+      PAROLA_KAYDI_GIRISI,
+      PAROLA_KAYDI_ACIKLAMASI,
+      DENETLEME_KURULUNA_BILDIRIN,
+      OZETI_TUTMAYAN_ACIKLAMASI,
+      GORDUM_ACIKLAMASI,
+      GERI_YUKLEME_BILDIRIN,
+    ]) {
+      expect(metin).not.toMatch(/[a-z]+_[a-z]+|mühür|sarmal|\b(YK|DK|MY)\b/i);
+    }
+    // Kayıt ve iz boşluğu cümleleri giriş de olabilir hesap işlemi de.
+    expect(KAYIT_DEGISMIS_GIRISI).toMatch(/giriş ya da hesap işlemi/);
+    expect(IZ_BOSLUGU_GIRISI).toMatch(/giriş ya da hesap işlemi/);
+    // Parola kaydı bulgusu kilit ekranında da açık oturumdaki parola işleminde de yazılır
+    // (`_check_session_password` aynı `wrap_digest` satırını yazar).
+    expect(PAROLA_KAYDI_GIRISI).toMatch(/giriş ya da parola işlemi/);
+    for (const metin of [KAYIT_DEGISMIS_GIRISI, IZ_BOSLUGU_GIRISI, PAROLA_KAYDI_GIRISI]) {
+      expect(metin).not.toMatch(/giriş açılmadı|giriş denendi/);
+    }
+    // Parola kaydı bulgusunda rol doğrudur; çare iki yoldur.
+    expect(PAROLA_KAYDI_ACIKLAMASI).toMatch(/hesap kaydındaki rol doğrudur/);
+    expect(PAROLA_KAYDI_ACIKLAMASI).not.toMatch(/rol değiştirilmiş/);
   });
 });

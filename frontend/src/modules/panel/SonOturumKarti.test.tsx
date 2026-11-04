@@ -12,10 +12,10 @@ import SonOturumKarti, { SON_OTURUM_KARTI_BASLIGI } from "./SonOturumKarti";
 
 const BASLANGIC = "2026-10-31T09:00:00+03:00";
 
-function bas() {
+function bas(kontrolEdebilir = true) {
   return render(
     <SnackbarProvider>
-      <SonOturumKarti />
+      <SonOturumKarti kontrolEdebilir={kontrolEdebilir} />
     </SnackbarProvider>,
   );
 }
@@ -82,6 +82,39 @@ describe("Son oturum kartı", () => {
       ).not.toBeInTheDocument(),
     );
     expect(await screen.findByText("Son oturumun kontrolü tamamlandı.")).toBeInTheDocument();
+  });
+
+  it("yeteneği olmayan rolde kart görünür, Kontrol ettim çizilmez (M9 okur)", async () => {
+    vi.spyOn(panelApi, "sonOturum").mockResolvedValue({
+      unexpected_shutdown: true,
+      process_started_at: BASLANGIC,
+    });
+    const onay = vi.spyOn(panelApi, "kontrolEttim");
+
+    bas(false);
+
+    expect(
+      await screen.findByRole("heading", { name: SON_OTURUM_KARTI_BASLIGI }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Son oturumdaki kayıtları kontrol edin/)).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(onay).not.toHaveBeenCalled();
+  });
+
+  it("gizlenen düğmenin ucu rol reddi verirse sunucunun iletisi kartta görünür", async () => {
+    vi.spyOn(panelApi, "sonOturum").mockResolvedValue({
+      unexpected_shutdown: true,
+      process_started_at: BASLANGIC,
+    });
+    vi.spyOn(panelApi, "kontrolEttim").mockRejectedValue(
+      new ApiError(403, "rol_yetkisiz", "Bu işlem hesabınızın rolüne açık değil."),
+    );
+
+    // Özet bayatken düğme hâlâ çiziliyordu: ret, çağıran kartta söylenir.
+    bas(true);
+    await userEvent.click(await screen.findByRole("button", { name: /Kontrol ettim/ }));
+
+    expect(await screen.findByText("Bu işlem hesabınızın rolüne açık değil.")).toBeInTheDocument();
   });
 
   it("onay kaydedilemezse kart kalır ve hata gösterilir", async () => {

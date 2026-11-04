@@ -16,9 +16,10 @@
 // (`security/integrity/`: son girişler, parola yenilenme, kâğıt çapası) her role açıktır;
 // denetim kartları (`audit/`: bütünlük, geri yükleme, mührü tutmayan hesaplar) program
 // yöneticisi ve Denetleme Kuruluna; iki depo kartı (`two-store/`) ve sahipsiz kaydın
-// silinmesi yalnız program yöneticisine. Hangi ucun çağrılacağını oturum özetindeki
-// yetenekler söyler (`butunluk_denetim`, `iki_depo`; `oturum/useOturum.useYetenekler`): rolün
-// açamadığı uç ÇAĞRILMAZ. Kartlar tek bir bileşik durumdan beslenir (`ButunlukDurumu`,
+// silinmesi yalnız program yöneticisine; geri yükleme kartının "Gördüm"ü (`restore-seen/`)
+// yalnız Denetleme Kuruluna. Hangi ucun çağrılacağını oturum özetindeki yetenekler söyler
+// (`butunluk_denetim`, `iki_depo`, `geri_yukleme_gordum`; `oturum/useOturum.useYetenekler`,
+// `oturum/yetki`): rolün açamadığı uç ÇAĞRILMAZ. Kartlar tek bir bileşik durumdan beslenir (`ButunlukDurumu`,
 // `birlestir`); mührü tutmayan hesaplar denetim kartlarından gelir ve "Hesaplar ve Güvenlik
 // Dosyası" kartının listesinde durur (program yöneticisinde iki depo farkıyla birlikte).
 
@@ -117,8 +118,10 @@ export interface IkiDepoKaydi {
   silinebilir_sarmallar: IkiDepoHesabi[];
   /**
    * Parola kaydı hesap kaydındaki özeti tutmayan hesaplar (eski ya da program dışından konmuş
-   * parola kaydı; giriş yapamaz, çaresi program yöneticisinin parola sıfırlamasıdır). Sunucu
-   * F1b-2 (b3)'ten beri yollar; yanıtta yoksa boş sayılır. Kartta gösterimi (d) alt commit'indedir.
+   * parola kaydı; giriş yapamaz, çaresi program yöneticisinin parola sıfırlaması, program
+   * yöneticisinin kendi hesabıysa kurtarma anahtarıyla açılış). Sunucu F1b-2 (b3)'ten beri yollar;
+   * yanıtta yoksa boş sayılır. Kartta "Parola kaydı hesap kaydıyla uyuşmayan hesaplar" listesidir
+   * (`IkiDepoKarti`).
    */
   ozeti_tutmayan_hesaplar?: IkiDepoHesabi[];
 }
@@ -128,7 +131,7 @@ export interface IkiDepoKaydi {
  * ve mührü tutmayan hesaplar (denetim kartlarından; program yöneticisi ve Denetleme Kurulu).
  */
 export interface IkiDepoFarki extends IkiDepoKaydi {
-  /** Kaydı program dışından değiştirilmiş görünen hesaplar (hiçbir işleme konu olmaz). */
+  /** Kaydı ya da denetim izi program dışından değiştirilmiş görünen hesaplar (dokunulmaz). */
   muhru_tutmayan: IkiDepoHesabi[];
 }
 
@@ -216,9 +219,14 @@ export interface SahipsizSarmalSonucu extends IkiDepoYaniti {
   silinen: string[];
 }
 
-/** `GET|POST /security/integrity/reset-notice/` yanıtı. */
+/**
+ * `GET|POST /security/integrity/reset-notice/` yanıtı. Bildirim okunamazsa (program dışından
+ * bozulmuş sıfırlama anı) `parola_yenilenme` null'dır ve adı `okunamayan`'dadır (uç 500 dönmez;
+ * Genel Bakış'ın kartı aynı durumu "okunamadı" diye söyler, pencere çizilmez).
+ */
 export interface ParolaBildirimiYaniti {
   parola_yenilenme: ParolaYenilenme | null;
+  okunamayan?: string[];
 }
 
 export const BUTUNLUK_YOLU = "/security/integrity/";
@@ -226,6 +234,8 @@ export const DENETIM_KARTLARI_YOLU = "/security/integrity/audit/";
 export const IKI_DEPO_YOLU = "/security/integrity/two-store/";
 export const SAHIPSIZ_SARMAL_YOLU = "/security/integrity/orphan-wraps/";
 export const PAROLA_BILDIRIMI_YOLU = "/security/integrity/reset-notice/";
+/** Geri yükleme kartının "Gördüm"ü (yalnız Denetleme Kurulu; yetenek `geri_yukleme_gordum`). */
+export const GERI_YUKLEME_GORDUM_YOLU = "/security/integrity/restore-seen/";
 
 type Nesne = Record<string, unknown>;
 
@@ -309,6 +319,41 @@ export function ikiDepoyuBirlestir(durum: ButunlukDurumu, yanit: unknown): Butun
   };
 }
 
+/**
+ * Denetim kartları ucunun güncel yanıtını ("Gördüm"den dönen) bileşik duruma yazar: bütünlük,
+ * geri yükleme ve mührü tutmayan hesaplar yenilenir; iki depo kaydı (yalnız program yöneticisi)
+ * korunur, denetim kartlarının okunamayan adları yenilenir. Yanıt nesne değilse denetim kartları
+ * okunamamış sayılır (uyarı sessizce kaybolmaz).
+ */
+export function denetimiBirlestir(durum: ButunlukDurumu, yanit: unknown): ButunlukDurumu {
+  const y: Nesne = nesneMi(yanit) ? yanit : {};
+  const iki = durum.iki_depo;
+  // İki depo kaydının kendisi (mührü tutmayanlar dışında); `fark_var`ı sunucunun kuralıyla.
+  const kayit: IkiDepoKaydi | null =
+    iki === null
+      ? null
+      : {
+          fark_var:
+            iki.sarmalsiz_hesaplar.length > 0 ||
+            iki.silinebilir_sarmallar.length > 0 ||
+            (iki.ozeti_tutmayan_hesaplar?.length ?? 0) > 0,
+          sarmalsiz_hesaplar: iki.sarmalsiz_hesaplar,
+          silinebilir_sarmallar: iki.silinebilir_sarmallar,
+          ozeti_tutmayan_hesaplar: iki.ozeti_tutmayan_hesaplar ?? [],
+        };
+  const denetimAdlari: readonly string[] = DENETIM_KARTLARI;
+  return {
+    ...durum,
+    butunluk: liste<ButunlukBulgusu>(y.butunluk),
+    geri_yukleme: (y.geri_yukleme as GeriYuklemeOzeti | null | undefined) ?? null,
+    iki_depo: ikiDepoFarki(kayit, liste<IkiDepoHesabi>(y.muhru_tutmayan)),
+    okunamayan: [
+      ...durum.okunamayan.filter((ad) => !denetimAdlari.includes(ad)),
+      ...(nesneMi(yanit) ? liste<string>(y.okunamayan) : DENETIM_KARTLARI),
+    ],
+  };
+}
+
 export const butunlukApi = {
   /** Oturumdaki hesabın kendi kartları (her rol; kullanıcı eylemi değil). */
   kendiKartlari: () => api.get<KendiKartlari>(BUTUNLUK_YOLU, { etkinlik: false }),
@@ -339,4 +384,12 @@ export const butunlukApi = {
   parolaBildirimi: () => api.get<ParolaBildirimiYaniti>(PAROLA_BILDIRIMI_YOLU, { etkinlik: false }),
   /** "Gördüm": bildirim izli bir yazımla kapanır; yanıt güncel bildirimdir (null). */
   parolaBildiriminiGordum: () => api.post<ParolaBildirimiYaniti>(PAROLA_BILDIRIMI_YOLU, {}),
+  /**
+   * Geri yükleme kartının "Gördüm"ü (yalnız Denetleme Kurulu): `seq` kartın gösterdiği son geri
+   * yüklemedir. Kart herkes için kalkar (bir üye yeter); aynı geri yüklemeye ikinci "Gördüm" bir
+   * şey yazmaz (200). Eski ya da olmayan `seq` 409 `geri_yukleme_guncel_degil`. Yanıt güncel
+   * denetim kartlarıdır (`denetimiBirlestir`).
+   */
+  geriYuklemeyiGordum: (seq: number) =>
+    api.post<DenetimKartlari>(GERI_YUKLEME_GORDUM_YOLU, { seq }),
 };

@@ -5,7 +5,8 @@
 // Ayarlar ekranında gizlidir: orada aynı bilgi ve indirme düğmesi zaten
 // Güncelleme panelindedir, iki kopya hangisinin "asıl" olduğunu sordururdu.
 // Aile iskeletinin görevli kipindeki gizleme (`gizli`) görevli kipiyle kalktı (tasarım
-// TK14); bandın role göre görünürlüğü F1b 2. adımda gelir (tasarım §4.4.2).
+// TK14). Bant yalnız güncelleme yeteneğinde çizilir: kararı kabuk verir (`AppShell`,
+// `useYetki().acik("guncelleme")`; plan F1b-2 "Ayarlar ve bant").
 
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";

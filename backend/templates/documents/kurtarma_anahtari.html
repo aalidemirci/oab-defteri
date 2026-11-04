@@ -5,15 +5,20 @@ dışıdır, E-kodu almaz (tasarım §9.7, §12.B; saklama yeri kullanıcı kara
 `document_title` (belgenin adı, tr_upper ile büyük harf), `key_no` ve `key_date`
 (anahtarın no'su ve üretim günü, gg.aa.yyyy — guvenlik.json `kurtarma.no`,
 `kurtarma.tarih`; boşsa elle doldurulacak çizgi), `asset_no` (bilgisayarın demirbaş
-no'su; boşsa elle doldurulacak çizgi) ve `key_groups` (numaralı dörtlü gruplar).
+no'su; boşsa elle doldurulacak çizgi), `key_groups` (numaralı dörtlü gruplar) ve
+`ucuncu_durum` ile `ucuncu_durumun_caresi` (zarfın üçüncü durumu ve çaresi; kullanıcı
+kararları 02.11.2026 ve 03.11.2026; tek sabit `recovery_key_document.UCUNCU_DURUM*`, ön yüz
+ve sözlük aynı sözü taşır).
 Basım günü ayrı satır olarak basılmaz: kâğıdın kimliği anahtarın no'su ve üretim
 günüdür (devir-teslimde yazılan da budur, tasarım §9.7); iki tarih yan yana
 karıştırılırdı.
 Metin her kişinin kendi hesabıyla çalıştığı düzene göredir: parola paylaşılmaz,
 anahtar yalnız program yöneticisi içindir ve ÜÇ durumda kullanılır (parolası
-unutulduğunda; kayıtlar yeni bilgisayara taşınırken; bu bilgisayarın güvenlik dosyası
-kaybolduğunda ya da bozulduğunda yedekten geri yüklemede — kayıp kilidinde parola yolu
-işlemez, tasarım §4.4.4); zarfın "yalnız" açıldığı durumlar bu üçüdür. Ailedeki
+unutulduğunda; kayıtlar yeni bilgisayara taşınırken; zarfın üçüncü durumunda — bu
+bilgisayarın güvenlik dosyası ya da kayıtları kaybolduğunda, bozulduğunda ya da program
+dışından değiştirildiğinde; çaresi yedekten geri yükleme ya da kurtarma anahtarıyla açılış,
+kayıp kilidinde parola yolu işlemez, tasarım §4.4.4); zarfın "yalnız" açıldığı durumlar bu
+üçüdür. Ailedeki
 "yönetici parolası" dili yoktur.
 Anahtar karakter karakter EŞİT GENİŞLİKLİ kutulara basılır: gömülü yazı tipi
 yalnız DejaVu Sans'tır (tek aralıklı DejaVu pakette yok), eşit genişlik kutuyla
@@ -22,12 +27,12 @@ kopyalarken karıştırılmasın). text-transform YOK — başlıklar doğrudan 
 harf (WeasyPrint TR "i" tuzağı). Belge tek sayfadır (sayfa bütçesi testi).{% endcomment %}
 {% block extra_style %}
 <style>
-  .key-box { margin: 12pt 0 4pt; border: 1.5pt solid var(--pr-ink); padding: 10pt 8pt 8pt;
+  .key-box { margin: 8pt 0 4pt; border: 1.5pt solid var(--pr-ink); padding: 8pt 8pt 6pt;
              break-inside: avoid; page-break-inside: avoid; }
   .key-caption { text-align: center; font-size: 8.5pt; color: var(--pr-secondary);
                  margin-bottom: 6pt; }
   .key-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  .key-grid td { text-align: center; vertical-align: top; padding: 3pt 2pt 7pt; }
+  .key-grid td { text-align: center; vertical-align: top; padding: 3pt 2pt 5pt; }
   .key-no { font-size: 7.5pt; color: var(--pr-muted); margin-bottom: 2pt; }
   .key-char { display: inline-block; width: 17pt; height: 23pt; line-height: 23pt;
               margin: 0 1pt; border: 0.75pt solid var(--pr-line); background: var(--pr-fill);
@@ -37,8 +42,8 @@ harf (WeasyPrint TR "i" tuzağı). Belge tek sayfadır (sayfa bütçesi testi).{
   .key-line-label { font-weight: normal; font-size: 8.5pt; color: var(--pr-secondary); }
   .key-hint { text-align: center; font-size: 8pt; color: var(--pr-secondary); margin-top: 5pt; }
   .advice { margin: 4pt 0 0 14pt; padding: 0; font-size: 9.5pt; line-height: 1.4; }
-  .advice li { margin-bottom: 3pt; }
-  .confidential { margin-top: 10pt; text-align: center; font-size: 8.5pt; font-weight: bold;
+  .advice li { margin-bottom: 2pt; }
+  .confidential { margin-top: 6pt; text-align: center; font-size: 8.5pt; font-weight: bold;
                   color: var(--pr-label); border-top: 0.6pt solid var(--pr-faint); padding-top: 5pt; }
 </style>
 {% endblock %}
@@ -74,8 +79,8 @@ harf (WeasyPrint TR "i" tuzağı). Belge tek sayfadır (sayfa bütçesi testi).{
     <p class="para">Herkes programı kendi hesabıyla ve kendi parolasıyla açar; bu anahtar günlük
     işte kullanılmaz. Anahtar yalnız program yöneticisi içindir ve üç durumda kullanılır:
     program yöneticisi parolasını unutursa kilit ekranında “Parolamı unuttum” ile yeni parolasını
-    belirler; kayıtlar yeni bir bilgisayara taşınırken ve bu bilgisayarın
-    güvenlik dosyası kaybolur ya da bozulursa kayıtlar yedekten bu anahtarla geri yüklenir. Öteki
+    belirler; kayıtlar yeni bir bilgisayara taşınırken yedekten bu anahtarla geri yüklenir;
+    {{ ucuncu_durum }} çare {{ ucuncu_durumun_caresi }}tır. Öteki
     hesaplarda parolasını unutan kişi program yöneticisine başvurur. Parola değişince anahtar
     değişmez; anahtar Ayarlar → Güvenlik'ten yenilenirse yeni belge alınır, eski kâğıt yenilemeden
     önceki yedekleri açtığı için atılmaz, “Eski anahtar” diye işaretlenip saklanır. Anahtar

@@ -22,16 +22,40 @@
 //   anahtarı yalnız onun içindir); öteki hesaplarda metin program yöneticisine yönlendirir.
 //   Liste boşsa (kurtarma anahtarıyla geri yükleme sonrası; tasarım TK10) kurtarma yolu
 //   doğrudan açılır ve hesap kurtarma listesinden seçilir (`KurtarmaIleAcma`).
+// * Liste dolu ama seçilebilir satır kalmadıysa (hepsi askıda, kaydı okunamıyor ya da giriş
+//   kapalı; plan F1b-2 "Ön yüz" → "Kilit ekranı") liste yerinde kalır, Parola alanı ve "Aç"
+//   kalkar; yerine yol gösterme metni ve "Kurtarma anahtarıyla aç" düğmesi gelir (hesap
+//   kurtarma listesinden seçilir). Metin kullanıcı kararlarınındır: program yöneticisi
+//   kurtarma anahtarıyla açar ("Parolamı unuttum" yolu), öteki hesaplar program yöneticisine
+//   başvurur (askıyı o kaldırır, parolayı o sıfırlar); kayıtlar değiştirilmiş görünüyorsa
+//   Denetleme Kuruluna bildirilir — kurtarma anahtarı zarfının üçüncü durumu (02.11.2026) ve
+//   çaresi "yedekten geri yükleme ya da kurtarma anahtarıyla açılış" (03.11.2026). Zarfın
+//   üçüncü durumunun sözleri belgede, anahtar panelinde ve sözlükte BİREBİR aynıdır
+//   (`metinler.ZARFIN_UCUNCU_DURUMU`; backend `test_kurtarma_anahtari_pdf` hepsini sınar).
 // * Açılış (kilit açma ya da kurtarma) pencereyi yeniden yükler (tasarım §13 D53;
 //   `oturum/eylemler`): önceki hesabın belleği yeni oturuma kalmaz.
+// * Çift gönderim yoktur: istek sürerken (ve açılıştan sonra, pencere yüklenirken) ikinci
+//   gönderim `gonder`'in başında döner. Koruma bir ref'tir, durum değil: aynı olay döngüsünde
+//   gelen iki gönderim (satırda Enter → `requestSubmit`, Enter'ın yinelenmesi) yeniden
+//   çizimden önce geldiği için `calisiyor`'u ikisi de false görürdü.
 //
 // Hata hangi alanınsa orada çıkar: "Parola hatalı." Parola alanının, "Hesabınızı seçin."
 // ve askı iletisi hesap grubunun, yeni parolanın reddi "Yeni parola"nın, eşleşmeme
-// "Parola (tekrar)"ın altında; hesaba ya da alana bağlı olmayan ret (hesap mührü, iki depo,
-// ağ) formun genel uyarısıdır. Odak her retten ve her geri dönüşten ("Vazgeç", "Parolayla
-// açmaya dön") sonra forma döner: hesap seçiliyse Parola alanına, değilse ilk seçilebilir
-// satıra (bu ekran kabuğun içinde çizilir; odak sayfa gövdesine düşerse klavye kullanıcısı
-// kenar çubuğunu dolaşmak zorunda kalırdı).
+// "Parola (tekrar)"ın altında; hesaba ya da alana bağlı olmayan ret (hesap kaydı, parola
+// kaydı, denetim izi, iki depo, ağ) formun genel uyarısıdır ve sunucunun iletisi olduğu gibi
+// yazılır (`oturum/hatalar`: sunucu iletisi önceliklidir). Kayıt reddinde (hesap kaydı, parola
+// kaydı, denetim izi ya da iki depo; `oturum/hatalar.kayitReddiMi`) program yöneticisi hesabı
+// seçiliyse iletinin altında zarfın üçüncü durumunun yol metni de durur
+// (`KurtarmaIleAcma.KayitReddiYolu`; kullanıcı kararı 04.11.2026) ve odağın döndüğü alana
+// bağlanır (Parola; yenilemede Yeni parola): satırı seçilebilir göründüğü hâlde girişi ve
+// "Parolamı unuttum"u reddedilen program yöneticisinin çıkışı yedekten geri yüklemedir (parola
+// kaydı reddinde metnin saydığı öteki çare, kurtarma anahtarıyla açılış, geçerlidir). Öteki
+// hesaplarda sunucunun iletisi çareyi kendisi söyler (parola kaydında program yöneticisinin
+// sıfırlaması; hesap kaydında program yöneticisine ve Denetleme Kuruluna bildirim). Odak her
+// retten ve her geri dönüşten ("Vazgeç", "Parolayla açmaya dön") sonra forma döner: hesap seçiliyse Parola alanına, değilse
+// ilk seçilebilir satıra, seçilebilir satır yoksa "Kurtarma anahtarıyla aç"a (bu ekran kabuğun
+// içinde çizilir; odak sayfa gövdesine düşerse klavye kullanıcısı kenar çubuğunu dolaşmak
+// zorunda kalırdı).
 // Hata kodları kullanıcı metnine çıkmaz (`oturum/hatalar`).
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
@@ -46,12 +70,16 @@ import TextField from "../../ui/TextField";
 import { oturumApi } from "../oturum/api";
 import type { KilitEkraniHesabi } from "../oturum/api";
 import { kilidiAc } from "../oturum/eylemler";
-import { dogrulamaReddiMi, oturumHatasi } from "../oturum/hatalar";
+import { dogrulamaReddiMi, kayitReddiMi, oturumHatasi } from "../oturum/hatalar";
 import { yeniParolaHatalari } from "../oturum/parolaPolitikasi";
 import YeniParolaAlanlari from "../oturum/YeniParolaAlanlari";
 import HesapSecimi from "./HesapSecimi";
 import type { HesapSecenegi } from "./HesapSecimi";
-import KurtarmaIleAcma, { DENETLENIYOR_METNI } from "./KurtarmaIleAcma";
+import KurtarmaIleAcma, {
+  DENETLENIYOR_METNI,
+  KayitReddiYolu,
+  UCUNCU_DURUM_YOL_METNI,
+} from "./KurtarmaIleAcma";
 import { KAPSAM_METNI } from "./metinler";
 
 /** Ekranın h1'i — üst çubukta da bu yazar (docs/sozluk.md §4.2). */
@@ -65,11 +93,30 @@ export const OKUNAMADI_ETIKETI = "Hesap kaydı okunamadı";
 export const UNUTTUM_BASKA_ROL_METNI = "Parolanızı unuttuysanız program yöneticisine başvurun.";
 /** Hesap seçilmeden gönderilince hesap grubunun altında. */
 export const HESAP_SECIN_ILETISI = "Hesabınızı seçin.";
-/** Liste boşken kurtarma yolunun gerekçesi. */
+/**
+ * Liste boşken kurtarma yolunun gerekçesi. Program böyle bir dosyayı yalnız kurtarma
+ * anahtarıyla geri yüklemede yazar (tasarım TK10); öyle bir geri yükleme yoksa dosya program
+ * dışından değiştirilmiştir (zarfın üçüncü durumu): Denetleme Kuruluna bildirilir.
+ */
 export const BOS_LISTE_METNI =
   "Bu bilgisayarın güvenlik dosyasında hesap parolası yok: kayıtlar kurtarma anahtarıyla " +
   "geri yüklendiyse böyledir. Program yöneticisi kurtarma anahtarıyla açar ve yeni " +
-  "parolasını belirler; öteki hesaplar program yöneticisine başvurur.";
+  "parolasını belirler; öteki hesaplar program yöneticisine başvurur. Böyle bir geri " +
+  "yükleme yapılmadıysa güvenlik dosyası program dışından değiştirilmiş olabilir: " +
+  "Denetleme Kuruluna bildirin.";
+
+/** Seçilebilir satır kalmayınca kurtarma yolunu açan düğme (plan F1b-2 "Kilit ekranı"). */
+export const KURTARMA_ILE_AC_ETIKETI = "Kurtarma anahtarıyla aç";
+
+/**
+ * Seçilebilir satır kalmayınca yol gösterme: kim ne yapar (kullanıcı kararı 03.11.2026 —
+ * program yöneticisi için "Parolamı unuttum", öteki hesaplar için program yöneticisinin
+ * sıfırlaması; askıyı da program yöneticisi kaldırır, backend `hesaplar.unsuspend`).
+ */
+export const SECILEBILIR_HESAP_YOK_METNI =
+  "Bu listede seçilebilecek hesap kalmadı. Program yöneticisi aşağıdaki “Kurtarma " +
+  "anahtarıyla aç” düğmesiyle (“Parolamı unuttum” yolu) açar ve yeni parolasını belirler. " +
+  "Öteki hesaplar program yöneticisine başvurur: askıyı o kaldırır, parolayı o sıfırlar.";
 
 /** Kilit ekranı satırı → seçim satırı (seçilemezliğin nedeni metne çevrilir). */
 export function hesapSecenegi(h: KilitEkraniHesabi): HesapSecenegi {
@@ -100,7 +147,13 @@ export default function KilitEkrani() {
   const yeniParolaAlani = useRef<HTMLInputElement>(null);
   const tekrarAlani = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  // Seçilebilir satır kalmayınca yol gösterme ve "Kurtarma anahtarıyla aç" (odağın son hedefi).
+  const yolGostermeRef = useRef<HTMLDivElement>(null);
+  // Çift gönderim koruması (dosya başı notu): istek sürerken ve açılıştan sonra true.
+  const gonderimSuruyor = useRef(false);
   const bilgiId = useId();
+  const yolGostermeId = useId();
+  const kayitYoluId = useId();
   const [hesaplar, setHesaplar] = useState<KilitEkraniHesabi[] | null>(null);
   const [listeHatasi, setListeHatasi] = useState<string | null>(null);
   const [seciliId, setSeciliId] = useState<string | null>(null);
@@ -115,12 +168,16 @@ export default function KilitEkrani() {
   const [tekrarHatasi, setTekrarHatasi] = useState<string | null>(null);
   const [hesapHatasi, setHesapHatasi] = useState<string | null>(null);
   const [genelHata, setGenelHata] = useState<string | null>(null);
+  // Genel hata program yöneticisi hesabının kayıt reddi mi (`kayitReddiMi`)? Öyleyse yol metni
+  // iletinin altında durur ve odağın döndüğü alana bağlanır (dosya başı notu).
+  const [kayitReddi, setKayitReddi] = useState(false);
   const [calisiyor, setCalisiyor] = useState(false);
   const [acildi, setAcildi] = useState(false);
 
   // Odak yeniden çizimden SONRA verilir: alanlar istek sürerken kapalıydı, kip değişince
   // alanlar yeniden takılır. Hedef: yenileme kipinde "Yeni parola" (eşleşmemede "Parola
-  // (tekrar)"); parola kipinde hesap seçiliyse "Parola", değilse ilk seçilebilir satır.
+  // (tekrar)"); parola kipinde hesap seçiliyse "Parola", değilse ilk seçilebilir satır;
+  // seçilebilir satır yoksa "Kurtarma anahtarıyla aç".
   const [odak, setOdak] = useState<OdakIstegi>({ n: 0, tekrar: false });
   const odakIste = useCallback((tekrarAlanina = false) => {
     setOdak((o) => ({ n: o.n + 1, tekrar: tekrarAlanina }));
@@ -134,7 +191,7 @@ export default function KilitEkrani() {
     if (odak.tekrar && tekrarAlani.current) hedef = tekrarAlani.current;
     else if (yeniParolaAlani.current) hedef = yeniParolaAlani.current;
     else if (form?.querySelector('input[type="radio"]:checked')) hedef = parolaAlani.current;
-    else hedef = ilkSecilebilir();
+    else hedef = ilkSecilebilir() ?? yolGostermeRef.current?.querySelector("button") ?? null;
     hedef?.focus();
   }, [odak]);
 
@@ -174,6 +231,7 @@ export default function KilitEkrani() {
     setTekrarHatasi(null);
     setHesapHatasi(null);
     setGenelHata(null);
+    setKayitReddi(false);
   }
 
   function parolaKipineDon() {
@@ -199,12 +257,21 @@ export default function KilitEkrani() {
   }
 
   function satirdaEnter() {
+    // `requestSubmit` `gonder`'den geçer: süren gönderim varsa orada döner (çift gönderim yok).
     if (parola !== "") formRef.current?.requestSubmit();
     else parolaAlani.current?.focus();
   }
 
+  /** Seçilebilir satır kalmayınca: kurtarma yolu, hesap kurtarma listesinden seçilir. */
+  function kurtarmayaGec() {
+    hatalariSil();
+    setKip("kurtarma");
+  }
+
   async function gonder(e: FormEvent) {
     e.preventDefault();
+    // Çift gönderim koruması (dosya başı notu): süren gönderimin hataları da silinmez.
+    if (gonderimSuruyor.current) return;
     hatalariSil();
     if (secili === null) {
       setHesapHatasi(HESAP_SECIN_ILETISI);
@@ -220,6 +287,7 @@ export default function KilitEkrani() {
         return;
       }
     }
+    gonderimSuruyor.current = true;
     setCalisiyor(true);
     try {
       await kilidiAc({
@@ -227,9 +295,11 @@ export default function KilitEkrani() {
         parola,
         ...(kip === "yenile" ? { yeni_parola: yeniParola } : {}),
       });
-      // Pencere yeniden yükleniyor; o ana dek form kapalı kalır (içerik görünmez).
+      // Pencere yeniden yükleniyor; o ana dek form kapalı kalır (içerik görünmez) ve koruma
+      // kalkmaz: yüklenen pencereye ikinci bir açılış gitmez.
       setAcildi(true);
     } catch (err) {
+      gonderimSuruyor.current = false;
       const { kod, metin } = oturumHatasi(err, "Kilit açılamadı.");
       if (kod === "parola_yenilenmeli") {
         setKip("yenile");
@@ -253,6 +323,9 @@ export default function KilitEkrani() {
         odakIste();
       } else {
         setGenelHata(metin);
+        // Yalnız program yöneticisi hesabında: öteki hesaplarda sunucunun iletisi çareyi kendisi
+        // söyler (parola kaydında program yöneticisinin sıfırlaması; dosya başı notu).
+        setKayitReddi(kayitReddiMi(kod) && yoneticiSecili);
         if (kip === "parola") setParola("");
         odakIste();
       }
@@ -262,7 +335,14 @@ export default function KilitEkrani() {
   }
 
   const kapali = calisiyor || acildi;
+  // Kayıt reddinin yol metni odağın döndüğü alanı açıklar (Parola; yenilemede Yeni parola).
+  const kayitYoluBagi = genelHata && kayitReddi ? kayitYoluId : undefined;
   const bosListe = hesaplar !== null && hesaplar.length === 0;
+  // Liste dolu ama hiçbir satır seçilemiyor (dosya başı notu): parola yolu yerine yol gösterme.
+  // Kip ayrıca sorulmaz: kurtarma kipinde form çizilmez, yenileme kipinde seçili (seçilebilir)
+  // bir hesap vardır ve liste o kipte tazelenmez (askıda önce parola kipine dönülür).
+  const yolGoster =
+    hesaplar !== null && hesaplar.length > 0 && !secenekler.some((h) => h.secilebilir);
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center p-4">
@@ -292,8 +372,13 @@ export default function KilitEkrani() {
           </div>
         )}
 
-        {!bosListe && hesaplar !== null && kip === "kurtarma" && secili !== null && (
-          <KurtarmaIleAcma hesap={hesapSecenegi(secili)} onVazgec={parolayaDon} />
+        {/* Seçili program yöneticisinin "Parolamı unuttum"u ya da (seçilebilir satır yokken)
+            "Kurtarma anahtarıyla aç": ikincisinde hesap kurtarma listesinden seçilir. */}
+        {!bosListe && hesaplar !== null && kip === "kurtarma" && (
+          <KurtarmaIleAcma
+            hesap={secili !== null ? hesapSecenegi(secili) : null}
+            onVazgec={parolayaDon}
+          />
         )}
 
         {!bosListe && hesaplar !== null && kip !== "kurtarma" && (
@@ -307,7 +392,27 @@ export default function KilitEkrani() {
               hata={hesapHatasi}
             />
 
-            {kip === "parola" ? (
+            {yolGoster ? (
+              <div ref={yolGostermeRef} className="flex flex-col gap-3">
+                <div
+                  id={yolGostermeId}
+                  className="flex flex-col gap-2 rounded-shape-md bg-tertiary-container p-3 text-body-medium text-on-tertiary-container"
+                >
+                  <p>{SECILEBILIR_HESAP_YOK_METNI}</p>
+                  <p>{UCUNCU_DURUM_YOL_METNI}</p>
+                </div>
+                <Button
+                  variant="tonal"
+                  icon="key"
+                  type="button"
+                  onClick={kurtarmayaGec}
+                  aria-describedby={yolGostermeId}
+                  block
+                >
+                  {KURTARMA_ILE_AC_ETIKETI}
+                </Button>
+              </div>
+            ) : kip === "parola" ? (
               <TextField
                 ref={parolaAlani}
                 label="Parola"
@@ -316,6 +421,7 @@ export default function KilitEkrani() {
                 onChange={(e) => setParola(e.target.value)}
                 autoComplete="current-password"
                 error={parolaHatasi ?? undefined}
+                describedBy={kayitYoluBagi}
                 disabled={kapali}
                 required
               />
@@ -338,7 +444,10 @@ export default function KilitEkrani() {
                   onTekrar={setTekrar}
                   yeniHata={yeniHatasi}
                   tekrarHata={tekrarHatasi}
-                  aciklamaId={bilgi ? bilgiId : undefined}
+                  aciklamaId={
+                    [bilgi ? bilgiId : undefined, kayitYoluBagi].filter(Boolean).join(" ") ||
+                    undefined
+                  }
                   disabled={kapali}
                 />
               </>
@@ -349,6 +458,7 @@ export default function KilitEkrani() {
                 {genelHata}
               </p>
             )}
+            {kayitYoluBagi && <KayitReddiYolu id={kayitYoluBagi} />}
 
             {calisiyor && (
               <p role="status" className="text-body-small text-on-surface-variant">
@@ -356,9 +466,11 @@ export default function KilitEkrani() {
               </p>
             )}
 
-            <Button type="submit" disabled={kapali} block>
-              {kapali ? "Açılıyor…" : kip === "yenile" ? "Parolayı yenile ve aç" : "Aç"}
-            </Button>
+            {!yolGoster && (
+              <Button type="submit" disabled={kapali} block>
+                {kapali ? "Açılıyor…" : kip === "yenile" ? "Parolayı yenile ve aç" : "Aç"}
+              </Button>
+            )}
 
             {kip === "yenile" && (
               <div className="flex justify-center">
@@ -370,15 +482,7 @@ export default function KilitEkrani() {
 
             {kip === "parola" && yoneticiSecili && (
               <div className="flex justify-center">
-                <Button
-                  variant="text"
-                  type="button"
-                  onClick={() => {
-                    hatalariSil();
-                    setKip("kurtarma");
-                  }}
-                  disabled={kapali}
-                >
+                <Button variant="text" type="button" onClick={kurtarmayaGec} disabled={kapali}>
                   Parolamı unuttum
                 </Button>
               </div>

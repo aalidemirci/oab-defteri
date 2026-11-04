@@ -86,12 +86,12 @@ const HAVUZ: LeavePool = {
 
 const BOS: LeavePool = { student_count: 0, personnel_count: 0, students: [], personnel: [] };
 
-function kur(onDegisti = vi.fn()) {
+function kur(onDegisti = vi.fn(), birlestirebilir = true) {
   render(
     <MemoryRouter>
       <SnackbarProvider>
         <ConfirmProvider>
-          <AyrilisHavuzu onDegisti={onDegisti} />
+          <AyrilisHavuzu onDegisti={onDegisti} birlestirebilir={birlestirebilir} />
         </ConfirmProvider>
       </SnackbarProvider>
     </MemoryRouter>,
@@ -339,6 +339,18 @@ describe("AyrilisHavuzu — olası aynı kişi", () => {
     await waitFor(() => expect(okulApiMock.mergePersonnel).toHaveBeenCalledWith(11, 21));
     expect(await screen.findByText("Kayıtlar birleştirildi.")).toBeInTheDocument();
     expect(onDegisti).toHaveBeenCalledTimes(1);
+  });
+
+  it("kişi yazma yeteneği yoksa aday gösterilir, “Birleştir” çizilmez", async () => {
+    kur(vi.fn(), false);
+    await screen.findByRole("heading", { name: "Öğrenciler (3)" });
+
+    expect(within(personelBolumu()).getByText("AYŞE BEYAZ")).toBeInTheDocument();
+    expect(within(personelBolumu()).queryByRole("button", { name: /birleştir/i })).toBeNull();
+    // Karar düğmeleri havuzun kendi yeteneğidir (sekme yalnız o yetenekte görünür).
+    expect(
+      within(personelBolumu()).getByRole("button", { name: /Ayrıldı olarak işaretle/ }),
+    ).toBeInTheDocument();
   });
 
   it("aday satırı neden aday olduğunu yazar (ad benzerliği adaşı da yakalar)", async () => {

@@ -41,9 +41,17 @@ orkestratör maddesi F-6); kaydı ya da izi tutmayan hesap 409 `hesap_muhru_tutm
 da iz boşluğu iletisi; mühürde, satır izinde ve izdeki boşlukta `BUTUNLUK` satırı kalır —
 orkestratör maddesi F-1; mührü tutmayan hesap ayrıca `security/integrity/audit/`'in
 `muhru_tutmayan` listesinde canlı görünür); rol 403 `rol_yetkisiz`; denetim izi yazılamazsa 409
-`iz_yazilamadi`. Kapamada parola kaydı güvenlik dosyasından (ya da eski kopyalarından) silinemezse
-400 `validation_error`, ileti `hesaplar.CLOSE_WRAP_MESSAGE` (hesap kapanmıştır; orkestratör maddesi
-F-7, `hesaplar.ParolaKaydiSilinemedi`).
+`iz_yazilamadi`. Güvenlik dosyası yazılamazsa (ör. dosyayı başka bir program tutuyor) 400
+`validation_error` ve neyin yapılıp neyin yapılmadığını söyleyen ileti (`hesaplar.
+GuvenlikDosyasiYazilamadi`; orkestratör maddeleri F-7 ve (d0)-1; iki depo kuralı 2 — veritabanı adımı
+yerinde kalır): kapamada `CLOSE_WRAP_MESSAGE` (hesap kapanmıştır), hesap açmada `OPEN_WRAP_MESSAGE`
+(hesap açılmıştır, parola kaydı yoktur; parolası sıfırlanır), parola sıfırlamada `RESET_WRAP_MESSAGE`
+(hesap "Parola yenilenmeli"dir, geçici parola geçerli değildir; sıfırlama yinelenir), askıdan
+çıkarmada `UNSUSPEND_WRAP_MESSAGE` (veritabanı askısı kalktı, dosyadaki kayıt kaldı) ya da
+`UNSUSPEND_NOTHING_MESSAGE` (hiçbir şey değişmedi). Ön yüz bu yanıttan sonra listeyi yeniden
+okumalıdır: kayıt değişmiş olabilir. Hesap açmanın bu reddinde ayırt edici kod yoktur; "Yeni hesap"
+penceresi hesabın açıldığını listeden anlar (gönderimden önce listede olmayan, rolü ve tanıtıcısı
+gönderilenle aynı açık hesap) ve yeniden açmayı önermez (`YeniHesapPenceresi` "YARIM AÇILIŞ").
 
 İŞLEM SINIRI (orkestratör maddesi C-2): uçlar istek boyu işlem (`atomic`) AÇMAZ ve ayarlarda
 `ATOMIC_REQUESTS` yoktur. Servisler `BUTUNLUK` satırını ve yanlış alarm ayıklamasını KENDİ

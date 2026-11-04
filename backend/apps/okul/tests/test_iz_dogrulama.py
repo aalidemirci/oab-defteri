@@ -1563,6 +1563,8 @@ def test_parola_sifirlanan_hesabin_sahibi_bildirimi_ve_sonraki_girisleri_gorur()
 # ============================================================ parola yenilenme bildirimi
 
 BILDIRIM_UCU = "/api/v1/security/integrity/reset-notice/"
+#: Bildirim yokken ucun yanıtı (okunamayan kart da yok; `iz_dogrulama.bildirim_yaniti`).
+BILDIRIM_YOK: dict[str, object] = {"parola_yenilenme": None, "okunamayan": []}
 
 
 def _sifirla_ve_sahibiyle_ac() -> Account:
@@ -1596,7 +1598,7 @@ def test_parola_bildirimi_sahibine_gorunur_gordum_izli_yazimla_kapatir() -> None
     yanit = istemci.post(BILDIRIM_UCU, {}, format="json")
 
     assert yanit.status_code == 200, yanit.content
-    assert yanit.json() == {"parola_yenilenme": None}
+    assert yanit.json() == BILDIRIM_YOK
     hesap = Account.objects.get(pk=muhasip.id)
     assert hesap.reset_notice_pending is False
     assert hesap.reset_kind == "SIFIRLAMA" and hesap.reset_at is not None
@@ -1612,7 +1614,7 @@ def test_parola_bildirimi_sahibine_gorunur_gordum_izli_yazimla_kapatir() -> None
     assert gordu.values == {"reset_notice_pending": [True, False]}
     assert denetim_izi.kaydi_dogrula(Account, muhasip.id) is True
     assert denetim_izi.zinciri_dogrula() == []
-    assert istemci.get(BILDIRIM_UCU).json() == {"parola_yenilenme": None}
+    assert istemci.get(BILDIRIM_UCU).json() == BILDIRIM_YOK
 
     ikinci = istemci.post(BILDIRIM_UCU, {}, format="json")
 
@@ -1645,8 +1647,8 @@ def test_baska_hesabin_bildirimi_bu_uctan_ne_okunur_ne_kapatilir() -> None:
     bas = son_satir().seq
     istemci = APIClient()
 
-    assert istemci.get(BILDIRIM_UCU).json() == {"parola_yenilenme": None}
-    assert istemci.post(BILDIRIM_UCU, {}, format="json").json() == {"parola_yenilenme": None}
+    assert istemci.get(BILDIRIM_UCU).json() == BILDIRIM_YOK
+    assert istemci.post(BILDIRIM_UCU, {}, format="json").json() == BILDIRIM_YOK
 
     assert Account.objects.get(pk=muhasip.id).reset_notice_pending is True
     assert son_satir().seq == bas

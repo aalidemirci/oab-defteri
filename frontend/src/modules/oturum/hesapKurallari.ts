@@ -9,11 +9,15 @@
 // rolden türer (`yonetici`, `yonetici-2`, `muhasip`, `dk-1`). Baştaki ve sondaki boşluk
 // atılır, Türkçe küçük harfe çevrilir ("I" → "ı", "İ" → "i"; backend `tr_lower`).
 //
-// UYARI, ENGEL DEĞİL (altın kural 3): tanıtıcı ad-soyaddaki üç harften uzun bir sözcüğü
-// içeriyorsa program uyarır (`login_name_warning`). Karşılaştırma Türkçe harfleri ASCII'ye
-// katlayarak yapılır ("Şükrü" ≡ "sukru"; backend `excel_ogrenci.normalize_header`):
-// `sukru.k` de ŞÜKRÜ adını açık eder. Üç harfli sözcük ("Ali", "Can") aranmaz; yoksa
-// rolden türeyen tanıtıcılar da sık sık uyarı verirdi.
+// UYARI, ENGEL DEĞİL (altın kural 3; backend `login_name_warning`), iki hâl, öncelik sırasıyla:
+// 1. Tanıtıcıda T.C. kimlik numarasına benzeyen 11 ardışık rakam (orkestratör maddesi F-5; K9:
+//    kimlik numarası kilit ekranında hiç görünmemeli). Sayının sağlaması aranmaz.
+// 2. Tanıtıcı ad-soyaddaki üç harften uzun bir sözcüğü içeriyor. Karşılaştırma Türkçe harfleri
+//    ASCII'ye katlayarak yapılır ("Şükrü" ≡ "sukru"; backend `excel_ogrenci.normalize_header`):
+//    `sukru.k` de ŞÜKRÜ adını açık eder. Üç harfli sözcük ("Ali", "Can") aranmaz; yoksa rolden
+//    türeyen tanıtıcılar da sık sık uyarı verirdi.
+// İkisi birden varsa kimlik numarasının uyarısı gelir. Ortak vaka tablosu backend
+// `test_hesaplar.py::TestTaniticiKurallari` ile `hesapKurallari.test.ts`'tedir.
 
 /** İlk program yöneticisi hesabının varsayılan tanıtıcısı (tasarım §4.4.4). */
 export const TANITICI_VARSAYILAN = "yonetici";
@@ -32,6 +36,13 @@ export const AD_SOYAD_UZUN_ILETISI = `Hesap sahibinin adı-soyadı en çok ${AD_
 export const TANITICI_UYARISI =
   "Tanıtıcı hesap sahibinin adını içeriyor. Tanıtıcı kilit ekranında herkese görünür; " +
   "rolden türeyen bir tanıtıcı seçmeniz önerilir.";
+/** Backend `LOGIN_NAME_TCKN_WARNING_MESSAGE` ile BİREBİR. */
+export const TANITICI_TCKN_UYARISI =
+  "Tanıtıcı T.C. kimlik numarasına benzeyen 11 haneli bir sayı içeriyor. Tanıtıcı kilit " +
+  "ekranında herkese görünür; rolden türeyen bir tanıtıcı seçmeniz önerilir.";
+
+/** 11 ardışık ASCII rakamı (backend `_TCKN_BENZERI = [0-9]{11}`; tanıtıcının rakamı yalnız ASCII'dir). */
+const TCKN_BENZERI = /[0-9]{11}/;
 
 /** Tanıtıcı alanının altındaki kural metni (sözlük §1 "Hesap"). */
 export const TANITICI_KURALI_METNI =
@@ -101,10 +112,12 @@ export function asciiKatla(deger: string): string {
 }
 
 /**
- * Tanıtıcı ad-soyaddaki üç harften uzun bir sözcüğü içeriyorsa uyarı metni, yoksa null
- * (backend `login_name_warning`; dosya başı notu). Engel değildir.
+ * Tanıtıcının kişisel veri uyarısı, yoksa null (backend `login_name_warning`; dosya başı notu):
+ * önce 11 ardışık rakam (ad-soyad boş olsa da), sonra ad-soyaddaki üç harften uzun bir sözcük.
+ * Engel değildir.
  */
 export function taniticiUyarisi(tanitici: string, adSoyad: string): string | null {
+  if (TCKN_BENZERI.test(tanitici)) return TANITICI_TCKN_UYARISI;
   const katli = asciiKatla(tanitici).replace(/ /g, "");
   if (katli === "") return null;
   for (const sozcuk of asciiKatla(adSoyad).split(" ")) {

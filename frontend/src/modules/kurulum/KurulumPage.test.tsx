@@ -436,6 +436,27 @@ describe("KurulumPage — 1. adım: program yöneticisi hesabı (atlanamaz)", ()
     );
   });
 
+  it("kimlik numarasına benzeyen 11 rakamın uyarısı ad-soyad yazılmadan da çıkar, engel değildir", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const tanitici = await screen.findByLabelText(/^Tanıtıcı/);
+    await user.clear(tanitici);
+    // Uydurma sayı (sağlaması aranmaz; orkestratör maddesi F-5).
+    await user.type(tanitici, "yonetici-12345678901");
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Tanıtıcı T.C. kimlik numarasına benzeyen 11 haneli bir sayı içeriyor.",
+    );
+    await user.type(screen.getByLabelText(/^Ad-soyad/), "Ayşe Deneme");
+    await user.type(screen.getByLabelText(PAROLA_ALANI), PAROLA);
+    await user.type(screen.getByLabelText(/^Parola \(tekrar\)/), PAROLA);
+    await user.click(screen.getByRole("button", { name: "Hesabı kur" }));
+    await waitFor(() =>
+      expect(gapi.kur).toHaveBeenCalledWith(
+        expect.objectContaining({ tanitici: "yonetici-12345678901" }),
+      ),
+    );
+  });
+
   it("sunucunun döndürdüğü tanıtıcı uyarısı hesap kurulduktan sonra anahtarın üstünde kalır", async () => {
     const user = userEvent.setup();
     const uyari =

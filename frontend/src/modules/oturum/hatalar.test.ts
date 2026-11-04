@@ -35,6 +35,20 @@ describe("oturumHatasi", () => {
     }
   });
 
+  it("hesap kaydı ve güvenlik dosyası retlerinin yedekleri nedeni seçmez, iki bağlama da uyar", () => {
+    // Dört neden (mühür, satırın izi, iz boşluğu, parola kaydı özeti) ve beş neden (parola kaydı
+    // yok, satır yok, başka veritabanı, iz anahtarı, bağsız kayıt); kilit ekranı ve hesap işlemi.
+    for (const kod of ["hesap_muhru_tutmadi", "iki_depo_tutarsiz"] as const) {
+      const metin = OTURUM_HATA_METINLERI[kod];
+      expect(metin).not.toMatch(/giriş açılmadı/);
+      expect(metin).toMatch(/işlem yapılmadı/);
+      expect(metin.endsWith("Denetleme Kuruluna bildirin.")).toBe(true);
+    }
+    expect(OTURUM_HATA_METINLERI.hesap_muhru_tutmadi).toMatch(
+      /Hesap kaydı, parola kaydı ya da denetim izi program dışından değiştirilmiş/,
+    );
+  });
+
   it("bilinmeyen kodda ve iletisiz yanıtta varsayılan yazılır", () => {
     expect(oturumHatasi(new ApiError(500, "500", ""), "Kilit açılamadı.")).toEqual({
       kod: null,

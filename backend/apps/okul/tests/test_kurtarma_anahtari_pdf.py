@@ -13,11 +13,15 @@ Kanıtlanan maddeler:
   `kurtarma.no` ve `kurtarma.tarih`'tendir (gg.aa.yyyy; plan F1b-1);
 * belge metni OAB'nindir (§12.B, §13 D50; plan F1b-1): herkes kendi hesabıyla ve
   kendi parolasıyla açar, anahtar yalnız program yöneticisi içindir ve üç durumda
-  kullanılır (parola unutulduğunda, yeni bilgisayara taşınırken, güvenlik dosyası
-  kaybolduğunda ya da bozulduğunda); zarf yalnız bu üç durumda açılır; saklama yeri okul müdürlüğünde
-  kapalı zarf, veliye geçmez (D3); parola paylaşılmaz; eski kâğıt atılmaz, işaretlenip
-  saklanır; aileden kalan "yönetici parolası" dili, "parola en az iki kişide" öğüdü ve
-  kütüphane dili yoktur;
+  kullanılır (parola unutulduğunda, yeni bilgisayara taşınırken ve zarfın üçüncü durumunda);
+  zarf yalnız bu üç durumda açılır; saklama yeri okul müdürlüğünde kapalı zarf, veliye
+  geçmez (D3); parola paylaşılmaz; eski kâğıt atılmaz, işaretlenip saklanır; aileden kalan
+  "yönetici parolası" dili, "parola en az iki kişide" öğüdü ve kütüphane dili yoktur;
+* zarfın üçüncü durumu (kullanıcı kararı 02.11.2026: "bu bilgisayarın güvenlik dosyası ya da
+  kayıtları kaybolduğunda, bozulduğunda ya da program dışından değiştirildiğinde") ve çaresi
+  (03.11.2026: "yedekten geri yükleme ya da kurtarma anahtarıyla açılış") belgede, anahtar
+  panelinin uyarısında, kilit ekranının yol gösterme metninde, ön yüzün sabitlerinde ve
+  sözlükte BİREBİR aynıdır; ön yüzün bu metinleri sözlükte tırnaklı yazılıdır;
 * anahtar hiçbir günlüğe düşmez (caplog, DEBUG düzeyinde bütün kaydediciler)
   ve hata gövdesinde yankılanmaz;
 * kilitliyken kilit kapısı keser (kilitliyken açık listede değildir), parola
@@ -26,6 +30,7 @@ Kanıtlanan maddeler:
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import time
@@ -108,8 +113,9 @@ def test_belge_metni_oab_ye_gore(client: APIClient) -> None:
         "Herkes programı kendi hesabıyla ve kendi parolasıyla açar",
         "Anahtar yalnız program yöneticisi içindir",
         "program yöneticisi parolasını unutursa",
-        "kayıtlar yeni bir bilgisayara taşınırken",
-        "güvenlik dosyası kaybolur ya da bozulursa kayıtlar yedekten",
+        "kayıtlar yeni bir bilgisayara taşınırken yedekten bu anahtarla geri yüklenir",
+        f"{recovery_key_document.UCUNCU_DURUM} çare "
+        f"{recovery_key_document.UCUNCU_DURUMUN_CARESI}tır.",
         "zarf yalnız yukarıdaki üç durumda açılır",
         "güvenlik dosyası da kaybolursa şifreli kayıtlar hiçbir yolla açılamaz",
         "parolasını unutan kişi program yöneticisine başvurur",
@@ -136,8 +142,103 @@ def test_belge_metni_oab_ye_gore(client: APIClient) -> None:
         "çıktı",
         # Zarfın açıldığı durumlar üçtür (güvenlik dosyası kaybı da): "iki durum" denmez.
         "iki durum",
+        # Kullanıcı metninde iç terim yok (sözlük §1 "Denetim izi").
+        "sarmal",
     ):
         assert yasak not in kucuk, yasak
+
+
+# ============================================================ zarfın üçüncü durumu
+
+
+def _depo_dosyasi(goreli: str) -> str:
+    """Depo kökündeki dosya (yerelde depo kökü, konteynerde `/repo`)."""
+    for kok in (Path(__file__).resolve().parents[4], Path("/repo")):
+        yol = kok / goreli
+        if yol.is_file():
+            return yol.read_text(encoding="utf-8")
+    pytest.fail(f"{goreli} bulunamadı.")
+
+
+def _ts_sabiti(goreli: str, ad: str) -> str:
+    """Ön yüz kaynağındaki `export const AD = "…" + "…";` dizesi.
+
+    Yalnız çift tırnaklı düz parçalar ve `+` kabul edilir: sözün birebirliği kaynakta görünsün
+    (hesaplanan ya da şablon dizesi bulunamaz ve test düşer). Kaçışlar JSON kuralıyla çözülür.
+    """
+    kaynak = _depo_dosyasi(goreli)
+    eslesme = re.search(rf'export const {ad} =\s*((?:"(?:[^"\\]|\\.)*"\s*\+?\s*)+);', kaynak)
+    assert eslesme is not None, f"{goreli}: `{ad}` düz dize olarak bulunamadı."
+    parcalar = re.findall(r'"((?:[^"\\]|\\.)*)"', eslesme.group(1))
+    return "".join(json.loads(f'"{parca}"') for parca in parcalar)
+
+
+def _sozluk_satiri(sozluk: str, bas: str) -> str:
+    """Sözlük tablosunun `bas` ile başlayan TEK satırı."""
+    satirlar = [satir for satir in sozluk.splitlines() if satir.startswith(bas)]
+    assert len(satirlar) == 1, (bas, len(satirlar))
+    return satirlar[0]
+
+
+ON_YUZ_METINLERI = "frontend/src/modules/guvenlik/metinler.ts"
+KILIT_EKRANI = "frontend/src/modules/guvenlik/KilitEkrani.tsx"
+KURTARMA_ILE_ACMA = "frontend/src/modules/guvenlik/KurtarmaIleAcma.tsx"
+
+
+def test_ucuncu_durum_metni_her_yerde_birebir(client: APIClient) -> None:
+    """Kullanıcı kararları: zarfın üçüncü durumu (02.11.2026) ve çaresi (03.11.2026).
+
+    Söz BİREBİR şu yerlerdedir: belge (PDF), anahtar panelinin uyarısı (`KURTARMA_UYARISI`),
+    kilit ekranının yol gösterme metni (`UCUNCU_DURUM_YOL_METNI`), ön yüzün iki sabiti ve
+    sözlüğün iki satırı ("Kurtarma anahtarı", "Kurtarma anahtarı belgesi"). Eski, dar söz
+    ("güvenlik dosyası kaybolur ya da bozulursa") hiçbirinde kalmaz. Ön yüzün kilit ekranı ve
+    panel metinleri sözlükte tırnaklı yazılıdır (kullanıcıya görünen her metin sözlüğe girer;
+    ön yüzün konteyneri `docs/`'u görmediği için eşitlik burada sınanır).
+    """
+    durum = recovery_key_document.UCUNCU_DURUM
+    care = recovery_key_document.UCUNCU_DURUMUN_CARESI
+    assert durum == (
+        "bu bilgisayarın güvenlik dosyası ya da kayıtları kaybolduğunda, bozulduğunda ya da "
+        "program dışından değiştirildiğinde"
+    )
+    assert care == "yedekten geri yükleme ya da kurtarma anahtarıyla açılış"
+    assert _ts_sabiti(ON_YUZ_METINLERI, "ZARFIN_UCUNCU_DURUMU") == durum
+    assert _ts_sabiti(ON_YUZ_METINLERI, "UCUNCU_DURUMUN_CARESI") == care
+
+    sozluk = _depo_dosyasi("docs/sozluk.md")
+    yerler = {
+        "belge": _metin(_pdf(_iste(client, TEST_KURTARMA_ANAHTARI))),
+        "anahtar paneli": _ts_sabiti(ON_YUZ_METINLERI, "KURTARMA_UYARISI"),
+        "kilit ekranı": _ts_sabiti(KURTARMA_ILE_ACMA, "UCUNCU_DURUM_YOL_METNI"),
+        "sözlük Kurtarma anahtarı": _sozluk_satiri(sozluk, "| Kurtarma anahtarı |"),
+        "sözlük Kurtarma anahtarı belgesi": _sozluk_satiri(
+            sozluk, "| — (program belgesi) | **Kurtarma anahtarı belgesi**"
+        ),
+    }
+    for yer, metin in yerler.items():
+        sade = _bosluksuz(metin)
+        assert _bosluksuz(durum) in sade, yer
+        assert _bosluksuz(care) in sade, yer
+        for eski in (
+            "kaybolur ya da bozulursa",
+            "kaybolur veya bozulursa",
+            "kaybolduğunda ya da bozulduğunda",
+            "kaybı ya da bozulması",
+        ):
+            assert _bosluksuz(eski) not in sade, (yer, eski)
+    # Kilit ekranının yol gösterme metni Denetleme Kuruluna bildirim ister (02.11.2026).
+    assert "Denetleme Kuruluna bildirin" in yerler["kilit ekranı"]
+
+    for kaynak, ad in (
+        (ON_YUZ_METINLERI, "KURTARMA_UYARISI"),
+        (KURTARMA_ILE_ACMA, "UCUNCU_DURUM_YOL_METNI"),
+        (KILIT_EKRANI, "SECILEBILIR_HESAP_YOK_METNI"),
+        (KILIT_EKRANI, "BOS_LISTE_METNI"),
+        (KILIT_EKRANI, "KURTARMA_ILE_AC_ETIKETI"),
+        (KURTARMA_ILE_ACMA, "KURTARILACAK_HESAP_YOK_METNI"),
+    ):
+        metin = _ts_sabiti(kaynak, ad)
+        assert f'**"{metin}"**' in sozluk or f"**{metin}**" in sozluk, ad
 
 
 def test_belge_anahtarin_no_sunu_ve_uretim_tarihini_basar(client: APIClient) -> None:

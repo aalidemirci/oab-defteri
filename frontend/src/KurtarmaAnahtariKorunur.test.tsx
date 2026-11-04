@@ -21,6 +21,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SetupStatus } from "./modules/okul/api";
+import { YETENEK_ADLARI } from "./modules/oturum/api";
 import type { OturumOzeti } from "./modules/oturum/api";
 import { ILK_ACILIS_DURUMU } from "./test/kurulumDurumu";
 import { ConfirmProvider } from "./ui/ConfirmProvider";
@@ -53,7 +54,10 @@ const oturumApiMock = vi.hoisted(() => ({
   kurtar: vi.fn(),
   kurtarmaHesaplari: vi.fn(),
 }));
-vi.mock("./modules/oturum/api", () => ({ oturumApi: oturumApiMock }));
+vi.mock("./modules/oturum/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./modules/oturum/api")>()),
+  oturumApi: oturumApiMock,
+}));
 const gapi = vi.hoisted(() => ({
   durum: vi.fn(),
   kur: vi.fn(),
@@ -83,7 +87,7 @@ function oturumOzeti(): OturumOzeti {
           tanitici: "yonetici",
           rol: "yonetici",
           rol_etiketi: "Program yöneticisi",
-          yetenekler: [],
+          yetenekler: [...YETENEK_ADLARI],
         }
       : null,
     bosta_dk: 10,

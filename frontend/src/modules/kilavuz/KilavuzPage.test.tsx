@@ -6,14 +6,21 @@ import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
+import { YetkiDegeri, hazirYetki } from "../oturum/yetki";
+import type { Yetki } from "../oturum/yetki";
 import { AltBaslik, Ekran, Ipucu, KilavuzBolumu, Kod, Mevzuat, Tus } from "./KilavuzKabugu";
-import KilavuzPage, { KILAVUZ_BOLUMLERI } from "./KilavuzPage";
+import KilavuzPage, { KILAVUZ_BOLUMLERI, KILAVUZ_SIHIRBAZ_KAPALI_METNI } from "./KilavuzPage";
 
-function bas(yol = "/kilavuz") {
+/** Sihirbazı açabilen hesap (program yöneticisinin yeteneği). */
+const SIHIRBAZ_ACIK = hazirYetki(["kurulum_tamamlama"]);
+
+function bas(yol = "/kilavuz", yetki: Yetki = SIHIRBAZ_ACIK) {
   return render(
-    <MemoryRouter initialEntries={[yol]}>
-      <KilavuzPage />
-    </MemoryRouter>,
+    <YetkiDegeri value={yetki}>
+      <MemoryRouter initialEntries={[yol]}>
+        <KilavuzPage />
+      </MemoryRouter>
+    </YetkiDegeri>,
   );
 }
 
@@ -41,6 +48,17 @@ describe("KilavuzPage", () => {
       "href",
       "/kurulum",
     );
+    expect(bolum).not.toHaveTextContent(KILAVUZ_SIHIRBAZ_KAPALI_METNI);
+  });
+
+  it("sihirbazı açamayan rolde sihirbazın adı bağlantı değildir (kullanıcı kararı 04.11.2026)", () => {
+    // Başkanın yetenekleri: kurulum_tamamlama yok.
+    bas("/kilavuz", hazirYetki(["son_oturum_onay"]));
+
+    const bolum = screen.getByRole("region", { name: "Programın Konumu" });
+    expect(within(bolum).queryByRole("link")).toBeNull();
+    expect(bolum).toHaveTextContent(KILAVUZ_SIHIRBAZ_KAPALI_METNI);
+    expect(bolum).not.toHaveTextContent("Kurulum Sihirbazı'nı açın");
   });
 
   it("kütüphane içeriği silinmiştir", () => {

@@ -277,10 +277,10 @@ HESAP_MODELI: Final = "okul.Account"
 #: anahtarıyla mühürlü bir iz satırı yazılır — ama YALNIZ satır önce ESKİ hâliyle (eski alan
 #: kümesi, eski anahtar) son içerik MAC'li kaydını tutuyorsa; tutmayana dokunulmaz (doğrulamasız
 #: yeniden kurma geri sarılmış satırı aklardı). Yoksa açık satırların girişi reddedilir, `KAPALI`
-#: satırlar "kaydı program dışından değiştirilmiş görünen hesaplar" listesine (`seal_mismatch`)
-#: düşer ve sarmallarının temizliği durur. Bu yolun bugün yeri YOKTUR: satırın izi kilit
-#: açılışında, DEK belleğe alınmadan ve her veri göçünden ÖNCE denetlenir; şema göçü kilitliyken
-#: iz yazamaz. Kümeyi değiştiren değişiklik bu adım tasarlanmadan yapılmaz (kullanıcı kararı
+#: satırlar "kaydı ya da denetim izi program dışından değiştirilmiş görünen hesaplar" listesine
+#: (`seal_mismatch`) düşer ve sarmallarının temizliği durur. Bu yolun bugün yeri YOKTUR: satırın
+#: izi kilit açılışında, DEK belleğe alınmadan ve her veri göçünden ÖNCE denetlenir; şema göçü
+#: kilitliyken iz yazamaz. Kümeyi değiştiren değişiklik bu adım tasarlanmadan yapılmaz (kullanıcı kararı
 #: bekler; `denetim_izi` modül başlığı "ÖZET ALANLARI VE ŞEMA DEĞİŞİMİ").
 HESAP_OZET_ALANLARI: Final[tuple[str, ...]] = (
     "login_name",

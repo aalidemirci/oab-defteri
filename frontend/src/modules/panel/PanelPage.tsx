@@ -18,8 +18,16 @@
 // okunamazsa da aynı uyarı çıkar: yalnız her role açık kendi kartları okunur, denetim ve iki
 // depo uçları yetenek bilinmeden çağrılmaz; özet yüklenirken uyarı yoktur. Backend tek kartı
 // okuyamazsa adını `okunamayan`'a yazar; "Son Girişler" kartı okunamayan bölümünü "henüz giriş
-// yok" diye değil "okunamadı" diye yazar. Öteki kartların ve gezinmenin rol süzmesi F1b 2.
-// adımın ön yüz işindedir.
+// yok" diye değil "okunamadı" diye yazar.
+// Öteki kartların rol süzmesi (plan F1b-2 "Ön yüz"; kaynak `oturum/yetki`): "Başlangıç Yol
+// Haritası" yalnız `yol_haritasi`'nda (maddeleri ve işaretleri program yöneticisinin kurulum
+// işleridir; kartın her denetimi bir yazmadır); "Son Oturumu Kontrol Edin" her rolde, "Kontrol
+// ettim" yalnız `son_oturum_onay`'da; "Ayrılış Havuzu" yalnız `ayrilis_havuzu`'nda, "Şifreli
+// Yedeği USB Belleğe Alın" yalnız `guvenlik`'te (uçları o rollere kapalıdır, çağrılmaz);
+// "Okunamayan Kayıt Alanları" ve gezinme kartları her rolde (açıklamaları rolün göreceğini
+// söyler). Geri yükleme kartının "Gördüm"ü yalnız `geri_yukleme_gordum`'da (Denetleme Kurulu;
+// bir üye yeter, kart herkes için kalkar); iki depo kartının Kullanıcılar bağlantısı yalnız
+// `kullanicilar`'da.
 // Aile iskeletinin kütüphane kartları (katalog şablonu, dolaşım, sayım, raporlar,
 // saklama, yıl akışları) F1a-2'de söküldü; OAB pano kartları F1c'de gelir (§7.10).
 //
@@ -39,13 +47,24 @@ import DisYedekKarti from "../guvenlik/DisYedekKarti";
 import { okulApi } from "../okul/api";
 import type { RoadmapManualItem, SetupStatus } from "../okul/api";
 import { useYetenekler } from "../oturum/useOturum";
+import { useYetki } from "../oturum/yetki";
 import AyrilisHavuzuKarti from "./AyrilisHavuzuKarti";
 import BaslangicYolHaritasi from "./BaslangicYolHaritasi";
 import OkunamayanAlanlarKarti from "./OkunamayanAlanlarKarti";
 import SonOturumKarti from "./SonOturumKarti";
 
+/** Gezinme kartlarının açıklamaları: rolün o sayfada göreceğini söyler (sözlük §4.5). */
+export const KISILER_KARTI_ACIKLAMASI =
+  "Öğretmen ve diğer personel sicili; e-Okul listelerinden içe aktarma.";
+export const KISILER_KARTI_SALT_OKUR_ACIKLAMASI = "Öğretmen ve diğer personel sicili.";
+export const AYARLAR_KARTI_ACIKLAMASI =
+  "Ders yılı, şubeler, okul bilgileri, güvenlik, yedek ve güncelleme.";
+export const AYARLAR_KARTI_SALT_OKUR_ACIKLAMASI =
+  "Ders yılı, şubeler, okul bilgileri, parolanız ve boşta kilit süresi.";
+
 export default function PanelPage() {
   const snackbar = useSnackbar();
+  const yetki = useYetki();
   const [durum, setDurum] = useState<SetupStatus | null>(null);
   const { yetenekler, hata: yetenekHatasi } = useYetenekler();
   const butunluk = useButunlukDurumu(
@@ -98,7 +117,7 @@ export default function PanelPage() {
           Okul-aile birliğinin işlerini yürüttüğü yerel araç. Veriler yalnız bu bilgisayarda durur.
         </p>
       </header>
-      {durum && !durum.roadmap.hidden && (
+      {yetki.acik("yol_haritasi") && durum && !durum.roadmap.hidden && (
         <BaslangicYolHaritasi
           durum={durum}
           onIsaretle={(madde, yapildi) => void isaretle(madde, yapildi)}
@@ -106,21 +125,30 @@ export default function PanelPage() {
         />
       )}
       {/* T15 (§13 D4): beklenmedik kapanıştan sonra "Son Oturumu Kontrol Edin". */}
-      <SonOturumKarti />
+      <SonOturumKarti kontrolEdebilir={yetki.acik("son_oturum_onay")} />
       {/* Denetim izinin uyarı kartları (tasarım §4.6.3, §4.6.1): söyleyecek bir şeyi
           olmayan kart çizilmez; kişisiz (hesap rol etiketi ve tanıtıcıyla). */}
       {/* Kartlar okunamayanı zaten söylüyorsa (`okunamayan` dolu) ikinci kart çizilmez. */}
       {butunluk.okunamadi && !butunluk.durum?.okunamayan.length && <OkunamayanButunlukKarti />}
       {butunluk.durum && (
-        <ButunlukKartlari durum={butunluk.durum} onIkiDepo={butunluk.ikiDepoyuYaz} />
+        <ButunlukKartlari
+          durum={butunluk.durum}
+          onIkiDepo={butunluk.ikiDepoyuYaz}
+          gordum={
+            yetki.acik("geri_yukleme_gordum")
+              ? { onDenetim: butunluk.denetimiYaz, onYenile: butunluk.yenile }
+              : null
+          }
+          kullanicilarAcik={yetki.acik("kullanicilar")}
+        />
       )}
       {/* D48: çözülemeyen şifreli alan yoksa görünmez; kişisiz, yalnız sayı. */}
       <OkunamayanAlanlarKarti />
-      {/* Havuz boşsa görünmez; yalnız sayı okunur. */}
-      <AyrilisHavuzuKarti />
+      {/* Havuz boşsa görünmez; yalnız sayı okunur. Ucu yalnız `ayrilis_havuzu`'nda açık. */}
+      {yetki.acik("ayrilis_havuzu") && <AyrilisHavuzuKarti />}
       {/* Dış yedek hatırlatması — son şifreli yedek indirmesinden (yoksa ilk hesabın
-          kurulumundan) süre dolunca; yalnız tarih ve gün sayısı. */}
-      <DisYedekKarti />
+          kurulumundan) süre dolunca; yalnız tarih ve gün sayısı. Ucu yalnız `guvenlik`'te. */}
+      {yetki.acik("guvenlik") && <DisYedekKarti />}
       {/* Oturumdaki hesabın son girişleri ve denetim izinin son kaydı (kâğıt çapası). */}
       {butunluk.durum && (
         <SonGirislerKarti
@@ -135,13 +163,21 @@ export default function PanelPage() {
           to="/kisiler"
           icon="group"
           title="Kişiler"
-          description="Öğretmen ve diğer personel sicili; e-Okul listelerinden içe aktarma."
+          description={
+            yetki.acik("eokul_aktarimi")
+              ? KISILER_KARTI_ACIKLAMASI
+              : KISILER_KARTI_SALT_OKUR_ACIKLAMASI
+          }
         />
         <HubFeatureCard
           to="/ayarlar"
           icon="settings"
           title="Ayarlar"
-          description="Ders yılı, şubeler, okul bilgileri, güvenlik, yedek ve güncelleme."
+          description={
+            yetki.acik("guvenlik") && yetki.acik("guncelleme")
+              ? AYARLAR_KARTI_ACIKLAMASI
+              : AYARLAR_KARTI_SALT_OKUR_ACIKLAMASI
+          }
         />
       </div>
     </div>

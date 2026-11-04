@@ -11,7 +11,10 @@ Program yöneticisi ve Denetleme Kuruluna açıktır: rol kapısı (`rol_izinler
 kilit kapısı 423 verir). OKUMA İZ BIRAKMAZ: ne denetim izine ne erişim günlüğüne satır yazılır.
 
 RET KODLARI: biçimsiz süzgeç ya da ters tarih aralığı 400 `validation_error` (Türkçe ileti; sözlük
-§1 "Erişim günlüğü (F1b)"); rol 403 `rol_yetkisiz`.
+§1 "Erişim günlüğü (F1b)"); rol 403 `rol_yetkisiz`. 400'ün iletisi süzgecin alanına bağlıdır
+(`fields`: `baslangic`, `bitis`, `tur`, `hesap`, `sayfa`): takvimin ucundaki gün ve ters aralık da
+(`erisim_gunlugu.tarih_suzgeci_hatalari`; ters aralıkta `bitis`) — ekran iletiyi o alanın altına
+yazar.
 """
 
 from __future__ import annotations
@@ -65,6 +68,13 @@ class ErisimGunluguSorgusu(serializers.Serializer[dict[str, Any]]):
             "max_value": erisim_gunlugu.SAYFA_MESAJI,
         },
     )
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        """Takvimin uçları ve ters aralık alan adıyla reddedilir (modül başlığı "RET KODLARI")."""
+        hatalar = erisim_gunlugu.tarih_suzgeci_hatalari(attrs.get("baslangic"), attrs.get("bitis"))
+        if hatalar:
+            raise serializers.ValidationError({alan: [ileti] for alan, ileti in hatalar.items()})
+        return attrs
 
 
 class ErisimGunluguView(APIView):

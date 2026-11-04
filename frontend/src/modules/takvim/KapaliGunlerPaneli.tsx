@@ -14,6 +14,10 @@
 // dışarıdan denetlenir, `yillar` seçiciyi sınırlar (ör. ders yılının iki takvim
 // yılı), `baslikGizli` panel başlığını kaldırır, `onDegisti` her yazmadan sonra
 // haber verir. Sağlayıcılar: SnackbarProvider + ConfirmProvider.
+//
+// Salt okur (`saltOkur`; Ayarlar'da `kapali_gun_yazma` yeteneği olmayan rol — plan F1b-2
+// "Ayarlar ve bant"): liste ve yıl seçici kalır; "Resmî ve dini tatilleri ekle", "Sil" ve
+// ekleme formu çizilmez, başta `SaltOkurNotu` durur. Sihirbaz her zaman yazar (`false`).
 
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
@@ -33,8 +37,11 @@ import TextField from "../../ui/TextField";
 import UyariBandi from "../../ui/UyariBandi";
 import { HOLIDAY_KIND_TR, okulApi } from "../okul/api";
 import type { Holiday, HolidayKind } from "../okul/api";
+import { SaltOkurNotu } from "../oturum/RolKapisi";
 
 export interface KapaliGunlerPaneliProps {
+  /** Yazma denetimleri gizli mi (dosya başı "Salt okur")? */
+  saltOkur: boolean;
   /** Gösterilen takvim yılı. Verilirse yıl dışarıdan denetlenir (`onYilChange` ile). */
   yil?: number;
   /** Yıl seçicideki seçenekler (varsayılan: geçen yıl … iki yıl sonrası). Tek yılsa seçici gizlenir. */
@@ -87,6 +94,9 @@ const TUR_ACIKLAMASI: Record<HolidayKind, string> = {
 
 const TAHMINI_ACIKLAMA =
   "“Tahmini” rozetli dini bayram tarihleri hesapla bulunmuştur ve bir gün kayabilir. Diyanet takvimi kesinleşince kontrol edin; tarih farklıysa kaydı silip doğru tarihle “Dini bayram” türünde yeniden ekleyin.";
+/** Salt okurda düzeltme öğüdü yoktur (düzeltmeyi yazabilen rol yapar). */
+const TAHMINI_ACIKLAMA_SALT_OKUR =
+  "“Tahmini” rozetli dini bayram tarihleri hesapla bulunmuştur ve bir gün kayabilir.";
 
 function ErrorBanner({ message }: { message: string }) {
   return (
@@ -101,6 +111,7 @@ function ErrorBanner({ message }: { message: string }) {
 }
 
 export default function KapaliGunlerPaneli({
+  saltOkur,
   yil,
   yillar,
   onYilChange,
@@ -206,6 +217,7 @@ export default function KapaliGunlerPaneli({
 
   return (
     <div className="space-y-6">
+      {saltOkur && <SaltOkurNotu />}
       {hata && <ErrorBanner message={hata} />}
 
       <Card elevation={1} className="p-6">
@@ -235,14 +247,16 @@ export default function KapaliGunlerPaneli({
           ) : (
             <p className="text-title-small text-on-surface">{seciliYil}</p>
           )}
-          <Button
-            variant="tonal"
-            icon="event_repeat"
-            onClick={() => void tohumla()}
-            disabled={tohumlaniyor}
-          >
-            {tohumlaniyor ? "Ekleniyor…" : "Resmî ve dini tatilleri ekle"}
-          </Button>
+          {!saltOkur && (
+            <Button
+              variant="tonal"
+              icon="event_repeat"
+              onClick={() => void tohumla()}
+              disabled={tohumlaniyor}
+            >
+              {tohumlaniyor ? "Ekleniyor…" : "Resmî ve dini tatilleri ekle"}
+            </Button>
+          )}
         </div>
 
         {diniEksikYil === seciliYil && (
@@ -262,7 +276,7 @@ export default function KapaliGunlerPaneli({
             className="mt-4 flex items-start gap-2 rounded-shape-sm bg-secondary-container px-4 py-3 text-body-small text-on-secondary-container"
           >
             <Icon name="info" size="lg" className="shrink-0" />
-            <span>{TAHMINI_ACIKLAMA}</span>
+            <span>{saltOkur ? TAHMINI_ACIKLAMA_SALT_OKUR : TAHMINI_ACIKLAMA}</span>
           </p>
         )}
 
@@ -273,7 +287,11 @@ export default function KapaliGunlerPaneli({
             <EmptyState
               compact
               icon="event_available"
-              title={`${seciliYil} yılı için kayıtlı kapalı gün yok. Resmî ve dini tatilleri ekleyin; ara tatil ve yarıyılı aşağıdaki formdan girin.`}
+              title={
+                saltOkur
+                  ? `${seciliYil} yılı için kayıtlı kapalı gün yok.`
+                  : `${seciliYil} yılı için kayıtlı kapalı gün yok. Resmî ve dini tatilleri ekleyin; ara tatil ve yarıyılı aşağıdaki formdan girin.`
+              }
             />
           </div>
         ) : (
@@ -302,21 +320,23 @@ export default function KapaliGunlerPaneli({
                   </p>
                   <p className="text-label-small text-on-surface-variant">{tarihAraligi(h)}</p>
                 </div>
-                <Button
-                  variant="text"
-                  icon="delete"
-                  aria-label={`${h.name} kaydını sil`}
-                  onClick={() => void sil(h)}
-                >
-                  Sil
-                </Button>
+                {!saltOkur && (
+                  <Button
+                    variant="text"
+                    icon="delete"
+                    aria-label={`${h.name} kaydını sil`}
+                    onClick={() => void sil(h)}
+                  >
+                    Sil
+                  </Button>
+                )}
               </li>
             ))}
           </ul>
         )}
       </Card>
 
-      <KapaliGunEkleKarti onEklendi={eklendi} />
+      {!saltOkur && <KapaliGunEkleKarti onEklendi={eklendi} />}
     </div>
   );
 }

@@ -353,8 +353,9 @@ def test_dosya_yazilamazsa_eski_parola_acar_yeni_acmaz(
 
     with monkeypatch.context() as yama:
         yama.setattr(app_password, "_replace_wrap", yazilamadi)
-        with pytest.raises(OSError, match="disk dolu"):
+        with pytest.raises(OSError) as hata:
             calistir()
+    _dosya_hatasi(hata.value, "disk dolu", sifirlama=yazici == "sifirlama")
 
     satir = Account.objects.get(pk=hesap_id)
     assert satir.wrap_digest_pending != "" and satir.seal_matches(TEST_DEK)
@@ -738,6 +739,18 @@ def _yazilamadi(_durum: dict[str, Any], _yeni: dict[str, Any]) -> None:
     raise OSError("dosya salt okunur")
 
 
+def _dosya_hatasi(hata: BaseException, neden: str, *, sifirlama: bool) -> None:
+    """Dosya yazımının hatası çağırana dosya hatası olarak döner. Parola sıfırlaması onu Türkçe
+    iletili `GuvenlikDosyasiYazilamadi`ya çevirir (kök neden `__cause__`'da; orkestratör maddesi
+    (d0)-1: 1. adım yerinde, geçici parola geçerli değil); öteki yazıcılarda hata olduğu gibidir."""
+    assert isinstance(hata, hesaplar.GuvenlikDosyasiYazilamadi) is sifirlama
+    if sifirlama:
+        assert str(hata) == hesaplar.RESET_WRAP_MESSAGE
+        assert hata.__cause__ is not None
+        hata = hata.__cause__
+    assert neden in str(hata)
+
+
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize("sir", ["parola", "kurtarma"])
 def test_capa_ikamesi_eski_ozeti_taze_yedege_tasimaz(
@@ -1067,8 +1080,9 @@ def test_kesintide_dosyaya_konmus_eski_sarmal_asil_ozet_olmaz(
     _geri_koy(_arsivdeki_sarmal(kimlik, eski))
     with monkeypatch.context() as yama:
         yama.setattr(app_password, "_replace_wrap", _yazilamadi)
-        with pytest.raises(OSError, match="salt okunur"):
+        with pytest.raises(OSError) as hata:
             calistir()
+    _dosya_hatasi(hata.value, "salt okunur", sifirlama=yazici == "sifirlama")
 
     assert Account.objects.get(pk=kimlik).wrap_digest == asil
     app_password.lock()
@@ -1103,10 +1117,11 @@ def test_kesintide_dosyadaki_bekleyen_sarmal_korunur(monkeypatch: pytest.MonkeyP
     app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
     with monkeypatch.context() as yama:
         yama.setattr(app_password, "_replace_wrap", _yazilamadi)
-        with pytest.raises(OSError, match="salt okunur"):
+        with pytest.raises(hesaplar.GuvenlikDosyasiYazilamadi) as hata:
             hesaplar.reset_password(
                 by_hesap_id=TEST_HESAP_ID, hesap_id=kimlik, temp_password=UCUNCU_PAROLA
             )
+    _dosya_hatasi(hata.value, "salt okunur", sifirlama=True)
     w2 = _sarmal(kimlik)
     assert Account.objects.get(pk=kimlik).wrap_digest == app_password.wrap_digest(TEST_DEK, w2)
     app_password.lock()

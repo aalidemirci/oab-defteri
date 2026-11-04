@@ -11,10 +11,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../lib/api";
 import { KURULU_DURUM } from "../../test/kurulumDurumu";
+import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import type { ButunlukDurumu } from "../butunluk/api";
 import type { RoadmapState, SetupStatus } from "../okul/api";
-import type { OturumOzeti } from "../oturum/api";
+import { YETENEK_ADLARI } from "../oturum/api";
+import type { OturumHesabi, OturumOzeti } from "../oturum/api";
+import { YetkiSaglayici } from "../oturum/yetki";
 
 const oapi = vi.hoisted(() => ({
   getSetupStatus: vi.fn(),
@@ -81,7 +84,7 @@ const TEMIZ_IZ: ButunlukDurumu = {
   okunamayan: [],
 };
 
-/** Açık oturum: program yöneticisi (bütünlük uçlarının üçü de açık). */
+/** Açık oturum: program yöneticisi (bütün yetenekler; bütünlük uçlarının üçü de açık). */
 const YONETICI_OTURUMU: OturumOzeti = {
   durum: "acik",
   hesap: {
@@ -89,7 +92,7 @@ const YONETICI_OTURUMU: OturumOzeti = {
     tanitici: "yonetici",
     rol: "yonetici",
     rol_etiketi: "Program yöneticisi",
-    yetenekler: ["butunluk_denetim", "iki_depo", "son_oturum_onay"],
+    yetenekler: [...YETENEK_ADLARI],
   },
   bosta_dk: 10,
   bosta_kalan_sn: 600,
@@ -101,11 +104,15 @@ function bas() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <SnackbarProvider>
-          <PanelPage />
-        </SnackbarProvider>
-      </MemoryRouter>
+      <YetkiSaglayici>
+        <MemoryRouter>
+          <SnackbarProvider>
+            <ConfirmProvider>
+              <PanelPage />
+            </ConfirmProvider>
+          </SnackbarProvider>
+        </MemoryRouter>
+      </YetkiSaglayici>
     </QueryClientProvider>,
   );
 }
@@ -205,9 +212,14 @@ describe("Genel Bakış", () => {
     otapi.ozet.mockReturnValue(new Promise(() => {}));
     bas();
 
-    await screen.findByRole("heading", { name: "Başlangıç Yol Haritası" });
+    await screen.findByRole("heading", { level: 1, name: "Genel Bakış" });
     await waitFor(() => expect(otapi.ozet).toHaveBeenCalled());
+    await waitFor(() => expect(oapi.getSetupStatus).toHaveBeenCalled());
     expect(bapi.durum).not.toHaveBeenCalled();
+    // Yetenek bilinmeden yeteneğe bağlı kartlar da çizilmez, uçları çağrılmaz (fail-closed).
+    expect(screen.queryByRole("heading", { name: "Başlangıç Yol Haritası" })).toBeNull();
+    expect(oapi.getLeavePoolSummary).not.toHaveBeenCalled();
+    expect(gapi.disYedek).not.toHaveBeenCalled();
     expect(screen.queryByRole("region", { name: "Bütünlük Durumu Okunamadı" })).toBeNull();
   });
 
@@ -442,5 +454,143 @@ describe("Başlangıç Yol Haritası", () => {
     await waitFor(() =>
       expect(screen.queryByRole("heading", { name: "Başlangıç Yol Haritası" })).toBeNull(),
     );
+  });
+});
+
+describe("Genel Bakış — rol süzmesi (kaynak oturum özetinin yetenekleri)", () => {
+  /** Program yöneticisi olmayan bir rolün özeti (yetenekler sunucudan gelir gibi). */
+  function oturum(rol: OturumHesabi): OturumOzeti {
+    return { ...YONETICI_OTURUMU, hesap: rol };
+  }
+  const BASKAN = oturum({
+    id: "h-2",
+    tanitici: "baskan",
+    rol: "baskan",
+    rol_etiketi: "Başkan",
+    yetenekler: ["son_oturum_onay"],
+  });
+  const DK = oturum({
+    id: "h-3",
+    tanitici: "dk-1",
+    rol: "denetleme_kurulu",
+    rol_etiketi: "Denetleme Kurulu",
+    yetenekler: ["butunluk_denetim", "erisim_gunlugu", "geri_yukleme_gordum"],
+  });
+
+  it("yol haritası, ayrılış havuzu ve dış yedek kartları yeteneksiz rolde çizilmez, uçları çağrılmaz", async () => {
+    otapi.ozet.mockResolvedValue(BASKAN);
+    oapi.getLeavePoolSummary.mockResolvedValue({ student_count: 3, personnel_count: 1 });
+    gapi.disYedek.mockResolvedValue({ remind: true, last_download: null, days_since: null });
+    bas();
+
+    await screen.findByRole("region", { name: "Son Girişler" });
+    expect(screen.queryByRole("heading", { name: "Başlangıç Yol Haritası" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Ayrılış Havuzu" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Şifreli Yedeği USB Belleğe Alın" })).toBeNull();
+    // Rolün açamadığı uç ÇAĞRILMAZ (sunucu zaten 403 verirdi).
+    expect(oapi.getLeavePoolSummary).not.toHaveBeenCalled();
+    expect(gapi.disYedek).not.toHaveBeenCalled();
+  });
+
+  it("gezinme kartlarının açıklaması rolün göreceğini söyler", async () => {
+    otapi.ozet.mockResolvedValue(BASKAN);
+    bas();
+
+    await screen.findByRole("region", { name: "Son Girişler" });
+    expect(
+      screen.getByRole("link", { name: /Öğretmen ve diğer personel sicili\./ }),
+    ).toHaveAttribute("href", "/kisiler");
+    expect(screen.queryByText(/e-Okul listelerinden içe aktarma/)).toBeNull();
+    expect(screen.getByRole("link", { name: /parolanız ve boşta kilit süresi/ })).toHaveAttribute(
+      "href",
+      "/ayarlar",
+    );
+    expect(screen.queryByText(/güvenlik, yedek ve güncelleme/)).toBeNull();
+  });
+
+  it("son oturum kartı her rolde görünür; Kontrol ettim yalnız yeteneği olan rolde", async () => {
+    papi.sonOturum.mockResolvedValue({
+      unexpected_shutdown: true,
+      process_started_at: "2026-10-31T09:00:00+03:00",
+    });
+    otapi.ozet.mockResolvedValue(DK);
+    const { unmount } = bas();
+
+    expect(
+      await screen.findByRole("heading", { name: "Son Oturumu Kontrol Edin" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Kontrol ettim/ })).toBeNull();
+    unmount();
+
+    otapi.ozet.mockResolvedValue(BASKAN);
+    bas();
+    expect(await screen.findByRole("button", { name: /Kontrol ettim/ })).toBeInTheDocument();
+  });
+
+  it("program yöneticisinde bütün kartlar ve tam açıklamalar durur", async () => {
+    oapi.getLeavePoolSummary.mockResolvedValue({ student_count: 3, personnel_count: 1 });
+    gapi.disYedek.mockResolvedValue({ remind: true, last_download: null, days_since: null });
+    bas();
+
+    expect(await screen.findByRole("region", { name: "Ayrılış Havuzu" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Şifreli Yedeği USB Belleğe Alın" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Başlangıç Yol Haritası" })).toBeInTheDocument();
+    expect(screen.getByText(/e-Okul listelerinden içe aktarma/)).toBeInTheDocument();
+    expect(screen.getByText(/güvenlik, yedek ve güncelleme/)).toBeInTheDocument();
+  });
+
+  it("geri yükleme kartının “Gördüm”ü yalnız Denetleme Kurulunda; Kullanıcılar bağlantısı yalnız program yöneticisinde", async () => {
+    const geri = {
+      seq: 40,
+      zaman: "2026-11-01T07:15:00Z",
+      geri_yukleme_ani: null,
+      hesap: null,
+      yol: null,
+      yol_hesap: null,
+      oturum_hesap: null,
+      kurtarma_no: null,
+      yedek: null,
+      onceki_dosya: null,
+      onceki_sha256: null,
+      onceki_kayit_no: null,
+      onceki_zincir: null,
+      ayrintisiz: true,
+      onceki_geri_yuklemeler: [],
+    };
+    const sifirlanacak = { id: "h-2", tanitici: "muhasip", rol_etiketi: "Muhasip", kapali: false };
+    bapi.durum.mockResolvedValue({
+      ...TEMIZ_IZ,
+      geri_yukleme: geri,
+      iki_depo: {
+        fark_var: true,
+        sarmalsiz_hesaplar: [],
+        silinebilir_sarmallar: [],
+        ozeti_tutmayan_hesaplar: [sifirlanacak],
+        muhru_tutmayan: [],
+      },
+    });
+    // Program yöneticisi: sunucunun türettiği gibi "Gördüm" yeteneği yok (yalnız Denetleme Kurulu).
+    otapi.ozet.mockResolvedValue(
+      oturum({
+        ...(YONETICI_OTURUMU.hesap as OturumHesabi),
+        yetenekler: YETENEK_ADLARI.filter((ad) => ad !== "geri_yukleme_gordum"),
+      }),
+    );
+    const { unmount } = bas();
+    const kart = await screen.findByRole("region", { name: "Yedekten Geri Yükleme Yapıldı" });
+    // Yetenekler okunduktan sonra bakılır (bağlantı yeteneğe bağlıdır).
+    expect(await screen.findByRole("link", { name: "Kullanıcılar'ı aç" })).toBeInTheDocument();
+    expect(within(kart).queryByRole("button", { name: "Gördüm" })).toBeNull();
+    expect(
+      within(kart).getByText(/Denetleme Kurulunun açık hesabı yoksa kart kalır/),
+    ).toBeInTheDocument();
+    unmount();
+
+    otapi.ozet.mockResolvedValue(DK);
+    bas();
+    expect(await screen.findByRole("button", { name: "Gördüm" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Kullanıcılar'ı aç" })).toBeNull();
   });
 });

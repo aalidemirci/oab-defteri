@@ -14,6 +14,10 @@
 // Karar tek işlemdir: seçilenlerden biri başka pencerede çözülmüşse backend hiçbir
 // kararı uygulamaz (400) — liste yenilenir, kullanıcı yeniden seçer. Adlar yalnız bu
 // yönetim ekranında görünür.
+//
+// Rol (plan F1b-2): sekme yalnız `ayrilis_havuzu` yeteneğinde görünür (Kişiler verir); karar
+// düğmeleri o yeteneğin ucudur. "Birleştir" ayrıca `kisi_yazma`'ya bağlıdır (`birlestirebilir`);
+// yoksa "Olası aynı kişi" sütunu adayları ve gerekçelerini düğmesiz gösterir.
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
@@ -66,7 +70,14 @@ function kesisim(secili: Set<number>, kimlikler: number[]): Set<number> {
   return new Set([...secili].filter((id) => var_.has(id)));
 }
 
-export default function AyrilisHavuzu({ onDegisti }: { onDegisti?: () => void }) {
+export default function AyrilisHavuzu({
+  onDegisti,
+  birlestirebilir,
+}: {
+  onDegisti?: () => void;
+  /** "Birleştir" düğmeleri (personel birleştirme; `kisi_yazma`). */
+  birlestirebilir: boolean;
+}) {
   const [havuz, setHavuz] = useState<LeavePool | null>(null);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState<SayfaHatasi | null>(null);
@@ -264,7 +275,7 @@ export default function AyrilisHavuzu({ onDegisti }: { onDegisti?: () => void })
               mesgul={mesgul}
               onAyril={() => void ayril("personnel")}
               onKalsin={() => void kalsin("personnel")}
-              onBirlestir={(kisi, aday) => void birlestir(kisi, aday)}
+              onBirlestir={birlestirebilir ? (kisi, aday) => void birlestir(kisi, aday) : undefined}
             />
           )}
         </>
@@ -480,7 +491,8 @@ function PersonelBolumu({
   mesgul: boolean;
   onAyril: () => void;
   onKalsin: () => void;
-  onBirlestir: (kisi: LeavePoolPersonnel, aday: LeavePoolSimilar) => void;
+  /** Yoksa "Birleştir" çizilmez (`birlestirebilir`). */
+  onBirlestir?: (kisi: LeavePoolPersonnel, aday: LeavePoolSimilar) => void;
 }) {
   const baslikId = useId();
   const ciftVar = kisiler.some((k) => k.similar.length > 0);
@@ -558,15 +570,17 @@ function PersonelBolumu({
                           <li key={aday.id} className="space-y-0.5">
                             <div className="flex flex-wrap items-center gap-2">
                               <span>{aday.full_name}</span>
-                              <Button
-                                variant="text"
-                                icon="merge"
-                                disabled={mesgul}
-                                onClick={() => onBirlestir(k, aday)}
-                                aria-label={`${kisiKaydiniMetni(k)} ${aday.full_name} kaydıyla birleştir`}
-                              >
-                                Birleştir
-                              </Button>
+                              {onBirlestir !== undefined && (
+                                <Button
+                                  variant="text"
+                                  icon="merge"
+                                  disabled={mesgul}
+                                  onClick={() => onBirlestir(k, aday)}
+                                  aria-label={`${kisiKaydiniMetni(k)} ${aday.full_name} kaydıyla birleştir`}
+                                >
+                                  Birleştir
+                                </Button>
+                              )}
                             </div>
                             {/* Neden aday? Kural adı yeterli sayar; adaş da buraya düşer (§13 D30). */}
                             <p className="text-body-small text-on-surface-variant">

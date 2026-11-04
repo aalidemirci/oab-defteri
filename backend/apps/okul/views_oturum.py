@@ -72,8 +72,10 @@ kişisizdir: `{id, tanitici, rol_etiketi}` (iki depo ve mührü tutmayan satırl
 
 * `GET|POST security/integrity/reset-notice/` → oturumdaki hesabın parola yenilenme
   bildirimi (tasarım §4.4.3, §4.3 tehdit 12): `{parola_yenilenme: {tur, zaman, girisler} |
-  null}` (`iz_dogrulama.yenilenme_bildirimi`; girişler YALNIZ bu hesabın). POST sahibinin
-  "Gördüm"üdür: bayrak izli bir yazımla kalkar (`hesaplar.acknowledge_reset_notice`,
+  null, okunamayan: [ad]}` (`iz_dogrulama.bildirim_yaniti`; girişler YALNIZ bu hesabın;
+  bildirim okunamazsa — program dışından bozulmuş sıfırlama anı — `parola_yenilenme` null,
+  `okunamayan` `["parola_yenilenme"]`dir, uç 500 vermez). POST sahibinin "Gördüm"üdür: bayrak
+  izli bir yazımla kalkar (`hesaplar.acknowledge_reset_notice`,
   `GUNCELLE` satırı); bildirim beklemiyorsa bir şey yazmaz. Başka hesabın bildirimi bu uçtan
   ne okunur ne kapatılır. Ön yüz bildirimi kilit ekranından açılıştan sonra pencerede
   gösterir. Yalnız açık oturumda (kilitliyken 423).
@@ -133,10 +135,11 @@ class SecurityRefusedResponse(APIException):
 def guvenlik_hatalari() -> Iterator[None]:
     """Kilit açma retlerini kodlu yanıta, öteki servis hatalarını 400'e çevirir.
 
-    Parola kaydının güvenlik dosyasından silinmesi yarıda kalırsa (`hesaplar.ParolaKaydiSilinemedi`,
-    bir `OSError`; kapama ve sahipsiz parola kayıtlarının silinmesi) servis retlerinin kalıbıyla 400
-    `validation_error` olur, ileti servisin Türkçe iletisidir (orkestratör maddesi F-7; eskiden 500).
-    Öteki `OSError`'lar burada yakalanmaz.
+    Hesap servisinin güvenlik dosyası adımı yarıda kalırsa (`hesaplar.GuvenlikDosyasiYazilamadi`, bir
+    `OSError`: hesap açma, kapama, parola sıfırlama, askıdan çıkarma ve sahipsiz parola kayıtlarının
+    silinmesi) servis retlerinin kalıbıyla 400 `validation_error` olur, ileti servisin Türkçe
+    iletisidir ve neyin yapılıp neyin yapılmadığını söyler (orkestratör maddeleri F-7 ve (d0)-1;
+    eskiden 500). Öteki `OSError`'lar burada yakalanmaz.
     """
     try:
         yield
@@ -144,7 +147,7 @@ def guvenlik_hatalari() -> Iterator[None]:
         raise SecurityRefusedResponse(exc) from exc
     except ValueError as exc:
         raise serializers.ValidationError(str(exc)) from exc
-    except hesaplar.ParolaKaydiSilinemedi as exc:
+    except hesaplar.GuvenlikDosyasiYazilamadi as exc:
         raise serializers.ValidationError(str(exc)) from exc
 
 
@@ -377,16 +380,18 @@ class ParolaBildirimiView(APIView):
     """`GET|POST /api/v1/security/integrity/reset-notice/` — parola yenilenme bildirimi.
 
     Yalnız oturumdaki hesabın bildirimi (modül başlığı). POST "Gördüm"dür; yanıt güncel
-    bildirimdir (kapandıysa `null`).
+    bildirimdir (kapandıysa `null`). Bildirim okunamazsa (program dışından bozulmuş sıfırlama
+    anı) uç 500 vermez: `parola_yenilenme` null, adı `okunamayan`'dadır
+    (`iz_dogrulama.bildirim_yaniti`).
     """
 
     def get(self, request: Request) -> Response:
-        return Response({"parola_yenilenme": iz_dogrulama.yenilenme_bildirimi(_yazar_hesabi())})
+        return Response(iz_dogrulama.bildirim_yaniti(_yazar_hesabi()))
 
     def post(self, request: Request) -> Response:
         with guvenlik_hatalari():
             hesaplar.acknowledge_reset_notice(hesap_id=_yazar_hesabi() or "")
-        return Response({"parola_yenilenme": iz_dogrulama.yenilenme_bildirimi(_yazar_hesabi())})
+        return Response(iz_dogrulama.bildirim_yaniti(_yazar_hesabi()))
 
 
 class BostaKilitSuresiView(APIView):

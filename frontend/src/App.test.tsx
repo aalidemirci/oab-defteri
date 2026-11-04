@@ -1,7 +1,8 @@
 // Kabuk + yönlendirme testi (aile iskeletinin kalıbı).
 // Pinlenen davranışlar: (1) kurulum kapısı — `setup_completed=false` iken her rota
 // sihirbaza düşer, `true` iken Genel Bakış açılır, durum okunamazsa kapı FAIL-OPEN;
-// (2) kabuk gezinmesi (Genel Bakış/Kişiler/Ayarlar/Kılavuz + Hakkında) ve
+// (2) kabuk gezinmesi (Genel Bakış/Kişiler/Kullanıcılar/Erişim Günlüğü/Ayarlar/Kılavuz + Hakkında;
+// Kullanıcılar yalnız `kullanicilar`, Erişim Günlüğü yalnız `erisim_gunlugu` yeteneğinde) ve
 // kopyalanmayan modüllerin bağlantı ve rotalarının iskelete sızmaması;
 // (3) açılışta güncelleme denetimi YOK — kabuk açılırken `/updates/` isteği
 // çıkmaz (tasarım TK4); (4) M3 token bütünlüğü — kaynakta kullanılan
@@ -27,6 +28,7 @@ import type { MockInstance } from "vitest";
 import { ConfirmProvider } from "./ui/ConfirmProvider";
 import { SnackbarProvider } from "./ui/SnackbarProvider";
 import type { SetupStatus } from "./modules/okul/api";
+import { gorunenMetin } from "./test/gorunenMetin";
 import { KURULU_DURUM } from "./test/kurulumDurumu";
 
 const okulApiMock = vi.hoisted(() => ({
@@ -61,7 +63,30 @@ const oturumApiMock = vi.hoisted(() => ({
   kurtarmaHesaplari: vi.fn(),
 }));
 
-vi.mock("./modules/oturum/api", () => ({ oturumApi: oturumApiMock }));
+vi.mock("./modules/oturum/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./modules/oturum/api")>()),
+  oturumApi: oturumApiMock,
+}));
+
+// Kullanıcılar ekranı (yalnız `kullanicilar` yeteneği): liste tek hesaptır.
+const kullanicilarApiMock = vi.hoisted(() => ({
+  liste: vi.fn(),
+  secenekler: vi.fn(),
+  ayrinti: vi.fn(),
+}));
+
+vi.mock("./modules/kullanicilar/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./modules/kullanicilar/api")>()),
+  kullanicilarApi: kullanicilarApiMock,
+}));
+
+// Erişim Günlüğü (yalnız `erisim_gunlugu` yeteneği): günlük boştur.
+const erisimApiMock = vi.hoisted(() => ({ sayfa: vi.fn() }));
+
+vi.mock("./modules/erisim/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./modules/erisim/api")>()),
+  erisimGunluguApi: erisimApiMock,
+}));
 
 // Denetim izi (Genel Bakış kartları, parola yenilenme bildirimi): varsayılan "okunamadı",
 // yani kartlar ve bildirim görünmez; bildirimin kendi testi aşağıda.
@@ -80,7 +105,13 @@ vi.mock("./modules/butunluk/api", async (importOriginal) => ({
 import App from "./App";
 import { denetimSonucunuYayinla } from "./modules/guncelleme/denetimOlayi";
 import { pencereIcerigi } from "./lib/kilit";
+import { YETENEK_ADLARI } from "./modules/oturum/api";
 import type { OturumOzeti } from "./modules/oturum/api";
+import { KENDI_HESABI } from "./test/kullanicilar";
+import { ROL_YETKISIZ_OLAYI } from "./lib/api";
+import { gezinmeGirdileri } from "./AppShell";
+import type { NavItem } from "./AppShell";
+import { KURULUM, OKUNAMADI, YUKLENIYOR, hazirYetki } from "./modules/oturum/yetki";
 
 const ACIK_OTURUM: OturumOzeti = {
   durum: "acik",
@@ -89,7 +120,8 @@ const ACIK_OTURUM: OturumOzeti = {
     tanitici: "yonetici",
     rol: "yonetici",
     rol_etiketi: "Program yöneticisi",
-    yetenekler: [],
+    // Program yöneticisinin yetenekleri (sunucu türetir; süzme `oturum/yetki`).
+    yetenekler: [...YETENEK_ADLARI],
   },
   bosta_dk: 10,
   bosta_kalan_sn: 600,
@@ -175,6 +207,16 @@ beforeEach(() => {
   oturumApiMock.ozet.mockResolvedValue(ACIK_OTURUM);
   butunlukApiMock.durum.mockRejectedValue(new TypeError("çevrimdışı"));
   butunlukApiMock.parolaBildirimi.mockResolvedValue({ parola_yenilenme: null });
+  kullanicilarApiMock.liste.mockResolvedValue([KENDI_HESABI]);
+  erisimApiMock.sayfa.mockResolvedValue({
+    satirlar: [],
+    toplam: 0,
+    sayfa: 1,
+    sayfa_sayisi: 1,
+    sayfa_boyutu: 50,
+    turler: [],
+    hesaplar: [],
+  });
 });
 
 describe("App — oturum", () => {
@@ -214,6 +256,8 @@ describe("App — oturum", () => {
   it("güncelleme bandı açık oturumda görünür (görevli kipindeki gizleme kalktı)", async () => {
     ekranaBas("/");
     await screen.findByRole("heading", { name: "Genel Bakış" });
+    // Bant güncelleme yeteneğinde takılır: önce oturum özeti okunmuş olmalı.
+    await within(ustCubuk()).findByText("Program yöneticisi");
 
     // Ayarlar → Güncelleme'de elle denetlendi ve yeni sürüm bulundu.
     act(() =>
@@ -296,14 +340,18 @@ describe("App — kurulum kapısı", () => {
 });
 
 describe("App — kabuk gezinmesi", () => {
-  it("gezinme tam olarak Genel Bakış, Kişiler, Ayarlar ve Kılavuz'dur (bu sırayla)", async () => {
+  it("program yöneticisinin gezinmesi Genel Bakış, Kişiler, Kullanıcılar, Erişim Günlüğü, Ayarlar ve Kılavuz'dur (bu sırayla)", async () => {
     ekranaBas("/");
     await screen.findByRole("heading", { name: "Genel Bakış" });
+    // Kullanıcılar yeteneğe bağlıdır: özet okunduktan sonra bakılır.
+    await within(ustCubuk()).findByText("Program yöneticisi");
     const gezinme = screen.getByRole("navigation", { name: "Ana gezinme" });
     const baglantilar = within(gezinme).getAllByRole("link");
     const beklenen: Array<[ad: string, yol: string]> = [
       ["Genel Bakış", "/"],
       ["Kişiler", "/kisiler"],
+      ["Kullanıcılar", "/kullanicilar"],
+      ["Erişim Günlüğü", "/erisim-gunlugu"],
       ["Ayarlar", "/ayarlar"],
       ["Kılavuz", "/kilavuz"],
     ];
@@ -357,6 +405,8 @@ describe("App — kabuk gezinmesi", () => {
   it.each([
     ["/", "Genel Bakış"],
     ["/kisiler", "Kişiler"],
+    ["/kullanicilar", "Kullanıcılar"],
+    ["/erisim-gunlugu", "Erişim Günlüğü"],
     ["/ayarlar", "Ayarlar"],
     ["/kilavuz", "Kullanım Kılavuzu"],
     ["/hakkinda", "Hakkında ve Lisans"],
@@ -554,4 +604,191 @@ describe("M3 token bütünlüğü", () => {
     const tanimsiz = [...kullanilan].filter(([sinif]) => !uretildiMi(css, sinif));
     expect(tanimsiz.map(([sinif, dosya]) => `${sinif} (${dosya})`)).toEqual([]);
   }, 60_000);
+});
+
+// Rol süzmesi (plan F1b-2 "Ön yüz"): kaynak oturum özetinin yetenekleridir; ön yüz rol
+// matrisini kopyalamaz. Kurulum durumunda süzme yoktur.
+describe("App — rol süzmesi", () => {
+  /** Başkanın özeti (yetenekler sunucudan gelir gibi: yalnız son oturum onayı). */
+  const BASKAN_OTURUMU: OturumOzeti = {
+    ...ACIK_OTURUM,
+    hesap: {
+      id: "h-2",
+      tanitici: "baskan",
+      rol: "baskan",
+      rol_etiketi: "Başkan",
+      yetenekler: ["son_oturum_onay"],
+    },
+  };
+  const GUNCELLEME_VAR = {
+    current_version: "2026.9.0",
+    latest_version: "2026.10.0",
+    update_available: true,
+    release_name: "",
+    published_at: "",
+    release_url: "",
+    platform: "windows" as const,
+    can_download: true,
+    installer_name: "kurulum.exe",
+    installer_size: 1,
+  };
+
+  it("bugünkü dört ekran her rolün gezinmesinde durur", async () => {
+    oturumApiMock.ozet.mockResolvedValue(BASKAN_OTURUMU);
+    ekranaBas("/");
+    await screen.findByRole("heading", { name: "Genel Bakış" });
+    // Özet okunduktan sonra (süzme hazır) bakılır.
+    await within(ustCubuk()).findByText("Başkan");
+    const gezinme = screen.getByRole("navigation", { name: "Ana gezinme" });
+    expect(
+      within(gezinme)
+        .getAllByRole("link")
+        .map((a) => gorunenMetin(a)),
+    ).toEqual(["Genel Bakış", "Kişiler", "Ayarlar", "Kılavuz"]);
+  });
+
+  it("Kullanıcılar yeteneği olmayan rolde gezinmede yoktur, adresi “rolünüze açık değil” der", async () => {
+    oturumApiMock.ozet.mockResolvedValue(BASKAN_OTURUMU);
+    ekranaBas("/kullanicilar");
+
+    expect(await screen.findByText("Bu ekran hesabınızın rolüne açık değil.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Kullanıcılar" })).toBeInTheDocument();
+    const gezinme = screen.getByRole("navigation", { name: "Ana gezinme" });
+    expect(within(gezinme).queryByRole("link", { name: "Kullanıcılar" })).toBeNull();
+    // Rolün açamadığı uç çağrılmaz; "Yeni hesap" çizilmez.
+    expect(kullanicilarApiMock.liste).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Yeni hesap" })).toBeNull();
+  });
+
+  it("Erişim Günlüğü Denetleme Kurulunun gezinmesindedir ve açılır; Kullanıcılar yoktur", async () => {
+    oturumApiMock.ozet.mockResolvedValue({
+      ...ACIK_OTURUM,
+      hesap: {
+        id: "h-4",
+        tanitici: "dk-1",
+        rol: "denetleme_kurulu",
+        rol_etiketi: "Denetleme Kurulu",
+        // Sunucunun türettiği gibi (süzme yalnız yeteneklere bakar).
+        yetenekler: ["butunluk_denetim", "erisim_gunlugu", "geri_yukleme_gordum"],
+      },
+    } satisfies OturumOzeti);
+    ekranaBas("/erisim-gunlugu");
+
+    expect(await screen.findByText("Erişim günlüğünde kayıt yok")).toBeInTheDocument();
+    expect(erisimApiMock.sayfa).toHaveBeenCalled();
+    const gezinme = screen.getByRole("navigation", { name: "Ana gezinme" });
+    expect(
+      within(gezinme)
+        .getAllByRole("link")
+        .map((a) => gorunenMetin(a)),
+    ).toEqual(["Genel Bakış", "Kişiler", "Erişim Günlüğü", "Ayarlar", "Kılavuz"]);
+  });
+
+  it("Erişim Günlüğü yeteneği olmayan rolde gezinmede yoktur, adresi “rolünüze açık değil” der", async () => {
+    oturumApiMock.ozet.mockResolvedValue(BASKAN_OTURUMU);
+    ekranaBas("/erisim-gunlugu");
+
+    expect(await screen.findByText("Bu ekran hesabınızın rolüne açık değil.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Erişim Günlüğü" })).toBeInTheDocument();
+    const gezinme = screen.getByRole("navigation", { name: "Ana gezinme" });
+    expect(within(gezinme).queryByRole("link", { name: "Erişim Günlüğü" })).toBeNull();
+    // Rolün açamadığı uç çağrılmaz.
+    expect(erisimApiMock.sayfa).not.toHaveBeenCalled();
+  });
+
+  it("Kullanıcılar program yöneticisinde açılır: liste sunucudan okunur", async () => {
+    ekranaBas("/kullanicilar");
+
+    expect(await screen.findByRole("table", { name: "Hesaplar" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Yeni hesap" })).toBeInTheDocument();
+    expect(kullanicilarApiMock.liste).toHaveBeenCalledTimes(1);
+  });
+
+  it("güncelleme bandı yalnız güncelleme yeteneğinde çizilir", async () => {
+    oturumApiMock.ozet.mockResolvedValue(BASKAN_OTURUMU);
+    ekranaBas("/");
+    await within(ustCubuk()).findByText("Başkan");
+
+    act(() => denetimSonucunuYayinla(GUNCELLEME_VAR));
+    expect(screen.queryByText(/OAB Defteri 2026\.10\.0 hazır\./)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Güncellemeyi indir" })).not.toBeInTheDocument();
+  });
+
+  it("Kurulum Sihirbazı'nın rotası yeteneği olmayan rolde kendi iletisini verir", async () => {
+    oturumApiMock.ozet.mockResolvedValue(BASKAN_OTURUMU);
+    ekranaBas("/kurulum");
+
+    // Kullanıcı kararı 04.11.2026: matristeki "O"ya istisna; bilgiler Ayarlar'da salt okur.
+    expect(
+      await screen.findByText(
+        "Kurulum Sihirbazı yalnız kurulumu tamamlayabilen hesaba açıktır; bu bilgiler Ayarlar'da görünür.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Bu ekran hesabınızın rolüne açık değil.")).toBeNull();
+    // Sayfanın h1'i üst çubukla aynı kalır (sözlük §4); sihirbazın hiçbir denetimi çizilmez.
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Kurulum Sihirbazı" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Devam|Hesabı kur|Kurulumu tamamla/ })).toBeNull();
+    expect(okulApiMock.getSchoolConfig).not.toHaveBeenCalled();
+  });
+
+  it("kurulum durumunda süzme yoktur: sihirbaz hesap yokken açılır", async () => {
+    oturumApiMock.ozet.mockResolvedValue({
+      ...ACIK_OTURUM,
+      durum: "kurulum",
+      hesap: null,
+      bosta_kalan_sn: null,
+      kurulum_tamam: false,
+    } satisfies OturumOzeti);
+    okulApiMock.getSetupStatus.mockResolvedValue({
+      ...KURULMAMIS,
+      password_set: false,
+      missing_steps: ["password", "school", "calendar"],
+    });
+    ekranaBas("/");
+
+    expect(await screen.findByRole("heading", { name: "Kurulum Sihirbazı" })).toBeInTheDocument();
+    expect(screen.queryByText("Bu ekran hesabınızın rolüne açık değil.")).not.toBeInTheDocument();
+  });
+
+  it("403 rol_yetkisiz olayı oturum özetini (yetenekleri) yeniden okutur", async () => {
+    ekranaBas("/");
+    await within(ustCubuk()).findByText("Program yöneticisi");
+    const once = oturumApiMock.ozet.mock.calls.length;
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(ROL_YETKISIZ_OLAYI));
+    });
+
+    await waitFor(() => expect(oturumApiMock.ozet.mock.calls.length).toBeGreaterThan(once));
+    // Olay ileti çizmez: hatayı çağıran ekran gösterir.
+    expect(screen.queryByText("Bu işlem hesabınızın rolüne açık değil.")).not.toBeInTheDocument();
+  });
+});
+
+describe("gezinmeGirdileri", () => {
+  const GIRDILER: NavItem[] = [
+    { to: "/", label: "Genel Bakış", icon: "space_dashboard" },
+    // Yeteneğe bağlı girdi (Kullanıcılar gibi).
+    {
+      to: "/kullanicilar",
+      label: "Kullanıcılar",
+      icon: "manage_accounts",
+      yetenek: "kullanicilar",
+    },
+  ];
+  const yollar = (y: Parameters<typeof gezinmeGirdileri>[1]) =>
+    gezinmeGirdileri(GIRDILER, y).map((g) => g.to);
+
+  it("yeteneğe bağlı girdi yalnız yetenek açıkken görünür; yeteneksiz girdi her zaman", () => {
+    expect(yollar(hazirYetki(["kullanicilar"]))).toEqual(["/", "/kullanicilar"]);
+    expect(yollar(hazirYetki(["erisim_gunlugu"]))).toEqual(["/"]);
+  });
+
+  it("özet yüklenirken ve okunamadıysa görünmez; kurulumda süzme yok", () => {
+    expect(yollar(YUKLENIYOR)).toEqual(["/"]);
+    expect(yollar(OKUNAMADI)).toEqual(["/"]);
+    expect(yollar(KURULUM)).toEqual(["/", "/kullanicilar"]);
+  });
 });

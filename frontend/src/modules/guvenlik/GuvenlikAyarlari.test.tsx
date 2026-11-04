@@ -39,15 +39,21 @@ const oturum = vi.hoisted(() => ({
 }));
 
 vi.mock("./api", () => ({ guvenlikApi: guvenlik }));
-vi.mock("../oturum/api", () => ({ oturumApi: oturum }));
-vi.mock("./SifreliYedekleme", () => ({ default: () => null }));
-vi.mock("./YedektenGeriYukleme", () => ({ default: () => null }));
+vi.mock("../oturum/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../oturum/api")>()),
+  oturumApi: oturum,
+}));
+// Yedek kartlarının kendi testleri var; burada yalnız görünüp görünmedikleri (rol süzmesi) sınanır.
+vi.mock("./SifreliYedekleme", () => ({ default: () => <div>ŞİFRELİ YEDEK KARTI</div> }));
+vi.mock("./YedektenGeriYukleme", () => ({ default: () => <div>GERİ YÜKLEME KARTI</div> }));
 vi.mock("../../lib/download", async (importOriginal) => {
   const gercek = await importOriginal<typeof import("../../lib/download")>();
   return { ...gercek, saveBlob: download.saveBlob };
 });
 
+import { YETENEK_ADLARI } from "../oturum/api";
 import { OTURUM_DEGISTI_OLAYI } from "../oturum/eylemler";
+import { YetkiDegeri, hazirYetki } from "../oturum/yetki";
 import { BOSTA_DK_TAM_SAYI_ILETISI, bostaDakikaSorunu } from "./BostaKilitSuresiKarti";
 import GuvenlikAyarlari from "./GuvenlikAyarlari";
 import { bekleyenKurtarmaAnahtariniYaz } from "./bekleyenAnahtar";
@@ -102,15 +108,18 @@ function dogrulamaFormu(): HTMLElement {
   return form;
 }
 
-function ekranaBas() {
+/** Varsayılan: program yöneticisinin bütün yetenekleri (süzme `oturum/yetki`'den gelir). */
+function ekranaBas(yetenekler: readonly string[] = YETENEK_ADLARI) {
   return render(
-    <MemoryRouter>
-      <SnackbarProvider>
-        <ConfirmProvider>
-          <GuvenlikAyarlari />
-        </ConfirmProvider>
-      </SnackbarProvider>
-    </MemoryRouter>,
+    <YetkiDegeri value={hazirYetki(yetenekler)}>
+      <MemoryRouter>
+        <SnackbarProvider>
+          <ConfirmProvider>
+            <GuvenlikAyarlari />
+          </ConfirmProvider>
+        </SnackbarProvider>
+      </MemoryRouter>
+    </YetkiDegeri>,
   );
 }
 
@@ -652,5 +661,72 @@ describe("GuvenlikAyarlari", () => {
     oturum.bostaKilitSuresi.mockRejectedValue(new ApiError(423, "locked", "Kayıtlar kilitli."));
     ekranaBas();
     expect(await screen.findByText("Boşta kilit süresi okunamadı.")).toBeInTheDocument();
+  });
+});
+
+describe("GuvenlikAyarlari — rol süzmesi (plan F1b-2 'Ayarlar ve bant')", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    oturum.ozet.mockResolvedValue(ACIK_OTURUM);
+    oturum.bostaKilitSuresi.mockResolvedValue({ dakika: 12 });
+    bekleyenKurtarmaAnahtariniYaz(null);
+  });
+
+  /** Sayfadaki h2 başlıkları (kart adları; sözlük §4.6). */
+  function kartlar(): string[] {
+    return screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent ?? "");
+  }
+
+  it("program yöneticisi olmayan rolde kurtarma ve yedek kartları çizilmez", async () => {
+    guvenlik.durum.mockResolvedValue(DOGRULANMAMIS);
+    // Başkanın yetenekleri: Güvenlik ve boşta süre yazımı yok.
+    ekranaBas(["son_oturum_onay"]);
+
+    expect(await screen.findByRole("heading", { name: "Hesap ve Parola" })).toBeInTheDocument();
+    expect(await screen.findByText("Boşta kilit süresi 12 dakika.")).toBeInTheDocument();
+    expect(kartlar()).toEqual(["Hesap ve Parola", "Boşta Kilit Süresi", "Şifreleme"]);
+    // Doğrulanmamış anahtar uyarısı da kurtarma kartlarındandır.
+    expect(screen.queryByText(/Kurtarma anahtarı doğrulanmadı/)).toBeNull();
+    expect(screen.queryByText("ŞİFRELİ YEDEK KARTI")).toBeNull();
+    expect(screen.queryByText("GERİ YÜKLEME KARTI")).toBeNull();
+    // Kendi parolası ve Kilitle her rolde (KENDI satırı).
+    expect(screen.getByRole("button", { name: "Parolayı değiştir" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Kilitle" })).toBeInTheDocument();
+  });
+
+  it("bekleyen yeni anahtar yeteneksiz rolde gösterilmez", async () => {
+    guvenlik.durum.mockResolvedValue(PAROLALI);
+    bekleyenKurtarmaAnahtariniYaz(YENI_ANAHTAR);
+    ekranaBas([]);
+
+    await screen.findByRole("heading", { name: "Hesap ve Parola" });
+    expect(screen.queryByRole("heading", { name: "Kurtarma Anahtarınız" })).toBeNull();
+    expect(document.body.textContent).not.toContain("YENI-ANAH");
+  });
+
+  it("boşta kilit süresini her rol okur; alan ve Kaydet yalnız yazabilen rolde", async () => {
+    guvenlik.durum.mockResolvedValue(PAROLALI);
+    const { unmount } = ekranaBas([]);
+
+    expect(await screen.findByText("Boşta kilit süresi 12 dakika.")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Boşta kilit süresi \(dakika\)/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Kaydet" })).toBeNull();
+    unmount();
+
+    ekranaBas(["bosta_sure_yazma"]);
+    expect(await screen.findByLabelText(/^Boşta kilit süresi \(dakika\)/)).toHaveValue(12);
+    expect(screen.getByRole("button", { name: "Kaydet" })).toBeInTheDocument();
+  });
+
+  it("program yöneticisinde kurtarma ve yedek kartlarının hepsi durur", async () => {
+    guvenlik.durum.mockResolvedValue(PAROLALI);
+    ekranaBas();
+
+    await screen.findByRole("heading", { name: "Kurtarma Anahtarını Yenile" });
+    expect(kartlar()).toEqual(
+      expect.arrayContaining(["Kurtarma Anahtarını Yenile", "Kurtarma anahtarı belgesi"]),
+    );
+    expect(screen.getByText("ŞİFRELİ YEDEK KARTI")).toBeInTheDocument();
+    expect(screen.getByText("GERİ YÜKLEME KARTI")).toBeInTheDocument();
   });
 });

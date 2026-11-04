@@ -14,10 +14,15 @@
 //   * "Şifreleme" — şifrelenen ve şifrelenmeyen alanlar, dürüst sınır "en zayıf hesap
 //     parolası kadar" (tasarım §4.4.6). Metinler `metinler.ts`'ten gelir ve DÜRÜSTTÜR:
 //     bu koruma alan şifrelemesidir, tam disk şifrelemesi değildir.
-//   * Kurtarma kartları (bekleyen anahtar paneli, doğrula, yenile, kurtarma anahtarı
-//     belgesi) ve yedek kartları. Kurtarma kartlarının yalnız program yöneticisine
-//     görünmesi rol kapısıyla 2. adımda gelir (bugün yalnız program yöneticisi hesabı
-//     açılabilir).
+//   * Kurtarma kartları (bekleyen anahtar paneli, doğrulanmadı uyarısı ve doğrula, yenile,
+//     kurtarma anahtarı belgesi) ve yedek kartları (şifreli yedek, yedekten geri yükleme):
+//     yalnız `guvenlik` yeteneğinde (program yöneticisi; plan F1b-2 "Ayarlar ve bant").
+//     Öteki rollerde bu kartlar çizilmez, uçları çağrılmaz. Güvenlik dosyası kayıp
+//     ekranındaki geri yükleme bu ekranın dışındadır ve her durumda kalır
+//     (`GuvenlikDosyasiKayip`; oturum yoktur, rol süzmesi de yoktur).
+//   Rol süzmesinin kaynağı oturum özetinin yetenekleridir (`oturum/yetki`); "Hesap ve Parola"
+//   ve "Şifreleme" her rolde, "Boşta Kilit Süresi"ni her rol okur, yalnız `bosta_sure_yazma`
+//   yazar. Kurulum durumunda süzme yoktur.
 //
 // Program yöneticisi hesabı YALNIZ kurulum sihirbazının ilk adımında kurulur (kurtarma
 // anahtarı orada gösterilir ve saklandığı doğrulanır); bu ekranda "hesabı kur" ya da
@@ -53,6 +58,7 @@ import { parolayiDegistir } from "../oturum/eylemler";
 import { dogrulamaReddiMi, oturumHatasi } from "../oturum/hatalar";
 import { yeniParolaHatalari } from "../oturum/parolaPolitikasi";
 import { useKilitle } from "../oturum/useKilitle";
+import { useYetki } from "../oturum/yetki";
 import BostaKilitSuresiKarti from "./BostaKilitSuresiKarti";
 import { DENETLENIYOR_METNI } from "./KurtarmaIleAcma";
 import KurtarmaAnahtariPaneli from "./KurtarmaAnahtariPaneli";
@@ -87,6 +93,9 @@ export const PAROLA_DEGISTI_ILETISI = "Parolanız değiştirildi.";
 
 export default function GuvenlikAyarlari() {
   const snackbar = useSnackbar();
+  const yetki = useYetki();
+  // Kurtarma ve yedek kartları (dosya başı notu).
+  const kurtarmaVeYedek = yetki.acik("guvenlik");
   const [durum, setDurum] = useState<GuvenlikDurumu | null>(null);
   // Oturumdaki hesabın kişisiz özeti (rol etiketi + tanıtıcı); okunamazsa satır yok.
   const [hesap, setHesap] = useState<OturumHesabi | null>(null);
@@ -258,7 +267,7 @@ export default function GuvenlikAyarlari() {
         )}
       </Card>
 
-      {durum.password_set && <BostaKilitSuresiKarti />}
+      {durum.password_set && <BostaKilitSuresiKarti yazabilir={yetki.acik("bosta_sure_yazma")} />}
 
       <Card className="p-6">
         <div className="mb-2 flex items-center gap-3">
@@ -289,7 +298,7 @@ export default function GuvenlikAyarlari() {
         )}
       </Card>
 
-      {durum.password_set && bekleyenAnahtar !== null && (
+      {kurtarmaVeYedek && durum.password_set && bekleyenAnahtar !== null && (
         <KurtarmaAnahtariPaneli
           anahtar={bekleyenAnahtar}
           kimlik={bekleyenKimlik}
@@ -298,27 +307,32 @@ export default function GuvenlikAyarlari() {
         />
       )}
 
-      {durum.password_set && bekleyenAnahtar === null && !durum.recovery_key_confirmed && (
-        <>
-          <div className="flex items-start gap-2 rounded-shape-sm bg-error-container px-4 py-3 text-body-medium text-on-error-container">
-            <Icon name="key_off" size="lg" />
-            <span>
-              <strong>{DOGRULANMADI_BASLIGI}.</strong> {DOGRULANMADI_METNI}
-            </span>
-          </div>
-          <KurtarmaAnahtariniDogrulaKarti onDogrulandi={setDurum} />
-        </>
-      )}
+      {kurtarmaVeYedek &&
+        durum.password_set &&
+        bekleyenAnahtar === null &&
+        !durum.recovery_key_confirmed && (
+          <>
+            <div className="flex items-start gap-2 rounded-shape-sm bg-error-container px-4 py-3 text-body-medium text-on-error-container">
+              <Icon name="key_off" size="lg" />
+              <span>
+                <strong>{DOGRULANMADI_BASLIGI}.</strong> {DOGRULANMADI_METNI}
+              </span>
+            </div>
+            <KurtarmaAnahtariniDogrulaKarti onDogrulandi={setDurum} />
+          </>
+        )}
 
-      {durum.password_set && bekleyenAnahtar === null && (
+      {kurtarmaVeYedek && durum.password_set && bekleyenAnahtar === null && (
         <KurtarmaAnahtariniYenileKarti onYenilendi={oku} />
       )}
 
-      {durum.password_set && <KurtarmaCiktisiKarti kimlik={guncelKurtarmaKimligi(durum)} />}
+      {kurtarmaVeYedek && durum.password_set && (
+        <KurtarmaCiktisiKarti kimlik={guncelKurtarmaKimligi(durum)} />
+      )}
 
-      <SifreliYedekleme parolaKurulu={durum.password_set} />
+      {kurtarmaVeYedek && <SifreliYedekleme parolaKurulu={durum.password_set} />}
 
-      <YedektenGeriYukleme />
+      {kurtarmaVeYedek && <YedektenGeriYukleme />}
 
       <Dialog
         open={degistirAcik}

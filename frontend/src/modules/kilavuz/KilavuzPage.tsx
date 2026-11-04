@@ -4,7 +4,15 @@
 // anlatan bölüm vardır (CLAUDE.md §1: konum cümlesi kılavuzda da yer alır).
 
 import Card from "../../ui/Card";
+import { useYetki } from "../oturum/yetki";
 import { Ekran, KilavuzBolumu, useCapayaKaydir } from "./KilavuzKabugu";
+
+/**
+ * Sihirbazı açamayan rolde konum bölümünün son cümlesi (sözlük §1 "Rol süzmesi"; kullanıcı
+ * kararı 04.11.2026).
+ */
+export const KILAVUZ_SIHIRBAZ_KAPALI_METNI =
+  "İlk kurulum adımları Kurulum Sihirbazı'ndadır; girilen bilgiler Ayarlar'da görünür.";
 
 /** Bölümler (çapa → başlık + ikon), sayfadaki sırasıyla. Başlıklar Başlık Düzenindedir. */
 const BOLUMLER = {
@@ -20,6 +28,7 @@ export const KILAVUZ_BOLUMLERI: ReadonlyArray<{ id: BolumId; baslik: string }> =
 
 export default function KilavuzPage() {
   useCapayaKaydir();
+  const yetki = useYetki();
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <header>
@@ -59,9 +68,15 @@ export default function KilavuzPage() {
           TEFBİS&apos;e okul idaresi girer. Program bunlara girilecek metni ve listeyi hazırlar,
           tutarlılığı denetler.
         </p>
-        <p>
-          İlk kurulum adımları için <Ekran to="/kurulum">Kurulum Sihirbazı</Ekran>&apos;nı açın.
-        </p>
+        {/* Sihirbaz yalnız kurulumu tamamlayabilen hesaba açıktır (kullanıcı kararı 04.11.2026);
+            öteki rollerde adı bağlantı değildir, rotası onları kapalı ekrana götürürdü. */}
+        {yetki.acik("kurulum_tamamlama") ? (
+          <p>
+            İlk kurulum adımları için <Ekran to="/kurulum">Kurulum Sihirbazı</Ekran>&apos;nı açın.
+          </p>
+        ) : (
+          <p>{KILAVUZ_SIHIRBAZ_KAPALI_METNI}</p>
+        )}
       </KilavuzBolumu>
     </div>
   );

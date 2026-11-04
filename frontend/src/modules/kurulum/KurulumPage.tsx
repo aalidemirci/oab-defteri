@@ -583,8 +583,9 @@ function HesapAdimi({
     );
   }
 
-  // Gönderimden ÖNCE görünen tanıtıcı uyarısı (backend kuralının kopyası; engel değil).
-  const onUyari = adSoyad.trim() ? taniticiUyarisi(tanitici, adSoyad) : null;
+  // Gönderimden ÖNCE görünen tanıtıcı uyarısı (backend kuralının kopyası; engel değil). Kimlik
+  // numarasına benzeyen sayının uyarısı ad-soyad girilmeden de çıkar.
+  const onUyari = taniticiUyarisi(tanitici, adSoyad);
 
   async function kur(e: FormEvent) {
     e.preventDefault();
@@ -834,6 +835,7 @@ function TakvimAdimi({
           </p>
           <div className="mt-4">
             <KapaliGunlerPaneli
+              saltOkur={false}
               yil={yil}
               yillar={yillar}
               onYilChange={setGosterilenYil}

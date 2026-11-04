@@ -13,17 +13,32 @@
 //   _cleanup_closed_wraps`, tasarım §4.6.1 kural 3); listede yalnız o silme tamamlanamadıysa
 //   (ör. dosyayı başka bir program tutuyordu) görünür, onayla hemen de silinebilir. Metin bu
 //   ikisini ayırır. Kart yanıttaki güncel iki depo kartıyla yenilenir.
-// * Kaydı program dışından değiştirilmiş görünen hesaplar: program onlara dokunmaz.
+// * Parola kaydı hesap kaydıyla uyuşmayan hesaplar (`ozeti_tutmayan_hesaplar`; kullanıcı kararı
+//   03.11.2026 "Tazelik kapatılır"): parola kaydı program dışından değiştirilmiş ya da yedekten
+//   geri yüklemeden sonra eski kalmış; sahipleri giriş yapamaz. Çaresi program yöneticisinin
+//   parola sıfırlaması (Kullanıcılar), program yöneticisinin kendi hesabıysa kilit ekranındaki
+//   "Parolamı unuttum" yolu (kurtarma anahtarı). Fark yalnız bu listedeyse (ya da yalnız mührü
+//   tutmayanlardaysa) kartın girişi "yedekten geri yüklemeden sonra olur" DEMEZ: o cümle yalnız
+//   geri yüklemenin doğurduğu iki listededir (`ikiDepoGirisi`).
+// * Kaydı ya da denetim izi program dışından değiştirilmiş görünen hesaplar (mührü tutmayan, eski
+//   bir kopyadan geri konmuş ya da son kaydından sonra denetim izinden kayıt silinmiş: backend
+//   `seal_mismatch`; Kullanıcılar ekranı aynı hesaplara iki ayrı ileti yazar, kart ikisini de
+//   kapsayan tek cümle): program onlara dokunmaz.
 //
-// ROL: ilk iki liste ve silme yalnız program yöneticisindedir (`security/integrity/two-store/`;
+// Parolası sıfırlanacak hesap varken (ilk ve üçüncü liste) kartta Kullanıcılar'a bağlantı durur;
+// yalnız `kullanicilar` yeteneğinde (`kullanicilarAcik`, Genel Bakış verir).
+//
+// ROL: ilk üç liste ve silme yalnız program yöneticisindedir (`security/integrity/two-store/`;
 // tasarım §4.6.1 kural 4); mührü tutmayan hesaplar denetim kartlarından gelir ve Denetleme
-// Kurulunda da görünür (kural 1). Öteki rollerde liste boş gelir, kart çizilmez.
+// Kurulunda da görünür (kural 1). Öteki rollerde liste boş gelir, kart çizilmez. Hesaplar rol
+// etiketi, tanıtıcı ve (özet taşıyorsa) açılış ve kapanış günüyle anılır (`hesapEtiketiGunlu`).
 //
 // "Sarmal" kullanıcı metnine girmez: kullanıcıdaki adı hesabın güvenlik dosyasındaki
 // **parola kaydı**dır (sözlük §1 "Denetim izi"). Hesaplar rol etiketi ve tanıtıcıyla anılır;
 // ad-soyad yok.
 
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import Button from "../../ui/Button";
 import { useConfirm } from "../../ui/ConfirmProvider";
@@ -33,7 +48,35 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import { butunlukApi } from "./api";
 import type { IkiDepoFarki, IkiDepoHesabi, IkiDepoYaniti } from "./api";
 import KartKabugu from "./KartKabugu";
-import { IKI_DEPO_KARTI_BASLIGI, hesapEtiketi } from "./metinler";
+import {
+  IKI_DEPO_GERI_YUKLEME_CUMLESI,
+  IKI_DEPO_GIRISI,
+  IKI_DEPO_KARTI_BASLIGI,
+  KULLANICILARI_AC,
+  MUHRU_TUTMAYAN_ACIKLAMASI,
+  MUHRU_TUTMAYAN_BASLIGI,
+  OZETI_TUTMAYAN_ACIKLAMASI,
+  OZETI_TUTMAYAN_BASLIGI,
+  hesapEtiketiGunlu,
+} from "./metinler";
+
+/** Kullanıcılar ekranının adresi (parolası sıfırlanacak hesaplar için bağlantı). */
+export const KULLANICILAR_ADRESI = "/kullanicilar";
+
+/**
+ * Kartın giriş cümlesi, listedeki farklara göre (sözlük §4.5): parola kaydı olmayan, kalan ya da
+ * tutmayan hesap varsa güvenlik dosyasıyla veritabanının uyuşmadığı; yalnız geri yüklemenin
+ * doğurduğu farklarda (giriş yapamayan hesap, kalan eski kayıt) "çoğunlukla yedekten geri
+ * yüklemeden sonra olur". Fark yalnız mührü tutmayan hesaplardaysa giriş yoktur (alt başlık
+ * söyler). Fark yoksa null.
+ */
+export function ikiDepoGirisi(fark: IkiDepoFarki): string | null {
+  const geriYuklemeFarki =
+    fark.sarmalsiz_hesaplar.length > 0 || fark.silinebilir_sarmallar.length > 0;
+  if (geriYuklemeFarki) return `${IKI_DEPO_GIRISI} ${IKI_DEPO_GERI_YUKLEME_CUMLESI}`;
+  if ((fark.ozeti_tutmayan_hesaplar ?? []).length > 0) return IKI_DEPO_GIRISI;
+  return null;
+}
 
 /** Onay diyaloğunun başlığı (soru) — sözlük §3, §4.3. */
 export const SILME_ONAY_BASLIGI = "Parola kaydı güvenlik dosyasından silinsin mi?";
@@ -91,7 +134,7 @@ function HesapListesi({ hesaplar }: { hesaplar: readonly IkiDepoHesabi[] }) {
   return (
     <ul className="list-disc space-y-0.5 pl-5 text-body-medium text-on-surface">
       {hesaplar.map((h) => (
-        <li key={h.id}>{hesapEtiketi(h)}</li>
+        <li key={h.id}>{hesapEtiketiGunlu(h)}</li>
       ))}
     </ul>
   );
@@ -101,15 +144,24 @@ interface IkiDepoKartiProps {
   fark: IkiDepoFarki;
   /** Silmeden dönen güncel iki depo kartı (`useButunlukDurumu.ikiDepoyuYaz`). */
   onIkiDepo: (yanit: IkiDepoYaniti) => void;
+  /** Kullanıcılar'a bağlantı verilsin mi? (`kullanicilar` yeteneği; dosya başı) */
+  kullanicilarAcik?: boolean;
 }
 
-export default function IkiDepoKarti({ fark, onIkiDepo }: IkiDepoKartiProps) {
+export default function IkiDepoKarti({
+  fark,
+  onIkiDepo,
+  kullanicilarAcik = false,
+}: IkiDepoKartiProps) {
   const confirm = useConfirm();
   const snackbar = useSnackbar();
   const [silinen, setSilinen] = useState<string | null>(null);
   const [hata, setHata] = useState<SayfaHatasi | null>(null);
 
   if (!fark.fark_var) return null;
+  const ozetiTutmayan = fark.ozeti_tutmayan_hesaplar ?? [];
+  const giris = ikiDepoGirisi(fark);
+  const sifirlanacakVar = fark.sarmalsiz_hesaplar.length > 0 || ozetiTutmayan.length > 0;
 
   const sil = async (hesap: IkiDepoHesabi) => {
     const onay = await confirm({
@@ -132,10 +184,7 @@ export default function IkiDepoKarti({ fark, onIkiDepo }: IkiDepoKartiProps) {
 
   return (
     <KartKabugu id="iki-depo-karti" baslik={IKI_DEPO_KARTI_BASLIGI} ikon="sync_problem" ton="uyari">
-      <p className="text-body-medium text-on-surface">
-        Bu bilgisayarın güvenlik dosyasındaki hesaplarla veritabanındaki hesap kayıtları uyuşmuyor.
-        Bu çoğunlukla yedekten geri yüklemeden sonra olur.
-      </p>
+      {giris !== null && <p className="text-body-medium text-on-surface">{giris}</p>}
       {fark.sarmalsiz_hesaplar.length > 0 && (
         <div className="space-y-1">
           <h3 className="text-title-small font-semibold text-on-surface">
@@ -160,7 +209,7 @@ export default function IkiDepoKarti({ fark, onIkiDepo }: IkiDepoKartiProps) {
             {fark.silinebilir_sarmallar.map((h) => (
               <li key={h.id} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="min-w-0 text-body-medium text-on-surface">
-                  {hesapEtiketi(h)} · {neden(h)}
+                  {hesapEtiketiGunlu(h)} · {neden(h)}
                 </span>
                 <Button
                   variant="outlined"
@@ -176,17 +225,31 @@ export default function IkiDepoKarti({ fark, onIkiDepo }: IkiDepoKartiProps) {
           </ul>
         </div>
       )}
+      {ozetiTutmayan.length > 0 && (
+        <div className="space-y-1">
+          <h3 className="text-title-small font-semibold text-on-surface">
+            {OZETI_TUTMAYAN_BASLIGI}
+          </h3>
+          <p className="text-body-small text-on-surface-variant">{OZETI_TUTMAYAN_ACIKLAMASI}</p>
+          <HesapListesi hesaplar={ozetiTutmayan} />
+        </div>
+      )}
       {fark.muhru_tutmayan.length > 0 && (
         <div className="space-y-1">
           <h3 className="text-title-small font-semibold text-on-surface">
-            Kaydı değiştirilmiş görünen hesaplar
+            {MUHRU_TUTMAYAN_BASLIGI}
           </h3>
-          <p className="text-body-small text-on-surface-variant">
-            Bu hesapların kaydı program dışından değiştirilmiş görünüyor; program onlara dokunmaz.
-            Durumu Denetleme Kuruluna bildirin.
-          </p>
+          <p className="text-body-small text-on-surface-variant">{MUHRU_TUTMAYAN_ACIKLAMASI}</p>
           <HesapListesi hesaplar={fark.muhru_tutmayan} />
         </div>
+      )}
+      {kullanicilarAcik && sifirlanacakVar && (
+        <Link
+          to={KULLANICILAR_ADRESI}
+          className="inline-flex pt-1 text-label-large text-primary underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          {KULLANICILARI_AC}
+        </Link>
       )}
       {hata && <ErrorBand hata={hata} />}
     </KartKabugu>

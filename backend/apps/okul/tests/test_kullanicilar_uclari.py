@@ -20,6 +20,8 @@ C-1..C-5).
 * F-6'nın null kolu: JSON null da boş değerdir, servisin iletisini alır.
 * F-5: tanıtıcıda 11 haneli sayı uyarısı; F-6: boş alan servisin iletisini alır; F-7: parola kaydı
   güvenlik dosyasından silinemezse Türkçe ileti (eskiden 500).
+* (d0)-1: hesap açmada, parola sıfırlamada ve askıdan çıkarmada güvenlik dosyası yazılamazsa Türkçe
+  ileti (eskiden 500); ne yazıldığı, ne geri alındığı ve iletinin dediği çıkış.
 
 Adlar, parolalar ve numaralar uydurmadır; gerçek kişi değildir.
 """
@@ -29,6 +31,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +59,7 @@ from apps.okul.tests.hesap_ortak import (
     durum,
     durum_yaz,
     ham_guncelle,
+    ham_satir,
     hesap_ac,
     muhurle,
     sarmal,
@@ -1179,6 +1183,209 @@ def test_sahipsiz_parola_kaydi_silinemezse_turkce_ileti(monkeypatch: pytest.Monk
     assert hayalet in sarmal_kimlikleri()
 
 
+# ============================================================ (d0)-1: güvenlik dosyası yazılamadı
+
+
+@contextmanager
+def _dosya_yazilamaz(monkeypatch: pytest.MonkeyPatch, islev: str) -> Iterator[None]:
+    """Blok boyunca güvenlik dosyasını başka bir program tutuyor taklidi (yolu ve işletim sistemi
+    iletisini taşıyan hata; yanıta sızmamalı). Yalnız bu yama geri alınır (fikstürlerinki kalır)."""
+
+    def yazilamadi(_durum: dict[str, Any]) -> None:
+        raise PermissionError("C:/gizli/yol/guvenlik.json kilitli")
+
+    with monkeypatch.context() as yama:
+        yama.setattr(app_password, islev, yazilamadi)
+        yield
+
+
+def _ileti_ve_sizinti(yanit: Any, ileti: str, *gizliler: str) -> None:
+    assert yanit.status_code == 400, yanit.content
+    assert yanit.json() == {"code": "validation_error", "message": ileti, "fields": {}}
+    metin = yanit.content.decode("utf-8")
+    assert "gizli" not in metin
+    for gizli in gizliler:
+        assert gizli not in metin
+
+
+def _yeni_satirlar(son: int) -> list[tuple[str, str, str]]:
+    return [
+        (s.action, s.model, s.object_id)
+        for s in AuditTrail.objects.filter(seq__gt=son).order_by("seq")
+    ]
+
+
+def test_hesap_acmada_parola_kaydi_yazilamazsa_turkce_ileti(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Orkestratör maddesi (d0)-1: hesap açmanın dosya adımı yarıda kalırsa uç 500 değil 400
+    `validation_error` ve sözlükteki ileti döner (iç ayrıntı ve geçici parola yok). İki depo kuralı
+    2: satır (`PAROLA_YENILENMELI`) ve `HESAP` satırı yerinde kalır, parola kaydı güvenlik dosyasında
+    yoktur — Kullanıcılar satırı girişin nedenini söyler, iki depo kartında görünür; çıkış (iletinin
+    dediği) parola sıfırlamasıdır: geçici parolayla açılır."""
+    son = _son_seq()
+    govde = {
+        "rol": "muhasip",
+        "tanitici": "muhasip",
+        "ad_soyad": "Uydurma Muhasip",
+        "gecici_parola": GIZLI_GECICI,
+    }
+
+    with _dosya_yazilamaz(monkeypatch, "_write_structural"):
+        yanit = _istemci().post(API, govde, format="json")
+
+    _ileti_ve_sizinti(yanit, hesaplar.OPEN_WRAP_MESSAGE, GIZLI_GECICI)
+    hesap = Account.objects.get(role=AccountRole.MUHASIP)
+    assert hesap.status == AccountStatus.PAROLA_YENILENMELI
+    assert _yeni_satirlar(son) == [(AuditAction.HESAP, "okul.Account", str(hesap.id))]
+    assert str(hesap.id) not in sarmal_kimlikleri()
+
+    satir = _satir(_istemci().get(API).json()["hesaplar"], hesap.id)
+    assert satir["kayit_tutuyor"] is True
+    assert satir["giris"] == {"yapabilir": False, "neden": hesaplar._LOGIN_NO_WRAP_MESSAGE}
+    assert satir["eylemler"]["parola_sifirla"] == {"yapilabilir": True, "neden": None}
+    assert hesaplar.two_store_differences().rows_without_wrap == [str(hesap.id)]
+
+    sifirla = _istemci().post(
+        f"{API}{hesap.id}/reset-password/", {"gecici_parola": GIZLI_SIFIRLAMA}, format="json"
+    )
+    assert sifirla.status_code == 200, sifirla.content
+    app_password.lock()
+    acilan = app_password.unlock(
+        hesap_id=hesap.id, password=GIZLI_SIFIRLAMA, new_password="Muhasibin-Kendi-Parolasi-5!"
+    )
+    assert acilan.id == hesap.id
+
+
+def test_hesap_acmada_dosya_yazildiktan_sonraki_hata_iletiyle_ortulmez(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """İleti yalnız parola kaydı dosyaya GİRMEDİYSE doğrudur: hata yazımdan sonra gelirse (kesinti
+    testlerinin "süreç öldü" taklidi) kayıt dosyadadır, hata olduğu gibi yükselir (parola
+    sıfırlamanın karşılığı `test_sarmal_tazeligi._yazip_dusur`)."""
+    gercek = app_password._replace_wrap
+
+    def yazip_dus(durum_: dict[str, Any], yeni_: dict[str, Any]) -> None:
+        gercek(durum_, yeni_)
+        raise OSError("süreç öldü")
+
+    with monkeypatch.context() as yama:
+        yama.setattr(app_password, "_replace_wrap", yazip_dus)
+        with pytest.raises(OSError, match="süreç öldü") as hata:
+            hesap_ac(AccountRole.MUHASIP, ad="Uydurma Muhasip")
+
+    assert not isinstance(hata.value, hesaplar.GuvenlikDosyasiYazilamadi)
+    hesap = Account.objects.get(role=AccountRole.MUHASIP)
+    assert str(hesap.id) in sarmal_kimlikleri()
+
+
+def test_parola_sifirlamada_parola_kaydi_yazilamazsa_turkce_ileti(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Orkestratör maddesi (d0)-1: sıfırlamanın dosya adımı yarıda kalırsa 400 ve sözlükteki ileti.
+    Ne yazıldı: 1. işlem (durum `PAROLA_YENILENMELI`, sıfırlama izi ve bildirimi, `PAROLA` satırı).
+    Ne geri alındı: 2. işlem (asıl özetin `HESAP` satırı, sayacın `guvenlik.sarmal` satırı); güvenlik
+    dosyasındaki kayıt (sayaç dahil) değişmedi. Geçici parola açmaz, eski parola yeni parola
+    isteyerek açar; sıfırlamayı yinelemek (iletinin dediği) geçici parolayı geçerli kılar."""
+    hesap = _sayacli_muhasip()
+    once = sarmal(hesap.id)
+    son = _son_seq()
+    with _dosya_yazilamaz(monkeypatch, "_write_structural"):
+        yanit = _istemci().post(
+            f"{API}{hesap.id}/reset-password/", {"gecici_parola": GIZLI_SIFIRLAMA}, format="json"
+        )
+
+    _ileti_ve_sizinti(yanit, hesaplar.RESET_WRAP_MESSAGE, GIZLI_SIFIRLAMA)
+    satir = Account.objects.get(pk=hesap.id)
+    assert satir.status == AccountStatus.PAROLA_YENILENMELI
+    assert satir.reset_notice_pending is True and satir.reset_at is not None
+    assert _yeni_satirlar(son) == [(AuditAction.PAROLA, "okul.Account", str(hesap.id))]
+    assert sarmal(hesap.id) == once
+    assert app_password._try_unwrap_account(sarmal(hesap.id), durum(), GIZLI_SIFIRLAMA) is None
+
+    app_password.lock()
+    with pytest.raises(app_password.PasswordRenewalRequired):
+        app_password.unlock(hesap_id=hesap.id, password=GECICI_PAROLA)
+    app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
+    yine = _istemci().post(
+        f"{API}{hesap.id}/reset-password/", {"gecici_parola": GIZLI_SIFIRLAMA}, format="json"
+    )
+    assert yine.status_code == 200, yine.content
+    app_password.lock()
+    acilan = app_password.unlock(
+        hesap_id=hesap.id, password=GIZLI_SIFIRLAMA, new_password="Muhasibin-Kendi-Parolasi-5!"
+    )
+    assert acilan.id == hesap.id
+
+
+def _askidaki_sekreter(*, veritabaninda: bool) -> Account:
+    """Güvenlik dosyasında hatalı deneme askısı (10 deneme) olan sekreter; istenirse veritabanında
+    da askıda (üyelik düştü)."""
+    hesap = hesap_ac(AccountRole.SEKRETER, ad="Uydurma Sekreter")
+    if veritabaninda:
+        hesap = muhurle(
+            hesap, status=AccountStatus.ASKIDA, suspend_reason=SuspendReason.UYELIK_DUSTU
+        )
+    veri = durum()
+    for bolum in veri["hesaplar"]:
+        if bolum["id"] == str(hesap.id):
+            bolum["askida"], bolum["hatali"] = True, 10
+    durum_yaz(veri)
+    return hesap
+
+
+def test_askidan_cikarmada_dosya_yazilamazsa_veritabani_askisi_kalkar_ileti_soyler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Orkestratör maddesi (d0)-1: veritabanında da askıdaki hesapta dosya adımı yarıda kalırsa 400
+    ve sözlükteki ileti. Ne yazıldı: satır (askı kalktı) ve `HESAP` satırı. Ne geri alındı: sayacın
+    `guvenlik.sarmal` satırı; dosyadaki hatalı deneme askısı kaldı — satır hâlâ askıda görünür ve
+    askıdan çıkarma yapılabilir; yinelemek (iletinin dediği) yalnız dosyayı siler."""
+    hesap = _askidaki_sekreter(veritabaninda=True)
+    son = _son_seq()
+    with _dosya_yazilamaz(monkeypatch, "_write_state"):
+        yanit = _istemci().post(f"{API}{hesap.id}/unsuspend/")
+
+    _ileti_ve_sizinti(yanit, hesaplar.UNSUSPEND_WRAP_MESSAGE)
+    satir_db = Account.objects.get(pk=hesap.id)
+    assert satir_db.status == AccountStatus.PAROLA_YENILENMELI and satir_db.suspend_reason == ""
+    assert _yeni_satirlar(son) == [(AuditAction.HESAP, "okul.Account", str(hesap.id))]
+    assert app_password.wrap_failure_state(hesap.id) == (10, True)
+
+    satir = _satir(_istemci().get(API).json()["hesaplar"], hesap.id)
+    assert satir["askida_nedeni"] == hesaplar.HATALI_DENEME_ASKISI
+    assert satir["eylemler"]["askidan_cikar"] == {"yapilabilir": True, "neden": None}
+    son = _son_seq()
+    yine = _istemci().post(f"{API}{hesap.id}/unsuspend/")
+    assert yine.status_code == 200, yine.content
+    assert app_password.wrap_failure_state(hesap.id) == (0, False)
+    assert _yeni_satirlar(son) == [(AuditAction.HESAP, denetim_izi.HESAP_SARMALI, str(hesap.id))]
+
+
+def test_askidan_cikarmada_yalniz_dosya_askisi_varsa_hicbir_sey_degismez(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Orkestratör maddesi (d0)-1: kaldırılacak veritabanı askısı yoksa ve dosya yazılamazsa hiçbir
+    şey değişmez (iz satırı yok, satır ve dosyadaki askı aynı) ve ileti bunu söyler."""
+    hesap = _askidaki_sekreter(veritabaninda=False)
+    once = ham_satir(hesap.id)
+    son = _son_seq()
+    with _dosya_yazilamaz(monkeypatch, "_write_state"):
+        yanit = _istemci().post(f"{API}{hesap.id}/unsuspend/")
+
+    _ileti_ve_sizinti(yanit, hesaplar.UNSUSPEND_NOTHING_MESSAGE)
+    assert _son_seq() == son
+    assert ham_satir(hesap.id) == once
+    assert app_password.wrap_failure_state(hesap.id) == (10, True)
+
+
+def test_guvenlik_dosyasi_hatalari_dosya_hatasi_olarak_kalir() -> None:
+    """Yeni hata türü dosya hatasıdır (çağıranlar `OSError` yakalar); silme hatası onun alt
+    sınıfıdır ve uçta aynı yoldan çevrilir (`views_oturum.guvenlik_hatalari`)."""
+    assert issubclass(hesaplar.GuvenlikDosyasiYazilamadi, OSError)
+    assert issubclass(hesaplar.ParolaKaydiSilinemedi, hesaplar.GuvenlikDosyasiYazilamadi)
+
+
 # ============================================================ sözlük
 
 
@@ -1234,6 +1441,12 @@ def test_kullanicilar_ve_iz_iletileri_sozlukte_yazilidir() -> None:
         hesap_kurallari.LOGIN_NAME_TCKN_WARNING_MESSAGE,
         hesaplar.CLOSE_WRAP_MESSAGE,
         hesaplar.ORPHAN_WRAP_MESSAGE,
+        # Orkestratör maddeleri (d0)-1 ve (d0)-3.
+        hesaplar.OPEN_WRAP_MESSAGE,
+        hesaplar.RESET_WRAP_MESSAGE,
+        hesaplar.UNSUSPEND_WRAP_MESSAGE,
+        hesaplar.UNSUSPEND_NOTHING_MESSAGE,
+        app_password.ISLEMDE_PAROLA_KAYDI_MESSAGE,
     ]
     eksik = [ileti for ileti in iletiler if f'**"{ileti}"**' not in sozluk]
     assert eksik == []

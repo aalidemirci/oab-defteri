@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../lib/api";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
-import type { ClassSection, SchoolYear } from "../okul/api";
+import type { ClassSection, SchoolTerm, SchoolYear } from "../okul/api";
 
 const oapi = vi.hoisted(() => ({
   getSetupStatus: vi.fn(),
@@ -43,9 +43,18 @@ vi.mock("../guvenlik/GuvenlikAyarlari", () => ({
 
 // Kapalı gün paneli kendi testinde; burada yalnız sekmeye bağlandığı doğrulanır.
 vi.mock("../takvim/KapaliGunlerPaneli", () => ({
-  default: () => <div>KAPALI GÜNLER PANELİ</div>,
+  default: ({ saltOkur }: { saltOkur: boolean }) => (
+    <div>KAPALI GÜNLER PANELİ{saltOkur ? " (salt okur)" : ""}</div>
+  ),
 }));
 
+// Güncelleme paneli kendi testinde; burada yalnız sekmenin rolle görünüp görünmediği sınanır.
+vi.mock("../guncelleme/UpdatePanel", () => ({
+  default: () => <div>GÜNCELLEME PANELİ</div>,
+}));
+
+import { YETENEK_ADLARI } from "../oturum/api";
+import { YetkiDegeri, hazirYetki } from "../oturum/yetki";
 import AyarlarPage from "./AyarlarPage";
 
 const AKTIF_YIL: SchoolYear = {
@@ -73,15 +82,18 @@ const SUBE: ClassSection = {
   class_label: "10/A",
 };
 
-function renderPage(yol = "/ayarlar") {
+/** Varsayılan: program yöneticisinin bütün yetenekleri (süzme `oturum/yetki`'den gelir). */
+function renderPage(yol = "/ayarlar", yetenekler: readonly string[] = YETENEK_ADLARI) {
   return render(
-    <MemoryRouter initialEntries={[yol]}>
-      <SnackbarProvider>
-        <ConfirmProvider>
-          <AyarlarPage />
-        </ConfirmProvider>
-      </SnackbarProvider>
-    </MemoryRouter>,
+    <YetkiDegeri value={hazirYetki(yetenekler)}>
+      <MemoryRouter initialEntries={[yol]}>
+        <SnackbarProvider>
+          <ConfirmProvider>
+            <AyarlarPage />
+          </ConfirmProvider>
+        </SnackbarProvider>
+      </MemoryRouter>
+    </YetkiDegeri>,
   );
 }
 
@@ -487,5 +499,144 @@ describe("AyarlarPage — güvenlik", () => {
     renderPage();
     await user.click(await screen.findByRole("tab", { name: /Güvenlik/ }));
     expect(await screen.findByText("GÜVENLİK PANELİ")).toBeInTheDocument();
+  });
+});
+
+describe("AyarlarPage — rol süzmesi (okul sekmeleri öteki rollerde salt okurdur)", () => {
+  /** Başkanın yetenekleri (sunucudan gelir gibi): Ayarlar'da yazma yok. */
+  const BASKAN = ["son_oturum_onay"];
+  const SALT_OKUR = "Bu bölüm hesabınızın rolüne yalnız okuma için açık.";
+
+  it("Güncelleme sekmesi ve Kurulum Sihirbazı kartı yalnız yeteneği olan rolde", async () => {
+    renderPage("/ayarlar", BASKAN);
+    await screen.findByText("2026-2027");
+
+    expect(screen.getAllByRole("tab").map((t) => t.textContent?.trim())).toEqual([
+      expect.stringContaining("Ders Yılları"),
+      expect.stringContaining("Kapalı Günler"),
+      expect.stringContaining("Şubeler"),
+      expect.stringContaining("Okul Bilgileri"),
+      expect.stringContaining("Güvenlik"),
+    ]);
+    expect(screen.queryByRole("link", { name: /Kurulum Sihirbazı/ })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Diğer Ayarlar" })).toBeNull();
+    expect(
+      screen.getByText(/burada görüntülenir; parolanızı Güvenlik sekmesinden/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/güncelleme burada yönetilir/)).toBeNull();
+  });
+
+  it("?tab=guncelleme adresi yeteneksiz rolde varsayılan sekmeye düşer, panel çizilmez", async () => {
+    renderPage("/ayarlar?tab=guncelleme", BASKAN);
+    expect(await screen.findByText("2026-2027")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Ders Yılları/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByText("GÜNCELLEME PANELİ")).toBeNull();
+  });
+
+  it("program yöneticisinde Güncelleme sekmesi açılır", async () => {
+    renderPage("/ayarlar?tab=guncelleme");
+    expect(await screen.findByText("GÜNCELLEME PANELİ")).toBeInTheDocument();
+  });
+
+  it("ders yılları salt okur: oluşturma ve aktifleştirme yok, dönemler aralık olarak yazılır", async () => {
+    const user = userEvent.setup();
+    oapi.listSchoolTerms.mockResolvedValue([
+      {
+        id: 1,
+        school_year: 3,
+        sequence: 1,
+        name: "1. dönem",
+        start_date: "2026-09-01",
+        end_date: "2027-01-22",
+      },
+      {
+        id: 2,
+        school_year: 3,
+        sequence: 2,
+        name: "2. dönem",
+        start_date: "2027-02-08",
+        end_date: "2027-06-30",
+      },
+    ] satisfies SchoolTerm[]);
+    renderPage("/ayarlar", BASKAN);
+
+    expect(await screen.findByText("2026-2027")).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent(SALT_OKUR);
+    expect(screen.queryByRole("button", { name: /Aktifleştir/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Ders yılı oluştur/ })).toBeNull();
+    expect(screen.queryByText("Yeni Ders Yılı")).toBeNull();
+
+    await user.click(screen.getAllByRole("button", { name: /Dönemler/ })[0]);
+    expect(
+      await screen.findByText(
+        "1. dönem: 01.09.2026 – 22.01.2027 · 2. dönem: 08.02.2027 – 30.06.2027",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("1. dönem bitişi")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Dönemleri kaydet/ })).toBeNull();
+  });
+
+  it("dönemleri girilmemiş yıl salt okurda bunu söyler; ders yılı yoksa eklemeyi öğütlemez", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderPage("/ayarlar", BASKAN);
+    await screen.findByText("2026-2027");
+    await user.click(screen.getAllByRole("button", { name: /Dönemler/ })[0]);
+    expect(
+      await screen.findByText("Bu ders yılının dönemleri henüz girilmedi."),
+    ).toBeInTheDocument();
+    unmount();
+
+    oapi.listSchoolYears.mockResolvedValue([]);
+    renderPage("/ayarlar", BASKAN);
+    expect(await screen.findByText("Henüz ders yılı tanımlanmadı.")).toBeInTheDocument();
+  });
+
+  it("kapalı günler paneli salt okur kipte açılır", async () => {
+    renderPage("/ayarlar?tab=kapali-gunler", BASKAN);
+    expect(await screen.findByText("KAPALI GÜNLER PANELİ (salt okur)")).toBeInTheDocument();
+  });
+
+  it("şubeler salt okur: liste kalır, ekleme ve kaldırma yok", async () => {
+    renderPage("/ayarlar?tab=subeler", BASKAN);
+
+    expect(await screen.findByText("10/A")).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent(SALT_OKUR);
+    expect(screen.queryByRole("button", { name: /şubesini kaldır/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Şube ekle" })).toBeNull();
+    expect(screen.queryByLabelText("Şube")).toBeNull();
+    expect(
+      screen.getByText("Öğrenci aktarımında görülen şubeler buraya kendiliğinden eklenir."),
+    ).toBeInTheDocument();
+  });
+
+  it("okul bilgileri salt okur: form yerine değerler listelenir", async () => {
+    renderPage("/ayarlar?tab=okul", BASKAN);
+
+    expect(await screen.findByText("Örnek Anadolu Lisesi")).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent(SALT_OKUR);
+    expect(screen.getByText("Ortaöğretim (lise)")).toBeInTheDocument();
+    expect(screen.getByText("Örnek AL")).toBeInTheDocument();
+    expect(screen.getByText("Bu bilgisayar okul demirbaşıdır.")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Kaydet" })).toBeNull();
+    expect(oapi.updateSchoolConfig).not.toHaveBeenCalled();
+  });
+
+  it("özet yüklenirken sekmeler çizilmez", () => {
+    render(
+      <MemoryRouter initialEntries={["/ayarlar"]}>
+        <SnackbarProvider>
+          <ConfirmProvider>
+            <AyarlarPage />
+          </ConfirmProvider>
+        </SnackbarProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("heading", { level: 1, name: "Ayarlar" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByRole("link", { name: /Kurulum Sihirbazı/ })).toBeNull();
   });
 });

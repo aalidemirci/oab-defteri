@@ -5,24 +5,38 @@ import { NavLink, useLocation } from "react-router-dom";
 import CikisDugmesi from "./modules/cikis/CikisDugmesi";
 import UpdateBanner from "./modules/guncelleme/UpdateBanner";
 import OturumGostergesi from "./modules/oturum/OturumGostergesi";
+import type { YetenekAdi } from "./modules/oturum/api";
+import { useYetki } from "./modules/oturum/yetki";
+import type { Yetki } from "./modules/oturum/yetki";
 import DensitySwitcher from "./ui/DensitySwitcher";
 import { DurumBasligiSaglayici, useDurumBasligiYonetimi } from "./ui/DurumBasligi";
 import Icon from "./ui/Icon";
 import ThemeSwitcher from "./ui/ThemeSwitcher";
 
-interface NavItem {
+export interface NavItem {
   to: string;
   label: string;
   icon: string;
+  /**
+   * Ekranın yeteneği (plan F1b-2 "Ön yüz"): verilirse girdi yalnız o yetenek açıkken görünür
+   * (matriste "—" olan ekran gezinmede yer almaz); rotası `RolKapisi` ile aynı yeteneğe bağlanır.
+   * Verilmeyen ekran her role en az okumaya açıktır.
+   */
+  yetenek?: YetenekAdi;
 }
 
 // Gezinme etiketi KISA addır. Ana sayfanın tek adı "Genel Bakış"tır (gezinme +
 // üst çubuk + h1). OAB ekranları (birlik dönemi, organlar…) fazlarıyla birlikte
 // eklenir; aile iskeletinin kütüphane ekranları F1a-2'de söküldü. Liste
-// `App.test.tsx` "kabuk gezinmesi" testiyle sabittir.
+// `App.test.tsx` "kabuk gezinmesi" testiyle sabittir. Genel Bakış, Kişiler, Ayarlar ve Kılavuz
+// her role açıktır (Kişiler'de personeli her rol okur, Ayarlar'ı her rol okur); Kullanıcılar
+// yalnız `kullanicilar`, Erişim Günlüğü yalnız `erisim_gunlugu` yeteneğinde görünür (program
+// yöneticisi ve Denetleme Kurulu).
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Genel Bakış", icon: "space_dashboard" },
   { to: "/kisiler", label: "Kişiler", icon: "group" },
+  { to: "/kullanicilar", label: "Kullanıcılar", icon: "manage_accounts", yetenek: "kullanicilar" },
+  { to: "/erisim-gunlugu", label: "Erişim Günlüğü", icon: "policy", yetenek: "erisim_gunlugu" },
   { to: "/ayarlar", label: "Ayarlar", icon: "settings" },
   { to: "/kilavuz", label: "Kılavuz", icon: "auto_stories" },
 ];
@@ -33,6 +47,8 @@ const NAV_ITEMS: NavItem[] = [
 const PAGE_TITLES: Array<[prefix: string, title: string]> = [
   // Sıra anlamlıdır: alt sayfalar köke göre ÖNCE gelir.
   ["/kisiler", "Kişiler"],
+  ["/kullanicilar", "Kullanıcılar"],
+  ["/erisim-gunlugu", "Erişim Günlüğü"],
   ["/ayarlar", "Ayarlar"],
   ["/kilavuz", "Kullanım Kılavuzu"],
   ["/hakkinda", "Hakkında ve Lisans"],
@@ -41,6 +57,14 @@ const PAGE_TITLES: Array<[prefix: string, title: string]> = [
 ];
 
 const COLLAPSE_KEY = "oab-defteri-sidebar-collapsed";
+
+/**
+ * Rolün gördüğü gezinme girdileri: yeteneksiz girdi her zaman, yetenekli girdi yalnız yetenek
+ * açıkken (yüklenirken ve özet okunamadıysa görünmez; kurulumda süzme yok — `oturum/yetki`).
+ */
+export function gezinmeGirdileri(girdiler: readonly NavItem[], yetki: Yetki): NavItem[] {
+  return girdiler.filter((g) => g.yetenek === undefined || yetki.acik(g.yetenek));
+}
 
 function pageTitle(pathname: string): string {
   return (
@@ -66,6 +90,7 @@ function SidebarContent({
   collapsed: boolean;
   onNavigate?: () => void;
 }) {
+  const girdiler = gezinmeGirdileri(NAV_ITEMS, useYetki());
   return (
     <>
       <div
@@ -91,9 +116,8 @@ function SidebarContent({
         </p>
       )}
       <nav aria-label="Ana gezinme" className="flex flex-1 flex-col gap-1.5 px-3 py-2">
-        {/* Rol bazlı gezinme (hangi rol hangi ekranı görür) F1b 2. adımda gelir
-            (tasarım §4.4.2); bugün tek rol program yöneticisidir. */}
-        {NAV_ITEMS.map((item) => (
+        {/* Rol bazlı gezinme (tasarım §4.4.2; plan F1b-2): kaynak yeteneklerdir. */}
+        {girdiler.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -159,6 +183,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   // olmadıkları için başlığı kendileri bildirir (ui/DurumBasligi).
   const { durumBasligi, yaz } = useDurumBasligiYonetimi();
   const title = durumBasligi ?? pageTitle(location.pathname);
+  const yetki = useYetki();
 
   const toggleCollapsed = () => {
     setCollapsed((current) => {
@@ -226,8 +251,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
             {/* Güncelleme bandı açılışta DENETİM YAPMAZ (tasarım TK4): yalnız
                 Ayarlar → Güncelleme'deki elle denetimin sonucunu gösterir.
                 Açılışta `/updates/` isteği çıkmadığı `App.test.tsx`'te sabittir.
-                Rol bazlı görünürlüğü F1b 2. adımda gelir (tasarım §4.4.2). */}
-            <UpdateBanner />
+                Yalnız güncelleme yeteneğinde (program yöneticisi; plan F1b-2 "Ayarlar ve
+                bant"): öteki rollerde Güncelleme sekmesi de yoktur. */}
+            {yetki.acik("guncelleme") && <UpdateBanner />}
             <DurumBasligiSaglayici yaz={yaz}>{children}</DurumBasligiSaglayici>
           </div>
         </main>

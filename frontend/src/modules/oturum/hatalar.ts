@@ -6,26 +6,40 @@
 // hesap listesinin tazelenmesi) `kod`a bakarak seçer; metni kodla kendileri kurmaz.
 //
 // Metnin kaynağı: backend iletileri Türkçedir, sözlüğe uyar ve kodun alt durumunu daha
-// kesin söyler (ör. `iki_depo_tutarsiz`'in beş nedeni: sarmal yok, satır yok, başka
-// veritabanı, iz anahtarı okunamadı, parola kaydı kimliğe bağlı biçimde değil (`UnboundWrap`;
-// iletisi program dışı değişikliği anar ve bildirim ister); `hesap_muhru_tutmadi`'nın iki
-// nedeni: kaydın mührü ya da parola kaydının özeti tutmadı — ikincisinin iletisi bağsız
-// kaydınkiyle aynıdır, çıkışı ("Parolamı unuttum", program yöneticisinin sıfırlaması)
-// söyler; onuncu hatalı denemede askıya alındığını söyleyen `hesap_askida`). Bu yüzden ileti doluysa o, boşsa ya da kod biçiminde
-// geldiyse (savunma derinliği) buradaki metin yazılır. Bilinmeyen kodda çağıranın varsayılanı.
+// kesin söyler. SUNUCUNUN İLETİSİ HER ZAMAN ÖNCELİKLİDİR; buradaki metin yalnız ileti boşsa ya
+// da kod biçiminde geldiyse (savunma derinliği) yazılır, bilinmeyen kodda çağıranın varsayılanı.
+// Bu yüzden yedek metinler nedeni seçmez, kodun bütün nedenlerine ve iki bağlama (kilit ekranı;
+// açık oturumdaki parola doğrulaması ve hesap işlemleri) uyar:
+//
+// * `hesap_muhru_tutmadi` (409; `app_password.AccountSealMismatch` ve alt sınıfları) — dört
+//   neden: hesap kaydının mührü tutmadı (`seal`); satırın izi tutmadı, yani satır eski bir
+//   kopyadan geri konmuş (`kayit_mac`, `AccountRecordStale`); hesabın son kaydından sonra denetim
+//   izinde boşluk var (`iz_boslugu`, `AuditTrailGap`; iletisi değişen denetim izini anar);
+//   parola kaydının özeti hesap kaydınınkini tutmadı (`wrap_digest`, `WrapDigestMismatch`;
+//   iletisi bağsız kaydınkiyle aynıdır, çıkışı — "Parolamı unuttum", program yöneticisinin
+//   sıfırlaması — söyler). Açık oturumda ve hesap işlemlerinde üç iletinin "kayda dokunulmadı" /
+//   "işlem yapılmadı" karşılıkları gelir (`ISLEMDE_*`).
+// * `iki_depo_tutarsiz` (409; `TwoStoreMismatch` ve alt sınıfları) — beş neden: parola kaydı bu
+//   bilgisayarın güvenlik dosyasında yok; hesap kaydı yok ya da açık değil; güvenlik dosyası
+//   başka bir veritabanının; iz anahtarı okunamadı (`AuditKeyUnreadable`); parola kaydı kimliğe
+//   bağlı biçimde değil, yani bağsız kayıt (`UnboundWrap`; iletisi program dışı değişikliği anar
+//   ve bildirim ister; açık oturumda "işlem yapılmadı" karşılığı).
+// * `hesap_askida` onuncu hatalı denemede askıya alındığını da söyler.
 
 import { ApiError, BEKLENMEYEN_HATA_ILETISI } from "../../lib/api";
 
-/** Oturum uçlarının ret kodları (`views_oturum.py`, `lock_middleware`, `shared.exceptions`). */
+/** Oturum uçlarının ret kodları (`views_oturum.py`, `lock_middleware`, `rol_middleware`, `shared.exceptions`). */
 export const OTURUM_HATA_METINLERI = {
   parola_yanlis: "Parola hatalı.",
   hesap_askida: "Hesap askıda — program yöneticisine başvurun.",
+  // Dört nedene ve iki bağlama uyan yedek (dosya başı): nedeni seçmez, "giriş açılmadı" demez.
   hesap_muhru_tutmadi:
-    "Hesap kaydı program dışından değiştirilmiş görünüyor; giriş açılmadı. Program " +
-    "yöneticisine ve Denetleme Kuruluna bildirin.",
+    "Hesap kaydı, parola kaydı ya da denetim izi program dışından değiştirilmiş görünüyor; " +
+    "işlem yapılmadı ve kayda dokunulmadı. Denetleme Kuruluna bildirin.",
+  // Beş nedene ve iki bağlama uyan yedek (dosya başı).
   iki_depo_tutarsiz:
-    "Hesap kaydı bu bilgisayarın güvenlik dosyasıyla uyuşmuyor; giriş açılmadı. Program " +
-    "yöneticisine başvurun.",
+    "Hesap kaydı bu bilgisayarın güvenlik dosyasıyla uyuşmuyor; işlem yapılmadı. Program " +
+    "yöneticisine ve Denetleme Kuruluna bildirin.",
   parola_yenilenmeli:
     "Parolanızı yenilemeniz gerekiyor (geçici parola ya da süresi dolan parola). Yeni " +
     "parolanızı belirleyin.",
@@ -35,6 +49,9 @@ export const OTURUM_HATA_METINLERI = {
   guvenlik_dosyasi_kayip:
     "Güvenlik dosyası (guvenlik.json) bulunamadı ya da okunamıyor. Kayıtlar açılamaz.",
   parola_gerekli: "Önce program yöneticisi hesabını kurun.",
+  // Rol reddi (403; `shared/exceptions.ROL_YETKISIZ_MESAJI` ile birebir; sözlük §1 "Program
+  // yöneticisi ve roller"). Olayı `lib/api` yayınlar; metni çağıran ekran yazar.
+  rol_yetkisiz: "Bu işlem hesabınızın rolüne açık değil.",
 } as const;
 
 export type OturumHataKodu = keyof typeof OTURUM_HATA_METINLERI;
@@ -70,6 +87,17 @@ export function oturumHatasi(err: unknown, varsayilan: string): OturumHatasi {
 /** Kısayol: yalnız metin. */
 export function oturumHataMetni(err: unknown, varsayilan: string): string {
   return oturumHatasi(err, varsayilan).metin;
+}
+
+/**
+ * Kayıt reddi mi? Hesap kaydı, parola kaydı ya da denetim izi program dışından değiştirilmiş
+ * görünüyor (`hesap_muhru_tutmadi`) ya da hesap kaydı bu bilgisayarın güvenlik dosyasıyla
+ * uyuşmuyor (`iki_depo_tutarsiz`). Kilit ekranında (yalnız program yöneticisi hesabında) ve
+ * kurtarma yolunda (yalnız program yöneticisinindir) bu retten sonra zarfın üçüncü durumunun yol
+ * metni iletinin altında durur (kullanıcı kararı 04.11.2026).
+ */
+export function kayitReddiMi(kod: OturumHataKodu | null): boolean {
+  return kod === "hesap_muhru_tutmadi" || kod === "iki_depo_tutarsiz";
 }
 
 /**

@@ -4,16 +4,23 @@
 // impersonation yoktur. Kalan: temel `fetch` sarmalayıcı, `ApiError`, backend
 // `{code, message, fields}` hata sözleşmesi ve snake_case gövde. Blob
 // yardımcıları (`getBlob`/`postBlob`) dosya indirmeleri (Excel şablonları,
-// şifreli yedek, kurulum dosyası, evrak/PDF) için korunur.
+// şifreli yedek, kurulum dosyası, evrak/PDF) için korunur; `postDosya` dosyayla birlikte
+// sunucunun `Content-Disposition`'daki adını da verir (adı sunucu kuran evrak, ör. hesap teslim
+// pusulası; `lib/download.basliktanDosyaAdi`).
 // Oturum (tasarım §4.4.3, TK14): kullanıcı etkileşiminden hemen sonra giden isteklere
 // `X-OD-Etkinlik: 1` eklenir (oturumun boşta kilit sayacı); yoklamalar eklemez. Kilit
 // kapısı: 423 `locked`/`guvenlik_dosyasi_kayip` `lib/kilit.ts`'e verilir — ön yüz
 // oturumu açık sanıyorsa pencere yeniden yüklenir (tasarım §13 D53), sanmıyorsa güvenlik
 // kapısı durumu yeniden okur. Aile iskeletinin 403 `kip_yetkisiz` dalı görevli kipiyle
-// kalktı; 403 `rol_yetkisiz` (rol matrisi) F1b 2. adımda gelir.
+// kalktı. Rol reddi (plan F1b-2 "Ön yüz"): `od:rol-yetkisiz` olayı YALNIZ 403 `rol_yetkisiz`'de
+// yayınlanır; kilit açmanın 403 `hesap_askida`'sında ve oturum belirteci kapısının 403'ünde
+// (`forbidden`, masaüstü `session_guard`) yayınlanmaz. Hatayı (sunucunun iletisi "Bu işlem
+// hesabınızın rolüne açık değil.") çağıran ekran gösterir; olay yalnız oturum özetinin
+// (yeteneklerin) yeniden okunmasını tetikler (`modules/oturum/yetki.YetkiSaglayici`).
 
 // Boş/tanımsız → göreli "/api/v1": geliştirmede Vite proxy'si (vite.config.ts
 // server.proxy) backend'e yönlendirir. Mutlak URL yalnız özel senaryoda gerekir.
+import { basliktanDosyaAdi } from "./download";
 import { kilitKapisiYaniti } from "./kilit";
 import { yenidenBaslatGerekliYayinla } from "./restart";
 
@@ -24,6 +31,11 @@ export const BEKLENMEYEN_HATA_ILETISI = "Beklenmeyen bir hata oluştu.";
 
 /** Backend "yeniden başlat" kapısındayken (geri yükleme sonrası) dönen kod. */
 const RESTART_CODE = "restart_required";
+
+/** Rol reddinin kodu (backend `shared/exceptions.ROL_YETKISIZ_KODU`; 403). */
+export const ROL_YETKISIZ_KODU = "rol_yetkisiz";
+/** 403 `rol_yetkisiz` görülünce yayınlanan olay (dosya başı notu). */
+export const ROL_YETKISIZ_OLAYI = "od:rol-yetkisiz";
 
 // --- Kullanıcı etkinliği (tasarım §4.4.3) ------------------------------------
 // Oturumun boşta kilit süresi SUNUCUDA dolar ve yalnız kullanıcı eylemi
@@ -92,6 +104,11 @@ function hataOlayiYayinla(status: number, code: string): void {
   // Kilit kapısı: oturum arayüzün haberi olmadan kilitlendi (boşta süre doldu) ya da
   // güvenlik dosyası kayboldu. Yeniden yükleme ve döngü koruması `lib/kilit.ts`'tedir.
   if (status === 423) kilitKapisiYaniti(code);
+  // Rol reddi: yalnız 403 `rol_yetkisiz` (dosya başı notu). Aynı durumun öteki 403'leri
+  // (`hesap_askida`, belirteç kapısı) ve başka durumdaki aynı kod olay doğurmaz.
+  if (status === 403 && code === ROL_YETKISIZ_KODU) {
+    window.dispatchEvent(new CustomEvent(ROL_YETKISIZ_OLAYI));
+  }
 }
 
 export class ApiError extends Error {
@@ -145,8 +162,31 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return data as T;
 }
 
+/**
+ * İndirilen dosya ve sunucunun verdiği adı (`Content-Disposition`; `lib/download.basliktanDosyaAdi`).
+ * Başlık yoksa ya da okunamıyorsa `ad` null'dır: çağıran yedek adı kendisi kurar.
+ */
+export interface IndirilenDosya {
+  blob: Blob;
+  ad: string | null;
+}
+
 /** İkili (dosya) indirme — şablon, yedek, kurulum dosyası ve evrak/PDF için. */
 async function requestBlob(path: string, options: RequestOptions = {}): Promise<Blob> {
+  return (await blobYaniti(path, options)).blob();
+}
+
+/** Dosya indirme + sunucunun dosya adı (evrak/PDF; adı sunucu kurar). */
+async function requestDosya(path: string, options: RequestOptions = {}): Promise<IndirilenDosya> {
+  const resp = await blobYaniti(path, options);
+  return {
+    blob: await resp.blob(),
+    ad: basliktanDosyaAdi(resp.headers?.get("Content-Disposition")),
+  };
+}
+
+/** Dosya yanıtının ortak yolu: hatalı yanıt `ApiError`'a çevrilir, başarılı yanıt döner. */
+async function blobYaniti(path: string, options: RequestOptions): Promise<Response> {
   const { method = "GET", body, etkinlik } = options;
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -176,7 +216,7 @@ async function requestBlob(path: string, options: RequestOptions = {}): Promise<
     hataOlayiYayinla(resp.status, code);
     throw new ApiError(resp.status, code, message, fields);
   }
-  return resp.blob();
+  return resp;
 }
 
 export const api = {
@@ -196,6 +236,9 @@ export const api = {
   /** JSON body ile POST + dosya yanıtı. */
   postBlob: (path: string, body?: unknown, secenekler?: IstekSecenekleri) =>
     requestBlob(path, { ...secenekler, method: "POST", body }),
+  /** JSON body ile POST + dosya yanıtı ve sunucunun dosya adı (`IndirilenDosya`). */
+  postDosya: (path: string, body?: unknown, secenekler?: IstekSecenekleri) =>
+    requestDosya(path, { ...secenekler, method: "POST", body }),
 };
 
 export { API_BASE };

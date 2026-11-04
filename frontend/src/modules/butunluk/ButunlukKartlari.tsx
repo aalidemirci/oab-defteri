@@ -11,17 +11,26 @@
 //   düştü…) varsa "bir bölümünü denetleyemedi" der: değişiklik iddia etmez, ama "değişiklik
 //   değildir" de demez (denetlenemeyen bölümde bilinmez). Bulgu denetim izinde kalır, kart bir
 //   sonraki girişte kalkar.
-// * **Değiştirilmiş Hesap Kaydı** — girişte hesap mührü tutmadı: giriş açılmadı, kayda
-//   dokunulmadı (tehdit 19). Hesap rol etiketi ve tanıtıcıyla anılır; rol, kaydın BUGÜN
-//   söylediğidir (değiştirilmiş olabilir).
+// * **Değiştirilmiş Hesap Kaydı** — girişte ya da bir hesap işleminde hesabın kaydı tutmadı:
+//   işlem yapılmadı, kayda dokunulmadı (tehdit 19). Bulgular türüne göre üç grupta yazılır
+//   (`metinler.hesapBulgusuTuru`): kaydı değiştirilmiş görünen hesap (mühür ya da satırın izi),
+//   denetim izindeki boşluk, parola kaydı hesap kaydıyla uyuşmayan hesap. Hesap rol etiketi,
+//   tanıtıcı ve günleriyle anılır; mühür bulgusunda rol kaydın BUGÜN söylediğidir
+//   (değiştirilmiş olabilir; "kayıtta yazan rol"), ötekilerde kaydın mührü tutar.
 // * **Yedekten Geri Yükleme Yapıldı** — son geri yükleme: yedeğin adı (programın ürettiği
 //   yedekse), yedeği açan yol (hesap ya da kurtarma anahtarı no'su), uygulama içinden
 //   yapıldıysa onu başlatan oturumun hesabı (kurtarma yolunda da; konsolda oturum yok),
 //   kenara alınan önceki veritabanı ve onun son kaydı ("Kayıt no · Zincir"). Aralarında giriş
 //   yapılmadan birden çok geri yükleme olduysa hepsi sırasıyla yazılır: yedekten sonraki
 //   kayıtlar İLKİNİN kenara aldığı veritabanındadır. O veritabanı yoktuysa ya da izi boştuysa
-//   (yeni bilgisayara taşıma) kart "kayıtlar ekrandan kalktı" demez. Kart Denetleme Kurulu
-//   "gördüm" diyene dek kalır; o düğme F1b 2. adımda gelir — bugün kart hep durur.
+//   (yeni bilgisayara taşıma) kart "kayıtlar ekrandan kalktı" demez. Kart Denetleme Kurulunun
+//   bir üyesi "Gördüm" diyene dek kalır (plan F1b-2 "Gördüm."; kullanıcı kararı 02.11.2026: bir
+//   üye yeter, kart herkes için kalkar, kimin gördüğü izde kalır). Düğme yalnız
+//   `geri_yukleme_gordum` yeteneğinde çizilir (`GordumDugmesi`; `POST security/integrity/
+//   restore-seen/` `{seq}`); yanıt güncel denetim kartlarıdır. Kartın gösterdiği geri yükleme
+//   artık son geri yükleme değilse (409 `geri_yukleme_guncel_degil`) kartlar yeniden okunur ve
+//   sunucunun iletisi düğmenin altında kalır. Açık Denetleme Kurulu hesabı yoksa kart program
+//   yöneticisinde kalır; metni bunu söyler.
 // * **Hesaplar ve Güvenlik Dosyası** — iki depo farkı ve mührü tutmayan hesaplar
 //   (`IkiDepoKarti`; onaylı silme orada).
 // * **Bütünlük Durumu Okunamadı** — kartlardan biri ya da hepsi okunamadı (`okunamayan`,
@@ -33,10 +42,19 @@
 // uçlar çağrılmaz, kartları boş kalır (`butunluk/api.ts` "ROLE GÖRE ÜÇ UÇ"). "Bütünlük Durumu
 // Okunamadı" her rolde kalır.
 
+import { useState } from "react";
+
+import { ApiError } from "../../lib/api";
 import { formatDateTime } from "../../lib/format";
+import Button from "../../ui/Button";
+import ErrorBand from "../../ui/ErrorBand";
+import { useSnackbar } from "../../ui/SnackbarProvider";
+import { oturumHataMetni } from "../oturum/hatalar";
+import { butunlukApi } from "./api";
 import type {
   ButunlukBulgusu,
   ButunlukDurumu,
+  DenetimKartlari,
   GeriYuklemeKaydi,
   GeriYuklemeOzeti,
   HesapOzeti,
@@ -52,12 +70,26 @@ import {
   DENETIM_DENETLENEMEDI_CUMLESI,
   DENETIM_DENETLENEMEDI_DIP_CUMLESI,
   DENETIM_IZI_KARTI_BASLIGI,
+  DENETLEME_KURULUNA_BILDIRIN,
+  GERI_YUKLEME_BILDIRIN,
   GERI_YUKLEME_KARTI_BASLIGI,
+  GORDUM_ACIKLAMASI,
+  GORDUM_DUGMESI,
+  GORDUM_KART_KALKTI,
+  GORDUM_KAYDEDILEMEDI,
+  GORDUM_KAYDEDILIYOR,
+  IZ_BOSLUGU_GIRISI,
+  KAYIT_DEGISMIS_GIRISI,
   OKUNAMAYAN_BUTUNLUK_KARTI_BASLIGI,
   OKUNAMAYAN_BUTUNLUK_METNI,
+  PAROLA_KAYDI_ACIKLAMASI,
+  PAROLA_KAYDI_GIRISI,
+  ROL_DEGISMIS_OLABILIR,
   bulguMetinleri,
   degisiklikGosterir,
-  hesapEtiketi,
+  hesapBulgusuTuru,
+  hesapEtiketiGunlu,
+  hesapGunleri,
   kagitCapasiSatiri,
 } from "./metinler";
 
@@ -124,16 +156,60 @@ export function DenetimIziKarti({ bulgular }: { bulgular: readonly ButunlukBulgu
   );
 }
 
-/** Mührü tutmayan hesabın kişisiz anılışı: tanıtıcı + kaydın bugün söylediği rol. */
-function degistirilmisHesap(hesap: HesapOzeti | null): string {
-  if (hesap === null || hesap.tanitici === null) return "Kaydı okunamayan bir hesap";
-  const rol = hesap.rol_etiketi === null ? "" : ` (kayıtta yazan rol: ${hesap.rol_etiketi})`;
-  return `Tanıtıcısı “${hesap.tanitici}” olan hesap${rol}`;
+const KAYIT_OKUNAMAYAN_HESAP = "Kaydı okunamayan bir hesap";
+
+/**
+ * Mührü tutmayan hesabın kişisiz anılışı: tanıtıcı + kaydın bugün söylediği rol (değiştirilmiş
+ * olabilir) ve günleri: "Tanıtıcısı “muhasip” olan hesap (kayıtta yazan rol: Sekreter; açılış
+ * 01.11.2026)".
+ */
+export function degistirilmisHesap(hesap: HesapOzeti | null): string {
+  if (hesap === null || hesap.tanitici === null) return KAYIT_OKUNAMAYAN_HESAP;
+  const ekler = [
+    hesap.rol_etiketi === null ? null : `kayıtta yazan rol: ${hesap.rol_etiketi}`,
+    hesapGunleri(hesap),
+  ].filter((ek): ek is string => ek !== null);
+  const ek = ekler.length === 0 ? "" : ` (${ekler.join("; ")})`;
+  return `Tanıtıcısı “${hesap.tanitici}” olan hesap${ek}`;
 }
 
+/** Mührü tutan hesabın anılışı (satırın izi, iz boşluğu, parola kaydı): kayıttaki rol doğrudur. */
+function muhurluHesap(hesap: HesapOzeti | null): string {
+  if (hesap === null || hesap.tanitici === null) return KAYIT_OKUNAMAYAN_HESAP;
+  return hesapEtiketiGunlu(hesap);
+}
+
+function BulguListesi({
+  bulgular,
+  ad,
+}: {
+  bulgular: readonly ButunlukBulgusu[];
+  ad: (b: ButunlukBulgusu) => string;
+}) {
+  return (
+    <ul className="list-disc space-y-0.5 pl-5 text-body-medium text-on-surface">
+      {bulgular.map((b) => (
+        <li key={b.seq}>
+          {ad(b)} · {formatDateTime(b.zaman)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Değiştirilmiş Hesap Kaydı (sözlük §4.5): hesap bulguları türüne göre üç grupta yazılır —
+ * kaydı değiştirilmiş görünen hesap (mühür ya da satırın izi), denetim izindeki boşluk, parola
+ * kaydı (`metinler.hesapBulgusuTuru`). Metin nötrdür: olay giriş de olabilir hesap işlemi de.
+ */
 export function DegistirilmisHesapKarti({ bulgular }: { bulgular: readonly ButunlukBulgusu[] }) {
-  const muhurler = bulgular.filter((b) => b.tur === "muhur");
-  if (muhurler.length === 0) return null;
+  const hesapBulgulari = bulgular.filter((b) => b.tur === "muhur");
+  if (hesapBulgulari.length === 0) return null;
+  const turu = (b: ButunlukBulgusu) => hesapBulgusuTuru(b.bulgular);
+  const kayit = hesapBulgulari.filter((b) => turu(b) === "muhur" || turu(b) === "kayit");
+  const bosluk = hesapBulgulari.filter((b) => turu(b) === "bosluk");
+  const parolaKaydi = hesapBulgulari.filter((b) => turu(b) === "parola_kaydi");
+  const muhurVar = kayit.some((b) => turu(b) === "muhur");
 
   return (
     <KartKabugu
@@ -142,20 +218,33 @@ export function DegistirilmisHesapKarti({ bulgular }: { bulgular: readonly Butun
       ikon="manage_accounts"
       ton="hata"
     >
-      <p className="text-body-medium text-on-surface">
-        Kaydı program dışından değiştirilmiş görünen hesapla giriş denendi; giriş açılmadı ve
-        program kayda dokunmadı:
-      </p>
-      <ul className="list-disc space-y-0.5 pl-5 text-body-medium text-on-surface">
-        {muhurler.map((b) => (
-          <li key={b.seq}>
-            {degistirilmisHesap(b.hesap)} · {formatDateTime(b.zaman)}
-          </li>
-        ))}
-      </ul>
+      {kayit.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-body-medium text-on-surface">{KAYIT_DEGISMIS_GIRISI}</p>
+          <BulguListesi
+            bulgular={kayit}
+            ad={(b) => (turu(b) === "muhur" ? degistirilmisHesap(b.hesap) : muhurluHesap(b.hesap))}
+          />
+          {muhurVar && (
+            <p className="text-body-small text-on-surface-variant">{ROL_DEGISMIS_OLABILIR}</p>
+          )}
+        </div>
+      )}
+      {bosluk.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-body-medium text-on-surface">{IZ_BOSLUGU_GIRISI}</p>
+          <BulguListesi bulgular={bosluk} ad={(b) => muhurluHesap(b.hesap)} />
+        </div>
+      )}
+      {parolaKaydi.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-body-medium text-on-surface">{PAROLA_KAYDI_GIRISI}</p>
+          <BulguListesi bulgular={parolaKaydi} ad={(b) => muhurluHesap(b.hesap)} />
+          <p className="text-body-small text-on-surface-variant">{PAROLA_KAYDI_ACIKLAMASI}</p>
+        </div>
+      )}
       <p className="text-body-small text-on-surface-variant">
-        Kayıtta yazan rol, değiştirilmiş rol olabilir. Durumu Denetleme Kuruluna bildirin.{" "}
-        {KART_KALKAR_METNI}
+        {DENETLEME_KURULUNA_BILDIRIN} {KART_KALKAR_METNI}
       </p>
     </KartKabugu>
   );
@@ -171,7 +260,7 @@ function yedegiAcan(geri: GeriYuklemeKaydi): string {
   if (geri.yol === "hesap") {
     return geri.yol_hesap === null
       ? "Bir hesabın parolası"
-      : `${hesapEtiketi(geri.yol_hesap)} hesabının parolası`;
+      : `${hesapEtiketiGunlu(geri.yol_hesap)} hesabının parolası`;
   }
   return "Okunamadı";
 }
@@ -224,7 +313,9 @@ function GeriYuklemeAyrintisi({ geri }: { geri: GeriYuklemeKaydi }) {
               {geri.oturum_hesap !== null && (
                 <>
                   <dt className="text-label-large text-on-surface-variant">Başlatan oturum</dt>
-                  <dd className="min-w-0 text-on-surface">{hesapEtiketi(geri.oturum_hesap)}</dd>
+                  <dd className="min-w-0 text-on-surface">
+                    {hesapEtiketiGunlu(geri.oturum_hesap)}
+                  </dd>
                 </>
               )}
               {geri.onceki_dosya !== null && (
@@ -265,7 +356,64 @@ export function geriYuklemeDipCumlesi(kayitlar: readonly GeriYuklemeKaydi[]): st
         "veritabanında durur.";
 }
 
-export function GeriYuklemeKarti({ geri }: { geri: GeriYuklemeOzeti | null }) {
+/** "Gördüm"ün işi (yalnız `geri_yukleme_gordum` yeteneğinde verilir). */
+export interface GordumIslemi {
+  /** Başarılı "Gördüm"den dönen güncel denetim kartları (`useButunlukDurumu.denetimiYaz`). */
+  onDenetim: (yanit: DenetimKartlari) => void;
+  /** Kartlar yeniden okunur (409 `geri_yukleme_guncel_degil`; `useButunlukDurumu.yenile`). */
+  onYenile: () => void;
+}
+
+/** Kartın gösterdiği geri yükleme artık son geri yükleme değil (backend `RestoreCardStale`). */
+const GUNCEL_DEGIL_KODU = "geri_yukleme_guncel_degil";
+
+/**
+ * Denetleme Kurulunun "Gördüm"ü (dosya başı): kartın gösterdiği (son) geri yüklemenin `seq`'i
+ * gider. Başarıda yanıttaki güncel kartlar yazılır; kart kalktıysa snackbar söyler (düğme
+ * kaybolur, odak düşer). Ret düğmenin altında sunucunun iletisiyle kalır; 409
+ * `geri_yukleme_guncel_degil`de kartlar ayrıca yeniden okunur.
+ */
+function GordumDugmesi({ seq, islem }: { seq: number; islem: GordumIslemi }) {
+  const snackbar = useSnackbar();
+  const [mesgul, setMesgul] = useState(false);
+  const [hata, setHata] = useState<string | null>(null);
+
+  const gordum = async () => {
+    setMesgul(true);
+    setHata(null);
+    try {
+      const yanit = await butunlukApi.geriYuklemeyiGordum(seq);
+      if (yanit.geri_yukleme === null || yanit.geri_yukleme === undefined) {
+        snackbar.success(GORDUM_KART_KALKTI);
+      }
+      islem.onDenetim(yanit);
+    } catch (e) {
+      setHata(oturumHataMetni(e, GORDUM_KAYDEDILEMEDI));
+      if (e instanceof ApiError && e.code === GUNCEL_DEGIL_KODU) islem.onYenile();
+    } finally {
+      setMesgul(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <Button variant="filled" icon="task_alt" onClick={() => void gordum()} disabled={mesgul}>
+          {mesgul ? GORDUM_KAYDEDILIYOR : GORDUM_DUGMESI}
+        </Button>
+      </div>
+      {hata && <ErrorBand hata={hata} />}
+    </div>
+  );
+}
+
+interface GeriYuklemeKartiProps {
+  geri: GeriYuklemeOzeti | null;
+  /** "Gördüm" (yalnız `geri_yukleme_gordum` yeteneğinde); verilmezse düğme yoktur. */
+  gordum?: GordumIslemi | null;
+}
+
+export function GeriYuklemeKarti({ geri, gordum = null }: GeriYuklemeKartiProps) {
   if (geri === null) return null;
   // Eskiden yeniye; sonuncusu zamanca son geri yüklemedir.
   const kayitlar: GeriYuklemeKaydi[] = [...geri.onceki_geri_yuklemeler, geri];
@@ -306,9 +454,10 @@ export function GeriYuklemeKarti({ geri }: { geri: GeriYuklemeOzeti | null }) {
         <GeriYuklemeAyrintisi geri={geri} />
       )}
       <p className="text-body-small text-on-surface-variant">
-        {geriYuklemeDipCumlesi(kayitlar)} Geri yüklemeyi kimin ve neden yaptığını Denetleme Kuruluna
-        bildirin. Kart, son geri yüklemeyi göstermeyi sürdürür.
+        {geriYuklemeDipCumlesi(kayitlar)}{" "}
+        {gordum === null ? GERI_YUKLEME_BILDIRIN : GORDUM_ACIKLAMASI}
       </p>
+      {gordum !== null && <GordumDugmesi seq={geri.seq} islem={gordum} />}
     </KartKabugu>
   );
 }
@@ -335,18 +484,31 @@ interface ButunlukKartlariProps {
   durum: ButunlukDurumu;
   /** Sahipsiz parola kaydı silinince gelen güncel iki depo kartı. */
   onIkiDepo: (yanit: IkiDepoYaniti) => void;
+  /** Geri yükleme kartının "Gördüm"ü (yalnız `geri_yukleme_gordum` yeteneğinde). */
+  gordum?: GordumIslemi | null;
+  /** İki depo kartında Kullanıcılar'a bağlantı (yalnız `kullanicilar` yeteneğinde). */
+  kullanicilarAcik?: boolean;
 }
 
 /** Uyarı kartları, sırasıyla; söyleyecek bir şeyi olmayan çizilmez. */
-export default function ButunlukKartlari({ durum, onIkiDepo }: ButunlukKartlariProps) {
+export default function ButunlukKartlari({
+  durum,
+  onIkiDepo,
+  gordum = null,
+  kullanicilarAcik = false,
+}: ButunlukKartlariProps) {
   return (
     <>
       {durum.okunamayan.length > 0 && <OkunamayanButunlukKarti />}
       <DenetimIziKarti bulgular={durum.butunluk} />
       <DegistirilmisHesapKarti bulgular={durum.butunluk} />
-      <GeriYuklemeKarti geri={durum.geri_yukleme} />
+      <GeriYuklemeKarti geri={durum.geri_yukleme} gordum={gordum} />
       {durum.iki_depo !== null && durum.iki_depo.fark_var && (
-        <IkiDepoKarti fark={durum.iki_depo} onIkiDepo={onIkiDepo} />
+        <IkiDepoKarti
+          fark={durum.iki_depo}
+          onIkiDepo={onIkiDepo}
+          kullanicilarAcik={kullanicilarAcik}
+        />
       )}
     </>
   );

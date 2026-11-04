@@ -6,11 +6,15 @@
 // Parola (tekrar)) bağlıdır; odak her retten ve geri dönüşten sonra forma döner; 409
 // `parola_yenilenmeli`de aynı ekranda yeni parola istenir (gerekçe alana bağlı, ret
 // dalları dâhil); güç göstergesi yazılan yeni parolayı izler; "Parolamı unuttum" yalnız
-// SEÇİLİ hesap program yöneticisiyken; liste boşken kurtarma yolu doğrudan açılır.
+// SEÇİLİ hesap program yöneticisiyken; liste boşken kurtarma yolu doğrudan açılır; liste dolu
+// ama seçilebilir satır kalmayınca yol gösterir ve "Kurtarma anahtarıyla aç"ı sunar (plan F1b-2
+// "Kilit ekranı"; metin kullanıcı kararlarının: zarfın üçüncü durumu, çaresi, Denetleme Kurulu);
+// sunucunun ret iletileri (hesap kaydı, denetim izi, parola kaydı) olduğu gibi yazılır; gönderim
+// sürerken ve açılıştan sonra ikinci gönderim gitmez (aynı olay döngüsündeki iki gönderim de).
 // Başarılı açılış pencereyi yeniden yükler (tasarım §13 D53).
-// Oturum istemcisi vi.mock ile taklit edilir — ağ yok.
+// Oturum istemcisi vi.mock ile taklit edilir — ağ yok. Hesaplar ve parolalar uydurmadır.
 
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -28,9 +32,14 @@ import { pencereIcerigi } from "../../lib/kilit";
 import type { KilitEkraniHesabi } from "../oturum/api";
 import KilitEkrani, {
   ASKIDA_ETIKETI,
+  BOS_LISTE_METNI,
+  KURTARMA_ILE_AC_ETIKETI,
   OKUNAMADI_ETIKETI,
+  SECILEBILIR_HESAP_YOK_METNI,
   UNUTTUM_BASKA_ROL_METNI,
 } from "./KilitEkrani";
+import { KURTARILACAK_HESAP_YOK_METNI, UCUNCU_DURUM_YOL_METNI } from "./KurtarmaIleAcma";
+import { UCUNCU_DURUMUN_CARESI, ZARFIN_UCUNCU_DURUMU } from "./metinler";
 
 const YONETICI: KilitEkraniHesabi = {
   id: "aaaaaaaa-0000-4000-8000-000000000001",
@@ -73,10 +82,41 @@ const OKUNAMAYAN: KilitEkraniHesabi = {
   askida_nedeni: null,
 };
 
+const YONETICI_ASKIDA: KilitEkraniHesabi = {
+  ...YONETICI,
+  secilebilir: false,
+  askida_nedeni: "HATALI_DENEME",
+};
+const KURTARILACAK_YONETICI = {
+  id: YONETICI.id,
+  tanitici: "yonetici",
+  rol_etiketi: "Program yöneticisi",
+  sarmali_var: true,
+};
+
 const GECERLI_PAROLA = "Yeni-Parola-22";
+
+/** Backend'in kilit ekranı iletileri (`app_password`: `_SEAL_MISMATCH_MESSAGE`,
+ * `IZ_BOSLUGU_MESSAGE`, `UNBOUND_WRAP_MESSAGE` = `WRAP_DIGEST_MISMATCH_MESSAGE`; sözlük §1). */
+const KAYIT_REDDI =
+  "Hesap kaydı program dışından değiştirilmiş görünüyor; giriş açılmadı. Program " +
+  "yöneticisine ve Denetleme Kuruluna bildirin.";
+const IZ_BOSLUGU =
+  "Denetim izinden kayıt silinmiş ya da kayıtların sırası program dışından değiştirilmiş " +
+  "görünüyor; giriş açılmadı. Program yöneticisine ve Denetleme Kuruluna bildirin.";
+const PAROLA_KAYDI =
+  "Bu hesabın parola kaydı program dışından değiştirilmiş görünüyor; giriş açılmadı. " +
+  "Denetleme Kuruluna bildirin. Program yöneticisinin hesabıysa “Parolamı unuttum” yolundan " +
+  "kurtarma anahtarıyla açılır; öteki hesapların parolasını program yöneticisi sıfırlar.";
 
 function radyo(ad: RegExp | string) {
   return screen.getByRole("radio", { name: ad });
+}
+
+function formu(alan: HTMLElement): HTMLFormElement {
+  const form = alan.closest("form");
+  if (form === null) throw new Error("form bulunamadı");
+  return form;
 }
 
 async function hazir() {
@@ -118,6 +158,10 @@ describe("KilitEkrani — hesap listesi", () => {
     expect(radyo("Program yöneticisi (yonetici)")).not.toBeChecked();
     expect(radyo("Muhasip (muhasip)")).not.toBeChecked();
     await waitFor(() => expect(radyo("Program yöneticisi (yonetici)")).toHaveFocus());
+    // Seçilebilir satır varken yol gösterme yoktur; parola yolu yerindedir.
+    expect(screen.queryByRole("button", { name: KURTARMA_ILE_AC_ETIKETI })).toBeNull();
+    expect(screen.queryByText(SECILEBILIR_HESAP_YOK_METNI)).toBeNull();
+    expect(screen.getByRole("button", { name: "Aç" })).toBeInTheDocument();
   });
 
   it("hesap seçilmeden gönderilirse hesap grubunun altında sorar, istek atmaz", async () => {
@@ -269,7 +313,7 @@ describe("KilitEkrani — retler", () => {
     expect(oturum.ac).toHaveBeenCalledTimes(1);
   });
 
-  it("tek hesaplı listede askıdan sonra seçilebilir hesap kalmaz; ileti görünür", async () => {
+  it("tek hesaplı listede askıdan sonra seçilebilir hesap kalmaz; ileti ve yol gösterme görünür", async () => {
     const kullanici = userEvent.setup();
     oturum.hesaplar
       .mockResolvedValueOnce([MUHASIP])
@@ -285,6 +329,12 @@ describe("KilitEkrani — retler", () => {
     expect(radyo("Muhasip (muhasip)")).not.toBeChecked();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Hesap askıda — program yöneticisine başvurun.",
+    );
+    // Askı iletisi kalır; parola yolu yerine yol gösterme gelir, odak kurtarma düğmesindedir.
+    expect(screen.getByText(SECILEBILIR_HESAP_YOK_METNI)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Parola/)).toBeNull();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: KURTARMA_ILE_AC_ETIKETI })).toHaveFocus(),
     );
   });
 
@@ -328,6 +378,349 @@ describe("KilitEkrani — retler", () => {
     bitir({ durum: "acik" });
     await waitFor(() => expect(pencereIcerigi.yenidenYukle).toHaveBeenCalledTimes(1));
   });
+
+  it.each([
+    ["hesap kaydı", 409, "hesap_muhru_tutmadi", KAYIT_REDDI],
+    ["iz boşluğu", 409, "hesap_muhru_tutmadi", IZ_BOSLUGU],
+    ["özeti tutmayan parola kaydı", 409, "hesap_muhru_tutmadi", PAROLA_KAYDI],
+    ["bağsız parola kaydı", 409, "iki_depo_tutarsiz", PAROLA_KAYDI],
+  ])(
+    "program yöneticisinde sunucunun ret iletisi olduğu gibi yazılır (%s); altında zarfın üçüncü durumunun yol metni durur",
+    async (_ad, status, kod, ileti) => {
+      const kullanici = userEvent.setup();
+      oturum.ac.mockRejectedValue(new ApiError(status, kod, ileti));
+      render(<KilitEkrani />);
+      await hazir();
+
+      await kullanici.type(screen.getByLabelText(/^Parola/), "Deneme-Parola-1{Enter}");
+
+      expect((await screen.findByRole("alert")).textContent).toBe(ileti);
+      // Kullanıcı kararı 04.11.2026: satır seçilebilir göründüğü hâlde giriş reddedildi; çıkış
+      // (yedekten geri yükleme) iletinin altında yazılır. Seçilebilir satırlar kaldığı için
+      // yol gösterme kutusu ve "Kurtarma anahtarıyla aç" çıkmaz.
+      expect(screen.getByText(UCUNCU_DURUM_YOL_METNI)).toBeInTheDocument();
+      // Yol metni odağın döndüğü alana bağlıdır: ekran okuyucu çıkışı da okur.
+      await waitFor(() => expect(screen.getByLabelText(/^Parola/)).toHaveFocus());
+      expect(screen.getByLabelText(/^Parola/)).toHaveAccessibleDescription(
+        /zarfının üçüncü durumudur/,
+      );
+      expect(screen.queryByText(SECILEBILIR_HESAP_YOK_METNI)).toBeNull();
+      expect(screen.queryByRole("button", { name: KURTARMA_ILE_AC_ETIKETI })).toBeNull();
+      // Program yöneticisinin "Parolamı unuttum"u (iletinin andığı yol) yerindedir.
+      expect(screen.getByRole("button", { name: "Parolamı unuttum" })).toBeInTheDocument();
+      expect(oturum.ac).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    ["hatalı parola", 400, "parola_yanlis", "Parola hatalı."],
+    ["ağ", 0, "network_error", "Sunucuya ulaşılamadı."],
+    ["beklenmeyen", 500, "server_error", "Beklenmeyen bir hata oluştu."],
+  ])("kayıt reddi olmayan retten (%s) sonra yol metni çıkmaz", async (_ad, status, kod, ileti) => {
+    const kullanici = userEvent.setup();
+    oturum.ac.mockRejectedValue(new ApiError(status, kod, ileti));
+    render(<KilitEkrani />);
+    await hazir();
+
+    await kullanici.type(screen.getByLabelText(/^Parola/), "Deneme-Parola-1{Enter}");
+
+    await screen.findByRole("alert");
+    expect(screen.queryByText(UCUNCU_DURUM_YOL_METNI)).toBeNull();
+    expect(screen.getByLabelText(/^Parola/)).not.toHaveAccessibleDescription(/üçüncü durumudur/);
+  });
+
+  it.each([
+    ["özeti tutmayan parola kaydı", 409, "hesap_muhru_tutmadi", PAROLA_KAYDI],
+    ["bağsız parola kaydı", 409, "iki_depo_tutarsiz", PAROLA_KAYDI],
+    ["hesap kaydı", 409, "hesap_muhru_tutmadi", KAYIT_REDDI],
+    ["iz boşluğu", 409, "hesap_muhru_tutmadi", IZ_BOSLUGU],
+  ])(
+    "öteki hesapta kayıt reddinde (%s) yol metni çıkmaz: sunucunun iletisi çareyi kendisi söyler",
+    async (_ad, status, kod, ileti) => {
+      const kullanici = userEvent.setup();
+      oturum.hesaplar.mockResolvedValue([YONETICI, MUHASIP]);
+      oturum.ac.mockRejectedValue(new ApiError(status, kod, ileti));
+      render(<KilitEkrani />);
+      await hazir();
+
+      await kullanici.click(radyo("Muhasip (muhasip)"));
+      await kullanici.type(screen.getByLabelText(/^Parola/), "Deneme-Parola-1{Enter}");
+
+      expect((await screen.findByRole("alert")).textContent).toBe(ileti);
+      // Kullanıcı kararı program yöneticisinin hesabı içindir; muhasibin parola kaydında çare
+      // program yöneticisinin sıfırlamasıdır, ekranda ikinci (ağır) bir çare önerilmez.
+      expect(screen.queryByText(UCUNCU_DURUM_YOL_METNI)).toBeNull();
+      expect(screen.getByText(UNUTTUM_BASKA_ROL_METNI)).toBeInTheDocument();
+    },
+  );
+
+  it("kayıt reddinin yol metni sonraki denemede kalkar", async () => {
+    const kullanici = userEvent.setup();
+    oturum.ac
+      .mockRejectedValueOnce(new ApiError(409, "hesap_muhru_tutmadi", KAYIT_REDDI))
+      .mockRejectedValueOnce(new ApiError(400, "parola_yanlis", "Parola hatalı."));
+    render(<KilitEkrani />);
+    await hazir();
+
+    await kullanici.type(screen.getByLabelText(/^Parola/), "Deneme-Parola-1{Enter}");
+    expect(await screen.findByText(UCUNCU_DURUM_YOL_METNI)).toBeInTheDocument();
+
+    await kullanici.type(screen.getByLabelText(/^Parola/), "Deneme-Parola-2{Enter}");
+    expect(await screen.findByText("Parola hatalı.")).toBeInTheDocument();
+    expect(screen.queryByText(UCUNCU_DURUM_YOL_METNI)).toBeNull();
+    expect(screen.queryByText(KAYIT_REDDI)).toBeNull();
+  });
+});
+
+describe("KilitEkrani — çift gönderim", () => {
+  it("aynı anda gelen iki gönderimden yalnız biri gider", async () => {
+    oturum.ac.mockReturnValue(new Promise(() => undefined));
+    render(<KilitEkrani />);
+    await hazir();
+    const alan = screen.getByLabelText(/^Parola/);
+    fireEvent.change(alan, { target: { value: "Deneme-Parola-1" } });
+
+    // İki gönderim yeniden çizimden önce: `calisiyor` ikisinde de henüz false'tur.
+    act(() => {
+      formu(alan).requestSubmit();
+      formu(alan).requestSubmit();
+    });
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Denetleniyor…");
+    expect(oturum.ac).toHaveBeenCalledTimes(1);
+  });
+
+  it("satırda yinelenen Enter (requestSubmit yolu) ikinci gönderim yapmaz", async () => {
+    const kullanici = userEvent.setup();
+    oturum.hesaplar.mockResolvedValue([YONETICI, MUHASIP]);
+    oturum.ac.mockReturnValue(new Promise(() => undefined));
+    render(<KilitEkrani />);
+    await hazir();
+    await kullanici.click(radyo("Muhasip (muhasip)"));
+    await kullanici.type(screen.getByLabelText(/^Parola/), "Muhasip-Parola-1");
+    const satir = radyo("Muhasip (muhasip)");
+
+    act(() => {
+      fireEvent.keyDown(satir, { key: "Enter" });
+      fireEvent.keyDown(satir, { key: "Enter" });
+    });
+
+    await screen.findByRole("status");
+    expect(oturum.ac).toHaveBeenCalledTimes(1);
+    expect(oturum.ac).toHaveBeenCalledWith({ hesap: MUHASIP.id, parola: "Muhasip-Parola-1" });
+  });
+
+  it("açılıştan sonra (pencere yüklenirken) ikinci açılış gitmez", async () => {
+    const kullanici = userEvent.setup();
+    oturum.ac.mockResolvedValue({ durum: "acik" });
+    render(<KilitEkrani />);
+    await hazir();
+    await kullanici.type(screen.getByLabelText(/^Parola/), "Deneme-Parola-1{Enter}");
+    await waitFor(() => expect(pencereIcerigi.yenidenYukle).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      formu(screen.getByLabelText(/^Parola/)).requestSubmit();
+    });
+
+    expect(oturum.ac).toHaveBeenCalledTimes(1);
+    expect(pencereIcerigi.yenidenYukle).toHaveBeenCalledTimes(1);
+  });
+
+  it("ret geldikten sonra yeniden gönderilebilir", async () => {
+    const kullanici = userEvent.setup();
+    oturum.ac
+      .mockRejectedValueOnce(new ApiError(400, "parola_yanlis", "Parola hatalı."))
+      .mockResolvedValueOnce({ durum: "acik" });
+    render(<KilitEkrani />);
+    await hazir();
+
+    await kullanici.type(screen.getByLabelText(/^Parola/), "yanlis{Enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Parola hatalı.");
+    await kullanici.type(screen.getByLabelText(/^Parola/), "Deneme-Parola-1{Enter}");
+
+    await waitFor(() => expect(pencereIcerigi.yenidenYukle).toHaveBeenCalledTimes(1));
+    expect(oturum.ac).toHaveBeenCalledTimes(2);
+  });
+
+  it("kurtarma yolunda da aynı anda gelen iki gönderimden yalnız biri gider", async () => {
+    const kullanici = userEvent.setup();
+    oturum.kurtar.mockReturnValue(new Promise(() => undefined));
+    render(<KilitEkrani />);
+    await hazir();
+    await kullanici.click(screen.getByRole("button", { name: "Parolamı unuttum" }));
+    await kullanici.type(screen.getByLabelText(/^Kurtarma anahtarı/), "AAAA-BBBB");
+    await kullanici.type(screen.getByLabelText(/^Yeni parola/), GECERLI_PAROLA);
+    await kullanici.type(screen.getByLabelText(/^Parola \(tekrar\)/), GECERLI_PAROLA);
+    const form = screen.getByRole("form", { name: "Kurtarma yolu" });
+
+    act(() => {
+      (form as HTMLFormElement).requestSubmit();
+      (form as HTMLFormElement).requestSubmit();
+    });
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Denetleniyor…");
+    expect(oturum.kurtar).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("KilitEkrani — seçilebilir satır kalmayınca yol gösterme", () => {
+  it("liste dolu ama hiçbir satır seçilemiyorsa yol gösterir; parola yolu kalkar, odak kurtarma düğmesindedir", async () => {
+    oturum.hesaplar.mockResolvedValue([YONETICI_ASKIDA, DK_UYELIK, OKUNAMAYAN]);
+    render(<KilitEkrani />);
+    await hazir();
+
+    // Satırlar nedenleriyle yerinde kalır.
+    expect(radyo("Program yöneticisi (yonetici)")).toBeDisabled();
+    expect(radyo("Program yöneticisi (yonetici)")).toHaveAccessibleDescription(ASKIDA_ETIKETI);
+    expect(radyo(`${OKUNAMADI_ETIKETI} (sekreter)`)).toBeDisabled();
+    // Yol gösterme: kim ne yapar ve zarfın üçüncü durumu.
+    expect(screen.getByText(SECILEBILIR_HESAP_YOK_METNI)).toBeInTheDocument();
+    expect(screen.getByText(UCUNCU_DURUM_YOL_METNI)).toBeInTheDocument();
+    // Gönderilecek bir şey yok: Parola alanı, "Aç" ve "Parolamı unuttum" çizilmez.
+    expect(screen.queryByLabelText(/^Parola/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Aç" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Parolamı unuttum" })).toBeNull();
+    // Düğme yol gösterme metnine bağlıdır: ekran okuyucu nedenini de okur.
+    const dugme = screen.getByRole("button", { name: KURTARMA_ILE_AC_ETIKETI });
+    expect(dugme).toHaveAccessibleDescription(
+      /seçilebilecek hesap kalmadı.*Denetleme Kuruluna bildirin/,
+    );
+    await waitFor(() => expect(dugme).toHaveFocus());
+    // Uyarı değil bilgidir: tek uyarı yoktur (askı iletisi gibi uyarılarla karışmaz).
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("yol gösterme kullanıcı kararlarının sözlerini taşır", () => {
+    // Zarfın üçüncü durumu (02.11.2026) ve çaresi (03.11.2026) belgeyle ve panelle birebir.
+    expect(UCUNCU_DURUM_YOL_METNI).toContain(ZARFIN_UCUNCU_DURUMU);
+    expect(UCUNCU_DURUM_YOL_METNI).toContain(UCUNCU_DURUMUN_CARESI);
+    expect(UCUNCU_DURUM_YOL_METNI).toContain("kurtarma anahtarı zarfının üçüncü durumudur");
+    expect(UCUNCU_DURUM_YOL_METNI).toContain("Denetleme Kuruluna bildirin");
+    // Kilitliyken geri yüklemenin yolu kısayol ve komuttur (sözlük §1 "Yedek").
+    expect(UCUNCU_DURUM_YOL_METNI).toContain(
+      "Başlat menüsündeki “OAB Defteri — Yedekten Geri Yükle” kısayolunu",
+    );
+    expect(UCUNCU_DURUM_YOL_METNI).toContain("oab-defteri --geri-yukle");
+    // Program yöneticisi için "Parolamı unuttum", öteki hesaplar için program yöneticisi.
+    expect(SECILEBILIR_HESAP_YOK_METNI).toContain("(“Parolamı unuttum” yolu)");
+    expect(SECILEBILIR_HESAP_YOK_METNI).toContain(`“${KURTARMA_ILE_AC_ETIKETI}” düğmesiyle`);
+    expect(SECILEBILIR_HESAP_YOK_METNI).toContain(
+      "Öteki hesaplar program yöneticisine başvurur: askıyı o kaldırır, parolayı o sıfırlar.",
+    );
+    // Boş liste de Denetleme Kurulunu anar (geri yükleme yoksa dosya değiştirilmiştir).
+    expect(BOS_LISTE_METNI).toContain("Denetleme Kuruluna bildirin");
+    expect(KURTARILACAK_HESAP_YOK_METNI).toContain("Denetleme Kuruluna bildirin");
+    // Sözlük: iç terimler ve kısaltmalar kullanıcı metnine çıkmaz.
+    for (const metin of [
+      SECILEBILIR_HESAP_YOK_METNI,
+      UCUNCU_DURUM_YOL_METNI,
+      BOS_LISTE_METNI,
+      KURTARILACAK_HESAP_YOK_METNI,
+    ]) {
+      expect(metin).not.toMatch(/sarmal|mühür|zincir|\bDK\b|\bYK\b|şifre(?!l)/i);
+    }
+  });
+
+  it("“Kurtarma anahtarıyla aç” kurtarma yolunu açar: hesap kurtarma listesinden gelir, dönülebilir, kurtarınca pencere yüklenir", async () => {
+    const kullanici = userEvent.setup();
+    oturum.hesaplar.mockResolvedValue([YONETICI_ASKIDA]);
+    oturum.kurtarmaHesaplari.mockResolvedValue([KURTARILACAK_YONETICI]);
+    oturum.kurtar.mockResolvedValue({ durum: "acik" });
+    render(<KilitEkrani />);
+    await hazir();
+
+    await kullanici.click(screen.getByRole("button", { name: KURTARMA_ILE_AC_ETIKETI }));
+    const form = screen.getByRole("form", { name: "Kurtarma yolu" });
+    expect(
+      await within(form).findByRole("radio", { name: "Program yöneticisi (yonetici)" }),
+    ).toBeChecked();
+    expect(oturum.kurtarmaHesaplari).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(SECILEBILIR_HESAP_YOK_METNI)).toBeNull();
+
+    // Geri dönüş yol göstermeye döner; odak sayfa gövdesine düşmez.
+    await kullanici.click(screen.getByRole("button", { name: "Parolayla açmaya dön" }));
+    expect(screen.getByText(SECILEBILIR_HESAP_YOK_METNI)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: KURTARMA_ILE_AC_ETIKETI })).toHaveFocus(),
+    );
+
+    await kullanici.click(screen.getByRole("button", { name: KURTARMA_ILE_AC_ETIKETI }));
+    await screen.findByRole("radio", { name: "Program yöneticisi (yonetici)", checked: true });
+    await kullanici.type(screen.getByLabelText(/^Kurtarma anahtarı/), "AAAA-BBBB");
+    await kullanici.type(screen.getByLabelText(/^Yeni parola/), GECERLI_PAROLA);
+    await kullanici.type(screen.getByLabelText(/^Parola \(tekrar\)/), GECERLI_PAROLA);
+    await kullanici.click(screen.getByRole("button", { name: "Kurtar ve aç" }));
+
+    await waitFor(() => expect(pencereIcerigi.yenidenYukle).toHaveBeenCalledTimes(1));
+    expect(oturum.kurtar).toHaveBeenCalledWith({
+      kurtarma_anahtari: "AAAA-BBBB",
+      hesap: YONETICI.id,
+      yeni_parola: GECERLI_PAROLA,
+    });
+    expect(oturum.ac).not.toHaveBeenCalled();
+  });
+
+  it("kurtarmanın reddi (sunucunun iletisi) olduğu gibi yazılır", async () => {
+    const kullanici = userEvent.setup();
+    oturum.hesaplar.mockResolvedValue([YONETICI_ASKIDA]);
+    oturum.kurtarmaHesaplari.mockResolvedValue([KURTARILACAK_YONETICI]);
+    oturum.kurtar.mockRejectedValue(new ApiError(409, "hesap_muhru_tutmadi", KAYIT_REDDI));
+    render(<KilitEkrani />);
+    await hazir();
+
+    await kullanici.click(screen.getByRole("button", { name: KURTARMA_ILE_AC_ETIKETI }));
+    await screen.findByRole("radio", { name: "Program yöneticisi (yonetici)", checked: true });
+    await kullanici.type(screen.getByLabelText(/^Kurtarma anahtarı/), "AAAA-BBBB");
+    await kullanici.type(screen.getByLabelText(/^Yeni parola/), GECERLI_PAROLA);
+    await kullanici.type(screen.getByLabelText(/^Parola \(tekrar\)/), GECERLI_PAROLA);
+    await kullanici.click(screen.getByRole("button", { name: "Kurtar ve aç" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe(KAYIT_REDDI);
+    expect(pencereIcerigi.yenidenYukle).not.toHaveBeenCalled();
+    // Kayıt reddi: yol metni iletinin altında durur (kullanıcı kararı 04.11.2026) ve odağın
+    // döndüğü Kurtarma anahtarı alanını açıklar.
+    expect(screen.getByText(UCUNCU_DURUM_YOL_METNI)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText(/^Kurtarma anahtarı/)).toHaveFocus());
+    expect(screen.getByLabelText(/^Kurtarma anahtarı/)).toHaveAccessibleDescription(
+      /zarfının üçüncü durumudur/,
+    );
+  });
+
+  it("kurtarmanın kayıt reddi olmayan reddinde (yanlış anahtar) yol metni çıkmaz", async () => {
+    const kullanici = userEvent.setup();
+    oturum.hesaplar.mockResolvedValue([YONETICI]);
+    oturum.kurtar.mockRejectedValue(
+      new ApiError(400, "validation_error", "Kurtarma anahtarı hatalı."),
+    );
+    render(<KilitEkrani />);
+    await hazir();
+
+    await kullanici.click(screen.getByRole("button", { name: "Parolamı unuttum" }));
+    await kullanici.type(screen.getByLabelText(/^Kurtarma anahtarı/), "AAAA-BBBB");
+    await kullanici.type(screen.getByLabelText(/^Yeni parola/), GECERLI_PAROLA);
+    await kullanici.type(screen.getByLabelText(/^Parola \(tekrar\)/), GECERLI_PAROLA);
+    await kullanici.click(screen.getByRole("button", { name: "Kurtar ve aç" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Kurtarma anahtarı hatalı.");
+    expect(screen.queryByText(UCUNCU_DURUM_YOL_METNI)).toBeNull();
+    expect(screen.getByLabelText(/^Kurtarma anahtarı/)).not.toHaveAccessibleDescription(
+      /üçüncü durumudur/,
+    );
+  });
+
+  it("kurtarma listesi de boşsa yolun sonunu söyler: Denetleme Kurulu ve yedekten geri yükleme", async () => {
+    const kullanici = userEvent.setup();
+    oturum.hesaplar.mockResolvedValue([OKUNAMAYAN]);
+    oturum.kurtarmaHesaplari.mockResolvedValue([]);
+    render(<KilitEkrani />);
+    await hazir();
+
+    await kullanici.click(screen.getByRole("button", { name: KURTARMA_ILE_AC_ETIKETI }));
+
+    expect(await screen.findByText(KURTARILACAK_HESAP_YOK_METNI)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Kurtar ve aç" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Parolayla açmaya dön" })).toBeEnabled();
+  });
 });
 
 describe("KilitEkrani — zorunlu parola yenileme (409 parola_yenilenmeli)", () => {
@@ -345,6 +738,23 @@ describe("KilitEkrani — zorunlu parola yenileme (409 parola_yenilenmeli)", () 
     await kullanici.type(screen.getByLabelText(/^Parola/), "Gecici-Parola-1{Enter}");
     await screen.findByLabelText(/^Yeni parola/);
   }
+
+  it("yenilemede kayıt reddi: yol metni Yeni parola alanını gerekçeyle birlikte açıklar", async () => {
+    const kullanici = userEvent.setup();
+    await yenilemeyeGec(kullanici);
+    oturum.ac.mockRejectedValueOnce(new ApiError(409, "hesap_muhru_tutmadi", KAYIT_REDDI));
+
+    await kullanici.type(screen.getByLabelText(/^Yeni parola/), GECERLI_PAROLA);
+    await kullanici.type(screen.getByLabelText(/^Parola \(tekrar\)/), GECERLI_PAROLA);
+    await kullanici.click(screen.getByRole("button", { name: "Parolayı yenile ve aç" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe(KAYIT_REDDI);
+    expect(screen.getByText(UCUNCU_DURUM_YOL_METNI)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText(/^Yeni parola/)).toHaveFocus());
+    expect(screen.getByLabelText(/^Yeni parola/)).toHaveAccessibleDescription(
+      /Parolanızı yenilemeniz gerekiyor.*zarfının üçüncü durumudur.*En az 8 karakter/,
+    );
+  });
 
   it("oturum açılmadan aynı ekranda yeni parola + tekrar ister ve yeni parolayla açar", async () => {
     const kullanici = userEvent.setup();
