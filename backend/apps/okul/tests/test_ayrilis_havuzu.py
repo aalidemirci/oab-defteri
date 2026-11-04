@@ -8,7 +8,7 @@ listede bulunmayan aktif kişi havuza girer, karar burada verilir:
 - `POST leave-pool/resolve/` toplu karar: "Ayrıldı olarak işaretle" (LEFT +
   tarih, kancalar; KAYIT SİLİNMEZ) ve "Aktif kalsın" (yalnız havuzdan çıkar).
   Tek işlemdir: seçilenlerden biri havuzda değilse hiçbir karar uygulanmaz.
-- Karar ucu kişi yazar: parola kurulmadan 409; iki uç da görevli kipinde 403.
+- Karar ucu kişi yazar: parola kurulmadan 409 (rol izni `rol_izinleri.KURALLAR`'da).
 - Havuzdaki personel için "olası aynı kişi" adayları (eşleşme GEREKÇESİYLE —
   §13 D30) ve havuzdan birleştirme.
 - Günlüğe ad yazılmaz.
@@ -29,7 +29,6 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.okul import name_match, selectors
-from apps.okul.kip import KIP
 from apps.okul.models import (
     ImportRun,
     ImportStatus,
@@ -146,6 +145,8 @@ def test_havuz_listesi_ogrenci_ve_personel_ayri_tr_sirali_giris_ve_aktarimla(
         "class_label",
         "leave_candidate_since",
         "run",
+        # Çözülemeyen şifreli alanların adları (tasarım §13 D48); değer taşımaz.
+        "bozuk_alanlar",
     }
     assert set(veri["personnel"][0]) == {
         "id",
@@ -154,6 +155,7 @@ def test_havuz_listesi_ogrenci_ve_personel_ayri_tr_sirali_giris_ve_aktarimla(
         "leave_candidate_since",
         "run",
         "similar",
+        "bozuk_alanlar",
     }
 
 
@@ -324,7 +326,7 @@ def test_karar_gunlukte_ad_birakmaz(client: APIClient, caplog: pytest.LogCapture
 
 
 # ---------------------------------------------------------------------------
-# Parola ve kip kapıları
+# Parola kapısı
 # ---------------------------------------------------------------------------
 
 
@@ -334,22 +336,6 @@ def test_parolasizken_karar_ucu_409_liste_acik(parolasiz: Path, client: APIClien
     assert yanit.status_code == 409
     assert yanit.json()["code"] == "parola_gerekli"
     assert client.get(HAVUZ_URL).status_code == 200
-
-
-def test_gorevli_kipinde_havuz_uclari_403(client: APIClient) -> None:
-    ogrenci = _ogrenci("101", 12, "A")
-    _havuza(ogrenci)
-    KIP.gorevliye_gec()
-
-    for yanit in (
-        client.get(HAVUZ_URL),
-        client.get(HAVUZ_URL, {"summary": "true"}),
-        _karar(client, {"students": {"leave": [ogrenci.pk]}}),
-    ):
-        assert yanit.status_code == 403
-        assert yanit.json()["code"] == "kip_yetkisiz"
-    ogrenci.refresh_from_db()
-    assert ogrenci.status == StudentStatus.ACTIVE
 
 
 # ---------------------------------------------------------------------------

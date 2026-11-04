@@ -54,6 +54,8 @@ vi.mock("../okul/api", async (importOriginal) => {
 
 vi.mock("../../lib/download", () => ({ saveBlob: vi.fn() }));
 
+import { YETENEK_ADLARI } from "../oturum/api";
+import { YetkiDegeri, hazirYetki } from "../oturum/yetki";
 import KisilerPage from "./KisilerPage";
 
 const STUDENT: Student = {
@@ -105,16 +107,19 @@ function page<T>(results: T[], count = results.length) {
   return { count, next: null, previous: null, results };
 }
 
-/** `route` derin bağlantıyı sınar: sekme URL'deki `tab` parametresinden okunur. */
-function renderPage(route = "/kisiler") {
+/** `route` derin bağlantıyı sınar: sekme URL'deki `tab` parametresinden okunur. Varsayılan
+ *  yetenekler program yöneticisininkidir (bütün yetenekler; süzme `oturum/yetki`'den). */
+function renderPage(route = "/kisiler", yetenekler: readonly string[] = YETENEK_ADLARI) {
   return render(
-    <MemoryRouter initialEntries={[route]}>
-      <SnackbarProvider>
-        <ConfirmProvider>
-          <KisilerPage />
-        </ConfirmProvider>
-      </SnackbarProvider>
-    </MemoryRouter>,
+    <YetkiDegeri value={hazirYetki(yetenekler)}>
+      <MemoryRouter initialEntries={[route]}>
+        <SnackbarProvider>
+          <ConfirmProvider>
+            <KisilerPage />
+          </ConfirmProvider>
+        </SnackbarProvider>
+      </MemoryRouter>
+    </YetkiDegeri>,
   );
 }
 
@@ -565,7 +570,7 @@ describe("KisilerPage — öğrenci ayrılışı ve parola uyarısı", () => {
       new ApiError(
         409,
         "parola_gerekli",
-        "Kişi kaydı için önce yönetici parolasını kurun (Kurulum Sihirbazı'nın ilk adımı).",
+        "Kişi kaydı için önce program yöneticisi hesabını kurun (Kurulum Sihirbazı'nın ilk adımı).",
       ),
     );
     const user = userEvent.setup();
@@ -579,7 +584,7 @@ describe("KisilerPage — öğrenci ayrılışı ve parola uyarısı", () => {
     await user.click(within(dialog).getByRole("button", { name: "Kaydet" }));
 
     const bant = await within(dialog).findByRole("alert");
-    expect(within(bant).getByText("Önce yönetici parolasını kurun")).toBeInTheDocument();
+    expect(within(bant).getByText("Önce program yöneticisi hesabını kurun")).toBeInTheDocument();
     expect(within(bant).getByText(/Kurulum Sihirbazı'nın ilk adımı/)).toBeInTheDocument();
     expect(within(bant).getByRole("link", { name: "Kurulum sihirbazını aç" })).toHaveAttribute(
       "href",
@@ -797,5 +802,167 @@ describe("KisilerPage — içe aktarma paneli", () => {
     await user.click(screen.getByRole("button", { name: "Şablon indir" }));
 
     await waitFor(() => expect(saveBlob).toHaveBeenCalledWith(blob, "sablon-ogrenci.xlsx"));
+  });
+});
+
+// Çözülemeyen şifreli alan (tasarım TK8 (3), §13 D48): API'de alan `null` gelir ve
+// kaydın `bozuk_alanlar` listesinde durur; ekran boş hücre değil "okunamadı" yazar.
+describe("KisilerPage — okunamayan şifreli alan", () => {
+  const BOZUK_OGRENCI: Student = {
+    ...STUDENT,
+    id: 2,
+    first_name: null,
+    full_name: null,
+    student_number: null,
+    bozuk_alanlar: ["first_name", "student_number"],
+  };
+
+  it("listede ad ve okul no'su “okunamadı” görünür; satırın adı kişi adı tahmin etmez", async () => {
+    okulApiMock.listStudents.mockResolvedValue(page([STUDENT, BOZUK_OGRENCI]));
+    renderPage();
+    await screen.findByText("Ayşe Yılmaz");
+
+    // İki hücre (okul no + ad soyad) işaretlidir; boş hücre ya da "null" yazmaz.
+    expect(screen.getAllByText("okunamadı")).toHaveLength(2);
+    expect(document.body.textContent).not.toMatch(/null/);
+    expect(
+      screen.getByRole("button", { name: "Adı okunamayan kaydı düzenle" }),
+    ).toBeInTheDocument();
+  });
+
+  it("düzenlemede okunamayan alan boş açılır ve yardım metni söyler; boş no gönderilmez", async () => {
+    okulApiMock.listStudents.mockResolvedValue(page([BOZUK_OGRENCI]));
+    okulApiMock.updateStudent.mockResolvedValue({ ...BOZUK_OGRENCI });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Adı okunamayan kaydı düzenle" }));
+    const dialog = await screen.findByRole("dialog", { name: "Öğrenciyi düzenle" });
+    expect(within(dialog).getByLabelText(/^Ad \*$/)).toHaveValue("");
+    expect(
+      within(dialog).getByText("Kayıtlı değer okunamadı; kaydetmek için yeniden yazın."),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/Kayıtlı numara okunamadı; boş bırakırsanız/),
+    ).toBeInTheDocument();
+
+    // Ad zorunludur: okunamayan ad ancak yeniden yazılarak kaydedilir.
+    await user.type(within(dialog).getByLabelText(/^Ad \*$/), "Elif");
+    await user.click(within(dialog).getByRole("button", { name: "Kaydet" }));
+
+    await waitFor(() => expect(okulApiMock.updateStudent).toHaveBeenCalledTimes(1));
+    const govde = okulApiMock.updateStudent.mock.calls[0][1] as Record<string, unknown>;
+    expect(govde.first_name).toBe("Elif");
+    // Okunamayan no boş bırakıldı: gövdede yoktur, kayıtlı (işaretli) değer olduğu gibi kalır.
+    expect(govde).not.toHaveProperty("student_number");
+  });
+
+  it("silme onayı adı okunamayan kaydı adsız anar", async () => {
+    okulApiMock.listStudents.mockResolvedValue(page([BOZUK_OGRENCI]));
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Adı okunamayan kaydı düzenle" }));
+    const dialog = await screen.findByRole("dialog", { name: "Öğrenciyi düzenle" });
+    await user.click(within(dialog).getByRole("button", { name: "Sil" }));
+    const onay = await screen.findByRole("dialog", { name: "Öğrenci sicilden silinsin mi?" });
+    expect(onay).toHaveTextContent("Adı okunamayan bu kayıt kalıcı olarak silinir");
+    expect(onay).not.toHaveTextContent("null");
+  });
+
+  it("personel listesinde okunamayan ad “okunamadı” görünür", async () => {
+    okulApiMock.listPersonnel.mockResolvedValue(
+      page([
+        {
+          ...PERSONNEL,
+          last_name: null,
+          full_name: null,
+          bozuk_alanlar: ["last_name"],
+        },
+      ]),
+    );
+    const user = userEvent.setup();
+    renderPage("/kisiler?tab=personel");
+
+    expect(await screen.findByText("okunamadı")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Adı okunamayan kaydı düzenle" }));
+    const dialog = await screen.findByRole("dialog", { name: "Kişiyi düzenle" });
+    expect(within(dialog).getByLabelText(/^Soyad \*$/)).toHaveValue("");
+    expect(
+      within(dialog).getByText("Kayıtlı değer okunamadı; kaydetmek için yeniden yazın."),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("KisilerPage — rol süzmesi (personeli her rol okur)", () => {
+  it("yazma yeteneği olmayan rolde yalnız personel sekmesi açılır; liste salt okurdur", async () => {
+    // Denetleme Kurulunun yetenekleri (sunucudan gelir gibi): Kişiler'de yazma yok.
+    renderPage("/kisiler", ["butunluk_denetim", "erisim_gunlugu", "geri_yukleme_gordum"]);
+
+    expect(await screen.findByText("Mehmet Demirci")).toBeInTheDocument();
+    const sekmeler = screen.getAllByRole("tab");
+    expect(sekmeler).toHaveLength(1);
+    expect(sekmeler[0]).toHaveAccessibleName(/Öğretmenler ve Diğer Personel/);
+    expect(okulApiMock.listStudents).not.toHaveBeenCalled();
+    expect(okulApiMock.getLeavePool).not.toHaveBeenCalled();
+    expect(screen.getByRole("note")).toHaveTextContent(
+      "Bu bölüm hesabınızın rolüne yalnız okuma için açık.",
+    );
+    expect(screen.queryByRole("button", { name: "Kişi ekle" })).toBeNull();
+    // Satır tıklanmaz: düzenleme penceresinin her eylemi yazmadır.
+    expect(screen.queryByRole("button", { name: /düzenle/ })).toBeNull();
+    // e-Okul aktarım paneli ve şablon yok.
+    expect(screen.queryByText(/Öğretmen ve Diğer Personeli Aktar/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Önizle|Aktar|şablon/i })).toBeNull();
+    expect(screen.getByText(/^Öğretmen ve diğer personel sicili\. TCKN/)).toBeInTheDocument();
+  });
+
+  it("yetkisiz sekmenin adresi rolün ilk sekmesine düşer (öğrenci ve havuz uçları çağrılmaz)", async () => {
+    renderPage("/kisiler?tab=havuz", []);
+
+    expect(await screen.findByText("Mehmet Demirci")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Öğretmenler/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(okulApiMock.getLeavePool).not.toHaveBeenCalled();
+    expect(okulApiMock.listStudents).not.toHaveBeenCalled();
+  });
+
+  it("boş listede salt okur rol aktarımı öğütlemez", async () => {
+    okulApiMock.listPersonnel.mockResolvedValue(page([]));
+    renderPage("/kisiler", []);
+
+    expect(await screen.findByText("Gösterilecek kişi yok")).toBeInTheDocument();
+    expect(screen.queryByText(/içe aktarın/)).toBeNull();
+  });
+
+  it("program yöneticisinde üç sekme ve yazma denetimleri durur", async () => {
+    const user = userEvent.setup();
+    renderPage("/kisiler?tab=personel");
+
+    expect(await screen.findByText("Mehmet Demirci")).toBeInTheDocument();
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "Kişi ekle" })).toBeInTheDocument();
+    expect(screen.queryByRole("note")).toBeNull();
+    await user.click(screen.getByRole("button", { name: /Mehmet Demirci.*düzenle/ }));
+    expect(await screen.findByRole("dialog", { name: "Kişiyi düzenle" })).toBeInTheDocument();
+  });
+
+  it("özet yüklenirken sekme ve liste çizilmez (yanlış sekme bir an açılmaz)", async () => {
+    render(
+      <MemoryRouter initialEntries={["/kisiler"]}>
+        <SnackbarProvider>
+          <ConfirmProvider>
+            <KisilerPage />
+          </ConfirmProvider>
+        </SnackbarProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("heading", { level: 1, name: "Kişiler" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(okulApiMock.listStudents).not.toHaveBeenCalled();
+    expect(okulApiMock.listPersonnel).not.toHaveBeenCalled();
   });
 });

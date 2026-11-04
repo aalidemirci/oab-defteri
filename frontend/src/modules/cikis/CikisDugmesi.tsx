@@ -1,61 +1,36 @@
 // Çık düğmesi ve diyaloğu — üst çubukta her durumda görünür (tasarım §4.2, §4.5).
 //
-// * Yönetici kipi, kilitli, kurulum: "Programdan çıkılsın mı?" onayı, parolasız.
-// * Görevli kipi: yönetici parolası sorulur (kaza önleyicidir, güvenlik sınırı
-//   değildir — Görev Yöneticisi süreci her durumda kapatabilir).
+// * Her oturum durumunda (açık, kilitli, kurulum, kayıp güvenlik dosyası) aynı
+//   "Programdan çıkılsın mı?" onayı; PAROLASIZDIR. Aile iskeletinin görevli kipindeki
+//   parola dalı görevli kipiyle kalktı (tasarım §12.B; plan F1b-1 "Oturum").
 // * Pencerenin çarpısı da programı kapatır (T6, tasarım §4.5); tepsi yoktur.
 //
-// Kip bilgisi yalnız hangi soruyu soracağımızı seçer; karar sunucudadır. Sunucu
-// parola isterse (kip bu arada görevliye inmiş olabilir) diyalog parola alanına
-// geçer. Başarıda program kapanır: pencere birazdan kendiliğinden kaybolur.
-//
-// Parola alanı açılışta odaktadır (`ui/Dialog` `initialFocusRef`; `autoFocus` panel
-// odağına yenilirdi). Alan pencere açıkken sonradan belirirse (sunucu parola istedi)
-// odağı ayrı bir efekt verir.
+// Başarıda program kapanır: pencere birazdan kendiliğinden kaybolur.
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useState } from "react";
 import type { FormEvent } from "react";
 
-import { ApiError } from "../../lib/api";
 import Button from "../../ui/Button";
 import Dialog from "../../ui/Dialog";
-import TextField from "../../ui/TextField";
-import { useKip } from "../kip/useKip";
-import { CIKIS_PAROLASI_GEREKLI, cikisApi } from "./api";
+import { oturumHataMetni } from "../oturum/hatalar";
+import { cikisApi } from "./api";
 
 function hataMesaji(err: unknown): string {
-  return err instanceof Error && err.message ? err.message : "Programdan çıkılamadı.";
+  return oturumHataMetni(err, "Programdan çıkılamadı.");
 }
 
 interface CikisDiyaloguProps {
   open: boolean;
   onClose: () => void;
-  /** Görevli kipinde başlar: yönetici parolası sorulur. */
-  parolaIle: boolean;
 }
 
-export function CikisDiyalogu({ open, onClose, parolaIle }: CikisDiyaloguProps) {
+export function CikisDiyalogu({ open, onClose }: CikisDiyaloguProps) {
   const formId = useId();
-  const parolaAlani = useRef<HTMLInputElement>(null);
-  const [parola, setParola] = useState("");
-  const [parolaGerekli, setParolaGerekli] = useState(parolaIle);
   const [hata, setHata] = useState<string | null>(null);
   const [calisiyor, setCalisiyor] = useState(false);
   const [kapaniyor, setKapaniyor] = useState(false);
 
-  useEffect(() => {
-    if (open) setParolaGerekli(parolaIle);
-  }, [open, parolaIle]);
-
-  // İlk odak yalnız açılış anında verilir (`initialFocusRef`); parola alanı pencere
-  // açıkken belirirse (kip bu arada görevliye indi) odak burada alana taşınır. Bu
-  // efekt `Dialog`un açılış efektinden SONRA koşar (ebeveyn efekti çocuğunkinden sonra).
-  useEffect(() => {
-    if (open && parolaGerekli) parolaAlani.current?.focus();
-  }, [open, parolaGerekli]);
-
   function kapat() {
-    setParola("");
     setHata(null);
     onClose();
   }
@@ -65,13 +40,9 @@ export function CikisDiyalogu({ open, onClose, parolaIle }: CikisDiyaloguProps) 
     setHata(null);
     setCalisiyor(true);
     try {
-      await cikisApi.cik(parolaGerekli ? parola : undefined);
-      setParola("");
+      await cikisApi.cik();
       setKapaniyor(true);
     } catch (err) {
-      if (err instanceof ApiError && err.code === CIKIS_PAROLASI_GEREKLI) {
-        setParolaGerekli(true);
-      }
       setHata(hataMesaji(err));
     } finally {
       setCalisiyor(false);
@@ -90,49 +61,25 @@ export function CikisDiyalogu({ open, onClose, parolaIle }: CikisDiyaloguProps) 
     <Dialog
       open={open}
       onClose={kapat}
-      // Sözlük §3: onay diyaloğunun başlığı sorudur; parola isteyen hâl bir formdur.
-      title={parolaGerekli ? "Programdan çık" : "Programdan çıkılsın mı?"}
-      initialFocusRef={parolaAlani}
+      // Sözlük §3: onay diyaloğunun başlığı soru, gövdesi sonuçtur.
+      title="Programdan çıkılsın mı?"
       actions={
         <>
           <Button variant="text" type="button" onClick={kapat}>
             Vazgeç
           </Button>
-          <Button
-            type="submit"
-            form={formId}
-            icon="power_settings_new"
-            disabled={calisiyor || (parolaGerekli && parola === "")}
-          >
+          <Button type="submit" form={formId} icon="power_settings_new" disabled={calisiyor}>
             {calisiyor ? "Kapatılıyor…" : "Çık"}
           </Button>
         </>
       }
     >
       <form id={formId} onSubmit={gonder} className="flex flex-col gap-4">
-        {parolaGerekli ? (
-          <>
-            <p>Görevli kipinde programdan çıkmak için yönetici parolasını girin.</p>
-            <TextField
-              ref={parolaAlani}
-              label="Yönetici parolası"
-              type="password"
-              value={parola}
-              onChange={(e) => setParola(e.target.value)}
-              autoComplete="current-password"
-              error={hata ?? undefined}
-              required
-            />
-          </>
-        ) : (
-          <>
-            <p>Program kapanır. Pencerenin çarpısı da programı aynı biçimde kapatır.</p>
-            {hata && (
-              <p role="alert" className="text-body-medium text-error">
-                {hata}
-              </p>
-            )}
-          </>
+        <p>Program kapanır. Pencerenin çarpısı da programı aynı biçimde kapatır.</p>
+        {hata && (
+          <p role="alert" className="text-body-medium text-error">
+            {hata}
+          </p>
         )}
       </form>
     </Dialog>
@@ -142,7 +89,6 @@ export function CikisDiyalogu({ open, onClose, parolaIle }: CikisDiyaloguProps) 
 /** Üst çubuktaki Çık düğmesi. */
 export default function CikisDugmesi() {
   const [acik, setAcik] = useState(false);
-  const gorevli = useKip().ozet?.durum === "gorevli";
 
   return (
     <>
@@ -155,7 +101,7 @@ export default function CikisDugmesi() {
       >
         <span className="hidden xl:inline">Çık</span>
       </Button>
-      <CikisDiyalogu open={acik} onClose={() => setAcik(false)} parolaIle={gorevli} />
+      <CikisDiyalogu open={acik} onClose={() => setAcik(false)} />
     </>
   );
 }

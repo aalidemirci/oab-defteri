@@ -17,6 +17,10 @@
 // ile eski kayıt yeni kayda katılır (Ayrılış Havuzu'ndan da yapılabilir). Görev
 // sütunu yalnız üye türü için okunur; tanınmayan satırlar "Üye türünü denetleyin"
 // uyarısı alır.
+//
+// Rol (plan F1b-2): panelin kendisi `eokul_aktarimi` yeteneğinde çizilir (Kişiler verir);
+// "Birleştir" düğmeleri ayrıca `kisi_yazma`'ya bağlıdır (`birlestirebilir`; personel
+// birleştirme ucu).
 
 import { useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -96,9 +100,12 @@ function isStudentReport(report: ImportReport): report is StudentImportReport {
 export default function AktarimPaneli({
   kind,
   onImported,
+  birlestirebilir,
 }: {
   kind: ImportKind;
   onImported: () => void;
+  /** "Birleştir" düğmeleri (personel birleştirme; `kisi_yazma`). */
+  birlestirebilir: boolean;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [text, setText] = useState("");
@@ -314,7 +321,13 @@ export default function AktarimPaneli({
         </Button>
       </div>
 
-      {report && <ImportReportView report={report} onMerge={birlestir} busy={busy} />}
+      {report && (
+        <ImportReportView
+          report={report}
+          onMerge={birlestirebilir ? birlestir : undefined}
+          busy={busy}
+        />
+      )}
     </Card>
   );
 }
@@ -329,7 +342,8 @@ function ImportReportView({
   busy,
 }: {
   report: ImportReport;
-  onMerge: (pair: SimilarPair) => void;
+  /** Yoksa "Birleştir" çizilmez (`birlestirebilir`). */
+  onMerge?: (pair: SimilarPair) => void;
   busy: boolean;
 }) {
   const counts = importCounts(report);
@@ -520,7 +534,7 @@ function PersonelMutabakati({
   busy,
 }: {
   report: PersonnelImportReport;
-  onMerge: (pair: SimilarPair) => void;
+  onMerge?: (pair: SimilarPair) => void;
   busy: boolean;
 }) {
   const ciftteki = new Set(report.similar_pairs.map((p) => p.existing_id));
@@ -588,7 +602,7 @@ function PersonelMutabakati({
                     Neden aday: {benzerlikGerekcesi(p.reason)}
                   </span>
                 </span>
-                {!report.dry_run && p.new_id !== null && (
+                {onMerge !== undefined && !report.dry_run && p.new_id !== null && (
                   <Button
                     variant="tonal"
                     icon="merge"

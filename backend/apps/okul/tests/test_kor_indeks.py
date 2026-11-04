@@ -23,7 +23,7 @@ from rest_framework.test import APIClient
 from apps.okul import selectors
 from apps.okul.models import Personnel, Student, StudentStatus, student_number_blind_index
 from apps.okul.services import app_password
-from conftest import TEST_DEK, TEST_PAROLA
+from conftest import TEST_DEK, TEST_HESAP_ID, TEST_PAROLA
 from shared import crypto
 
 pytestmark = pytest.mark.django_db
@@ -93,11 +93,13 @@ def test_farkli_dek_ile_uretilen_indeks_eslesmez() -> None:
     assert bulunan is not None and bulunan.pk == ogrenci.pk
 
 
-def test_parola_degisimi_indeksi_bozmaz() -> None:
+def test_parola_degisimi_indeksi_bozmaz(yonetici_hesabi: Any) -> None:
     """Anahtar DEK'ten türer; parola değişimi yalnız sarmalı yeniler (§4.4.4)."""
     ogrenci = _ogrenci(student_number="321")
 
-    app_password.change_password(current_password=TEST_PAROLA, new_password="Yeni-Parola-99")
+    app_password.change_password(
+        hesap_id=TEST_HESAP_ID, current_password=TEST_PAROLA, new_password="Yeni-Parola-99"
+    )
 
     bulunan = selectors.find_student_by_number("321")
     assert bulunan is not None and bulunan.pk == ogrenci.pk

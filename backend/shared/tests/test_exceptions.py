@@ -92,7 +92,7 @@ def test_anahtar_eksik_hatasi_409_parola_gerekli_olur() -> None:
     assert yanit.data == {
         "code": "parola_gerekli",
         "message": (
-            "Kişi kaydı için önce yönetici parolasını kurun (Kurulum Sihirbazı'nın ilk adımı)."
+            "Kişi kaydı için önce program yöneticisi hesabını kurun (Kurulum Sihirbazı'nın ilk adımı)."
         ),
         "fields": {},
     }

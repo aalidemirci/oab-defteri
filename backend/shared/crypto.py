@@ -1,21 +1,22 @@
-"""Zorunlu yönetici parolası — anahtar tutucu, Argon2id türetme, şifreli alanlar, kör indeks.
+"""Hesaplı güvenlik çekirdeği — anahtar tutucu, Argon2id türetme, şifreli alanlar, kör indeks.
 
-Tasarım §4.3, §4.4.4, §5.3. SQLCipher ve "kapanışta dosyayı şifrele"
-reddedildi; seçilen yol ailenin sahada denenmiş `shared/fields.py` Fernet alan
-şifrelemesidir. Bu dosya o alanı bu programın gerçeklerine uyarlar. KAYNAKTAN
-FARKLAR:
+Tasarım §4.3, §4.4.4, §5.3; şema 2 (F1b-1): veri anahtarı (DEK) her hesap için
+ayrı sarılır (`apps.okul.services.app_password`), bu modül yalnız ilkelleri
+sağlar. SQLCipher ve "kapanışta dosyayı şifrele" reddedildi; seçilen yol ailenin
+sahada denenmiş `shared/fields.py` Fernet alan şifrelemesidir. Bu dosya o alanı
+bu programın gerçeklerine uyarlar. KAYNAKTAN FARKLAR:
 
 1. **Anahtar ayardan değil, ÇALIŞMA ZAMANINDAN gelir.** Kaynakta anahtar
-   `settings.FIELD_ENCRYPTION_KEY` (.env) ile sabittir; burada yönetici
+   `settings.FIELD_ENCRYPTION_KEY` (.env) ile sabittir; burada bir hesabın
    parolasından (ya da kurtarma anahtarından) çözülen veri anahtarıdır (DEK) ve
    programın kilidi açılana kadar YOKTUR. Bu yüzden `lru_cache`'li Fernet
    KULLANILAMAZ — anahtar süreç ömrü içinde yüklenir, boşaltılır, değişir.
-2. **Parolasız kip YOKTUR (fail-closed, §5.3).** Yönetici parolası
-   zorunludur; kurulum sihirbazının ilk adımıdır ve parola kurulmadan kişi
-   yazan her uç 409 döner. Anahtar bellekte değilken `EncryptedTextField`
-   boş olmayan bir değeri YAZMAZ, `KeyMissingError` yükseltir: kilitliyken ya
-   da parola hiç kurulmamışken kişi adı düz metin olarak diske düşemez. Ailenin
-   eski "parolasız kipte alanlar DÜZ yazılır" dalı ve onun geçiş aracı
+2. **Hesapsız kip YOKTUR (fail-closed, §5.3).** İlk program yöneticisi hesabı
+   kurulum sihirbazının ilk adımıdır ve hesap kurulmadan kişi yazan her uç 409
+   döner. Anahtar bellekte değilken `EncryptedTextField` boş olmayan bir değeri
+   YAZMAZ, `KeyMissingError` yükseltir: kilitliyken ya da hesap hiç
+   kurulmamışken kişi adı düz metin olarak diske düşemez. Ailenin eski
+   "parolasız kipte alanlar DÜZ yazılır" dalı ve onun geçiş aracı
    (`plaintext_writes`) aile iskeletinde sökülmüştü; OAB'de yoktur.
 3. **Kör indeks VARDIR (§5.3 — ailenin eski "BLIND INDEX YOKTUR" kararından
    BİLİNÇLİ sapma).** Okul no da şifrelendiği için e-Okul eşleştirmesi tam
@@ -23,23 +24,81 @@ FARKLAR:
    Anahtar DEK'ten HKDF ile türediği için parola değişimi indeksi bozmaz.
    Normalleştirme çağıranın işidir (ör. `apps/okul/normalize.py`); bu modül
    yalnız HMAC'i hesaplar.
+4. **Okuma KATI KİPTEDİR (tasarım TK8 (3), §13 D48).** Kilit açıkken çözülemeyen
+   ya da token olmayan dolu değer düz metin diye DÖNMEZ: `CorruptField`
+   işaretiyle döner (metin değildir) ve süreç içi kayda düşer
+   (`corrupt_reads`); güvenlik durumu bozuk alan sayısını bildirir, pano kartı
+   ön yüz commit'indedir. Ailenin hoşgörüsü düz metin döneminden kalmaydı;
+   OAB'de düz metin dönemi hiç olmadı (§13 D29) ve hoşgörü SQLite'ta şifreli
+   sütuna yazılmış düz metni meşru veri gibi gösterirdi (denetim GA-9). İşaret
+   kaydedilirken eski ham değer AYNEN geri yazılır; şifrelenip meşru veriye
+   dönmez. Hoşgörü 1. adımda hiçbir hâlde açılmaz: tek geçiş (`gecis:
+   "KURULUM"`) kişi tabloları boşken koşar; DEK yenilemesinin geçişi F4'tedir.
+
+HESAP SARMALI KİMLİĞE BAĞLIDIR (kullanıcı kararı 02.11.2026: "Hesap kimliği parola
+kaydına bağlanır"; tasarım §4.4.4, tehdit 19 ve 21). Hesap sarmalının anahtarı
+`HKDF(Argon2id(parola, tuz), bilgi = "od-hesap-sarmali/v1" ‖ kanonik hesap kimliği)`'dir
+(`account_wrapping_key`). Eskiden kimlik ne KDF'ye ne Fernet'e giriyordu: `guvenlik.json`
+düz metin olduğu için herhangi bir hesabın parolasını bilen biri kendi sarmalının `id`
+alanını metin düzenleyiciyle program yöneticisininkine çevirip kilidi ve konsol geri
+yüklemesini onun adına açabiliyordu (kod gerekmeden; tehdit 19'un çıtasının altında).
+Artık başka kimlikle okunan sarmal açılmaz: Fernet'in HMAC'i tutmaz, sonuç yanlış
+parolayla aynıdır. Neden HKDF (tuza ya da Argon2 girdisine katmak değil): Argon2id
+çıktısı 32 baytlık tekdüze bir sırdır; HKDF-SHA256 onu bilgi dizgesiyle ayrışan
+bağımsız anahtarlara açar (bir PRF'tir), türetimler §2.3.1 kimlik tablosundaki öteki
+dizgelerle aynı kapıdan geçer (`derive_subkey`) ve Argon2id maliyeti değişmez. Bilgi
+dizgesi sabit önek + sabit uzunlukta (36 karakter) kanonik kimliktir: kimlikten bilgiye
+eşleme birebirdir, ayraç gerekmez. Kanonik biçim TEKTİR (`canonical_account_id`):
+`uuid.UUID` nesnesinin metni ya da tam olarak o metin (küçük harf, tireli, boşluksuz).
+Büyük harfli, tiresiz, boşluklu, süslü ayraçlı, `urn:uuid:` önekli ya da ASCII dışı
+rakamlı yazımlar REDDEDİLİR (o sarmal açılmaz): satırı bulan okuyucu (`uuid.UUID(...)`,
+Django `UUIDField`) bu yazımları aynı satıra çevirir; sarmalın açılması "kimlik metni
+kanoniktir" demek olduğu için kimliği metin olarak karşılaştıran her sonraki adım (oturum
+kimliği, geri yükleme notu, iz satırı) aynı hesabı aynı metinle görür. Kurtarma
+bölümünün sarmalı hesaba bağlı DEĞİLDİR ve değişmedi (`derive_key` ham hâliyle). Bağın
+çıtası: parolasını bildiği hesabın DEK'ini program dışında türetip başka kimlikle yeniden
+saran ya da mühürlü sahte satır üreten biri yine geçer; bu artık KOD ister (tehdit 6, 19).
+
+SARMALIN TAZELİĞİ MÜHÜRLÜ SATIRA BAĞLIDIR (kullanıcı kararı 03.11.2026: "Tazelik kapatılır").
+Kimlik bağı tek başına tazeliği bağlamıyordu: DEK parola değişiminde değişmediği için aynı
+hesabın ESKİ sarmalı (`guvenlik-arsiv-*.json`'da ya da önceden alınmış bir kopyada) da o kimliğe
+meşru biçimde bağlıdır ve eski parolasıyla açılırdı. Artık hesabın mühürlü `Account` satırı
+`guvenlik.json`'daki GÜNCEL sarmalın özetini taşır (`wrap_digest`; iki aşamalı yazımın ara hâli
+`wrap_digest_pending`) ve iki alan hesap mührüne girer (`shared.kanonik.HESAP_MUHRU_ALANLARI`).
+Özet `HMAC(HKDF(DEK, "od-sarmal-ozeti/v1"), kanonik(kanonik kimlik, tuz, sarmal))`'dır
+(`account_wrap_digest`; biçim `shared.kanonik.sarmal_ozeti`). Neden DEK'li HMAC (düz SHA-256
+değil): (1) özet DEK'siz hesaplanamaz — `guvenlik.json` ile veritabanına yazabilen ama DEK'i
+bilmeyen biri bir sarmal için tutan özeti üretemez; mühür zaten satırı korur, DEK'li özet ikinci
+bir kat olur ve bir hatada mühür denetimi atlansa da sahte özet üretilemez; (2) okul dışına
+çıkabilen bir veritabanı kopyasıyla bir arşivdeki sarmalların hangisinin güncel olduğu DEK'siz
+eşlenemez; (3) DEK'ten türeyen öteki anahtarlar gibi §2.3.1 kimlik tablosundaki kendi bilgi
+dizgesiyle `derive_subkey` kapısından geçer (amaç ayrımı: mühür anahtarı özet anahtarını vermez).
+Özete kimlik, tuz ve sarmal girer: tuz ya da belirteç metni değişen sarmal özeti tutmaz; sayaç
+ve askı girmez (kilitliyken DEK'siz yazılırlar). Karşılaştırma sabit sürededir (`kanonik.esit`).
+Tutmayan sarmal parolayla açılmaz (kilit açılışı, oturumdaki parola doğrulaması, geri yüklemenin
+parola yolu; `app_password` modül başlığı "SARMALIN TAZELİĞİ"). Özet bir PROGRAM kapısıdır: eski
+sarmal DEK'i sarmaladığı için eski parolayı bilen biri onu program dışında yine açar (tehdit 6);
+bunu DEK yenilemesi kapatır (TK12, F4).
 
 ANAHTARIN BELLEKTEKİ YERİ: anahtar süreç genelinde, bu modülün `_holder`
 nesnesinde tutulur ve kilit açıldıktan sonra kilitlenene dek bellekte kalır.
 Gerekçe: yönetim yüzeyi yalnız 127.0.0.1'de ve tek bilgisayara hizmet eder
-(`desktop/session_guard.py`); anahtarı bağlayacağımız bir kullanıcı oturumu
-bugün yoktur, kişiler arasındaki ayrım kiple yapılır (§4.4). Anahtarı her
-istekte yeniden türetmek Argon2id maliyetini (~0,2 sn) her tıklamaya yayardı.
-Kilitleme = programı kapatmak VEYA açık "Kilitle" eylemi (`POST /security/lock/` →
-`unload_key()`). Her yükleme ve boşaltma `key_epoch()` sayacını artırır; kip
-katmanı yeni bir kilit açılışını buradan anlar. Anahtar diske YAZILMAZ,
-loglanmaz, hata mesajında yankılanmaz.
+(`desktop/session_guard.py`); süreçte tek oturum vardır (tasarım TK14).
+Anahtarı her istekte yeniden türetmek Argon2id maliyetini (~0,2 sn) her
+tıklamaya yayardı. Anahtarı oturum yükler ve düşürür (`apps/okul/oturum.py`:
+kilit açılışı, Kilitle, boşta kilit, kapanış). Denetim izinin iz anahtarı (İA;
+tasarım §4.6.3) DEK'ten türemez; kilit açılışında DEK'le birlikte yüklenir ve
+onunla düşer (`load_key(..., audit_key=...)`). Her yükleme ve boşaltma
+`key_epoch()` sayacını artırır (yalnız teşhis ve test içindir; oturumun açılışı bu
+sayaçtan ÇIKARILMAZ, açık çağrıyla yapılır). Anahtar diske YAZILMAZ, loglanmaz,
+hata mesajında yankılanmaz.
 
 ŞİFRELİ ALANDA DB ARAMASI YOKTUR (§5.3): Fernet her şifrelemede farklı token
 ürettiği için şifreli alan üzerinde DB tarafı filtre/LIKE/sıralama çalışmaz
 (`Student.objects.filter(first_name=…)` daima boş döner). Ad temelli arama,
 sıralama ve teklik selector katmanında Python ile; kimlik eşleştirmesi kör
-indeksle yapılır.
+indeksle yapılır. Arama ve eşleme `CorruptField` taşıyan kaydı dışarıda bırakır
+(`has_corrupt`).
 """
 
 from __future__ import annotations
@@ -48,6 +107,7 @@ import base64
 import hmac
 import secrets
 import threading
+import uuid
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import Any, cast
@@ -58,6 +118,9 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from django.db import models
+from django.db.models.signals import post_init
+
+from shared import kanonik
 
 # Veri anahtarı (DEK) uzunluğu — Fernet 32 baytlık anahtar ister.
 KEY_BYTES = 32
@@ -124,7 +187,11 @@ def new_salt() -> bytes:
 
 
 def derive_key(secret: str, *, salt: bytes, params: KdfParams | None = None) -> bytes:
-    """Parola/kurtarma anahtarından Argon2id ile 32 baytlık sarmalama anahtarı türetir."""
+    """Sırdan Argon2id ile 32 baytlık anahtar türetir.
+
+    Kurtarma bölümünün sarmalama anahtarı doğrudan budur. HESAP SARMALI bunu TEK BAŞINA
+    kullanmaz: hesap kimliğine bağlı `account_wrapping_key`'den geçer (modül başlığı).
+    """
     kdf = params or DEFAULT_KDF
     return hash_secret_raw(
         secret=secret.encode("utf-8"),
@@ -171,13 +238,157 @@ def key_fingerprint(data_key: bytes) -> str:
 # Kör indeks anahtarının HKDF bağlamı (tasarım §5.3). Değişirse bütün
 # kör indeks sütunları yeniden hesaplanmalıdır — sabit, sürüm ekiyle değişir.
 BLIND_INDEX_INFO = b"od-kor-indeks"
+#: Hesap mührü anahtarının HKDF bağlamı (tasarım §2.3.1, §4.6.1): `Account.seal`
+#: `HMAC(HKDF(DEK, "od-hesap-muhru/v1"), kanonik(...))`'tir (`shared.kanonik`).
+#: Değişirse bütün mühürler tutmaz olur; tasarım tutmayan mührün yeniden
+#: hesaplanmasını yasaklar. Sürüm eki yalnız DEK yenilemesiyle (F4) değişebilir.
+ACCOUNT_SEAL_INFO = b"od-hesap-muhru/v1"
+#: Sarmal özeti anahtarının HKDF bağlamı (kullanıcı kararı 03.11.2026; modül başlığı "SARMALIN
+#: TAZELİĞİ"): `Account.wrap_digest` `HMAC(HKDF(DEK, "od-sarmal-ozeti/v1"), kanonik(id, salt,
+#: sarmal))`'dır (`account_wrap_digest`). Değişirse bütün özetler tutmaz olur ve hiçbir hesap
+#: parolayla açılmaz; sürüm eki yalnız DEK yenilemesiyle (F4) değişebilir.
+ACCOUNT_WRAP_DIGEST_INFO = b"od-sarmal-ozeti/v1"
+#: Hesap sarmalı anahtarının HKDF bağlamının öneki (tasarım §2.3.1, §4.4.4; kullanıcı kararı
+#: 02.11.2026): anahtar `HKDF(Argon2id(parola, tuz), ACCOUNT_WRAP_INFO ‖ kanonik kimlik)`'tir
+#: (`account_wrapping_key`). DEK'e değil parolanın Argon2id çıktısına uygulanır. Değişirse
+#: bütün hesap sarmalları açılmaz olur (kurtarma bölümü etkilenmez); eski türetime geri
+#: düşen yol YOKTUR.
+ACCOUNT_WRAP_INFO = b"od-hesap-sarmali/v1"
+
+# İz anahtarından (İA; tasarım §4.6.3) türeyen anahtarların HKDF bağlamları. İA DEK'ten
+# TÜREMEZ; bu dizgeler yalnız İA'ya (kilitli kipte çapadan türeyen tohuma) uygulanır.
+# Değişirse kâğıda inmiş zincir başları ve var olan bütün MAC'ler tutmaz olur.
+#: Açık kipte zincir MAC'i: `HMAC(HKDF(İA, "od-denetim-izi/v1"), kanonik(satır) ‖ prev_mac)`.
+AUDIT_CHAIN_INFO = b"od-denetim-izi/v1"
+#: İçerik MAC'i ("kaydın özeti", §4.6.2): `HMAC(HKDF(İA, "od-kayit-ozeti/v1"), kanonik(...))`.
+RECORD_SUMMARY_INFO = b"od-kayit-ozeti/v1"
+#: Çapanın mührü (`iz-durumu.json`): `HMAC(HKDF(İA, "od-iz-capa/v1"), seq ‖ mac)`.
+AUDIT_ANCHOR_INFO = b"od-iz-capa/v1"
+#: Kilitli kip tohumu: `tohum₀ = HKDF(İA, "od-iz-kilitli/v1", tuz = seq ‖ mac)`.
+AUDIT_LOCKED_SEED_INFO = b"od-iz-kilitli/v1"
+#: Kilitli kipteki k'ıncı satırın anahtarı: `HKDF(tohumₖ, "od-iz-kilitli-mac/v1")`.
+AUDIT_LOCKED_MAC_INFO = b"od-iz-kilitli-mac/v1"
+
+
+def derive_subkey(key: bytes, *, info: bytes, salt: bytes | None = None) -> bytes:
+    """Adlı amaç için 32 baytlık alt anahtar: HKDF-SHA256(salt, info=amaç).
+
+    DEK'ten türeyen bütün anahtarların (kör indeks, hesap mührü, sarmal özeti; F3'te hareket
+    parmak izi, 3. adımda dosya sarmalı), iz anahtarı türevlerinin (§4.6.3) ve hesap
+    sarmalı anahtarının (parolanın Argon2id çıktısından; `account_wrapping_key`) tek
+    kapısıdır. Bilgi dizgeleri kimlik tablosundadır (tasarım §2.3.1); her amaç
+    ayrı dizge kullanır, bir amacın anahtarı ötekini vermez. Tuz yalnız kilitli kip
+    tohumunda verilir (`tuz = seq ‖ mac`, §4.6.3); öteki türevlerde yoktur (None).
+    """
+    return HKDF(algorithm=hashes.SHA256(), length=32, salt=salt, info=info).derive(key)
+
+
+def audit_chain_key(audit_key: bytes) -> bytes:
+    """İA'dan açık kip zincir anahtarı (`od-denetim-izi/v1`; tasarım §4.6.3)."""
+    return derive_subkey(audit_key, info=AUDIT_CHAIN_INFO)
+
+
+def record_summary_key(audit_key: bytes) -> bytes:
+    """İA'dan içerik MAC'i anahtarı (`od-kayit-ozeti/v1`; tasarım §4.6.2)."""
+    return derive_subkey(audit_key, info=RECORD_SUMMARY_INFO)
+
+
+def audit_anchor_key(audit_key: bytes) -> bytes:
+    """İA'dan çapanın mühür anahtarı (`od-iz-capa/v1`; tasarım §4.6.3)."""
+    return derive_subkey(audit_key, info=AUDIT_ANCHOR_INFO)
+
+
+def audit_locked_seed(audit_key: bytes, anchor_bytes: bytes) -> bytes:
+    """Kilitli kip tohumu: `tohum₀ = HKDF(İA, "od-iz-kilitli/v1", tuz = seq ‖ mac)` (§4.6.3).
+
+    `anchor_bytes` çapanın `seq ‖ mac` baytlarıdır (`shared.kanonik.capa_baytlari`).
+    """
+    return derive_subkey(audit_key, info=AUDIT_LOCKED_SEED_INFO, salt=anchor_bytes)
+
+
+def audit_locked_mac_key(seed: bytes) -> bytes:
+    """Kilitli kipteki k'ıncı satırın zincir anahtarı: `HKDF(tohumₖ, "od-iz-kilitli-mac/v1")`."""
+    return derive_subkey(seed, info=AUDIT_LOCKED_MAC_INFO)
 
 
 def _derive_blind_index_key(data_key: bytes) -> bytes:
     """DEK'ten kör indeks HMAC anahtarı: HKDF-SHA256(salt=None, info="od-kor-indeks")."""
-    return HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=BLIND_INDEX_INFO).derive(
-        data_key
+    return derive_subkey(data_key, info=BLIND_INDEX_INFO)
+
+
+def account_seal_key(data_key: bytes) -> bytes:
+    """DEK'ten hesap mührü anahtarı (`od-hesap-muhru/v1`; tasarım §4.6.1)."""
+    return derive_subkey(data_key, info=ACCOUNT_SEAL_INFO)
+
+
+def account_wrap_digest_key(data_key: bytes) -> bytes:
+    """DEK'ten sarmal özeti anahtarı (`od-sarmal-ozeti/v1`; modül başlığı "SARMALIN TAZELİĞİ")."""
+    return derive_subkey(data_key, info=ACCOUNT_WRAP_DIGEST_INFO)
+
+
+def account_wrap_digest(data_key: bytes, *, account_id: object, salt: bytes, wrapped: str) -> str:
+    """Hesap sarmalının özeti: `HMAC(HKDF(DEK, "od-sarmal-ozeti/v1"), kanonik(id, salt, sarmal))`.
+
+    Kimlik `canonical_account_id`'den geçer (çevrilemezse `ValueError`/`TypeError`); tuz ham
+    baytlardır ve kanonik base64 metniyle girer (dosyadaki yazımı ne olursa olsun aynı tuz aynı
+    özeti verir); sarmal dosyadaki Fernet belirtecinin metnidir. Saftır (ORM istemez): geri
+    yüklemenin ORM'siz yolu da bunu çağırır.
+    """
+    if not isinstance(wrapped, str):
+        raise TypeError("Sarmal metin olmalıdır.")
+    return kanonik.sarmal_ozeti(
+        account_wrap_digest_key(data_key),
+        {
+            "id": canonical_account_id(account_id),
+            "salt": base64.b64encode(salt).decode("ascii"),
+            "sarmal": wrapped,
+        },
     )
+
+
+def canonical_account_id(value: object) -> str:
+    """Hesap kimliğinin TEK kanonik metni: `uuid.UUID` nesnesinin `str()`'i (modül başlığı).
+
+    `uuid.UUID` nesnesi metnine çevrilir. Metin ancak tam olarak kanonik biçimdeyse (küçük
+    harf, tireli, 36 karakter, boşluksuz) kabul edilir; büyük harfli, tiresiz, boşluklu,
+    süslü ayraçlı, `urn:uuid:` önekli ya da ASCII dışı rakamlı yazım `ValueError`, metin ve
+    UUID dışındaki tür `TypeError` yükseltir. Hesap sarmalının YAZICISI da OKUYUCUSU da
+    kimliği buradan geçirir: çevrilemeyen kimlikle sarmal yazılmaz, açılmaz.
+    """
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if not isinstance(value, str):
+        raise TypeError("Hesap kimliği UUID ya da metin olmalıdır.")
+    kanonik = str(uuid.UUID(value))
+    if value != kanonik:
+        raise ValueError("Hesap kimliği kanonik biçimde değil.")
+    return kanonik
+
+
+def account_wrapping_key(
+    password: str, *, salt: bytes, account_id: object, params: KdfParams | None = None
+) -> bytes:
+    """Hesap sarmalının anahtarı: `HKDF(Argon2id(parola, tuz), "od-hesap-sarmali/v1" ‖ kimlik)`.
+
+    Kimlik `canonical_account_id`'den geçer (çevrilemezse `ValueError`/`TypeError`, Argon2id
+    koşmadan). Başka kimlikle türetilen anahtar sarmalı açmaz (modül başlığı "HESAP SARMALI
+    KİMLİĞE BAĞLIDIR"). Kurtarma bölümü bunu KULLANMAZ (hesaba bağlı değildir).
+    """
+    kimlik = canonical_account_id(account_id)
+    return derive_subkey(
+        derive_key(password, salt=salt, params=params),
+        info=ACCOUNT_WRAP_INFO + kimlik.encode("ascii"),
+    )
+
+
+def decrypt_with(raw_key: bytes, token: str) -> bytes:
+    """Verilen ham anahtarla (bellekteki DEK değil) Fernet token'ını çözer.
+
+    Kilit açılışında iz anahtarı (İA) DEK BELLEĞE YÜKLENMEDEN önce aday DEK'le
+    çözülür (tasarım §4.6.3; plan F1b-1 "Oturum"): çözülemezse oturum açılmaz.
+    Yanlış anahtar ya da bozuk token `InvalidToken` yükseltir.
+    """
+    return _fernet_for(raw_key).decrypt(token.encode("ascii"))
 
 
 class KeyMissingError(RuntimeError):
@@ -210,15 +421,17 @@ class _KeyHolder:
         self._fernet: Fernet | None = None
         self._raw: bytes | None = None
         self._blind_key: bytes | None = None
+        self._audit_key: bytes | None = None
         self._epoch = 0
 
-    def load(self, raw_key: bytes) -> None:
+    def load(self, raw_key: bytes, audit_key: bytes | None = None) -> None:
         blind_key = _derive_blind_index_key(raw_key)
         fernet = _fernet_for(raw_key)
         with self._lock:
             self._raw = raw_key
             self._fernet = fernet
             self._blind_key = blind_key
+            self._audit_key = audit_key
             self._epoch += 1
 
     def unload(self) -> None:
@@ -226,6 +439,7 @@ class _KeyHolder:
             self._raw = None
             self._fernet = None
             self._blind_key = None
+            self._audit_key = None
             self._epoch += 1
 
     @property
@@ -249,13 +463,21 @@ class _KeyHolder:
     def blind_key(self) -> bytes | None:
         return self._blind_key
 
+    def audit_key(self) -> bytes | None:
+        return self._audit_key
+
 
 _holder = _KeyHolder()
 
 
-def load_key(raw_key: bytes) -> None:
-    """Veri anahtarını belleğe alır (kilidi açar); `key_epoch()` artar."""
-    _holder.load(raw_key)
+def load_key(raw_key: bytes, *, audit_key: bytes | None = None) -> None:
+    """Veri anahtarını (ve varsa iz anahtarını) belleğe alır; `key_epoch()` artar.
+
+    İki anahtar tek adımda yüklenir: önceki oturumun iz anahtarı yeni DEK'le
+    birlikte bellekte kalmaz. İz anahtarı verilmezse bellekte iz anahtarı yoktur
+    (denetim izi yazıcısı bunu "iz yazılamaz" sayar; `apps.okul.denetim_izi`).
+    """
+    _holder.load(raw_key, audit_key)
 
 
 def unload_key() -> None:
@@ -271,9 +493,9 @@ def is_unlocked() -> bool:
 def key_epoch() -> int:
     """Her `load_key` ve `unload_key` çağrısında artan süreç içi sayaç.
 
-    Kip katmanı (`apps/okul/kip.py`) gördüğü son değeri saklar; değer
-    değişmişse ve anahtar yüklüyse bu yeni bir kilit açılışıdır (yönetici kipi,
-    sayaçlar sıfırdan).
+    Teşhis ve test içindir (ör. "parola değişimi DEK'i yeniden yüklemedi"). Aile
+    iskeletinin kip katmanı kilit açılışını bu sayacın değişiminden çıkarıyordu; OAB'de
+    oturum yalnız açık çağrıyla açılır (`apps/okul/oturum.py`), sayaç hesap taşımaz.
     """
     return _holder.epoch
 
@@ -284,8 +506,13 @@ def active_fingerprint() -> str | None:
 
 
 def active_key() -> bytes | None:
-    """Yüklü veri anahtarı (ham). YALNIZ geçiş aracı içindir; asla loglanmaz/döndürülmez."""
+    """Yüklü veri anahtarı (ham). Yalnız servis katmanı içindir; asla loglanmaz/döndürülmez."""
     return _holder.raw()
+
+
+def active_audit_key() -> bytes | None:
+    """Yüklü iz anahtarı (İA, ham; tasarım §4.6.3); yoksa None. Asla loglanmaz."""
+    return _holder.audit_key()
 
 
 def blind_index(normalized: str) -> str:
@@ -308,24 +535,152 @@ def blind_index(normalized: str) -> str:
 # ---------------------------------------------------------------------------
 # Model alanları
 # ---------------------------------------------------------------------------
+class CorruptField:
+    """Çözülemeyen şifreli alanın işareti (tasarım TK8 (3), §13 D48) — METİN DEĞİLDİR.
+
+    Kilit açıkken bir şifreli sütunda token olmayan ya da bu DEK'le çözülemeyen
+    dolu değer bulunursa `from_db_value` bunu döndürür. Bilinçli olarak `str`
+    alt sınıfı DEĞİLDİR (plan F1b-1 "Denetim izi"): metin sanılıp şifrelenseydi
+    işaret meşru veriye dönerdi.
+
+    * `str()` boş dize verir, doğruluk değeri yanlıştır: ad birleştirme ve
+      sıralama gibi yollar patlamaz, ama değer ekrana ve evraka düz metin olarak
+      çıkmaz. Arama ve eşleme işaretli kaydı dışarıda bırakır (`has_corrupt`);
+      serializer alanı `null` verir ve kaydın `bozuk_alanlar` listesine yazar.
+    * Kaydedilirken `EncryptedTextField.get_prep_value` eski HAM değeri aynen
+      geri yazar: bozukluk kayıtta görünür kalır, inceleme yapılabilir.
+    * Ham değer `repr`'e ve günlüğe yazılmaz (düz metin kişi verisi olabilir).
+    """
+
+    __slots__ = ("_raw", "field_name", "model_label")
+
+    def __init__(self, raw: str, *, model_label: str = "", field_name: str = "") -> None:
+        self._raw = raw
+        self.model_label = model_label
+        self.field_name = field_name
+
+    @property
+    def raw(self) -> str:
+        """Veritabanındaki ham değer (yalnız geri yazım içindir)."""
+        return self._raw
+
+    def __str__(self) -> str:
+        return ""
+
+    def __format__(self, format_spec: str) -> str:
+        return format("", format_spec)
+
+    def __repr__(self) -> str:
+        return f"<CorruptField {self.model_label}.{self.field_name}>"
+
+    def __bool__(self) -> bool:
+        return False
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, CorruptField) and other._raw == self._raw
+
+    def __hash__(self) -> int:
+        return hash(("CorruptField", self._raw))
+
+
+def is_corrupt(value: object) -> bool:
+    """Değer çözülemeyen şifreli alan işareti mi?"""
+    return isinstance(value, CorruptField)
+
+
+# Süreç içi bozuk okuma kaydı: (model etiketi, kayıt kimliği, alan adı). Güvenlik
+# durumu sayıyı bildirir; pano kartı ön yüz commit'indedir (plan F1b-1 "Denetim
+# izi": okuma GET isteğinde iz yazamaz, önce bellekte toplanır).
+_bozuk_kilit = threading.Lock()
+_bozuk_okumalar: set[tuple[str, str, str]] = set()
+_sifreli_alan_onbellegi: dict[type[Any], tuple[str, ...]] = {}
+
+
+def record_corrupt_read(model_label: str, pk: object, field_name: str) -> None:
+    """Bozuk okumayı süreç içi kayda ekler (aynı kayıt-alan bir kez sayılır)."""
+    with _bozuk_kilit:
+        _bozuk_okumalar.add((model_label, "" if pk is None else str(pk), field_name))
+
+
+def corrupt_reads() -> list[tuple[str, str, str]]:
+    """Bu süreçte okunan bozuk alanlar: (model etiketi, kayıt kimliği, alan adı), sıralı."""
+    with _bozuk_kilit:
+        return sorted(_bozuk_okumalar)
+
+
+def corrupt_read_count() -> int:
+    """Bu süreçte okunan bozuk alanların sayısı (güvenlik durumu bildirir)."""
+    with _bozuk_kilit:
+        return len(_bozuk_okumalar)
+
+
+def _reset_corrupt_reads_for_tests() -> None:
+    """Yalnız testler için: süreç içi kayıt testler arasında sızmasın."""
+    with _bozuk_kilit:
+        _bozuk_okumalar.clear()
+
+
+def corrupt_fields_of(instance: models.Model) -> list[str]:
+    """Kaydın `CorruptField` taşıyan şifreli alanlarının adları (alan sırasıyla)."""
+    return [
+        alan.name
+        for alan in encrypted_fields_of(type(instance))
+        if isinstance(instance.__dict__.get(alan.attname), CorruptField)
+    ]
+
+
+def has_corrupt(instance: models.Model) -> bool:
+    """Kayıtta çözülemeyen şifreli alan var mı? (arama ve eşleme dışarıda bırakır)"""
+    return bool(corrupt_fields_of(instance))
+
+
+def _bozuk_alanlari_kaydet(sender: type[Any], instance: models.Model, **kwargs: Any) -> None:
+    """`post_init`: veritabanından gelen kayıttaki işaretleri kimliğiyle kaydeder.
+
+    `from_db_value` kaydın kimliğini bilmez; kimlik ancak örnek kurulunca bellidir.
+    Şifreli alanı olmayan modelde maliyet tek sözlük aramasıdır. `values()`
+    sorgusu örnek kurmadığı için onun okuduğu işaret kayda düşmez; üretim kodu
+    şifreli alanı model örneğiyle okur.
+    """
+    attnames = _sifreli_alan_onbellegi.get(sender)
+    if attnames is None:
+        attnames = tuple(alan.attname for alan in encrypted_fields_of(sender))
+        _sifreli_alan_onbellegi[sender] = attnames
+    for attname in attnames:
+        deger = instance.__dict__.get(attname)
+        if isinstance(deger, CorruptField):
+            record_corrupt_read(deger.model_label, instance.pk, deger.field_name)
+
+
+post_init.connect(_bozuk_alanlari_kaydet, weak=False, dispatch_uid="od-bozuk-alan-kaydi")
+
+
 class EncryptedTextField(models.TextField):  # type: ignore[type-arg]  # Any davranışı korunur
     """Fernet ile şifreli saklanan metin alanı; anahtar yokken yazmaz (fail-closed).
 
-    Python tarafında daima düz metin (str) gibi davranır. DB sütunu TEXT'tir,
+    Python tarafında düz metin (str) gibi davranır. DB sütunu TEXT'tir,
     içerik base64 Fernet token'ıdır. Boş dize şifrelenmez.
 
-    KİLİTLİYKEN OKUMA: `from_db_value` çözemediği değeri OLDUĞU GİBİ döndürür
-    (token okunamaz ama patlamaz). Aynı tolerans, yarım kalmış bir şifreleme
-    geçişinden (elektrik kesintisi) kalan düz satırların okunmasını da sağlar;
-    geçiş kaldığı yerden tamamlanır (`app_password.resume_pending`).
+    KİLİTLİYKEN OKUMA: anahtar yoksa `from_db_value` token'ı OLDUĞU GİBİ
+    döndürür (okunamaz ama patlamaz); böyle okunmuş kaydı geri yazmak
+    `KeyMissingError` verir (dolu değer anahtarsız yazılmaz).
+
+    KİLİT AÇIKKEN OKUMA KATIDIR (tasarım §13 D48): çözülemeyen ya da token
+    olmayan dolu değer `CorruptField` olarak döner; yazımda işaretin ham değeri
+    aynen geri yazılır (`get_prep_value`), `clean`/`to_python` işareti metne
+    çevirmez.
     """
 
-    description = "Yönetici parolasının veri anahtarıyla Fernet ile şifrelenen metin alanı"
+    description = "Hesabın açtığı veri anahtarıyla Fernet ile şifrelenen metin alanı"
 
     def get_prep_value(self, value: Any) -> str | None:
         """Python değeri → DB'ye yazılacak şifreli metin; anahtar yoksa `KeyMissingError`."""
         if value is None:
             return None
+        if isinstance(value, CorruptField):
+            # Bozuk değer olduğu gibi geri yazılır: işaret ŞİFRELENİP meşru veriye
+            # dönmez, bozukluk kayıtta görünür kalır (plan F1b-1, D48).
+            return value.raw
         text = str(value)
         # Boş dize ŞİFRELENMEZ: "veri yok" hâli DB'de de boş görünmeli — kısmi
         # tekillik kısıtları ve `blank=True` semantiği buna dayanır.
@@ -337,8 +692,10 @@ class EncryptedTextField(models.TextField):  # type: ignore[type-arg]  # Any dav
             raise KeyMissingError()
         return fernet.encrypt(text.encode("utf-8")).decode("ascii")
 
-    def from_db_value(self, value: Any, expression: Any, connection: Any) -> str | None:
-        """DB'den okunan metin → düz metin (token ise çözülür)."""
+    def from_db_value(
+        self, value: Any, expression: Any, connection: Any
+    ) -> str | CorruptField | None:
+        """DB'den okunan metin → düz metin; kilit açıkken çözülemeyen → `CorruptField`."""
         if value is None or value == "":
             return cast("str | None", value)
         fernet = _holder.fernet()
@@ -348,10 +705,23 @@ class EncryptedTextField(models.TextField):  # type: ignore[type-arg]  # Any dav
         try:
             return fernet.decrypt(str(value).encode("ascii")).decode("utf-8")
         except (InvalidToken, UnicodeEncodeError, UnicodeDecodeError):
-            # Yarım kalmış geçişten düz satır veya anahtar uyuşmazlığı.
-            # UnicodeEncodeError: Fernet token'ı daima ASCII'dir; Türkçe harf
-            # içeren değer tanım gereği düz metindir (ailenin sahada öğrendiği ders).
-            return cast("str | None", value)
+            # Token değil (düz metin; Türkçe harfli değer tanım gereği tokensızdır,
+            # UnicodeEncodeError) ya da bu DEK'in token'ı değil: KATI KİP (D48).
+            model = getattr(self, "model", None)
+            etiket = model._meta.label if model is not None else ""
+            return CorruptField(str(value), model_label=etiket, field_name=self.name or "")
+
+    def to_python(self, value: Any) -> Any:
+        """`CorruptField` metne çevrilmez (aksi hâlde `full_clean` işareti "" yapardı)."""
+        if isinstance(value, CorruptField):
+            return value
+        return super().to_python(value)
+
+    def clean(self, value: Any, model_instance: models.Model | None) -> Any:
+        """İşaretli değer doğrulanmadan aynen kalır (uzunluk denetimi metin ister)."""
+        if isinstance(value, CorruptField):
+            return value
+        return super().clean(value, model_instance)
 
 
 class EncryptedCharField(EncryptedTextField):

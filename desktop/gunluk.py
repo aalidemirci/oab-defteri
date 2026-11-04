@@ -11,7 +11,7 @@ damga dosyasında tutar ve günü eskiyen işi çalıştırır.
   açılışta okur (`backend_islerini_ekle`).
 * **Damga** (`gun-kapisi.json`, veri dizininde): iş başına son başarılı gün.
   Bir iş `False` döner ya da istisna yükseltirse damgası yazılmaz ve bir saat
-  sonra yeniden denenir (ör. yönetici parolası kurulmadan yedek alınamaz).
+  sonra yeniden denenir (ör. ilk program yöneticisi hesabı kurulmadan yedek alınamaz).
   Tarih YEREL gündür (`date.today()`, `Europe/Istanbul`); saat taklit edilebilir.
 * **Bakım kapısı** (§13 D3): her iş ortak bakım kapısından geçer
   (`shared.bakim.KAPI.is_()`); geri yükleme sürerken iş başlamaz, başlamış iş
@@ -22,6 +22,13 @@ damga dosyasında tutar ve günü eskiyen işi çalıştırır.
   (yedek alınmadıysa rotasyon koşmaz).
 * **Saatlik işler** (`saatlik_kaydet`): damgasız, HER tikte koşar. Günde bir
   yetmeyen denetimler içindir; bakım kapısından aynı biçimde geçer.
+* **Ertelenenleri şimdi dene** (`ertelenenleri_dene`; TK19 "DEK isteyen gün işi kilitliyken
+  'ertelendi' döner ve ilk kilit açılışında koşar"): kilit açılışı backend'den
+  `masaustu_kanca` üzerinden bu sinyali verir. Sinyal ENGELLEMEZ: döngüyü uyandırır, döngü
+  günü eskiyen (bugün başarıyla bitmemiş) işleri saatlik takvimi beklemeden kendi iş
+  parçacığında dener — bakım kapısından geçerek, damga kuralıyla. Saatlik işler bu denemede
+  koşmaz ve saatlik takvim kaymaz: tetiklenen iş yine düşerse saatlik deneme sürer. Sinyal
+  bir iş sürerken gelirse kaybolmaz; iş bitince deneme yapılır.
 
 Aile iskeletindeki uyku engelleme ve IP denetimi yalnız ağ kataloğu içindi;
 katalogla birlikte söküldü (program ağ servisi sunmaz).
@@ -140,6 +147,7 @@ class GunDegisimiKapisi:
         self._ilk_is: Callable[[], None] | None = None
         self._kilit = threading.Lock()
         self._uyandir = threading.Event()
+        self._simdi_dene = threading.Event()
         self._dur = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -203,7 +211,19 @@ class GunDegisimiKapisi:
     # ------------------------------------------------------------ tek geçiş
 
     def tik(self) -> list[str]:
-        """Günü eskiyen işleri çalıştırır; bu geçişte BAŞARIYLA biten işlerin adları."""
+        """Günü eskiyen işleri, sonra saatlik işleri çalıştırır; BAŞARIYLA biten günlük işler."""
+        biten = self.gunu_eskiyenleri_kos()
+        with self._kilit:
+            saatlik = list(self._saatlik.values())
+        for is_ in saatlik:
+            self._calistir(is_)  # damga yok; sonuç bir sonraki tikte yeniden sorulur
+        return biten
+
+    def gunu_eskiyenleri_kos(self) -> list[str]:
+        """Günü eskiyen (bugün başarıyla bitmemiş) işleri çalıştırır; BAŞARIYLA bitenlerin adları.
+
+        Saatlik tikin ilk yarısıdır; ertelenenleri deneme sinyali yalnız bunu koşar.
+        """
         bugun = self._bugun().isoformat()
         damgalar = self.damgalar()
         with self._kilit:
@@ -218,10 +238,6 @@ class GunDegisimiKapisi:
         if biten:
             self._damga_yaz(damgalar)
             logger.info("Gün değişimi kapısı: %s tamamlandı.", ", ".join(biten))
-        with self._kilit:
-            saatlik = list(self._saatlik.values())
-        for is_ in saatlik:
-            self._calistir(is_)  # damga yok; sonuç bir sonraki tikte yeniden sorulur
         return biten
 
     def _calistir(self, is_: IsKaydi) -> bool:
@@ -258,6 +274,15 @@ class GunDegisimiKapisi:
         """Döngüyü uyandırır (saatlik takvim kaymaz; vakti gelmişse tik koşar)."""
         self._uyandir.set()
 
+    def ertelenenleri_dene(self) -> None:
+        """Günü eskiyen işler saatlik takvimi beklemeden denensin (modül belgesi). ENGELLEMEZ.
+
+        Kilit açılışı `masaustu_kanca.ertelenen_gun_islerini_dene` üzerinden çağırır; iş
+        `od-gunluk` iş parçacığında koşar. Döngü durmuşsa ya da hiç başlamamışsa etkisizdir.
+        """
+        self._simdi_dene.set()
+        self._uyandir.set()
+
     def durdur(self, *, zaman_asimi: float = 10.0) -> None:
         """Döngüyü bitirir."""
         thread, self._thread = self._thread, None
@@ -284,6 +309,11 @@ class GunDegisimiKapisi:
                 self._uyandir.clear()
                 if self._dur.is_set():
                     break
+                if self._simdi_dene.is_set():
+                    # İşaret İŞTEN ÖNCE düşer: iş sürerken gelen yeni sinyal bir sonraki turda
+                    # yeniden denetir (kaybolmaz).
+                    self._simdi_dene.clear()
+                    self.gunu_eskiyenleri_kos()
                 if self._monoton() >= sonraki:
                     self.tik()
                     sonraki = self._monoton() + self._aralik

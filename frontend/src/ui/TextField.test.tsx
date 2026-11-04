@@ -62,6 +62,26 @@ describe("TextField", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Sayı girin.");
   });
 
+  it("dış açıklama (describedBy) alanın kendi hata metniyle birleşir, onu ezmez", () => {
+    const { rerender } = render(
+      <>
+        <p id="kural">En az 8 karakter.</p>
+        <TextField label="Yeni parola" describedBy="kural" defaultValue="" />
+      </>,
+    );
+    const alan = screen.getByLabelText("Yeni parola");
+    expect(alan).toHaveAccessibleDescription("En az 8 karakter.");
+
+    rerender(
+      <>
+        <p id="kural">En az 8 karakter.</p>
+        <TextField label="Yeni parola" describedBy="kural" error="Parola kısa." defaultValue="" />
+      </>,
+    );
+    expect(alan).toHaveAccessibleDescription("Parola kısa. En az 8 karakter.");
+    expect(alan).toHaveAttribute("aria-invalid", "true");
+  });
+
   it("boş etiketle <label> basmaz; erişilebilir ad aria-label'dan gelir", () => {
     const { container } = render(<TextField label="" aria-label="Öğrenci ara" defaultValue="" />);
 

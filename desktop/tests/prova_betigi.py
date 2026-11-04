@@ -8,17 +8,18 @@ AYRI süreçte koşar ve sonucunu stdout'un son satırına JSON olarak yazar. To
 
 Komutlar:
 
-* `hazirla --data-dir A --usb U` — göç, yönetici parolası + kurtarma anahtarı
-  (doğrulanmış), uydurma kişi kayıtları, **dış yedek** (kullanıcının indirdiği
-  şifreli yedek, `encrypted_backup`) U klasörüne.
-* `dogrula --data-dir B (--parola P | --kurtarma K --yeni-parola P2)` — kilidi
-  açar, özeti yazar.
+* `hazirla --data-dir A --usb U` — göç, ilk program yöneticisi hesabı (tanıtıcı
+  `yonetici`) + kurtarma anahtarı (doğrulanmış), uydurma kişi kayıtları, **dış
+  yedek** (kullanıcının indirdiği şifreli yedek, `encrypted_backup`) U klasörüne.
+* `dogrula --data-dir B (--parola P | --kurtarma K --yeni-parola P2) [--hesap T]` —
+  kilidi hesabın parolasıyla ya da kurtarma anahtarıyla (program yöneticisinin
+  parolası yenilenir) açar, özeti yazar.
 * `gelecek-yedek --data-dir A --parola P --usb U` — veritabanına programın
   tanımadığı bir göç kaydı yazıp dış yedek alır, sonra kaydı siler (daha yeni bir
   sürümün yedeği; eski-sürüm kapısının geri yükleme yolu).
 * `sihirbaz --data-dir B --parola P2` — yeni bilgisayarda kurucunun "programı
-  çalıştır" kutusuyla açılan programda sihirbazın BAŞKA bir parolayla kurulması
-  (göç + parola + doğrulanmış anahtar, kişi verisi yok). Geri yüklemeden önce
+  çalıştır" kutusuyla açılan programda sihirbazın BAŞKA bir hesapla kurulması
+  (göç + ilk hesap + doğrulanmış anahtar, kişi verisi yok). Geri yüklemeden önce
   yabancı bir güvenlik dosyası, yedek anahtarı ve boş veritabanı bırakır (aile
   iskeletinin düzeltmesi).
 * `gun-kapisi --data-dir A --parola P` — gün değişimi kapısını (`od-gunluk`) gerçek
@@ -40,13 +41,17 @@ import argparse
 import json
 import os
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 from desktop.django_bootstrap import prepare_django, run_migrations
 from desktop.paths import ENV_APP_HOME, resolve_app_paths, resolve_backend_dir
 
-#: Uydurma yönetici parolası (yalnız bu provanın geçici veri dizini için).
+#: Uydurma hesap ve parola (yalnız bu provanın geçici veri dizini için).
+TANITICI = "yonetici"
+HESAP_ADI = "Deneme Yönetici"
 PAROLA = "Prova-Yonetici-Parolasi-1"
 YENI_PAROLA = "Prova-Yeni-Parola-2"
 #: Sahte "gelecek sürüm" göçü (program tanımaz).
@@ -61,6 +66,23 @@ def _django(veri_koku: str) -> Path:
     paths.ensure()
     prepare_django(resolve_backend_dir(), paths.data)
     return paths.data
+
+
+@contextmanager
+def _oturum_istegi() -> Iterator[None]:
+    """Açık oturumdaki hesabın isteği gibi: yazar bağlamı istek başında kurulur.
+
+    Programda bunu ara katman yapar (`lock_middleware`); betik servisi doğrudan çağırdığı
+    için bağlamı kendisi kurar. Denetim izi yazarsız yazmayı reddeder (tasarım §4.6.2):
+    kurtarma anahtarı damgası `KURTARMA`, dış yedek `YEDEK` satırı yazar.
+    """
+    from apps.okul.oturum import OTURUM, Yazar, yazar_olarak
+
+    hesap = OTURUM.hesap()
+    if hesap is None:
+        raise SystemExit("oturum açık değil")
+    with yazar_olarak(Yazar.hesaptan(hesap)):
+        yield
 
 
 def _ozet() -> dict[str, Any]:
@@ -84,8 +106,9 @@ def hazirla(args: argparse.Namespace) -> dict[str, Any]:
 
     run_migrations()
     crypto.DEFAULT_KDF = crypto.KdfParams.from_dict(_UCUZ_KDF)
-    kurtarma = app_password.enable(password=PAROLA)
-    app_password.confirm_recovery_key(kurtarma)
+    kurtarma = app_password.enable(tanitici=TANITICI, display_name=HESAP_ADI, password=PAROLA)
+    with _oturum_istegi():
+        app_password.confirm_recovery_key(kurtarma)
 
     Student.objects.create(
         first_name="Deneme Çağla",
@@ -106,12 +129,14 @@ def hazirla(args: argparse.Namespace) -> dict[str, Any]:
     )
 
     # Dış yedek: kullanıcının Ayarlar → Güvenlik'ten indirip USB'ye aldığı şifreli yedek.
-    icerik, ad = encrypted_backup.create_encrypted_backup()
+    with _oturum_istegi():
+        icerik, ad = encrypted_backup.create_encrypted_backup()
     usb = Path(args.usb)
     usb.mkdir(parents=True, exist_ok=True)
     yedek = usb / ad
     yedek.write_bytes(icerik)
     return {
+        "tanitici": TANITICI,
         "parola": PAROLA,
         "kurtarma": kurtarma,
         "yedek": str(yedek),
@@ -119,14 +144,27 @@ def hazirla(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def _ac(tanitici: str, parola: str) -> None:
+    """Tanıtıcısı verilen hesabın parolasıyla kilidi açar (kilit ekranının karşılığı)."""
+    from apps.okul.services import app_password
+
+    hesap_id = app_password.account_id_for_login_name(tanitici)
+    if hesap_id is None:
+        raise SystemExit(f"hesap yok: {tanitici}")
+    app_password.unlock(hesap_id=hesap_id, password=parola)
+
+
 def dogrula(args: argparse.Namespace) -> dict[str, Any]:
     _django(args.data_dir)
     from apps.okul.services import app_password
 
     if args.parola:
-        app_password.unlock(password=args.parola)
+        _ac(args.hesap, args.parola)
     else:
-        app_password.unlock_with_recovery(recovery_key=args.kurtarma, new_password=args.yeni_parola)
+        hesap_id = app_password.account_id_for_login_name(args.hesap)
+        app_password.unlock_with_recovery(
+            recovery_key=args.kurtarma, hesap_id=hesap_id, new_password=args.yeni_parola
+        )
     return {"ozet": _ozet(), "durum": app_password.status()}
 
 
@@ -135,13 +173,14 @@ def gelecek_yedek(args: argparse.Namespace) -> dict[str, Any]:
     from django.db import connection
     from django.db.migrations.recorder import MigrationRecorder
 
-    from apps.okul.services import app_password, encrypted_backup
+    from apps.okul.services import encrypted_backup
 
-    app_password.unlock(password=args.parola)
+    _ac(args.hesap, args.parola)
     kayit = MigrationRecorder(connection)
     kayit.record_applied(*GELECEK_GOC)
     try:
-        icerik, _ad = encrypted_backup.create_encrypted_backup()
+        with _oturum_istegi():
+            icerik, _ad = encrypted_backup.create_encrypted_backup()
     finally:
         kayit.record_unapplied(*GELECEK_GOC)
     usb = Path(args.usb)
@@ -158,18 +197,20 @@ def sihirbaz(args: argparse.Namespace) -> dict[str, Any]:
 
     run_migrations()
     crypto.DEFAULT_KDF = crypto.KdfParams.from_dict(_UCUZ_KDF)
-    kurtarma = app_password.enable(password=args.parola)
-    app_password.confirm_recovery_key(kurtarma)
+    kurtarma = app_password.enable(
+        tanitici=TANITICI, display_name="Deneme Başka Yönetici", password=args.parola
+    )
+    with _oturum_istegi():
+        app_password.confirm_recovery_key(kurtarma)
     return {"durum": app_password.status()}
 
 
 def gun_kapisi(args: argparse.Namespace) -> dict[str, Any]:
     _django(args.data_dir)
-    from apps.okul.services import app_password
     from desktop.gunluk import GunDegisimiKapisi
     from desktop.main import gunluk_yedek_isi
 
-    app_password.unlock(password=args.parola)
+    _ac(args.hesap, args.parola)
     paths = resolve_app_paths()
     kapi = GunDegisimiKapisi(damga_yolu=paths.data / "kapi-sinamasi.json")
     kapi.kaydet("gunluk-yedek", gunluk_yedek_isi(paths))
@@ -189,16 +230,19 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--parola", default="")
     d.add_argument("--kurtarma", default="")
     d.add_argument("--yeni-parola", default=YENI_PAROLA)
+    d.add_argument("--hesap", default=TANITICI)
     g = alt.add_parser("gelecek-yedek")
     g.add_argument("--data-dir", required=True)
     g.add_argument("--parola", required=True)
     g.add_argument("--usb", required=True)
+    g.add_argument("--hesap", default=TANITICI)
     s = alt.add_parser("sihirbaz")
     s.add_argument("--data-dir", required=True)
     s.add_argument("--parola", required=True)
     c = alt.add_parser("gun-kapisi")
     c.add_argument("--data-dir", required=True)
     c.add_argument("--parola", required=True)
+    c.add_argument("--hesap", default=TANITICI)
     args = ayristirici.parse_args(argv)
     islem = {
         "hazirla": hazirla,

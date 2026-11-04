@@ -8,8 +8,8 @@ Kanıtlanan maddeler:
 * `POST security/recovery-key/confirm/` yanlış anahtarı (kademeli gecikmeyle)
   reddeder, doğru anahtarı `guvenlik.json`'un kurtarma bölümüne damgalar;
   damga DB'de değil dosyadadır ve parola değişiminden sonra da kalır;
-* başka kurulumun güvenlik dosyasıyla damga yazılmaz; kilitliyken 423, görevli
-  kipinde 403, parola kurulmadan 400;
+* başka kurulumun güvenlik dosyasıyla damga yazılmaz; kilitliyken 423, parola
+  kurulmadan 400;
 * kurulumu önceden (damgasız) tamamlanmış program kilitlenmez; durum uçları
   uyarı için `recovery_key_confirmed: false` söyler;
 * anahtar hiçbir günlüğe ve hata gövdesine düşmez.
@@ -30,13 +30,12 @@ from typing import Any
 import pytest
 from rest_framework.test import APIClient
 
-from apps.okul.kip import KIP
-from apps.okul.models import SchoolConfig, SchoolLevel
+from apps.okul.models import SchoolConfig, SchoolLevel, SchoolTerm, SchoolYear
 from apps.okul.services import app_password
 from apps.okul.services import school_year as school_year_service
 from apps.okul.services import setup as setup_service
 from apps.okul.services import terms as term_service
-from conftest import TEST_KURTARMA_ANAHTARI, TEST_PAROLA
+from conftest import TEST_HESAP_ID, TEST_KURTARMA_ANAHTARI, TEST_PAROLA, TEST_TANITICI
 
 URL = "/api/v1/security/recovery-key/confirm/"
 KANONIK = "TEST-KURT-ARMA-ANAH-TARI-ABCD-EFGH-JKLM"
@@ -94,7 +93,10 @@ class TestKurulumKapisi:
         assert yanit.status_code == 400
         govde = yanit.json()
         assert govde["code"] == "kurulum_eksik"
-        assert "1. adım (yönetici parolası): kurtarma anahtarı doğrulanmadı." in govde["message"]
+        assert (
+            "1. adım (program yöneticisi hesabı): kurtarma anahtarı doğrulanmadı."
+            in govde["message"]
+        )
         assert "2. adım" not in govde["message"] and "3. adım" not in govde["message"]
         assert SchoolConfig.load().setup_completed is False
 
@@ -107,9 +109,31 @@ class TestKurulumKapisi:
         assert client.post("/api/v1/setup/complete/").status_code == 200
 
     def test_parolasizken_ileti_parolayi_soyler(self, client: APIClient, parolasiz: Path) -> None:
-        _kurulum_hazir()
+        # Hesap kurulmadan servis yazamaz (iz anahtarı yok; tasarım §4.6.3): okul bilgileri
+        # ve ders yılı test verisi olarak doğrudan yazılır.
+        SchoolConfig.objects.update_or_create(
+            pk=SchoolConfig.SINGLETON_PK,
+            defaults={
+                "school_name": "Örnek Anadolu Lisesi",
+                "kademe": SchoolLevel.ORTAOGRETIM,
+                "kisa_ad": "Örnek AL",
+                "demirbas_onayi": True,
+            },
+        )
+        yil = SchoolYear.objects.create(
+            name="2026-2027",
+            start_date=date(2026, 9, 7),
+            end_date=date(2027, 6, 25),
+            is_active=True,
+        )
+        SchoolTerm.objects.create(
+            school_year=yil, sequence=1, start_date=yil.start_date, end_date=date(2027, 1, 22)
+        )
+        SchoolTerm.objects.create(
+            school_year=yil, sequence=2, start_date=date(2027, 2, 8), end_date=yil.end_date
+        )
         mesaj = client.post("/api/v1/setup/complete/").json()["message"]
-        assert "yönetici parolası kurulmadı" in mesaj
+        assert "1. adım (program yöneticisi hesabı): hesap kurulmadı." in mesaj
         assert "kurtarma anahtarı doğrulanmadı" not in mesaj
 
     def test_onceden_tamamlanmis_damgasiz_kurulum_kilitlenmez(self, client: APIClient) -> None:
@@ -175,9 +199,12 @@ class TestDogrulamaUcu:
     def test_baska_kurulumun_dosyasiyla_damga_yazilmaz(self, client: APIClient) -> None:
         """Sarmal açılsa bile DEK bellekteki anahtar değilse (başka kurulum) damga yok."""
         baska = app_password._build_state(
-            bytes(range(1, 33)), password="Baska-Parola-9", recovery_key=TEST_KURTARMA_ANAHTARI
+            bytes(range(1, 33)),
+            hesap_id=TEST_HESAP_ID,
+            tanitici=TEST_TANITICI,
+            password="Baska-Parola-9",
+            recovery_key=TEST_KURTARMA_ANAHTARI,
         )
-        baska["gecis"] = app_password.TRANSITION_DONE
         app_password._write_state(baska)
 
         assert _iste(client, TEST_KURTARMA_ANAHTARI).status_code == 400
@@ -188,17 +215,23 @@ class TestDogrulamaUcu:
         assert _iste(client, TEST_KURTARMA_ANAHTARI).status_code == 200
         assert app_password.recovery_key_confirmed() is True
 
-    def test_damga_parola_degisiminden_sonra_kalir(self) -> None:
+    def test_damga_parola_degisiminden_sonra_kalir(self, yonetici_hesabi: Any) -> None:
         app_password.confirm_recovery_key(TEST_KURTARMA_ANAHTARI)
-        app_password.change_password(current_password=TEST_PAROLA, new_password="Yeni-Parola-42")
+        app_password.change_password(
+            hesap_id=TEST_HESAP_ID, current_password=TEST_PAROLA, new_password="Yeni-Parola-42"
+        )
         assert app_password.recovery_key_confirmed() is True
 
-    def test_damga_kurtarmayla_parola_yenilemeden_sonra_kalir(self, kilitli: Path) -> None:
-        app_password.unlock(password=TEST_PAROLA)
+    def test_damga_kurtarmayla_parola_yenilemeden_sonra_kalir(
+        self, yonetici_hesabi: Any, kilitli: Path
+    ) -> None:
+        app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)
         app_password.confirm_recovery_key(TEST_KURTARMA_ANAHTARI)
         app_password.lock()
         app_password.unlock_with_recovery(
-            recovery_key=TEST_KURTARMA_ANAHTARI, new_password="Yeni-Parola-42"
+            recovery_key=TEST_KURTARMA_ANAHTARI,
+            hesap_id=TEST_HESAP_ID,
+            new_password="Yeni-Parola-42",
         )
         assert app_password.recovery_key_confirmed() is True
 
@@ -219,12 +252,6 @@ class TestDogrulamaUcu:
             app_password.confirm_recovery_key(TEST_KURTARMA_ANAHTARI)
         assert app_password.recovery_key_confirmed() is False
 
-    def test_gorevli_kipinde_kapali(self, client: APIClient) -> None:
-        KIP.gorevliye_gec()
-        yanit = _iste(client, TEST_KURTARMA_ANAHTARI)
-        assert yanit.status_code == 403
-        assert yanit.json()["code"] == "kip_yetkisiz"
-
     def test_guvenlik_dosyasi_kayipken_kapali(
         self, client: APIClient, parmak_izi_yazili: str
     ) -> None:
@@ -233,10 +260,10 @@ class TestDogrulamaUcu:
         assert yanit.status_code == 423
         assert yanit.json()["code"] == "guvenlik_dosyasi_kayip"
 
-    def test_parola_kurulmadan_calismaz(self, client: APIClient, parolasiz: Path) -> None:
+    def test_hesap_kurulmadan_calismaz(self, client: APIClient, parolasiz: Path) -> None:
         yanit = _iste(client, TEST_KURTARMA_ANAHTARI)
         assert yanit.status_code == 400
-        assert yanit.json()["message"] == "Yönetici parolası kurulu değil."
+        assert yanit.json()["message"] == "Program yöneticisi hesabı henüz kurulmadı."
         assert app_password.recovery_key_confirmed() is False
 
     def test_bozuk_dosyada_damga_okunamaz_hata_yukseltmez(self) -> None:

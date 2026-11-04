@@ -1,13 +1,18 @@
 // Kurulum sihirbazı — programın İLK AÇILIŞ ekranı (plan §2.2; genel tasarım §5.1
 // sihirbaz sırası, §4.4.5). Üç adım, bu sırayla:
-//   1. Yönetici parolası + kurtarma anahtarı — ATLANAMAZ. Parola kurulunca anahtar
-//      bir kez gösterilir (yazdır / PDF olarak kaydet / elle yaz); devam için
-//      sakladığı kopyadan iki grup geri yazılır, sonra TAM anahtar sunucuda
-//      doğrulanıp güvenlik dosyasına damgalanır (anahtarın saklandığı doğrulanmadan
-//      kurulum bitmez; genel tasarım §4.4.5).
-//      Anahtar ekranda değilken (pencere kapandı, program çöktü) adım iki yol
-//      sunar: kâğıttaki anahtarı yazıp doğrulamak ya da yönetici parolasıyla
-//      YENİ anahtar üretmek (eski anahtar geçersizleşir, kayıtlar değişmez).
+//   1. Program yöneticisi hesabı + kurtarma anahtarı — ATLANAMAZ (tasarım §4.4.4,
+//      §4.4.5; plan F1b-1). Tanıtıcı (varsayılan `yonetici`), ad-soyad (şifreli
+//      saklanır, kilit ekranında görünmez) ve parola + tekrarı girilir; parola
+//      politikası ve tanıtıcı kuralı gönderimden ÖNCE burada da denetlenir, tanıtıcı
+//      ad-soyadı içeriyorsa uyarı (engel değil) yazar. Hesap kurulunca anahtar
+//      (no'su ve üretim tarihiyle) bir kez gösterilir (yazdır / PDF olarak kaydet / elle
+//      yaz); devam için sakladığı kopyadan iki grup geri yazılır, sonra TAM anahtar
+//      sunucuda doğrulanıp güvenlik dosyasına damgalanır (anahtarın saklandığı
+//      doğrulanmadan kurulum bitmez). İlk hesap pencereyi yeniden YÜKLEMEZ (tasarım
+//      §13 D53; `oturum/eylemler.ilkHesabiKur`): sihirbaz anahtarı göstermeyi sürer.
+//      Anahtar ekranda değilken (pencere kapandı, program çöktü, Kilitle'ye basıldı)
+//      adım iki yol sunar: kâğıttaki anahtarı yazıp doğrulamak ya da hesabın
+//      parolasıyla YENİ anahtar üretmek (eski anahtar geçersizleşir, kayıtlar değişmez).
 //   2. Okul bilgileri — okul adı, il, ilçe, müdür, hazırlık sınıfı, kademe, kısa
 //      ad, "bu bilgisayar okul demirbaşıdır" onayı (zorunlu) ve demirbaş no.
 //   3. Ders yılı, dönemler ve kapalı günler — ders yılı kaydedilip aktifleşince
@@ -18,7 +23,7 @@
 //
 // Durum tek kaynaktan (`GET /setup/status/`) beslenir: adım durumları ve eksik
 // adımlar (`missing_steps`) backend'in `setup/complete/` kapısıyla AYNI hesaptır;
-// sihirbaz ilk EKSİK adımdan açılır. Parola kurulmadan ve kurtarma anahtarı
+// sihirbaz ilk EKSİK adımdan açılır. Hesap kurulmadan ve kurtarma anahtarı
 // doğrulanmadan ilerlenemez (İleri kapalı, adım rayı tıklanmaz); kapı backend'de de
 // vardır (eksik adımda 400 `kurulum_eksik`). Kurulum tamamlandıktan sonra anahtar
 // damgasız kalmışsa (yenilenip doğrulanmamış anahtar) ray kilitlenmez; 1. adım yalnız
@@ -45,12 +50,15 @@ import KurtarmaAnahtariPaneli from "../guvenlik/KurtarmaAnahtariPaneli";
 import KurtarmaAnahtariniDogrulaKarti from "../guvenlik/KurtarmaAnahtariniDogrulaKarti";
 import KurtarmaAnahtariniYenileKarti from "../guvenlik/KurtarmaAnahtariniYenileKarti";
 import KurtarmaCiktisiKarti from "../guvenlik/KurtarmaCiktisiKarti";
-import { guvenlikApi } from "../guvenlik/api";
+import type { IlkHesapSonucu, KurtarmaKimligi } from "../guvenlik/api";
 import {
   bekleyenKurtarmaAnahtari,
+  bekleyenKurtarmaAnahtariDogrulandi,
   bekleyenKurtarmaAnahtariniYaz,
   useBekleyenKurtarmaAnahtari,
+  useBekleyenKurtarmaKimligi,
 } from "../guvenlik/bekleyenAnahtar";
+import { guncelKurtarmaKimligi } from "../guvenlik/kurtarma";
 import {
   DOGRULANMADI_BASLIGI,
   DOGRULANMADI_METNI,
@@ -61,11 +69,23 @@ import DemirbasAlanlari from "../okul/DemirbasAlanlari";
 import { KISA_AD_EN_COK, SCHOOL_LEVEL_TR, SETUP_STEPS, okulApi } from "../okul/api";
 import type { SchoolLevel, SchoolYear, SetupStatus, SetupStep } from "../okul/api";
 import { okulBilgileriHatalari } from "../okul/okulBilgileri";
+import YeniParolaAlanlari from "../oturum/YeniParolaAlanlari";
+import { ilkHesabiKur } from "../oturum/eylemler";
+import {
+  TANITICI_KURALI_METNI,
+  TANITICI_VARSAYILAN,
+  adSoyadNormallestir,
+  adSoyadSorunu,
+  taniticiNormallestir,
+  taniticiSorunu,
+  taniticiUyarisi,
+} from "../oturum/hesapKurallari";
+import { yeniParolaHatalari } from "../oturum/parolaPolitikasi";
 import KapaliGunlerPaneli from "../takvim/KapaliGunlerPaneli";
 import { eksikDiniBayramIletisi, takvimYillari, tatilleriTohumla } from "../takvim/tatilTohumu";
 
 const ADIMLAR: readonly { key: SetupStep; label: string; icon: string }[] = [
-  { key: "password", label: "Yönetici Parolası", icon: "key" },
+  { key: "password", label: "Program Yöneticisi Hesabı", icon: "manage_accounts" },
   { key: "school", label: "Okul Bilgileri", icon: "school" },
   { key: "calendar", label: "Ders Yılı ve Kapalı Günler", icon: "calendar_month" },
 ];
@@ -144,16 +164,21 @@ export default function KurulumPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [okul, setOkul] = useState<OkulFormu>(BOS_OKUL_FORMU);
 
-  // Parola kurulur kurulmaz (ya da anahtar yenilenince) gelen kurtarma anahtarı
+  // Hesap kurulur kurulmaz (ya da anahtar yenilenince) gelen kurtarma anahtarı
   // YALNIZ bellekte, 1. adımda durur; kullanıcı doğrulayıp devam edince bırakılır
   // (sunucuda saklanmaz). Anahtar bu bileşenin durumunda DEĞİL, rota ağacının
-  // dışındaki modül belleğindedir (`guvenlik/bekleyenAnahtar`): sayfa görevli
-  // kipine geçiş, Kilitle ya da menü gezinmesiyle sökülse de anahtar kaybolmaz ve
-  // sihirbaz yeniden açılınca 1. adımda yeniden gösterilir. Doğrulama durumu ise
+  // dışındaki modül belleğindedir (`guvenlik/bekleyenAnahtar`): sayfa menü
+  // gezinmesiyle sökülse de anahtar kaybolmaz ve sihirbaz yeniden açılınca 1. adımda
+  // yeniden gösterilir. Kilitle pencereyi yeniden yükler ve anahtarı siler; bu yüzden
+  // anahtar damgasız beklerken önce sorar (`oturum/useKilitle`; tasarım §13 D53). Doğrulama durumu ise
   // bileşendedir: yeniden açılan sihirbaz iki grubu yeniden sorar (sunucu damgası
   // zaten yazıldıysa anahtar bırakılır).
   const kurtarmaAnahtari = useBekleyenKurtarmaAnahtari();
+  const kurtarmaKimligi = useBekleyenKurtarmaKimligi();
   const [anahtarDogrulandi, setAnahtarDogrulandi] = useState(false);
+  // Sunucunun döndürdüğü tanıtıcı uyarısı (`login_name_warning`; engel değil). Hesap
+  // kurulduktan sonra form kalkar; uyarı anahtar panelinin üstünde kalır.
+  const [taniticiSunucuUyarisi, setTaniticiSunucuUyarisi] = useState<string | null>(null);
 
   const [busy, setBusy] = useState(false);
   const [adimHatasi, setAdimHatasi] = useState<string | null>(null);
@@ -174,7 +199,7 @@ export default function KurulumPage() {
       .then(([s, c]) => {
         if (iptal) return;
         setStatus(s);
-        // Parola kurulu değilse bekleyen anahtarın karşılığı yoktur (ör. güvenlik
+        // Hesap kurulu değilse bekleyen anahtarın karşılığı yoktur (ör. güvenlik
         // dosyası sıfırlandı); anahtar sunucuda doğrulandıysa bellekte tutulmaz.
         if (!s.password_set || s.recovery_key_confirmed) bekleyenKurtarmaAnahtariniYaz(null);
         setOkul({
@@ -219,7 +244,7 @@ export default function KurulumPage() {
     [status, parolaKurulu, anahtarSaklandi, anahtarBekliyor],
   );
 
-  // Parola adımı kapısı (kod kapısı): parola kurulmadan ya da anahtar doğrulanmadan
+  // Hesap adımı kapısı (kod kapısı): hesap kurulmadan ya da anahtar doğrulanmadan
   // hiçbir adıma geçilmez — ne İleri ile ne de adım rayından. Kurulumu önceden
   // tamamlanmış (damgasız) programda ray kilitlenmez; 1. adım uyarı gösterir.
   const parolaKapisiKapali =
@@ -243,18 +268,22 @@ export default function KurulumPage() {
     setAdim(Math.max(0, Math.min(hedef, SON_ADIM)));
   };
 
-  const parolaKuruldu = async (anahtar: string) => {
-    bekleyenKurtarmaAnahtariniYaz(anahtar);
+  const hesapKuruldu = async (sonuc: IlkHesapSonucu) => {
+    bekleyenKurtarmaAnahtariniYaz(sonuc.recovery_key, guncelKurtarmaKimligi(sonuc));
+    setTaniticiSunucuUyarisi(sonuc.login_name_warning ?? null);
     setAnahtarDogrulandi(false);
     await durumTazele();
   };
 
   // Panel `true`yu ancak sunucu damgayı yazınca bildirir: durum hemen güncellenir
-  // (İleri beklemeden açılır), ardından sunucudan tazelenir.
+  // (İleri beklemeden açılır), ardından sunucudan tazelenir. Anahtar "Devam"a dek ekranda
+  // kalır ama damgası işaretlenir: bu arada Kilitle "henüz doğrulanmadı" diye sormaz
+  // (`bekleyenAnahtar` "sihirbazdaki ara durum").
   const onDogrulama = useCallback(
     (dogru: boolean) => {
       setAnahtarDogrulandi(dogru);
       if (!dogru) return;
+      bekleyenKurtarmaAnahtariDogrulandi();
       setStatus((s) =>
         s === null
           ? s
@@ -326,7 +355,8 @@ export default function KurulumPage() {
 
   const eksikAdimVar = (status?.missing_steps.length ?? 1) > 0;
   let ileriIpucu: string | null = null;
-  if (adim === 0 && !parolaKurulu) ileriIpucu = "Devam etmek için yönetici parolasını kurun.";
+  if (adim === 0 && !parolaKurulu)
+    ileriIpucu = "Devam etmek için program yöneticisi hesabını kurun.";
   else if (adim === 0 && anahtarBekliyor)
     ileriIpucu = "Devam etmek için kurtarma anahtarını sakladığınızı doğrulayın.";
   else if (adim === 0 && parolaKapisiKapali)
@@ -340,7 +370,7 @@ export default function KurulumPage() {
         <div>
           <h1 className="od-page-title">Kurulum Sihirbazı</h1>
           <p className="od-page-description">
-            Programı kullanmaya başlamadan önce üç adımı tamamlayın: yönetici parolası, okul
+            Programı kullanmaya başlamadan önce üç adımı tamamlayın: program yöneticisi hesabı, okul
             bilgileri, ders yılı ve kapalı günler. Okul bilgilerini ve takvimi daha sonra Ayarlar
             ekranından değiştirebilirsiniz.
           </p>
@@ -378,11 +408,13 @@ export default function KurulumPage() {
         status && (
           <>
             {adim === 0 && (
-              <ParolaAdimi
+              <HesapAdimi
                 status={status}
                 kurtarmaAnahtari={kurtarmaAnahtari}
+                kurtarmaKimligi={kurtarmaKimligi}
+                taniticiUyarisi={taniticiSunucuUyarisi}
                 okulAdi={okul.okulAdi}
-                onKuruldu={parolaKuruldu}
+                onKuruldu={hesapKuruldu}
                 onDogrulama={onDogrulama}
                 onKagittanDogrulandi={() => void durumTazele()}
                 onYenilendi={yenilendi}
@@ -449,14 +481,18 @@ export default function KurulumPage() {
 }
 
 // ---------------------------------------------------------------------------
-// 1. adım — Yönetici parolası + kurtarma anahtarı
+// 1. adım — Program yöneticisi hesabı + kurtarma anahtarı
 // ---------------------------------------------------------------------------
 
-interface ParolaAdimiProps {
+interface HesapAdimiProps {
   status: SetupStatus;
   kurtarmaAnahtari: string | null;
+  /** Bekleyen anahtarın kimliği (no, üretim günü); panel anahtarın üstünde gösterir. */
+  kurtarmaKimligi: KurtarmaKimligi | null;
+  /** Sunucunun döndürdüğü tanıtıcı uyarısı (hesap kurulduktan sonra; engel değil). */
+  taniticiUyarisi: string | null;
   okulAdi: string;
-  onKuruldu: (anahtar: string) => Promise<void>;
+  onKuruldu: (sonuc: IlkHesapSonucu) => Promise<void>;
   onDogrulama: (dogru: boolean) => void;
   /** Kâğıttaki anahtar yazılıp sunucuda doğrulandı (durum tazelenir). */
   onKagittanDogrulandi: () => void;
@@ -467,33 +503,50 @@ interface ParolaAdimiProps {
 /** Sihirbazdaki yenileme kartının vurgusu (sözleşme: "kaydedemediyseniz yenisini üretin"). */
 const SIHIRBAZ_YENILEME_METNI = `Anahtarı kaydedemediyseniz yenisini üretin. ${YENILEME_METNI}`;
 
-function ParolaAdimi({
+/** Formun alan hataları: istemci ön denetimi alanın altına yazar (sunucu iletisi bantta). */
+interface HesapFormuHatalari {
+  tanitici?: string;
+  adSoyad?: string;
+  parola?: string;
+  parolaTekrar?: string;
+}
+
+function HesapAdimi({
   status,
   kurtarmaAnahtari,
+  kurtarmaKimligi,
+  taniticiUyarisi: sunucuUyarisi,
   okulAdi,
   onKuruldu,
   onDogrulama,
   onKagittanDogrulandi,
   onYenilendi,
-}: ParolaAdimiProps) {
+}: HesapAdimiProps) {
   const snackbar = useSnackbar();
+  const [tanitici, setTanitici] = useState(TANITICI_VARSAYILAN);
+  const [adSoyad, setAdSoyad] = useState("");
   const [parola, setParola] = useState("");
   const [parolaTekrar, setParolaTekrar] = useState("");
-  const [hata, setHata] = useState<string | null>(null);
+  const [hatalar, setHatalar] = useState<HesapFormuHatalari>({});
+  const [sunucuHatasi, setSunucuHatasi] = useState<string | null>(null);
   const [calisiyor, setCalisiyor] = useState(false);
 
   if (kurtarmaAnahtari !== null) {
     return (
-      <KurtarmaAnahtariPaneli
-        anahtar={kurtarmaAnahtari}
-        okulAdi={okulAdi}
-        onDogrulama={onDogrulama}
-      />
+      <div className="space-y-4">
+        {sunucuUyarisi && <BilgiBandi ikon="warning">{sunucuUyarisi}</BilgiBandi>}
+        <KurtarmaAnahtariPaneli
+          anahtar={kurtarmaAnahtari}
+          kimlik={kurtarmaKimligi}
+          okulAdi={okulAdi}
+          onDogrulama={onDogrulama}
+        />
+      </div>
     );
   }
 
   if (status.password_set && !status.recovery_key_confirmed) {
-    // Anahtar ekranda değil (pencere kapandı, program çöktü) ve saklandığı doğrulanmadı.
+    // Anahtar ekranda değil (pencere kapandı, program çöktü, Kilitle) ve saklandığı doğrulanmadı.
     return (
       <div className="space-y-4">
         <div className="flex items-start gap-2 rounded-shape-sm bg-error-container px-4 py-3 text-body-medium text-on-error-container">
@@ -517,11 +570,11 @@ function ParolaAdimi({
         <Card elevation={1} className="p-6">
           <div className="flex items-center gap-3">
             <Icon name="verified_user" className="text-primary" />
-            <p className="text-title-medium text-on-surface">1. Yönetici Parolası</p>
+            <p className="text-title-medium text-on-surface">1. Program Yöneticisi Hesabı</p>
           </div>
           <p className="mt-2 text-body-medium text-on-surface-variant">
-            Parola kurulu, kurtarma anahtarının saklandığı doğrulandı. Anahtarı müdürlükte kapalı
-            zarfta saklayın. Parolayı Ayarlar → Güvenlik bölümünden değiştirebilirsiniz; parola
+            Hesap kurulu, kurtarma anahtarının saklandığı doğrulandı. Anahtarı müdürlükte kapalı
+            zarfta saklayın. Parolanızı Ayarlar → Güvenlik bölümünden değiştirebilirsiniz; hesap
             kaldırılamaz. Anahtar kaybolursa aynı bölümden yenisini üretebilirsiniz.
           </p>
         </Card>
@@ -530,22 +583,39 @@ function ParolaAdimi({
     );
   }
 
+  // Gönderimden ÖNCE görünen tanıtıcı uyarısı (backend kuralının kopyası; engel değil). Kimlik
+  // numarasına benzeyen sayının uyarısı ad-soyad girilmeden de çıkar.
+  const onUyari = taniticiUyarisi(tanitici, adSoyad);
+
   async function kur(e: FormEvent) {
     e.preventDefault();
-    setHata(null);
-    if (parola !== parolaTekrar) {
-      setHata("Parolalar eşleşmedi.");
-      return;
-    }
+    setSunucuHatasi(null);
+    // İstemci ön denetimi (otorite backend'dir; iletiler birebir aynıdır).
+    const yeniHatalar: HesapFormuHatalari = {};
+    const taniticiHatasi = taniticiSorunu(tanitici);
+    if (taniticiHatasi) yeniHatalar.tanitici = taniticiHatasi;
+    const adHatasi = adSoyadSorunu(adSoyad);
+    if (adHatasi) yeniHatalar.adSoyad = adHatasi;
+    // Politika ilk alanın, eşleşmeme tekrar alanının altında (hata hangi alanınsa orada).
+    const parolaHatalari = yeniParolaHatalari(parola, parolaTekrar);
+    if (parolaHatalari.yeni) yeniHatalar.parola = parolaHatalari.yeni;
+    if (parolaHatalari.tekrar) yeniHatalar.parolaTekrar = parolaHatalari.tekrar;
+    setHatalar(yeniHatalar);
+    if (Object.keys(yeniHatalar).length > 0) return;
     setCalisiyor(true);
     try {
-      const sonuc = await guvenlikApi.kur(parola);
+      const sonuc = await ilkHesabiKur({
+        tanitici: taniticiNormallestir(tanitici),
+        ad_soyad: adSoyadNormallestir(adSoyad),
+        parola,
+      });
+      setAdSoyad("");
       setParola("");
       setParolaTekrar("");
-      snackbar.success("Yönetici parolası kuruldu.");
-      await onKuruldu(sonuc.recovery_key);
+      snackbar.success("Program yöneticisi hesabı kuruldu.");
+      await onKuruldu(sonuc);
     } catch (err) {
-      setHata(hataMesaji(err, "Yönetici parolası kurulamadı."));
+      setSunucuHatasi(hataMesaji(err, "Program yöneticisi hesabı kurulamadı."));
     } finally {
       setCalisiyor(false);
     }
@@ -553,34 +623,61 @@ function ParolaAdimi({
 
   return (
     <Card elevation={1} className="p-6">
-      <p className="text-title-medium text-on-surface">1. Yönetici Parolası</p>
+      <p className="text-title-medium text-on-surface">1. Program Yöneticisi Hesabı</p>
       <p className="mt-1 text-body-medium text-on-surface-variant">{KURMA_UYARISI}</p>
       <p className="mt-2 text-body-medium text-on-surface-variant">
-        Parola kurulunca bir kurtarma anahtarı gösterilir. Parola unutulursa kayıtlara erişmenin tek
-        yolu odur; bir sonraki ekranda onu saklamanız istenecek.
+        Hesap kurulunca bir kurtarma anahtarı gösterilir. Parolanızı unutursanız kayıtlara erişmenin
+        tek yolu odur; bir sonraki ekranda onu saklamanız istenecek.
       </p>
-      <form onSubmit={kur} className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <form onSubmit={kur} noValidate className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <TextField
-          label="Yönetici parolası"
-          type="password"
-          value={parola}
-          onChange={(e) => setParola(e.target.value)}
-          autoComplete="new-password"
-          helperText="En az 8 karakter."
+          label="Tanıtıcı"
+          value={tanitici}
+          onChange={(e) => setTanitici(e.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          helperText={TANITICI_KURALI_METNI}
+          error={hatalar.tanitici}
           required
         />
         <TextField
-          label="Parola (tekrar)"
-          type="password"
-          value={parolaTekrar}
-          onChange={(e) => setParolaTekrar(e.target.value)}
-          autoComplete="new-password"
-          error={hata ?? undefined}
+          label="Ad-soyad"
+          value={adSoyad}
+          onChange={(e) => setAdSoyad(e.target.value)}
+          autoComplete="name"
+          helperText="Hesap sahibinin adı-soyadı; şifreli saklanır, kilit ekranında görünmez."
+          error={hatalar.adSoyad}
           required
         />
+        {onUyari && (
+          <div role="status" className="sm:col-span-2">
+            <BilgiBandi ikon="warning">{onUyari}</BilgiBandi>
+          </div>
+        )}
+        <div className="flex flex-col gap-4 sm:col-span-2">
+          <YeniParolaAlanlari
+            etiket="Parola"
+            yeniParola={parola}
+            onYeniParola={setParola}
+            tekrar={parolaTekrar}
+            onTekrar={setParolaTekrar}
+            yeniHata={hatalar.parola}
+            tekrarHata={hatalar.parolaTekrar}
+            disabled={calisiyor}
+          />
+        </div>
+        {sunucuHatasi && (
+          <div className="sm:col-span-2">
+            <HataBandi mesaj={sunucuHatasi} />
+          </div>
+        )}
         <div className="flex justify-end sm:col-span-2">
-          <Button type="submit" icon="lock" disabled={calisiyor || !parola || !parolaTekrar}>
-            {calisiyor ? "Kuruluyor…" : "Yönetici parolasını kur"}
+          <Button
+            type="submit"
+            icon="manage_accounts"
+            disabled={calisiyor || !tanitici.trim() || !adSoyad.trim() || !parola || !parolaTekrar}
+          >
+            {calisiyor ? "Kuruluyor…" : "Hesabı kur"}
           </Button>
         </div>
       </form>
@@ -738,6 +835,7 @@ function TakvimAdimi({
           </p>
           <div className="mt-4">
             <KapaliGunlerPaneli
+              saltOkur={false}
               yil={yil}
               yillar={yillar}
               onYilChange={setGosterilenYil}

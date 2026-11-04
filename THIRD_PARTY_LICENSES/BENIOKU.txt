@@ -106,7 +106,7 @@ Python kitaplıkları:
   argon2-cffi 23.1.0
       Lisans   : MIT
       Platform : Windows + Linux
-      Kullanım : Yönetici parolası (Argon2id)
+      Kullanım : Hesap parolaları (Argon2id)
       Kaynak   : https://pypi.org/project/argon2-cffi/23.1.0/
       Dosyalar : python-argon2-cffi-LICENSE.txt
   argon2-cffi-bindings 26.1.0

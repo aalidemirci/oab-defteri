@@ -71,7 +71,11 @@ def test_sifirlama_sonrasi_sihirbaz_parola_adimindan_baslar_ve_parola_kurulur(
     durum = client.get("/api/v1/setup/status/").json()
     assert durum["password_set"] is False
     assert durum["missing_steps"][0] == "password"
-    kurma = client.post("/api/v1/security/enable/", {"password": "Yeni-Parola-42"}, format="json")
+    kurma = client.post(
+        "/api/v1/security/enable/",
+        {"ad_soyad": "Örnek Yönetici", "parola": "Yeni-Parola-42"},
+        format="json",
+    )
     assert kurma.status_code == 201, kurma.json()
     assert kurma.json()["recovery_key"]
 

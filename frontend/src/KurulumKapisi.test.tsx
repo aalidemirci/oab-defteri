@@ -25,7 +25,7 @@ const TAMAM: SetupStatus = KURULU_DURUM;
 
 const EKSIK: SetupStatus = { ...TAMAM, setup_completed: false };
 
-/** Kurulumu eskiden tamamlanmış ama yönetici parolası olmayan veritabanı. */
+/** Kurulumu eskiden tamamlanmış ama program yöneticisi hesabı olmayan veritabanı. */
 const PAROLASIZ_TAMAM: SetupStatus = {
   ...TAMAM,
   password_set: false,
@@ -116,8 +116,8 @@ describe("KurulumKapisi", () => {
     expect(okulApiMock.getSetupStatus).toHaveBeenCalledTimes(1);
   });
 
-  it("kurulum tamamlanmış olsa bile yönetici parolası yoksa sihirbaza yönlendirir", async () => {
-    // Parola isteğe bağlı değildir (tasarım §4.4.5): kapı parolayı da sorar.
+  it("kurulum tamamlanmış olsa bile program yöneticisi hesabı yoksa sihirbaza yönlendirir", async () => {
+    // Hesap isteğe bağlı değildir (tasarım §4.4.5): kapı hesabı da sorar.
     okulApiMock.getSetupStatus.mockResolvedValue(PAROLASIZ_TAMAM);
     render(<Deneme yol="/kisiler" />);
     expect(await screen.findByRole("heading", { name: "Sihirbaz içeriği" })).toBeInTheDocument();

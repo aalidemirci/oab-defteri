@@ -4,14 +4,23 @@ Paketlenmiş kurulumda `manage.py` yoktur; son kullanıcı aynı çekirdeği
 `oab-defteri --geri-yukle` ile çalıştırır (desktop/restore.py). Bu komut
 geliştirme ortamı ve uzaktan destek senaryosu içindir:
 
-    python manage.py restore_backup <yedek.odbak>              # yönetici parolasını sorar
+    python manage.py restore_backup <yedek.odbak>              # hesap ve parola sorar
+    python manage.py restore_backup <yedek> --hesap yonetici   # o hesabın parolası sorulur
     python manage.py restore_backup <yedek> --recovery-key ...
     python manage.py restore_backup <yedek> --yes              # onay sorusu atlanır
 
 Komut veritabanına ORM üzerinden HİÇ dokunmaz — hedef dosya bozuk olabilir,
-geri yüklemenin varlık sebebi de budur. Sırlar varsayılan olarak gizli istemle
-(getpass) alınır; `--password/--recovery-key` yalnız otomasyon/test içindir ve
-komut geçmişine düşme riskini taşır (bkz. app_password komutu).
+geri yüklemenin varlık sebebi de budur. Parola yolu güncel `guvenlik.json`'daki
+hesabın sarmalıyla işler (`--hesap` tanıtıcıdır); başka bilgisayarda alınmış yedek
+yalnız kurtarma anahtarıyla açılır (tasarım TK10). Parola yolunda geri yüklemeyi yalnız
+program yöneticisi yapar: rol denetimi `desktop/restore.py` ile aynıdır, çünkü ikisi de aynı
+çekirdekten geçer (`backup_restore`, `geri_yukleme_yetkisi`; ORM'siz). Ret
+`GeriYuklemeYetkisiz` bir `BackupRestoreError`'dır, `CommandError` olarak döner; hiçbir dosya
+değişmez. Kurtarma anahtarı yolunda rol denetimi yoktur. Var olan bir hesabın parolasını alan
+TEK yönetim komutu budur (`app_password` komutunun başlığı). Sırlar varsayılan olarak gizli
+istemle (getpass)
+alınır; `--password/--recovery-key` yalnız otomasyon/test içindir ve komut
+geçmişine düşme riskini taşır (bkz. app_password komutu).
 
 UYARI: komut çalışırken program AÇIK OLMAMALIDIR — masaüstü kabuğu tek-instance
 kilidini kullanır, `manage.py` o kilidi almaz.
@@ -35,7 +44,12 @@ class Command(BaseCommand):
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("backup", help="Geri yüklenecek yedek dosyası (.odbak).")
         parser.add_argument(
-            "--password", default=None, help="Yönetici parolası (otomasyon; risklidir)."
+            "--hesap", default=None, help="Program yöneticisi hesabının tanıtıcısı (parola yolu)."
+        )
+        parser.add_argument(
+            "--password",
+            default=None,
+            help="Program yöneticisi hesabının parolası (otomasyon; risklidir).",
         )
         parser.add_argument("--recovery-key", default=None, help="Kurtarma anahtarı (otomasyon).")
         parser.add_argument("--yes", action="store_true", help="Onay sorusunu atlar.")
@@ -63,16 +77,23 @@ class Command(BaseCommand):
                 self.stdout.write("Geri yükleme iptal edildi.")
                 return
 
+        hesap = options.get("hesap")
         parola = options.get("password")
         anahtar = options.get("recovery_key")
         if not parola and not anahtar:
-            parola = getpass("Yönetici parolası (kurtarma anahtarıyla açmak için boş bırakın): ")
-            if not parola:
+            if not hesap:
+                hesap = input(
+                    "Program yöneticisi hesabının tanıtıcısı "
+                    "(kurtarma anahtarıyla açmak için boş bırakın): "
+                )
+            if hesap:
+                parola = getpass("Hesabın parolası: ")
+            else:
                 anahtar = input("Kurtarma anahtarı: ")
 
         try:
             sonuc = backup_restore.restore_database(
-                yedek, hedef, password=parola, recovery_key=anahtar
+                yedek, hedef, hesap=hesap, password=parola, recovery_key=anahtar
             )
         except backup_restore.BackupRestoreError as exc:
             raise CommandError(str(exc)) from exc
@@ -81,7 +102,10 @@ class Command(BaseCommand):
         if sonuc.old_db_path is not None:
             self.stdout.write(f"Önceki veritabanı: {sonuc.old_db_path}")
         if sonuc.state_written:
-            self.stdout.write("guvenlik.json yedekteki kurtarma başlığından yeniden yazıldı.")
+            self.stdout.write(
+                "guvenlik.json yedekteki kurtarma başlığından yeniden yazıldı; programı "
+                "kurtarma anahtarıyla açıp program yöneticisinin parolasını belirleyin."
+            )
         self.stdout.write(
             "Program açıldığında gerekli şema güncellemeleri kendiliğinden uygulanır."
         )

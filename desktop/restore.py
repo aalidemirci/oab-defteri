@@ -18,10 +18,17 @@ Django BURADA AYAĞA KALDIRILIR ama veritabanına DOKUNULMAZ: `prepare_django`
 yalnız ayarları ve uygulama kayıt defterini yükler; göç ve bütünlük denetimi
 bu kipte KOŞULMAZ (bozuk veritabanı bu kipin varlık sebebidir).
 
-Yedekler daima şifrelidir (tasarım §4.4.7; düz yedek dalı söküldü, §13 D29): yönetici
-parolası ya da kurtarma anahtarı her geri yüklemede istenir. Güvenlik dosyası
-kayıpsa (tasarım §4.3 tehdit 8) bu kip de çıkış yoludur: çekirdek `guvenlik.json`'u yedeğin
-kurtarma başlığından yeniden yazar.
+Yedekler daima şifrelidir (tasarım §4.4.7; düz yedek dalı söküldü, §13 D29): program
+yöneticisi hesabının tanıtıcısı ve parolası (`--hesap` + `--parola`; aynı bilgisayarda güncel
+`guvenlik.json` ile) ya da kurtarma anahtarı her geri yüklemede istenir (tasarım
+§4.4.4, TK10). Parola yolunda geri yüklemeyi yalnız program yöneticisi yapar: rol denetimi
+çekirdektedir (`geri_yukleme_yetkisi`; güncel veritabanı salt okunur `sqlite3` ile, ORM'siz,
+okunamazsa yedeğin görüntüsü), parola doğrulandıktan sonra ve kenara alma yapılmadan önce koşar.
+Ret `GeriYuklemeYetkisiz`'dir (bir `BackupRestoreError`): hiçbir dosya değişmez, ileti
+gösterilir, çıkış kodu 9'dur. Kurtarma anahtarı yolunda rol denetimi yoktur (anahtarın
+kendisi yetkidir). Güvenlik dosyası kayıpsa (tasarım
+§4.3 tehdit 8) bu kip de çıkış yoludur: çekirdek `guvenlik.json`'u yedeğin kurtarma
+başlığından (yalnız kurtarma bölümüyle) yeniden yazar.
 """
 
 from __future__ import annotations
@@ -108,15 +115,21 @@ def _run_steps(paths: AppPaths, args: argparse.Namespace, interactive: bool) -> 
             print("Geri yükleme iptal edildi.")
         return EXIT_OK
 
+    hesap: str | None = str(getattr(args, "hesap", "") or "") or None
     parola: str | None = str(getattr(args, "parola", "") or "") or None
     anahtar: str | None = str(getattr(args, "kurtarma_anahtari", "") or "") or None
+    if parola and not hesap:
+        raise RestoreCliError(
+            "--parola ile birlikte program yöneticisi hesabının tanıtıcısını da verin "
+            "(--hesap); ya da --kurtarma-anahtari kullanın."
+        )
     if not parola and not anahtar:
         if not interactive:
             raise RestoreCliError(
-                "Yedekler şifrelidir; --parola ya da --kurtarma-anahtari verin veya "
-                "komutu etkileşimli bir uçbirimden çalıştırın."
+                "Yedekler şifrelidir; --hesap ile --parola ya da --kurtarma-anahtari verin "
+                "veya komutu etkileşimli bir uçbirimden çalıştırın."
             )
-        parola, anahtar = _ask_secret()
+        hesap, parola, anahtar = _ask_secret()
 
     if interactive:
         print(f"\nYedek : {yedek.name}")
@@ -130,7 +143,9 @@ def _run_steps(paths: AppPaths, args: argparse.Namespace, interactive: bool) -> 
             return EXIT_OK
 
     try:
-        sonuc = servis.restore_database(yedek, paths.db_path, password=parola, recovery_key=anahtar)
+        sonuc = servis.restore_database(
+            yedek, paths.db_path, hesap=hesap, password=parola, recovery_key=anahtar
+        )
     except (BackupCryptoError, servis.BackupRestoreError) as hata:
         raise RestoreCliError(str(hata)) from hata
 
@@ -140,7 +155,10 @@ def _run_steps(paths: AppPaths, args: argparse.Namespace, interactive: bool) -> 
         if sonuc.old_db_path is not None:
             print(f"Önceki veritabanı kenara alındı: {sonuc.old_db_path}")
         if sonuc.state_written:
-            print("guvenlik.json yedekteki kurtarma başlığından yeniden yazıldı.")
+            print(
+                "guvenlik.json yedekteki kurtarma başlığından yeniden yazıldı; programı "
+                "kurtarma anahtarıyla açıp program yöneticisinin parolasını belirleyin."
+            )
         print("Programı şimdi normal şekilde açabilirsiniz.")
     return EXIT_OK
 
@@ -278,18 +296,27 @@ def _read_secret(prompt: str) -> str:
         return ""
 
 
-def _ask_secret() -> tuple[str | None, str | None]:
-    """(parola, kurtarma anahtarı) — biri dolu döner."""
-    parola = _read_secret("Yönetici parolası (kurtarma anahtarıyla açmak için boş bırakın): ")
-    if parola:
-        return parola, None
+def _ask_secret() -> tuple[str | None, str | None, str | None]:
+    """(hesap tanıtıcısı, parola, kurtarma anahtarı) — parola ya da anahtar dolu döner."""
+    try:
+        hesap = input(
+            "Program yöneticisi hesabının tanıtıcısı (kurtarma anahtarıyla açmak için boş bırakın): "
+        )
+    except EOFError:
+        hesap = ""
+    hesap = hesap.strip()
+    if hesap:
+        parola = _read_secret("Parolanız: ")
+        if not parola:
+            raise RestoreCliError("Parola girilmedi.")
+        return hesap, parola, None
     try:
         anahtar = input("Kurtarma anahtarı (yazdırdığınız kâğıttaki): ").strip()
     except EOFError:
         anahtar = ""
     if not anahtar:
-        raise RestoreCliError("Parola ya da kurtarma anahtarı girilmedi.")
-    return None, anahtar
+        raise RestoreCliError("Hesap ve parola ya da kurtarma anahtarı girilmedi.")
+    return None, None, anahtar
 
 
 def _confirm() -> bool:

@@ -119,12 +119,12 @@ const PERSONEL_ONIZLEME: PersonnelImportReport = {
   skipped: [],
 };
 
-function kur(kind: ImportKind, onImported = vi.fn()) {
+function kur(kind: ImportKind, onImported = vi.fn(), birlestirebilir = true) {
   render(
     <MemoryRouter>
       <SnackbarProvider>
         <ConfirmProvider>
-          <AktarimPaneli kind={kind} onImported={onImported} />
+          <AktarimPaneli kind={kind} onImported={onImported} birlestirebilir={birlestirebilir} />
         </ConfirmProvider>
       </SnackbarProvider>
     </MemoryRouter>,
@@ -270,13 +270,17 @@ describe("AktarimPaneli — öğrenci mutabakatı ve ayrılış havuzu", () => {
 
   it("409 parola_gerekli önizlemede kurulum sihirbazına yönlendirir", async () => {
     okulApiMock.previewStudentImport.mockRejectedValue(
-      new ApiError(409, "parola_gerekli", "Kişi kaydı için önce yönetici parolasını kurun."),
+      new ApiError(
+        409,
+        "parola_gerekli",
+        "Kişi kaydı için önce program yöneticisi hesabını kurun.",
+      ),
     );
     const user = userEvent.setup();
     kur("students");
     await yapistirVeOnizle(user);
 
-    expect(await screen.findByText("Önce yönetici parolasını kurun")).toBeInTheDocument();
+    expect(await screen.findByText("Önce program yöneticisi hesabını kurun")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Kurulum sihirbazını aç" })).toBeInTheDocument();
   });
 
@@ -361,6 +365,25 @@ describe("AktarimPaneli — personel mutabakatı ve ayrılış havuzu", () => {
     expect(
       screen.getByText(/burada ya da Ayrılış Havuzu'nda birleştirebilirsiniz/),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /birleştir/i })).toBeNull();
+  });
+
+  it("kişi yazma yeteneği yoksa aktarımdan sonra da “Birleştir” çizilmez", async () => {
+    const sonuc: PersonnelImportReport = {
+      ...PERSONEL_ONIZLEME,
+      dry_run: false,
+      similar_pairs: [{ ...PERSONEL_ONIZLEME.similar_pairs[0], new_id: 21 }],
+    };
+    okulApiMock.previewPersonnelImport.mockResolvedValue(PERSONEL_ONIZLEME);
+    okulApiMock.commitPersonnelImport.mockResolvedValue(sonuc);
+    const user = userEvent.setup();
+    kur("personnel", vi.fn(), false);
+    await yapistirVeOnizle(user);
+    await screen.findByText("Olası aynı kişi (1)");
+    await user.click(screen.getByRole("button", { name: "Aktar" }));
+
+    await waitFor(() => expect(okulApiMock.commitPersonnelImport).toHaveBeenCalled());
+    expect(await screen.findByText("Olası aynı kişi (1)")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /birleştir/i })).toBeNull();
   });
 

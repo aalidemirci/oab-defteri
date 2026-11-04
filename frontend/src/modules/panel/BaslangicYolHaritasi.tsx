@@ -63,7 +63,7 @@ export const YOL_HARITASI_MADDELERI: readonly MaddeTanimi[] = [
     anahtar: "kurtarma_zarfi",
     baslik: "Kurtarma anahtarını müdürlükte kapalı zarfta saklayın",
     aciklama:
-      "Kurtarma anahtarı çıktısını zarfa koyup kapatın ve müdürlükte kilitli dolapta saklayın. PDF dosyasını bu bilgisayarda bırakmayın.",
+      "Kurtarma anahtarı belgesini zarfa koyup kapatın ve müdürlükte kilitli dolapta saklayın. PDF dosyasını bu bilgisayarda bırakmayın.",
     bag: { to: "/ayarlar?tab=guvenlik", etiket: "Ayarlar → Güvenlik'i aç" },
   },
 ];

@@ -4,15 +4,30 @@
 // (Başlat menüsü: "Yedekten Geri Yükle"); metin kullanıcıyı oraya yönlendirir.
 //
 // Akış: günlük yedek listesinden seçim YA DA elden getirilen .odbak dosyası →
-// yönetici parolası veya kurtarma anahtarı (yedekler DAİMA şifrelidir; düz yedek
-// dalı yok, tasarım TK8, §4.4.7) → onay → POST /backups/restore/. Başarıda backend
-// "yeniden başlat" kapısını kurar (tüm API 503 döner); kart olayı yayınlar ve
+// parolanız veya kurtarma anahtarı (yedekler DAİMA şifrelidir; düz yedek dalı yok,
+// tasarım TK8, §4.4.7) → onay → POST /backups/restore/. Başarıda backend "yeniden
+// başlat" kapısını kurar (tüm API 503 döner); kart olayı yayınlar ve
 // YenidenBaslatEkrani arayüzü örter. Parola/kurtarma anahtarı yalnız istek
 // gövdesinde taşınır, hiçbir yere yazılmaz.
 //
+// Yedeğin hangi sırla açıldığı (tasarım TK10, §4.4.4): yedek başlığı yalnız kurtarma
+// bölümünü taşır, hesap sarmalı taşımaz. Bu yüzden
+//   * PAROLA yolu oturumdaki hesabın BUGÜNKÜ parolasıdır ("Parolanız"): backend güncel
+//     `guvenlik.json`'daki o hesabın sarmalını dener (gövdede `hesap` boş gider, backend
+//     oturumdaki hesabı kullanır — `live_restore`). Yalnız bu bilgisayarda işler. Açık
+//     oturumda geri yüklemeyi yalnız program yöneticisi yapar: uç rol kapısından, parola yolu
+//     ayrıca servisin yetki kapısından geçer (`live_restore`).
+//   * KURTARMA ANAHTARI yolu yedeğin alındığı gün geçerli olan anahtardır; listedeki
+//     her yedek o anahtarın no'sunu ve tarihini taşır (`YedekDosyasi.kurtarma`) ve seçilen
+//     yedeğin hangi kâğıtla açıldığı sır sorulmadan ÖNCE yazılır. Elden yüklenen dosyanın
+//     başlığı istemcide okunmaz; doğru anahtar değilse backend iletisi no'yu söyler.
+// Gövde backend'in beklediği gibidir: `name` YA DA `file`, `password` ya da
+// `recovery_key` (anahtarlar İngilizce; `BackupRestoreRequestSerializer`).
+//
 // `kayipKipi`: güvenlik dosyası kayıp ekranında (GuvenlikDosyasiKayip) çıkış
 // yolu olarak gösterilir; giriş metni o duruma göre yazılır. Backend bu iki ucu
-// kayıp kilidinde de açık tutar.
+// kayıp kilidinde de açık tutar. Kayıp kipinde oturum yoktur ve güncel güvenlik
+// dosyası okunamaz: parola yolu İŞLEMEZ, yalnız kurtarma anahtarı alanı gösterilir.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -27,6 +42,7 @@ import { SkeletonList } from "../../ui/Skeleton";
 import TextField from "../../ui/TextField";
 import { guvenlikApi } from "./api";
 import type { YedekListesi } from "./api";
+import { kurtarmaKimligiMetni, yedekAnahtarCumlesi } from "./kurtarma";
 
 /** Dosya boyutu — Türkçe sayı biçimiyle (ondalık virgül): "2,5 MB". */
 function boyutMetni(bayt: number): string {
@@ -52,6 +68,9 @@ export default function YedektenGeriYukleme({ kayipKipi = false }: YedektenGeriY
   const [anahtar, setAnahtar] = useState("");
   const [hata, setHata] = useState<string | null>(null);
   const [calisiyor, setCalisiyor] = useState(false);
+  // Listeden seçilen yedeğin satırı (anahtar kimliği buradan okunur).
+  const seciliYedek =
+    dosya === null && secili ? (liste?.backups.find((y) => y.name === secili) ?? null) : null;
 
   const yukle = useCallback(() => {
     guvenlikApi
@@ -84,7 +103,11 @@ export default function YedektenGeriYukleme({ kayipKipi = false }: YedektenGeriY
     const kaynakAdi = dosya ? dosya.name : secili;
     if (!kaynakAdi) return;
     if (!parola && !anahtar) {
-      setHata("Yedekler şifrelidir; yönetici parolasını ya da kurtarma anahtarını girin.");
+      setHata(
+        kayipKipi
+          ? "Yedekler şifrelidir; yedeğin kurtarma anahtarını girin."
+          : "Yedekler şifrelidir; parolanızı ya da kurtarma anahtarını girin.",
+      );
       return;
     }
     // Başlık soru, gövde sonuç (docs/sozluk.md §3) — soru gövdede yinelenmez.
@@ -102,7 +125,7 @@ export default function YedektenGeriYukleme({ kayipKipi = false }: YedektenGeriY
       const form = new FormData();
       if (dosya) form.append("file", dosya);
       else form.append("name", secili);
-      if (parola) form.append("password", parola);
+      if (parola && !kayipKipi) form.append("password", parola);
       if (anahtar) form.append("recovery_key", anahtar);
       await guvenlikApi.geriYukle(form);
       // Backend kapıyı kurdu; ekran örtülür — sırları bellekte tutmaya gerek yok.
@@ -152,8 +175,8 @@ export default function YedektenGeriYukleme({ kayipKipi = false }: YedektenGeriY
           ) : liste !== null && liste.backups.length === 0 ? (
             <p className="mt-4 text-body-medium text-on-surface-variant">
               Yedek klasöründe geri yüklenebilir dosya yok. Program her gün ilk açılışta günlük
-              yedek alır (yönetici parolası kurulduktan sonra); elinizde bir yedek varsa aşağıdan
-              dosya olarak yükleyebilirsiniz.
+              yedek alır (program yöneticisi hesabı kurulduktan sonra); elinizde bir yedek varsa
+              aşağıdan dosya olarak yükleyebilirsiniz.
             </p>
           ) : (
             liste !== null && (
@@ -178,6 +201,8 @@ export default function YedektenGeriYukleme({ kayipKipi = false }: YedektenGeriY
                           </span>
                           <span className="block text-label-small text-on-surface-variant">
                             {formatDateTime(yedek.modified_at)} · {boyutMetni(yedek.size)}
+                            {kurtarmaKimligiMetni(yedek.kurtarma) &&
+                              ` · ${kurtarmaKimligiMetni(yedek.kurtarma)}`}
                           </span>
                         </span>
                       </label>
@@ -211,21 +236,38 @@ export default function YedektenGeriYukleme({ kayipKipi = false }: YedektenGeriY
             />
           </div>
 
+          {/* Sır sorulmadan ÖNCE: seçilen yedeği hangi kurtarma anahtarı açıyor (TK10). */}
+          {seciliYedek && (
+            <p
+              role="status"
+              className="mt-4 flex items-start gap-2 rounded-shape-sm bg-secondary-container px-4 py-3 text-body-medium text-on-secondary-container"
+            >
+              <Icon name="key" size="lg" />
+              <span>{yedekAnahtarCumlesi(seciliYedek.kurtarma)}</span>
+            </p>
+          )}
+
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <TextField
-              label="Yönetici parolası"
-              type="password"
-              value={parola}
-              onChange={(e) => setParola(e.target.value)}
-              autoComplete="current-password"
-              helperText="Yedeğin alındığı dönemdeki parola; ikisinden birini girin."
-            />
+            {!kayipKipi && (
+              <TextField
+                label="Parolanız"
+                type="password"
+                value={parola}
+                onChange={(e) => setParola(e.target.value)}
+                autoComplete="current-password"
+                helperText="Bu oturumu açan hesabın bugünkü parolası; yalnız bu bilgisayarda alınmış yedeği açar. İkisinden birini girin."
+              />
+            )}
             <TextField
               label="Kurtarma anahtarı"
               value={anahtar}
               onChange={(e) => setAnahtar(e.target.value)}
               autoComplete="off"
-              helperText="Parola bilinmiyorsa yazdırdığınız anahtar."
+              helperText={
+                kayipKipi
+                  ? "Yedeğin alındığı gün geçerli olan kurtarma anahtarı (kurtarma anahtarı belgesindeki)."
+                  : "Parolayla açılmıyorsa (ör. başka bilgisayarda alınmış yedek) yedeğin alındığı gün geçerli olan anahtar."
+              }
             />
           </div>
 

@@ -88,13 +88,14 @@ export default function SifreliYedekleme({ parolaKurulu }: { parolaKurulu: boole
           </p>
           <p className="mt-2 text-body-small text-on-surface-variant">
             İndirdiğiniz dosyayı USB belleğe ya da okulun ağ diskine kendiniz kopyalayın; bulut
-            depolama hizmetine yüklemeyin (Bilgi ve Sistem Güvenliği Yönergesi 11/23). Yedeği açmak
-            için yönetici parolanız ya da kurtarma anahtarınız gerekir; ikisini de güvenli biçimde
+            depolama hizmetine yüklemeyin (Bilgi ve Sistem Güvenliği Yönergesi 11/23). Yedek bu
+            bilgisayarda program yöneticisinin parolasıyla, başka bir bilgisayarda yalnız kurtarma
+            anahtarıyla açılır; kurtarma anahtarı belgesini okul müdürlüğünde kapalı zarfta
             saklayın.
           </p>
           {!parolaKurulu && (
             <p className="mt-3 rounded-shape-md bg-error-container p-3 text-body-small text-on-error-container">
-              Şifreli yedek oluşturabilmek için önce yönetici parolası kurmalısınız.
+              Şifreli yedek oluşturabilmek için önce program yöneticisi hesabını kurmalısınız.
             </p>
           )}
           <div className="mt-5">

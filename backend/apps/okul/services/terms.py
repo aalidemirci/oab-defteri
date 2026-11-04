@@ -1,4 +1,9 @@
-"""Ders yılı dönemlerinin kurulması ve tarih çözümlemesi."""
+"""Ders yılı dönemlerinin kurulması ve tarih çözümlemesi.
+
+DENETİM İZİ (tasarım §4.6.2; plan F1b-1 alt commit c): dönemin oluşturulması `OLUSTUR`,
+tarihlerinin değişmesi `GUNCELLE` satırıdır (aynı işlemde, `denetim_izi.degisiklik`).
+Tarihleri değişmeyen dönem yeniden yazılmaz: kayıt değişmediği için iz satırı da yoktur.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +11,7 @@ from datetime import date
 
 from django.db import transaction
 
+from apps.okul import denetim_izi
 from apps.okul.models import SchoolTerm, SchoolYear
 
 
@@ -39,11 +45,21 @@ def configure_terms(
     )
     terms: list[SchoolTerm] = []
     for sequence, start_date, end_date in values:
-        term, _ = SchoolTerm.objects.update_or_create(
-            school_year=school_year,
-            sequence=sequence,
-            defaults={"start_date": start_date, "end_date": end_date},
-        )
+        term = SchoolTerm.objects.filter(school_year=school_year, sequence=sequence).first()
+        if term is None:
+            term = SchoolTerm.objects.create(
+                school_year=school_year,
+                sequence=sequence,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            denetim_izi.degisiklik(term, onceki=None)
+        elif (term.start_date, term.end_date) != (start_date, end_date):
+            onceki = denetim_izi.anlik(term)
+            term.start_date = start_date
+            term.end_date = end_date
+            term.save(update_fields=["start_date", "end_date", "updated_at"])
+            denetim_izi.degisiklik(term, onceki=onceki)
         terms.append(term)
     return terms
 

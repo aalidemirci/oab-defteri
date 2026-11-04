@@ -3,11 +3,13 @@
 Yedek YALNIZ şifreli alınır (tasarım §4.4.7; ailenin düz yedek dalı söküldü, §13 D29).
 Yedek anahtarı (`yedekleme.json`) ya da kurtarma başlığı (`guvenlik.json`) yoksa
 yedek ATLANIR; düz kopya hiçbir koşulda yazılmaz. Yardımcı `_db_olustur`
-varsayılan olarak ikisini de yazar (parolası kurulu kurulum).
+varsayılan olarak ikisini de yazar (ilk hesabı kurulu kurulum). Başlık dosyanın
+kendisi değil, yalnız kurtarma bölümünün izdüşümüdür (tasarım TK10).
 """
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import date
 from pathlib import Path
@@ -23,22 +25,45 @@ from desktop.backup import (
 )
 from desktop.backup_crypto import (
     MAGIC,
+    MAX_RECOVERY_HEADER_BYTES,
     BackupCryptoError,
     decrypt_bytes,
     embedded_recovery_metadata,
     ensure_public_config,
+    is_usable_security_state,
+    parse_security_state,
+    read_embedded_recovery_metadata,
+    recovery_header_from_state,
+    recovery_key_identity,
 )
 
 _TEST_KEY = b"k" * 32
-# Kurtarma başlığı olarak gömülen örnek durum dosyası. Sarmallar kriptografik
+# Kurtarma başlığının kaynağı olan örnek şema 2 durum dosyası. Sarmallar kriptografik
 # olarak anlamsızdır (yedek başlığı opaktır), ama biçim `is_usable_security_state`
-# kuralına uyar: iki bölüm, ikisinde de dolu tuz + sarmal.
+# kuralına uyar: tam bir hesap sarmalı ve tam bir kurtarma bölümü.
 _GUVENLIK = (
-    b'{"surum":1,"kdf":{"time_cost":1},'
-    b'"parola":{"salt":"dHV6MQ==","sarmal":"ornek-parola-sarmali"},'
-    b'"kurtarma":{"salt":"dHV6Mg==","sarmal":"ornek-kurtarma-sarmali"},'
-    b'"gecis":"TAMAM"}'
+    b'{"surum":2,"olusturma":"2026-07-24T09:00:00+03:00","kdf":{"time_cost":1},'
+    b'"hesaplar":[{"id":"6f1c2a3b-4d5e-4f60-8a71-0b2c3d4e5f60","tanitici":"yonetici",'
+    b'"salt":"dHV6MQ==","sarmal":"ornek-hesap-sarmali","hatali":0,"askida":false}],'
+    b'"kurtarma":{"no":1,"tarih":"2026-07-24","salt":"dHV6Mg==",'
+    b'"sarmal":"ornek-kurtarma-sarmali","dogrulandi":"2026-07-24T09:05:00+03:00"},'
+    b'"gecis":null}'
 )
+#: `_GUVENLIK`'in yedek başlığı (TK10): yalnız kurtarma bölümü ve anahtarın kimliği.
+_BASLIK = {
+    "surum": 2,
+    "kdf": {"time_cost": 1},
+    "kurtarma": {
+        "no": 1,
+        "tarih": "2026-07-24",
+        "salt": "dHV6Mg==",
+        "sarmal": "ornek-kurtarma-sarmali",
+    },
+}
+
+
+def _baslik(yedek: Path) -> Any:
+    return json.loads(embedded_recovery_metadata(yedek.read_bytes()))
 
 
 def _db_olustur(path: Path, satir_sayisi: int = 3, *, parola_kurulu: bool = True) -> None:
@@ -84,7 +109,8 @@ def test_gunluk_yedek_tarihli_deterministik_ad_alir(tmp_path: Path) -> None:
     assert _satir_sayisi(sonuc) == 3
 
 
-def test_yedek_kurtarma_basligini_tasir_ve_baslik_dogrulanir(tmp_path: Path) -> None:
+def test_yedek_basligi_yalniz_kurtarma_bolumunu_tasir_ve_dogrulanir(tmp_path: Path) -> None:
+    """TK10 (tasarım §4.4.4): hesap sarmalları ve saklandı damgası yedeğe GİRMEZ."""
     db = tmp_path / "db.sqlite3"
     _db_olustur(db)
     guvenlik = _GUVENLIK.replace(b'"time_cost":1', b'"time_cost":3')
@@ -94,7 +120,10 @@ def test_yedek_kurtarma_basligini_tasir_ve_baslik_dogrulanir(tmp_path: Path) -> 
 
     assert sonuc is not None
     container = sonuc.read_bytes()
-    assert embedded_recovery_metadata(container) == guvenlik
+    baslik = json.loads(embedded_recovery_metadata(container))
+    assert baslik == {**_BASLIK, "kdf": {"time_cost": 3}}
+    assert "hesaplar" not in baslik and "dogrulandi" not in baslik["kurtarma"]
+    assert b"ornek-hesap-sarmali" not in container
     bozuk = bytearray(container)
     bozuk[-1] ^= 1
     with pytest.raises(BackupCryptoError, match="bütünlüğü"):
@@ -286,7 +315,7 @@ def test_serialize_olmayan_sqlite_ile_yedek_alinir(
 
 
 def test_ilk_acilista_yedek_anahtari_yokken_gunluk_yedek_atlanir(tmp_path: Path) -> None:
-    """Tasarım §4.2 adım 7 (yedek kabı §4.4.7): yönetici parolası kurulmadan
+    """Tasarım §4.2 adım 7 (yedek kabı §4.4.7): ilk program yöneticisi hesabı kurulmadan
     (yedekleme.json yok, kişi verisi de yok) günlük yedek ATLANIR; düz kopya YAZILMAZ."""
     db = tmp_path / "db.sqlite3"
     _db_olustur(db, parola_kurulu=False)
@@ -325,15 +354,30 @@ _KULLANILAMAZ_GUVENLIK = {
     "utf8_degil": b"\xff\xfe\x00",
     "sozluk_degil": b'["parola"]',
     "bos_sozluk": b"{}",
-    "sarmal_bolumu_yok": b'{"surum":1,"kdf":{"time_cost":1},"gecis":"TAMAM"}',
-    "bolumler_sozluk_degil": b'{"parola":"x","kurtarma":[]}',
-    "sarmallar_bos": (
-        b'{"parola":{"salt":"dHV6","sarmal":""},"kurtarma":{"salt":"","sarmal":"s"}}'
+    # Şema 1 (tek parola bölümü) kullanılamaz sayılır (plan F1b-1 "Eski veri").
+    "sema_1": (
+        b'{"surum":1,"kdf":{"time_cost":1},"parola":{"salt":"dHV6","sarmal":"s"},'
+        b'"kurtarma":{"salt":"dHV6","sarmal":"s"},"gecis":"TAMAM"}'
     ),
-    "tuz_dize_degil": b'{"parola":{"salt":5,"sarmal":"s"}}',
-    "kdf_sozluk_degil": (
-        b'{"kdf":"x","parola":{"salt":"dHV6","sarmal":"s"},'
-        b'"kurtarma":{"salt":"dHV6","sarmal":"s"}}'
+    "surum_yok": b'{"kdf":{},"kurtarma":{"salt":"dHV6","sarmal":"s"}}',
+    "sarmal_bolumu_yok": b'{"surum":2,"kdf":{"time_cost":1},"hesaplar":[],"gecis":null}',
+    "hesaplar_liste_degil": (
+        b'{"surum":2,"kdf":{},"hesaplar":{},"kurtarma":{"salt":"dHV6","sarmal":"s"}}'
+    ),
+    "sarmallar_bos": (
+        b'{"surum":2,"kdf":{},"hesaplar":[{"id":"a","tanitici":"b","salt":"dHV6",'
+        b'"sarmal":""}],"kurtarma":{"salt":"","sarmal":"s"}}'
+    ),
+    "tuz_dize_degil": b'{"surum":2,"kdf":{},"kurtarma":{"salt":5,"sarmal":"s"}}',
+    "kdf_sozluk_degil": b'{"surum":2,"kdf":"x","kurtarma":{"salt":"dHV6","sarmal":"s"}}',
+    # Derin iç içe JSON: `json.loads` RecursionError yükseltir; o da "kullanılamaz"dır
+    # (yedek atlanır, istisna sızmaz — `parse_security_state`).
+    "derin_ic_ice": b"[" * 20000 + b"]" * 20000,
+    # Kullanılabilir (hesap sarmalı tam) ama kurtarma bölümü yok: başlık başka
+    # bilgisayarda hiçbir sırla açılamazdı (TK10) → yedek alınmaz.
+    "kurtarma_yok": (
+        b'{"surum":2,"kdf":{},"hesaplar":[{"id":"a","tanitici":"b","salt":"dHV6",'
+        b'"sarmal":"s"}],"gecis":null}'
     ),
 }
 
@@ -351,17 +395,98 @@ def test_bos_ya_da_bozuk_guvenlik_json_ile_yedek_alinmaz(tmp_path: Path, icerik:
     assert not list((tmp_path / "backups").glob("*.odbak"))
 
 
-def test_tek_tam_sarmal_basliga_yeter(tmp_path: Path) -> None:
-    """Tek tam sarmal (ör. yalnız parola bölümü) o sırla DEK'i açar: yedek alınır."""
+def test_yalniz_kurtarma_bolumu_basliga_yeter(tmp_path: Path) -> None:
+    """Kurtarma anahtarıyla geri yüklemeden sonra `hesaplar` boştur: yedek yine alınır."""
     db = tmp_path / "db.sqlite3"
     _db_olustur(db)
-    yalniz_parola = b'{"kdf":{"time_cost":1},"parola":{"salt":"dHV6","sarmal":"s"}}'
-    (tmp_path / "guvenlik.json").write_bytes(yalniz_parola)
+    yalniz_kurtarma = (
+        b'{"surum":2,"kdf":{"time_cost":1},"hesaplar":[],'
+        b'"kurtarma":{"no":4,"tarih":"2026-10-01","salt":"dHV6","sarmal":"s"},"gecis":null}'
+    )
+    (tmp_path / "guvenlik.json").write_bytes(yalniz_kurtarma)
 
     sonuc = daily_backup(db, tmp_path / "backups", today=date(2026, 7, 24))
 
     assert sonuc is not None
-    assert embedded_recovery_metadata(sonuc.read_bytes()) == yalniz_parola
+    assert _baslik(sonuc) == {
+        "surum": 2,
+        "kdf": {"time_cost": 1},
+        "kurtarma": {"no": 4, "tarih": "2026-10-01", "salt": "dHV6", "sarmal": "s"},
+    }
+
+
+def test_baslik_kurallari_dogrudan() -> None:
+    """Tek kural: hesap sarmalı ya da kurtarma bölümü tam olmalı; başlık yalnız kurtarma."""
+    durum = json.loads(_GUVENLIK)
+    assert is_usable_security_state(durum)
+    assert recovery_header_from_state(durum) == _BASLIK
+    assert is_usable_security_state(_BASLIK)  # başlık da aynı kuraldan geçer
+    durum["kurtarma"] = {}
+    assert is_usable_security_state(durum)  # hesap sarmalı tam
+    assert recovery_header_from_state(durum) is None  # ama başlık olamaz
+
+
+def test_derin_ic_ice_json_recursionerror_sizdirmaz() -> None:
+    """`json.loads` derin iç içe dizide RecursionError yükseltir; ayrıştırıcı None döner.
+
+    Yedek listesi (kayıp kilidinin çıkış yolu) ve geri yükleme çekirdeği bu kuralı
+    çağırır: tek bir bozuk başlık ikisini de 500'e düşürmemeli.
+    """
+    with pytest.raises(RecursionError):
+        json.loads("[" * 20000 + "]" * 20000)
+    assert parse_security_state(b"[" * 20000 + b"]" * 20000) is None
+    assert parse_security_state(_GUVENLIK) is not None
+
+
+def test_kurtarma_anahtarinin_kimligi_yalniz_no_ve_tarihtir() -> None:
+    """TK10: başlık ve durum dosyası aynı kuraldan `{no, tarih}` verir; tuz ve sarmal dönmez."""
+    assert recovery_key_identity(json.loads(_GUVENLIK)) == {"no": 1, "tarih": "2026-07-24"}
+    assert recovery_key_identity(_BASLIK) == {"no": 1, "tarih": "2026-07-24"}
+    # Biçimsiz alan tek başına düşer; ikisi de yoksa kimlik yoktur.
+    assert recovery_key_identity({"kurtarma": {"no": True, "tarih": "2026-07-24"}}) == {
+        "no": None,
+        "tarih": "2026-07-24",
+    }
+    assert recovery_key_identity({"kurtarma": {"no": 2, "tarih": "24.07.2026"}}) == {
+        "no": 2,
+        "tarih": None,
+    }
+    bos_durumlar: tuple[object, ...] = (
+        None,
+        [],
+        {},
+        {"kurtarma": []},
+        {"kurtarma": {"no": 0, "tarih": ""}},
+    )
+    for bos in bos_durumlar:
+        assert recovery_key_identity(bos) is None
+
+
+def test_gomulu_baslik_dosyanin_yalniz_basindan_okunur(tmp_path: Path) -> None:
+    """Yedek listesinin okuyucusu bellekteki kuralla aynı sonucu verir, bozuğu reddeder."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db)
+    yedek = daily_backup(db, tmp_path / "backups", today=date(2026, 7, 24))
+    assert yedek is not None
+    icerik = yedek.read_bytes()
+    assert read_embedded_recovery_metadata(yedek) == embedded_recovery_metadata(icerik)
+
+    sabit = len(MAGIC) + 32 + 12 + 4  # sihirli bayt + açık anahtar + nonce + uzunluk
+    uzunluk = int.from_bytes(icerik[sabit - 4 : sabit], "big")
+    bozuklar = {
+        "yedek_degil": b"duz metin",
+        "kisa": icerik[: sabit - 1],
+        "baslik_kesik": icerik[: sabit + uzunluk - 1],
+        "icerik_yok": icerik[: sabit + uzunluk],
+        "uzunluk_sinir_disi": icerik[: sabit - 4]
+        + (MAX_RECOVERY_HEADER_BYTES + 1).to_bytes(4, "big")
+        + icerik[sabit:],
+    }
+    for ad, bayt in bozuklar.items():
+        yol = tmp_path / f"{ad}.odbak"
+        yol.write_bytes(bayt)
+        with pytest.raises(BackupCryptoError):
+            read_embedded_recovery_metadata(yol)
 
 
 def test_bosaltilan_guvenlik_json_eski_baslikli_yedekleri_rotasyona_kurban_etmez(
@@ -375,7 +500,7 @@ def test_bosaltilan_guvenlik_json_eski_baslikli_yedekleri_rotasyona_kurban_etmez
     yedekler = tmp_path / "backups"
     eski = daily_backup(db, yedekler, today=date(2026, 9, 1))
     assert eski is not None
-    assert embedded_recovery_metadata(eski.read_bytes()) == _GUVENLIK
+    assert _baslik(eski) == _BASLIK
 
     (tmp_path / "guvenlik.json").write_bytes(b"")
     bugun = date(2026, 9, 21)
@@ -385,7 +510,7 @@ def test_bosaltilan_guvenlik_json_eski_baslikli_yedekleri_rotasyona_kurban_etmez
 
     assert alinan is None
     assert sorted(p.name for p in yedekler.glob("*.odbak")) == ["gunluk-2026-09-01.odbak"]
-    assert embedded_recovery_metadata(eski.read_bytes()) == _GUVENLIK
+    assert _baslik(eski) == _BASLIK
 
 
 def test_rotasyon_olmayan_dizinde_patlamaz(tmp_path: Path) -> None:

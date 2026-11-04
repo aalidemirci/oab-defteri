@@ -10,6 +10,15 @@
 // tutulur (`?tab=personel`, `?tab=havuz`): başka ekranlar doğrudan o sekmeye bağlanır.
 // Aile iskeletinin kütüphane üyelik sekmeleri ve "Bakanlık sistemi" hatırlatması
 // F1a-2'de söküldü.
+//
+// Rol süzmesi (plan F1b-2 "Bugünkü uçların eşlemi" → Kişiler; kaynak `oturum/yetki`): personeli
+// her rol okur. Öğrenciler sekmesi yalnız `ogrenciler`'de (öğrenci uçları 5. adımda sökülene dek
+// yalnız program yöneticisine açık), Ayrılış Havuzu sekmesi yalnız `ayrilis_havuzu`'nda görünür;
+// adresle gelinirse rolün ilk sekmesi açılır. Personel sekmesinde "Kişi ekle" ve satırdan
+// düzenleme (ayrılış, silme dahil) `kisi_yazma`'ya, e-Okul aktarım paneli (şablon dahil)
+// `eokul_aktarimi`'na, "Birleştir" düğmeleri (aktarım raporu ve havuz) `kisi_yazma`'ya bağlıdır.
+// Yazamayan rolde liste salt okurdur (başta `SaltOkurNotu`, satır tıklanmaz). Özet yüklenirken
+// sekmeler yerine iskelet durur.
 
 import { useCallback, useEffect, useState } from "react";
 
@@ -35,6 +44,9 @@ import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import type { TabItem } from "../../ui/Tabs";
 import TextField from "../../ui/TextField";
 import { MEMBER_KIND_TR, okulApi } from "../okul/api";
+import { SaltOkurNotu } from "../oturum/RolKapisi";
+import type { YetenekAdi } from "../oturum/api";
+import { useYetki } from "../oturum/yetki";
 import type {
   GradeLevelOption,
   MemberKind,
@@ -45,7 +57,16 @@ import type {
 } from "../okul/api";
 import AktarimPaneli from "./AktarimPaneli";
 import AyrilisHavuzu from "./AyrilisHavuzu";
-import { DurumRozeti, ErrorBand, hataOku } from "./ortak";
+import {
+  DurumRozeti,
+  ErrorBand,
+  KisiAdi,
+  OkunamadiIsareti,
+  hataOku,
+  kisiKaydiniMetni,
+  kisiOznesi,
+  okunamadiMi,
+} from "./ortak";
 import type { SayfaHatasi } from "./ortak";
 
 /** Sayfa başına kayıt (liste uçları limit/offset ile sayfalanır, varsayılan 25). */
@@ -63,11 +84,42 @@ const TABS: TabItem[] = [
   { key: "havuz", label: "Ayrılış Havuzu", icon: "pending_actions" },
 ];
 
+/** Sekmenin yeteneği (verilmeyen sekme her role açık; dosya başı "Rol süzmesi"). */
+const SEKME_YETENEGI: Partial<Record<TabKey, YetenekAdi>> = {
+  ogrenciler: "ogrenciler",
+  havuz: "ayrilis_havuzu",
+};
+
+/** Sayfanın açıklaması: yazabilen rolde ve salt okur rolde (sözlük §4.1). */
+export const KISILER_ACIKLAMASI =
+  "Öğrenci, öğretmen ve diğer personel sicili. Kayıtlar e-Okul listesinden toplu aktarılabilir " +
+  "ya da tek tek girilebilir. Aktarım kimseyi ayırmaz: listede bulunmayanlar Ayrılış Havuzu'nda " +
+  "karar bekler. TCKN, veli bilgisi, unvan ve branş bu programda tutulmaz.";
+export const KISILER_SALT_OKUR_ACIKLAMASI =
+  "Öğretmen ve diğer personel sicili. TCKN, veli bilgisi, unvan ve branş bu programda tutulmaz.";
+
 /** Ayrılış onayının ortak sonucu cümlesi (ayrılış yolu kaydı silmez). */
 const AYRILIS_SONUCU = "Kaydı silinmez; sicilde “Ayrıldı · gg.aa.yyyy” rozetiyle kalır.";
 
+/**
+ * Düzenleme penceresinde çözülemeyen şifreli alanın yardım metni (tasarım §13 D48). Ad ve
+ * soyad zorunludur: okunamayan değer ancak yeniden yazılarak kaydedilir. Okul no'su
+ * boş bırakılırsa gönderilmez, kayıtlı değer olduğu gibi kalır.
+ */
+const OKUNAMAYAN_AD_YARDIMI = "Kayıtlı değer okunamadı; kaydetmek için yeniden yazın.";
+const OKUNAMAYAN_NUMARA_YARDIMI =
+  "Kayıtlı numara okunamadı; boş bırakırsanız olduğu gibi kalır, yazarsanız yenisi kaydedilir.";
+
 export default function KisilerPage() {
-  const [active, setActive] = useTabParam<TabKey>("tab", TAB_KEYS, "ogrenciler");
+  const yetki = useYetki();
+  // Rolün sekmeleri; ilki varsayılandır (program yöneticisinde Öğrenciler, öteki rollerde
+  // personel). Yetkisiz sekmenin adresi varsayılana düşer (`useTabParam`).
+  const sekmeler = TAB_KEYS.filter((k) => {
+    const yetenek = SEKME_YETENEGI[k];
+    return yetenek === undefined || yetki.acik(yetenek);
+  });
+  const [active, setActive] = useTabParam<TabKey>("tab", sekmeler, sekmeler[0]);
+  const birlestirebilir = yetki.acik("kisi_yazma");
 
   return (
     <div className="space-y-[var(--od-page-gap)]">
@@ -75,27 +127,35 @@ export default function KisilerPage() {
         <div>
           <h1 className="od-page-title">Kişiler</h1>
           <p className="od-page-description">
-            Öğrenci, öğretmen ve diğer personel sicili. Kayıtlar e-Okul listesinden toplu
-            aktarılabilir ya da tek tek girilebilir. Aktarım kimseyi ayırmaz: listede bulunmayanlar
-            Ayrılış Havuzu&apos;nda karar bekler. TCKN, veli bilgisi, unvan ve branş bu programda
-            tutulmaz.
+            {yetki.acik("kisi_yazma") ? KISILER_ACIKLAMASI : KISILER_SALT_OKUR_ACIKLAMASI}
           </p>
         </div>
       </div>
 
-      <Tabs
-        items={TABS}
-        active={active}
-        onChange={(key) => setActive(key as TabKey)}
-        ariaLabel="Kişiler bölümleri"
-        idBase="kisiler"
-      />
+      {yetki.durum === "yukleniyor" ? (
+        <SkeletonList rows={5} />
+      ) : (
+        <>
+          <Tabs
+            items={TABS.filter((t) => (sekmeler as readonly string[]).includes(t.key))}
+            active={active}
+            onChange={(key) => setActive(key as TabKey)}
+            ariaLabel="Kişiler bölümleri"
+            idBase="kisiler"
+          />
 
-      <div {...tabPanelProps("kisiler", active)}>
-        {active === "ogrenciler" && <OgrencilerSekmesi />}
-        {active === "personel" && <PersonelSekmesi />}
-        {active === "havuz" && <AyrilisHavuzu />}
-      </div>
+          <div {...tabPanelProps("kisiler", active)}>
+            {active === "ogrenciler" && <OgrencilerSekmesi birlestirebilir={birlestirebilir} />}
+            {active === "personel" && (
+              <PersonelSekmesi
+                yazabilir={yetki.acik("kisi_yazma")}
+                aktarabilir={yetki.acik("eokul_aktarimi")}
+              />
+            )}
+            {active === "havuz" && <AyrilisHavuzu birlestirebilir={birlestirebilir} />}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -104,7 +164,7 @@ export default function KisilerPage() {
 // Öğrenciler sekmesi
 // ---------------------------------------------------------------------------
 
-function OgrencilerSekmesi() {
+function OgrencilerSekmesi({ birlestirebilir }: { birlestirebilir: boolean }) {
   const [searchInput, setSearchInput] = useState("");
   const search = useDebounced(searchInput);
   const [level, setLevel] = useState("");
@@ -165,8 +225,13 @@ function OgrencilerSekmesi() {
   }, [search, level, section, offset, reloadKey]);
 
   const columns: Column<Student>[] = [
-    { header: "Okul no", cell: (s) => s.student_number || "—" },
-    { header: "Ad soyad", cell: (s) => s.full_name },
+    // Çözülemeyen şifreli alan boş hücre değil "okunamadı"dır (tasarım §13 D48; `ortak`).
+    {
+      header: "Okul no",
+      cell: (s) =>
+        okunamadiMi(s, "student_number") ? <OkunamadiIsareti /> : s.student_number || "—",
+    },
+    { header: "Ad soyad", cell: (s) => <KisiAdi kayit={s} /> },
     { header: "Sınıf", cell: (s) => s.class_label || "—" },
     {
       header: "Durum",
@@ -250,7 +315,7 @@ function OgrencilerSekmesi() {
             columns={columns}
             rows={page.results}
             onRowClick={(s) => setEditing(s)}
-            rowLabel={(s) => `${s.full_name} kaydını düzenle`}
+            rowLabel={(s) => `${kisiKaydiniMetni(s)} düzenle`}
           />
           <PaginationBar
             count={page.count}
@@ -261,7 +326,7 @@ function OgrencilerSekmesi() {
         </>
       )}
 
-      <AktarimPaneli kind="students" onImported={reload} />
+      <AktarimPaneli kind="students" onImported={reload} birlestirebilir={birlestirebilir} />
 
       {(creating || editing !== null) && (
         <OgrenciFormDialog
@@ -311,6 +376,10 @@ function OgrenciFormDialog({
   const snackbar = useSnackbar();
   const confirm = useConfirm();
   const aktif = student === null || student.status === "ACTIVE";
+  // Çözülemeyen şifreli alanlar (D48): alan boş açılır, altında "okunamadı" yazar.
+  const adBozuk = student !== null && okunamadiMi(student, "first_name");
+  const soyadBozuk = student !== null && okunamadiMi(student, "last_name");
+  const numaraOkunamadi = student !== null && okunamadiMi(student, "student_number");
 
   const submit = async () => {
     clearErrors();
@@ -328,6 +397,9 @@ function OgrenciFormDialog({
       class_level: level ? Number(level) : null,
       class_section: section.trim(),
     };
+    // Okunamayan okul no'su boş bırakıldıysa GÖNDERİLMEZ: kayıtlı (bozuk) değer olduğu gibi
+    // kalır; boş dize gönderilseydi işaretli veri sessizce silinirdi (tasarım §13 D48).
+    if (numaraOkunamadi && !studentNumber.trim()) delete body.student_number;
     setBusy(true);
     try {
       if (student) await okulApi.updateStudent(student.id, body);
@@ -346,7 +418,7 @@ function OgrenciFormDialog({
     // Başlık soru, gövde sonuç (docs/sozluk.md §3); ad yalnız bu onay penceresinde görünür.
     const ok = await confirm({
       title: "Öğrenci ayrıldı olarak işaretlensin mi?",
-      message: `“${student.full_name}” okuldan ayrılmış sayılır ve seçicilerden düşer. ${AYRILIS_SONUCU}`,
+      message: `${kisiOznesi(student)} okuldan ayrılmış sayılır ve seçicilerden düşer. ${AYRILIS_SONUCU}`,
       confirmLabel: "Ayrıldı olarak işaretle",
     });
     if (!ok) return;
@@ -366,7 +438,7 @@ function OgrenciFormDialog({
     if (!student) return;
     const ok = await confirm({
       title: "Öğrenci sicilden silinsin mi?",
-      message: `“${student.full_name}” kaydı kalıcı olarak silinir, geri alınamaz. Yanlış girilmiş kayıtlar içindir; okuldan ayrılan öğrenci için “Ayrıldı olarak işaretle”yi kullanın. Yanlışlıkla silerseniz öğrenciyi yeniden ekleyebilir ya da e-Okul listesini yeniden aktarabilirsiniz.`,
+      message: `${kisiOznesi(student, true)} kalıcı olarak silinir, geri alınamaz. Yanlış girilmiş kayıtlar içindir; okuldan ayrılan öğrenci için “Ayrıldı olarak işaretle”yi kullanın. Yanlışlıkla silerseniz öğrenciyi yeniden ekleyebilir ya da e-Okul listesini yeniden aktarabilirsiniz.`,
       confirmLabel: "Sil",
     });
     if (!ok) return;
@@ -429,6 +501,7 @@ function OgrenciFormDialog({
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
             error={errors.first_name}
+            helperText={adBozuk ? OKUNAMAYAN_AD_YARDIMI : undefined}
           />
           <TextField
             label="Soyad"
@@ -436,13 +509,18 @@ function OgrenciFormDialog({
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
             error={errors.last_name}
+            helperText={soyadBozuk ? OKUNAMAYAN_AD_YARDIMI : undefined}
           />
           <TextField
             label="Okul no"
             value={studentNumber}
             onChange={(e) => setStudentNumber(e.target.value)}
             error={errors.student_number}
-            helperText="İçe aktarma bu numarayla eşleştirir; aktif kayıtlar arasında tekildir."
+            helperText={
+              numaraOkunamadi
+                ? OKUNAMAYAN_NUMARA_YARDIMI
+                : "İçe aktarma bu numarayla eşleştirir; aktif kayıtlar arasında tekildir."
+            }
           />
           <Select
             label="Sınıf düzeyi"
@@ -472,7 +550,15 @@ function OgrenciFormDialog({
 // Öğretmenler ve diğer personel sekmesi
 // ---------------------------------------------------------------------------
 
-function PersonelSekmesi() {
+function PersonelSekmesi({
+  yazabilir,
+  aktarabilir,
+}: {
+  /** "Kişi ekle" ve satırdan düzenleme (`kisi_yazma`). */
+  yazabilir: boolean;
+  /** e-Okul aktarım paneli (`eokul_aktarimi`). */
+  aktarabilir: boolean;
+}) {
   const [searchInput, setSearchInput] = useState("");
   const search = useDebounced(searchInput);
   const [offset, setOffset] = useState(0);
@@ -515,7 +601,7 @@ function PersonelSekmesi() {
   }, [search, offset, reloadKey]);
 
   const columns: Column<Personnel>[] = [
-    { header: "Ad soyad", cell: (p) => p.full_name },
+    { header: "Ad soyad", cell: (p) => <KisiAdi kayit={p} /> },
     { header: "Üye türü", cell: (p) => MEMBER_KIND_TR[p.member_kind] },
     {
       header: "Durum",
@@ -540,10 +626,14 @@ function PersonelSekmesi() {
             </p>
           )}
         </div>
-        <Button icon="person_add" onClick={() => setCreating(true)}>
-          Kişi ekle
-        </Button>
+        {yazabilir && (
+          <Button icon="person_add" onClick={() => setCreating(true)}>
+            Kişi ekle
+          </Button>
+        )}
       </div>
+
+      {!yazabilir && <SaltOkurNotu />}
 
       <Card
         elevation={0}
@@ -569,15 +659,21 @@ function PersonelSekmesi() {
         <EmptyState
           icon="badge"
           title="Gösterilecek kişi yok"
-          description="Aramayı değiştirin ya da e-Okul personel listesini aşağıdaki panelden içe aktarın."
+          description={
+            aktarabilir
+              ? "Aramayı değiştirin ya da e-Okul personel listesini aşağıdaki panelden içe aktarın."
+              : undefined
+          }
         />
       ) : (
         <>
+          {/* Salt okurda satır tıklanmaz: düzenleme penceresinin her eylemi bir yazmadır;
+              listenin sütunları kaydın okunabilen bütün alanlarını zaten gösterir. */}
           <DataTable<Personnel>
             columns={columns}
             rows={page.results}
-            onRowClick={(p) => setEditing(p)}
-            rowLabel={(p) => `${p.full_name} kaydını düzenle`}
+            onRowClick={yazabilir ? (p) => setEditing(p) : undefined}
+            rowLabel={yazabilir ? (p) => `${kisiKaydiniMetni(p)} düzenle` : undefined}
           />
           <PaginationBar
             count={page.count}
@@ -588,9 +684,11 @@ function PersonelSekmesi() {
         </>
       )}
 
-      <AktarimPaneli kind="personnel" onImported={reload} />
+      {aktarabilir && (
+        <AktarimPaneli kind="personnel" onImported={reload} birlestirebilir={yazabilir} />
+      )}
 
-      {(creating || editing !== null) && (
+      {yazabilir && (creating || editing !== null) && (
         <PersonelFormDialog
           personnel={editing}
           onClose={() => {
@@ -630,6 +728,8 @@ function PersonelFormDialog({
   const snackbar = useSnackbar();
   const confirm = useConfirm();
   const aktif = personnel === null || personnel.is_active;
+  const adBozuk = personnel !== null && okunamadiMi(personnel, "first_name");
+  const soyadBozuk = personnel !== null && okunamadiMi(personnel, "last_name");
 
   const submit = async () => {
     clearErrors();
@@ -661,7 +761,7 @@ function PersonelFormDialog({
     if (!personnel) return;
     const ok = await confirm({
       title: "Kişi ayrıldı olarak işaretlensin mi?",
-      message: `“${personnel.full_name}” okuldan ayrılmış sayılır ve seçicilerden düşer. ${AYRILIS_SONUCU}`,
+      message: `${kisiOznesi(personnel)} okuldan ayrılmış sayılır ve seçicilerden düşer. ${AYRILIS_SONUCU}`,
       confirmLabel: "Ayrıldı olarak işaretle",
     });
     if (!ok) return;
@@ -681,7 +781,7 @@ function PersonelFormDialog({
     if (!personnel) return;
     const ok = await confirm({
       title: "Kişi sicilden silinsin mi?",
-      message: `“${personnel.full_name}” kaydı kalıcı olarak silinir, geri alınamaz. Yanlış girilmiş kayıtlar içindir; okuldan ayrılan kişi için “Ayrıldı olarak işaretle”yi kullanın.`,
+      message: `${kisiOznesi(personnel, true)} kalıcı olarak silinir, geri alınamaz. Yanlış girilmiş kayıtlar içindir; okuldan ayrılan kişi için “Ayrıldı olarak işaretle”yi kullanın.`,
       confirmLabel: "Sil",
     });
     if (!ok) return;
@@ -741,6 +841,7 @@ function PersonelFormDialog({
           value={firstName}
           onChange={(e) => setFirstName(e.target.value)}
           error={errors.first_name}
+          helperText={adBozuk ? OKUNAMAYAN_AD_YARDIMI : undefined}
         />
         <TextField
           label="Soyad"
@@ -748,6 +849,7 @@ function PersonelFormDialog({
           value={lastName}
           onChange={(e) => setLastName(e.target.value)}
           error={errors.last_name}
+          helperText={soyadBozuk ? OKUNAMAYAN_AD_YARDIMI : undefined}
         />
         <Select
           label="Üye türü"

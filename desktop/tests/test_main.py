@@ -23,6 +23,7 @@ import pytest
 from desktop import main as main_mod
 from desktop import qt_kurulum as qt_kurulum_mod
 from desktop import restore as restore_mod
+from desktop.backup import daily_backup_path
 from desktop.clean_shutdown import ENV_PREVIOUS_SESSION, MARKER_FILE_NAME
 from desktop.django_bootstrap import is_parcacigi_baglantisiyla, wal_checkpoint
 from desktop.errors import (
@@ -84,10 +85,13 @@ def izlenen_adimlar(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     monkeypatch.setattr(main_mod, "prepare_django", kaydet("django-hazirla"))
     monkeypatch.setattr(main_mod, "unknown_applied_migrations", kaydet("taninmayan-goc", []))
     monkeypatch.setattr(main_mod, "ensure_no_unknown_migrations", kaydet("goc-surumu"))
-    monkeypatch.setattr(main_mod, "has_pending_migrations", kaydet("bekleyen-goc-var-mi", True))
+    monkeypatch.setattr(
+        main_mod, "pending_migrations", kaydet("bekleyen-goc-var-mi", ["okul.0010_ornek"])
+    )
     monkeypatch.setattr(main_mod, "pre_migrate_backup", kaydet("goc-oncesi-yedek"))
     monkeypatch.setattr(main_mod, "run_migrations", kaydet("goc"))
     monkeypatch.setattr(main_mod, "write_version_stamp", kaydet("damga-yaz"))
+    monkeypatch.setattr(main_mod, "_acilis_olaylarini_yaz", kaydet("iz-olaylari"))
     return sira
 
 
@@ -110,6 +114,8 @@ def test_acilis_sirasi_tasarimla_birebir(tmp_path: Path, izlenen_adimlar: list[s
         "goc-oncesi-yedek",
         "goc",
         "damga-yaz",
+        # §4.6.3: 7-8'in olguları göçten SONRA denetim izine (masaustu_kanca).
+        "iz-olaylari",
     ]
 
 
@@ -134,12 +140,71 @@ def test_gunluk_yedek_alinmadiysa_rotasyon_kosmaz(
 def test_bekleyen_goc_yoksa_ek_yedek_alinmaz(
     tmp_path: Path, izlenen_adimlar: list[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(main_mod, "has_pending_migrations", lambda: False)
+    monkeypatch.setattr(main_mod, "pending_migrations", lambda: [])
     paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
 
     main_mod.prepare_data(paths, "0.1.0")
 
     assert "goc-oncesi-yedek" not in izlenen_adimlar
+
+
+def _acilis_olaylarini_topla(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    """`_acilis_olaylarini_yaz`'a giden olguları toplar (backend yok; §4.6.3)."""
+    gorulen: list[Any] = []
+    monkeypatch.setattr(
+        main_mod, "_acilis_olaylarini_yaz", lambda olaylar, surum: gorulen.append((olaylar, surum))
+    )
+    return gorulen
+
+
+def test_acilisin_yedek_ve_goc_olgulari_gocten_sonra_denetim_izine_verilir(
+    tmp_path: Path, izlenen_adimlar: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Tasarım §4.2 adım 7-8, §4.6.3; plan F1b-1: günlük ve göç öncesi yedek Django ve tablo
+    hazır olmadan alınır; olgular tamponlanır, göçten sonra `masaustu_kanca`'ya verilir."""
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    monkeypatch.setattr(
+        main_mod, "rotate_backups", lambda *a, **k: [paths.backups / "gunluk-2026-09-08.odbak"]
+    )
+    monkeypatch.setattr(
+        main_mod,
+        "pre_migrate_backup",
+        lambda *a, **k: paths.backups / "pre-migrate-0.2.0-2026-09-22.odbak",
+    )
+    gorulen = _acilis_olaylarini_topla(monkeypatch)
+
+    main_mod.prepare_data(paths, "0.2.0")
+
+    ((olaylar, surum),) = gorulen
+    assert surum == "0.2.0"
+    assert olaylar.alinan_yedekler == [
+        "gunluk-2026-09-22.odbak",
+        "pre-migrate-0.2.0-2026-09-22.odbak",
+    ]
+    assert olaylar.silinen_yedekler == ["gunluk-2026-09-08.odbak"]
+    assert olaylar.gocler == ["okul.0010_ornek"]
+
+
+def test_bugunun_yedegi_zaten_varsa_alindi_olayi_yazilmaz(
+    tmp_path: Path, izlenen_adimlar: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Aynı gün ikinci açılış yedeği yeniden üretmez: "alındı" olayı da yinelenmez."""
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    paths.ensure()
+    daily_backup_path(paths.backups, date.today()).write_bytes(b"x")
+    monkeypatch.setattr(main_mod, "pending_migrations", lambda: [])
+    gorulen = _acilis_olaylarini_topla(monkeypatch)
+
+    main_mod.prepare_data(paths, "0.1.0")
+
+    ((olaylar, _surum),) = gorulen
+    assert olaylar.alinan_yedekler == [] and olaylar.gocler == []
+
+
+def test_backend_yoksa_acilis_olaylari_sessizce_atlanir() -> None:
+    """Masaüstü birim testinde `apps.okul` içe aktarılamaz: açılış durmaz."""
+    main_mod._acilis_olaylarini_yaz(main_mod.AcilisOlaylari(gocler=["okul.0010_ornek"]), "0.2.0")
+    main_mod._yedek_olaylarini_yaz(alinan=["gunluk-2026-09-22.odbak"], silinen=[])
 
 
 # ------------------------------------------------------------ hata senaryoları
@@ -630,7 +695,7 @@ def test_autotest_kipi_gercek_acilisi_dogrular(tmp_path: Path) -> None:
     assert (tmp_path / "data" / "db.sqlite3").is_file()
     assert (tmp_path / "data" / "surum.json").is_file()
     assert (tmp_path / "logs" / "uygulama.log").is_file()
-    # İlk açılışta veritabanı henüz yoktu → yedek yok; ilk yedek yönetici parolası
+    # İlk açılışta veritabanı henüz yoktu → yedek yok; ilk yedek ilk program yöneticisi hesabı
     # kurulduktan sonraki açılışta alınır.
     assert (tmp_path / "backups").is_dir()
     # T15: düzenli çıkış işareti yazar; ilk açılış alarm vermez.
@@ -643,7 +708,7 @@ def test_autotest_kipi_gercek_acilisi_dogrular(tmp_path: Path) -> None:
 @pytest.mark.slow
 def test_parola_kurulmadan_ikinci_acilista_gunluk_yedek_atlanir(tmp_path: Path) -> None:
     """Tasarım §4.2 adım 7 (yedek kabı §4.4.7): ilk açılışta `yedekleme.json` (ve kişi
-    verisi) yokken günlük yedek ATLANIR; düz kopya hiçbir koşulda yazılmaz. İlk yedek, yönetici parolası
+    verisi) yokken günlük yedek ATLANIR; düz kopya hiçbir koşulda yazılmaz. İlk yedek, ilk hesap
     kurulduktan sonraki açılışta şifreli alınır."""
     for _ in range(2):
         sonuc = subprocess.run(  # noqa: S603 — sabit argümanlar, kabuk yok
@@ -667,7 +732,7 @@ def test_parola_kurulmadan_ikinci_acilista_gunluk_yedek_atlanir(tmp_path: Path) 
     assert "Önceki oturum düzenli kapanmış." in gunluk
     assert (tmp_path / "data" / MARKER_FILE_NAME).is_file()
 
-    # Parola kurulmadı → yedek anahtarı yok → yedek atlandı; düz kopya da yok.
+    # Hesap kurulmadı → yedek anahtarı yok → yedek atlandı; düz kopya da yok.
     assert not (tmp_path / "data" / "yedekleme.json").exists()
     assert not list((tmp_path / "backups").glob("gunluk-*"))
     assert "yedek alınmadı" in gunluk
@@ -854,6 +919,33 @@ def test_gunluk_yedek_isi_yedek_alinmazsa_rotasyon_kosmaz(
     assert olaylar == ["rotasyon"]
 
 
+def test_gunluk_yedek_isi_yeni_yedegi_ve_silinenleri_denetim_izine_verir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`od-gunluk`'un yedeği de `YEDEK` olayıdır (kip backend'de seçilir; §4.6.3)."""
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    paths.ensure()
+    _sahte_gunluk_yedek(monkeypatch)
+    monkeypatch.setattr(
+        main_mod, "rotate_backups", lambda *a, **k: [paths.backups / "gunluk-2026-09-09.odbak"]
+    )
+    gorulen: list[tuple[list[str], list[str]]] = []
+    monkeypatch.setattr(
+        main_mod,
+        "_yedek_olaylarini_yaz",
+        lambda *, alinan, silinen: gorulen.append((alinan, silinen)),
+    )
+    is_ = main_mod.gunluk_yedek_isi(paths, bugun=lambda: date(2026, 9, 24))
+
+    assert is_() is True
+    assert is_() is True  # aynı gün: yedek zaten var, "alındı" yinelenmez
+
+    assert gorulen == [
+        (["gunluk-2026-09-24.odbak"], ["gunluk-2026-09-09.odbak"]),
+        ([], ["gunluk-2026-09-09.odbak"]),
+    ]
+
+
 def _sahte_gunluk_yedek(monkeypatch: pytest.MonkeyPatch) -> None:
     """Günlük yedeği yalnız dosya adıyla taklit eder (şifreleme `test_backup.py`'dedir)."""
     from desktop.backup import DAILY_PREFIX
@@ -953,6 +1045,9 @@ class _SahteKapi:
     def durdur(self) -> None:
         self.sira.append("od-gunluk-dur")
 
+    def ertelenenleri_dene(self) -> None:
+        self.sira.append("ertelenenleri-dene")
+
 
 @pytest.fixture
 def sahte_servis(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
@@ -973,10 +1068,20 @@ def sahte_servis(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, A
     )
     monkeypatch.setattr(main_mod, "gun_kapisi_kur", lambda paths, **_: _SahteKapi(sira))
     monkeypatch.setattr(main_mod, "wal_checkpoint", lambda yol: sira.append("wal-checkpoint"))
+    monkeypatch.setattr(main_mod, "_oturumu_kilitle", lambda: sira.append("oturum-kilidi"))
+
+    def kancalar(**kanca: Any) -> None:
+        sira.extend(f"kanca:{ad}" for ad in sorted(kanca))
+        kayit.setdefault("kancalar", {}).update(kanca)
+
+    monkeypatch.setattr(main_mod, "_kancalari_kaydet", kancalar)
+    monkeypatch.setattr(main_mod, "_kancalari_birak", lambda: sira.append("kancalar-birak"))
     return kayit
 
 
-def test_kapanis_sirasi_gun_kapisi_sunucu_ve_wal_checkpoint(sahte_servis: dict[str, Any]) -> None:
+def test_kapanis_sirasi_gun_kapisi_oturum_sunucu_ve_wal_checkpoint(
+    sahte_servis: dict[str, Any],
+) -> None:
     kod = main_mod.serve(sahte_servis["paths"], "belirtec", False)
 
     assert kod == EXIT_OK
@@ -984,11 +1089,23 @@ def test_kapanis_sirasi_gun_kapisi_sunucu_ve_wal_checkpoint(sahte_servis: dict[s
         "yonetim-basla",
         "saglik",
         "od-gunluk",  # yönetim ayakta ve korumalı olduktan SONRA
+        "kanca:ertelenenleri_dene",  # TK19: kilit açılışının sinyali kapı başladıktan sonra
         "pencere",
+        "kancalar-birak",  # kanca kapı durmadan ÖNCE düşer
         "od-gunluk-dur",
+        "oturum-kilidi",  # §4.2: od-gunluk durduktan SONRA, sunucudan ÖNCE
         "yonetim-dur",
         "wal-checkpoint",  # TB14: sunucu durduktan SONRA
     ]
+
+
+def test_kilit_acilisinin_sinyali_gun_kapisina_baglanir(sahte_servis: dict[str, Any]) -> None:
+    """TK19: backend'e kaydolan "ertelenenleri şimdi dene" kancası kapının kendi sinyalidir."""
+    main_mod.serve(sahte_servis["paths"], "belirtec", False)
+
+    sahte_servis["kancalar"]["ertelenenleri_dene"]()
+
+    assert sahte_servis["sira"][-1] == "ertelenenleri-dene"
 
 
 def test_autotest_pencere_ve_gun_kapisi_acmaz_ag_dinleyicisi_kurmaz(
@@ -998,7 +1115,14 @@ def test_autotest_pencere_ve_gun_kapisi_acmaz_ag_dinleyicisi_kurmaz(
     kod = main_mod.serve(sahte_servis["paths"], "belirtec", True)
 
     assert kod == EXIT_OK
-    assert sahte_servis["sira"] == ["yonetim-basla", "saglik", "yonetim-dur", "wal-checkpoint"]
+    assert sahte_servis["sira"] == [
+        "yonetim-basla",
+        "saglik",
+        "kancalar-birak",
+        "oturum-kilidi",  # oturum açılmadığı için etkisizdir; sıra aynı kalır
+        "yonetim-dur",
+        "wal-checkpoint",
+    ]
 
 
 def test_pencere_motoru_yoksa_gun_kapisi_kalkmaz(
@@ -1027,7 +1151,12 @@ def test_pencere_hatasinda_da_gun_kapisi_ve_sunucu_durdurulur(
     with pytest.raises(RuntimeError):
         main_mod.serve(sahte_servis["paths"], "belirtec", False)
 
-    assert sahte_servis["sira"][-3:] == ["od-gunluk-dur", "yonetim-dur", "wal-checkpoint"]
+    assert sahte_servis["sira"][-4:] == [
+        "od-gunluk-dur",
+        "oturum-kilidi",
+        "yonetim-dur",
+        "wal-checkpoint",
+    ]
 
 
 def test_gun_kapisi_yerlesik_isi_gunluk_yedektir(tmp_path: Path) -> None:
@@ -1075,3 +1204,51 @@ def test_acilista_umask_dizinlerden_ve_gunlukten_once(
         main_mod.run([])
 
     assert sira == ["umask", "dizinler", "gunluk"]
+
+
+# ------------------------------------------------- kapanışta oturum kilidi (§4.2)
+
+
+def _sahte_kanca(monkeypatch: pytest.MonkeyPatch, kilitle: Any) -> None:
+    """`apps.okul.masaustu_kanca` yerine yalnız kapanış kilidini taşıyan sahte modül."""
+    import types
+
+    sahte = types.ModuleType("apps.okul.masaustu_kanca")
+    sahte.kapanista_kilitle = kilitle  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "apps.okul.masaustu_kanca", sahte)
+
+
+def test_kapanis_oturum_kilidini_backend_kancasindan_cagirir(
+    monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[Any]
+) -> None:
+    cagrilar: list[str] = []
+
+    def kilitle() -> bool:
+        cagrilar.append("kilit")
+        return True
+
+    _sahte_kanca(monkeypatch, kilitle)
+
+    main_mod._oturumu_kilitle()
+
+    assert cagrilar == ["kilit"]
+    assert any("oturum kilitlendi" in kayit.getMessage() for kayit in od_gunlugu)
+
+
+def test_kapanis_oturum_kilidi_hatasi_kapanisi_durdurmaz(
+    monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[Any]
+) -> None:
+    def patlat() -> bool:
+        raise RuntimeError("kilit düştü")
+
+    _sahte_kanca(monkeypatch, patlat)
+
+    main_mod._oturumu_kilitle()  # istisna yükseltmez
+
+    assert any("kilitlenemedi" in kayit.getMessage() for kayit in od_gunlugu)
+
+
+def test_kapanis_oturum_kilidi_backend_yoksa_sessizdir(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "apps.okul.masaustu_kanca", None)
+
+    main_mod._oturumu_kilitle()  # ImportError yutulur

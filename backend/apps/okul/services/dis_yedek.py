@@ -23,10 +23,11 @@ yedek indirme"yi söyler ve dosyanın USB belleğe alınmasını ister (dürüst
 
 **Hatırlatma ne zaman?**
 
-* Hiç indirme yoksa: yönetici parolası kurulduktan `ILK_HATIRLATMA_GUN` gün sonra
-  (başlangıç, `guvenlik.json`'un oluşturma damgasıdır — yeni bilgisayara geri
-  yüklenen kurulumda o damga eski tarihtir; kart hemen çıkar, doğrusu da budur:
-  yeni diskte henüz dış kopya yoktur).
+* Hiç indirme yoksa: ilk program yöneticisi hesabı kurulduktan `ILK_HATIRLATMA_GUN`
+  gün sonra (başlangıç, `guvenlik.json`'un oluşturma damgasıdır — yeni bilgisayara
+  kurtarma anahtarıyla geri yüklenen kurulumda o damga kurtarma anahtarının üretim
+  günüdür, yani eski bir tarihtir (`backup_restore._creation_stamp`); kart hemen
+  çıkar, doğrusu da budur: yeni diskte henüz dış kopya yoktur).
 * İndirme varsa: son indirmeden `hatirlatma_gun` gün sonra (varsayılan 30 —
   kılavuzun "ayda bir"i; ayarla 7-90).
 
@@ -46,8 +47,11 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Final
 
+from django.db import transaction
 from django.utils import timezone
 
+from apps.okul import denetim_izi
+from apps.okul.models import AuditAction
 from apps.okul.services import app_password
 
 logger = logging.getLogger("oab_defteri.yedek")
@@ -62,7 +66,7 @@ VARSAYILAN_HATIRLATMA_GUN: Final = 30
 #: hatırlatma bir dönemin kaydını tek diske bırakır.
 EN_AZ_HATIRLATMA_GUN: Final = 7
 EN_COK_HATIRLATMA_GUN: Final = 90
-#: Hiç indirme yokken ilk hatırlatma, parola kurulduktan bu kadar gün sonra.
+#: Hiç indirme yokken ilk hatırlatma, ilk hesap kurulduktan bu kadar gün sonra.
 ILK_HATIRLATMA_GUN: Final = 7
 
 SURE_ARALIK_MESAJI: Final = (
@@ -79,7 +83,7 @@ class DisYedekDurumu:
     #: Son şifreli yedek indirmenin anı (ISO, yerel dilim); hiç yoksa None.
     son_indirme: str | None
     hatirlatma_gun: int
-    #: Son indirmeden (yoksa parola kurulumundan) bu yana geçen gün; bilinmiyorsa None.
+    #: Son indirmeden (yoksa ilk hesabın kurulumundan) bu yana geçen gün; bilinmiyorsa None.
     gecen_gun: int | None
     #: Genel Bakış kartı gösterilsin mi?
     hatirlat: bool
@@ -165,11 +169,25 @@ def indirme_kaydet(an: datetime | None = None) -> None:
 
 
 def hatirlatma_suresini_ayarla(gun: int) -> DisYedekDurumu:
-    """Hatırlatma süresini değiştirir; aralık dışıysa `ValueError` (400)."""
+    """Hatırlatma süresini değiştirir; aralık dışıysa `ValueError` (400).
+
+    Ayar değişikliği oturumdaki hesabın `GUNCELLE` satırıdır (tasarım §4.6.2; nesne
+    `dis_yedek.ayar`, gün sayısı `[önce, sonra]` değeriyle). Sıra `guvenlik.json`
+    yazımlarındakiyle aynıdır: önce dosya kilidi, sonra veritabanı işlemi; satır dosyadan
+    ÖNCE eklenir, dosya yazılamazsa işlem geri sarılır (iz yapılmamış işi anlatmaz).
+    """
     if isinstance(gun, bool) or not EN_AZ_HATIRLATMA_GUN <= gun <= EN_COK_HATIRLATMA_GUN:
         raise ValueError(SURE_ARALIK_MESAJI)
-    with _kilit:
+    with _kilit, transaction.atomic():
         veri = _oku()
+        onceki = _hatirlatma_gun(veri)
+        denetim_izi.olay(
+            AuditAction.GUNCELLE,
+            model=denetim_izi.DIS_YEDEK_AYARI,
+            object_id="hatirlatma_gun",
+            changed_fields=["hatirlatma_gun"],
+            values={"hatirlatma_gun": [onceki, gun]},
+        )
         veri["surum"] = DOSYA_SURUMU
         veri["hatirlatma_gun"] = gun
         _yaz(veri)
@@ -177,7 +195,7 @@ def hatirlatma_suresini_ayarla(gun: int) -> DisYedekDurumu:
 
 
 def durum(bugun: date | None = None) -> DisYedekDurumu:
-    """Kartın özeti. Parola kurulmamışsa (yedek alınamaz) hatırlatma yoktur."""
+    """Kartın özeti. Hesap kurulmamışsa (yedek alınamaz) hatırlatma yoktur."""
     gun = bugun or timezone.localdate()
     with _kilit:
         veri = _oku()

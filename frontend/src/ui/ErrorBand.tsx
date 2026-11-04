@@ -4,19 +4,20 @@
 //
 // İki durum vardır:
 //   1) olağan hata → kırmızı bant, backend iletisi olduğu gibi;
-//   2) 409 `parola_gerekli` → bu bir "hata" değil, eksik adımdır: yönetici parolası
-//      kurulmadan şifreli alana (kişi adı, bağışçı, komisyon başkanı) yazılamaz
-//      (tasarım §4.2, TK8). Kullanıcı sihirbaza yönlendirilir.
+//   2) 409 `parola_gerekli` → bu bir "hata" değil, eksik adımdır: program yöneticisi
+//      hesabı kurulmadan şifreli alana (kişi adı, bağışçı, komisyon başkanı) yazılamaz
+//      (tasarım §4.2, TK8). Kullanıcı sihirbaza yönlendirilir. Başlık oturum hata
+//      eşlemindeki metinle aynıdır (`oturum/hatalar.OTURUM_HATA_METINLERI.parola_gerekli`).
 
 import { Link } from "react-router-dom";
 
 import { ApiError } from "../lib/api";
 import Icon from "./Icon";
 
-/** Fail-closed yazma (tasarım TK8): yönetici parolası yokken şifreli alan yazan uç 409 döner. */
+/** Fail-closed yazma (tasarım TK8): hesap kurulmamışken şifreli alan yazan uç 409 döner. */
 export const PAROLA_GEREKLI_KODU = "parola_gerekli";
 
-/** Sayfada gösterilecek hata: ileti + (varsa) parola kurulmamış olduğu bilgisi. */
+/** Sayfada gösterilecek hata: ileti + (varsa) hesabın kurulmamış olduğu bilgisi. */
 export interface SayfaHatasi {
   message: string;
   parolaGerekli: boolean;
@@ -32,7 +33,7 @@ export function hataOku(e: unknown, yedek: string): SayfaHatasi {
 
 /**
  * Hata bandı canlı bölgedir: başarısız yükleme/kaydetme/silme ekran okuyucuya
- * duyurulur. Parola kurulmamışsa (409) ileti okunaklı bir başlıkla verilir ve
+ * duyurulur. Hesap kurulmamışsa (409) ileti okunaklı bir başlıkla verilir ve
  * kullanıcı kurulum sihirbazına yönlendirilir: bu bir "hata" değil, eksik adımdır.
  */
 export default function ErrorBand({ hata }: { hata: SayfaHatasi | string }) {
@@ -46,7 +47,7 @@ export default function ErrorBand({ hata }: { hata: SayfaHatasi | string }) {
       >
         <Icon name="lock" size="lg" className="mt-0.5 shrink-0" />
         <div className="min-w-0 flex-1">
-          <p className="text-label-large">Önce yönetici parolasını kurun</p>
+          <p className="text-label-large">Önce program yöneticisi hesabını kurun</p>
           <p className="mt-1 text-body-medium">{message}</p>
           <Link
             to="/kurulum"

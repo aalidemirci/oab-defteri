@@ -10,13 +10,18 @@
        (damga yoksa 8'den önce veritabanının göç kaydı da denetlenir — §4.2 adım 5)
     6. Bütünlük denetimi .................... bozuk veriyle pencere AÇILMAZ
     7. Günlük yedek + 14 gün rotasyonu ...... `Connection.backup()`; yalnız şifreli
-       `.odbak`. Yönetici parolası kurulmadan (ilk açılış) yedek atlanır; bugünün
+       `.odbak`. İlk program yöneticisi hesabı kurulmadan (ilk açılış) yedek atlanır; bugünün
        yedeği alınmadıysa rotasyon da koşmaz (tasarım §4.2 adım 7; yedekler §4.4.7)
-    8. Göç öncesi yedek + `migrate --no-input`
+    8. Göç öncesi yedek + `migrate --no-input`; ardından 7-8'in olguları (alınan ve silinen
+       yedekler, uygulanan göçler) denetim izine `YEDEK` ve `GOC` olarak verilir — bu adımlar
+       Django ve tablo hazır olmadan olur, olgular tamponlanır, göçten SONRA `masaustu_kanca`
+       üzerinden yazılır (kilitli kipte; tasarım §4.6.3, plan F1b-1 "Denetim izi")
     9. Gömülü sunucu (waitress, 127.0.0.1, boş port) + sağlık denetimi
    10. Çıkış kancası backend'e kaydolur (`masaustu_kanca`, §4.2 adım 10); `od-gunluk`
-       başlar: gün değişimi kapısını koşar (günlük yedek + rotasyon; saatte bir
-       yinelenir, her iş ortak bakım kapısından geçer — `shared/bakim.py`)
+       başlar: gün değişimi kapısını koşar (günlük yedek + rotasyon + backend'in kaydettiği
+       işler, ör. erişim günlüğünün saklama silmesi; saatte bir yinelenir, her iş ortak bakım
+       kapısından geçer — `shared/bakim.py`). Kapının "ertelenenleri şimdi dene" sinyali de
+       kaydolur: kilit açılışı onu verir, kilitliyken ertelenen iş hemen denenir (TK19)
    11. Linux: Qt uygulaması + SIGTERM köprüsü (`desktop/qt_kurulum.py`)
    12. Pencere (pywebview)
    `--autotest` kipinde 1-9 + sağlık denetimi koşar, pencere açılmaz (§13 D5).
@@ -28,8 +33,9 @@ bozukken rotasyonun sağlam eski yedekleri silmesi istenmez.
 Öteki kaynaklar: arayüzdeki Çık (`POST app/quit/`), kurucu ve kaldırıcının
 `OABDefteri.Kapat` olayı, tek kopya kanalının `kapat` komutu ve Linux oturum
 kapanışı (SIGTERM). Sıra: pencere → kanal → Qt köprüsü → kancalar bırakılır →
-`od-gunluk` → yönetim sunucusu → WAL checkpoint (TB14) → temiz kapanış işareti →
-kilit. Mutex'ler süreç bitene dek kalır (lock.py).
+`od-gunluk` → oturum açıksa kilitlenir (`KILIT` satırı ve çapa `iz-durumu.json`'a, sonra DEK
+ve iz anahtarı bellekten düşer) → yönetim sunucusu → WAL checkpoint (TB14) → temiz kapanış
+işareti → kilit. Mutex'ler süreç bitene dek kalır (lock.py).
 
 Herhangi bir adım başarısız olursa pencere açılmaz; kullanıcıya Türkçe ileti +
 "son yedekten dön" yolu gösterilir ve hataya özel bir çıkış kodu döner (CI ve
@@ -46,12 +52,19 @@ import os
 import sys
 import threading
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
 from desktop import qt_kurulum
-from desktop.backup import daily_backup, pre_migrate_backup, rotate_backups
+from desktop.backup import (
+    daily_backup,
+    daily_backup_path,
+    pre_migrate_backup,
+    pre_migrate_backup_path,
+    rotate_backups,
+)
 from desktop.clean_shutdown import (
     consume_marker,
     publish,
@@ -62,7 +75,7 @@ from desktop.dialogs import show_error
 from desktop.django_bootstrap import (
     assert_session_guard_installed,
     build_wsgi_application,
-    has_pending_migrations,
+    pending_migrations,
     prepare_django,
     run_migrations,
     unknown_applied_migrations,
@@ -138,9 +151,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--hesap",
+        default=None,
+        metavar="TANITICI",
+        help="Geri yükleme: program yöneticisi hesabının tanıtıcısı (ör. yonetici).",
+    )
+    parser.add_argument(
         "--parola",
         default=None,
-        help="Geri yükleme: yönetici parolası (otomasyon içindir; komut geçmişine düşer).",
+        help="Geri yükleme: --hesap ile verilen hesabın parolası (otomasyon içindir; komut "
+        "geçmişine düşer).",
     )
     parser.add_argument(
         "--kurtarma-anahtari",
@@ -173,25 +193,69 @@ def is_plain_launch(args: argparse.Namespace) -> bool:
     return not args.autotest and args.geri_yukle is None
 
 
+@dataclass
+class AcilisOlaylari:
+    """Açılışın denetim izine düşecek olguları (tasarım §4.2 adım 7-8, §4.6.3).
+
+    Günlük yedek ve göç öncesi yedek Django ve iz tablosu hazır olmadan alınır; olgular
+    burada tamponlanır, göçten sonra `masaustu_kanca` üzerinden yazılır. Yalnız yeni alınan
+    yedek sayılır (aynı gün ikinci açılışta var olan yedek "alındı" değildir).
+    """
+
+    alinan_yedekler: list[str] = field(default_factory=list)
+    silinen_yedekler: list[str] = field(default_factory=list)
+    gocler: list[str] = field(default_factory=list)
+
+
 def prepare_data(paths: AppPaths, app_version: str) -> None:
-    """Veriyi açılışa hazırlar: sürüm → bütünlük → yedek → göç sürümü → göç → damga."""
+    """Veriyi açılışa hazırlar: sürüm → bütünlük → yedek → göç sürümü → göç → damga → iz."""
     ensure_stamp_compatible(paths.version_stamp_path, app_version)
     check_database_integrity(paths.db_path, backup_dir=paths.backups)
+    olaylar = AcilisOlaylari()
 
     # Rotasyon yalnız bugünün yedeği elde varken koşar: yedek atlandıysa
     # (parola henüz kurulmadı, yedek anahtarı bozuk, guvenlik.json kayıp) eski
     # yedekler silinmez — kayıp kilidinden çıkış yolu onlardır (tasarım §4.3 tehdit 8).
-    if daily_backup(paths.db_path, paths.backups) is not None:
-        rotate_backups(paths.backups)
+    bugunku_vardi = daily_backup_path(paths.backups, date.today()).exists()
+    gunluk = daily_backup(paths.db_path, paths.backups)
+    if gunluk is not None:
+        if not bugunku_vardi:
+            olaylar.alinan_yedekler.append(gunluk.name)
+        olaylar.silinen_yedekler.extend(yol.name for yol in rotate_backups(paths.backups) or [])
 
     prepare_django(resolve_backend_dir(), paths.data)
     # İkinci hat (§4.2 adım 5): damga yoksa (geri yükleme siler) veritabanının göç kaydı
     # konuşur — tanınmayan göç = daha yeni sürümün şeması; göç ve yazım başlamadan dur.
     ensure_no_unknown_migrations(unknown_applied_migrations(), app_version)
-    if has_pending_migrations():
-        pre_migrate_backup(paths.db_path, paths.backups, app_version)
+    bekleyen = pending_migrations()
+    if bekleyen:
+        hedef_vardi = pre_migrate_backup_path(paths.backups, app_version, date.today()).exists()
+        goc_oncesi = pre_migrate_backup(paths.db_path, paths.backups, app_version)
+        if goc_oncesi is not None and not hedef_vardi:
+            olaylar.alinan_yedekler.append(goc_oncesi.name)
     run_migrations()
+    olaylar.gocler = list(bekleyen)
     write_version_stamp(paths.version_stamp_path, app_version)
+    _acilis_olaylarini_yaz(olaylar, app_version)
+
+
+def _acilis_olaylarini_yaz(olaylar: AcilisOlaylari, app_version: str) -> None:
+    """Açılışın olgularını denetim izine verir (`masaustu_kanca`; §4.6.3 kilitli kip).
+
+    Backend yoksa (masaüstü birim testi) sessiz; hata açılışı DURDURMAZ, günlüğe yazılır.
+    İlk hesaptan önce (iz zinciri boş) backend olay yazmaz.
+    """
+    try:
+        from apps.okul import masaustu_kanca
+    except ImportError:
+        return
+    try:
+        masaustu_kanca.yedek_olaylarini_yaz(
+            alinan=olaylar.alinan_yedekler, silinen=olaylar.silinen_yedekler
+        )
+        masaustu_kanca.goc_olayini_yaz(surum=app_version, gocler=olaylar.gocler)
+    except Exception:
+        logger.exception("Açılışın olayları denetim izine yazılamadı; program açılıyor.")
 
 
 def dispatch_command(command: str, controller: WindowController) -> None:
@@ -267,6 +331,25 @@ def _kancalari_birak() -> None:
     masaustu_kanca.kaldir()
 
 
+def _oturumu_kilitle() -> None:
+    """Düzenli kapanışta oturum açıksa kilitler (§4.2: `od-gunluk` durduktan sonra, sunucudan önce).
+
+    Kilidi backend kaydeder (`masaustu_kanca.kapanista_kilitle`; `OkulConfig.ready`):
+    uçuştaki isteklerin bitmesini sınırlı süre bekler, `KILIT` satırını ve çapayı
+    (`iz-durumu.json`) yazar, sonra DEK ve iz anahtarı bellekten düşer. Backend yoksa (testte)
+    sessiz; hata kapanışı DURDURMAZ, günlüğe yazılır.
+    """
+    try:
+        from apps.okul.masaustu_kanca import kapanista_kilitle
+    except ImportError:
+        return
+    try:
+        if kapanista_kilitle():
+            logger.info("Kapanışta oturum kilitlendi.")
+    except Exception:
+        logger.exception("Kapanışta oturum kilitlenemedi; program kapanmaya devam ediyor.")
+
+
 def gun_kapisi_kur(
     paths: AppPaths,
     *,
@@ -308,7 +391,9 @@ def gunluk_yedek_isi(
         capa_gunu, capa_saati = capa[0]
         gecen_gun = max(0, int((simdi - capa_saati) // 86_400))
         guvenilir = capa_gunu + timedelta(days=gecen_gun + 1)
-        if daily_backup(paths.db_path, paths.backups, today=gun) is None:
+        vardi = daily_backup_path(paths.backups, gun).exists()
+        yedek = daily_backup(paths.db_path, paths.backups, today=gun)
+        if yedek is None:
             return False  # parola kurulmadı / güvenlik dosyası kayıp: bir saat sonra yeniden
         rotasyon_gunu = min(gun, guvenilir)
         if rotasyon_gunu < gun:
@@ -317,10 +402,32 @@ def gunluk_yedek_isi(
                 "gerçek süreye göre döndürülüyor. Saati denetleyin.",
                 (gun - rotasyon_gunu).days,
             )
-        rotate_backups(paths.backups, today=rotasyon_gunu)
+        silinen = rotate_backups(paths.backups, today=rotasyon_gunu) or []
+        _yedek_olaylarini_yaz(
+            alinan=[] if vardi else [yedek.name], silinen=[yol.name for yol in silinen]
+        )
         return True
 
     return calistir
+
+
+def _yedek_olaylarini_yaz(*, alinan: list[str], silinen: list[str]) -> None:
+    """`od-gunluk`'un yedek olgularını denetim izine verir (`YEDEK`; kip backend'de seçilir).
+
+    Oturum açıksa satır açık kipte, kilitliyse kilitli kipte `SISTEM` adına düşer
+    (`masaustu_kanca.yedek_olaylarini_yaz`). Backend yoksa (testte) sessiz; hata işi
+    durdurmaz.
+    """
+    if not alinan and not silinen:
+        return
+    try:
+        from apps.okul import masaustu_kanca
+    except ImportError:
+        return
+    try:
+        masaustu_kanca.yedek_olaylarini_yaz(alinan=alinan, silinen=silinen)
+    except Exception:
+        logger.exception("Yedek olayı denetim izine yazılamadı.")
 
 
 def serve(
@@ -346,6 +453,9 @@ def serve(
         require_window_runtime()
         kapi = gun_kapisi_kur(paths)
         kapi.baslat()
+        # TK19: kilit açılışı ertelenen gün işlerini bu sinyalle hemen denetir (engellemez;
+        # iş `od-gunluk`'ta koşar). Kapanışta `_kancalari_birak` kapıdan ÖNCE düşürür.
+        _kancalari_kaydet(ertelenenleri_dene=kapi.ertelenenleri_dene)
         run_window_session(
             window_url(server.base_url, token),
             paths.webview_storage_path,
@@ -353,9 +463,11 @@ def serve(
         )
         return EXIT_OK
     finally:
+        # Kapanış sırası (§4.2): kancalar → od-gunluk → oturum kilidi → sunucu → WAL.
         _kancalari_birak()
         if kapi is not None:
             kapi.durdur()
+        _oturumu_kilitle()
         server.stop()
         wal_checkpoint(paths.db_path)
 

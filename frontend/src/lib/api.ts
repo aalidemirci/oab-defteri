@@ -4,34 +4,50 @@
 // impersonation yoktur. Kalan: temel `fetch` sarmalayıcı, `ApiError`, backend
 // `{code, message, fields}` hata sözleşmesi ve snake_case gövde. Blob
 // yardımcıları (`getBlob`/`postBlob`) dosya indirmeleri (Excel şablonları,
-// şifreli yedek, kurulum dosyası, evrak/PDF) için korunur.
-// Kip (tasarım §4.4): kullanıcı etkileşiminden hemen sonra giden isteklere
-// `X-OD-Etkinlik: 1` eklenir (yönetici kipinin boşta sayacı); 403
-// `kip_yetkisiz` `lib/kip.ts` olayını yayınlar. Kilit kapısı (tasarım §4.4.3):
-// 423 `locked`/`guvenlik_dosyasi_kayip` `lib/kilit.ts` olayını yayınlar.
+// şifreli yedek, kurulum dosyası, evrak/PDF) için korunur; `postDosya` dosyayla birlikte
+// sunucunun `Content-Disposition`'daki adını da verir (adı sunucu kuran evrak, ör. hesap teslim
+// pusulası; `lib/download.basliktanDosyaAdi`).
+// Oturum (tasarım §4.4.3, TK14): kullanıcı etkileşiminden hemen sonra giden isteklere
+// `X-OD-Etkinlik: 1` eklenir (oturumun boşta kilit sayacı); yoklamalar eklemez. Kilit
+// kapısı: 423 `locked`/`guvenlik_dosyasi_kayip` `lib/kilit.ts`'e verilir — ön yüz
+// oturumu açık sanıyorsa pencere yeniden yüklenir (tasarım §13 D53), sanmıyorsa güvenlik
+// kapısı durumu yeniden okur. Aile iskeletinin 403 `kip_yetkisiz` dalı görevli kipiyle
+// kalktı. Rol reddi (plan F1b-2 "Ön yüz"): `od:rol-yetkisiz` olayı YALNIZ 403 `rol_yetkisiz`'de
+// yayınlanır; kilit açmanın 403 `hesap_askida`'sında ve oturum belirteci kapısının 403'ünde
+// (`forbidden`, masaüstü `session_guard`) yayınlanmaz. Hatayı (sunucunun iletisi "Bu işlem
+// hesabınızın rolüne açık değil.") çağıran ekran gösterir; olay yalnız oturum özetinin
+// (yeteneklerin) yeniden okunmasını tetikler (`modules/oturum/yetki.YetkiSaglayici`).
 
 // Boş/tanımsız → göreli "/api/v1": geliştirmede Vite proxy'si (vite.config.ts
 // server.proxy) backend'e yönlendirir. Mutlak URL yalnız özel senaryoda gerekir.
-import { KILIT_KAPISI_KODLARI, kilitKapisiYayinla } from "./kilit";
-import { KIP_YETKISIZ_KODU, kipYetkisizYayinla } from "./kip";
+import { basliktanDosyaAdi } from "./download";
+import { kilitKapisiYaniti } from "./kilit";
 import { yenidenBaslatGerekliYayinla } from "./restart";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
 
+/** Gövdesinde ileti olmayan hatalı yanıtın iletisi (ekranlar kod eşlemine düşebilsin). */
+export const BEKLENMEYEN_HATA_ILETISI = "Beklenmeyen bir hata oluştu.";
+
 /** Backend "yeniden başlat" kapısındayken (geri yükleme sonrası) dönen kod. */
 const RESTART_CODE = "restart_required";
 
+/** Rol reddinin kodu (backend `shared/exceptions.ROL_YETKISIZ_KODU`; 403). */
+export const ROL_YETKISIZ_KODU = "rol_yetkisiz";
+/** 403 `rol_yetkisiz` görülünce yayınlanan olay (dosya başı notu). */
+export const ROL_YETKISIZ_OLAYI = "od:rol-yetkisiz";
+
 // --- Kullanıcı etkinliği (tasarım §4.4.3) ------------------------------------
-// Yönetici kipinin boşta süresi SUNUCUDA dolar ve yalnız kullanıcı eylemi
+// Oturumun boşta kilit süresi SUNUCUDA dolar ve yalnız kullanıcı eylemi
 // taşıyan isteklerle tazelenir. "Kullanıcı eylemi" = son birkaç saniye içinde
 // gerçek bir etkileşim (fare/dokunma ya da tuş) olmuş olması. Zamanlayıcıyla
-// giden istekler (kip ve durum sorguları, periyodik yenilemeler) başlığı
+// giden istekler (oturum ve durum sorguları, periyodik yenilemeler) başlığı
 // taşımaz; bunun için çağıran `etkinlik: false` verir — aksi hâlde kullanıcının
 // son tıklamasından hemen sonra denk gelen bir yoklama da eylem sayılırdı.
 
 /** Etkileşimden sonra giden isteğin kullanıcı eylemi sayıldığı pencere. */
 export const ETKINLIK_PENCERESI_MS = 5_000;
-/** Backend `apps/okul/kip_middleware.ETKINLIK_BASLIGI` ile aynı. */
+/** Backend `apps/okul/oturum.ETKINLIK_BASLIGI` ile aynı. */
 export const ETKINLIK_BASLIGI = "X-OD-Etkinlik";
 
 let sonEtkilesim = Number.NEGATIVE_INFINITY;
@@ -66,7 +82,7 @@ export function etkinlikSaatleriniSifirla(): void {
 
 export interface IstekSecenekleri {
   /**
-   * `false`: `X-OD-Etkinlik` hiçbir koşulda gönderilmez (kip/durum/pano
+   * `false`: `X-OD-Etkinlik` hiçbir koşulda gönderilmez (oturum/durum/pano
    * sorguları, periyodik yenilemeler). Verilmezse son etkileşime bakılır.
    */
   etkinlik?: boolean;
@@ -80,16 +96,19 @@ function etkinlikBasligiEkle(headers: Record<string, string>, etkinlik?: boolean
   sonEtkinlikGonderimi = simdi;
 }
 
-/** Hata koduna göre uygulama çapı olayları (yeniden başlat, kilit, kip değişimi). */
+/** Hata koduna göre uygulama çapı tepkiler (yeniden başlat, kilit kapısı). */
 function hataOlayiYayinla(status: number, code: string): void {
   // Geri yükleme sonrası kapı: HANGİ çağrı olursa olsun tam ekran
   // "yeniden başlatın" yönlendirmesi tetiklenir (sayfa yenilense bile).
   if (code === RESTART_CODE) yenidenBaslatGerekliYayinla();
-  // Kilit kapısı: program arayüzün haberi olmadan kilitlendi ya da güvenlik
-  // dosyası kayboldu; güvenlik kapısı durumu yeniden okur.
-  if (status === 423 && KILIT_KAPISI_KODLARI.has(code)) kilitKapisiYayinla();
-  // Görevli kipi kapısı: kip arayüzün haberi olmadan değişti (süre doldu).
-  if (status === 403 && code === KIP_YETKISIZ_KODU) kipYetkisizYayinla();
+  // Kilit kapısı: oturum arayüzün haberi olmadan kilitlendi (boşta süre doldu) ya da
+  // güvenlik dosyası kayboldu. Yeniden yükleme ve döngü koruması `lib/kilit.ts`'tedir.
+  if (status === 423) kilitKapisiYaniti(code);
+  // Rol reddi: yalnız 403 `rol_yetkisiz` (dosya başı notu). Aynı durumun öteki 403'leri
+  // (`hesap_askida`, belirteç kapısı) ve başka durumdaki aynı kod olay doğurmaz.
+  if (status === 403 && code === ROL_YETKISIZ_KODU) {
+    window.dispatchEvent(new CustomEvent(ROL_YETKISIZ_OLAYI));
+  }
 }
 
 export class ApiError extends Error {
@@ -138,18 +157,36 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     const d = (data ?? {}) as { code?: string; message?: string; fields?: Record<string, unknown> };
     const code = d.code ?? String(resp.status);
     hataOlayiYayinla(resp.status, code);
-    throw new ApiError(
-      resp.status,
-      code,
-      d.message ?? "Beklenmeyen bir hata oluştu.",
-      d.fields ?? {},
-    );
+    throw new ApiError(resp.status, code, d.message ?? BEKLENMEYEN_HATA_ILETISI, d.fields ?? {});
   }
   return data as T;
 }
 
+/**
+ * İndirilen dosya ve sunucunun verdiği adı (`Content-Disposition`; `lib/download.basliktanDosyaAdi`).
+ * Başlık yoksa ya da okunamıyorsa `ad` null'dır: çağıran yedek adı kendisi kurar.
+ */
+export interface IndirilenDosya {
+  blob: Blob;
+  ad: string | null;
+}
+
 /** İkili (dosya) indirme — şablon, yedek, kurulum dosyası ve evrak/PDF için. */
 async function requestBlob(path: string, options: RequestOptions = {}): Promise<Blob> {
+  return (await blobYaniti(path, options)).blob();
+}
+
+/** Dosya indirme + sunucunun dosya adı (evrak/PDF; adı sunucu kurar). */
+async function requestDosya(path: string, options: RequestOptions = {}): Promise<IndirilenDosya> {
+  const resp = await blobYaniti(path, options);
+  return {
+    blob: await resp.blob(),
+    ad: basliktanDosyaAdi(resp.headers?.get("Content-Disposition")),
+  };
+}
+
+/** Dosya yanıtının ortak yolu: hatalı yanıt `ApiError`'a çevrilir, başarılı yanıt döner. */
+async function blobYaniti(path: string, options: RequestOptions): Promise<Response> {
   const { method = "GET", body, etkinlik } = options;
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -179,7 +216,7 @@ async function requestBlob(path: string, options: RequestOptions = {}): Promise<
     hataOlayiYayinla(resp.status, code);
     throw new ApiError(resp.status, code, message, fields);
   }
-  return resp.blob();
+  return resp;
 }
 
 export const api = {
@@ -199,6 +236,9 @@ export const api = {
   /** JSON body ile POST + dosya yanıtı. */
   postBlob: (path: string, body?: unknown, secenekler?: IstekSecenekleri) =>
     requestBlob(path, { ...secenekler, method: "POST", body }),
+  /** JSON body ile POST + dosya yanıtı ve sunucunun dosya adı (`IndirilenDosya`). */
+  postDosya: (path: string, body?: unknown, secenekler?: IstekSecenekleri) =>
+    requestDosya(path, { ...secenekler, method: "POST", body }),
 };
 
 export { API_BASE };

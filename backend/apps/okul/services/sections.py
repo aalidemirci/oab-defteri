@@ -10,6 +10,13 @@ silme gerekçeyle reddedilir; bugün kayıtlı denetim yoktur (şube kataloğu O
 alınmaz, T5 ile F1b'de sökülür — tasarım §5.1).
 Bağımlılık yönü <uygulama> → okul'dur (`services.persons` kalıbı): uygulama kendi
 denetimini `AppConfig.ready` içinde `register_delete_check` ile kaydeder.
+
+DENETİM İZİ (tasarım §4.6.2; plan F1b-1 alt commit c): oluşturma `OLUSTUR`, yumuşak silme
+`deleted_at`'li `DURUM` satırıdır (aynı işlemde, `denetim_izi.degisiklik`). Plan şube
+silmesini 5. adımda yeniden yazılacağı için izsiz yazım taramasında muaf sayar; silme
+yumuşak olduğu ve kayıt durduğu için yine de izlenir: izsiz bir `deleted_at` kaydın
+içerik MAC'ini son iz satırından ayırır, bütünlük denetimi onu program dışı değişiklik
+sanardı.
 """
 
 from __future__ import annotations
@@ -20,6 +27,7 @@ from typing import Any
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
+from apps.okul import denetim_izi
 from apps.okul.models import ClassSection
 
 type SectionDeleteCheck = Callable[[ClassSection], Iterable[str]]
@@ -44,6 +52,7 @@ def delete_obstacles(section: ClassSection) -> list[str]:
 @transaction.atomic
 def create_class_section(**fields: Any) -> ClassSection:
     section: ClassSection = ClassSection.objects.create(**fields)
+    denetim_izi.degisiklik(section, onceki=None)
     return section
 
 
@@ -53,4 +62,6 @@ def delete_class_section(section: ClassSection) -> None:
     gerekceler = delete_obstacles(section)
     if gerekceler:
         raise ValidationError("Şube silinemez: " + " ".join(gerekceler))
+    onceki = denetim_izi.anlik(section)
     section.delete()  # soft delete (BaseModel)
+    denetim_izi.degisiklik(section, onceki=onceki)

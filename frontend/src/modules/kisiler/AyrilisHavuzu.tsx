@@ -13,7 +13,11 @@
 //
 // Karar tek işlemdir: seçilenlerden biri başka pencerede çözülmüşse backend hiçbir
 // kararı uygulamaz (400) — liste yenilenir, kullanıcı yeniden seçer. Adlar yalnız bu
-// yönetim ekranında görünür; ekran görevli kipinde kapalıdır.
+// yönetim ekranında görünür.
+//
+// Rol (plan F1b-2): sekme yalnız `ayrilis_havuzu` yeteneğinde görünür (Kişiler verir); karar
+// düğmeleri o yeteneğin ucudur. "Birleştir" ayrıca `kisi_yazma`'ya bağlıdır (`birlestirebilir`);
+// yoksa "Olası aynı kişi" sütunu adayları ve gerekçelerini düğmesiz gösterir.
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
@@ -34,7 +38,16 @@ import type {
   LeavePoolSimilar,
   LeavePoolStudent,
 } from "../okul/api";
-import { ErrorBand, hataOku } from "./ortak";
+import {
+  ErrorBand,
+  KisiAdi,
+  OkunamadiIsareti,
+  hataOku,
+  kisiAdiMetni,
+  kisiKaydiniMetni,
+  kisiOznesi,
+  okunamadiMi,
+} from "./ortak";
 import type { SayfaHatasi } from "./ortak";
 
 const TH = "p-2 text-left text-label-medium text-on-surface-variant";
@@ -57,7 +70,14 @@ function kesisim(secili: Set<number>, kimlikler: number[]): Set<number> {
   return new Set([...secili].filter((id) => var_.has(id)));
 }
 
-export default function AyrilisHavuzu({ onDegisti }: { onDegisti?: () => void }) {
+export default function AyrilisHavuzu({
+  onDegisti,
+  birlestirebilir,
+}: {
+  onDegisti?: () => void;
+  /** "Birleştir" düğmeleri (personel birleştirme; `kisi_yazma`). */
+  birlestirebilir: boolean;
+}) {
   const [havuz, setHavuz] = useState<LeavePool | null>(null);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState<SayfaHatasi | null>(null);
@@ -185,7 +205,7 @@ export default function AyrilisHavuzu({ onDegisti }: { onDegisti?: () => void })
     const ok = await confirm({
       title: "Bu iki kayıt aynı kişi mi?",
       message:
-        `Havuzdaki kayıt: “${kisi.full_name}” — ${MEMBER_KIND_TR[kisi.member_kind]}, havuza giriş ${formatDate(kisi.leave_candidate_since)}. ` +
+        `Havuzdaki kayıt: ${kisiOznesi(kisi)} — ${MEMBER_KIND_TR[kisi.member_kind]}, havuza giriş ${formatDate(kisi.leave_candidate_since)}. ` +
         `Kalacak kayıt: “${aday.full_name}” — ${MEMBER_KIND_TR[aday.member_kind]}, sicile eklendi ${formatDate(aday.created_on)}. ` +
         `Aday yalnız ad benzerliğiyle bulundu (${benzerlikGerekcesi(aday.reason)}); okula yeni gelen bir adaş da olabilir. ` +
         `Onaylarsanız havuzdaki kaydın bağları kalacak kayda taşınır ve havuzdaki kayıt silinir. Bu işlem geri alınamaz.`,
@@ -255,7 +275,7 @@ export default function AyrilisHavuzu({ onDegisti }: { onDegisti?: () => void })
               mesgul={mesgul}
               onAyril={() => void ayril("personnel")}
               onKalsin={() => void kalsin("personnel")}
-              onBirlestir={(kisi, aday) => void birlestir(kisi, aday)}
+              onBirlestir={birlestirebilir ? (kisi, aday) => void birlestir(kisi, aday) : undefined}
             />
           )}
         </>
@@ -422,14 +442,23 @@ function OgrenciBolumu({
                   <td className={TD}>
                     <input
                       type="checkbox"
-                      aria-label={`${o.full_name} seç`}
+                      aria-label={`${kisiAdiMetni(o)} seç`}
                       checked={secim.has(o.id)}
                       onChange={(e) => onSecim(degistir(secim, o.id, e.target.checked))}
                       className="size-5 accent-primary"
                     />
                   </td>
-                  <td className={TD}>{o.student_number || "—"}</td>
-                  <td className={TD}>{o.full_name}</td>
+                  {/* Çözülemeyen şifreli alan boş hücre değil "okunamadı"dır (§13 D48). */}
+                  <td className={TD}>
+                    {okunamadiMi(o, "student_number") ? (
+                      <OkunamadiIsareti />
+                    ) : (
+                      o.student_number || "—"
+                    )}
+                  </td>
+                  <td className={TD}>
+                    <KisiAdi kayit={o} />
+                  </td>
                   <td className={TD}>{o.class_label || "Sınıfsız"}</td>
                   <td className={TD}>{formatDate(o.leave_candidate_since)}</td>
                   <td className={TD}>{aktarimAdi(o.run)}</td>
@@ -462,7 +491,8 @@ function PersonelBolumu({
   mesgul: boolean;
   onAyril: () => void;
   onKalsin: () => void;
-  onBirlestir: (kisi: LeavePoolPersonnel, aday: LeavePoolSimilar) => void;
+  /** Yoksa "Birleştir" çizilmez (`birlestirebilir`). */
+  onBirlestir?: (kisi: LeavePoolPersonnel, aday: LeavePoolSimilar) => void;
 }) {
   const baslikId = useId();
   const ciftVar = kisiler.some((k) => k.similar.length > 0);
@@ -519,13 +549,15 @@ function PersonelBolumu({
                   <td className={TD}>
                     <input
                       type="checkbox"
-                      aria-label={`${k.full_name} seç`}
+                      aria-label={`${kisiAdiMetni(k)} seç`}
                       checked={secim.has(k.id)}
                       onChange={(e) => onSecim(degistir(secim, k.id, e.target.checked))}
                       className="size-5 accent-primary"
                     />
                   </td>
-                  <td className={TD}>{k.full_name}</td>
+                  <td className={TD}>
+                    <KisiAdi kayit={k} />
+                  </td>
                   <td className={TD}>{MEMBER_KIND_TR[k.member_kind]}</td>
                   <td className={TD}>{formatDate(k.leave_candidate_since)}</td>
                   <td className={TD}>{aktarimAdi(k.run)}</td>
@@ -538,15 +570,17 @@ function PersonelBolumu({
                           <li key={aday.id} className="space-y-0.5">
                             <div className="flex flex-wrap items-center gap-2">
                               <span>{aday.full_name}</span>
-                              <Button
-                                variant="text"
-                                icon="merge"
-                                disabled={mesgul}
-                                onClick={() => onBirlestir(k, aday)}
-                                aria-label={`${k.full_name} kaydını ${aday.full_name} kaydıyla birleştir`}
-                              >
-                                Birleştir
-                              </Button>
+                              {onBirlestir !== undefined && (
+                                <Button
+                                  variant="text"
+                                  icon="merge"
+                                  disabled={mesgul}
+                                  onClick={() => onBirlestir(k, aday)}
+                                  aria-label={`${kisiKaydiniMetni(k)} ${aday.full_name} kaydıyla birleştir`}
+                                >
+                                  Birleştir
+                                </Button>
+                              )}
                             </div>
                             {/* Neden aday? Kural adı yeterli sayar; adaş da buraya düşer (§13 D30). */}
                             <p className="text-body-small text-on-surface-variant">

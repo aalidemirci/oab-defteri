@@ -56,6 +56,25 @@ def test_bozuk_dosya_turkce_hata_ile_reddedilir(tmp_path: Path) -> None:
 
     assert "bozuk" in str(hata.value).lower()
     assert "backups" in hata.value.hint
+    # Yol gösterme parola yolunun yalnız program yöneticisine açık olduğunu söyler (sözlük
+    # "Yedek"; tasarım §4.4.4): başka hesap sahibi Argon2 gecikmesinden sonra öğrenmez.
+    assert (
+        "program yöneticisi hesabının tanıtıcısı ve parolası ya da kurtarma anahtarı sorulur"
+        in hata.value.hint
+    )
+
+
+def test_pardus_benioku_geri_yuklemede_program_yoneticisini_anar() -> None:
+    """Pardus'ta yol gösterme BENIOKU'dadır (`oab-defteri --geri-yukle`); metin bütünlük
+    iletisiyle aynı şeyi söyler."""
+    benioku = Path(__file__).resolve().parents[2] / "packaging" / "linux" / "BENIOKU.txt"
+    metin = " ".join(benioku.read_text(encoding="utf-8").split())
+
+    assert (
+        "program yöneticisi hesabının tanıtıcısı ve parolası ya da kurtarma anahtarı sorulur"
+        in metin
+    )
+    assert "hesabınızın tanıtıcısı" not in metin
 
 
 def test_bozuk_sayfa_integrity_check_ile_yakalanir(tmp_path: Path) -> None:

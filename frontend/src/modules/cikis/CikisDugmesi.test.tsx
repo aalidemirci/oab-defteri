@@ -1,169 +1,74 @@
-// Çık (tasarım §4.2, §4.5): üst çubuktaki düğme her durumda görünür;
-// yönetici kipinde ve kilitliyken parolasız onay, görevli kipinde yönetici
-// parolası. Sunucu parola isterse (kip bu arada değişti) diyalog parola alanına
-// geçer. Tepsi yoktur (T6): diyalog yalnız düğmeyle açılır.
+// Çık (tasarım §4.2, §4.5): üst çubuktaki düğme her durumda görünür ve HER oturum
+// durumunda parolasız bir onaydır ("Programdan çıkılsın mı?"); aile iskeletinin görevli
+// kipindeki parola dalı kalktı. Tepsi yoktur (T6): diyalog yalnız düğmeyle açılır.
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../lib/api";
-import type { KipAdi } from "../kip/api";
 
 const cikis = vi.hoisted(() => ({ cik: vi.fn() }));
-const kip = vi.hoisted(() => ({
-  durum: vi.fn(),
-  gorevliyeGec: vi.fn(),
-  yoneticiyeGec: vi.fn(),
-  kilitle: vi.fn(),
-}));
 
 vi.mock("./api", async (orijinal) => ({
   ...(await orijinal<typeof import("./api")>()),
   cikisApi: cikis,
 }));
-vi.mock("../kip/api", () => ({ kipApi: kip }));
 
 import CikisDugmesi, { CikisDiyalogu, DogrudanCikisDugmesi } from "./CikisDugmesi";
-
-function ozet(durum: KipAdi) {
-  return { durum, bosta_kalan_sn: null, mutlak_kalan_sn: null, bosta_dk: 3, mutlak_dk: 30 };
-}
-
-function bas() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <CikisDugmesi />
-    </QueryClientProvider>,
-  );
-}
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
 describe("CikisDugmesi", () => {
-  it("yönetici kipinde parolasız onayla çıkar", async () => {
+  it("parolasız onayla çıkar; diyalogda parola alanı yoktur", async () => {
     const kullanici = userEvent.setup();
-    kip.durum.mockResolvedValue(ozet("yonetici"));
     cikis.cik.mockResolvedValue({ durum: "kapaniyor" });
-    bas();
+    render(<CikisDugmesi />);
 
     await kullanici.click(screen.getByRole("button", { name: "Çık" }));
-    const diyalog = screen.getByRole("dialog");
+    const diyalog = screen.getByRole("dialog", { name: "Programdan çıkılsın mı?" });
     // T6: çarpı programı kapatır; aile iskeletinin "yalnız gizler" ve Ağ Kataloğu
     // cümleleri yoktur.
     expect(diyalog).toHaveTextContent("Pencerenin çarpısı da programı aynı biçimde kapatır.");
-    expect(diyalog).not.toHaveTextContent(/Ağ Kataloğu|gizler/);
-    expect(within(diyalog).queryByLabelText(/Yönetici parolası/)).toBeNull();
+    expect(diyalog).not.toHaveTextContent(/Ağ Kataloğu|gizler|görevli/i);
+    expect(within(diyalog).queryByLabelText(/parola/i)).toBeNull();
     await kullanici.click(within(diyalog).getByRole("button", { name: "Çık" }));
 
-    expect(cikis.cik).toHaveBeenCalledWith(undefined);
+    expect(cikis.cik).toHaveBeenCalledWith();
     expect(await screen.findByRole("status")).toHaveTextContent("kapanıyor");
   });
 
-  it("görevli kipinde yönetici parolası ister ve parolayı gövdede gönderir", async () => {
+  it("çıkış reddedilirse iletiyi gösterir, diyalog açık kalır", async () => {
     const kullanici = userEvent.setup();
-    kip.durum.mockResolvedValue(ozet("gorevli"));
-    cikis.cik.mockResolvedValue({ durum: "kapaniyor" });
-    bas();
-    await screen.findByRole("button", { name: "Çık" });
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    await kullanici.click(screen.getByRole("button", { name: "Çık" }));
-    const diyalog = await screen.findByRole("dialog");
-    const gonder = within(diyalog).getByRole("button", { name: "Çık" });
-    expect(await within(diyalog).findByLabelText(/Yönetici parolası/)).toHaveAttribute(
-      "type",
-      "password",
+    cikis.cik.mockRejectedValue(
+      new ApiError(503, "cikis_kullanilamiyor", "Program masaüstü penceresinde çalışmıyor."),
     );
-    expect(gonder).toBeDisabled();
-
-    await kullanici.type(within(diyalog).getByLabelText(/Yönetici parolası/), "Dogru-Parola-1");
-    await kullanici.click(gonder);
-
-    expect(cikis.cik).toHaveBeenCalledWith("Dogru-Parola-1");
-    expect(await screen.findByRole("status")).toHaveTextContent("kapanıyor");
-  });
-
-  it("yanlış parolada iletiyi gösterir, diyalog açık kalır", async () => {
-    const kullanici = userEvent.setup();
-    kip.durum.mockResolvedValue(ozet("gorevli"));
-    cikis.cik.mockRejectedValue(new ApiError(400, "validation_error", "Parola hatalı."));
-    bas();
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    await kullanici.click(screen.getByRole("button", { name: "Çık" }));
-    const diyalog = await screen.findByRole("dialog");
-    await kullanici.type(await within(diyalog).findByLabelText(/Yönetici parolası/), "yanlis");
-    await kullanici.click(within(diyalog).getByRole("button", { name: "Çık" }));
-
-    expect(await within(diyalog).findByRole("alert")).toHaveTextContent("Parola hatalı.");
-    expect(screen.queryByRole("status")).toBeNull();
-  });
-
-  it("sunucu parola isterse (kip görevliye indi) parola alanına geçer", async () => {
-    const kullanici = userEvent.setup();
-    kip.durum.mockResolvedValue(ozet("yonetici"));
-    cikis.cik.mockRejectedValueOnce(
-      new ApiError(
-        403,
-        "cikis_parolasi_gerekli",
-        "Görevli kipinde programdan çıkmak için yönetici parolasını girin.",
-      ),
-    );
-    bas();
+    render(<CikisDugmesi />);
 
     await kullanici.click(screen.getByRole("button", { name: "Çık" }));
     const diyalog = screen.getByRole("dialog");
     await kullanici.click(within(diyalog).getByRole("button", { name: "Çık" }));
 
-    const alan = await within(diyalog).findByLabelText(/Yönetici parolası/);
-    // Alan pencere açıkken belirdi: odak ona taşınır.
-    await waitFor(() => expect(alan).toHaveFocus());
+    expect(await within(diyalog).findByRole("alert")).toHaveTextContent("masaüstü penceresinde");
+    expect(within(diyalog).queryByText(/cikis_kullanilamiyor/)).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
-  // `autoFocus` ortak Dialog'un panel odağına yeniliyordu; parola alanı
-  // `initialFocusRef` ile odaklanır (`ui/Dialog` başlığındaki İLK ODAK notu).
-  it("görevli kipinde açılışta parola alanı odaktadır", async () => {
+  it("ağ hatasında genel ileti gösterilir", async () => {
     const kullanici = userEvent.setup();
-    kip.durum.mockResolvedValue(ozet("gorevli"));
-    bas();
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    await kullanici.click(screen.getByRole("button", { name: "Çık" }));
-    const diyalog = await screen.findByRole("dialog");
-    const alan = await within(diyalog).findByLabelText(/Yönetici parolası/);
-    await waitFor(() => expect(alan).toHaveFocus());
-  });
-
-  it("parola isteyen pencere doğrudan açıldığında alan ilk anda odaktadır", () => {
-    render(<CikisDiyalogu open onClose={vi.fn()} parolaIle />);
-    expect(screen.getByLabelText(/Yönetici parolası/)).toHaveFocus();
-  });
-
-  it("kilitliyken de görünür ve parolasızdır", async () => {
-    const kullanici = userEvent.setup();
-    kip.durum.mockResolvedValue(ozet("kilitli"));
-    bas();
+    cikis.cik.mockRejectedValue(new TypeError("Failed to fetch"));
+    render(<CikisDiyalogu open onClose={vi.fn()} />);
 
     await kullanici.click(screen.getByRole("button", { name: "Çık" }));
 
-    expect(within(screen.getByRole("dialog")).queryByLabelText(/Yönetici parolası/)).toBeNull();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Programdan çıkılamadı.");
   });
 
   it("Vazgeç diyaloğu kapatır, istek gitmez", async () => {
     const kullanici = userEvent.setup();
-    kip.durum.mockResolvedValue(ozet("yonetici"));
-    bas();
+    render(<CikisDugmesi />);
 
     await kullanici.click(screen.getByRole("button", { name: "Çık" }));
     await kullanici.click(screen.getByRole("button", { name: "Vazgeç" }));

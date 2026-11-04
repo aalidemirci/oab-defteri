@@ -145,7 +145,7 @@ it("parola yokken şifreli yedek indirmesini kapalı tutar", () => {
   );
 
   expect(screen.getByRole("button", { name: /Şifreli yedeği indir/ })).toBeDisabled();
-  expect(screen.getByText(/önce yönetici parolası kurmalısınız/)).toBeInTheDocument();
+  expect(screen.getByText(/önce program yöneticisi hesabını kurmalısınız/)).toBeInTheDocument();
 });
 
 it("yalnız şifreli odbak dosyasını kullanıcıya indirir", async () => {

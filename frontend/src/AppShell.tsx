@@ -4,27 +4,39 @@ import { NavLink, useLocation } from "react-router-dom";
 
 import CikisDugmesi from "./modules/cikis/CikisDugmesi";
 import UpdateBanner from "./modules/guncelleme/UpdateBanner";
-import { GOREVLI_EKRANI_BASLIGI } from "./modules/kip/GorevliEkrani";
-import KipGostergesi from "./modules/kip/KipGostergesi";
-import { useKip } from "./modules/kip/useKip";
+import OturumGostergesi from "./modules/oturum/OturumGostergesi";
+import type { YetenekAdi } from "./modules/oturum/api";
+import { useYetki } from "./modules/oturum/yetki";
+import type { Yetki } from "./modules/oturum/yetki";
 import DensitySwitcher from "./ui/DensitySwitcher";
 import { DurumBasligiSaglayici, useDurumBasligiYonetimi } from "./ui/DurumBasligi";
 import Icon from "./ui/Icon";
 import ThemeSwitcher from "./ui/ThemeSwitcher";
 
-interface NavItem {
+export interface NavItem {
   to: string;
   label: string;
   icon: string;
+  /**
+   * Ekranın yeteneği (plan F1b-2 "Ön yüz"): verilirse girdi yalnız o yetenek açıkken görünür
+   * (matriste "—" olan ekran gezinmede yer almaz); rotası `RolKapisi` ile aynı yeteneğe bağlanır.
+   * Verilmeyen ekran her role en az okumaya açıktır.
+   */
+  yetenek?: YetenekAdi;
 }
 
 // Gezinme etiketi KISA addır. Ana sayfanın tek adı "Genel Bakış"tır (gezinme +
 // üst çubuk + h1). OAB ekranları (birlik dönemi, organlar…) fazlarıyla birlikte
 // eklenir; aile iskeletinin kütüphane ekranları F1a-2'de söküldü. Liste
-// `App.test.tsx` "kabuk gezinmesi" testiyle sabittir.
+// `App.test.tsx` "kabuk gezinmesi" testiyle sabittir. Genel Bakış, Kişiler, Ayarlar ve Kılavuz
+// her role açıktır (Kişiler'de personeli her rol okur, Ayarlar'ı her rol okur); Kullanıcılar
+// yalnız `kullanicilar`, Erişim Günlüğü yalnız `erisim_gunlugu` yeteneğinde görünür (program
+// yöneticisi ve Denetleme Kurulu).
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Genel Bakış", icon: "space_dashboard" },
   { to: "/kisiler", label: "Kişiler", icon: "group" },
+  { to: "/kullanicilar", label: "Kullanıcılar", icon: "manage_accounts", yetenek: "kullanicilar" },
+  { to: "/erisim-gunlugu", label: "Erişim Günlüğü", icon: "policy", yetenek: "erisim_gunlugu" },
   { to: "/ayarlar", label: "Ayarlar", icon: "settings" },
   { to: "/kilavuz", label: "Kılavuz", icon: "auto_stories" },
 ];
@@ -35,6 +47,8 @@ const NAV_ITEMS: NavItem[] = [
 const PAGE_TITLES: Array<[prefix: string, title: string]> = [
   // Sıra anlamlıdır: alt sayfalar köke göre ÖNCE gelir.
   ["/kisiler", "Kişiler"],
+  ["/kullanicilar", "Kullanıcılar"],
+  ["/erisim-gunlugu", "Erişim Günlüğü"],
   ["/ayarlar", "Ayarlar"],
   ["/kilavuz", "Kullanım Kılavuzu"],
   ["/hakkinda", "Hakkında ve Lisans"],
@@ -43,6 +57,14 @@ const PAGE_TITLES: Array<[prefix: string, title: string]> = [
 ];
 
 const COLLAPSE_KEY = "oab-defteri-sidebar-collapsed";
+
+/**
+ * Rolün gördüğü gezinme girdileri: yeteneksiz girdi her zaman, yetenekli girdi yalnız yetenek
+ * açıkken (yüklenirken ve özet okunamadıysa görünmez; kurulumda süzme yok — `oturum/yetki`).
+ */
+export function gezinmeGirdileri(girdiler: readonly NavItem[], yetki: Yetki): NavItem[] {
+  return girdiler.filter((g) => g.yetenek === undefined || yetki.acik(g.yetenek));
+}
 
 function pageTitle(pathname: string): string {
   return (
@@ -63,14 +85,12 @@ function navLinkClass(isActive: boolean, collapsed: boolean): string {
 
 function SidebarContent({
   collapsed,
-  gorevli,
   onNavigate,
 }: {
   collapsed: boolean;
-  /** Görevli kipinde yönetici ekranlarının bağlantıları gösterilmez (tasarım §4.4). */
-  gorevli: boolean;
   onNavigate?: () => void;
 }) {
+  const girdiler = gezinmeGirdileri(NAV_ITEMS, useYetki());
   return (
     <>
       <div
@@ -96,9 +116,8 @@ function SidebarContent({
         </p>
       )}
       <nav aria-label="Ana gezinme" className="flex flex-1 flex-col gap-1.5 px-3 py-2">
-        {/* Görevli kipinde rotalar zaten görevli ekranına düşer (KipKapisi);
-            bağlantılar gösterilmez ki görevli kipindeki kullanıcı boşuna tıklamasın. */}
-        {(gorevli ? [] : NAV_ITEMS).map((item) => (
+        {/* Rol bazlı gezinme (tasarım §4.4.2; plan F1b-2): kaynak yeteneklerdir. */}
+        {girdiler.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -125,19 +144,17 @@ function SidebarContent({
             <p className="mt-0.5 text-body-small text-on-sidebar-muted">Veriler bu cihazda</p>
           </div>
         )}
-        {!gorevli && (
-          <NavLink
-            to="/hakkinda"
-            title={collapsed ? "Hakkında ve Lisans" : undefined}
-            aria-label={collapsed ? "Hakkında ve Lisans" : undefined}
-            onClick={onNavigate}
-            className={({ isActive }) => navLinkClass(isActive, collapsed)}
-          >
-            <span aria-hidden="true" className="state-layer" />
-            <Icon name="info" size="xl" filled className="relative z-10 shrink-0 opacity-95" />
-            {!collapsed && <span className="relative z-10 truncate">Hakkında ve Lisans</span>}
-          </NavLink>
-        )}
+        <NavLink
+          to="/hakkinda"
+          title={collapsed ? "Hakkında ve Lisans" : undefined}
+          aria-label={collapsed ? "Hakkında ve Lisans" : undefined}
+          onClick={onNavigate}
+          className={({ isActive }) => navLinkClass(isActive, collapsed)}
+        >
+          <span aria-hidden="true" className="state-layer" />
+          <Icon name="info" size="xl" filled className="relative z-10 shrink-0 opacity-95" />
+          {!collapsed && <span className="relative z-10 truncate">Hakkında ve Lisans</span>}
+        </NavLink>
         <DensitySwitcher
           collapsed={collapsed}
           className="text-on-sidebar-muted hover:bg-on-sidebar/8 hover:text-on-sidebar"
@@ -161,13 +178,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
     () => window.localStorage.getItem(COLLAPSE_KEY) === "true",
   );
   const [mobileOpen, setMobileOpen] = useState(false);
-  const gorevli = useKip().ozet?.durum === "gorevli";
   // Program durumu ekranları (kilitli, güvenlik dosyası kayıp, yeniden başlat)
   // açıkken üst çubukta o ekranın h1'i yazar — sözlük §4.2. Adrese bağlı
   // olmadıkları için başlığı kendileri bildirir (ui/DurumBasligi).
   const { durumBasligi, yaz } = useDurumBasligiYonetimi();
-  // Görevli kipinde her rota görevli ekranını gösterir; başlık onun h1'idir.
-  const title = durumBasligi ?? (gorevli ? GOREVLI_EKRANI_BASLIGI : pageTitle(location.pathname));
+  const title = durumBasligi ?? pageTitle(location.pathname);
+  const yetki = useYetki();
 
   const toggleCollapsed = () => {
     setCollapsed((current) => {
@@ -184,7 +200,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           collapsed ? "w-[4.75rem]" : "w-60"
         }`}
       >
-        <SidebarContent collapsed={collapsed} gorevli={gorevli} />
+        <SidebarContent collapsed={collapsed} />
         <button
           type="button"
           onClick={toggleCollapsed}
@@ -219,14 +235,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
               burada ikinci bir kopyası vardı — aynı ayarın iki düğmesi hangisinin
               "asıl" olduğu sorusunu doğuruyordu. */}
 
-          {/* Kip göstergesi (tasarım §4.4): kip adı, görsel geri sayım,
-              "Görevli kipine geç" / "Yönetici kipine geç", "Kilitle". Kilitliyken
-              ve kip okunamazsa boştur. */}
+          {/* Oturum göstergesi (tasarım §4.4.3, TK14): oturumdaki hesabın rol etiketi ve
+              tanıtıcısı, boşta kilide görsel geri sayım (kurulumdan sonra), "Kilitle"
+              (Ctrl+Shift+L). Kilitliyken, kurulumda ve oturum okunamazsa boştur. */}
           <div className="ml-auto flex min-w-0 items-center gap-1">
-            <KipGostergesi />
-            {/* Çık (tasarım §4.2 "Kapanış"): her durumda görünür; pencerenin çarpısıyla
-                aynı düzenli kapanış yoludur (T6, tepsi yoktur). Görevli kipinde
-                yönetici parolası ister. */}
+            <OturumGostergesi />
+            {/* Çık (tasarım §4.2 "Kapanış"): her durumda görünür ve parolasızdır;
+                pencerenin çarpısıyla aynı düzenli kapanış yoludur (T6, tepsi yoktur). */}
             <CikisDugmesi />
           </div>
         </header>
@@ -236,8 +251,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
             {/* Güncelleme bandı açılışta DENETİM YAPMAZ (tasarım TK4): yalnız
                 Ayarlar → Güncelleme'deki elle denetimin sonucunu gösterir.
                 Açılışta `/updates/` isteği çıkmadığı `App.test.tsx`'te sabittir.
-                Görevli kipinde gizlidir: indirme yönetici işidir (§4.4). */}
-            <UpdateBanner gizli={gorevli} />
+                Yalnız güncelleme yeteneğinde (program yöneticisi; plan F1b-2 "Ayarlar ve
+                bant"): öteki rollerde Güncelleme sekmesi de yoktur. */}
+            {yetki.acik("guncelleme") && <UpdateBanner />}
             <DurumBasligiSaglayici yaz={yaz}>{children}</DurumBasligiSaglayici>
           </div>
         </main>
@@ -252,11 +268,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             onClick={() => setMobileOpen(false)}
           />
           <aside className="od-sidebar-glow relative flex h-full w-72 animate-dialog-in flex-col shadow-elevation-4">
-            <SidebarContent
-              collapsed={false}
-              gorevli={gorevli}
-              onNavigate={() => setMobileOpen(false)}
-            />
+            <SidebarContent collapsed={false} onNavigate={() => setMobileOpen(false)} />
           </aside>
         </div>
       )}

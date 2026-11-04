@@ -17,7 +17,11 @@ LibreOffice ya da Word gerekmez.
    çizici de harf dönüştürmez (`text-transform`, `w:caps` yok).
 
 Konum cümlesi (§9.2) gövdenin sonunda, imza bloğunun HEMEN üstündedir; model
-bunu kurarken denetler.
+bunu kurarken denetler. Dipnot (`Dipnot`; tasarım §9.1-5 kişisel veri dipnotu) belgenin EN
+SONUNDADIR: ardından yalnız başka dipnot gelebilir (model denetler). Kısaltmanın açılımı dipnota
+konmaz: kısaltma ilk geçtiği yerde açık biçimiyle yazılır (sözlük §3 "Kısaltma", RYUE md. 16/11).
+Altlık değildir: iki çizicide gövdenin son paragrafları olarak küçük puntoyla çizilir ve
+içerik eşdeğerliğine girer.
 """
 
 from __future__ import annotations
@@ -80,6 +84,21 @@ class KonumCumlesi:
 
 
 @dataclass(frozen=True)
+class Dipnot:
+    """Belgenin sonundaki dipnot (tasarım §9.1-5; plan F1b-2 "E63 hesap teslim pusulası").
+
+    Gövdenin en sonunda, imza bloğundan sonra durur; ardından yalnız başka dipnot gelebilir
+    (`Belge` denetler). Küçük puntoyla çizilir; altlık değildir, metin akışına girer.
+    """
+
+    metin: str
+
+
+#: Kişi adı taşıyan iç belgelerin dipnotu (tasarım §9.1-5; sözlük §1 "Hesap teslim pusulası").
+KISISEL_VERI_DIPNOTU = "Kişisel veri içerir — asılmaz, okul dışına verilmez."
+
+
+@dataclass(frozen=True)
 class ImzaSahibi:
     ad: str
     gorev: str
@@ -91,7 +110,7 @@ class Imza:
     tarih: str = ""
 
 
-Blok = Baslik | Paragraf | Tablo | KonumCumlesi | Imza
+Blok = Baslik | Paragraf | Tablo | KonumCumlesi | Imza | Dipnot
 
 _BLOK_TURLERI: dict[str, type[Any]] = {
     "baslik": Baslik,
@@ -99,6 +118,7 @@ _BLOK_TURLERI: dict[str, type[Any]] = {
     "tablo": Tablo,
     "konum": KonumCumlesi,
     "imza": Imza,
+    "dipnot": Dipnot,
 }
 _TUR_ADI = {tur: ad for ad, tur in _BLOK_TURLERI.items()}
 
@@ -113,7 +133,14 @@ class Belge:
     bloklar: tuple[Blok, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
+        dipnot_basladi = False
         for sira, blok in enumerate(self.bloklar):
+            if isinstance(blok, Dipnot):
+                dipnot_basladi = True
+            elif dipnot_basladi:
+                raise ValueError(
+                    "Dipnot belgenin sonunda durur; ardından yalnız başka dipnot gelebilir."
+                )
             if isinstance(blok, KonumCumlesi):
                 sonraki = self.bloklar[sira + 1] if sira + 1 < len(self.bloklar) else None
                 if not isinstance(sonraki, Imza):
@@ -147,14 +174,14 @@ def metin_akisi(belge: Belge) -> list[str]:
     """Modelin kanonik metin akışı — iki çizicinin çıktısı buna eşit olmalıdır.
 
     Sıra: antet satırları, sonra bloklar belge sırasıyla; tablo başlık ve
-    hücreleri satır satır; imzada tarih, sonra her sahibin adı ve görevi.
-    Boş metinler akışa girmez.
+    hücreleri satır satır; imzada tarih, sonra her sahibin adı ve görevi; dipnotlar
+    en sonda. Boş metinler akışa girmez.
     """
     akis = [belge.antet.tc, belge.antet.authority, belge.antet.unit_line, belge.antet.alt_birim]
     for blok in belge.bloklar:
         if isinstance(blok, Baslik):
             akis += [blok.metin, blok.alt]
-        elif isinstance(blok, Paragraf | KonumCumlesi):
+        elif isinstance(blok, Paragraf | KonumCumlesi | Dipnot):
             akis.append(blok.metin)
         elif isinstance(blok, Tablo):
             akis += list(blok.basliklar)
@@ -177,14 +204,18 @@ def html_ciz(belge: Belge, sablonlar: Path | None = None) -> str:
 
     `sablonlar` verilirse Django ayarı olmadan bağımsız bir şablon motoru
     kurulur (paket teşhis kipi `--evrak-duman`); verilmezse projenin şablon
-    ayarı kullanılır.
+    ayarı kullanılır. İlk dipnot (`ilk_dipnot`) gövdeden ince bir çizgiyle ayrılır.
     """
+    ilk_dipnot = next((b for b in belge.bloklar if isinstance(b, Dipnot)), None)
     baglam = {
         "belge": belge,
         "tc": belge.antet.tc,
         "authority": belge.antet.authority,
         "unit_line": belge.antet.unit_line,
-        "bloklar": [{"tur": _TUR_ADI[type(blok)], "blok": blok} for blok in belge.bloklar],
+        "bloklar": [
+            {"tur": _TUR_ADI[type(blok)], "blok": blok, "ilk_dipnot": blok is ilk_dipnot}
+            for blok in belge.bloklar
+        ],
     }
     if sablonlar is not None:
         from django.template import Context, Engine
@@ -227,6 +258,8 @@ def docx_ciz(belge: Belge) -> bytes:
             cizici.tablo(d, blok.basliklar, blok.satirlar)
         elif isinstance(blok, Imza):
             cizici.imza(d, blok.tarih, [(sahip.ad, sahip.gorev) for sahip in blok.sahipler])
+        elif isinstance(blok, Dipnot):
+            cizici.dipnot(d, blok.metin)
 
     cizici.altlik_yaz(d, belge.kod)
     return cizici.kaydet(d)
@@ -273,5 +306,6 @@ def ornek_belge() -> Belge:
                     ImzaSahibi("İsmail DENEME", "Sekreter"),
                 ),
             ),
+            Dipnot(KISISEL_VERI_DIPNOTU),
         ),
     )

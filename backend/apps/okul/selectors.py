@@ -35,6 +35,7 @@ from apps.okul.models import (
     StudentStatus,
     student_number_blind_index,
 )
+from shared.crypto import has_corrupt
 
 
 def school_years() -> QuerySet[SchoolYear]:
@@ -115,7 +116,9 @@ def personnel_list(*, search: str = "", only_active: bool = False) -> list[Perso
     rows: Iterable[Personnel] = qs
     if search.strip():
         needle = normalize_header(search)
-        rows = [p for p in qs if needle in normalize_header(p.full_name)]
+        # Çözülemeyen adlı kayıt aramaya girmez (tasarım §13 D48): adın sağlam yarısı
+        # yanlış kişiyi bulduruyordu.
+        rows = [p for p in qs if not has_corrupt(p) and needle in normalize_header(p.full_name)]
     return personnel_sorted(rows)
 
 
@@ -238,11 +241,15 @@ def student_list(
     if search.strip():
         needle = normalize_header(search)
         number_index = number_search_index(search)
+        # Çözülemeyen alanlı kayıt aramaya girmez (tasarım §13 D48).
         rows = [
             s
             for s in qs
-            if (number_index and s.student_number_index == number_index)
-            or (needle and needle in normalize_header(s.full_name))
+            if not has_corrupt(s)
+            and (
+                (number_index and s.student_number_index == number_index)
+                or (needle and needle in normalize_header(s.full_name))
+            )
         ]
     return students_sorted(rows)
 
@@ -296,7 +303,7 @@ def get_personnel(personnel_id: int) -> Personnel | None:
 
 
 # ---------------------------------------------------------------------------
-# Ayrılış havuzu (aile iskeletinden — kişisel veri: yalnız yönetim yüzeyi, yönetici kipi)
+# Ayrılış havuzu (aile iskeletinden — kişisel veri: yalnız yönetim yüzeyi, açık oturum)
 # ---------------------------------------------------------------------------
 def _pool_students_qs() -> QuerySet[Student]:
     return Student.objects.filter(status=StudentStatus.ACTIVE, leave_candidate_since__isnull=False)
@@ -355,11 +362,14 @@ def leave_pool_similar_personnel(pool: Iterable[Personnel]) -> dict[int, list[Si
     önizlemesindekiyle aynıdır (`name_match.match_reason`) ve GEREKÇESİYLE
     birlikte taşınır: ekran adayın neden aday olduğunu yazar (§13 D30).
     """
-    kisiler = list(pool)
+    # Çözülemeyen adlı kayıt öneri üretmez ve aday olmaz (tasarım §13 D48).
+    kisiler = [kisi for kisi in pool if not has_corrupt(kisi)]
     if not kisiler:
         return {}
     adaylar = personnel_sorted(
-        Personnel.objects.filter(is_active=True, leave_candidate_since__isnull=True)
+        aday
+        for aday in Personnel.objects.filter(is_active=True, leave_candidate_since__isnull=True)
+        if not has_corrupt(aday)
     )
     sonuc: dict[int, list[SimilarCandidate]] = {}
     for kisi in kisiler:

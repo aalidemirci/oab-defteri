@@ -1,9 +1,25 @@
 {% extends "documents/base.html" %}
 {% comment %}Kurtarma anahtarı belgesi: programın kendi güvenlik belgesi, katalog
-dışıdır, E-kodu almaz (tasarım §9.7, §12.B; saklama yeri kullanıcı kararı D3). Bağlam
-apps/okul/services/recovery_key_document.py'den gelir: antet, `document_title`,
-`issued_on` (gg.aa.yyyy, yerel gün), `asset_no` (bilgisayarın demirbaş no'su;
-boşsa elle doldurulacak çizgi) ve `key_groups` (numaralı dörtlü gruplar).
+dışıdır, E-kodu almaz (tasarım §9.7, §12.B; saklama yeri kullanıcı kararı D3; metin
+§13 D50). Bağlam apps/okul/services/recovery_key_document.py'den gelir: antet,
+`document_title` (belgenin adı, tr_upper ile büyük harf), `key_no` ve `key_date`
+(anahtarın no'su ve üretim günü, gg.aa.yyyy — guvenlik.json `kurtarma.no`,
+`kurtarma.tarih`; boşsa elle doldurulacak çizgi), `asset_no` (bilgisayarın demirbaş
+no'su; boşsa elle doldurulacak çizgi), `key_groups` (numaralı dörtlü gruplar) ve
+`ucuncu_durum` ile `ucuncu_durumun_caresi` (zarfın üçüncü durumu ve çaresi; kullanıcı
+kararları 02.11.2026 ve 03.11.2026; tek sabit `recovery_key_document.UCUNCU_DURUM*`, ön yüz
+ve sözlük aynı sözü taşır).
+Basım günü ayrı satır olarak basılmaz: kâğıdın kimliği anahtarın no'su ve üretim
+günüdür (devir-teslimde yazılan da budur, tasarım §9.7); iki tarih yan yana
+karıştırılırdı.
+Metin her kişinin kendi hesabıyla çalıştığı düzene göredir: parola paylaşılmaz,
+anahtar yalnız program yöneticisi içindir ve ÜÇ durumda kullanılır (parolası
+unutulduğunda; kayıtlar yeni bilgisayara taşınırken; zarfın üçüncü durumunda — bu
+bilgisayarın güvenlik dosyası ya da kayıtları kaybolduğunda, bozulduğunda ya da program
+dışından değiştirildiğinde; çaresi yedekten geri yükleme ya da kurtarma anahtarıyla açılış,
+kayıp kilidinde parola yolu işlemez, tasarım §4.4.4); zarfın "yalnız" açıldığı durumlar bu
+üçüdür. Ailedeki
+"yönetici parolası" dili yoktur.
 Anahtar karakter karakter EŞİT GENİŞLİKLİ kutulara basılır: gömülü yazı tipi
 yalnız DejaVu Sans'tır (tek aralıklı DejaVu pakette yok), eşit genişlik kutuyla
 sağlanır. Anahtar ayrıca tek satırda da basılır (elle yazarken ve PDF'ten
@@ -11,12 +27,12 @@ kopyalarken karıştırılmasın). text-transform YOK — başlıklar doğrudan 
 harf (WeasyPrint TR "i" tuzağı). Belge tek sayfadır (sayfa bütçesi testi).{% endcomment %}
 {% block extra_style %}
 <style>
-  .key-box { margin: 12pt 0 4pt; border: 1.5pt solid var(--pr-ink); padding: 10pt 8pt 8pt;
+  .key-box { margin: 8pt 0 4pt; border: 1.5pt solid var(--pr-ink); padding: 8pt 8pt 6pt;
              break-inside: avoid; page-break-inside: avoid; }
   .key-caption { text-align: center; font-size: 8.5pt; color: var(--pr-secondary);
                  margin-bottom: 6pt; }
   .key-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  .key-grid td { text-align: center; vertical-align: top; padding: 3pt 2pt 7pt; }
+  .key-grid td { text-align: center; vertical-align: top; padding: 3pt 2pt 5pt; }
   .key-no { font-size: 7.5pt; color: var(--pr-muted); margin-bottom: 2pt; }
   .key-char { display: inline-block; width: 17pt; height: 23pt; line-height: 23pt;
               margin: 0 1pt; border: 0.75pt solid var(--pr-line); background: var(--pr-fill);
@@ -26,17 +42,18 @@ harf (WeasyPrint TR "i" tuzağı). Belge tek sayfadır (sayfa bütçesi testi).{
   .key-line-label { font-weight: normal; font-size: 8.5pt; color: var(--pr-secondary); }
   .key-hint { text-align: center; font-size: 8pt; color: var(--pr-secondary); margin-top: 5pt; }
   .advice { margin: 4pt 0 0 14pt; padding: 0; font-size: 9.5pt; line-height: 1.4; }
-  .advice li { margin-bottom: 3pt; }
-  .confidential { margin-top: 14pt; text-align: center; font-size: 8.5pt; font-weight: bold;
+  .advice li { margin-bottom: 2pt; }
+  .confidential { margin-top: 6pt; text-align: center; font-size: 8.5pt; font-weight: bold;
                   color: var(--pr-label); border-top: 0.6pt solid var(--pr-faint); padding-top: 5pt; }
 </style>
 {% endblock %}
 {% block content %}
   <div class="doc-title">{{ document_title }}</div>
-  <div class="doc-subtitle">OAB Defteri · yönetici parolası unutulduğunda kayıtlara erişmenin yolu</div>
+  <div class="doc-subtitle">OAB Defteri · program yöneticisinin parolası unutulursa kayıtları açmanın yolu</div>
 
   <table class="info">
-    <tr><td class="label">Düzenlenme tarihi</td><td>{{ issued_on }}</td></tr>
+    <tr><td class="label">Anahtar no</td><td>{% if key_no %}{{ key_no }}{% else %}……………………………………{% endif %}</td></tr>
+    <tr><td class="label">Üretim tarihi</td><td>{% if key_date %}{{ key_date }}{% else %}……………………………………{% endif %}</td></tr>
     <tr><td class="label">Bilgisayarın demirbaş no'su</td><td>{% if asset_no %}{{ asset_no }}{% else %}……………………………………{% endif %}</td></tr>
     <tr><td class="label">Program</td><td>OAB Defteri — okul-aile birliğinin işlerini okulun bilgisayarında yürüten çevrimdışı masaüstü programı</td></tr>
   </table>
@@ -59,27 +76,32 @@ harf (WeasyPrint TR "i" tuzağı). Belge tek sayfadır (sayfa bütçesi testi).{
 
   <div class="section">
     <div class="section-title">NE İŞE YARAR?</div>
-    <p class="para">Yönetici parolası unutulursa kilit ekranında “Parolamı unuttum” seçilir, bu
-    anahtar girilir ve yeni parola belirlenir. Yedekten geri yüklemede de parolanın yerine
-    kullanılabilir. Parola değiştirildiğinde anahtar değişmez. Anahtar Ayarlar → Güvenlik'ten
-    yenilenirse yeni çıktı alınır; eski kâğıt yenilemeden önceki yedekleri açtığı için atılmaz,
-    “Eski anahtar” diye işaretlenip saklanır. Anahtar kaybolur ve parola da unutulursa
-    şifreli kayıtlar (kişi kayıtlarındaki ad, soyad ve numara) hiçbir yolla açılamaz.</p>
+    <p class="para">Herkes programı kendi hesabıyla ve kendi parolasıyla açar; bu anahtar günlük
+    işte kullanılmaz. Anahtar yalnız program yöneticisi içindir ve üç durumda kullanılır:
+    program yöneticisi parolasını unutursa kilit ekranında “Parolamı unuttum” ile yeni parolasını
+    belirler; kayıtlar yeni bir bilgisayara taşınırken yedekten bu anahtarla geri yüklenir;
+    {{ ucuncu_durum }} çare {{ ucuncu_durumun_caresi }}tır. Öteki
+    hesaplarda parolasını unutan kişi program yöneticisine başvurur. Parola değişince anahtar
+    değişmez; anahtar Ayarlar → Güvenlik'ten yenilenirse yeni belge alınır, eski kâğıt yenilemeden
+    önceki yedekleri açtığı için atılmaz, “Eski anahtar” diye işaretlenip saklanır. Anahtar
+    kaybolmuşken hiçbir hesabın parolası bilinmezse ya da güvenlik dosyası da kaybolursa şifreli
+    kayıtlar hiçbir yolla açılamaz.</p>
   </div>
 
   <div class="section">
     <div class="section-title">NASIL SAKLANIR?</div>
     <ol class="advice">
-      <li>Bu kâğıdı zarfa koyup zarfı kapatın; üstüne “OAB Defteri kurtarma anahtarı” ve
-        tarihi yazın. Zarfı okul müdürlüğünde, kilitli dolapta saklayın. Zarf veliye geçmez:
-        birlik yönetimi değişse de müdürlükte kalır, devir-teslimde yalnız durumu yazılır.</li>
-      <li>Yönetici parolası kimseyle paylaşılmaz (MEB Bilgi ve Sistem Güvenliği Yönergesi md. 7/2,
-        9/2-e). Parolayı bilen kişi okuldan ayrılır ya da parolayı unutursa yeni parola bu
-        anahtarla belirlenir.</li>
+      <li>Bu kâğıdı zarfa koyup zarfı kapatın; üstüne “OAB Defteri kurtarma anahtarı”, anahtar
+        no'sunu ve tarihini yazın. Zarfı okul müdürlüğünde, kilitli dolapta saklayın. Zarf veliye
+        geçmez: birlik yönetimi değişse de müdürlükte kalır, devir-teslimde yalnız zarfın durumu
+        ve anahtarın no'su ile tarihi yazılır.</li>
+      <li>Parola kimseyle paylaşılmaz, herkes kendi hesabıyla çalışır (MEB Bilgi ve Sistem
+        Güvenliği Yönergesi md. 7/2, 9/2-e). Anahtar da ortak parola değildir; zarf yalnız
+        yukarıdaki üç durumda açılır.</li>
       <li>Anahtarı bilgisayarda, e-postada, mesajlaşma uygulamasında ya da fotoğraf olarak
-        saklamayın. Bu çıktının PDF dosyasını kaydettiyseniz dosyayı bu bilgisayarda bırakmayın;
-        USB belleğe alıp zarfla birlikte saklayın.</li>
-      <li>Çıktıyı masada, yazıcıda, panoda ya da ortak klasörlerde bırakmayın.</li>
+        saklamayın. PDF dosyasını kaydettiyseniz bu bilgisayarda bırakmayın; USB belleğe alıp
+        zarfla birlikte saklayın.</li>
+      <li>Belgeyi masada, yazıcıda, panoda ya da ortak klasörlerde bırakmayın.</li>
     </ol>
   </div>
 

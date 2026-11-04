@@ -5,8 +5,9 @@ durur (F1 dosya sahipliği). İnce görünümler: okuma `selectors`, yazma
 `services.calendar`. Hata gövdesi `{code, message, fields}` sözleşmesindedir;
 servisin Django `ValidationError`'ı `od_exception_handler`'da 400'e çevrilir.
 
-Kişisel veri taşımaz → parola kapısı (409) gerekmez. Görevli kipi izin listesinde
-YOKTUR: kapalı gün yönetimi yönetici işidir (varsayılan kapalı, tasarım §4.4).
+Kişisel veri taşımaz → parola kapısı (409) gerekmez. Kapalı gün yönetimi program
+yöneticisinin işidir: her rol okur, yalnız program yöneticisi yazar (tasarım §4.4.2 M1;
+`rol_izinleri.KURALLAR`).
 """
 
 from __future__ import annotations

@@ -2,16 +2,20 @@
 // adım 3, tasarım §13 D14).
 //
 // Anahtar kurulumda kaydedilemediyse (pencere kapandı, program çöktü) ya da sonradan
-// kaybolduysa yenisi üretilir. Onay diyaloğu yönetici parolasını ister (başlık soru,
-// gövde sonuç — docs/sozluk.md §3); backend parolayı bellekteki anahtara karşı doğrular,
-// aynı veri anahtarını YENİ kurtarma anahtarıyla sarmalar, önceki güvenlik dosyasını
-// "guvenlik-arsiv" adıyla saklar ve yeni anahtarı BİR KEZ döndürür.
+// kaybolduysa yenisi üretilir. Onay diyaloğu oturumdaki hesabın KENDİ parolasını ister
+// (başlık soru, gövde sonuç — docs/sozluk.md §3; başka hesabın parolası geçmez, plan
+// F1b-1 "Parola ve hatalı deneme"); backend parolayı o hesabın sarmalına karşı doğrular,
+// aynı veri anahtarını YENİ kurtarma anahtarıyla sarmalar (no'su bir artar), önceki
+// güvenlik dosyasını "guvenlik-arsiv" adıyla saklar ve yeni anahtarı BİR KEZ döndürür.
+// Yenilemeyi yalnız program yöneticisi yapar (tasarım TK9): kart `guvenlik` yeteneğine
+// bağlıdır, uç rol kapısından, servis yetki kapısından (`Eylem.KURTARMA_ANAHTARI`) geçer.
 //
-// Yeni anahtar bileşen durumunda DEĞİL, rota ağacının dışındaki modül belleğinde
-// bekletilir (`bekleyenAnahtar`): sayfa görevli kipi, Kilitle ya da gezinmeyle
-// sökülse de kaybolmaz; sihirbaz ve Güvenlik ekranı onu `KurtarmaAnahtariPaneli`
-// ile saklatıp doğrulatır. Metinler dürüsttür: eski yedeklerin eski anahtarla
-// açıldığını ve yenilemenin ele geçmiş anahtara karşı koruma olmadığını söyler.
+// Yeni anahtar (ve kimliği) bileşen durumunda DEĞİL, rota ağacının dışındaki modül
+// belleğinde bekletilir (`bekleyenAnahtar`): sayfa gezinmeyle sökülse de kaybolmaz
+// (kilitlenme pencereyi yeniden yükler ve anahtarı siler; Kilitle önce sorar); sihirbaz
+// ve Güvenlik ekranı onu `KurtarmaAnahtariPaneli` ile saklatıp doğrulatır. Metinler
+// dürüsttür: eski yedeklerin eski anahtarla açıldığını ve yenilemenin ele geçmiş anahtara
+// karşı koruma olmadığını söyler.
 // Pencere açılınca parola alanı odaktadır (`ui/Dialog` `initialFocusRef`).
 
 import { useRef, useState } from "react";
@@ -26,6 +30,7 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import TextField from "../../ui/TextField";
 import { guvenlikApi } from "./api";
 import { bekleyenKurtarmaAnahtariniYaz } from "./bekleyenAnahtar";
+import { guncelKurtarmaKimligi } from "./kurtarma";
 import {
   ELE_GECMIS_ANAHTAR_METNI,
   ESKI_YEDEK_METNI,
@@ -61,7 +66,7 @@ export default function KurtarmaAnahtariniYenileKarti({
     setCalisiyor(true);
     try {
       const sonuc = await guvenlikApi.kurtarmaAnahtariniYenile(parola);
-      bekleyenKurtarmaAnahtariniYaz(sonuc.recovery_key);
+      bekleyenKurtarmaAnahtariniYaz(sonuc.recovery_key, guncelKurtarmaKimligi(sonuc));
       kapat();
       snackbar.success("Yeni kurtarma anahtarı üretildi. Saklayıp doğrulayın.");
       onYenilendi?.();
@@ -97,11 +102,12 @@ export default function KurtarmaAnahtariniYenileKarti({
           <p className="text-body-small text-on-surface-variant">{ELE_GECMIS_ANAHTAR_METNI}</p>
           <TextField
             ref={parolaAlani}
-            label="Yönetici parolası"
+            label="Parolanız"
             type="password"
             value={parola}
             onChange={(e) => setParola(e.target.value)}
             autoComplete="current-password"
+            helperText="Bu oturumu açan hesabın parolası."
             error={hata ?? undefined}
             required
           />

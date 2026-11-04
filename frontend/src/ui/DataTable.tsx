@@ -1,6 +1,7 @@
 // Generic salt-okunur tablo (ortak kit).
 // Heterojen listeler için tek kaynak; tıklanabilir satır (ClickableRow) + satıra özgü
-// erişilebilir ad. Yalnız M3 token'ları (ham renk/px yok).
+// erişilebilir ad. Yalnız M3 token'ları (ham renk/px yok). Satırın kimliği (`key`) sayı ya da
+// metin olabilir (hesaplar UUID taşır).
 
 import type { ReactNode } from "react";
 
@@ -13,26 +14,31 @@ export interface Column<T> {
   align?: "right";
 }
 
-export default function DataTable<T extends { id: number }>({
+export default function DataTable<T extends { id: number | string }>({
   columns,
   rows,
   onRowClick,
   rowLabel,
+  caption,
 }: {
   columns: Column<T>[];
   rows: T[];
   onRowClick?: (row: T) => void;
   /** Satıra özgü erişilebilir ad (ekran okuyucu) — verilmezse generic "Detayı aç". */
   rowLabel?: (row: T) => string;
+  /** Tablonun erişilebilir adı (görünmez `<caption>`; ekran okuyucu tabloyu bu adla duyurur). */
+  caption?: string;
 }) {
   return (
     <Card elevation={0} className="overflow-x-auto p-0 shadow-elevation-1 scrollbar-thin">
       <table className="w-full min-w-table border-collapse text-body-small">
+        {caption && <caption className="sr-only">{caption}</caption>}
         <thead className="sticky top-0 z-10 bg-surface-container-low">
           <tr className="border-b border-outline-variant text-left text-label-medium text-on-surface-variant">
             {columns.map((c, i) => (
               <th
                 key={i}
+                scope="col"
                 className={`px-4 py-3 font-semibold ${c.align === "right" ? "text-right" : ""}`}
               >
                 {c.header}

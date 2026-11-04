@@ -1,8 +1,11 @@
 // Yedekten geri yükleme kartı testleri: liste, sır zorunluluğu (yedekler DAİMA
 // şifrelidir — düz yedek dalı yok), onay akışı, FormData içeriği (kaynak ad YA
 // DA dosya) ve başarıda "yeniden başlat" olayının yayınlanması. Backend hatası
-// Türkçe mesajıyla kartta gösterilir. Güvenlik dosyası kayıp ekranındaki
-// kullanımı (`kayipKipi`) giriş metnini değiştirir.
+// Türkçe mesajıyla kartta gösterilir. Seçilen yedeği hangi kurtarma anahtarının
+// (no, tarih) açtığı sır sorulmadan önce yazılır (tasarım TK10); parola yolu
+// oturumdaki hesabın kendi parolasıdır ("Parolanız"; gövdede `hesap` yok, backend
+// oturumdaki hesabı kullanır). Güvenlik dosyası kayıp ekranındaki kullanımı
+// (`kayipKipi`) giriş metnini değiştirir ve parola alanını göstermez.
 
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -28,11 +31,13 @@ const LISTE = {
       name: "gunluk-2026-09-01.odbak",
       size: 2 * 1024 * 1024,
       modified_at: "2026-09-01T08:00:00+03:00",
+      kurtarma: { no: 2, tarih: "2026-08-31" },
     },
     {
       name: "gunluk-2026-08-31.odbak",
       size: 4096,
       modified_at: "2026-08-31T08:00:00+03:00",
+      kurtarma: null,
     },
   ],
 };
@@ -72,8 +77,12 @@ describe("YedektenGeriYukleme", () => {
     expect(screen.getByText("gunluk-2026-08-31.odbak")).toBeInTheDocument();
     // Düz yedek yoktur: "şifresiz" etiketi de yoktur.
     expect(screen.queryByText(/şifresiz/)).toBeNull();
-    expect(screen.getByLabelText("Yönetici parolası")).toBeInTheDocument();
+    expect(screen.getByLabelText("Parolanız")).toBeInTheDocument();
     expect(screen.getByLabelText("Kurtarma anahtarı")).toBeInTheDocument();
+    // Satır yedeği açan anahtarın kimliğini taşır (tasarım TK10).
+    expect(screen.getByText(/Anahtar no 2 · üretim tarihi 31\.08\.2026/)).toBeInTheDocument();
+    // Eski "yönetici parolası" dili kalmadı.
+    expect(document.body.textContent).not.toMatch(/yönetici parolası/i);
     expect(screen.getByText("C:\\OABDefteri\\backups")).toBeInTheDocument();
     // Kaynak seçilmeden geri yükleme düğmesi kapalıdır.
     expect(screen.getByRole("button", { name: "Geri yükle" })).toBeDisabled();
@@ -105,7 +114,7 @@ describe("YedektenGeriYukleme", () => {
       ekranaBas();
 
       await kullanici.click(await screen.findByRole("radio", { name: /gunluk-2026-08-31/ }));
-      await kullanici.type(screen.getByLabelText("Yönetici parolası"), PAROLA);
+      await kullanici.type(screen.getByLabelText("Parolanız"), PAROLA);
       await kullanici.click(screen.getByRole("button", { name: "Geri yükle" }));
       // Onay metni kenara alma davranışını açıkça söyler.
       const diyalog = await screen.findByRole("dialog", { name: "Yedekten geri yüklensin mi?" });
@@ -121,6 +130,8 @@ describe("YedektenGeriYukleme", () => {
       expect(form.get("file")).toBeNull();
       expect(form.get("password")).toBe(PAROLA);
       expect(form.get("recovery_key")).toBeNull();
+      // Parola oturumdaki hesabındır: gövdede tanıtıcı gitmez (backend oturumdan alır).
+      expect(form.get("hesap")).toBeNull();
       await waitFor(() => expect(dinleyici).toHaveBeenCalled());
     } finally {
       window.removeEventListener(YENIDEN_BASLAT_OLAYI, dinleyici);
@@ -135,7 +146,7 @@ describe("YedektenGeriYukleme", () => {
     await kullanici.click(screen.getByRole("button", { name: "Geri yükle" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Yedekler şifrelidir; yönetici parolasını ya da kurtarma anahtarını girin.",
+      "Yedekler şifrelidir; parolanızı ya da kurtarma anahtarını girin.",
     );
     expect(guvenlik.geriYukle).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -165,7 +176,7 @@ describe("YedektenGeriYukleme", () => {
 
     const dosya = new File([new Uint8Array([1, 2, 3])], "elden.odbak");
     await kullanici.upload(await screen.findByLabelText(/elinizdeki yedek dosyası/), dosya);
-    await kullanici.type(screen.getByLabelText("Yönetici parolası"), PAROLA);
+    await kullanici.type(screen.getByLabelText("Parolanız"), PAROLA);
     await kullanici.click(screen.getByRole("button", { name: "Geri yükle" }));
     await onayla(kullanici);
 
@@ -180,7 +191,7 @@ describe("YedektenGeriYukleme", () => {
     ekranaBas();
 
     await kullanici.click(await screen.findByRole("radio", { name: /gunluk-2026-08-31/ }));
-    await kullanici.type(screen.getByLabelText("Yönetici parolası"), PAROLA);
+    await kullanici.type(screen.getByLabelText("Parolanız"), PAROLA);
     await kullanici.click(screen.getByRole("button", { name: "Geri yükle" }));
     const diyalog = await screen.findByRole("dialog", { name: "Yedekten geri yüklensin mi?" });
     await kullanici.click(within(diyalog).getByRole("button", { name: "Vazgeç" }));
@@ -191,12 +202,16 @@ describe("YedektenGeriYukleme", () => {
   it("backend hatasını Türkçe mesajıyla gösterir", async () => {
     const kullanici = userEvent.setup();
     guvenlik.geriYukle.mockRejectedValue(
-      new ApiError(400, "validation_error", "Yedek açılamadı: yönetici parolası hatalı."),
+      new ApiError(
+        400,
+        "validation_error",
+        "Yedek açılamadı: tanıtıcı, parola ya da kurtarma anahtarı hatalı veya yedek bu kuruluma ait değil.",
+      ),
     );
     ekranaBas();
 
     await kullanici.click(await screen.findByRole("radio", { name: /gunluk-2026-08-31/ }));
-    await kullanici.type(screen.getByLabelText("Yönetici parolası"), "Yanlis-Parola-9");
+    await kullanici.type(screen.getByLabelText("Parolanız"), "Yanlis-Parola-9");
     await kullanici.click(screen.getByRole("button", { name: "Geri yükle" }));
     await onayla(kullanici);
 
@@ -216,6 +231,54 @@ describe("YedektenGeriYukleme", () => {
 
     expect(await screen.findByText(/En yeni yedeği seçin/)).toBeInTheDocument();
     expect(screen.queryByText(/Yanlış veri girişinden sonra/)).toBeNull();
+  });
+
+  it("seçilen yedeği hangi kurtarma anahtarının açtığını sır sorulmadan önce söyler", async () => {
+    const kullanici = userEvent.setup();
+    ekranaBas();
+
+    // Seçim yokken cümle yoktur.
+    await screen.findByText("gunluk-2026-09-01.odbak");
+    expect(screen.queryByText(/kurtarma anahtarıyla açılır\./)).toBeNull();
+
+    await kullanici.click(screen.getByRole("radio", { name: /gunluk-2026-09-01/ }));
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Bu yedek 2 numaralı, 31.08.2026 tarihli kurtarma anahtarıyla açılır.",
+    );
+
+    // Başlığı okunamayan yedek bunu açıkça söyler.
+    await kullanici.click(screen.getByRole("radio", { name: /gunluk-2026-08-31/ }));
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Bu yedeği hangi kurtarma anahtarının açtığı okunamadı.",
+    );
+
+    // Elden dosya seçilince listedeki yedeğin cümlesi kalkar (dosyanın başlığı istemcide okunmaz).
+    const dosya = new File([new Uint8Array([1, 2, 3])], "elden.odbak");
+    await kullanici.upload(screen.getByLabelText(/elinizdeki yedek dosyası/), dosya);
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("kayıp kipinde parola alanı yoktur; yalnız kurtarma anahtarı sorulur", async () => {
+    const kullanici = userEvent.setup();
+    guvenlik.geriYukle.mockResolvedValue({ ...SONUC, state_written: true });
+    ekranaBas(true);
+
+    await kullanici.click(await screen.findByRole("radio", { name: /gunluk-2026-09-01/ }));
+    // Oturum yok ve güncel güvenlik dosyası okunamıyor: parola yolu işlemez.
+    expect(screen.queryByLabelText("Parolanız")).toBeNull();
+    await kullanici.click(screen.getByRole("button", { name: "Geri yükle" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Yedekler şifrelidir; yedeğin kurtarma anahtarını girin.",
+    );
+
+    await kullanici.type(screen.getByLabelText("Kurtarma anahtarı"), "AAAA-BBBB");
+    await kullanici.click(screen.getByRole("button", { name: "Geri yükle" }));
+    await onayla(kullanici);
+
+    await waitFor(() => expect(guvenlik.geriYukle).toHaveBeenCalledTimes(1));
+    const form = guvenlik.geriYukle.mock.calls[0][0] as FormData;
+    expect(form.get("recovery_key")).toBe("AAAA-BBBB");
+    expect(form.get("password")).toBeNull();
   });
 
   it.each([false, true])(

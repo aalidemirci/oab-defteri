@@ -92,16 +92,17 @@ MIDDLEWARE = [
     # tarif etmez; tüm API 503 restart_required ile kesilir. Kilit kapısından
     # ÖNCE durur — geri yükleme kilit durumunu da bayatlatır.
     "apps.okul.restart_gate.RestartRequiredMiddleware",
-    # Kilit kapısı (tasarım §4.3 tehdit 8, §4.4.3): güvenlik dosyası kayıpken (423
-    # guvenlik_dosyasi_kayip) ve kilit açılmadıysa (423 locked) veri uçlarını
-    # keser. Parola hiç kurulmamışsa kapı geçirir; kişi yazan uçları izin
+    # Kilit kapısı ve oturumun istek başı (tasarım §4.3 tehdit 8, §4.4.3): uçuştaki
+    # istek sayımı, tembel kilit (bekleyen ve boşta), güvenlik dosyası kayıpken (423
+    # guvenlik_dosyasi_kayip) ve oturum kapalıyken (423 locked) açık listeler
+    # dışındaki API'yi keser, X-OD-Etkinlik ile boşta sayacını tazeler, yazar
+    # bağlamını kurar. Hesap hiç kurulmamışsa kapı geçirir; kişi yazan uçları izin
     # sınıfı 409 parola_gerekli ile keser.
     "apps.okul.lock_middleware.AppLockMiddleware",
-    # Kip kapısı (tasarım §4.4): kilit açık ve kip görevliyken izin listesi
-    # dışındaki /api/ isteklerini 403 kip_yetkisiz ile keser; X-OD-Etkinlik
-    # başlıklı istekte yönetici kipinin boşta sayacını tazeler. Kilit
-    # kapısından SONRA durur: kilitliyken (423) istek buraya gelmez.
-    "apps.okul.kip_middleware.KipMiddleware",
+    # Rol kapısı (tasarım §4.4.2-§4.4.3): kilit kapısından SONRA durur ve yalnız açık
+    # oturumda keser; rolün matriste açık olmayan uçları 403 rol_yetkisiz alır
+    # (`apps.okul.rol_izinleri`; yeni uç varsayılan kapalıdır).
+    "apps.okul.rol_middleware.RolMiddleware",
 ]
 
 # Yerel oturum belirteci koruması (tasarım §4.3 tehdit 1). API'de istek başına
@@ -212,9 +213,10 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 # Django REST Framework
 # ---------------------------------------------------------------------------
 # DRF kimlik doğrulaması kullanılmaz: istek kapıları ara katmandadır (oturum
-# belirteci, kilit, kip). Kişisel hesaplar (T1) F1b'de oturum katmanıyla gelir
-# (plan §2.2 adım 1). DEFAULT_AUTHENTICATION_CLASSES boş + UNAUTHENTICATED_USER
-# None: DRF hiçbir kimlik doğrulama denemesi yapmaz.
+# belirteci, kilit ve oturum, rol). Kişisel hesabın oturumu süreç içi tek
+# nesnededir (`apps.okul.oturum`; tasarım TK14), Django oturumu ve çerezi
+# kullanılmaz. DEFAULT_AUTHENTICATION_CLASSES boş + UNAUTHENTICATED_USER None: DRF
+# hiçbir kimlik doğrulama denemesi yapmaz.
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],

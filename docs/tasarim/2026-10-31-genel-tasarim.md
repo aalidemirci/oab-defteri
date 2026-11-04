@@ -107,8 +107,8 @@ karşılığı · **Öneri** = bu belgenin önerisi · **§15 (M-n)** = kullanı
 | TK8 | Güvenlik çekirdeği | Aileden: Argon2id (RFC 9106 düşük bellek profili, ~0,2 sn), Fernet alan şifrelemesi, kör indeks, fail-closed yazma (`KeyMissingError` → 409 `parola_gerekli`), güvenlik dosyası kayıp kilidi, X25519 + AES-256-GCM şifreli yedek (`Connection.backup()`), kademeli gecikme. **Aileden ayrılan dört nokta:** (1) dosya deposu şifrelemesi yenidir (dosya başına anahtar, §4.4.4; TK22); (2) yedek kabı dosya bölümü taşır (`ODBAK\x03`, §4.4.7); (3) `from_db_value` **katı kipte** çalışır: kilit açıkken çözülemeyen ya da token olmayan dolu değer düz metin diye dönmez, `CorruptField` işaretiyle döner ve panoya bütünlük uyarısı düşer; hoşgörü yalnız `gecis` sürerken açıktır (§13 D48); (4) hatalı deneme sayacı hesap başınadır (TK15). Şifrelenecek alanların **listesi** §5'tedir | [KVKK md. 12/1](../mevzuat/6698-kvkk.md#madde-12) teknik tedbir; [BSG Yön. md. 10/5](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-10) taşınabilir ortamda şifreleme; Kütüphane'de kapalı denetim bulguları (TB26). Ailenin hoşgörüsü düz metin döneminden kalmadır; OAB'de düz metin dönemi hiç olmadı (§13 D29), hoşgörü SQLite'ta şifreli sütuna yazılan düz metni meşru veri gibi gösterirdi (denetim GA-9) | Kesin (aile) + öneri (dört ayrılış) |
 | TK9 | Hesaplar | T1: kişisel hesaplar; veri anahtarı (DEK) her hesap için ayrı sarılır; rol ve organ bağı veritabanında, `Account` satırı mühürlü (§4.6.1); kurtarma anahtarını yalnız `yonetici` yeniler, anahtar okul müdürlüğünde mühürlü zarfta durur (D3; §4.4) | T1 kullanıcı kararı; [BSG Yön. md. 7/2, 7/4](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-7) ve [md. 9/2-e](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-9) (kullanıcı adı ve şifre paylaşılmaz, herkes kendi hesabıyla çalışır). Yönergenin 7. maddesi aktif dizin hesabı içindir; programa kıyasen uygulanır | Kesin (T1) |
 | TK10 | Yedek başlığı | Şifreli yedeğin başlığı **yalnız kurtarma bölümünü** ve kurtarma anahtarının **kimliğini** (sıra no + üretim tarihi; anahtar kâğıdında da basılıdır) taşır; hesap sarmalları yedeğe girmez. Aynı bilgisayarda geri yükleme güncel `guvenlik.json` + bir `yonetici` hesabının parolasıyla, yeni bilgisayarda kurtarma anahtarıyla açılır; program "bu yedek <no> numaralı, <tarih> tarihli kurtarma anahtarıyla açılır" der | TB23 OAB'de ağırlaşır: dönemi biten veli üyenin eski parolası + eski yedek başlığı → DEK. Bedel: yeni bilgisayara taşıma kurtarma anahtarı ister — bu zaten yönetici işidir. Anahtar kimliği hangi zarfın hangi yedeği açtığını gösterir (denetim SU-12) | Öneri |
-| TK11 | Kapanan hesap | Hesap kapanınca sarmalı `guvenlik.json`'dan **ve bütün `guvenlik-arsiv-*` kopyalarından** silinir; `Account` satırı (rol, tanıtıcı, kapanış tarihi) denetim izi için kalır. **İki depo kuralı:** giriş, sarmal açıldığında **ve** `Account` satırı var, açık ve mühürlüyse açılır; kapanışta önce veritabanı, sonra dosyalar yazılır; açılışta ve geri yüklemeden sonra iki depo karşılaştırılır (§4.6.1) | Arşiv kopyasında sarmal kalırsa kapatma anlamsızdır (TB17/TB23); satırın kalması altın kural 4. Dosya yazımı SQLite işlemine giremez; sıra ve yarıda kalma tanımlı olmalı (denetim GA-11) | Öneri |
-| TK12 | DEK yenileme | **Hesap geçişinde** (yeni görev bölümünden sonra, eski organ hesapları kapanınca ve yeni organ hesapları açılmadan önce; §4.4.5) ve **MY değişiminde** DEK yenilenir; `yonetici` gerektiğinde elle de başlatır. Şifreli alanlar, kör indeksler, hareket parmak izleri, hesap mühürleri, dosya anahtarı sarmalları ve iz anahtarlarının şifreli kopyaları yeni DEK'le **tek SQLite işleminde** yazılır; yedek anahtar çifti yenilenir; yeni iz anahtarı üretilir, zincir **yeniden mühürlenmez**. Yeni kurtarma anahtarı basılır, okul müdürlüğünde mühürlü zarfta saklanır; eski zarf, yeni anahtarla alınan tam yedek açılıp doğrulandıktan sonra imha tutanağıyla yok edilir (D3). Sıra ve yarıda kalma §4.4.4 | Eski kurulun bildiği hiçbir şey (parola, eski başlık, arşiv kopyası, iz anahtarı) **yenilemeden sonraki** veriyi ve yedekleri açmaz; genel kurul ile hesap geçişi arasındaki pencere (görev bölümü en çok bir hafta, [md. 12/3](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-12)) kalan risktir. Kütüphane v1 dışı bırakmıştı (TB17, TB23); OAB'de veri küçük, dosya içerikleri yeniden şifrelenmez (yalnız sarmalları, TK22) | §15 (M-2) |
+| TK11 | Kapanan hesap | Hesap kapanınca sarmalı `guvenlik.json`'dan **ve bütün `guvenlik-arsiv-*` kopyalarından** silinir; `Account` satırı (rol, tanıtıcı, kapanış tarihi) denetim izi için kalır. **İki depo kuralı:** giriş, sarmal (hesap kimliğine bağlı) açıldığında **ve** `Account` satırı var, açık ve mühürlüyse, denetim izindeki son kaydını tutuyorsa ve açılan sarmalın özeti satırınkini tutuyorsa açılır (kapanıştan önceki kopyasına geri sarılmış kapalı hesap da girmez; §4.6.1 kural 1); kapanışta önce veritabanı, sonra dosyalar yazılır; açılışta ve geri yüklemeden sonra iki depo karşılaştırılır (§4.6.1) | Arşiv kopyasında sarmal kalırsa kapatma anlamsızdır (TB17/TB23); satırın kalması altın kural 4. Dosya yazımı SQLite işlemine giremez; sıra ve yarıda kalma tanımlı olmalı (denetim GA-11) | Öneri |
+| TK12 | DEK yenileme | **Hesap geçişinde** (yeni görev bölümünden sonra, eski organ hesapları kapanınca ve yeni organ hesapları açılmadan önce; §4.4.5) ve **MY değişiminde** DEK yenilenir; `yonetici` gerektiğinde elle de başlatır. Şifreli alanlar, kör indeksler, hareket parmak izleri, hesap mühürleri, sarmal özetleri, dosya anahtarı sarmalları ve iz anahtarlarının şifreli kopyaları yeni DEK'le **tek SQLite işleminde** yazılır; aynı işlemde, eski hâliyle denetim izindeki son kaydını tutan her `Account` satırına (`KAPALI` dahil) yeni hâlini taşıyan bir iz satırı yazılır, tutmayana dokunulmaz (§4.4.4 adım 4; adımın ayrıntısı kullanıcı kararı bekler); yedek anahtar çifti yenilenir; yeni iz anahtarı üretilir, zincir **yeniden mühürlenmez**. Yeni kurtarma anahtarı basılır, okul müdürlüğünde mühürlü zarfta saklanır; eski zarf, yeni anahtarla alınan tam yedek açılıp doğrulandıktan sonra imha tutanağıyla yok edilir (D3). Sıra ve yarıda kalma §4.4.4 | Eski kurulun bildiği hiçbir şey (parola, eski başlık, arşiv kopyası, iz anahtarı) **yenilemeden sonraki** veriyi ve yedekleri açmaz; genel kurul ile hesap geçişi arasındaki pencere (görev bölümü en çok bir hafta, [md. 12/3](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-12)) kalan risktir. Kütüphane v1 dışı bırakmıştı (TB17, TB23); OAB'de veri küçük, dosya içerikleri yeniden şifrelenmez (yalnız sarmalları, TK22) | §15 (M-2) |
 | TK13 | Rol izinleri | **İki katman.** (1) Uç katmanı: uç + yöntem (+ parametre) matrisi (`rol_izinleri.py`; ailenin `govdede_yok`/`yalniz_sorgu` denetçileri), kısmi yetki ayrı uçla verilir, yeni uç varsayılan kapalı, URL desenlerini dolaşan koruma testi; ret 403 `{"code":"rol_yetkisiz"}`. (2) Servis katmanı: kapanmış dönem, maskesiz okuma, kişisel veri içeren çıktı, rol-özel işaretler ve kayıt sahipliği tek kapıdan geçer (`yetki(rol, eylem, kayıt)`; §4.4.2). Rol kriptografik değildir: kaza önleyici + izlenebilirlik; `Account` satırı mühürlüdür (§4.6.1) | Kütüphane görevli kipinin deseni (`kip_izinleri` "uç + yöntem (+ parametre)", `test_kip_koruma`); [iskelet envanteri §6.3](../kesif/2026-10-31-iskelet-envanteri.md) risk 1. URL dolaşan test yalnız uç düzeyini kanıtlar (denetim GA-18) | Öneri |
 | TK14 | Oturum | Süreç içi tek oturum (`OturumDurumu`, tek nesne); kullanıcı değiştirmek = Kilitle + başka hesapla aç; **kilitlenme ve her kilit açılışı ön yüzde sorgu önbelleğini ve modül belleğini sıfırlar** (pencere içeriği yeniden yüklenir); boşta süre dolunca **kilit** (görevliye iniş yok), uzun yazma işi sürerken boşta kilit ertelenir; varsayılan 10 dk (ayar 3-30); mutlak süre yok | [BSG Yön. md. 10/2](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-10) kullanılmayan bilgisayarda parolalı kilit (süre vermez). Görevli kipi olmadığından Kütüphane'nin 30 dk mutlak süre gerekçesi düşer; 3 dk velinin yavaş yazdığı formda can sıkar. Önceki hesabın yüklediği maskesiz veri sonraki oturumda kalmamalı (denetim GA-23); iş ortasında DEK silinmemeli (denetim UY-1) | §15 (M-3) |
 | TK15 | Parola politikası | En az 8 karakter (sert) · küçük harf, büyük harf, rakam ve simge (varsayılan sert) · 180 günü geçen parola girişte değiştirilir · ilk girişte geçici parola değiştirilir · organ hesaplarına **en az 12 karakterlik parola cümlesi önerilir**, sihirbazda güç göstergesi · kademeli gecikme hesap başına sayılır; ardışık hatalı denemede organ ve müdür hesabı askıya alınır, `yonetici` açar; `yonetici` hesabında askı yoktur (kurtarma anahtarı yolu kalır) | [BSG Yön. md. 9/2-a, b, ç](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-9); geçici parolanın değişimi [md. 7/2](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-7); askı [md. 7/3](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-7) ve 9/2-c'nin karşılığıdır (ailede "hesabı açacak yönetici yok" gerekçesi OAB'de geçmez; denetim GA-15). Her sarmal DEK'i tek başına verir: şifreli alanlar en zayıf hesap parolası kadar korunur (§4.3 tehdit 9). Argon2id profili (64 MiB, t=3) aynı kalır: hesap sayısı deneme başına maliyeti değiştirmez, zayıf parola olasılığını artırır; çare parolanın gücü ve kapanan hesabın sarmalının silinmesidir (TK11); profili yükseltmek 4 GB'lık makinede her girişi yavaşlatır (denetim GA-16). Yönergenin "kullanıcı" tanımı Bakanlık bilişim kaynağını kullanma yetkisi verilen konukları da kapsar ([md. 2/1, 4/1-j, k](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-4)) — veli kullanıcı için yorum | §15 (M-4, M-12) |
@@ -142,7 +142,7 @@ Karşılıkların yeri ve sayımı: [iskelet envanteri §4.1-4.2](../kesif/2026-
 | **Oturum, ön yüz** | | | |
 | Oturum çerezi / başlığı | `od_oturum` / `X-OD-Token` | `kd_oturum` / `X-KD-Token` | |
 | Etkinlik başlığı | `X-OD-Etkinlik` | `X-KD-Etkinlik` | Boşta kilit (TK14) yalnız bu başlığı taşıyan istekle tazelenir |
-| Ret kodları | 403 `rol_yetkisiz` · 423 `locked`, `guvenlik_dosyasi_kayip` · 409 `parola_gerekli` · 503 `restart_required` | 403 `kip_yetkisiz` | `rol_yetkisiz` yenidir (T1); ötekiler aynen |
+| Ret kodları | 403 `rol_yetkisiz` · 423 `locked`, `guvenlik_dosyasi_kayip` · 409 `parola_gerekli` · 503 `restart_required` · oturum: 400 `parola_yanlis`, 403 `hesap_askida`, 409 `hesap_muhru_tutmadi`, `iki_depo_tutarsiz`, `parola_yenilenmeli` · 409 `iz_yazilamadi` (denetim izi yazılamadı, yazma yapılmadı) · 409 `geri_yukleme_guncel_degil` ("Gördüm" eski ya da olmayan geri yüklemeyi andı) | 403 `kip_yetkisiz` | `rol_yetkisiz`, oturum kodları, `iz_yazilamadi` ve `geri_yukleme_guncel_degil` yenidir (T1, F1b); ötekiler aynen |
 | DOM olayları | `od:kilit-kapisi`, `od:rol-yetkisiz`, `od:yeniden-baslat-gerekli`, `od:guncelleme-denetlendi` | `kd:*` | `kd:cik-iste` ALMA (T6); `kd:kip-yetkisiz` → `od:rol-yetkisiz` |
 | CSS | değişkenler `--od-*`; sınıflar `od-page-title`, `od-page-header`, `od-page-description` | `--kd-*`, `kd-page-*` | Sitedeki `od` paletiyle karıştırılmaz |
 | Tarayıcı deposu anahtarları | `oab-defteri-density`, `oab-defteri-sidebar-collapsed`, `oab-defteri-dismissed-update`, `oab-defteri-theme` | `kutuphane-defteri-*`, `oys-theme` | `-okuma-sesi` ALMA (barkod); `oys-theme` OYS kalıntısıydı (§13 D13). Tarayıcı deposuna kişisel veri ve form taslağı yazılmaz (§4.2) |
@@ -157,9 +157,11 @@ Karşılıkların yeri ve sayımı: [iskelet envanteri §4.1-4.2](../kesif/2026-
 | Dosya sarmal anahtarı HKDF (DEK'ten) | `od-dosya-sarmal/v1` | — (yeni) | Dosya başına anahtarı saran anahtar (§4.4.4; TK22) |
 | Hareket parmak izi HKDF (DEK'ten) | `od-hareket-parmak-izi/v1` | — (yeni) | `BankTransaction.fingerprint` anahtarlı HMAC'tir; şifreli açıklamadan türeyen özet anahtarsız olamaz (denetim KM-11) |
 | Hesap mührü HKDF (DEK'ten) | `od-hesap-muhru/v1` | — (yeni) | §4.6.1 |
+| Hesap sarmalı HKDF (parolanın Argon2id çıktısından) | `od-hesap-sarmali/v1` ‖ kanonik hesap kimliği (ayraçsız) | — (yeni) | Parola kaydını hesap kimliğine bağlar (§4.4.4; kullanıcı kararı 02.11.2026); kurtarma bölümü kullanmaz |
+| Sarmal özeti HKDF (DEK'ten) | `od-sarmal-ozeti/v1` | — (yeni) | `Account.wrap_digest`, `wrap_digest_pending` (§4.4.4 "Sarmalın tazeliği", §4.6.1); DEK'ten türediği için DEK yenilemesinde özetler yeniden yazılır |
 | İz anahtarı türevleri (HKDF, İA'dan) | `od-denetim-izi/v1` (zincir) · `od-kayit-ozeti/v1` (içerik MAC'i) · `od-iz-capa/v1` (çapa mührü) · `od-iz-kilitli/v1`, `od-iz-kilitli-mac/v1` (kilitli kip) | — (yeni) | §4.6.3. İA DEK'ten **türemez**; kurulumda ayrı üretilir |
 | Yedek indirme adı | `oab-defteri-yedek-<damga>.odbak` | `kutuphane-defteri-yedek-<damga>.kdbak` | Tam yedek (dosyalar dâhil) |
-| `guvenlik.json` şema sürümü | `"surum": 2` (hesaplı şema: `hesaplar[]` ile `hatali` sayacı ve `askida` işareti; `kurtarma.no`, `kurtarma.tarih`) | 1 | §4.4.4 |
+| `guvenlik.json` şema sürümü | `"surum": 2` (hesaplı şema: `hesaplar[]` ile kimliğe bağlı sarmal ve türetim etiketi `turetim`, `hatali` sayacı ve `askida` işareti; `kurtarma.no`, `kurtarma.tarih`) | 1 | §4.4.4. Sarmalın kimliğe bağlanması sürümü değiştirmedi: sürüm yedek başlığında da geçer, başlığın taşıdığı kurtarma bölümü değişmedi |
 | **Windows** | | | |
 | Inno AppId | **yeni GUID üretilecek** | sabit GUID | Kütüphane'ninki asla kullanılmaz; bir kez üretilir, bir daha değişmez |
 | Mutex | `OABDefteri`, `Global\OABDefteri` | `KutuphaneDefteri`, `Global\…` | Inno `AppMutex` kullanılmaz (§4.2) |
@@ -439,9 +441,12 @@ oab-defteri.exe   (tek süreç · tek kopya kilidi · OturumDurumu tek nesne)
   denetçisi yoktur.
 - Veritabanının tek yazarı vardır: istekler ve `od-gunluk` aynı SQLite dosyasına `IMMEDIATE` işlemle yazar; geri
   yükleme bakım kapısını kapatır, uçuştaki işin bitmesini bekler, sonra dosyayı takas eder (TK19, §13 D3).
-- **DEK yokken veritabanına iş verisi yazılmaz.** Kilitliyken yalnız kişisiz sistem olayları (yedek alındı, şema
-  göçü uygulandı, gün işi ertelendi) denetim izine kilitli kip anahtarıyla düşer (§4.6.3); şifreli alan zaten yazılamaz
-  (`KeyMissingError`). Göçler yalnız şema değiştirir; veri göçü gerekirse ilk kilit açılışında koşar.
+- **DEK yokken veritabanına iş verisi yazılmaz.** Kilitliyken yalnız kişisiz sistem olayları (yedek alındı, şema göçü
+  uygulandı, gün işi ertelendi) denetim izine kilitli kip anahtarıyla düşer (§4.6.3); şifreli alan zaten yazılamaz
+  (`KeyMissingError`). Göçler yalnız şema değiştirir; veri göçü gerekirse ilk kilit açılışında koşar. `Account` bunun
+  dışındadır: satırın izi kilit açılışında, DEK belleğe alınmadan ve her veri göçünden önce denetlenir (§4.6.1 kural 1);
+  hesap satırlarının içerik MAC'ini değiştiren göç bu yoldan yapılamaz, adımı ayrıca tasarlanır (§4.6.2 "İçerik MAC'i";
+  kullanıcı kararı bekler).
 
 **Katmanlar** ([ön değerlendirme §7.2](../kesif/2026-10-31-on-degerlendirme.md)): arayüz (React) → DRF uçları →
 servis katmanı (iş akışı, kural motoru, uyarı + gerekçe kaydı, yetki kapısı) → modeller → evrak (§9) ve içe/dışa
@@ -526,25 +531,26 @@ girer ([KVKK md. 12/1](../mevzuat/6698-kvkk.md#madde-12) idari tedbirler okulund
 | 1 | Aynı makinedeki başka süreç yönetim API'sine istek atar | Oturum belirteci (fail-closed 403), yalnız loopback, rastgele port | — |
 | 2 | Kötü niyetli web sayfası DNS rebinding yapar | Belirteç çerezi `SameSite=Strict`, yalnız WebView2 profilinde; `ALLOWED_HOSTS` paketli yapıda yalnız loopback adları (§4.1, §13 D46) | — |
 | 3 | Açık bırakılan oturumda başkası işlem yapar (MY masadan kalkar) | Boşta kilit (TK14), Kilitle düğmesi ve kısayolu, her yazma hesapla denetim izinde; kilitlenmede ön yüz belleği sıfırlanır (§4.4.3) | Boşta süre içindeki işlem oturum sahibinin adına düşer; [BSG Yön. md. 7/4](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-7) kilitleme yükümlülüğü kullanıcınındır |
-| 4 | Kısıtlı rol (DK, müdür) yetki alanı dışına ya da yetkisiz rol yazmaya çalışır | Uç katmanı: rol matrisi, yeni uç kapalı, koruma testi; servis katmanı: tek yetki kapısı (TK13, §4.4.2) | Hatalı matris: URL desenlerini dolaşan test ve hücre başına anlık görüntü testi yakalar |
+| 4 | Kısıtlı rol (DK, müdür) yetki alanı dışına ya da yetkisiz rol yazmaya çalışır | Uç katmanı: rol matrisi, yeni uç kapalı, koruma testi; servis katmanı: tek yetki kapısı (TK13, §4.4.2) | Hatalı matris: URL desenlerini dolaşan test (her uç × yöntem × rol) ve hücre anlık görüntüsü yakalar. Ucu ya da servisi sonraki fazda gelen hücre, dipnot ve eylem fazıyla bekleyen listesindedir; kısıtları o güne dek yalnız kapı düzeyinde sınanır (§4.4.2 "Testler (F1b)"). Rol reddi denetim izine yazılmaz. Ön yüz süzmesi kullanım içindir, güvenlik katmanı değildir |
 | 5 | Dönemi biten ya da görevden düşen üye eski parolasıyla girer ya da eski yedeği açar | Üyelik düşünce ve görev bölümünde hesap askıya alınır, hesap geçişinde kapanır; sarmal `guvenlik.json`'dan ve arşivden silinir (TK11); yedek başlığında hesap sarmalı yok (TK10); hesap geçişinde DEK yenilenir (TK12) | Görevdeyken kopyaladığı veri; genel kurul ile hesap geçişi arasında (en çok bir hafta) alınan yedekler eski DEK'le açılır. TK12 kapalı kalırsa: görevdeyken kopyaladığı `guvenlik.json`'la sonraki yedekler de açılır |
-| 6 | Hesap parolasını bilen biri veri dizinini kopyalayıp DEK'i program dışında türetir | Rol kriptografik değildir; dönemlik hesap + izlenebilirlik | Tam okuma mümkündür; kılavuz açıkça yazar ([iskelet envanteri §6.3](../kesif/2026-10-31-iskelet-envanteri.md) risk 1); BitLocker ve ayrı Windows hesabı önerisi (§4.5) |
-| 7 | Program dışından SQLite dosyasında veri değiştirilir, son kayıtlar ve iz satırları birlikte silinir ya da dosya dünkü kopyayla değiştirilir — parola gerekmez | İçerik MAC'i + HMAC zinciri (İA; §4.6); kilit açılışında çapa, kilitli satırlar ve son 200 satır kendiliğinden doğrulanır; zincir başı her ay kâğıda iner (aylık bildirim, deftere geçirilecek baskı, devir tutanağı; §9); `from_db_value` katı kip (TK8); DK'nin "kayıt bütünlüğü denetimi" | Veritabanı ile `iz-durumu.json` birlikte eski kopyayla değiştirilirse program fark etmez, kâğıt çapası yakalar; parolayı bilen biri zinciri yeniden hesaplayabilir (tehdit 6) |
+| 6 | Hesap parolasını bilen biri veri dizinini kopyalayıp DEK'i program dışında türetir | Rol kriptografik değildir; dönemlik hesap + izlenebilirlik | Tam okuma mümkündür; kılavuz açıkça yazar ([iskelet envanteri §6.3](../kesif/2026-10-31-iskelet-envanteri.md) risk 1); BitLocker ve ayrı Windows hesabı önerisi (§4.5). Kimlik bağı, parola kaydının özeti ve satırın izi (tehdit 19, 23) bunu sınırlamaz, yalnız programın içindeki açılışı denetler: eski parola kaydı eski parolayla DEK'i program dışında verir |
+| 7 | Program dışından SQLite dosyasında veri değiştirilir, son kayıtlar ve iz satırları birlikte silinir ya da dosya dünkü kopyayla değiştirilir — parola gerekmez | İçerik MAC'i + HMAC zinciri (İA; §4.6); kilit açılışında çapa, kilitli satırlar ve son 200 satır kendiliğinden doğrulanır; zincir başı her ay kâğıda iner (aylık bildirim, deftere geçirilecek baskı, devir tutanağı; §9); `from_db_value` katı kip (TK8); DK'nin "kayıt bütünlüğü denetimi"; girişte satırın izi: hesabın son kaydından sonra izden silinmiş ya da aşağı kaydırılmış satır o hesabın girişini, tablonun herhangi bir yerindeki tamsayı olmayan sıra ya da kimliği veya geçerli ilk sırası tamsayı olmayan iz anahtarı satırı her hesabın girişini kapatır (kullanıcı kararı 03.11.2026 "Boşluğu engelle"; §4.6.3) | Veritabanı ile `iz-durumu.json` birlikte eski kopyayla değiştirilirse program fark etmez, kâğıt çapası yakalar; parolayı bilen biri zinciri yeniden hesaplayabilir (tehdit 6). Kuyruk kesme ve çapa bulguları girişi engellemez (kart). Girişte görünmeyenler §4.6.3 "Kalan risk"tedir. İzden ilgisiz tek bir satır silinmişse son kaydı ondan eski bütün hesaplar reddedilir; çıkış, değişiklikten önceki yedeğin kurtarma anahtarıyla geri yüklenmesidir |
 | 8 | Kilitliyken `guvenlik.json` silinir ya da bozulur | Kayıp kilidi (fail-closed): yalnız durum ve geri yükleme açık; "sıfırla ve kuruluma dön" yalnız korunacak veri yokken | Geri yükleme `guvenlik.json`'u yedek başlığından (yalnız kurtarma bölümü) yazar → kurtarma anahtarı gerekir |
 | 9 | Disk, bilgisayar ya da USB yedeği çalınır | Fernet alan şifrelemesi (kapsam §5), dosya deposu şifreli (§4.4.4), X25519/AES-GCM yedek; yedek başlığında yalnız kurtarma sarmalı (TK10); şifreli alandan türeyen her özet anahtarlı (kör indeks, hareket parmak izi) | `guvenlik.json` aynı diskte durur: şifreli alanlar **en zayıf hesap parolası** kadar korunur (TK15). Düz alanlar (tutar, tarih, karar no, kategori, kurumsal IBAN) okunur; veli listesinin sınıf alanı dönem kapanışına dek açıktır, satır sırası tutulmaz (§5). Tam koruma BitLocker |
 | 10 | Kurtarma anahtarı kâğıdı ele geçer | Anahtar okul müdürlüğünde, mühürlü zarfta durur; veliye geçmez; devir tutanağına yalnız zarfın durumu girer (D3). Yalnız `yonetici` yeniler; hesap geçişinde yeni anahtar, eski zarf imha tutanağıyla yok edilir (TK12). Anahtarla açılış ayrı türle denetim izine düşer, parolası yenilenen hesabın sahibine ilk girişinde bildirilir (§4.4.3) | Zarfı açan kişi (müdür dâhil) bir `yonetici` hesabını devralabilir; iz ve bildirim görünür kılar. Yenilemeden önceki yedekler eski zarf imha edilene dek eski anahtarla açılır (TB17) |
 | 11 | Kilit ekranında parola denenir | Argon2id (~0,2 sn), kademeli gecikme 0/0/1/2/4 sn **hesap başına**; yalnız seçilen hesabın sarmalı denenir; organ ve müdür hesabı ardışık 10 hatalı denemede askıya alınır, `yonetici` açar ([BSG Yön. md. 7/3](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-7), [md. 9/2-c](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-9); §15 M-12) | `yonetici` hesabında askı yoktur (kendi kendine hizmet reddi olurdu; kurtarma anahtarı yolu kalır). Sayaç `guvenlik.json`'dadır, dosyaya erişen sıfırlayabilir; çevrimdışı denemeye karşı koruma parolanın gücüdür (tehdit 9) |
-| 12 | `yonetici` başka bir hesabın parolasını sıfırlayıp o hesapla işlem yapar | Sıfırlama denetim izine düşer; geçici parola yalnız ilk girişte geçer ve hemen değiştirilir; hesap sahibine ilk girişte "parolanız … tarihinde sıfırlandı" bildirimi ve son girişleri gösterilir; kurtarma anahtarıyla yenilemede de aynı | Sıfırlama ile sahibinin ilk girişi arasındaki işlemler; bildirim ve denetim izi görünür kılar |
+| 12 | `yonetici` başka bir hesabın parolasını sıfırlayıp o hesapla işlem yapar | Sıfırlama denetim izine düşer; geçici parola yalnız ilk girişte geçer ve hemen değiştirilir; hesap sahibine ilk girişte "parolanız … tarihinde sıfırlandı" bildirimi ve son girişleri gösterilir; kurtarma anahtarıyla yenilemede de aynı. Sahibinin parola değişiminden sonra eski ya da geçici parolanın kaydını (arşivden de) geri koyan giremez: güncel satır o kaydın özetini taşımaz (§4.4.4 "Sarmalın tazeliği"); satırı da sıfırlamadan sonraki kopyasıyla geri koyarsa satır denetim izindeki son kaydını tutmaz (§4.6.1 kural 1) | Sıfırlama ile sahibinin ilk girişi arasındaki işlemler; bildirim ve denetim izi görünür kılar; kalan hâller tehdit 23'tedir |
 | 13 | İçe aktarılan dosya (banka özeti, e-Okul listesi, TEFBİS Excel) zararlı ya da bozuk | TK18: tür ve boyut denetimi, makrolu biçim reddi, `read_only`/`data_only`, önizleme + onay | openpyxl XML saldırılarına karşı `defusedxml` önerir (doğrulanmadı; §11 B15) |
 | 14 | Dış kaynaklı metin Excel çıktısında formül olarak çalışır (banka açıklamasında `=HYPERLINK(…)`) | Tek xlsx yazım yardımcısı metin tipini zorlar (TK18); test | — |
 | 15 | Programın ürettiği dosyalar (Word, PDF, Excel) ve içe aktarılan e-Okul listesi diskte kalır | Program kendi geçici dizinine açık kopya bırakmaz (§4.4.7); kalanını koruyamaz: içe aktarma ekranında "kaynak dosyayı silin" hatırlatması, kılavuz, ayrı Windows hesabı; evrak izi (sha256) neyin üretildiğini gösterir | Kullanıcının kaydettiği kopya kullanıcının idari tedbiridir |
 | 16 | Sahte güncelleme | İlk istek yalnız `api.github.com`'a, kurulum dosyası `github.com`'dan; indirme yönlendirmesi izlenir; **güven çapası SHA-256** (kurucu çalıştırılmadan hemen önce yeniden doğrulanır); HTTPS; kurulumu kullanıcı başlatır; `OD_UPDATE_REPOSITORY` paketli yapıda okunmaz | İmzasız exe (TB6, SmartScreen); GitHub hesabı ele geçerse sahte sürüm |
 | 17 | Kişisel veri depoya ya da pakete sızar | `.gitignore`; `depo_sizintisi` (TCKN sağlaması + **IBAN mod-97**), `veri_sizintisi` (paket ve arşiv üyeleri) | Sentetik örnekler adıyla muaf |
 | 18 | Elektrik kesintisi, disk arızası (tek bilgisayar) | `synchronous=FULL`, temiz kapanış işareti, uzun işlerin `gecis` günlüğü (§4.2), günlük yedek, dış (USB) **tam** yedek hatırlatması — dışarı çıkan yedek ekleri ve üretilmiş evrakı da taşır (§4.4.7) | Bilgisayar ve USB birlikte kaybolursa son dış yedekten sonrası |
-| 19 | Program dışından `Account` satırında rol ya da durum değiştirilir (parola gerekmez) | Her `Account` satırı DEK'ten türeyen anahtarla mühürlüdür; kilit açılışında seçilen hesabın mührü doğrulanır, tutmazsa oturum açılmaz ve olay denetim izine düşer (§4.6.1) | Parolasını bilen biri DEK'i dışarıda türetip mührü yeniden hesaplayabilir (tehdit 6); mühür bu yolu kod yazmayı gerektiren bir işe çevirir |
+| 19 | Program dışından `Account` satırında rol ya da durum değiştirilir ya da satır mührüyle birlikte eski bir kopyasından geri konur (sıfırlamadan sonraki, askıdan ya da kapanıştan önceki hâli) — parola ve kod gerekmez | Her `Account` satırı DEK'ten türeyen anahtarla mühürlüdür ve denetim izindeki son içerik MAC'li kaydını tutmalıdır, o kayıttan sonra izde boşluk olmamalıdır (§4.6.1 kural 1, §4.6.3; kullanıcı kararları 03.11.2026 "Girişte reddet", "Boşluğu engelle"). Kilit açılışında, kurtarma anahtarıyla açılışta, oturumdaki parola doğrulamasında, hesap işlemlerinde ve parolayla geri yüklemede denetlenir; tutmazsa işlem açılmaz, satıra dokunulmaz, olay denetim izine düşer (geri yüklemede günlüğe) | Parolasını bilen biri DEK'i dışarıda türetip İA'yı çözer, mührü ve izi yeniden hesaplayabilir (tehdit 6); mühür ve iz bu yolu kod yazmayı gerektiren bir işe çevirir. Veritabanının iziyle birlikte eski kopyayla değiştirilmesi ve iz kuyruğunun satırla birlikte kesilmesi girişte görünmez (çapa kartı, kâğıt çapası; tehdit 7); hesabın son kaydından sonraki iz satırlarıyla yapılan ve girişte görünmeyen değişiklikler §4.6.3 "Kalan risk"tedir; denetimle yazım arasında satırı değiştiren betik kod ve zamanlama ister |
 | 20 | Ortak Windows hesabını kullanan kişi program dosyalarını değiştirip başkalarının parolasını toplar | Ortak "OAB" Windows hesabında yönetici kurulumu: Program Files standart kullanıcıya salt okunur (TK7) | Kullanıcı başına kurulumla ortak hesap birlikte kullanılırsa program dosyalarının bütünlüğü korunmaz; kılavuz bu birleşimi önermez |
-| 21 | Yönetici olmayan hesap sahibi konsoldan ("Yedekten Geri Yükle" kısayolu) veritabanını ve denetim izini geri sarar | Konsol geri yüklemesi yalnız kurtarma anahtarıyla ya da rolü `yonetici` olan hesabın parolasıyla; geri yükleme ilk kilit açılışında denetim izine ve DK panosuna düşer (§4.4.4) | Kurtarma anahtarını ele geçiren (tehdit 10) |
+| 21 | Yönetici olmayan hesap sahibi konsoldan ("Yedekten Geri Yükle" kısayolu) veritabanını ve denetim izini geri sarar | Konsol geri yüklemesi yalnız kurtarma anahtarıyla ya da rolü `yonetici` olan hesabın parolasıyla yapılır. Denetlenen hesap parolanın açtığı sarmalın kimliğidir ve sarmal bu kimliğe bağlıdır (tehdit 23); satırın mührü, izi (iz boşluğu dahil), rolü, durumu ve sarmalın özeti güncel veritabanında (okunamıyorsa yedeğin görüntüsünde) denetlenir. Geri yükleme ilk kilit açılışında denetim izine ve DK panosuna düşer (§4.4.4) | Kurtarma anahtarını ele geçiren (tehdit 10). Güncel veritabanı okunamaz kılınıp görüntüye düşülürse (okul kartını bozmak, hesap tablosunu silmek ya da bir sütunun adını değiştirmek tek yazımdır, dosyayı 5 sn'den uzun kilitle tutmak da yeter; kod istemez) görüntünün satırı kendi izini tutar: yedek günündeki sarmalı geri koyan, o gün `yonetici` olan ve o günün parolasını bilen biri geri yükler. Güncel veritabanının zinciri doğrulanmaz: askıya alınmış ya da kapatılmış bir `yonetici`nin geri sarılmış satırı §4.6.3'ün girişte görünmeyen düzenlemelerinden biriyle birleşirse kendi parolasıyla geri yükler. Kendi parolasıyla DEK'i dışarıda türetip sahte sarmal ya da mühürlü sahte satır üreten geçer (kod ister; tehdit 6, 19) |
 | 22 | Aynı bilgisayardaki başka yerel hesap veri dizinini okur (Linux) | Açılışta `umask 077`; veri, günlük, önbellek ve yedek dizinleri 0700, gizli dosyalar 0600 (§4.5). Windows'ta `%LOCALAPPDATA%` hesaba özeldir | Pardus'ta yeni kullanıcı ev dizininin varsayılan izni doğrulanmadı (F1a'da elle) |
+| 23 | Veri dizinine yazabilen biri `guvenlik.json`'daki parola kayıtlarını değiştirir: kendi kaydının `id`'sini başka hesabınkine çevirir (yalnız kendi parolasıyla) ya da bir hesabın eski ya da geçici parolasının kaydını (`guvenlik-arsiv-*`'den ya da önceden aldığı kopyadan; geçici parolayı veren `yonetici` dahil) geri koyup o hesap olarak girer — kod gerekmez | Parola kaydının anahtarı hesap kimliğine bağlıdır (`od-hesap-sarmali/v1` ‖ kanonik kimlik; kullanıcı kararı 02.11.2026): kimliği çevrilen kayıt açılmaz, sonuç yanlış parolayla aynıdır; tanıtıcı yalnız kaydı bulmaya yarar. Mühürlü `Account` satırı güncel kaydın DEK'li özetini taşır (`wrap_digest`, `wrap_digest_pending`; kullanıcı kararı 03.11.2026): tutmayan kayıt kilit açılışında ve açık oturumdaki parola doğrulamasında açılmaz (`BUTUNLUK` satırı, hatalı deneme sayılmaz), parolayla geri yükleme yapamaz; geri yükleme özetleri önceki veritabanına göre onarır (§4.4.4) | Kesintiyle yarım kalan bir parola yazımından sonraki ilk kilit açılışına dek bekleyen özet penceresi; çapası kullanılamayan geri yüklemede geri yüklemeden önce dosyaya konmuş yedek günü kaydı (§4.4.4); önüne aynı kimlikli kopya konan hesap açılamaz (hizmet reddi; yetki yükselmez; sıfırlama ya da kurtarma anahtarıyla açılış kopyaları siler); eski kayıt eski parolayla DEK'i program dışında verir (tehdit 6) |
 
 ### 4.4 Kullanıcılar, roller ve oturum (T1)
 
@@ -661,15 +667,35 @@ satırlı katılım cetveli ve sayılar M3'tedir.
    sahipliği (müdür yalnız kendi yazısını düzenler, DK yalnız kendi raporunu) tek kapıdan geçer:
    `yetki(rol, eylem, kayıt)`; ret 403 `rol_yetkisiz`.
 
-**Testler (F1b):** URL desenlerini dolaşan koruma testi · matristeki her (rol, satır, Y) hücresi için en az bir uç
-bulunduğunu gösteren anlık görüntü testi · her dipnot için en az bir servis testi (F1b kapısındaki "müdür yalnız kendi
-yazılarına yazar" maddesi bu testlerle sınanır).
+**Ön yüz süzmesi** kullanım içindir, güvenlik katmanı değildir. Kaynağı oturum özetindeki yeteneklerdir
+(`hesap.yetenekler`; her yetenek kurallardan türeyen bir (uç, yöntem) kümesidir); ön yüz matrisi kopyalamaz. Matriste
+"—" olan ekran gezinmede yer almaz, adresi "Bu ekran hesabınızın rolüne açık değil." der; "O" olan ekran açılır, yazma
+denetimleri çizilmez. Özet yüklenirken ya da hiç okunamadıysa hiçbir yazma denetimi açılmaz; bir kez okunmuş özetin
+yetenekleri sonraki yoklama hatasında düşmez, 403 `rol_yetkisiz`'den sonra özet yeniden okunur. Kurulum durumunda süzme
+yoktur. **İstisna** (kullanıcı kararı 04.11.2026): Kurulum Sihirbazı ve Genel Bakış'ın Başlangıç Yol Haritası "O" olsa
+da yalnız onlara yazabilen hesapta açılır, çünkü her denetimleri bir yazmadır. Sihirbazın adresi öteki rollerde "Kurulum
+Sihirbazı yalnız kurulumu tamamlayabilen hesaba açıktır; bu bilgiler Ayarlar'da görünür." der, Kılavuz'daki adı bağlantı
+değildir; okulun bilgileri Ayarlar'da salt okur görünür.
+
+**Testler (F1b):** URL desenlerini dolaşan koruma testi (her uç × yöntem × rol) · matristeki her (rol, satır, Y)
+hücresinin ya bir yazma ucuyla karşılandığını ya da fazıyla bekleyen listesinde durduğunu gösteren anlık görüntü testi ·
+her dipnot için kapının kendisini sahte kayıtla sınayan test; gerçek servisi gelen dipnot gerçek serviste de sınanır
+(F1b'de ⁵: DK'nin geri yükleme kartındaki "Gördüm"ü). Ucu ya da servisi olmayan hücre ve dipnot fazıyla donmuş bekleyen
+listesinde durur (`rol_izinleri.py`: `BEKLEYEN_HUCRELER`, `BEKLEYEN_DIPNOTLAR`; kullanıcı kararı 02.11.2026); servise
+bağlanmamış eylem de aynı kuralla `BAGLANMAMIS_EYLEMLER`'dedir (F1b-2 uygulaması). Listeler yalnız küçülür; her fazın
+kapısında o fazın adını taşıyan kalem kalmaz (§14). Hücre satır düzeyinde izlenir: satırın ilk ucu bağlanınca hücre
+listeden çıkar, satırın sonraki işlerini eylem listesi ve fazın kapısı izler; bu yüzden eylemin fazı o satırdaki en
+erken bekleyen işinkidir. Bugün bunu tutmayan tek kalem M8'dir: `DENETIM_YAZMA` F4 der, oysa M8'in E02'si (görev bölümü
+ve denetim planı) F1c'dedir (§9.5); F1c planı açılırken eylem bölünür ya da fazı düzelir. F1b kapısındaki "müdür yalnız
+kendi yazılarına yazar" maddesi F1b'de kapı testleriyle, müdür yazılarının servisleri gelince (F2, F4) gerçek serviste
+sınanır.
 
 #### 4.4.3 Oturum durumları
 
 ```
 KURULUM ──(ilk yönetici hesabı + kurtarma anahtarı saklandı)──▶ KİLİTLİ
-KİLİTLİ ──(hesap + parola, hesap mührü ve iki depo tutarlı  |  kurtarma anahtarı + yeni parola)──▶ AÇIK(hesap, rol)
+KİLİTLİ ──(hesap + parola; hesap kaydı (mühür, satırın izi, parola kaydının özeti) ve iki depo tutarlı
+           |  kurtarma anahtarı + yeni parola)──▶ AÇIK(hesap, rol)
 AÇIK    ──(Kilitle  |  boşta süre doldu ve uzun iş yok  |  kullanıcı değiştir)──▶ KİLİTLİ
 her durum ──(parmak izi dolu, guvenlik.json yok ya da kullanılamaz)──▶ GÜVENLİK_DOSYASI_KAYIP
 her durum ──(geri yükleme uygulandı)──▶ YENİDEN_BAŞLAT_GEREK
@@ -678,18 +704,30 @@ her durum ──(geri yükleme uygulandı)──▶ YENİDEN_BAŞLAT_GEREK
 - **Kilit ekranı** açık hesapların tanıtıcılarını rol etiketiyle listeler ("Muhasip", "Denetleme Kurulu 2"); kişi adı
   gösterilmez — `guvenlik.json` düz metindir ve kilitliyken şifreli adlar okunamaz. Askıdaki hesap "askıda — program
   yöneticisine başvurun" etiketiyle görünür, seçilemez. Kullanıcı hesabını seçer, parolasını yazar; yalnız o hesabın
-  sarmalı denenir (Argon2id süresi hesap sayısıyla büyümez).
-- **Kilit açılışında sıra:** sarmal açılır → `Account` satırı var, durumu uygun, mührü tutuyor mu (iki depo kuralı,
-  §4.6.1) → çapa ve kilitli satırlar doğrulanır (§4.6.3) → geri yükleme notu varsa denetim izine yazılır → ertelenen gün
-  işleri ve veri göçleri koşar. Mühür ya da iki depo tutmazsa oturum açılmaz.
+  sarmalı denenir (Argon2id süresi hesap sayısıyla büyümez). Seçilebilir satır kalmazsa satırlar nedenleriyle kalır,
+  parola alanı kalkar; ekran kurtarma anahtarı zarfının üçüncü durumunu (bu bilgisayarın güvenlik dosyası ya da
+  kayıtları kaybolduğunda, bozulduğunda ya da program dışından değiştirildiğinde; kullanıcı kararı 02.11.2026) ve
+  çaresini (yedekten geri yükleme ya da kurtarma anahtarıyla açılış; kullanıcı kararı 03.11.2026) söyler, Denetleme
+  Kuruluna bildirim ister ve "Kurtarma anahtarıyla aç"ı sunar (hesap kurtarma listesinden seçilir). Program yöneticisi
+  hesabının girişi hesap kaydı, parola kaydı, denetim izi ya da iki depo nedeniyle reddedilirse aynı yol metni kilit
+  ekranında ve kurtarma yolunda iletinin altında da durur ve odağın döndüğü alana bağlanır (Parola; yenilemede Yeni
+  parola) (kullanıcı kararı 04.11.2026); öteki hesaplarda sunucunun iletisi tek başına kalır.
+- **Kilit açılışında sıra:** sarmal (hesap kimliğine bağlı; `turetim` etiketi yoksa açılmadan reddedilir) açılır →
+  parmak izi, `Account` satırı var mı, mührü, iz anahtarı, satırın izi (denetim izindeki son kaydı, izde boşluk
+  olmadan), açılan sarmalın özeti, durumu (iki depo kuralı, §4.6.1) → çapa ve kilitli satırlar doğrulanır (§4.6.3) →
+  geri yükleme notu varsa denetim izine yazılır → ertelenen gün işleri ve veri göçleri koşar. Mühür, satırın izi, özet
+  ya da iki depo tutmazsa oturum açılmaz.
 - **Kurtarma anahtarıyla açılış** (denetim GA-17). Kullanıcı ya **var olan bir `yonetici` hesabının** parolasını
   yeniler ya da (MY değişimi) **yeni bir `yonetici` hesabı** açar; başka rolün hesabı bu yolla açılmaz. Olay denetim
   izine ayrı türle (`KURTARMA`: hangi hesap, yeni mi) düşer; parolası yenilenen hesabın sahibine ilk girişinde
   "parolanız … tarihinde kurtarma anahtarıyla yenilendi" bildirimi ve o tarihten sonraki girişler gösterilir (tehdit 12
   deseni). Anahtar müdürlükte durduğu için (D3) bu iz zarfın açıldığını görünür kılan kayıttır.
 - **Ara katman sırası:** belirteç → güvenlik → whitenoise → common → `RestartRequired` (503) → `AppLock` (423) →
-  `RolMiddleware` (403 `rol_yetkisiz`). `RolMiddleware` yalnız AÇIK durumda devreye girer; `HEALTH_PATH`,
-  `setup/status/`, `security/status/` hiçbir durumda kesilmez (aile).
+  `RolMiddleware` (403 `rol_yetkisiz`). `RolMiddleware` yalnız AÇIK durumda (isteğin yazarı bir hesapken) devreye girer;
+  güvenlik dosyası kayıp kilidinde, açık kalmış oturumda da kesmez (açık listeyi `AppLock` tutar, rol kapısı onun bu
+  istek için verdiği kararı kullanır). `HEALTH_PATH` (`setup/status/`) ve `security/status/` yalnız okumada (GET, HEAD)
+  hiçbir durumda kesilmez, öteki yöntemleri kural tablosundan geçer (aile). Açık oturumda kuralı olmayan (uç, yöntem)
+  çifti ve çözülemeyen `/api/` yolu her rolde 403 alır.
 - **Boşta kilit** sunucuda tembel dolar: her istekte `son_etkinlik + N < şimdi` ise oturum kilitlenir, DEK bellekten
   silinir. `son_etkinlik` yalnız `X-OD-Etkinlik` başlıklı (kullanıcı eylemli) istekle tazelenir; durum ve pano
   sorguları tazelemez. Saat uykuyu sayar (`UykuyuSayanSaat`). Ön yüzdeki geri sayım yalnız görseldir. Kurulum
@@ -703,13 +741,38 @@ her durum ──(geri yükleme uygulandı)──▶ YENİDEN_BAŞLAT_GEREK
 #### 4.4.4 Anahtarlar ve `guvenlik.json` (şema 2)
 
 - **DEK:** 32 bayt, kurulumda üretilir; hesap geçişinde ve MY değişiminde yenilenir (TK12). Kör indeks, hareket parmak
-  izi, hesap mührü, dosya sarmal anahtarı ve yedek anahtar çifti DEK'ten HKDF ile türer (dizgeler §2.3.1). Denetim izinin
-  **iz anahtarı (İA) DEK'ten türemez**; DEK'le şifreli olarak veritabanında durur (§4.6.3).
-- **`guvenlik.json`:** `surum: 2`, `kdf` parametreleri, `hesaplar: [{id, tanitici, salt, sarmal, hatali, askida}]`,
-  `kurtarma: {no, tarih, salt, sarmal, dogrulandi}`, `gecis`. **Rol, ad-soyad, organ bağı, durum ve tarihler
+  izi, hesap mührü, sarmal özeti, dosya sarmal anahtarı ve yedek anahtar çifti DEK'ten HKDF ile türer (dizgeler §2.3.1);
+  hesap sarmalının anahtarı ise DEK'ten değil, parolanın Argon2id çıktısından hesap kimliğine bağlı HKDF ile türer.
+  Denetim izinin **iz anahtarı (İA) DEK'ten türemez**; DEK'le şifreli olarak veritabanında durur (§4.6.3).
+- **`guvenlik.json`:** `surum: 2`, `kdf` parametreleri, `hesaplar: [{id, tanitici, salt, sarmal, turetim, hatali,
+  askida}]`, `kurtarma: {no, tarih, salt, sarmal, dogrulandi}`, `gecis`. **Rol, ad-soyad, organ bağı, durum ve tarihler
   veritabanındadır** (`Account`, §4.6.1). `tanitici` gerçek ad olmaz; varsayılan rolden türer (`muhasip`, `dk-1`,
   `yonetici-2`), yönetici değiştirebilir — kişinin adını içeriyorsa program uyarır (açılışta DEK eldedir). `hatali`
   ardışık hatalı deneme sayacı, `askida` hatalı deneme askısıdır (§15 M-12); ikisi DEK istemez, kilitliyken yazılır.
+  **Hesap sarmalı hesap kimliğine bağlıdır** (kullanıcı kararı 02.11.2026): anahtarı `HKDF(Argon2id(parola, tuz),
+  "od-hesap-sarmali/v1" ‖ kanonik kimlik)`'tir; kanonik kimlik UUID'nin küçük harfli, tireli metnidir ve `id`'ye aynen
+  yazılır, başka yazım okumada Argon2id koşmadan reddedilir. `id`'si başka hesabınkine çevrilen sarmal açılmaz, sonuç
+  yanlış parolayla aynıdır; tanıtıcı yalnız sarmalı bulmaya yarar. `turetim` (`"od-hesap-sarmali/v1"`) yalnız ret
+  içindir: taşımayan sarmal Argon2id koşmadan, hatalı deneme sayılmadan reddedilir; eski türetime geri düşüş ve tembel
+  göç yoktur. Program aynı kimliğe ikinci sarmal yazmaz, sarmalı yazan her işlem kopyaları siler; kilit açılışı ilkini
+  dener. Kurtarma bölümü hesaba bağlı değildir.
+- **Sarmalın tazeliği** (kullanıcı kararı 03.11.2026). Hesabın mühürlü `Account` satırı `guvenlik.json`'daki güncel
+  sarmalın özetini taşır: `wrap_digest = HMAC(HKDF(DEK, "od-sarmal-ozeti/v1"), kanonik(id, salt, sarmal))`; iki aşamalı
+  yazımın ara hâli `wrap_digest_pending`'dir; ikisi de hesap mührüne girer (§4.6.1). Parolayla açılan sarmalın özeti
+  ikisinden birini tutmalıdır; ikisi de boşsa hesap parolayla açılmaz. Denetim kilit açılışında, açık oturumdaki parola
+  doğrulamasında (parola doğrulama, parola değiştirme, kurtarma anahtarının yenilenmesi) ve geri yüklemenin parola
+  yolunda yapılır; ilk ikisinde tutmazsa işlem reddedilir, `BUTUNLUK` satırı düşer, satıra dokunulmaz, hatalı deneme
+  sayılmaz. Kurtarma anahtarıyla açılış özeti denetlemez: özeti tutmayan `yonetici`nin çıkışıdır. Sarmalı değiştiren her
+  yazım (kilit açılışında yenileme, parola değiştirme, kurtarma anahtarıyla açılış, parola sıfırlama) iki işlemdir: (1)
+  asıl özet dosyada duran meşru sarmalınki, bekleyen özet yeninin olur; (2) asıl özet yeninin olur, bekleyen boşalır,
+  sarmal işlemin sonunda, commit'ten önce `guvenlik.json`'a yazılır. Yenileme, parola değiştirme ve kurtarmada (1) kendi
+  `HESAP` iz satırını yazar, (2) asıl yazımın (`PAROLA`, `KURTARMA`, `GIRIS`) işlemidir; sıfırlamada (1) sıfırlamanın
+  kendisidir (`PAROLA` satırı), (2) asıl özetin `HESAP` satırıdır. Kilit açılışı bekleyenle tutan sarmalı asıla çeker,
+  asılla tutan sarmal varken bekleyeni temizler. Böylece her kesintide hesap o an dosyada duran meşru sarmalın
+  parolasıyla açılır; başarılı yazımdan sonra eski sarmal (arşivdeki dahil) programda açılmaz (kalan hâller: bekleyen
+  özet penceresi ve çapası kullanılamayan geri yüklemeden önce dosyaya konmuş yedek günü sarmalı; "Özet onarımı", tehdit
+  23). Hesap açma ve ilk hesap tek aşamalıdır. Özet bir program kapısıdır: eski sarmal DEK'i sardığı için eski parolayı
+  bilen biri onu program dışında yine açar (tehdit 6).
 - **Parmak izi:** `HMAC(DEK, "od-anahtar-parmak-izi")` okul kartında; dosyanın ve veritabanının aynı DEK'i
   anlattığını gösterir. `enable()` → ilk yönetici hesabı; ön koşulları aile ile aynı (dosya yok, parmak izi boş,
   kişi tabloları boş).
@@ -723,18 +786,57 @@ her durum ──(geri yükleme uygulandı)──▶ YENİDEN_BAŞLAT_GEREK
   yedeğin hangi anahtarla açılacağını (no, tarih) gösterir. (2) ile açılırsa `guvenlik.json` yalnız kurtarma bölümüyle
   yazılır; program "kurtarma anahtarıyla aç + yönetici parolası" ekranına gelir, öteki hesaplar "parola yenilenmeli"
   durumuna düşer (geçici parolayı yönetici verir).
-- **Geri yükleme yetkisi** (denetim GA-3). Uygulama içi geri yükleme `RolMiddleware`'den geçer (yalnız `yonetici`).
-  Konsol yolu (`--geri-yukle`, Başlat menüsündeki "Yedekten Geri Yükle" kısayolu) Django ara katmanından geçmez; rol
-  orada denetlenir: geri yükleme yalnız **kurtarma anahtarıyla** ya da rolü `yonetici` olan hesabın parolasıyla
-  yapılır. Parola yolunda DEK açıldıktan sonra güncel `db.sqlite3` salt okunur bir `sqlite3` bağlantısıyla okunur (ORM
-  yok; ailenin "geri yükleme veritabanına yazmaz" kuralı korunur) ve hesabın satırı, durumu ve mührü denetlenir;
-  güncel veritabanı okunamıyorsa aynı denetim yedeğin içindeki görüntüde bellekte yapılır. `yonetici` doğrulanmazsa
-  kenara alma yapılmadan durulur (çıkış 9). Başarılı geri yükleme `geri-yukleme-notu.json`'a yedeğin adını, kenara alınan
+- **Geri yükleme yetkisi** (denetim GA-3). Geri yükleme yalnız **kurtarma anahtarıyla** ya da rolü `yonetici` olan
+  hesabın parolasıyla yapılır. Uygulama içi yol açık oturumda `RolMiddleware`'den (yalnız `yonetici`), parola yolunda
+  servisin yetki kapısından da geçer; parola oturumdaki hesabınkidir, oturum yoksa parola yolu kapalıdır; güvenlik
+  dosyası kayıp kilidinde rol kapısı kesmez ve geri yükleme yalnız kurtarma anahtarıyladır. Konsol yolu (`--geri-yukle`,
+  Başlat menüsündeki "Yedekten Geri Yükle" kısayolu, `restore_backup`) Django ara katmanından geçmez; bu yüzden rol
+  denetimi üç yolun ortak çekirdeğindedir (`backup_restore` → `geri_yukleme_yetkisi`) ve yalnız parola yolunda koşar.
+  Yedek parolayla çözüldükten sonra, hiçbir dosyaya dokunulmadan önce güncel `db.sqlite3` salt okunur bir `sqlite3`
+  bağlantısıyla (`mode=ro`) okunur (ORM yok; ailenin "geri yükleme veritabanına yazmaz" kuralı korunur). Denetlenen
+  hesap parolanın açtığı sarmalın kimliğidir; satırı sırayla denetlenir: mührü; satırın izi (denetim izindeki son içerik
+  MAC'li kaydını tutar, o kayıttan sonra izde boşluk yoktur; §4.6.1 kural 1; kullanıcı kararları 03.11.2026 "Girişte
+  reddet", "Boşluğu engelle"); rolü `yonetici`; durumu `ACIK` ya da `PAROLA_YENILENMELI`; sarmalın özeti satırın asıl ya
+  da bekleyen özetini tutar; sarmalda hatalı deneme askısı yoktur. Yanlış parolada denetim koşmaz; kaydı (mühür ve iz)
+  tutan ama `yonetici` olmayan hesap rol iletisini alır, özete varılmaz. Güncel veritabanı yalnız dört hâlde okunamıyor
+  sayılır: dosya yok; `sqlite3` hatası (iz ve iz anahtarı tablosu dahil); okul kartı tek satır değil; okul kartının
+  parmak izi bu DEK'inkine eşit değil (boş parmak izi dahil). O zaman aynı denetim yedeğin içindeki görüntüde yapılır:
+  görüntü bellekte açılır, `deserialize` olmayan SQLite'ta (Pardus 21) veri dizini altında 0700 izinli geçici dizine
+  yazılıp hemen silinir; görüntüdeki satır yedek gününün özetini taşıdığından parolası yedekten sonra değişmiş
+  `yonetici` parolayla geri yükleyemez (ileti kurtarma anahtarı yolunu anar). Satırın yokluğu ya da tutmaması okunamama
+  değil rettir, görüntüye düşülmez. `yonetici` doğrulanmazsa kenara alma yapılmadan durulur: masaüstünde çıkış 9,
+  komutta `CommandError`, uygulama içinde 400; ret denetim izine yazılmaz, günlüğe sırsız uyarı olarak düşer. Program
+  kapalıyken (WAL başlıklı veritabanının yanında `-wal` ve `-shm` yokken) salt okunur okuma, ret yolunda da kabul
+  yolunda da 0 baytlık bir `-wal` ve 32 KiB'lık bir `-shm` bırakır; veritabanının baytları, önceden var olan `-wal`'ın
+  baytları ve öteki dosyalar değişmez. Başarılı geri yükleme `geri-yukleme-notu.json`'a yedeğin adını, kenara alınan
   `db-onceki-<damga>` dosyasının adını ve sha256'sını, kullanılan yolu (hesap tanıtıcısı ya da kurtarma anahtarı no'su)
   ve kenara alınan veritabanının zincir başını (son `seq` + MAC) yazar. İlk kilit açılışında not denetim izine
   `GERI_YUKLEME` satırı olarak geçer, çapa yenilenir ve `yonetici` ile DK panosunda kart çıkar; kart DK "gördüm" diyene
-  dek kalır. `db-onceki-*` 14 günlük rotasyondadır (§4.4.7): bu sürede DK kenara alınan veritabanını isteyebilir;
-  zincir başı izde kaldığı için sonra da kâğıt çapasıyla karşılaştırılabilir.
+  dek kalır: Denetleme Kurulunun bir üyesinin "Gördüm"ü kartı herkes için (`yonetici`de ve öteki üyelerde) kaldırır
+  (kullanıcı kararı 02.11.2026). "Gördüm" denetim izine `ISARET` satırıdır (kaydı denetim izinin kendisi, kimliği son
+  `GERI_YUKLEME` satırının `seq`'i; değer yok); kimin gördüğü izde kalır. Kart yalnız doğrulanan son `GERI_YUKLEME`
+  satırından sonra yazılmış, doğrulanan ve yazarı bir DK hesabı olan `ISARET` satırıyla kalkar; yeni bir geri yükleme
+  kartı yeniden açar; açık DK hesabı yoksa kart kalır. `db-onceki-*` 14 günlük rotasyondadır (§4.4.7): bu sürede DK
+  kenara alınan veritabanını isteyebilir; zincir başı izde kaldığı için sonra da kâğıt çapasıyla karşılaştırılabilir.
+- **Özet onarımı** (kullanıcı kararı 03.11.2026). Geri yükleme güncel `guvenlik.json`'u eski veritabanıyla birleştirir;
+  onarılmasaydı yedekten sonra parolası değişen hesap yeni parolasıyla açamaz, yedek günündeki parola kaydı ise açardı.
+  Bu yüzden geri yüklenecek veritabanının hesap satırlarının özetleri takastan önce `.tmp` dosyasında, ORM'siz onarılır
+  (parola yolunda ve iki kurtarma anahtarı yolunda: güncel dosyayla ve yedek başlığından). Güven çapası kenara alınacak
+  veritabanının mührü ve izi tutan satırlarıdır; çapa ancak geri yüklenen yedeğin zincir başını (son satırın `seq`'i ve
+  `mac`'i) içeriyorsa tazedir, içermiyorsa ya da yedeğin zincir başı okunamıyorsa bayattır ve özet vermez. Taze çapada
+  da hesabın çapa satırının eşleştiği iz sırası geri yüklenen satırınkinden küçükse çapa o hesap için kullanılamaz (sıra
+  kuralı: tek bir INSERT eski bir kopyaya yedeğin zincir başını ekleyebilir). Mührü ya da izi tutmayan geri yüklenen
+  satıra dokunulmaz. Hesap başına: çapa okunuyor (taze ya da bayat) ve hesabın çapada satırı yoksa ya da kullanılabilir
+  satırı `KAPALI` ise iki özet boşaltılır (TK11); taze çapada kullanılabilir satır için dosyadaki sarmal o satırın asıl
+  ya da bekleyen özetini tutuyorsa özet ona taşınır, tutmuyorsa çapanın iki özeti geçer; çapa ya da hesabın çapa satırı
+  kullanılamıyorsa (okunamıyor, bayat, satırın mührü, izi ya da sırası tutmuyor) dosyadaki sarmal geri yüklenen satırın
+  özetini tutuyorsa özetler kalır, tutmuyorsa ya da sarmal yoksa boşaltılır. Değiştirilen her satır aynı işlemde
+  `SISTEM` `HESAP` iz satırı alır (değişen alan adları; değer yok). Onarım ya da izi yazılamazsa geri yükleme yapılmaz,
+  hiçbir dosya değişmez. Özeti boşaltılan hesap parolayla açılmaz; çaresi parola sıfırlaması, `yonetici`nin kendi
+  hesabıysa kurtarma anahtarıyla açılıştır. Kalan risk: çapa kullanılamazken geri yüklemeden önce dosyaya konmuş yedek
+  günü sarmalı o günün parolasıyla açar; kapatılmış hesap ise ancak çapa okunamıyorsa ya da o hesabın çapa satırı
+  bozuksa kapanıştan önceki yedekle döner. Çapayı kullanılamaz kılmak kod istemez; görünürlüğü geri yükleme kartı ve
+  onarımın `HESAP` satırlarıdır.
 - **İki depo karşılaştırması** her açılışta ve geri yüklemeden sonraki ilk kilit açılışında yapılır (§4.6.1).
 - **Arşiv:** her durum yazımından önce `guvenlik-arsiv-<damga>.json` (aile); hesap kapanınca sarmalı bütün arşiv
   kopyalarından da silinir (TK11).
@@ -746,10 +848,16 @@ her durum ──(geri yükleme uygulandı)──▶ YENİDEN_BAŞLAT_GEREK
   3. Yeni DEK, yeni İA ve yeni kurtarma anahtarı (no + 1) üretilir. Yeni DEK `yonetici` parolası ve yeni kurtarma
      anahtarıyla sarılır ve `guvenlik.json`'a **veritabanından önce** `gecis: {tur: "DEK_YENILEME", yeni: {sarmallar,
      kurtarma}, eski_parmak_izi, yeni_parmak_izi}` olarak atomik yazılır.
-  4. Tek SQLite işleminde yeni DEK'le: şifreli alanlar, kör indeksler, hareket parmak izleri, hesap mühürleri, dosya
-     anahtarı sarmalları, eski iz anahtarlarının şifreli kopyaları; yeni İA eklenir; parmak izi; `DEK_YENILEME` satırı
-     (eski İA'yla mühürlü son satır; sonraki satırlar yeni İA'yla). Öteki açık hesaplar (`mudur`, öteki `yonetici`)
-     `PAROLA_YENILENMELI` olur.
+  4. Tek SQLite işleminde yeni DEK'le: şifreli alanlar, kör indeksler, hareket parmak izleri, hesap mühürleri, sarmal
+     özetleri (anahtarı DEK'ten türer, §2.3.1), dosya anahtarı sarmalları, eski iz anahtarlarının şifreli kopyaları;
+     yeni İA eklenir; parmak izi; `DEK_YENILEME` satırı (eski İA'yla mühürlü son satır; sonraki satırlar yeni İA'yla).
+     Mühürler ve özetler değiştiği için her `Account` satırının içerik MAC'i değişir: aynı işlemde `KAPALI` dahil her
+     hesap satırına yeni hâlinin içerik MAC'ini taşıyan, yeni İA'yla mühürlü bir iz satırı yazılır; yalnız satır önce
+     eski hâliyle (eski DEK, eski İA) denetim izindeki son kaydına karşı doğrulanıp tutuyorsa (tutmayana dokunulmaz:
+     doğrulamasız yeniden kurma geri sarılmış satırı aklardı). Yeni İA'nın `valid_from_seq`'i onunla mühürlenen ilk
+     satırın sırasıdır (§4.6.3): satırın izi her iz satırını sırasında yürürlükteki İA'yla doğrular. Bu yeniden kurmanın
+     ayrıntısı (sırası, yarıda kalma, tutmayan satırın kartı) kullanıcı kararı bekler ve F4'te kesinleşir (§4.6.2
+     "İçerik MAC'i"). Öteki açık hesaplar (`mudur`, öteki `yonetici`) `PAROLA_YENILENMELI` olur.
   5. `guvenlik.json`: `gecis`'teki sarmallar etkinleşir; öteki hesapların ve `guvenlik-arsiv-*` kopyalarının eski DEK
      sarmalları silinir; `gecis` kalkar. `yedekleme.json` yeni açık anahtarla yazılır.
   6. Yeni kurtarma anahtarı (no, tarih) basılır, saklandığı doğrulanır (aile `dogrulandi` deseni); okul müdürlüğünde
@@ -772,7 +880,7 @@ Hesap olaylarının **tek kaynağı** bu tablodur; §5 ve §7 buraya gönderir (
 | Olay | Hesaba etkisi | Kim | Ne zaman |
 |---|---|---|---|
 | Kurulum (sihirbaz 1. adım) | İlk `yonetici` hesabı + parola + kurtarma anahtarı (no 1); anahtar basılıp saklandığı doğrulanmadan kurulum bitmez; ilk İA üretilir; `pre-parola` yedeği | Kuran kişi | İlk açılış |
-| Hesap açma | Önce `Account` satırı (`PAROLA_YENILENMELI`, mühür), sonra DEK geçici parolayla sarılır; ilk girişte parola değişimi zorunlu, durum `ACIK`; organ rolünde üyelik bağı (F1c); hesap teslim pusulası (E63: tanıtıcı, rol, açılış tarihi; parola taşımaz — geçici parola ayrı kapalı zarfta verilir, okul uygulaması; [BSG Yön. md. 10/1](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-10) parolanın görünür yere yazılmasını yasaklar) | `yonetici` | Görevlendirmede ya da hesap geçişinde |
+| Hesap açma | Geçici parolanın sarmalı bellekte kurulur; önce `Account` satırı (`PAROLA_YENILENMELI`, sarmalın özeti, mühür), sonra sarmal `guvenlik.json`'a yazılır; ilk girişte parola değişimi zorunlu, durum `ACIK`; organ rolünde üyelik bağı (F1c); hesap teslim pusulası (E63: tanıtıcı, rol, açılış tarihi; parola taşımaz — geçici parola ayrı kapalı zarfta verilir, okul uygulaması; [BSG Yön. md. 10/1](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-10) parolanın görünür yere yazılmasını yasaklar) | `yonetici` | Görevlendirmede ya da hesap geçişinde |
 | Parola değiştirme | Kendi sarmalı yenilenir; eskisiyle aynı olamaz | Hesap sahibi | Her an; 180 gün dolunca girişte (TK15) |
 | Parola unutuldu (organ, müdür, öteki yönetici) | DEK yeni geçici parolayla sarılır, `PAROLA_YENILENMELI`; sıfırlama denetim izine; sahibine ilk girişte bildirim (tehdit 12) | `yonetici` | İstek üzerine |
 | Yönetici parolası unutuldu | Başka `yonetici` sıfırlar; yoksa kurtarma anahtarıyla o hesabın parolası yenilenir (ayrı iz türü, bildirim; §4.4.3) | Başka `yonetici` ya da zarfı açan | İstek üzerine |
@@ -782,8 +890,8 @@ Hesap olaylarının **tek kaynağı** bu tablodur; §5 ve §7 buraya gönderir (
 | Dönem kapanışı (`KAPANISTA → KAPANDI`) | Hesaplara etkisi yok (geçiş görev bölümünde yapıldı); kapanmış döneme yalnız işaret alanları ve yeniden basım kaydı yazılır (R12). Eski dönemin kalan işi yeni dönemin hesaplarıyla yürür; mali kayıtları muhasip girer (D2; §7.8) | `yonetici` (başkan onayı aranmaz) | §7.8 |
 | Müdür değişti | `mudur` hesabı kapanır, yenisi açılır | `yonetici` | Görev değişiminde |
 | MY değişti | Yeni `yonetici` hesabı açılır, eskisi kapanır, DEK yenilenir (TK12; dönem ön koşulu yok); devir notu (KütD-E18 kalıbı) F4'te | Giden MY ya da kurtarma anahtarıyla gelen | Görev değişiminde |
-| Geri yükleme | İki depo karşılaştırılır (§4.6.1): sarmalı olmayan açık hesap `PAROLA_YENILENMELI`; açık satırı olmayan sarmal `yonetici` onayıyla silinir | `yonetici` | Geri yüklemeden sonraki ilk kilit açılışı |
-| Hesap mührü tutmadı | Oturum açılmaz; satıra dokunulmaz; olay denetim izine, kart `yonetici` ve DK panosuna | Program; inceleyen `yonetici` ve DK | Kilit açılışında |
+| Geri yükleme | Geri yüklenen satırların parola kaydı özetleri takastan önce önceki veritabanına göre onarılır (§4.4.4 "Özet onarımı"); iki depo karşılaştırılır (§4.6.1 kural 4): sarmalı olmayan açık hesap `PAROLA_YENILENMELI`; satırı olmayan sarmal `yonetici` onayıyla silinir; satırı `KAPALI` olanın sarmalını her kilit açılışında koşan temizlik onaysız siler (§4.6.1 kural 3); özeti tutmayan hesap ayrı listededir, çaresi parola sıfırlamasıdır (`yonetici`nin kendi hesabıysa kurtarma anahtarıyla açılış) | `yonetici` | Onarım geri yüklemede; karşılaştırma geri yüklemeden sonraki ilk kilit açılışında |
+| Hesap kaydı ya da izi tutmadı (mühür, parola kaydının özeti, denetim izindeki son kaydı ya da son kaydından sonra izde boşluk) | İşlem reddedilir, oturum açılmaz; satıra dokunulmaz, hatalı deneme sayılmaz. Mühür ve iz kaydın durumundan önce sorulur: program dışından değiştirilmiş durum da bu reddi alır. Ret denetim izine `BUTUNLUK` satırı olarak düşer (yazar `SISTEM`; alan `seal`, `wrap_digest`, `kayit_mac` ya da `iz_boslugu`), kart `yonetici` ve DK panosuna. Kaydı ya da izi tutmayan hesap kapatılamadığı için rolündeki yeri tutmayı sürdürür: tek hesaplı rolde ya da DK'nin üç hesaplık sınırı doluyken o role yeni hesap açılamaz; yeri tutan bütün hesapların kaydı tutmuyorsa program bunu ayrı bir nedenle söyler. Çıkış: hesap kaydı ya da iz tutmuyorsa yedekten geri yükleme (kurtarma anahtarı zarfının üçüncü durumu); yalnız parola kaydının özeti tutmuyorsa `yonetici`nin parola sıfırlaması (`yonetici`nin kendi hesabıysa kurtarma anahtarıyla açılış ya da başka `yonetici`nin sıfırlaması) | Program; inceleyen `yonetici` ve DK | Kilit açılışında, kurtarma anahtarıyla açılışta, oturumdaki parola doğrulamasında ve hesap işlemlerinde (işlemi yapan ve işlem gören hesap); parola kaydının özeti girişte ve oturumdaki parola doğrulamasında sorulur. Denetim izine yazılmayan retler: kurtarma anahtarıyla açılışın mühürsüz rol ve durum ön denetimi, bağsız parola kaydının reddi ve yedekten geri yüklemenin yetki reddi (günlüğe) |
 
 #### 4.4.6 Dürüst sınırlar (kılavuz ve Hakkında'ya girer)
 
@@ -801,6 +909,11 @@ Hesap olaylarının **tek kaynağı** bu tablodur; §5 ve §7 buraya gönderir (
    çalınırsa [KVKK md. 12/5](../mevzuat/6698-kvkk.md#madde-12) bildirimi (ilgilisine ve Kurula, en kısa sürede) veri
    sorumlusunun, yani okulun işidir. Program yalnız yardım eder: "ihlal dökümü" seçilen tarihte programda bulunan veri
    kategorilerini ve kişi sayılarını kişisiz verir (§8.6). Kılavuz kontrol listesini yazar (denetim KM-18).
+7. **Parola değişimi eski parolayı program içinde geçersiz kılar, program dışında kılmaz.** Parola değiştikten ya da
+   sıfırlandıktan sonra eski parola kaydı (arşiv kopyası dahil) programda giriş açmaz; istisnaları yazımın yarıda
+   kaldığı ve kayıtların program dışından değiştirildiği hâllerdir (§4.3 tehdit 23). Eski parola kaydı veri anahtarını
+   sardığı için, eski parolayı bilen biri onu programın dışında yine çözebilir. Yenilemeden sonraki veriyi DEK
+   yenilemesi (TK12) korur.
 
 #### 4.4.7 Dosya deposu ve yedekler
 
@@ -917,28 +1030,68 @@ yoktur**; `AccessLog` dışında satır da silinmez. Alan adları İngilizcedir 
 | `password_changed_at` | zaman | 180 gün kuralı (TK15) |
 | `reset_at`, `reset_by`, `reset_notice_pending` | zaman, → `Account`, evet/hayır | Sıfırlama ve kurtarma bildirimi (tehdit 12) |
 | `last_login_at` | zaman | "Son girişler" kartı |
-| `seal` | HMAC-SHA256, açık | `HMAC(HKDF(DEK, "od-hesap-muhru/v1"), kanonik(id, login_name, role, status, person, membership, term, opened_at, closed_at))` |
+| `wrap_digest` | HMAC-SHA256 metni, boş olabilir | `guvenlik.json`'daki güncel parola kaydının (sarmalın) özeti (§4.4.4 "Sarmalın tazeliği"); bununla bekleyen özet ikisi de boşsa hesap parolayla açılmaz |
+| `wrap_digest_pending` | HMAC-SHA256 metni, boş olabilir | İki aşamalı yazımın bekleyen özeti; olağan hâlde boş |
+| `seal` | HMAC-SHA256, açık | `HMAC(HKDF(DEK, "od-hesap-muhru/v1"), kanonik(id, login_name, role, status, person, membership, term, opened_at, closed_at, wrap_digest, wrap_digest_pending))` |
 
-**Kısıtlar** (sert; sistem bütünlüğü): açık (`KAPALI` olmayan) hesaplar arasında `login_name` tekil · aynı üyeliğe
-bağlı tek açık hesap · `baskan`, `baskan_yardimcisi`, `muhasip`, `sekreter` ve `mudur` için aynı anda tek açık hesap,
-`denetleme_kurulu` için en çok üç · en az bir açık `yonetici` (son yönetici kapatılamaz) · satır silinmez (TK11; altın
-kural 4).
+**Kısıtlar** (sert; sistem bütünlüğü): açık (`KAPALI` olmayan) hesaplar arasında `login_name` tekil · aynı üyeliğe bağlı
+tek açık hesap · `baskan`, `baskan_yardimcisi`, `muhasip`, `sekreter` ve `mudur` için aynı anda tek açık hesap,
+`denetleme_kurulu` için en çok üç · en az bir açık `yonetici` (son yönetici kapatılamaz; oturumdaki hesap kendi hesabını
+kapatamadığı için bugün derin savunmadır) · oturumdaki hesap Kullanıcılar'da kendi hesabını kapatamaz, kendi parolasını
+sıfırlayamaz (kendi parolasını eski parolasıyla değiştirir) ve kendi hesap teslim pusulasını basamaz; başka bir
+`yonetici` öteki `yonetici`nin parolasını sıfırlar; MY değişiminin istisnası F4'te DEK yenilemesiyle gelir · satır
+silinmez (TK11; altın kural 4).
 
 **İki depo kuralı** (`guvenlik.json` ↔ `Account`; denetim GA-11, UY-8):
 
-1. **Giriş** ikisi birden tutarlıysa açılır: sarmal parolayla açılır **ve** `Account` satırı var, durumu `ACIK` ya da
-   `PAROLA_YENILENMELI`, mührü tutar. Biri eksikse giriş reddedilir. Mühür tutmazsa satıra dokunulmaz (yeniden
-   mühürlemek değiştirilmiş rolü meşrulaştırırdı); olay denetim izine düşer, `yonetici` ve DK panosuna kart çıkar.
-2. **Açma:** önce veritabanı (`PAROLA_YENILENMELI`, mühür), sonra `guvenlik.json` sarmalı. Arada kesilirse satır
-   sarmalsız kalır; giriş zaten açılmaz, `yonetici` yeniden geçici parola verir.
+1. **Giriş** ikisi birden tutarlıysa açılır: sarmal kendi kimliğine bağlı olarak parolayla açılır (§4.4.4) **ve**
+   `Account` satırı vardır, mührü tutar, denetim izindeki son içerik MAC'li kaydını tutar ve o kayıttan sonra izde
+   boşluk yoktur (satırın izi; §4.6.2, §4.6.3; kullanıcı kararları 03.11.2026 "Girişte reddet", "Boşluğu engelle"),
+   açılan sarmalın özeti satırın asıl ya da bekleyen özetini tutar (§4.4.4 "Sarmalın tazeliği"), durumu `ACIK` ya da
+   `PAROLA_YENILENMELI`dir. Sıra: parmak izi, satır, mühür, iz anahtarı, satırın izi, özet, durum; eski bir kopyadan
+   geri konmuş satırın özetine ve durumuna güvenilmez. Biri eksikse giriş reddedilir; bağsız sarmal açılmadan
+   reddedilir. Mühür, satırın izi ya da özet tutmazsa satıra dokunulmaz (yeniden mühürlemek değiştirilmiş ya da geri
+   sarılmış satırı, özeti yeniden yazmak eski parola kaydını meşrulaştırırdı); olay denetim izine `BUTUNLUK` satırı
+   olarak düşer (`SISTEM`; alan `seal`, `kayit_mac`, `iz_boslugu` ya da `wrap_digest`), `yonetici` ve DK panosuna kart
+   çıkar, hatalı deneme sayılmaz. Aynı denetim kurtarma anahtarıyla açılışta (özet hariç), oturumdaki parola
+   doğrulamasında (doğrulama, parola değiştirme, kurtarma anahtarının yenilenmesi), hesap işlemlerinde (işlemi yapan ve
+   işlem gören; sıfırlama, kapama ve askıdan çıkarma tutmayan satırı aklamaz) ve parolayla geri yüklemede (ORM'siz; ret
+   günlüğe; §4.4.4) yapılır. Satır, iz anahtarları ve iz satırları tek anlık görüntüden okunur; ilk ret yazıcılarla
+   sıralı bir işlemde yinelenir, eşzamanlı meşru yazım yanlış alarm doğurmaz. Hesap kaydı ya da izi tutmayan hesabın
+   çıkışı yedekten geri yüklemedir (kurtarma anahtarı zarfının üçüncü durumu); tek hesaplı roldeki satır `KAPALI`
+   olmadığı için o role yeni hesap da açılamaz.
+2. **Açma:** yeni sarmal bellekte kurulur; önce veritabanı (`PAROLA_YENILENMELI`, yeni sarmalın özeti, mühür), sonra
+   `guvenlik.json` sarmalı. Arada kesilirse satır sarmalsız kalır; giriş zaten açılmaz, `yonetici` yeniden geçici parola
+   verir.
 3. **Kapama:** önce veritabanı (`KAPALI`, `closed_at`, mühür), sonra `guvenlik.json` ve bütün `guvenlik-arsiv-*`
-   kopyalarından sarmal silinir. Dosya adımı yarıda kalırsa her açılışta koşan "kapalı hesabın sarmalı duruyor"
-   denetimi sarmalı siler (fikirdeş).
+   kopyalarından sarmal silinir. Dosya adımı yarıda kalırsa her açılışta koşan "kapalı hesabın sarmalı duruyor" denetimi
+   sarmalı siler (fikirdeş). Temizlik yalnız mührü ve izi tutan `KAPALI` satırın sarmalını siler: durumu program
+   dışından `KAPALI`'ya çevrilmiş satır meşru bir sarmalı sildiremez.
 4. **Geri yüklemeden sonra** ilk kilit açılışında iki depo karşılaştırılır, fark `yonetici`ye liste olarak gösterilir:
-   veritabanında açık ama sarmalı olmayan hesap `PAROLA_YENILENMELI` olur; sarmalı olup satırı olmayan ya da satırı
-   `KAPALI` olan sarmal `yonetici` onayıyla silinir.
+   veritabanında açık ama sarmalı olmayan hesap `PAROLA_YENILENMELI` olur; satırı olmayan sarmal `yonetici` onayıyla
+   silinir; satırı `KAPALI` olan sarmalı kural 3'ün denetimi her kilit açılışında kendisi siler (listede yalnız o silme
+   tamamlanamadıysa görünür, onayla da silinir). Sarmalı dosyada duran ama özeti satırın asıl ya da bekleyen özetini
+   tutmayan açık hesap ayrı listededir (geri yüklemenin özet onarımının özetini boşalttığı hesap dahil): parolayla
+   açılmaz, çaresi `yonetici`nin parola sıfırlamasıdır, `yonetici`nin kendi hesabıysa kurtarma anahtarıyla açılış ya da
+   başka bir `yonetici`nin sıfırlaması. Mührü ya da izi tutmayan satır öteki listelere girmez ve hiçbir işleme konu
+   olmaz (parola yenilemeye çekilmez, sarmalı silinmez); yalnız "Kaydı ya da denetim izi program dışından değiştirilmiş
+   görünen hesaplar" listesinde görünür.
 
-F1b testleri bu dört hâli ve mühür bozulmasını kapsar.
+**Parola sıfırlama ve askıdan çıkarma** da önce veritabanını, sonra `guvenlik.json`'u yazar (sıfırlamada
+`PAROLA_YENILENMELI`, yenilenme izi ve bekleyen özet, sonra sarmal; askıdan çıkarmada `ASKIDA` satırı, sonra dosyadaki
+hatalı deneme sayacı ve askısı). Bir hesap işleminin dosya adımı yarıda kalırsa (ör. dosyayı başka bir program tutuyor)
+veritabanı adımı geri alınmaz; program neyin yapılıp neyin yapılmadığını ve çıkışı söyler (400): açmada parola kaydı
+yoktur, çıkış parola sıfırlamasıdır; sıfırlamada hesap "Parola yenilenmeli" kalır, geçici parola geçerli değildir, eski
+parola yeni parola isteyerek açmayı sürdürür, sıfırlama yinelenir; askıdan çıkarmada veritabanı askısı kalkmış,
+dosyadaki hatalı deneme kaydı kalmıştır; kapamada sarmalı kural 3'ün denetimi siler. Zaman bilgisi program dışından
+okunamaz biçimde yazılmış satır yine okunur ve kaydı değiştirilmiş sayılır (mühür ya da satırın izi tutmaz); kilit
+ekranı, kartlar ve Kullanıcılar düşmez.
+
+F1b testleri bu dört hâli, mühür bozulmasını, kimliği değiştirilmiş, kopyalanmış ve bağsız sarmalı, eski sarmalın geri
+konmasını, iki aşamalı yazımın kesintilerini, geri yüklemenin özet onarımını, satır geri sarmayı (sıfırlamadan sonra
+kopyalanmış satır, askıdan ve kapanıştan önceki hâl; her denetim noktasında), iz boşluğunu (silme, yeniden numaralama,
+REAL ve BLOB sıra), eşzamanlı meşru yazımda yanlış alarm olmamasını, dosya adımının yarıda kalmasını ve okunamayan zaman
+bilgisini kapsar.
 
 #### 4.6.2 `AuditTrail`
 
@@ -949,7 +1102,7 @@ F1b testleri bu dört hâli ve mühür bozulmasını kapsar.
 | `actor` | `HESAP` · `SISTEM` | `SISTEM`: kullanıcı eylemi olmadan programın yaptığı iş |
 | `account` | → `Account`; `SISTEM`'de boş | |
 | `role` | rol kodu; `SISTEM`'de boş | Yazma anındaki rol |
-| `action` | kapalı küme: `OLUSTUR` · `GUNCELLE` · `DURUM` · `TERS_KAYIT` · `ISARET` · `BASIM` · `KVKK_SILME` · `GIRIS` · `KILIT` · `HESAP` · `PAROLA` · `KURTARMA` · `YEDEK` · `GOC` · `GERI_YUKLEME` · `DEK_YENILEME` · `BUTUNLUK` · `GUN_ISI` | Küme testle sabitlenir; yeni tür göçle eklenir |
+| `action` | kapalı küme: `OLUSTUR` · `GUNCELLE` · `DURUM` · `TERS_KAYIT` · `ISARET` · `BASIM` · `KVKK_SILME` · `GIRIS` · `KILIT` · `HESAP` · `PAROLA` · `KURTARMA` · `YEDEK` · `GOC` · `GERI_YUKLEME` · `DEK_YENILEME` · `BUTUNLUK` · `GUN_ISI` | Küme testle sabitlenir; yeni tür göçle eklenir. `ISARET` bugün yalnız Denetleme Kurulunun geri yükleme "Gördüm"ünün satırıdır (⁵; kaydı denetim izinin kendisi, kimliği geri yüklemenin `seq`'i, değer yok; §4.4.4) |
 | `model`, `object_id` | metin, kimlik | Kaydın kendisi |
 | `term` | → `OabTerm`, boş olabilir | DK görünümü dönemle süzer |
 | `changed_fields` | JSON liste | Değişen **alan adları**; değer yok |
@@ -967,12 +1120,22 @@ gerekçe metni ve veli listesinin (`ParentRoster`) hiçbir alanı ne açık ne �
 değiştiği yalnız alan adıyla görünür.
 
 **İçerik MAC'i.** `record_mac = HMAC(HKDF(İA, "od-kayit-ozeti/v1"), kanonik(model, object_id, alanların çözülmüş
-değerleri))`; yazmadan sonraki hâli özetler. Kayıt bütünlüğü denetimi kaydın bugünkü değerinden MAC'i yeniden hesaplar ve
-o kaydın son iz satırıyla karşılaştırır: program dışından yapılan değişiklik, şifreli sütuna yazılmış düz metin ve bir
-satırdan ötekine taşınmış Fernet token'ı burada görünür (denetim GA-9). **MAC dışı alanlar:** KVKK gereği boşaltılan
-ya da silinen alanlar (§5.4: bağışçı T.C. kimlik no, istekli iletişim bilgisi, katılım ve görev alma engelinin dayanağı, imha edilen
-dosya) ve veli listesi modelinin tamamı MAC'e girmez. Gerekçe: silinen değerin MAC'i kalsaydı anahtara erişen biri
-olasılık uzayı dar değeri (telefon, T.C. kimlik no) deneyerek geri bulabilir, silme anlamsızlaşırdı.
+değerleri))`; yazmadan sonraki hâli özetler. Kayıt bütünlüğü denetimi kaydın bugünkü değerinden MAC'i yeniden hesaplar
+ve o kaydın son iz satırıyla karşılaştırır: program dışından yapılan değişiklik, şifreli sütuna yazılmış düz metin ve
+bir satırdan ötekine taşınmış Fernet token'ı burada görünür (denetim GA-9). **MAC dışı alanlar:** KVKK gereği boşaltılan
+ya da silinen alanlar (§5.4: bağışçı T.C. kimlik no, istekli iletişim bilgisi, katılım ve görev alma engelinin dayanağı,
+imha edilen dosya) ve veli listesi modelinin tamamı MAC'e girmez. Gerekçe: silinen değerin MAC'i kalsaydı anahtara
+erişen biri olasılık uzayı dar değeri (telefon, T.C. kimlik no) deneyerek geri bulabilir, silme anlamsızlaşırdı.
+`Account` satırında bu karşılaştırma girişte de yapılır ve katıdır (satırın izi; kullanıcı kararı 03.11.2026 "Girişte
+reddet"; §4.6.1 kural 1): hesabın iz satırları en yeniden geriye okunur; okunan her satırın sırası SQLite'ta tamsayı
+türünde, satır açık kipte ve kendi zincir MAC'i satırın sırasında yürürlükteki iz anahtarıyla tutmalıdır; ilk içerik
+MAC'li satırın `record_mac`'i satırın bugünkü alanlarından hesaplanana eşit olmalıdır; içerik MAC'li satır hiç yoksa
+satır tutmaz. İz anahtarı tablosunda kimliği ya da geçerli ilk sırası tamsayı olmayan bir satır varsa hiçbir hesap
+doğrulanmaz. `Account`'un içerik MAC'ine giren alan kümesi ya da var olan satırların bu alanlardaki değeri değişirse
+(F4'ün DEK yenilemesi; F1c'nin `person`, `membership`, `term`'ü özete girerse) `KAPALI` dahil bütün hesap satırlarının
+izi aynı işlemde, her satır önce eski küme ve eski anahtarla son kaydına karşı doğrulanarak yeniden kurulur; yeni iz
+satırı yalnız tutanlara yazılır. §4.1'in "veri göçü ilk kilit açılışında" yolu `Account` için kapalıdır; bu adım
+tasarlanmadan alan kümesi değişmez (kullanıcı kararı bekler).
 
 **Yazma kuralları.**
 
@@ -984,9 +1147,13 @@ olasılık uzayı dar değeri (telefon, T.C. kimlik no) deneyerek geri bulabilir
 4. KVKK silmesi `KVKK_SILME` satırıdır: model, alan adları, adet, tetik; değer yok (§5.4).
 5. Satır silinmez, anonimleştirilmez (birlik kaydı; §5.4). Arşiv paketindeki "denetim izi dökümü" aynı sütunlardan
    üretilir, fazlasını taşımaz (§8.5).
-6. **Test (F1b kapısı):** her model için uydurma ad, telefon ve T.C. kimlik no içeren kayıt yazılır, güncellenir,
-   KVKK silmesi uygulanır; sonra `AuditTrail`'in bütün sütunlarında ve arşiv dökümünde bu değerler aranır — sonuç
-   sıfır.
+6. **Test (F1b kapısı):** her model için uydurma ad, telefon ve T.C. kimlik no içeren kayıt yazılır, güncellenir, KVKK
+   silmesi uygulanır; sonra `AuditTrail`'in bütün sütunlarında ve arşiv dökümünde bu değerler aranır — sonuç sıfır.
+7. `seq` zincir başının +1'idir ve yazım işleminin içinde verilir (`AUTOINCREMENT` yok); geri alınan işlem numara
+   yakmaz, program izi boşluksuz ve tekrarsız yazar. Girişteki iz boşluğu denetimi (§4.6.3) buna dayanır. Zincir başının
+   sırası tamsayı değilse (program dışından metin, BLOB ya da REAL yazılmışsa), SQLite'ın en büyük tamsayısına ulaşmışsa
+   ya da `mac`'i metin değilse yazıcı yazmaz; iz yazılamadığı için yazma da yapılamaz (kural 1; ret 409
+   `iz_yazilamadi`), çıkış yedekten geri yüklemedir.
 
 #### 4.6.3 Mühür, çapa ve kilitliyken yazım
 
@@ -1032,7 +1199,17 @@ Mühürleri **kilitli kip anahtarıyla**dır:
 uyarısı (geri yükleme notu bunu açıklıyorsa uyarı yerine `GERI_YUKLEME` satırı); (2) çapadan sonraki kilitli satırlar
 tohumdan yeniden türetilerek doğrulanır ve sayıları dosyadaki `adim`'e eşit mi; (3) son 200 satırın zinciri. Uyarı
 `BUTUNLUK` satırı olarak denetim izine, kart olarak `yonetici` ve DK panosuna düşer; giriş engellenmez (altın kural 3:
-sert engel hesap bütünlüğündedir). **Tam doğrulama** DK modülünde elle ve dönem kapanışında kendiliğinden koşar (§7.8).
+sert engel hesap bütünlüğündedir). Tek istisna hesabın son kaydından sonraki iz boşluğudur (kullanıcı kararı 03.11.2026
+"Boşluğu engelle"): seçilen hesabın son içerik MAC'li kaydının sırası S ise, S'den sonra izden silinmiş satır varsa
+(`seq > S` aralığında satır sayısı, ayrık sıra sayısı ve `MAX(seq) − S` eşit değilse; tekillik birincil anahtara
+bırakılmaz), tabloda tamsayı olmayan sıra varsa ya da dayanak satırı aşağı kaydırılmışsa o hesabın girişi ve öteki
+denetim noktaları (§4.6.1 kural 1) reddedilir. Dayanak, S'den sonraki satırlardan programın giriş olmadan yazdıkları
+(kilitli kip, `BUTUNLUK`) atlanarak zincir başına en yakın olanıdır; zincir MAC'i bugünkü sırasında tutmayıp `seq +
+d`'de (1 ≤ d ≤ 10 000) tutuyorsa kaymıştır. Denetim satırın izinin parçasıdır; S ile zincir başı arasındaki satırların
+MAC'i doğrulanmaz, dayanak denetimi fail-closed değildir. Bedel: izden tek bir satır silinmişse son kaydı ondan eski
+bütün hesaplar reddedilir; çıkış değişiklikten önceki bir yedeğin kurtarma anahtarıyla geri yüklenmesidir. Kuyruk kesme
+ve çapa bulguları girişi engellemez. **Tam doğrulama** DK modülünde elle ve dönem kapanışında kendiliğinden koşar
+(§7.8).
 
 **Kâğıt çapası.** Zincir başı ("Kayıt no: N · Zincir: XXXX-XXXX"; `mac`'in ilk 8 onaltılık hanesi) aylık bildirime,
 deftere geçirilecek aylık baskıya ve devir-teslim tutanağına basılır (E31, E17, E37; §9); kilit açılışındaki "son girişler" kartında da
@@ -1045,7 +1222,17 @@ görünür. Zincir böylece her ay programın dışına, kâğıda iner.
 **Kalan risk** (dürüst sınır). Veritabanı ve `iz-durumu.json` birlikte eski kopyayla değiştirilirse program fark etmez;
 aylık kâğıt çapası yakalar. Parolasını bilen biri DEK'i ve İA'yı dışarıda çözüp zinciri yeniden hesaplayabilir (tehdit
 6); kâğıt çapası yine son katmandır. Kilitli kip tohumu dosyada açıktır: dosyayı okuyan kişi o andan sonraki kilitli
-satırları taklit edebilir; bu satırlar veri değiştirmez.
+satırları taklit edebilir; bu satırlar veri değiştirmez. Çapa ile geri yükleme kartı bağımsız değildir: geri yükleme
+notu MAC'sizdir; önceki zincir başını çapanın ilerisinde gösteren sahte bir not (1)'deki uyarının yerine alanları boş
+bir geri yükleme kartı çıkarır, gerçek bir geri yüklemeden sonra notu silmek ve `iz-durumu.json`'u eski kopyasıyla
+değiştirmek kartı da kaldırır; kalıcı sinyaller kâğıt çapası, günlük yedekler, `db-onceki-*` ve onarımın `SISTEM`
+`HESAP` satırlarıdır. Hesabın son kaydından sonraki iz satırlarıyla yapılan şu değişiklikler girişte görünmez: satırı
+silmeden başka kayda çevirmek ya da içeriğini değiştirmek; iki satırın tamsayı sırayla yer değiştirmesi; hesabın yeni
+satırının son kaydın gerisinde boş bir tamsayıya taşınması; silinen satırın yerine başka bir satırın ya da kopyasının
+konması; dayanağı da bozan (tek hücre yeter), zincir başına sahte bir açık kip satırı ekleyen, on binden büyük ya da
+oturum açıkken yapılan kaydırma. Bu satırların kendi MAC'i bozulur: son 200 satırdaysa kilit açılışının bulgusu,
+dışındaysa yalnız DK'nin tam doğrulaması gösterir. Açık kip satırların zincir başına dek silinip kalan girişsiz
+satırların aşağı kaydırılması kuyruk kesmedir; çapa (varsa) gösterir.
 
 #### 4.6.4 `AccessLog`
 
@@ -1065,7 +1252,14 @@ tutmaz.
 - **Saklama:** 2 yıl (§15 B-9; DOĞRULANMADI). Silme kilit açıkken gün işiyle yapılır; silinen satır sayısı ve en yeni
   tarih denetim izine `KVKK_SILME` satırı olarak düşer.
 - Arşiv paketine girmez: saklama süresi arşivinkinden kısadır (§8.5).
-- Okuyan: `yonetici` ve DK (§4.4.2).
+- Okuyan: `yonetici` ve DK (§4.4.2); rol kapısının ardından servis de yazarın rolünü bu satırın okuyabilen rolleriyle
+  sınar (satırda Y hücresi yoktur, eylem değildir; ret 403 `rol_yetkisiz`). Okuma ekranı tarih aralığıyla
+  (Europe/Istanbul günü, iki uç dahil), türle ve okuyan hesapla süzer; sayfalıdır, en yeni önce gelir. Çıktı satırında
+  satır sayısı görünür; belgenin özeti (`document_sha256`) uçta taşınır, ekranda gösterilmez. Kişisizdir: okuyan hesap
+  rol etiketi (okuma anındaki rol), tanıtıcı ve hesabın açılış ve kapanış günüyle anılır (tanıtıcı yalnız açık hesaplar
+  arasında tekil olduğundan kapanan hesapla aynı tanıtıcıyı alan yeni hesap böyle ayrılır); ad-soyad okunmaz. Günlüğü
+  okumak iz bırakmaz (ne denetim izine ne bu tabloya satır). Türlerin görünen adları sözlüktedir; özel nitelikli
+  türlerde [KVKK md. 6/1](../mevzuat/6698-kvkk.md#madde-6)'in sözü kullanılır.
 
 #### 4.6.5 Özet: kişisel veri, koruma, saklama
 
@@ -2663,8 +2857,13 @@ Kütüphane Defteri'nin evrak kodları bu belgede "KütD-E13" biçiminde önekle
 ### 9.1 İlkeler
 
 1. **Tek içerik, iki çizici** (T2). Belgenin cümleleri, tabloları ve imza blokları bir kez Python'da içerik modeli
-   olarak kurulur; Word (python-docx) ve PDF (WeasyPrint) yalnız düzeni çizer. Listeler ayrıca xlsx (openpyxl) verir;
-   duyurular ayrıca tek dosyalık, dış kaynaksız HTML verir (okul web sitesine elle konur; ağ servisi yok).
+   olarak kurulur; Word (python-docx) ve PDF (WeasyPrint) yalnız düzeni çizer. Modelin blokları başlık, paragraf, tablo,
+   konum cümlesi (§9.2), imza ve dipnottur; dipnot belgenin en sonunda durur (kişisel veri dipnotu, §9.1-5), altlık
+   değildir: iki çizicide gövdenin son paragrafı olarak küçük puntoyla çizilir ve içerik eşdeğerliğine girer.
+   Kısaltmanın açılımı dipnota konmaz: kısaltma ilk geçtiği yerde açık biçimiyle, ardından parantez içinde yazılır
+   ([RYUE md. 16/11](../mevzuat/resmi-yazismalarda-uygulanacak-usul-ve-esaslar-hakkinda-yonetmelik.md#madde-16)).
+   Listeler ayrıca xlsx (openpyxl) verir; duyurular ayrıca tek dosyalık, dış kaynaksız HTML verir (okul web sitesine
+   elle konur; ağ servisi yok).
 2. **Evrak izi.** Her üretim bir `GeneratedDocument` kaydıdır: kod, dönem, kural paketi (kimlik + rev), üreten
    kullanıcı, zaman, **içerik JSON'u** (`content_json`, şifreli), **içerik özeti** (bu JSON'un kanonik biçiminin
    SHA-256'sı; docx zip baytı değil) ve dosya özetleri. Yeniden basım kayıtlı JSON'dan çizilir; bu yüzden kapanmış
@@ -2870,7 +3069,7 @@ mevzuat değildir (kabul ölçütü). Faz sütunu planın §3'üne uyar (R3).
 | E60 | TEFBİS Excel mutabakat raporu (banka ↔ defter ↔ TEFBİS) | [23/5](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-23) | yeni (K6) | xlsx, pdf | F8+ |
 | E61 | Birlik personeli istihdam dosyası ve özlük takip formu | [6/1-d](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-6); [5510 md. 11](../mevzuat/5510-sosyal-sigortalar-ve-genel-saglik-sigortasi-kanunu.md#madde-11), [md. 86](../mevzuat/5510-sosyal-sigortalar-ve-genel-saglik-sigortasi-kanunu.md#madde-86) | GNL-OAB-FR-019 | docx+pdf | F8+ |
 | E62 | Yıllık ücretli izin kayıt belgesi | [4857 md. 53](../mevzuat/4857-is-kanunu.md#madde-53), [md. 56](../mevzuat/4857-is-kanunu.md#madde-56) | yeni | docx+pdf, xlsx | F8+ |
-| E63 | Hesap teslim pusulası | [BSG Yön. md. 9/2](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-9), [md. 10/1-2](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-10) | yeni | pdf | F1b |
+| E63 | Hesap teslim pusulası | [BSG Yön. md. 9/2-a, b, ç, e](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-9), [md. 10/1](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-10); programa kıyasen [md. 7/3-4](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-7), [9/2-c](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-9), [10/2](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-10) | yeni | pdf | F1b |
 | E64 | Genel kurul yeter sayı tespit tutanağı (sağlandı / sağlanamadı) | [9/2](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-9), [9/5, 9/6](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-9) | GNL-OAB-FR-003 A, D; OYS `yeter_sayi_yok.html` | docx+pdf | F2 |
 | E65 | Yedek üyenin asıl üyeliğe çağrı yazısı | [13/6](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-13), [12/3](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-12); DK yedeğinde [14/6](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-14) | yeni (RYUE biçimi) | docx+pdf | F3 |
 | E66 | Bankaya imza yetkisi bildirim yazısı | [18/2](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-18), [16/1](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-16) | GNL-OAB-FR-006 C (bildirim alanı); yeni (RYUE biçimi) | docx+pdf | F3 |
@@ -2992,7 +3191,7 @@ imzalar, oluşturmaz — istisna md. 13/8 çağrısında E05 ve aylık bildirim 
 | E60 | `LedgerEntry`, `TefbisTypeMapping`, `BankTransaction`, TEFBİS Excel içe aktarımı (§8) | yonetici, muhasip | Muhasip + yönetici (iç) | TFB | Fark satırları türüne göre: TEFBİS'te yok · defterde yok · tutar farkı |
 | E61 | personel modeli (sürüm 2), `LedgerEntry` (ücret, prim) | muhasip, yonetici (özlük bölümü; ücret ve prim satırları muhasibin kaydından) | Muhasip + Birlik Başkanı | — | Yalnız "doğrudan işveren" okulda açılır; izin ve ihbar süreleri kural paketinden; müdür bloğu yok (MB-15) |
 | E62 | personel modeli (sürüm 2) | muhasip, yonetici | İşveren adına Birlik Başkanı + işçi | — | Hak edilen, kullanılan, kalan; bölüm ≥ 10 gün; sözleşmeyle verilen fazla izin uyarısız |
-| E63 | `Account` (giriş adı, rol, açılış tarihi; §4.6), rol-izin matrisi (§4.4.2), parola politikası (TK15), boşta kilit süresi (TK14) | yonetici | Teslim eden: yönetici; Teslim alan: hesap sahibi (ad, imza, tarih) | — | Tanıtıcı (giriş adı), rol ve "bu programda sizin işiniz" özeti matristen; ilk giriş adımları (geçici parolayla giriş → parolayı değiştirme); parola kuralları: en az 8 karakter, küçük-büyük harf, rakam ve simgeli karışık yapı, en geç altı ayda bir değişim (BSG 9/2-a, b, ç); kilitleme: boşta kalınca oturum kilitlenir, "Kilitle" düğmesi, yanlış denemede artan bekleme (BSG 10/2; kalıcı kilit yok); **parola alanı yok** (ne değer ne boş satır); "İlk parolanız ayrı kapalı zarftadır; parolanızı kimseyle paylaşmayın, görünür yere yazmayın" cümlesi (BSG 9/2-e, 10/1; kapalı zarf okul uygulaması); kişisel veri dipnotu; dosya saklanmaz |
+| E63 | `Account` (giriş adı, rol, açılış tarihi; §4.6), rol-izin matrisi (§4.4.2; rolün bugün yazabildiği satırlar), parola politikası (TK15), boşta kilit süresi (TK14), okul kartının anteti | yonetici | Teslim eden: program yöneticisi; Teslim alan: hesap sahibi (ikisi de elle: ad-soyad, imza, tarih) | — | Tanıtıcı (giriş adı), rol ve "bu programda sizin işiniz" özeti matristen: rolün bugün yazabildiği satırlar, her biri yalnız bugün programda yapılabilen işin adıyla (işi yapan ekranın, kartın ya da düğmenin adı; sonraki fazların işleri ekranları geldikçe eklenir); ilk giriş adımları (geçici parolayla giriş → parolayı değiştirme); parola kuralları: en az 8 karakter, küçük-büyük harf, rakam ve simgeli karışık yapı, en geç altı ayda bir değişim (BSG 9/2-a, b, ç; yönergenin adı ilk atıfta açık yazılır, kısaltma parantezdedir), başta ve sonda boşluk yok ve 180 günde yeni parola (programın kuralları); kilitleme: boşta kalınca oturum kilitlenir (BSG 10/2; programa kıyasen), "Kilitle" düğmesi (BSG 7/4; programa kıyasen), yanlış denemede artan bekleme (programın kuralı), organ ve müdür hesabında 10. yanlış denemede askı, askıyı program yöneticisi kaldırır (BSG 7/3, 9/2-c; programa kıyasen), program yöneticisinin pusulasında "Program yöneticisi hesabı yanlış denemede askıya alınmaz."; kalıcı kilit yok; **parola alanı yok** (ne değer ne boş satır); ad-soyad basılmaz; "İlk parolanız ayrı kapalı zarftadır; parolanızı kimseyle paylaşmayın, görünür yere yazmayın" cümlesi (BSG 9/2-e, 10/1; kapalı zarf okul uygulaması); kişisel veri dipnotu (tek dipnot); dosya saklanmaz, indirme adı `Hesap-Teslim-Pusulası_<rol etiketi>_gg.aa.yyyy.pdf` (tanıtıcı ve ad yok); program yöneticisinin pusulası en çok iki, öteki rollerinki bir sayfa (kullanıcı kararı 04.11.2026) |
 | E64 | `GeneralAssembly` (dondurulmuş yeter sayı, mevcut anlık değeri, katılan sayısı ve türe göre dağılımı, gözlemci sayısı, toplantı: birinci/ikinci) | sekreter, yonetici | Sağlandıysa Divan Başkanı + Kâtip; sağlanamadıysa Birlik Başkanı + Sekreter + "Görüldü — Okul Müdürü" (KE-10) | — | Kişisizdir, yalnız sayılar (E08'den ayrıldı, KE-21; R9 kapsamı dışında); 99 öğrenci → 32, 100 → 64; ikinci toplantıda "çoğunluk aranmaz" satırı; gözlemciler sayıya girmez (9/5); kapanmış dönemde içerik özeti aynı |
 | E65 | `OrganMembership` (yedek, oy sırası, `promoted_on`, `promoted_by_decision`), `BoardDecision` (`YEDEK_CAGIRMA`; yalnız YK yedeğinde) | YK yedeğinde sekreter (YK kararıyla, 13/6); DK yedeğinde yonetici (14/6; üyelik kaydıdır, YK kararı gerekmez — M2) | Birlik Başkanı + Sekreter | — | Çağrılan oy sırasındaki ilk yedek (sıra dışıysa gerekçe satırı); boşalan koltuk ve düşme nedeni (kişisel ayrıntı yok); YK yedeğinde görev bölümü için 7 günlük süre ve karar no yazılı, DK yedeğinde karar satırı yok, neden "dört aydan uzun görevlendirme" (14/6); kişisel veri dipnotu |
 | E66 | `BankAccount` (banka, şube, IBAN), `OrganMembership` (başkan, başkan yardımcısı, muhasip), `BoardDecision` (`GOREV_BOLUMU`) | sekreter | Birlik Başkanı + Sekreter | — | Üst yazı; ek E01 karar örneği; müşterek yetkililer başkan + muhasip (başkan yokken başkan yardımcısı); değişiklikte eski yetkililerin yetkisinin kaldırılması satırı; bankanın kendi formu ve imza sirküleri program dışı (§9.7); gönderim tarihi E01'deki alana döner |
@@ -3032,7 +3231,7 @@ göre yeniden yazılır (§12.B); zarf imha tutanağı yenidir (D3):
 
 | Belge | Dayanak | Faz · üreten · imza | İçerik |
 |---|---|---|---|
-| Kurtarma anahtarı belgesi (`recovery_key_document.py`) | D3; §4.4.4 adım 6 | F1b · yonetici · — | Anahtarın no'su ve üretim tarihi; saklama yeri okul müdürlüğünde mühürlü zarf, veliye geçmez; "parola paylaşılmaz, herkes kendi hesabıyla" ([BSG Yön. md. 7/2](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-7), [9/2-e](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-9)); dönemlik yenileme ve eski zarfın imha tutanağıyla yok edileceği |
+| Kurtarma anahtarı belgesi (`recovery_key_document.py`) | D3; §4.4.4 adım 6 | F1b · yonetici · — | Anahtarın no'su ve üretim tarihi; anahtarın üç kullanımı (program yöneticisinin unutulan parolası, kayıtların yeni bilgisayara taşınması ve zarfın üçüncü durumu: bu bilgisayarın güvenlik dosyası ya da kayıtları kaybolduğunda, bozulduğunda ya da program dışından değiştirildiğinde, çaresi yedekten geri yükleme ya da kurtarma anahtarıyla açılış; kullanıcı kararları 02.11.2026 ve 03.11.2026) ve zarfın yalnız bu üç durumda açıldığı; üçüncü durumun sözü belgede, anahtar panelinde, kilit ekranında ve sözlükte birebirdir (arka yüzde `recovery_key_document.UCUNCU_DURUM`, `UCUNCU_DURUMUN_CARESI`; birebirliği `test_kurtarma_anahtari_pdf.test_ucuncu_durum_metni_her_yerde_birebir` sınar); saklama yeri okul müdürlüğünde mühürlü zarf, veliye geçmez; "parola paylaşılmaz, herkes kendi hesabıyla" ([BSG Yön. md. 7/2](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-7), [9/2-e](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-9)); dönemlik yenileme ve eski zarfın imha tutanağıyla yok edileceği |
 | Kurtarma anahtarı zarfı imha tutanağı | D3; §4.4.4 DEK yenilemesinin 7. adımı | F4 · yonetici · Okul Müdürü + Müdür Yardımcısı (program yöneticisi) | Eski anahtarın no ve tarihi; yeni anahtarla alınan tam yedeğin açılıp doğrulandığı tarih; zarfın mührü sağlam bulunarak yok edildiği; anahtarın kendisi basılmaz; yenilemeden önceki yedeklerin artık açılmayacağı bilgi satırı (§4.4.6) |
 | Yedek raporu | §4.4.7 | F1b · yonetici · — | İçeriği §4.4.7'deki yedek türlerine göre F1b'de yazılır |
 
@@ -3390,7 +3589,7 @@ sınadığı için sınıfları değişmedi: servis kaydında bedel alanı, serv
 | `ev::test_servis_evraki_soz_dagarcigi` | E48-E58 ve E73-E79'da `ihale`, `teklif`, `eksiltme` kökü yok (TR katlamalı); tek istisna "ihaleye fesat karıştırma" (KE-9) | F6 |
 | `ev::test_duyurularda_kisi_adi_yok` | E06, E29, E30 çıktısında hiçbir `OabPerson` ve `ParentRoster` adı yok | F2, F4 |
 | `ev::test_e56_yalniz_unvan_plaka_guzergah` | E56'da taşımacının ad/unvanı, plaka ve güzergâh var; telefon, adres, 11 haneli kimlik deseni, şoför ve veli adı yok; imza "Taşımacıyı Tespit Komisyonu"; ilan süresi bitince kaldırma hatırlatması (D5, KM-13) | F6 |
-| `ev::test_tckn_hicbir_belgede_yok[k9_kapali, k9_acik]` | K9 açık ya da kapalı, hiçbir belgede ve dışa aktarımda 11 haneli kimlik deseni yok; K9 açıkken E20'de yalnız "kimlik no kayıtlı: evet/hayır", E18'de "kimlik no kaynağı" sütunu (KM-14) | her faz |
+| `ev::test_tckn_hicbir_belgede_yok[<belge>]` (F1b kolları: E63 ve kurtarma anahtarı belgesi; K9 kolları `k9_kapali`, `k9_acik` bağış kaydıyla F3'te eklenir) | K9 açık ya da kapalı, hiçbir belgede ve dışa aktarımda 11 haneli kimlik deseni yok; K9 açıkken E20'de yalnız "kimlik no kayıtlı: evet/hayır", E18'de "kimlik no kaynağı" sütunu (KM-14) | her faz |
 | `ev::test_kisa_aydinlatma_paragrafi[E07, E21, E46, E48, E50, E58]` | Kişisel verinin toplandığı belgede kısa aydınlatma paragrafı ve tam metnin (E04) yeri var (KM-6) | belgenin fazı |
 | `ev::test_e04_dort_alt_metin_veri_sorumlusu_bossa_basilmaz` | E04'te dört alt metin ve her birinde KVKK 10/1 (a)-(d) başlıkları; `data_controller_text` boşken basım reddedilir, kalem "tamamlanacaklar"da (KM-6, KM-7, EK-12) | F2 |
 | `ev::test_kagit_capasi[E17, E31, E37]` | "Kayıt no: N · Zincir: XXXX-XXXX" satırı basılır; değer basım anındaki zincir başıyla aynı (§4.6.3; GA-9) | F3, F4 |
@@ -3430,6 +3629,7 @@ iskeletin test dosyalarıdır (§12.B):
 |---|---|---|---|
 | `test_yonetici_olmayan_hesapla_geri_yukle_reddedilir[uygulama_ici, konsol]` | `--geri-yukle` ve uygulama içi geri yükleme yalnız `yonetici` (§4.4.4) | GA-3 | F1b |
 | `test_iki_depo_dort_hali[giris, acma_yarida, kapama_yarida, geri_yukleme_sonrasi]` · `test_hesap_muhru_bozulunca_giris_reddedilir_satir_degismez` | `guvenlik.json` ↔ `Account` tutarlılığı ve mühür (§4.6.1) | GA-10, GA-11 | F1b |
+| `test_sarmal_kimligi_degistirilirse_giris_reddedilir[takas, one_alinir]` · `test_eski_sarmal_eski_parolayla_acilmaz[acik, parola_yenilenmeli]` · `test_satir_geri_sarma_girisi_acmaz[sifirlama_sonrasi, rol_dusurme, kapanis]` · `test_iz_boslugu_girisi_acmaz[silme, yeniden_numaralama, real_tasima, blob_sira]` | Parola kaydı hesap kimliğine ve mühürlü satıra bağlıdır; satır denetim izindeki son kaydını tutar, o kayıttan sonra izde boşluk yoktur (§4.4.4, §4.6.1, §4.6.3) | kullanıcı kararları 02.11 ve 03.11.2026 | F1b |
 | `test_denetim_izinde_uydurma_kisisel_veri_yok` · `test_arsiv_dokumunde_uydurma_kisisel_veri_yok` | Uydurma veli adı, telefon ve T.C. kimlik no iz satırlarında ve `02-defterler/` dökümünde geçmez (§4.6.2) | KM-2 | F1b, F4 |
 | `test_kilitliyken_gun_isi_is_verisi_yazmaz` · `test_sema_gocu_olayi_kilitli_kipte_muhurlu` · `test_uzun_is_surerken_bosta_kilit_yok` | Kilitliyken yazım kümesi ve uzun iş sayacı (§4.6.3, §4.4.3) | UY-1 | F1b |
 | `test_capa_ve_kuyruk_kesme_uyarisi` · `test_from_db_value_kati_kip` | Çapa, kuyruk kesmenin görünmesi, çözülemeyen şifreli alanın `CorruptField` olması (§4.6.3; D48) | GA-9 | F1b |
@@ -3439,7 +3639,7 @@ iskeletin test dosyalarıdır (§12.B):
 | `test_od_update_repository_paketli_yapida_okunmaz` | Güncelleme deposu ortam değişkeni `sys.frozen` iken okunmaz (D51) | GA-14 | F1a-2 |
 | `test_linux_dizin_ve_dosya_kipleri` | Dizinler 0700, gizli dosyalar 0600, `umask 077` (D52) | GA-20 | F1a-2 |
 | `kilit.test.ts` (Vitest): kilitlenmede ve kilit açılışında sorgu önbelleği ve modül belleği sıfırlanır | Önceki hesabın verisi sonrakine kalmaz (§4.4.3; D53) | GA-23 | F1b |
-| `test_rol_matrisi_hucre_anlik_goruntusu` · `test_rol_matrisi_dipnot_servis_testi[1-10]` | Matristeki her (rol, satır, Y) hücresinin ucu ve her dipnotun servis kapısı (§4.4.2) | GA-18 | F1b |
+| `test_rol_matrisi_hucre_anlik_goruntusu` · `test_bekleyen_hucreler_anlik_goruntusu` · `test_rol_matrisi_dipnot_servis_testi[1-10]` · `test_dipnot_bes_gercek_serviste_yalniz_denetleme_kurulu` · `test_bekleyen_dipnotlar_anlik_goruntusu` · `test_eylem_baglama_anlik_goruntusu` · `test_f1b_fazli_bekleyen_kalmadi` | Matristeki her (rol, satır, Y) hücresi ya bir yazma ucuyla karşılanır ya da fazıyla bekleyen listesinde durur; her dipnotun kapısı sahte kayıtla, gerçek servisi olan dipnot (F1b'de ⁵) gerçek serviste de sınanır; bekleyen listeleri yalnız küçülür ve F1b fazlı kalem kalmaz (§4.4.2) | GA-18 | F1b |
 | `test_rotasyon_onek_kumesi` · `test_her_onekte_15_gun_silme[gunluk, pre_parola, pre_anonim, pre_kapanis, pre_dek_yenileme, db_onceki]` · `test_kvkk_tetiginden_eski_pre_migrate_silinir` | Rotasyon bütün yerel önekleri kapsar; `pre-migrate` son 5'le tutulur, KVKK tetiğinden eskisi silinir (§4.4.7; D49) | GA-5 | F1b, F4 |
 | `test_tam_yedekte_ekli_kayit_geri_yuklemeden_sonra_acilir` | Dışarı çıkan tam yedek ekleri ve üretilmiş evrakı taşır (§4.4.7; D49) | GA-1 | F1b |
 | `--evrak-duman` paketli ikilide `Document()` | Paketli ikilide python-docx belge açar (§11) | UY-17 | F1a |
@@ -3692,7 +3892,10 @@ dört bağı F1a-1'de kesmek iki işi karıştırırdı.
 *Kullanıcıya görünen metni kütüphaneye özgü olan ya da davranışı OAB'de değişen dosya AYNEN sınıfına girmez; kalıntı
 taraması bu metinleri yakalamaz (denetim GA-19). Bu yüzden `lock_middleware.py`, `recovery_key_document.py`,
 `kurtarma_anahtari.html`, `shared/pdf.py`, `shared/crypto.py`, `desktop/paths.py` ve `encrypted_backup.py` UYARLA'ya
-alındı.*
+alındı. F1b'de değişen `ui/DataTable.tsx` (metin kimlikli satır, görünmez başlık), `ui/TextField.tsx`,
+`ui/ErrorBand.tsx`, `modules/takvim/KapaliGunlerPaneli.tsx` (salt okur kip), `desktop/integrity.py` (ipucu metni) ve
+`backend/conftest.py` (varsayılan hesabın iz satırı) de UYARLA sınıfındadır; `views_calendar.py`, `views_yedek.py` ve
+`modules/guncelleme/UpdateBanner.tsx`'te yalnız yorum değişti (F1b ekleri).*
 
 | Dizin | Dosyalar |
 |---|---|
@@ -3723,7 +3926,7 @@ alındı.*
 | `desktop/clean_shutdown.py` | İleti "son oturumdaki kayıtları kontrol edin"; `OD_ONCEKI_OTURUM`; işaret yalnız uzun iş sayacı sıfırken yazılır (§4.2) | F1a-1, F1b |
 | `desktop/errors.py` | Başlıklar "OAB Defteri …"; 11 ayrılmış; 12 `--evrak-duman`; 9 "geri yükleme başarısız ya da yetkisiz" | F1a-2, F1a-3, F1b |
 | `desktop/gunluk.py` | Uyku engelleme, IP işi, saatlik katalog denetimi sökülür; bakım kapısı `shared/bakim.py`'den, `ImportError` düşüşü kalkar (§13 D3); DEK isteyen iş kilitliyken "ertelendi" döner ve iz satırı kilitli kip anahtarıyla düşer (§4.6.3) | F1a-2, F1b |
-| `desktop/lock.py`, `restore.py` | Mutex adları; "tepside" iletileri; `restore.py` `--hesap` + parola ya da kurtarma anahtarı; **rol denetimi**: parola yolunda güncel veritabanı salt okunur `sqlite3` ile (ORM yok), okunamazsa yedeğin görüntüsü bellekte okunur, `yonetici` doğrulanmazsa kenara alma yapılmadan çıkış 9; `geri-yukleme-notu.json` yazılır (§4.4.4) | F1a-2, F1b |
+| `desktop/lock.py`, `restore.py` | Mutex adları; "tepside" iletileri; `restore.py` `--hesap` + parola ya da kurtarma anahtarı; **rol denetimi** geri yükleme çekirdeğindedir (`backup_restore` → `geri_yukleme_yetkisi`; uygulama içi yol ve `restore_backup` de aynı çekirdekten geçer): parola yolunda güncel veritabanı salt okunur `sqlite3` ile (ORM yok) okunur, okunamazsa yedeğin görüntüsü bellekte okunur (Pardus 21'de 0700 izinli geçici dizinde, hemen silinir), `yonetici` doğrulanmazsa kenara alma yapılmadan çıkış 9; `geri-yukleme-notu.json` yazılır (§4.4.4) | F1a-2, F1b |
 | `desktop/main.py` | Tepsi, katalog, `--tepside`, uyku, güvenlik duvarı yardımcı kipi, `encrypt_legacy_backups`, `--autotest` katalog adımı sökülür; Linux'ta `umask 077` ve `qt_kurulum.hazirla()`; `--evrak-duman`; kapanışta kilitleme ve çapa (§4.2) | F1a-2, F1a-3, F1b |
 | `desktop/window.py` | T6 (§4.5): `tray_available`, `ask_quit_in_spa`, `kd:cik-iste`, gizleme sökülür; `show()` ve `request_quit()` kalır; `closing` işleyicisi yalnız uzun yazma işi sürerken kapanışı bir kez erteler (§4.2) | F1a-2, F1b |
 | `desktop/tests/` | `test_main`, `test_window_controller`, `test_window_f5`, `test_restore`, `test_gunluk`, `test_acilista_dis_istek`, `test_geri_yukleme_provasi` + `prova_betigi.py`, `alt_surec.py`, `conftest.py`. **Taşınacak parçalar:** `test_katalog_server.py`'deki "yalnız 127.0.0.1" testleri → `test_server.py`; `test_main_f5.py`'deki WAL checkpoint ve kapanış sırası testleri → `test_main.py`; `test_tray.py`'deki Qt kurulum testleri → `test_qt_kurulum.py`. **Yeni testler:** Linux dizin ve dosya kipleri; iş sürerken çarpı; yönetici olmayan hesapla `--geri-yukle` reddi | F1a-2, F1b |
@@ -3746,7 +3949,7 @@ alındı.*
 | `apps/okul/kip.py`, `kip_izinleri.py`, `kip_middleware.py`, `views_mode.py` | → `oturum.py` (`OturumDurumu`), `rol_izinleri.py` (uç + yöntem + parametre; parametre denetçileri aynen), `rol_middleware.py`, `views_oturum.py`; görevli/yönetici kipi → oturum + rol (§4.4); servis katmanı yetki kapısı yeni (§4.4.2). Yeniden adlandırma bilinçli: "kip" kavramı kalkar | F1b |
 | `apps/okul/lock_middleware.py` | 423 iletisi: "Kayıtlar kilitli. Hesabınızı seçip parolanızla açın (parolanızı unuttuysanız program yöneticisine başvurun)." — ailedeki "yönetici parolası" dili OAB'de her kullanıcının kendi hesabıyla açtığı düzene uymaz (§13 D50) | F1b |
 | `apps/okul/services/recovery_key_document.py`, `templates/documents/kurtarma_anahtari.html` | Metin OAB'ye göre yeniden yazılır (§13 D50): amacı; anahtarın no'su ve üretim tarihi; saklama yeri **okul müdürlüğünde mühürlü zarf**, veliye geçmez, devir tutanağına yalnız zarfın durumu girer (D3); "parola paylaşılmaz, herkes kendi hesabıyla" (BSG md. 7/2, 9/2-e); dönemlik yenileme ve eski zarfın imha tutanağıyla yok edilmesi; PDF dosyası bilgisayarda bırakılmaz. Ailedeki "yönetici parolası en az iki kişide bulunsun", "öğrenci … okul numaraları", "kütüphane masası" ifadeleri çıkar. Aynı modül F4'te **kurtarma anahtarı zarfı imha tutanağını** da üretir (katalog dışı program belgesi, §9.7; DEK yenilemesinin 7. adımı, §4.4.4) | F1b, F4 |
-| `apps/okul/permissions.py`, `views_app.py`, `restart_gate.py` | `RequiresAdminPassword` → rol izinleri; `app/quit/`'te görevli parola dalı sökülür; "tepsiden Çık" iletisi | F1a-2, F1b |
+| `apps/okul/permissions.py`, `views_app.py`, `restart_gate.py` | `RequiresAdminPassword` kurulum durumunun 409 kapısı olarak kalır, rol işi `RolMiddleware`'e geçer (§4.4.2); `app/quit/`'te görevli parola dalı sökülür; "tepsiden Çık" iletisi | F1a-2, F1b |
 | `apps/okul/masaustu_kanca.py` | `KatalogKontrolu` protokolü ve katalog bakım çağrıları sökülür; çıkış kancası ve gün işleri kaydı kalır | F1a-2 |
 | `apps/okul/services/app_password.py` | Şema 2: `enable` → ilk yönetici hesabı ve ilk İA; `unlock(hesap, parola)` + hesap mührü ve iki depo kuralı (§4.6.1); hesap aç, kapat (TK11), sıfırla, askı (hesap başına hatalı deneme sayacı, §15 M-12); kurtarma anahtarıyla açılış yalnız `yonetici` hesabına (§4.4.3); `start_handover` yerine hesap geçişi; DEK yenileme `gecis: DEK_YENILEME` (TK12, F4). Dosya adı korunur: "parolayla DEK açma" kavramı sürer | F1b, F4 |
 | `apps/okul/services/backup_restore.py`, `live_restore.py` | Bakım kapısı `shared/bakim.py`'den; aday durumlar şema 2 ve TK10 (anahtar no'su gösterilir); hesap seçimi; tam yedekte dosya deposunun manifestoyla doğrulanıp takası; `geri-yukleme-notu.json` | F1a-2, F1b |
@@ -3754,7 +3957,7 @@ alındı.*
 | `apps/okul/services/imports.py`, `persons.py`, `sections.py`, `templates.py`, `setup.py` | Öğrenci mutabakatı ve şablonu çıkar; kayıt defteri kancaları OAB modelleriyle (F1c); sihirbaz adımları plan §2.2, yol haritası maddeleri | F1a-1, F1b, F1c |
 | `apps/okul/services/updates.py` | Varsayılan depo ve `INSTALLER_PATTERN`; `OD_UPDATE_REPOSITORY` paketli yapıda (`sys.frozen`) okunmaz, test (§13 D51); kurucu çalıştırılmadan hemen önce SHA-256 yeniden doğrulanır (ailede bu adım var mı doğrulanmadı) | F1a-1, F1a-2 |
 | `apps/okul/views_pool.py`, `selectors.py`, `serializers.py`, `views.py`, `urls.py` | Öğrenci dalları sökülür; personel ayrılış havuzu kalır | F1b |
-| `apps/okul/management/commands/` | `app_password`, `restore_backup`: `--parola` → `--hesap` + parola; rol denetimi `restore.py` ile aynı | F1b |
+| `apps/okul/management/commands/` | `restore_backup`: `--hesap` + parola (gizli istem ya da `--password`) ya da `--recovery-key`; var olan bir hesabın parolasını alan tek komuttur, rol denetimi `restore.py` ile aynı çekirdektedir (§4.4.4). `app_password`'a var olan hesabın parolası eklenmez: `status` kişisizdir, `enable` yalnız ilk kurulumda çalışır, `recover --hesap` yalnız var olan, kapanmamış program yöneticisini kabul eder (yetkiyi kurtarma anahtarı verir) | F1b |
 | `apps/okul/tests/` | `test_cikis_ucu`, `test_dis_istek_kapilari` (izinli listeden katalog ve künye satırları çıkar), `test_imports`, `test_kip_koruma` → `test_rol_koruma` (+ hücre başına anlık görüntü testi), `test_kisi_yazan_uclar` | F1a-2, F1b |
 | `templates/documents/aydinlatma_metni.html` | **Silindi** (F1b 0. adım): hiçbir yerden çağrılmıyordu, içeriği ailenindi. OAB'nin aydınlatma metni E04'tür (§3.4): metni F1b 5. adımda içe aktarma ekranına, belgesi F2'de (plan §2.2) | F1b |
 | `frontend/` yapılandırma, `public/app-logo.png` | `package.json` adı; `tailwind.config.js` `--od-*`; `vitest.config.ts` eşiği (82/82/78/55) aynen; logo | F1a-1 |
@@ -3789,6 +3992,10 @@ alındı.*
 | `backend/shared/dosya_sifreleme.py` (+ testleri) | Dosya deposu: dosya başına anahtar, `ODDOSYA\x01` kabı, sarmal (`od-dosya-sarmal/v1`), bellekten akan açma, yetim taraması (§4.4.4, §4.4.7; TK22) | F1b |
 | `Account`, `AuditTrail`, `AuditKey`, `AccessLog` modelleri ve servisleri | T1, TK16 (§4.6): hesap mührü ve iki depo kuralı, denetim izi yazıcısı (aynı işlem, izinli alan listesi, içerik MAC'i), İA, çapa ve kilitli kip (`iz-durumu.json`), kendiliğinden doğrulama, erişim günlüğü ve 2 yıllık silmesi | F1b |
 | `frontend/src/modules/kullanicilar` | Hesap aç, kapat, askıdan çıkar, parola sıfırla; hesap teslim pusulası (E63); hesap önerileri ve hesap geçişi (F4); son girişler | F1b, F4 |
+| `frontend/src/modules/erisim` | Erişim Günlüğü ekranı (§4.6.4): tarih, tür ve hesap süzgeçli, sayfalı, kişisiz liste; okuma iz bırakmaz | F1b |
+| `frontend/src/modules/oturum/yetki.tsx`, `RolKapisi.tsx` | Ön yüz rol süzmesi (§4.4.2): oturum özetindeki yeteneklerden gezinme, rota kapısı ve salt okur notu | F1b |
+| `backend/apps/okul/services/satir_izi.py`, `ozet_onarimi.py`, `geri_yukleme_yetkisi.py`; `backend/shared/sqlite_adres.py` | Satırın izi ve iz boşluğu (ORM'siz tek karar işlevi), geri yüklemenin özet onarımı, geri yüklemenin parola yolunun rol denetimi, salt okunur SQLite adresi (§4.4.4, §4.6.1, §4.6.3) | F1b |
+| `backend/apps/okul/views_hesaplar.py`, `views_erisim_gunlugu.py`, `services/hesap_teslim_pusulasi.py` | Kullanıcılar uçları, erişim günlüğü okuma ucu, E63 | F1b |
 | `frontend/src/modules/` F1c ekranları: `birlik-donemi`, `organlar`, `temsilciler`, `gecis-kurulumu`, `pano` | Birlik dönemi (hazırlık ve açılış), organ üyelikleri ve görev bölümü, temsilciler çizelgesi, geçiş kurulumunun organ adımları (§7.9), pano kabuğu (§7.10); aile kitiyle yeni yazılır, OYS ön yüzü alınmaz (§12.A) | F1c |
 
 **Kalıp olarak sonra bakılacaklar** (kopyalanmaz): `apps/kutuphane/services/saklama.py` + `pre-anonim` (saklama ve
@@ -3904,15 +4111,19 @@ F3'tedir; panonun kabuğu F1c'de, kalemleri her fazda gelir (§7.10).
 modelleriyle gelir: erişim günlüğünün 2 yıllık silmesi F1b'de, dönem kapanışı silmeleri F4'te; kiracı, çalışan ve şoför
 belge taramalarının süreli silmesi (§15 B-5) F5 ve F6'da kalemleşir.
 
-**Her kapıda üç ortak madde** (denetim SU-5, SU-13, SU-15): (1) **kılavuzun bu faza ait bölümü yazıldı**; (2) fazın
-yeni ekranları **1366×768'de yatay kaydırmasız** açılır (elle denetim; F1a'da `NOTLAR.md` listesine girer); (3) fazın
-**pano kalemleri** (süre sayaçları, "tamamlanacaklar", iş kuyrukları; §7.10 "Fazlar") sınanır.
+**Her kapıda ortak maddeler** (denetim SU-5, SU-13, SU-15; (4) kullanıcı kararı 02.11.2026): (1) **kılavuzun bu faza ait
+bölümü yazıldı**; (2) fazın yeni ekranları **1366×768'de yatay kaydırmasız** açılır (elle denetim; F1a'da `NOTLAR.md`
+listesine girer); (3) fazın **pano kalemleri** (süre sayaçları, "tamamlanacaklar", iş kuyrukları; §7.10 "Fazlar")
+sınanır; (4) F1b'den başlayarak **rol matrisinin bu faza ait hücreleri ve dipnotları bağlandı**; uygulama servise
+bağlanmamış eylemleri de bu maddeye katar: `rol_izinleri.py`'nin bekleyen listelerinde (`BEKLEYEN_HUCRELER`,
+`BEKLEYEN_DIPNOTLAR`, `BAGLANMAMIS_EYLEMLER`) fazın adını taşıyan kalem kalmaz; listeler yalnız küçülür (§4.4.2 "Testler
+(F1b)").
 
 | Faz | İçerik | Kod kapısı |
 |---|---|---|
 | **F0** | Mevzuat korpusu, envanterler, kullanıcı kararları, bu belge, bağımsız tasarım denetimi (F0-9) ve bulguların işlenişi | Plan §1.6 — denetim bulguları işlendi ya da gerekçeyle reddedildi, kullanıcı "F0 tamam" dedi |
 | **F1a** | Aile iskeleti: ham kopya + kimlik çevirisi, arındırma (sıra §13), evrak hattının ilk kanıtı (T2), Debian 13 provası | Windows'ta exe açılır, çarpıyla kapanır · `.deb` Debian 11/12/13'te kurulur ve açılır · `--pdf-duman`, `--evrak-duman` (paketli ikilide `Document()` dâhil), `--bagimlilik-duman` geçer · kimlik kalıntısı sıfır · sızıntı denetimleri ve `gates.sh` yeşil · `url_fetcher` ağ tuzağı, `ALLOWED_HOSTS` koşulu, `OD_UPDATE_REPOSITORY`'nin paketli yapıda okunmaması, Linux dizin ve dosya kipleri (§10.6) · ana ekranlar 1366×768 |
-| **F1b** | Güvenlik çekirdeği (kişisel hesaplar, T1; §4.4, §4.6), kurulum sihirbazının **ilk üç adımı** (yönetici hesabı ve kurtarma anahtarı — anahtar basılıp müdürlükte kapalı zarfta saklanır, D3; okul kartı; ders yılı, dönemler, kapalı günler), kullanıcılar ve roller, hesap teslim pusulası (E63), e-Okul personel ve veli aktarımı | Aile güvenlik testleri adıyla (§10.6): parola kurulmadan kişi yazan uç 409 · kilitliyken yazma hata verir; kilitliyken gün işi iş verisi yazmaz, şema göçü olayı kilitli kipte mühürlü · güvenlik dosyası silinince fail-closed · kör indeks eşleşmesi · şifreli yedek (ekler dâhil) geri yüklenir · **yönetici olmayan hesapla `--geri-yukle` reddedilir** · iki deponun dört hâli ve hesap mührü bozulması (§4.6.1) · **denetim izinde ve arşiv dökümünde uydurma kişisel veri sıfır** (§4.6.2) · rol testleri (rol matrisi §4.4.2; hücre başına anlık görüntü ve dipnot başına servis testi; DK yalnız denetim modülüne, müdür yalnız kendi yazılarına, mali kayıtlara yalnız muhasip yazar; her yazma denetim izinde) · **kapanmış hesap giremez** (elle kapanış ve üyelik düşmesi; dönem devrindeki hesap geçişi F4'te) · veli listesi yalnız iki alan taşır · `ev::test_e63_pusulada_parola_alani_yok` |
+| **F1b** | Güvenlik çekirdeği (kişisel hesaplar, T1; §4.4, §4.6), kurulum sihirbazının **ilk üç adımı** (yönetici hesabı ve kurtarma anahtarı — anahtar basılıp müdürlükte kapalı zarfta saklanır, D3; okul kartı; ders yılı, dönemler, kapalı günler), kullanıcılar ve roller, hesap teslim pusulası (E63), e-Okul personel ve veli aktarımı | Aile güvenlik testleri adıyla (§10.6): parola kurulmadan kişi yazan uç 409 · kilitliyken yazma hata verir; kilitliyken gün işi iş verisi yazmaz, şema göçü olayı kilitli kipte mühürlü · güvenlik dosyası silinince fail-closed · kör indeks eşleşmesi · şifreli yedek (ekler dâhil) geri yüklenir · **yönetici olmayan hesapla `--geri-yukle` reddedilir** · iki deponun dört hâli, hesap mührü bozulması, parola kaydının kimlik bağı ve tazeliği, hesap satırının geri sarılması ve son kaydından sonraki iz boşluğu (§4.4.4, §4.6.1, §4.6.3; kullanıcı kararları 02.11 ve 03.11.2026) · **denetim izinde ve arşiv dökümünde uydurma kişisel veri sıfır** (§4.6.2) · rol testleri (rol matrisi §4.4.2; hücre başına anlık görüntü ve dipnot başına kapı testi, ucu ya da servisi sonraki fazda olan hücre, dipnot ve eylem fazıyla bekleyen listesinde (§4.4.2 "Testler (F1b)"); DK yalnız denetim modülüne, müdür yalnız kendi yazılarına, mali kayıtlara yalnız muhasip yazar ve bu kısıtlar servisleri gelene dek kapı düzeyinde sınanır; her yazma denetim izinde) · bekleyen listelerinde F1b fazlı kalem kalmadı · **kapanmış hesap giremez** (elle kapanış ve üyelik düşmesi; dönem devrindeki hesap geçişi F4'te) · veli listesi yalnız iki alan taşır · `ev::test_e63_pusulada_parola_alani_yok` |
 | **F1c** | Sihirbaza **ilk birlik dönemi** adımı (geçiş kurulumunun organ kısmı: görevdeki kurul "devralınan" üyelik olarak girilir, §7.9), kişiler, organlar, kural paketi `r1` (`OAB-2023.12`, 53 kural), ilk üç evrak (E01-E03; FR-006, FR-011, FR-022), **pano kabuğu** ("bu hafta yapılacaklar", yol haritası; §7.10) | Plan §2.4 — atıf kilidi; yeter sayı 64/32 (sabit taban); dönem sınırı başkan ve üyeler için; organ bileşimleri (YK ve DK'de aynı kişi olamaz; müdür YK'ye giremez); `OrganMembership`'in iki kısmi tekil kısıtı (genel kurullu ve genel kurulsuz; `IPTAL` kısıta girmez); **dönem ortasında kurulum senaryosu**: devralınan kurul aday şartı olmadan `SECILDI`, geçmiş seçilme sayaçları toplu beyanla tek gerekçe, karar defterinin son sıra no'su ve sayfası; pano kabuğunun kalemleri; üç evrak docx + PDF eşdeğer; temiz Windows 11 ve Pardus 25'te uçtan uca zincir (kurulum → sihirbaz → okul kartı → dönem → kişiler → organlar → üç evrak → şifreli yedek → geri yükleme) · kılavuzun F1 bölümleri (kurulum, okul kartı, kullanıcılar, organlar) |
 | **F2** | Genel kurul sihirbazı ve **genel kurulun kendi evrakı**: çağrı kararı, davet, ilan ve duyuru tutanağı, katılım cetveli, yeter sayı tespit tutanağı (E64), **ikinci toplantı ana yol** (saha 8; olağanüstüde de, §15.1 A-1), divan, ibra ("ibra edilmedi" akışı dâhil), seçim, aday listeleri, sonuç bildirimi, görev bölümü; olağanüstü genel kurul (müdür ve DK çağrısı dâhil). Faaliyet raporu, DK raporu ve tahmini bütçe bu fazda **dosya eki** | Pilot okulun 2026-2027 genel kurul akışı (birinci toplantıda yeter sayı yok → ikinci toplantı) uydurma adlarla programdan baştan sona üretilir; evrak genel setle içerik eşdeğer; 15 gün, 30 gün, bir hafta süre testleri · veli adı taşıyan belgenin (E07 çizelgesi, adlı E08) dosyası saklanmaz, arşiv paketine girmez · hazırlık dönemi: genel kurul planlanınca `HAZIRLIK` açılır, ikinci toplantıda yapılan genel kurulda seçilen kurulla dönem `ACIK` olur, genel kurul `IPTAL` olursa `HAZIRLIK` dönemi de `IPTAL` · olağanüstüde gündem dışı madde uyarı + gerekçeyle kaydedilir (B-13) · DK'nin 14/5 çağrısı yalnız md. 6 aykırılık işaretiyle. **Canlı kullanım** bir sonraki olağan genel kurulda (Ekim) F7 betası içinde |
 | **F3** | YK toplantı ve karar taslağı ("deftere işlendi"; defterde sakat karar), devamsızlık ve yedek çağırma; işlem düzeyinde gelir-gider, hesap planı ve sihirbazın **banka-devreden bakiye adımı** (geçiş kurulumunun mali kısmı, §7.9), banka özeti içe aktarma ve eşleme, makbuz koçanı, şartlı bağış, kasada 5 iş günü, "TEFBİS'e girilecekler" listesi, deftere geçirilecek aylık baskı; **kantin aylık kira takvimi, arz bedeli (10'u / 20'si) ve pay dağılımı** (`OabContract`'ın kira alanları, `ContractInstallment`, `ShareStatement`). **Fazdan önce** pilot okulun muhasibiyle görüşülür (saha notuna eklenir) | Uydurma bir yıllık banka dökümü (~410 hareket) eşlenir, TEFBİS listesi ve defter baskısı üretilir; ters kayıt ve dönem kilidi testleri · **yalnız muhasip mali kayıt yazar**, `yonetici` yalnız "TEFBİS'e girildi" işaretini koyar (D2) · içe aktar → geri al → yeniden aktar aynı satır sayısını verir · makbuzlu kesin gelirin ters kaydı ve aynı yaprağa yeniden bağlanması · toplu deftere geçirmenin sayfa no'ları · defterde sakat karar hiçbir akışa bağlanamaz · uyarılı taslak kayıt gerekçesiz yazılır, `KESIN` gerekçe ister · "programa başlama günü" açılışlı dönem senaryosu ve geçişte toplu defter/TEFBİS işareti (§7.9) · kantin kira-pay hesabı kurallarının davranış testleri · mali ekranlar ~35 hareketli bir ayla 1366×768'de. **Saha kanıtı (kapıyı kilitlemez):** pilot okulun 2025-2026 hareketleri yerelde, depoya girmeden mutabık |

@@ -5,7 +5,7 @@ Dosya değişimini `backup_restore` çekirdeği yapar; bu modül ÇALIŞAN sunuc
 
 * yedek listesi — `app_password.backup_dir()` içindeki `.odbak` dosyaları
   (masaüstü `desktop/restore.py::list_backups` ile aynı kaynak, en yeniden
-  eskiye);
+  eskiye) ve her birini açan kurtarma anahtarının kimliği (gömülü başlıktan, TK10);
 * kullanıcının YÜKLEDİĞİ dosyanın geçici yazımı (çekirdek yol ister) — KVKK:
   geçici dosya işlem sonunda her durumda silinir, kullanıcının elindeki asıl
   dosya zaten kendindedir;
@@ -21,9 +21,29 @@ Masaüstü kardeşi `desktop/restore.py` bozuk-veritabanı senaryosudur (pencere
 hiç açılmadan `--geri-yukle`); bu modül programın AÇILABİLDİĞİ senaryo içindir
 (yanlış veri girişi sonrası eski güne dönme; güvenlik dosyası kayıp kilidinden
 çıkış — iki uç da o kilitte açıktır, `lock_middleware`). Yedekler daima
-şifrelidir (düz yedek dalı yok, §13 D29); parola ya da kurtarma anahtarı
-gerekir. Parola/kurtarma anahtarı yalnız parametre olarak akar; hiçbir günlük
-satırına ve hata metnine yazılmaz.
+şifrelidir (düz yedek dalı yok, §13 D29); bir hesabın parolası ya da kurtarma
+anahtarı gerekir. Parola/kurtarma anahtarı yalnız parametre olarak akar; hiçbir
+günlük satırına ve hata metnine yazılmaz.
+
+YETKİ (tasarım §4.4.4 "Geri yükleme yetkisi"; plan F1b-2). Uygulama içi geri yükleme
+rol kapısından geçer (`RolMiddleware`: açık oturumda yalnız program yöneticisi). Servisin
+kendi denetimi YALNIZ PAROLA YOLUNDADIR: parolası verilen hesap isteğin yazarı olan hesap
+olmalıdır ve rolü program yöneticisidir (`rol_izinleri.Eylem.GERI_YUKLEME`; değilse 403
+`rol_yetkisiz`); hesap verilmezse yazarın hesabı kullanılır, başka hesabın parolası geçmez
+(400). Yazar yoksa (oturum yok) parola yolu reddedilir. Oturumdaki hesap `OTURUM`'dan değil
+yazar bağlamından okunur: rol kararı, parolanın hesabı ve geri yüklemenin bağlandığı oturum
+aynı görüntüdür. KURTARMA ANAHTARI YOLUNDA ROL DENETİMİ YOKTUR (konsolla aynı; anahtarın
+kendisi yetkidir): güvenlik dosyası kayıp kilidinde oturumsuz ya da açık kalmış bir organ
+oturumuyla da çıkış yolu açık kalır (rol kapısı o kipte kesmez, kilit kapısının listesi
+geçerlidir; plan F1b-1 "Kayıp dosya kipinde yedekten geri yükleme yalnız kurtarma anahtarı
+ister"). Parola yolunda çekirdek de hesabı konsoldaki gibi ORM'siz doğrular
+(`backup_restore` → `geri_yukleme_yetkisi`; bağlantılar kapatıldıktan sonra, salt okunur):
+oturumdaki program yöneticisinin kaydı tutmazsa (ör. program dışından değiştirilmişse) ret
+`GeriYuklemeYetkisiz`'dir, bir `ValueError` olduğu için 400 döner; hiçbir dosya değişmez.
+
+Geri yükleme UZUN İŞTİR (`shared.bakim.UZUN_ISLER`; tasarım §4.2, §4.4.3): sürerken
+oturumun boşta ve elle kilidi ertelenir, DEK işin ortasında silinmez. Başarıda oturum
+burada HEMEN kapanır (`app_password.lock`): DEK artık bu veritabanına ait değildir.
 """
 
 from __future__ import annotations
@@ -31,15 +51,22 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
-from desktop.backup_crypto import BACKUP_SUFFIX
+from desktop.backup_crypto import (
+    BACKUP_SUFFIX,
+    BackupCryptoError,
+    parse_security_state,
+    read_embedded_recovery_metadata,
+    recovery_key_identity,
+)
 from django.conf import settings
 from django.db import connections
 from django.utils import timezone
 
-from apps.okul import restart_gate
+from apps.okul import restart_gate, rol_izinleri
+from apps.okul.oturum import yazar
 from apps.okul.services import app_password, backup_restore
 from shared import bakim
 
@@ -47,6 +74,15 @@ logger = logging.getLogger("oab_defteri.restore")
 
 #: Uçuştaki gün işinin bitmesi için en çok bekleme (sn).
 BAKIM_BEKLEME_SN = 10.0
+
+
+#: Parola yolunda başka hesabın parolası (sözlük: kod yok, "hesap" ve "oturum").
+PAROLA_YALNIZ_OTURUM_HESABI = "Parola yalnız oturumdaki hesap için doğrulanır."
+#: Oturum yokken parola yolu (kayıp kilidi ya da kurulum).
+PAROLA_YOLU_OTURUM_ISTER = (
+    "Parolayla geri yükleme yalnız açık oturumda, program yöneticisi hesabıyla yapılır; "
+    "yedeği kurtarma anahtarıyla açın."
+)
 
 
 class LiveRestoreError(ValueError):
@@ -59,6 +95,13 @@ def list_backups() -> dict[str, Any]:
     `backup_dir` yanıtta bilinçli olarak vardır: kullanıcı elle aldığı bir
     yedeği nereye koyacağını ya da dosyaların nerede durduğunu buradan görür
     (tek bilgisayarda çalışan yerel program — yol kişisel veri değildir).
+
+    Her satırın `kurtarma` alanı o yedeği açan kurtarma anahtarının kimliğidir:
+    `{no, tarih}` (`tarih` ISO gün; arayüz gg.aa.yyyy yazar) ya da başlık yoksa,
+    okunamıyorsa veya kullanılamıyorsa `null` (`_recovery_key_of`). Kullanıcı
+    yeni bilgisayarda hangi kâğıdın hangi yedeği açtığını buradan görür (tasarım
+    §4.4.4, TK10; anahtar yenilenince eski kâğıt eski yedekleri açmaya devam eder).
+    Başlığın tuzu ve sarmalı ASLA dönmez.
     """
     dizin = app_password.backup_dir()
     satirlar: list[dict[str, Any]] = []
@@ -74,6 +117,7 @@ def list_backups() -> dict[str, Any]:
                     "modified_at": timezone.localtime(
                         datetime.fromtimestamp(bilgi.st_mtime, tz=UTC)
                     ).isoformat(),
+                    "kurtarma": _recovery_key_of(yol),
                     "_mtime": bilgi.st_mtime,
                 }
             )
@@ -87,6 +131,7 @@ def restore_and_require_restart(
     *,
     name: str = "",
     content: bytes | None = None,
+    hesap: str = "",
     password: str = "",
     recovery_key: str = "",
 ) -> dict[str, Any]:
@@ -94,8 +139,55 @@ def restore_and_require_restart(
 
     Kaynak ikisinden biridir: `name` (yedek klasöründen) YA DA `content`
     (kullanıcının yüklediği dosyanın baytları). Hata hâlinde hedefe dokunulmaz
-    (çekirdek garantisi) ve kapı KURULMAZ — kullanıcı yeniden dener.
+    (çekirdek garantisi) ve kapı KURULMAZ — kullanıcı yeniden dener. İş uzun iş
+    sayacındadır (modül başlığı). Yetki (modül başlığı "YETKİ") hiçbir dosyaya ve bakım
+    kapısına dokunmadan önce denetlenir.
     """
+    kim = yazar()
+    oturum_hesabi = None if kim is None or kim.sistem_mi else kim.hesap_id
+    if password:
+        if oturum_hesabi is None:
+            raise LiveRestoreError(PAROLA_YOLU_OTURUM_ISTER)
+        rol_izinleri.yetki_oturum(rol_izinleri.Eylem.GERI_YUKLEME)
+        hesap = _parola_hesabi(hesap, oturum_hesabi)
+    with bakim.UZUN_ISLER.is_():
+        return _restore(
+            name=name,
+            content=content,
+            hesap=hesap,
+            password=password,
+            recovery_key=recovery_key,
+            oturum_hesabi=oturum_hesabi,
+        )
+
+
+def _parola_hesabi(hesap: str, oturum_hesabi: str) -> str:
+    """Parola yolunun hesabı: verilmediyse ya da oturumdaki hesabı anıyorsa o (kimliğiyle).
+
+    `hesap` kimlik ya da tanıtıcıdır (çekirdeğin `--hesap` kuralı); güncel güvenlik
+    dosyasındaki sarmallardan çözülür. Başka bir hesabı anıyorsa ret (400): parolası sorulan
+    hesap yazarın hesabıdır (yetki kararı onun rolüyle verildi).
+    """
+    istenen = hesap.strip()
+    if not istenen or istenen == oturum_hesabi:
+        return oturum_hesabi
+    for sarmal in app_password.account_wraps():
+        if istenen in (sarmal["tanitici"], sarmal["id"]):
+            if sarmal["id"] == oturum_hesabi:
+                return oturum_hesabi
+            break
+    raise LiveRestoreError(PAROLA_YALNIZ_OTURUM_HESABI)
+
+
+def _restore(
+    *,
+    name: str,
+    content: bytes | None,
+    hesap: str,
+    password: str,
+    recovery_key: str,
+    oturum_hesabi: str | None,
+) -> dict[str, Any]:
     hedef = _database_path()
     gecici: Path | None = None
     if content is not None:
@@ -121,8 +213,11 @@ def restore_and_require_restart(
         sonuc = backup_restore.restore_database(
             kaynak,
             hedef,
+            hesap=hesap or None,
             password=password or None,
             recovery_key=recovery_key or None,
+            # Geri yükleme onu başlatan oturumun hesabına bağlanır (kurtarma yolunda da).
+            oturum_hesabi=oturum_hesabi,
         )
     except BaseException:
         # Hedefe dokunulmadı (çekirdek garantisi): gün işleri yeniden koşabilir.
@@ -150,6 +245,24 @@ def restore_and_require_restart(
 # ---------------------------------------------------------------------------
 # İç yardımcılar
 # ---------------------------------------------------------------------------
+def _recovery_key_of(yol: Path) -> dict[str, Any] | None:
+    """Yedeği açan kurtarma anahtarının kimliği `{no, tarih}`; bilinemiyorsa None.
+
+    Yalnız dosyanın başı okunur (`read_embedded_recovery_metadata`). Başlık
+    kullanılamıyorsa (şema 1, kurtarma bölümü eksik, bozuk) kimlik de gösterilmez:
+    o yedek kurtarma anahtarıyla zaten açılamaz (`parse_security_state` tek kuraldır).
+    Okuma hatası listeyi düşürmez; satır kimliksiz görünür. Ayrıştırma da istisna
+    sızdırmaz (`parse_security_state` derin iç içe JSON'un RecursionError'ını dâhil
+    None'a çevirir): tek bir bozuk yedek, kayıp kilidinin çıkış yolu olan listeyi
+    düşüremez.
+    """
+    try:
+        ham = read_embedded_recovery_metadata(yol)
+    except (OSError, BackupCryptoError):
+        return None
+    return cast("dict[str, Any] | None", recovery_key_identity(parse_security_state(ham)))
+
+
 def _resolve_named(name: str) -> Path:
     """Yedek klasöründeki adı yola çevirir; klasör dışına çıkışı reddeder."""
     duz_ad = name.strip()

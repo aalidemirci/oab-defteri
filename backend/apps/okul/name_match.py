@@ -37,7 +37,12 @@ class MatchReason(StrEnum):
 
 
 def name_key(value: str) -> str:
-    """Ad-soyad eşleştirme anahtarı (ASCII'ye katlanmış, küçük harf, tek boşluk)."""
+    """Ad-soyad eşleştirme anahtarı (ASCII'ye katlanmış, küçük harf, tek boşluk).
+
+    Metin olmayan girdi (çözülemeyen alan işareti, tasarım §13 D48) boş anahtar verir.
+    """
+    if not isinstance(value, str):
+        return ""
     return normalize_header(value)
 
 
@@ -61,7 +66,13 @@ def match_reason(*, first_a: str, full_a: str, first_b: str, full_b: str) -> Mat
 
     Sıra kuralı DEĞİŞTİRMEZ, yalnız gerekçeyi ayrıştırır: birebir aynı ad-soyad
     "adı aynı, soyadı farklı" diye sunulmasın.
+
+    Metin olmayan girdide (çözülemeyen alan işareti) None: işaretli kayıt eşleşmeye
+    girmez (tasarım §13 D48). Çağıranlar kaydı zaten `crypto.has_corrupt` ile
+    dışarıda bırakır; bu denetim savunma derinliğidir.
     """
+    if not all(isinstance(deger, str) for deger in (first_a, full_a, first_b, full_b)):
+        return None
     tam_a, tam_b = name_key(full_a), name_key(full_b)
     if tam_a and tam_a == tam_b:
         return MatchReason.SAME_FULL_NAME
