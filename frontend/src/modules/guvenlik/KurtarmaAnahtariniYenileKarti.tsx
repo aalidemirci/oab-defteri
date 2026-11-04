@@ -7,8 +7,8 @@
 // F1b-1 "Parola ve hatalı deneme"); backend parolayı o hesabın sarmalına karşı doğrular,
 // aynı veri anahtarını YENİ kurtarma anahtarıyla sarmalar (no'su bir artar), önceki
 // güvenlik dosyasını "guvenlik-arsiv" adıyla saklar ve yeni anahtarı BİR KEZ döndürür.
-// Yenilemeyi yalnız program yöneticisinin yapması rol kapısıyla 2. adımda gelir (tasarım
-// TK9; bugün yalnız program yöneticisi hesabı açılabilir).
+// Yenilemeyi yalnız program yöneticisi yapar (tasarım TK9): kart `guvenlik` yeteneğine
+// bağlıdır, uç rol kapısından, servis yetki kapısından (`Eylem.KURTARMA_ANAHTARI`) geçer.
 //
 // Yeni anahtar (ve kimliği) bileşen durumunda DEĞİL, rota ağacının dışındaki modül
 // belleğinde bekletilir (`bekleyenAnahtar`): sayfa gezinmeyle sökülse de kaybolmaz

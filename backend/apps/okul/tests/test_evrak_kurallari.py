@@ -7,7 +7,8 @@ Tasarım §10.5'in `ev::` testlerinden bu fazın payı; dosya F1c'de §10.1 dizi
   "kapalı zarf" cümlesi var; dosyası saklanmaz.
 * `test_katalog_kabul[E63]` — tasarım §9.6 "Kabul örneği" sütunu.
 * `test_sayfa_butcesi[E63]` — gerçek uzunlukta uydurma veriyle (en uzun tanıtıcı, uzun okul ve ilçe
-  adı, her rol; program yöneticisi en çok satırı taşır) tek sayfa.
+  adı, her rol): program yöneticisinin pusulası en çok iki, öteki rollerinki bir sayfa (kullanıcı
+  kararı 04.11.2026; program yöneticisinin iş listesi fazlarla en çok uzayandır).
 * `test_tckn_hicbir_belgede_yok` — programın bugün ürettiği belgelerde 11 haneli kimlik deseni yok
   (K9 ayarının kolları bağış kaydıyla F3'te gelir).
 
@@ -298,10 +299,13 @@ def test_katalog_kabul(kod: str, yakalanan: list[evrak.Belge]) -> None:
 
 @pytest.mark.parametrize("kod", ["E63"])
 def test_sayfa_butcesi(kod: str) -> None:
-    """Gerçek uzunlukta uydurma veriyle tek sayfa: her rol, en uzun tanıtıcı, uzun okul ve ilçe adı,
-    iki haneli boşta kilit süresi (program yöneticisi en çok "iş" satırını taşır)."""
+    """Gerçek uzunlukta uydurma veriyle sayfa bütçesi: her rol, en uzun tanıtıcı, uzun okul ve ilçe
+    adı, iki haneli boşta kilit süresi. Program yöneticisinin pusulası en çok iki, öteki rollerinki bir
+    sayfadır (kullanıcı kararı 04.11.2026): program yöneticisi en çok "iş" satırını taşır ve listesi
+    sonraki fazların ekranlarıyla uzar."""
     assert kod == e63.KOD
     for rol in ROLLER:
+        sinir = 2 if rol == AccountRole.YONETICI else 1
         belge = e63.pusula_belgesi(
             tanitici=EN_UZUN_TANITICI,
             rol=rol,
@@ -311,7 +315,7 @@ def test_sayfa_butcesi(kod: str) -> None:
             bosta_dakika=30,
         )
         sayfa = len(PdfReader(io.BytesIO(evrak.pdf_ciz(belge))).pages)
-        assert sayfa == 1, (rol, sayfa)
+        assert 1 <= sayfa <= sinir, (rol, sayfa)
 
 
 @pytest.mark.parametrize("belge_adi", ["E63", "kurtarma_anahtari_belgesi"])

@@ -71,7 +71,8 @@ KUNYE_BASLIKLARI: Final = ("Tanıtıcı", "Rol", "Açılış tarihi")
 IS_BASLIGI: Final = "Bu programda sizin işiniz"
 
 # Bölüm paragrafları: "<başlık>: " + cümleler (iki noktadan sonra cümle büyük harfle başlar). Sayfa
-# bütçesi (tek sayfa; `test_evrak_kurallari.py`) bölümlerin tablo yerine paragraf olmasını ister.
+# bütçesi (program yöneticisinde en çok iki, öteki rollerde bir sayfa; kullanıcı kararı 04.11.2026;
+# `test_evrak_kurallari.py`) bölümlerin tablo yerine paragraf olmasını ister.
 ILK_GIRIS_BASLIGI: Final = "İlk girişte"
 #: İlk giriş adımları (kilit ekranının metinleriyle: "Parola", "Aç", "Yeni parola", "Parola
 #: (tekrar)", "Parolayı yenile ve aç"; sözlük §1 "Parola"). `{tanitici}` hesabın tanıtıcısıdır.

@@ -2,8 +2,9 @@
 
 Varsayılan ortam `backend/conftest.py`'dedir; buradaki testler `yonetici_hesabi`
 fixtürüyle program yöneticisinin satırını kurar ve servisleri onunla çağırır. Rol
-denetimi (yalnız program yöneticisi) 2. adımdadır: burada işlemi yapanın açık ve
-mühürlü bir hesap olması sınanır.
+denetimi (yalnız program yöneticisi; `hesaplar._yonetici_aktor`) `test_yetki_kapisi.py` ve
+`test_kullanicilar_uclari.py`'dedir: burada işlemi yapanın açık ve mühürlü bir hesap olması
+sınanır.
 
 F1 kapısının iki testi buradadır (tasarım §10.6):
 `test_iki_depo_dort_hali[giris, acma_yarida, kapama_yarida, geri_yukleme_sonrasi]` ve

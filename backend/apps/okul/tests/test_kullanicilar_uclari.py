@@ -943,7 +943,7 @@ def test_bildirim_gordumu_program_disindan_degisen_durumda_muhur_reddidir() -> N
 
 def test_denetim_karti_iz_boslugunu_ayri_bulgu_olarak_tasir() -> None:
     """DK ve program yöneticisi kartı (`security/integrity/audit/`): satırın `bulgular`'ı
-    `iz_boslugu`dur (kart metni F1b 2. adımın (d) alt commit'inde)."""
+    `iz_boslugu`dur (kartın metni `modules/butunluk`'tadır)."""
     hesap = _ilgisiz_satir_silinmis_muhasip()
     with pytest.raises(app_password.AuditTrailGap):
         app_password.unlock(hesap_id=hesap.id, password=GECICI_PAROLA)

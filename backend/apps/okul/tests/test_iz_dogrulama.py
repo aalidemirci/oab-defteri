@@ -1367,7 +1367,7 @@ def test_butunluk_ucu_kilitliyken_kapalidir() -> None:
 
 def test_butunluk_karti_bir_sonraki_giriste_kalkar_geri_yukleme_karti_kalir() -> None:
     """Bütünlük kartı hesabın önceki girişinden beri yazılanlardır; geri yükleme kartı
-    Denetleme Kurulu "gördüm" diyene dek (2. adım) kalır."""
+    Denetleme Kurulu "Gördüm" diyene dek kalır (`test_geri_yukleme_gordum.py`)."""
     kilitle()
     notu_yaz()  # not çapayı açıklar (çapa notun zincir başının gerisinde): kart geri yüklemedir
     ac()

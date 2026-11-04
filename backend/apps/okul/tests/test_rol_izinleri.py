@@ -502,7 +502,7 @@ def test_etkin_hucreler_bekleyende_olmayan_y_hucreleridir() -> None:
     ]
     for rol in YK_ROLLERI:
         assert [s.value for s in etkin_hucreler(rol)] == ["M9", "KENDI"]
-    # DK'nin M8 hücresi geri yükleme kartının "Gördüm"üyle bağlandı (F1b-2 c3).
+    # DK'nin M8 hücresi geri yükleme kartının "Gördüm"üyle bağlandı (F1b-2 (c)).
     assert [s.value for s in etkin_hucreler("denetleme_kurulu")] == ["M8", "KENDI"]
     assert [s.value for s in etkin_hucreler("mudur")] == ["KENDI"]
     for rol in ROLLER:

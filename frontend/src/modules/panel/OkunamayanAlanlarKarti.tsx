@@ -11,7 +11,8 @@
 // §5). Nedenini kesin bilemez: kayıt program dışından değiştirilmiş (SQLite'ta şifreli
 // sütuna yazılmış düz metin) ya da veritabanı bozulmuş olabilir; kart bunu söyler ve
 // kaydı yeniden yazmadan önce bildirilmesini ister. Denetim izinin bütünlük (zincir) ve
-// hesap mührü kartları `modules/butunluk`'tadır; rol süzmesi 2. adımda, pano kabuğu F1c'de.
+// hesap mührü kartları `modules/butunluk`'tadır. Bu kart rol süzmesi olmadan, bilerek her
+// roldedir (`PanelPage`); pano kabuğu F1c'de.
 
 import { useEffect, useState } from "react";
 

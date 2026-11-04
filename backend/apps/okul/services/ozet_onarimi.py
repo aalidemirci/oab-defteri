@@ -92,7 +92,7 @@ ana dosyaya aktarılamadı) geri yükleme yarıda kalır ve hiçbir dosya deği�
 sütunları okunamıyorsa (bu göçten önceki bir yedek) onarım atlanır ve uyarı günlüğe düşer. Göç
 sütunları boş ekler; ama o satırların mührü özet alanları mühre girmeden hesaplanmıştır ve yeni
 biçimle tutmaz: hiçbir hesap açılmaz, kurtarma anahtarıyla açılış dahil; parola sıfırlaması da
-yapılamaz (fail-closed; kullanıcı kararı 03.11.2026, 3: göç gerekmez, deneme kurulumları silinip
+yapılamaz (fail-closed; plan F1b-1 "Eski veri": göç gerekmez, deneme kurulumları silinip
 yeniden kurulur).
 
 İZ (K-e; `satir_izi` modül başlığı "ONARIMIN İZİ"): değiştirilen her satır için AYNI `sqlite3`

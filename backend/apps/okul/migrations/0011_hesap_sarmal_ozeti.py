@@ -3,7 +3,7 @@
 # F1b-2 (b3) — kullanıcı kararı 03.11.2026 "tazelik kapatılır": hesabın mühürlü satırı
 # `guvenlik.json`'daki güncel parola kaydının (sarmalın) DEK'li özetini taşır (`wrap_digest`;
 # iki aşamalı yazımın ara hâli `wrap_digest_pending`) ve iki alan hesap mührüne girer
-# (`shared.kanonik.HESAP_MUHRU_ALANLARI`). Veri göçü YOKTUR (kullanıcı kararı 3: program sahada
+# (`shared.kanonik.HESAP_MUHRU_ALANLARI`). Veri göçü YOKTUR (plan F1b-1 "Eski veri": program sahada
 # değil; F1b-1/F1b-2 deneme kurulumları plan F1b-1 "Eski veri"deki gibi silinip yeniden
 # kurulur): özet DEK ister, göç onu hesaplayamaz; var olan satırın mührü yeni alanlarla tutmaz
 # ve özeti boş satır parolayla açılmaz (fail-closed). Göçler F1b sonunda tek `0001_initial`'a

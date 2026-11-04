@@ -43,7 +43,7 @@ ALTIN_HESAP_BAYTLARI = (
     b'"wrap_digest_pending":""}'
 )
 #: `hesap_muhru(bytes(range(32)), ALTIN_HESAP)` — DONMUŞ değer (03.11.2026'da özet alanlarıyla
-#: yeniden dondu: program sahada değil, göç gerekmez — kullanıcı kararı 3).
+#: yeniden dondu: program sahada değil, göç gerekmez — plan F1b-1 "Eski veri").
 ALTIN_HESAP_MUHRU = "2d0aa91ef58bdab7cfc2fc5c428823a7ed5e5c1ff0d87316b03d37043057d6c1"
 
 #: Yabancı anahtarları dolu hesap (F1c'de `person`, `membership`, `term` dolar): kimliğin
@@ -104,8 +104,8 @@ def test_altin_vektor_yabanci_anahtar_kimligin_metnidir() -> None:
 @pytest.mark.parametrize("alan", kanonik.HESAP_MUHRU_YABANCI_ANAHTARLARI)
 @pytest.mark.parametrize("deger", [42, True, UUID("6f1c2a3b-4d5e-4f60-8a71-0b2c3d4e5f60")])
 def test_hesap_muhrunde_yabanci_anahtar_yalniz_metin(alan: str, deger: object) -> None:
-    """Tek biçim: `42` ve `"42"` iki ayrı baytla kodlanıp iki yolda (ORM ve 2. adımın
-    salt okunur `sqlite3` denetimi) aynı satıra farklı mühür vermesin."""
+    """Tek biçim: `42` ve `"42"` iki ayrı baytla kodlanıp iki yolda (ORM ve konsol
+    geri yüklemesinin salt okunur `sqlite3` denetimi, `geri_yukleme_yetkisi`) aynı satıra farklı mühür vermesin."""
     with pytest.raises(kanonik.KanonikHata, match=alan):
         kanonik.hesap_muhru(bytes(range(32)), {**ALTIN_HESAP, alan: deger})
     assert set(kanonik.HESAP_MUHRU_YABANCI_ANAHTARLARI) <= set(kanonik.HESAP_MUHRU_ALANLARI)
@@ -233,7 +233,7 @@ def test_esit_metin_olmayan_degerde_hata_yukseltmez_tutmaz(deger: object) -> Non
 
 
 def test_modul_django_ice_aktarmaz() -> None:
-    """2. adımda konsol geri yüklemesi aynı işlevi ORM'siz kullanır (plan F1b-1)."""
+    """Konsol geri yüklemesi aynı işlevi ORM'siz kullanır (`geri_yukleme_yetkisi`; plan F1b-1)."""
     kaynak = Path(kanonik.__file__).read_text(encoding="utf-8")
     agac = ast.parse(kaynak)
     moduller: set[str] = set()

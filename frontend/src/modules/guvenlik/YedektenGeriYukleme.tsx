@@ -14,8 +14,9 @@
 // bölümünü taşır, hesap sarmalı taşımaz. Bu yüzden
 //   * PAROLA yolu oturumdaki hesabın BUGÜNKÜ parolasıdır ("Parolanız"): backend güncel
 //     `guvenlik.json`'daki o hesabın sarmalını dener (gövdede `hesap` boş gider, backend
-//     oturumdaki hesabı kullanır — `live_restore`). Yalnız bu bilgisayarda işler. Geri
-//     yüklemenin yalnız program yöneticisine açık olması rol kapısıyla 2. adımda gelir.
+//     oturumdaki hesabı kullanır — `live_restore`). Yalnız bu bilgisayarda işler. Açık
+//     oturumda geri yüklemeyi yalnız program yöneticisi yapar: uç rol kapısından, parola yolu
+//     ayrıca servisin yetki kapısından geçer (`live_restore`).
 //   * KURTARMA ANAHTARI yolu yedeğin alındığı gün geçerli olan anahtardır; listedeki
 //     her yedek o anahtarın no'sunu ve tarihini taşır (`YedekDosyasi.kurtarma`) ve seçilen
 //     yedeğin hangi kâğıtla açıldığı sır sorulmadan ÖNCE yazılır. Elden yüklenen dosyanın

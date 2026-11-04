@@ -278,7 +278,7 @@ def test_kayip_kilidinde_rol_kapisi_kesmez(parmak_izi_yazili: str) -> None:
 
 #: Rolün bugün yazabildiği satırlar (tasarım §14 F1b: "DK yalnız denetim modülüne, müdür yalnız
 #: kendi yazılarına yazar"). Kendi hesabı ve oturum satırları her roldedir; DK'nin denetim
-#: modülündeki ilk ucu geri yükleme kartının "Gördüm"üdür (M8, F1b-2 c3); müdürün yazıları
+#: modülündeki ilk ucu geri yükleme kartının "Gördüm"üdür (M8, F1b-2 (c)); müdürün yazıları
 #: sonraki fazlardadır.
 #: Müdürün yazıları M3 (¹), M6 (⁴) ve müdür yazısı (⁶) satırlarındadır. M10 (gelen-giden evrak)
 #: burada YOKTUR: hücresi O⁷'dir, müdürün yazısını evrak defterine program işler (yazının

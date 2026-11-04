@@ -7,7 +7,7 @@ Kanıtlanan maddeler:
 * hiç indirme yokken hatırlatma parola kurulumundan 7 gün sonra, indirme varken son
   indirmeden `hatirlatma_gun` (varsayılan 30) gün sonra başlar;
 * süre 7-90 gün arasında ayarlanır; aralık dışı 400; bozuk dosya "hiç indirme yok" sayılır;
-* uç kilitliyken 423 (rol izni 2. adımın rol matrisinde); yanıtta kişisel veri yok.
+* uç kilitliyken 423 (rol izni `rol_izinleri.KURALLAR`'da); yanıtta kişisel veri yok.
 """
 
 from __future__ import annotations

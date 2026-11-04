@@ -76,7 +76,7 @@ satırların girişi reddedilir, `KAPALI` satırlar iki depo kartında "kaydı p
 değiştirilmiş görünen hesaplar" listesine düşer ve sarmallarının temizliği durur. Böyle bir adım
 tasarlanmadan küme değiştirilmez (kullanıcı kararı bekler; F1c'nin `person`/`membership`/`term`
 alanları buna girer). Program sahaya çıkana dek deneme kurulumları silinip yeniden kurulur
-(kullanıcı kararı 03.11.2026).
+(plan F1b-1 "Eski veri").
 
 TEK YAZARIN ORM'SİZ EŞİ: geri yüklemenin özet onarımı (`services.ozet_onarimi`) takastan önce,
 oturumu olmayan `.tmp` veritabanında yazar; değiştirdiği hesap satırlarının iz satırını

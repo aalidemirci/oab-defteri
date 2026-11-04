@@ -40,8 +40,8 @@ olmayan Y hücresi `BEKLEYEN_HUCRELER`'de, gerçek servisi olmayan dipnot
 (plan F1b-2 kullanıcı kararı). Listeler testte anlık görüntüdür ve yalnız küçülebilir; her
 fazın kapısında "bu fazın hücreleri ve dipnotları bağlandı" maddesi vardır. F1b'nin 2. adımının
 kapısı: faz değeri "F1b" olan bekleyen KALMAZ (testle sabit) — Kullanıcılar hücresi uçlarıyla
-(alt commit c1-c2), Denetleme Kurulunun M8 hücresi, ⁵ dipnotu ve `GERI_YUKLEME_GORDUM` eylemi geri
-yükleme kartının "Gördüm"üyle (c3) bağlandı. `etkin_hucreler(rol)`
+(F1b-2 (c)), Denetleme Kurulunun M8 hücresi, ⁵ dipnotu ve `GERI_YUKLEME_GORDUM` eylemi geri
+yükleme kartının "Gördüm"üyle (F1b-2 (c)) bağlandı. `etkin_hucreler(rol)`
 bekleyende olmayan Y hücreleridir: hesap teslim pusulasının "bu programda sizin işiniz"
 özeti ve hücre anlık görüntüsü bu tek yüklemi kullanır; ikinci bir matris doğmaz.
 
@@ -632,7 +632,7 @@ BEKLEYEN_HUCRELER: Final[Mapping[tuple[Satir, str], str]] = {
     # Kişisel veri içeren çıktı: veli listesi çıktısı (5. adım) ya da adlı E07/E08.
     **_bekleyen(Satir.KISISEL_VERI, (YONETICI,), "F2"),
     # F1b'de bekleyen kalmadı: Kullanıcılar (program yöneticisi) uçlarıyla, Denetleme Kurulunun
-    # M8 hücresi geri yükleme kartının "Gördüm"üyle bağlandı (F1b-2 alt commit c1-c3). DK
+    # M8 hücresi geri yükleme kartının "Gördüm"üyle bağlandı (F1b-2 (c)). DK
     # modülünün öteki işleri (görev bölümü, denetim planı, rapor, md. 14/5 çağrısı) F4'tedir; M8
     # hücresi satır düzeyindedir, ilk ucu bağlayınca bekleyenden çıkar.
 }

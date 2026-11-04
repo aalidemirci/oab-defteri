@@ -8,7 +8,7 @@ listede bulunmayan aktif kişi havuza girer, karar burada verilir:
 - `POST leave-pool/resolve/` toplu karar: "Ayrıldı olarak işaretle" (LEFT +
   tarih, kancalar; KAYIT SİLİNMEZ) ve "Aktif kalsın" (yalnız havuzdan çıkar).
   Tek işlemdir: seçilenlerden biri havuzda değilse hiçbir karar uygulanmaz.
-- Karar ucu kişi yazar: parola kurulmadan 409 (rol izni 2. adımın rol matrisinde).
+- Karar ucu kişi yazar: parola kurulmadan 409 (rol izni `rol_izinleri.KURALLAR`'da).
 - Havuzdaki personel için "olası aynı kişi" adayları (eşleşme GEREKÇESİYLE —
   §13 D30) ve havuzdan birleştirme.
 - Günlüğe ad yazılmaz.
