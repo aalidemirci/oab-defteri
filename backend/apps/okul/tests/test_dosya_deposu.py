@@ -10,6 +10,7 @@ F1b'de sahip kümesi boştur; testler geçici sahip kaydeder (`sahip` fikstürü
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import inspect
 import logging
@@ -755,6 +756,18 @@ _EK_ADI = re.compile(r"\bAttachment\b|(?i:\bokul[._]attachment\b)|^attachment$")
 #: R9, tür denetimi ve önce-dosya sırası yalnız `yaz`'dadır; veritabanı `owner_type` kümesini
 #: zorlayamaz. F4-F6 imhası ve TK12 sarmal yenilemesi gelince kendi yerleri adıyla eklenir.
 EK_YAZIM_YERLERI = {("apps/okul/services/dosya_deposu.py", "yaz", ("objects", "create"))}
+#: Tabloyu ham SQL ile OKUYAN tek yer: masaüstü manifestosu Django'dan ve göçten önce koşar, ORM
+#: kullanamaz (plan F1b-3 "Kap ve manifesto"). İzin dosyaya ya da birime değil bu iki dizenin TAM
+#: METNİNE verilir ve burada elle yazılıdır: kaynaktan alınsaydı sorgu `DELETE`'e dönünce izin de
+#: onunla değişirdi. Aynı dosyadaki başka dize yine yakalanır.
+EK_OKUMA_DIZELERI = (
+    ("desktop/backup.py", "okul_attachment"),
+    (
+        "desktop/backup.py",
+        "SELECT stored_name, size, sha256 FROM okul_attachment "
+        "WHERE purged_at IS NULL ORDER BY stored_name",
+    ),
+)
 
 #: Programa eklenen ek yazımları ve atlatmaları: her biri yakalanmalıdır.
 _EK_SONDASI = """
@@ -815,7 +828,9 @@ def okuma(pk):
 
 
 def _ek_yazimlari(kaynaklar: dict[str, str]) -> set[tuple[str, str, tuple[str, ...]]]:
-    return _kok_yazimlari(kaynaklar, kok="Attachment", ad_deseni=_EK_ADI)
+    return _kok_yazimlari(
+        kaynaklar, kok="Attachment", ad_deseni=_EK_ADI, okuma_dizeleri=EK_OKUMA_DIZELERI
+    )
 
 
 def test_ekin_tek_yazari_depo_servisidir() -> None:
@@ -825,6 +840,30 @@ def test_ekin_tek_yazari_depo_servisidir() -> None:
     (`AccessLog`'un eşi: `test_erisim_gunlugu.py`). Eşitlik iki yönlüdür.
     """
     assert _ek_yazimlari(_program_kaynaklari()) == EK_YAZIM_YERLERI
+
+
+def test_manifestonun_okuma_dizeleri_programda_durur() -> None:
+    """İzin iki yönlüdür: sorgu değişirse ya da kalkarsa izin bayat kalmaz."""
+    kaynaklar = _program_kaynaklari()
+    for yol, dize in EK_OKUMA_DIZELERI:
+        dugumler = ast.walk(ast.parse(kaynaklar[yol]))
+        assert dize in {dugum.value for dugum in dugumler if isinstance(dugum, ast.Constant)}
+
+
+@pytest.mark.parametrize(
+    "dize",
+    [
+        "DELETE FROM okul_attachment",
+        "UPDATE okul_attachment SET purged_at = NULL",
+        "SELECT stored_name, size, sha256, key_wrap FROM okul_attachment",
+        "okul.Attachment",
+    ],
+)
+def test_manifestonun_okuma_izni_ayni_dosyadaki_baska_dizeyi_ortmez(dize: str) -> None:
+    """İzin tam metnedir: manifestonun dosyasına eklenen yazım da, geniş okuma da yakalanır."""
+    assert _ek_yazimlari({"desktop/backup.py": f"_SORGU = {dize!r}\n"}) == {
+        ("desktop/backup.py", "<modül>", ("<dize>",))
+    }
 
 
 def test_ek_taramasi_yazimlari_ve_atlatmalari_yakalar() -> None:

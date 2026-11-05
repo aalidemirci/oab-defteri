@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from desktop.backup import ROTASYON_KUMESI
 from django.db import connection, transaction
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -991,6 +992,10 @@ def test_kullanicinin_sectigi_ya_da_adlandirdigi_yedek_adi_satira_girmez(ad: str
         "pre-migrate-1.0.0-beta.10-2026-11-01.odbak",
         "pre-anonim-2026-11-01-101530.odbak",
         "pre-anonim-2026-11-01-101530-2.odbak",
+        "pre-parola-acilis-2026-11-01-101530.odbak",
+        "pre-kapanis-2026-11-01.odbak",
+        "pre-dek-yenileme-2026-11-01.odbak",
+        "db-onceki-2026-11-01-101530.sqlite3",
         "oab-defteri-yedek-2026-11-02-101530.odbak",
     ],
 )
@@ -1000,11 +1005,50 @@ def test_programin_urettigi_yedek_adlari_kayda_gecer(ad: str) -> None:
     assert denetim_izi.yedek_kimligi(f"klasor/{ad}") == ""
 
 
+@pytest.mark.parametrize(
+    "ad",
+    [
+        "pre-parola-Pelinsu-2026-11-01-101530.odbak",
+        "pre-parola-acilis-2026-11-01-101530-Pelinsu.odbak",
+        "pre-kapanis-2026-11-01-Pelinsu.odbak",
+        "pre-dek-yenileme-Pelinsu-2026-11-01.odbak",
+        "db-onceki-2026-11-01-101530.odbak",
+        "db-onceki-2026-11-01-101530.sqlite3-wal",
+        "db-onceki-2026-11-01-101530.sqlite3-shm",
+        "db-onceki-Pelinsu-2026-11-01-101530.sqlite3",
+        "gunluk-2026-11-01.sqlite3",
+    ],
+)
+def test_onekini_koruyan_serbest_ad_kayda_gecmez(ad: str) -> None:
+    """Plan F1b-1 ekleri: genişleyen desen de birebir biçimdir; önekten sonra serbest metin kişi adı
+    taşıyabilir (R1). `-wal`/`-shm` eşi yedek değildir."""
+    assert denetim_izi.program_yedegi_mi(ad) is False
+    assert denetim_izi.yedek_kimligi(ad) == ""
+
+
+def test_rotasyon_kumesinin_her_oneginin_adi_kayda_gecer() -> None:
+    """Küme genişlerse desen de genişler (plan F1b-1 ekleri); yoksa silinen dosya adsız kalırdı."""
+    ornekler = {
+        "gunluk": "gunluk-2026-11-01.odbak",
+        "pre-parola": "pre-parola-acilis-2026-11-01-101530.odbak",
+        "pre-anonim": "pre-anonim-2026-11-01-101530.odbak",
+        "pre-kapanis": "pre-kapanis-2026-11-01.odbak",
+        "pre-dek-yenileme": "pre-dek-yenileme-2026-11-01.odbak",
+        "pre-migrate": "pre-migrate-0.2.0-2026-11-01.odbak",
+        "db-onceki": "db-onceki-2026-11-01-101530.sqlite3",
+    }
+    assert set(ornekler) == {kural.onek for kural in ROTASYON_KUMESI}
+    for kural in ROTASYON_KUMESI:
+        assert kural.desen.fullmatch(ornekler[kural.onek])
+        assert denetim_izi.program_yedegi_mi(ornekler[kural.onek]) is True
+
+
 def test_rotasyonun_sildigi_elle_konmus_dosyanin_adi_yedek_satirina_girmez() -> None:
-    """Rotasyon tarihi adın herhangi bir yerinde arar: elle konmuş "gunluk-<gün> <ad>.odbak" da
-    silinir. Olay kalır, ad girmez — açık kipte, kilitli kipte ve geri yükleme notunda aynı
-    kural (`denetim_izi.yedek_kimligi`)."""
-    elle = "gunluk-2026-10-01 Pelinsu Uydurmakaya.odbak"
+    """Rotasyonun `pre-migrate` deseni sürümü geniş alır: elle yeniden adlandırılmış dosya da silinir.
+    Olay kalır, ad girmez — açık kipte, kilitli kipte ve geri yükleme notunda aynı kural
+    (`denetim_izi.yedek_kimligi`)."""
+    elle = "pre-migrate-Pelinsu.Uydurmakaya-2026-10-01.odbak"
+    assert next(k for k in ROTASYON_KUMESI if k.adetle).desen.fullmatch(elle)
     assert masaustu_kanca.yedek_olaylarini_yaz(silinen=[elle]) == 1  # oturum açık: açık kip
     kilitle()
     assert masaustu_kanca.yedek_olaylarini_yaz(silinen=[elle]) == 1  # kilitli kip

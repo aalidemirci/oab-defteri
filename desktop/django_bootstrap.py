@@ -14,6 +14,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from desktop.backup import wal_bosalt
 from desktop.errors import MigrationError, ServerStartError
 from desktop.logging_setup import apply_access_log_policy
 from desktop.session_guard import ENV_TOKEN
@@ -157,15 +158,11 @@ def is_parcacigi_baglantisiyla[T](islem: Callable[[], T]) -> T:
 def wal_checkpoint(db_path: Path) -> bool:
     """Düzenli kapanışta WAL'i ana dosyaya yazar ve kırpar (TB14).
 
-    İki sunucu durduktan SONRA çağrılır: `PRAGMA wal_checkpoint(TRUNCATE)`
-    bütün WAL sayfalarını veritabanı dosyasına aktarır ve `-wal` dosyasını
-    sıfırlar. Böylece kurucunun kapatma olayında ya da elektrik kesintisinde
-    geriye tek, tutarlı bir dosya kalır. Başka bir bağlantı hâlâ okuyorsa
+    İki sunucu durduktan SONRA çağrılır: bütün WAL sayfaları veritabanı dosyasına aktarılır,
+    `-wal` dosyası sıfırlanır (`backup.wal_bosalt`). Böylece kurucunun kapatma olayında ya da
+    elektrik kesintisinde geriye tek, tutarlı bir dosya kalır. Başka bir bağlantı hâlâ okuyorsa
     checkpoint kısmi kalır (sonuç `False`); hata çıkışı durdurmaz.
     """
-    import sqlite3
-    from contextlib import closing
-
     if not db_path.exists():
         return False
     try:
@@ -174,17 +171,7 @@ def wal_checkpoint(db_path: Path) -> bool:
         connections.close_all()  # bu iş parçacığının Django bağlantıları
     except Exception:  # noqa: BLE001 — Django kurulmamış olabilir (açılış hatası)
         logger.debug("Django bağlantıları kapatılamadı (Django kurulmamış olabilir).")
-    try:
-        with closing(sqlite3.connect(db_path, timeout=5)) as baglanti:
-            mesgul, _, _ = baglanti.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
-    except sqlite3.Error:
-        logger.warning("Kapanışta WAL checkpoint yapılamadı.", exc_info=True)
-        return False
-    if mesgul:
-        logger.warning("Kapanışta WAL checkpoint kısmi kaldı (veritabanı meşgul).")
-        return False
-    logger.info("Kapanışta WAL checkpoint yapıldı.")
-    return True
+    return wal_bosalt(db_path)
 
 
 def upload_limit() -> int:

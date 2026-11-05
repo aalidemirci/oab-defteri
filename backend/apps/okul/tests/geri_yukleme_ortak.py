@@ -28,7 +28,6 @@ bütün sütunları taşır; ad-soyad DEK'le şifreli uydurma addır.
 from __future__ import annotations
 
 import base64
-import json
 import sqlite3
 import uuid
 from collections.abc import Iterable
@@ -39,11 +38,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from cryptography.fernet import Fernet
-from desktop.backup_crypto import (
-    encrypt_bytes,
-    private_key_from_data_key,
-    recovery_header_from_state,
-)
+from desktop.tests.kap_ortak import durum_basligi, kap_kur
 from django.db import connection, transaction
 
 from apps.okul.services import app_password, backup_restore, geri_yukleme_yetkisi
@@ -341,11 +336,9 @@ def goruntu(yol: Path) -> bytes:
 
 def sifreli_yedek(icerik: bytes) -> bytes:
     """Bu kurulumun DEK'iyle, güncel kurtarma başlığını gömen şifreli yedek."""
-    baslik = json.dumps(
-        recovery_header_from_state(app_password.read_state() or {}), ensure_ascii=False
-    ).encode("utf-8")
-    acik = private_key_from_data_key(TEST_DEK).public_key()
-    return cast("bytes", encrypt_bytes(icerik, acik, recovery_header=baslik))
+    return cast(
+        "bytes", kap_kur(icerik, TEST_DEK, baslik=durum_basligi(app_password.read_state() or {}))
+    )
 
 
 def geri_yukle(

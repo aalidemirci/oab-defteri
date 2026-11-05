@@ -56,8 +56,8 @@ uçbirimden:
 Yedekler listelenir ve seçtiğiniz yedek veritabanının yerine konur. Yedekler
 şifrelidir; program yöneticisi hesabının tanıtıcısı ve parolası ya da kurtarma
 anahtarı sorulur (parolayla geri yüklemeyi yalnız program yöneticisi hesabı
-yapar). Mevcut (bozuk) dosya silinmez; 'db-onceki-*' adıyla veri klasöründe
-saklanır.
+yapar). Mevcut (bozuk) dosya 'db-onceki-*' adıyla veri klasöründe 14 gün
+saklanır, sonra silinir.
 
 GEREKLİ SİSTEM PAKETLERİ
 ------------------------

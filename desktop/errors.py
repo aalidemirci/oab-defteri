@@ -70,7 +70,11 @@ class SchemaTooNewError(StartupError):
 
 
 class MigrationError(StartupError):
-    """`migrate --no-input` başarısız — pencere açılmaz, yedekten dönüş önerilir."""
+    """Veritabanı güncellenemedi (çıkış 5), pencere açılmaz.
+
+    `migrate` düştüyse yedekten dönüş önerilir. Göç öncesi yedek alınamadıysa göç koşmamıştır,
+    veri sağlamdır: yer açmak önerilir.
+    """
 
     exit_code = EXIT_MIGRATION_FAILED
     title = "Veritabanı güncellenemedi"

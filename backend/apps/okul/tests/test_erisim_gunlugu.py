@@ -336,7 +336,11 @@ def _birim_adi(dugum: ast.AST, ust: dict[ast.AST, ast.AST]) -> str:
 
 
 def _kok_yazimlari(
-    kaynaklar: dict[str, str], *, kok: str, ad_deseni: re.Pattern[str]
+    kaynaklar: dict[str, str],
+    *,
+    kok: str,
+    ad_deseni: re.Pattern[str],
+    okuma_dizeleri: tuple[tuple[str, str], ...] = (),
 ) -> set[tuple[str, str, tuple[str, ...]]]:
     """Kökü `kok` modeli olan yazım zincirleri ve kökü gizleyen başvurular: (dosya, birim, adlar).
 
@@ -349,7 +353,8 @@ def _kok_yazimlari(
     başvurular adlarıyla raporlanır: `import … AccessLog as X` ve `X = AccessLog` (`_TAKMA_AD`),
     belge olmayan bir dizede tablonun ya da modelin adı (`get_model("okul", "AccessLog")`, ham
     SQL; `_DIZE`; adı `ad_deseni` tanır). Birim modül düzeyinde `<modül>`, değilse iç içe
-    tanımların noktalı adıdır.
+    tanımların noktalı adıdır. `okuma_dizeleri` ham SQL okumasına verilen izindir: (dosya, dizenin
+    tam metni) çiftleri sayılmaz, aynı dosyadaki başka dize yine yakalanır.
     Kalan sınır veri akışıdır (queryset'i değişkende tutup sonra yazmak, modeli genel bir
     yardımcıya vermek): uçlar için onu izsiz yazım taramasının tablo karşılaştırması yakalar.
     """
@@ -369,7 +374,8 @@ def _kok_yazimlari(
                 and ad_deseni.search(dugum.value)
                 and not isinstance(ust.get(dugum), ast.Expr)  # belge dizesi
             ):
-                bulunan.add((yol, _birim_adi(dugum, ust), (_DIZE,)))
+                if (yol, dugum.value) not in okuma_dizeleri:
+                    bulunan.add((yol, _birim_adi(dugum, ust), (_DIZE,)))
                 continue
             kok_mu = (isinstance(dugum, ast.Name) and dugum.id == kok) or (
                 isinstance(dugum, ast.Attribute) and dugum.attr == kok

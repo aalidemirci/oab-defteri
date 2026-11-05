@@ -22,7 +22,6 @@ yedek bu kurulumun DEK'iyle alınır; okul kartı ve hesap satırları ORM'siz k
 from __future__ import annotations
 
 import ast
-import json
 import logging
 import os
 import re
@@ -40,15 +39,11 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from desktop import restore as restore_mod
-from desktop.backup_crypto import (
-    config_path,
-    encrypt_bytes,
-    private_key_from_data_key,
-    recovery_header_from_state,
-)
+from desktop.backup_crypto import KAPSAM_TAM, KAPSAM_YEREL, Manifesto, ManifestoGirdisi, config_path
 from desktop.errors import EXIT_RESTORE_FAILED
 from desktop.main import build_parser
 from desktop.paths import VERSION_STAMP_FILE_NAME, AppPaths
+from desktop.tests.kap_ortak import durum_basligi, kap_kur
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -117,10 +112,8 @@ KAPANIS = ACILIS + timedelta(days=3)
 
 def _yedek(icerik: bytes) -> bytes:
     """Bu kurulumun DEK'iyle, güncel kurtarma başlığını gömen şifreli yedek."""
-    durum = app_password.read_state() or {}
-    baslik = json.dumps(recovery_header_from_state(durum), ensure_ascii=False).encode("utf-8")
-    acik = private_key_from_data_key(TEST_DEK).public_key()
-    return cast("bytes", encrypt_bytes(icerik, acik, recovery_header=baslik))
+    baslik = durum_basligi(app_password.read_state() or {})
+    return cast("bytes", kap_kur(icerik, TEST_DEK, baslik=baslik))
 
 
 @pytest.fixture
@@ -1621,6 +1614,57 @@ def test_yedek_goruntusu_wal_basligiyla_bellekte_acilir(
 
     assert gorulen == [None]  # bellek içi bağlantı
     assert list(veri.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    "manifesto",
+    [
+        Manifesto(KAPSAM_YEREL, (ManifestoGirdisi("1" * 32, 2, "a" * 64),)),
+        Manifesto(KAPSAM_TAM),
+    ],
+    ids=["yerel_manifestolu", "tam"],
+)
+@pytest.mark.parametrize("deserialize", [True, False], ids=["bellekte", "pardus_21"])
+def test_yetkiye_ve_goruntuye_dusmeye_yalniz_veritabani_baytlari_gider(
+    manifesto: Manifesto,
+    deserialize: bool,
+    ortam: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Plan F1b-2 ekleri: kap manifesto taşısa da `yonetici_dogrula`'ya ve görüntüye düşmede
+    bağlantıya (Pardus 21'in geçici dosyası dahil) manifesto ve dosya bölümü gitmez."""
+    monkeypatch.setattr(geri_yukleme_yetkisi, "_DESERIALIZE_VAR", deserialize)
+    verilen: list[bytes] = []
+    gorunen: list[bytes] = []
+    asil_dogrula = geri_yukleme_yetkisi.yonetici_dogrula
+    asil_baglanti = geri_yukleme_yetkisi._goruntu_baglantisi
+
+    def izleyen_dogrula(*, goruntu: bytes, **kalan: Any) -> str:
+        verilen.append(goruntu)
+        return asil_dogrula(goruntu=goruntu, **kalan)
+
+    def izleyen_baglanti(dizin: Path, goruntu: bytes) -> Any:
+        gorunen.append(goruntu)
+        return asil_baglanti(dizin, goruntu)
+
+    monkeypatch.setattr(geri_yukleme_yetkisi, "yonetici_dogrula", izleyen_dogrula)
+    monkeypatch.setattr(geri_yukleme_yetkisi, "_goruntu_baglantisi", izleyen_baglanti)
+    ortam["db"].unlink()  # güncel veritabanı yok: karar görüntüde verilir
+    ortam["yedek"].write_bytes(
+        kap_kur(
+            ortam["yeni"],
+            TEST_DEK,
+            baslik=durum_basligi(app_password.read_state() or {}),
+            manifesto=manifesto,
+        )
+    )
+
+    backup_restore.restore_database(
+        ortam["yedek"], ortam["db"], hesap=TEST_TANITICI, password=TEST_PAROLA
+    )
+
+    assert verilen == [ortam["yeni"]]
+    assert gorunen == [geri_yukleme_yetkisi.wal_basligini_yama(ortam["yeni"])]
 
 
 @pytest.mark.parametrize("yol", ["kabul", "sqlite_hatasi", "beklenmeyen_hata"])

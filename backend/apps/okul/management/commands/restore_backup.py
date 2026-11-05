@@ -32,6 +32,7 @@ from getpass import getpass
 from pathlib import Path
 from typing import Any
 
+from desktop.backup import DEFAULT_KEEP_DAYS, OLD_DB_PREFIX
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 
@@ -69,7 +70,8 @@ class Command(BaseCommand):
         self.stdout.write(f"Yedek : {yedek}")
         self.stdout.write(f"Hedef : {hedef}")
         self.stdout.write(
-            f"Mevcut veritabanı silinmez; '{backup_restore.OLD_DB_PREFIX}-*' adıyla kenara alınır."
+            f"Mevcut veritabanı '{OLD_DB_PREFIX}-*' adıyla kenara alınır; "
+            f"{DEFAULT_KEEP_DAYS} gün saklanır, sonra silinir."
         )
         if not options["yes"]:
             yanit = input("Devam edilsin mi? [e/H] ").strip().lower()

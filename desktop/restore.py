@@ -40,6 +40,7 @@ from getpass import getpass
 from pathlib import Path
 from typing import Any
 
+from desktop.backup import DEFAULT_KEEP_DAYS
 from desktop.backup_crypto import BACKUP_SUFFIX, BackupCryptoError
 from desktop.dialogs import show_error
 from desktop.django_bootstrap import prepare_django
@@ -134,7 +135,10 @@ def _run_steps(paths: AppPaths, args: argparse.Namespace, interactive: bool) -> 
     if interactive:
         print(f"\nYedek : {yedek.name}")
         print(f"Hedef : {paths.db_path}")
-        print("Mevcut veritabanı silinmez; 'db-onceki-*' adıyla aynı klasörde saklanır.")
+        print(
+            "Mevcut veritabanı 'db-onceki-*' adıyla aynı klasörde "
+            f"{DEFAULT_KEEP_DAYS} gün saklanır, sonra silinir."
+        )
     if not args.evet:
         if not interactive:
             raise RestoreCliError("Onay sorusu sorulamadı (konsol yok); --evet ile çalıştırın.")

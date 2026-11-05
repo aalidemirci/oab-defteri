@@ -9,9 +9,11 @@
     5. Sürüm damgası ........................ eski program yeni veriyi AÇMAZ
        (damga yoksa 8'den önce veritabanının göç kaydı da denetlenir — §4.2 adım 5)
     6. Bütünlük denetimi .................... bozuk veriyle pencere AÇILMAZ
-    7. Günlük yedek + 14 gün rotasyonu ...... `Connection.backup()`; yalnız şifreli
-       `.odbak`. İlk program yöneticisi hesabı kurulmadan (ilk açılış) yedek atlanır; bugünün
-       yedeği alınmadıysa rotasyon da koşmaz (tasarım §4.2 adım 7; yedekler §4.4.7)
+    7. Günlük yedek (veritabanı + manifesto) + yerel yedeklerin rotasyonu ... yalnız şifreli
+       `.odbak`, `Connection.backup()` ile, Django'dan ve göçten önce, kilitliyken. İlk program
+       yöneticisi hesabı kurulmadan (ilk açılış) yedek atlanır; bugünün yedeği alınmadıysa
+       rotasyon da koşmaz. Bu adımın hatası günlüğe yazılır, program AÇILIR (tasarım §4.2
+       açılış tablosu; yedekler §4.4.7)
     8. Göç öncesi yedek + `migrate --no-input`; ardından 7-8'in olguları (alınan ve silinen
        yedekler, uygulanan göçler) denetim izine `YEDEK` ve `GOC` olarak verilir — bu adımlar
        Django ve tablo hazır olmadan olur, olgular tamponlanır, göçten SONRA `masaustu_kanca`
@@ -37,11 +39,12 @@ kapanışı (SIGTERM). Sıra: pencere → kanal → Qt köprüsü → kancalar b
 ve iz anahtarı bellekten düşer) → yönetim sunucusu → WAL checkpoint (TB14) → temiz kapanış
 işareti → kilit. Mutex'ler süreç bitene dek kalır (lock.py).
 
-Herhangi bir adım başarısız olursa pencere açılmaz; kullanıcıya Türkçe ileti +
-"son yedekten dön" yolu gösterilir ve hataya özel bir çıkış kodu döner (CI ve
+Yedek adımı (7) dışında herhangi bir adım başarısız olursa pencere açılmaz; kullanıcıya
+Türkçe ileti + "son yedekten dön" yolu gösterilir ve hataya özel bir çıkış kodu döner (CI ve
 paket kurulum testleri bu kodlara bakar). "Son yedekten dön" yolunun kendisi
 `--geri-yukle` kipidir (desktop/restore.py): pencere/sunucu açılmadan yedek
-seçtirilir ve veritabanının yerine konur.
+seçtirilir ve veritabanının yerine konur. Göç öncesi yedeğin hatasında veri sağlamdır: ipucu
+yedekten dönüş değil yer açma söyler.
 """
 
 from __future__ import annotations
@@ -86,6 +89,7 @@ from desktop.errors import (
     EXIT_OK,
     EXIT_UNEXPECTED,
     AlreadyRunningError,
+    MigrationError,
     StartupError,
 )
 from desktop.gunluk import DAMGA_DOSYASI, GunDegisimiKapisi, acik_kalma_saati
@@ -214,15 +218,15 @@ def prepare_data(paths: AppPaths, app_version: str) -> None:
     check_database_integrity(paths.db_path, backup_dir=paths.backups)
     olaylar = AcilisOlaylari()
 
-    # Rotasyon yalnız bugünün yedeği elde varken koşar: yedek atlandıysa
-    # (parola henüz kurulmadı, yedek anahtarı bozuk, guvenlik.json kayıp) eski
+    # Rotasyon yalnız bugünün yedeği elde varken koşar: yedek atlandıysa ya da alınamadıysa
+    # (parola henüz kurulmadı, yedek anahtarı bozuk, guvenlik.json kayıp, disk dolu) eski
     # yedekler silinmez — kayıp kilidinden çıkış yolu onlardır (tasarım §4.3 tehdit 8).
-    bugunku_vardi = daily_backup_path(paths.backups, date.today()).exists()
-    gunluk = daily_backup(paths.db_path, paths.backups)
+    gun = date.today()
+    gunluk, yeni = _gunluk_yedegi_al(paths, gun)
     if gunluk is not None:
-        if not bugunku_vardi:
+        if yeni:
             olaylar.alinan_yedekler.append(gunluk.name)
-        olaylar.silinen_yedekler.extend(yol.name for yol in rotate_backups(paths.backups) or [])
+        olaylar.silinen_yedekler.extend(_rotasyonu_kos(paths, gun) or [])
 
     prepare_django(resolve_backend_dir(), paths.data)
     # İkinci hat (§4.2 adım 5): damga yoksa (geri yükleme siler) veritabanının göç kaydı
@@ -230,14 +234,63 @@ def prepare_data(paths: AppPaths, app_version: str) -> None:
     ensure_no_unknown_migrations(unknown_applied_migrations(), app_version)
     bekleyen = pending_migrations()
     if bekleyen:
-        hedef_vardi = pre_migrate_backup_path(paths.backups, app_version, date.today()).exists()
-        goc_oncesi = pre_migrate_backup(paths.db_path, paths.backups, app_version)
-        if goc_oncesi is not None and not hedef_vardi:
-            olaylar.alinan_yedekler.append(goc_oncesi.name)
+        _goc_oncesi_yedegi_al(paths, app_version, olaylar)
     run_migrations()
     olaylar.gocler = list(bekleyen)
     write_version_stamp(paths.version_stamp_path, app_version)
     _acilis_olaylarini_yaz(olaylar, app_version)
+
+
+def _gunluk_yedegi_al(paths: AppPaths, gun: date) -> tuple[Path | None, bool]:
+    """Günün yedeği: (yedek, bu çağrıda mı alındı); alınamadıysa (None, False).
+
+    Tasarım §4.2 açılış tablosu 7. adımın hatasına çıkış kodu değil "günlüğe" der: disk dolu,
+    SQLite hatası ya da okunamayan manifesto programın açılmasını engellemez, eski yedekler kalır.
+    `od-gunluk` da bu yoldan geçer; orada iş bir saat sonra yeniden denenir.
+    """
+    try:
+        vardi = daily_backup_path(paths.backups, gun).exists()
+        yedek = daily_backup(paths.db_path, paths.backups, today=gun)
+    except Exception:
+        logger.exception("Günlük yedek alınamadı; eski yedekler korunuyor, program açık kalıyor.")
+        return None, False
+    return yedek, yedek is not None and not vardi
+
+
+def _goc_oncesi_yedegi_al(paths: AppPaths, app_version: str, olaylar: AcilisOlaylari) -> None:
+    """Göç öncesi yedek; HATASI 8. adımın hatasıdır: çıkış 5, göç koşmaz (§4.2 açılış tablosu).
+
+    Yedek ATLANIRSA (`None`: ilk hesap kurulmadı, yedek anahtarı bozuk, güvenlik dosyası kayıp)
+    göç yine koşar: anahtarı onaran kilit açılışına ancak program açılınca varılır. Hata hâlinde
+    veri sağlamdır: ipucu yedekten dönüş önermez.
+    """
+    try:
+        hedef_vardi = pre_migrate_backup_path(paths.backups, app_version, date.today()).exists()
+        goc_oncesi = pre_migrate_backup(paths.db_path, paths.backups, app_version)
+    except Exception as exc:  # noqa: BLE001 — her yedek hatası aynı kullanıcı akışına çıkar
+        logger.exception("Güncelleme öncesi yedek alınamadı.")
+        raise MigrationError(
+            "Güncelleme öncesi yedek alınamadı; program veriyi korumak için açılmadı.",
+            hint=(
+                "Diskte yer açıp programı yeniden başlatın. Sorun sürerse veri klasöründeki "
+                "logs/uygulama.log dosyasını okulun bilişim teknolojileri rehber öğretmenine "
+                "(BTR) iletin."
+            ),
+        ) from exc
+    if goc_oncesi is not None and not hedef_vardi:
+        olaylar.alinan_yedekler.append(goc_oncesi.name)
+
+
+def _rotasyonu_kos(paths: AppPaths, gun: date) -> list[str] | None:
+    """Yerel yedeklerin rotasyonu: silinen adlar; beklenmeyen hatada None (§4.2 açılış tablosu).
+
+    Tek dosyanın silinememesi buraya gelmez, rotasyon onu kendi yazar (`rotate_backups`).
+    """
+    try:
+        return [yol.name for yol in rotate_backups(paths.backups, paths.data, today=gun) or []]
+    except Exception:
+        logger.exception("Yedek rotasyonu tamamlanamadı; program açık kalıyor.")
+        return None
 
 
 def _acilis_olaylarini_yaz(olaylar: AcilisOlaylari, app_version: str) -> None:
@@ -369,11 +422,16 @@ def gunluk_yedek_isi(
     bugun: Callable[[], date] = date.today,
     saat: Callable[[], float] = acik_kalma_saati,
 ) -> Callable[[], bool]:
-    """Günlük yedek + 14 gün rotasyonu; yedek alınmadıysa rotasyon koşmaz (§4.3 tehdit 8).
+    """Günlük yedek + rotasyon; yedek alınmadıysa rotasyon koşmaz (§4.3 tehdit 8).
+
+    Yedek ya da rotasyon hatası günlüğe yazılır, iş düşer ve bir saat sonra yeniden denenir;
+    alınmış yedeğin olayı rotasyon düşse de denetim izine gider (yeniden denemede yedek "yeni"
+    görünmez).
 
     Oturum içi rotasyon SAAT SIÇRAMASINA karşı korunur: program günlerce açık
     kalırken sistem saati 14 günden fazla ileri sıçrarsa (NTP ya da elle yanlış
-    ayar) `bugün - 14` kesimi geçmiş günlerin bütün yedeklerini silerdi. İşin
+    ayar) `bugün - 14` kesimi geçmiş günlerin bütün yedeklerini ve kenara alınmış
+    veritabanlarını (`db-onceki`) silerdi. İşin
     ilk koşusu bir çapa tutar (o günkü tarih + uyku dahil açık kalma saati);
     rotasyon `min(bugün, çapa + gerçekte geçen gün + 1)` tarihiyle yapılır.
     Saat doğruyken iki değer aynıdır (tatilde uykuda kalan bilgisayarda da:
@@ -392,8 +450,7 @@ def gunluk_yedek_isi(
         capa_gunu, capa_saati = capa[0]
         gecen_gun = max(0, int((simdi - capa_saati) // 86_400))
         guvenilir = capa_gunu + timedelta(days=gecen_gun + 1)
-        vardi = daily_backup_path(paths.backups, gun).exists()
-        yedek = daily_backup(paths.db_path, paths.backups, today=gun)
+        yedek, yeni = _gunluk_yedegi_al(paths, gun)
         if yedek is None:
             return False  # parola kurulmadı / güvenlik dosyası kayıp: bir saat sonra yeniden
         rotasyon_gunu = min(gun, guvenilir)
@@ -403,11 +460,9 @@ def gunluk_yedek_isi(
                 "gerçek süreye göre döndürülüyor. Saati denetleyin.",
                 (gun - rotasyon_gunu).days,
             )
-        silinen = rotate_backups(paths.backups, today=rotasyon_gunu) or []
-        _yedek_olaylarini_yaz(
-            alinan=[] if vardi else [yedek.name], silinen=[yol.name for yol in silinen]
-        )
-        return True
+        silinen = _rotasyonu_kos(paths, rotasyon_gunu)
+        _yedek_olaylarini_yaz(alinan=[yedek.name] if yeni else [], silinen=silinen or [])
+        return silinen is not None
 
     return calistir
 

@@ -30,10 +30,12 @@ from typing import Any, cast
 
 import pytest
 from desktop.backup_crypto import (
-    encrypt_bytes,
-    private_key_from_data_key,
+    DENEME_MAGIC,
+    KAPSAM_TAM,
+    Manifesto,
     recovery_header_from_state,
 )
+from desktop.tests.kap_ortak import durum_basligi, kap_kur
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connections
@@ -91,9 +93,7 @@ def _sifreli_kapsayici(icerik: bytes, *, yabanci: bool = False) -> tuple[bytes, 
     else:
         dek = TEST_DEK
         durum = app_password.read_state() or {}
-    baslik = json.dumps(recovery_header_from_state(durum), ensure_ascii=False).encode("utf-8")
-    acik = private_key_from_data_key(dek).public_key()
-    return cast("bytes", encrypt_bytes(icerik, acik, recovery_header=baslik)), durum
+    return cast("bytes", kap_kur(icerik, dek, baslik=durum_basligi(durum))), durum
 
 
 # ---------------------------------------------------------------------------
@@ -135,10 +135,7 @@ def test_yedek_listesi_dizin_yokken_bos(
 
 def _baslikli_yedek(tmp_path: Path, baslik: bytes) -> bytes:
     """Bu kurulumun DEK'iyle, verilen ham kurtarma başlığını gömen şifreli yedek."""
-    acik = private_key_from_data_key(TEST_DEK).public_key()
-    return cast(
-        "bytes", encrypt_bytes(_sqlite_baytlari(tmp_path, "kimlik"), acik, recovery_header=baslik)
-    )
+    return cast("bytes", kap_kur(_sqlite_baytlari(tmp_path, "kimlik"), TEST_DEK, baslik=baslik))
 
 
 def _liste_satiri(ad: str) -> dict[str, Any]:
@@ -195,6 +192,37 @@ def test_kullanilamayan_baslikta_kurtarma_kimligi_bostur(
     (ortam["yedekler"] / "eski.odbak").write_bytes(_baslikli_yedek(tmp_path, baslik))
 
     assert _liste_satiri("eski.odbak")["kurtarma"] is None
+
+
+def test_yedek_listesi_tam_yedegi_de_baslikten_okur(tmp_path: Path, ortam: dict[str, Path]) -> None:
+    """Kimlik başlıktadır: dosya bölümü taşıyan yedek de aynı okuyucudan geçer."""
+    (ortam["yedekler"] / "tam.odbak").write_bytes(
+        kap_kur(
+            _sqlite_baytlari(tmp_path, "tam"),
+            TEST_DEK,
+            baslik=durum_basligi(app_password.read_state() or {}),
+            manifesto=Manifesto(KAPSAM_TAM),
+        )
+    )
+
+    assert _liste_satiri("tam.odbak")["kurtarma"] is not None
+
+
+def test_deneme_yedegi_listede_kimliksiz_durur_geri_yuklenmez(ortam: dict[str, Path]) -> None:
+    """Plan F1b-3 "Kap ve manifesto": `ODBAK\\x02` listeyi düşürmez, geri yüklemesi ayrı iletiyle
+    400 döner; kapı kurulmaz."""
+    (ortam["yedekler"] / "gunluk-2026-08-01.odbak").write_bytes(DENEME_MAGIC + bytes(200))
+
+    assert _liste_satiri("gunluk-2026-08-01.odbak")["kurtarma"] is None
+    yanit = APIClient().post(
+        GERI_YUKLE_URL,
+        {"name": "gunluk-2026-08-01.odbak", "recovery_key": "UYDURMA-ANAHTAR"},
+        format="json",
+    )
+
+    assert yanit.status_code == 400
+    assert "deneme sürümüyle alınmış" in yanit.json()["message"]
+    assert restart_gate.restart_required() is False
 
 
 def test_bozuk_yedek_dosyasi_listeyi_dusurmez(tmp_path: Path, ortam: dict[str, Path]) -> None:
@@ -263,6 +291,43 @@ def test_sirsiz_istek_400_ile_reddedilir(tmp_path: Path, ortam: dict[str, Path])
         "program yöneticisi hesabının tanıtıcısı ve parolası ya da kurtarma anahtarı"
         in yanit.json()["message"]
     )
+
+
+@pytest.mark.parametrize(
+    "kdf",
+    [{"time_cost": "x"}, {"time_cost": None}, {"parallelism": 0}, {"memory_cost": 2**40}],
+    ids=["metin", "bos", "kulvar_sifir", "bellek_uint32_ustu"],
+)
+def test_sinir_disi_baslik_kdfsi_400_ve_turkce_ileti_verir(
+    tmp_path: Path, ortam: dict[str, Path], kdf: dict[str, Any]
+) -> None:
+    """Hazırlanmış başlık canlı uçta 500 ya da "invalid literal for int()" iletisi vermez."""
+    dek = crypto.new_data_key()
+    durum = app_password._build_state(
+        dek,
+        hesap_id="5e6f7a8b-9c0d-4e1f-a2b3-c4d5e6f7a8b9",
+        tanitici=TEST_TANITICI,
+        password="Baska-Parola-7",
+        recovery_key=TEST_KURTARMA_ANAHTARI,
+    )
+    (ortam["yedekler"] / "hazirlanmis.odbak").write_bytes(
+        kap_kur(
+            _sqlite_baytlari(tmp_path, "yabanci"),
+            dek,
+            baslik=durum_basligi({**durum, "kdf": {**durum["kdf"], **kdf}}),
+        )
+    )
+
+    yanit = APIClient().post(
+        GERI_YUKLE_URL,
+        {"name": "hazirlanmis.odbak", "recovery_key": TEST_KURTARMA_ANAHTARI},
+        format="json",
+    )
+
+    assert yanit.status_code == 400
+    assert yanit.json()["message"].startswith("Yedek açılamadı")
+    assert not ortam["db"].exists()
+    assert restart_gate.restart_required() is False
 
 
 def test_yol_ayracli_ad_reddedilir(tmp_path: Path, ortam: dict[str, Path]) -> None:

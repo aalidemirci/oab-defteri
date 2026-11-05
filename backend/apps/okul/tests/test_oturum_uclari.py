@@ -9,7 +9,6 @@ göstermez, tasarım §4.4.3).
 
 from __future__ import annotations
 
-import json
 import sqlite3
 import uuid
 from contextlib import closing
@@ -17,11 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from desktop.backup_crypto import (
-    encrypt_bytes,
-    private_key_from_data_key,
-    recovery_header_from_state,
-)
+from desktop.tests.kap_ortak import durum_basligi, kap_kur
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -464,14 +459,9 @@ def test_kurtarmayla_geri_yuklemeden_sonra_program_yoneticisi_arayuzden_acar(
     with closing(sqlite3.connect(kaynak)) as baglanti:
         baglanti.execute("CREATE TABLE kayit (deger TEXT)")
         baglanti.commit()
-    baslik = json.dumps(recovery_header_from_state(app_password.read_state())).encode("utf-8")
     yedek = tmp_path / "tasima.odbak"
     yedek.write_bytes(
-        encrypt_bytes(
-            kaynak.read_bytes(),
-            private_key_from_data_key(TEST_DEK).public_key(),
-            recovery_header=baslik,
-        )
+        kap_kur(kaynak.read_bytes(), TEST_DEK, baslik=durum_basligi(app_password.read_state()))
     )
     app_password.lock()
     app_password.state_path().unlink()  # yeni bilgisayar: güvenlik dosyası yok

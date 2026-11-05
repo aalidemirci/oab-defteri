@@ -278,10 +278,12 @@ AUDIT_LOCKED_MAC_INFO = b"od-iz-kilitli-mac/v1"
 def derive_subkey(key: bytes, *, info: bytes, salt: bytes | None = None) -> bytes:
     """Adlı amaç için 32 baytlık alt anahtar: HKDF-SHA256(salt, info=amaç).
 
-    DEK'ten türeyen bütün anahtarların (kör indeks, hesap mührü, sarmal özeti, dosya sarmalı;
-    F3'te hareket parmak izi), iz anahtarı türevlerinin (§4.6.3) ve hesap
+    Backend'de DEK'ten türeyen anahtarların (kör indeks, hesap mührü, sarmal özeti, dosya
+    sarmalı; F3'te hareket parmak izi), iz anahtarı türevlerinin (§4.6.3) ve hesap
     sarmalı anahtarının (parolanın Argon2id çıktısından; `account_wrapping_key`) tek
-    kapısıdır. Bilgi dizgeleri kimlik tablosundadır (tasarım §2.3.1); her amaç
+    kapısıdır. Yedek anahtarları bu kapının dışındadır: DEK'ten türerler ama masaüstü katmanı
+    backend'i içe aktarmadığı için `desktop.backup_crypto`'da türetilirler; dizgelerinin
+    çakışmazlığı testle sabittir. Bilgi dizgeleri kimlik tablosundadır (tasarım §2.3.1); her amaç
     ayrı dizge kullanır, bir amacın anahtarı ötekini vermez. Tuz yalnız kilitli kip
     tohumunda verilir (`tuz = seq ‖ mac`, §4.6.3); öteki türevlerde yoktur (None).
     """

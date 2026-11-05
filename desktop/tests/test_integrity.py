@@ -62,6 +62,9 @@ def test_bozuk_dosya_turkce_hata_ile_reddedilir(tmp_path: Path) -> None:
         "program yöneticisi hesabının tanıtıcısı ve parolası ya da kurtarma anahtarı sorulur"
         in hata.value.hint
     )
+    # `db-onceki` rotasyondadır (tasarım §4.4.7): "silinmez" sözü verilmez.
+    assert "14 gün saklanır, sonra silinir" in hata.value.hint
+    assert "silinmez" not in hata.value.hint
 
 
 def test_pardus_benioku_geri_yuklemede_program_yoneticisini_anar() -> None:
@@ -75,6 +78,9 @@ def test_pardus_benioku_geri_yuklemede_program_yoneticisini_anar() -> None:
         in metin
     )
     assert "hesabınızın tanıtıcısı" not in metin
+    # `db-onceki` rotasyondadır (tasarım §4.4.7): metin de bütünlük iletisi gibi süre söyler.
+    assert "'db-onceki-*' adıyla veri klasöründe 14 gün saklanır, sonra silinir" in metin
+    assert "dosya silinmez" not in metin
 
 
 def test_bozuk_sayfa_integrity_check_ile_yakalanir(tmp_path: Path) -> None:

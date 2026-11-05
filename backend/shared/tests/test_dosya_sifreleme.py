@@ -24,6 +24,7 @@ import pytest
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from desktop import backup_crypto
 
 from conftest import TEST_DEK
 from shared import crypto
@@ -733,3 +734,47 @@ def test_modul_yalniz_standart_kitaplik_ve_cryptography_kullanir() -> None:
     yabanci = {kok for kok in kokler if kok not in sys.stdlib_module_names} - {"cryptography"}
     assert yabanci == set()
     assert "cryptography" in kokler
+
+
+# ---------------------------------------------------------------- yedek kabıyla sözleşme
+def test_yedek_kabinin_yeniden_yazdigi_sabitler_dosya_kabiyla_ayni() -> None:
+    """Masaüstü katmanı backend'i içe aktarmaz (`desktop.backup_crypto` modül başlığı): dosya kabının
+    bildiği sabitleri orada yeniden yazılıdır, biri değişirse bu test düşer."""
+    assert backup_crypto.DEPO_ADI_DESENI.pattern == ds.DEPO_ADI_DESENI.pattern
+    assert backup_crypto.DOSYA_KAP_EK_BAYT == ds.KAP_EK_BAYT
+    assert backup_crypto.DOSYA_AZAMI_SIFRELI_BOY == ds.AZAMI_SIFRELI_BOY
+    girdi = backup_crypto.ManifestoGirdisi(_AD, len(_ACIK), ds.acik_ozet(_ACIK))
+    assert girdi.sifreli_boy == ds.sifreli_boy(len(_ACIK))
+
+
+def test_tam_yedek_gercek_dosya_kabini_ikinci_kez_sifrelemeden_tasir(tmp_path: Path) -> None:
+    """Ek, yedekten çıkan baytlarla dosya anahtarıyla açılır; özeti manifestoyu tutar."""
+    depo = tmp_path / "dosyalar"
+    depo.mkdir()
+    (depo / _AD).write_bytes(ds.sifrele(_ACIK, dosya_anahtari=_DOSYA_ANAHTARI, stored_name=_AD))
+    girdi = backup_crypto.ManifestoGirdisi(_AD, len(_ACIK), ds.acik_ozet(_ACIK))
+    baslik = backup_crypto._header_bytes(
+        {"surum": 2, "kdf": {}, "kurtarma": {"salt": "eA==", "sarmal": "eA=="}}
+    )
+    hedef = tmp_path / "tam.odbak"
+    manifesto = backup_crypto.tam_yedek_yaz(
+        hedef,
+        b"SQLite format 3\x00",
+        [girdi],
+        depo,
+        backup_crypto.private_key_from_data_key(TEST_DEK).public_key(),
+        recovery_header=baslik,
+    )
+
+    with hedef.open("rb") as akis:
+        akis.seek(backup_crypto.kap_basligini_oku(hedef).dosya_bolumu_konumu)
+        (kap,) = (
+            b"".join(okunan.parcalar())
+            for okunan in backup_crypto.dosya_bolumunu_oku(akis, manifesto)
+        )
+
+    assert kap == (depo / _AD).read_bytes()
+    acik = ds.coz(kap, dosya_anahtari=_DOSYA_ANAHTARI, stored_name=_AD)
+    backup_crypto.ek_denetle(girdi, acik)
+    with pytest.raises(backup_crypto.EkTutmuyorHatasi):
+        backup_crypto.ek_denetle(girdi, acik[:-1] + b"X")

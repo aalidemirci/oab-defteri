@@ -149,13 +149,14 @@ YEDEĞİN GÖRÜNTÜSÜ BELLEKTE açılır: `sqlite3.connect(":memory:")` + `des
 yedeği WAL kipindeki kaynaktan `Connection.backup()` ile alındığı için görüntünün başlığı WAL
 işaretlidir (18-19. baytlar 2); `deserialize` böyle görüntüyü açmaz ("unable to open database
 file"). Bu yüzden görüntünün BELLEKTEKİ kopyasında iki bayt 1'e çekilir (geri yükleme ise
-görüntünün kendisini aynen yazar). Görüntü bugün yalnız veritabanı baytlarıdır; F1b 3. adımda
-kap manifesto ya da dosya bölümü taşırsa buraya yalnız veritabanı baytları verilmelidir.
+görüntünün kendisini aynen yazar). Görüntü yalnız veritabanı baytlarıdır: kabın manifestosunu ve
+dosya bölümünü `backup_crypto` ayırır, buraya gelmezler (plan F1b-2 ekleri; çağıran
+`backup_restore._yetkiyi_denetle`).
 
 **Tasarımın "bellekte" lafzından sapma (F1b-2 ekleri):** `deserialize` olmayan SQLite'ta
 (< 3.36; Pardus 21'in 3.34'ü) görüntü, veri dizini altında 0700 izinli bir geçici dizine
 yazılır, salt okunur açılır ve okunur okunmaz (hata yolunda da) silinir. Aile emsali
-`desktop/backup.py::database_snapshot`'tır (aynı platform için aynı kısa temas bilerek kabul
+`desktop/backup.py::goruntu_ve_manifesto`'dur (aynı platform için aynı kısa temas bilerek kabul
 edilir). Çözülen görüntü alan düzeyinde şifrelidir: geçici dosyanın açıklığı, diskte her zaman
 duran `db.sqlite3` ile aynıdır; yine de kalıcı düz kopya bırakılmaz.
 """

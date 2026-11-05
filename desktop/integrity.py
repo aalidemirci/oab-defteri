@@ -17,6 +17,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+from desktop.backup import DEFAULT_KEEP_DAYS
 from desktop.errors import DatabaseCorruptError
 
 logger = logging.getLogger("oab_defteri.integrity")
@@ -34,7 +35,8 @@ def _hint(backup_dir: Path | None) -> str:
         "'OAB Defteri — Yedekten Geri Yükle' kısayolunu çalıştırın "
         "(veya komut satırından: oab-defteri --geri-yukle). Yedek listeden "
         "seçilir; program yöneticisi hesabının tanıtıcısı ve parolası ya da kurtarma anahtarı "
-        "sorulur. Bozuk dosya silinmez; 'db-onceki-*' adıyla veri klasöründe saklanır."
+        "sorulur. Bozuk dosya 'db-onceki-*' adıyla veri klasöründe "
+        f"{DEFAULT_KEEP_DAYS} gün saklanır, sonra silinir."
     )
     if backup_dir is None:
         return yol

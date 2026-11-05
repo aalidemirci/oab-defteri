@@ -68,6 +68,7 @@ from typing import Any
 
 import desktop
 import pytest
+from desktop.backup_crypto import BOS_YEREL_MANIFESTO
 from django.apps import apps as django_apps
 from django.db import connection, transaction
 from django.urls import URLPattern, URLResolver, get_resolver
@@ -307,7 +308,11 @@ def _personel_listesi() -> dict[str, Any]:
 
 def _sifreli_yedek(monkeypatch: pytest.MonkeyPatch) -> Istek:
     # Görüntü sabit baytlardır: açık test işleminin dosyasından ayrı bağlantıyla okunmaz.
-    monkeypatch.setattr(encrypted_backup, "database_snapshot", lambda _yol: b"SQLite format 3\0")
+    monkeypatch.setattr(
+        encrypted_backup,
+        "goruntu_ve_manifesto",
+        lambda _yol: (b"SQLite format 3\0", BOS_YEREL_MANIFESTO),
+    )
     return Istek("/api/v1/backups/encrypted/", None, _turler("YEDEK"))
 
 
@@ -831,11 +836,14 @@ ORM_DISI_CAGRILAR: dict[tuple[str, str, str], str] = {
         "Okuma işleminin sınırları (`BEGIN`, `COMMIT`, hata yolunda `ROLLBACK`): kayıt yazmaz; "
         "satırın izinin okumaları tek anlık görüntüdedir (bağımsız denetim bulgusu: yanlış alarm)."
     ),
+    ("desktop/backup.py", "_goruntunun_manifestosu", "goruntu.execute"): (
+        "Yedek görüntüsünden `SELECT`: manifestoyu okur, kayıt yazmaz; canlı veritabanına dokunmaz."
+    ),
+    ("desktop/backup.py", "wal_bosalt", "baglanti.execute"): (
+        "`PRAGMA wal_checkpoint`: kayıt yazmaz, WAL günlüğünü ana dosyaya aktarır."
+    ),
     ("desktop/django_bootstrap.py", "unknown_applied_migrations", "bilinen.update"): (
         "Python kümesi (`set.update`): bilinen göç adları."
-    ),
-    ("desktop/django_bootstrap.py", "wal_checkpoint", "baglanti.execute"): (
-        "`PRAGMA wal_checkpoint`: kayıt yazmaz, WAL günlüğünü ana dosyaya aktarır."
     ),
     ("desktop/integrity.py", "check_database_integrity", "connection.execute"): (
         "`PRAGMA integrity_check`: açılıştaki bütünlük denetimi, salt okur."

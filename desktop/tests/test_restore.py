@@ -400,7 +400,11 @@ def test_onay_reddinde_servis_cagrilmaz(
 
     assert kod == EXIT_OK
     assert "cagri" not in sahte_ortam
-    assert "iptal" in capsys.readouterr().out
+    cikti = capsys.readouterr().out
+    assert "iptal" in cikti
+    # `db-onceki` rotasyondadır (tasarım §4.4.7): "silinmez" sözü verilmez.
+    assert "14 gün saklanır, sonra silinir" in cikti
+    assert "silinmez" not in cikti
 
 
 # ------------------------------------------------------------------ uçtan uca
@@ -454,7 +458,7 @@ def test_geri_yukleme_kipi_gercek_akista_calisir(tmp_path: Path) -> None:
     Veri klasöründe `guvenlik.json` YOKTUR (tehdit 8, güvenlik dosyası kayıp senaryosu):
     geri yükleme dosyayı yedeğin kurtarma başlığından yeniden yazar.
     """
-    from desktop.backup_crypto import encrypt_bytes, private_key_from_data_key
+    from desktop.tests.kap_ortak import kap_kur
 
     veri = tmp_path / "data"
     veri.mkdir(parents=True)
@@ -475,13 +479,7 @@ def test_geri_yukleme_kipi_gercek_akista_calisir(tmp_path: Path) -> None:
     dek = os.urandom(32)
     baslik = _gomulu_durum(dek, _E2E_KURTARMA)
     yedek = yedek_dizini / "gunluk-2026-08-29.odbak"
-    yedek.write_bytes(
-        encrypt_bytes(
-            kaynak.read_bytes(),
-            private_key_from_data_key(dek).public_key(),
-            recovery_header=baslik,
-        )
-    )
+    yedek.write_bytes(kap_kur(kaynak.read_bytes(), dek, baslik=baslik))
 
     sonuc = subprocess.run(  # noqa: S603 — sabit argümanlar, kabuk yok
         [

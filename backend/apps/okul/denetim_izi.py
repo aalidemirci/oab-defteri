@@ -209,18 +209,25 @@ DOSYA_NESNELERI: Final[Mapping[str, tuple[str, ...]]] = {
 
 #: Programın ürettiği yedek adları — BİREBİR biçimleriyle (`desktop/backup.py`,
 #: `services/encrypted_backup.py`): günlük `gunluk-<gün>`, göç öncesi
-#: `pre-migrate-<sürüm>-<gün>`, saklama tetiği öncesi `pre-anonim-<gün>-<saat>[-<sıra>]`,
-#: indirilen `oab-defteri-yedek-<gün>-<saat>`. Önekten sonra serbest harf KABUL EDİLMEZ:
+#: `pre-migrate-<sürüm>-<gün>`, kurulum `pre-parola-acilis-<gün>-<saat>`, saklama tetiği öncesi
+#: `pre-anonim-<gün>-<saat>[-<sıra>]`, dönem kapanışı öncesi `pre-kapanis-<gün>`, DEK yenilemesi
+#: öncesi `pre-dek-yenileme-<gün>`, indirilen `oab-defteri-yedek-<gün>-<saat>` (`.odbak`) ve
+#: kenara alınan veritabanı `db-onceki-<gün>-<saat>.sqlite3` (plan F1b-1 ekleri; `-wal`/`-shm`
+#: eşleri yedek değildir, satıra girmez). Önekten sonra serbest harf KABUL EDİLMEZ:
 #: kullanıcı programın önekini koruyup dosyaya bir ad ekleyebilir ("oab-defteri-yedek-…-
 #: Uydurma.odbak"); o ad serbest metindir, kişi adı içerebilir (R1). Sürüm yalnız
 #: `x.y.z[-alpha|beta|rc|dev[.n]]` biçimindedir; uymayan sürümlü ad da satıra girmez
 #: (fail-closed: ad düşer, olay kalır).
 _GUN = r"\d{4}-\d{2}-\d{2}"
 _PROGRAM_YEDEGI: Final = re.compile(
-    rf"^(?:gunluk-{_GUN}"
+    rf"^(?:(?:gunluk-{_GUN}"
     rf"|pre-migrate-\d{{1,4}}\.\d{{1,4}}\.\d{{1,4}}(?:-(?:alpha|beta|rc|dev)(?:\.\d{{1,4}})?)?-{_GUN}"
+    rf"|pre-parola-acilis-{_GUN}-\d{{6}}"
     rf"|pre-anonim-{_GUN}-\d{{6}}(?:-\d{{1,4}})?"
-    rf"|oab-defteri-yedek-{_GUN}-\d{{6}})\.odbak$"
+    rf"|pre-kapanis-{_GUN}"
+    rf"|pre-dek-yenileme-{_GUN}"
+    rf"|oab-defteri-yedek-{_GUN}-\d{{6}})\.odbak"
+    rf"|db-onceki-{_GUN}-\d{{6}}\.sqlite3)$"
 )
 
 
@@ -232,9 +239,10 @@ def program_yedegi_mi(ad: object) -> bool:
 def yedek_kimligi(ad: object) -> str:
     """`YEDEK` satırının kimliği: programın ürettiği ad, değilse BOŞ (adı kayda geçmez; R1).
 
-    Rotasyon tarihi adın herhangi bir yerinde arar (`desktop/backup.py`): yedek klasörüne
-    elle konmuş "gunluk-2026-10-01 <ad>.odbak" da silinir; silinen dosyanın adı satıra
-    girmez, olay kalır. Geri yükleme notunda bekleyen olay da aynı kuraldan geçer.
+    Rotasyonun `pre-migrate` deseni sürümü bu desenden geniş alır (`desktop/backup.py`
+    `_safe_name` alfabesi): elle yeniden adlandırılmış "pre-migrate-<ad>-2026-10-01.odbak" da
+    silinir; silinen dosyanın adı satıra girmez, olay kalır. Geri yükleme notunda bekleyen olay
+    da aynı kuraldan geçer.
     """
     return ad if isinstance(ad, str) and program_yedegi_mi(ad) else ""
 

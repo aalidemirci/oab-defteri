@@ -12,6 +12,13 @@ izi taşımayan bir veritabanı getirirdi. Bu çekirdek üç giriş kapısından
     * çalışan program: Güvenlik sekmesi (`live_restore`, `POST backups/restore/`)
     * destek/geliştirme: `python manage.py restore_backup`
 
+KAP (`ODBAK\\x03`; `desktop.backup_crypto`; plan F1b-3 "Kap ve manifesto"): çözülen yedek
+veritabanı baytlarını ve manifestoyu AYRI verir (`YedekIcerigi`). SQLite başlık denetimi, yetki
+denetimi (görüntüye düşme dahil) ve takas yalnız veritabanı baytlarını görür. Deneme sürümünün
+kabı (`ODBAK\\x02`) ayrı iletiyle reddedilir. Tam yedeğin dosya bölümünün yapısı denetlenir, kap
+düzeyinde bozuksa geri yükleme yapılmaz; manifestodaki eklerin depoya yerleştirilmesi sonraki alt
+commit'tedir (plan F1b-3 "Sıra" (c)).
+
 VERİTABANINA HİÇ DOKUNULMAZ: geri yüklemenin varlık sebebi bozuk bir
 db.sqlite3'tür; bu modülde ORM importu ve sorgusu yoktur. Django'dan yalnız
 ayarlar (`settings.DATA_DIR`, `app_password` yol çözümü üzerinden) ve saat
@@ -52,6 +59,15 @@ yok). KURTARMA ANAHTARI YOLUNDA ROL DENETİMİ YOKTUR: anahtarın kendisi yetkid
 Yanlış denemelerin gecikmesi hesapsız ve süreç içidir (plan F1b-1). AES-GCM
 kimlik doğrulaması nihai hakemdir: yanlış DEK açık hata verir, sessizce bozuk
 çıktı üretilemez.
+
+YEDEK BAŞLIĞININ `kdf`'Sİ GÜVENİLMEZDİR: başlık AAD'dedir ama kurtarma anahtarı yolunda mühür
+açılmadan ÖNCE kullanılır, kabın uzunluk alanları gibi okumadan önce sınanır. Gömülü başlık aday
+olmadan `_baslik_kdf_makul`'dan geçer: değerler okunabilmeli, Argon2id'nin aralığında kalmalı ve
+programın profilinin `_BASLIK_KDF_KATI` katını aşmamalıdır. Aşan başlık aday olmaz; hazırlanmış
+bir yedek süreci belleğe boğamaz, bitmeyen bir işe sokamaz, ham Argon2 hatası gösteremez. Tavanın
+altındaki değer yine koşar (bellek tepesi en çok profilin bu katıdır). Sınır tek kurala konmaz
+(`is_usable_security_state`): o kural `guvenlik.json`'u da "kayıp" yapardı; güncel dosyanın
+biçimsiz `kdf`'si kabul edilmiş kalan risktir (plan F1b-2 ekleri).
 
 GÜVENLİK DOSYASI KAYIP KİLİDİNDEN ÇIKIŞ (tasarım §4.3 tehdit 8): güncel `guvenlik.json` yoksa
 aday listesinde yalnız gömülü başlık kalır; çözüm onunla (kurtarma anahtarıyla)
@@ -94,39 +110,46 @@ yolda yazılır.
 
 KVKK: çözülen içerik diske YALNIZ hedef veritabanı dosyası olarak yazılır
 (aynı dizinde .tmp → atomik yer değiştirme; hata hâlinde .tmp silinir).
-Ayrı bir düz kopya bırakılmaz. Mevcut (bozuk) veritabanı da SİLİNMEZ:
+Ayrı bir düz kopya bırakılmaz. Mevcut (bozuk) veritabanı geri yüklemede silinmez:
 `db-onceki-<damga>.sqlite3` adıyla kenara alınır — veri kurtarma denemesi
 için tek nüsha oydu.
 
-KENARA ALINAN VERİTABANININ AKIBETİ (aile iskeletinden; OAB'de tasarım §4.4.7):
-geri yükleme onu silmez. 14 günden eskileri `-wal`/`-shm` eşleriyle silmenin
-araçları buradadır (`old_databases_before` + `remove_old_databases_named`). Aile
-iskeletinde bunları saklama tetiği çağırıyordu; o servis OAB'ye alınmadı, bugün
-çağıran yoktur. Tasarıma göre `db-onceki-` yerel yedeklerin 14 günlük
-rotasyonuna girecektir (tasarım §4.4.7, §12.B `desktop/backup.py`; bugünkü
-`rotate_backups` bu öneki kapsamaz). Yaş dosyanın ADINDAKİ damgadan okunur, dosya
+KENARA ALINAN VERİTABANININ AKIBETİ (tasarım §4.4.7; plan F1b-3 "Rotasyon ve yerel yedekler"):
+geri yükleme onu silmez; 14 gün sonra `-wal`/`-shm` eşleriyle yerel yedeklerin rotasyonu siler
+(`desktop.backup.rotate_backups`). Ad kuralı rotasyonla birlikte `desktop/backup.py`'dedir,
+masaüstü backend'i içe aktarmaz. Yaş dosyanın ADINDAKİ damgadan okunur, dosya
 zamanından değil: `os.replace` dosya zamanını korur, yani dosya zamanı kenara
 alınma anını değil eski veritabanına son yazılan anı söyler (program yaz tatilinde
 kapalı kaldıysa haftalar öncesini) — dosya zamanına bakılsa dün yapılan geri
-yüklemenin dönüş yolu ertesi tetikte silinirdi. Damga değişmez (taşıma, kopyalama,
+yüklemenin dönüş yolu ertesi rotasyonda silinirdi. Damga değişmez (taşıma, kopyalama,
 virüs tarayıcısı dosya zamanını değiştirebilir) ve `-wal`/`-shm` eşleri aynı damgayı
-taşıdığı için bir çift birlikte karar görür.
+taşıdığı için bir çift birlikte karar görür. `old_databases_before` aile iskeletinin saklama
+tetiğinden kalmadır, bugün çağıranı yoktur.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Final, cast
 
+from argon2.exceptions import HashingError
+from desktop.backup import (
+    OLD_DB_PREFIX,
+    OLD_DB_STAMP_FORMAT,
+    SQLITE_EKLERI,
+    old_database_stamp,
+)
 from desktop.backup_crypto import (
+    DENEME_MAGIC,
     MAGIC,
     BackupCryptoError,
+    YedekAnahtariHatasi,
+    YedekIcerigi,
     decrypt_bytes,
     embedded_recovery_metadata,
     ensure_public_config,
@@ -138,25 +161,21 @@ from desktop.paths import VERSION_STAMP_FILE_NAME
 from django.utils import timezone
 
 from apps.okul.services import app_password, geri_yukleme_notu, geri_yukleme_yetkisi, ozet_onarimi
+from shared import crypto
 
 logger = logging.getLogger("oab_defteri.restore")
 
 SQLITE_MAGIC = b"SQLite format 3\x00"
-# Kenara alınan eski veritabanının ad öneki (integrity ipucu bu adı anar).
-OLD_DB_PREFIX = "db-onceki"
-#: Kenara alınan veritabanının adındaki damga: geri yükleme anının YEREL saati,
-#: saniyesiyle (`_swap_database_files`). Saklama tetiği dosyanın yaşını bundan okur.
-OLD_DB_STAMP_FORMAT = "%Y-%m-%d-%H%M%S"
-#: SQLite'ın yan dosyaları; kenara alınan veritabanının adıyla yanına taşınır.
-_SQLITE_EKLERI = ("-wal", "-shm")
-#: Programın ürettiği adlar: `db-onceki-<damga>.sqlite3` ve `-wal`/`-shm` eşleri. Bu
-#: biçimde olmayan (elle konmuş, yol ayırıcılı) ada saklama tetiği dokunmaz.
-_OLD_DB_NAME_RE = re.compile(
-    rf"^{re.escape(OLD_DB_PREFIX)}-(\d{{4}}-\d{{2}}-\d{{2}}-\d{{6}})\.sqlite3(?:-wal|-shm)?$"
-)
 
 _SOURCE_CURRENT = "guncel"
 _SOURCE_EMBEDDED = "gomulu"
+
+#: Yedek başlığının `kdf`'sine izin verilen tavan: programın profilinin bu katı (modül başlığı).
+#: Profil ileride yükselirse o sürümün yedeği eski sürümde de aday kalsın diye paydır. Tavan sınıf
+#: varsayılanından türer: `crypto.DEFAULT_KDF` testlerde ucuz profile iner.
+_BASLIK_KDF_KATI: Final = 16
+#: Argon2'nin alt sınırı: bellek (KiB) kulvar başına en az 8'dir.
+_ARGON2_KULVAR_BELLEGI: Final = 8
 
 
 class BackupRestoreError(ValueError):
@@ -209,7 +228,7 @@ class RestoreResult:
 
 def inspect_backup(container: bytes) -> BackupInfo:
     """Dosyanın şifreli yedek kapsayıcısı olduğunu doğrular, gömülü başlığı çıkarır."""
-    if container.startswith(MAGIC):
+    if container.startswith((MAGIC, DENEME_MAGIC)):
         try:
             ham = embedded_recovery_metadata(container)
         except BackupCryptoError as exc:
@@ -270,13 +289,14 @@ def restore_database(
     icerik, kaynak, dek, acan_durum = _decrypt_container(
         container, info, hesap=hesap_adi, password=parola, recovery_key=anahtar
     )
-    if not icerik.startswith(SQLITE_MAGIC):
+    veritabani: bytes = icerik.veritabani
+    if not veritabani.startswith(SQLITE_MAGIC):
         raise BackupRestoreError(
             "Yedek çözüldü ama içeriği SQLite veritabanı çıkmadı; dosya bozulmuş olabilir."
         )
     if parola:
         # Geri yükleme yetkisi (modül başlığı): parola doğrulandı, hiçbir dosya değişmedi.
-        _yetkiyi_denetle(db_path, icerik, dek, acan_durum, hesap_adi or "")
+        _yetkiyi_denetle(db_path, veritabani, dek, acan_durum, hesap_adi or "")
 
     # Kenara alınacak veritabanının zincir başı ve çapa takastan ÖNCE, salt okunur (geri
     # yükleme notu).
@@ -290,7 +310,7 @@ def restore_database(
             onceki_db=db_path, yeni_db=gecici, dek=dek, sarmal_ozetleri=sarmal_ozetleri
         )
 
-    eski = _swap_database_files(db_path, icerik, hazirla=_onar)
+    eski = _swap_database_files(db_path, veritabani, hazirla=_onar)
     yazildi = _ensure_state_file(info, kaynak)
     # KARDEŞ DOSYA da eşitlenir (birleşme incelemesi bulgusu): yedekleme.json
     # bayat kalırsa (a) `_adopt_key` her kilit açılışında "anahtar eşleşmiyor"
@@ -322,34 +342,12 @@ def restore_database(
 # ---------------------------------------------------------------------------
 # Kenara alınan veritabanının akıbeti (14 günlük rotasyon — tasarım §4.4.7)
 # ---------------------------------------------------------------------------
-def old_database_stamp(name: str) -> datetime | None:
-    """`db-onceki-<damga>.sqlite3[-wal|-shm]` adındaki geri yükleme anı (yerel, saf).
-
-    Programın ürettiği biçimde olmayan ad (elle konmuş dosya, yol ayırıcılı ad,
-    geçersiz tarih) için None: saklama tetiği o dosyaya dokunmaz.
-    """
-    eslesme = _OLD_DB_NAME_RE.match(name)
-    if eslesme is None:
-        return None
-    try:
-        return datetime.strptime(eslesme.group(1), OLD_DB_STAMP_FORMAT)
-    except ValueError:
-        return None
-
-
-def is_old_database_file(name: str) -> bool:
-    """Ad bir önceki veritabanının KENDİSİ mi (`-wal`/`-shm` eşi değil)? Sayım içindir."""
-    return old_database_stamp(name) is not None and name.endswith(".sqlite3")
-
-
 def old_databases_before(data_dir: Path, cutoff: datetime) -> list[str]:
     """Adındaki damga `cutoff`'tan ÖNCE olan önceki veritabanı dosyalarının ADLARI (SİLMEZ).
 
     Eşler (`-wal`/`-shm`) aynı damgayı taşıdığı için veritabanıyla birlikte listelenir.
-    `cutoff` saat dilimli ise yerel saate çevrilir (damga yerel saattir). Yalnız saklama
-    tetiği ANINDA sorulur; silinemeyenler sonra yalnız ADLARIYLA yeniden denenir
-    (`remove_old_databases_named`). Ölçünün neden dosya zamanı değil ad olduğu modül
-    başlığındadır.
+    `cutoff` saat dilimli ise yerel saate çevrilir (damga yerel saattir). Ölçünün neden dosya
+    zamanı değil ad olduğu modül başlığındadır.
     """
     sinir = timezone.localtime(cutoff).replace(tzinfo=None) if timezone.is_aware(cutoff) else cutoff
     try:
@@ -362,52 +360,6 @@ def old_databases_before(data_dir: Path, cutoff: datetime) -> list[str]:
         if damga is not None and damga < sinir and yol.is_file():
             adlar.append(yol.name)
     return adlar
-
-
-def _ana_ad(ad: str) -> str:
-    for ek in _SQLITE_EKLERI:
-        if ad.endswith(ek):
-            return ad[: -len(ek)]
-    return ad
-
-
-def remove_old_databases_named(data_dir: Path, names: Iterable[str]) -> tuple[list[str], list[str]]:
-    """ADI verilen önceki veritabanı dosyalarını siler: (silinen adlar, silinemeyen adlar).
-
-    * Yalnız programın ürettiği biçimdeki ad (`old_database_stamp` tanır); öbür adlara
-      dokunulmaz ve beklemede de kalmaz. Dosya zamanına BAKILMAZ: hangi dosyaların
-      silineceğini çağıran tetik anında belirler; sistem saati sonradan kaysa da
-      yeniden deneme yalnız bu adları siler (aile iskeletinin düzeltme ilkesi).
-    * Önce veritabanının kendisi, sonra `-wal`/`-shm` eşleri. Kendisi silinemezse (ör. bir
-      veritabanı aracında açık) eşleri de SİLİNMEZ, bekler: kalan kopyanın işlenmiş
-      sayfaları `-wal`'da olabilir, eşini silmek o kopyayı eksik bırakırdı.
-    * Klasörde olmayan dosya silinmiş sayılmaz ama beklemede de kalmaz.
-    """
-    gruplar: dict[str, list[str]] = {}
-    for ad in dict.fromkeys(names):
-        if old_database_stamp(ad) is not None:
-            gruplar.setdefault(_ana_ad(ad), []).append(ad)
-    silinen: list[str] = []
-    kalan: list[str] = []
-    for ana in sorted(gruplar):
-        ana_kaldi = False
-        for ad in sorted(gruplar[ana], key=lambda a: (a != ana, a)):
-            if ana_kaldi:
-                kalan.append(ad)
-                continue
-            try:
-                (data_dir / ad).unlink()
-            except FileNotFoundError:
-                continue
-            except OSError:
-                logger.warning("Önceki veritabanı dosyası silinemedi: %s", ad)
-                kalan.append(ad)
-                ana_kaldi = ad == ana
-                continue
-            silinen.append(ad)
-    if silinen:
-        logger.info("Saklama tetiği: %d önceki veritabanı dosyası silindi.", len(silinen))
-    return silinen, kalan
 
 
 # ---------------------------------------------------------------------------
@@ -424,8 +376,28 @@ def _parse_state(raw: bytes) -> dict[str, Any] | None:
     return cast("dict[str, Any] | None", parse_security_state(raw))
 
 
+def _baslik_kdf_makul(baslik: dict[str, Any]) -> bool:
+    """Yedek başlığının `kdf`'si Argon2id'ye verilebilir mi? (modül başlığı)
+
+    Değerler Argon2id'ye gidecekleri biçimiyle okunur (`app_password._kdf_of`); yazılmamış alan
+    profilin değeridir. Üst sınır profilin katıdır, alt sınır Argon2'nin kendi aralığıdır.
+    """
+    try:
+        kdf = app_password._kdf_of(baslik)
+    except (TypeError, ValueError, OverflowError):
+        return False
+    profil = crypto.KdfParams()
+    return (
+        1 <= kdf.time_cost <= profil.time_cost * _BASLIK_KDF_KATI
+        and 1 <= kdf.parallelism <= profil.parallelism * _BASLIK_KDF_KATI
+        and _ARGON2_KULVAR_BELLEGI * kdf.parallelism
+        <= kdf.memory_cost
+        <= profil.memory_cost * _BASLIK_KDF_KATI
+    )
+
+
 def _candidate_states(info: BackupInfo) -> list[tuple[str, dict[str, Any]]]:
-    """Denenecek durum dosyaları: önce güncel guvenlik.json, sonra gömülü başlık."""
+    """Denenecek durum dosyaları: önce güncel guvenlik.json, sonra `kdf`'si makul gömülü başlık."""
     adaylar: list[tuple[str, dict[str, Any]]] = []
     try:
         guncel = app_password.read_state()
@@ -435,7 +407,11 @@ def _candidate_states(info: BackupInfo) -> list[tuple[str, dict[str, Any]]]:
         guncel = None  # bölümleri eksik dosya aday değildir (kayıp kilidiyle aynı kural)
     if guncel is not None:
         adaylar.append((_SOURCE_CURRENT, guncel))
-    if info.embedded_state is not None and info.embedded_state != guncel:
+    if (
+        info.embedded_state is not None
+        and info.embedded_state != guncel
+        and _baslik_kdf_makul(info.embedded_state)
+    ):
         adaylar.append((_SOURCE_EMBEDDED, info.embedded_state))
     return adaylar
 
@@ -447,10 +423,10 @@ def _decrypt_container(
     hesap: str | None,
     password: str | None,
     recovery_key: str | None,
-) -> tuple[bytes, str, bytes, dict[str, Any]]:
-    """Kapsayıcıyı çözer; (düz içerik, DEK kaynağı, DEK, açan durum dosyası) döndürür.
+) -> tuple[YedekIcerigi, str, bytes, dict[str, Any]]:
+    """Kapsayıcıyı çözer; (yedeğin içeriği, DEK kaynağı, DEK, açan durum dosyası) döndürür.
 
-    Parola yolu yalnız güncel `guvenlik.json`'un hesap sarmallarıyla işler (yedek
+    İçerik veritabanı baytlarını ve manifestoyu ayrı taşır. Parola yolu yalnız güncel `guvenlik.json`'un hesap sarmallarıyla işler (yedek
     başlığında hesap yoktur, TK10); kurtarma anahtarı iki adayda da denenir. Açan durum
     geri yükleme notunun "kullanılan yol"udur (hangi hesap, hangi kurtarma anahtarı).
     """
@@ -470,10 +446,23 @@ def _decrypt_container(
                 dek = app_password._unwrap_with_recovery(durum, recovery_key or "")
         except app_password.AppPasswordError:
             continue  # bu durum dosyası bu sırla açılmadı; diğer adaya geç
+        except HashingError:
+            # Başlığın değerleri makul olsa da Argon2 koşamadı (bellek ayrılamadı, tuz kısa):
+            # güvenilmez başlık ham hata göstermez. Güncel dosyanın hatası çağırana çıkar.
+            if kaynak != _SOURCE_EMBEDDED:
+                raise
+            logger.warning(
+                "Yedek başlığıyla anahtar türetilemedi (bellek yetersiz ya da başlık bozuk); "
+                "sıradaki aday deneniyor."
+            )
+            continue
         try:
             return decrypt_bytes(container, dek), kaynak, dek, durum
-        except BackupCryptoError:
+        except YedekAnahtariHatasi:
             continue  # sarmal açıldı ama DEK bu yedeğe ait değil (başka kurulum)
+        except BackupCryptoError as exc:
+            # Mühür açıldı, yedeğin kendisi bozuk: yanlış sır gibi anlatılmaz.
+            raise BackupRestoreError(str(exc)) from exc
     ileti = (
         "Yedek açılamadı: tanıtıcı, parola ya da kurtarma anahtarı hatalı veya yedek bu "
         "kuruluma ait değil. Başka bilgisayarda alınmış yedek yalnız kurtarma anahtarıyla "
@@ -486,7 +475,7 @@ def _decrypt_container(
 
 
 def _yetkiyi_denetle(
-    db_path: Path, icerik: bytes, dek: bytes, durum: dict[str, Any], hesap: str
+    db_path: Path, veritabani: bytes, dek: bytes, durum: dict[str, Any], hesap: str
 ) -> None:
     """Parolası doğrulanan hesap program yöneticisi mi? Değilse `GeriYuklemeYetkisiz`.
 
@@ -502,7 +491,7 @@ def _yetkiyi_denetle(
     try:
         kaynak = geri_yukleme_yetkisi.yonetici_dogrula(
             db_path=db_path,
-            goruntu=icerik,
+            goruntu=veritabani,
             dek=dek,
             hesap_id=sarmal.get("id"),
             askida=bool(sarmal.get("askida")),
@@ -557,14 +546,14 @@ def _swap_database_files(
             damga = timezone.localtime().strftime(OLD_DB_STAMP_FORMAT)
             eski_hedef = db_path.with_name(f"{OLD_DB_PREFIX}-{damga}.sqlite3")
             db_path.replace(eski_hedef)
-            for ek in _SQLITE_EKLERI:
+            for ek in SQLITE_EKLERI:
                 kalinti = db_path.with_name(db_path.name + ek)
                 if kalinti.exists():
                     kalinti.replace(eski_hedef.with_name(eski_hedef.name + ek))
             logger.info("Önceki veritabanı kenara alındı: %s", eski_hedef.name)
         else:
             # Hedef yokken kalan başıboş WAL/SHM yeni dosyayı zehirlemesin.
-            for ek in _SQLITE_EKLERI:
+            for ek in SQLITE_EKLERI:
                 db_path.with_name(db_path.name + ek).unlink(missing_ok=True)
         temp.replace(db_path)
         return eski_hedef
@@ -575,7 +564,7 @@ def _swap_database_files(
         ) from exc
     finally:
         temp.unlink(missing_ok=True)
-        for ek in _SQLITE_EKLERI:
+        for ek in SQLITE_EKLERI:
             temp.with_name(temp.name + ek).unlink(missing_ok=True)
 
 

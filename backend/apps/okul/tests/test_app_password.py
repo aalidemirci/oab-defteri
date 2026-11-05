@@ -30,14 +30,16 @@ from typing import Any, cast
 from unittest import mock
 
 import pytest
+from desktop.backup import PRE_PAROLA_PREFIX, ROTASYON_KUMESI
 from desktop.backup_crypto import (
+    BOS_YEREL_MANIFESTO,
     config_path,
     decrypt_bytes,
-    encrypt_bytes,
     ensure_public_config,
-    private_key_from_data_key,
-    recovery_metadata,
+    kap_basligi,
+    usable_recovery_header,
 )
+from desktop.tests.kap_ortak import kap_kur
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -46,7 +48,7 @@ from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.okul import selectors
+from apps.okul import denetim_izi, selectors
 from apps.okul.models import (
     Account,
     AccountRole,
@@ -254,8 +256,17 @@ class TestEnable:
             hedef = app_password.take_transition_backup("acilis")
         assert hedef is not None
         assert hedef.name.startswith("pre-parola-acilis-")
+        # Üretilen ad rotasyonun ve denetim izinin tanıdığı addır (tasarım §4.4.7).
+        kural = next(k for k in ROTASYON_KUMESI if k.onek == PRE_PAROLA_PREFIX)
+        assert kural.desen.fullmatch(hedef.name)
+        assert denetim_izi.program_yedegi_mi(hedef.name)
         geri_yuklenen = tmp_path / "geri-yuklenen.sqlite3"
-        geri_yuklenen.write_bytes(decrypt_bytes(hedef.read_bytes(), veri_anahtari))
+        geri_yuklenen.write_bytes(decrypt_bytes(hedef.read_bytes(), veri_anahtari).veritabani)
+        # Kurulum yedeği de kullanılabilir başlıkla alınır; manifestosu boştur (eki yoktur).
+        assert kap_basligi(hedef.read_bytes()).kurtarma_basligi == usable_recovery_header(
+            app_password._data_dir()
+        )
+        assert decrypt_bytes(hedef.read_bytes(), veri_anahtari).manifesto == BOS_YEREL_MANIFESTO
         with sqlite3.connect(geri_yuklenen) as kopya:
             assert kopya.execute("SELECT ad FROM deneme").fetchone() == ("EMRE",)
 
@@ -317,6 +328,24 @@ class TestEnable:
         assert app_password.read_state() is None
         assert not config_path(parolasiz).exists()
         assert SchoolConfig.load().app_password_hash == ""
+
+    def test_basliksiz_kurulum_yedegi_alinmaz_ilk_hesap_geri_alinir(
+        self, parolasiz: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Plan F1b-3 "Kap ve manifesto": başlık yoksa ilk hesap kurulumu durup geri alınır."""
+        kaynak = tmp_path / "db.sqlite3"
+        with sqlite3.connect(kaynak) as baglanti:
+            baglanti.execute("CREATE TABLE deneme (ad TEXT)")
+        monkeypatch.setattr(app_password, "database_file", lambda: kaynak)
+        monkeypatch.setattr(app_password, "usable_recovery_header", lambda _dizin: None)
+
+        with pytest.raises(app_password.AppPasswordError, match="güvenlik dosyası okunamıyor"):
+            kur()
+
+        assert app_password.read_state() is None
+        assert not config_path(parolasiz).exists()
+        assert SchoolConfig.load().app_password_hash == ""
+        assert not list(app_password.backup_dir().glob("pre-parola-*"))
 
     def test_veritabani_islemi_duserse_hicbiri_kalmaz(
         self, parolasiz: Path, monkeypatch: pytest.MonkeyPatch
@@ -1392,11 +1421,7 @@ def _kurtarma_baslikli_yedek(icerik_yolu: Path, baslik_kaynagi: Path) -> Path:
     gecici.mkdir(exist_ok=True)
     (gecici / "guvenlik.json").write_bytes(baslik_kaynagi.read_bytes())
     yedek.write_bytes(
-        encrypt_bytes(
-            icerik_yolu.read_bytes(),
-            private_key_from_data_key(TEST_DEK).public_key(),
-            recovery_header=recovery_metadata(gecici),
-        )
+        kap_kur(icerik_yolu.read_bytes(), TEST_DEK, baslik=usable_recovery_header(gecici))
     )
     return yedek
 
