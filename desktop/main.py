@@ -79,6 +79,7 @@ from desktop.django_bootstrap import (
     prepare_django,
     run_migrations,
     unknown_applied_migrations,
+    upload_limit,
     wal_checkpoint,
 )
 from desktop.errors import (
@@ -101,7 +102,7 @@ from desktop.paths import (
     resolve_backend_dir,
 )
 from desktop.restore import run_restore
-from desktop.server import BackgroundServer, check_health
+from desktop.server import TAMPON_PAYI, BackgroundServer, check_health
 from desktop.session_guard import ENV_TOKEN, generate_session_token, window_url
 from desktop.version import (
     ensure_no_unknown_migrations,
@@ -440,7 +441,8 @@ def serve(
     application = build_wsgi_application()
     assert_session_guard_installed()
 
-    server = BackgroundServer(application)
+    # Açık kopya kuralı (tasarım §4.4.7): sınırın altındaki gövde sunucuda da bellekte kalır.
+    server = BackgroundServer(application, tampon_esigi=upload_limit() + TAMPON_PAYI)
     server.start()
     kapi: GunDegisimiKapisi | None = None
     try:

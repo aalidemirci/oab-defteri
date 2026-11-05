@@ -10,6 +10,8 @@ OTOMATİK FİXTÜR `guvenlik_ortami` (her teste uygulanır, DB İSTEMEZ):
   parametresidir; algoritma, zarf yapısı ve dosya biçimi üretimdekiyle aynıdır.
 * Geçici `OD_SECURITY_DIR` (güvenlik dosyası + `yedekleme.json`) ve
   `OD_BACKUP_DIR`; testin kendi `tmp_path`'inden AYRI dizinlerdir.
+* Geçici dosya deposu (`settings.DOSYA_DEPOSU_DIR`; dizin henüz kurulmamıştır, ilk yazım kurar):
+  testler `backend/data/`'ya ek yazmaz.
 * Sabit test DEK'i (`TEST_DEK`) için GEÇERLİ bir şema 2 `guvenlik.json`: tek
   hesap sarmalı (`TEST_HESAP_ID`, tanıtıcı `TEST_TANITICI`, parola `TEST_PAROLA`),
   kurtarma bölümü (no 1, anahtar `TEST_KURTARMA_ANAHTARI`), `gecis: null`; buna
@@ -160,6 +162,7 @@ def guvenlik_ortami(
     Güvenlik dizininin yolunu döndürür (`guvenlik.json` ve `yedekleme.json` orada).
     """
     from desktop.backup_crypto import ensure_public_config
+    from django.conf import settings
 
     from apps.okul import denetim_izi, iz_durumu, restart_gate
     from apps.okul.oturum import yazar_olarak
@@ -170,6 +173,9 @@ def guvenlik_ortami(
     yedek_dizini = tmp_path_factory.mktemp("od-yedek")
     monkeypatch.setenv(app_password.ENV_SECURITY_DIR, str(guvenlik_dizini))
     monkeypatch.setenv(app_password.ENV_BACKUP_DIR, str(yedek_dizini))
+    monkeypatch.setattr(
+        settings, "DOSYA_DEPOSU_DIR", tmp_path_factory.mktemp("od-veri") / "dosyalar"
+    )
     monkeypatch.setattr(crypto, "DEFAULT_KDF", crypto.KdfParams.from_dict(_UCUZ_KDF))
     monkeypatch.setattr(app_password, "FAILURE_DELAYS", (0.0,))
 

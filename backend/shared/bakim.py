@@ -26,8 +26,8 @@ Süreç içi tektir (`KAPI`).
 
 UZUN İŞ SAYACI (§4.2 "Uçuştaki iş", §4.4.3 "Boşta kilit"; denetim UY-1)
 
-Uzun yazma işi (bugün yalnız canlı geri yükleme; tam yedek, banka özeti uygulama,
-dönem kapanışı, DEK yenileme ve dosya eki yazımı geldikçe girer) sürerken oturum
+Uzun yazma işi (bugün canlı geri yükleme ve dosya eki yazımı; tam yedek, banka özeti
+uygulama, dönem kapanışı ve DEK yenileme geldikçe girer) sürerken oturum
 kilitlenmez: kilit (elle ya da boşta) ertelenir, iş bitince ilk istekte uygulanır
 (`apps/okul/oturum.py`). Böylece DEK işin ortasında bellekten silinmez. Çarpının
 bir kez ertelenmesi ve temiz kapanış işaretinin "sayaç sıfırken" koşulu ilk yeni

@@ -80,6 +80,8 @@ def test_bicimsiz_degerler_elenir(deger: str) -> None:
         "backend/data/od.sqlite3",
         "backend/data/media/ek.txt",
         "media/ekran.txt",
+        "backend/data/dosyalar/0123456789abcdef0123456789abcdef",
+        "dosyalar/0123456789abcdef0123456789abcdef",
     ],
 )
 def test_riskli_yollar_yakalanir(yol: str) -> None:
@@ -95,6 +97,13 @@ def test_sentetik_fixturelar_muaf() -> None:
 @pytest.mark.parametrize("yol", ["backend/apps/okul/models.py", "README.md", "data/ornek.md"])
 def test_masum_yollar_gecer(yol: str) -> None:
     assert depo_sizintisi.yol_riskli_mi(yol) is False
+
+
+def test_riskli_dizinler_gitignoreda_da_durur() -> None:
+    """Kapı denetler, `.gitignore` önler: satırlar aynı, derinlik ayrı (`RISKLI_DIZIN_ONEKLERI`)."""
+    gitignore = Path(__file__).resolve().parents[2] / ".gitignore"
+    satirlar = set(gitignore.read_text(encoding="utf-8").splitlines())
+    assert set(depo_sizintisi.RISKLI_DIZIN_ONEKLERI) <= satirlar
 
 
 # --------------------------------------------------------------------------- #

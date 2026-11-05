@@ -6,6 +6,7 @@ Dosyanın sonundaki koruma testleri "yalnız 127.0.0.1" değişmezini kilitler (
 from __future__ import annotations
 
 import ast
+import io
 import socket
 import urllib.error
 import urllib.request
@@ -16,7 +17,13 @@ from typing import Any
 import pytest
 
 from desktop.errors import ServerStartError
-from desktop.server import DEFAULT_HOST, BackgroundServer, check_health, find_free_port
+from desktop.server import (
+    DEFAULT_HOST,
+    TAMPON_PAYI,
+    BackgroundServer,
+    check_health,
+    find_free_port,
+)
 
 
 class _SahteSunucu:
@@ -127,6 +134,91 @@ def test_gercek_waitress_yalniz_yerel_arayuzde_dinler() -> None:
             assert yanit.read() == b"tamam"
     finally:
         sunucu.stop()
+
+
+def test_tampon_esigi_sunucuya_iki_adla_gecer() -> None:
+    """Açık kopya kuralı (tasarım §4.4.7): istek ve yanıt tamponu aynı eşikle kurulur."""
+    cagri: dict[str, Any] = {}
+
+    def fabrika(app: object, **kwargs: Any) -> _SahteSunucu:
+        cagri.update(kwargs)
+        return _SahteSunucu()
+
+    sunucu = BackgroundServer(_bos_uygulama, tampon_esigi=4096, server_factory=fabrika)
+    sunucu.start()
+    sunucu.stop()
+
+    assert cagri["inbuf_overflow"] == 4096
+    assert cagri["outbuf_overflow"] == 4096
+
+
+def test_tampon_esigi_verilmezse_sunucu_ayari_gecmez() -> None:
+    """waitress `None`'ı sayıya çeviremez: eşik yoksa ayar hiç verilmez."""
+    cagri: dict[str, Any] = {}
+
+    def fabrika(app: object, **kwargs: Any) -> _SahteSunucu:
+        cagri.update(kwargs)
+        return _SahteSunucu()
+
+    sunucu = BackgroundServer(_bos_uygulama, server_factory=fabrika)
+    sunucu.start()
+    sunucu.stop()
+
+    assert {"inbuf_overflow", "outbuf_overflow"}.isdisjoint(cagri)
+
+
+@pytest.mark.parametrize(
+    ("esik", "boy", "bellekte"),
+    [
+        (2_000_000, 1_000_000, True),
+        (1_000_000, 999_999, True),
+        (1_000_000, 1_000_000, False),
+        (None, 1_000_000, False),
+        (1_000_000 + TAMPON_PAYI, 1_000_000, True),
+        (1_000_000 + TAMPON_PAYI, 1_000_000 + 1024, True),
+    ],
+    ids=[
+        "esigin-altinda",
+        "esigin-bir-eksigi",
+        "esikte-tasar",
+        "waitress-varsayilani",
+        "sinirdaki-govde",
+        "sinirdaki-dosya-ve-zarf",
+    ],
+)
+def test_gercek_waitress_esigin_altindaki_govdeyi_bellekte_tutar(
+    esik: int | None, boy: int, bellekte: bool
+) -> None:
+    """Gövde uygulamadan önce tamponlanır (modül başlığı): sınır Django'da değil burada tutar.
+
+    Dördüncü kol kuralın gerekçesidir: waitress'in 512 KB'lık varsayılanı 1 MB'lık gövdeyi sistemin
+    geçici dizinine yazar. Üçüncü kol kalan risktir: eşiği aşan gövde yine dosyaya iner. Son iki kol
+    payı sabitler: 1 000 000 yükleme sınırı sayılırsa sınırdaki gövde de, sınırdaki dosya zarfıyla
+    sınırı az aşan gövde de bellekte kalır (`TAMPON_PAYI`).
+    """
+    pytest.importorskip("waitress")
+    gorulen: dict[str, Any] = {}
+
+    def uygulama(environ: dict[str, Any], start_response: Callable[..., Any]) -> Iterable[bytes]:
+        govde = environ["wsgi.input"]
+        gorulen["bellekte"] = isinstance(govde, io.BytesIO)
+        gorulen["boy"] = len(govde.read())
+        start_response("200 OK", [("Content-Length", "0")])
+        return [b""]
+
+    sunucu = BackgroundServer(uygulama, tampon_esigi=esik)
+    sunucu.start()
+    try:
+        sunucu.wait_until_ready(timeout=10.0)
+        istek = urllib.request.Request(  # noqa: S310 — sabit http://127.0.0.1
+            sunucu.base_url + "/", data=b"x" * boy, method="POST"
+        )
+        with urllib.request.urlopen(istek, timeout=15) as yanit:  # noqa: S310
+            assert yanit.status == 200
+    finally:
+        sunucu.stop()
+
+    assert gorulen == {"bellekte": bellekte, "boy": boy}
 
 
 def test_saglik_denetimi_belirtecsiz_istegin_reddini_dogrular() -> None:

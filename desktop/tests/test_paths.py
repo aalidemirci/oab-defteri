@@ -160,8 +160,9 @@ def test_linux_dizin_ve_dosya_kipleri(tmp_path: Path) -> None:
     try:
         yerlesim = resolve_app_paths(environ={"HOME": str(tmp_path)}, platform="linux")
         # Eski kurulumdan kalan geniş kipli dizin de daraltılır.
-        yerlesim.data.mkdir(parents=True)
-        yerlesim.data.chmod(0o755)
+        yerlesim.yetim_dizini.mkdir(parents=True)
+        for genis in (yerlesim.data, yerlesim.dosya_deposu, yerlesim.yetim_dizini):
+            genis.chmod(0o755)
 
         gizli_kipleri_uygula(platform="linux")
         yerlesim.ensure(platform="linux")
@@ -172,6 +173,8 @@ def test_linux_dizin_ve_dosya_kipleri(tmp_path: Path) -> None:
             yerlesim.backups,
             yerlesim.logs,
             yerlesim.cache,
+            yerlesim.dosya_deposu,
+            yerlesim.yetim_dizini,
         ):
             assert stat.S_IMODE(dizin.stat().st_mode) == DIZIN_KIPI, dizin
         gizli = yerlesim.data / "guvenlik.json"
@@ -204,4 +207,4 @@ def test_windowsta_kip_uygulanmaz(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     )
 
     assert cagrilar == []
-    assert (tmp_path / APP_DIR_NAME_WINDOWS / "data").is_dir()
+    assert (tmp_path / APP_DIR_NAME_WINDOWS / "data" / "dosyalar" / "yetim").is_dir()

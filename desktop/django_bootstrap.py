@@ -187,6 +187,13 @@ def wal_checkpoint(db_path: Path) -> bool:
     return True
 
 
+def upload_limit() -> int:
+    """Ayardaki yükleme sınırı (bayt); gömülü sunucunun tampon eşiği bundan türer."""
+    from django.conf import settings
+
+    return int(settings.FILE_UPLOAD_MAX_MEMORY_SIZE)
+
+
 def build_wsgi_application() -> object:
     """WSGI uygulamasını üretir (middleware zinciri burada kurulur)."""
     from django.core.wsgi import get_wsgi_application

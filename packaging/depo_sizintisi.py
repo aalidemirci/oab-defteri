@@ -68,8 +68,10 @@ RISKLI_UZANTILAR = frozenset(
     }
 )
 
-#: Gerçek verinin yaşadığı dizinler (`.gitignore` ile aynı liste).
-RISKLI_DIZIN_ONEKLERI = ("backend/data/", "data/raw/", "media/")
+#: Gerçek verinin yaşadığı dizinler. `.gitignore` ile aynı satırlardır, ama bu kapı yalnız depo
+#: kökünden bakar; `media/` ve `dosyalar/` `.gitignore`'da her derinlikte eşleşir, kaynak ağacında
+#: bu adla açılan dizin sessizce yok sayılır.
+RISKLI_DIZIN_ONEKLERI = ("backend/data/", "data/raw/", "media/", "dosyalar/")
 
 #: Sentetik fixture'lar ve programın şablonları — adları TEK TEK yazılır (joker
 #: YOK; docstring'e bakın).

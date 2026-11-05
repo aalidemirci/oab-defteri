@@ -23,7 +23,8 @@ from contextlib import contextmanager
 from io import BytesIO
 from typing import Any
 
-from django.http import FileResponse
+from django.core.files.uploadhandler import MemoryFileUploadHandler, TemporaryFileUploadHandler
+from django.http import FileResponse, HttpRequest
 from django.views.decorators.debug import sensitive_variables
 from rest_framework import generics, serializers, status
 from rest_framework.exceptions import APIException
@@ -698,6 +699,19 @@ class BackupRestoreView(APIView):
     (`live_restore` modül başlığı "YETKİ"). Parola yolunda çekirdeğin ORM'siz hesap denetimi
     reddederse (`GeriYuklemeYetkisiz`, bir `ValueError`) yanıt 400'dür.
     """
+
+    def initialize_request(self, request: HttpRequest, *args: Any, **kwargs: Any) -> Request:
+        """Yedek yüklemesi genel bellek işleyicisinin ve sınırının dışındadır (plan F1b-3).
+
+        Yedek şifrelidir (açık kopya değildir) ve yükleme sınırını aşabilir; sınırı aşan yedek
+        Django'nun geçici dosyasına iner. Ucun kendi işleyicisi (`.yukleme-<hex>.tmp`, 0600)
+        plan F1b-3 (c) alt commit'indedir. İşleyiciler gövde okunmadan kurulmalıdır.
+        """
+        request.upload_handlers = [
+            MemoryFileUploadHandler(request),
+            TemporaryFileUploadHandler(request),
+        ]
+        return super().initialize_request(request, *args, **kwargs)
 
     def post(self, request: Request) -> Response:
         req = BackupRestoreRequestSerializer(data=request.data)

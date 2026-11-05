@@ -16,6 +16,14 @@ ve oturum belirteciyle dinler; hiçbir port okul ağına açılmaz. Dış istek 
 kullanıcının başlattığı güncelleme denetiminden çıkar (tasarım §4.1 değişmezleri).
 
 waitress istek (erişim) logu üretmez; `logging_setup` bunu ayrıca susturur.
+
+Açık kopya kuralı sunucuyu da kapsar (tasarım §4.4.7, §4.3 tehdit 15): waitress gövdeyi uygulamayı
+çağırmadan önce tamponlar ve eşiği aşan tamponu sistemin geçici dizinine DÜZ yazar. Varsayılan
+eşikler istekte 512 KB, yanıtta 1 MB'tır: 600 KB'lık bir e-Okul listesi Django'ya varmadan diske
+inerdi. `tampon_esigi` iki tamponu da yükleme sınırına çeker (`TAMPON_PAYI`). Eşiği aşan gövde
+yine geçici dosyaya iner: sunucu uca göre ayırmaz, gövde bitmeden uygulamayı çağırmaz; şifreli
+yedek için bu sorun değildir, sınırı aşan düz dosya için kalan risktir (plan F1b-3 "Dosya
+deposu"). `wsgi.file_wrapper` yolundan giden yanıt (`FileResponse`) bu tampona hiç girmez.
 """
 
 from __future__ import annotations
@@ -37,6 +45,11 @@ logger = logging.getLogger("oab_defteri.server")
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_THREADS = 6
 HEALTH_PATH = "/api/v1/setup/status/"
+#: Yükleme sınırının üstüne eklenen tampon payı (bayt). Kabul edilen istek için bir bayt yeterdi
+#: (sınır gövdenin tamamına uygulanır, waitress `boy >= eşik` olunca taşar). Pay, sınırdaki dosyanın
+#: çok parçalı zarfla sınırı az aşan gövdesi reddedilmeden diske inmesin, gövdeyle aynı tampona
+#: yazılan yanıt başlıkları da eşiği aşırmasın diyedir.
+TAMPON_PAYI = 64 * 1024
 
 
 class WSGIServerLike(Protocol):
@@ -79,6 +92,7 @@ class BackgroundServer:
         *,
         host: str = DEFAULT_HOST,
         threads: int = DEFAULT_THREADS,
+        tampon_esigi: int | None = None,
         server_factory: ServerFactory | None = None,
     ) -> None:
         if host != DEFAULT_HOST:
@@ -88,6 +102,7 @@ class BackgroundServer:
         self._app = app
         self._host = host
         self._threads = threads
+        self._tampon_esigi = tampon_esigi
         self._factory = server_factory or _waitress_factory
         self._server: WSGIServerLike | None = None
         self._thread: threading.Thread | None = None
@@ -108,6 +123,8 @@ class BackgroundServer:
 
     def start(self) -> str:
         """Sunucuyu ayağa kaldırır ve taban URL'sini döndürür."""
+        esik = self._tampon_esigi
+        tamponlar = {} if esik is None else {"inbuf_overflow": esik, "outbuf_overflow": esik}
         try:
             self._server = self._factory(
                 self._app,
@@ -116,6 +133,7 @@ class BackgroundServer:
                 threads=self._threads,
                 ident=None,  # `Server:` başlığında sürüm sızdırma
                 clear_untrusted_proxy_headers=True,
+                **tamponlar,
             )
         except Exception as exc:  # noqa: BLE001 — her hata aynı Türkçe mesaja çıkar
             raise ServerStartError(

@@ -32,6 +32,7 @@ from apps.okul.models import (
     Account,
     AccountRole,
     AccountStatus,
+    Attachment,
     AuditAction,
     AuditActor,
     AuditKeyMode,
@@ -359,6 +360,7 @@ def test_listesiz_model_izlenmez() -> None:
         Personnel,
         ClassSection,
         ImportRun,
+        Attachment,
     ],
     ids=lambda m: m.__name__,
 )
@@ -366,7 +368,8 @@ def test_izin_listeleri_modelin_alanlarini_eksiksiz_siniflar(model: Any) -> None
     """Kimlik dışındaki her alan ya içerik MAC'indedir ya MAC dışıdır (§4.6.2'nin MAC dışı
     alanları: KVKK gereği boşaltılan ya da SİLİNEN alanlar — tasarım §5 O4; veli listesi
     okul çekirdeğinde yok); değer listesi özetin alt kümesidir, şifreli alan içermez. MAC
-    dışı alan yalnız KVKK silme kümesindeki modelin (değer listesi boş) kişi alanıdır."""
+    dışı alan KVKK silme kümesindeki modelin (değer listesi boş) kişi alanı ya da imhada
+    boşalan iki `Attachment` alanıdır (plan F1b-3 "Dosya deposu"; adlarıyla)."""
     alanlar = {a.name for a in model._meta.concrete_fields if not a.primary_key}
     ozet = set(model.IZ_OZET_ALANLARI)
     mac_disi = set(getattr(model, "IZ_MAC_DISI_ALANLARI", ()))
@@ -374,8 +377,11 @@ def test_izin_listeleri_modelin_alanlarini_eksiksiz_siniflar(model: Any) -> None
     assert set(model.IZ_DEGER_ALANLARI) <= ozet
     sifreli = {a.name for a in crypto.encrypted_fields_of(model)}
     assert not sifreli & set(model.IZ_DEGER_ALANLARI)
-    if mac_disi:
+    if model is Attachment:
+        assert mac_disi == {"original_name", "key_wrap"}
+    elif mac_disi:
         assert model in (Student, Personnel) and model.IZ_DEGER_ALANLARI == ()
+    if mac_disi:
         assert sifreli <= mac_disi  # silinen kişi verisinin hiçbiri MAC'e girmez
 
 

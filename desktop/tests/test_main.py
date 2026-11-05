@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from django.test import override_settings
 
 from desktop import main as main_mod
 from desktop import qt_kurulum as qt_kurulum_mod
@@ -37,6 +38,7 @@ from desktop.errors import (
 from desktop.instance_channel import open_channel
 from desktop.lock import SingleInstanceLock
 from desktop.paths import ENV_APP_HOME, resolve_app_paths
+from desktop.server import TAMPON_PAYI
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -1020,9 +1022,11 @@ class _SahteYonetim:
     """Yönetim `BackgroundServer`'ının yerine geçer; sırayı kaydeder."""
 
     sira: list[str] = []
+    kurulum: dict[str, Any] = {}
 
-    def __init__(self, application: object) -> None:
+    def __init__(self, application: object, **kurulum: Any) -> None:
         self.base_url = "http://127.0.0.1:54321"
+        self.kurulum.update(kurulum)
 
     def start(self) -> str:
         self.sira.append("yonetim-basla")
@@ -1054,6 +1058,7 @@ def sahte_servis(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, A
     """`serve()` çevresini izole eder: Django ve pencere sahte, sıra kayıtlı."""
     sira: list[str] = []
     monkeypatch.setattr(_SahteYonetim, "sira", sira)
+    monkeypatch.setattr(_SahteYonetim, "kurulum", {})
     kayit: dict[str, Any] = {
         "sira": sira,
         "paths": resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)}),
@@ -1097,6 +1102,16 @@ def test_kapanis_sirasi_gun_kapisi_oturum_sunucu_ve_wal_checkpoint(
         "yonetim-dur",
         "wal-checkpoint",  # TB14: sunucu durduktan SONRA
     ]
+
+
+def test_yonetim_sunucusunun_tampon_esigi_yukleme_sinirindan_turer(
+    sahte_servis: dict[str, Any],
+) -> None:
+    """Açık kopya kuralı (tasarım §4.4.7): eşik ayardaki sınırı izler, sabit yazılmaz."""
+    with override_settings(FILE_UPLOAD_MAX_MEMORY_SIZE=7_340_032):
+        main_mod.serve(sahte_servis["paths"], "belirtec", False)
+
+    assert _SahteYonetim.kurulum == {"tampon_esigi": 7_340_032 + TAMPON_PAYI}
 
 
 def test_kilit_acilisinin_sinyali_gun_kapisina_baglanir(sahte_servis: dict[str, Any]) -> None:

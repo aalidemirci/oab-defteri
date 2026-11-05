@@ -254,6 +254,11 @@ ACCOUNT_WRAP_DIGEST_INFO = b"od-sarmal-ozeti/v1"
 #: bütün hesap sarmalları açılmaz olur (kurtarma bölümü etkilenmez); eski türetime geri
 #: düşen yol YOKTUR.
 ACCOUNT_WRAP_INFO = b"od-hesap-sarmali/v1"
+#: Dosya sarmal anahtarının HKDF bağlamı (tasarım §2.3.1, §4.4.4 "Dosya anahtarı"; TK22): dosya
+#: başına rastgele anahtar `HKDF(DEK, "od-dosya-sarmal/v1")` anahtarıyla AES-GCM sarılır (AAD =
+#: `stored_name`) ve `Attachment.key_wrap`'te durur (`shared.dosya_sifreleme`). Değişirse hiçbir
+#: ek açılmaz; sürüm eki yalnız DEK yenilemesiyle (F4) değişebilir, o da sarmalları yeniden yazar.
+FILE_WRAP_INFO = b"od-dosya-sarmal/v1"
 
 # İz anahtarından (İA; tasarım §4.6.3) türeyen anahtarların HKDF bağlamları. İA DEK'ten
 # TÜREMEZ; bu dizgeler yalnız İA'ya (kilitli kipte çapadan türeyen tohuma) uygulanır.
@@ -273,8 +278,8 @@ AUDIT_LOCKED_MAC_INFO = b"od-iz-kilitli-mac/v1"
 def derive_subkey(key: bytes, *, info: bytes, salt: bytes | None = None) -> bytes:
     """Adlı amaç için 32 baytlık alt anahtar: HKDF-SHA256(salt, info=amaç).
 
-    DEK'ten türeyen bütün anahtarların (kör indeks, hesap mührü, sarmal özeti; F3'te hareket
-    parmak izi, 3. adımda dosya sarmalı), iz anahtarı türevlerinin (§4.6.3) ve hesap
+    DEK'ten türeyen bütün anahtarların (kör indeks, hesap mührü, sarmal özeti, dosya sarmalı;
+    F3'te hareket parmak izi), iz anahtarı türevlerinin (§4.6.3) ve hesap
     sarmalı anahtarının (parolanın Argon2id çıktısından; `account_wrapping_key`) tek
     kapısıdır. Bilgi dizgeleri kimlik tablosundadır (tasarım §2.3.1); her amaç
     ayrı dizge kullanır, bir amacın anahtarı ötekini vermez. Tuz yalnız kilitli kip
@@ -324,6 +329,15 @@ def account_seal_key(data_key: bytes) -> bytes:
 def account_wrap_digest_key(data_key: bytes) -> bytes:
     """DEK'ten sarmal özeti anahtarı (`od-sarmal-ozeti/v1`; modül başlığı "SARMALIN TAZELİĞİ")."""
     return derive_subkey(data_key, info=ACCOUNT_WRAP_DIGEST_INFO)
+
+
+def file_wrap_key(data_key: bytes) -> bytes:
+    """DEK'ten dosya sarmal anahtarı (`od-dosya-sarmal/v1`; tasarım §4.4.4 "Dosya anahtarı").
+
+    `shared.dosya_sifreleme` DEK'i görmez: dosya anahtarını bu anahtarla sarar ve açar (o
+    modülün başlığı "DOSYA ANAHTARI VE SARMAL"). Saftır (ORM istemez).
+    """
+    return derive_subkey(data_key, info=FILE_WRAP_INFO)
 
 
 def account_wrap_digest(data_key: bytes, *, account_id: object, salt: bytes, wrapped: str) -> str:

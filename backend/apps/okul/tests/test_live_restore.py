@@ -307,6 +307,25 @@ def test_yuklenen_sifreli_dosya_oturum_hesabinin_parolasiyla_geri_yuklenir(
     assert not list(ortam["yedekler"].glob(".yukleme-*"))
 
 
+def test_yuklenen_yedek_genel_yukleme_sinirina_takilmaz(
+    tmp_path: Path, ortam: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Genel bellek işleyicisi ve sınırı bu ucu kesmez (plan F1b-3 "Dosya deposu"): yedek
+    yükleme sınırından büyük olabilir, sınırı aşan yedek geçici dosyaya iner."""
+    icerik = _sqlite_baytlari(tmp_path, "gizli")
+    kapsayici, _durum = _sifreli_kapsayici(icerik)
+    monkeypatch.setattr(settings, "FILE_UPLOAD_MAX_MEMORY_SIZE", len(kapsayici) // 2)
+
+    yanit = APIClient().post(
+        GERI_YUKLE_URL,
+        {"file": SimpleUploadedFile("elden.odbak", kapsayici), "password": PAROLA},
+        format="multipart",
+    )
+
+    assert yanit.status_code == 200, yanit.json()
+    assert ortam["db"].read_bytes() == icerik
+
+
 def test_baska_kurulumun_yedegi_yalniz_kurtarma_anahtariyla_acilir(
     tmp_path: Path, ortam: dict[str, Path]
 ) -> None:
