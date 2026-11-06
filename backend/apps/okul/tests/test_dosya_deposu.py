@@ -953,8 +953,8 @@ def test_sinirdan_buyuk_yukleme_iletisiyle_reddedilir(settings: Any) -> None:
 
 
 def test_eksik_ekler_satiri_olup_dosyasi_olmayan_eki_verir(sahip: SchoolYear) -> None:
-    """Tasarım §4.4.7: satırı olup dosyası olmayan kayıt panoya bütünlük uyarısı düşürür; plan: asıl
-    dosya adı bu uyarıda görünür."""
+    """Tasarım §4.4.7: satırı olup dosyası olmayan kayıt Genel Bakış'ta Eksik Ekler kartını
+    çıkarır; plan: asıl dosya adı bu kartta görünür."""
     yerinde = _yaz(sahip)
     kayip = _yaz(sahip, PNG, original_name="Örnek rapor.png")
     _guncelle(kayip, uploaded_at=datetime(2026, 11, 3, 21, 30, tzinfo=UTC))

@@ -169,6 +169,21 @@ def test_yedek_secici_bos_girdiyle_vazgecer(
     assert restore_mod._pick_backup([yedek]) is None
 
 
+def test_yedek_secicinin_basligi_ekrandaki_liste_basligidir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Başlık sözlüğün "Yedek" satırındaki liste başlığıdır. "Geri yüklenebilir" denmez: liste
+    içeriğe bakmaz, hesapsız yedek de satırda durur, seçilince reddedilir (kullanıcı kararı
+    07.11.2026)."""
+    yedek = tmp_path / "a.odbak"
+    yedek.write_bytes(SQLITE_MAGIC)
+    monkeypatch.setattr("builtins.input", lambda *args: "")
+
+    restore_mod._pick_backup([yedek])
+
+    assert capsys.readouterr().out.startswith("Bu bilgisayardaki yedekler (en yeniden eskiye):\n")
+
+
 # ------------------------------------------------------------------ akış (sahte servis)
 
 

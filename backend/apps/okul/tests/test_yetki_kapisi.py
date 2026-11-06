@@ -5,9 +5,9 @@ rol-özel işaretler ve kayıt sahipliği tek kapıdan geçer; ret `RolYetkisiz`
 `rol_yetkisiz`. Dipnotların servisleri sonraki fazlardadır (müdür yazıları F2/F4, mali kayıtlar
 F3, DK modülü F4): F1b'de her dipnot KAPININ KENDİSİYLE sahte kayıtla sınanır
 (`test_rol_matrisi_dipnot_servis_testi`; plan F1b-2 kullanıcı kararı). Bağlı servisler
-(hesap yönetimi, kurtarma anahtarı, boşta süre, yedek indirme, uygulama içi geri yükleme)
-ayrıca gerçek çağrıyla sınanır: rol kapısının ardından servis de reddeder (derin savunma). ⁵
-gerçek serviste de sınanır: Denetleme Kurulunun geri yükleme kartındaki "Gördüm"ü
+(hesap yönetimi, kurtarma anahtarı, boşta süre, şifreli yedeğin kaydedilmesi, uygulama içi geri
+yükleme) ayrıca gerçek çağrıyla sınanır: rol kapısının ardından servis de reddeder (derin
+savunma). ⁵ gerçek serviste de sınanır: Denetleme Kurulunun geri yükleme kartındaki "Gördüm"ü
 (`test_dipnot_bes_gercek_serviste_yalniz_denetleme_kurulu`; plan F1b-2 kullanıcı kararı).
 """
 

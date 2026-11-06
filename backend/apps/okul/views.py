@@ -751,7 +751,7 @@ class BackupInspectRequestSerializer(serializers.Serializer[dict[str, Any]]):
 
 
 class BackupListView(APIView):
-    """`GET /api/v1/backups/` — yedek klasöründeki geri yüklenebilir dosyalar.
+    """`GET /api/v1/backups/` — yedek klasöründeki `.odbak` dosyaları.
 
     Güvenlik dosyası kayıpken de açıktır (kayıp kilidinden çıkış yolu).
     """

@@ -1475,6 +1475,10 @@ def take_transition_backup(label: str) -> Path | None:
     (plan F1b-3 "Kap ve manifesto"): başlık kullanılamıyorsa `AppPasswordError`, ilk hesap
     kurulumu durur ve geri alınır (`enable`).
 
+    BU YEDEK GERİ YÜKLENEMEZ (kullanıcı kararı 07.11.2026): `enable` onu hesap satırı yazılmadan
+    önce alır, içinde girişe açık program yöneticisi yoktur; geri yükleme içeriğe bakıp reddeder
+    (`backup_restore` modül başlığı "HESAPSIZ YEDEK"). Alınma sırası bilerek değişmez.
+
     KOPYA AYRI BİR BAĞLANTIDAN alınır (canlı Django bağlantısından DEĞİL): açık
     bir işlem varken `sqlite3.Connection.backup()` SQLITE_BUSY'de sonsuz döngüye
     girer — testte donma olarak yakalandı. Ayrı bağlantı WAL dosyasını da

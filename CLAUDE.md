@@ -61,7 +61,8 @@ siteyi ve evrakı kapsar.
    kararıyla** (aynı kişi aynı dönemde YK'de ve DK'de olamaz; okul müdürü YK'ye giremez;
    hesabın son kaydından sonra denetim izinden silinmiş ya da sırası değiştirilmiş kayıt o
    hesabın girişini kapatır — 03.11.2026, tasarım §4.6.3; öteki zincir bulguları girişi
-   engellemez).
+   engellemez; girişe açık program yöneticisi taşımayan yedek geri yüklenmez — 07.11.2026,
+   tasarım §4.4.4).
    Kullanıcının belgeden **girdiği** değer (teminat, kira, artış, ay sayısı, EK-3 puanı,
    taksit) mevzuattan saparsa, eksik belge ve kantinde onay eksikliği uyarı + gerekçedir.
    Henüz girilmemiş veri "eksik"tir, gerekçe istemez; gerekçe yalnız bilinçli sapmada.

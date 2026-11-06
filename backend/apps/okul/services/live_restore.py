@@ -58,6 +58,11 @@ ister"). Parola yolunda çekirdek de hesabı konsoldaki gibi ORM'siz doğrular
 oturumdaki program yöneticisinin kaydı tutmazsa (ör. program dışından değiştirilmişse) ret
 `GeriYuklemeYetkisiz`'dir, bir `ValueError` olduğu için 400 döner; hiçbir dosya değişmez.
 
+HESAPSIZ YEDEK (kullanıcı kararı 07.11.2026; `backup_restore` modül başlığı): girişe açık program
+yöneticisi taşımayan yedeği çekirdek iki yolda da reddeder. Ret bir `ValueError`'dır, 400 döner, ileti
+kartta çıkar. Takas olmadığı için bakım kapısı açılır, "yeniden başlat" kapısı kurulmaz, oturum açık
+kalır. Kurulum yedeği listede durur: kural dosyanın adına değil içeriğine bakar.
+
 BOZUK EK (kullanıcı kararı 04.11.2026 "Bozuk ekte geri yükleme durur, ikinci onayla sürer"):
 çekirdek `EkOnayiGerekli` ile durunca hiçbir şey değişmez, kapı kurulmaz, bakım kapısı açılır; uç
 kişisiz yapılandırılmış yanıt döner. İkinci onay durumsuzdur: istek aynı yedekle ve
@@ -250,7 +255,7 @@ def _yedek_satiri(yol: Path, bilgi: os.stat_result) -> dict[str, Any]:
 
 
 def list_backups() -> dict[str, Any]:
-    """Yedek klasöründeki geri yüklenebilir `.odbak` dosyaları (en yeniden eskiye).
+    """Yedek klasöründeki `.odbak` dosyaları (en yeniden eskiye).
 
     `backup_dir` yanıtta bilinçli olarak vardır: kullanıcı elle aldığı bir
     yedeği nereye koyacağını ya da dosyaların nerede durduğunu buradan görür

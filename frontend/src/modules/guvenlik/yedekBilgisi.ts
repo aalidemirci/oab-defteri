@@ -8,7 +8,7 @@
 //
 // EK SATIRI konsoldakiyle aynı sırayı taşır (`geri_yukleme_ekleri.EkSatiri.metin`): durum, kayıt
 // türü, kayıt no, yükleme tarihi, boy. Özgün dosya adı burada yoktur (R1): yalnız program açıkken,
-// kaydın kendisinde ve Genel Bakış'taki bütünlük uyarısında görünür.
+// kaydın kendisinde ve Genel Bakış'taki Eksik Ekler kartında görünür.
 
 import { formatBoyut, formatDate, formatNumber } from "../../lib/format";
 import type { DosyaSayilari, EkSatiri, YedekKapsami } from "./api";

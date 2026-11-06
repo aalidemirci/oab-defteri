@@ -1152,7 +1152,8 @@ def denetim_kartlari(hesap_id: str | None) -> dict[str, Any]:
     `butunluk`: oturumdaki hesabın bir önceki girişinden beri yazılmış `BUTUNLUK` satırları;
     `geri_yukleme`: son geri yükleme kartı; `muhru_tutmayan`: kaydı ya da denetim izi program
     dışından değiştirilmiş görünen hesaplar (canlı); `eksik_ekler`: satırı olup dosyası olmayan ekler
-    (canlı; tasarım §4.4.7 "panoya bütünlük uyarısı düşer", `dosya_deposu.eksik_ekler`).
+    (canlı; tasarım §4.4.7 "Yetim ve eksik dosya": Genel Bakış'ın Eksik Ekler kartı;
+    `dosya_deposu.eksik_ekler`).
     """
     kimlik = _hesap_kimligi(hesap_id)
     gecerli = denetim_izi.acik_satir_dogrulayici()

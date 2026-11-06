@@ -17,9 +17,11 @@ yalnız kurtarma anahtarıyla açılır (tasarım TK10). Parola yolunda geri yü
 program yöneticisi yapar: rol denetimi `desktop/restore.py` ile aynıdır, çünkü ikisi de aynı
 çekirdekten geçer (`backup_restore`, `geri_yukleme_yetkisi`; ORM'siz). Ret
 `GeriYuklemeYetkisiz` bir `BackupRestoreError`'dır, `CommandError` olarak döner; hiçbir dosya
-değişmez. Kurtarma anahtarı yolunda rol denetimi yoktur. Var olan bir hesabın parolasını alan
-TEK yönetim komutu budur (`app_password` komutunun başlığı). Sırlar varsayılan olarak gizli
-istemle (getpass)
+değişmez. Kurtarma anahtarı yolunda rol denetimi yoktur. Girişe açık program yöneticisi taşımayan
+yedek (kurulum yedeği) iki yolda da reddedilir (kullanıcı kararı 07.11.2026; `backup_restore` modül
+başlığı "HESAPSIZ YEDEK"); ret yine `CommandError`'dır, hiçbir dosya değişmez. Var olan bir
+hesabın parolasını alan TEK yönetim komutu budur (`app_password` komutunun başlığı). Sırlar
+varsayılan olarak gizli istemle (getpass)
 alınır; `--password/--recovery-key` yalnız otomasyon/test içindir ve komut
 geçmişine düşme riskini taşır (bkz. app_password komutu).
 

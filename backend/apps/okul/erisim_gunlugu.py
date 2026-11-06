@@ -46,7 +46,7 @@ yoktur; yazıcı bu yüzden hiçbir uca bağlı değildir. Kişisel veriye dokun
 öğrenci ve personel listesi ve ayrıntısı, ayrılış havuzu (olağan okuma; tasarımın "okuma ≠
 hassas detay" ayrımında okuma), içe aktarma önizlemesi (kullanıcının yüklediği dosyanın
 işlenmesi; programın verisinin çıktısı değildir), boş şablonlar ve kurtarma anahtarı belgesi
-(kişisel veri yok), şifreli yedek indirme (bütün veritabanı, şifreli; tasarımda "Güvenlik"
+(kişisel veri yok), şifreli yedeğin kaydedilmesi (bütün veritabanı, şifreli; tasarımda "Güvenlik"
 satırındadır, izi denetim izinde `YEDEK` satırıdır — erişim günlüğü türlerinde yoktur).
 T.C. kimlik no (K9, F3), veli listesi ve adlı E07/E08 (F2), kişi dökümü ve ihlal dökümü,
 özel nitelikli alan ve ek (F1c-F5) henüz yoktur; o okumaları getiren adımlar bu yazıcıya

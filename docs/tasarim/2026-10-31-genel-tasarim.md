@@ -79,7 +79,7 @@ kararları gösterir.
 | T5 | e-Okul verisi | **Personel** (ad-soyad, görev) **+ veli listesi** — veliden yalnız ad-soyad ve öğrencinin sınıfı; telefon, adres, T.C. kimlik no, öğrenci no alınmaz; liste dönem kapanışında silinir | **evet** (öneri yalnız personeldi) |
 | T6 | Pencere | Çarpı **programı kapatır**; tepsi ve otomatik başlatma yok | — |
 | F0-a | Kantin arz bedeli vadesi | Sözleşmedeki **izleyen ayın 10'u** ([EK-2 md. 7](../mevzuat/meb-okul-aile-birligi-yonetmeligi-ek-2-kantin-kiralama-sozlesmesi.md#genel-sartlar-madde-7)) esas, Yönetmelikteki **20'si** ([md. 17/1-a-1](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-17)) üst sınır; iki tarih kural paketinde ayrı kural | — |
-| F0-b | Sert engeller | Sert engel yalnız dört gerekçede (D1 ve D4 ile güncel hâli; §6.1): **hesap bütünlüğü** (toplamlar, numara tekilliği, kapanmış dönem, yeter sayı ve karar hesabı); **programın kendi hesapladığı değerde** yasal oran ve yöntem (D1: gerçekte olan tutar yine kaydedilir, fark uyarıdır; kullanıcının belgeden girdiği değer uyarıdır); **mevzuatın hukuken geçersiz saydığı işlem** (kantin isteklisinde suç ve hısımlık engeli; serviste mülki amir onayı (OLUR) olmadan kesinleştirme — kantinde uyarı, D4; organda mevzuatın saymadığı kişi türü: YK'ye veli olmayan, DK bileşimi); **kullanıcının sert dediği karar** (A-2, KE-15). Eksik belge, taksit sayısı, puan sınırı uyarı + gerekçe; liste genişlemez (CLAUDE.md altın kural 3) | — |
+| F0-b | Sert engeller | Sert engel yalnız dört gerekçede (D1 ve D4 ile güncel hâli; §6.1): **hesap bütünlüğü** (toplamlar, numara tekilliği, kapanmış dönem, yeter sayı ve karar hesabı); **programın kendi hesapladığı değerde** yasal oran ve yöntem (D1: gerçekte olan tutar yine kaydedilir, fark uyarıdır; kullanıcının belgeden girdiği değer uyarıdır); **mevzuatın hukuken geçersiz saydığı işlem** (kantin isteklisinde suç ve hısımlık engeli; serviste mülki amir onayı (OLUR) olmadan kesinleştirme — kantinde uyarı, D4; organda mevzuatın saymadığı kişi türü: YK'ye veli olmayan, DK bileşimi); **kullanıcının sert dediği karar** (A-2, KE-15; iz boşluğu §4.6.3; hesapsız yedek §4.4.4). Eksik belge, taksit sayısı, puan sınırı uyarı + gerekçe; liste genişlemez (CLAUDE.md altın kural 3) | — |
 | F0-c | TEFBİS ve banka örnekleri | Sonra gelecek; tasarım varsayılan şemayla (§8), örnek gelince "F1 eki" | — |
 | F0-d | Saha | Yalnız pilot okul; gönüllü okul aranmaz. Pilot okul görüşmesi yapıldı ([saha.md](../kesif/saha.md)) | **evet** (öneri 2-4 gönüllü okuldu) |
 | F0-e | İl/ilçe MEM'e sorular | Sorulmaz; varsayılanlar: (a) program tasdikli deftere geçirilecek baskı üretir, (b) veri sorumlusu sorusu kılavuzda okul müdürlüğüne bırakılır, (c) internet bankacılığında üçüncü onay okul ayarıdır, (d) okul kendi TEFBİS işlem tipi listesini girer | — |
@@ -838,6 +838,16 @@ her durum ──(geri yükleme uygulandı)──▶ YENİDEN_BAŞLAT_GEREK
   satırından sonra yazılmış, doğrulanan ve yazarı bir DK hesabı olan `ISARET` satırıyla kalkar; yeni bir geri yükleme
   kartı yeniden açar; açık DK hesabı yoksa kart kalır. `db-onceki-*` 14 günlük rotasyondadır (§4.4.7): bu sürede DK
   kenara alınan veritabanını isteyebilir; zincir başı izde kaldığı için sonra da kâğıt çapasıyla karşılaştırılabilir.
+- **Hesapsız yedek** (kullanıcı kararı 07.11.2026). Kurulum yedeği hesap satırı yazılmadan önce alınır: geri yüklenseydi
+  kilit ekranında hesap seçilemez, kurtarma listesi boş kalır, programa girilemezdi. Bu yüzden yedeğin görüntüsünde rolü
+  `yonetici`, durumu `ACIK` ya da `PAROLA_YENILENMELI` en az bir `okul_account` satırı yoksa geri yükleme reddedilir
+  (süzgeç kurtarma listesininkidir: `hesaplar.recovery_accounts`). Kural dosyanın adına değil içeriğine bakar; mühür ve
+  iz denetlenmez. Denetim ORM'sizdir (`geri_yukleme_yetkisi`), parola yolunda da kurtarma anahtarı yolunda da hiçbir
+  dosyaya dokunulmadan önce koşar; parola yolunda yetkiden sonradır, yetkisiz hesap yedeğin içeriğini öğrenmez. Ret
+  masaüstünde çıkış 9, komutta `CommandError`, uygulama içinde 400'dür: hiçbir dosya değişmez, bakım kapısı açılır,
+  "yeniden başlat" kapısı kurulmaz, oturum açık kalır, günlüğe kişisiz uyarı düşer. Ret yalnız olumlu kanıtla olur:
+  görüntü okunamazsa (`sqlite3` hatası, tablo yok dahil; geçici dizin yazılamazsa `OSError`) denetim karar vermez,
+  geri yükleme eskisi gibi sürer. Kurulum yedeği listede durur, seçilince ileti çıkar; alınma sırası değişmez.
 - **Özet onarımı** (kullanıcı kararı 03.11.2026). Geri yükleme güncel `guvenlik.json`'u eski veritabanıyla birleştirir;
   onarılmasaydı yedekten sonra parolası değişen hesap yeni parolasıyla açamaz, yedek günündeki parola kaydı ise açardı.
   Bu yüzden geri yüklenecek veritabanının hesap satırlarının özetleri takastan önce `.tmp` dosyasında, ORM'siz onarılır
@@ -968,7 +978,7 @@ kalır). Veli adı taşıyan E07 çizelgesi ve adlı E08 depoya hiç yazılmaz (
 |---|---|---|---|
 | `gunluk-<tarih>.odbak` | Açılışta ve gün değişiminde, günde bir | Veritabanı + manifesto | 14 gün |
 | `pre-migrate-<sürüm>-<tarih>.odbak` | Göçten önce | Veritabanı + manifesto | Son 5; ayrıca KVKK silme tetiğinden önce alınmış olanlar tetikten sonra silinir |
-| `pre-parola-acilis-<tarih>-<saat>.odbak` | Kurulumda (kişi verisi yokken) | Veritabanı (manifestosu boş) | 14 gün |
+| `pre-parola-acilis-<tarih>-<saat>.odbak` | Kurulumda (kişi verisi yokken, hesap satırı yazılmadan önce; geri yüklenemez, §4.4.4 "Hesapsız yedek") | Veritabanı (manifestosu boş) | 14 gün |
 | `pre-anonim-<tarih-saat>.odbak` | Elle KVKK silme tetiğinden önce (F4+) | Veritabanı + manifesto | 14 gün |
 | `pre-kapanis-<tarih>.odbak` | Dönem kapanışından önce (§7.8) | Veritabanı + manifesto | 14 gün |
 | `pre-dek-yenileme-<tarih>.odbak` | DEK yenilemesinden önce (eski DEK) | Veritabanı + manifesto | 14 gün; eski zarf imha edilince açılamaz |

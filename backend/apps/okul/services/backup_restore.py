@@ -15,7 +15,8 @@ izi taşımayan bir veritabanı getirirdi. Bu çekirdek üç giriş kapısından
 KAP (`ODBAK\\x03`; `desktop.backup_crypto`; plan F1b-3 "Kap ve manifesto"): yedek dosyası akışla
 okunur (`baslik_oku`, `muhurlu_bolumu_ac`, `dosya_bolumunu_oku`); dosya bölümü belleğe alınmaz.
 Mühürlü bölüm veritabanı baytlarını ve manifestoyu AYRI verir (`YedekIcerigi`). SQLite başlık
-denetimi, yetki denetimi (görüntüye düşme dahil) ve takas yalnız veritabanı baytlarını görür.
+denetimi, yetki denetimi (görüntüye düşme dahil), hesapsız yedek denetimi ve takas yalnız veritabanı
+baytlarını görür.
 Deneme sürümünün kabı (`ODBAK\\x02`) ayrı iletiyle reddedilir.
 
 KAYNAK USB'DE OLABİLİR (kullanıcı kararı 06.11.2026 "Yedek dosyası yüklenmez, programın Aç penceresiyle
@@ -25,13 +26,13 @@ okunmaz, yani bellek o andan sonra çıkarılırsa geri yükleme etkilenmez. Oku
 da hedefe dokunmadan sabit iletiyle düşer, geçici dosya bırakmaz (`YEDEK_OKUNAMADI`,
 `geri_yukleme_ekleri.YedekOkunamadi`). Kaynağın kapanış hatası sonucu değiştirmez ("KESİNLEŞME").
 
-SIRA (plan F1b-3 "Geri yükleme"): yetki (yalnız veritabanı baytlarıyla) → `.tmp` ve özet onarımı →
-dosya bölümü `dosyalar/` altındaki hazırlık dizinine akar ve girdi girdi denetlenir → yerel yedekte
-manifestodaki dosyalar depoda ve `yetim/`'de aranır → depoda olmayanlar yerine konur, yetimdekiler
-geri alınır → veritabanı takası tek kesinleşme noktasıdır. Yetkiden önce diske dosya yazılmaz. Takas
-düşerse bu geri yüklemenin taşıdığı dosyalar geri alınır, kenara alınan veritabanı yerine döner;
-geçiş günlüğü tutulmaz (kesinti yalnız satırsız dosya üretir, kayıp üretmez). Dosya ayağının
-kuralları `geri_yukleme_ekleri`'ndedir.
+SIRA (plan F1b-3 "Geri yükleme"): yetki (yalnız veritabanı baytlarıyla) → hesapsız yedek denetimi →
+`.tmp` ve özet onarımı → dosya bölümü `dosyalar/` altındaki hazırlık dizinine akar ve girdi girdi
+denetlenir → yerel yedekte manifestodaki dosyalar depoda ve `yetim/`'de aranır → depoda olmayanlar
+yerine konur, yetimdekiler geri alınır → veritabanı takası tek kesinleşme noktasıdır. Yetkiden önce
+diske dosya yazılmaz. Takas düşerse bu geri yüklemenin taşıdığı dosyalar geri alınır, kenara alınan
+veritabanı yerine döner; geçiş günlüğü tutulmaz (kesinti yalnız satırsız dosya üretir, kayıp
+üretmez). Dosya ayağının kuralları `geri_yukleme_ekleri`'ndedir.
 
 KESİNLEŞME (plan F1b-3 "Geri yükleme": takas tek kesinleşme noktasıdır). Bu çekirdekten hata
 çıkıyorsa takas yapılmamıştır; takastan sonraki hiçbir adım başarısızlık üretmez. `.tmp`'nin baytları
@@ -82,6 +83,15 @@ uygulama içinde 400 (`BackupRestoreError` bir `ValueError`'dır; uygulama için
 servis kapısı zaten 403 verir, bu ret ancak oturumdaki program yöneticisinin kaydı tutmazsa
 düşer). Ret günlüğe sırsız uyarı olarak yazılır; konsolda denetim izi satırı yazılmaz (ORM
 yok). KURTARMA ANAHTARI YOLUNDA ROL DENETİMİ YOKTUR: anahtarın kendisi yetkidir.
+
+HESAPSIZ YEDEK (kullanıcı kararı 07.11.2026; kural `geri_yukleme_yetkisi` modül başlığında): yedeğin
+görüntüsünde girişe açık program yöneticisi satırı yoksa geri yükleme reddedilir: böyle bir yedekle
+programa girilemezdi (kurulum yedeği bu hâldedir). Denetim yetkiden SONRA (yetkisiz hesap yedeğin
+içeriğini öğrenmez) ve zincir başı okunmadan ÖNCE, parola yolunda da kurtarma anahtarı yolunda da
+koşar. Ret sabit iletili `BackupRestoreError`'dır: hiçbir dosya değişmez (yedek, veritabanı,
+`guvenlik.json`, `yedekleme.json`, not, dosya deposu), günlüğe kişisiz uyarı düşer; masaüstünde
+çıkış 9, komutta `CommandError`, uygulama içinde 400. Görüntü okunamazsa denetim karar vermez, akış
+eskisi gibi sürer.
 
 Yanlış denemelerin gecikmesi hesapsız ve süreç içidir (plan F1b-1). AES-GCM
 kimlik doğrulaması nihai hakemdir: yanlış DEK açık hata verir, sessizce bozuk
@@ -347,6 +357,9 @@ def restore_database(
     program yöneticisi olarak doğrulanır; değilse `GeriYuklemeYetkisiz` (modül başlığı
     "GERİ YÜKLEME YETKİSİ"). Kurtarma anahtarı yolunda rol denetimi yoktur.
 
+    İki yolda da girişe açık program yöneticisi taşımayan yedek `BackupRestoreError` ile reddedilir
+    (modül başlığı "HESAPSIZ YEDEK").
+
     Bozuk ek varsa `EkOnayiGerekli` ile durur; `ekler_olmadan_surdur` ikinci onaydır, kayıtlar o
     ekler olmadan geri yüklenir (modül başlığı "BOZUK EKTE DURMA"). `yedek_adi`: dosyanın kayda
     geçecek adı; verilmezse `backup_path`'in adıdır (modül başlığı "YEDEĞİN ADI").
@@ -412,6 +425,8 @@ def _yedekten_yukle(
     if parola:
         # Geri yükleme yetkisi (modül başlığı): parola doğrulandı, hiçbir dosya değişmedi.
         _yetkiyi_denetle(db_path, veritabani, dek, acan_durum, hesap_adi or "")
+    # Hesapsız yedek (modül başlığı): iki yolda da, hiçbir dosya değişmeden önce.
+    _hesapsiz_yedegi_reddet(db_path, veritabani)
 
     # Kenara alınacak veritabanının zincir başı ve çapa takastan ÖNCE, salt okunur (geri
     # yükleme notu).
@@ -632,6 +647,17 @@ def _yetkiyi_denetle(
         logger.info(
             "Güncel veritabanı okunamadı; program yöneticisi yedeğin görüntüsünde doğrulandı."
         )
+
+
+def _hesapsiz_yedegi_reddet(db_path: Path, veritabani: bytes) -> None:
+    """Görüntüde girişe açık program yöneticisi yoksa `BackupRestoreError` (modül başlığı
+    "HESAPSIZ YEDEK"). Uyarı kişisizdir: kimlik, tanıtıcı ve dosya adı yazılmaz."""
+    if geri_yukleme_yetkisi.goruntude_giris_hesabi_yok_mu(db_path.parent, veritabani):
+        logger.warning(
+            "Geri yükleme reddedildi: yedekte girişe açık program yöneticisi yok; geri yükleme "
+            "yapılmadı."
+        )
+        raise BackupRestoreError(geri_yukleme_yetkisi.ILETI_HESAPSIZ_YEDEK)
 
 
 def _sarmal_ozetleri(durum: dict[str, Any], dek: bytes) -> dict[str, str | None]:

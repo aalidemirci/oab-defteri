@@ -7,10 +7,10 @@ yoktur. Program dosyanın USB bellekte olduğunu bilemez, yalnız seçilen yere 
 
 SIRA (`sifreli_yedegi_kaydet`):
 
-1. Kilit ve yetki: yalnız program yöneticisi (tasarım §4.4.2 Güvenlik satırı "yedek indirme"). Rol
-   kapısının ardından servis de isteğin yazarını sorar (`RolYetkisiz`, 403); ret görüntü alınmadan
-   verilir. Denetim uzun iş sayacının İÇİNDEDİR: sayaçtan önce verilen bir kilit kararı burada
-   görülür, sayaçtan sonraki kilit de işin sonuna ertelenir; arada DEK düşmez.
+1. Kilit ve yetki: yalnız program yöneticisi (tasarım §4.4.2 Güvenlik satırı "şifreli yedeğin
+   kaydedilmesi"). Rol kapısının ardından servis de isteğin yazarını sorar (`RolYetkisiz`, 403); ret
+   görüntü alınmadan verilir. Denetim uzun iş sayacının İÇİNDEDİR: sayaçtan önce verilen bir kilit
+   kararı burada görülür, sayaçtan sonraki kilit de işin sonuna ertelenir; arada DEK düşmez.
 2. Hedef yolun denetimi (`_hedef_denetle`); süren ikinci iş ve bakım kapısı ondan önce sorulur:
    hedefi kötü olan ikinci istek süren işin yanında deneme sayılmasın (aşağıda "SON DENEME").
 3. Boş yer ve FAT32'nin tek dosya sınırı (`_yer_denetle`). Tahmini boy görüntüden ve manifestodaki

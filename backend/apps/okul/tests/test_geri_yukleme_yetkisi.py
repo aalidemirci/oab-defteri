@@ -12,11 +12,13 @@ ortak çekirdeğindedir (`backup_restore.restore_database` → `geri_yukleme_yet
 parola doğrulandıktan sonra ve hiçbir dosyaya dokunulmadan önce, güncel veritabanında, o
 okunamıyorsa yedeğin görüntüsünde. `test_yonetici_olmayan_hesapla_geri_yukle_reddedilir` iki
 kolludur (`uygulama_ici`, `konsol`); öteki testler çekirdeğin kabul ve ret koşullarını, geri
-düşüşü, ORM'le biçim eşitliğini ve retten sonra dosyaların değişmediğini sınar.
+düşüşü, ORM'le biçim eşitliğini ve retten sonra dosyaların değişmediğini sınar. Son bölüm iki
+yolda da koşan hesapsız yedek denetimini sınar (kullanıcı kararı 07.11.2026).
 
-Testler (biçim eşitliği testi dışında) ORM'e dokunmaz: hedef veritabanı geçici bir dosyadır,
-yedek bu kurulumun DEK'iyle alınır; okul kartı ve hesap satırları ORM'siz kurulur
-(`geri_yukleme_ortak`). Adlar ve kimlikler uydurmadır.
+Testler (biçim eşitliği testi, kuralın kurtarma listesiyle eşitliği ve gerçek kurulum akışı
+dışında) ORM'e dokunmaz: hedef veritabanı geçici bir dosyadır, yedek bu kurulumun DEK'iyle alınır;
+okul kartı ve hesap satırları ORM'siz kurulur (`geri_yukleme_ortak`). Adlar ve kimlikler
+uydurmadır.
 """
 
 from __future__ import annotations
@@ -29,9 +31,9 @@ import sqlite3
 import stat
 import uuid
 from collections.abc import Callable, Iterator
-from contextlib import closing
+from contextlib import closing, contextmanager
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from io import StringIO
 from pathlib import Path
 from typing import Any, cast
@@ -39,6 +41,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from desktop import restore as restore_mod
+from desktop.backup import PRE_PAROLA_PREFIX, daily_backup
 from desktop.backup_crypto import KAPSAM_TAM, KAPSAM_YEREL, Manifesto, ManifestoGirdisi, config_path
 from desktop.errors import EXIT_RESTORE_FAILED
 from desktop.main import build_parser
@@ -52,17 +55,19 @@ from rest_framework.test import APIClient
 
 from apps.okul import denetim_izi, restart_gate
 from apps.okul.models import Account, AccountRole, AccountStatus, AuditAction
-from apps.okul.oturum import Yazar, yazar_olarak
+from apps.okul.oturum import OTURUM, Yazar, yazar_olarak
 from apps.okul.services import (
     app_password,
     backup_restore,
     geri_yukleme_notu,
     geri_yukleme_yetkisi,
+    hesaplar,
     live_restore,
     satir_izi,
 )
 from apps.okul.services.geri_yukleme_yetkisi import (
     ILETI_DURUM,
+    ILETI_HESAPSIZ_YEDEK,
     ILETI_IZ_BOSLUGU,
     ILETI_MUHUR,
     ILETI_OZET,
@@ -83,6 +88,9 @@ from apps.okul.tests.geri_yukleme_ortak import (
     sarmal_ozeti,
     yetkili_sqlite,
 )
+from apps.okul.tests.geri_yukleme_ortak import (
+    goruntu as orm_goruntusu,
+)
 from apps.okul.tests.hesap_ortak import bagsiz_sarmal, durum_yaz
 from conftest import (
     TEST_DEK,
@@ -93,6 +101,7 @@ from conftest import (
     oturumu_ac_test,
 )
 from shared import bakim, crypto, kanonik, sqlite_adres
+from shared import dosya_sifreleme as ds
 from shared.exceptions import ROL_YETKISIZ_MESAJI, RolYetkisiz
 
 GERI_YUKLE_URL = "/api/v1/backups/restore/"
@@ -1669,7 +1678,8 @@ def test_yetkiye_ve_goruntuye_dusmeye_yalniz_veritabani_baytlari_gider(
     )
 
     assert verilen == [ortam["yeni"]]
-    assert gorunen == [geri_yukleme_yetkisi.wal_basligini_yama(ortam["yeni"])]
+    # Görüntüyü iki denetim açar: yetkinin görüntüye düşmesi ve hesapsız yedek denetimi.
+    assert gorunen == [geri_yukleme_yetkisi.wal_basligini_yama(ortam["yeni"])] * 2
 
 
 @pytest.mark.parametrize("yol", ["kabul", "sqlite_hatasi", "beklenmeyen_hata"])
@@ -1857,7 +1867,14 @@ def _depo_koku() -> Path:
 def test_iletiler_sozlukte_yazilidir() -> None:
     """Kullanıcı metni sözlükten (docs/sozluk.md "Yedek" satırı) sapmaz."""
     sozluk = (_depo_koku() / "docs" / "sozluk.md").read_text(encoding="utf-8")
-    for ileti in (ILETI_ROL, ILETI_DURUM, ILETI_MUHUR, ILETI_IZ_BOSLUGU, ILETI_OZET):
+    for ileti in (
+        ILETI_ROL,
+        ILETI_DURUM,
+        ILETI_MUHUR,
+        ILETI_IZ_BOSLUGU,
+        ILETI_OZET,
+        ILETI_HESAPSIZ_YEDEK,
+    ):
         assert re.search(re.escape(f'**"{ileti}"**'), sozluk), ileti
 
 
@@ -1906,3 +1923,473 @@ def test_kayip_kilidinde_oturumsuz_parola_yolu_reddedilir(
     assert yanit.status_code == 400
     assert yanit.json()["message"] == live_restore.PAROLA_YOLU_OTURUM_ISTER
     _degismedi(ortam)
+
+
+# ============================================================ hesapsız yedek
+# Kullanıcı kararı 07.11.2026: girişe açık program yöneticisi satırı taşımayan yedek geri
+# yüklenmez (`backup_restore` modül başlığı "HESAPSIZ YEDEK"). Denetim parola yolunda da kurtarma
+# anahtarı yolunda da koşar; kural yedeğin içeriğine bakar, dosyanın adına bakmaz.
+
+
+#: Yedeği açan iki sır: ret ne parolaya ne anahtara bağlıdır.
+PAROLA_YOLU: dict[str, Any] = {"hesap": TEST_TANITICI, "password": TEST_PAROLA}
+KURTARMA_YOLU: dict[str, Any] = {"recovery_key": TEST_KURTARMA_ANAHTARI}
+iki_yol = pytest.mark.parametrize("sir", [PAROLA_YOLU, KURTARMA_YOLU], ids=["parola", "kurtarma"])
+
+#: Girişe kapalı program yöneticileri: kurulum yedeğinin sıfır satırıyla aynı reddi alırlar.
+GIRISE_KAPALI_YONETICILER = (
+    replace(YONETICI, status="ASKIDA"),
+    replace(YONETICI_2, status="KAPALI", closed_at=KAPANIS),
+)
+
+#: Okunamayan görüntünün uyarısı. Neden içeriksiz addır (sınıf, varsa SQLite kodu), hata metni
+#: değildir: `OSError`'ın metni veri dizininin yolunu taşır.
+OKUNAMAZ_UYARISI = re.compile(
+    r"Yedeğin hesapları okunamadı \(neden: \w+(/\w+)?\); hesap denetimi yapılmadı\."
+)
+
+
+def test_hesapsiz_yedek_iletisinin_metni() -> None:
+    """Öteki testler iletiyi sabitin kendisiyle karşılaştırır; metin burada sabitlenir."""
+    assert ILETI_HESAPSIZ_YEDEK == (
+        "Bu yedekte açık bir program yöneticisi hesabı yok; geri yüklenirse programa girilemez. "
+        "Kurulum yedeği hesap kurulmadan önce alınır. "
+        "Geri yükleme yapılmadı; başka bir yedek seçin."
+    )
+
+
+def _hesapsiz_mi(dizin: Path, goruntu: bytes) -> bool:
+    return geri_yukleme_yetkisi.goruntude_giris_hesabi_yok_mu(dizin, goruntu)
+
+
+def _hesapsiz_yedek_koy(
+    ortam: dict[str, Any], tmp_path: Path, hesaplar: tuple[HesapSatiri, ...] = ()
+) -> None:
+    """Listedeki yedeğin içeriğini hesapsız görüntüyle değiştirir. Dosyanın adı günlük yedeğin
+    adıdır: kural ada bakmaz."""
+    goruntu = yetkili_sqlite(
+        tmp_path / "hesapsiz.sqlite3", dek=TEST_DEK, hesaplar=hesaplar, isaret="yeni"
+    )
+    ortam["yedek"].write_bytes(_yedek(goruntu))
+
+
+def _agac(kok: Path) -> dict[str, bytes | None]:
+    """Dizindeki her dosya ve dizin; dizinin değeri None."""
+    return {
+        str(yol.relative_to(kok)): yol.read_bytes() if yol.is_file() else None
+        for yol in sorted(kok.rglob("*"))
+    }
+
+
+@pytest.fixture(params=[True, False], ids=["bellekte", "pardus_21"])
+def goruntu_yolu(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Görüntünün iki açılış yolu: `deserialize` ve onu sunmayan SQLite (modül başlığı)."""
+    monkeypatch.setattr(geri_yukleme_yetkisi, "_DESERIALIZE_VAR", request.param)
+
+
+@pytest.mark.usefixtures("goruntu_yolu")
+@pytest.mark.parametrize(
+    ("hesaplar", "hesapsiz"),
+    [
+        pytest.param([], True, id="sifir_satir"),
+        pytest.param([YONETICI], False, id="ACIK_yonetici"),
+        pytest.param(
+            [replace(YONETICI, status="PAROLA_YENILENMELI")],
+            False,
+            id="PAROLA_YENILENMELI_yonetici",
+        ),
+        pytest.param([replace(YONETICI, status="ASKIDA")], True, id="yalniz_ASKIDA_yonetici"),
+        pytest.param(
+            [replace(YONETICI, status="KAPALI", closed_at=KAPANIS)],
+            True,
+            id="yalniz_KAPALI_yonetici",
+        ),
+        pytest.param(list(GIRISE_KAPALI_YONETICILER), True, id="iki_kapali_yonetici"),
+        *[
+            pytest.param([replace(MUHASIP, role=rol)], True, id=f"yalniz_{rol}")
+            for rol in AccountRole.values
+            if rol != AccountRole.YONETICI
+        ],
+        pytest.param(
+            [MUHASIP, replace(YONETICI, status="ASKIDA"), YONETICI_2], False, id="biri_acik"
+        ),
+        # Mühür denetlenmez: kurtarma listesi de düz sütunlardan çıkar (`recovery_accounts`).
+        pytest.param([replace(YONETICI, muhur="")], False, id="muhursuz_ACIK_yonetici"),
+    ],
+)
+def test_hesap_kurali_satirlara_bakar(
+    hesaplar: list[HesapSatiri], hesapsiz: bool, tmp_path: Path
+) -> None:
+    """Kural: `role='yonetici'` ve durumu girişe açık en az bir satır (`recovery_accounts`)."""
+    goruntu = yetkili_sqlite(tmp_path / "goruntu.sqlite3", dek=TEST_DEK, hesaplar=hesaplar)
+    veri = tmp_path / "veri"
+    veri.mkdir()
+
+    assert _hesapsiz_mi(veri, goruntu) is hesapsiz
+
+    assert list(veri.iterdir()) == []  # geçici dizin de bırakılmaz
+
+
+@pytest.mark.usefixtures("goruntu_yolu")
+@pytest.mark.parametrize("wal", [True, False], ids=["wal_basligi", "duz_baslik"])
+def test_hesap_kurali_wal_isaretli_basligi_okur(wal: bool, tmp_path: Path) -> None:
+    """Programın yedeği WAL işaretli başlık taşır (18-19. bayt 2): bellekteki kopya yamanmasa
+    görüntü açılmaz, denetim sessizce "karar yok"a düşerdi."""
+    hesapsiz = yetkili_sqlite(tmp_path / "hesapsiz.sqlite3", dek=TEST_DEK, hesaplar=[], wal=wal)
+    hesapli = yetkili_sqlite(
+        tmp_path / "hesapli.sqlite3", dek=TEST_DEK, hesaplar=[YONETICI], wal=wal
+    )
+    assert hesapsiz[18:20] == hesapli[18:20] == (b"\x02\x02" if wal else b"\x01\x01")
+
+    assert _hesapsiz_mi(tmp_path, hesapsiz) is True
+    assert _hesapsiz_mi(tmp_path, hesapli) is False
+
+
+def _tablosuz(tmp_path: Path) -> bytes:
+    return duz_sqlite(tmp_path / "tablosuz.sqlite3", "x")
+
+
+def _sutunsuz(tmp_path: Path) -> bytes:
+    yol = tmp_path / "sutunsuz.sqlite3"
+    with closing(sqlite3.connect(yol)) as baglanti:
+        baglanti.execute("CREATE TABLE okul_account (id char(32) NOT NULL PRIMARY KEY)")
+        baglanti.commit()
+    return yol.read_bytes()
+
+
+def _bozuk(tmp_path: Path) -> bytes:
+    goruntu = yetkili_sqlite(tmp_path / "bozuk.sqlite3", dek=TEST_DEK, hesaplar=[])
+    return goruntu[:100] + b"\xff" * (len(goruntu) - 100)
+
+
+@pytest.mark.usefixtures("goruntu_yolu")
+@pytest.mark.parametrize(
+    "kur",
+    [
+        pytest.param(_tablosuz, id="hesap_tablosu_yok"),
+        pytest.param(_sutunsuz, id="sutun_yok"),
+        pytest.param(_bozuk, id="bozuk_goruntu"),
+    ],
+)
+def test_okunamayan_goruntude_karar_verilmez(
+    kur: Callable[[Path], bytes], tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Red yalnız olumlu kanıtla olur: tablo okunamadıysa denetim karar vermez, ama sessiz de
+    kalmaz; günlüğe kişisiz bir uyarı düşer."""
+    goruntu = kur(tmp_path)
+
+    with caplog.at_level(logging.WARNING, logger="oab_defteri.restore"):
+        assert _hesapsiz_mi(tmp_path, goruntu) is False
+
+    (kayit,) = caplog.records
+    assert kayit.levelno == logging.WARNING
+    assert OKUNAMAZ_UYARISI.fullmatch(kayit.getMessage()), kayit.getMessage()
+
+
+def test_gecici_dizin_yazilamazsa_karar_verilmez(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """`deserialize` olmayan SQLite'ta görüntü veri dizinine yazılamazsa `OSError` ret değildir.
+    Uyarı kişisizdir: hatanın metni yolu taşır, günlüğe yalnız sınıfın adı yazılır."""
+    monkeypatch.setattr(geri_yukleme_yetkisi, "_DESERIALIZE_VAR", False)
+    dosya = tmp_path / "dizin-degil"
+    dosya.write_text("x", encoding="utf-8")
+    goruntu = yetkili_sqlite(tmp_path / "goruntu.sqlite3", dek=TEST_DEK, hesaplar=[])
+
+    with caplog.at_level(logging.WARNING, logger="oab_defteri.restore"):
+        assert _hesapsiz_mi(dosya / "veri", goruntu) is False
+
+    (kayit,) = caplog.records
+    assert kayit.levelno == logging.WARNING
+    assert OKUNAMAZ_UYARISI.fullmatch(kayit.getMessage()), kayit.getMessage()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_hesap_kurali_kurtarma_listesiyle_ayni(tmp_path: Path) -> None:
+    """Kuralın dayanağı `hesaplar.recovery_accounts`'tur: güvenlik dosyası kayıpken tek kapı o
+    listedir, liste boşsa programa girilemez. Her rol ve durum için aynı satırda ikisi aynı
+    kararı vermelidir; süzgeçlerden biri değişirse bu test düşer."""
+    for rol in AccountRole.values:
+        for durum in AccountStatus.values:
+            kapanis = KAPANIS if durum == AccountStatus.KAPALI else None
+            Account.objects.filter(pk=TEST_HESAP_ID).update(
+                role=rol, status=durum, closed_at=kapanis
+            )
+            goruntu = orm_goruntusu(tmp_path / "goruntu.sqlite3")
+
+            assert _hesapsiz_mi(tmp_path, goruntu) is not bool(hesaplar.recovery_accounts()), (
+                rol,
+                durum,
+            )
+
+
+@iki_yol
+@pytest.mark.parametrize(
+    "yedektekiler",
+    [
+        pytest.param((), id="sifir_satir"),
+        pytest.param(GIRISE_KAPALI_YONETICILER, id="girise_kapali_yoneticiler"),
+        pytest.param((MUHASIP,), id="yalniz_muhasip"),
+    ],
+)
+def test_hesapsiz_yedek_iki_yolda_da_reddedilir_hicbir_dosya_degismez(
+    yedektekiler: tuple[HesapSatiri, ...],
+    sir: dict[str, Any],
+    ortam: dict[str, Any],
+    tmp_path: Path,
+) -> None:
+    """Yedek, veritabanı, `guvenlik.json`, `yedekleme.json`, not ve dosya deposu olduğu gibi
+    kalır; kenara alma ve hazırlık dizini yoktur."""
+    _hesapsiz_yedek_koy(ortam, tmp_path, yedektekiler)
+    depo = ds.dizin_kur(Path(settings.DOSYA_DEPOSU_DIR))
+    (depo / ("1" * 32)).write_bytes(b"uydurma ek")
+    once = _anlik(ortam["db"])
+    depo_once = _agac(depo)
+    yedek_once = ortam["yedek"].read_bytes()
+
+    with pytest.raises(backup_restore.BackupRestoreError) as ret:
+        backup_restore.restore_database(ortam["yedek"], ortam["db"], **sir)
+
+    assert str(ret.value) == ILETI_HESAPSIZ_YEDEK
+    assert _anlik(ortam["db"]) == once
+    assert _agac(depo) == depo_once
+    assert ortam["yedek"].read_bytes() == yedek_once
+
+
+@pytest.mark.parametrize("guncel_db", [True, False], ids=["veritabani_var", "veritabani_yok"])
+def test_guvenlik_dosyasi_kayipken_kurtarma_anahtari_yolu_da_reddedilir(
+    guncel_db: bool, ortam: dict[str, Any], tmp_path: Path
+) -> None:
+    """Yedeğin başlığından açılan yol en tehlikelisidir: `guvenlik.json` yokken programın tek
+    kapısı kurtarma listesidir, hesapsız yedek onu boşaltırdı. Ret dosyayı başlıktan YAZMAZ."""
+    _hesapsiz_yedek_koy(ortam, tmp_path)
+    app_password.state_path().unlink()
+    if not guncel_db:
+        ortam["db"].unlink()
+    veri_once = _agac(ortam["db"].parent)
+    guvenlik_once = _agac(app_password.state_path().parent)
+
+    with pytest.raises(backup_restore.BackupRestoreError) as ret:
+        backup_restore.restore_database(ortam["yedek"], ortam["db"], **KURTARMA_YOLU)
+
+    assert str(ret.value) == ILETI_HESAPSIZ_YEDEK
+    assert _agac(ortam["db"].parent) == veri_once
+    assert _agac(app_password.state_path().parent) == guvenlik_once
+
+
+def test_yonetici_olmayan_parolasi_hesapsiz_yedekte_de_rol_iletisini_alir(
+    ortam: dict[str, Any], tmp_path: Path
+) -> None:
+    """Sıra korunur: yetki önce gelir, yedeğin içeriği yetkisiz hesaba anlatılmaz."""
+    _muhasip_sarmali_ekle()
+    _hesapsiz_yedek_koy(ortam, tmp_path)
+    once = _anlik(ortam["db"])
+
+    with pytest.raises(backup_restore.GeriYuklemeYetkisiz) as ret:
+        backup_restore.restore_database(
+            ortam["yedek"], ortam["db"], hesap="muhasip", password=TEST_PAROLA
+        )
+
+    assert (ret.value.kod, str(ret.value)) == (geri_yukleme_yetkisi.RET_ROL, ILETI_ROL)
+    assert _anlik(ortam["db"]) == once
+
+
+@iki_yol
+def test_hesapsiz_yedek_zincir_basi_okunmadan_durur(
+    sir: dict[str, Any],
+    ortam: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Denetim yetkiden sonra, geri yükleme notunun zincir başından önce koşar."""
+    _hesapsiz_yedek_koy(ortam, tmp_path)
+
+    def patla(*_a: Any, **_k: Any) -> None:
+        pytest.fail("Hesapsız yedek zincir başına ulaşmamalıydı.")
+
+    monkeypatch.setattr(geri_yukleme_notu, "zincir_basi_oku", patla)
+
+    with pytest.raises(backup_restore.BackupRestoreError) as ret:
+        backup_restore.restore_database(ortam["yedek"], ortam["db"], **sir)
+
+    assert str(ret.value) == ILETI_HESAPSIZ_YEDEK
+
+
+@iki_yol
+def test_hesapsiz_yedek_denetimi_goruntuyu_veri_dizini_altina_yazar(
+    sir: dict[str, Any],
+    ortam: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pardus 21 (`deserialize` yok): çözülmüş görüntü diske iner. Çağıran veri dizinini verir,
+    görüntü onun altındaki 0700 izinli geçici dizine yazılır, retten sonra silinir (yetkinin
+    eşdeğeri `test_deserialize_yokken_gecici_dizin_kullanilir_ve_silinir`)."""
+    monkeypatch.setattr(geri_yukleme_yetkisi, "_DESERIALIZE_VAR", False)
+    _hesapsiz_yedek_koy(ortam, tmp_path)
+    asil = geri_yukleme_yetkisi._goruntu_baglantisi
+    gorulen: list[Path] = []
+    kipler: list[int] = []
+
+    @contextmanager
+    def izleyen(dizin: Path, goruntu: bytes) -> Iterator[sqlite3.Connection]:
+        with asil(dizin, goruntu) as baglanti:
+            dosya = Path(str(baglanti.execute("PRAGMA database_list").fetchone()[2]))
+            gorulen.append(dosya)
+            kipler.append(stat.S_IMODE(dosya.parent.stat().st_mode))
+            yield baglanti
+
+    monkeypatch.setattr(geri_yukleme_yetkisi, "_goruntu_baglantisi", izleyen)
+
+    with pytest.raises(backup_restore.BackupRestoreError) as ret:
+        backup_restore.restore_database(ortam["yedek"], ortam["db"], **sir)
+
+    assert str(ret.value) == ILETI_HESAPSIZ_YEDEK
+    # Güncel veritabanı okunuyor: görüntüyü yalnız hesapsız yedek denetimi açar.
+    (dosya,) = gorulen
+    assert dosya.parent.parent == ortam["db"].parent.resolve()
+    assert dosya.parent.name.startswith(geri_yukleme_yetkisi.GECICI_DIZIN_ONEKI)
+    if os.name == "posix":
+        assert kipler == [0o700]
+    assert not dosya.parent.exists()
+
+
+def test_hesapsiz_yedek_reddinin_gunlugu_kisisizdir(
+    ortam: dict[str, Any], tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Uyarı kimlik, tanıtıcı ve dosya adı taşımaz; sırrı zaten görmez."""
+    _hesapsiz_yedek_koy(ortam, tmp_path)
+
+    with (
+        caplog.at_level(logging.INFO, logger="oab_defteri.restore"),
+        pytest.raises(backup_restore.BackupRestoreError),
+    ):
+        backup_restore.restore_database(ortam["yedek"], ortam["db"], **PAROLA_YOLU)
+
+    uyarilar = [k.getMessage() for k in caplog.records if k.levelno >= logging.WARNING]
+    assert len(uyarilar) == 1
+    metin = "\n".join(k.getMessage() for k in caplog.records)
+    for gizli in (TEST_HESAP_ID, TEST_TANITICI, TEST_PAROLA, YEDEK, str(tmp_path)):
+        assert gizli not in metin
+
+
+@iki_yol
+def test_okunamayan_goruntu_akisi_durdurmaz(
+    sir: dict[str, Any], ortam: dict[str, Any], tmp_path: Path
+) -> None:
+    """Sert engelin kapsamı dardır: hesap tablosu olmayan görüntüde karar verilmez, geri yükleme
+    eskisi gibi sürer."""
+    tablosuz = _tablosuz(tmp_path)
+    ortam["yedek"].write_bytes(_yedek(tablosuz))
+
+    backup_restore.restore_database(ortam["yedek"], ortam["db"], **sir)
+
+    assert ortam["db"].read_bytes() == tablosuz
+
+
+@pytest.mark.django_db(transaction=True)
+def test_kurulum_yedegi_reddedilir_ayni_kurulumun_hesapli_yedegi_kabul_edilir(
+    parolasiz: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Asıl vaka (gerçek sunucuyla doğrulandı, 07.11.2026): `enable` hesap satırı yazılmadan önce
+    `pre-parola-acilis` yedeğini alır; geri yüklenseydi programa girilemezdi. Gerçek akışın
+    ürettiği yedek iki yolda da reddedilir, adı değiştirilse de. Aynı kurulumun gerçek günlük
+    yedeği hesap satırını taşır, geri yüklenir."""
+    # Masaüstündeki gibi veritabanı ve anahtar dosyaları aynı dizindedir (`daily_backup`).
+    db = parolasiz / "db.sqlite3"
+    orm_goruntusu(db)  # hesap kurulmadan önceki göçlü veritabanı
+    monkeypatch.setattr(app_password, "database_file", lambda: db)
+    kurtarma = app_password.enable(
+        tanitici=TEST_TANITICI, display_name="Örnek Yönetici", password=TEST_PAROLA
+    )
+    (kurulum,) = app_password.backup_dir().glob(f"{PRE_PAROLA_PREFIX}-acilis-*")
+    orm_goruntusu(db)  # hesap kuruldu: programın dosyası da satırı taşır
+    gunluk = daily_backup(db, app_password.backup_dir(), today=date(2026, 11, 7))
+    assert gunluk is not None
+    adi_degismis = kurulum.with_name("gunluk-2026-11-06.odbak")
+    adi_degismis.write_bytes(kurulum.read_bytes())
+    once = db.read_bytes()
+
+    for yedek in (kurulum, adi_degismis):
+        for sir in (PAROLA_YOLU, {"recovery_key": kurtarma}):
+            with pytest.raises(backup_restore.BackupRestoreError) as ret:
+                backup_restore.restore_database(yedek, db, **sir)
+            assert str(ret.value) == ILETI_HESAPSIZ_YEDEK
+            assert db.read_bytes() == once
+    assert not list(db.parent.glob("db-onceki-*"))
+
+    sonuc = backup_restore.restore_database(gunluk, db, **PAROLA_YOLU)
+
+    assert sonuc.old_db_path is not None
+    with closing(sqlite3.connect(db)) as baglanti:
+        satirlar = baglanti.execute("SELECT login_name, role, status FROM okul_account").fetchall()
+    assert satirlar == [(TEST_TANITICI, AccountRole.YONETICI.value, AccountStatus.ACIK.value)]
+
+
+@iki_yol
+def test_uygulama_icinde_hesapsiz_yedek_400_kapilar_kurulmaz_oturum_acik_kalir(
+    sir: dict[str, Any], ortam: dict[str, Any], tmp_path: Path
+) -> None:
+    """Çekirdeğin reddi `ValueError`'dır: uçta 400, ileti yanıtta (kartta kırmızı çıkar). Takas
+    olmadığı için anahtar bellekte kalır, bakım kapısı açılır, yeniden başlat kapısı kurulmaz."""
+    _hesapsiz_yedek_koy(ortam, tmp_path)
+    once = _anlik(ortam["db"])
+    govde = {"name": YEDEK, **{ad: deger for ad, deger in sir.items() if ad != "hesap"}}
+
+    yanit = APIClient().post(GERI_YUKLE_URL, govde, format="json")
+
+    assert yanit.status_code == 400
+    assert yanit.json()["message"] == ILETI_HESAPSIZ_YEDEK
+    _degismedi(ortam)
+    assert _anlik(ortam["db"]) == once
+    assert OTURUM.acik_mi() is True
+    assert crypto.is_unlocked() is True
+
+
+@pytest.mark.parametrize(
+    ("konsol", "komut"),
+    [
+        pytest.param(
+            ["--hesap", TEST_TANITICI, "--parola", TEST_PAROLA],
+            ["--hesap", TEST_TANITICI, "--password", TEST_PAROLA],
+            id="parola",
+        ),
+        pytest.param(
+            ["--kurtarma-anahtari", TEST_KURTARMA_ANAHTARI],
+            ["--recovery-key", TEST_KURTARMA_ANAHTARI],
+            id="kurtarma",
+        ),
+    ],
+)
+def test_konsolda_hesapsiz_yedek_reddedilir(
+    konsol: list[str],
+    komut: list[str],
+    ortam: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Masaüstü kipi iletiyi gösterip 9 ile çıkar, komut `CommandError` verir; ikisi de aynı
+    çekirdekten geçer, hiçbir dosya değişmez."""
+    _hesapsiz_yedek_koy(ortam, tmp_path)
+    (ortam["db"].parent / VERSION_STAMP_FILE_NAME).write_text("{}", encoding="utf-8")
+    once = _anlik(ortam["db"])
+    paths = AppPaths(
+        root=tmp_path,
+        data=ortam["db"].parent,
+        backups=app_password.backup_dir(),
+        logs=tmp_path / "gunlukler",
+        cache=tmp_path / "onbellek",
+    )
+    # Django testte zaten kurulu; masaüstü kipinin hazırlığı atlanır, çekirdek gerçektir.
+    monkeypatch.setattr(restore_mod, "prepare_django", lambda *a, **k: None)
+    args = build_parser().parse_args(["--geri-yukle", YEDEK, "--evet", *konsol])
+
+    assert restore_mod._restore_flow(paths, args) == EXIT_RESTORE_FAILED
+    assert f"HATA: {ILETI_HESAPSIZ_YEDEK}" in capsys.readouterr().out
+    assert _anlik(ortam["db"]) == once
+
+    with pytest.raises(CommandError) as hata:
+        call_command("restore_backup", str(ortam["yedek"]), "--yes", *komut, stdout=StringIO())
+    assert str(hata.value) == ILETI_HESAPSIZ_YEDEK
+    assert _anlik(ortam["db"]) == once

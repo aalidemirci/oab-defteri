@@ -61,6 +61,7 @@ from apps.okul.services import (
 )
 from apps.okul.services import school_year as school_year_service
 from apps.okul.tests.geri_yukleme_ortak import (
+    GORUNTU_HESABI,
     OZGUN_AD,
     PDF,
     PNG,
@@ -1043,7 +1044,9 @@ def test_ek_tablosu_olmayan_goruntude_manifesto_bossa_rapor_bostur(
 ) -> None:
     yedek = _yedek(tmp_path)
     yerel_yedek_yaz(
-        yedek, yetkili_sqlite(tmp_path / "goruntu.sqlite3", dek=TEST_DEK, hesaplar=[]), ()
+        yedek,
+        yetkili_sqlite(tmp_path / "goruntu.sqlite3", dek=TEST_DEK, hesaplar=[GORUNTU_HESABI]),
+        (),
     )
 
     sonuc = _geri_yukle(yedek, canli_db)
@@ -1057,7 +1060,7 @@ def test_ek_tablosu_olmayan_goruntude_manifestodaki_ek_dogrulanamaz(
 ) -> None:
     """Tablo yoksa satır da yoktur; manifesto okuyucusuyla aynı kural (`desktop.backup`)."""
     yedek = _yedek(tmp_path)
-    goruntu = yetkili_sqlite(tmp_path / "goruntu.sqlite3", dek=TEST_DEK, hesaplar=[])
+    goruntu = yetkili_sqlite(tmp_path / "goruntu.sqlite3", dek=TEST_DEK, hesaplar=[GORUNTU_HESABI])
     yerel_yedek_yaz(yedek, goruntu, (ornek_ek(),))
 
     with pytest.raises(backup_restore.EkOnayiGerekli) as durma:
@@ -1071,7 +1074,7 @@ def test_ek_kayitlari_okunamayan_goruntu_manifesto_doluysa_reddedilir(
 ) -> None:
     """Sütunu olmayan tablo: doğrulama yapılamaz; yedek bozuk sayılır, onay istenmez."""
     goruntu = tmp_path / "goruntu.sqlite3"
-    yetkili_sqlite(goruntu, dek=TEST_DEK, hesaplar=[], isaret="yeni")
+    yetkili_sqlite(goruntu, dek=TEST_DEK, hesaplar=[GORUNTU_HESABI], isaret="yeni")
     with closing(sqlite3.connect(goruntu)) as baglanti:
         baglanti.execute("CREATE TABLE okul_attachment (stored_name text)")
         baglanti.commit()

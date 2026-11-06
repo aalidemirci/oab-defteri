@@ -37,8 +37,8 @@ yazılamazsa verilmez (fail-closed). Günlük hesabın okumasının kaydıdır: 
 bağlamsız okuma reddedilir (`erisim_gunlugu.yaz`).
 
 EKSİK EKLER (`eksik_ekler`; tasarım §4.4.7 "Yetim ve eksik dosya"): satırı olup dosyası olmayan
-kayıt canlı okunur, Genel Bakış'taki bütünlük uyarısı buradan beslenir. Plan F1b-3 "Eksik ve bozuk
-ekler kişisiz bilgiyle listelenir": asıl dosya adı yalnız bu uyarıda ve kaydın kendisinde görünür,
+kayıt canlı okunur, Genel Bakış'taki Eksik Ekler kartı buradan beslenir. Plan F1b-3 "Eksik ve bozuk
+ekler kişisiz bilgiyle listelenir": asıl dosya adı yalnız bu kartta ve kaydın kendisinde görünür,
 kilit açıkken çözülür. Yanıt yalnız program yöneticisine ve Denetleme Kuruluna gider.
 
 SAHİP KÜMESİ: `owner_type` kayıtlı model etiketlerinden gelir (`sahip_kaydet`); F1b'de küme BOŞTUR,

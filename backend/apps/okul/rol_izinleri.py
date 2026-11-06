@@ -872,7 +872,9 @@ EYLEM_KURALLARI: Final[Mapping[Eylem, EylemKurali]] = {
         Satir.GUVENLIK, (YONETICI,), dayanak="Tasarım §4.4.2 Güvenlik satırı, §4.4.4"
     ),
     Eylem.YEDEK_INDIRME: _ek(
-        Satir.GUVENLIK, (YONETICI,), dayanak="Tasarım §4.4.2 Güvenlik satırı (yedek indirme)"
+        Satir.GUVENLIK,
+        (YONETICI,),
+        dayanak="Tasarım §4.4.2 Güvenlik satırı (şifreli yedeğin kaydedilmesi)",
     ),
     Eylem.BOSTA_SURE_YAZMA: _ek(
         Satir.AYARLAR, (YONETICI,), dayanak="Tasarım §4.4.2 Ayarlar satırı (boşta süre)"
@@ -931,7 +933,7 @@ EYLEM_KURALLARI: Final[Mapping[Eylem, EylemKurali]] = {
 
 #: Gerçek servise henüz bağlanmamış eylemler → faz (yalnız küçülebilir; test kaynakta
 #: `Eylem.<AD>` çağrısını arar). Bağlı olanlar: hesap yönetimi, kurtarma anahtarı, geri
-#: yükleme, yedek indirme, boşta süre yazımı, geri yükleme kartının "Gördüm"ü (⁵).
+#: yükleme, şifreli yedeğin kaydedilmesi, boşta süre yazımı, geri yükleme kartının "Gördüm"ü (⁵).
 BAGLANMAMIS_EYLEMLER: Final[Mapping[Eylem, str]] = {
     Eylem.GENEL_KURUL_YAZMA: "F2",
     Eylem.GENEL_KURUL_YENI_OKUL_DAVETI: "F2",

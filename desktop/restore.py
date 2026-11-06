@@ -26,7 +26,9 @@ yöneticisi hesabının tanıtıcısı ve parolası (`--hesap` + `--parola`; ayn
 okunamazsa yedeğin görüntüsü), parola doğrulandıktan sonra ve kenara alma yapılmadan önce koşar.
 Ret `GeriYuklemeYetkisiz`'dir (bir `BackupRestoreError`): hiçbir dosya değişmez, ileti
 gösterilir, çıkış kodu 9'dur. Kurtarma anahtarı yolunda rol denetimi yoktur (anahtarın
-kendisi yetkidir). Güvenlik dosyası kayıpsa (tasarım
+kendisi yetkidir). Girişe açık program yöneticisi taşımayan yedek (kurulum yedeği) iki yolda da
+reddedilir (kullanıcı kararı 07.11.2026; `backup_restore` modül başlığı "HESAPSIZ YEDEK"): hiçbir dosya
+değişmez, ileti gösterilir, çıkış kodu 9'dur. Güvenlik dosyası kayıpsa (tasarım
 §4.3 tehdit 8) bu kip de çıkış yoludur: çekirdek `guvenlik.json`'u yedeğin kurtarma
 başlığından (yalnız kurtarma bölümüyle) yeniden yazar.
 
@@ -303,7 +305,7 @@ def _report_error(message: str, interactive: bool, *, gunluk: str | None = None)
 # Yedek seçimi ve sır istemleri
 # ---------------------------------------------------------------------------
 def list_backups(backup_dir: Path) -> list[Path]:
-    """Geri yüklenebilir `.odbak` dosyaları — en yeniden eskiye."""
+    """Yedek klasöründeki `.odbak` dosyaları — en yeniden eskiye."""
     if not backup_dir.is_dir():
         return []
     dosyalar = [yol for yol in backup_dir.glob(f"*{BACKUP_SUFFIX}") if yol.is_file()]
@@ -336,7 +338,7 @@ def _choose_backup(paths: AppPaths, args: argparse.Namespace, interactive: bool)
 
 
 def _pick_backup(yedekler: list[Path]) -> Path | None:
-    print("Geri yüklenebilir yedekler (en yeniden eskiye):")
+    print("Bu bilgisayardaki yedekler (en yeniden eskiye):")
     for sira, yol in enumerate(yedekler, start=1):
         boyut = max(1, yol.stat().st_size // 1024)
         print(f"  {sira:2d}) {yol.name}  ({boyut} KB)")

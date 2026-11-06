@@ -25,7 +25,9 @@ sözlükten): okuyucunun ham sütun çevirisi böylece sınanır. Hesap tablosu 
 bütün sütunları taşır; ad-soyad DEK'le şifreli uydurma addır.
 
 Ekli görüntü (`ekli_sqlite`; plan F1b-3 "Geri yükleme"): `yetkili_sqlite`'ın dosyasına göçün kurduğu
-`okul_attachment` sütunları eklenir, satırlar depo servisinin yazdığı biçimdedir. `OrnekEk` kabı ve
+`okul_attachment` sütunları eklenir, satırlar depo servisinin yazdığı biçimdedir. Varsayılan hesabı
+`GORUNTU_HESABI`dır: girişe açık program yöneticisi taşımayan yedek geri yüklenmez (kullanıcı kararı
+07.11.2026), ek sınamalarının konusu ise hesap değildir. `OrnekEk` kabı ve
 sarmalı gerçektir (`ds.dosya_hazirla`). Gerçek şema ve gerçek yazıcı
 `test_tam_yedek.py::test_tam_yedekte_ekli_kayit_geri_yuklemeden_sonra_acilir`'de sınanır. Kişi adı
 taşıyan özgün ad uydurmadır ve yalnız raporda ya da notta bulunmadığını göstermek içindir.
@@ -55,7 +57,7 @@ from desktop.tests.kap_ortak import durum_basligi, kap_kur
 from django.db import connection, transaction
 
 from apps.okul.services import app_password, backup_restore, geri_yukleme_yetkisi
-from conftest import TEST_DEK, TEST_IA
+from conftest import TEST_DEK, TEST_HESAP_ID, TEST_IA, TEST_TANITICI
 from shared import crypto, kanonik
 from shared import dosya_sifreleme as ds
 
@@ -84,6 +86,10 @@ class HesapSatiri:
     bekleyen_ozet: str = ""
     #: Satırın iz satırı yazılsın mı (modül başlığı); yanlışsa satırın izi yoktur (fail-closed).
     iz: bool = True
+
+
+#: Konusu hesap olmayan görüntülerin program yöneticisi satırı (modül başlığı "Ekli görüntü").
+GORUNTU_HESABI = HesapSatiri(TEST_HESAP_ID, TEST_TANITICI)
 
 
 def sarmal_ozeti(dek: bytes, hesap_id: str) -> str:
@@ -387,7 +393,7 @@ def ekli_sqlite(
     ekler: Iterable[OrnekEk],
     *,
     dek: bytes = TEST_DEK,
-    hesaplar: Iterable[HesapSatiri] = (),
+    hesaplar: Iterable[HesapSatiri] = (GORUNTU_HESABI,),
     isaret: str = "",
 ) -> bytes:
     """`yetkili_sqlite` ve ek tablosu; dosyanın baytlarını döndürür."""
