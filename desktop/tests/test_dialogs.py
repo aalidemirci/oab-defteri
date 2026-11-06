@@ -87,3 +87,26 @@ def test_gorsel_ileti_denenmeden_once_gunluk_yazilir(
     show_error("Başlık", "Mesaj", platform="linux", runner=kaydet)
 
     assert sira == ["gunluk", "ileti"]
+
+
+def test_gunluk_verilirse_ileti_gunluge_yazilmaz_kutuda_gosterilir(
+    od_gunlugu: list[logging.LogRecord],
+) -> None:
+    """R1: ileti serbest ad ya da yol taşıyorsa günlüğe adsız hâli yazılır."""
+    gorulen: list[list[str]] = []
+
+    def kutu(argv: list[str]) -> bool:
+        gorulen.append(argv)
+        return True
+
+    show_error(
+        "Geri yükleme başarısız",
+        "Yedek dosyası bulunamadı: Uydurgül Masalcıoğlu.odbak",
+        gunluk="Yedek dosyası bulunamadı.",
+        platform="linux",
+        runner=kutu,
+    )
+
+    metin = " | ".join(kayit.getMessage() for kayit in od_gunlugu)
+    assert "Yedek dosyası bulunamadı." in metin and "Masalcıoğlu" not in metin
+    assert "Masalcıoğlu" in gorulen[0][-1]

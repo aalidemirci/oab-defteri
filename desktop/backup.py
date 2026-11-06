@@ -48,6 +48,13 @@ tek işlev (`rotate_backups`), kapalı önek kümesi tek sabitte (`ROTASYON_KUME
 söylemez. `pre-kapanis` ve `pre-dek-yenileme`'nin üreticileri F4'tedir; bu adımda yalnız adları ve
 kuralları vardır. Bir dosyanın silinememesi rotasyonu düşürmez, adı günlüğe yazılır.
 
+**Yetim silmesi** (tasarım §4.4.7 "Yetim ve eksik dosya"; plan F1b-3 "Geri yükleme"): `dosyalar/yetim/
+<yyyy-aa-gg>/` dizinleri 14 gün sonra silinir (`eski_yetimleri_sil`). Rotasyonla aynı tetikte ve
+aynı rotasyon günüyle koşar (`desktop/main.py::_rotasyonu_kos`): açılışın 7. adımı Django'dan önce
+olduğu için bu işlev depo modülünü içe aktarmaz. Yaş dizinin adındaki gündür; adı gün biçiminde
+olmayan dizine dokunulmaz. Bir dosyanın silinememesi süreci düşürmez, dizin kalır, sonraki rotasyon
+yeniden dener. Günlüğe yalnız sayı yazılır.
+
 Kenara alınan veritabanının ad kuralı da buradadır (`old_database_stamp`): rotasyon onu tanımak
 zorundadır ve masaüstü backend'i içe aktarmaz; geri yükleme (`apps.okul.services.backup_restore`)
 buradan alır. `-wal`/`-shm` eşleri veritabanıyla karar görür: veritabanı silinemezse eşleri de
@@ -66,6 +73,7 @@ from __future__ import annotations
 import logging
 import re
 import sqlite3
+import stat
 import tempfile
 from collections.abc import Iterable
 from contextlib import closing
@@ -77,6 +85,7 @@ from typing import Final
 from desktop.backup_crypto import (
     BACKUP_SUFFIX,
     BOS_YEREL_MANIFESTO,
+    KAPSAM_TAM,
     KAPSAM_YEREL,
     BackupCryptoError,
     Manifesto,
@@ -109,6 +118,11 @@ DEFAULT_KEEP_PRE_MIGRATE = 5
 #: `Attachment`'ın tablosu (Django'nun varsayılan adı). Masaüstü backend'i içe aktarmaz: eşitliği
 #: ve sütunlar `apps/okul/tests/test_yedek_manifestosu.py`'de sabittir.
 EK_TABLOSU: Final = "okul_attachment"
+#: Geri yükleme onayında yedeğin kapsamı (kullanıcı kararı 04.11.2026 "Ekran adları").
+KAPSAM_METINLERI: Final[dict[int, str]] = {
+    KAPSAM_YEREL: "yalnız kayıtlar; ekler bu bilgisayardan alınır",
+    KAPSAM_TAM: "kayıtlar, ekler ve üretilen evrak",
+}
 _EK_SORGUSU: Final = (
     "SELECT stored_name, size, sha256 FROM okul_attachment "
     "WHERE purged_at IS NULL ORDER BY stored_name"
@@ -120,6 +134,8 @@ _UNSAFE_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _GUN: Final = r"(?P<gun>\d{4}-\d{2}-\d{2})"
 _SAAT: Final = r"\d{6}"
 _ODBAK: Final = re.escape(BACKUP_SUFFIX)
+#: Yetim dizinindeki gün dizininin adı (`fullmatch`; biçimi `shared.dosya_sifreleme` yazar).
+_YETIM_GUNU: Final = re.compile(_GUN)
 #: Programın ürettiği adlar: `db-onceki-<damga>.sqlite3` ve `-wal`/`-shm` eşleri. Bu biçimde
 #: olmayan (elle konmuş, yol ayırıcılı) ada dokunulmaz.
 _OLD_DB_NAME_RE: Final = re.compile(
@@ -588,3 +604,52 @@ def rotate_backups(
     if removed:
         logger.info("Eskimiş %d yedek silindi.", len(removed))
     return removed
+
+
+def _yetim_gununu_sil(gun_dizini: Path) -> tuple[int, int]:
+    """Gün dizinindeki dosyaları ve boşalan dizini siler: (silinen, silinemeyen).
+
+    Sembolik bağ ya da düzenli dosya dizin değildir, izlenmez. Hiçbir `OSError` buradan çıkmaz: iletisi
+    yolu taşır, süreç de bir dosya yüzünden düşmez.
+    """
+    silinen = kalan = 0
+    try:
+        if not stat.S_ISDIR(gun_dizini.lstat().st_mode):
+            return 0, 0
+        for yol in sorted(gun_dizini.iterdir()):
+            try:
+                yol.unlink()
+            except OSError:
+                kalan += 1
+            else:
+                silinen += 1
+        if not kalan:
+            gun_dizini.rmdir()
+    except OSError:
+        kalan += 1
+    return silinen, kalan
+
+
+def eski_yetimleri_sil(
+    yetim_dizini: Path,
+    *,
+    keep_days: int = DEFAULT_KEEP_DAYS,
+    today: date | None = None,
+) -> int:
+    """Süresi dolan yetim dosyaları siler; silinen dosya sayısını döndürür (modül başlığı).
+
+    Gün dizini rotasyondaki yedeklerle aynı kesimle eskir: 14. gün kalır, 15. gün silinir.
+    """
+    sinir = (today or date.today()) - timedelta(days=keep_days)
+    silinen = kalan = 0
+    for ad in _dizin_adlari(yetim_dizini):
+        gun = _adin_gunu(_YETIM_GUNU, ad)
+        if gun is not None and gun < sinir:
+            bu_silinen, bu_kalan = _yetim_gununu_sil(yetim_dizini / ad)
+            silinen += bu_silinen
+            kalan += bu_kalan
+    if kalan:
+        logger.warning("Süresi dolan %d yetim dosya silinemedi; sonra yeniden denenecek.", kalan)
+    if silinen:
+        logger.info("Süresi dolan %d yetim dosya silindi.", silinen)
+    return silinen

@@ -23,8 +23,7 @@ from contextlib import contextmanager
 from io import BytesIO
 from typing import Any
 
-from django.core.files.uploadhandler import MemoryFileUploadHandler, TemporaryFileUploadHandler
-from django.http import FileResponse, HttpRequest
+from django.http import FileResponse, HttpRequest, HttpResponseBase
 from django.views.decorators.debug import sensitive_variables
 from rest_framework import generics, serializers, status
 from rest_framework.exceptions import APIException
@@ -70,9 +69,13 @@ from apps.okul.services import setup as setup_service
 from apps.okul.services import templates as template_service
 from apps.okul.services import terms as term_service
 from apps.okul.services import updates as update_service
+from apps.okul.services.backup_restore import EkOnayiGerekli
 from apps.okul.views_oturum import guvenlik_hatalari
 
 XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+#: Bozuk ekte ikinci onay isteyen yanıtın kodu (`BackupRestoreView`).
+EK_ONAYI_GEREKLI = "ek_onayi_gerekli"
 
 # Boolean query parametresi için kabul edilen "açık" değerler.
 TRUE_VALUES = frozenset({"true", "1"})
@@ -665,6 +668,8 @@ class BackupRestoreRequestSerializer(serializers.Serializer[dict[str, Any]]):
         required=False, allow_blank=True, default="", trim_whitespace=False
     )
     recovery_key = serializers.CharField(required=False, allow_blank=True, default="")
+    # İkinci onay: kayıtlar bozuk ekler olmadan geri yüklenir (`live_restore` "BOZUK EK").
+    ekler_olmadan_surdur = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         ad = str(attrs.get("name") or "").strip()
@@ -697,34 +702,57 @@ class BackupRestoreView(APIView):
     başlığından yeniden yazar. Açık oturumda yalnız program yöneticisi; parola yolunda
     servis de yazarın rolünü ve hesabını denetler, kurtarma anahtarı yolunda denetlemez
     (`live_restore` modül başlığı "YETKİ"). Parola yolunda çekirdeğin ORM'siz hesap denetimi
-    reddederse (`GeriYuklemeYetkisiz`, bir `ValueError`) yanıt 400'dür.
+    reddederse (`GeriYuklemeYetkisiz`, bir `ValueError`) yanıt 400'dür. Bozuk ek varsa hiçbir şey
+    değişmez, yanıt 409 `ek_onayi_gerekli`'dir ve `rapor` kişisiz sayıları ve listeyi taşır; aynı
+    istek `ekler_olmadan_surdur` ile yinelenirse kayıtlar o ekler olmadan geri yüklenir.
     """
+
+    _yukleme: live_restore_service.YedekYuklemeIsleyicisi | None = None
 
     def initialize_request(self, request: HttpRequest, *args: Any, **kwargs: Any) -> Request:
         """Yedek yüklemesi genel bellek işleyicisinin ve sınırının dışındadır (plan F1b-3).
 
-        Yedek şifrelidir (açık kopya değildir) ve yükleme sınırını aşabilir; sınırı aşan yedek
-        Django'nun geçici dosyasına iner. Ucun kendi işleyicisi (`.yukleme-<hex>.tmp`, 0600)
-        plan F1b-3 (c) alt commit'indedir. İşleyiciler gövde okunmadan kurulmalıdır.
+        Yedek şifrelidir (açık kopya değildir) ve yükleme sınırını aşabilir: gövde belleğe
+        alınmadan yedek dizinindeki geçici dosyaya akar. İşleyici gövde okunmadan kurulmalıdır.
         """
-        request.upload_handlers = [
-            MemoryFileUploadHandler(request),
-            TemporaryFileUploadHandler(request),
-        ]
+        self._yukleme = live_restore_service.YedekYuklemeIsleyicisi(request)
+        request.upload_handlers = [self._yukleme]
         return super().initialize_request(request, *args, **kwargs)
+
+    def dispatch(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponseBase:
+        """Yüklenen dosya her çıkış yolunda silinir: başarı, ret, doğrulama hatası, kesinti.
+
+        Temizlik hata yükseltmez: buradaki hata hazır yanıtın yerine geçerdi.
+        """
+        try:
+            return super().dispatch(request, *args, **kwargs)
+        finally:
+            if self._yukleme is not None:
+                self._yukleme.temizle()
 
     def post(self, request: Request) -> Response:
         req = BackupRestoreRequestSerializer(data=request.data)
         req.is_valid(raise_exception=True)
-        yuklenen = req.validated_data["file"]
         with _service_errors():
-            payload = live_restore_service.restore_and_require_restart(
-                name=req.validated_data["name"],
-                content=yuklenen.read() if yuklenen is not None else None,
-                hesap=req.validated_data["hesap"],
-                password=req.validated_data["password"],
-                recovery_key=req.validated_data["recovery_key"],
-            )
+            try:
+                payload = live_restore_service.restore_and_require_restart(
+                    name=req.validated_data["name"],
+                    yuklenen=req.validated_data["file"],
+                    hesap=req.validated_data["hesap"],
+                    password=req.validated_data["password"],
+                    recovery_key=req.validated_data["recovery_key"],
+                    ekler_olmadan_surdur=req.validated_data["ekler_olmadan_surdur"],
+                )
+            except EkOnayiGerekli as durma:
+                return Response(
+                    {
+                        "code": EK_ONAYI_GEREKLI,
+                        "message": str(durma),
+                        "fields": {},
+                        "rapor": durma.rapor.yanit(),
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
         return Response(payload)
 
 

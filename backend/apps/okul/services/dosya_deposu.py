@@ -36,6 +36,11 @@ günlüğüne `OZEL_NITELIKLI_EK` satırı yazar (§4.6.4); bayt ancak satır ya
 yazılamazsa verilmez (fail-closed). Günlük hesabın okumasının kaydıdır: `SISTEM` yazarında ya da
 bağlamsız okuma reddedilir (`erisim_gunlugu.yaz`).
 
+EKSİK EKLER (`eksik_ekler`; tasarım §4.4.7 "Yetim ve eksik dosya"): satırı olup dosyası olmayan
+kayıt canlı okunur, Genel Bakış'taki bütünlük uyarısı buradan beslenir. Plan F1b-3 "Eksik ve bozuk
+ekler kişisiz bilgiyle listelenir": asıl dosya adı yalnız bu uyarıda ve kaydın kendisinde görünür,
+kilit açıkken çözülür. Yanıt yalnız program yöneticisine ve Denetleme Kuruluna gider.
+
 SAHİP KÜMESİ: `owner_type` kayıtlı model etiketlerinden gelir (`sahip_kaydet`); F1b'de küme BOŞTUR,
 ilk kaydı F1c'de sahibiyle birlikte gelir. Testler geçici sahip kaydeder (plan F1b-3).
 
@@ -44,24 +49,21 @@ Bu modül kişi adı içerebilen özgün adı günlüğe, iletiye ve iz satırı
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 from django.conf import settings
 from django.db import models, transaction
+from django.utils import timezone
 
 from apps.okul import denetim_izi, erisim_gunlugu
 from apps.okul.models import AccessKind, Attachment, AttachmentSensitivity
 from apps.okul.oturum import Yazar, yazar_olarak
+from apps.okul.services.geri_yukleme_ekleri import tur_adi
 from shared import crypto
 from shared import dosya_sifreleme as ds
 from shared.bakim import UZUN_ISLER
 
-#: `dosyalar/` altındaki yetim dizininin adı (plan F1b-3 "Geri yükleme"; taraması (c) alt commit'i).
-YETIM_DIZINI: Final = "yetim"
-#: Depo dizinlerinin POSIX kipi (tasarım §4.5).
-DIZIN_KIPI: Final = 0o700
 #: `original_name`'in üst sınırı (karakter); şifreli sütun TEXT'tir, sınırı burası zorlar.
 OZGUN_AD_UZUNLUGU: Final = 255
 
@@ -91,6 +93,14 @@ class EkDosyasiYok(DosyaDeposuHatasi):
         super().__init__("Dosya yok: bu ekin dosyası imha edilmiş ya da depoda bulunamadı.")
 
 
+class DepoOkunamadi(DosyaDeposuHatasi):
+    """Depo dizini okunamadı. Yol taşımaz: kart hatayı izle birlikte günlüğe yazar, yol hesap adını
+    içerir. `from None` ile yükseltilir, yoksa zincirdeki `OSError` yolu yine yazdırırdı."""
+
+    def __init__(self, neden: str) -> None:
+        super().__init__(f"Dosya deposu okunamadı ({neden}).")
+
+
 class EkOzetiTutmuyor(ds.DogrulamaHatasi):
     """Açılan içeriğin özeti satırdaki `sha256`'yı tutmuyor; bayt verilmez."""
 
@@ -111,15 +121,6 @@ def depo_dizini() -> Path:
 def yukleme_siniri() -> int:
     """Ekin açık boyu üst sınırı (bayt): ayardaki yükleme sınırıyla biçim sınırının küçüğü."""
     return min(int(settings.FILE_UPLOAD_MAX_MEMORY_SIZE), ds.AZAMI_ACIK_BOY)
-
-
-def _depo_dizinini_kur() -> Path:
-    """Dizini yoksa kurar, POSIX'te 0700'e çeker (modül başlığı adım 3); yolu döndürür."""
-    dizin = depo_dizini()
-    dizin.mkdir(mode=DIZIN_KIPI, parents=True, exist_ok=True)
-    if os.name == "posix":
-        dizin.chmod(DIZIN_KIPI)
-    return dizin
 
 
 def _veri_anahtari(dek: bytes | None = None) -> bytes:
@@ -149,6 +150,35 @@ def _sahip_bagi(owner: models.Model) -> tuple[str, str]:
     if owner._state.adding or owner.pk is None:
         raise EkSahibiHatasi("Ek yalnız kaydedilmiş bir kayda bağlanır.")
     return etiket, denetim_izi.kimlik_metni(model, owner.pk)
+
+
+def eksik_ekler() -> list[dict[str, Any]]:
+    """Satırı olup depoda düzenli dosyası bulunmayan ekler, eskiden yeniye (modül başlığı).
+
+    İmhalı satırın dosyası zaten yoktur, sayılmaz. Özgün ad satır satır, yalnız eksik ekte çözülür;
+    çözülemeyen ad `None`'dır (`CorruptField` metin değildir). Depo dizini okunamazsa
+    `DepoOkunamadi` yükselir: okunamayan depo boş sayılmaz.
+    """
+    try:
+        depodakiler = set(ds.depodaki_dosyalar(depo_dizini()))
+    except OSError as hata:
+        raise DepoOkunamadi(type(hata).__name__) from None
+    satirlar = (
+        Attachment.objects.filter(purged_at__isnull=True)
+        .defer("original_name", "key_wrap")
+        .order_by("uploaded_at", "stored_name")
+    )
+    return [
+        {
+            "kayit_turu": tur_adi(ek.owner_type),
+            "kayit_no": ek.owner_id,
+            "yukleme_tarihi": timezone.localtime(ek.uploaded_at).date().isoformat(),
+            "boyut": ek.size,
+            "ozgun_ad": ek.original_name if isinstance(ek.original_name, str) else None,
+        }
+        for ek in satirlar
+        if ek.stored_name not in depodakiler
+    ]
 
 
 def yaz(
@@ -182,7 +212,7 @@ def yaz(
     with UZUN_ISLER.is_():
         sarmal_anahtari = crypto.file_wrap_key(_veri_anahtari())
         hazir = ds.dosya_hazirla(icerik, sarmal_anahtari=sarmal_anahtari)
-        ds.depoya_yaz(_depo_dizinini_kur(), hazir.stored_name, hazir.kap)
+        ds.depoya_yaz(ds.dizin_kur(depo_dizini()), hazir.stored_name, hazir.kap)
         with yazar_olarak(yazar), transaction.atomic():
             ek = Attachment.objects.create(
                 stored_name=hazir.stored_name,

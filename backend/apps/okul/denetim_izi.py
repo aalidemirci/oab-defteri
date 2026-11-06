@@ -160,10 +160,14 @@ IZ_ANAHTARI_BAYT: Final = 32
 #: * Ertelenen gün işi (`GUN_ISI`; kimliği işin ASCII adı).
 #: * Kilit açılışındaki kendiliğinden doğrulama (`BUTUNLUK`; bulgu kodları, düzey, çapanın
 #:   sırası, kilitli satır sayıları, bulgulu satırların sıraları — hepsi sayı ya da iç kod).
+#: * Dosya deposunun yetim taraması (`BUTUNLUK`; tasarım §4.4.7, plan F1b-3 "Geri yükleme"; kimliği
+#:   sabit `yetim`, değerleri yalnız sayıdır: taşınan, taşınamayan). Satırı olmayan dosyanın adı
+#:   satıra girmez.
 #: * Geri yükleme (`GERI_YUKLEME`; kimliği kenara alınan veritabanının adı; yol, kurtarma
 #:   anahtarı no'su, parolayla açan hesabın kimliği, uygulama içi geri yüklemede oturumdaki
-#:   hesabın kimliği, kenara alınanın sha256'sı ve zincir başı). Tanıtıcı satıra girmez:
-#:   kişinin adını içerebilir (program yalnız uyarır).
+#:   hesabın kimliği, kenara alınanın sha256'sı ve zincir başı; dosya ayağının kapsamı ve
+#:   sayıları: yerine konan, yetimden dönen, eksik, bozuk, onayla sürülen). Tanıtıcı satıra
+#:   girmez: kişinin adını içerebilir (program yalnız uyarır).
 #:
 #: `zaman`: satırın anı (`at`) yazıldığı andır. Sistem olayı yazılamayıp beklemişse (geri
 #: yükleme notunda ya da düşen bir kilitli yazımdan sonra bellekte; `iz_durumu`) ilk kilit
@@ -177,6 +181,7 @@ SEMA_GOCU: Final = "sema.goc"
 GUN_ISI_ERTELEME: Final = "gun_isi.erteleme"
 IZ_DOGRULAMASI: Final = "denetim_izi.dogrulama"
 GERI_YUKLEME_KAYDI: Final = "yedek.geri_yukleme"
+DOSYA_DEPOSU: Final = "dosya.deposu"
 DOSYA_NESNELERI: Final[Mapping[str, tuple[str, ...]]] = {
     KURTARMA_ANAHTARI: ("no", "tarih"),
     HESAP_SARMALI: ("hatali", "askida"),
@@ -193,6 +198,7 @@ DOSYA_NESNELERI: Final[Mapping[str, tuple[str, ...]]] = {
         "bulgu_satirlari",
         "zaman",
     ),
+    DOSYA_DEPOSU: ("tasinan", "tasinamayan", "zaman"),
     GERI_YUKLEME_KAYDI: (
         # Geri yüklemenin anı (nottan; satırın kendi anı ilk kilit açılışınındır).
         "zaman",
@@ -204,6 +210,12 @@ DOSYA_NESNELERI: Final[Mapping[str, tuple[str, ...]]] = {
         "onceki_sha256",
         "onceki_seq",
         "onceki_mac",
+        "kapsam",
+        "yerine_konan",
+        "yetimden_donen",
+        "eksik",
+        "bozuk",
+        "onayla_suruldu",
     ),
 }
 

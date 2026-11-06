@@ -9,19 +9,24 @@
     5. Sürüm damgası ........................ eski program yeni veriyi AÇMAZ
        (damga yoksa 8'den önce veritabanının göç kaydı da denetlenir — §4.2 adım 5)
     6. Bütünlük denetimi .................... bozuk veriyle pencere AÇILMAZ
-    7. Günlük yedek (veritabanı + manifesto) + yerel yedeklerin rotasyonu ... yalnız şifreli
-       `.odbak`, `Connection.backup()` ile, Django'dan ve göçten önce, kilitliyken. İlk program
-       yöneticisi hesabı kurulmadan (ilk açılış) yedek atlanır; bugünün yedeği alınmadıysa
-       rotasyon da koşmaz. Bu adımın hatası günlüğe yazılır, program AÇILIR (tasarım §4.2
-       açılış tablosu; yedekler §4.4.7)
+    7. Günlük yedek (veritabanı + manifesto) + yerel yedeklerin rotasyonu ve yetim silmesi ...
+       yalnız şifreli `.odbak`, `Connection.backup()` ile, Django'dan ve göçten önce, kilitliyken.
+       İlk program yöneticisi hesabı kurulmadan (ilk açılış) yedek atlanır; bugünün yedeği
+       alınmadıysa rotasyon ve yetim silmesi de koşmaz. Bu adımın hatası günlüğe yazılır, program
+       AÇILIR (tasarım §4.2 açılış tablosu; yedekler §4.4.7)
     8. Göç öncesi yedek + `migrate --no-input`; ardından 7-8'in olguları (alınan ve silinen
        yedekler, uygulanan göçler) denetim izine `YEDEK` ve `GOC` olarak verilir — bu adımlar
        Django ve tablo hazır olmadan olur, olgular tamponlanır, göçten SONRA `masaustu_kanca`
-       üzerinden yazılır (kilitli kipte; tasarım §4.6.3, plan F1b-1 "Denetim izi")
-    9. Gömülü sunucu (waitress, 127.0.0.1, boş port) + sağlık denetimi
+       üzerinden yazılır (kilitli kipte; tasarım §4.6.3, plan F1b-1 "Denetim izi"). Sonra yarım
+       işlerin artıkları silinir ve yetim taraması koşar (`_acilis_bakimi`; §4.4.7, plan F1b-3
+       "Geri yükleme"): tek kopya kilidi alınmıştır, göç bitmiştir, sunucu henüz yazmıyordur.
+       Tarama `--autotest`te ve `--geri-yukle`de koşmaz; hatası günlüğe yazılır, program AÇILIR
+    9. Ana iş parçacığının Django bağlantısı kapanır (`baglantilari_kapat`): açık kalsaydı Windows'ta
+       uygulama içi geri yüklemenin takası düşerdi. Gömülü sunucu (waitress, 127.0.0.1, boş port) +
+       sağlık denetimi
    10. Çıkış kancası backend'e kaydolur (`masaustu_kanca`, §4.2 adım 10); `od-gunluk`
-       başlar: gün değişimi kapısını koşar (günlük yedek + rotasyon + backend'in kaydettiği
-       işler, ör. erişim günlüğünün saklama silmesi; saatte bir yinelenir, her iş ortak bakım
+       başlar: gün değişimi kapısını koşar (günlük yedek + rotasyon ve yetim silmesi + backend'in
+       kaydettiği işler, ör. erişim günlüğünün saklama silmesi; saatte bir yinelenir, her iş ortak bakım
        kapısından geçer — `shared/bakim.py`). Kapının "ertelenenleri şimdi dene" sinyali de
        kaydolur: kilit açılışı onu verir, kilitliyken ertelenen iş hemen denenir (TK19)
    11. Linux: Qt uygulaması + SIGTERM köprüsü (`desktop/qt_kurulum.py`)
@@ -39,8 +44,8 @@ kapanışı (SIGTERM). Sıra: pencere → kanal → Qt köprüsü → kancalar b
 ve iz anahtarı bellekten düşer) → yönetim sunucusu → WAL checkpoint (TB14) → temiz kapanış
 işareti → kilit. Mutex'ler süreç bitene dek kalır (lock.py).
 
-Yedek adımı (7) dışında herhangi bir adım başarısız olursa pencere açılmaz; kullanıcıya
-Türkçe ileti + "son yedekten dön" yolu gösterilir ve hataya özel bir çıkış kodu döner (CI ve
+Yedek adımı (7) ve açılış bakımı dışında herhangi bir adım başarısız olursa pencere açılmaz;
+kullanıcıya Türkçe ileti + "son yedekten dön" yolu gösterilir ve hataya özel bir çıkış kodu döner (CI ve
 paket kurulum testleri bu kodlara bakar). "Son yedekten dön" yolunun kendisi
 `--geri-yukle` kipidir (desktop/restore.py): pencere/sunucu açılmadan yedek
 seçtirilir ve veritabanının yerine konur. Göç öncesi yedeğin hatasında veri sağlamdır: ipucu
@@ -64,6 +69,7 @@ from desktop import qt_kurulum
 from desktop.backup import (
     daily_backup,
     daily_backup_path,
+    eski_yetimleri_sil,
     pre_migrate_backup,
     pre_migrate_backup_path,
     rotate_backups,
@@ -77,6 +83,7 @@ from desktop.clean_shutdown import (
 from desktop.dialogs import show_error
 from desktop.django_bootstrap import (
     assert_session_guard_installed,
+    baglantilari_kapat,
     build_wsgi_application,
     pending_migrations,
     prepare_django,
@@ -220,7 +227,8 @@ def prepare_data(paths: AppPaths, app_version: str) -> None:
 
     # Rotasyon yalnız bugünün yedeği elde varken koşar: yedek atlandıysa ya da alınamadıysa
     # (parola henüz kurulmadı, yedek anahtarı bozuk, guvenlik.json kayıp, disk dolu) eski
-    # yedekler silinmez — kayıp kilidinden çıkış yolu onlardır (tasarım §4.3 tehdit 8).
+    # yedekler ve yetim dosyalar silinmez — kayıp kilidinden çıkış yolu onlardır (tasarım §4.3
+    # tehdit 8).
     gun = date.today()
     gunluk, yeni = _gunluk_yedegi_al(paths, gun)
     if gunluk is not None:
@@ -282,15 +290,22 @@ def _goc_oncesi_yedegi_al(paths: AppPaths, app_version: str, olaylar: AcilisOlay
 
 
 def _rotasyonu_kos(paths: AppPaths, gun: date) -> list[str] | None:
-    """Yerel yedeklerin rotasyonu: silinen adlar; beklenmeyen hatada None (§4.2 açılış tablosu).
+    """Rotasyon ve yetim silmesi aynı günle: silinen yedek adları; rotasyon düşerse None.
 
-    Tek dosyanın silinememesi buraya gelmez, rotasyon onu kendi yazar (`rotate_backups`).
+    Tetik açılışın 7. adımı ve `od-gunluk`'tur; hataları günlüğe yazılır, program açık kalır (§4.2
+    açılış tablosu). Biri düşse de öteki koşar. Tek dosyanın silinememesi buraya gelmez, iki işlev
+    onu kendi yazar (`rotate_backups`, `eski_yetimleri_sil`).
     """
+    silinen: list[str] | None = None
     try:
-        return [yol.name for yol in rotate_backups(paths.backups, paths.data, today=gun) or []]
+        silinen = [yol.name for yol in rotate_backups(paths.backups, paths.data, today=gun) or []]
     except Exception:
         logger.exception("Yedek rotasyonu tamamlanamadı; program açık kalıyor.")
-        return None
+    try:
+        eski_yetimleri_sil(paths.yetim_dizini, today=gun)
+    except Exception:
+        logger.exception("Yetim dosyalar silinemedi; program açık kalıyor.")
+    return silinen
 
 
 def _acilis_olaylarini_yaz(olaylar: AcilisOlaylari, app_version: str) -> None:
@@ -310,6 +325,30 @@ def _acilis_olaylarini_yaz(olaylar: AcilisOlaylari, app_version: str) -> None:
         masaustu_kanca.goc_olayini_yaz(surum=app_version, gocler=olaylar.gocler)
     except Exception:
         logger.exception("Açılışın olayları denetim izine yazılamadı; program açılıyor.")
+
+
+def _acilis_bakimi(paths: AppPaths, *, autotest: bool) -> None:
+    """Göçten sonra, sunucudan önce: yarım işlerin artıkları ve yetim taraması (§4.4.7).
+
+    Tek kopya kilidi alınmıştır: başka bir kopya ya da geri yükleme sürmüyor, artıklar sahipsizdir.
+    `--autotest`te tarama yoktur (plan F1b-3 "Geri yükleme"); `--geri-yukle` buraya gelmez: artıkları
+    kendisi siler (`desktop.restore`), tarama orada da yoktur.
+    Backend yoksa (masaüstü birim testi) sessiz; hata açılışı DURDURMAZ, günlüğe yazılır.
+    """
+    try:
+        from apps.okul.masaustu_kanca import artiklari_temizle, yetim_taramasi
+    except ImportError:
+        return
+    try:
+        artiklari_temizle(paths.db_path, paths.backups, paths.dosya_deposu)
+    except Exception:
+        logger.exception("Yarım işlerin artıkları silinemedi; program açılıyor.")
+    if autotest:
+        return
+    try:
+        yetim_taramasi(paths.db_path, paths.dosya_deposu)
+    except Exception:
+        logger.exception("Dosya deposu taranamadı; program açılıyor.")
 
 
 def dispatch_command(command: str, controller: WindowController) -> None:
@@ -409,7 +448,7 @@ def gun_kapisi_kur(
     *,
     bugun: Callable[[], date] = date.today,
 ) -> GunDegisimiKapisi:
-    """`od-gunluk`: yerleşik iş (günlük yedek + rotasyon) + backend'in kaydettiği işler."""
+    """`od-gunluk`: yerleşik iş (yedek, rotasyon, yetim silmesi) + backend'in kaydettiği işler."""
     kapi = GunDegisimiKapisi(damga_yolu=paths.data / DAMGA_DOSYASI, bugun=bugun)
     kapi.kaydet("gunluk-yedek", gunluk_yedek_isi(paths, bugun=bugun))
     kapi.backend_islerini_ekle()
@@ -424,14 +463,15 @@ def gunluk_yedek_isi(
 ) -> Callable[[], bool]:
     """Günlük yedek + rotasyon; yedek alınmadıysa rotasyon koşmaz (§4.3 tehdit 8).
 
+    Yetim silmesi rotasyonla aynı gün tarihiyle koşar (`_rotasyonu_kos`), çapa onu da korur.
     Yedek ya da rotasyon hatası günlüğe yazılır, iş düşer ve bir saat sonra yeniden denenir;
     alınmış yedeğin olayı rotasyon düşse de denetim izine gider (yeniden denemede yedek "yeni"
     görünmez).
 
     Oturum içi rotasyon SAAT SIÇRAMASINA karşı korunur: program günlerce açık
     kalırken sistem saati 14 günden fazla ileri sıçrarsa (NTP ya da elle yanlış
-    ayar) `bugün - 14` kesimi geçmiş günlerin bütün yedeklerini ve kenara alınmış
-    veritabanlarını (`db-onceki`) silerdi. İşin
+    ayar) `bugün - 14` kesimi geçmiş günlerin bütün yedeklerini, kenara alınmış
+    veritabanlarını (`db-onceki`) ve yetim dosyaları silerdi. İşin
     ilk koşusu bir çapa tutar (o günkü tarih + uyku dahil açık kalma saati);
     rotasyon `min(bugün, çapa + gerçekte geçen gün + 1)` tarihiyle yapılır.
     Saat doğruyken iki değer aynıdır (tatilde uykuda kalan bilgisayarda da:
@@ -541,6 +581,11 @@ def _run_locked(paths: AppPaths, args: argparse.Namespace, app_version: str) -> 
         os.environ[ENV_TOKEN] = token
         try:
             prepare_data(paths, app_version)
+            _acilis_bakimi(paths, autotest=args.autotest)
+            # Ana iş parçacığı oturum süresince ORM kullanmaz (kapanıştaki kilit satırı hariç; onun
+            # bağlantısını `wal_checkpoint` kapatır). Açık bağlantısı Windows'ta uygulama içi geri
+            # yüklemenin takasını düşürürdü (`baglantilari_kapat`).
+            baglantilari_kapat()
             code = serve(paths, token, args.autotest, channel)
         except StartupError:
             # Bu oturumda veriye işlem yazılmadı: önceki oturumun durumu korunur.

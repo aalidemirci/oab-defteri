@@ -155,6 +155,23 @@ def is_parcacigi_baglantisiyla[T](islem: Callable[[], T]) -> T:
             baglanti.close()
 
 
+def baglantilari_kapat() -> None:
+    """Bu iş parçacığının Django bağlantılarını kapatır; Django kurulmamışsa sessiz.
+
+    Açılış zinciri ORM'yi ANA iş parçacığında kullanır (göç, açılış olayları, yetim taramasının
+    olayı). Kimse kapatmazsa bu bağlantı oturum boyunca `db.sqlite3`, `-wal` ve `-shm` tanıtıcılarını
+    tutar; `live_restore`'un `connections.close_all()`'u yalnız kendi iş parçacığını kapattığı için
+    Windows'ta uygulama içi geri yüklemenin takası her denemede erişim hatasıyla düşerdi
+    (`is_parcacigi_baglantisiyla`'daki kural). Masaüstü kabuğu bu yüzden sunucudan önce çağırır.
+    """
+    try:
+        from django.db import connections
+
+        connections.close_all()
+    except Exception:  # noqa: BLE001 — Django kurulmamış olabilir (açılış hatası)
+        logger.debug("Django bağlantıları kapatılamadı (Django kurulmamış olabilir).")
+
+
 def wal_checkpoint(db_path: Path) -> bool:
     """Düzenli kapanışta WAL'i ana dosyaya yazar ve kırpar (TB14).
 
@@ -165,12 +182,7 @@ def wal_checkpoint(db_path: Path) -> bool:
     """
     if not db_path.exists():
         return False
-    try:
-        from django.db import connections
-
-        connections.close_all()  # bu iş parçacığının Django bağlantıları
-    except Exception:  # noqa: BLE001 — Django kurulmamış olabilir (açılış hatası)
-        logger.debug("Django bağlantıları kapatılamadı (Django kurulmamış olabilir).")
+    baglantilari_kapat()
     return wal_bosalt(db_path)
 
 

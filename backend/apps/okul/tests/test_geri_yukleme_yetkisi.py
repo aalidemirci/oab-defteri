@@ -1659,8 +1659,13 @@ def test_yetkiye_ve_goruntuye_dusmeye_yalniz_veritabani_baytlari_gider(
         )
     )
 
+    # Görüntüde bu girdinin satırı yok: ek doğrulanamaz; konu yetkiye giden baytlardır.
     backup_restore.restore_database(
-        ortam["yedek"], ortam["db"], hesap=TEST_TANITICI, password=TEST_PAROLA
+        ortam["yedek"],
+        ortam["db"],
+        hesap=TEST_TANITICI,
+        password=TEST_PAROLA,
+        ekler_olmadan_surdur=True,
     )
 
     assert verilen == [ortam["yeni"]]

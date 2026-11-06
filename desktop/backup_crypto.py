@@ -580,7 +580,7 @@ def encrypt_bytes(
     return aad + muhurlu
 
 
-def _yeni_yedek_dosyasi(yol: Path) -> IO[bytes]:
+def yeni_yedek_dosyasi(yol: Path) -> IO[bytes]:
     """Yeni dosyayı 0600 açar: var olan adı açmaz, kip umask'tan bağımsız çekilir (modül başlığı)."""
     tanitici = os.open(yol, _YAZMA_BAYRAKLARI, YEDEK_DOSYA_KIPI)
     try:
@@ -624,7 +624,7 @@ def encrypt_to_path(
     temp = target.with_name(target.name + ".tmp")
     temp.unlink(missing_ok=True)
     try:
-        with _yeni_yedek_dosyasi(temp) as akis:
+        with yeni_yedek_dosyasi(temp) as akis:
             akis.write(icerik)
             _diske_indir(akis)
         os.replace(temp, target)
@@ -705,7 +705,7 @@ def tam_yedek_yaz(
     manifesto = Manifesto(KAPSAM_TAM, tuple(_diskteki_hali(girdi, store_dir) for girdi in files))
     aad, muhurlu = _muhurle(database, manifesto.baytlar(), KAPSAM_TAM, public_key, recovery_header)
     target.parent.mkdir(parents=True, exist_ok=True)
-    akis = _yeni_yedek_dosyasi(target)
+    akis = yeni_yedek_dosyasi(target)
     try:
         with akis:
             akis.write(aad)

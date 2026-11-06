@@ -23,8 +23,11 @@ Yetkinin kendi testleri `test_geri_yukleme_yetkisi.py`'dedir.
 from __future__ import annotations
 
 import json
+import logging
 import os
-from collections.abc import Iterator
+import re
+import stat
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any, cast
 
@@ -43,9 +46,18 @@ from rest_framework.test import APIClient
 
 from apps.okul import restart_gate
 from apps.okul.services import app_password, backup_restore, live_restore
-from apps.okul.tests.geri_yukleme_ortak import HesapSatiri, yetkili_sqlite
+from apps.okul.tests.geri_yukleme_ortak import (
+    HesapSatiri,
+    OrnekEk,
+    depoya_koy,
+    ekli_sqlite,
+    ornek_ek,
+    tam_yedek_kur,
+    yetkili_sqlite,
+)
 from conftest import TEST_DEK, TEST_HESAP_ID, TEST_KURTARMA_ANAHTARI, TEST_PAROLA, TEST_TANITICI
 from shared import bakim, crypto
+from shared import dosya_sifreleme as ds
 
 PAROLA = TEST_PAROLA
 LISTE_URL = "/api/v1/backups/"
@@ -118,7 +130,8 @@ def test_yedek_listesi_en_yeniden_eskiye(tmp_path: Path, ortam: dict[str, Path])
     assert adlar == ["gunluk-2026-08-02.odbak", "gunluk-2026-08-01.odbak"]
     # Yedekler daima şifrelidir; "şifreli mi" alanı artık yok (§13 D29). `kurtarma`
     # yedeği açan kurtarma anahtarının kimliğidir (TK10).
-    assert set(veri["backups"][0]) == {"name", "size", "modified_at", "kurtarma"}
+    assert set(veri["backups"][0]) == {"name", "size", "modified_at", "kurtarma", "kapsam"}
+    assert veri["backups"][0]["kapsam"] == "yerel"
     assert all(satir["size"] > 0 and satir["modified_at"] for satir in veri["backups"])
 
 
@@ -206,6 +219,23 @@ def test_yedek_listesi_tam_yedegi_de_baslikten_okur(tmp_path: Path, ortam: dict[
     )
 
     assert _liste_satiri("tam.odbak")["kurtarma"] is not None
+    assert _liste_satiri("tam.odbak")["kapsam"] == "tam"
+
+
+def test_yedek_adi_tam_yedegi_tanitmaz_kapsam_basliktan_okunur(
+    tmp_path: Path, ortam: dict[str, Path]
+) -> None:
+    """Plan: "Yedek listesi kapsamı kurtarma anahtarı olmadan okur"; dosya elle adlandırılmış olabilir."""
+    (ortam["yedekler"] / "gunluk-2026-11-04.odbak").write_bytes(
+        kap_kur(
+            _sqlite_baytlari(tmp_path, "tam"),
+            TEST_DEK,
+            baslik=durum_basligi(app_password.read_state() or {}),
+            manifesto=Manifesto(KAPSAM_TAM),
+        )
+    )
+
+    assert _liste_satiri("gunluk-2026-11-04.odbak")["kapsam"] == "tam"
 
 
 def test_deneme_yedegi_listede_kimliksiz_durur_geri_yuklenmez(ortam: dict[str, Path]) -> None:
@@ -214,6 +244,7 @@ def test_deneme_yedegi_listede_kimliksiz_durur_geri_yuklenmez(ortam: dict[str, P
     (ortam["yedekler"] / "gunluk-2026-08-01.odbak").write_bytes(DENEME_MAGIC + bytes(200))
 
     assert _liste_satiri("gunluk-2026-08-01.odbak")["kurtarma"] is None
+    assert _liste_satiri("gunluk-2026-08-01.odbak")["kapsam"] is None
     yanit = APIClient().post(
         GERI_YUKLE_URL,
         {"name": "gunluk-2026-08-01.odbak", "recovery_key": "UYDURMA-ANAHTAR"},
@@ -234,6 +265,9 @@ def test_bozuk_yedek_dosyasi_listeyi_dusurmez(tmp_path: Path, ortam: dict[str, P
 
     assert _liste_satiri("yedek-degil.odbak")["kurtarma"] is None
     assert _liste_satiri("kesik.odbak")["kurtarma"] is None
+    assert _liste_satiri("yedek-degil.odbak")["kapsam"] is None
+    assert _liste_satiri("kesik.odbak")["kapsam"] is None
+    assert _liste_satiri("saglam.odbak")["kapsam"] == "yerel"
     assert _liste_satiri("saglam.odbak")["kurtarma"] == {
         "no": 1,
         "tarih": app_password.status()["recovery_key_date"],
@@ -588,3 +622,502 @@ def test_geri_yukleme_uzun_is_olarak_sayilir_ve_basarida_oturum_kapanir(
     assert bakim.UZUN_ISLER.sayi == 0
     assert OTURUM.acik_mi() is False
     assert crypto.is_unlocked() is False
+
+
+# ---------------------------------------------------------------------------
+# Yüklenen yedek: akışla diske, her çıkışta silinir (plan F1b-3 "Dosya deposu")
+# ---------------------------------------------------------------------------
+def _yukle(ad: str, icerik: bytes, **alanlar: Any) -> Any:
+    return APIClient().post(
+        GERI_YUKLE_URL,
+        {"file": SimpleUploadedFile(ad, icerik), "password": PAROLA, **alanlar},
+        format="multipart",
+    )
+
+
+def _yukleme_artiklari(ortam: dict[str, Path]) -> list[Path]:
+    return list(ortam["yedekler"].glob(".yukleme-*"))
+
+
+def test_yuklenen_yedek_0600_ile_yedek_dizinine_akar(
+    tmp_path: Path, ortam: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Çekirdek baytı değil yolu alır; dosya `.odbak` değildir, rotasyon ve liste yedek sanmaz."""
+    icerik = _sifreli_kapsayici(_sqlite_baytlari(tmp_path, "gizli"))[0]
+    gorulen: dict[str, Any] = {}
+    asil = backup_restore.restore_database
+
+    def izleyen(kaynak: Path, *args: Any, **kwargs: Any) -> Any:
+        gorulen.update(
+            yol=kaynak, kip=stat.S_IMODE(kaynak.stat().st_mode), icerik=kaynak.read_bytes()
+        )
+        return asil(kaynak, *args, **kwargs)
+
+    monkeypatch.setattr(backup_restore, "restore_database", izleyen)
+
+    yanit = _yukle("elden.odbak", icerik)
+
+    assert yanit.status_code == 200, yanit.json()
+    assert gorulen["yol"].parent == ortam["yedekler"]
+    assert re.fullmatch(r"\.yukleme-[0-9a-f]{32}\.tmp", gorulen["yol"].name)
+    assert gorulen["icerik"] == icerik
+    if os.name == "posix":
+        assert gorulen["kip"] == 0o600
+    assert not gorulen["yol"].exists()
+
+
+def _gecersiz_istek(icerik: bytes) -> Any:
+    return APIClient().post(
+        GERI_YUKLE_URL,
+        {"file": SimpleUploadedFile("elden.odbak", icerik), "name": "gunluk.odbak"},
+        format="multipart",
+    )
+
+
+def _yanlis_parola(icerik: bytes) -> Any:
+    return _yukle("elden.odbak", icerik, password="Yanlis-Parola-9")
+
+
+def _bakim_suresi_doldu(icerik: bytes) -> Any:
+    kapi = bakim.BakimKapisi()
+    kapi.gir()
+    with pytest.MonkeyPatch.context() as yama:
+        yama.setattr(bakim, "KAPI", kapi)
+        yama.setattr(live_restore, "BAKIM_BEKLEME_SN", 0.01)
+        return _yukle("elden.odbak", icerik)
+
+
+def _beklenmeyen_hata(icerik: bytes) -> Any:
+    def duser(*_a: Any, **_k: Any) -> Any:
+        raise RuntimeError("beklenmeyen")
+
+    istemci = APIClient(raise_request_exception=False)
+    with pytest.MonkeyPatch.context() as yama:
+        yama.setattr(backup_restore, "restore_database", duser)
+        return istemci.post(
+            GERI_YUKLE_URL,
+            {"file": SimpleUploadedFile("elden.odbak", icerik), "password": PAROLA},
+            format="multipart",
+        )
+
+
+@pytest.mark.parametrize(
+    ("istek", "durum"),
+    [
+        (_gecersiz_istek, 400),
+        (_yanlis_parola, 400),
+        (_bakim_suresi_doldu, 400),
+        (_beklenmeyen_hata, 500),
+    ],
+    ids=["dogrulama_hatasi", "yanlis_parola", "bakim_suresi", "beklenmeyen_hata"],
+)
+def test_yuklenen_dosya_her_cikis_yolunda_silinir(
+    istek: Callable[[bytes], Any], durum: int, tmp_path: Path, ortam: dict[str, Path]
+) -> None:
+    (ortam["yedekler"] / "gunluk.odbak").write_bytes(b"x")
+    icerik = _sifreli_kapsayici(_sqlite_baytlari(tmp_path, "gizli"))[0]
+
+    yanit = istek(icerik)
+
+    assert yanit.status_code == durum
+    assert not _yukleme_artiklari(ortam)
+
+
+def test_kesilen_yukleme_kendi_dosyasini_birakmaz(ortam: dict[str, Path]) -> None:
+    isleyici = live_restore.YedekYuklemeIsleyicisi()
+    isleyici.new_file("file", "elden.odbak", "application/octet-stream", 3)
+    isleyici.receive_data_chunk(b"abc", 0)
+    assert len(_yukleme_artiklari(ortam)) == 1
+
+    isleyici.upload_interrupted()
+
+    assert not _yukleme_artiklari(ortam)
+
+
+def test_bir_istekteki_butun_dosyalar_silinir(ortam: dict[str, Path]) -> None:
+    isleyici = live_restore.YedekYuklemeIsleyicisi()
+    for ad in ("bir.odbak", "iki.odbak"):
+        isleyici.new_file("file", ad, "application/octet-stream", 1)
+        isleyici.receive_data_chunk(b"a", 0)
+        isleyici.file_complete(1)
+    assert len(_yukleme_artiklari(ortam)) == 2
+
+    isleyici.temizle()
+
+    assert not _yukleme_artiklari(ortam)
+
+
+def _yukleme_silinemez(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Windows'ta virüs tarayıcısı `.yukleme-<hex>.tmp`'yi tutuyor; ileti yolu taşıyabilir."""
+    asil = Path.unlink
+
+    def unlink(self: Path, missing_ok: bool = False) -> None:
+        if self.name.startswith(live_restore.YUKLEME_ONEKI):
+            raise PermissionError(f"tutuluyor: {self}")
+        asil(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", unlink)
+
+
+def test_gecici_dosya_silinemezse_basarili_yanit_ve_rapor_korunur(
+    tmp_path: Path,
+    ortam: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Takas yapılmıştır: kullanıcı başarılı geri yüklemeyi hata görmez, liste kaybolmaz."""
+    icerik = _sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni"))[0]
+    _yukleme_silinemez(monkeypatch)
+
+    with caplog.at_level(logging.WARNING, logger="oab_defteri.restore"):
+        yanit = _yukle("elden.odbak", icerik)
+
+    assert yanit.status_code == 200, yanit.content
+    assert yanit.json()["restart_required"] is True
+    assert yanit.json()["dosya_raporu"]["kapsam"] == "yerel"
+    assert restart_gate.restart_required() is True
+    assert len(_yukleme_artiklari(ortam)) == 1  # artığı açılış temizliği toplar
+    assert "açılış temizliği toplar" in caplog.text
+    assert ".yukleme-" not in caplog.text and str(ortam["yedekler"]) not in caplog.text
+
+
+def test_gecici_dosya_silinemezse_ikinci_onay_yaniti_korunur(
+    tmp_path: Path, ortam: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Rapor ve ikinci onay yolu kullanıcıya ulaşmalıdır."""
+    _saglam, _bozuk, yedek = _bozuk_tam_yedek(tmp_path)
+    _yukleme_silinemez(monkeypatch)
+
+    yanit = _yukle("elden.odbak", yedek)
+
+    assert yanit.status_code == 409, yanit.content
+    assert yanit.json()["code"] == "ek_onayi_gerekli"
+    assert yanit.json()["rapor"]["bozuk"] == 1
+    assert restart_gate.restart_required() is False
+
+
+def test_gecici_dosya_silinemezse_ret_iletisi_korunur(
+    tmp_path: Path, ortam: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    icerik = _sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni"))[0]
+    _yukleme_silinemez(monkeypatch)
+
+    yanit = _yanlis_parola(icerik)
+
+    assert yanit.status_code == 400, yanit.content
+    assert "Yedek açılamadı" in yanit.json()["message"]
+
+
+def test_silinemeyen_dosya_oteki_dosyalarin_silinmesini_durdurmaz(
+    ortam: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    isleyici = live_restore.YedekYuklemeIsleyicisi()
+    for ad in ("bir.odbak", "iki.odbak", "uc.odbak"):
+        isleyici.new_file("file", ad, "application/octet-stream", 1)
+        isleyici.receive_data_chunk(b"a", 0)
+        isleyici.file_complete(1)
+    tutulan = _yukleme_artiklari(ortam)[0]
+    asil = Path.unlink
+
+    def unlink(self: Path, missing_ok: bool = False) -> None:
+        if self == tutulan:
+            raise PermissionError("tutuluyor")
+        asil(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", unlink)
+
+    isleyici.temizle()
+
+    assert _yukleme_artiklari(ortam) == [tutulan]
+
+
+def test_kapatilamayan_akis_birakilir_dosya_yine_silinir(ortam: dict[str, Path]) -> None:
+    """Tampon doluyken yazım düşerse `close` da hata verir; temizlik sürer, yanıt değişmez."""
+    isleyici = live_restore.YedekYuklemeIsleyicisi()
+    isleyici.new_file("file", "elden.odbak", "application/octet-stream", 1)
+    assert isleyici._akis is not None
+    kapat = isleyici._akis.close
+
+    class Akis:
+        def close(self) -> None:
+            kapat()
+            raise OSError("disk dolu")
+
+    isleyici._akis = cast("Any", Akis())
+
+    isleyici.temizle()
+
+    assert isleyici._akis is None
+    assert not _yukleme_artiklari(ortam)
+
+
+def test_takastan_sonraki_adim_duserse_kapi_kurulur_bakim_kapali_kalir(
+    tmp_path: Path, ortam: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Çekirdek garantisi: hata yoksa takas olmuştur. Program yeni veritabanıyla sürdürülemez."""
+    kapi = bakim.BakimKapisi()
+    monkeypatch.setattr(bakim, "KAPI", kapi)
+    ortam["db"].write_bytes(_sqlite_baytlari(tmp_path, "eski"))
+    (ortam["yedekler"] / "gunluk.odbak").write_bytes(
+        _sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni"))[0]
+    )
+
+    def duser(*_a: Any, **_k: Any) -> Any:
+        raise OSError("yazılamadı")
+
+    monkeypatch.setattr(backup_restore, "ensure_public_config", duser)
+
+    yanit = APIClient().post(
+        GERI_YUKLE_URL, {"name": "gunluk.odbak", "password": PAROLA}, format="json"
+    )
+
+    assert yanit.status_code == 200, yanit.content
+    assert restart_gate.restart_required() is True
+    assert kapi.bakimda is True
+    assert crypto.is_unlocked() is False
+
+
+def test_yuklenen_yedek_diske_yazilamazsa_400_ve_ileti(
+    ortam: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def dolu(_yol: Path) -> Any:
+        raise OSError("disk dolu")
+
+    monkeypatch.setattr(live_restore, "yeni_yedek_dosyasi", dolu)
+
+    yanit = _yukle("elden.odbak", b"x")
+
+    assert yanit.status_code == 400
+    assert yanit.json()["message"] == live_restore.YEDEK_YAZILAMADI
+
+
+def _not(ortam: dict[str, Path]) -> dict[str, Any]:
+    veri: dict[str, Any] = json.loads(
+        (ortam["veri"] / "geri-yukleme-notu.json").read_text(encoding="utf-8")
+    )
+    return veri
+
+
+@pytest.mark.parametrize(
+    ("ad", "beklenen"),
+    [
+        ("oab-defteri-yedek-2026-11-04-101530.odbak", "oab-defteri-yedek-2026-11-04-101530.odbak"),
+        ("Uydurgül Masalcıoğlu yedeği.odbak", None),
+    ],
+    ids=["programin_adi", "serbest_ad"],
+)
+def test_yuklenen_dosyanin_ozgun_adi_desene_uyuyorsa_nota_gecer(
+    ad: str,
+    beklenen: str | None,
+    tmp_path: Path,
+    ortam: dict[str, Path],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Plan F1b-3 "Geri yükleme": uymuyorsa ad yazılmaz, kart "Elden getirilen dosya" der."""
+    icerik = _sifreli_kapsayici(_sqlite_baytlari(tmp_path, "gizli"))[0]
+
+    with caplog.at_level(logging.INFO, logger="oab_defteri.restore"):
+        yanit = _yukle(ad, icerik)
+
+    assert yanit.status_code == 200, yanit.json()
+    (kayit,) = _not(ortam)["geri_yuklemeler"]
+    assert kayit["yedek"] == beklenen
+    assert ".yukleme" not in json.dumps(kayit)
+    assert "API'den geri yükleme uygulandı" in caplog.text
+    assert "Masalcıoğlu" not in caplog.text and ".yukleme" not in caplog.text
+
+
+def test_listeden_secilen_serbest_ad_gunluge_yazilmaz(
+    tmp_path: Path, ortam: dict[str, Path], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Yedek klasörüne elle konmuş dosyanın adı da serbest metindir (R1)."""
+    ad = "Uydurgül Masalcıoğlu.odbak"
+    (ortam["yedekler"] / ad).write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "gizli"))[0])
+
+    with caplog.at_level(logging.INFO, logger="oab_defteri.restore"):
+        live_restore.restore_and_require_restart(name=ad, password=PAROLA)
+
+    assert _not(ortam)["geri_yuklemeler"][0]["yedek"] is None
+    assert "API'den geri yükleme uygulandı" in caplog.text
+    assert "Masalcıoğlu" not in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# Bakım kapısının süresi (plan F1b-3 "Geri yükleme")
+# ---------------------------------------------------------------------------
+def test_bakim_kapisinin_suresi_dolarsa_takas_yapilmaz(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ortam: dict[str, Path]
+) -> None:
+    """Uçuştaki iş bitmeden takas yapılsaydı dosya deposu süren tam yedekle çakışırdı. Çekirdek hiç
+    çağrılmaz, kapı yeniden açılır (gün işleri sürer), yeniden başlatma istenmez."""
+    kapi = bakim.BakimKapisi()
+    assert kapi.gir()
+    monkeypatch.setattr(bakim, "KAPI", kapi)
+    monkeypatch.setattr(live_restore, "BAKIM_BEKLEME_SN", 0.01)
+    monkeypatch.setattr(
+        backup_restore, "restore_database", lambda *a, **k: pytest.fail("takas yapılmamalı")
+    )
+    ortam["db"].write_bytes(b"onceki")
+    (ortam["yedekler"] / "gunluk.odbak").write_bytes(
+        _sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni"))[0]
+    )
+
+    yanit = APIClient().post(
+        GERI_YUKLE_URL, {"name": "gunluk.odbak", "password": PAROLA}, format="json"
+    )
+
+    assert yanit.status_code == 400
+    assert "ren bir yedekleme ya da gün işi var" in yanit.json()["message"]
+    assert ortam["db"].read_bytes() == b"onceki"
+    assert kapi.bakimda is False
+    assert restart_gate.restart_required() is False
+    assert crypto.is_unlocked() is True
+
+
+# ---------------------------------------------------------------------------
+# Bozuk ek: kişisiz yapılandırılmış yanıt, ikinci onay (kullanıcı kararı 04.11.2026)
+# ---------------------------------------------------------------------------
+def _bozuk_tam_yedek(tmp_path: Path) -> tuple[OrnekEk, OrnekEk, bytes]:
+    saglam, bozuk = ornek_ek(owner_id="3"), ornek_ek(owner_id="9")
+    kaynak = ds.dizin_kur(tmp_path / "kaynak-depo")
+    depoya_koy(kaynak, saglam, bozuk)
+    yol = kaynak / bozuk.ad
+    baytlar = bytearray(yol.read_bytes())
+    baytlar[-1] ^= 1
+    yol.write_bytes(baytlar)
+    goruntu = ekli_sqlite(
+        tmp_path / "goruntu.sqlite3",
+        (saglam, bozuk),
+        hesaplar=[HesapSatiri(TEST_HESAP_ID, TEST_TANITICI)],
+        isaret="yeni",
+    )
+    yedek = tmp_path / "tam.odbak"
+    tam_yedek_kur(yedek, goruntu, (saglam, bozuk), kaynak)
+    return saglam, bozuk, yedek.read_bytes()
+
+
+def test_bozuk_ekte_uc_kisisiz_rapor_doner_hicbir_sey_degismez(
+    tmp_path: Path, ortam: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    kapi = bakim.BakimKapisi()
+    monkeypatch.setattr(bakim, "KAPI", kapi)
+    ortam["db"].write_bytes(_sqlite_baytlari(tmp_path, "eski"))
+    once = ortam["db"].read_bytes()
+    _saglam, bozuk, yedek = _bozuk_tam_yedek(tmp_path)
+    (ortam["yedekler"] / "gunluk.odbak").write_bytes(yedek)
+
+    yanit = APIClient().post(
+        GERI_YUKLE_URL, {"name": "gunluk.odbak", "password": PAROLA}, format="json"
+    )
+
+    assert yanit.status_code == 409
+    govde = yanit.json()
+    assert govde["code"] == "ek_onayi_gerekli"
+    assert govde["fields"] == {}
+    assert "1 ek" in govde["message"]
+    assert govde["rapor"] == {
+        "kapsam": "tam",
+        "yerine_konan": 0,
+        "yetimden_donen": 0,
+        "eksik": 0,
+        "bozuk": 1,
+        "onayla_suruldu": 0,
+        "ekler": [
+            {
+                "durum": "bozuk",
+                "kayit_turu": "ders yılı",
+                "kayit_no": "9",
+                "yukleme_tarihi": "2026-11-04",
+                "boyut": bozuk.hazir.size,
+                "yedekte_yoktu": False,
+            }
+        ],
+    }
+    metin = json.dumps(govde, ensure_ascii=False)
+    assert "Masalcıoğlu" not in metin and bozuk.ad not in metin
+    assert ortam["db"].read_bytes() == once
+    assert restart_gate.restart_required() is False
+    assert kapi.bakimda is False
+    assert crypto.is_unlocked() is True
+
+
+@pytest.mark.parametrize("kaynak", ["ad", "yukleme"])
+def test_ikinci_istek_acik_bayrakla_ekler_olmadan_surer(
+    kaynak: str, tmp_path: Path, ortam: dict[str, Path]
+) -> None:
+    """Onay durumsuzdur: sunucu ilk denemenin dosyasını saklamaz, aynı yedek yeniden gelir."""
+    saglam, bozuk, yedek = _bozuk_tam_yedek(tmp_path)
+    (ortam["yedekler"] / "gunluk.odbak").write_bytes(yedek)
+
+    def iste(**alanlar: Any) -> Any:
+        if kaynak == "yukleme":
+            return _yukle("elden.odbak", yedek, **alanlar)
+        return APIClient().post(
+            GERI_YUKLE_URL, {"name": "gunluk.odbak", "password": PAROLA, **alanlar}, format="json"
+        )
+
+    assert iste().status_code == 409
+    assert not _yukleme_artiklari(ortam)
+
+    yanit = iste(ekler_olmadan_surdur=True)
+
+    assert yanit.status_code == 200, yanit.json()
+    rapor = yanit.json()["dosya_raporu"]
+    assert (rapor["kapsam"], rapor["yerine_konan"], rapor["bozuk"]) == ("tam", 1, 1)
+    assert rapor["onayla_suruldu"] == 1
+    assert [satir["kayit_no"] for satir in rapor["ekler"]] == ["9"]
+    assert restart_gate.restart_required() is True
+    depo = Path(settings.DOSYA_DEPOSU_DIR)
+    assert (depo / saglam.ad).is_file() and not (depo / bozuk.ad).exists()
+    assert not _yukleme_artiklari(ortam)
+
+
+def test_onceki_denemeden_kalan_yan_dosya_silinemezse_ikinci_onay_400_doner(
+    tmp_path: Path, ortam: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Windows'ta virüs tarayıcısı `.yeni.tmp`'yi tutuyor: yanıt sözleşmeye uyar, 500 değildir."""
+    ortam["db"].write_bytes(_sqlite_baytlari(tmp_path, "eski"))
+    once = ortam["db"].read_bytes()
+    _saglam, _bozuk, yedek = _bozuk_tam_yedek(tmp_path)
+    (ortam["yedekler"] / "gunluk.odbak").write_bytes(yedek)
+    artik = ortam["db"].with_name(ortam["db"].name + ".yeni.tmp")
+    artik.write_bytes(b"artik")
+    asil = Path.unlink
+
+    def unlink(self: Path, missing_ok: bool = False) -> None:
+        if self == artik:
+            raise PermissionError(13, "tutuluyor", str(self))
+        asil(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", unlink)
+
+    yanit = APIClient().post(
+        GERI_YUKLE_URL,
+        {"name": "gunluk.odbak", "password": PAROLA, "ekler_olmadan_surdur": True},
+        format="json",
+    )
+
+    assert yanit.status_code == 400, yanit.content
+    assert "Geri yükleme yazılamadı" in yanit.json()["message"]
+    assert ortam["db"].read_bytes() == once
+    assert restart_gate.restart_required() is False
+
+
+def test_basarili_yanit_dosya_raporunu_tasir(tmp_path: Path, ortam: dict[str, Path]) -> None:
+    (ortam["yedekler"] / "gunluk.odbak").write_bytes(
+        _sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni"))[0]
+    )
+
+    yanit = APIClient().post(
+        GERI_YUKLE_URL, {"name": "gunluk.odbak", "password": PAROLA}, format="json"
+    )
+
+    assert yanit.json()["dosya_raporu"] == {
+        "kapsam": "yerel",
+        "yerine_konan": 0,
+        "yetimden_donen": 0,
+        "eksik": 0,
+        "bozuk": 0,
+        "onayla_suruldu": 0,
+        "ekler": [],
+    }

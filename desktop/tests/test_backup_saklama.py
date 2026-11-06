@@ -9,6 +9,9 @@
 - Tetik, tetik anından ESKİ `pre-migrate` yedeklerini siler (yazılma zamanına göre);
   sonra alınanlar ve başka önekli dosyalar kalır. Tetiğe bağlanması F4'tedir.
 - Anahtar yoksa yedek alınmaz (`None`) — çağıran tetiği çalıştırmaz.
+- Yetim silmesi rotasyonla aynı kesimi kullanır: gün dizini 14. gün kalır, 15. gün silinir; adı gün
+  biçiminde olmayan dizine dokunulmaz, tek dosyanın silinememesi süreci düşürmez, günlüğe ad ve yol
+  yazılmaz.
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ from desktop.backup import (
     PRE_PAROLA_PREFIX,
     ROTASYON_KUMESI,
     daily_backup_path,
+    eski_yetimleri_sil,
     old_database_stamp,
     pre_anonim_backup,
     pre_migrate_backup_path,
@@ -560,3 +564,131 @@ def test_wal_bosalt_bozuk_dosyada_false_doner(tmp_path: Path) -> None:
     db.write_bytes(b"veritabani degil" * 100)
 
     assert wal_bosalt(db) is False
+
+
+# --------------------------------------------------------------- yetim silmesi
+
+_YETIM_ADI = "ab" * 16
+
+
+def _yetim_gun_dizini(yetim: Path, gun: str, *adlar: str) -> Path:
+    dizin = yetim / gun
+    dizin.mkdir(parents=True)
+    for ad in adlar or (_YETIM_ADI,):
+        (dizin / ad).write_bytes(b"kap")
+    return dizin
+
+
+def test_yetim_on_besinci_gun_silinir_on_dorduncu_gun_kalir(tmp_path: Path) -> None:
+    on_dorduncu = _yetim_gun_dizini(tmp_path, _gun_once(14))
+    on_besinci = _yetim_gun_dizini(tmp_path, _gun_once(15), _YETIM_ADI, f"{_YETIM_ADI}-1")
+
+    assert eski_yetimleri_sil(tmp_path, today=_BUGUN) == 2
+
+    assert (on_dorduncu / _YETIM_ADI).exists()
+    assert not on_besinci.exists()
+
+
+def test_yetim_yasi_dosya_zamanindan_degil_dizinin_adindan_okunur(tmp_path: Path) -> None:
+    eski = _yetim_gun_dizini(tmp_path, _gun_once(30))
+    yeni = _yetim_gun_dizini(tmp_path, _gun_once(1))
+    os.utime(yeni / _YETIM_ADI, (1, 1))  # 1970: taşıma dosya zamanını korur
+
+    eski_yetimleri_sil(tmp_path, today=_BUGUN)
+
+    assert not eski.exists() and yeni.exists()
+
+
+@pytest.mark.parametrize(
+    "ad",
+    [
+        "elle-konmus",
+        "2020-01-01-kopya",
+        "x2020-01-01",
+        "2020-1-1",
+        "2020-13-45",  # desene uyar, gün değildir
+        "20200101",
+    ],
+)
+def test_adi_gun_bicimi_olmayan_dizine_dokunulmaz(ad: str, tmp_path: Path) -> None:
+    dizin = _yetim_gun_dizini(tmp_path, ad)
+
+    assert eski_yetimleri_sil(tmp_path, today=_BUGUN) == 0
+
+    assert (dizin / _YETIM_ADI).exists()
+
+
+def test_yetim_dizinindeki_gevsek_dosyaya_dokunulmaz(tmp_path: Path) -> None:
+    gevsek = tmp_path / "2020-01-01"
+    gevsek.write_bytes(b"dizin degil")
+
+    assert eski_yetimleri_sil(tmp_path, today=_BUGUN) == 0
+
+    assert gevsek.read_bytes() == b"dizin degil"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="sembolik bağ testi POSIX'te koşar")
+def test_gun_adli_sembolik_bag_izlenmez(tmp_path: Path) -> None:
+    disari = _yetim_gun_dizini(tmp_path / "disari", "dosyalar")
+    yetim = tmp_path / "yetim"
+    yetim.mkdir()
+    bag = yetim / "2020-01-01"
+    bag.symlink_to(disari, target_is_directory=True)
+
+    assert eski_yetimleri_sil(yetim, today=_BUGUN) == 0
+
+    assert bag.is_symlink() and (disari / _YETIM_ADI).exists()
+
+
+def test_tek_dosyanin_silinememesi_yetim_silmesini_dusurmez(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    kilitli = _yetim_gun_dizini(tmp_path, _gun_once(20), _YETIM_ADI, "cd" * 16)
+    oteki = _yetim_gun_dizini(tmp_path, _gun_once(16))
+    asil = Path.unlink
+
+    def sil(yol: Path, missing_ok: bool = False) -> None:
+        if yol == kilitli / _YETIM_ADI:
+            raise PermissionError(f"kilitli: {yol}")
+        asil(yol, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", sil)
+
+    assert eski_yetimleri_sil(tmp_path, today=_BUGUN) == 2
+
+    assert (kilitli / _YETIM_ADI).exists()  # dizin kalır, sonraki rotasyon yeniden dener
+    assert not (kilitli / ("cd" * 16)).exists() and not oteki.exists()
+    gunluk = "\n".join(kayit.getMessage() for kayit in od_gunlugu)
+    assert "1 yetim dosya silinemedi" in gunluk and "2 yetim dosya silindi" in gunluk
+    assert _YETIM_ADI not in gunluk and str(tmp_path) not in gunluk
+
+
+def test_gun_dizini_okunamazsa_oteki_gun_silinir_yol_gunluge_yazilmaz(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    bozuk = _yetim_gun_dizini(tmp_path, _gun_once(20))
+    oteki = _yetim_gun_dizini(tmp_path, _gun_once(19))
+    asil = Path.iterdir
+
+    def listele(yol: Path) -> Any:
+        if yol == bozuk:
+            raise PermissionError(f"izin yok: {yol}")
+        return asil(yol)
+
+    monkeypatch.setattr(Path, "iterdir", listele)
+
+    assert eski_yetimleri_sil(tmp_path, today=_BUGUN) == 1
+
+    assert (bozuk / _YETIM_ADI).exists() and not oteki.exists()
+    gunluk = "\n".join(kayit.getMessage() for kayit in od_gunlugu)
+    assert "1 yetim dosya silinemedi" in gunluk and str(tmp_path) not in gunluk
+
+
+def test_bos_gun_dizini_de_kalkar_yetim_dizini_yoksa_bir_sey_olmaz(tmp_path: Path) -> None:
+    bos = tmp_path / _gun_once(15)
+    bos.mkdir()
+
+    assert eski_yetimleri_sil(tmp_path, today=_BUGUN) == 0
+
+    assert not bos.exists()
+    assert eski_yetimleri_sil(tmp_path / "yok", today=_BUGUN) == 0

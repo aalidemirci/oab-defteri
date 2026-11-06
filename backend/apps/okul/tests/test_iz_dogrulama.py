@@ -834,6 +834,79 @@ def test_geri_yukleme_notu_ilk_kilit_acilisinda_satir_olur_bekleyenler_yazilir()
     assert denetim_izi.zinciri_dogrula() == []
 
 
+_DOSYA_SAYILARI = {
+    "kapsam": "tam",
+    "yerine_konan": 3,
+    "yetimden_donen": 1,
+    "eksik": 2,
+    "bozuk": 1,
+    "onayla_suruldu": 1,
+}
+
+
+def test_geri_yukleme_satiri_ve_karti_dosya_sayilarini_tasir() -> None:
+    """Plan F1b-3 "Geri yükleme": not ve satır kişisiz sayıları taşır; kart satırdan okur."""
+    kilitle()
+    notu_yaz(dosya_sayilari=_DOSYA_SAYILARI)
+
+    ac()
+
+    (geri,) = satirlar(action="GERI_YUKLEME")
+    for ad, deger in _DOSYA_SAYILARI.items():
+        assert geri.values[ad] == [None, deger]
+        assert ad in geri.changed_fields
+    assert pano(TEST_HESAP_ID)["geri_yukleme"]["dosyalar"] == _DOSYA_SAYILARI
+
+
+def test_dosya_sayisi_tasimayan_eski_not_bos_sozluk_verir() -> None:
+    kilitle()
+    notu_yaz()
+
+    ac()
+
+    (geri,) = satirlar(action="GERI_YUKLEME")
+    assert "kapsam" not in geri.values
+    assert pano(TEST_HESAP_ID)["geri_yukleme"]["dosyalar"] == {}
+
+
+@pytest.mark.parametrize(
+    "bozuk",
+    [
+        {"kapsam": "Uydurgül Masalcıoğlu"},
+        {"kapsam": 2},
+        {"yerine_konan": -1},
+        {"eksik": True},
+        {"bozuk": "1"},
+        {"onayla_suruldu": 1.5},
+        {"yetimden_donen": None},
+    ],
+    ids=["serbest_kapsam", "sayi_kapsam", "eksi", "bool", "metin", "kesirli", "bos"],
+)
+def test_bicimi_tutmayan_dosya_sayisi_satira_girmez(bozuk: dict[str, Any]) -> None:
+    """Not dosyası program dışından değiştirilebilir: serbest metin ve biçimsiz sayı girmez (R1)."""
+    kilitle()
+    notu_yaz(dosya_sayilari={**_DOSYA_SAYILARI, **bozuk})
+
+    ac()
+
+    (geri,) = satirlar(action="GERI_YUKLEME")
+    (alan,) = bozuk
+    assert alan not in geri.values
+    assert "Masalcıoğlu" not in json.dumps(geri.values, ensure_ascii=False)
+
+
+def test_dosya_bolumu_sozluk_degilse_satira_girmez() -> None:
+    kilitle()
+    kayit = not_kaydi()
+    kayit["dosyalar"] = ["kapsam", "tam"]
+    geri_yukleme_notu.geri_yukleme_ekle(iz_durumu.dizin(), kayit)
+
+    ac()
+
+    (geri,) = satirlar(action="GERI_YUKLEME")
+    assert "kapsam" not in geri.values
+
+
 def test_iki_geri_yukleme_iki_satir_kurtarma_yolu_no_tasir() -> None:
     kilitle()
     notu_yaz(yol_bilgisi={"tur": "kurtarma", "no": 3}, onceki_dosya=None)
@@ -1284,7 +1357,13 @@ def test_butunluk_ucu_kartlari_kagit_capasini_ve_son_girisleri_verir() -> None:
     assert veri["parola_yenilenme"] is None
     assert veri["okunamayan"] == []
     denetim = APIClient().get("/api/v1/security/integrity/audit/").json()
-    assert denetim == {"butunluk": [], "geri_yukleme": None, "muhru_tutmayan": [], "okunamayan": []}
+    assert denetim == {
+        "butunluk": [],
+        "geri_yukleme": None,
+        "muhru_tutmayan": [],
+        "eksik_ekler": [],
+        "okunamayan": [],
+    }
     iki_depo = APIClient().get("/api/v1/security/integrity/two-store/").json()
     assert iki_depo == {
         "iki_depo": {

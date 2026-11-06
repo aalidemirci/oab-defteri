@@ -42,7 +42,7 @@ LOCK_FILE_NAME = "instance.lock"
 VERSION_STAMP_FILE_NAME = "surum.json"
 #: Dosya deposu ve yetim dizini (tasarım §2.3.2, §4.4.7): veri dizinindeki `dosyalar/`,
 #: `dosyalar/yetim/`. Backend bu pakete bağımlı değildir; eşi `settings.DOSYA_DEPOSU_DIR` ve
-#: `dosya_deposu.YETIM_DIZINI`'dir (eşitliği `test_dosya_deposu.py` sınar).
+#: `shared.dosya_sifreleme.YETIM_DIZINI`'dir (eşitliği `test_dosya_deposu.py` sınar).
 DOSYA_DEPOSU_DIR_NAME = "dosyalar"
 YETIM_DIR_NAME = "yetim"
 

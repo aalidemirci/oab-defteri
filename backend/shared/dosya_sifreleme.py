@@ -53,6 +53,16 @@ arasıdır; adlar rastgele (`uuid4`) üretildiği için oraya ancak bir program 
 kesintiden kalmış `.tmp`'ye dokunulmaz, yazım reddedilir; artığı `gecici_artik_mi` tanır, silmek
 açılıştaki artık temizliğinin işidir. Kip açıkça çekilir (`fchmod`): yazıcı umask'a güvenmez.
 Windows'ta dosya kullanıcı profilindedir, kip anlamsızdır.
+
+DEPO DİZİNLERİ VE TAŞIMA (plan F1b-3 "Geri yükleme"; tasarım §4.4.7 "Yetim ve eksik dosya"): yetim
+dosya `dosyalar/yetim/<yyyy-aa-gg>/<stored_name>`'dedir. Burada yalnız saf parçalar durur: dizinin
+kurulması, tarih dizini, yetime taşıma, yetimdeki kopyaların bulunması ve geri yüklemenin hazırlık
+dizini (`dosyalar/.hazirlik-<hex>/`). Hazırlık dizini depoyla aynı birimdedir: doğrulanmış kap
+depoya tek `os.replace`'le geçer. Yetim taramasının saf parçaları da buradadır: dokunulabilecek
+adlar (`depodaki_dosyalar`), taşıma (`yetime_tasi`), tarih dizini (`yetim_gun_dizini`). Hangi
+dosyanın nereye gideceğini bu modül bilmez: veritabanını okuyan kararlar geri yükleme servisinin ve
+açılış kancasınındır (`apps.okul.masaustu_kanca`). Taşıyıcılar var olan adın üzerine yazmaz (depo
+tek yazımlıdır, §4.4.7).
 """
 
 from __future__ import annotations
@@ -66,7 +76,9 @@ import re
 import secrets
 import stat
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Final
 
@@ -95,6 +107,16 @@ DEPO_ADI_DESENI: Final = re.compile(r"[0-9a-f]{32}")
 GECICI_EK: Final = ".tmp"
 #: Depo dosyalarının POSIX kipi (tasarım §4.5).
 DOSYA_KIPI: Final = 0o600
+#: Depo dizinlerinin POSIX kipi (tasarım §4.5).
+DIZIN_KIPI: Final = 0o700
+#: `dosyalar/` altındaki yetim dizininin adı (modül başlığı "DEPO DİZİNLERİ VE TAŞIMA").
+YETIM_DIZINI: Final = "yetim"
+#: Geri yüklemenin hazırlık dizininin öneki; artığı açılış temizliği toplar.
+HAZIRLIK_ONEKI: Final = ".hazirlik-"
+#: Yetim dizinindeki gün dizinlerinin deseni (`fullmatch`).
+_YETIM_GUNU_DESENI: Final = re.compile(r"\d{4}-\d{2}-\d{2}")
+#: Aynı gün aynı adla yetime düşen kopyanın sıra eki (`<ad>-<n>`; `yetime_tasi`).
+_SIRA_EKI_DESENI: Final = re.compile(r"-([1-9][0-9]*)")
 
 _EN_KISA_KAP: Final = KAP_EK_BAYT
 _OKUMA_PARCASI: Final = 1024 * 1024
@@ -216,6 +238,14 @@ def gecici_artik_mi(dosya_adi: str) -> bool:
     return (
         dosya_adi.endswith(GECICI_EK)
         and DEPO_ADI_DESENI.fullmatch(dosya_adi[: -len(GECICI_EK)]) is not None
+    )
+
+
+def hazirlik_artigi_mi(dizin_adi: str) -> bool:
+    """Ad, geri yüklemenin hazırlık dizini mi (`.hazirlik-<32 hane>`)? Açılış temizliği içindir."""
+    return (
+        dizin_adi.startswith(HAZIRLIK_ONEKI)
+        and DEPO_ADI_DESENI.fullmatch(dizin_adi[len(HAZIRLIK_ONEKI) :]) is not None
     )
 
 
@@ -460,7 +490,7 @@ def _tamamini_yaz(tanitici: int, veri: bytes) -> None:
         gorunum = gorunum[yazilan:]
 
 
-def _dizini_esitle(dizin: Path) -> None:
+def dizini_esitle(dizin: Path) -> None:
     """POSIX'te dizin girdisini diske indirir (yeniden adlandırma kesintiye dayansın)."""
     if os.name != "posix":
         return
@@ -469,6 +499,15 @@ def _dizini_esitle(dizin: Path) -> None:
         os.fsync(tanitici)
     finally:
         os.close(tanitici)
+
+
+def dosyayi_esitle(yol: Path) -> None:
+    """Dosyanın baytlarını diske indirir: `fsync` yazan tanıtıcıdan bağımsızdır.
+
+    Tanıtıcı yazılabilir açılır: Windows'ta salt okunur tanıtıcı `fsync` edilemez.
+    """
+    with yol.open("r+b") as dosya:
+        os.fsync(dosya.fileno())
 
 
 def atomik_yaz(hedef: Path, veri: bytes) -> None:
@@ -502,7 +541,125 @@ def atomik_yaz(hedef: Path, veri: bytes) -> None:
     except BaseException:
         gecici.unlink(missing_ok=True)
         raise
-    _dizini_esitle(hedef.parent)
+    dizini_esitle(hedef.parent)
+
+
+def akisla_yaz(hedef: Path, parcalar: Iterable[bytes]) -> None:
+    """Parçaları yeni bir dosyaya 0600 ile yazar, `fsync` eder; var olan adı açmaz.
+
+    Geri yüklemenin hazırlık dizini içindir: kap bellekte toplanmaz (§4.4.7). Yazım hazırlık
+    dizininde olduğu için atomik değildir; yarıda kalan dosya dizinle birlikte silinir.
+    """
+    tanitici = os.open(hedef, _YAZMA_BAYRAKLARI, DOSYA_KIPI)
+    try:
+        if os.name == "posix":
+            os.fchmod(tanitici, DOSYA_KIPI)
+        for parca in parcalar:
+            _tamamini_yaz(tanitici, parca)
+        os.fsync(tanitici)
+    finally:
+        os.close(tanitici)
+
+
+def dizin_kur(dizin: Path) -> Path:
+    """Dizini yoksa kurar, POSIX'te 0700'e çeker (yazıcılar umask'a güvenmez; §4.5)."""
+    dizin.mkdir(mode=DIZIN_KIPI, parents=True, exist_ok=True)
+    if os.name == "posix":
+        dizin.chmod(DIZIN_KIPI)
+    return dizin
+
+
+def hazirlik_dizini_kur(depo: Path) -> Path:
+    """Depo altında yeni bir hazırlık dizini kurar (modül başlığı "DEPO DİZİNLERİ VE TAŞIMA")."""
+    dizin_kur(depo)
+    hazirlik = depo / f"{HAZIRLIK_ONEKI}{uuid.uuid4().hex}"
+    hazirlik.mkdir(mode=DIZIN_KIPI)
+    if os.name == "posix":
+        hazirlik.chmod(DIZIN_KIPI)
+    return hazirlik
+
+
+def yerine_tasi(kaynak: Path, hedef: Path) -> None:
+    """Dosyayı `hedef`'e taşır; hedefte bir şey varsa `HedefVarHatasi` (üzerine yazılmaz)."""
+    if os.path.lexists(hedef):
+        raise HedefVarHatasi(hedef.name)
+    os.replace(kaynak, hedef)
+    dizini_esitle(hedef.parent)
+
+
+def depodaki_dosyalar(depo: Path) -> list[str]:
+    """`dosyalar/` altında adı desene uyan düzenli dosyalar, sıralı; dizin yoksa boş liste.
+
+    Yetim taraması yalnız bunlara dokunur (plan F1b-3 "Geri yükleme"). Dizin, sembolik bağ ve desene
+    uymayan ad listeye girmez. Dizin okunamazsa `OSError` çağırana gider: okunamayan depo boş değildir.
+    """
+    try:
+        with os.scandir(depo) as girdiler:
+            return sorted(
+                girdi.name
+                for girdi in girdiler
+                if DEPO_ADI_DESENI.fullmatch(girdi.name) is not None
+                and girdi.is_file(follow_symlinks=False)
+            )
+    except FileNotFoundError:
+        return []
+
+
+def yetim_gun_dizini(depo: Path, gun: date) -> Path:
+    """`dosyalar/yetim/<yyyy-aa-gg>` yolu; dizini kurmaz."""
+    return depo / YETIM_DIZINI / gun.isoformat()
+
+
+def yetime_tasi(depo: Path, ad: str, gun: date) -> Path:
+    """`dosyalar/<ad>`'ı o günün yetim dizinine taşır; dosyanın yeni yolunu döndürür.
+
+    Aynı gün aynı adla yetime düşmüş kopya ezilmez: yenisi sıra ekiyle (`<ad>-<n>`) yanına konur,
+    `yetimdeki_kopyalar` onu da verir. `yetim/` ayrıca kurulur: `dizin_kur` kipi yalnız son dizine
+    çeker, ara dizin umask'la kalırdı (§4.5).
+    """
+    kaynak = depo_yolu(depo, ad)
+    dizin_kur(depo / YETIM_DIZINI)
+    dizin = dizin_kur(yetim_gun_dizini(depo, gun))
+    hedef = dizin / ad
+    sira = 0
+    while os.path.lexists(hedef):
+        sira += 1
+        hedef = dizin / f"{ad}-{sira}"
+    yerine_tasi(kaynak, hedef)
+    return hedef
+
+
+def _kopya_sirasi(kopya: str, ad: str) -> int | None:
+    """Yetimdeki adın sıra eki: asıl adda 0, `<ad>-<n>`'de n; bu adın kopyası değilse None."""
+    if kopya == ad:
+        return 0
+    eslesme = _SIRA_EKI_DESENI.fullmatch(kopya, len(ad)) if kopya.startswith(ad) else None
+    return None if eslesme is None else int(eslesme[1])
+
+
+def yetimdeki_kopyalar(depo: Path, ad: str) -> list[Path]:
+    """`dosyalar/yetim/<gün>/`'deki `<ad>` ve `<ad>-<n>` kopyaları; okunamayan dizin atlanır.
+
+    En yeni gün önce gelir; günün içinde asıl ad, sonra sıra ekleri artan sırayla.
+    """
+    depo_adi_denetle(ad)
+    kok = depo / YETIM_DIZINI
+    try:
+        gunler = sorted(
+            (gun for gun in os.listdir(kok) if _YETIM_GUNU_DESENI.fullmatch(gun)), reverse=True
+        )
+    except OSError:
+        return []
+    kopyalar: list[Path] = []
+    for gun in gunler:
+        try:
+            adlar = os.listdir(kok / gun)
+        except OSError:
+            continue
+        siralar = {kopya: _kopya_sirasi(kopya, ad) for kopya in adlar}
+        bulunan = {kopya: sira for kopya, sira in siralar.items() if sira is not None}
+        kopyalar += [kok / gun / kopya for kopya in sorted(bulunan, key=bulunan.__getitem__)]
+    return kopyalar
 
 
 def depoya_yaz(dizin: Path, stored_name: str, kap: bytes) -> Path:

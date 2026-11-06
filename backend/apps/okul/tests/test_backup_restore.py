@@ -279,10 +279,12 @@ def test_veritabani_silinemezse_esleri_de_kalir(
     [b"SQLite format 3\x00" + b"\x00" * 100, b"HERHANGI BIR ICERIK"],
     ids=["duz", "yabanci"],
 )
-def test_ret_iletileri_teknik_uzanti_anmaz(icerik: bytes) -> None:
+def test_ret_iletileri_teknik_uzanti_anmaz(icerik: bytes, tmp_path: Path) -> None:
     """Sözlük: ".odbak" ve "kapsayıcı" kullanıcı metninde geçmez (yalnız Hakkında)."""
+    yedek = tmp_path / "yedek.odbak"
+    yedek.write_bytes(icerik)
     with pytest.raises(backup_restore.BackupRestoreError) as hata:
-        backup_restore.inspect_backup(icerik)
+        backup_restore.inspect_backup(yedek)
 
     ileti = str(hata.value)
     assert "odbak" not in ileti
@@ -656,7 +658,7 @@ def test_sema_1_baslikli_eski_yedek_aday_degildir(tmp_path: Path, veri_dizini: P
         )
     )
 
-    assert backup_restore.inspect_backup(yedek.read_bytes()).embedded_state is None
+    assert backup_restore.inspect_backup(yedek).embedded_state is None
 
 
 # ---------------------------------------------------------------------------
@@ -842,11 +844,13 @@ def test_baslikta_kdf_bolumunun_tek_bit_donmesi_turkce_hataya_cikar(
 def test_yedek_kurtarma_anahtarinin_kimligini_soyler(tmp_path: Path) -> None:
     dek, durum = _dek_ile_durum(PAROLA)
     durum["kurtarma"].update(no=3, tarih="2026-11-01")
-    bilgi = backup_restore.inspect_backup(_sifreli_kapsayici(b"x", dek, durum))
+    yedek = tmp_path / "yedek.odbak"
+    yedek.write_bytes(_sifreli_kapsayici(b"x", dek, durum))
+    bilgi = backup_restore.inspect_backup(yedek)
     assert bilgi.recovery_key_label == "3 numaralı, 01.11.2026 tarihli"
-    assert (
-        backup_restore.inspect_backup(_sifreli_kapsayici(b"x", dek, None)).recovery_key_label == ""
-    )
+    assert bilgi.kapsam == KAPSAM_YEREL
+    yedek.write_bytes(_sifreli_kapsayici(b"x", dek, None))
+    assert backup_restore.inspect_backup(yedek).recovery_key_label == ""
 
 
 # ---------------------------------------------------------------------------

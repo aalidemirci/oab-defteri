@@ -31,6 +31,26 @@ kontrol kanalı doğmaz:
   yazıcı yazar (`iz_durumu.sistem_olayi`: oturum açıksa açık, değilse kilitli kip). Bu
   işlevler HATA YÜKSELTMEZ: denetim izinin yazılamaması açılışı ve yedeği durdurmaz, olay
   günlüğe düşer (kilitli kipte ilk hesaptan önce olay yazılmaz).
+* **Yetim taraması** (`yetim_taramasi`; tasarım §4.4.7 "Yetim ve eksik dosya", plan F1b-3 "Geri
+  yükleme"): masaüstü kabuğu her açılışta göçten sonra, sunucudan önce çağırır. Satırı olmayan
+  dosyayı `dosyalar/yetim/<yyyy-aa-gg>/`'e taşır. Eski bir yedeğin geri yüklenmesinden, yarım kalmış
+  bir geri yüklemeden ya da kaydı düşmüş bir ek yazımından kalır. KORUMA: tarama veritabanının bu
+  deponun sahibi olduğunu kanıtlamadan dosyaya dokunmaz. Okul kartı tek satır değilse, parmak izi
+  boşsa ya da tablolar okunamıyorsa atlanır: boş veritabanı bütün depoyu yetime gönderirdi, 14 gün
+  sonra da silerdi (takasın ortasında öldürülen geri yüklemeden sonra göç böyle bir veritabanı
+  kurar). Okuma ham SQL'ledir, salt okunurdur, DEK istemez; iki sorgu da yalnız açık sütun okur.
+  Satırı olan her ad yerinde kalır: `purged_at` dolu satır da satırdır, imhanın dosyası imhanın
+  işidir (F4-F6), tarama onu ayrıca ele almaz. Yalnız desene uyan düzenli dosyalara dokunulur
+  (`dosya_sifreleme.depodaki_dosyalar`). Olay `BUTUNLUK` satırıdır (`DOSYA_DEPOSU`; sayılar, ad yok);
+  bir dosya bile taşınmadıysa satır yazılmaz. Geri yükleme notu varken olay nota düşer
+  (`iz_durumu`). Hata yükseltmez; tek dosyanın taşınamaması taramayı durdurmaz.
+* **Artık temizliği** (`artiklari_temizle`; plan F1b-3 "Geri yükleme"): yarım kalmış işlerin geçici
+  dosyaları açılışta silinir: `db.sqlite3.yeni.tmp` ve eşleri, `.geri-yukleme-denetimi-*`,
+  `.yukleme-*.tmp`, `*.odbak.tmp`, `dosyalar/<stored_name>.tmp`, hazırlık dizinleri. Yalnız bu adlara
+  ve beklenen türe (dosya ya da dizin) dokunulur, yol ve ad günlüğe yazılmaz (`*.odbak.tmp`'nin adı
+  serbest olabilir; R1). Çağıran tek kopya kilidini tutar: başka bir kopya ya da geri yükleme
+  sürerken bu adlar artık değildir. `--geri-yukle` de kendi kilidi altında çağırır: veritabanı
+  bozukken program açılmaz, artık başka türlü silinmezdi. Hata yükseltmez.
 * **Kapanış kilidi** (ters yön; tasarım §4.2 kapanış sırası, plan F1b-1 "Oturum"):
   backend `OkulConfig.ready` içinde oturumun kapanış kilidini KAYDEDER
   (`kapanis_kilidi_kaydet`), masaüstü kabuğu düzenli kapanışta `od-gunluk` durduktan
@@ -55,9 +75,17 @@ Kayıt süreç içidir ve açılışta bir kez yapılır; `_reset_for_tests` yal
 from __future__ import annotations
 
 import logging
+import os
+import shutil
+import sqlite3
+import stat
 import threading
 from collections.abc import Callable, Sequence
+from contextlib import closing
 from dataclasses import dataclass
+from datetime import date
+from pathlib import Path
+from typing import Final
 
 logger = logging.getLogger("oab_defteri.okul")
 
@@ -65,6 +93,8 @@ GunlukIs = Callable[[], bool | None]
 
 #: Denetim izinin `object_id` sütununun sınırı (dosya adı daha uzunsa kırpılır).
 _KIMLIK_SINIRI = 64
+#: Yetim taramasının `BUTUNLUK` satırının kimliği (kişisiz sabit).
+_YETIM_KIMLIGI: Final = "yetim"
 
 
 @dataclass(frozen=True)
@@ -257,6 +287,151 @@ def goc_olayini_yaz(*, surum: str, gocler: Sequence[str]) -> bool:
         logger.warning("Şema göçü denetim izine yazılamadı.", exc_info=True)
         return False
     return satir is not None
+
+
+def _kayitli_ek_adlari(db_path: Path) -> frozenset[str] | None:
+    """Depoyu tanıyan veritabanının bütün ek adları; koruma tutmuyorsa None (modül başlığı).
+
+    Veritabanı yoksa, kilitliyse ya da tablolardan biri okunamıyorsa da None: taranamayan depoya
+    dokunulmaz. Metin hoşgörüyle okunur: bozuk bir satır okumayı düşürmez, adı desene uymaz.
+    """
+    from shared import sqlite_adres
+
+    adres = sqlite_adres.salt_okunur_adres(db_path)
+    try:
+        with closing(sqlite3.connect(adres, uri=True, timeout=5)) as baglanti:
+            baglanti.text_factory = lambda ham: ham.decode("utf-8", "replace")
+            kartlar = baglanti.execute(
+                "SELECT app_password_hash FROM okul_schoolconfig LIMIT 2"
+            ).fetchall()
+            if len(kartlar) != 1 or not str(kartlar[0][0] or "").strip():
+                logger.info("Dosya deposu taranmadı: okul kartı ya da parmak izi yok.")
+                return None
+            # İzni `test_dosya_deposu.EK_OKUMA_DIZELERI`'nde, tam metniyle.
+            satirlar = baglanti.execute("SELECT stored_name FROM okul_attachment").fetchall()
+    except sqlite3.Error as hata:
+        logger.warning("Dosya deposu taranmadı: veritabanı okunamadı (%s).", type(hata).__name__)
+        return None
+    return frozenset(satir[0] for satir in satirlar)
+
+
+def _yetim_olayini_yaz(*, tasinan: int, tasinamayan: int) -> None:
+    """Taramanın `BUTUNLUK` satırı (sayılar); not varken olay nota düşer. Hata yükseltmez."""
+    try:
+        from apps.okul import denetim_izi, iz_durumu
+        from apps.okul.models import AuditAction
+
+        degerler = {"tasinan": (None, tasinan), "tasinamayan": (None, tasinamayan)}
+        iz_durumu.sistem_olayi(
+            AuditAction.BUTUNLUK,
+            model=denetim_izi.DOSYA_DEPOSU,
+            object_id=_YETIM_KIMLIGI,
+            changed_fields=sorted(degerler),
+            values=degerler,
+        )
+    except Exception:  # noqa: BLE001 — açılış iz yüzünden durmaz
+        logger.warning("Yetim taraması denetim izine yazılamadı.", exc_info=True)
+
+
+def yetim_taramasi(db_path: Path, depo: Path, *, gun: date | None = None) -> int:
+    """Satırı olmayan dosyaları yetime taşır; taşınan sayıyı döndürür (modül başlığı "Yetim taraması").
+
+    Hata yükseltmez. Bir dosya bile taşınmadıysa denetim izine satır yazılmaz: taşınamayan dosya her
+    açılışta yeniden denenir, satırı çoğaltmaz, günlüğe düşer.
+    """
+    from django.utils import timezone
+
+    from shared import dosya_sifreleme as ds
+
+    kayitli = _kayitli_ek_adlari(db_path)
+    if kayitli is None:
+        return 0
+    try:
+        yetimler = [ad for ad in ds.depodaki_dosyalar(depo) if ad not in kayitli]
+    except OSError as hata:
+        logger.warning("Dosya deposu taranmadı: dizin okunamadı (%s).", type(hata).__name__)
+        return 0
+    gunu = gun if gun is not None else timezone.localdate()
+    tasinan = tasinamayan = 0
+    for ad in yetimler:
+        try:
+            ds.yetime_tasi(depo, ad, gunu)
+        except OSError:
+            tasinamayan += 1
+        else:
+            tasinan += 1
+    if tasinamayan:
+        logger.warning("Satırı olmayan %d dosya yetime taşınamadı.", tasinamayan)
+    if tasinan:
+        logger.warning("Satırı olmayan %d dosya yetime taşındı.", tasinan)
+        _yetim_olayini_yaz(tasinan=tasinan, tasinamayan=tasinamayan)
+    return tasinan
+
+
+def _artigi_sil(yol: Path, mod: int) -> None:
+    if stat.S_ISDIR(mod):
+        shutil.rmtree(yol)
+    else:
+        yol.unlink()
+
+
+def _artik_kurallari(
+    db_path: Path, yedekler: Path, depo: Path
+) -> tuple[tuple[Path, Callable[[str], bool], Callable[[int], bool]], ...]:
+    """(dizin, ad tanıyıcı, beklenen tür) üçlüleri: tanınan artıkların tek listesi (modül başlığı)."""
+    from desktop.backup import SQLITE_EKLERI
+    from desktop.backup_crypto import BACKUP_SUFFIX
+
+    from apps.okul.services import backup_restore, geri_yukleme_yetkisi, live_restore
+    from shared import dosya_sifreleme as ds
+
+    yeni = db_path.name + backup_restore.YENI_VERITABANI_EKI
+    yeni_adlar = {yeni, *(yeni + ek for ek in SQLITE_EKLERI)}
+    yarim_yedek = BACKUP_SUFFIX + ds.GECICI_EK
+
+    def yedek_artigi_mi(ad: str) -> bool:
+        return ad.endswith(yarim_yedek) or (
+            ad.startswith(live_restore.YUKLEME_ONEKI) and ad.endswith(live_restore.YUKLEME_EKI)
+        )
+
+    return (
+        (db_path.parent, yeni_adlar.__contains__, stat.S_ISREG),
+        (
+            db_path.parent,
+            lambda ad: ad.startswith(geri_yukleme_yetkisi.GECICI_DIZIN_ONEKI),
+            stat.S_ISDIR,
+        ),
+        (yedekler, yedek_artigi_mi, stat.S_ISREG),
+        (depo, ds.gecici_artik_mi, stat.S_ISREG),
+        (depo, ds.hazirlik_artigi_mi, stat.S_ISDIR),
+    )
+
+
+def artiklari_temizle(db_path: Path, yedekler: Path, depo: Path) -> int:
+    """Yarım işlerin artıklarını siler; silinen sayıyı döndürür (modül başlığı "Artık temizliği").
+
+    Hata yükseltmez; silinemeyen artık sonraki açılışta yeniden denenir.
+    """
+    silinen = kalan = 0
+    for dizin, artik_mi, tur_tutar_mi in _artik_kurallari(db_path, yedekler, depo):
+        try:
+            adlar = sorted(ad for ad in os.listdir(dizin) if artik_mi(ad))
+        except OSError:
+            continue  # dizin yoksa artığı da yoktur; okunamıyorsa sonraki açılış dener
+        for ad in adlar:
+            yol = dizin / ad
+            try:
+                mod = yol.lstat().st_mode
+                if tur_tutar_mi(mod):
+                    _artigi_sil(yol, mod)
+                    silinen += 1
+            except OSError:
+                kalan += 1
+    if kalan:
+        logger.warning("Yarım işlerden kalan %d artık silinemedi.", kalan)
+    if silinen:
+        logger.info("Yarım işlerden kalan %d artık silindi.", silinen)
+    return silinen
 
 
 def kapanis_kilidi_kaydet(kilitle: Callable[[], bool] | None) -> None:

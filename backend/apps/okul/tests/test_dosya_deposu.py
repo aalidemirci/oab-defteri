@@ -13,6 +13,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import inspect
+import json
 import logging
 import os
 import re
@@ -33,7 +34,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils.module_loading import import_string
 from rest_framework.test import APIClient
 
-from apps.okul import denetim_izi, erisim_gunlugu
+from apps.okul import denetim_izi, erisim_gunlugu, iz_dogrulama
 from apps.okul.models import (
     AccessKind,
     AccessLog,
@@ -756,8 +757,10 @@ _EK_ADI = re.compile(r"\bAttachment\b|(?i:\bokul[._]attachment\b)|^attachment$")
 #: R9, tür denetimi ve önce-dosya sırası yalnız `yaz`'dadır; veritabanı `owner_type` kümesini
 #: zorlayamaz. F4-F6 imhası ve TK12 sarmal yenilemesi gelince kendi yerleri adıyla eklenir.
 EK_YAZIM_YERLERI = {("apps/okul/services/dosya_deposu.py", "yaz", ("objects", "create"))}
-#: Tabloyu ham SQL ile OKUYAN tek yer: masaüstü manifestosu Django'dan ve göçten önce koşar, ORM
-#: kullanamaz (plan F1b-3 "Kap ve manifesto"). İzin dosyaya ya da birime değil bu iki dizenin TAM
+#: Tabloyu ham SQL ile OKUYAN üç yer: masaüstü manifestosu Django'dan ve göçten önce koşar, ORM
+#: kullanamaz (plan F1b-3 "Kap ve manifesto"); geri yükleme bozuk olabilecek bir veritabanını
+#: ORM'siz okur (plan F1b-3 "Geri yükleme"); yetim taraması okunamayan tabloda depoya dokunmaz ve
+#: Django bağlantısı açmaz (plan F1b-3 "Geri yükleme"). İzin dosyaya ya da birime değil bu dizelerin TAM
 #: METNİNE verilir ve burada elle yazılıdır: kaynaktan alınsaydı sorgu `DELETE`'e dönünce izin de
 #: onunla değişirdi. Aynı dosyadaki başka dize yine yakalanır.
 EK_OKUMA_DIZELERI = (
@@ -767,6 +770,12 @@ EK_OKUMA_DIZELERI = (
         "SELECT stored_name, size, sha256 FROM okul_attachment "
         "WHERE purged_at IS NULL ORDER BY stored_name",
     ),
+    (
+        "apps/okul/services/geri_yukleme_ekleri.py",
+        "SELECT stored_name, key_wrap, size, sha256, owner_type, owner_id, uploaded_at "
+        "FROM okul_attachment WHERE purged_at IS NULL ORDER BY stored_name",
+    ),
+    ("apps/okul/masaustu_kanca.py", "SELECT stored_name FROM okul_attachment"),
 )
 
 #: Programa eklenen ek yazımları ve atlatmaları: her biri yakalanmalıdır.
@@ -914,7 +923,7 @@ def test_depo_yollari_masaustu_yerlesimiyle_aynidir() -> None:
     from config import settings as ayarlar
 
     assert ayarlar.DOSYA_DEPOSU_DIR == ayarlar.DATA_DIR / masaustu_yollari.DOSYA_DEPOSU_DIR_NAME
-    assert dosya_deposu.YETIM_DIZINI == masaustu_yollari.YETIM_DIR_NAME
+    assert ds.YETIM_DIZINI == masaustu_yollari.YETIM_DIR_NAME
 
 
 def test_eski_esigi_asan_yukleme_bellekte_kalir() -> None:
@@ -938,3 +947,114 @@ def test_sinirdan_buyuk_yukleme_iletisiyle_reddedilir(settings: Any) -> None:
     )
     assert yanit.status_code == 400
     assert yanit.json()["message"] == "Dosya çok büyük; en çok 7 MB olabilir."
+
+
+# ============================================================ eksik ekler (Genel Bakış kartı)
+
+
+def test_eksik_ekler_satiri_olup_dosyasi_olmayan_eki_verir(sahip: SchoolYear) -> None:
+    """Tasarım §4.4.7: satırı olup dosyası olmayan kayıt panoya bütünlük uyarısı düşürür; plan: asıl
+    dosya adı bu uyarıda görünür."""
+    yerinde = _yaz(sahip)
+    kayip = _yaz(sahip, PNG, original_name="Örnek rapor.png")
+    _guncelle(kayip, uploaded_at=datetime(2026, 11, 3, 21, 30, tzinfo=UTC))
+    _dosya(kayip).unlink()
+
+    assert dosya_deposu.eksik_ekler() == [
+        {
+            "kayit_turu": "ders yılı",
+            "kayit_no": kayip.owner_id,
+            "yukleme_tarihi": "2026-11-04",  # 21:30 UTC yerelde ertesi gündür
+            "boyut": len(PNG),
+            "ozgun_ad": "Örnek rapor.png",
+        }
+    ]
+    assert _dosya(yerinde).is_file()
+
+
+def test_eksik_ekler_eskiden_yeniye_dizilir(sahip: SchoolYear) -> None:
+    yeni, eski = _yaz(sahip, original_name="yeni.pdf"), _yaz(sahip, original_name="eski.pdf")
+    _guncelle(yeni, uploaded_at=datetime(2026, 11, 4, 9, 0, tzinfo=UTC))
+    _guncelle(eski, uploaded_at=datetime(2026, 10, 4, 9, 0, tzinfo=UTC))
+    _dosya(yeni).unlink()
+    _dosya(eski).unlink()
+
+    assert [satir["ozgun_ad"] for satir in dosya_deposu.eksik_ekler()] == ["eski.pdf", "yeni.pdf"]
+
+
+def test_eksik_ekler_imhali_satiri_saymaz(sahip: SchoolYear) -> None:
+    ek = _yaz(sahip)
+    _dosya(ek).unlink()
+    _guncelle(ek, purged_at=ORNEK_AN, key_wrap="", original_name="")
+
+    assert dosya_deposu.eksik_ekler() == []
+
+
+def test_eksik_ekler_dosya_yerine_dizin_duruyorsa_eksik_sayar(sahip: SchoolYear) -> None:
+    ek = _yaz(sahip)
+    _dosya(ek).unlink()
+    _dosya(ek).mkdir()
+
+    assert len(dosya_deposu.eksik_ekler()) == 1
+
+
+def test_eksik_ekler_cozulemeyen_adi_bos_verir_yanit_kodlanabilir(sahip: SchoolYear) -> None:
+    """`CorruptField` metin değildir: uç onu JSON'a çeviremez, kart okunamaz görünürdü."""
+    ek = _yaz(sahip)
+    _dosya(ek).unlink()
+    with connection.cursor() as imlec:
+        imlec.execute(
+            "UPDATE okul_attachment SET original_name = %s WHERE stored_name = %s",
+            ["duz-metin", ek.stored_name],
+        )
+
+    (satir,) = dosya_deposu.eksik_ekler()
+
+    assert satir["ozgun_ad"] is None
+    json.dumps(satir)
+
+
+def test_eksik_ekler_yalniz_eksik_ekin_adini_cozer(sahip: SchoolYear) -> None:
+    """Depodaki ekin özgün adı okunmaz: kart her açılışta bütün satırları çözmesin."""
+    _yaz(sahip)
+    kayip = _yaz(sahip)
+    _dosya(kayip).unlink()
+
+    with CaptureQueriesContext(connection) as sorgular:
+        dosya_deposu.eksik_ekler()
+
+    assert len(sorgular) == 2  # liste ve eksik ekin ertelenen adı
+
+
+def test_denetim_kartlari_eksik_ekleri_tasir_depo_okunamazsa_kart_okunamaz_der(
+    sahip: SchoolYear, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Hata gerçek biçimindedir: `OSError` yolu taşır, yol hesap adını içerir, günlüğe düşmez."""
+    ek = _yaz(sahip)
+    _dosya(ek).unlink()
+
+    (satir,) = iz_dogrulama.denetim_kartlari(TEST_HESAP_ID)["eksik_ekler"]
+    assert satir["ozgun_ad"] == UYDURMA_DOSYA_ADI
+
+    depo = dosya_deposu.depo_dizini()
+
+    def duser(_depo: Path) -> list[str]:
+        raise PermissionError(13, "Erişim engellendi", str(depo))
+
+    monkeypatch.setattr(ds, "depodaki_dosyalar", duser)
+
+    with caplog.at_level(logging.ERROR, logger="oab_defteri.okul"):
+        kartlar = iz_dogrulama.denetim_kartlari(TEST_HESAP_ID)
+
+    assert kartlar["eksik_ekler"] == []
+    assert "eksik_ekler" in kartlar["okunamayan"]
+    assert "Dosya deposu okunamadı (PermissionError)." in caplog.text
+    assert str(depo) not in caplog.text
+
+
+def test_kendi_kartlari_eksik_ekleri_tasimaz(sahip: SchoolYear) -> None:
+    """Özgün ad her role gitmez: alan yalnız denetim kartlarındadır (program yöneticisi ve DK)."""
+    ek = _yaz(sahip)
+    _dosya(ek).unlink()
+
+    assert "eksik_ekler" not in iz_dogrulama.kendi_kartlari(TEST_HESAP_ID)

@@ -18,6 +18,7 @@ import sys
 import threading
 import uuid
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -778,3 +779,219 @@ def test_tam_yedek_gercek_dosya_kabini_ikinci_kez_sifrelemeden_tasir(tmp_path: P
     backup_crypto.ek_denetle(girdi, acik)
     with pytest.raises(backup_crypto.EkTutmuyorHatasi):
         backup_crypto.ek_denetle(girdi, acik[:-1] + b"X")
+
+
+# ============================================================ depo dizinleri ve taşıma
+
+
+def test_akisla_yaz_parcalari_0600_ile_yazar_var_olan_adi_acmaz(tmp_path: Path) -> None:
+    hedef = tmp_path / _AD
+
+    ds.akisla_yaz(hedef, iter([b"ab", b"", b"cd"]))
+
+    assert hedef.read_bytes() == b"abcd"
+    if os.name == "posix":
+        assert stat.S_IMODE(hedef.stat().st_mode) == ds.DOSYA_KIPI
+    with pytest.raises(FileExistsError):
+        ds.akisla_yaz(hedef, [b"x"])
+    assert hedef.read_bytes() == b"abcd"
+
+
+def test_dizin_kur_kipi_ceker_var_olan_dizinde_de(tmp_path: Path) -> None:
+    dizin = tmp_path / "a" / "b"
+    dizin.mkdir(parents=True, mode=0o755)
+
+    assert ds.dizin_kur(dizin) == dizin
+
+    if os.name == "posix":
+        assert stat.S_IMODE(dizin.stat().st_mode) == ds.DIZIN_KIPI
+
+
+def test_hazirlik_dizini_depoyla_ayni_yerdedir_ad_oneki_tanir(tmp_path: Path) -> None:
+    depo = tmp_path / "dosyalar"
+
+    birinci, ikinci = ds.hazirlik_dizini_kur(depo), ds.hazirlik_dizini_kur(depo)
+
+    assert birinci != ikinci
+    assert birinci.parent == depo and birinci.name.startswith(ds.HAZIRLIK_ONEKI)
+    assert ds.DEPO_ADI_DESENI.fullmatch(birinci.name) is None  # yetim taraması dokunmaz
+    if os.name == "posix":
+        assert stat.S_IMODE(birinci.stat().st_mode) == ds.DIZIN_KIPI
+        assert stat.S_IMODE(depo.stat().st_mode) == ds.DIZIN_KIPI
+
+
+def test_yerine_tasi_var_olan_adin_uzerine_yazmaz(tmp_path: Path) -> None:
+    kaynak, hedef = tmp_path / "kaynak", tmp_path / "hedef"
+    kaynak.write_bytes(b"yeni")
+    hedef.write_bytes(b"eski")
+
+    with pytest.raises(ds.HedefVarHatasi):
+        ds.yerine_tasi(kaynak, hedef)
+
+    assert (kaynak.read_bytes(), hedef.read_bytes()) == (b"yeni", b"eski")
+    hedef.unlink()
+    ds.yerine_tasi(kaynak, hedef)
+    assert hedef.read_bytes() == b"yeni" and not kaynak.exists()
+
+
+def test_yetime_tasi_gun_dizinine_alir_ayni_gunde_kopyayi_ezmez(tmp_path: Path) -> None:
+    depo = tmp_path / "dosyalar"
+    depo.mkdir()
+    gun = date(2026, 11, 5)
+    (depo / _AD).write_bytes(b"ilk")
+
+    birinci = ds.yetime_tasi(depo, _AD, gun)
+
+    assert birinci == depo / ds.YETIM_DIZINI / "2026-11-05" / _AD
+    assert not (depo / _AD).exists()
+    (depo / _AD).write_bytes(b"ikinci")
+
+    ikinci = ds.yetime_tasi(depo, _AD, gun)
+
+    assert birinci.read_bytes() == b"ilk"
+    assert ikinci.read_bytes() == b"ikinci" and ikinci != birinci
+    assert ds.yetimdeki_kopyalar(depo, _AD) == [birinci, ikinci]  # sıra ekli kopya da aranır
+    if os.name == "posix":
+        assert stat.S_IMODE(birinci.parent.stat().st_mode) == ds.DIZIN_KIPI
+
+
+@pytest.mark.skipif(os.name != "posix", reason="kip POSIX'tedir")
+def test_yetime_tasi_yetim_dizinini_de_umaska_birakmaz(tmp_path: Path) -> None:
+    """Plan F1b-3 "Dosya deposu": yazıcılar umask'a güvenmez; `mkdir(parents=True)`'nun kipi yalnız
+    son dizine gider. Masaüstünde `ensure` ve umask 077 bunu örter, `restore_backup` örtmez."""
+    depo = ds.dizin_kur(tmp_path / "dosyalar")
+    (depo / _AD).write_bytes(b"kap")
+    onceki = os.umask(0o022)
+    try:
+        yetimde = ds.yetime_tasi(depo, _AD, date(2026, 11, 5))
+    finally:
+        os.umask(onceki)
+
+    assert stat.S_IMODE((depo / ds.YETIM_DIZINI).stat().st_mode) == ds.DIZIN_KIPI
+    assert stat.S_IMODE(yetimde.parent.stat().st_mode) == ds.DIZIN_KIPI
+
+
+def test_yetime_tasi_adi_yol_kurmadan_denetler(tmp_path: Path) -> None:
+    with pytest.raises(ds.GecersizAdHatasi):
+        ds.yetime_tasi(tmp_path, "../guvenlik.json", date(2026, 11, 5))
+    assert not (tmp_path / ds.YETIM_DIZINI).exists()
+
+
+def test_yetimdeki_kopyalar_en_yeni_gun_once_tarih_olmayan_dizine_bakmaz(tmp_path: Path) -> None:
+    depo = tmp_path / "dosyalar"
+    for gun in ("2026-10-01", "2026-11-05", "2026-10-20", "elle-konmus"):
+        dizin = depo / ds.YETIM_DIZINI / gun
+        dizin.mkdir(parents=True)
+        (dizin / _AD).write_bytes(b"x")
+    (depo / ds.YETIM_DIZINI / "2026-11-06").mkdir()
+
+    kopyalar = ds.yetimdeki_kopyalar(depo, _AD)
+
+    assert [yol.parent.name for yol in kopyalar] == ["2026-11-05", "2026-10-20", "2026-10-01"]
+
+
+def test_yetimdeki_kopyalar_sira_ekini_sayiyla_dizer_baska_ada_bakmaz(tmp_path: Path) -> None:
+    depo = tmp_path / "dosyalar"
+    gun = depo / ds.YETIM_DIZINI / "2026-11-05"
+    gun.mkdir(parents=True)
+    baska = "cd" * 16
+    for ad in (f"{_AD}-10", f"{_AD}-2", _AD, baska, f"{baska}-1"):
+        (gun / ad).write_bytes(b"x")
+    for ad in (f"{_AD}-", f"{_AD}-x", f"{_AD}-01", f"{_AD}-0", f"{_AD}.tmp", f"{_AD}-1.tmp"):
+        (gun / ad).write_bytes(b"x")
+    eski = depo / ds.YETIM_DIZINI / "2026-10-20"
+    eski.mkdir()
+    (eski / f"{_AD}-1").write_bytes(b"x")
+
+    kopyalar = ds.yetimdeki_kopyalar(depo, _AD)
+
+    assert kopyalar == [gun / _AD, gun / f"{_AD}-2", gun / f"{_AD}-10", eski / f"{_AD}-1"]
+
+
+def test_yetimdeki_kopyalar_okunamayan_gun_dizinini_atlar(tmp_path: Path) -> None:
+    depo = tmp_path / "dosyalar"
+    (depo / ds.YETIM_DIZINI).mkdir(parents=True)
+    (depo / ds.YETIM_DIZINI / "2026-11-06").write_bytes(b"dizin degil")
+    dizin = depo / ds.YETIM_DIZINI / "2026-11-05"
+    dizin.mkdir()
+    (dizin / _AD).write_bytes(b"x")
+
+    assert ds.yetimdeki_kopyalar(depo, _AD) == [dizin / _AD]
+
+
+def test_dosyayi_esitle_dosyanin_kendisini_diske_indirir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    yol = tmp_path / "dosya"
+    yol.write_bytes(b"bayt")
+    gorulen: list[bool] = []
+    asil = os.fsync
+
+    def izleyen(tanitici: int) -> None:
+        gorulen.append(os.path.samestat(os.fstat(tanitici), yol.stat()))
+        asil(tanitici)
+
+    monkeypatch.setattr(os, "fsync", izleyen)
+
+    ds.dosyayi_esitle(yol)
+
+    assert gorulen == [True]
+    assert yol.read_bytes() == b"bayt"
+
+
+def test_yetim_dizini_yoksa_kopya_yoktur_gecersiz_ad_reddedilir(tmp_path: Path) -> None:
+    assert ds.yetimdeki_kopyalar(tmp_path, _AD) == []
+    with pytest.raises(ds.GecersizAdHatasi):
+        ds.yetimdeki_kopyalar(tmp_path, "../guvenlik.json")
+
+
+def test_depodaki_dosyalar_yalniz_desene_uyan_duzenli_dosyalari_verir(tmp_path: Path) -> None:
+    ikinci = "cd" * 16
+    for ad in (ikinci, _AD, f"{_AD}.tmp", f"{_AD}-1", "AB" * 16, "notlar.txt"):
+        (tmp_path / ad).write_bytes(b"x")
+    (tmp_path / ("ef" * 16)).mkdir()
+    (tmp_path / ds.YETIM_DIZINI).mkdir()
+
+    assert ds.depodaki_dosyalar(tmp_path) == sorted([_AD, ikinci])
+
+
+@pytest.mark.skipif(os.name != "posix", reason="sembolik bağ testi POSIX'te koşar")
+def test_depodaki_dosyalar_sembolik_bagi_saymaz(tmp_path: Path) -> None:
+    hedef = tmp_path / "hedef"
+    hedef.write_bytes(b"x")
+    (tmp_path / _AD).symlink_to(hedef)
+
+    assert ds.depodaki_dosyalar(tmp_path) == []
+
+
+def test_depo_yoksa_dosya_yoktur_okunamayan_depo_hata_verir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert ds.depodaki_dosyalar(tmp_path / "yok") == []
+
+    def patla(_yol: Path) -> None:
+        raise PermissionError("izin yok")
+
+    monkeypatch.setattr(os, "scandir", patla)
+    with pytest.raises(PermissionError):
+        ds.depodaki_dosyalar(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("ad", "beklenen"),
+    [
+        (f"{ds.HAZIRLIK_ONEKI}{_AD}", True),
+        (f"{ds.HAZIRLIK_ONEKI}{_AD}x", False),
+        (f"{ds.HAZIRLIK_ONEKI}{_AD[:-1]}", False),
+        (f"{ds.HAZIRLIK_ONEKI}{_AD.upper()}", False),
+        (ds.HAZIRLIK_ONEKI, False),
+        (_AD, False),
+        (f"x{ds.HAZIRLIK_ONEKI}{_AD}", False),
+    ],
+)
+def test_hazirlik_artigi_yalniz_programin_adini_tanir(ad: str, beklenen: bool) -> None:
+    assert ds.hazirlik_artigi_mi(ad) is beklenen
+
+
+def test_hazirlik_dizini_kurucusunun_adi_taninir(tmp_path: Path) -> None:
+    assert ds.hazirlik_artigi_mi(ds.hazirlik_dizini_kur(tmp_path).name)

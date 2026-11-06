@@ -29,6 +29,18 @@ gösterilir, çıkış kodu 9'dur. Kurtarma anahtarı yolunda rol denetimi yoktu
 kendisi yetkidir). Güvenlik dosyası kayıpsa (tasarım
 §4.3 tehdit 8) bu kip de çıkış yoludur: çekirdek `guvenlik.json`'u yedeğin kurtarma
 başlığından (yalnız kurtarma bölümüyle) yeniden yazar.
+
+Onay yedeğin kapsamını söyler; çekirdek bozuk ek bulursa hiçbir şey değişmeden durur ve bu kip liste
+yazıp ikinci kez sorar, onaylanırsa kayıtlar o ekler olmadan geri yüklenir (kullanıcı kararı 04.11.2026
+"Bozuk ekte geri yükleme durur, ikinci onayla sürer"). `--evet` ikinci onay sayılmaz: konsol yoksa
+geri yükleme yapılmaz. İkinci deneme doğrulamayı baştan koşar. Eksik ve bozuk ekler kişisiz listelenir.
+
+Kullanıcının verdiği dosyanın adı ve yerel yollar günlüğe yazılmaz (R1; yol işletim sistemi hesabının
+adını taşıyabilir): çekirdek adı süzerek kendisi yazar, konsol iletisi onları göstermeyi sürdürür.
+
+Yarım işlerin artıkları bu kipte de silinir (plan F1b-3 "Geri yükleme"; `masaustu_kanca`): veritabanı
+bozukken program açılmaz, açılış temizliği koşmaz; kesilen bir denemenin hazırlık dizini yeniden
+denemenin yerini tüketirdi. Kilit alınmıştır, artıklar sahipsizdir. Yetim taraması bu kipte koşmaz.
 """
 
 from __future__ import annotations
@@ -40,8 +52,8 @@ from getpass import getpass
 from pathlib import Path
 from typing import Any
 
-from desktop.backup import DEFAULT_KEEP_DAYS
-from desktop.backup_crypto import BACKUP_SUFFIX, BackupCryptoError
+from desktop.backup import DEFAULT_KEEP_DAYS, KAPSAM_METINLERI
+from desktop.backup_crypto import BACKUP_SUFFIX, BackupCryptoError, kap_basligini_oku
 from desktop.dialogs import show_error
 from desktop.django_bootstrap import prepare_django
 from desktop.errors import EXIT_OK, EXIT_RESTORE_FAILED, AlreadyRunningError
@@ -59,7 +71,14 @@ _allocated = False
 
 
 class RestoreCliError(Exception):
-    """Akışı durduran, kullanıcıya olduğu gibi gösterilecek Türkçe mesaj."""
+    """Akışı durduran, kullanıcıya olduğu gibi gösterilecek Türkçe mesaj.
+
+    `gunluk`: iletinin günlüğe yazılacak hâli; ileti serbest ad taşıyorsa verilir (R1).
+    """
+
+    def __init__(self, ileti: str, *, gunluk: str | None = None) -> None:
+        super().__init__(ileti)
+        self.gunluk = ileti if gunluk is None else gunluk
 
 
 def run_restore(paths: AppPaths, args: argparse.Namespace) -> int:
@@ -88,7 +107,7 @@ def _restore_flow(paths: AppPaths, args: argparse.Namespace) -> int:
         interactive = ensure_console()
         kod = _run_steps(paths, args, interactive)
     except RestoreCliError as hata:
-        _report_error(str(hata), interactive)
+        _report_error(str(hata), interactive, gunluk=hata.gunluk)
     except Exception:  # noqa: BLE001 — kip her hatada Türkçe mesajla bitmeli
         logger.exception("Geri yükleme beklenmeyen hatayla durdu.")
         _report_error(
@@ -104,6 +123,7 @@ def _run_steps(paths: AppPaths, args: argparse.Namespace, interactive: bool) -> 
     # Ayarlar + uygulama kaydı; sorgu YOK (backup_restore importu bunu ister).
     prepare_django(resolve_backend_dir(), paths.data)
     servis = _load_service()
+    _artiklari_temizle(paths)
 
     if interactive:
         print("OAB Defteri — yedekten geri yükleme")
@@ -134,6 +154,9 @@ def _run_steps(paths: AppPaths, args: argparse.Namespace, interactive: bool) -> 
 
     if interactive:
         print(f"\nYedek : {yedek.name}")
+        kapsam = _kapsam_metni(yedek)
+        if kapsam is not None:
+            print(f"Kapsam: {kapsam}")
         print(f"Hedef : {paths.db_path}")
         print(
             "Mevcut veritabanı 'db-onceki-*' adıyla aynı klasörde "
@@ -146,16 +169,22 @@ def _run_steps(paths: AppPaths, args: argparse.Namespace, interactive: bool) -> 
             print("Geri yükleme iptal edildi.")
             return EXIT_OK
 
-    try:
-        sonuc = servis.restore_database(
-            yedek, paths.db_path, hesap=hesap, password=parola, recovery_key=anahtar
-        )
-    except (BackupCryptoError, servis.BackupRestoreError) as hata:
-        raise RestoreCliError(str(hata)) from hata
+    sonuc = _geri_yukle(
+        servis,
+        yedek,
+        paths,
+        hesap=hesap,
+        parola=parola,
+        anahtar=anahtar,
+        interactive=interactive,
+    )
+    if sonuc is None:
+        print("Geri yükleme iptal edildi.")
+        return EXIT_OK
 
-    logger.info("Yedekten geri yükleme tamamlandı: %s", yedek.name)
     if interactive:
         print("\nGeri yükleme tamamlandı.")
+        _ekleri_yaz(sonuc.dosya_raporu)
         if sonuc.old_db_path is not None:
             print(f"Önceki veritabanı kenara alındı: {sonuc.old_db_path}")
         if sonuc.state_written:
@@ -165,6 +194,60 @@ def _run_steps(paths: AppPaths, args: argparse.Namespace, interactive: bool) -> 
             )
         print("Programı şimdi normal şekilde açabilirsiniz.")
     return EXIT_OK
+
+
+def _geri_yukle(
+    servis: Any,
+    yedek: Path,
+    paths: AppPaths,
+    *,
+    hesap: str | None,
+    parola: str | None,
+    anahtar: str | None,
+    interactive: bool,
+) -> Any:
+    """Çekirdeği çağırır; bozuk ekte durursa ikinci kez sorar. Vazgeçilirse None (modül başlığı)."""
+
+    def _cagir(*, ekler_olmadan_surdur: bool) -> Any:
+        return servis.restore_database(
+            yedek,
+            paths.db_path,
+            hesap=hesap,
+            password=parola,
+            recovery_key=anahtar,
+            ekler_olmadan_surdur=ekler_olmadan_surdur,
+        )
+
+    try:
+        try:
+            return _cagir(ekler_olmadan_surdur=False)
+        except servis.EkOnayiGerekli as durma:
+            if not interactive:
+                raise
+            print(f"\n{durma}")
+            _ekleri_yaz(durma.rapor)
+            if not _ikinci_onay():
+                return None
+            return _cagir(ekler_olmadan_surdur=True)
+    except (BackupCryptoError, servis.BackupRestoreError) as hata:
+        raise RestoreCliError(str(hata)) from hata
+
+
+def _kapsam_metni(yedek: Path) -> str | None:
+    """Yedeğin kapsamının metni, yalnız başlıktan; okunamıyorsa None: hatayı çekirdek söyler."""
+    try:
+        return KAPSAM_METINLERI[kap_basligini_oku(yedek).kapsam]
+    except (OSError, BackupCryptoError):
+        return None
+
+
+def _ekleri_yaz(rapor: Any) -> None:
+    """Eksik ve bozuk eklerin kişisiz listesi; yoksa bir şey yazılmaz."""
+    satirlar = rapor.metin_satirlari()
+    if satirlar:
+        print("Eksik ya da bozuk ekler:")
+    for satir in satirlar:
+        print(f"  {satir}")
 
 
 # ---------------------------------------------------------------------------
@@ -208,12 +291,12 @@ def _pause_before_exit(*, skip: bool) -> None:
         pass
 
 
-def _report_error(message: str, interactive: bool) -> None:
-    logger.error("Geri yükleme başarısız: %s", message)
+def _report_error(message: str, interactive: bool, *, gunluk: str | None = None) -> None:
+    logger.error("Geri yükleme başarısız: %s", message if gunluk is None else gunluk)
     if interactive:
         print(f"\nHATA: {message}")
     else:
-        show_error("Geri yükleme başarısız", message)
+        show_error("Geri yükleme başarısız", message, gunluk=gunluk)
 
 
 # ---------------------------------------------------------------------------
@@ -238,12 +321,17 @@ def _choose_backup(paths: AppPaths, args: argparse.Namespace, interactive: bool)
         aday = paths.backups / istenen
         if aday.is_file():
             return aday
-        raise RestoreCliError(f"Yedek dosyası bulunamadı: {istenen}")
+        raise RestoreCliError(
+            f"Yedek dosyası bulunamadı: {istenen}", gunluk="Yedek dosyası bulunamadı."
+        )
     if not interactive:
         raise RestoreCliError("Yedek dosyası belirtilmedi ve seçim için konsol açılamadı.")
     yedekler = list_backups(paths.backups)
     if not yedekler:
-        raise RestoreCliError(f"Yedek klasöründe geri yüklenebilir dosya yok: {paths.backups}")
+        raise RestoreCliError(
+            f"Yedek klasöründe geri yüklenebilir dosya yok: {paths.backups}",
+            gunluk="Yedek klasöründe geri yüklenebilir dosya yok.",
+        )
     return _pick_backup(yedekler)
 
 
@@ -323,12 +411,35 @@ def _ask_secret() -> tuple[str | None, str | None, str | None]:
     return None, None, anahtar
 
 
-def _confirm() -> bool:
+def _evet_mi(soru: str) -> bool:
     try:
-        yanit = input("Devam edilsin mi? [e/H] ").strip().lower()
+        yanit = input(soru).strip().lower()
     except EOFError:
         return False
     return yanit in {"e", "evet"}
+
+
+def _confirm() -> bool:
+    return _evet_mi("Devam edilsin mi? [e/H] ")
+
+
+def _ikinci_onay() -> bool:
+    return _evet_mi("Kayıtlar bu ekler olmadan geri yüklensin mi? [e/H] ")
+
+
+def _artiklari_temizle(paths: AppPaths) -> None:
+    """Yarım işlerin artıklarını siler (modül başlığı); hata geri yüklemeyi durdurmaz.
+
+    Veritabanına dokunmaz. Backend yoksa (masaüstü birim testi) sessiz.
+    """
+    try:
+        from apps.okul.masaustu_kanca import artiklari_temizle
+    except ImportError:
+        return
+    try:
+        artiklari_temizle(paths.db_path, paths.backups, paths.dosya_deposu)
+    except Exception as hata:  # noqa: BLE001 — temizlik kurtuluş yolunu kapatamaz
+        logger.warning("Yarım işlerin artıkları silinemedi (%s).", type(hata).__name__)
 
 
 def _load_service() -> Any:
