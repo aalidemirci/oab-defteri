@@ -148,8 +148,7 @@ alınma anını değil eski veritabanına son yazılan anı söyler (program yaz
 kapalı kaldıysa haftalar öncesini) — dosya zamanına bakılsa dün yapılan geri
 yüklemenin dönüş yolu ertesi rotasyonda silinirdi. Damga değişmez (taşıma, kopyalama,
 virüs tarayıcısı dosya zamanını değiştirebilir) ve `-wal`/`-shm` eşleri aynı damgayı
-taşıdığı için bir çift birlikte karar görür. `old_databases_before` aile iskeletinin saklama
-tetiğinden kalmadır, bugün çağıranı yoktur.
+taşıdığı için bir çift birlikte karar görür.
 """
 
 from __future__ import annotations
@@ -169,7 +168,6 @@ from desktop.backup import (
     OLD_DB_PREFIX,
     OLD_DB_STAMP_FORMAT,
     SQLITE_EKLERI,
-    old_database_stamp,
 )
 from desktop.backup_crypto import (
     DENEME_MAGIC,
@@ -464,29 +462,6 @@ def _yedekten_yukle(
         state_written=yazildi,
         dosya_raporu=rapor,
     )
-
-
-# ---------------------------------------------------------------------------
-# Kenara alınan veritabanının akıbeti (14 günlük rotasyon — tasarım §4.4.7)
-# ---------------------------------------------------------------------------
-def old_databases_before(data_dir: Path, cutoff: datetime) -> list[str]:
-    """Adındaki damga `cutoff`'tan ÖNCE olan önceki veritabanı dosyalarının ADLARI (SİLMEZ).
-
-    Eşler (`-wal`/`-shm`) aynı damgayı taşıdığı için veritabanıyla birlikte listelenir.
-    `cutoff` saat dilimli ise yerel saate çevrilir (damga yerel saattir). Ölçünün neden dosya
-    zamanı değil ad olduğu modül başlığındadır.
-    """
-    sinir = timezone.localtime(cutoff).replace(tzinfo=None) if timezone.is_aware(cutoff) else cutoff
-    try:
-        yollar = sorted(data_dir.glob(f"{OLD_DB_PREFIX}-*")) if data_dir.is_dir() else []
-    except OSError:
-        return []
-    adlar: list[str] = []
-    for yol in yollar:
-        damga = old_database_stamp(yol.name)
-        if damga is not None and damga < sinir and yol.is_file():
-            adlar.append(yol.name)
-    return adlar
 
 
 # ---------------------------------------------------------------------------

@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import ast
 import json
+import tempfile
 import time
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
@@ -313,7 +314,10 @@ def _sifreli_yedek(monkeypatch: pytest.MonkeyPatch) -> Istek:
         "goruntu_ve_manifesto",
         lambda _yol: (b"SQLite format 3\0", BOS_YEREL_MANIFESTO),
     )
-    return Istek("/api/v1/backups/encrypted/", None, _turler("YEDEK"))
+    # Seçilen yer program dizinlerinin dışındadır: pytest'in temizlediği taban geçici dizin.
+    usb = tempfile.mkdtemp(prefix="od-usb-", dir=app_password.state_path().parent.parent)
+    hedef = Path(usb) / "oab-defteri-yedek-2026-11-06-101530.odbak"
+    return Istek("/api/v1/backups/encrypted/", {"hedef": str(hedef)}, _turler("YEDEK"))
 
 
 def _sahipsiz_sarmal(_: pytest.MonkeyPatch) -> Istek:
@@ -537,6 +541,8 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     ("account-unsuspend", "POST"): Senaryo(_askidan_cikar),
     ("account-reset-password", "POST"): Senaryo(_parolayi_sifirla),
     ("account-handover-slip", "POST"): Senaryo(_teslim_pusulasi),
+    # Yedek Raporu (plan F1b-3): dosya saklanmaz, tek izi `BASIM` satırıdır.
+    ("backup-report", "POST"): _sabit("/api/v1/backups/report/", None, "BASIM"),
 }
 
 #: Plan F1b-1'in adıyla muaf tuttuğu yollar: kişi silme ve birleştirme 5. adımda yeniden
@@ -848,7 +854,7 @@ ORM_DISI_CAGRILAR: dict[tuple[str, str, str], str] = {
     ("desktop/integrity.py", "check_database_integrity", "connection.execute"): (
         "`PRAGMA integrity_check`: açılıştaki bütünlük denetimi, salt okur."
     ),
-    ("desktop/window.py", "WindowController.show", "window.restore"): (
+    ("desktop/window.py", "WindowController._one_getir", "window.restore"): (
         "Pencereyi simge durumundan geri getirir (pywebview); veritabanına dokunmaz."
     ),
 }

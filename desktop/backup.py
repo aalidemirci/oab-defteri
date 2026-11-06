@@ -111,6 +111,9 @@ OLD_DB_PREFIX = "db-onceki"
 OLD_DB_STAMP_FORMAT = "%Y-%m-%d-%H%M%S"
 #: SQLite'ın yan dosyaları; kenara alınan veritabanının adıyla yanına taşınır.
 SQLITE_EKLERI = ("-wal", "-shm")
+#: `serialize` olmayan SQLite'ta görüntünün geçici dizini. Düz baytlar taşır: süreç o anda ölürse
+#: açılış temizliği adından tanıyıp siler (`masaustu_kanca.artiklari_temizle`).
+GORUNTU_DIZINI_ONEKI: Final = ".yedek-goruntusu-"
 
 DEFAULT_KEEP_DAYS = 14
 DEFAULT_KEEP_PRE_MIGRATE = 5
@@ -230,16 +233,18 @@ def goruntu_ve_manifesto(source_path: Path) -> tuple[bytes, Manifesto]:
     """WAL dahil tutarlı SQLite görüntüsü ve o görüntünün manifestosu (mümkünse RAM'de).
 
     `serialize` yoksa görüntü, veri dizini altında 0700 izinli geçici bir dizine
-    `Connection.backup()` ile alınır; manifesto dosya silinmeden okunur, baytlar okunur okunmaz
-    silinir. Şifreli kipte düz baytların diske bu KISA temasını, Pardus 21 uyumu için bilinçli
-    kabul ediyoruz: kalıcı düz kopya yine yazılmaz.
+    (`GORUNTU_DIZINI_ONEKI`) `Connection.backup()` ile alınır; manifesto dosya silinmeden okunur,
+    baytlar okunur okunmaz silinir. Şifreli kipte düz baytların diske bu KISA temasını, Pardus 21
+    uyumu için bilinçli kabul ediyoruz: kalıcı düz kopya yine yazılmaz.
     """
     with closing(sqlite3.connect(source_path)) as source:
         if _HAS_SERIALIZE:
             with closing(sqlite3.connect(":memory:")) as target:
                 source.backup(target)
                 return bytes(target.serialize()), _goruntunun_manifestosu(target)
-        with tempfile.TemporaryDirectory(dir=source_path.parent) as tmp_dir:
+        with tempfile.TemporaryDirectory(
+            prefix=GORUNTU_DIZINI_ONEKI, dir=source_path.parent
+        ) as tmp_dir:
             snapshot_path = Path(tmp_dir) / "goruntu.sqlite3"
             with closing(sqlite3.connect(snapshot_path)) as target:
                 source.backup(target)
@@ -553,7 +558,7 @@ def _dizin_adlari(dizin: Path) -> list[str]:
         return []
 
 
-def _adin_gunu(desen: re.Pattern[str], ad: str) -> date | None:
+def adin_gunu(desen: re.Pattern[str], ad: str) -> date | None:
     """Adı desene uyuyorsa addaki gün; uymuyorsa ya da gün geçersizse None."""
     eslesme = desen.fullmatch(ad)
     if eslesme is None:
@@ -588,7 +593,7 @@ def rotate_backups(
         gunler = [
             (gun, ad)
             for ad in (veri_adlari if kural.veri_dizininde else yedek_adlari)
-            if (gun := _adin_gunu(kural.desen, ad)) is not None
+            if (gun := adin_gunu(kural.desen, ad)) is not None
         ]
         if kural.adetle:
             # En yeni tarih başta; aynı gün birden fazlaysa ad sırası belirleyicidir.
@@ -643,7 +648,7 @@ def eski_yetimleri_sil(
     sinir = (today or date.today()) - timedelta(days=keep_days)
     silinen = kalan = 0
     for ad in _dizin_adlari(yetim_dizini):
-        gun = _adin_gunu(_YETIM_GUNU, ad)
+        gun = adin_gunu(_YETIM_GUNU, ad)
         if gun is not None and gun < sinir:
             bu_silinen, bu_kalan = _yetim_gununu_sil(yetim_dizini / ad)
             silinen += bu_silinen

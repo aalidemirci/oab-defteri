@@ -24,6 +24,13 @@ inerdi. `tampon_esigi` iki tamponu da yükleme sınırına çeker (`TAMPON_PAYI`
 yine geçici dosyaya iner: sunucu uca göre ayırmaz, gövde bitmeden uygulamayı çağırmaz; şifreli
 yedek için bu sorun değildir, sınırı aşan düz dosya için kalan risktir (plan F1b-3 "Dosya
 deposu"). `wsgi.file_wrapper` yolundan giden yanıt (`FileResponse`) bu tampona hiç girmez.
+
+Gövde üst sınırı açıkça verilir (`AZAMI_ISTEK_GOVDESI`; kullanıcı kararı 06.11.2026 "1 GB üstü
+şifreli yedek yükleme kutusundan açılır"): waitress'in varsayılanı 1 GiB'tır, tam yedeği uca varmadan
+düz metin 413 ile keserdi. Sunucu uca göre ayırmadığı için değer bütün uçlara uygulanır; öteki uçlarda
+çok parçalı gövdenin sınırı Django işleyicisindedir. JSON ve form gövdesinde Django sınırı yoktur, üst
+sınır bu değerdir; ön yüz böyle gövde göndermez, ekranı atlayan istek için kalan risktir. Bu sınır
+tampon eşiğini değiştirmez.
 """
 
 from __future__ import annotations
@@ -50,6 +57,8 @@ HEALTH_PATH = "/api/v1/setup/status/"
 #: çok parçalı zarfla sınırı az aşan gövdesi reddedilmeden diske inmesin, gövdeyle aynı tampona
 #: yazılan yanıt başlıkları da eşiği aşırmasın diyedir.
 TAMPON_PAYI = 64 * 1024
+#: Waitress'in kabul ettiği en büyük istek gövdesi (bayt; modül başlığı): 8 GiB.
+AZAMI_ISTEK_GOVDESI = 8 * 1024 * 1024 * 1024
 
 
 class WSGIServerLike(Protocol):
@@ -133,6 +142,7 @@ class BackgroundServer:
                 threads=self._threads,
                 ident=None,  # `Server:` başlığında sürüm sızdırma
                 clear_untrusted_proxy_headers=True,
+                max_request_body_size=AZAMI_ISTEK_GOVDESI,
                 **tamponlar,
             )
         except Exception as exc:  # noqa: BLE001 — her hata aynı Türkçe mesaja çıkar

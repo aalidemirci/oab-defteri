@@ -259,6 +259,8 @@ urlpatterns = [
     # Yedekten geri yükleme (Güvenlik sekmesi — çalışan program içinden)
     path("backups/", views.BackupListView.as_view(), name="backup-list"),
     path("backups/restore/", views.BackupRestoreView.as_view(), name="backup-restore"),
+    # Yedek Raporu (plan F1b-3): yalnız PDF, saklanmaz; izi `BASIM` satırıdır.
+    path("backups/report/", views_yedek.YedekRaporuView.as_view(), name="backup-report"),
     # GitHub Release tabanlı uygulama güncellemesi (tasarım TK4)
     path("updates/latest/", views.UpdateStatusView.as_view(), name="update-latest"),
     path(

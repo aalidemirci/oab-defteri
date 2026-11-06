@@ -32,8 +32,8 @@ sanılamaz.
 MANİFESTO: kanonik UTF-8 JSON (`Manifesto`): `surum`, `kapsam`, `dosyalar: [{ad, boyut, sha256,
 eksik?}]`; kapsamı başlıktaki baytla eşit olmalıdır. `boyut` ve `sha256` eklerin AÇIK
 içeriğinindir (`shared.dosya_sifreleme` "ÖZET VE BOY"). `eksik` yalnız tam yedekte, diskte
-düzenli dosya olarak ve beklenen boyda bulunmayan ya da açılamayan ek içindir (`_diskteki_hali`):
-o ek dosya bölümüne girmez. Geri yükleme veritabanını ve manifestoyu AYRI alır (`YedekIcerigi`): yetki denetimine ve takasa yalnız
+düzenli dosya olarak ve beklenen boyda bulunmayan ya da açılamayan ek (`_diskteki_hali`) ve ön
+okumada okunamayan ya da tutmayan ek (`encrypted_backup`) içindir: o ek dosya bölümüne girmez. Geri yükleme veritabanını ve manifestoyu AYRI alır (`YedekIcerigi`): yetki denetimine ve takasa yalnız
 veritabanı baytları gider.
 
 DOSYA BÖLÜMÜ (yalnız tam yedek): manifesto sırasıyla, `eksik` olmayan her ek için
@@ -654,10 +654,13 @@ def _diskteki_hali(girdi: ManifestoGirdisi, store_dir: Path) -> ManifestoGirdisi
     Karar manifesto mühürlenmeden burada verilir, sonra `eksik` yazılamaz. Boyu tutmayan dosyayı
     taşımak tam yedeği kap düzeyinde bozardı: okuyucu boyu manifestoyla karşılaştırır ve bütün
     yedeği reddeder. Açılamayan dosya da yedeği düşürmez (yedeksiz kalmak eksik ekli yedekten
-    ağırdır; plan "Kap ve manifesto"). Boyu tutan bozuk dosya taşınır, geri yükleme onu girdi
-    düzeyinde yakalar.
+    ağırdır; plan "Kap ve manifesto"). Çağıranın `eksik` verdiği ek öyle kalır: bu katman DEK'i
+    tanımaz, ekin baştan sona okunmasını şifreli yedek servisi yazımdan önce yapar (kullanıcı kararı
+    05.11.2026 "Şifreli yedek yazılmadan önce her ek bir kez okunur"). Servis elindeki DEK'le ekin
+    içeriğini de sınar (kullanıcı kararı 06.11.2026; `encrypted_backup` başlığı, 4. adım). Bu
+    sınamadan geçmemiş boyu tutan bozuk dosya taşınır, geri yükleme onu girdi düzeyinde yakalar.
     """
-    eksik = _acilan_boy(store_dir / girdi.ad) != girdi.sifreli_boy
+    eksik = girdi.eksik or _acilan_boy(store_dir / girdi.ad) != girdi.sifreli_boy
     return ManifestoGirdisi(girdi.ad, girdi.boyut, girdi.sha256, eksik=eksik)
 
 

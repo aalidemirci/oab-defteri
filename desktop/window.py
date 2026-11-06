@@ -13,13 +13,33 @@ modül yine de import edilebilir ve testler koşar.
 
 **Çarpı programı kapatır, onay sorulmaz** (T6, §4.5; `WindowController`).
 pywebview 5.3.2'nin `closing` olayı pencere motorunun iş parçacığında ESZAMANLI
-koşar (`Event(window, should_lock=True)`) ve işleyicilerden biri `False`
-döndürürse kapanma iptal edilir (winforms `on_closing` → `args.Cancel`, qt
-`closeEvent` → `event.ignore()`). OAB'de tepsi yoktur: işleyici kapanmayı iptal
-etmez, pencere kapanır, `webview.start` döner ve düzenli kapanış sürer
-(`desktop/main.py`). Uzun yazma işi sürerken kapanışı bir kez erteleme F1b'de
-gelir (§4.2). Kapanma hiç iptal edilmediği için Windows oturum kapanışında
-iptali geri alan .NET işleyicisine de gerek kalmadı.
+koşar (`Event(window, should_lock=True)`: `event.py` işleyiciyi çağıranda koşturur) ve
+işleyicilerden biri `False` döndürürse kapanma iptal edilir (winforms `on_closing` →
+`args.Cancel`, qt `closeEvent` → `event.ignore()`). OAB'de tepsi yoktur: uzun yazma işi
+yokken işleyici kapanmayı iptal etmez, pencere kapanır, `webview.start` döner ve düzenli
+kapanış sürer (`desktop/main.py`).
+
+**Uzun iş sürerken kapanış bir kez ertelenir** (§4.2, TK5; plan F1b-3 "Uzun iş, çarpı, temiz
+kapanış"). `on_closing` iş yapmaz: sayaç sıfır değilse `False` döner ve yardımcı iş parçacığını
+başlatır. İşleyici pencere iş parçacığında koştuğu için içinden `evaluate_js` ya da `destroy`
+çağrılmaz, pencere kilitlenirdi. Yardımcı iş parçacığı en çok `KAPANIS_BEKLEME_SN` bekler, sonra
+kapanışı bir kez yapar (`destroy`'un tetiklediği `closing` geçer). Pencereyi gösterme ve
+`od:kapanis-bekliyor` olayı ayrı bir iş parçacığındadır: `evaluate_js` sonucu süresiz bekleyebilir,
+60 sn sınırını aşmasın. Bekleme sırasında gelen kapatma istekleri (ikinci çarpı, Çık, kurucunun
+kapatma olayı, kanal, SIGTERM) beklemeye katılır. Windows oturum kapanışı da aynı yoldan geçer:
+`closing` olayı nedeni taşımaz, kapanış bir kez, en çok 60 sn ertelenir (plan "Sorulmadı, tasarım
+cevaplıyor"); iptali geri alan .NET işleyicisi yoktur. Sayaç okunamazsa kapanış beklemez (T6); temiz
+kapanış işaretini kendi okuması belirler (`clean_shutdown.write_marker_if_idle`).
+
+**Kaydetme yeri soran köprü** (`PencereKoprusu`; kullanıcı kararı 04.11.2026 "Şifreli yedeği
+program kaydeder"). Ön yüz `window.pywebview.api.kaydetme_yeri_sor(ad)` ile sorar, dönen yolu
+isteğin içinde sunucuya verir: masaüstü sunucuyu doğrudan çağırmaz (§4.1). pywebview 5.3.2'de js_api
+çağrısı her seferinde yeni bir iş parçacığında koşar (`util.js_bridge_call`): pencere iş parçacığı
+bekletilmez, dönüş sonrası `evaluate_js` ile ön yüze gider. `create_file_dialog`'un kaydetme
+dönüşü iki platformda ayrıdır: WinForms düz metin, Qt tek öğeli demet verir, ikisi de iptalde
+`None`'dır (`_secilen_yol` tek biçime indirir; metni dizi sanmak yolun ilk harfini verirdi). Qt
+kolu tür süzgecini kaydetmede uygulamaz, uzantı eklemez; uzantıyı sunucu denetler. Seçilen yol
+günlüğe yazılmaz: Windows yolu hesap adını taşır.
 """
 
 from __future__ import annotations
@@ -27,9 +47,10 @@ from __future__ import annotations
 import logging
 import sys
 import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Final, Protocol
 
 from desktop.errors import WebViewUnavailableError
 from desktop.paths import resource_root
@@ -62,6 +83,30 @@ _WEBVIEW2_HINT = (
     "WebView2'yi kurun, sonra programı yeniden açın. Kurulum yetkiniz yoksa okul bilişim "
     "sorumlusundan 'WebView2 Runtime' kurulumunu isteyin."
 )
+#: Kaydetme penceresinin tür süzgeci. pywebview açıklamada yalnız harf, rakam ve boşluk kabul eder
+#: (`util.parse_file_type`); uymayan süzgeç pencereyi açmadan `ValueError` verirdi.
+KAYDETME_SUZGECI = ("OAB Defteri yedeği (*.odbak)",)
+#: pywebview'ın kendi metinleri (`webview.start(localization=...)`). Qt kolu kaydetme penceresinin
+#: başlığını buradan alır (`qt.py`); Windows'ta başlığı işletim sistemi yazar.
+PENCERE_METINLERI: Final = {"global.saveFile": "Farklı kaydet"}
+#: Uzun iş sürerken kapanışın en çok bekleyeceği süre (tasarım §4.2, TK5).
+KAPANIS_BEKLEME_SN: Final = 60.0
+#: Süre enjekte edilen saatle ölçülür; sayaç bu aralıklarla sorulur (iş bitince hemen uyanır).
+_BEKLEME_DILIMI_SN: Final = 1.0
+#: Ön yüzün "İşlem bitiyor, program kendiliğinden kapanacak" penceresini açtıran DOM olayı.
+KAPANIS_BEKLIYOR_OLAYI: Final = "od:kapanis-bekliyor"
+_KAPANIS_BEKLIYOR_BETIGI: Final = (
+    f"window.dispatchEvent(new CustomEvent('{KAPANIS_BEKLIYOR_OLAYI}'))"
+)
+
+
+class UzunIsBeklenebilir(Protocol):
+    """Kapanışın kullandığı sayaç yüzeyi (`shared.bakim.UzunIsSayaci`; testte sahtesi verilir)."""
+
+    @property
+    def sayi(self) -> int: ...
+
+    def sifirlanmasini_bekle(self, sure: float) -> bool: ...
 
 
 def _read_registry_value(hive: str, subkey: str, value_name: str) -> str | None:
@@ -113,7 +158,7 @@ def require_window_runtime(
         raise WebViewUnavailableError(_WEBVIEW2_MESSAGE, hint=_WEBVIEW2_HINT)
 
 
-def _import_webview() -> Any:
+def import_webview() -> Any:
     import webview
 
     return webview
@@ -264,6 +309,49 @@ class TitleBarApi:
             return False
 
 
+def _secilen_yol(sonuc: object) -> str:
+    """`create_file_dialog`'un dönüşünü tek biçime indirir: seçilen yol, iptalde boş metin."""
+    if sonuc is None:
+        return ""
+    if isinstance(sonuc, list | tuple):
+        return str(sonuc[0]) if sonuc else ""
+    return str(sonuc)
+
+
+class PencereKoprusu(TitleBarApi):
+    """Pencerenin `js_api`'si: başlık çubuğu teması ve kaydetme yeri (modül başlığı).
+
+    Köprünün varlığı ön yüzün yetenek işaretidir: `kaydetme_yeri_sor` yoksa (geliştirme kipi,
+    tarayıcı) "Şifreli yedeği kaydet" düğmesi kapalıdır. `_webview`'in adı `_` ile başlar: pywebview
+    `js_api`'nin açık özniteliklerini dolaşıp ön yüze açar.
+    """
+
+    def __init__(self, *, platform: str, webview: Any) -> None:
+        super().__init__(platform=platform)
+        self._webview = webview
+
+    def kaydetme_yeri_sor(self, onerilen_ad: str = "") -> str:
+        """Kaydetme penceresini açar; seçilen yolu döndürür.
+
+        İptalde, pencere yoksa ya da pencere açılamazsa boş metin döner, hata ön yüze geçmez:
+        boş dönüşte ön yüz istek göndermez, hiçbir şey yazılmaz.
+        """
+        window = self._window
+        if window is None:
+            return ""
+        try:
+            sonuc = window.create_file_dialog(
+                self._webview.SAVE_DIALOG,
+                directory=str(Path.home()),
+                save_filename=Path(str(onerilen_ad)).name,
+                file_types=KAYDETME_SUZGECI,
+            )
+        except Exception as hata:  # noqa: BLE001 — köprü hatası ön yüze ham geçmesin
+            logger.warning("Kaydetme penceresi açılamadı (%s).", type(hata).__name__)
+            return ""
+        return _secilen_yol(sonuc)
+
+
 class WindowController:
     """Pencerenin göster / çık davranışı (T6, §4.2, §4.5).
 
@@ -275,15 +363,30 @@ class WindowController:
 
     pywebview'ın `shown` olayı bazı arka uçlarda geç gelebilir; sayfa yüklenince
     gelen `loaded` olayı da pencereyi "hazır" sayar (göster/kapat komutları işler).
+
+    `sayac` uzun iş sayacıdır (`desktop.main.uzun_is_sayaci`); verilmezse beklenecek iş yoktur.
+    `bekleme_sn` ve `saat` kapanış beklemesinin süresi ve saatidir (modül başlığı).
     """
 
-    def __init__(self, *, platform: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        platform: str | None = None,
+        sayac: UzunIsBeklenebilir | None = None,
+        bekleme_sn: float = KAPANIS_BEKLEME_SN,
+        saat: Callable[[], float] = time.monotonic,
+    ) -> None:
         self._platform = sys.platform if platform is None else platform
+        self._sayac = sayac
+        self._bekleme_sn = bekleme_sn
+        self._saat = saat
         self._lock = threading.Lock()
         self._window: Any | None = None
         self._shown = False
         self._quitting = False
         self._destroy_requested = False
+        # Kapanış uzun işi bekliyor: kapatma istekleri bu beklemeye katılır.
+        self._bekliyor = False
         self._minimized = False
         self._maximized = False
 
@@ -309,14 +412,24 @@ class WindowController:
     # ------------------------------------------------------------ pywebview olayları
 
     def on_closing(self) -> bool:
-        """Çarpı (ya da işletim sisteminin kapatması): program kapanır, iptal YOK (T6).
+        """Çarpı (ya da işletim sisteminin kapatması): program kapanır, onay sorulmaz (T6).
 
-        Pencere zaten kapanmakta olduğu için ikinci bir `destroy` çağrılmaz.
+        Pencere iş parçacığında eşzamanlı koşar, iş yapmaz (modül başlığı). Uzun iş sürüyorsa
+        kapanmayı iptal eder, yardımcı iş parçacığı kapanışı bir kez yapar; ikinci çarpı
+        beklemeye katılır. Pencere zaten kapanmakta olduğu için ikinci bir `destroy` çağrılmaz.
         """
         with self._lock:
+            if self._destroy_requested:
+                return True
             ilk = not self._quitting
             self._quitting = True
-            self._destroy_requested = True
+            if self._bekliyor:
+                return False
+            bekle = self._bekleme_kararini_ver()
+            window = self._window
+        if bekle:
+            self._beklemeyi_baslat(window)
+            return False
         if ilk:
             logger.info("Pencere kapatıldı; program düzenli kapanıyor.")
         return True
@@ -327,7 +440,7 @@ class WindowController:
             window = self._window
             pending_quit = self._quitting
         if window is not None and pending_quit:
-            self._destroy(window)
+            self._kapat_ya_da_bekle(window)
 
     def _on_loaded(self) -> None:
         """Sayfa yüklendi: gizli başlatılan pencere de artık komut alabilir."""
@@ -338,7 +451,7 @@ class WindowController:
             window = self._window
             pending_quit = self._quitting
         if window is not None and pending_quit:
-            self._destroy(window)
+            self._kapat_ya_da_bekle(window)
 
     def _on_minimized(self) -> None:
         with self._lock:
@@ -359,8 +472,25 @@ class WindowController:
         with self._lock:
             window = self._window if self._shown and not self._quitting else None
             minimized, maximized = self._minimized, self._maximized
-        if window is None:
-            return
+        if window is not None:
+            self._one_getir(window, minimized=minimized, maximized=maximized)
+
+    def request_quit(self) -> None:
+        """Çık (arayüz, kurucu, SIGTERM): pencereyi kapatır; `webview.start` döner, çıkış sürer.
+
+        Pencere henüz gösterilmediyse (komut açılış sırasında geldi) kapanma
+        `shown` olayında yapılır; `open_window` başlatmadan önce de bakar. Uzun iş sürüyorsa
+        kapanış onun bitmesini bekler; SIGTERM köprüsü Qt iş parçacığından çağırır, burası
+        beklemez.
+        """
+        with self._lock:
+            self._quitting = True
+            window = self._window if self._shown else None
+        logger.info("Çıkış istendi; program düzenli kapanıyor.")
+        if window is not None:
+            self._kapat_ya_da_bekle(window)
+
+    def _one_getir(self, window: Any, *, minimized: bool, maximized: bool) -> None:
         try:
             window.show()
             if minimized:
@@ -371,24 +501,73 @@ class WindowController:
         except Exception:  # noqa: BLE001 — kanal komutu programı düşürmesin
             logger.warning("Pencere gösterilemedi.", exc_info=True)
 
-    def request_quit(self) -> None:
-        """Çık (arayüz, kurucu, SIGTERM): pencereyi kapatır; `webview.start` döner, çıkış sürer.
+    def _bekleme_kararini_ver(self) -> bool:
+        """Kilit altında: kapanış bekleyecekse bekleme durumuna, beklemeyecekse kapanmaya geçer.
 
-        Pencere henüz gösterilmediyse (komut açılış sırasında geldi) kapanma
-        `shown` olayında yapılır; `open_window` başlatmadan önce de bakar.
+        Sayaç okunamazsa beklenmez (modül başlığı); okuma kısadır, pywebview'a gitmez.
         """
-        with self._lock:
-            self._quitting = True
-            window = self._window if self._shown else None
-        logger.info("Çıkış istendi; program düzenli kapanıyor.")
-        if window is not None:
-            self._destroy(window)
+        try:
+            suruyor = self._sayac is not None and self._sayac.sayi != 0
+        except Exception:  # noqa: BLE001 — kapanış sayaç yüzünden takılmasın (T6)
+            logger.warning("Uzun iş sayacı okunamadı; kapanış beklemiyor.", exc_info=True)
+            suruyor = False
+        self._bekliyor = suruyor
+        self._destroy_requested = not suruyor
+        return suruyor
 
-    def _destroy(self, window: Any) -> None:
+    def _kapat_ya_da_bekle(self, window: Any) -> None:
+        """Kapanışın tek kapısı: uzun iş sürüyorsa bekler, yoksa kapatır; bir kez yapılır."""
         with self._lock:
-            if self._destroy_requested:
+            if self._destroy_requested or self._bekliyor:
                 return
+            bekle = self._bekleme_kararini_ver()
+        if bekle:
+            self._beklemeyi_baslat(window)
+        else:
+            self._pencereyi_kapat(window)
+
+    def _beklemeyi_baslat(self, window: Any) -> None:
+        logger.info("Uzun iş sürüyor; kapanış işin bitmesini bekliyor.")
+        threading.Thread(
+            target=self._kapanisi_bekle, args=(window,), name="od-kapanis", daemon=True
+        ).start()
+
+    def _kapanisi_bekle(self, window: Any) -> None:
+        """Yardımcı iş parçacığı: iş bitince ya da süre dolunca kapanışı yapar (modül başlığı)."""
+        threading.Thread(
+            target=self._bekledigini_bildir, args=(window,), name="od-kapanis-bildirim", daemon=True
+        ).start()
+        try:
+            if not self._is_bitene_dek_bekle():
+                logger.warning(
+                    "Uzun iş %d sn içinde bitmedi; program kapanıyor.", int(self._bekleme_sn)
+                )
+        except Exception:  # noqa: BLE001 — kapanış sayaç yüzünden takılmasın (T6)
+            logger.exception("Uzun iş beklenemedi; program kapanıyor.")
+        with self._lock:
             self._destroy_requested = True
+        self._pencereyi_kapat(window)
+
+    def _is_bitene_dek_bekle(self) -> bool:
+        if self._sayac is None:
+            return True
+        son = self._saat() + self._bekleme_sn
+        while (kalan := son - self._saat()) > 0:
+            if self._sayac.sifirlanmasini_bekle(min(kalan, _BEKLEME_DILIMI_SN)):
+                return True
+        return False
+
+    def _bekledigini_bildir(self, window: Any) -> None:
+        """Pencereyi gösterir, ön yüze DOM olayını yollar; hata beklemeyi bozmaz."""
+        with self._lock:
+            minimized, maximized = self._minimized, self._maximized
+        self._one_getir(window, minimized=minimized, maximized=maximized)
+        try:
+            window.evaluate_js(_KAPANIS_BEKLIYOR_BETIGI)
+        except Exception:  # noqa: BLE001 — ileti gösterilemese de kapanış sürer
+            logger.warning("Kapanış bekleme iletisi ön yüze gönderilemedi.", exc_info=True)
+
+    def _pencereyi_kapat(self, window: Any) -> None:
         try:
             window.destroy()
         except Exception:  # noqa: BLE001 — çıkış yolu hata yüzünden takılmasın
@@ -414,7 +593,7 @@ def open_window(
     module = webview
     if module is None:
         try:
-            module = (importer or _import_webview)()
+            module = (importer or import_webview)()
         except ImportError as exc:
             raise WebViewUnavailableError(
                 "Pencere açılamadı: pencere bileşeni (pywebview) yüklü değil.",
@@ -428,7 +607,7 @@ def open_window(
     # anahtarı için `<a download>` kullandığından bu izin pencere oluşturulmadan
     # önce açılmalıdır; aksi hâlde tıklama hata vermeden sessizce yutulur.
     module.settings["ALLOW_DOWNLOADS"] = True
-    titlebar_api = TitleBarApi(platform=system)
+    kopru = PencereKoprusu(platform=system, webview=module)
     window = module.create_window(
         title,
         url,
@@ -436,9 +615,9 @@ def open_window(
         height=WINDOW_HEIGHT,
         min_size=WINDOW_MIN_SIZE,
         text_select=True,
-        js_api=titlebar_api,
+        js_api=kopru,
     )
-    titlebar_api.bind_window(window)
+    kopru.bind_window(window)
     if controller is not None:
         controller.bind(window)
         if controller.quitting:
@@ -447,6 +626,7 @@ def open_window(
     logger.info("Pencere açılıyor (%s).", gui_backend_for(system))
     module.start(
         gui=gui_backend_for(system),
+        localization=dict(PENCERE_METINLERI),
         private_mode=False,  # oturum çerezi + taslaklar pencere ömrü boyunca kalsın
         storage_path=str(storage_path),
         debug=False,

@@ -578,6 +578,86 @@ def test_basarisiz_geri_yuklemede_bakim_kapisi_yeniden_acilir(
     assert kapi.bakimda is False  # hedefe dokunulmadı; gün işleri yeniden koşabilir
 
 
+def test_ikinci_geri_yukleme_cekirdege_ve_kapiya_dokunmadan_duser(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ortam: dict[str, Path]
+) -> None:
+    """Kapı kapalıyken `bakima_al` yine `True` döner: yanlış parolalı ikinci istek çekirdeğe girip
+    düşseydi kapıyı birincisi takastayken açardı, şifreli yedek de o sırada başlayabilirdi."""
+    kapi = bakim.BakimKapisi()
+    monkeypatch.setattr(bakim, "KAPI", kapi)
+    ortam["db"].write_bytes(_sqlite_baytlari(tmp_path, "eski"))
+    (ortam["yedekler"] / "gunluk.odbak").write_bytes(
+        _sifreli_kapsayici(_sqlite_baytlari(tmp_path, "yeni"))[0]
+    )
+    cekirdek: list[Any] = []
+    ikinci: list[str] = []
+    gun_isi: list[bool] = []
+    asil = backup_restore.restore_database
+
+    def izleyen(*args: Any, **kwargs: Any) -> Any:
+        cekirdek.append(args)
+        with pytest.raises(live_restore.LiveRestoreError) as hata:
+            live_restore.restore_and_require_restart(
+                name="gunluk.odbak", password="Yanlis-Parola-9"
+            )
+        ikinci.append(str(hata.value))
+        with kapi.is_() as izin:  # birincisi hâlâ takasta: gün işi başlamaz
+            gun_isi.append(izin)
+        return asil(*args, **kwargs)
+
+    monkeypatch.setattr(backup_restore, "restore_database", izleyen)
+
+    live_restore.restore_and_require_restart(name="gunluk.odbak", password=PAROLA)
+
+    assert ikinci == [live_restore.BAKIM_SURUYOR]
+    assert len(cekirdek) == 1
+    assert gun_isi == [False]
+    assert kapi.bakimda is True  # başarıda program yeniden açılana dek kapalı
+    assert restart_gate.restart_required() is True
+    assert bakim.UZUN_ISLER.sayi == 0
+
+
+def test_dusen_geri_yukleme_kilidi_birakir_yeniden_denenebilir(
+    tmp_path: Path, ortam: dict[str, Path]
+) -> None:
+    ortam["db"].write_bytes(_sqlite_baytlari(tmp_path, "eski"))
+    yeni = _sqlite_baytlari(tmp_path, "yeni")
+    (ortam["yedekler"] / "gunluk.odbak").write_bytes(_sifreli_kapsayici(yeni)[0])
+
+    with pytest.raises(ValueError, match="açılamadı"):
+        live_restore.restore_and_require_restart(name="gunluk.odbak", password="Yanlis-Parola-9")
+    assert not live_restore._TEK_GERI_YUKLEME.locked()
+
+    live_restore.restore_and_require_restart(name="gunluk.odbak", password=PAROLA)
+
+    assert not live_restore._TEK_GERI_YUKLEME.locked()
+    assert ortam["db"].read_bytes() == yeni
+
+
+def test_birincisi_bitince_kapiyi_gecmis_ikinci_istek_cekirdege_girmez(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ortam: dict[str, Path]
+) -> None:
+    """Orta katman yalnız girişte bakar: birincisi bitmeden geçmiş istek kilidi boş bulur. Çekirdeğe
+    girip düşseydi bakım kapısını başarılı geri yüklemeden sonra açardı, gün işleri koşabilirdi."""
+    kapi = bakim.BakimKapisi()
+    monkeypatch.setattr(bakim, "KAPI", kapi)
+    ortam["db"].write_bytes(_sqlite_baytlari(tmp_path, "eski"))
+    yeni = _sqlite_baytlari(tmp_path, "yeni")
+    (ortam["yedekler"] / "gunluk.odbak").write_bytes(_sifreli_kapsayici(yeni)[0])
+    live_restore.restore_and_require_restart(name="gunluk.odbak", password=PAROLA)
+    cekirdek: list[Any] = []
+    monkeypatch.setattr(backup_restore, "restore_database", lambda *a, **_k: cekirdek.append(a))
+
+    with pytest.raises(live_restore.LiveRestoreError) as hata:
+        live_restore.restore_and_require_restart(name="gunluk.odbak", recovery_key="herhangi")
+
+    assert str(hata.value) == live_restore.BAKIM_SURUYOR
+    assert cekirdek == []
+    assert kapi.bakimda is True
+    assert restart_gate.restart_required() is True
+    assert not live_restore._TEK_GERI_YUKLEME.locked()
+
+
 def test_yedek_adi_gecersizse_bakim_kapisina_dokunulmaz(
     monkeypatch: pytest.MonkeyPatch, ortam: dict[str, Path]
 ) -> None:

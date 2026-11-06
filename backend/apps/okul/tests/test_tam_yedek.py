@@ -2,9 +2,9 @@
 
 Kullanıcı kararları (04.11.2026 "Bozuk ekte geri yükleme durur, ikinci onayla sürer", "Eksik ve bozuk
 ekler kişisiz bilgiyle listelenir"; 05.11.2026 "Yedek alınırken bozuk olan ek eksik sayılır"). Yazıcı
-`tam_yedek_yaz`'dır: tam yedek üreten üretim yolu sonraki alt commit'tedir (d). Çekirdek gibi bu
-testler ORM'e dokunmaz; ilk test gerçek şemada, gerçek depo servisiyle koşar. Ekler ve adlar
-uydurmadır (`geri_yukleme_ortak`).
+`tam_yedek_yaz`'dır, programdaki çağıranı `encrypted_backup`'tır. Çekirdek gibi bu testler ORM'e
+dokunmaz; ilk testler gerçek şemada, gerçek depo servisiyle koşar. Ekler ve adlar uydurmadır
+(`geri_yukleme_ortak`).
 
 "eksik": manifestoda `eksik` işaretli ya da yerel yedekte hiçbir yerde bulunamayan ek; durdurmaz.
 "bozuk": tam yedekte özeti tutmayan girdi, yerel yedekte depoda ya da yetimde duran ama tutmayan ek;
@@ -37,6 +37,7 @@ from desktop.backup_crypto import (
     Manifesto,
     ManifestoGirdisi,
     decrypt_bytes,
+    kap_basligini_oku,
     private_key_from_data_key,
     tam_yedek_yaz,
 )
@@ -54,6 +55,7 @@ from apps.okul.services import (
     app_password,
     backup_restore,
     dosya_deposu,
+    encrypted_backup,
     geri_yukleme_ekleri,
     ozet_onarimi,
 )
@@ -239,6 +241,80 @@ def test_tam_yedekte_ekli_kayit_geri_yuklemeden_sonra_acilir(
     if os.name == "posix":
         assert stat.S_IMODE((depo / ad).stat().st_mode) == ds.DOSYA_KIPI
     assert not _hazirlik_dizinleri(depo)
+
+
+def _programin_yedegi(tmp_path: Path) -> Path:
+    usb = tmp_path / "usb"
+    usb.mkdir()
+    return usb / "oab-defteri-yedek-2026-11-06-101530.odbak"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_programin_kaydettigi_tam_yedek_geri_yuklenir_ek_cozulur(
+    sahip: SchoolYear, tmp_path: Path, depo: Path
+) -> None:
+    """Uçtan uca (plan F1b-3 "Ötekiler"): şifreli yedeği program kaydeder, çekirdek açar, ek çözülür."""
+    ek = dosya_deposu.yaz(
+        PDF,
+        original_name=OZGUN_AD,
+        sensitivity=AttachmentSensitivity.OZEL_NITELIKLI,
+        owner=sahip,
+        yazar=varsayilan_yazar(),
+        kisi_listesi=False,
+    )
+    yedek = _programin_yedegi(tmp_path)
+
+    kayit = encrypted_backup.sifreli_yedegi_kaydet(str(yedek))
+
+    assert (kayit.ek_sayisi, kayit.eksik, kayit.denetlendi) == (1, 0, True)
+    assert kap_basligini_oku(yedek).kapsam == KAPSAM_TAM
+    shutil.rmtree(depo)
+    hedef = tmp_path / "canli" / "db.sqlite3"
+
+    sonuc = backup_restore.restore_database(yedek, hedef, recovery_key=TEST_KURTARMA_ANAHTARI)
+
+    assert sonuc.dosya_raporu.sayilar()["kapsam"] == "tam"
+    assert sonuc.dosya_raporu.sayilar()["yerine_konan"] == 1
+    assert (sonuc.dosya_raporu.eksik, sonuc.dosya_raporu.bozuk) == (0, 0)
+    assert dosya_deposu.oku(ek) == PDF
+    assert not _hazirlik_dizinleri(depo)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_programin_yedeginde_eksik_ek_durdurmaz_saglam_ek_doner(
+    sahip: SchoolYear, tmp_path: Path, depo: Path
+) -> None:
+    """Boyu tutan bozuk ek yedeğe girmez, geri yüklemede listelenir, durdurmaz.
+
+    Uygulama okuması (`encrypted_backup` başlığı, 4. adım): 05.11.2026 kararı boy farkını sayar.
+    """
+
+    def yaz(acik: bytes) -> Attachment:
+        return dosya_deposu.yaz(
+            acik,
+            original_name=OZGUN_AD,
+            sensitivity=AttachmentSensitivity.NORMAL,
+            owner=sahip,
+            yazar=varsayilan_yazar(),
+            kisi_listesi=False,
+        )
+
+    saglam, bozuk = yaz(PDF), yaz(PNG)
+    _bit_cevir(depo / bozuk.stored_name)
+    yedek = _programin_yedegi(tmp_path)
+
+    kayit = encrypted_backup.sifreli_yedegi_kaydet(str(yedek))
+
+    assert (kayit.ek_sayisi, kayit.eksik) == (1, 1)
+    shutil.rmtree(depo)
+
+    sonuc = backup_restore.restore_database(
+        yedek, tmp_path / "canli" / "db.sqlite3", recovery_key=TEST_KURTARMA_ANAHTARI
+    )
+
+    assert (sonuc.dosya_raporu.eksik, sonuc.dosya_raporu.bozuk) == (1, 0)
+    assert dosya_deposu.oku(saglam) == PDF
+    assert not (depo / bozuk.stored_name).exists()
 
 
 def test_ek_sorgusu_modelin_sutunlarini_okur() -> None:

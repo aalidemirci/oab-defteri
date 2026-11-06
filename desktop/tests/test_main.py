@@ -47,6 +47,22 @@ from desktop.server import TAMPON_PAYI
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+class _Sayac:
+    """Uzun iş sayacının yüzeyi. Masaüstü testlerinde backend `sys.path`'te değildir."""
+
+    def __init__(self, sayi: int = 0) -> None:
+        self.sayi = sayi
+
+    def sifirlanmasini_bekle(self, sure: float) -> bool:
+        return self.sayi == 0
+
+
+@pytest.fixture(autouse=True)
+def _uzun_is_yok(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sayaç sıfırdır; `shared` içe aktarılmış mı diye test sırasına bağlı kalınmaz."""
+    monkeypatch.setattr(main_mod, "uzun_is_sayaci", _Sayac)
+
+
 # ------------------------------------------------------------------ argümanlar
 
 
@@ -224,7 +240,7 @@ def test_adim_7_hatasinda_program_acilir_cikis_kodu_olagandir(
     monkeypatch.setenv(ENV_PREVIOUS_SESSION, "")
     monkeypatch.setattr(main_mod, patlayan, _patlayan(OSError(28, "No space left on device")))
     monkeypatch.setattr(main_mod, "serve", sunucu)
-    monkeypatch.setattr(main_mod, "show_error", lambda *a: hatalar.append(a))
+    monkeypatch.setattr(main_mod, "show_error", lambda *a, **_: hatalar.append(a))
 
     assert main_mod.run([]) == EXIT_OK
     assert hatalar == [] and izlenen_adimlar[-1] == "sunucu"
@@ -254,7 +270,7 @@ def test_adim_8_yedek_hatasi_5_ile_durur(
     for ad in patlayanlar:
         monkeypatch.setattr(main_mod, ad, _patlayan(OSError(28, "No space left on device")))
     monkeypatch.setattr(main_mod, "restore_after_failed_startup", lambda *a: geri_konan.append(a))
-    monkeypatch.setattr(main_mod, "show_error", lambda *a: ekran.append(a))
+    monkeypatch.setattr(main_mod, "show_error", lambda *a, **_: ekran.append(a))
 
     assert main_mod.run([]) == EXIT_MIGRATION_FAILED
 
@@ -388,7 +404,7 @@ def sahte_calisma(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         kayit["kanal"] = channel
         return EXIT_OK
 
-    def sahte_hata(title: str, message: str) -> None:
+    def sahte_hata(title: str, message: str, **_: Any) -> None:
         kayit["hata"].append((title, message))
 
     monkeypatch.setattr(main_mod, "prepare_data", lambda paths, version: None)
@@ -679,6 +695,18 @@ def test_linuxta_qt_kurulumu_pencereden_once_ve_cikista_durdurulur(
     assert pencere_oturumu["qt_cikis"] == pencere_oturumu["denetci"].request_quit
 
 
+def test_pencere_denetcisi_uzun_is_sayacini_alir(
+    tmp_path: Path, pencere_oturumu: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Çarpı ertelemesi ve temiz kapanış işareti aynı sayacı okur (§4.2)."""
+    sayac = _Sayac(1)
+    monkeypatch.setattr(main_mod, "uzun_is_sayaci", lambda: sayac)
+
+    main_mod.run_window_session("http://127.0.0.1:1/", tmp_path, None, platform="win32")
+
+    assert pencere_oturumu["denetci"]._sayac is sayac  # noqa: SLF001
+
+
 def test_windowsta_qt_kurulmaz(tmp_path: Path, pencere_oturumu: dict[str, Any]) -> None:
     main_mod.run_window_session("http://127.0.0.1:1/", tmp_path, None, platform="win32")
 
@@ -781,6 +809,123 @@ def test_isaret_yoksa_beklenmedik_kapanma_backende_bildirilir(
     main_mod.run([])
 
     assert gorulen == ["beklenmedik"]
+
+
+def test_is_oldurulunce_temiz_kapanis_isareti_yok(
+    tmp_path: Path, sahte_calisma: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§4.2: 60 sn dolup kapanış sürdüyse iş yarım kalır, sayaç sıfır değildir: işaret yazılmaz,
+    sonraki açılış "son oturumdaki kayıtları kontrol edin" kartını gösterir."""
+    monkeypatch.setenv(ENV_APP_HOME, str(tmp_path))
+    _db_olustur(tmp_path)
+    main_mod.run([])
+    assert _isaret(tmp_path).is_file()
+    monkeypatch.setattr(main_mod, "uzun_is_sayaci", lambda: _Sayac(1))
+
+    assert main_mod.run([]) == EXIT_OK
+
+    assert not _isaret(tmp_path).exists()
+    monkeypatch.setattr(main_mod, "uzun_is_sayaci", _Sayac)
+    main_mod.run([])
+    assert os.environ[ENV_PREVIOUS_SESSION] == "beklenmedik"
+
+
+@pytest.mark.parametrize(
+    "sayac",
+    [
+        pytest.param(lambda: None, id="sayac_yok"),
+        pytest.param(lambda: (_ for _ in ()).throw(RuntimeError("okunamadı")), id="hata"),
+    ],
+)
+def test_sayac_okunamazsa_isaret_yazilmaz(
+    tmp_path: Path,
+    sahte_calisma: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    sayac: Any,
+) -> None:
+    """Okunamayan sayaç "sıfır" sayılmaz; program yine 0 ile çıkar."""
+    monkeypatch.setenv(ENV_APP_HOME, str(tmp_path))
+    monkeypatch.setattr(main_mod, "uzun_is_sayaci", sayac)
+
+    assert main_mod.run([]) == EXIT_OK
+
+    assert not _isaret(tmp_path).exists()
+
+
+def test_sayac_serve_bittikten_sonra_okunur(
+    tmp_path: Path, sahte_calisma: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sıra: pencere, sunucu, WAL; sayaç en sonda sorulur. Daha önce okunsa, kapanış sırasında biten
+    ya da süren iş yanlış sayılırdı."""
+    monkeypatch.setenv(ENV_APP_HOME, str(tmp_path))
+    sira: list[str] = []
+
+    def serve(paths: Any, token: str, autotest: bool, channel: Any = None, **_: Any) -> int:
+        sira.append("serve")
+        return EXIT_OK
+
+    class _Izleyen(_Sayac):
+        @property
+        def sayi(self) -> int:
+            sira.append("sayac")
+            return 0
+
+        @sayi.setter
+        def sayi(self, _deger: int) -> None:
+            pass
+
+    monkeypatch.setattr(main_mod, "serve", serve)
+    monkeypatch.setattr(main_mod, "uzun_is_sayaci", _Izleyen)
+
+    main_mod.run([])
+
+    assert sira == ["serve", "sayac"]
+    assert _isaret(tmp_path).is_file()
+
+
+def test_sayac_ortak_uzun_is_sayacidir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`monkeypatch` fikstürünün altındaki gerçek işlev: pencere ve işaret aynı nesneyi okur."""
+    monkeypatch.undo()
+    monkeypatch.syspath_prepend(str(REPO_ROOT / "backend"))
+    from shared.bakim import UZUN_ISLER
+
+    assert main_mod.uzun_is_sayaci() is UZUN_ISLER
+
+
+def test_backend_yoksa_sayac_yoktur(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.undo()
+    monkeypatch.setitem(sys.modules, "shared.bakim", None)  # içe aktarma ImportError verir
+
+    assert main_mod.uzun_is_sayaci() is None
+
+
+def test_acilis_hatasinda_gunluge_yol_dusmez(
+    tmp_path: Path, sahte_calisma: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bozuk veritabanı iletisi kullanıcıya yedek klasörünü söyler, günlüğe yolu yazmaz: Windows
+    yolu hesap adını içerir (R1)."""
+    monkeypatch.setenv(ENV_APP_HOME, str(tmp_path))
+    ekran: list[tuple[str, str, str | None]] = []
+
+    def hata(paths: Any, app_version: str) -> None:
+        raise DatabaseCorruptError(
+            "Veri dosyası bozuk görünüyor.",
+            hint=f"Yedek klasörü: {tmp_path}",
+            gunluk_ipucu="Yedek klasörü günlüğe yazılmaz.",
+        )
+
+    def show_error(baslik: str, ileti: str, *, gunluk: str | None = None) -> None:
+        ekran.append((baslik, ileti, gunluk))
+
+    monkeypatch.setattr(main_mod, "prepare_data", hata)
+    monkeypatch.setattr(main_mod, "show_error", show_error)
+
+    assert main_mod.run([]) == EXIT_DATABASE_CORRUPT
+
+    ((_, ileti, gunluk),) = ekran
+    assert str(tmp_path) in ileti
+    assert gunluk is not None and str(tmp_path) not in gunluk
+    assert "Veri dosyası bozuk görünüyor." in gunluk
 
 
 def test_beklenmeyen_hatada_isaret_yazilmaz(
@@ -1014,6 +1159,49 @@ def test_zorla_sonlandirmada_isaret_eksik_kalir_ve_sonraki_acilis_uyarir(
     gunluk = (tmp_path / "logs" / "uygulama.log").read_text(encoding="utf-8")
     assert "Önceki oturum beklenmedik biçimde kapandı" in gunluk
     assert isaret.is_file()  # üçüncü oturum düzenli kapandı
+
+
+@pytest.mark.slow
+def test_is_oldurulunce_temiz_kapanis_isareti_yok_alt_surec(tmp_path: Path) -> None:
+    """§4.2 "iş öldürüldü → işaret yok": gerçek süreç, gerçek sunucu ve gerçek sayaç. Süreç uzun iş
+    sürerken öldürülür; işaret yazılmaz, sonraki açılış bunu görür."""
+    ilk = _autotest_sureci(tmp_path)
+    assert ilk.wait(timeout=300) == EXIT_OK
+    isaret = tmp_path / "data" / MARKER_FILE_NAME
+    assert isaret.is_file()
+
+    surec = subprocess.Popen(  # noqa: S603 — sabit argümanlar, kabuk yok
+        [
+            sys.executable,
+            "-m",
+            "desktop.tests.prova_betigi",
+            "uzun-is-surerken",
+            "--data-dir",
+            str(tmp_path),
+        ],
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    bekci = threading.Timer(120, surec.kill)  # açılış takılırsa `readline` süresiz beklemesin
+    bekci.start()
+    try:
+        assert surec.stdout is not None
+        assert surec.stdout.readline().strip() == "uzun is suruyor"
+        assert not isaret.exists()  # açılış işareti tüketti, düzenli çıkış yazmadı
+        surec.kill()  # SIGKILL: temizlik kodu koşmaz
+    finally:
+        bekci.cancel()
+        surec.wait(timeout=60)
+        if surec.stdout is not None:
+            surec.stdout.close()
+    assert not isaret.exists()
+
+    son = _autotest_sureci(tmp_path)
+    assert son.wait(timeout=300) == EXIT_OK
+    gunluk = (tmp_path / "logs" / "uygulama.log").read_text(encoding="utf-8")
+    assert "Önceki oturum beklenmedik biçimde kapandı" in gunluk
 
 
 @pytest.mark.slow

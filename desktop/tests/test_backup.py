@@ -734,6 +734,29 @@ def test_pardus21_yolunda_manifesto_gecici_goruntuden_okunur(
 
     assert manifesto.dosyalar == (ManifestoGirdisi(_AD_1, 10, _OZET_1),)
     assert not list(tmp_path.glob("tmp*"))
+    assert not list(tmp_path.glob(f"{backup_mod.GORUNTU_DIZINI_ONEKI}*"))
+
+
+def test_pardus21_gecici_dizininin_adi_programa_ozgudur(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Süreç o anda ölürse dizin kalır, içinde düz görüntü durur: açılış temizliği adından tanır."""
+    monkeypatch.setattr(backup_mod, "_HAS_SERIALIZE", False)
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db)
+    gorulen: list[str] = []
+    gercek = backup_mod._goruntunun_manifestosu
+
+    def izleyen(goruntu: sqlite3.Connection) -> Manifesto:
+        gorulen.extend(yol.name for yol in tmp_path.iterdir() if yol.is_dir())
+        return gercek(goruntu)
+
+    monkeypatch.setattr(backup_mod, "_goruntunun_manifestosu", izleyen)
+
+    goruntu_ve_manifesto(db)
+
+    assert len(gorulen) == 1
+    assert gorulen[0].startswith(backup_mod.GORUNTU_DIZINI_ONEKI)
 
 
 @pytest.mark.parametrize(

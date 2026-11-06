@@ -43,6 +43,11 @@ def _hint(backup_dir: Path | None) -> str:
     return f"Yedek klasörü: {backup_dir}\n{yol}"
 
 
+def _bozuk(backup_dir: Path | None) -> DatabaseCorruptError:
+    """Kullanıcı yedek klasörünü görür; günlüğe yol yazılmaz (Windows yolu hesap adını taşır)."""
+    return DatabaseCorruptError(_MESSAGE, hint=_hint(backup_dir), gunluk_ipucu=_hint(None))
+
+
 def check_database_integrity(db_path: Path, *, backup_dir: Path | None = None) -> None:
     """Veritabanını hızlı bütünlük denetiminden geçirir; bozuksa hata yükseltir.
 
@@ -56,9 +61,9 @@ def check_database_integrity(db_path: Path, *, backup_dir: Path | None = None) -
     except sqlite3.DatabaseError as exc:
         # "file is not a database" / "database disk image is malformed" — dosya okunamıyor.
         logger.error("Bütünlük denetimi açılamadı: %s", exc.__class__.__name__)
-        raise DatabaseCorruptError(_MESSAGE, hint=_hint(backup_dir)) from exc
+        raise _bozuk(backup_dir) from exc
 
     result = str(rows[0][0]) if rows else ""
     if result != "ok":
         logger.error("Bütünlük denetimi başarısız.")
-        raise DatabaseCorruptError(_MESSAGE, hint=_hint(backup_dir))
+        raise _bozuk(backup_dir)

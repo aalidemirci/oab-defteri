@@ -3,7 +3,7 @@
 **Sorun.** Program her gün şifreli bir yedek alır, ama o yedekler aynı diskte
 durur: disk bozulur, bilgisayar çalınır ya da yeniden kurulursa otomatik
 yedekler de gider. Okulun elinde kalan tek kopya, kullanıcının Ayarlar →
-Güvenlik'ten indirip USB belleğe aldığı şifreli yedektir. Bu modül son indirmenin
+Güvenlik'ten seçtiği yere kaydettiği şifreli yedektir. Bu modül son kaydın
 tarihini tutar ve belli bir süre geçince Genel Bakış'a kart düşürür.
 
 **Karar — tarih VERİTABANINDA DEĞİL, veri dizinindeki bir dosyada tutulur**
@@ -16,23 +16,24 @@ tarihini tutar ve belli bir süre geçince Genel Bakış'a kart düşürür.
 2. Model alanı gerekmez: göç yoktur, `SchoolConfig` şişmez.
 3. Dosya kişisel veri taşımaz: yalnız bir zaman damgası ve bir gün sayısı.
 
-**Hangi olay "dış yedek" sayılır?** Kullanıcının istediği şifreli yedeğin
-üretilip indirmeye verilmesi (`encrypted_backup.create_encrypted_backup`). Program
-dosyanın USB belleğe gerçekten kopyalandığını bilemez; kart bu yüzden "son şifreli
-yedek indirme"yi söyler ve dosyanın USB belleğe alınmasını ister (dürüst dil).
+**Hangi olay "dış yedek" sayılır?** Kullanıcının istediği şifreli yedeğin seçilen yere
+yazılıp denetlenmesi ve asıl adını alması (`encrypted_backup.sifreli_yedegi_kaydet`; kullanıcı
+kararı 04.11.2026 "Şifreli yedeği program kaydeder"). Program dosyanın USB bellekte olduğunu
+bilemez, yalnız seçilen yere sağlam yazıldığını bilir; kart bu yüzden son şifreli yedeği söyler
+ve dosyanın USB belleğe alınmasını ister (dürüst dil).
 
 **Hatırlatma ne zaman?**
 
-* Hiç indirme yoksa: ilk program yöneticisi hesabı kurulduktan `ILK_HATIRLATMA_GUN`
+* Hiç kayıt yoksa: ilk program yöneticisi hesabı kurulduktan `ILK_HATIRLATMA_GUN`
   gün sonra (başlangıç, `guvenlik.json`'un oluşturma damgasıdır — yeni bilgisayara
   kurtarma anahtarıyla geri yüklenen kurulumda o damga kurtarma anahtarının üretim
   günüdür, yani eski bir tarihtir (`backup_restore._creation_stamp`); kart hemen
   çıkar, doğrusu da budur: yeni diskte henüz dış kopya yoktur).
-* İndirme varsa: son indirmeden `hatirlatma_gun` gün sonra (varsayılan 30 —
+* Kayıt varsa: son kayıttan `hatirlatma_gun` gün sonra (varsayılan 30 —
   kılavuzun "ayda bir"i; ayarla 7-90).
 
-Dosya okunamazsa ya da bozuksa hiç indirme yokmuş gibi davranılır (hatırlatma
-tarafında hata yapmak kayıptan iyidir); yazma hatası indirmeyi DURDURMAZ, yalnız
+Dosya okunamazsa ya da bozuksa hiç kayıt yokmuş gibi davranılır (hatırlatma
+tarafında hata yapmak kayıptan iyidir); yazma hatası yedeği DURDURMAZ, yalnız
 günlüğe olay düşer. Tarihler yerel gündür (`timezone.localdate`; saat dilimi
 `Europe/Istanbul`).
 """
@@ -60,13 +61,13 @@ logger = logging.getLogger("oab_defteri.yedek")
 DOSYA_ADI: Final = "dis-yedek.json"
 DOSYA_SURUMU: Final = 1
 
-#: Son indirmeden sonra hatırlatmanın varsayılan süresi (gün) — kılavuzun "ayda bir"i.
+#: Son kayıttan sonra hatırlatmanın varsayılan süresi (gün) — kılavuzun "ayda bir"i.
 VARSAYILAN_HATIRLATMA_GUN: Final = 30
 #: Ayarın sınırları (gün). Bir haftadan sık hatırlatma gürültüdür, üç aydan seyrek
 #: hatırlatma bir dönemin kaydını tek diske bırakır.
 EN_AZ_HATIRLATMA_GUN: Final = 7
 EN_COK_HATIRLATMA_GUN: Final = 90
-#: Hiç indirme yokken ilk hatırlatma, ilk hesap kurulduktan bu kadar gün sonra.
+#: Hiç kayıt yokken ilk hatırlatma, ilk hesap kurulduktan bu kadar gün sonra.
 ILK_HATIRLATMA_GUN: Final = 7
 
 SURE_ARALIK_MESAJI: Final = (
@@ -80,10 +81,10 @@ _kilit = threading.Lock()
 class DisYedekDurumu:
     """Kartın ve ayar ekranının okuduğu özet (kişisel veri yok)."""
 
-    #: Son şifreli yedek indirmenin anı (ISO, yerel dilim); hiç yoksa None.
+    #: Son şifreli yedeğin kaydedildiği an (ISO, yerel dilim); hiç yoksa None.
     son_indirme: str | None
     hatirlatma_gun: int
-    #: Son indirmeden (yoksa ilk hesabın kurulumundan) bu yana geçen gün; bilinmiyorsa None.
+    #: Son kayıttan (yoksa ilk hesabın kurulumundan) bu yana geçen gün; bilinmiyorsa None.
     gecen_gun: int | None
     #: Genel Bakış kartı gösterilsin mi?
     hatirlat: bool
@@ -111,7 +112,7 @@ def _oku() -> dict[str, Any]:
     except FileNotFoundError:
         return {}
     except (OSError, ValueError):
-        logger.warning("Dış yedek kaydı okunamadı; hiç indirme yokmuş gibi davranılıyor.")
+        logger.warning("Dış yedek kaydı okunamadı; hiç kayıt yokmuş gibi davranılıyor.")
         return {}
     return veri if isinstance(veri, dict) else {}
 
@@ -155,7 +156,7 @@ def _parola_kurulum_gunu() -> date | None:
 
 
 def indirme_kaydet(an: datetime | None = None) -> None:
-    """Şifreli yedeğin indirmeye verildiği anı yazar. HATA YÜKSELTMEZ (indirme sürer)."""
+    """Şifreli yedeğin kaydedildiği anı yazar. HATA YÜKSELTMEZ (yedek zaten yerindedir)."""
     zaman = timezone.localtime(an or timezone.now())
     with _kilit:
         veri = _oku()
@@ -165,7 +166,7 @@ def indirme_kaydet(an: datetime | None = None) -> None:
         try:
             _yaz(veri)
         except OSError:
-            logger.warning("Dış yedek tarihi yazılamadı; yedek yine de indirildi.")
+            logger.warning("Dış yedek tarihi yazılamadı; yedek yine de kaydedildi.")
 
 
 def hatirlatma_suresini_ayarla(gun: int) -> DisYedekDurumu:

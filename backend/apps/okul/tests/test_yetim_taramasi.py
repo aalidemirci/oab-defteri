@@ -24,6 +24,7 @@ from typing import Any
 
 import pytest
 from desktop import main as masaustu
+from desktop.backup import GORUNTU_DIZINI_ONEKI
 from desktop.paths import ENV_APP_HOME, resolve_app_paths
 from django.conf import settings
 from django.db import connection, transaction
@@ -725,6 +726,7 @@ def test_tanimlanan_artiklar_silinir(dizinler: tuple[Path, Path, Path]) -> None:
         _dosya(veri / "db.sqlite3.yeni.tmp-wal"),
         _dosya(veri / "db.sqlite3.yeni.tmp-shm"),
         _dizin(veri / ".geri-yukleme-denetimi-a1b2c3_d"),
+        _dizin(veri / f"{GORUNTU_DIZINI_ONEKI}a1b2c3_d"),
         _dosya(yedekler / f".yukleme-{HEX}.tmp"),
         _dosya(yedekler / "gunluk-2026-11-06.odbak.tmp"),
         _dosya(yedekler / "elle verilmis ad.odbak.tmp"),

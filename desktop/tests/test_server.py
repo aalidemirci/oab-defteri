@@ -18,6 +18,7 @@ import pytest
 
 from desktop.errors import ServerStartError
 from desktop.server import (
+    AZAMI_ISTEK_GOVDESI,
     DEFAULT_HOST,
     TAMPON_PAYI,
     BackgroundServer,
@@ -150,6 +151,49 @@ def test_tampon_esigi_sunucuya_iki_adla_gecer() -> None:
 
     assert cagri["inbuf_overflow"] == 4096
     assert cagri["outbuf_overflow"] == 4096
+
+
+def test_govde_siniri_sunucuya_acikca_verilir_tampon_esigi_degismez() -> None:
+    """Kullanıcı kararı 06.11.2026: 1 GB üstü şifreli yedek uca varmalıdır."""
+    assert AZAMI_ISTEK_GOVDESI == 8 * 1024 * 1024 * 1024
+    cagrilar: list[dict[str, Any]] = []
+
+    def fabrika(_app: Any, **kwargs: Any) -> Any:
+        cagrilar.append(kwargs)
+        return _SahteSunucu()
+
+    sunucu = BackgroundServer(_bos_uygulama, tampon_esigi=4096, server_factory=fabrika)
+    sunucu.start()
+    sunucu.stop()
+
+    (cagri,) = cagrilar
+    assert cagri["max_request_body_size"] == AZAMI_ISTEK_GOVDESI
+    assert cagri["inbuf_overflow"] == 4096
+
+
+def _bildirilen_govdeye_yanit(sunucu: BackgroundServer, boy: int) -> bytes:
+    """Yalnız başlığı yollar: sınırı aşan gövdeyi waitress başlıkta reddeder, gövde beklemez."""
+    with socket.create_connection((DEFAULT_HOST, sunucu.port), timeout=5) as soket:
+        soket.sendall(
+            f"POST / HTTP/1.1\r\nHost: {DEFAULT_HOST}\r\nContent-Length: {boy}\r\n\r\n".encode()
+        )
+        soket.settimeout(0.5)
+        try:
+            return soket.recv(64)
+        except TimeoutError:
+            return b""
+
+
+def test_gercek_sunucu_bir_gb_ustu_govdeyi_keser_mez_sinir_ustunu_keser() -> None:
+    """Gerçek waitress: 1 GiB'ı aşan gövde ucu bekler, 8 GiB'ı aşan gövde 413 alır."""
+    sunucu = BackgroundServer(_bos_uygulama)
+    sunucu.start()
+    sunucu.wait_until_ready()
+    try:
+        assert _bildirilen_govdeye_yanit(sunucu, 2 * 1024**3) == b""
+        assert b"413" in _bildirilen_govdeye_yanit(sunucu, AZAMI_ISTEK_GOVDESI + 1)
+    finally:
+        sunucu.stop()
 
 
 def test_tampon_esigi_verilmezse_sunucu_ayari_gecmez() -> None:

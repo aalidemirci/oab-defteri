@@ -26,6 +26,20 @@ QApplication(sys.argv)` ile alır (`platforms/qt.py`: `setup_app` ve
 
 Uygulamanın pencere simgesi de burada atanır (`prepare_qt_application`).
 
+**İndirme işleyicisi** (plan F1b-3 "Ötekiler"; hata düzeltmesi, sürüm yükseltilmez). pywebview
+5.3.2'nin Qt işleyicisi (`qt.py` `on_download_requested`) `download.setPath`'i çağırır. PySide6
+6.8.3'ün `QWebEngineDownloadRequest`'inde bu yöntem yoktur (Docker'da gerçek paketle sınandı;
+`setDownloadDirectory` ve `setDownloadFileName` vardır): kullanıcı yeri seçer, yuvada
+`AttributeError` çıkar, istek kabul edilmez, dosya inmez. İşleyici ayrıca önerilen adı URL'nin
+yolundan alır, oysa `<a download>` blob adresidir, adı `suggestedFileName`'dedir. Bu bütün indirmeleri
+(kurtarma anahtarı belgesi, E63, yedek raporu, şablonlar) ilgilendirir.
+
+İşleyici `BrowserView` sınıfında değiştirilir: pencerenin kurucusu yuvayı oradan bağlar, kurulmuş
+pencerede değiştirmek etkisizdir. Değişim `webview.initialize`'ın ardına konur, çünkü
+`webview.platforms.qt` bundan önce içe aktarılamaz: modül `_profile_storage_path`'i içe aktarılırken
+okur, `webview.start` `storage_path`'i ondan hemen önce yazar; erken içe aktarma pencere deposunu
+ev dizinine (`~/.pywebview`) kaydırırdı.
+
 **Linux oturum kapanışı.** Oturum kapanırken süreç SIGTERM alır; varsayılan
 davranış sessiz ölümdür ve temiz kapanış işareti (T15) yazılmazdı. Qt döngüsü
 C++'ta beklerken Python sinyal işleyicisi koşamaz; kısa aralıklı bir `QTimer`
@@ -50,7 +64,7 @@ from pathlib import Path
 from types import FrameType, SimpleNamespace
 from typing import TYPE_CHECKING, Any, Final
 
-from desktop.window import app_icon_path
+from desktop.window import app_icon_path, import_webview
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -99,6 +113,7 @@ def load_qt() -> SimpleNamespace:
     qt_widgets = importlib.import_module(f"{QT_PACKAGE}.QtWidgets")
     return SimpleNamespace(
         QApplication=qt_widgets.QApplication,
+        QFileDialog=qt_widgets.QFileDialog,
         QIcon=qt_gui.QIcon,
         QPixmap=qt_gui.QPixmap,
         QTimer=qt_core.QTimer,
@@ -143,6 +158,40 @@ def _qt_icon(qt: Any, icon_path: Path | None) -> Any:
     return qt.QIcon(pixmap)
 
 
+def indirme_isleyicisi(dosya_penceresi: Any) -> Callable[[Any, Any], None]:
+    """pywebview `BrowserView.on_download_requested`'in yerine geçen yöntem (modül belgesi).
+
+    Yer seçilmezse istek kabul edilmez, Qt onu iptal sayar. Başlık pencerenin metnidir
+    (`window.PENCERE_METINLERI`). Seçilen yol günlüğe yazılmaz.
+    """
+
+    def on_download_requested(pencere: Any, indirme: Any) -> None:
+        onerilen = Path.home() / Path(str(indirme.suggestedFileName())).name
+        yol, _ = dosya_penceresi.getSaveFileName(
+            pencere, pencere.localization["global.saveFile"], str(onerilen)
+        )
+        if not yol:
+            return
+        hedef = Path(yol)
+        indirme.setDownloadDirectory(str(hedef.parent))
+        indirme.setDownloadFileName(hedef.name)
+        indirme.accept()
+
+    return on_download_requested
+
+
+def indirme_isleyicisini_bagla(webview: Any, dosya_penceresi: Any) -> None:
+    """`webview.initialize`'ı sarar: arka uç yüklenince Qt penceresinin işleyicisi değişir."""
+    asil = webview.initialize
+
+    def initialize(*args: Any, **kwargs: Any) -> Any:
+        arka_uc = asil(*args, **kwargs)
+        arka_uc.BrowserView.on_download_requested = indirme_isleyicisi(dosya_penceresi)
+        return arka_uc
+
+    webview.initialize = initialize
+
+
 class QtKurulumu:
     """Linux Qt kurulumu + SIGTERM → düzenli kapanış köprüsü (ana iş parçacığı).
 
@@ -158,11 +207,13 @@ class QtKurulumu:
         icon_path: Path | None = None,
         qt_loader: Callable[[], Any] = load_qt,
         signal_installer: SignalInstaller = signal.signal,
+        webview_loader: Callable[[], Any] = import_webview,
     ) -> None:
         self._cikis = cikis
         self._icon_path = icon_path
         self._qt_loader = qt_loader
         self._install_signal = signal_installer
+        self._webview_loader = webview_loader
         self._app: Any | None = None
         self._timer: Any | None = None
         self._previous_sigterm: Any | None = None
@@ -181,9 +232,16 @@ class QtKurulumu:
             logger.warning("Qt yüklenemedi; pencere açılışı hata verecek.", exc_info=True)
             return False
         self._app = app
+        self._indirmeyi_bagla(qt)
         self._watch_termination(qt)
         logger.info("Qt uygulaması hazır.")
         return True
+
+    def _indirmeyi_bagla(self, qt: Any) -> None:
+        try:
+            indirme_isleyicisini_bagla(self._webview_loader(), qt.QFileDialog)
+        except Exception:  # noqa: BLE001 — pencere bileşeni yoksa pencere de açılmaz
+            logger.warning("İndirme işleyicisi bağlanamadı.", exc_info=True)
 
     def _watch_termination(self, qt: Any) -> None:
         try:
@@ -228,6 +286,7 @@ def hazirla(
     icon_path: Path | None = None,
     qt_loader: Callable[[], Any] = load_qt,
     signal_installer: SignalInstaller = signal.signal,
+    webview_loader: Callable[[], Any] = import_webview,
 ) -> QtKurulumu:
     """Linux: Qt uygulamasını pencereden ÖNCE kurar ve SIGTERM köprüsünü bağlar.
 
@@ -239,6 +298,7 @@ def hazirla(
         icon_path=icon_path if icon_path is not None else app_icon_path(),
         qt_loader=qt_loader,
         signal_installer=signal_installer,
+        webview_loader=webview_loader,
     )
     kurulum.kur()
     return kurulum

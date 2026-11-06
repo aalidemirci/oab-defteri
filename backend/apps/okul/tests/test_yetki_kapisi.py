@@ -367,7 +367,7 @@ def test_bosta_sure_yazimi_yalniz_program_yoneticisi() -> None:
 def test_yedek_indirme_yalniz_program_yoneticisi() -> None:
     once = AuditTrail.objects.count()
     with yazar_olarak(MUHASIP_YAZARI), pytest.raises(RolYetkisiz):
-        encrypted_backup.create_encrypted_backup()
+        encrypted_backup.sifreli_yedegi_kaydet("/uydurma/yer/yedek.odbak")
     assert AuditTrail.objects.count() == once
 
 

@@ -232,22 +232,6 @@ def test_programin_bicimi_olmayan_ad_taninmaz_ve_silinmez(ad: str, veri_dizini: 
     assert disarida.exists() and hedef.exists()
 
 
-def test_eskiler_addaki_damgaya_gore_esleriyle_listelenir(veri_dizini: Path) -> None:
-    eski = _aile(veri_dizini, ESKI_AD)
-    yeni = _aile(veri_dizini, "db-onceki-2026-09-20-080000.sqlite3")
-    (veri_dizini / "db-onceki-elle.sqlite3").write_bytes(b"x")
-    # Dosya zamanı ölçü değildir: yeni dosya çok eski, eski dosya çok yeni görünse de.
-    for yol in yeni:
-        os.utime(yol, (0, 0))
-    sinir = datetime(2026, 9, 15, 12, 0)
-
-    beklenen = sorted(yol.name for yol in eski)
-    assert backup_restore.old_databases_before(veri_dizini, sinir) == beklenen
-    # Saat dilimli sınır yerel saate çevrilir (damga yerel saattir).
-    assert backup_restore.old_databases_before(veri_dizini, timezone.make_aware(sinir)) == beklenen
-    assert backup_restore.old_databases_before(veri_dizini / "yok", sinir) == []
-
-
 def test_veritabani_silinemezse_esleri_de_kalir(
     veri_dizini: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

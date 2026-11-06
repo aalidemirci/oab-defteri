@@ -12,8 +12,10 @@ siler**:
 - işaret YOK, veritabanı YOK → ilk açılış (`ilk`): alarm verilmez.
 
 Açılışta silinen işaret yalnız düzenli çıkışta (pencere kapandı, yönetim
-sunucusu durdu, WAL ana dosyaya yazıldı) yeniden yazılır; süreç öldürülürse
-eksik kalır. Açılış bir
+sunucusu durdu, WAL ana dosyaya yazıldı) ve uzun iş sayacı sıfırken yeniden yazılır
+(`write_marker_if_idle`; tasarım §4.2): 60 sn dolup kapanış sürdüyse iş hâlâ koşuyordur, yarım
+kalır; sayaç okunamazsa da yazılmaz, "sıfır" saymak §13 D3 dersine aykırıdır. Süreç
+öldürülürse işaret eksik kalır. Açılış bir
 `StartupError` ile durursa (bozuk veritabanı, WebView2 yok…) bu oturumda işlem
 yapılmamıştır: önceki oturumun durumu korunur (`restore_after_failed_startup`).
 
@@ -68,8 +70,9 @@ def consume_marker(data_dir: Path, db_path: Path) -> PreviousSession:
     if marker.is_file():
         try:
             marker.unlink()
-        except OSError:
-            logger.warning("Temiz kapanış işareti silinemedi: %s", marker, exc_info=True)
+        except OSError as hata:
+            # Hatanın metni ve yığını yolu taşır, Windows yolu hesap adını içerir (R1).
+            logger.warning("Temiz kapanış işareti silinemedi (%s).", type(hata).__name__)
         logger.info("Önceki oturum düzenli kapanmış.")
         return PreviousSession.CLEAN
     if not db_path.exists():
@@ -102,10 +105,31 @@ def write_marker_quietly(data_dir: Path, app_version: str) -> None:
     """`write_marker`; hata çıkışı durdurmaz (yalnız günlüğe düşer)."""
     try:
         write_marker(data_dir, app_version)
-    except OSError:
-        logger.warning("Temiz kapanış işareti yazılamadı.", exc_info=True)
+    except OSError as hata:
+        logger.warning("Temiz kapanış işareti yazılamadı (%s).", type(hata).__name__)
     else:
         logger.info("Temiz kapanış işareti yazıldı.")
+
+
+def write_marker_if_idle(
+    data_dir: Path, app_version: str, uzun_is_sayisi: Callable[[], int]
+) -> None:
+    """Düzenli çıkışın son adımı: işaret yalnız uzun iş sayacı sıfırsa yazılır (modül başlığı).
+
+    Sayaç okunamazsa işaret yazılmaz: sonraki açılışın "son oturumdaki kayıtları kontrol edin"
+    kartı (T15) gereksiz çıksa da yarım kalan işin kartı kaçmaz.
+    """
+    try:
+        sayi = uzun_is_sayisi()
+    except Exception as hata:  # noqa: BLE001 — okunamayan sayaç "iş yok" sayılmaz
+        logger.warning(
+            "Uzun iş sayacı okunamadı (%s); temiz kapanış işareti yazılmadı.", type(hata).__name__
+        )
+        return
+    if sayi != 0:
+        logger.warning("Uzun iş sürerken kapanıldı; temiz kapanış işareti yazılmadı.")
+        return
+    write_marker_quietly(data_dir, app_version)
 
 
 def restore_after_failed_startup(

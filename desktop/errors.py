@@ -37,15 +37,26 @@ class StartupError(Exception):
     exit_code: int = EXIT_UNEXPECTED
     title: str = "OAB Defteri açılamadı"
 
-    def __init__(self, message: str, *, hint: str = "") -> None:
+    def __init__(self, message: str, *, hint: str = "", gunluk_ipucu: str | None = None) -> None:
         super().__init__(message)
         self.message = message
         self.hint = hint
+        self.gunluk_ipucu = gunluk_ipucu
 
     @property
     def full_message(self) -> str:
         """Kullanıcıya gösterilecek tam metin (mesaj + varsa ipucu)."""
         return f"{self.message}\n\n{self.hint}" if self.hint else self.message
+
+    @property
+    def gunluk_metni(self) -> str | None:
+        """Günlüğe yazılacak hâli; ipucu yol taşıyorsa `gunluk_ipucu` verilir (R1).
+
+        `None` iletinin günlüğe olduğu gibi yazılabileceğini söyler (`show_error(gunluk=...)`).
+        """
+        if self.gunluk_ipucu is None:
+            return None
+        return f"{self.message}\n\n{self.gunluk_ipucu}"
 
 
 class AlreadyRunningError(StartupError):

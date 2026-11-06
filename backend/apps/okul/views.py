@@ -636,18 +636,59 @@ class SecurityStateResetView(APIView):
 
 
 # ---------------------------------------------------------------------------
-# Kullanıcı isteğiyle oluşturulan şifreli veritabanı yedeği
+# Kullanıcı isteğiyle kaydedilen şifreli tam yedek
 # ---------------------------------------------------------------------------
+class EncryptedBackupBusyResponse(APIException):
+    """Aynı anda ikinci şifreli yedek: 409 `yedek_suruyor`."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "yedek_suruyor"
+    default_detail = encrypted_backup_service.YEDEK_ALINIYOR
+
+
+class EncryptedBackupMaintenanceResponse(APIException):
+    """Bakım kapısı kapalı (geri yükleme sürüyor): 409 `bakim_suruyor`."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "bakim_suruyor"
+    default_detail = encrypted_backup_service.BAKIM_SURUYOR
+
+
+class EncryptedBackupSaveSerializer(serializers.Serializer[dict[str, Any]]):
+    """Kaydetme penceresinde seçilen yol; yanıtta ve günlükte yankılanmaz (R1).
+
+    Boş gelmesi iptal değildir: iptalde ön yüz istek göndermez. Reddi servis verir.
+    """
+
+    hedef = serializers.CharField(
+        required=False, allow_blank=True, default="", trim_whitespace=False
+    )
+
+
 class EncryptedBackupDownloadView(APIView):
-    def post(self, request: Request) -> FileResponse:
+    """`backups/encrypted/`: şifreli tam yedeğin programca kaydedilmesi (tasarım §4.4.7).
+
+    `GET` kaydetme penceresinin önereceği adı verir (`onerilen_ad`). `POST` `{hedef}` yedeği
+    seçilen yere yazar, yeniden açıp denetler, `YEDEK` satırını yazar, dosyaya asıl adını verir ve
+    kişisiz özeti döndürür (`encrypted_backup`). Yanıt dosya taşımaz, bellek içi indirme yoktur.
+    Masaüstü sunucuyu doğrudan çağırmaz, yol ön yüzden gelir (tasarım §4.1).
+    """
+
+    def get(self, request: Request) -> Response:
         with _service_errors():
-            content, filename = encrypted_backup_service.create_encrypted_backup()
-        return FileResponse(
-            BytesIO(content),
-            as_attachment=True,
-            filename=filename,
-            content_type="application/octet-stream",
-        )
+            return Response({"onerilen_ad": encrypted_backup_service.onerilen_ad()})
+
+    def post(self, request: Request) -> Response:
+        req = EncryptedBackupSaveSerializer(data=request.data)
+        req.is_valid(raise_exception=True)
+        with _service_errors():
+            try:
+                sonuc = encrypted_backup_service.sifreli_yedegi_kaydet(req.validated_data["hedef"])
+            except encrypted_backup_service.YedekSuruyor:
+                raise EncryptedBackupBusyResponse from None
+            except encrypted_backup_service.BakimSuruyor:
+                raise EncryptedBackupMaintenanceResponse from None
+        return Response(sonuc.yanit())
 
 
 # ---------------------------------------------------------------------------

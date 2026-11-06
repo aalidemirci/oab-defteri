@@ -118,6 +118,9 @@ def test_senkron_dizin_uyarisi_verilir(yol: str) -> None:
 
     assert uyari is not None
     assert "yedek" in uyari.lower() or "senkron" in uyari.lower()
+    # Uyarı günlüğe gider; Windows yolu hesap adını içerir (R1).
+    assert yol not in uyari
+    assert str(Path(yol)) not in uyari
 
 
 def test_senkron_disi_dizin_uyari_vermez() -> None:

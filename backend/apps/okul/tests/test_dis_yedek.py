@@ -2,11 +2,11 @@
 
 Kanıtlanan maddeler:
 
-* şifreli yedek indirmesi (`POST backups/encrypted/`) son indirme tarihini veri
+* şifreli yedeğin kaydedilmesi (`POST backups/encrypted/`) son yedeğin tarihini veri
   dizinindeki `dis-yedek.json`'a yazar; veritabanına YAZMAZ (geri yükleme geri sarmaz);
-* hiç indirme yokken hatırlatma parola kurulumundan 7 gün sonra, indirme varken son
-  indirmeden `hatirlatma_gun` (varsayılan 30) gün sonra başlar;
-* süre 7-90 gün arasında ayarlanır; aralık dışı 400; bozuk dosya "hiç indirme yok" sayılır;
+* hiç kayıt yokken hatırlatma parola kurulumundan 7 gün sonra, kayıt varken son
+  kayıttan `hatirlatma_gun` (varsayılan 30) gün sonra başlar;
+* süre 7-90 gün arasında ayarlanır; aralık dışı 400; bozuk dosya "hiç kayıt yok" sayılır;
 * uç kilitliyken 423 (rol izni `rol_izinleri.KURALLAR`'da); yanıtta kişisel veri yok.
 """
 
@@ -102,10 +102,10 @@ def test_indirme_saati_sifirlar_ve_sure_dolunca_hatirlatir() -> None:
     assert ozet.son_indirme is not None and ozet.son_indirme.startswith("2026-09-01T14:30")
 
 
-def test_sifreli_yedek_indirmesi_tarihi_veri_dizinine_yazar(
+def test_sifreli_yedek_kaydi_tarihi_veri_dizinine_yazar(
     client: APIClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # İndirilen görüntünün kaynağı dosya tabanlı bir SQLite olmalıdır (test DB'si değil).
+    # Görüntünün kaynağı dosya tabanlı bir SQLite olmalıdır (test DB'si değil).
     kaynak = tmp_path / "db.sqlite3"
     with closing(sqlite3.connect(kaynak)) as baglanti:
         baglanti.execute("CREATE TABLE deneme (deger TEXT)")
@@ -114,7 +114,10 @@ def test_sifreli_yedek_indirmesi_tarihi_veri_dizinine_yazar(
     yol = dis_yedek.dosya_yolu()
     assert not yol.exists()
 
-    yanit = client.post("/api/v1/backups/encrypted/")
+    usb = tmp_path / "usb"
+    usb.mkdir()
+    hedef = usb / "oab-defteri-yedek-2026-11-06-101530.odbak"
+    yanit = client.post("/api/v1/backups/encrypted/", {"hedef": str(hedef)}, format="json")
 
     assert yanit.status_code == 200
     kayit = json.loads(yol.read_text(encoding="utf-8"))

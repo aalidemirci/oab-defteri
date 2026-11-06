@@ -14,6 +14,7 @@ import os
 import stat
 import tracemalloc
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -860,6 +861,16 @@ def test_acilamayan_ek_eksik_isaretlenir_yedek_yine_alinir(
     assert manifesto.tasinanlar == (girdiler[_AD_1],)
     icerik = decrypt_bytes(hedef.read_bytes(), _DEK)
     assert icerik.veritabani == _DB and icerik.manifesto == manifesto
+
+
+def test_caginin_eksik_verdigi_ek_saglam_dosyayla_da_tasinmaz(tmp_path: Path) -> None:
+    """Ön okumanın kararı korunur (kullanıcı kararı 05.11.2026): bu katman DEK'i tanımaz, dosyanın
+    diskte sağlam görünmesi çağıranın kararını geri almaz."""
+    depo = tmp_path / "dosyalar"
+    girdi = _depo(depo, **{_AD_1: b"saglam"})[_AD_1]
+
+    assert backup_crypto._diskteki_hali(replace(girdi, eksik=True), depo).eksik is True
+    assert backup_crypto._diskteki_hali(girdi, depo).eksik is False
 
 
 def test_ek_sinanirken_acilan_dosya_kapatilir(

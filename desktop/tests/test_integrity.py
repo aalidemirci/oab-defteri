@@ -67,6 +67,26 @@ def test_bozuk_dosya_turkce_hata_ile_reddedilir(tmp_path: Path) -> None:
     assert "silinmez" not in hata.value.hint
 
 
+def test_bozuk_veritabani_iletisi_yolu_kullaniciya_gosterir_gunluge_yazmaz(tmp_path: Path) -> None:
+    """Yedek klasörü yol gösterir, ama günlük BTR'ye iletilir: yol hesap adını taşır (R1)."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db)
+    with db.open("r+b") as f:
+        f.seek(0)
+        f.write(b"BOZUKBOZUK")
+    yedekler = tmp_path / "Uydurgul" / "backups"
+
+    with pytest.raises(DatabaseCorruptError) as hata:
+        check_database_integrity(db, backup_dir=yedekler)
+
+    assert str(yedekler) in hata.value.full_message
+    gunluk = hata.value.gunluk_metni
+    assert gunluk is not None
+    assert "Uydurgul" not in gunluk
+    assert hata.value.message in gunluk
+    assert "OAB Defteri — Yedekten Geri Yükle" in gunluk
+
+
 def test_pardus_benioku_geri_yuklemede_program_yoneticisini_anar() -> None:
     """Pardus'ta yol gösterme BENIOKU'dadır (`oab-defteri --geri-yukle`); metin bütünlük
     iletisiyle aynı şeyi söyler."""

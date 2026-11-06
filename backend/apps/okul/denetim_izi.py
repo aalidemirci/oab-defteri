@@ -155,6 +155,8 @@ IZ_ANAHTARI_BAYT: Final = 32
 #:   Kullanıcının istediği yedek açık kipte, açılıştaki günlük ve göç öncesi yedekler
 #:   kilitli kipte yazılır (tasarım §4.6.3). Yalnız programın ürettiği ad kimlik olur
 #:   (`yedek_kimligi`); elle konmuş ya da yeniden adlandırılmış dosyanın adı satıra girmez.
+#:   Kullanıcının kaydettiği tam yedeğin değerleri kişisizdir (plan F1b-3 "Uzun iş, çarpı, temiz
+#:   kapanış"): kapsam, dosya sayısı, boyut, eksik; yol ve serbest ad satıra girmez.
 #: * Dış yedek hatırlatmasının süresi (`dis-yedek.json`, tasarım §16 R6; gün sayısı).
 #: * Şema göçü (`GOC`; kimliği programın sürümü, değeri uygulanan göçlerin adları).
 #: * Ertelenen gün işi (`GUN_ISI`; kimliği işin ASCII adı).
@@ -182,10 +184,12 @@ GUN_ISI_ERTELEME: Final = "gun_isi.erteleme"
 IZ_DOGRULAMASI: Final = "denetim_izi.dogrulama"
 GERI_YUKLEME_KAYDI: Final = "yedek.geri_yukleme"
 DOSYA_DEPOSU: Final = "dosya.deposu"
+#: Yedek Raporu'nun basımı (`basim`); satırı `BASIM_DEGERLERI`'ni taşır, bu listeye girmez.
+YEDEK_RAPORU: Final = "yedek.rapor"
 DOSYA_NESNELERI: Final[Mapping[str, tuple[str, ...]]] = {
     KURTARMA_ANAHTARI: ("no", "tarih"),
     HESAP_SARMALI: ("hatali", "askida"),
-    YEDEK_DOSYASI: ("zaman",),
+    YEDEK_DOSYASI: ("zaman", "kapsam", "dosya_sayisi", "boyut", "eksik"),
     DIS_YEDEK_AYARI: ("hatirlatma_gun",),
     SEMA_GOCU: ("gocler", "zaman"),
     GUN_ISI_ERTELEME: ("zaman",),
@@ -223,7 +227,7 @@ DOSYA_NESNELERI: Final[Mapping[str, tuple[str, ...]]] = {
 #: `services/encrypted_backup.py`): günlük `gunluk-<gün>`, göç öncesi
 #: `pre-migrate-<sürüm>-<gün>`, kurulum `pre-parola-acilis-<gün>-<saat>`, saklama tetiği öncesi
 #: `pre-anonim-<gün>-<saat>[-<sıra>]`, dönem kapanışı öncesi `pre-kapanis-<gün>`, DEK yenilemesi
-#: öncesi `pre-dek-yenileme-<gün>`, indirilen `oab-defteri-yedek-<gün>-<saat>` (`.odbak`) ve
+#: öncesi `pre-dek-yenileme-<gün>`, kaydedilen `oab-defteri-yedek-<gün>-<saat>` (`.odbak`) ve
 #: kenara alınan veritabanı `db-onceki-<gün>-<saat>.sqlite3` (plan F1b-1 ekleri; `-wal`/`-shm`
 #: eşleri yedek değildir, satıra girmez). Önekten sonra serbest harf KABUL EDİLMEZ:
 #: kullanıcı programın önekini koruyup dosyaya bir ad ekleyebilir ("oab-defteri-yedek-…-
@@ -658,8 +662,10 @@ def olay(
 #: Evrak basımının satırının değerleri (tasarım §4.6.2 kural 3: "evrak basımı `BASIM` satırıdır
 #: (tür, sha256)"): YALNIZ evrak kodu ve basılan dosyanın SHA-256'sı. İkisi de kişisel veri
 #: değildir; biçimleri `basim`'de denetlenir (kod `E01`…`E79` biçiminde, özet 64 küçük onaltılık).
+#: Yedek Raporu program belgesidir, E-kodu almaz (tasarım §9.7): satırı sabit kodunu taşır.
 BASIM_DEGERLERI: Final = ("kod", "sha256")
-_EVRAK_KODU: Final = re.compile(r"E\d{2}")
+YEDEK_RAPORU_KODU: Final = "YEDEK-RAPORU"
+_EVRAK_KODU: Final = re.compile(rf"E\d{{2}}|{YEDEK_RAPORU_KODU}")
 _SHA256_OZETI: Final = re.compile(r"[0-9a-f]{64}")
 
 

@@ -273,6 +273,10 @@ ADSIZ_UCLAR: Final[Mapping[str, str]] = {
         "Güvenlik dosyası kayıp ekranındaki sıfırlama; yalnız hiç hesap ve şifreli kayıt yokken "
         "açıktır, açık oturumda 409 döner; hesap sahibinin işi değildir."
     ),
+    "backup-report": (
+        "Yedek Raporu: ekranı henüz yoktur, pusula yalnız bugün programda yapılabilen işi yazar. "
+        "Adı Ayarlar → Güvenlik'teki düğmeyle ve sözlükle birlikte Güvenlik satırına geçer."
+    ),
     "security-integrity-reset-notice": (
         "Kendi parola yenilenme bildiriminin “Gördüm”ü; bildirim kendiliğinden açılır, ayrı iş "
         "değildir."

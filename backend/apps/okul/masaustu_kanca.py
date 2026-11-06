@@ -46,7 +46,8 @@ kontrol kanalı doğmaz:
   (`iz_durumu`). Hata yükseltmez; tek dosyanın taşınamaması taramayı durdurmaz.
 * **Artık temizliği** (`artiklari_temizle`; plan F1b-3 "Geri yükleme"): yarım kalmış işlerin geçici
   dosyaları açılışta silinir: `db.sqlite3.yeni.tmp` ve eşleri, `.geri-yukleme-denetimi-*`,
-  `.yukleme-*.tmp`, `*.odbak.tmp`, `dosyalar/<stored_name>.tmp`, hazırlık dizinleri. Yalnız bu adlara
+  `.yukleme-*.tmp`, `*.odbak.tmp`, `dosyalar/<stored_name>.tmp`, hazırlık dizinleri ve `serialize`
+  olmayan SQLite'ın görüntü dizini (`.yedek-goruntusu-*`; içinde düz görüntü durur). Yalnız bu adlara
   ve beklenen türe (dosya ya da dizin) dokunulur, yol ve ad günlüğe yazılmaz (`*.odbak.tmp`'nin adı
   serbest olabilir; R1). Çağıran tek kopya kilidini tutar: başka bir kopya ya da geri yükleme
   sürerken bu adlar artık değildir. `--geri-yukle` de kendi kilidi altında çağırır: veritabanı
@@ -379,7 +380,7 @@ def _artik_kurallari(
     db_path: Path, yedekler: Path, depo: Path
 ) -> tuple[tuple[Path, Callable[[str], bool], Callable[[int], bool]], ...]:
     """(dizin, ad tanıyıcı, beklenen tür) üçlüleri: tanınan artıkların tek listesi (modül başlığı)."""
-    from desktop.backup import SQLITE_EKLERI
+    from desktop.backup import GORUNTU_DIZINI_ONEKI, SQLITE_EKLERI
     from desktop.backup_crypto import BACKUP_SUFFIX
 
     from apps.okul.services import backup_restore, geri_yukleme_yetkisi, live_restore
@@ -401,6 +402,7 @@ def _artik_kurallari(
             lambda ad: ad.startswith(geri_yukleme_yetkisi.GECICI_DIZIN_ONEKI),
             stat.S_ISDIR,
         ),
+        (db_path.parent, lambda ad: ad.startswith(GORUNTU_DIZINI_ONEKI), stat.S_ISDIR),
         (yedekler, yedek_artigi_mi, stat.S_ISREG),
         (depo, ds.gecici_artik_mi, stat.S_ISREG),
         (depo, ds.hazirlik_artigi_mi, stat.S_ISDIR),

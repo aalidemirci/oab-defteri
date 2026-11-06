@@ -53,11 +53,19 @@ kişisiz yapılandırılmış yanıt döner. İkinci onay durumsuzdur: istek ayn
 Geri yükleme UZUN İŞTİR (`shared.bakim.UZUN_ISLER`; tasarım §4.2, §4.4.3): sürerken
 oturumun boşta ve elle kilidi ertelenir, DEK işin ortasında silinmez. Başarıda oturum
 burada HEMEN kapanır (`app_password.lock`): DEK artık bu veritabanına ait değildir.
+
+Aynı anda tek geri yükleme (`_TEK_GERI_YUKLEME`): ikincisi beklemez, çekirdeğe ve bakım kapısına
+dokunmadan düşer. Kapı zaten kapalıyken `bakima_al` yine `True` döner; ikinci istek düşünce
+`bakimdan_cik` kapıyı birincisi takastayken açar, şifreli yedek de o sırada başlayabilirdi. Kilit
+`mark_restart_required`'ı da kapsar. Bıraktıktan sonra gelen istekleri yeniden başlat kapısı keser;
+o kapı yalnız girişte bakar, birincisi bitmeden geçmiş istek kilidi alınca kapıyı kendisi sorar.
+Sormasaydı çekirdekte düşüp bakım kapısını başarılı geri yüklemeden sonra açardı.
 """
 
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any, Final, cast
@@ -92,6 +100,8 @@ BAKIM_BEKLEME_SN = 10.0
 BAKIM_SURUYOR = (
     "Süren bir yedekleme ya da gün işi var; geri yükleme yapılmadı. Biraz sonra yeniden deneyin."
 )
+#: Aynı anda tek geri yükleme (modül başlığı).
+_TEK_GERI_YUKLEME: Final = threading.Lock()
 #: Yüklenen yedeğin geçici dosyasının öneki ve eki: `.odbak` BİLEREK değildir, rotasyon ve liste
 #: yalnız o uzantıya bakar, yarım kalan dosya yedek sanılmamalı. Artığı açılış temizliği toplar.
 YUKLEME_ONEKI: Final = ".yukleme-"
@@ -194,7 +204,7 @@ def list_backups() -> dict[str, Any]:
 
     Her satırın `kurtarma` alanı o yedeği açan kurtarma anahtarının kimliğidir:
     `{no, tarih}` (`tarih` ISO gün; arayüz gg.aa.yyyy yazar) ya da başlık yoksa,
-    okunamıyorsa veya kullanılamıyorsa `null` (`_recovery_key_of`). Kullanıcı
+    okunamıyorsa veya kullanılamıyorsa `null` (`recovery_key_of`). Kullanıcı
     yeni bilgisayarda hangi kâğıdın hangi yedeği açtığını buradan görür (tasarım
     §4.4.4, TK10; anahtar yenilenince eski kâğıt eski yedekleri açmaya devam eder).
     Başlığın tuzu ve sarmalı ASLA dönmez.
@@ -216,7 +226,7 @@ def list_backups() -> dict[str, Any]:
                     "modified_at": timezone.localtime(
                         datetime.fromtimestamp(bilgi.st_mtime, tz=UTC)
                     ).isoformat(),
-                    "kurtarma": _recovery_key_of(yol),
+                    "kurtarma": recovery_key_of(yol),
                     "kapsam": _kapsam_of(yol),
                     "_mtime": bilgi.st_mtime,
                 }
@@ -252,15 +262,22 @@ def restore_and_require_restart(
         rol_izinleri.yetki_oturum(rol_izinleri.Eylem.GERI_YUKLEME)
         hesap = _parola_hesabi(hesap, oturum_hesabi)
     with bakim.UZUN_ISLER.is_():
-        return _restore(
-            name=name,
-            yuklenen=yuklenen,
-            hesap=hesap,
-            password=password,
-            recovery_key=recovery_key,
-            oturum_hesabi=oturum_hesabi,
-            ekler_olmadan_surdur=ekler_olmadan_surdur,
-        )
+        if not _TEK_GERI_YUKLEME.acquire(blocking=False):
+            raise LiveRestoreError(BAKIM_SURUYOR)
+        try:
+            if restart_gate.restart_required():
+                raise LiveRestoreError(BAKIM_SURUYOR)
+            return _restore(
+                name=name,
+                yuklenen=yuklenen,
+                hesap=hesap,
+                password=password,
+                recovery_key=recovery_key,
+                oturum_hesabi=oturum_hesabi,
+                ekler_olmadan_surdur=ekler_olmadan_surdur,
+            )
+        finally:
+            _TEK_GERI_YUKLEME.release()
 
 
 def _parola_hesabi(hesap: str, oturum_hesabi: str) -> str:
@@ -339,7 +356,7 @@ def _restore(
 # ---------------------------------------------------------------------------
 # İç yardımcılar
 # ---------------------------------------------------------------------------
-def _recovery_key_of(yol: Path) -> dict[str, Any] | None:
+def recovery_key_of(yol: Path) -> dict[str, Any] | None:
     """Yedeği açan kurtarma anahtarının kimliği `{no, tarih}`; bilinemiyorsa None.
 
     Yalnız dosyanın başı okunur (`read_embedded_recovery_metadata`). Başlık

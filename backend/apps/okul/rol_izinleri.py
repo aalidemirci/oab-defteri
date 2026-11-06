@@ -511,11 +511,14 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _yaz("security-recovery-key-renew", "POST", Satir.GUVENLIK),
     # Güvenlik dosyası kayıp kilidinde rol kapısı kesmez (kilit kapısının listesi geçerlidir).
     _yaz("security-state-reset", "POST", Satir.GUVENLIK),
+    # Şifreli yedek: önerilen ad (okuma) ve seçilen yere kaydetme (plan F1b-3 "Ötekiler").
+    _oku("encrypted-backup-download", Satir.GUVENLIK),
     _yaz("encrypted-backup-download", "POST", Satir.GUVENLIK),
     _oku("backup-external-reminder", Satir.GUVENLIK),
     _yaz("backup-external-reminder", "PUT", Satir.GUVENLIK),
     _oku("backup-list", Satir.GUVENLIK),
     _yaz("backup-restore", "POST", Satir.GUVENLIK),
+    _yaz("backup-report", "POST", Satir.GUVENLIK),
     # İki depo farkı ve sahipsiz parola kayıtlarının onayla silinmesi: güvenlik dosyasının
     # bakımıdır (tasarım §4.6.1 kural 4: "fark yonetici'ye"; plan F1b-2).
     _oku("security-integrity-two-store", Satir.GUVENLIK),
@@ -706,10 +709,11 @@ YETENEKLER: Final[Mapping[str, frozenset[tuple[str, str]]]] = {
         ("security-recovery-key-pdf", "POST"),
         ("security-recovery-key-confirm", "POST"),
         ("security-recovery-key-renew", "POST"),
-        ("encrypted-backup-download", "POST"),
+        ("encrypted-backup-download", ("GET", "POST")),
         ("backup-external-reminder", ("GET", "PUT")),
         ("backup-list", "GET"),
         ("backup-restore", "POST"),
+        ("backup-report", "POST"),
     ),
     "guncelleme": _ciftler(("update-latest", "GET"), ("update-installer", "GET")),
     "bosta_sure_yazma": _ciftler(("security-idle-lock", "PUT")),

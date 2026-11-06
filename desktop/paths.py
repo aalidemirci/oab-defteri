@@ -179,13 +179,14 @@ def resolve_app_paths(
 def check_sync_hazard(path: Path) -> str | None:
     """Veri dizini buluta/gezici profile denk geliyorsa Türkçe uyarı döndürür.
 
-    Engellemez (kullanıcı bilinçli taşımış olabilir) — yalnız günlüğe yazılır.
+    Engellemez (kullanıcı bilinçli taşımış olabilir) — yalnız günlüğe yazılır. İleti yolu
+    taşımaz: Windows yolu hesap adını içerir, bu günlük BTR'ye iletilen dosyadır.
     """
     lowered = str(path).lower().replace("\\", "/")
     for marker in _SYNC_MARKERS:
         if marker.replace("\\", "/") in lowered:
             return (
-                f"Veri dizini bulut/gezici profil ile eşitlenen bir konumda görünüyor: {path}. "
+                "Veri dizini bulut/gezici profil ile eşitlenen bir konumda görünüyor. "
                 "Eşitleme açık veritabanı dosyasını bozabilir; verinizi eşitlenmeyen bir "
                 "klasöre almanız ve düzenli yedek almanız önerilir."
             )

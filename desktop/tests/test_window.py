@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +11,9 @@ import pytest
 
 from desktop.errors import WebViewUnavailableError
 from desktop.window import (
+    KAYDETME_SUZGECI,
     WINDOW_TITLE,
+    PencereKoprusu,
     gui_backend_for,
     open_window,
     require_window_runtime,
@@ -122,6 +126,113 @@ def test_pencere_dosya_indirmelerine_izin_verir(tmp_path: Path) -> None:
     open_window("http://127.0.0.1:1/", webview=sahte, platform="win32", storage_path=tmp_path)
 
     assert sahte.settings["ALLOW_DOWNLOADS"] is True
+
+
+class _KaydetmePenceresi:
+    """`create_file_dialog` yerine geçer; pywebview 5.3.2'nin iki platformdaki dönüşünü verir."""
+
+    def __init__(self, sonuc: Any = None, hata: Exception | None = None) -> None:
+        self.sonuc = sonuc
+        self.hata = hata
+        self.cagrilar: list[tuple[Any, ...]] = []
+        self.anahtarlar: list[dict[str, Any]] = []
+
+    def create_file_dialog(self, *args: Any, **kwargs: Any) -> Any:
+        self.cagrilar.append(args)
+        self.anahtarlar.append(kwargs)
+        if self.hata is not None:
+            raise self.hata
+        return self.sonuc
+
+
+class _KaydetmeSabiti:
+    SAVE_DIALOG = 30  # pywebview 5.3.2 `webview/__init__.py`
+
+
+def _kopru(pencere: Any) -> PencereKoprusu:
+    kopru = PencereKoprusu(platform="win32", webview=_KaydetmeSabiti)
+    kopru.bind_window(pencere)
+    return kopru
+
+
+@pytest.mark.parametrize(
+    ("donus", "beklenen"),
+    [
+        # WinForms `dialog.FileName`: düz metin. Dizi gibi okunsa yolun ilk harfi dönerdi.
+        ("C:\\Yedekler\\yedek.odbak", "C:\\Yedekler\\yedek.odbak"),
+        # Qt: tek öğeli demet.
+        (("/media/usb/yedek.odbak",), "/media/usb/yedek.odbak"),
+        (["/media/usb/yedek.odbak"], "/media/usb/yedek.odbak"),
+        # İki platformda da iptal.
+        (None, ""),
+        ((), ""),
+    ],
+    ids=["winforms", "qt", "liste", "iptal", "bos_demet"],
+)
+def test_kaydetme_penceresinin_donusu_tek_bicime_iner(donus: Any, beklenen: str) -> None:
+    assert _kopru(_KaydetmePenceresi(donus)).kaydetme_yeri_sor("yedek.odbak") == beklenen
+
+
+def test_kaydetme_penceresi_onerilen_adla_kaydetme_kipinde_acilir() -> None:
+    pencere = _KaydetmePenceresi(None)
+
+    _kopru(pencere).kaydetme_yeri_sor("oab-defteri-yedek-2026-11-06-101530.odbak")
+
+    assert pencere.cagrilar == [(30,)]
+    (anahtarlar,) = pencere.anahtarlar
+    assert anahtarlar["save_filename"] == "oab-defteri-yedek-2026-11-06-101530.odbak"
+    assert anahtarlar["file_types"] == KAYDETME_SUZGECI
+    assert anahtarlar["directory"] == str(Path.home())
+
+
+def test_onerilen_addaki_yol_ayiklanir() -> None:
+    pencere = _KaydetmePenceresi(None)
+
+    _kopru(pencere).kaydetme_yeri_sor("/baska/yer/yedek.odbak")
+
+    assert pencere.anahtarlar[0]["save_filename"] == "yedek.odbak"
+
+
+def test_kaydetme_suzgeci_pywebviewin_bicimine_uyar() -> None:
+    """Desen pywebview 5.3.2 `util.parse_file_type`'tan: uymayan süzgeç `ValueError` verirdi."""
+    desen = r"^([\w ]+)\((\*(?:\.(?:\w+|\*))*(?:;\*\.\w+)*)\)$"
+    assert all(re.search(desen, suzgec) for suzgec in KAYDETME_SUZGECI)
+
+
+def test_pencere_yoksa_kaydetme_yeri_bos_doner(caplog: pytest.LogCaptureFixture) -> None:
+    """`--autotest` ve pencere bağlanmadan gelen çağrı: boş dönüş, ön yüz istek göndermez.
+
+    Bu bir hata değildir, günlüğe uyarı düşmez.
+    """
+    kopru = PencereKoprusu(platform="linux", webview=_KaydetmeSabiti)
+
+    with caplog.at_level(logging.DEBUG):
+        assert kopru.kaydetme_yeri_sor("yedek.odbak") == ""
+
+    assert not caplog.records
+
+
+def test_kaydetme_penceresi_acilamazsa_bos_doner_yol_gunluge_gitmez(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    pencere = _KaydetmePenceresi(hata=RuntimeError("/home/uydurma/yedek.odbak"))
+
+    with caplog.at_level(logging.DEBUG):
+        assert _kopru(pencere).kaydetme_yeri_sor("yedek.odbak") == ""
+
+    assert "uydurma" not in caplog.text
+
+
+def test_pencere_kaydetme_yeri_koprusunu_frontende_sunar(tmp_path: Path) -> None:
+    sahte = _SahteWebview()
+
+    open_window("http://127.0.0.1:1/", webview=sahte, platform="linux", storage_path=tmp_path)
+
+    kopru = sahte.pencereler[0]["js_api"]
+    assert callable(kopru.kaydetme_yeri_sor)
+    # pywebview `js_api`'nin açık özniteliklerini dolaşır: pencere modülü ön yüze açılmamalı.
+    assert "_webview" in vars(kopru)
+    assert not [ad for ad in vars(kopru) if not ad.startswith("_")]
 
 
 def test_pencere_baslik_cubugu_tema_koprusunu_frontende_sunar(tmp_path: Path) -> None:

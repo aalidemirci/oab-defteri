@@ -42,7 +42,9 @@ bozukken rotasyonun sağlam eski yedekleri silmesi istenmez.
 kapanışı (SIGTERM). Sıra: pencere → kanal → Qt köprüsü → kancalar bırakılır →
 `od-gunluk` → oturum açıksa kilitlenir (`KILIT` satırı ve çapa `iz-durumu.json`'a, sonra DEK
 ve iz anahtarı bellekten düşer) → yönetim sunucusu → WAL checkpoint (TB14) → temiz kapanış
-işareti → kilit. Mutex'ler süreç bitene dek kalır (lock.py).
+işareti (yalnız uzun iş sayacı sıfırsa; okunamazsa yazılmaz) → kilit. Mutex'ler süreç bitene dek
+kalır (lock.py). Uzun yazma işi sürüyorsa pencere önce onu en çok 60 sn bekler
+(`desktop/window.py`); sayaç aynı nesnedir (`uzun_is_sayaci`).
 
 Yedek adımı (7) ve açılış bakımı dışında herhangi bir adım başarısız olursa pencere açılmaz;
 kullanıcıya Türkçe ileti + "son yedekten dön" yolu gösterilir ve hataya özel bir çıkış kodu döner (CI ve
@@ -78,7 +80,7 @@ from desktop.clean_shutdown import (
     consume_marker,
     publish,
     restore_after_failed_startup,
-    write_marker_quietly,
+    write_marker_if_idle,
 )
 from desktop.dialogs import show_error
 from desktop.django_bootstrap import (
@@ -121,7 +123,12 @@ from desktop.version import (
     get_app_version,
     write_version_stamp,
 )
-from desktop.window import WindowController, open_window, require_window_runtime
+from desktop.window import (
+    UzunIsBeklenebilir,
+    WindowController,
+    open_window,
+    require_window_runtime,
+)
 
 logger = logging.getLogger("oab_defteri")
 
@@ -351,6 +358,27 @@ def _acilis_bakimi(paths: AppPaths, *, autotest: bool) -> None:
         logger.exception("Dosya deposu taranamadı; program açılıyor.")
 
 
+def uzun_is_sayaci() -> UzunIsBeklenebilir | None:
+    """Ortak uzun iş sayacı (`shared.bakim.UZUN_ISLER`; bakım kapısı gibi kabukla ortaktır).
+
+    İçe aktarma çağrı anındadır: backend dizini `sys.path`'e `prepare_django` ile girer. Backend
+    yoksa (masaüstü birim testi) `None`: pencere beklemez, temiz kapanış işareti yazılmaz.
+    """
+    try:
+        from shared.bakim import UZUN_ISLER
+    except ImportError:
+        return None
+    return UZUN_ISLER
+
+
+def _uzun_is_sayisi() -> int:
+    """Temiz kapanış işaretinin okuması; sayaç yoksa hata: okunamayan sayaç "sıfır" sayılmaz."""
+    sayac = uzun_is_sayaci()
+    if sayac is None:
+        raise RuntimeError("Uzun iş sayacı yok.")
+    return sayac.sayi
+
+
 def dispatch_command(command: str, controller: WindowController) -> None:
     """Tek kopya kanalından gelen komut → pencere denetçisi."""
     if command == COMMAND_SHOW:
@@ -390,7 +418,7 @@ def run_window_session(
     (`masaustu_kanca`); pencere süslemesi olmayan Linux masaüstünün çıkış yolu
     odur (TB13).
     """
-    controller = WindowController(platform=platform)
+    controller = WindowController(platform=platform, sayac=uzun_is_sayaci())
     # Linux: Qt uygulaması ve SIGTERM köprüsü pencereden ÖNCE, ana iş parçacığında
     # (§4.2 adım 11, §13 D1).
     qt = qt_kurulum.hazirla(controller.request_quit) if platform.startswith("linux") else None
@@ -592,7 +620,7 @@ def _run_locked(paths: AppPaths, args: argparse.Namespace, app_version: str) -> 
             restore_after_failed_startup(previous, paths.data, app_version)
             raise
         if code == EXIT_OK:
-            write_marker_quietly(paths.data, app_version)
+            write_marker_if_idle(paths.data, app_version, _uzun_is_sayisi)
         return code
     finally:
         if channel is not None:
@@ -649,7 +677,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             lock.release()
     except StartupError as exc:
         logger.error("Açılış durdu: %s", exc.message)
-        show_error(exc.title, exc.full_message)
+        show_error(exc.title, exc.full_message, gunluk=exc.gunluk_metni)
         return exc.exit_code
     except Exception:
         logger.exception("Açılışta beklenmeyen hata.")

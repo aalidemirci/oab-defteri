@@ -1153,6 +1153,37 @@ def test_bozuk_not_ayrintisiz_geri_yukleme_satiri_yazar(icerik: str) -> None:
     assert not satirlar(action="BUTUNLUK")
 
 
+def test_notta_bekleyen_yedek_olayi_kisisiz_degerlerini_tasir_yol_tasiyamaz() -> None:
+    """Plan F1b-3: `YEDEK` satırının izinli değerleri kişisizdir; `yol` izin listesinde yoktur."""
+    kilitle()
+    notu_yaz()
+    notu = geri_yukleme_notu.oku(iz_durumu.dizin())
+    assert notu is not None
+    degerler = {
+        "kapsam": [None, "tam"],
+        "dosya_sayisi": [None, 2],
+        "boyut": [None, 4096],
+        "eksik": [None, 1],
+    }
+    olay = {
+        "eylem": "YEDEK",
+        "model": denetim_izi.YEDEK_DOSYASI,
+        "object_id": "oab-defteri-yedek-2026-11-06-101530.odbak",
+        "changed_fields": sorted(degerler),
+    }
+    notu["bekleyen_olaylar"] += [
+        {**olay, "values": degerler},
+        {**olay, "values": {"yol": [None, "uydurma-yol"]}},
+    ]
+    geri_yukleme_notu.yol(iz_durumu.dizin()).write_text(json.dumps(notu), encoding="utf-8")
+
+    ac()
+
+    yeni = satirlar(seq__gt=satirlar(action="KILIT")[-1].seq)
+    assert [s.action for s in yeni] == ["GERI_YUKLEME", "YEDEK", "GIRIS"]
+    assert yeni[1].values == degerler
+
+
 def test_notta_bicimsiz_bekleyen_olay_atlanir_giris_acilir() -> None:
     """Not dosyası program dışından değiştirilebilir: kapalı küme dışı tür, sistem olayı
     olmayan nesne, izinsiz değer ve serbest metin (uydurma kişi adı) satıra GİRMEZ (R1).
