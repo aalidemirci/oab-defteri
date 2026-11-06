@@ -573,6 +573,10 @@ MUAF_UCLAR: dict[tuple[str, str], str] = {
         "Yalnız hesap ve iz anahtarı YOKKEN çalışır (parmak izi ve şifreli tablolar boş): "
         "zincir yoktur, ilk hesaptan önce olay yazılmaz (plan F1b-1)."
     ),
+    ("backup-inspect", "POST"): (
+        "Kayıt yazmaz: seçilen dosyanın başlığını okur, yol gövdede gittiği için POST'tur "
+        '(kullanıcı kararı 06.11.2026 "Elden seçilen yedeğin başlığını sunucu okur").'
+    ),
     ("backup-restore", "POST"): (
         "Veritabanını değiştirir: satır kenara alınan veritabanına yazılamaz, yenisinde oturum "
         "yoktur. Ortak çekirdek `geri-yukleme-notu.json`'u yazar; `GERI_YUKLEME` satırı nottan "

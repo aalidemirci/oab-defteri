@@ -13,8 +13,8 @@ açılmamışken hassas alanlar zaten okunamaz (şifreli token döner) ve yazıl
    `423 guvenlik_dosyasi_kayip` döner. Anahtar bellekteyken dosya kaybolsa bile kapı
    kapanır: bir sonraki kilitte açılamayacak bir durumda çalışmaya devam etmek yerine
    kullanıcı sorunu hemen görür. Açık kalanlar `KAYIP_IZINLI`'dedir: durum uçları,
-   "sıfırla ve kuruluma dön" (uç koşulu kendisi denetler, aksi 409), yedek listesi ve
-   geri yükleme (çıkış yolu: geri yükleme `guvenlik.json`'u yedeğin kurtarma
+   "sıfırla ve kuruluma dön" (uç koşulu kendisi denetler, aksi 409), yedek listesi, seçilen
+   dosyanın başlığı ve geri yükleme (çıkış yolu: geri yükleme `guvenlik.json`'u yedeğin kurtarma
    başlığından yeniden yazar; öteki yol dosyanın yedeğini veri klasörüne geri koymaktır
    — kapı her istekte diske bakar, dosya döndüğü anda olağan kilide geçilir) ve Çık.
 2. **Kilitli** (`423 locked`): hesap kurulu, oturum açık değil (`oturum.OTURUM`). Açık
@@ -111,6 +111,8 @@ KAYIP_IZINLI: Mapping[str, frozenset[str]] = {
     # "Güvenlik dosyasını sıfırla ve kuruluma dön": uç kendi koşullarını denetler (aksi 409).
     _API + "security/state/reset/": _POST,
     _API + "backups/": OKUMA,
+    # Aç penceresinde seçilen dosyanın başlığı: kayıp ekranı da yedeği onunla tanır.
+    _API + "backups/inspect/": _POST,
     _API + "backups/restore/": _POST,
     # Çık (tasarım §4.2): kayıp kilidinde de parolasız çıkılır.
     _API + "app/quit/": _POST,

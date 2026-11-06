@@ -21,16 +21,21 @@ Açık kopya kuralı sunucuyu da kapsar (tasarım §4.4.7, §4.3 tehdit 15): wai
 çağırmadan önce tamponlar ve eşiği aşan tamponu sistemin geçici dizinine DÜZ yazar. Varsayılan
 eşikler istekte 512 KB, yanıtta 1 MB'tır: 600 KB'lık bir e-Okul listesi Django'ya varmadan diske
 inerdi. `tampon_esigi` iki tamponu da yükleme sınırına çeker (`TAMPON_PAYI`). Eşiği aşan gövde
-yine geçici dosyaya iner: sunucu uca göre ayırmaz, gövde bitmeden uygulamayı çağırmaz; şifreli
-yedek için bu sorun değildir, sınırı aşan düz dosya için kalan risktir (plan F1b-3 "Dosya
-deposu"). `wsgi.file_wrapper` yolundan giden yanıt (`FileResponse`) bu tampona hiç girmez.
+yine geçici dosyaya iner: sunucu uca göre ayırmaz, gövde bitmeden uygulamayı çağırmaz; sınırı aşan
+düz dosya için kalan risktir (plan F1b-3 "Dosya deposu"). `wsgi.file_wrapper` yolundan giden yanıt
+(`FileResponse`) bu tampona hiç girmez.
+
+Programın penceresinde yedek yüklenmez (kullanıcı kararı 06.11.2026 "Yedek dosyası yüklenmez,
+programın Aç penceresiyle seçilir"): yol ve sır küçük istekle gelir, gövde eşiği aşmaz, parola ve
+kurtarma anahtarı diske inmez. Yükleme kutusu yalnız köprünün olmadığı geliştirme kipindedir; orada
+eşiği aşan gövde bütünüyle geçici dosyaya iner, aynı gövdedeki parola ya da kurtarma anahtarı da.
 
 Gövde üst sınırı açıkça verilir (`AZAMI_ISTEK_GOVDESI`; kullanıcı kararı 06.11.2026 "1 GB üstü
-şifreli yedek yükleme kutusundan açılır"): waitress'in varsayılanı 1 GiB'tır, tam yedeği uca varmadan
-düz metin 413 ile keserdi. Sunucu uca göre ayırmadığı için değer bütün uçlara uygulanır; öteki uçlarda
-çok parçalı gövdenin sınırı Django işleyicisindedir. JSON ve form gövdesinde Django sınırı yoktur, üst
-sınır bu değerdir; ön yüz böyle gövde göndermez, ekranı atlayan istek için kalan risktir. Bu sınır
-tampon eşiğini değiştirmez.
+şifreli yedek yükleme kutusundan açılır"): waitress'in varsayılanı 1 GiB'tır, geliştirme kipinin
+yükleme kutusundan gelen tam yedeği uca varmadan düz metin 413 ile keserdi. Sunucu uca göre
+ayırmadığı için değer bütün uçlara uygulanır; öteki uçlarda çok parçalı gövdenin sınırı Django
+işleyicisindedir. JSON ve form gövdesinde Django sınırı yoktur, üst sınır bu değerdir; ön yüz böyle
+gövde göndermez, ekranı atlayan istek için kalan risktir. Bu sınır tampon eşiğini değiştirmez.
 """
 
 from __future__ import annotations

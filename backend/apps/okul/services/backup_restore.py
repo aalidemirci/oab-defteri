@@ -18,6 +18,13 @@ Mühürlü bölüm veritabanı baytlarını ve manifestoyu AYRI verir (`YedekIce
 denetimi, yetki denetimi (görüntüye düşme dahil) ve takas yalnız veritabanı baytlarını görür.
 Deneme sürümünün kabı (`ODBAK\\x02`) ayrı iletiyle reddedilir.
 
+KAYNAK USB'DE OLABİLİR (kullanıcı kararı 06.11.2026 "Yedek dosyası yüklenmez, programın Aç penceresiyle
+seçilir"): yedek dosyası yerinde okunur, geçici kopya alınmaz. Dosya bir kez açılır ve baştan sona bir
+kez okunur; okumanın tamamı takastan önce biter (`_hazirla`). Takas başladıktan sonra kaynaktan bayt
+okunmaz, yani bellek o andan sonra çıkarılırsa geri yükleme etkilenmez. Okuma hatası da kısalan dosya
+da hedefe dokunmadan sabit iletiyle düşer, geçici dosya bırakmaz (`YEDEK_OKUNAMADI`,
+`geri_yukleme_ekleri.YedekOkunamadi`). Kaynağın kapanış hatası sonucu değiştirmez ("KESİNLEŞME").
+
 SIRA (plan F1b-3 "Geri yükleme"): yetki (yalnız veritabanı baytlarıyla) → `.tmp` ve özet onarımı →
 dosya bölümü `dosyalar/` altındaki hazırlık dizinine akar ve girdi girdi denetlenir → yerel yedekte
 manifestodaki dosyalar depoda ve `yetim/`'de aranır → depoda olmayanlar yerine konur, yetimdekiler
@@ -131,7 +138,8 @@ yolda yazılır.
 YEDEĞİN ADI (R1; plan F1b-3 "Geri yükleme"): kullanıcının seçtiği ya da yüklediği dosyanın adı
 serbest metindir, kişi adı içerebilir. Ad nota ve günlüğe yalnız programın ad desenine birebir
 uyuyorsa yazılır (`denetim_izi.program_yedegi_mi`); uymuyorsa ad yazılmaz, kart "Elden getirilen
-dosya" der. Uygulama içi yüklemede ad geçici dosyanın değil özgün dosyanındır (`yedek_adi`).
+dosya" der. Uygulama içi yüklemede ad geçici dosyanın değil özgün dosyanındır (`yedek_adi`). Aç
+penceresinde kayda geçen yalnız dosyanın adıdır; yol hiçbir yere yazılmaz.
 
 KVKK: çözülen içerik diske YALNIZ hedef veritabanı dosyası olarak yazılır
 (aynı dizinde .tmp → atomik yer değiştirme; hata hâlinde .tmp silinir).
@@ -173,6 +181,7 @@ from desktop.backup_crypto import (
     DENEME_MAGIC,
     KAPSAM_YEREL,
     MAGIC,
+    YEDEK_OKUNAMADI,
     BackupCryptoError,
     KapBasligi,
     YedekAnahtariHatasi,
@@ -203,8 +212,6 @@ logger = logging.getLogger("oab_defteri.restore")
 
 SQLITE_MAGIC = b"SQLite format 3\x00"
 
-#: Yedek dosyası açılamadı ya da okuma yarıda kaldı (ileti yol taşımaz: günlüğe düşer).
-YEDEK_OKUNAMADI: Final = "Yedek dosyası okunamadı."
 #: Takasa hazırlanan veritabanının geçici adı (`db.sqlite3` + bu ek); artığı açılış temizliği toplar.
 YENI_VERITABANI_EKI: Final = ".yeni.tmp"
 
@@ -348,7 +355,7 @@ def restore_database(
         akis = backup_path.open("rb")
     except OSError as exc:
         raise BackupRestoreError(YEDEK_OKUNAMADI) from exc
-    with akis:
+    try:
         return _yedekten_yukle(
             akis,
             db_path,
@@ -359,6 +366,10 @@ def restore_database(
             ekler_olmadan_surdur=ekler_olmadan_surdur,
             yedek_adi=backup_path.name if yedek_adi is None else yedek_adi,
         )
+    finally:
+        # Takas olmuşsa bellek çıkarıldı diye başarısızlık üretilmez (modül başlığı "KESİNLEŞME").
+        with suppress(OSError):
+            akis.close()
 
 
 def _yedekten_yukle(
@@ -424,7 +435,11 @@ def _yedekten_yukle(
         )
         try:
             ekler.hazirla(gecici)
-        except (BackupCryptoError, geri_yukleme_ekleri.EkKayitlariOkunamadi) as exc:
+        except (
+            BackupCryptoError,
+            geri_yukleme_ekleri.EkKayitlariOkunamadi,
+            geri_yukleme_ekleri.YedekOkunamadi,
+        ) as exc:
             raise BackupRestoreError(str(exc)) from exc
         if ekler.bozuk_var and not ekler_olmadan_surdur:
             raise EkOnayiGerekli(ekler.rapor())

@@ -9,6 +9,7 @@ yükleme `test_tam_yedek.py`'dedir. Adlar ve içerikler uydurmadır.
 from __future__ import annotations
 
 import errno
+import json
 import logging
 import os
 import shutil
@@ -19,11 +20,12 @@ from contextlib import closing
 from datetime import UTC, date, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from desktop import backup_crypto
 from desktop.backup_crypto import (
+    BACKUP_SUFFIX,
     KAPSAM_TAM,
     KAPSAM_YEREL,
     MAGIC,
@@ -42,13 +44,14 @@ from rest_framework.test import APIClient
 
 from apps.okul import denetim_izi, rol_izinleri
 from apps.okul.models import Attachment, AttachmentSensitivity, AuditTrail, SchoolYear
-from apps.okul.oturum import OTURUM
+from apps.okul.oturum import OTURUM, Yazar, yazar_olarak
 from apps.okul.services import app_password, dis_yedek, dosya_deposu, encrypted_backup
 from apps.okul.services import school_year as school_year_service
 from apps.okul.tests.geri_yukleme_ortak import OZGUN_AD, PDF, PNG
 from conftest import KURULUM_IZI, TEST_DEK, TEST_HESAP_ID, oturumu_ac_test, varsayilan_yazar
 from shared import bakim, crypto
 from shared import dosya_sifreleme as ds
+from shared.exceptions import RolYetkisiz
 
 pytestmark = pytest.mark.django_db
 
@@ -131,11 +134,22 @@ def _adlar(dizin: Path) -> list[str]:
     return sorted(yol.name for yol in dizin.iterdir())
 
 
+def _dis_yedek_kaydi() -> dict[str, Any]:
+    """`dis-yedek.json`'un ham içeriği; dosya yoksa boş."""
+    yol = dis_yedek.dosya_yolu()
+    return (
+        cast("dict[str, Any]", json.loads(yol.read_text(encoding="utf-8"))) if yol.exists() else {}
+    )
+
+
 def _iz_yok_dosya_yok(dizin: Path) -> None:
-    """Yedek verilmedi: seçilen yer boş, satır yok, hatırlatma sıfırlanmadı."""
+    """Yedek verilmedi: seçilen yer boş, satır yok, hatırlatma sıfırlanmadı.
+
+    Dosya son denemeyi taşıyabilir (kullanıcı kararı 06.11.2026); `son_indirme`'yi taşımaz.
+    """
     assert _adlar(dizin) == []
     assert _yedek_satirlari() == []
-    assert not dis_yedek.dosya_yolu().exists()
+    assert "son_indirme" not in _dis_yedek_kaydi()
 
 
 def _bit_cevir(yol: Path, konum: int) -> None:
@@ -355,6 +369,8 @@ def test_iptalde_hicbir_sey_yazilmaz(
     assert yanit.status_code == 400
     assert yanit.json()["message"] == encrypted_backup.YER_SECILMEDI
     _iz_yok_dosya_yok(usb)
+    # İptal deneme de sayılmaz: dosyaya hiç dokunulmaz.
+    assert not dis_yedek.dosya_yolu().exists()
 
 
 def _goreli(_usb: Path) -> str:
@@ -480,7 +496,10 @@ def test_sunucu_yola_guvenmez(
     kur: Callable[[Path], str],
     ileti: str,
 ) -> None:
-    """Plan F1b-3: reddedilen yolda görüntü alınmaz, hiçbir yere bir şey yazılmaz."""
+    """Plan F1b-3: reddedilen yolda görüntü alınmaz, yedeğin hiçbir yerine bir şey yazılmaz.
+
+    Veri dizinine yalnız son deneme girer (kullanıcı kararı 06.11.2026): hedef reddi denemedir.
+    """
 
     def alinmamali(_yol: Path) -> None:
         raise AssertionError("görüntü alınmamalıydı")
@@ -498,9 +517,11 @@ def test_sunucu_yola_guvenmez(
     assert yanit.json()["message"] == ileti
     assert str(usb) not in yanit.content.decode("utf-8")
     assert _adlar(usb) == once
-    assert _adlar(veri) == veri_once
+    assert _adlar(veri) == sorted({*veri_once, dis_yedek.DOSYA_ADI})
     assert _adlar(app_password.backup_dir()) == yedekler_once
     assert _yedek_satirlari() == []
+    assert "son_indirme" not in _dis_yedek_kaydi()
+    assert _dis_yedek_kaydi()["son_deneme"]["ileti"] == ileti
     _sayac_bos()
 
 
@@ -789,7 +810,7 @@ def test_asil_ad_verilemezse_satir_kalir_hatirlatma_sifirlanmaz_gecici_silinir(
     assert str(usb) not in yanit.content.decode("utf-8")
     assert UYDURMA_KISI not in caplog.text
     assert len(_yedek_satirlari()) == 1
-    assert not dis_yedek.dosya_yolu().exists()
+    assert "son_indirme" not in _dis_yedek_kaydi()
     assert _adlar(usb) == []
     _sayac_bos()
 
@@ -806,7 +827,7 @@ def test_dizin_esitlenemezse_yedek_gecerlidir(
 
     assert _kaydet(client, usb / AD).status_code == 200
 
-    assert dis_yedek.dosya_yolu().exists()
+    assert "son_indirme" in _dis_yedek_kaydi()
 
 
 def test_gecici_dosya_silinemezse_asil_ileti_kalir(
@@ -983,6 +1004,7 @@ def test_on_okumadan_sonra_okuma_duserse_yedek_duser_ileti_yol_tasimaz(
     assert yanit.json()["message"] == ileti
     assert str(dosya_deposu.depo_dizini()) not in yanit.content.decode("utf-8")
     assert str(dosya_deposu.depo_dizini()) not in caplog.text
+    assert _dis_yedek_kaydi()["son_deneme"]["ileti"] == ileti
     _iz_yok_dosya_yok(usb)
     _sayac_bos()
 
@@ -1181,6 +1203,238 @@ def test_yol_hicbir_satira_gunluge_yanita_girmez(
 
 
 # ============================================================ uzun iş
+
+
+# ============================================================ son deneme (kullanıcı kararı 06.11.2026)
+def _son_deneme() -> dict[str, Any]:
+    deneme: dict[str, Any] = _dis_yedek_kaydi()["son_deneme"]
+    return deneme
+
+
+def test_basarili_kayit_son_denemeye_sayilariyla_yazilir_ad_ve_yol_yazilmaz(
+    client: APIClient, usb: Path, goruntu: Callable[..., None], sahip: SchoolYear
+) -> None:
+    goruntu(_ek(sahip))
+    hedef = usb / f"{UYDURMA_KISI} yedeği.odbak"
+
+    yanit = _kaydet(client, hedef)
+
+    assert yanit.status_code == 200, yanit.json()
+    deneme = _son_deneme()
+    assert set(deneme) == {"an", "sonuc", "boyut", "ek_sayisi", "eksik", "ileti"}
+    assert deneme["sonuc"] == dis_yedek.BASARILI
+    assert deneme["boyut"] == hedef.stat().st_size == yanit.json()["boyut"]
+    assert (deneme["ek_sayisi"], deneme["eksik"], deneme["ileti"]) == (1, 0, None)
+    metin = dis_yedek.dosya_yolu().read_text(encoding="utf-8")
+    assert UYDURMA_KISI not in metin
+    assert str(usb) not in metin
+    assert yanit.json()["ad"] not in metin
+
+
+def test_eksik_ek_son_denemede_sayilir(
+    client: APIClient, usb: Path, goruntu: Callable[..., None], sahip: SchoolYear
+) -> None:
+    ek = _ek(sahip)
+    goruntu(ek)
+    (dosya_deposu.depo_dizini() / ek.stored_name).unlink()
+
+    assert _kaydet(client, usb / AD).status_code == 200
+
+    assert (_son_deneme()["ek_sayisi"], _son_deneme()["eksik"]) == (0, 1)
+
+
+def test_yazim_hatasi_son_denemeye_ham_metinsiz_yazilir(
+    client: APIClient, usb: Path, goruntu: Callable[..., None], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _yazim_hatasi(monkeypatch, OSError(errno.EIO, "disk hatası", "/uydurma/yol/yedek"))
+
+    assert _kaydet(client, usb / AD).status_code == 400
+
+    deneme = _son_deneme()
+    assert deneme["sonuc"] == dis_yedek.BASARISIZ
+    assert deneme["ileti"] == encrypted_backup.YAZILAMADI
+    assert (deneme["boyut"], deneme["ek_sayisi"], deneme["eksik"]) == (None, None, None)
+    metin = dis_yedek.dosya_yolu().read_text(encoding="utf-8")
+    assert "/uydurma/yol" not in metin
+    assert "disk hatası" not in metin
+    assert "son_indirme" not in _dis_yedek_kaydi()
+
+
+@pytest.mark.parametrize("ileti", sorted(backup_crypto.YAZIM_ILETILERI))
+def test_yazimin_sabit_iletisi_son_denemede_kalir(
+    client: APIClient,
+    usb: Path,
+    goruntu: Callable[..., None],
+    monkeypatch: pytest.MonkeyPatch,
+    ileti: str,
+) -> None:
+    """Kilitten sonra da asıl neden görünür: kart ekrandaki sonucu değil, bu kaydı gösterir."""
+
+    def bozuk(*_a: Any, **_k: Any) -> Any:
+        raise BackupCryptoError(ileti)
+
+    monkeypatch.setattr(encrypted_backup, "tam_yedek_yaz", bozuk)
+
+    assert _kaydet(client, usb / AD).json()["message"] == ileti
+    assert _son_deneme()["ileti"] == ileti
+
+
+def test_kumede_olmayan_ileti_son_denemeye_giremez(
+    client: APIClient, usb: Path, goruntu: Callable[..., None], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Yanıt hatanın kendi metnini taşır; son deneme yalnız sabit metni tutar."""
+
+    def bozuk(*_a: Any, **_k: Any) -> Any:
+        raise BackupCryptoError(f"/uydurma/{UYDURMA_KISI}/yedek bozuk")
+
+    monkeypatch.setattr(encrypted_backup, "tam_yedek_yaz", bozuk)
+
+    assert _kaydet(client, usb / AD).status_code == 400
+
+    assert _son_deneme()["ileti"] == encrypted_backup.OLUSTURULAMADI
+    assert UYDURMA_KISI not in dis_yedek.dosya_yolu().read_text(encoding="utf-8")
+
+
+def test_beklenmeyen_hata_deneme_yazar_sonra_yukselir(
+    usb: Path, goruntu: Callable[..., None], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def duser(*_a: Any, **_k: Any) -> Any:
+        raise RuntimeError(f"/uydurma/{UYDURMA_KISI}/yedek")
+
+    monkeypatch.setattr(encrypted_backup, "_yazilani_denetle", duser)
+
+    with pytest.raises(RuntimeError):
+        encrypted_backup.sifreli_yedegi_kaydet(str(usb / AD))
+
+    assert _son_deneme()["sonuc"] == dis_yedek.BASARISIZ
+    assert _son_deneme()["ileti"] == encrypted_backup.OLUSTURULAMADI
+    assert UYDURMA_KISI not in dis_yedek.dosya_yolu().read_text(encoding="utf-8")
+    assert "son_indirme" not in _dis_yedek_kaydi()
+    _sayac_bos()
+
+
+def test_surec_olumunde_deneme_yazilmaya_calisilmaz(
+    usb: Path, goruntu: Callable[..., None], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def olduruldu(*_a: Any, **_k: Any) -> Any:
+        raise _Olduruldu
+
+    monkeypatch.setattr(encrypted_backup, "_yazilani_denetle", olduruldu)
+
+    with pytest.raises(_Olduruldu):
+        encrypted_backup.sifreli_yedegi_kaydet(str(usb / AD))
+
+    assert not dis_yedek.dosya_yolu().exists()
+
+
+def test_son_deneme_yazilamazsa_yedegin_sonucu_degismez(
+    client: APIClient, usb: Path, goruntu: Callable[..., None], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def yazilamadi(_veri: dict[str, Any]) -> None:
+        raise OSError(errno.EROFS, "salt okunur")
+
+    monkeypatch.setattr(dis_yedek, "_yaz", yazilamadi)
+
+    assert _kaydet(client, usb / AD).status_code == 200
+    assert _adlar(usb) == [AD]
+    uzantisiz = _kaydet(client, usb / "yedek.txt")
+    assert uzantisiz.status_code == 400
+    assert uzantisiz.json()["message"] == encrypted_backup.UZANTI_DEGISMIS
+
+
+def test_son_deneme_iletileri_modulun_kullanici_iletilerinin_tamamidir() -> None:
+    """Modüle yeni ileti eklenirse burası bilinçli karar ister: deneme iletisi mi, değil mi?"""
+    deneme_sayilmayan = {
+        encrypted_backup.KILITLI,
+        encrypted_backup.YER_SECILMEDI,
+        encrypted_backup.YEDEK_ALINIYOR,
+        encrypted_backup.BAKIM_SURUYOR,
+    }
+    teknik = {
+        encrypted_backup.AD_ONEKI,
+        encrypted_backup.GECICI_EK,
+        BACKUP_SUFFIX,
+    }
+    iletiler = {
+        deger
+        for ad, deger in vars(encrypted_backup).items()
+        if ad.isupper() and not ad.startswith("_") and isinstance(deger, str)
+    } - teknik
+
+    assert (
+        iletiler - deneme_sayilmayan | backup_crypto.YAZIM_ILETILERI
+        == encrypted_backup._DENEME_ILETILERI
+    )
+    assert not encrypted_backup._DENEME_ILETILERI & deneme_sayilmayan
+
+
+def test_suren_ikinci_istek_hedefi_kotu_olsa_da_deneme_sayilmaz(
+    client: APIClient, usb: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ikinciler: list[Any] = []
+    yazilanlar: list[dict[str, Any]] = []
+    asil = dis_yedek._denemeyi_yaz
+
+    def izle(deneme: dict[str, Any]) -> None:
+        yazilanlar.append(deneme)
+        asil(deneme)
+
+    def goruntu_al(_yol: Path) -> tuple[bytes, Manifesto]:
+        ikinciler.append(_kaydet(client, usb / "uzantisiz.txt"))
+        ikinciler.append(_kaydet(client, usb / "ikinci.odbak"))
+        return GORUNTU, Manifesto(KAPSAM_YEREL)
+
+    monkeypatch.setattr(dis_yedek, "_denemeyi_yaz", izle)
+    monkeypatch.setattr(encrypted_backup, "goruntu_ve_manifesto", goruntu_al)
+
+    assert _kaydet(client, usb / AD).status_code == 200
+
+    assert [yanit.json()["code"] for yanit in ikinciler] == ["yedek_suruyor", "yedek_suruyor"]
+    assert [deneme["sonuc"] for deneme in yazilanlar] == [dis_yedek.BASARILI]
+
+
+def test_bakim_surerken_gelen_istek_hedefi_kotu_olsa_da_deneme_sayilmaz(
+    client: APIClient, usb: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    kapi = bakim.BakimKapisi()
+    monkeypatch.setattr(bakim, "KAPI", kapi)
+    assert kapi.bakima_al(bekleme_sn=0.1) is True
+
+    for hedef in (usb / AD, usb / "uzantisiz.txt"):
+        yanit = _kaydet(client, hedef)
+        assert yanit.status_code == 409
+        assert yanit.json()["code"] == "bakim_suruyor"
+
+    assert not dis_yedek.dosya_yolu().exists()
+
+
+def test_kilit_reddi_deneme_sayilmaz(usb: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app_password, "is_locked", lambda: True)
+
+    with pytest.raises(encrypted_backup.EncryptedBackupError) as hata:
+        encrypted_backup.sifreli_yedegi_kaydet(str(usb / AD))
+
+    assert str(hata.value) == encrypted_backup.KILITLI
+    assert not dis_yedek.dosya_yolu().exists()
+
+
+def test_yetki_reddi_deneme_sayilmaz(client: APIClient, usb: Path) -> None:
+    oturumu_ac_test(tanitici="muhasip", rol="muhasip")
+
+    assert _kaydet(client, usb / AD).status_code == 403
+
+    assert not dis_yedek.dosya_yolu().exists()
+
+
+def test_servisin_yetki_reddi_de_deneme_sayilmaz(usb: Path) -> None:
+    """Rol kapısının ardındaki ikinci kapı: yukarıdaki uç testi servise varmaz."""
+    with (
+        yazar_olarak(Yazar(hesap_id="uydurma-hesap", rol="muhasip")),
+        pytest.raises(RolYetkisiz),
+    ):
+        encrypted_backup.sifreli_yedegi_kaydet(str(usb / AD))
+
+    assert not dis_yedek.dosya_yolu().exists()
 
 
 def test_ikinci_yedek_409_alir(

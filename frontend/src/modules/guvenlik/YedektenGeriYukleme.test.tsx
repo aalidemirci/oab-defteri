@@ -5,15 +5,16 @@
 // (no, tarih) açtığı sır sorulmadan önce yazılır (tasarım TK10); parola yolu
 // oturumdaki hesabın kendi parolasıdır ("Parolanız"; gövdede `hesap` yok, backend
 // oturumdaki hesabı kullanır). Güvenlik dosyası kayıp ekranındaki kullanımı
-// (`kayipKipi`) giriş metnini değiştirir ve parola alanını göstermez. F1b-3: liste her yedeğin
-// türünü ve kapsamını yazar, onay kapsamı söyler; 8 GiB üstü dosya gönderilmez; 409
+// (`kayipKipi`) giriş metnini değiştirir ve parola alanını göstermez. Bu dosya köprünün olmadığı
+// kipi sınar (yükleme kutusu); Aç penceresiyle seçim `YedektenGeriYukleme.kopru.test.tsx`'tedir.
+// F1b-3: liste her yedeğin türünü ve kapsamını yazar, onay kapsamı söyler; 8 GiB üstü dosya gönderilmez; 409
 // `ek_onayi_gerekli`de kart kişisiz listeyi ve ikinci düğmeyi açar, ikinci istek aynı kaynağı ve
 // sırrı `ekler_olmadan_surdur` ile yollar, kaynak ya da sır değişirse onay sıfırlanır. Sahte
 // rapor `geri_yukleme_ekleri.DosyaRaporu.yanit`, ret gövdesi `views.BackupRestoreView` ile aynıdır.
 // Süren istek kart sökülüp takılsa da görünür, ikinci istek gitmez; istek sürerken kart söküldüyse
 // ret kapatılana dek duran snackbar'la söylenir. Durulunca odak panele alınır, ikinci düğmeye değil.
 
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -381,8 +382,43 @@ describe("YedektenGeriYukleme", () => {
   it("kayıp kipinde giriş metni en yeni yedeği önerir", async () => {
     ekranaBas(true);
 
-    expect(await screen.findByText(/En yeni yedeği seçin/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/En yeni yedeği ya da elinizdeki yedek dosyasını seçin\./),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/Yanlış veri girişinden sonra/)).toBeNull();
+  });
+
+  it("değişme anı tutulamayan yedeğin satırı tarih yazmaz, ötekiler kalır", async () => {
+    guvenlik.yedekler.mockResolvedValue({
+      ...LISTE,
+      backups: [{ ...LISTE.backups[0], modified_at: null }],
+    });
+    ekranaBas();
+
+    expect(
+      await screen.findByText("2 MB · Anahtar no 2 · üretim tarihi 31.08.2026"),
+    ).toBeInTheDocument();
+  });
+
+  it("kutu boşalınca yalnız kutunun kaynağı gider", async () => {
+    const kullanici = userEvent.setup();
+    ekranaBas();
+    await screen.findByText("gunluk-2026-09-01.odbak");
+    const kutu = screen.getByLabelText(/elinizdeki yedek dosyası/) as HTMLInputElement;
+    const dosyaSec = (dosyalar: File[]) => {
+      Object.defineProperty(kutu, "files", { value: dosyalar, configurable: true });
+      fireEvent.change(kutu);
+    };
+
+    dosyaSec([new File([new Uint8Array([1])], "elden.odbak")]);
+    expect(screen.getByRole("button", { name: "Geri yükle" })).toBeEnabled();
+    dosyaSec([]);
+    expect(screen.getByRole("button", { name: "Geri yükle" })).toBeDisabled();
+
+    await kullanici.click(screen.getByRole("radio", { name: /gunluk-2026-09-01/ }));
+    dosyaSec([]);
+    expect(screen.getByRole("radio", { name: /gunluk-2026-09-01/ })).toBeChecked();
+    expect(screen.getByRole("button", { name: "Geri yükle" })).toBeEnabled();
   });
 
   it.each([false, true])(

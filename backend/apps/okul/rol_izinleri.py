@@ -518,6 +518,9 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _yaz("backup-external-reminder", "PUT", Satir.GUVENLIK),
     _oku("backup-list", Satir.GUVENLIK),
     _yaz("backup-restore", "POST", Satir.GUVENLIK),
+    # Seçilen dosyanın başlığı: yol gövdede gittiği için POST'tur, yalnız okur; geri yüklemenin
+    # ilk adımıdır, öteki rollere o kadar kapalıdır.
+    _yaz("backup-inspect", "POST", Satir.GUVENLIK),
     _yaz("backup-report", "POST", Satir.GUVENLIK),
     # İki depo farkı ve sahipsiz parola kayıtlarının onayla silinmesi: güvenlik dosyasının
     # bakımıdır (tasarım §4.6.1 kural 4: "fark yonetici'ye"; plan F1b-2).
@@ -713,6 +716,7 @@ YETENEKLER: Final[Mapping[str, frozenset[tuple[str, str]]]] = {
         ("backup-external-reminder", ("GET", "PUT")),
         ("backup-list", "GET"),
         ("backup-restore", "POST"),
+        ("backup-inspect", "POST"),
         ("backup-report", "POST"),
     ),
     "guncelleme": _ciftler(("update-latest", "GET"), ("update-installer", "GET")),

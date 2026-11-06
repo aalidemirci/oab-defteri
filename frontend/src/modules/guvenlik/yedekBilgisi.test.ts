@@ -13,7 +13,9 @@ import {
   eksikEkCumlesi,
   kapsamMetni,
   yedekAciklamasi,
+  yedekBoyuSatiri,
   yedekTuru,
+  yoldanDosyaAdi,
 } from "./yedekBilgisi";
 
 const EK: EkSatiri = {
@@ -77,6 +79,28 @@ describe("yedekAciklamasi", () => {
     expect(yedekAciklamasi("gunluk-2026-09-01.odbak", null)).toBe("Günlük yedek");
     expect(yedekAciklamasi("okulun-yedegi.odbak", "tam")).toBe("kayıtlar, ekler ve üretilen evrak");
     expect(yedekAciklamasi("okulun-yedegi.odbak", null)).toBeNull();
+  });
+});
+
+describe("yoldanDosyaAdi", () => {
+  it.each([
+    ["E:\\Okul Yedekleri\\Şubat ayı ğüşıöç.odbak", "Şubat ayı ğüşıöç.odbak"],
+    ["/media/öğretmen/USB BELLEK/günlük yedek.odbak", "günlük yedek.odbak"],
+    ["\\\\sunucu\\pay\\yedek.odbak", "yedek.odbak"],
+    ["E:\\Okul/iç klasör\\son yedek.odbak", "son yedek.odbak"],
+    ["E:/Okul\\iç klasör/son yedek.odbak", "son yedek.odbak"],
+    ["ayracsiz.odbak", "ayracsiz.odbak"],
+  ])("iki ayracı da tanır: %s", (yol, ad) => {
+    expect(yoldanDosyaAdi(yol)).toBe(ad);
+  });
+});
+
+describe("yedekBoyuSatiri", () => {
+  it("boyu ve ek sayısını yan yana yazar; bilinmeyen parça yazılmaz, ikisi yoksa satır yoktur", () => {
+    expect(yedekBoyuSatiri(3 * 1024 * 1024, 1200)).toBe("Boy: 3 MB · Taşıdığı ek: 1.200");
+    expect(yedekBoyuSatiri(3 * 1024 * 1024, null)).toBe("Boy: 3 MB");
+    expect(yedekBoyuSatiri(null, 0)).toBe("Taşıdığı ek: 0");
+    expect(yedekBoyuSatiri(null, null)).toBeNull();
   });
 });
 

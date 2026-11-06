@@ -68,6 +68,17 @@ const HEPSI_TAMAM: SetupStatus = {
   },
 };
 
+/** Dış yedek hatırlatmasının sunucu özeti (`GET backups/external/`): süre dolmamış, hiç kayıt yok. */
+const DIS_YEDEK_OZETI = {
+  last_download: null,
+  reminder_days: 30,
+  days_since: null,
+  remind: false,
+  min_reminder_days: 7,
+  max_reminder_days: 90,
+  son_deneme: null,
+};
+
 /** Bulgusuz denetim izi: yalnız "Son Girişler" kartı görünür. */
 const TEMIZ_IZ: ButunlukDurumu = {
   butunluk: [],
@@ -131,7 +142,7 @@ beforeEach(() => {
     process_started_at: "2026-10-31T09:00:00+03:00",
   });
   gapi.durum.mockResolvedValue({ corrupt_field_count: 0 });
-  gapi.disYedek.mockResolvedValue({ remind: false });
+  gapi.disYedek.mockResolvedValue(DIS_YEDEK_OZETI);
   bapi.durum.mockResolvedValue(TEMIZ_IZ);
   otapi.ozet.mockResolvedValue(YONETICI_OTURUMU);
 });
@@ -504,7 +515,7 @@ describe("Genel Bakış — rol süzmesi (kaynak oturum özetinin yetenekleri)",
   it("yol haritası, ayrılış havuzu ve dış yedek kartları yeteneksiz rolde çizilmez, uçları çağrılmaz", async () => {
     otapi.ozet.mockResolvedValue(BASKAN);
     oapi.getLeavePoolSummary.mockResolvedValue({ student_count: 3, personnel_count: 1 });
-    gapi.disYedek.mockResolvedValue({ remind: true, last_download: null, days_since: null });
+    gapi.disYedek.mockResolvedValue({ ...DIS_YEDEK_OZETI, remind: true });
     bas();
 
     await screen.findByRole("region", { name: "Son Girişler" });
@@ -553,7 +564,7 @@ describe("Genel Bakış — rol süzmesi (kaynak oturum özetinin yetenekleri)",
 
   it("program yöneticisinde bütün kartlar ve tam açıklamalar durur", async () => {
     oapi.getLeavePoolSummary.mockResolvedValue({ student_count: 3, personnel_count: 1 });
-    gapi.disYedek.mockResolvedValue({ remind: true, last_download: null, days_since: null });
+    gapi.disYedek.mockResolvedValue({ ...DIS_YEDEK_OZETI, remind: true });
     bas();
 
     expect(await screen.findByRole("region", { name: "Ayrılış Havuzu" })).toBeInTheDocument();

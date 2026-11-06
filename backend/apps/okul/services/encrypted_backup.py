@@ -11,7 +11,8 @@ SIRA (`sifreli_yedegi_kaydet`):
    kapısının ardından servis de isteğin yazarını sorar (`RolYetkisiz`, 403); ret görüntü alınmadan
    verilir. Denetim uzun iş sayacının İÇİNDEDİR: sayaçtan önce verilen bir kilit kararı burada
    görülür, sayaçtan sonraki kilit de işin sonuna ertelenir; arada DEK düşmez.
-2. Hedef yolun denetimi (`_hedef_denetle`).
+2. Hedef yolun denetimi (`_hedef_denetle`); süren ikinci iş ve bakım kapısı ondan önce sorulur:
+   hedefi kötü olan ikinci istek süren işin yanında deneme sayılmasın (aşağıda "SON DENEME").
 3. Boş yer ve FAT32'nin tek dosya sınırı (`_yer_denetle`). Tahmini boy görüntüden ve manifestodaki
    kapların boyundan gelir. Tür ya da boş yer okunamazsa yazım denenir, hata iletiye çevrilir.
 4. Her ek yazmadan önce bir kez baştan sona okunur (`_ekleri_on_oku`; kullanıcı kararı 05.11.2026).
@@ -33,8 +34,16 @@ SIRA (`sifreli_yedegi_kaydet`):
 7. Dosyaya asıl adı verilir (`os.replace`), sonra dış yedek hatırlatması sıfırlanır (§16 R6). Asıl ad
    verilemezse satır kalır, geçici dosya silinir, hatırlatma sıfırlanmaz, kullanıcıya ileti gider.
 
-İptalde (yol gelmezse) hiçbir şey yazılmaz. Kalan risk planda yazılıdır: denetimle satır arasında
-süreç ölürse seçilen yerde geçici adlı, izsiz bir dosya kalır; program onu yedek saymaz.
+İptalde (yol gelmezse) hiçbir şey yazılmaz, deneme de sayılmaz. Kalan risk planda yazılıdır: denetimle
+satır arasında süreç ölürse seçilen yerde geçici adlı, izsiz bir dosya kalır; program onu yedek saymaz.
+
+SON DENEME (kullanıcı kararı 06.11.2026 "Son şifreli yedek denemesi saklanır"; `dis_yedek` "Son
+deneme"). Bir yol verilip kapılardan geçen her istek denemedir, sonucu yazılır (`_denenmis_kaydet`):
+hedef reddi de, beklenmeyen hata da. Yol gelmemesi, süren ikinci iş, bakım, kilit ve yetki reddi deneme
+değildir. Başarıda boy, ek sayısı ve eksik yazılır; ad ve yol yazılmaz. Başarısızlıkta yalnız sabit
+ileti yazılır (`_DENEME_ILETILERI`: bu modülünkiler ve yazımın `YAZIM_ILETILERI`), kümede olmayan metin
+`OLUSTURULAMADI` olur: ham `OSError` metni ve yol kayda giremez. Kayıt hata yükseltmez, yedeğin
+sonucunu değiştirmez.
 
 YOL (tasarım §4.1; plan F1b-3): yol ön yüzden isteğin içinde gelir, masaüstü sunucuyu doğrudan
 çağırmaz. Sunucu yola güvenmez: mutlak yol, var olan üst dizin, program uzantısı. Veri dizininin, yedek
@@ -82,6 +91,7 @@ from desktop.backup import goruntu_ve_manifesto
 from desktop.backup_crypto import (
     BACKUP_SUFFIX,
     KAPSAM_TAM,
+    YAZIM_ILETILERI,
     BackupCryptoError,
     EkTutmuyorHatasi,
     Manifesto,
@@ -155,6 +165,24 @@ ASIL_AD_VERILEMEDI: Final = (
 )
 YEDEK_ALINIYOR: Final = "Şifreli yedek zaten alınıyor; bitmesini bekleyin."
 BAKIM_SURUYOR: Final = "Geri yükleme sürüyor; şifreli yedek alınmadı. Biraz sonra yeniden deneyin."
+
+#: Son denemeye yazılabilen iletiler (modül başlığı "SON DENEME"). Deneme sayılmayan retler yoktur.
+_DENEME_ILETILERI: Final = YAZIM_ILETILERI | frozenset(
+    {
+        GUVENLIK_DOSYASI_OKUNAMIYOR,
+        VERITABANI_YOK,
+        OLUSTURULAMADI,
+        YER_KULLANILAMIYOR,
+        UZANTI_DEGISMIS,
+        PROGRAM_KLASORU,
+        DOSYA_DEGIL,
+        YER_YOK,
+        FAT_SINIRI,
+        YAZILAMADI,
+        DENETIM_DUSTU,
+        ASIL_AD_VERILEMEDI,
+    }
+)
 
 #: Aynı anda tek şifreli yedek: ikincisi beklemez, 409 alır (modül başlığı "UZUN İŞ").
 _TEK_IS: Final = threading.Lock()
@@ -248,8 +276,6 @@ def _program_dizinleri() -> tuple[Path, ...]:
 
 def _hedef_denetle(ham: str) -> Path:
     """Gelen yolu denetler (modül başlığı "YOL"); iletiler yolu taşımaz."""
-    if not ham:
-        raise EncryptedBackupError(YER_SECILMEDI)
     hedef = Path(ham)
     if "\0" in ham or not hedef.is_absolute() or ".." in hedef.parts:
         raise EncryptedBackupError(YER_KULLANILAMIYOR)
@@ -475,17 +501,37 @@ def _kaydet(hedef: Path) -> KayitSonucu:
     return KayitSonucu(ad=kimlik, boyut=boyut, ek_sayisi=len(manifesto.tasinanlar), eksik=eksik)
 
 
+def _deneme_iletisi(metin: str) -> str:
+    """Son denemeye yazılacak ileti: kümedeki sabit metin ya da `OLUSTURULAMADI` (modül başlığı)."""
+    return metin if metin in _DENEME_ILETILERI else OLUSTURULAMADI
+
+
+def _denenmis_kaydet(hedef: str) -> KayitSonucu:
+    """Hedefi denetler, yedeği kaydeder; sonucu son deneme olarak yazar (modül başlığı "SON DENEME")."""
+    try:
+        sonuc = _kaydet(_hedef_denetle(hedef))
+    except EncryptedBackupError as hata:
+        dis_yedek.deneme_basarisiz(_deneme_iletisi(str(hata)))
+        raise
+    except Exception:
+        dis_yedek.deneme_basarisiz(OLUSTURULAMADI)
+        raise
+    dis_yedek.deneme_basarili(boyut=sonuc.boyut, ek_sayisi=sonuc.ek_sayisi, eksik=sonuc.eksik)
+    return sonuc
+
+
 def sifreli_yedegi_kaydet(hedef: str) -> KayitSonucu:
     """Tam yedeği seçilen yola kaydeder (modül başlığı "SIRA"); yanıtın özetini döndürür."""
     with bakim.UZUN_ISLER.is_():
         _kilit_ve_yetki()
-        yol = _hedef_denetle(hedef)
+        if not hedef:
+            raise EncryptedBackupError(YER_SECILMEDI)
         if not _TEK_IS.acquire(blocking=False):
             raise YedekSuruyor
         try:
             with bakim.KAPI.is_() as izin:
                 if not izin:
                     raise BakimSuruyor
-                return _kaydet(yol)
+                return _denenmis_kaydet(hedef)
         finally:
             _TEK_IS.release()

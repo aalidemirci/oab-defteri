@@ -6,11 +6,12 @@ Dosya değişimini `backup_restore` çekirdeği yapar; bu modül ÇALIŞAN sunuc
 * yedek listesi — `app_password.backup_dir()` içindeki `.odbak` dosyaları
   (masaüstü `desktop/restore.py::list_backups` ile aynı kaynak, en yeniden
   eskiye) ve her birini açan kurtarma anahtarının kimliği (gömülü başlıktan, TK10);
-* kullanıcının YÜKLEDİĞİ dosyanın geçici yazımı (`YedekYuklemeIsleyicisi`; plan F1b-3 "Dosya
-  deposu"): gövde yedek dizinindeki `.yukleme-<hex>.tmp`'ye (0600) parça parça akar, belleğe
-  alınmaz, genel yükleme sınırına takılmaz (yedek şifrelidir, açık kopya değildir). Geçici dosya
-  uç bitince her durumda silinir, kullanıcının elindeki asıl dosya zaten kendindedir. Silinemezse
-  yanıt değişmez, artığı açılış temizliği toplar;
+* kullanıcının Aç penceresinde SEÇTİĞİ dosya (aşağıda "SEÇİLEN DOSYA");
+* köprünün olmadığı geliştirme kipinde kullanıcının YÜKLEDİĞİ dosyanın geçici yazımı
+  (`YedekYuklemeIsleyicisi`; plan F1b-3 "Dosya deposu"): gövde yedek dizinindeki
+  `.yukleme-<hex>.tmp`'ye (0600) parça parça akar, belleğe alınmaz, genel yükleme sınırına takılmaz
+  (yedek şifrelidir, açık kopya değildir). Geçici dosya uç bitince her durumda silinir, kullanıcının
+  elindeki asıl dosya zaten kendindedir. Silinemezse yanıt değişmez, artığı açılış temizliği toplar;
 * takas öncesi Django bağlantılarının kapatılması — Windows'ta SQLite dosyayı
   FILE_SHARE_DELETE olmadan açar; açık bağlantı varken `os.replace` erişim
   hatasıyla düşer (Linux'ta düşmez ama bağlantı eski dosyada asılı kalırdı);
@@ -24,10 +25,22 @@ Dosya değişimini `backup_restore` çekirdeği yapar; bu modül ÇALIŞAN sunuc
 Masaüstü kardeşi `desktop/restore.py` bozuk-veritabanı senaryosudur (pencere
 hiç açılmadan `--geri-yukle`); bu modül programın AÇILABİLDİĞİ senaryo içindir
 (yanlış veri girişi sonrası eski güne dönme; güvenlik dosyası kayıp kilidinden
-çıkış — iki uç da o kilitte açıktır, `lock_middleware`). Yedekler daima
+çıkış — üç uç da o kilitte açıktır, `lock_middleware`). Yedekler daima
 şifrelidir (düz yedek dalı yok, §13 D29); bir hesabın parolası ya da kurtarma
 anahtarı gerekir. Parola/kurtarma anahtarı yalnız parametre olarak akar; hiçbir
 günlük satırına ve hata metnine yazılmaz.
+
+SEÇİLEN DOSYA (kullanıcı kararları 06.11.2026 "Yedek dosyası yüklenmez, programın Aç penceresiyle
+seçilir", "Elden seçilen yedeğin başlığını sunucu okur"). Ön yüz pencerenin verdiği yolu küçük
+istekle yollar; dosya gövdesi sunucuya gitmez, sır waitress'in geçici dosyasına inmez. Yola
+güvenilmez (`_secilen_yedek`): NUL baytlı, göreli, bulunamayan, dizin, FIFO, aygıt ya da açılamayan
+yol tek sabit iletiyle reddedilir; boş yol `inspect`'te aynı iletiyle, `restore`'da kaynak kuralıyla
+reddedilir. İleti yolu yankılamaz, günlüğe yalnız hatanın türü yazılır. Yol bakım kapısına
+dokunulmadan önce denetlenir: denetim dosyayı açıp kapatır, çekirdek bir kez açar. Kaynak dosya
+yalnız okunur: silinmez, yazılmaz, adı değişmez; ucun temizliği yalnız yüklenen geçici dosya içindir.
+Yol yanıta ve denetim izine girmez, kayda geçen yalnız dosyanın adıdır (`backup_restore` "YEDEĞİN
+ADI"). Yetki kapıları üç kaynakta da aynıdır. `secilen_yedek_ozeti` listedeki satırın aynısını verir,
+başlığı anahtarsız okur.
 
 YETKİ (tasarım §4.4.4 "Geri yükleme yetkisi"; plan F1b-2). Uygulama içi geri yükleme
 rol kapısından geçer (`RolMiddleware`: açık oturumda yalnız program yöneticisi). Servisin
@@ -48,7 +61,8 @@ oturumdaki program yöneticisinin kaydı tutmazsa (ör. program dışından değ
 BOZUK EK (kullanıcı kararı 04.11.2026 "Bozuk ekte geri yükleme durur, ikinci onayla sürer"):
 çekirdek `EkOnayiGerekli` ile durunca hiçbir şey değişmez, kapı kurulmaz, bakım kapısı açılır; uç
 kişisiz yapılandırılmış yanıt döner. İkinci onay durumsuzdur: istek aynı yedekle ve
-`ekler_olmadan_surdur` ile yeniden gelir, doğrulama baştan koşar, yüklenen dosya arada saklanmaz.
+`ekler_olmadan_surdur` ile yeniden gelir, doğrulama baştan koşar, yüklenen dosya arada saklanmaz;
+Aç penceresinde aynı yol yeniden gelir, dosya yeniden gönderilmez.
 
 Geri yükleme UZUN İŞTİR (`shared.bakim.UZUN_ISLER`; tasarım §4.2, §4.4.3): sürerken
 oturumun boşta ve elle kilidi ertelenir, DEK işin ortasında silinmez. Başarıda oturum
@@ -65,6 +79,8 @@ Sormasaydı çekirdekte düşüp bakım kapısını başarılı geri yüklemeden
 from __future__ import annotations
 
 import logging
+import os
+import stat
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
@@ -108,6 +124,15 @@ YUKLEME_ONEKI: Final = ".yukleme-"
 YUKLEME_EKI: Final = ".tmp"
 #: Yüklenen yedek diske yazılamadı.
 YEDEK_YAZILAMADI: Final = "Yedek dosyası yazılamadı; diskte yer olduğundan emin olun."
+#: Aç penceresinden gelen yol kullanılamıyor (modül başlığı "SEÇİLEN DOSYA"): ileti yolu taşımaz.
+SECILEN_YEDEK_ACILAMADI: Final = (
+    "Seçilen yedek dosyası açılamadı; dosyanın yerinde ve okunabilir olduğundan emin olun."
+)
+#: Seçilen dosyanın denetimi: `O_NONBLOCK` FIFO'da süresiz beklemeyi keser. Sembolik bağ izlenir:
+#: kaynak yalnız okunur, bağı kullanıcı kendi seçmiştir.
+_SECILEN_OKUMA_BAYRAKLARI: Final = (
+    os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NONBLOCK", 0)
+)
 
 
 #: Parola yolunda başka hesabın parolası (sözlük: kod yok, "hesap" ve "oturum").
@@ -195,6 +220,35 @@ class YedekYuklemeIsleyicisi(FileUploadHandler):
                 )
 
 
+def _degisme_ani(bilgi: os.stat_result) -> str | None:
+    """Dosyanın yerel saatle değişme anı; dosya sistemi tutmayan bir zaman verirse None."""
+    try:
+        return timezone.localtime(datetime.fromtimestamp(bilgi.st_mtime, tz=UTC)).isoformat()
+    except (OSError, OverflowError, ValueError):
+        return None
+
+
+def _gosterim(metin: str) -> str:
+    """Yanıttaki ad ya da dizin: UTF-8'e çevrilemeyen bayt `?` olur.
+
+    Python bu baytı vekil karakterle okur, yanıt çizilirken kodlanamaz ve tek dosya bütün listeyi
+    düşürürdü. Çeviri geri dönüşlü değildir: böyle bir satır listeden seçilemez (`_resolve_named`),
+    kullanıcı dosyanın adını değiştirir.
+    """
+    return metin.encode("utf-8", "replace").decode("utf-8")
+
+
+def _yedek_satiri(yol: Path, bilgi: os.stat_result) -> dict[str, Any]:
+    """Listenin ve seçilen dosyanın satırı; `name` dosya adıdır, yol değildir (`_gosterim`)."""
+    return {
+        "name": _gosterim(yol.name),
+        "size": bilgi.st_size,
+        "modified_at": _degisme_ani(bilgi),
+        "kurtarma": recovery_key_of(yol),
+        "kapsam": _kapsam_of(yol),
+    }
+
+
 def list_backups() -> dict[str, Any]:
     """Yedek klasöründeki geri yüklenebilir `.odbak` dosyaları (en yeniden eskiye).
 
@@ -213,34 +267,31 @@ def list_backups() -> dict[str, Any]:
     plan F1b-3 "Kap ve manifesto": liste kapsamı kurtarma anahtarı olmadan okur).
     """
     dizin = app_password.backup_dir()
-    satirlar: list[dict[str, Any]] = []
+    satirlar: list[tuple[float, dict[str, Any]]] = []
     if dizin.is_dir():
         for yol in dizin.glob(f"*{BACKUP_SUFFIX}"):
             if not yol.is_file():
                 continue
             bilgi = yol.stat()
-            satirlar.append(
-                {
-                    "name": yol.name,
-                    "size": bilgi.st_size,
-                    "modified_at": timezone.localtime(
-                        datetime.fromtimestamp(bilgi.st_mtime, tz=UTC)
-                    ).isoformat(),
-                    "kurtarma": recovery_key_of(yol),
-                    "kapsam": _kapsam_of(yol),
-                    "_mtime": bilgi.st_mtime,
-                }
-            )
-    satirlar.sort(key=lambda satir: float(satir["_mtime"]), reverse=True)
-    for satir in satirlar:
-        del satir["_mtime"]
-    return {"backup_dir": str(dizin), "backups": satirlar}
+            satirlar.append((bilgi.st_mtime, _yedek_satiri(yol, bilgi)))
+    satirlar.sort(key=lambda satir: satir[0], reverse=True)
+    return {"backup_dir": _gosterim(str(dizin)), "backups": [satir for _an, satir in satirlar]}
+
+
+def secilen_yedek_ozeti(ham_yol: str) -> dict[str, Any]:
+    """Aç penceresinde seçilen dosyanın listedeki satırın aynısı (modül başlığı "SEÇİLEN DOSYA").
+
+    Yol geçersizse `LiveRestoreError`. Dosya yedek değilse ya da başlığı okunamıyorsa hata değildir:
+    `kurtarma` ve `kapsam` `null` döner, geri yüklemeyi çekirdek reddeder.
+    """
+    return _yedek_satiri(*_secilen_yedek(ham_yol))
 
 
 def restore_and_require_restart(
     *,
     name: str = "",
     yuklenen: YuklenenYedek | None = None,
+    yol: str = "",
     hesap: str = "",
     password: str = "",
     recovery_key: str = "",
@@ -248,8 +299,9 @@ def restore_and_require_restart(
 ) -> dict[str, Any]:
     """Yedeği veritabanının yerine koyar ve süreci "yeniden başlat" kapısına alır.
 
-    Kaynak ikisinden biridir: `name` (yedek klasöründen) YA DA `yuklenen` (kullanıcının yüklediği,
-    diske akmış dosya; silmek ucun işidir). Hata hâlinde hedefe dokunulmaz (çekirdek garantisi) ve
+    Kaynak üçünden biridir: `name` (yedek klasöründen), `yol` (Aç penceresinde seçilen, yerinde
+    okunan dosya; modül başlığı "SEÇİLEN DOSYA") YA DA `yuklenen` (geliştirme kipinde yüklenen, diske
+    akmış dosya; silmek ucun işidir). Hata hâlinde hedefe dokunulmaz (çekirdek garantisi) ve
     kapı KURULMAZ: kullanıcı yeniden dener. İş uzun iş sayacındadır (modül başlığı). Yetki (modül
     başlığı "YETKİ") hiçbir dosyaya ve bakım kapısına dokunmadan önce denetlenir.
     `ekler_olmadan_surdur` ikinci onaydır (modül başlığı "BOZUK EK").
@@ -270,6 +322,7 @@ def restore_and_require_restart(
             return _restore(
                 name=name,
                 yuklenen=yuklenen,
+                yol=yol,
                 hesap=hesap,
                 password=password,
                 recovery_key=recovery_key,
@@ -302,6 +355,7 @@ def _restore(
     *,
     name: str,
     yuklenen: YuklenenYedek | None,
+    yol: str,
     hesap: str,
     password: str,
     recovery_key: str,
@@ -309,7 +363,12 @@ def _restore(
     ekler_olmadan_surdur: bool,
 ) -> dict[str, Any]:
     hedef = _database_path()
-    kaynak = yuklenen.yol if yuklenen is not None else _resolve_named(name)
+    if yuklenen is not None:
+        kaynak = yuklenen.yol
+    elif yol:
+        kaynak, _bilgi = _secilen_yedek(yol)
+    else:
+        kaynak = _resolve_named(name)
     # Ortak bakım kapısı takastan ÖNCE kapanır (§4.1, §13 D3): yeni gün işi (günlük yedek)
     # başlamaz, uçuştaki iş bitene dek beklenir. Süre dolarsa takas yapılmaz (modül başlığı):
     # dosya deposu takası süren bir tam yedekle çakışırdı.
@@ -330,7 +389,8 @@ def _restore(
             # Geri yükleme onu başlatan oturumun hesabına bağlanır (kurtarma yolunda da).
             oturum_hesabi=oturum_hesabi,
             ekler_olmadan_surdur=ekler_olmadan_surdur,
-            # Geçici dosyanın adı kayda geçmez: yüklenen dosyanın özgün adı denenir.
+            # Geçici dosyanın adı kayda geçmez: yüklenen dosyanın özgün adı denenir. Öteki iki
+            # kaynakta çekirdek dosyanın adını alır, yolu almaz.
             yedek_adi=str(yuklenen.name) if yuklenen is not None else None,
         )
     except BaseException:
@@ -380,6 +440,31 @@ def _kapsam_of(yol: Path) -> str | None:
         return geri_yukleme_ekleri.KAPSAM_KODLARI.get(kap_basligini_oku(yol).kapsam)
     except (OSError, BackupCryptoError):
         return None
+
+
+def _secilen_yedek(ham: str) -> tuple[Path, os.stat_result]:
+    """Aç penceresinden gelen yolu denetler (modül başlığı "SEÇİLEN DOSYA").
+
+    Dosya yalnız okuma kipinde açılır, türü açılan tanıtıcıdan sorulur: FIFO beklenmez, denetimle
+    karar arasında başka dosya sayılmaz. `ValueError`: NUL baytı ya da işletim sistemine çevrilemeyen
+    karakter (`os.open` yükseltir).
+    """
+    yol = Path(ham)
+    if not yol.is_absolute():
+        raise LiveRestoreError(SECILEN_YEDEK_ACILAMADI)
+    try:
+        tanitici = os.open(yol, _SECILEN_OKUMA_BAYRAKLARI)
+        try:
+            bilgi = os.fstat(tanitici)
+        finally:
+            os.close(tanitici)
+    except (OSError, ValueError) as hata:
+        logger.warning("Seçilen yedek dosyası açılamadı (%s).", type(hata).__name__)
+        raise LiveRestoreError(SECILEN_YEDEK_ACILAMADI) from None
+    if not stat.S_ISREG(bilgi.st_mode):
+        logger.warning("Seçilen yedek düzenli dosya değil.")
+        raise LiveRestoreError(SECILEN_YEDEK_ACILAMADI)
+    return yol, bilgi
 
 
 def _resolve_named(name: str) -> Path:

@@ -2,7 +2,7 @@
 
 | Uç | Ad | İş |
 |---|---|---|
-| `GET backups/external/` | `backup-external-reminder` | Son şifreli yedeğin tarihi, hatırlatma süresi ve Genel Bakış kartının gösterilip gösterilmeyeceği (kişisel veri yok) |
+| `GET backups/external/` | `backup-external-reminder` | Son şifreli yedeğin tarihi, hatırlatma süresi, Genel Bakış kartının gösterilip gösterilmeyeceği ve son denemenin özeti (`son_deneme`; yoksa `null`; kişisel veri yok) |
 | `PUT backups/external/` | `backup-external-reminder` | `{reminder_days}` — hatırlatma süresi (7-90 gün) |
 | `POST backups/report/` | `backup-report` | Yedek Raporu'nun PDF'i (`yedek_raporu`; plan F1b-3) |
 

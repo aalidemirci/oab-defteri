@@ -1544,6 +1544,35 @@ class TestGuvenlikDosyasiKayip:
         assert yazilan["kurtarma"]["no"] == 1 and yazilan["kurtarma"]["dogrulandi"]
         assert app_password._unwrap_with_recovery(yazilan, TEST_KURTARMA_ANAHTARI) == TEST_DEK
 
+    def test_ac_penceresinde_secilen_yedekle_de_kayip_kilitten_cikilir(
+        self,
+        client: APIClient,
+        kayip: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Kullanıcı kararı 06.11.2026: kayıp ekranı da dosyayı seçer, başlığını okur, kaynak kalır."""
+        yedek = _kurtarma_baslikli_yedek(tmp_path / "yedek-icerik.sqlite3", kayip)
+        elde = tmp_path / "USB Bellek" / "elden gelen yedek.odbak"
+        elde.parent.mkdir()
+        yedek.replace(elde)
+        hedef_db = tmp_path / "canli" / "db.sqlite3"
+        monkeypatch.setitem(settings.DATABASES["default"], "NAME", str(hedef_db))
+        monkeypatch.setattr(connections, "close_all", lambda: None)
+
+        baslik = client.post("/api/v1/backups/inspect/", {"yol": str(elde)}, format="json")
+        resp = client.post(
+            "/api/v1/backups/restore/",
+            {"yol": str(elde), "recovery_key": TEST_KURTARMA_ANAHTARI},
+            format="json",
+        )
+
+        assert baslik.status_code == 200, baslik.json()
+        assert baslik.json()["kurtarma"]["no"] == 1
+        assert resp.status_code == 200, resp.json()
+        assert resp.json()["state_written"] is True
+        assert elde.is_file()
+
 
 # Dosya SİLİNMEZ ama kullanılamaz hâle gelir (boşaltılır, bozulur, bölümü eksik
 # kalır, şema 1 kalır). Kural `desktop.backup_crypto.is_usable_security_state` —

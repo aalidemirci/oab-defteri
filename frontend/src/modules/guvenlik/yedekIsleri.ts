@@ -7,12 +7,13 @@
 //
 // ŞİFRELİ YEDEK: aşama, son sonuç ve son hata tutulur; dönüşte kart üçünü de gösterir.
 //
-// GERİ YÜKLEME: yalnız "sürüyor" bayrağı tutulur. Parola, kurtarma anahtarı ve File bu belleğe
-// GİRMEZ: sır bileşenin durumundan çıkmaz, kart sökülünce gider; kart yeniden açılınca akış baştan
-// yürür (sunucu da ikinci onay için bir şey saklamaz).
+// GERİ YÜKLEME: yalnız "sürüyor" bayrağı tutulur. Parola, kurtarma anahtarı, seçilen dosyanın yolu
+// ve File bu belleğe GİRMEZ: bileşenin durumundan çıkmazlar, kart sökülünce giderler; kart yeniden
+// açılınca akış baştan yürür (sunucu da ikinci onay için bir şey saklamaz).
 //
 // KİLİT SİLER. Kilitlenme pencereyi yeniden yükler (tasarım §13 D53): bu bellek de gider, eski
-// sonuç sonraki hesaba taşınmaz. Bu yüzden tarayıcı deposuna yazılmaz.
+// sonuç sonraki hesaba taşınmaz. Bu yüzden tarayıcı deposuna yazılmaz. Şifreli Yedek kartı kilitten
+// sonra son denemeyi sunucudan okur (`SifreliYedekleme` "SON DENEME").
 
 import { useSyncExternalStore } from "react";
 

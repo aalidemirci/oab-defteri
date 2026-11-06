@@ -146,11 +146,34 @@ _OKUMA_BAYRAKLARI: Final = (
     | getattr(os, "O_NONBLOCK", 0)
 )
 
+#: Yedek dosyası açılamadı ya da okuma yarıda kaldı (ileti yol taşımaz: günlüğe düşer).
+YEDEK_OKUNAMADI: Final = "Yedek dosyası okunamadı."
 _BOZUK_BASLIK_ILETISI: Final = "Yedek başlığı bozuk veya eksik."
 _BOZUK_ICERIK_ILETISI: Final = "Yedek çözüldü ama içeriği bozuk; dosya bozulmuş olabilir."
 _BOZUK_LISTE_ILETISI: Final = "Yedeğin dosya listesi bozuk."
 _BOZUK_DOSYA_BOLUMU_ILETISI: Final = (
     "Yedeğin ekleri taşıyan bölümü bozuk ya da eksik; bu yedek geri yüklenemez."
+)
+
+#: Şifreli yedek yazılırken çıkan iletiler: sabittir, yol ve kişi taşımaz. Son şifreli yedek denemesi
+#: de bunları saklar (`encrypted_backup` modül başlığı "SON DENEME").
+ANAHTAR_KULLANILAMIYOR: Final = (
+    "Şifreli yedekleme anahtarı yok veya bozuk; önce program yöneticisi hesabını kurup kilidi açın."
+)
+KURTARMA_BASLIGI_KULLANILAMIYOR: Final = "Kurtarma başlığı kullanılamıyor; yedek yazılmadı."
+KURTARMA_BASLIGI_BUYUK: Final = "Yedek kurtarma başlığı beklenenden büyük."
+VERITABANI_BUYUK: Final = "Veritabanı tek yedeğe sığmayacak kadar büyük."
+EK_DEGISTI: Final = "Ek dosyası yedek alınırken değişti; yedek yazılmadı."
+EK_OZETI_TUTMUYOR: Final = "Bir ekin içeriği yedek alınırkenki özetini tutmuyor."
+YAZIM_ILETILERI: Final = frozenset(
+    {
+        ANAHTAR_KULLANILAMIYOR,
+        KURTARMA_BASLIGI_KULLANILAMIYOR,
+        KURTARMA_BASLIGI_BUYUK,
+        VERITABANI_BUYUK,
+        EK_DEGISTI,
+        EK_OZETI_TUTMUYOR,
+    }
 )
 
 
@@ -191,7 +214,7 @@ class EkTutmuyorHatasi(BackupCryptoError):
     """
 
     def __init__(self, ad: str) -> None:
-        super().__init__("Bir ekin içeriği yedek alınırkenki özetini tutmuyor.")
+        super().__init__(EK_OZETI_TUTMUYOR)
         self.ad = ad
 
 
@@ -249,10 +272,7 @@ def load_public_key(data_dir: Path) -> X25519PublicKey:
             raise ValueError
         return X25519PublicKey.from_public_bytes(key)
     except (OSError, KeyError, ValueError, TypeError) as exc:
-        raise BackupCryptoError(
-            "Şifreli yedekleme anahtarı yok veya bozuk; önce program yöneticisi hesabını "
-            "kurup kilidi açın."
-        ) from exc
+        raise BackupCryptoError(ANAHTAR_KULLANILAMIYOR) from exc
 
 
 def can_encrypt(data_dir: Path) -> bool:
@@ -413,7 +433,7 @@ def usable_recovery_header(data_dir: Path) -> bytes | None:
 def _kurtarma_basligi_denetle(baslik: bytes) -> None:
     """Başlıksız yedek üretilmez (modül başlığı): kurtarma bölümü kullanılamıyorsa yazım durur."""
     if recovery_header_from_state(parse_security_state(baslik)) is None:
-        raise BackupCryptoError("Kurtarma başlığı kullanılamıyor; yedek yazılmadı.")
+        raise BackupCryptoError(KURTARMA_BASLIGI_KULLANILAMIYOR)
 
 
 # ---------------------------------------------------------------------------
@@ -539,11 +559,11 @@ def _muhurle(
     Başlık kapısı yazıcılardadır. `ephemeral` ve `nonce` yalnız altın vektör testinde verilir.
     """
     if len(recovery_header) > MAX_RECOVERY_HEADER_BYTES:
-        raise BackupCryptoError("Yedek kurtarma başlığı beklenenden büyük.")
+        raise BackupCryptoError(KURTARMA_BASLIGI_BUYUK)
     acik = len(database).to_bytes(_DB_LENGTH_BYTES, "big") + database + manifesto
     muhurlu_boy = len(acik) + _TAG_BYTES
     if muhurlu_boy > _AZAMI_MUHURLU_BOY:
-        raise BackupCryptoError("Veritabanı tek yedeğe sığmayacak kadar büyük.")
+        raise BackupCryptoError(VERITABANI_BUYUK)
     gecici = ephemeral if ephemeral is not None else X25519PrivateKey.generate()
     gecici_acik = gecici.public_key().public_bytes(
         encoding=serialization.Encoding.Raw,
@@ -669,12 +689,12 @@ def _ek_govdesini_kopyala(hedef: IO[bytes], kaynak: Path, boy: int) -> None:
     with os.fdopen(os.open(kaynak, _OKUMA_BAYRAKLARI), "rb", buffering=0) as dosya:
         bilgi = os.fstat(dosya.fileno())
         if not stat.S_ISREG(bilgi.st_mode) or bilgi.st_size != boy:
-            raise BackupCryptoError("Ek dosyası yedek alınırken değişti; yedek yazılmadı.")
+            raise BackupCryptoError(EK_DEGISTI)
         kalan = boy
         while kalan:
             parca = dosya.read(min(KOPYA_PARCASI, kalan))
             if not parca:
-                raise BackupCryptoError("Ek dosyası yedek alınırken değişti; yedek yazılmadı.")
+                raise BackupCryptoError(EK_DEGISTI)
             hedef.write(parca)
             kalan -= len(parca)
 
@@ -828,13 +848,16 @@ def muhurlu_bolumu_ac(akis: IO[bytes], baslik: KapBasligi, data_key: bytes) -> Y
     """Mühürlü bölümü okuyup çözer; akış başlığın hemen ardında olmalıdır.
 
     Akış mühürlü bölümün sonunda kalır: tam yedekte `dosya_bolumunu_oku` buradan sürer.
-    Kimlik doğrulaması başarısızsa `YedekAnahtariHatasi`.
+    Kimlik doğrulaması başarısızsa `YedekAnahtariHatasi`. Bölüm eksik geliyorsa dosya başlıktan sonra
+    kısalmıştır (USB bellek çıkarıldı): yanlış anahtar gibi anlatılmaz.
     """
     onek = len(MAGIC)
     ephemeral = X25519PublicKey.from_public_bytes(baslik.aad[onek : onek + _PUBLIC_BYTES])
     nonce_start = onek + _PUBLIC_BYTES
     nonce = baslik.aad[nonce_start : nonce_start + _NONCE_BYTES]
     muhurlu = akis.read(baslik.muhurlu_boy)
+    if len(muhurlu) != baslik.muhurlu_boy:
+        raise BackupCryptoError(YEDEK_OKUNAMADI)
     try:
         aes_key = _hkdf(
             private_key_from_data_key(data_key).exchange(ephemeral),

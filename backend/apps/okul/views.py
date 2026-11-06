@@ -657,7 +657,8 @@ class EncryptedBackupMaintenanceResponse(APIException):
 class EncryptedBackupSaveSerializer(serializers.Serializer[dict[str, Any]]):
     """Kaydetme penceresinde seçilen yol; yanıtta ve günlükte yankılanmaz (R1).
 
-    Boş gelmesi iptal değildir: iptalde ön yüz istek göndermez. Reddi servis verir.
+    Boş gelmesi yol verilmedi demektir: iptalde ön yüz istek göndermez, gelirse servis reddeder,
+    deneme yazılmaz.
     """
 
     hedef = serializers.CharField(
@@ -694,8 +695,28 @@ class EncryptedBackupDownloadView(APIView):
 # ---------------------------------------------------------------------------
 # Yedekten geri yükleme (Güvenlik sekmesi — çalışan program içinden)
 # ---------------------------------------------------------------------------
+class _SecilenYolAlani(serializers.CharField):
+    """Aç penceresinde seçilen dosyanın yolu; yanıtta ve günlükte yankılanmaz (R1).
+
+    Yolun bütün denetimi serviste, tek sabit iletiyledir (`live_restore` "SEÇİLEN DOSYA"): DRF'nin
+    NUL ve vekil karakter doğrulayıcıları aynı yolu başka iletiyle keserdi. Boş gelmesi "yol verilmedi"
+    demektir.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            required=False,
+            allow_blank=True,
+            default="",
+            trim_whitespace=False,
+            error_messages={"invalid": live_restore_service.SECILEN_YEDEK_ACILAMADI},
+        )
+        self.validators = []
+
+
 class BackupRestoreRequestSerializer(serializers.Serializer[dict[str, Any]]):
-    """Kaynak İKİSİNDEN BİRİ: `name` (yedek klasöründen) YA DA `file` (yükleme).
+    """Kaynak ÜÇÜNDEN TAM OLARAK BİRİ: `name` (yedek klasöründen), `yol` (Aç penceresinde seçilen,
+    yerinde okunur) YA DA `file` (köprünün olmadığı geliştirme kipinde yükleme).
 
     Parola/kurtarma anahtarı yalnız gövdede taşınır; yanıt ve günlüklerde
     yankılanmaz (security uçlarıyla aynı kural).
@@ -703,6 +724,7 @@ class BackupRestoreRequestSerializer(serializers.Serializer[dict[str, Any]]):
 
     name = serializers.CharField(required=False, allow_blank=True, default="")
     file = serializers.FileField(required=False, allow_null=True, default=None)
+    yol = _SecilenYolAlani()
     # Parola yolunda hesabın tanıtıcısı; boşsa oturumdaki hesap (live_restore).
     hesap = serializers.CharField(required=False, allow_blank=True, default="")
     password = serializers.CharField(
@@ -714,13 +736,18 @@ class BackupRestoreRequestSerializer(serializers.Serializer[dict[str, Any]]):
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         ad = str(attrs.get("name") or "").strip()
-        dosya = attrs.get("file")
-        if bool(ad) == bool(dosya):
+        if sum(map(bool, (ad, attrs.get("file"), attrs.get("yol")))) != 1:
             raise serializers.ValidationError(
-                "Yedek klasöründen bir dosya seçin YA DA elinizdeki yedek dosyasını yükleyin."
+                "Yedek klasöründen bir dosya seçin YA DA elinizdeki yedek dosyasını seçin."
             )
         attrs["name"] = ad
         return attrs
+
+
+class BackupInspectRequestSerializer(serializers.Serializer[dict[str, Any]]):
+    """Başlığı okunacak dosyanın yolu; boş gelirse servis sabit iletiyle reddeder."""
+
+    yol = _SecilenYolAlani()
 
 
 class BackupListView(APIView):
@@ -731,6 +758,23 @@ class BackupListView(APIView):
 
     def get(self, request: Request) -> Response:
         return Response(live_restore_service.list_backups())
+
+
+class BackupInspectView(APIView):
+    """`POST /api/v1/backups/inspect/` `{yol}` — Aç penceresinde seçilen dosyanın başlığı.
+
+    Yanıt yedek listesinin satırıdır: `{name, size, modified_at, kurtarma, kapsam}`; `name` dosya
+    adıdır, yol yanıta ve günlüğe girmez (`live_restore` "SEÇİLEN DOSYA"). Yol sorgu dizesinde gitmez.
+    Yol geçersizse 400; dosyanın başlığı okunamıyorsa `kurtarma` ve `kapsam` `null`'dır, geri
+    yüklemeyi çekirdek reddeder (kullanıcı kararı 06.11.2026 "Elden seçilen yedeğin başlığını sunucu
+    okur"). Kapıları geri yüklemeyle aynıdır: güvenlik dosyası kayıpken de açıktır.
+    """
+
+    def post(self, request: Request) -> Response:
+        req = BackupInspectRequestSerializer(data=request.data)
+        req.is_valid(raise_exception=True)
+        with _service_errors():
+            return Response(live_restore_service.secilen_yedek_ozeti(req.validated_data["yol"]))
 
 
 class BackupRestoreView(APIView):
@@ -745,7 +789,8 @@ class BackupRestoreView(APIView):
     (`live_restore` modül başlığı "YETKİ"). Parola yolunda çekirdeğin ORM'siz hesap denetimi
     reddederse (`GeriYuklemeYetkisiz`, bir `ValueError`) yanıt 400'dür. Bozuk ek varsa hiçbir şey
     değişmez, yanıt 409 `ek_onayi_gerekli`'dir ve `rapor` kişisiz sayıları ve listeyi taşır; aynı
-    istek `ekler_olmadan_surdur` ile yinelenirse kayıtlar o ekler olmadan geri yüklenir.
+    istek `ekler_olmadan_surdur` ile yinelenirse kayıtlar o ekler olmadan geri yüklenir. Kaynak
+    yedek klasöründen ad, Aç penceresinde seçilen yol ya da geliştirme kipinde yüklenen dosyadır.
     """
 
     _yukleme: live_restore_service.YedekYuklemeIsleyicisi | None = None
@@ -753,8 +798,12 @@ class BackupRestoreView(APIView):
     def initialize_request(self, request: HttpRequest, *args: Any, **kwargs: Any) -> Request:
         """Yedek yüklemesi genel bellek işleyicisinin ve sınırının dışındadır (plan F1b-3).
 
-        Yedek şifrelidir (açık kopya değildir) ve yükleme sınırını aşabilir: gövde belleğe
-        alınmadan yedek dizinindeki geçici dosyaya akar. İşleyici gövde okunmadan kurulmalıdır.
+        Programın penceresinde yedek yüklenmez, dosya Aç penceresiyle seçilir (kullanıcı kararı
+        06.11.2026): gövde küçüktür, işleyici çalışmaz. Yükleme kutusu yalnız köprünün olmadığı
+        geliştirme kipindedir: dosya şifrelidir (açık kopya değildir) ve yükleme sınırını aşabilir,
+        gövde belleğe alınmadan yedek dizinindeki geçici dosyaya akar. Ama eşiği aşan gövde uca
+        varmadan waitress'in düz geçici dosyasına iner, aynı gövdedeki parola ya da kurtarma anahtarı
+        da oraya iner (`desktop/server.py` başlığı). İşleyici gövde okunmadan kurulmalıdır.
         """
         self._yukleme = live_restore_service.YedekYuklemeIsleyicisi(request)
         request.upload_handlers = [self._yukleme]
@@ -779,6 +828,7 @@ class BackupRestoreView(APIView):
                 payload = live_restore_service.restore_and_require_restart(
                     name=req.validated_data["name"],
                     yuklenen=req.validated_data["file"],
+                    yol=req.validated_data["yol"],
                     hesap=req.validated_data["hesap"],
                     password=req.validated_data["password"],
                     recovery_key=req.validated_data["recovery_key"],

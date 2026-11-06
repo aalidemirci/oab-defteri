@@ -40,6 +40,15 @@ dönüşü iki platformda ayrıdır: WinForms düz metin, Qt tek öğeli demet v
 `None`'dır (`_secilen_yol` tek biçime indirir; metni dizi sanmak yolun ilk harfini verirdi). Qt
 kolu tür süzgecini kaydetmede uygulamaz, uzantı eklemez; uzantıyı sunucu denetler. Seçilen yol
 günlüğe yazılmaz: Windows yolu hesap adını taşır.
+
+**Yedek dosyası soran köprü** (`yedek_dosyasi_sor`; kullanıcı kararı 06.11.2026 "Yedek dosyası
+yüklenmez, programın Aç penceresiyle seçilir"; plan F1b-3). Geri yüklemede dosya gövdesi sunucuya
+gitmez: ön yüz Aç penceresinin verdiği yolu küçük istekle yollar, sır waitress'in geçici dosyasına
+inmez (`desktop/server.py` başlığı). Aç penceresinde iki platform da tek öğeli demet verir (WinForms
+`tuple(dialog.FileNames)`, Qt `(self._file_name[0],)`), iptalde `None`'dır; `_secilen_yol` aynı işlevdir.
+Qt kolu pencerenin başlığını `linux.openFile`'dan alır (`PENCERE_METINLERI`), tür süzgecini bu
+pencerede uygular; Windows'ta başlığı işletim sistemi yazar. Süzgeç yalnız kolaylıktır, kullanıcı
+başka dosya seçebilir: dosyanın yedek olup olmadığını sunucu okur.
 """
 
 from __future__ import annotations
@@ -83,12 +92,12 @@ _WEBVIEW2_HINT = (
     "WebView2'yi kurun, sonra programı yeniden açın. Kurulum yetkiniz yoksa okul bilişim "
     "sorumlusundan 'WebView2 Runtime' kurulumunu isteyin."
 )
-#: Kaydetme penceresinin tür süzgeci. pywebview açıklamada yalnız harf, rakam ve boşluk kabul eder
-#: (`util.parse_file_type`); uymayan süzgeç pencereyi açmadan `ValueError` verirdi.
+#: Kaydetme ve Aç pencerelerinin tür süzgeci. pywebview açıklamada yalnız harf, rakam ve boşluk kabul
+#: eder (`util.parse_file_type`); uymayan süzgeç pencereyi açmadan `ValueError` verirdi.
 KAYDETME_SUZGECI = ("OAB Defteri yedeği (*.odbak)",)
-#: pywebview'ın kendi metinleri (`webview.start(localization=...)`). Qt kolu kaydetme penceresinin
-#: başlığını buradan alır (`qt.py`); Windows'ta başlığı işletim sistemi yazar.
-PENCERE_METINLERI: Final = {"global.saveFile": "Farklı kaydet"}
+#: pywebview'ın kendi metinleri (`webview.start(localization=...)`). Qt kolu kaydetme ve Aç
+#: pencerelerinin başlığını buradan alır (`qt.py`); Windows'ta başlığı işletim sistemi yazar.
+PENCERE_METINLERI: Final = {"global.saveFile": "Farklı kaydet", "linux.openFile": "Dosya aç"}
 #: Uzun iş sürerken kapanışın en çok bekleyeceği süre (tasarım §4.2, TK5).
 KAPANIS_BEKLEME_SN: Final = 60.0
 #: Süre enjekte edilen saatle ölçülür; sayaç bu aralıklarla sorulur (iş bitince hemen uyanır).
@@ -319,11 +328,12 @@ def _secilen_yol(sonuc: object) -> str:
 
 
 class PencereKoprusu(TitleBarApi):
-    """Pencerenin `js_api`'si: başlık çubuğu teması ve kaydetme yeri (modül başlığı).
+    """Pencerenin `js_api`'si: başlık çubuğu teması, kaydetme yeri, yedek dosyası (modül başlığı).
 
     Köprünün varlığı ön yüzün yetenek işaretidir: `kaydetme_yeri_sor` yoksa (geliştirme kipi,
-    tarayıcı) "Şifreli yedeği kaydet" düğmesi kapalıdır. `_webview`'in adı `_` ile başlar: pywebview
-    `js_api`'nin açık özniteliklerini dolaşıp ön yüze açar.
+    tarayıcı) "Şifreli yedeği kaydet" düğmesi kapalıdır, `yedek_dosyasi_sor` yoksa geri yüklemede
+    yükleme kutusu çıkar. `_webview`'in adı `_` ile başlar: pywebview `js_api`'nin açık
+    özniteliklerini dolaşıp ön yüze açar.
     """
 
     def __init__(self, *, platform: str, webview: Any) -> None:
@@ -348,6 +358,27 @@ class PencereKoprusu(TitleBarApi):
             )
         except Exception as hata:  # noqa: BLE001 — köprü hatası ön yüze ham geçmesin
             logger.warning("Kaydetme penceresi açılamadı (%s).", type(hata).__name__)
+            return ""
+        return _secilen_yol(sonuc)
+
+    def yedek_dosyasi_sor(self) -> str:
+        """Aç penceresini açar; seçilen yedek dosyasının yolunu döndürür.
+
+        İptalde, pencere yoksa ya da pencere açılamazsa boş metin döner, hata ön yüze geçmez: boş
+        dönüşte ön yüzün seçili kaynağı değişmez, istek gitmez. Yol günlüğe yazılmaz.
+        """
+        window = self._window
+        if window is None:
+            return ""
+        try:
+            sonuc = window.create_file_dialog(
+                self._webview.OPEN_DIALOG,
+                directory=str(Path.home()),
+                allow_multiple=False,
+                file_types=KAYDETME_SUZGECI,
+            )
+        except Exception as hata:  # noqa: BLE001 — köprü hatası ön yüze ham geçmesin
+            logger.warning("Aç penceresi açılamadı (%s).", type(hata).__name__)
             return ""
         return _secilen_yol(sonuc)
 

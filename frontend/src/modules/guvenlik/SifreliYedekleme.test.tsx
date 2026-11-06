@@ -4,8 +4,10 @@
 // bekleme görünür; başarı seçilen yere yazıldığını söyler, "USB belleğe alındı" demez, yanıttaki adı
 // dosyanın adı diye göstermez; eksik ek sayısı tek sayıdır. Süren iş ve son sonuç modül belleğindedir:
 // kart sökülüp takılınca iş görünür, ikinci istek gitmez. Hata kartta kalıcı satırdır; kart yokken
-// snackbar söyler. Sahte yanıtlar uç sözleşmesiyle aynıdır (`views.EncryptedBackupDownloadView`,
-// `encrypted_backup.KayitSonucu.yanit`).
+// snackbar söyler. Bellek boşsa son deneme gösterilir (kullanıcı kararı 06.11.2026 "Son şifreli yedek
+// denemesi saklanır"); bellekte sonuç varken aynı bilgi iki kez çizilmez. Sahte yanıtlar uç
+// sözleşmesiyle aynıdır (`views.EncryptedBackupDownloadView`, `encrypted_backup.KayitSonucu.yanit`,
+// `dis_yedek._son_deneme`).
 
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -37,6 +39,7 @@ const HIC_KAYDEDILMEDI = {
   remind: false,
   min_reminder_days: 7,
   max_reminder_days: 90,
+  son_deneme: null,
 };
 
 const ONERILEN_AD = "oab-defteri-yedek-2026-11-06-101530.odbak";
@@ -580,6 +583,226 @@ it("hiç kayıt yokken ve süre dolmamışken hatırlatma cümlesi çizilmez", a
   ).toBeInTheDocument();
   expect(screen.queryByText(/yeniden hatırlatır/)).not.toBeInTheDocument();
   expect(screen.queryByText(/Hatırlatma süresi doldu/)).not.toBeInTheDocument();
+});
+
+describe("son deneme", () => {
+  const BASARILI = {
+    an: "2026-11-06T10:15:30+03:00",
+    sonuc: "basarili",
+    boyut: 3 * 1024 * 1024,
+    ek_sayisi: 12,
+    eksik: 0,
+    ileti: null,
+  };
+  const BASARISIZ = {
+    an: "2026-11-05T09:05:00+03:00",
+    sonuc: "basarisiz",
+    boyut: null,
+    ek_sayisi: null,
+    eksik: null,
+    ileti: BOS_YER_YOK,
+  };
+
+  /** Sunucunun verdiği son deneme; pencere yeniden yüklenince kartın okuduğu budur. */
+  function sonDenemeVer(deneme: unknown) {
+    mocks.get.mockImplementation((yol: string) =>
+      Promise.resolve(
+        yol === "/backups/encrypted/"
+          ? { onerilen_ad: ONERILEN_AD }
+          : { ...HIC_KAYDEDILMEDI, son_deneme: deneme },
+      ),
+    );
+  }
+
+  /** Kutunun kendisi: zaman satırının üst öğesi. */
+  async function denemeKutusu() {
+    const satir = await screen.findByText(/^Son deneme: /);
+    return satir.parentElement as HTMLElement;
+  }
+
+  it("bellek boşsa başarılı denemeyi yazar: zaman, sonuç, boy, taşıdığı ek; ad ve yol yoktur", async () => {
+    sonDenemeVer(BASARILI);
+    bas();
+
+    const kutu = await denemeKutusu();
+    expect(kutu).toHaveTextContent("Son deneme: 06.11.2026 10:15");
+    expect(kutu).toHaveTextContent("Şifreli yedek seçilen yere yazıldı ve denetlendi.");
+    expect(kutu).toHaveTextContent("Boy: 3 MB · Taşıdığı ek: 12");
+    expect(kutu).not.toHaveTextContent(/bulunamadı ya da bozuktu/);
+    expect(kutu).not.toHaveTextContent(ONERILEN_AD);
+    expect(kutu).not.toHaveTextContent(SECILEN_YOL);
+    expect(document.body.textContent).not.toMatch(/USB belleğe alındı|indir/i);
+  });
+
+  it("eksik ek varsa sayıyı söyler", async () => {
+    sonDenemeVer({ ...BASARILI, ek_sayisi: 9, eksik: 3 });
+    bas();
+
+    expect(await denemeKutusu()).toHaveTextContent(
+      "3 ek yedek alınırken bulunamadı ya da bozuktu.",
+    );
+  });
+
+  it("başarısız denemeyi yazar: zaman, alınamadığı, programın iletisi", async () => {
+    sonDenemeVer(BASARISIZ);
+    bas();
+
+    const kutu = await denemeKutusu();
+    expect(kutu).toHaveTextContent("Son deneme: 05.11.2026 09:05");
+    expect(kutu).toHaveTextContent("Şifreli yedek alınamadı.");
+    expect(kutu).toHaveTextContent(BOS_YER_YOK);
+    expect(kutu).not.toHaveTextContent(/seçilen yere yazıldı|Boy:/);
+  });
+
+  it("başarısız denemede kalan sayı ve başarılı denemede kalan ileti yazılmaz", async () => {
+    sonDenemeVer({ ...BASARISIZ, boyut: 1024, ek_sayisi: 3, eksik: 2 });
+    const { unmount } = bas();
+    expect(await denemeKutusu()).not.toHaveTextContent(/Boy:|bulunamadı ya da bozuktu/);
+    unmount();
+
+    sonDenemeVer({ ...BASARILI, ileti: BOS_YER_YOK });
+    bas();
+    expect(await denemeKutusu()).not.toHaveTextContent(BOS_YER_YOK);
+  });
+
+  it.each([
+    ["boy", { boyut: null }, "Taşıdığı ek: 12", "Boy:"],
+    ["ek sayısı", { ek_sayisi: null }, "Boy: 3 MB", "Taşıdığı ek"],
+    ["eksik", { eksik: null }, "Boy: 3 MB · Taşıdığı ek: 12", "bulunamadı"],
+  ])("biçimi tutmayan %s yazılmaz, öteki parçalar kalır", async (_ad, degisim, kalan, giden) => {
+    sonDenemeVer({ ...BASARILI, ...degisim });
+    bas();
+
+    const kutu = await denemeKutusu();
+    expect(kutu).toHaveTextContent(kalan);
+    expect(kutu).not.toHaveTextContent(giden);
+  });
+
+  it("boy ve ek sayısı okunamazsa boş satır çizilmez", async () => {
+    sonDenemeVer({ ...BASARILI, boyut: null, ek_sayisi: null });
+    bas();
+
+    expect((await denemeKutusu()).children).toHaveLength(2);
+  });
+
+  it("iletisi okunamayan başarısız deneme yine alınamadığını söyler", async () => {
+    sonDenemeVer({ ...BASARISIZ, ileti: null });
+    bas();
+
+    const kutu = await denemeKutusu();
+    expect(kutu).toHaveTextContent("Şifreli yedek alınamadı.");
+    expect(kutu.children).toHaveLength(2);
+  });
+
+  it("hiç deneme yoksa kutu çizilmez", async () => {
+    bas();
+    await screen.findByLabelText("Hatırlatma süresi");
+
+    expect(screen.queryByText(/^Son deneme: /)).not.toBeInTheDocument();
+  });
+
+  it("kutu sayfayla gelir, yeni olay değildir: duyurulmaz", async () => {
+    sonDenemeVer(BASARISIZ);
+    bas();
+
+    await denemeKutusu();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("bellekte sonuç varken aynı bilgi iki kez çizilmez", async () => {
+    sonDenemeVer(BASARILI);
+    koprudenSor.mockResolvedValue(SECILEN_YOL);
+    mocks.post.mockResolvedValue(SONUC);
+    bas();
+    await denemeKutusu();
+
+    await userEvent.click(dugme());
+
+    await sonucKutusu();
+    // Sonuç gelince son deneme yeniden okunur; kutu yine çizilmez.
+    await waitFor(() =>
+      expect(mocks.get.mock.calls.filter(([yol]) => yol === "/backups/external/")).toHaveLength(2),
+    );
+    expect(screen.queryByText(/^Son deneme: /)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/^Boy: /)).toHaveLength(1);
+  });
+
+  it("bellekte hata varken son deneme çizilmez", async () => {
+    sonDenemeVer(BASARILI);
+    koprudenSor.mockResolvedValue(SECILEN_YOL);
+    mocks.post.mockRejectedValue(new ApiError(400, "validation_error", BOS_YER_YOK));
+    bas();
+    await denemeKutusu();
+
+    await userEvent.click(dugme());
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(BOS_YER_YOK);
+    expect(screen.queryByText(/^Son deneme: /)).not.toBeInTheDocument();
+  });
+
+  it("yer seçilirken ve yazım sürerken kutu kalkar; iptalde döner", async () => {
+    sonDenemeVer(BASARILI);
+    let sec: (yol: string) => void = () => undefined;
+    koprudenSor.mockImplementationOnce(
+      () =>
+        new Promise((coz) => {
+          sec = coz;
+        }),
+    );
+    bas();
+    await denemeKutusu();
+
+    await userEvent.click(dugme());
+    await screen.findByRole("button", { name: "Yer seçiliyor…" });
+    expect(screen.queryByText(/^Son deneme: /)).not.toBeInTheDocument();
+
+    await act(async () => {
+      sec("");
+      await Promise.resolve();
+    });
+    await denemeKutusu();
+
+    koprudenSor.mockResolvedValue(SECILEN_YOL);
+    const post = bekletilenPost();
+    await userEvent.click(dugme());
+    await screen.findByRole("button", { name: "Şifreli yedek kaydediliyor…" });
+    expect(screen.queryByText(/^Son deneme: /)).not.toBeInTheDocument();
+
+    await post.bitir(SONUC);
+    await sonucKutusu();
+    expect(screen.queryByText(/^Son deneme: /)).not.toBeInTheDocument();
+  });
+
+  it("süren iş kart sökülüp takılınca da kutuyu göstermez", async () => {
+    sonDenemeVer(BASARISIZ);
+    koprudenSor.mockResolvedValue(SECILEN_YOL);
+    const post = bekletilenPost();
+    const kart = sokulebilirBas();
+    await denemeKutusu();
+    await userEvent.click(dugme());
+    await screen.findByRole("button", { name: "Şifreli yedek kaydediliyor…" });
+
+    kart.sok();
+    kart.tak();
+    await screen.findByLabelText("Hatırlatma süresi");
+
+    expect(screen.queryByText(/^Son deneme: /)).not.toBeInTheDocument();
+    await post.bitir(SONUC);
+    await sonucKutusu();
+  });
+
+  it("süre ayarı yazılınca kutu kalır: PUT yanıtı da son denemeyi taşır", async () => {
+    sonDenemeVer(BASARILI);
+    mocks.put.mockResolvedValue({ ...HIC_KAYDEDILMEDI, reminder_days: 60, son_deneme: BASARILI });
+    bas();
+    await denemeKutusu();
+
+    await userEvent.selectOptions(screen.getByLabelText("Hatırlatma süresi"), "60");
+
+    await screen.findByText("Hatırlatma süresi kaydedildi.");
+    expect(screen.getByText(/^Son deneme: /)).toBeInTheDocument();
+  });
 });
 
 it("parola kurulmadan dış yedek özeti istenmez", () => {

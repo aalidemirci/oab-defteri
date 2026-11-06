@@ -230,7 +230,7 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
                 "security-recovery-key-renew",
             ),
             _parca("şifreli yedek", "encrypted-backup-download", "backup-external-reminder"),
-            _parca("yedekten geri yükleme", "backup-restore"),
+            _parca("yedekten geri yükleme", "backup-restore", "backup-inspect"),
             _parca("yedek raporu", "backup-report"),
             # Genel Bakış'ın "Hesaplar ve Güvenlik Dosyası" kartındaki liste ve "Güvenlik dosyasından
             # sil" düğmesi (sözlük §4.5): ad kartın alt başlığıdır.

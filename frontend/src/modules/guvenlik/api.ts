@@ -109,15 +109,17 @@ export type YedekKurtarmaKimligi = KurtarmaKimligi;
 export type YedekKapsami = "yerel" | "tam";
 
 /**
- * `GET /backups/` satırı — yedek klasöründeki bir yedek dosyası (daima şifreli). Tür alanı yoktur:
- * ekran türü dosya adından türetir (`yedekBilgisi.yedekTuru`).
+ * `GET /backups/` satırı — yedek klasöründeki bir yedek dosyası (daima şifreli) — ve
+ * `POST /backups/inspect/` yanıtı (Aç penceresinde seçilen dosya; `live_restore._yedek_satiri`). Tür
+ * alanı yoktur: ekran türü dosya adından türetir (`yedekBilgisi.yedekTuru`).
  */
 export interface YedekDosyasi {
+  /** Dosya adı; yol değildir. */
   name: string;
   /** Bayt cinsinden boyut. */
   size: number;
-  /** Son değişme anı (ISO tarih-saat, yerel dilim). */
-  modified_at: string;
+  /** Son değişme anı (ISO tarih-saat, yerel dilim); dosya sistemi tutulamayan zaman verdiyse null. */
+  modified_at: string | null;
   /** Yedeği açan kurtarma anahtarının kimliği; başlık yok ya da okunamıyorsa null. */
   kurtarma: YedekKurtarmaKimligi | null;
   /** Başlık okunamıyorsa null. */
@@ -190,6 +192,25 @@ export interface SifreliYedekSonucu {
 }
 
 /**
+ * Son şifreli yedek denemesinin kişisiz özeti (kullanıcı kararı 06.11.2026 "Son şifreli yedek
+ * denemesi saklanır"; `dis_yedek._son_deneme`). Başarıda sayılar dolu, `ileti` null; başarısızda
+ * sayılar null, `ileti` doludur. Sunucu okumayı toleranslı yapar: biçimi tutmayan sayı ya da ileti
+ * tek başına null olabilir. Dosyanın adı ve yolu yoktur.
+ */
+export interface SonDeneme {
+  /** Denemenin anı (ISO tarih-saat, yerel dilim). */
+  an: string;
+  sonuc: "basarili" | "basarisiz";
+  /** Bayt cinsinden boy. */
+  boyut: number | null;
+  ek_sayisi: number | null;
+  /** Yedek alınırken bulunamayan ya da bozuk olan ek sayısı. */
+  eksik: number | null;
+  /** Programın sabit iletisi. */
+  ileti: string | null;
+}
+
+/**
  * `GET/PUT /backups/external/` — dış yedek hatırlatması (tasarım §4.3 tehdit 18, §16 R6).
  * Tarih, şifreli yedek her kaydedildiğinde sunucuda kendiliğinden yazılır (veri
  * klasöründeki dosyada; veritabanında değil — geri yükleme onu geri sarmaz).
@@ -205,6 +226,8 @@ export interface DisYedekDurumu {
   remind: boolean;
   min_reminder_days: number;
   max_reminder_days: number;
+  /** Son şifreli yedek denemesi; hiç yoksa null. */
+  son_deneme: SonDeneme | null;
 }
 
 export const guvenlikApi = {
@@ -241,9 +264,11 @@ export const guvenlikApi = {
   /** Kayıp ekranındaki "sıfırla ve kuruluma dön" (yalnız `reset_available` iken). */
   sifirla: () => api.post<SifirlamaSonucu>("/security/state/reset/"),
   // Yedekten geri yükleme (Güvenlik sekmesi; güvenlik dosyası kayıpken de açık).
-  // Parola/kurtarma anahtarı yalnız form gövdesinde taşınır; `geriYukle` çok
-  // parçalı gönderir (dosya yüklemesi ile aynı uç — kaynak `name` YA DA `file`).
+  // Parola/kurtarma anahtarı yalnız form gövdesinde taşınır; `geriYukle` çok parçalı gönderir.
+  // Kaynak üçünden tam olarak biridir: `name`, `yol` (Aç penceresinde seçilen) YA DA `file`
+  // (köprünün olmadığı geliştirme kipinde). Yol yalnız gövdede gider, sorgu dizesine girmez.
   yedekler: () => api.get<YedekListesi>("/backups/"),
+  yedekBasligi: (yol: string) => api.post<YedekDosyasi>("/backups/inspect/", { yol }),
   geriYukle: (form: FormData) => api.postForm<GeriYuklemeSonucu>("/backups/restore/", form),
   // Şifreli yedek (plan F1b-3): ad sunucudan gelir, yeri kaydetme penceresi sorar, yol isteğin
   // içinde gider. İstek zaman aşımısız beklenir: iş dakikalar sürebilir.

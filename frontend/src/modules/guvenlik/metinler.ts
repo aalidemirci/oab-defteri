@@ -310,6 +310,13 @@ export const SIFRELI_YEDEK_YAZILDI = "Şifreli yedek seçilen yere yazıldı ve 
 /** Sunucunun iletisi okunamayan hatanın metni. */
 export const SIFRELI_YEDEK_KAYDEDILEMEDI = "Şifreli yedek kaydedilemedi.";
 
+/**
+ * Ekranda sonuç yokken kart son denemeyi gösterir (kullanıcı kararı 06.11.2026 "Son şifreli yedek
+ * denemesi saklanır"): zamanı başlıktaki gibi yazılır, başarısızsa ardından programın iletisi gelir.
+ */
+export const SIFRELI_YEDEK_SON_DENEME = "Son deneme:";
+export const SIFRELI_YEDEK_ALINAMADI = "Şifreli yedek alınamadı.";
+
 /** Yedek Raporu kartı (tasarım §9.7; kullanıcı kararı 04.11.2026 "Yedek raporu"). */
 export const YEDEK_RAPORU_ADI = "Yedek Raporu";
 export const YEDEK_RAPORU_METNI =
@@ -338,7 +345,19 @@ export const ONCEKI_VERITABANI_KENARA_ALINDI =
   "Önceki veritabanı veri klasöründe “db-onceki-…” adıyla kenara alındı; 14 gün saklanır, sonra " +
   "silinir.";
 
-/** Sunucunun gövde sınırını aşan yedek gönderilmez (kullanıcı kararı 06.11.2026). */
+/**
+ * Elindeki yedek dosyasının alanı. Program penceresinde düğme Aç penceresini açar, pencere açıkken
+ * etiketi süren işi söyler (kullanıcı kararı 06.11.2026 "Yedek dosyası yüklenmez, programın Aç
+ * penceresiyle seçilir"; sözlük §3 "Süren iş").
+ */
+export const YEDEK_DOSYASI_ETIKETI = "Ya da elinizdeki yedek dosyası";
+export const YEDEK_DOSYASI_SEC = "Yedek dosyası seç";
+export const YEDEK_DOSYASI_SECILIYOR = "Dosya seçiliyor…";
+
+/**
+ * Sunucunun gövde sınırını aşan yedek gönderilmez (kullanıcı kararı 06.11.2026). Yalnız köprünün
+ * olmadığı geliştirme kipinin yükleme kutusunda çıkar; kullanıcı görmediği için sözlükte yoktur.
+ */
 export const YEDEK_DOSYASI_COK_BUYUK = "Dosya çok büyük; en çok 8 GB olabilir.";
 
 /** İstek sürerken kart söküldüyse ikinci düğme yoktur: durma iletisinin ardına bu cümle eklenir. */

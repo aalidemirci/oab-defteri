@@ -26,6 +26,11 @@ declare global {
          * `PencereKoprusu`); iptalde, pencere yoksa ya da açılamazsa "" döner.
          */
         kaydetme_yeri_sor?: (onerilen_ad: string) => Promise<string>;
+        /**
+         * Aç penceresini açar, seçilen dosyanın yolunu döndürür (`desktop/window.py`
+         * `PencereKoprusu`); iptalde, pencere yoksa ya da açılamazsa "" döner.
+         */
+        yedek_dosyasi_sor?: () => Promise<string>;
       };
     };
   }

@@ -26,9 +26,10 @@ import {
 } from "./metinler";
 
 /**
- * Ekranın göndereceği en büyük yedek dosyası (kullanıcı kararı 06.11.2026 "1 GB üstü şifreli yedek
- * yükleme kutusundan açılır"). `desktop/server.py` `AZAMI_ISTEK_GOVDESI` ile aynı değerdir; backend
- * testi ikisini karşılaştırır.
+ * Yükleme kutusunun göndereceği en büyük yedek dosyası (kullanıcı kararı 06.11.2026 "1 GB üstü
+ * şifreli yedek yükleme kutusundan açılır"). Kutu yalnız köprünün olmadığı geliştirme kipindedir;
+ * Aç penceresinde seçilen dosya gönderilmez, bu sınır ona uygulanmaz. `desktop/server.py`
+ * `AZAMI_ISTEK_GOVDESI` ile aynı değerdir; backend testi ikisini karşılaştırır.
  */
 export const AZAMI_YEDEK_DOSYASI = 8 * 1024 ** 3;
 
@@ -56,6 +57,20 @@ export function kapsamMetni(kapsam: YedekKapsami | null): string | null {
 /** Listenin satırı: tür ve kapsam yan yana; ikisi de yoksa null. */
 export function yedekAciklamasi(ad: string, kapsam: YedekKapsami | null): string | null {
   const parcalar = [yedekTuru(ad), kapsamMetni(kapsam)].filter((parca) => parca !== null);
+  return parcalar.length > 0 ? parcalar.join(" · ") : null;
+}
+
+/** Yolun dosya adı; ekran Windows ve Pardus yolunu görür, iki ayraç da tanınır. */
+export function yoldanDosyaAdi(yol: string): string {
+  return yol.slice(Math.max(yol.lastIndexOf("/"), yol.lastIndexOf("\\")) + 1);
+}
+
+/** Şifreli yedeğin boy ve ek satırı; son denemede okunamayan parça yazılmaz, ikisi yoksa null. */
+export function yedekBoyuSatiri(boyut: number | null, ekSayisi: number | null): string | null {
+  const parcalar = [
+    ...(boyut === null ? [] : [`Boy: ${formatBoyut(boyut)}`]),
+    ...(ekSayisi === null ? [] : [`Taşıdığı ek: ${formatNumber(ekSayisi)}`]),
+  ];
   return parcalar.length > 0 ? parcalar.join(" · ") : null;
 }
 

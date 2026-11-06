@@ -21,6 +21,10 @@ yapar; her adım bir taşımadır, `geri_al` taşımaları ters sırayla geri ç
 `kesinlestir`'i çağırır: artık geri alınacak bir şey yoktur. Geçiş günlüğü tutulmaz: süreç öldürülürse
 takas yapılmamıştır, depoya konanlar yalnız satırsız dosya kalır.
 
+KAYNAK USB'DE OLABİLİR (kullanıcı kararı 06.11.2026 "Yedek dosyası yüklenmez, programın Aç penceresiyle
+seçilir"): `hazirla` yedek dosyasını sonuna dek okur, `yerine_koy` ve sonrası kaynağa dönmez. Kaynağın
+okuma hatası yazım hatasından ayrılır (`YedekOkunamadi`): disk doluymuş gibi anlatılmaz.
+
 KAPSAMA GÖRE KARAR.
 
 * Tam yedek, `eksik` işaretli girdi: yedek alınırken bulunamamış ya da bozuk bulunmuştur; **eksik**
@@ -59,6 +63,7 @@ import logging
 import os
 import shutil
 import sqlite3
+from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime
@@ -69,6 +74,7 @@ from desktop.backup import EK_TABLOSU
 from desktop.backup_crypto import (
     KAPSAM_TAM,
     KAPSAM_YEREL,
+    YEDEK_OKUNAMADI,
     EkTutmuyorHatasi,
     Manifesto,
     ManifestoGirdisi,
@@ -102,6 +108,13 @@ class EkKayitlariOkunamadi(ValueError):
 
     def __init__(self) -> None:
         super().__init__("Yedek çözüldü ama eklerin kayıtları okunamadı; dosya bozulmuş olabilir.")
+
+
+class YedekOkunamadi(ValueError):
+    """Dosya bölümü okunurken kaynak düştü: yedeğin kendisi bozuk sayılmaz, yeniden denenebilir."""
+
+    def __init__(self) -> None:
+        super().__init__(YEDEK_OKUNAMADI)
 
 
 @dataclass(frozen=True)
@@ -196,6 +209,19 @@ class _EkKaydi:
 def _metin(ham: bytes) -> str:
     """Satır çözme hatası satır düzeyinde kalsın (`desktop.backup` manifesto okuyucusu gibi)."""
     return ham.decode("utf-8", "replace")
+
+
+def _kaynaktan[T](okunan: Iterator[T]) -> Iterator[T]:
+    """Yedek dosyasının okuma hatasını `YedekOkunamadi`'ya çevirir (modül başlığı).
+
+    Yalnız `okunan`'ın içinde çıkan hata yakalanır: çağıranın yazım hatası `OSError` kalır. Günlüğe
+    yalnız türü yazılır, ileti yolu taşır.
+    """
+    try:
+        yield from okunan
+    except OSError as hata:
+        logger.warning("Yedek dosyası okunurken kesildi (%s).", type(hata).__name__)
+        raise YedekOkunamadi from None
 
 
 def _ek_kayitlari(db: Path, *, zorunlu: bool) -> dict[Any, _EkKaydi]:
@@ -354,7 +380,7 @@ class EkYerlesimi:
         bozuk girdilerden önce gelir. Tutmayan kopya dizinle birlikte silinir.
         """
         dogrulanan: dict[str, Path] = {}
-        for bolum in dosya_bolumunu_oku(self._akis, self._manifesto):
+        for bolum in _kaynaktan(dosya_bolumunu_oku(self._akis, self._manifesto)):
             girdi = bolum.girdi
             kayit = kayitlar.get(girdi.ad)
             if kayit is None:
@@ -362,7 +388,7 @@ class EkYerlesimi:
             if self._hazirlik is None:
                 self._hazirlik = ds.hazirlik_dizini_kur(self._depo)
             yol = self._hazirlik / girdi.ad
-            ds.akisla_yaz(yol, bolum.parcalar())
+            ds.akisla_yaz(yol, _kaynaktan(bolum.parcalar()))
             if self._tutuyor_mu(self._hazirlik, girdi.ad, kayit, girdi):
                 dogrulanan[girdi.ad] = yol
         return dogrulanan

@@ -268,8 +268,13 @@ def _deger(satir: AuditTrail, alan: str) -> Any:
 
 def _son_tam_satir(kayit: datetime) -> AuditTrail | None:
     """Kaydın `YEDEK` satırı: kayıttan önceki son tam yedek, yeterince yakınsa (modül başlığı)."""
+    try:
+        sinir = kayit + _KIRPMA_PAYI
+    except OverflowError:
+        # Tarih aralığının son saniyesi: bu damga ancak bozuk dosyadan gelir, satırı yoktur.
+        return None
     sorgu = AuditTrail.objects.filter(
-        action=AuditAction.YEDEK, model=denetim_izi.YEDEK_DOSYASI, at__lte=kayit + _KIRPMA_PAYI
+        action=AuditAction.YEDEK, model=denetim_izi.YEDEK_DOSYASI, at__lte=sinir
     )
     for satir in sorgu.order_by("-seq").iterator():
         if _deger(satir, "kapsam") == KAPSAM_KODLARI[KAPSAM_TAM]:

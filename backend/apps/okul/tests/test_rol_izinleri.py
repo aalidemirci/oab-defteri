@@ -362,6 +362,7 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     "account-unsuspend": {"POST": "Y"},
     "app-quit": {"POST": "H"},
     "backup-external-reminder": {"GET": "Y", "HEAD": "Y", "PUT": "Y"},
+    "backup-inspect": {"POST": "Y"},
     "backup-list": {"GET": "Y", "HEAD": "Y"},
     "backup-report": {"POST": "Y"},
     "backup-restore": {"POST": "Y"},

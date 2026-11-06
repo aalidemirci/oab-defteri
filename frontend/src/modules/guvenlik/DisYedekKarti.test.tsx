@@ -20,6 +20,7 @@ const TEMEL = {
   remind: true,
   min_reminder_days: 7,
   max_reminder_days: 90,
+  son_deneme: null,
 };
 
 function bas() {

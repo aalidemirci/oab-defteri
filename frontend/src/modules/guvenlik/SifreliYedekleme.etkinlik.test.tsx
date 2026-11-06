@@ -26,6 +26,7 @@ const DIS_YEDEK = {
   remind: false,
   min_reminder_days: 7,
   max_reminder_days: 90,
+  son_deneme: null,
 };
 
 function yanit(govde: unknown) {

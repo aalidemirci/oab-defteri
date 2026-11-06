@@ -146,7 +146,8 @@ class _KaydetmePenceresi:
 
 
 class _KaydetmeSabiti:
-    SAVE_DIALOG = 30  # pywebview 5.3.2 `webview/__init__.py`
+    OPEN_DIALOG = 10  # pywebview 5.3.2 `webview/__init__.py`
+    SAVE_DIALOG = 30
 
 
 def _kopru(pencere: Any) -> PencereKoprusu:
@@ -223,6 +224,69 @@ def test_kaydetme_penceresi_acilamazsa_bos_doner_yol_gunluge_gitmez(
     assert "uydurma" not in caplog.text
 
 
+@pytest.mark.parametrize(
+    ("donus", "beklenen"),
+    [
+        # WinForms `tuple(dialog.FileNames)`: kaydetmenin tersine demet verir.
+        (
+            ("C:\\Okul Yedekleri\\şifreli yedek ığüşöç.odbak",),
+            "C:\\Okul Yedekleri\\şifreli yedek ığüşöç.odbak",
+        ),
+        # Qt `(self._file_name[0],)`.
+        (("/media/usb/Yedek Klasörü/yedek.odbak",), "/media/usb/Yedek Klasörü/yedek.odbak"),
+        # İki platformda da iptal; Qt boş seçimi `None`'a kendi çevirir.
+        (None, ""),
+        ((), ""),
+    ],
+    ids=["winforms", "qt", "iptal", "bos_demet"],
+)
+def test_ac_penceresinin_donusu_tek_bicime_iner(donus: Any, beklenen: str) -> None:
+    assert _kopru(_KaydetmePenceresi(donus)).yedek_dosyasi_sor() == beklenen
+
+
+def test_ac_penceresi_ev_dizininde_tek_dosya_icin_acilir() -> None:
+    pencere = _KaydetmePenceresi(None)
+
+    _kopru(pencere).yedek_dosyasi_sor()
+
+    assert pencere.cagrilar == [(10,)]
+    assert pencere.anahtarlar == [
+        {
+            "directory": str(Path.home()),
+            "allow_multiple": False,
+            "file_types": KAYDETME_SUZGECI,
+        }
+    ]
+
+
+def test_pencere_yoksa_yedek_dosyasi_bos_doner(od_gunlugu: list[logging.LogRecord]) -> None:
+    kopru = PencereKoprusu(platform="linux", webview=_KaydetmeSabiti)
+
+    assert kopru.yedek_dosyasi_sor() == ""
+
+    assert not od_gunlugu
+
+
+def test_ac_penceresi_acilamazsa_bos_doner_yol_gunluge_gitmez(
+    od_gunlugu: list[logging.LogRecord],
+) -> None:
+    pencere = _KaydetmePenceresi(hata=RuntimeError("/home/uydurma/yedek.odbak"))
+
+    assert _kopru(pencere).yedek_dosyasi_sor() == ""
+
+    (kayit,) = od_gunlugu
+    assert "RuntimeError" in kayit.getMessage()
+    assert "uydurma" not in kayit.getMessage()
+
+
+def test_secilen_yedek_yolu_gunluge_yazilmaz(od_gunlugu: list[logging.LogRecord]) -> None:
+    pencere = _KaydetmePenceresi(("/home/uydurma/yedek.odbak",))
+
+    assert _kopru(pencere).yedek_dosyasi_sor() == "/home/uydurma/yedek.odbak"
+
+    assert not od_gunlugu
+
+
 def test_pencere_kaydetme_yeri_koprusunu_frontende_sunar(tmp_path: Path) -> None:
     sahte = _SahteWebview()
 
@@ -230,6 +294,7 @@ def test_pencere_kaydetme_yeri_koprusunu_frontende_sunar(tmp_path: Path) -> None
 
     kopru = sahte.pencereler[0]["js_api"]
     assert callable(kopru.kaydetme_yeri_sor)
+    assert callable(kopru.yedek_dosyasi_sor)
     # pywebview `js_api`'nin açık özniteliklerini dolaşır: pencere modülü ön yüze açılmamalı.
     assert "_webview" in vars(kopru)
     assert not [ad for ad in vars(kopru) if not ad.startswith("_")]

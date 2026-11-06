@@ -20,7 +20,9 @@ from pathlib import Path
 import pytest
 from desktop.backup import KAPSAM_METINLERI
 from desktop.server import AZAMI_ISTEK_GOVDESI
-from desktop.window import KAPANIS_BEKLIYOR_OLAYI
+from desktop.window import KAPANIS_BEKLIYOR_OLAYI, PENCERE_METINLERI
+
+from apps.okul.services import encrypted_backup, live_restore
 
 #: Kapsanan ön yüz dosyaları (depo köküne göre).
 DOSYALAR = (
@@ -33,8 +35,14 @@ DOSYALAR = (
     "frontend/src/modules/cikis/metinler.ts",
 )
 
-#: Kullanıcıya görünmeyen düz dize sabitleri (dosya, ad) → gerekçe. Bugün boştur.
-ISTISNALAR: dict[tuple[str, str], str] = {}
+#: Kullanıcıya görünmeyen düz dize sabitleri (dosya, ad) → gerekçe.
+ISTISNALAR: dict[tuple[str, str], str] = {
+    ("frontend/src/modules/guvenlik/metinler.ts", "YEDEK_DOSYASI_COK_BUYUK"): (
+        "Yalnız köprünün olmadığı geliştirme kipinin yükleme kutusunda çıkar; programın penceresinde "
+        'yedek yüklenmez (kullanıcı kararı 06.11.2026 "Yedek dosyası yüklenmez, programın Aç '
+        'penceresiyle seçilir").'
+    ),
+}
 
 _SABIT = re.compile(
     r'export const (\w+)(?::\s*[\w.<>\[\]| ]+)?\s*=\s*((?:"(?:[^"\\]|\\.)*"\s*\+?\s*)+);'
@@ -80,6 +88,21 @@ def test_on_yuz_metinleri_sozlukte_yazilidir() -> None:
     assert not eksik, "Sözlükte yazılı olmayan ön yüz metinleri:\n" + "\n".join(eksik)
     # Kapsam boşalmasın (ör. dosya taşındı, kalıp artık eşleşmiyor).
     assert sayi >= 100, sayi
+
+
+def test_pencere_basliklari_ve_secilen_dosyanin_iletisi_sozlukte_yazilidir() -> None:
+    """Kullanıcı kararı 06.11.2026 "Yedek dosyası yüklenmez, programın Aç penceresiyle seçilir"."""
+    sozluk = _sade(_depo_dosyasi("docs/sozluk.md"))
+    for metin in (*PENCERE_METINLERI.values(), live_restore.SECILEN_YEDEK_ACILAMADI):
+        assert f'**"{_sade(metin)}"**' in sozluk, metin
+
+
+def test_son_denemenin_iletileri_sozlukte_yazilidir() -> None:
+    """Kart son denemenin iletisini gösterir (kullanıcı kararı 06.11.2026 "Son şifreli yedek denemesi
+    saklanır"): kümedeki her ileti kullanıcıya görünür."""
+    sozluk = _sade(_depo_dosyasi("docs/sozluk.md"))
+    for metin in encrypted_backup._DENEME_ILETILERI:
+        assert f'**"{_sade(metin)}"**' in sozluk, metin
 
 
 def test_yedek_kapsami_metinleri_konsoldakiyle_birebirdir() -> None:

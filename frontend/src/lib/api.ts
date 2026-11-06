@@ -45,9 +45,9 @@ export const ROL_YETKISIZ_OLAYI = "od:rol-yetkisiz";
 // giden istekler (oturum ve durum sorguları, periyodik yenilemeler) başlığı
 // taşımaz; bunun için çağıran `etkinlik: false` verir — aksi hâlde kullanıcının
 // son tıklamasından hemen sonra denk gelen bir yoklama da eylem sayılırdı.
-// Yerel pencerede yapılan seçim DOM olayı üretmez: tek istisna "Farklı kaydet"tir,
-// seçilen yer dönünce ekran `etkilesimKaydet`i kendisi çağırır (zamanlayıcı değil,
-// kullanıcının seçimidir; `guvenlik/SifreliYedekleme`).
+// Yerel pencerede yapılan seçim DOM olayı üretmez: istisnalar "Farklı kaydet" ve Aç
+// pencereleridir, seçim dönünce ekran `etkilesimKaydet`i kendisi çağırır (zamanlayıcı
+// değil, kullanıcının seçimidir; `guvenlik/SifreliYedekleme`, `guvenlik/YedektenGeriYukleme`).
 
 /** Etkileşimden sonra giden isteğin kullanıcı eylemi sayıldığı pencere. */
 export const ETKINLIK_PENCERESI_MS = 5_000;

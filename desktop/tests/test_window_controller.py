@@ -309,8 +309,13 @@ def test_denetci_pencereye_start_tan_once_baglanir(tmp_path: Path) -> None:
 
     assert sahte.start_kwargs is not None and sahte.start_kwargs["gui"] == "qt"
     assert sahte.pencere.events.closing.isleyiciler == [denetci.on_closing]
-    # Qt kolunun kaydetme penceresi başlığını pywebview'ın metinlerinden alır (sözlük: Türkçe).
-    assert sahte.start_kwargs["localization"] == {"global.saveFile": "Farklı kaydet"}
+    # Qt kolu kaydetme ve Aç pencerelerinin başlığını pywebview'ın metinlerinden alır (sözlük:
+    # Türkçe). Anahtarlar pywebview 5.3.2 `localization.py`'den; yanlış anahtar sessizce İngilizce
+    # başlık bırakırdı.
+    assert sahte.start_kwargs["localization"] == {
+        "global.saveFile": "Farklı kaydet",
+        "linux.openFile": "Dosya aç",
+    }
 
 
 def test_cik_acilista_istendiyse_pencere_hic_baslatilmaz(tmp_path: Path) -> None:
