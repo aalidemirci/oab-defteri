@@ -25,8 +25,9 @@
 > açılış kilidi reddetti ve `Goster` olayını teslim etti. OAB'de olay adı
 > `OABDefteri.Kapat`'tır; spike OAB adıyla yinelenmedi. **Doğrulanmayanlar:** gerçek
 > kurucu ve kaldırıcı (iki kip), UAC'ye başka bir hesabın kimliği girilmesi (W12),
-> paketli exe'de oturum kapanışı — W11, W12, W14 ve çek-listesi 4, 8-12. Çarpıyla
-> kapanma (W13, çek-listesi 7) F1a kapısında elle doğrulandı (plan §2.1).
+> paketli exe'de oturum kapanışı — W11, W12, W14 ve çek-listesi 4, 8-12, 14-16.
+> Çarpıyla kapanma (W13, çek-listesi 7) F1a kapısında elle doğrulandı (plan §2.1);
+> uzun iş sürerken kapanış henüz denenmedi (çek-listesi 14).
 
 ## 1. Doğrulanması gereken varsayımlar
 
@@ -44,8 +45,8 @@
 | W10 | Kurulum sonrası "programı çalıştır" adımı yükseltilmemiş (kurucuyu başlatan) hesapla koşar | `oab-defteri.iss` `[Run]` (`runasoriginaluser`) | yönetici kipinde veri UAC'ye kimliği girilen hesabın profilinde oluşur |
 | W11 | Kapatma olayı kurucu VE kaldırıcıda çalışır: `InitializeSetup`/`InitializeUninstall` → `OpenEventW`+`SetEvent` (kernel32 `external`) → `CheckForMutexes` döngüsü; `AppMutex` yok (tasarım §4.2 "Kurucu ve kaldırıcı"). Derleme ve düşük yetkili spike geçti (yukarıdaki not) | `oab-defteri.iss` `[Code]`, `desktop/instance_channel.py` | kurucu program açıkken dosyaların üzerine yazar ("dosya kullanımda") ya da her seferinde 30 sn bekleyip "Programı kapatıp Yeniden Dene'ye basın" der; kurulum günlüğünde (`/LOG`) "Kapatma olayı açılamadı" satırı |
 | W12 | Yönetici kipinde UAC'ye BAŞKA hesabın kimliği girildiğinde yükseltilmiş kurucu programı çalıştıran hesabın olay ve mutex'lerini açabilir: nesneler SY/BA/IU/OW'ye açık güvenlik tanımlayıcısıyla kurulur | `desktop/win32_objects.py` (`MUTEX_SDDL`, `EVENT_SDDL`) | varsayılan tanımlayıcıda olduğu gibi erişim reddi: kurucu "program kapalı" sanıp kuruluma geçer (Inno `OpenMutex` reddini "yok" okur); günlükte "Kapatma olayı açılamadı" |
-| W13 | T6 (tasarım §4.5): çarpı programı kapatır, onay sorulmaz; `webview.start` döner, düzenli kapanış (WAL checkpoint + temiz kapanış işareti) yazılır ve çıkış kodu 0'dır; süreç Görev Yöneticisi'nde KALMAZ (elle doğrulama — CI pencereye tıklayamaz) | `desktop/window.py` (`WindowController.on_closing`), `desktop/main.py` | çarpıdan sonra süreç asılı kalır (mutex'ler bırakılmaz, kurucu 30 sn bekler) ya da sonraki açılışta "Önceki oturum beklenmedik biçimde kapandı" |
-| W14 | Windows oturum kapanışı/yeniden başlatma programca engellenmez: `closing` işleyicisi kapanmayı hiç iptal etmez (T6); ailedeki `FormClosing` iptal-geri-alma işleyicisi bu yüzden söküldü | `desktop/window.py` | Windows kapanırken "Bu uygulama kapanmayı engelliyor" ekranı; sonraki açılışta günlükte "Önceki oturum beklenmedik biçimde kapandı" |
+| W13 | T6 (tasarım §4.5): çarpı programı kapatır, onay sorulmaz; `webview.start` döner, düzenli kapanış (WAL checkpoint + temiz kapanış işareti) yazılır ve çıkış kodu 0'dır; süreç Görev Yöneticisi'nde KALMAZ (elle doğrulama — CI pencereye tıklayamaz). Uzun iş sürerken kapanış bir kez, en çok 60 sn ertelenir (`od:kapanis-bekliyor`), temiz kapanış işareti yalnız sayaç sıfırsa yazılır | `desktop/window.py` (`WindowController.on_closing`), `desktop/main.py` | çarpıdan sonra süreç asılı kalır (mutex'ler bırakılmaz, kurucu 30 sn bekler) ya da sonraki açılışta "Önceki oturum beklenmedik biçimde kapandı" |
+| W14 | Windows oturum kapanışı/yeniden başlatma uzun iş yokken programca engellenmez: `closing` işleyicisi kapanmayı iptal etmez (T6). Uzun iş sürerken `closing` kapanışın nedenini taşımadığı için oturum kapanışı da bir kez, en çok 60 sn ertelenir; ailedeki `FormClosing` iptal-geri-alma işleyicisi söküldü, geri alan .NET işleyicisi yoktur | `desktop/window.py` | Windows kapanırken "Bu uygulama kapanmayı engelliyor" ekranı; sonraki açılışta günlükte "Önceki oturum beklenmedik biçimde kapandı" |
 | W15-W20 | *(F1a-2'de düştü)* Aile iskeletinin ağ kataloğu, güvenlik duvarı, otomatik başlatma, UAC yardımcısı, uyku engeli ve tepsi menüsü varsayımlarıydı; bileşenler sökülünce düştüler. Numaralar yeniden kullanılmaz | — | — |
 | W21 | *(lisans kapısı, tasarım §11.4)* Lisans denetimi Windows'ta: PyInstaller'ın son aşama TOC dosyaları (`COLLECT/PYZ/PKG/EXE-00.toc`) `dist\_build-win\oab_defteri\` altında; MSYS2 pacman yerel veritabanı `<msys64>\var\lib\pacman\local\*\{desc,files,mtree}` (setup-msys2 kurulumunda da) ve her DLL'in paketi `share/licenses/` dosyası taşıyor; setup-python'ın `LICENSE.txt`'si `Lib\` ya da kökte. **29.09.2026 aile iskeletinin ilk CI koşusu:** TOC'lar, `D:\a\_temp\msys64` veritabanı, kapanıştaki 30 DLL'in sahibi ve lisans dosyaları, Python'un `LICENSE.txt`'si bulundu — varsayım DOĞRU. Denetim dört bulgu sınıfıyla durdu, hepsi giderildi (`packaging/README.md` "Aile iskeletinin ilk CI Windows koşusunun bulguları"): (A) koşucunun PATH'indeki JDK'dan Universal CRT (43 dosya) → spec `ucrt_suz` + yalın PATH + Inno `MinVersion=10.0`; (B) hooks-contrib `hook-weasyprint`'in topladığı MSYS2 `etc/fonts` (25 dosya) "sahipsiz" → veritabanı %FILES%'teki her tam yolu tutar, DLL dışı dosyada `mtree` sha256 özeti doğrulanır; (C) colorama ve `packaging` (W24); (D) `pywebview-android.jar` → `_webview_platform_disi` Analysis'ten sonra da. Aynı günün doğrulama turu: depo içindeki sanal ortamın RECORD'suz dosyası artık hatadır (en dar kök kuralı); fontconfig yapılandırması spec'te yerleşir, (B)'nin MSYS2 `etc/fonts` dosyaları artık pakete GİRMEZ. Düzeltmeli hat OAB Defteri adıyla F1a CI'ında yeşil geçti (plan §2.1). **Koşuda beklenenler (gerileme DEĞİL):** PyInstaller yalın PATH'te UCRT'yi bulamaz ve çok sayıda `Library not found: could not resolve 'api-ms-win-crt-…'` uyarısı basar (Windows Server 2025'te PyInstaller'ın bu uyarıyı bastırması çalışmaz: `platform.win32_ver()` "2025Server" döndürür); hiçbir ikili `ucrtbase.dll`'i doğrudan içe aktarmadığı için spec'in "Universal CRT'den N dosya ayıklandı" satırı hiç görünmeyebilir; spec "fontconfig: MSYS2'nin etc/fonts ağacından N dosya ayıklandı" yazar (ailenin 29.09.2026 koşusunda 25); `Hidden import 'PySide6…' not found` hataları zararsızdır (`OD_WITH_QT=1`, PySide6 Windows'ta kurulmaz); `paket-icerigi.txt` fontconfig paketi için yalnız `libfontconfig-1.dll`'i yazar | `packaging/lisanslar/lisanslar.py` (`paket`), `build.ps1` "lisans denetimi", spec (`ucrt_suz`, `_webview_platform_disi`, `fontconfig_yerlestir`) | derleme "MSYS2 paket veritabanı yok", "MSYS2 sahibi bulunamayan DLL/dosya", "lisans/telif dosyası bulunamadı", "Universal C çalışma zamanı dosyası pakete girmiş", "MSYS2 dosyasının … özeti yok" / "yerelde değiştirilmiş" , "COLLECT TOC dosyası yok" ya da "paket içi fontconfig …" ile durur |
 | W22 | *(F1a-2'de düştü)* Aile iskeletinin pystray kaynak dosyası (`module_collection_mode`) varsayımıydı; tepsi söküldü (tasarım T6, §11 B18). |
@@ -70,6 +71,12 @@
   `edgechromium` verir ve registry denetimi yapar — düşüş KODLA ENGELLİ.
 * **`%APPDATA%` (Roaming) kullanılmaz.** Gezici profil/OneDrive senkronu açık
   SQLite dosyasını bozar; veri `%LOCALAPPDATA%` altındadır (`desktop/paths.py`).
+* **Açık SQLite bağlantısı geri yüklemeyi düşürür.** SQLite dosyayı
+  `FILE_SHARE_DELETE` olmadan açar; açık bağlantı varken `os.replace` erişim
+  hatası verir. Bağlantılar iş parçacığına özgüdür: `desktop/main.py` sunucudan
+  önce ana iş parçacığınınkini kapatır (`baglantilari_kapat`), `live_restore`
+  kendisininkini kapatır. Başka bir waitress işçisinin açık bağlantısı kalan
+  risktir (plan F1b-3 ekleri).
 
 ## 3. İlk Windows koşusu çek-listesi
 
@@ -88,7 +95,7 @@
 5. **WebView2 kurulu OLMAYAN** bir makinede/VM'de aç → Türkçe yönlendirme
    diyaloğu çıksın, program çıkış kodu 7 versin (beyaz pencere DEĞİL).
 6. Taşınabilir zip'i USB'den çalıştır → MotW olmadığından SmartScreen çıkmamalı.
-7. **Çarpı = çık (T6, W13):** exe açılır, pencerenin çarpısına basılınca
+7. **Çarpı = çık (T6, W13):** exe açılır, uzun iş yokken pencerenin çarpısına basılınca
    program onay sormadan kapanır; `oab-defteri.exe` Görev Yöneticisi'nde KALMAZ,
    çıkış kodu 0'dır ve `temiz-kapanis.json` yazılır. Tepsi simgesi yoktur.
 8. **İkinci açılış:** program açıkken kısayoldan yeniden aç → pencere öne
@@ -96,25 +103,40 @@
    Yükle" kısayolu → "OAB Defteri açık. Programı kapatıp yeniden deneyin." ve
    çıkış kodu 2.
 9. **F0 spike: kapatma olayı — CI Windows derlemesinde ve elle kurulum/kaldırmada
-   doğrulanacak (W11, W12).** Program açıkken kurucuyu yeniden çalıştır →
-   program ≤30 sn içinde kendiliğinden düzenli kapanır ve kurulum sürer; aynısı
+   doğrulanacak (W11, W12).** Program açıkken ve uzun iş yokken kurucuyu yeniden
+   çalıştır → program ≤30 sn içinde kendiliğinden düzenli kapanır ve kurulum sürer; aynısı
    Denetim Masası'ndan kaldırmada. Yönetici kipinde kurucuyu yönetici olmayan
    hesapta başlatıp UAC'ye başka hesabın kimliğini girerek de dene (W12). Program
    kapanmazsa "OAB Defteri açık. Programı kapatıp Yeniden Dene'ye basın." iletisi,
    Yeniden Dene/İptal;
    süreç zorla sonlandırılMAZ. `/LOG` ile koşturulursa günlükte "Kapatma olayı
    gönderildi." ve "Program düzenli kapandı." satırları görünür.
-10. **Temiz kapanış işareti (T15):** çarpı ya da "Çık" sonrası
+10. **Temiz kapanış işareti (T15):** uzun iş yokken çarpı ya da "Çık" sonrası
     `%LOCALAPPDATA%\OABDefteri\data\temiz-kapanis.json` VAR; program
     Görev Yöneticisi'nden sonlandırılınca YOK ve sonraki açılışta
     `logs\uygulama.log`'da "Önceki oturum beklenmedik biçimde kapandı" satırı.
-11. **Oturum kapanışı (W14):** program açıkken Windows'u yeniden başlat ya
+11. **Oturum kapanışı (W14):** program açıkken ve uzun iş yokken Windows'u yeniden başlat ya
     da oturumu kapat → kapanış engellenmez; sonraki açılışta günlükte "Önceki
     oturum düzenli kapanmış."
 12. `--autotest` çıkış kodu 0 ve `uygulama.log`'da "Temiz kapanış işareti
     yazıldı." (duman testi; pencere açılmaz).
 13. Defender/AV taraması: onedir olduğu için imzasız da olsa engellenmemeli;
     engellenirse istisna adımları kılavuza yazılır (tasarım §13 D24, F7).
+14. **Uzun iş sürerken kapanış (W13, W14):** şifreli yedek yazılırken çarpıya
+    bas → pencere kapanmaz, "İşlem bitiyor, program kendiliğinden kapanacak."
+    penceresi çıkar, iş bitince program kapanır, işaret yazılır. 60 sn içinde
+    bitmeyen işte pencere kapanır, kapanış kilidi en çok 30 sn daha bekler; iş o
+    sürede bitmezse işaret yazılmaz, sonraki açılışta T15 kartı çıkar. Aynısı
+    kurucunun `.Kapat` olayıyla ve Windows'u yeniden başlatırken denenir
+    ("kapanmayı engelliyor" ekranı).
+15. **Kaydetme ve Aç pencereleri:** "Şifreli yedeği kaydet" ve "Yedek dosyası
+    seç" gerçek pencereyi açar; iptal hiçbir şey yazmaz, önceki seçim kalır;
+    Türkçe ve boşluklu yol, ağ yolu (`\\sunucu\pay\…`) çalışır. FAT32 USB'de 4 GB
+    sınırı; programın kendi klasörüne bilgisayarın kendi paylaşımından giden
+    yolun reddi (Windows 11, Windows 10, özel paylaşım).
+16. **Program açıkken geri yükleme:** uygulama içinden başarılı geri yükleme
+    takası düşürmez; USB'den tam yedekle geri yükleme ve okuma ortasında bellek
+    çıkarma ("Yedek dosyası okunamadı.", kapı açık, geçici dosya yok).
 
 ## 3b. Inno kalemlerinin kod durumu
 
