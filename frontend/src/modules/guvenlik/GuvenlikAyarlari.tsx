@@ -15,8 +15,8 @@
 //     parolası kadar" (tasarım §4.4.6). Metinler `metinler.ts`'ten gelir ve DÜRÜSTTÜR:
 //     bu koruma alan şifrelemesidir, tam disk şifrelemesi değildir.
 //   * Kurtarma kartları (bekleyen anahtar paneli, doğrulanmadı uyarısı ve doğrula, yenile,
-//     kurtarma anahtarı belgesi) ve yedek kartları (şifreli yedek, yedekten geri yükleme):
-//     yalnız `guvenlik` yeteneğinde (program yöneticisi; plan F1b-2 "Ayarlar ve bant").
+//     kurtarma anahtarı belgesi) ve yedek kartları (Şifreli Yedek, Yedekten Geri Yükleme, Yedek
+//     Raporu): yalnız `guvenlik` yeteneğinde (program yöneticisi; plan F1b-2 "Ayarlar ve bant").
 //     Öteki rollerde bu kartlar çizilmez, uçları çağrılmaz. Güvenlik dosyası kayıp
 //     ekranındaki geri yükleme bu ekranın dışındadır ve her durumda kalır
 //     (`GuvenlikDosyasiKayip`; oturum yoktur, rol süzmesi de yoktur).
@@ -66,6 +66,7 @@ import KurtarmaAnahtariniDogrulaKarti from "./KurtarmaAnahtariniDogrulaKarti";
 import KurtarmaAnahtariniYenileKarti from "./KurtarmaAnahtariniYenileKarti";
 import KurtarmaCiktisiKarti from "./KurtarmaCiktisiKarti";
 import SifreliYedekleme from "./SifreliYedekleme";
+import YedekRaporuKarti from "./YedekRaporuKarti";
 import YedektenGeriYukleme from "./YedektenGeriYukleme";
 import { guvenlikApi } from "./api";
 import type { GuvenlikDurumu } from "./api";
@@ -333,6 +334,8 @@ export default function GuvenlikAyarlari() {
       {kurtarmaVeYedek && <SifreliYedekleme parolaKurulu={durum.password_set} />}
 
       {kurtarmaVeYedek && <YedektenGeriYukleme />}
+
+      {kurtarmaVeYedek && durum.password_set && <YedekRaporuKarti />}
 
       <Dialog
         open={degistirAcik}

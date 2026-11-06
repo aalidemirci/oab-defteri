@@ -5,6 +5,7 @@
 // programda yoktur; geri gelmesinler diye ayrıca sabitlenir. Sekme URL'de
 // tutulur (`?tab=personel`), bu yüzden sayfa yönlendirici içinde kurulur.
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
@@ -55,6 +56,8 @@ vi.mock("../okul/api", async (importOriginal) => {
 vi.mock("../../lib/download", () => ({ saveBlob: vi.fn() }));
 
 import { YETENEK_ADLARI } from "../oturum/api";
+import type { OturumOzeti } from "../oturum/api";
+import { OTURUM_SORGU_ANAHTARI } from "../oturum/useOturum";
 import { YetkiDegeri, hazirYetki } from "../oturum/yetki";
 import KisilerPage from "./KisilerPage";
 
@@ -110,16 +113,29 @@ function page<T>(results: T[], count = results.length) {
 /** `route` derin bağlantıyı sınar: sekme URL'deki `tab` parametresinden okunur. Varsayılan
  *  yetenekler program yöneticisininkidir (bütün yetenekler; süzme `oturum/yetki`'den). */
 function renderPage(route = "/kisiler", yetenekler: readonly string[] = YETENEK_ADLARI) {
+  // Aktarım paneli yükleme sınırını oturum özetinden okur; özet önbellekte hazırdır.
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  queryClient.setQueryData<OturumOzeti>(OTURUM_SORGU_ANAHTARI, {
+    durum: "acik",
+    hesap: null,
+    bosta_dk: 10,
+    bosta_kalan_sn: 600,
+    kilit_bekliyor: false,
+    kurulum_tamam: true,
+    yukleme_siniri_mb: 20,
+  });
   return render(
-    <YetkiDegeri value={hazirYetki(yetenekler)}>
-      <MemoryRouter initialEntries={[route]}>
-        <SnackbarProvider>
-          <ConfirmProvider>
-            <KisilerPage />
-          </ConfirmProvider>
-        </SnackbarProvider>
-      </MemoryRouter>
-    </YetkiDegeri>,
+    <QueryClientProvider client={queryClient}>
+      <YetkiDegeri value={hazirYetki(yetenekler)}>
+        <MemoryRouter initialEntries={[route]}>
+          <SnackbarProvider>
+            <ConfirmProvider>
+              <KisilerPage />
+            </ConfirmProvider>
+          </SnackbarProvider>
+        </MemoryRouter>
+      </YetkiDegeri>
+    </QueryClientProvider>,
   );
 }
 

@@ -16,13 +16,16 @@ import type {
   ButunlukBulgusu,
   ButunlukDurumu,
   DenetimKartlari,
+  EksikEk,
   GeriYuklemeOzeti,
   HesapOzeti,
 } from "./api";
 import ButunlukKartlari, {
   DegistirilmisHesapKarti,
   DenetimIziKarti,
+  EksikEklerKarti,
   GeriYuklemeKarti,
+  geriYuklemeDipCumlesi,
 } from "./ButunlukKartlari";
 import {
   DEGISTIRILMIS_HESAP_KARTI_BASLIGI,
@@ -30,6 +33,9 @@ import {
   DENETIM_DENETLENEMEDI_CUMLESI,
   DENETIM_DENETLENEMEDI_DIP_CUMLESI,
   DENETIM_IZI_KARTI_BASLIGI,
+  EKSIK_EKLER_DIP_CUMLESI,
+  EKSIK_EKLER_KARTI_BASLIGI,
+  EKSIK_EKLER_OKUNAMADI_METNI,
   GERI_YUKLEME_BILDIRIN,
   GERI_YUKLEME_KARTI_BASLIGI,
   GORDUM_ACIKLAMASI,
@@ -85,6 +91,7 @@ const BOS: ButunlukDurumu = {
     silinebilir_sarmallar: [],
     muhru_tutmayan: [],
   },
+  eksik_ekler: [],
   kagit_capasi: { kayit_no: 7, zincir: "C3ED-8364" },
   son_girisler: [],
   parola_yenilenme: null,
@@ -106,7 +113,27 @@ const GERI: GeriYuklemeOzeti = {
   onceki_kayit_no: 42,
   onceki_zincir: "CDCD-CDCD",
   ayrintisiz: false,
+  dosyalar: {},
   onceki_geri_yuklemeler: [],
+};
+
+/** Sunucunun `dosyalar`ı (`iz_dogrulama`; yanıtta `kapsam` ve beş sayı birlikte gelir). */
+const DOSYALAR = {
+  kapsam: "tam",
+  yerine_konan: 3,
+  yetimden_donen: 0,
+  eksik: 1,
+  bozuk: 2,
+  onayla_suruldu: 2,
+} as const;
+
+/** `dosya_deposu.eksik_ekler`'in satırı; ad uydurmadır. */
+const EKSIK_EK: EksikEk = {
+  kayit_turu: "ders yılı",
+  kayit_no: "7",
+  yukleme_tarihi: "2026-10-01",
+  boyut: 4096,
+  ozgun_ad: "toplanti-tutanagi.pdf",
 };
 
 describe("Denetim İzi Bütünlüğü kartı", () => {
@@ -412,6 +439,86 @@ describe("Yedekten Geri Yükleme Yapıldı kartı", () => {
     );
   });
 
+  it("yedeğin kapsamını ve eklerin kişisiz sayılarını satır olarak yazar", () => {
+    render(<GeriYuklemeKarti geri={{ ...GERI, dosyalar: DOSYALAR }} />);
+
+    expect(screen.getByText("Yedeğin kapsamı").nextElementSibling?.textContent).toBe(
+      "kayıtlar, ekler ve üretilen evrak",
+    );
+    expect(screen.getByText("Ekler").nextElementSibling?.textContent).toBe(
+      "3 ek yerine kondu · 1 ek eksik · 2 bozuk ek onayla geride bırakıldı",
+    );
+  });
+
+  it("yerel yedekte sorunsuz geri yükleme eksik ek olmadığını söyler", () => {
+    render(
+      <GeriYuklemeKarti
+        geri={{
+          ...GERI,
+          dosyalar: {
+            kapsam: "yerel",
+            yerine_konan: 0,
+            yetimden_donen: 0,
+            eksik: 0,
+            bozuk: 0,
+            onayla_suruldu: 0,
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Yedeğin kapsamı").nextElementSibling?.textContent).toBe(
+      "yalnız kayıtlar; ekler bu bilgisayardan alınır",
+    );
+    expect(screen.getByText("Ekler").nextElementSibling?.textContent).toBe(
+      "eksik ya da bozuk ek yok",
+    );
+  });
+
+  it("dosya bilgisi taşımayan eski satırda kapsam ve ek satırı çizilmez", () => {
+    render(<GeriYuklemeKarti geri={GERI} />);
+
+    expect(screen.queryByText("Yedeğin kapsamı")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ekler")).not.toBeInTheDocument();
+  });
+
+  it("sayının biri satıra girmediyse eksik ek olmadığı söylenmez", () => {
+    render(
+      <GeriYuklemeKarti
+        geri={{ ...GERI, dosyalar: { kapsam: "tam", yerine_konan: 0, eksik: 0, bozuk: 0 } }}
+      />,
+    );
+
+    expect(screen.getByText("Yedeğin kapsamı")).toBeInTheDocument();
+    expect(screen.queryByText("Ekler")).not.toBeInTheDocument();
+    expect(screen.queryByText(/ek yok/)).not.toBeInTheDocument();
+  });
+
+  it("birden çok geri yüklemede her geri yükleme kendi sayılarını yazar", () => {
+    const ilk = { ...GERI, seq: 38, dosyalar: { ...DOSYALAR, yerine_konan: 5 } };
+    render(
+      <GeriYuklemeKarti geri={{ ...GERI, dosyalar: DOSYALAR, onceki_geri_yuklemeler: [ilk] }} />,
+    );
+
+    expect(screen.getByText(/^5 ek yerine kondu/)).toBeInTheDocument();
+    expect(screen.getByText(/^3 ek yerine kondu/)).toBeInTheDocument();
+  });
+
+  it("dip cümlesi kenara alınan dosyanın 14 gün sonra silindiğini söyler", () => {
+    expect(geriYuklemeDipCumlesi([GERI])).toBe(
+      "Yedeğin alındığı günden sonra girilen kayıtlar ekrandan kalkmıştır; kenara alınan önceki " +
+        "veritabanında durur. O dosya geri yüklemeden 14 gün sonra silinir.",
+    );
+    expect(geriYuklemeDipCumlesi([GERI, { ...GERI, seq: 41 }])).toBe(
+      "Yedeğin alındığı günden sonra girilen kayıtlar ekrandan kalkmıştır; ilk geri yüklemede " +
+        "kenara alınan veritabanında durur. O dosya geri yüklemeden 14 gün sonra silinir.",
+    );
+    // Yeni bilgisayara taşımada kenara alınan yoktur: silinecek dosya da anılmaz.
+    expect(geriYuklemeDipCumlesi([{ ...GERI, onceki_dosya: null, onceki_kayit_no: null }])).toBe(
+      "Geri yüklemeden önce bu bilgisayarda kayıt yoktu.",
+    );
+  });
+
   it("ayrıntısız geri yüklemede olgu yine yazılır", () => {
     render(
       <GeriYuklemeKarti
@@ -498,10 +605,85 @@ describe("Yedekten Geri Yükleme Yapıldı kartı", () => {
   });
 });
 
+describe("Eksik Ekler kartı", () => {
+  it("söyleyecek bir şey yoksa çizilmez", () => {
+    const { container } = render(<EksikEklerKarti ekler={[]} okunamadi={false} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("her eki özgün adı, kaydı, tarihi ve boyuyla yazar; iç kod yok", () => {
+    const { container } = render(
+      <EksikEklerKarti ekler={[EKSIK_EK, { ...EKSIK_EK, kayit_no: "9" }]} okunamadi={false} />,
+    );
+
+    const kart = screen.getByRole("region", { name: EKSIK_EKLER_KARTI_BASLIGI });
+    expect(
+      within(kart).getByText("2 ekin kaydı duruyor ama dosyası bu bilgisayarda bulunamadı:"),
+    ).toBeInTheDocument();
+    expect(
+      within(kart).getByText("toplanti-tutanagi.pdf · ders yılı · no 7 · 01.10.2026 · 4 KB"),
+    ).toBeInTheDocument();
+    expect(within(kart).getByText(EKSIK_EKLER_DIP_CUMLESI)).toBeInTheDocument();
+    expect(within(kart).queryByText(EKSIK_EKLER_OKUNAMADI_METNI)).toBeNull();
+    expect(gorunenMetin(container)).not.toMatch(IC_KOD);
+  });
+
+  it("uzun liste klavyeyle de kayar: kaydırma kutusu odak alır", () => {
+    render(<EksikEklerKarti ekler={[EKSIK_EK]} okunamadi={false} />);
+
+    expect(screen.getByRole("list", { name: EKSIK_EKLER_KARTI_BASLIGI })).toHaveAttribute(
+      "tabindex",
+      "0",
+    );
+  });
+
+  it("özgün adı çözülemeyen ek listeden düşmez, adı okunamadı der", () => {
+    render(<EksikEklerKarti ekler={[{ ...EKSIK_EK, ozgun_ad: null }]} okunamadi={false} />);
+
+    expect(
+      screen.getByText("Adı okunamayan ek · ders yılı · no 7 · 01.10.2026 · 4 KB"),
+    ).toBeInTheDocument();
+  });
+
+  it("depo okunamadıysa “eksik yok” demez, okunamadığını söyler", () => {
+    render(<EksikEklerKarti ekler={[]} okunamadi />);
+
+    const kart = screen.getByRole("region", { name: EKSIK_EKLER_KARTI_BASLIGI });
+    expect(within(kart).getByText(EKSIK_EKLER_OKUNAMADI_METNI)).toBeInTheDocument();
+    expect(within(kart).queryByRole("list")).toBeNull();
+    expect(within(kart).queryByText(EKSIK_EKLER_DIP_CUMLESI)).toBeNull();
+  });
+});
+
 describe("ButunlukKartlari", () => {
   it("söyleyecek bir şey yoksa hiçbir kart çizilmez", () => {
     const { container } = render(<ButunlukKartlari durum={BOS} onIkiDepo={vi.fn()} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("eksik ek varken Eksik Ekler kartı çizilir", () => {
+    render(<ButunlukKartlari durum={{ ...BOS, eksik_ekler: [EKSIK_EK] }} onIkiDepo={vi.fn()} />);
+
+    expect(screen.getByRole("region", { name: EKSIK_EKLER_KARTI_BASLIGI })).toBeInTheDocument();
+  });
+
+  it("depo okunamadıysa genel uyarı kartı da Eksik Ekler kartı da çizilir", () => {
+    render(
+      <ButunlukKartlari durum={{ ...BOS, okunamayan: ["eksik_ekler"] }} onIkiDepo={vi.fn()} />,
+    );
+
+    expect(
+      screen.getByRole("region", { name: OKUNAMAYAN_BUTUNLUK_KARTI_BASLIGI }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(EKSIK_EKLER_OKUNAMADI_METNI)).toBeInTheDocument();
+  });
+
+  it("başka bir kart okunamadıysa Eksik Ekler kartı çizilmez", () => {
+    render(
+      <ButunlukKartlari durum={{ ...BOS, okunamayan: ["geri_yukleme"] }} onIkiDepo={vi.fn()} />,
+    );
+
+    expect(screen.queryByRole("region", { name: EKSIK_EKLER_KARTI_BASLIGI })).toBeNull();
   });
 
   it("iki depo farkı kendiliğinden hesaplanamadıysa (null) kart çizilmez", () => {
@@ -573,6 +755,7 @@ describe("Yedekten Geri Yükleme Yapıldı kartının “Gördüm”ü", () => {
     butunluk: [],
     geri_yukleme: null,
     muhru_tutmayan: [],
+    eksik_ekler: [],
     okunamayan: [],
   };
 

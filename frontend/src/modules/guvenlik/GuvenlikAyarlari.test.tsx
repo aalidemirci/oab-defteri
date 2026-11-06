@@ -46,6 +46,7 @@ vi.mock("../oturum/api", async (importOriginal) => ({
 // Yedek kartlarının kendi testleri var; burada yalnız görünüp görünmedikleri (rol süzmesi) sınanır.
 vi.mock("./SifreliYedekleme", () => ({ default: () => <div>ŞİFRELİ YEDEK KARTI</div> }));
 vi.mock("./YedektenGeriYukleme", () => ({ default: () => <div>GERİ YÜKLEME KARTI</div> }));
+vi.mock("./YedekRaporuKarti", () => ({ default: () => <div>YEDEK RAPORU KARTI</div> }));
 vi.mock("../../lib/download", async (importOriginal) => {
   const gercek = await importOriginal<typeof import("../../lib/download")>();
   return { ...gercek, saveBlob: download.saveBlob };
@@ -95,6 +96,7 @@ const ACIK_OTURUM = {
   bosta_kalan_sn: 600,
   kilit_bekliyor: false,
   kurulum_tamam: true,
+  yukleme_siniri_mb: 20,
 };
 /** Anahtarı doğrulanmamış kurulum (yenilenmiş ve henüz doğrulanmamış anahtar). */
 const DOGRULANMAMIS = { ...PAROLALI, recovery_key_confirmed: false };
@@ -689,6 +691,7 @@ describe("GuvenlikAyarlari — rol süzmesi (plan F1b-2 'Ayarlar ve bant')", () 
     expect(screen.queryByText(/Kurtarma anahtarı doğrulanmadı/)).toBeNull();
     expect(screen.queryByText("ŞİFRELİ YEDEK KARTI")).toBeNull();
     expect(screen.queryByText("GERİ YÜKLEME KARTI")).toBeNull();
+    expect(screen.queryByText("YEDEK RAPORU KARTI")).toBeNull();
     // Kendi parolası ve Kilitle her rolde (KENDI satırı).
     expect(screen.getByRole("button", { name: "Parolayı değiştir" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Kilitle" })).toBeInTheDocument();
@@ -718,6 +721,15 @@ describe("GuvenlikAyarlari — rol süzmesi (plan F1b-2 'Ayarlar ve bant')", () 
     expect(screen.getByRole("button", { name: "Kaydet" })).toBeInTheDocument();
   });
 
+  it("hesap kurulmadan Yedek Raporu kartı çizilmez; öteki yedek kartları durur", async () => {
+    guvenlik.durum.mockResolvedValue(PAROLASIZ);
+    ekranaBas();
+
+    expect(await screen.findByText("ŞİFRELİ YEDEK KARTI")).toBeInTheDocument();
+    expect(screen.getByText("GERİ YÜKLEME KARTI")).toBeInTheDocument();
+    expect(screen.queryByText("YEDEK RAPORU KARTI")).toBeNull();
+  });
+
   it("program yöneticisinde kurtarma ve yedek kartlarının hepsi durur", async () => {
     guvenlik.durum.mockResolvedValue(PAROLALI);
     ekranaBas();
@@ -728,5 +740,6 @@ describe("GuvenlikAyarlari — rol süzmesi (plan F1b-2 'Ayarlar ve bant')", () 
     );
     expect(screen.getByText("ŞİFRELİ YEDEK KARTI")).toBeInTheDocument();
     expect(screen.getByText("GERİ YÜKLEME KARTI")).toBeInTheDocument();
+    expect(screen.getByText("YEDEK RAPORU KARTI")).toBeInTheDocument();
   });
 });

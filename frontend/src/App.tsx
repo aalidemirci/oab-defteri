@@ -24,6 +24,7 @@ import { Route, Routes } from "react-router-dom";
 import AppShell from "./AppShell";
 import KurulumKapisi from "./KurulumKapisi";
 import AyarlarPage from "./modules/ayarlar/AyarlarPage";
+import KapanisPenceresi from "./modules/cikis/KapanisPenceresi";
 import ErisimGunluguPage from "./modules/erisim/ErisimGunluguPage";
 import { ERISIM_GUNLUGU_BASLIGI } from "./modules/erisim/metinler";
 import ParolaYenilenmeBildirimi from "./modules/butunluk/ParolaYenilenmeBildirimi";
@@ -46,6 +47,9 @@ export default function App() {
         {/* Geri yükleme sonrası tam ekran "yeniden başlatın" örtüsü — kapıların
             DIŞINDA: kilit/kurulum durumu ne olursa olsun her şeyi örtmelidir. */}
         <YenidenBaslatEkrani />
+        {/* Uzun iş sürerken gelen kapanışın iletisi: çarpı her ekranda basılabilir, kapıların
+            DIŞINDADIR (kilit, kurulum ve yeniden başlat ekranında da açılır). */}
+        <KapanisPenceresi />
         <GuvenlikKapisi>
           {/* Parola yenilenme bildirimi (tasarım §4.4.3, tehdit 12): parolası sıfırlanan ya da
               kurtarma anahtarıyla yenilenen hesabın sahibine, kilit ekranından açılıştan sonra

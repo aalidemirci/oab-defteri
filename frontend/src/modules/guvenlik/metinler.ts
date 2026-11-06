@@ -11,7 +11,8 @@
 export const KAPSAM_METNI =
   "Bu koruma, kayıtlardaki kişisel veri alanlarını (öğrenci, öğretmen ve diğer " +
   "personelin ad-soyadları, öğrencilerin okul numaraları, hesap sahiplerinin " +
-  "ad-soyadları) her hesabın kendi parolasıyla açılan bir anahtarla şifreler. TAM DİSK " +
+  "ad-soyadları, eklerin özgün dosya adları) her hesabın kendi parolasıyla açılan bir " +
+  "anahtarla şifreler. TAM DİSK " +
   "ŞİFRELEME DEĞİLDİR: bilgisayarın tamamını korumak için Windows'ta BitLocker, " +
   "Pardus/Linux'ta LUKS kullanın.";
 
@@ -267,3 +268,96 @@ export const DURUST_SINIRLAR: readonly { baslik: string; metin: string }[] = [
       "bildirimi yapmaz; durumu okul müdürlüğüne hemen iletin.",
   },
 ];
+
+/** Şifreli Yedek kartının adı ve düğmesi (kullanıcı kararı 04.11.2026 "Ekran adları"). */
+export const SIFRELI_YEDEK_KARTI_BASLIGI = "Şifreli Yedek";
+export const SIFRELI_YEDEK_DUGMESI = "Şifreli yedeği kaydet";
+/** Kaydetme penceresi açıkken ve yazım sürerken düğmenin etiketi (sözlük §3 "Süren iş"). */
+export const SIFRELI_YEDEK_YER_SECILIYOR = "Yer seçiliyor…";
+export const SIFRELI_YEDEK_KAYDEDILIYOR = "Şifreli yedek kaydediliyor…";
+
+/** Kartın gövdesi: ne taşıdığı ve programın ne yaptığı (plan F1b-3; metin "indirilir" demez). */
+export const SIFRELI_YEDEK_METNI =
+  "Kayıtlar, ekler ve üretilen evrak tek dosyada toplanır ve güçlü şifrelemeyle korunur. Program " +
+  "dosyayı sizin seçtiğiniz yere kaydeder, ardından yeniden açıp denetler. Şifresiz kopya " +
+  "üretilmez; dosya hiçbir yere kendiliğinden gönderilmez.";
+
+/** Yerin seçimi ve yedeğin açılışı (BSG Yön. md. 11/23; tasarım TK10). */
+export const SIFRELI_YEDEK_YER_METNI =
+  "Yer olarak USB belleği ya da okulun ağ diskini seçin; bulut depolama hizmetine yüklemeyin " +
+  "(Bilgi ve Sistem Güvenliği Yönergesi 11/23). Yedek bu bilgisayarda program yöneticisinin " +
+  "parolasıyla, başka bir bilgisayarda yalnız kurtarma anahtarıyla açılır; kurtarma anahtarı " +
+  "belgesini okul müdürlüğünde kapalı zarfta saklayın.";
+
+/** Hesap kurulmadan düğme kapalıdır. */
+export const SIFRELI_YEDEK_HESAP_YOK =
+  "Şifreli yedek oluşturabilmek için önce program yöneticisi hesabını kurmalısınız.";
+
+/** Köprü yoksa (geliştirme kipi) düğme kapalıdır; bellek içi indirme yolu yoktur (plan F1b-3). */
+export const SIFRELI_YEDEK_PENCERE_YOK =
+  "Şifreli yedek yalnız programın kendi penceresinden kaydedilir.";
+
+/** Yazım ve denetim sürerken (iş dakikalar sürebilir; denetim yerin okuma hızında koşar). */
+export const SIFRELI_YEDEK_SURUYOR =
+  "Şifreli yedek yazılıyor ve denetleniyor; bu iş birkaç dakika sürebilir.";
+
+/**
+ * Başarı: program dosyanın USB bellekte olduğunu bilemez, yalnız seçilen yere sağlam yazıldığını
+ * bilir; metin "USB belleğe alındı" demez (kullanıcı kararı 04.11.2026).
+ */
+export const SIFRELI_YEDEK_YAZILDI = "Şifreli yedek seçilen yere yazıldı ve denetlendi.";
+
+/** Sunucunun iletisi okunamayan hatanın metni. */
+export const SIFRELI_YEDEK_KAYDEDILEMEDI = "Şifreli yedek kaydedilemedi.";
+
+/** Yedek Raporu kartı (tasarım §9.7; kullanıcı kararı 04.11.2026 "Yedek raporu"). */
+export const YEDEK_RAPORU_ADI = "Yedek Raporu";
+export const YEDEK_RAPORU_METNI =
+  "Bu bilgisayardaki yedeklerin tek sayfalık dökümü: türleri, tarihleri, yedekleri açan kurtarma " +
+  "anahtarları ve son şifreli yedek. Kişi adı taşımaz; dosyası programda saklanmaz.";
+export const YEDEK_RAPORU_KAYDEDILDI = "Yedek Raporu PDF olarak kaydedildi.";
+export const YEDEK_RAPORU_HAZIRLANAMADI = "Yedek Raporu hazırlanamadı.";
+
+/** Geri yükleme listesindeki türler (kullanıcı kararı 04.11.2026 "Ekran adları"). */
+export const YEDEK_TURU_GUNLUK = "Günlük yedek";
+export const YEDEK_TURU_GUNCELLEME = "Güncelleme öncesi yedek";
+export const YEDEK_TURU_KURULUM = "Kurulum yedeği";
+
+/** Yedeğin kapsamı; `desktop/backup.py` `KAPSAM_METINLERI` ile birebir (backend testi sınar). */
+export const KAPSAM_YEREL_METNI = "yalnız kayıtlar; ekler bu bilgisayardan alınır";
+export const KAPSAM_TAM_METNI = "kayıtlar, ekler ve üretilen evrak";
+
+/** Listenin başlığı: bütün türler listededir, yalnız günlük yedek değil. */
+export const YEDEK_LISTESI_BASLIGI = "Bu bilgisayardaki yedekler (en yeniden eskiye)";
+
+/** Kenara alınan veritabanı 14 günlük rotasyondadır (tasarım §4.4.7): "silinmez" denmez. */
+export const ONCEKI_VERITABANI_KENARA_ALINIR =
+  "Mevcut veritabanı veri klasöründe “db-onceki-…” adıyla kenara alınır; 14 gün saklanır, sonra " +
+  "silinir.";
+export const ONCEKI_VERITABANI_KENARA_ALINDI =
+  "Önceki veritabanı veri klasöründe “db-onceki-…” adıyla kenara alındı; 14 gün saklanır, sonra " +
+  "silinir.";
+
+/** Sunucunun gövde sınırını aşan yedek gönderilmez (kullanıcı kararı 06.11.2026). */
+export const YEDEK_DOSYASI_COK_BUYUK = "Dosya çok büyük; en çok 8 GB olabilir.";
+
+/** İstek sürerken kart söküldüyse ikinci düğme yoktur: durma iletisinin ardına bu cümle eklenir. */
+export const EK_ONAYI_KART_DISINDA =
+  "Onay için geri yüklemeyi Ayarlar → Güvenlik'teki Yedekten Geri Yükleme kartından yeniden başlatın.";
+
+/**
+ * Eksik ve bozuk ekler kişisiz listelenir (kullanıcı kararı 04.11.2026): kayıt türü ve numarası,
+ * yükleme tarihi, boy. Satır konsoldakiyle aynı sıradadır (`geri_yukleme_ekleri.EkSatiri.metin`);
+ * boy `formatBoyut` ile yazılır.
+ */
+export const EK_LISTESI_BASLIGI = "Eksik ya da bozuk ekler:";
+export const EK_DURUMU_EKSIK = "Eksik";
+export const EK_DURUMU_BOZUK = "Bozuk";
+export const EK_YEDEKTE_YOKTU = "yedek alınırken bulunamadı ya da bozuktu";
+export const EK_TARIHI_YOK = "tarih yok";
+
+/** İkinci onayın düğmesi: kayıtlar bozuk ekler olmadan geri yüklenir (kullanıcı kararı 04.11.2026). */
+export const EKLER_OLMADAN_GERI_YUKLE = "Ekler olmadan geri yükle";
+
+/** "Ekler" satırı: yerine konan, geri alınan, eksik ya da bozuk ek yoksa. */
+export const EK_SORUNU_YOK = "eksik ya da bozuk ek yok";

@@ -14,7 +14,7 @@ import {
   ikiDepoFarki,
   ikiDepoyuBirlestir,
 } from "./api";
-import type { ButunlukDurumu, GeriYuklemeOzeti, IkiDepoHesabi } from "./api";
+import type { ButunlukDurumu, EksikEk, GeriYuklemeOzeti, IkiDepoHesabi } from "./api";
 
 function yanit(govde: unknown): Response {
   return new Response(JSON.stringify(govde), {
@@ -49,10 +49,19 @@ const MUHASIP: IkiDepoHesabi = {
   rol_etiketi: "Muhasip",
   kapali: false,
 };
+/** `dosya_deposu.eksik_ekler`'in satırı; ad uydurmadır. */
+const EKSIK_EK: EksikEk = {
+  kayit_turu: "ders yılı",
+  kayit_no: "7",
+  yukleme_tarihi: "2026-10-01",
+  boyut: 4096,
+  ozgun_ad: "toplanti-tutanagi.pdf",
+};
 const DENETIM = {
   butunluk: [],
   geri_yukleme: null,
   muhru_tutmayan: [DK_1],
+  eksik_ekler: [EKSIK_EK],
   okunamayan: [],
 };
 const IKI_DEPO = {
@@ -111,6 +120,7 @@ describe("butunlukApi", () => {
       butunluk: [],
       geri_yukleme: null,
       iki_depo: null,
+      eksik_ekler: [],
       kagit_capasi: KENDI.kagit_capasi,
       son_girisler: KENDI.son_girisler,
       parola_yenilenme: null,
@@ -159,6 +169,7 @@ describe("butunlukApi", () => {
         ozeti_tutmayan_hesaplar: [],
         muhru_tutmayan: [DK_1],
       },
+      eksik_ekler: [EKSIK_EK],
       kagit_capasi: KENDI.kagit_capasi,
       son_girisler: KENDI.son_girisler,
       parola_yenilenme: null,
@@ -219,7 +230,18 @@ describe("bütünlük yanıtlarının birleşmesi", () => {
       "butunluk",
       "geri_yukleme",
       "muhru_tutmayan",
+      "eksik_ekler",
     ]);
+  });
+
+  it("eksik ekler denetim ucundan gelir; uç okunamadıysa “eksik yok” sayılmaz", () => {
+    expect(birlestir(KENDI, DENETIM, null)?.eksik_ekler).toEqual([EKSIK_EK]);
+    expect(birlestir(KENDI, null, null)?.eksik_ekler).toEqual([]);
+    expect(birlestir(KENDI, null, null)?.okunamayan).toEqual([]);
+    expect(
+      birlestir(KENDI, { ...DENETIM, eksik_ekler: [], okunamayan: ["eksik_ekler"] }, null)
+        ?.okunamayan,
+    ).toEqual(["eksik_ekler"]);
   });
 
   it("kendi kartları okunamazsa durum okunamamıştır (uyarı kartı); eksik alan boştur", () => {
@@ -228,6 +250,7 @@ describe("bütünlük yanıtlarının birleşmesi", () => {
       butunluk: [],
       geri_yukleme: null,
       iki_depo: null,
+      eksik_ekler: [],
       kagit_capasi: null,
       son_girisler: [],
       parola_yenilenme: null,
@@ -324,10 +347,12 @@ describe("denetimiBirlestir", () => {
       butunluk: [],
       geri_yukleme: null,
       muhru_tutmayan: [],
+      eksik_ekler: [],
       okunamayan: [],
     });
 
     expect(sonra.geri_yukleme).toBeNull();
+    expect(sonra.eksik_ekler).toEqual([]);
     expect(sonra.iki_depo).toEqual({
       fark_var: true,
       sarmalsiz_hesaplar: [],
@@ -364,8 +389,15 @@ describe("denetimiBirlestir", () => {
       "butunluk",
     ]);
     const bozuk = denetimiBirlestir(once, "beklenmeyen");
-    expect(bozuk.okunamayan).toEqual(["iki_depo", "butunluk", "geri_yukleme", "muhru_tutmayan"]);
+    expect(bozuk.okunamayan).toEqual([
+      "iki_depo",
+      "butunluk",
+      "geri_yukleme",
+      "muhru_tutmayan",
+      "eksik_ekler",
+    ]);
     expect(bozuk.butunluk).toEqual([]);
+    expect(bozuk.eksik_ekler).toEqual([]);
     expect(bozuk.geri_yukleme).toBeNull();
   });
 });

@@ -10,6 +10,19 @@ import { describe, expect, it } from "vitest";
 import HakkindaPage from "./HakkindaPage";
 
 describe("HakkindaPage", () => {
+  it("Teknik Bilgiler eklerin şifrelenmesini ve yedeğin dosya bölümünü anlatır", () => {
+    render(<HakkindaPage />);
+
+    const kart = screen.getByRole("heading", { level: 2, name: "Teknik Bilgiler" }).parentElement;
+    const metin = kart?.textContent?.replace(/\s+/g, " ") ?? "";
+    expect(metin).toContain("eklerin özgün dosya adları Fernet");
+    expect(metin).toContain("her dosya kendi rastgele anahtarıyla AES-256-GCM ile şifreli durur");
+    expect(metin).toContain("Bu bilgisayardaki yedekler veritabanını ve eklerin listesini");
+    expect(metin).toContain("taşır, dosyaların kendisini taşımaz");
+    expect(metin).toContain("Kaydedilen şifreli yedekte bunların ardına dosya bölümü gelir");
+    expect(metin).toContain("geri yükleme her dosyayı onunla denetler");
+  });
+
   it("üst yazı konumu, geliştiriciyi, iletişim bilgilerini ve kullanım koşullarını sayar", () => {
     render(<HakkindaPage />);
 

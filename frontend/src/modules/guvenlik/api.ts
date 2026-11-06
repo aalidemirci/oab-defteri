@@ -105,7 +105,13 @@ export interface KurtarmaKimligi {
  */
 export type YedekKurtarmaKimligi = KurtarmaKimligi;
 
-/** `GET /backups/` satırı — yedek klasöründeki bir yedek dosyası (daima şifreli). */
+/** Yedeğin kapsamı (yedek başlığından): `yerel` yalnız kayıtlar, `tam` kayıtlar ve ekler. */
+export type YedekKapsami = "yerel" | "tam";
+
+/**
+ * `GET /backups/` satırı — yedek klasöründeki bir yedek dosyası (daima şifreli). Tür alanı yoktur:
+ * ekran türü dosya adından türetir (`yedekBilgisi.yedekTuru`).
+ */
 export interface YedekDosyasi {
   name: string;
   /** Bayt cinsinden boyut. */
@@ -114,6 +120,8 @@ export interface YedekDosyasi {
   modified_at: string;
   /** Yedeği açan kurtarma anahtarının kimliği; başlık yok ya da okunamıyorsa null. */
   kurtarma: YedekKurtarmaKimligi | null;
+  /** Başlık okunamıyorsa null. */
+  kapsam: YedekKapsami | null;
 }
 
 export interface YedekListesi {
@@ -123,6 +131,39 @@ export interface YedekListesi {
   backups: YedekDosyasi[];
 }
 
+/**
+ * Eksik ya da bozuk bir ekin kişisiz satırı (`geri_yukleme_ekleri.EkSatiri`). `yedekte_yoktu`: ek
+ * yedeğin kendisinde yoktu (yedek alınırken bulunamadı ya da bozuktu); ayrı sayılmaz.
+ */
+export interface EkSatiri {
+  durum: "eksik" | "bozuk";
+  kayit_turu: string;
+  /** Kaydı bulunamayan ekte boş. */
+  kayit_no: string;
+  /** ISO gün (`yyyy-aa-gg`); ekranda gg.aa.yyyy. Kaydı bulunamayan ekte null. */
+  yukleme_tarihi: string | null;
+  /** Bayt cinsinden boy. */
+  boyut: number;
+  yedekte_yoktu: boolean;
+}
+
+/** Bir geri yüklemenin dosya ayağının kişisiz sayıları (geri yükleme notu ve kartı da taşır). */
+export interface DosyaSayilari {
+  kapsam: YedekKapsami;
+  yerine_konan: number;
+  /** `yetim/`'den geri alınan ek sayısı. */
+  yetimden_donen: number;
+  eksik: number;
+  bozuk: number;
+  /** İkinci onayla geride bırakılan ek sayısı. */
+  onayla_suruldu: number;
+}
+
+/** Yanıttaki dosya raporu: sayılar ve kişisiz liste (`DosyaRaporu.yanit`). */
+export interface DosyaRaporu extends DosyaSayilari {
+  ekler: EkSatiri[];
+}
+
 /** `POST /backups/restore/` yanıtı. Başarıda backend "yeniden başlat" kapısını kurar. */
 export interface GeriYuklemeSonucu {
   /** Kenara alınan önceki veritabanının adı (hedef yoksa boş). */
@@ -130,19 +171,35 @@ export interface GeriYuklemeSonucu {
   /** guvenlik.json yedekteki kurtarma başlığından yeniden yazıldı mı? */
   state_written: boolean;
   restart_required: boolean;
+  dosya_raporu: DosyaRaporu;
+}
+
+/**
+ * `POST /backups/encrypted/` yanıtı: yedek seçilen yere yazıldı, yeniden açılıp denetlendi. `ad`
+ * programın adıdır; kullanıcı serbest ad seçtiyse diskteki ad değildir, ekran onu göstermez.
+ */
+export interface SifreliYedekSonucu {
+  ad: string;
+  /** Bayt cinsinden boy. */
+  boyut: number;
+  /** Yedeğin taşıdığı ek sayısı. */
+  ek_sayisi: number;
+  /** Yedek alınırken bulunamayan ya da bozuk olan ek sayısı (ikisi ayrı sayılmaz). */
+  eksik: number;
+  denetlendi: true;
 }
 
 /**
  * `GET/PUT /backups/external/` — dış yedek hatırlatması (tasarım §4.3 tehdit 18, §16 R6).
- * Tarih, şifreli yedek her indirildiğinde sunucuda kendiliğinden yazılır (veri
+ * Tarih, şifreli yedek her kaydedildiğinde sunucuda kendiliğinden yazılır (veri
  * klasöründeki dosyada; veritabanında değil — geri yükleme onu geri sarmaz).
  */
 export interface DisYedekDurumu {
-  /** Son şifreli yedek indirmenin anı (ISO); hiç yoksa null. */
+  /** Son şifreli yedeğin kaydedildiği an (ISO); hiç yoksa null. Alanın adı uçtan gelir. */
   last_download: string | null;
   /** Hatırlatma süresi (gün). */
   reminder_days: number;
-  /** Son indirmeden (yoksa ilk hesabın kurulmasından) bu yana geçen gün. */
+  /** Son kayıttan (yoksa ilk hesabın kurulmasından) bu yana geçen gün. */
   days_since: number | null;
   /** Genel Bakış kartı gösterilsin mi? */
   remind: boolean;
@@ -188,6 +245,13 @@ export const guvenlikApi = {
   // parçalı gönderir (dosya yüklemesi ile aynı uç — kaynak `name` YA DA `file`).
   yedekler: () => api.get<YedekListesi>("/backups/"),
   geriYukle: (form: FormData) => api.postForm<GeriYuklemeSonucu>("/backups/restore/", form),
+  // Şifreli yedek (plan F1b-3): ad sunucudan gelir, yeri kaydetme penceresi sorar, yol isteğin
+  // içinde gider. İstek zaman aşımısız beklenir: iş dakikalar sürebilir.
+  sifreliYedekAdi: () => api.get<{ onerilen_ad: string }>("/backups/encrypted/"),
+  sifreliYedegiKaydet: (hedef: string) =>
+    api.post<SifreliYedekSonucu>("/backups/encrypted/", { hedef }),
+  /** Yedek Raporu (PDF); adı sunucu kurar (`Yedek-Raporu_gg.aa.yyyy.pdf`). */
+  yedekRaporu: () => api.postDosya("/backups/report/"),
   // Dış yedek hatırlatması. Pano kartı okuması kullanıcı etkinliği sayılmaz.
   disYedek: () => api.get<DisYedekDurumu>("/backups/external/", { etkinlik: false }),
   disYedekSuresi: (reminder_days: number) =>

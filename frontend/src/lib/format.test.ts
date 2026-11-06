@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatDate,
+  formatBoyut,
   formatDateTime,
   formatNumber,
   formatPercent,
@@ -67,6 +68,25 @@ describe("formatPercent", () => {
 
   it("null için tire", () => {
     expect(formatPercent(null)).toBe("—");
+  });
+});
+
+describe("formatBoyut", () => {
+  it("KB, MB ve GB'ı Türkçe sayı biçimiyle yazar", () => {
+    expect(formatBoyut(820 * 1024)).toBe("820 KB");
+    expect(formatBoyut(2.5 * 1024 * 1024)).toBe("2,5 MB");
+    expect(formatBoyut(1.25 * 1024 * 1024 * 1024)).toBe("1,3 GB");
+  });
+
+  it("birimin eşiğinde üst birime geçer", () => {
+    expect(formatBoyut(1024 * 1024 - 1)).toBe("1.024 KB");
+    expect(formatBoyut(1024 * 1024)).toBe("1 MB");
+    expect(formatBoyut(1024 * 1024 * 1024)).toBe("1 GB");
+  });
+
+  it("küçük dosya en az 1 KB yazar", () => {
+    expect(formatBoyut(0)).toBe("1 KB");
+    expect(formatBoyut(100)).toBe("1 KB");
   });
 });
 

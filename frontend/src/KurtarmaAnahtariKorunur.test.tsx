@@ -95,6 +95,7 @@ function oturumOzeti(): OturumOzeti {
     bosta_kalan_sn: null,
     kilit_bekliyor: false,
     kurulum_tamam: false,
+    yukleme_siniri_mb: 20,
   };
 }
 

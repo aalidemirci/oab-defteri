@@ -78,6 +78,7 @@ const TEMIZ_IZ: ButunlukDurumu = {
     silinebilir_sarmallar: [],
     muhru_tutmayan: [],
   },
+  eksik_ekler: [],
   kagit_capasi: { kayit_no: 57, zincir: "A1B2-C3D4" },
   son_girisler: ["2026-11-01T08:00:00+03:00"],
   parola_yenilenme: null,
@@ -98,6 +99,7 @@ const YONETICI_OTURUMU: OturumOzeti = {
   bosta_kalan_sn: 600,
   kilit_bekliyor: false,
   kurulum_tamam: true,
+  yukleme_siniri_mb: 20,
 };
 
 function bas() {
@@ -260,6 +262,7 @@ describe("Genel Bakış", () => {
         onceki_kayit_no: null,
         onceki_zincir: null,
         ayrintisiz: false,
+        dosyalar: {},
         onceki_geri_yuklemeler: [],
       },
     } satisfies ButunlukDurumu);
@@ -272,6 +275,27 @@ describe("Genel Bakış", () => {
       basliklar.indexOf("Son Girişler"),
     );
     expect(basliklar).toContain("Yedekten Geri Yükleme Yapıldı");
+  });
+
+  it("dosyası bulunamayan ek varsa “Eksik Ekler” kartı Son Girişler'den önce gelir", async () => {
+    bapi.durum.mockResolvedValue({
+      ...TEMIZ_IZ,
+      eksik_ekler: [
+        {
+          kayit_turu: "ders yılı",
+          kayit_no: "7",
+          yukleme_tarihi: "2026-10-01",
+          boyut: 4096,
+          ozgun_ad: "toplanti-tutanagi.pdf",
+        },
+      ],
+    } satisfies ButunlukDurumu);
+    bas();
+
+    const kart = await screen.findByRole("region", { name: "Eksik Ekler" });
+    expect(within(kart).getByText(/^toplanti-tutanagi\.pdf · ders yılı/)).toBeInTheDocument();
+    const sonGirisler = screen.getByRole("region", { name: "Son Girişler" });
+    expect(kart.compareDocumentPosition(sonGirisler)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it("denetim izi okunamazsa kartları görünmez, sayfanın geri kalanı çalışır", async () => {

@@ -2,11 +2,12 @@
 // konuşur (tasarım §4.1): JWT/Bearer, token yenileme,
 // `personnel_inactive`/`password_change_required` oturum kapıları ve
 // impersonation yoktur. Kalan: temel `fetch` sarmalayıcı, `ApiError`, backend
-// `{code, message, fields}` hata sözleşmesi ve snake_case gövde. Blob
-// yardımcıları (`getBlob`/`postBlob`) dosya indirmeleri (Excel şablonları,
-// şifreli yedek, kurulum dosyası, evrak/PDF) için korunur; `postDosya` dosyayla birlikte
-// sunucunun `Content-Disposition`'daki adını da verir (adı sunucu kuran evrak, ör. hesap teslim
-// pusulası; `lib/download.basliktanDosyaAdi`).
+// `{code, message, fields}` hata sözleşmesi ve snake_case gövde. Bu üç alanın dışında alan
+// taşıyan ret (409 `ek_onayi_gerekli`'nin `rapor`'u) `ApiError.govde`'den okunur. Blob
+// yardımcıları (`getBlob`/`postBlob`) dosya indirmeleri (Excel şablonları, kurulum dosyası,
+// evrak/PDF) için korunur; şifreli yedek indirilmez, program kaydeder (plan F1b-3). `postDosya`
+// dosyayla birlikte sunucunun `Content-Disposition`'daki adını da verir (adı sunucu kuran evrak,
+// ör. hesap teslim pusulası, Yedek Raporu; `lib/download.basliktanDosyaAdi`).
 // Oturum (tasarım §4.4.3, TK14): kullanıcı etkileşiminden hemen sonra giden isteklere
 // `X-OD-Etkinlik: 1` eklenir (oturumun boşta kilit sayacı); yoklamalar eklemez. Kilit
 // kapısı: 423 `locked`/`guvenlik_dosyasi_kayip` `lib/kilit.ts`'e verilir — ön yüz
@@ -44,6 +45,9 @@ export const ROL_YETKISIZ_OLAYI = "od:rol-yetkisiz";
 // giden istekler (oturum ve durum sorguları, periyodik yenilemeler) başlığı
 // taşımaz; bunun için çağıran `etkinlik: false` verir — aksi hâlde kullanıcının
 // son tıklamasından hemen sonra denk gelen bir yoklama da eylem sayılırdı.
+// Yerel pencerede yapılan seçim DOM olayı üretmez: tek istisna "Farklı kaydet"tir,
+// seçilen yer dönünce ekran `etkilesimKaydet`i kendisi çağırır (zamanlayıcı değil,
+// kullanıcının seçimidir; `guvenlik/SifreliYedekleme`).
 
 /** Etkileşimden sonra giden isteğin kullanıcı eylemi sayıldığı pencere. */
 export const ETKINLIK_PENCERESI_MS = 5_000;
@@ -53,7 +57,8 @@ export const ETKINLIK_BASLIGI = "X-OD-Etkinlik";
 let sonEtkilesim = Number.NEGATIVE_INFINITY;
 let sonEtkinlikGonderimi = Number.NEGATIVE_INFINITY;
 
-function etkilesimKaydet(): void {
+/** Kullanıcı etkileşimini kaydeder: DOM dinleyicileri ve yerel pencereden dönen seçim. */
+export function etkilesimKaydet(): void {
   sonEtkilesim = Date.now();
 }
 
@@ -115,13 +120,22 @@ export class ApiError extends Error {
   status: number;
   code: string;
   fields: Record<string, unknown>;
+  /** Yanıt gövdesinin bütünü: `{code, message, fields}`'in dışında alan taşıyan ret için. */
+  govde: Record<string, unknown>;
 
-  constructor(status: number, code: string, message: string, fields: Record<string, unknown> = {}) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    fields: Record<string, unknown> = {},
+    govde: Record<string, unknown> = {},
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.fields = fields;
+    this.govde = govde;
   }
 }
 
@@ -157,7 +171,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     const d = (data ?? {}) as { code?: string; message?: string; fields?: Record<string, unknown> };
     const code = d.code ?? String(resp.status);
     hataOlayiYayinla(resp.status, code);
-    throw new ApiError(resp.status, code, d.message ?? BEKLENMEYEN_HATA_ILETISI, d.fields ?? {});
+    throw new ApiError(resp.status, code, d.message ?? BEKLENMEYEN_HATA_ILETISI, d.fields ?? {}, d);
   }
   return data as T;
 }
@@ -171,7 +185,7 @@ export interface IndirilenDosya {
   ad: string | null;
 }
 
-/** İkili (dosya) indirme — şablon, yedek, kurulum dosyası ve evrak/PDF için. */
+/** İkili (dosya) indirme — şablon, kurulum dosyası ve evrak/PDF için. */
 async function requestBlob(path: string, options: RequestOptions = {}): Promise<Blob> {
   return (await blobYaniti(path, options)).blob();
 }
@@ -199,7 +213,7 @@ async function blobYaniti(path: string, options: RequestOptions): Promise<Respon
   if (!resp.ok) {
     // Hatalı yanıt genelde JSON; gövdeyi okuyup ApiError'a aktar.
     let code = String(resp.status);
-    let message = "Dosya indirilemedi.";
+    let message = BEKLENMEYEN_HATA_ILETISI;
     let fields: Record<string, unknown> = {};
     try {
       const d = (await resp.json()) as {

@@ -7,7 +7,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError } from "../../lib/api";
+import { ApiError, BEKLENMEYEN_HATA_ILETISI } from "../../lib/api";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import { DENETIM_OLAYI } from "./denetimOlayi";
 
@@ -122,6 +122,17 @@ describe("UpdatePanel", () => {
   it("indirme başarısızsa hata bandı gösterilir", async () => {
     mocks.check.mockResolvedValue(YENI_SURUM);
     mocks.downloadInstaller.mockRejectedValue(new Error("kesildi"));
+    renderPanel();
+    const user = await denetle();
+
+    await user.click(await screen.findByRole("button", { name: "Doğrula ve indir" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Güncelleme dosyası indirilemedi.");
+  });
+
+  it("gövdesiz retde genel ileti değil ekranın metni çıkar", async () => {
+    mocks.check.mockResolvedValue(YENI_SURUM);
+    mocks.downloadInstaller.mockRejectedValue(new ApiError(500, "500", BEKLENMEYEN_HATA_ILETISI));
     renderPanel();
     const user = await denetle();
 

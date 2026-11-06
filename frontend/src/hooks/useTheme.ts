@@ -21,6 +21,11 @@ declare global {
     pywebview?: {
       api?: {
         set_titlebar_theme?: (dark: boolean) => Promise<boolean>;
+        /**
+         * Kaydetme penceresini açar, seçilen yolu döndürür (`desktop/window.py`
+         * `PencereKoprusu`); iptalde, pencere yoksa ya da açılamazsa "" döner.
+         */
+        kaydetme_yeri_sor?: (onerilen_ad: string) => Promise<string>;
       };
     };
   }

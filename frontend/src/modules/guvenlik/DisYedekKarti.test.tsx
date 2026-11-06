@@ -1,6 +1,7 @@
 // Genel Bakış "Şifreli Yedeği USB Belleğe Alın" kartı (tasarım §4.3 tehdit 18, §16 R6):
-// yalnız süre dolunca görünür, son indirmeyi ya da hiç indirme olmadığını söyler,
-// Güvenlik sekmesine bağlanır; pano okuması kullanıcı etkinliği sayılmaz.
+// yalnız süre dolunca görünür, son kaydı ya da hiç kayıt olmadığını söyler, gövdesi eklerin ve
+// üretilen evrakın da şifreli yedekle korunduğunu anar, Güvenlik sekmesine bağlanır; pano okuması
+// kullanıcı etkinliği sayılmaz. Program dosyanın USB bellekte olduğunu bilemez: kart "alındı" demez.
 
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -31,19 +32,21 @@ function bas() {
 
 beforeEach(() => vi.clearAllMocks());
 
-it("hiç indirme yoksa bunu söyler ve Güvenlik sekmesine bağlanır", async () => {
+it("hiç kayıt yoksa bunu söyler ve Güvenlik sekmesine bağlanır", async () => {
   mocks.get.mockResolvedValue(TEMEL);
   bas();
 
   expect(await screen.findByRole("heading", { name: DIS_YEDEK_KARTI_BASLIGI })).toBeInTheDocument();
-  expect(screen.getByText("Bu bilgisayarda henüz şifreli yedek indirilmedi.")).toBeInTheDocument();
-  expect(screen.getByText(/USB belleğe kopyalayın/)).toBeInTheDocument();
+  expect(
+    screen.getByText("Bu bilgisayardan henüz şifreli yedek kaydedilmedi."),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/USB belleğe kaydedin/)).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Güvenlik/ })).toHaveAttribute("href", GUVENLIK_ADRESI);
   // Pano okuması boşta süreyi tazelemez (tasarım §4.4.3).
   expect(mocks.get).toHaveBeenCalledWith("/backups/external/", { etkinlik: false });
 });
 
-it("son indirmenin tarihini gg.aa.yyyy ve gün sayısıyla yazar", async () => {
+it("son kaydın tarihini gg.aa.yyyy ve gün sayısıyla yazar", async () => {
   mocks.get.mockResolvedValue({
     ...TEMEL,
     last_download: "2026-08-20T09:05:00+03:00",
@@ -52,8 +55,19 @@ it("son indirmenin tarihini gg.aa.yyyy ve gün sayısıyla yazar", async () => {
   bas();
 
   expect(
-    await screen.findByText("Son şifreli yedek 20.08.2026 tarihinde indirildi (38 gün önce)."),
+    await screen.findByText("Son şifreli yedek 20.08.2026 tarihinde kaydedildi (38 gün önce)."),
   ).toBeInTheDocument();
+});
+
+it("gövde ekleri ve üretilen evrakı anar; indirme ve USB'ye alındı sözü yoktur", async () => {
+  mocks.get.mockResolvedValue(TEMEL);
+  const { container } = bas();
+
+  await screen.findByRole("heading", { name: DIS_YEDEK_KARTI_BASLIGI });
+  expect(container.textContent).toMatch(/kayıtları, ekleri ve\s+üretilen evrakı birlikte taşır/);
+  expect(container.textContent).toMatch(/ekleri taşımaz/);
+  expect(container.textContent).not.toMatch(/indir/i);
+  expect(container.textContent).not.toMatch(/USB belleğe alındı/);
 });
 
 it("süre dolmadıysa kart görünmez", async () => {

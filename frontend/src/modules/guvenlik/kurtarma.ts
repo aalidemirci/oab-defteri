@@ -17,9 +17,9 @@
 
 import { useState } from "react";
 
-import { ApiError } from "../../lib/api";
 import { dosyaAdi, saveBlob } from "../../lib/download";
 import { formatDate, formatNumber, todayIso } from "../../lib/format";
+import { oturumHataMetni } from "../oturum/hatalar";
 import { guvenlikApi } from "./api";
 import type { GuvenlikDurumu, KurtarmaKimligi } from "./api";
 
@@ -127,7 +127,7 @@ export function useKurtarmaBelgesi() {
       saveBlob(pdf, kurtarmaBelgesiDosyaAdi());
       return true;
     } catch (err) {
-      setHata(err instanceof ApiError ? err.message : "Kurtarma anahtarı belgesi hazırlanamadı.");
+      setHata(oturumHataMetni(err, "Kurtarma anahtarı belgesi hazırlanamadı."));
       return false;
     } finally {
       setIndiriliyor(false);

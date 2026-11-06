@@ -93,6 +93,7 @@ def test_oturum_ozetinin_anahtarlari_sabittir(client: APIClient) -> None:
         "hesap",
         "kilit_bekliyor",
         "kurulum_tamam",
+        "yukleme_siniri_mb",
     ]
     assert veri["durum"] == "acik"
     assert veri["hesap"] == {
@@ -137,6 +138,13 @@ def test_kilitliyken_oturum_ozeti_yanit_verir(client: APIClient, kilitli: None) 
     assert _govde(yanit)["durum"] == "kilitli"
     assert _govde(yanit)["hesap"] is None
     assert _govde(yanit)["bosta_kalan_sn"] is None
+
+
+def test_oturum_ozeti_yukleme_sinirini_ayardan_verir(client: APIClient, settings: Any) -> None:
+    """Ekran sınırı aşan düz dosyayı göndermez; değer ayardan gelir (kullanıcı kararı 05.11.2026)."""
+    settings.MAX_UPLOAD_SIZE_MB = 7
+
+    assert _govde(client.get(OTURUM_UCU))["yukleme_siniri_mb"] == 7
 
 
 def test_hesap_kurulmadan_oturum_ozeti_kurulum_der(client: APIClient, parolasiz: None) -> None:

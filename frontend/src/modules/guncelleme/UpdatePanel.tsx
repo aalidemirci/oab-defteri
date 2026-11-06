@@ -19,6 +19,7 @@ import { useState } from "react";
 import { ApiError } from "../../lib/api";
 import { saveBlob } from "../../lib/download";
 import { formatNumber } from "../../lib/format";
+import { oturumHataMetni } from "../oturum/hatalar";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import Icon from "../../ui/Icon";
@@ -82,7 +83,7 @@ export default function UpdatePanel() {
       saveBlob(blob, status.installer_name || `oab-defteri-${status.latest_version}.exe`);
       snackbar.success("Kurulum dosyası doğrulanarak indirildi.");
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Güncelleme dosyası indirilemedi.");
+      setError(oturumHataMetni(e, "Güncelleme dosyası indirilemedi."));
     } finally {
       setDownloading(false);
     }

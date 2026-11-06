@@ -231,6 +231,7 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
             ),
             _parca("şifreli yedek", "encrypted-backup-download", "backup-external-reminder"),
             _parca("yedekten geri yükleme", "backup-restore"),
+            _parca("yedek raporu", "backup-report"),
             # Genel Bakış'ın "Hesaplar ve Güvenlik Dosyası" kartındaki liste ve "Güvenlik dosyasından
             # sil" düğmesi (sözlük §4.5): ad kartın alt başlığıdır.
             _parca(
@@ -272,10 +273,6 @@ ADSIZ_UCLAR: Final[Mapping[str, str]] = {
     "security-state-reset": (
         "Güvenlik dosyası kayıp ekranındaki sıfırlama; yalnız hiç hesap ve şifreli kayıt yokken "
         "açıktır, açık oturumda 409 döner; hesap sahibinin işi değildir."
-    ),
-    "backup-report": (
-        "Yedek Raporu: ekranı henüz yoktur, pusula yalnız bugün programda yapılabilen işi yazar. "
-        "Adı Ayarlar → Güvenlik'teki düğmeyle ve sözlükle birlikte Güvenlik satırına geçer."
     ),
     "security-integrity-reset-notice": (
         "Kendi parola yenilenme bildiriminin “Gördüm”ü; bildirim kendiliğinden açılır, ayrı iş "

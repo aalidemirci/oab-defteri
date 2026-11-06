@@ -10,7 +10,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, etkinlikSaatleriniSifirla } from "../../lib/api";
+import { ApiError, BEKLENMEYEN_HATA_ILETISI, etkinlikSaatleriniSifirla } from "../../lib/api";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 
 const guvenlik = vi.hoisted(() => ({
@@ -230,6 +230,18 @@ describe("KurtarmaAnahtariPaneli", () => {
       "Kayıtlar kilitli. Hesabınızı seçip parolanızla açın.",
     );
     expect(indirme.saveBlob).not.toHaveBeenCalled();
+  });
+
+  it("gövdesiz PDF retde genel ileti değil belgenin metni çıkar", async () => {
+    const kullanici = userEvent.setup();
+    guvenlik.kurtarmaAnahtariPdf.mockRejectedValue(
+      new ApiError(500, "500", BEKLENMEYEN_HATA_ILETISI),
+    );
+    bas();
+    await kullanici.click(screen.getByRole("button", { name: "PDF olarak kaydet" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Kurtarma anahtarı belgesi hazırlanamadı.",
+    );
   });
 
   it("doğrulama kipinde anahtar ekrandan kalkar; iki grup doğru yazılınca sunucuda damgalanır", async () => {

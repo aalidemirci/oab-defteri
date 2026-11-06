@@ -111,6 +111,7 @@ beforeEach(() => {
     bosta_kalan_sn: 600,
     kilit_bekliyor: false,
     kurulum_tamam: true,
+    yukleme_siniri_mb: 20,
   });
   oturumApiMock.hesaplar.mockResolvedValue([
     {
@@ -134,6 +135,7 @@ describe("Üst çubuk başlığı — program durumu ekranları", () => {
       bosta_kalan_sn: null,
       kilit_bekliyor: false,
       kurulum_tamam: true,
+      yukleme_siniri_mb: 20,
     });
     ekranaBas();
 

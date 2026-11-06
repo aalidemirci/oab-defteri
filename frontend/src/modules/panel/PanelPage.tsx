@@ -11,8 +11,8 @@
 // "Son Girişler" (oturumdaki hesabın girişleri ve denetim izinin son kaydı — kâğıt çapası)
 // ve gezinme kartları. Denetim izi kartları bütünlük uçlarının tek bileşik okumasından
 // beslenir (`useButunlukDurumu`): hangi ucun çağrılacağını oturum özetinin yetenekleri söyler
-// (`useYetenekler`; denetim kartları program yöneticisi ve Denetleme Kurulunda, iki depo kartı
-// yalnız program yöneticisinde; "Son Girişler" her rolde). Okuma beklenmedik biçimde düşerse
+// (`useYetenekler`; denetim kartları ve "Eksik Ekler" program yöneticisi ve Denetleme Kurulunda,
+// iki depo kartı yalnız program yöneticisinde; "Son Girişler" her rolde). Okuma beklenmedik biçimde düşerse
 // kartların yerine "Bütünlük Durumu Okunamadı" uyarısı çıkar (bir uyarı sessizce kaybolmasın),
 // sayfanın geri kalanı çalışır; kilitliyken (423) hiçbiri çizilmez. Oturum özeti (yetenekler)
 // okunamazsa da aynı uyarı çıkar: yalnız her role açık kendi kartları okunur, denetim ve iki
@@ -146,7 +146,7 @@ export default function PanelPage() {
       <OkunamayanAlanlarKarti />
       {/* Havuz boşsa görünmez; yalnız sayı okunur. Ucu yalnız `ayrilis_havuzu`'nda açık. */}
       {yetki.acik("ayrilis_havuzu") && <AyrilisHavuzuKarti />}
-      {/* Dış yedek hatırlatması — son şifreli yedek indirmesinden (yoksa ilk hesabın
+      {/* Dış yedek hatırlatması — son şifreli yedek kaydından (yoksa ilk hesabın
           kurulumundan) süre dolunca; yalnız tarih ve gün sayısı. Ucu yalnız `guvenlik`'te. */}
       {yetki.acik("guvenlik") && <DisYedekKarti />}
       {/* Oturumdaki hesabın son girişleri ve denetim izinin son kaydı (kâğıt çapası). */}

@@ -43,6 +43,11 @@ interface DialogProps {
    * verilen kararlı bir ref olmalıdır.
    */
   initialFocusRef?: RefObject<HTMLElement | null>;
+  /**
+   * Her şeyin üstünde açılır: "Programı kapatıp yeniden açın" ekranı (z-[60]) diyalogları örter,
+   * kapanış penceresi onun da üstünde görünmelidir.
+   */
+  enUstte?: boolean;
 }
 
 export default function Dialog({
@@ -54,6 +59,7 @@ export default function Dialog({
   wide = false,
   full = false,
   initialFocusRef,
+  enUstte = false,
 }: DialogProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const aciciRef = useRef<HTMLElement | null>(null);
@@ -122,7 +128,9 @@ export default function Dialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex animate-scrim-in items-center justify-center bg-scrim/[0.32] p-4"
+      className={`fixed inset-0 flex animate-scrim-in items-center justify-center bg-scrim/[0.32] p-4 ${
+        enUstte ? "z-[70]" : "z-50"
+      }`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

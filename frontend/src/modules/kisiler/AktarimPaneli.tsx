@@ -21,6 +21,13 @@
 // Rol (plan F1b-2): panelin kendisi `eokul_aktarimi` yeteneğinde çizilir (Kişiler verir);
 // "Birleştir" düğmeleri ayrıca `kisi_yazma`'ya bağlıdır (`birlestirebilir`; personel
 // birleştirme ucu).
+//
+// Boy denetimi (kullanıcı kararı 05.11.2026 "Sınırı aşan düz dosyayı ön yüz de durdurur"): sınırı
+// aşan gövde sunucuya varmadan sistemin geçici dizinine şifresiz iner (plan F1b-3 "Dosya deposu",
+// Yükleme maddesi). Ekran dosyayı seçimde ve gönderimden önce boyuna bakar; aşan dosya hiç
+// gönderilmez, ileti sunucununkiyle aynıdır (`shared/yukleme.py`). Sınır sunucudan gelir
+// (`useYuklemeSiniri`); okunamazsa dosya gönderilir, sunucu reddeder. Karar dosyayı sayar:
+// yapıştırılan metin bu denetimin dışındadır, panodan gelen liste sınırın çok altında kalır.
 
 import { useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -33,6 +40,7 @@ import { useConfirm } from "../../ui/ConfirmProvider";
 import EmptyState from "../../ui/EmptyState";
 import Icon from "../../ui/Icon";
 import { useSnackbar } from "../../ui/SnackbarProvider";
+import { useYuklemeSiniri } from "../oturum/useOturum";
 import {
   benzerlikGerekcesi,
   importCounts,
@@ -97,6 +105,12 @@ function isStudentReport(report: ImportReport): report is StudentImportReport {
   return "created_students" in report;
 }
 
+/** Sınırı aşan dosyanın iletisi; dosya sınırdaysa ya da sınır bilinmiyorsa null. */
+function boyHatasi(dosya: File | null, sinirMb: number | null): SayfaHatasi | null {
+  if (dosya === null || sinirMb === null || dosya.size <= sinirMb * 1024 * 1024) return null;
+  return { message: `Dosya çok büyük; en çok ${sinirMb} MB olabilir.`, parolaGerekli: false };
+}
+
 export default function AktarimPaneli({
   kind,
   onImported,
@@ -115,6 +129,7 @@ export default function AktarimPaneli({
   const [error, setError] = useState<SayfaHatasi | null>(null);
   const snackbar = useSnackbar();
   const confirm = useConfirm();
+  const sinirMb = useYuklemeSiniri();
   const fileId = useId();
   const textId = useId();
   const fullListId = useId();
@@ -137,6 +152,11 @@ export default function AktarimPaneli({
   const run = async (mode: "preview" | "commit") => {
     if (!input) {
       setError({ message: "Önce bir dosya seçin ya da listeyi yapıştırın.", parolaGerekli: false });
+      return;
+    }
+    const buyuk = boyHatasi(file, sinirMb);
+    if (buyuk !== null) {
+      setError(buyuk);
       return;
     }
     setBusy(true);
@@ -243,8 +263,10 @@ export default function AktarimPaneli({
                tanımayan Windows kurulumları için uzantı listesi de verilir. */
             accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             onChange={(e) => {
-              setFile(e.target.files?.[0] ?? null);
-              sifirla();
+              const secilen = e.target.files?.[0] ?? null;
+              setFile(secilen);
+              setReport(null);
+              setError(boyHatasi(secilen, sinirMb));
             }}
             className="block min-h-[var(--od-field-height)] flex-1 rounded-shape-sm border border-outline bg-surface-container-lowest px-3 py-2 text-body-medium text-on-surface file:mr-3 file:rounded-shape-sm file:border-0 file:bg-secondary-container file:px-3 file:py-1.5 file:text-label-large file:text-on-secondary-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           />

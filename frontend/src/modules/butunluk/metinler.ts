@@ -10,14 +10,15 @@
 // KİŞİSİZDİR: hesap rol etiketi ve tanıtıcıyla anılır ("Muhasip · tanıtıcı muhasip"); ad-soyad
 // hiçbir metne girmez (sözlük §5). Tarih ve saat `lib/format` ile yazılır.
 
-import { formatDate } from "../../lib/format";
-import type { HesapOzeti, KagitCapasi } from "./api";
+import { formatBoyut, formatDate, formatNumber } from "../../lib/format";
+import type { EksikEk, HesapOzeti, KagitCapasi } from "./api";
 
 /** Kart ve pencere adları (Başlık Düzeni; sözlük §3 "Başlık sabit addır", §4.5). */
 export const DENETIM_IZI_KARTI_BASLIGI = "Denetim İzi Bütünlüğü";
 export const DEGISTIRILMIS_HESAP_KARTI_BASLIGI = "Değiştirilmiş Hesap Kaydı";
 export const GERI_YUKLEME_KARTI_BASLIGI = "Yedekten Geri Yükleme Yapıldı";
 export const IKI_DEPO_KARTI_BASLIGI = "Hesaplar ve Güvenlik Dosyası";
+export const EKSIK_EKLER_KARTI_BASLIGI = "Eksik Ekler";
 export const SON_GIRISLER_KARTI_BASLIGI = "Son Girişler";
 export const OKUNAMAYAN_BUTUNLUK_KARTI_BASLIGI = "Bütünlük Durumu Okunamadı";
 /** Pencere başlığı cümle düzenindedir (sözlük §4.3 "Pencere başlıkları"). */
@@ -255,6 +256,41 @@ export const GERI_YUKLEME_BILDIRIN =
   "Geri yüklemeyi kimin ve neden yaptığını Denetleme Kuruluna bildirin. Kart, Denetleme " +
   "Kurulunun bir üyesi “Gördüm” deyince herkes için kalkar; programda Denetleme Kurulunun açık " +
   "hesabı yoksa kart kalır.";
+
+// --- Yedekten Geri Yükleme Yapıldı kartının dosya satırları (sözlük §4.5; plan F1b-3
+// "Geri yükleme") -------------------------------------------------------------------------------
+
+export const GERI_YUKLEME_KAPSAM_ETIKETI = "Yedeğin kapsamı";
+export const GERI_YUKLEME_EKLER_ETIKETI = "Ekler";
+
+// --- Eksik Ekler kartı (sözlük §4.5; tasarım §4.4.7 "Yetim ve eksik dosya"; kullanıcı kararı
+// 04.11.2026 "Eksik ve bozuk ekler kişisiz bilgiyle listelenir") --------------------------------
+
+/** Depo okunamadı: "eksik yok" denmez (Son Girişler kartının kalıbı). */
+export const EKSIK_EKLER_OKUNAMADI_METNI =
+  "Ek dosyalarının listesi okunamadı; eksik bir ek burada gösterilemiyor olabilir.";
+/** Kartın dip cümlesi. Geri yükleme seçenektir, öğüt değil: kayıtları da yedeğin gününe döndürür. */
+export const EKSIK_EKLER_DIP_CUMLESI =
+  "Dosya program dışından silinmiş ya da taşınmış olabilir. Program yöneticisine ve Denetleme " +
+  "Kuruluna bildirin; gerekirse ekleri taşıyan şifreli yedekten geri yüklenir.";
+/** Özgün adı çözülemeyen ekin satırı (§1 "Şifreleme"nin "Adı okunamayan kayıt" kalıbı). */
+export const ADI_OKUNAMAYAN_EK = "Adı okunamayan ek";
+
+/** Kartın giriş cümlesi. */
+export function eksikEklerGirisi(sayi: number): string {
+  return `${formatNumber(sayi)} ekin kaydı duruyor ama dosyası bu bilgisayarda bulunamadı:`;
+}
+
+/** Listenin satırı: özgün ad, kayıt türü, kayıt no, yükleme tarihi, boy. */
+export function eksikEkSatiri(ek: EksikEk): string {
+  return [
+    ek.ozgun_ad ?? ADI_OKUNAMAYAN_EK,
+    ek.kayit_turu,
+    `no ${ek.kayit_no}`,
+    formatDate(ek.yukleme_tarihi),
+    formatBoyut(ek.boyut),
+  ].join(" · ");
+}
 
 // --- Hesaplar ve Güvenlik Dosyası kartı (sözlük §4.5) ---------------------------------------
 

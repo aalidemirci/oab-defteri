@@ -163,6 +163,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Final, Literal
 
+from django.conf import settings
 from django.db import DatabaseError, connection
 from django.db.models import TextField
 from django.db.models.functions import Cast
@@ -755,7 +756,9 @@ class OturumDurumu:
         `bosta_kalan_sn` yalnız açık oturumda, kilit beklemiyorken ve kurulum
         tamamlanmışken doludur (kurulumda süre işlemez; D15). Arayüzdeki geri sayım
         yalnız görseldir. `kurulum_tamam` kurulumun bittiği bir kez görülünce
-        veritabanına bir daha sorulmaz.
+        veritabanına bir daha sorulmaz. `yukleme_siniri_mb` düz dosya yüklemesinin sınırıdır: ekran
+        sınırı aşan dosyayı göndermez (kullanıcı kararı 05.11.2026 "Sınırı aşan düz dosyayı ön yüz
+        de durdurur"); değer ortam değişkeniyle değişebildiği için ön yüzde kopyası tutulmaz.
         """
         durum = self.durum()
         bosta_dk = self._bosta_dk()
@@ -772,6 +775,7 @@ class OturumDurumu:
             "bosta_kalan_sn": kalan,
             "kilit_bekliyor": bool(bakis is not None and bakis.kilit_bekliyor),
             "kurulum_tamam": kurulum_tamam,
+            "yukleme_siniri_mb": settings.MAX_UPLOAD_SIZE_MB,
         }
 
     # ------------------------------------------------------------ açılış ve kapanış
