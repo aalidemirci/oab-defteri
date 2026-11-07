@@ -145,7 +145,11 @@ export interface SetupStatus {
    */
   recovery_key_confirmed: boolean;
   school_name: string;
-  /** Okul adı, kademe, kısa ad ve demirbaş onayı tamam mı? */
+  /**
+   * Okul kartının zorunlu alanları tamam mı? (okul adı, il, ilçe, kurum kodu, kademe, öğrenci
+   * mevcudu ve tarihi, yerleşim türü, kantin ve personel çalıştırma biçimi, demirbaş onayı —
+   * backend `missing_school_fields`). Yol haritasının `okul_karti` maddesi de buna bakar.
+   */
   school_info_complete: boolean;
   has_active_school_year: boolean;
   active_school_year: ActiveSchoolYearSummary | null;
@@ -159,29 +163,69 @@ export interface SetupStatus {
   roadmap: RoadmapState;
 }
 
-/** Okulun kademesi — backend `SchoolLevel` ile birebir; boş = henüz seçilmedi. */
-export type SchoolLevel = "ILKOKUL" | "ORTAOKUL" | "ORTAOGRETIM";
+/** Okulun kademesi — backend `SchoolLevel` ile birebir (değer adları ve sıra). */
+export type SchoolLevel = "OKUL_ONCESI" | "ILKOKUL" | "ORTAOKUL" | "ORTAOGRETIM";
 
+/** Kademe adları; anahtar sırası backend `SchoolLevel` sırasıdır (`levels` bu sırayla gider). */
 export const SCHOOL_LEVEL_TR: Record<SchoolLevel, string> = {
+  OKUL_ONCESI: "Okul öncesi",
   ILKOKUL: "İlkokul",
   ORTAOKUL: "Ortaokul",
   ORTAOGRETIM: "Ortaöğretim (lise)",
 };
 
-/** Kısa okul adının üst sınırı (backend `SchoolConfig.kisa_ad` ile aynı). */
-export const KISA_AD_EN_COK = 24;
+/** Yerleşim türü — backend `SettlementType` ile birebir (md. 17/1-a-2; kural paketinin koşulu). */
+export type SettlementType = "BUYUKSEHIR" | "IL_MERKEZI_BUYUKSEHIR_DEGIL" | "DIGER";
 
-/** Kurum künyesi — evrak antedi buradan çözülür (`setup_completed` salt-okunur). */
+export const SETTLEMENT_TYPE_TR: Record<SettlementType, string> = {
+  BUYUKSEHIR: "Büyükşehir statüsündeki il",
+  IL_MERKEZI_BUYUKSEHIR_DEGIL: "Büyükşehir statüsünde olmayan il merkezi",
+  DIGER: "Büyükşehir statüsünde olmayan ilde, il merkezi dışında",
+};
+
+/** Kantin işletme biçimi — backend `CanteenMode` ile birebir (md. 17/1-a-1, 17/1-b-1, 23/3). */
+export type CanteenMode = "KIRAYA_VERILIYOR" | "BIRLIKCE_ISLETILIYOR" | "KANTIN_YOK";
+
+export const CANTEEN_MODE_TR: Record<CanteenMode, string> = {
+  KIRAYA_VERILIYOR: "Kiraya veriliyor",
+  BIRLIKCE_ISLETILIYOR: "Birlikçe işletiliyor",
+  KANTIN_YOK: "Kantin ve benzeri yer yok",
+};
+
+/** Personel çalıştırma biçimi — backend `StaffingMode` ile birebir (K3, md. 6/1-d). */
+export type StaffingMode = "DOGRUDAN_ISVEREN" | "HIZMET_ALIMI" | "CALISTIRMIYOR";
+
+export const STAFFING_MODE_TR: Record<StaffingMode, string> = {
+  DOGRUDAN_ISVEREN: "Birlik doğrudan işveren",
+  HIZMET_ALIMI: "Hizmet alımıyla",
+  CALISTIRMIYOR: "Personel çalıştırmıyor",
+};
+
+/**
+ * Kurum künyesi (okul kartı) — `SchoolConfigSerializer` ile birebir: evrak antedi ve birliğin
+ * hesaplarının okul bilgisi buradan çözülür (`setup_completed` salt-okunur). Bütün alanlar
+ * kişisizdir. Seçilmemiş seçim alanı `""`, girilmemiş sayı ve tarih `null`dır.
+ */
 export interface SchoolConfig {
   school_name: string;
   province: string;
   district: string;
   principal_name: string;
-  /** Açıksa sınıf düzeylerine Hazırlık (0) eklenir. */
-  has_prep_class: boolean;
-  kademe: SchoolLevel | "";
-  /** Kısa okul adı (en çok 24 karakter; bugün hiçbir çıktıda kullanılmaz). */
-  kisa_ad: string;
+  /** MEB kurum kodu: boş ya da altı rakam. */
+  institution_code: string;
+  /** Kademeler: tekrarsız, `SchoolLevel` sırasıyla. */
+  levels: SchoolLevel[];
+  /** Öğrenci mevcudu (0..99999); tarihiyle birlikte girilir (md. 9/2, 9/6, 21/3). */
+  student_count: number | null;
+  /** Mevcudun tarihi (ISO): sayının alındığı gün. */
+  student_count_as_of: string | null;
+  settlement_type: SettlementType | "";
+  canteen_mode: CanteenMode | "";
+  staffing_mode: StaffingMode | "";
+  /** Okul bir eğitim kampüsünde mi? (md. 2/1, 13/7) */
+  in_campus: boolean;
+  /** Yeni açılan okulun açılış tarihi (ISO; isteğe bağlı, md. 9/1). */
+  opened_on: string | null;
   /** "Bu bilgisayar okul demirbaşıdır" onayı (kurulumda zorunlu). */
   demirbas_onayi: boolean;
   /** Bilgisayarın demirbaş no'su (isteğe bağlı). */

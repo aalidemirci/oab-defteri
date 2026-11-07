@@ -4,8 +4,11 @@
 // tamamlanınca kart gizlenebilir.
 //
 // İki tür madde vardır:
-// * KENDİLİĞİNDEN tespit edilenler — `setup/status/` sayılarından: öğrenci ve
-//   personel aktarımı (sayı > 0), aktif ders yılında öğrenciye kapalı gün (> 0).
+// * KENDİLİĞİNDEN tespit edilenler — `setup/status/`'tan: okul kartının zorunlu
+//   alanları (`school_info_complete`; kurulumu F1b 4. adımdan önce tamamlanmış
+//   kurulumda yeni alanlar boştur, kurulum kapısı yeniden kapanmaz — tasarım §7.10
+//   "okul kartının eksik alanları"), öğrenci ve personel aktarımı (sayı > 0), aktif
+//   ders yılında öğrenciye kapalı gün (> 0).
 // * KULLANICININ İŞARETLEDİKLERİ — program bunların yapıldığını bilemez (kurtarma
 //   anahtarı zarfının kapatılması). Parola paylaşımı maddesi yoktur: parola
 //   paylaşılmaz (BSG Yönergesi md. 7/2); kişisel hesaplar T1 ile F1b 1. adımda gelir.
@@ -26,8 +29,12 @@ import Card from "../../ui/Card";
 import Icon from "../../ui/Icon";
 import { DOGRULANMADI_BASLIGI } from "../guvenlik/metinler";
 import type { RoadmapManualItem, SetupStatus } from "../okul/api";
+import {
+  OKUL_KARTI_YOL_HARITASI_ACIKLAMASI,
+  OKUL_KARTI_YOL_HARITASI_BASLIGI,
+} from "../okul/metinler";
 
-type OtomatikMadde = "ogrenci_aktarimi" | "personel_aktarimi" | "kapali_gunler";
+type OtomatikMadde = "okul_karti" | "ogrenci_aktarimi" | "personel_aktarimi" | "kapali_gunler";
 
 interface MaddeTanimi {
   anahtar: OtomatikMadde | RoadmapManualItem;
@@ -38,6 +45,12 @@ interface MaddeTanimi {
 
 /** Maddeler, sırasıyla (sözlük: "öğrenciye kapalı gün", "kurtarma anahtarı"). */
 export const YOL_HARITASI_MADDELERI: readonly MaddeTanimi[] = [
+  {
+    anahtar: "okul_karti",
+    baslik: OKUL_KARTI_YOL_HARITASI_BASLIGI,
+    aciklama: OKUL_KARTI_YOL_HARITASI_ACIKLAMASI,
+    bag: { to: "/ayarlar?tab=okul", etiket: "Ayarlar → Okul Bilgileri'ni aç" },
+  },
   {
     anahtar: "ogrenci_aktarimi",
     baslik: "e-Okul öğrenci listesini aktarın",
@@ -69,12 +82,14 @@ export const YOL_HARITASI_MADDELERI: readonly MaddeTanimi[] = [
 ];
 
 const OTOMATIK: ReadonlySet<string> = new Set<OtomatikMadde>([
+  "okul_karti",
   "ogrenci_aktarimi",
   "personel_aktarimi",
   "kapali_gunler",
 ]);
 
 function otomatikTamam(anahtar: OtomatikMadde, durum: SetupStatus): boolean {
+  if (anahtar === "okul_karti") return durum.school_info_complete;
   if (anahtar === "ogrenci_aktarimi") return durum.student_count > 0;
   if (anahtar === "personel_aktarimi") return durum.personnel_count > 0;
   return durum.school_break_count > 0;

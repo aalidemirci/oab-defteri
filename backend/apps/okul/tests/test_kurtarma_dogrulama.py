@@ -30,11 +30,12 @@ from typing import Any
 import pytest
 from rest_framework.test import APIClient
 
-from apps.okul.models import SchoolConfig, SchoolLevel, SchoolTerm, SchoolYear
+from apps.okul.models import SchoolConfig, SchoolTerm, SchoolYear
 from apps.okul.services import app_password
 from apps.okul.services import school_year as school_year_service
 from apps.okul.services import setup as setup_service
 from apps.okul.services import terms as term_service
+from apps.okul.tests.okul_karti_ortak import okul_karti, okul_kartini_dogrudan_yaz
 from conftest import TEST_HESAP_ID, TEST_KURTARMA_ANAHTARI, TEST_PAROLA, TEST_TANITICI
 
 URL = "/api/v1/security/recovery-key/confirm/"
@@ -60,14 +61,7 @@ def _durum_dosyasi() -> dict[str, Any]:
 
 def _kurulum_hazir() -> None:
     """2. ve 3. adımlar tamam (okul bilgileri + dönemli aktif ders yılı)."""
-    setup_service.update_school_config(
-        fields={
-            "school_name": "Örnek Anadolu Lisesi",
-            "kademe": SchoolLevel.ORTAOGRETIM,
-            "kisa_ad": "Örnek AL",
-            "demirbas_onayi": True,
-        }
-    )
+    setup_service.update_school_config(fields=okul_karti())
     yil = school_year_service.create_school_year(
         name="2026-2027", start_date=date(2026, 9, 7), end_date=date(2027, 6, 25), activate=True
     )
@@ -111,15 +105,7 @@ class TestKurulumKapisi:
     def test_parolasizken_ileti_parolayi_soyler(self, client: APIClient, parolasiz: Path) -> None:
         # Hesap kurulmadan servis yazamaz (iz anahtarı yok; tasarım §4.6.3): okul bilgileri
         # ve ders yılı test verisi olarak doğrudan yazılır.
-        SchoolConfig.objects.update_or_create(
-            pk=SchoolConfig.SINGLETON_PK,
-            defaults={
-                "school_name": "Örnek Anadolu Lisesi",
-                "kademe": SchoolLevel.ORTAOGRETIM,
-                "kisa_ad": "Örnek AL",
-                "demirbas_onayi": True,
-            },
-        )
+        okul_kartini_dogrudan_yaz()
         yil = SchoolYear.objects.create(
             name="2026-2027",
             start_date=date(2026, 9, 7),

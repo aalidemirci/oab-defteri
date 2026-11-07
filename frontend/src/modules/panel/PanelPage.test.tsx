@@ -413,17 +413,33 @@ describe("Genel Bakış", () => {
 });
 
 describe("Başlangıç Yol Haritası", () => {
-  it("yeni kurulumda dört madde yapılacak olarak görünür, ilerleme 0/4", async () => {
+  it("yeni kurulumda okul kartı tamam, öteki dört madde yapılacak; ilerleme 1/5", async () => {
     bas();
 
     expect(
       await screen.findByRole("heading", { name: "Başlangıç Yol Haritası" }),
     ).toBeInTheDocument();
     const kart = yolHaritasi();
-    expect(within(kart).getAllByRole("listitem")).toHaveLength(4);
-    expect(within(kart).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
-    expect(within(kart).getByText(/4 maddeden 0 tanesi tamamlandı/)).toBeInTheDocument();
+    expect(within(kart).getAllByRole("listitem")).toHaveLength(5);
+    expect(within(kart).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "1");
+    expect(within(kart).getByText(/5 maddeden 1 tanesi tamamlandı/)).toBeInTheDocument();
     expect(within(kart).queryByRole("button", { name: "Kartı gizle" })).toBeNull();
+  });
+
+  it("okul kartının yeni alanları boşsa (önceden kurulmuş program) madde yapılacaktır", async () => {
+    oapi.getSetupStatus.mockResolvedValue({ ...KURULU_DURUM, school_info_complete: false });
+    bas();
+
+    await screen.findByRole("heading", { name: "Başlangıç Yol Haritası" });
+    const madde = within(yolHaritasi())
+      .getByText(/Okul bilgilerini tamamlayın/)
+      .closest("li");
+    expect(madde).toHaveTextContent("(yapılacak)");
+    expect(within(madde as HTMLElement).getByRole("link")).toHaveAttribute(
+      "href",
+      "/ayarlar?tab=okul",
+    );
+    expect(within(yolHaritasi()).getByText(/5 maddeden 0 tanesi tamamlandı/)).toBeInTheDocument();
   });
 
   it("gizlenmiş kart görünmez; durum okunamazsa da sayfa çalışır", async () => {
@@ -457,7 +473,8 @@ describe("Başlangıç Yol Haritası", () => {
     expect(oapi.markRoadmapItem).toHaveBeenCalledWith("kurtarma_zarfi", true);
     await waitFor(() => expect(kutu).toBeChecked());
     expect(within(yolHaritasi()).getByText("· 22.09.2026")).toBeInTheDocument();
-    expect(within(yolHaritasi()).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "1");
+    // Okul kartı (KURULU_DURUM'da tamam) + işaretlenen zarf.
+    expect(within(yolHaritasi()).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "2");
   });
 
   it("işaret kaydedilemezse hata bildirilir, kutu işaretlenmez", async () => {

@@ -118,7 +118,7 @@ class GradeLevelsView(APIView):
     """`GET /api/v1/grade-levels/` — UI seçicileri için geçerli öğrenim seviyeleri.
 
     Liste okul içi sabitten gelir (`SchoolConfig.grade_levels`): 1-12, hazırlık
-    bayrağı açıksa başta 0 (Hazırlık). Kademe (`SchoolConfig.kademe`)
+    bayrağı açıksa başta 0 (Hazırlık). Kademeler (`SchoolConfig.levels`)
     seviyeleri KISITLAMAZ.
     """
 

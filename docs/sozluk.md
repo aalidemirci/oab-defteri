@@ -47,7 +47,7 @@ zinciri, kantin, servis) ekranları geldiği fazda eklenir; o güne dek terim i�
 | Birlik dönemi | **birlik dönemi** (genel kuruldan genel kurula) | tek başına "dönem" (ders dönemiyle karışacak yerde), "mali yıl" | T3. Ders yılının iki dönemi (**ders dönemi**) ayrı kavramdır (Ayarlar → Ders Yılları; tasarım §5.1 `SchoolTerm`, §5.2.1); birlik dönemi ders yılı ve TEFBİS dönemiyle eşlenir. Ekranı F1c'de gelir |
 | Ders yılı | **ders yılı**; ders yılının iki dönemi **ders dönemi** (birlik dönemiyle karışabilecek her yerde; tasarım §5.2.1); Ders Yılları ekranında bağlam açıkken **1. dönem** · **2. dönem** | — | Ayarlar → Ders Yılları ve sihirbazın üçüncü adımı. Kantinde yarıyıl ayının yarım kirası (EK-2 md. 4) dönem tarihlerinden okunur (tasarım §5.1 `SchoolTerm`). Mevzuattan alıntıda mevzuatın sözü ("eğitim ve öğretim yılı") korunur |
 | Kapalı gün (`Holiday`) | üst adı **kapalı gün** (sekme **Kapalı Günler**); türleri **Resmî tatil** · **Dini bayram** · **Öğrenciye kapalı gün** (ara tatil, yarıyıl) · **İdari izin / diğer**; hesapla bulunmuş bayram tarihinde **"tahmini"** | genel anlamda tek başına "tatil" | Türler aile iskeletinden gelir (tasarım §5.1 `Holiday`). Ara tatil ve yarıyıl resmî tatil türünden ayrı tutulur ve tek başına "tatil" denmez. İş günüyle verilen süreler (ör. elden bağışın beş iş günü içinde bankaya yatırılması, [md. 16/3](mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-16)) bu takvimle hesaplanır |
-| Okul bilgileri | ekranda **Okul Bilgileri** (Ayarlar sekmesi ve sihirbazın ikinci adımı); künye evrakın antedinde kullanılır | — | Tasarım ve plan aynı yeri "okul kartı" diye anar. OAB'ye özgü alanlar (öğrenci mevcudu, yerleşim türü, kantin işletme modu, personel çalıştırma biçimi) F1b 4. adımda gelir (plan §2.2; tasarım §5.1); birliğin banka hesabı F3'te sihirbazın banka adımıyla gelir (tasarım §14) |
+| Okul bilgileri | ekranda **Okul Bilgileri** (Ayarlar sekmesi ve sihirbazın ikinci adımı); künye evrakın antedinde, OAB alanları birliğin hesaplarında kullanılır | ekranda "okul kartı", "kısa ad" | Tasarım ve plan aynı yeri "okul kartı" diye anar. OAB'ye özgü alanların adları §4.4'te (F1b 4. adım; plan "F1b-4 uygulama kararları"); kısa ad ve hazırlık sınıfı alanı yoktur. Birliğin banka hesabı F3'te sihirbazın banka adımıyla gelir (tasarım §14) |
 | Bilgisayar ve demirbaş | onay **"Bu bilgisayar okul demirbaşıdır."**; alan **"Bilgisayarın demirbaş no'su"** | — | Program okul demirbaşı bilgisayara kurulur (tasarım §4.5 "Hesap ve bilgisayar"). Bugün "demirbaş" yalnız bilgisayar için geçer; birliğin satın aldığı malların adı harcama ekranlarıyla (F4) eklenir |
 | e-Okul | **e-Okul**; e-Okul'daki rapor adları olduğu gibi ("Personel Listesi") | "e-okul", "eOkul" | Program e-Okul'a bağlanmaz; okulun e-Okul'dan aldığı dosya içe aktarılır (tasarım §8.4) |
 | İçe aktarma | **içe aktarma** (dosyadan toplu alma), tek çalıştırma **aktarım**; önce **önizleme**, kayıt yalnız onayla yazılır | "import", "senkronizasyon", "eşitle" | İçe alınan dosya güvenilmeyen girdidir (tasarım TK18). Aktarım kimseyi ayırmaz: listede bulunmayan kişi **Ayrılış Havuzu**'nda karar bekler (bugünkü Kişiler ekranı). Sınırı aşan dosyayı ekran göndermez, **"Dosya çok büyük; en çok N MB olabilir."** der (§1 "Ek ve dosya deposu"); N sunucudan gelir |
@@ -240,7 +240,7 @@ rolün gezinmesinde durur; Kullanıcılar yalnız program yöneticisinin, Erişi
 yer almaz, adresi "Bu ekran hesabınızın rolüne açık değil." der. Kurulum Sihirbazı'nın
 her denetimi bir yazma olduğu için adresi yalnız kurulumu tamamlayabilen rolde (program yöneticisi) açılır; öteki
 rollerde Ayarlar'daki kartı da yoktur, adresi kendi iletisini verir ve Kılavuz'daki adı bağlantı değildir (§1 "Rol
-süzmesi"; kullanıcı kararı 04.11.2026). Planlanan ekranlar: Okul Bilgileri bugün Ayarlar'ın sekmesidir, OAB alanları F1b 4. adımda gelir; Birlik Dönemi,
+süzmesi"; kullanıcı kararı 04.11.2026). Planlanan ekranlar: Okul Bilgileri Ayarlar'ın sekmesidir (OAB alanları §4.4); Birlik Dönemi,
 Kişiler (OAB'nin kişi türleriyle), Organlar, Temsilciler ve Pano (yol haritası) F1c'dedir (plan §2.3). Adları ekran
 gelince buraya işlenir.
 
@@ -358,15 +358,41 @@ için program yöneticisi hesabını kurun."** Hesap kurulunca **Kurtarma Anahta
 tarihiyle gösterir. Bu adımda Kilitle'ye basılırsa ve anahtar henüz doğrulanmadıysa önce **"Program kilitlensin
 mi?"** sorulur (§1 "Kilit ve çıkış").
 
-F1b'de sihirbazın öteki adımları da OAB'nin düzenine döner: okul kartı (OAB alanları 4. adımda) · ders yılı,
-dönemler, kapalı günler (plan §2.2; tasarım §5.1, §14). Geçiş kurulumunun adımları sonra gelir: ilk birlik dönemi ve
-görevdeki kurul F1c'de, birliğin banka hesabı ve açılış (devreden) bakiyesi F3'te. Adların yeni hâli adım gelince
-buraya işlenir.
+2. adım ve Ayarlar → Okul Bilgileri aynı alanları aynı adlarla gösterir (plan "F1b-4 uygulama kararları"). Açıklama
+**"Bu bilgiler programın bastığı evrakın antedinde ve birliğin hesaplarında (genel kurul yeter sayısı, kantin arz
+bedeli ve pay dağılımı) kullanılır."** Alanlar, sırasıyla: **Okul adı** · **İl** · **İlçe** · **Okul müdürü** ·
+**Kurum kodu** ("MEB kurum kodu; altı haneli.") · **Kademe** (birden çok seçilir: **Okul öncesi** · **İlkokul** ·
+**Ortaokul** · **Ortaöğretim (lise)**; "Birden çok kademesi olan kurumda hepsini seçin.") · **Öğrenci mevcudu**
+("Genel kurulun toplantı yeter sayısının hesabına girer (md. 9/2).") · **Mevcudun tarihi** ("Sayının alındığı gün.";
+salt okur listede "… itibarıyla") · **Yerleşim türü** (**Büyükşehir statüsündeki il** · **Büyükşehir statüsünde
+olmayan il merkezi** · **Büyükşehir statüsünde olmayan ilde, il merkezi dışında**; "Kantin gelirinin pay dağılımı buna
+göre yapılır (md. 17/1).") · **Kantin işletme biçimi** (**Kiraya veriliyor** · **Birlikçe işletiliyor** · **Kantin ve
+benzeri yer yok**; "Kantin ve benzeri yerlerin arz bedeli buna göre hesaplanır (md. 17/1).") · **Personel çalıştırma
+biçimi** (**Birlik doğrudan işveren** · **Hizmet alımıyla** · **Personel çalıştırmıyor**; "Birliğin istihdam ettiği
+personel için kıdem tazminatı karşılığı ayrılır (md. 6/1-d).") · onay kutusu **"Okul bir eğitim kampüsündedir."**
+("Kampüsteki okulda, ihtiyaç hâlinde kampüs yönetimine birliği temsilen başkan ya da yönetim kurulu üyelerinden biri
+görevlendirilir (md. 13/7).") · **Okulun açılış tarihi** ("Yalnız yeni açılan okulda doldurun; ilk genel kurulun süresi
+bu tarihten sayılır (md. 9/1).") · demirbaş onayı ve no'su (§1 "Bilgisayar ve demirbaş"). Kantinde **Birlikçe
+işletiliyor** seçilince alanın altında bilgi bandı: **"Kantin ve benzeri yerler birlikçe işletilir ve vergi
+mükellefiyeti doğarsa birlik hakkında 213 sayılı Vergi Usul Kanunu hükümleri uygulanır (md. 23/3)."** Yardım metinleri
+oran ve eşik yazmaz; değerler kural paketindedir (F1c). Zorunlu alanların iletileri: "Okul adı zorunludur." · "İl
+zorunludur." · "İlçe zorunludur." · "Kurum kodu zorunludur." · "Kurum kodu altı haneli bir sayıdır." · "En az bir
+kademe seçin." · "Öğrenci mevcudu zorunludur." · "Öğrenci mevcudu 0 ile 99999 arasında bir tam sayıdır." · "Mevcudun
+tarihi zorunludur." · "Mevcudun tarihi bugünden sonra olamaz." · "Yerleşim türünü seçin." · "Kantin işletme biçimini
+seçin." · "Personel çalıştırma biçimini seçin."
+
+3. adımın ders yılı kartı: **"Dönemlik gelir-gider duyurusu (md. 13/10) ve kantinde yarıyıl ayının yarım kirası (EK-2
+md. 4) aktif ders yılının dönemlerinden okunur."** ardından tek aktif yıl ve iki dönem şartı.
+
+Geçiş kurulumunun adımları sonra gelir: ilk birlik dönemi ve görevdeki kurul F1c'de, birliğin banka hesabı ve açılış
+(devreden) bakiyesi F3'te. Adların yeni hâli adım gelince buraya işlenir.
 
 ### 4.5 Genel Bakış kartları
 
 Sırasıyla: **Başlangıç Yol Haritası** (kurulumdan sonra; bütün maddeler bitince gizlenebilir; kurtarma anahtarı
-doğrulanmamışsa uyarı kartın başındadır. Maddeler bugün: e-Okul aktarımları, öğrenciye kapalı günler ve kurtarma
+doğrulanmamışsa uyarı kartın başındadır. Maddeler bugün: **Okul bilgilerini tamamlayın** ("Kurum kodu, kademe,
+öğrenci mevcudu, yerleşim türü, kantin ve personel çalıştırma biçimi girilmeden birliğin hesapları yapılamaz."; kurulumu
+bu alanlardan önce tamamlanmış programda açık kalır), e-Okul aktarımları, öğrenciye kapalı günler ve kurtarma
 anahtarının müdürlükte kapalı zarfta saklanması; parolanın paylaşılmasını öğütleyen madde yoktur — §1 "Parola") ·
 **Son Oturumu Kontrol Edin** (yalnız önceki oturum düzgün kapanmadıysa; düğme **"Kontrol ettim"**) · denetim izinin
 uyarı kartları (§1 "Denetim izi"; yalnız söyleyecekleri varken): **Bütünlük Durumu Okunamadı** (kartlardan biri ya

@@ -16,11 +16,15 @@ import pytest
 from django.db import IntegrityError, connection
 
 from apps.okul.models import (
+    CanteenMode,
     ClassSection,
     MemberKind,
     Personnel,
     SchoolConfig,
+    SchoolLevel,
     SchoolYear,
+    SettlementType,
+    StaffingMode,
     Student,
     StudentStatus,
     grade_levels_for,
@@ -61,6 +65,78 @@ class TestSchoolConfig:
     def test_load_mevcut_sati̇ri_doner(self) -> None:
         SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, school_name="Örnek AL")
         assert SchoolConfig.load().school_name == "Örnek AL"
+
+    def test_okul_kartinin_yeni_alanlari_bos_baslar(self) -> None:
+        """Var olan kurulumda yeni alanlar boştur (kurulum kapısı yeniden kapanmaz)."""
+        config = SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK)
+        config.refresh_from_db()
+        assert config.institution_code == ""
+        assert config.levels == []
+        assert (config.student_count, config.student_count_as_of) == (None, None)
+        assert (config.settlement_type, config.canteen_mode, config.staffing_mode) == ("", "", "")
+        assert config.in_campus is False
+        assert config.opened_on is None
+
+
+@pytest.mark.django_db
+@pytest.mark.hesapsiz  # kısıtlar satırın kendisinde sınanır; iz anahtarı gerekmez
+class TestSchoolConfigKisitlari:
+    """Okul kartının DB kısıtları (F1b 4. adım): program dışından yazılan değer de reddedilir.
+
+    `levels` için DB kısıtı yoktur (SQLite'ta JSON listesine kısıt yazılamaz; doğrulama
+    serileştiricide ve `missing_school_fields`'ta)."""
+
+    @pytest.mark.parametrize(
+        ("alan", "deger"),
+        [
+            ("settlement_type", "KOY"),
+            ("canteen_mode", "KIRALIK"),
+            ("staffing_mode", "TASERON"),
+            ("institution_code", "12345"),
+            ("institution_code", "1"),
+        ],
+    )
+    def test_gecersiz_deger_reddedilir(self, alan: str, deger: str) -> None:
+        with pytest.raises(IntegrityError):
+            SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, **{alan: deger})
+
+    @pytest.mark.parametrize(
+        ("alan", "deger"),
+        [
+            ("settlement_type", SettlementType.IL_MERKEZI_BUYUKSEHIR_DEGIL),
+            ("canteen_mode", CanteenMode.KANTIN_YOK),
+            ("staffing_mode", StaffingMode.CALISTIRMIYOR),
+            ("settlement_type", ""),
+            ("institution_code", ""),
+            ("institution_code", "999001"),
+        ],
+    )
+    def test_gecerli_deger_ve_bos_kabul_edilir(self, alan: str, deger: str) -> None:
+        SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, **{alan: deger})
+
+    @pytest.mark.parametrize(
+        "alanlar",
+        [{"student_count": 10}, {"student_count_as_of": date(2026, 10, 1)}],
+        ids=["tarihsiz_mevcut", "mevcutsuz_tarih"],
+    )
+    def test_mevcut_ve_tarihi_birlikte_dolu_ya_da_bos(self, alanlar: dict[str, object]) -> None:
+        with pytest.raises(IntegrityError):
+            SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, **alanlar)
+
+    def test_mevcut_ust_siniri(self) -> None:
+        tarih = date(2026, 10, 1)
+        SchoolConfig.objects.create(
+            pk=SchoolConfig.SINGLETON_PK, student_count=99999, student_count_as_of=tarih
+        )
+        with pytest.raises(IntegrityError):
+            SchoolConfig.objects.filter(pk=SchoolConfig.SINGLETON_PK).update(student_count=100000)
+
+    def test_kademe_enumu_tasarimdaki_sirayla(self) -> None:
+        """Değer adları tasarım §5.1 ile birebir; sıra `levels`'in kanonik sırasıdır."""
+        assert SchoolLevel.values == ["OKUL_ONCESI", "ILKOKUL", "ORTAOKUL", "ORTAOGRETIM"]
+        assert SettlementType.values == ["BUYUKSEHIR", "IL_MERKEZI_BUYUKSEHIR_DEGIL", "DIGER"]
+        assert CanteenMode.values == ["KIRAYA_VERILIYOR", "BIRLIKCE_ISLETILIYOR", "KANTIN_YOK"]
+        assert StaffingMode.values == ["DOGRUDAN_ISVEREN", "HIZMET_ALIMI", "CALISTIRMIYOR"]
 
 
 class TestGradeLevels:

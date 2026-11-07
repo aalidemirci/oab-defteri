@@ -1,5 +1,6 @@
 // Başlangıç Yol Haritası kartı: maddeler (sözlük), kendiliğinden tespit edilen
-// maddeler (setup/status sayıları), her maddenin ilgili sayfaya bağlanması.
+// maddeler (setup/status sayıları ve okul kartının tamamlığı), her maddenin ilgili sayfaya
+// bağlanması.
 
 import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -8,6 +9,10 @@ import { describe, expect, it, vi } from "vitest";
 import { KURULU_DURUM } from "../../test/kurulumDurumu";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import type { SetupStatus } from "../okul/api";
+import {
+  OKUL_KARTI_YOL_HARITASI_ACIKLAMASI,
+  OKUL_KARTI_YOL_HARITASI_BASLIGI,
+} from "../okul/metinler";
 import BaslangicYolHaritasi, { YOL_HARITASI_MADDELERI, maddeTamamMi } from "./BaslangicYolHaritasi";
 
 function bas(durum: SetupStatus = KURULU_DURUM) {
@@ -29,6 +34,7 @@ function madde(metin: RegExp): HTMLElement {
 describe("BaslangicYolHaritasi", () => {
   it("maddeler bu sırayla durur; parola paylaşımı maddesi yoktur", () => {
     expect(YOL_HARITASI_MADDELERI.map((m) => m.anahtar)).toEqual([
+      "okul_karti",
       "ogrenci_aktarimi",
       "personel_aktarimi",
       "kapali_gunler",
@@ -50,6 +56,8 @@ describe("BaslangicYolHaritasi", () => {
       school_break_count: 1,
       roadmap: { marks: {}, hidden: false },
     };
+    expect(maddeTamamMi("okul_karti", durum)).toBe(true);
+    expect(maddeTamamMi("okul_karti", { ...durum, school_info_complete: false })).toBe(false);
     expect(maddeTamamMi("ogrenci_aktarimi", durum)).toBe(true);
     expect(maddeTamamMi("personel_aktarimi", durum)).toBe(false);
     expect(maddeTamamMi("kapali_gunler", durum)).toBe(true);
@@ -60,6 +68,25 @@ describe("BaslangicYolHaritasi", () => {
         roadmap: { marks: { kurtarma_zarfi: "2026-09-22" }, hidden: false },
       }),
     ).toBe(true);
+  });
+
+  it("okul kartı maddesi ilk sıradadır; başlık ve açıklama okul metinlerindendir", () => {
+    bas({ ...KURULU_DURUM, school_info_complete: false });
+    const ilk = screen.getAllByRole("listitem")[0];
+    expect(ilk).toHaveTextContent(OKUL_KARTI_YOL_HARITASI_BASLIGI);
+    expect(ilk).toHaveTextContent(OKUL_KARTI_YOL_HARITASI_ACIKLAMASI);
+    expect(ilk).toHaveTextContent("(yapılacak)");
+    expect(within(ilk).getByText("Yapıldığında kendiliğinden işaretlenir.")).toBeInTheDocument();
+    expect(within(ilk).queryByRole("checkbox")).toBeNull();
+    expect(within(ilk).getByRole("link", { name: /Okul Bilgileri/ })).toHaveAttribute(
+      "href",
+      "/ayarlar?tab=okul",
+    );
+  });
+
+  it("okul kartının zorunlu alanları tamamsa madde tamamlandı görünür", () => {
+    bas();
+    expect(madde(/Okul bilgilerini tamamlayın/)).toHaveTextContent("(tamamlandı)");
   });
 
   it("kapalı günler maddesi iş günü hesabını anlatır, iade tarihinden söz etmez", () => {
@@ -86,6 +113,7 @@ describe("BaslangicYolHaritasi", () => {
   it("her madde ilgili sayfaya bağlanır", () => {
     bas();
     const bag = (metin: RegExp) => within(madde(metin)).getByRole("link");
+    expect(bag(/Okul bilgilerini tamamlayın/)).toHaveAttribute("href", "/ayarlar?tab=okul");
     expect(bag(/e-Okul öğrenci listesini aktarın/)).toHaveAttribute("href", "/kisiler");
     expect(bag(/Öğretmen ve diğer personel listesini aktarın/)).toHaveAttribute(
       "href",
@@ -119,7 +147,8 @@ describe("BaslangicYolHaritasi", () => {
     expect(
       within(madde(/e-Okul öğrenci listesini aktarın/)).getByText(/tamamlandı/),
     ).toBeInTheDocument();
-    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "2");
+    // İki aktarım + okul kartı (KURULU_DURUM'da tamam).
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "3");
   });
 
   it("iç kodlar kullanıcı metnine girmez; yerel araç dili korunur", () => {
