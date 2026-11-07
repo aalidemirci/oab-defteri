@@ -10,7 +10,8 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, etkinlikSaatleriniSifirla } from "../../lib/api";
+import { ApiError, BEKLENMEYEN_HATA_ILETISI, etkinlikSaatleriniSifirla } from "../../lib/api";
+import { DOSYA_YAZILAMADI_ILETISI } from "../../lib/metinler";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 
 const guvenlik = vi.hoisted(() => ({
@@ -62,6 +63,8 @@ function bas(onDogrulama = vi.fn(), rastgele = sabitRastgele(0.125, 0.6)) {
 
 beforeEach(() => {
   guvenlik.kurtarmaAnahtariniDogrula.mockResolvedValue({ recovery_key_confirmed: true });
+  // Gerçek `saveBlob` hep sonuç döndürür: sahte `undefined` dönseydi başarı dalı sınanmazdı.
+  indirme.saveBlob.mockResolvedValue("kaydedildi");
 });
 
 afterEach(() => {
@@ -213,10 +216,57 @@ describe("KurtarmaAnahtariPaneli", () => {
     await kullanici.click(screen.getByRole("button", { name: "PDF olarak kaydet" }));
 
     await waitFor(() => expect(guvenlik.kurtarmaAnahtariPdf).toHaveBeenCalledWith(ANAHTAR));
-    expect(indirme.saveBlob).toHaveBeenCalledWith(pdf, kurtarmaBelgesiDosyaAdi());
+    // Kullanıcı kararı 07.11.2026 "Hep ev klasöründe": pencere son klasörde açılmaz.
+    expect(indirme.saveBlob).toHaveBeenCalledWith(pdf, kurtarmaBelgesiDosyaAdi(), {
+      evKlasorunde: true,
+    });
     expect(
       await screen.findByText("Kurtarma anahtarı belgesi PDF olarak kaydedildi."),
     ).toBeInTheDocument();
+  });
+
+  it("köprü yoksa dosya tarayıcıya verilir, bildirim yine çıkar", async () => {
+    const kullanici = userEvent.setup();
+    guvenlik.kurtarmaAnahtariPdf.mockResolvedValue(new Blob(["%PDF-"]));
+    indirme.saveBlob.mockResolvedValueOnce("indirildi");
+    bas();
+
+    await kullanici.click(screen.getByRole("button", { name: "PDF olarak kaydet" }));
+
+    expect(
+      await screen.findByText("Kurtarma anahtarı belgesi PDF olarak kaydedildi."),
+    ).toBeInTheDocument();
+  });
+
+  it("kaydetme penceresinde iptal sessizdir: bildirim ve hata çıkmaz, anahtar ekranda kalır", async () => {
+    const kullanici = userEvent.setup();
+    guvenlik.kurtarmaAnahtariPdf.mockResolvedValue(new Blob(["%PDF-"]));
+    indirme.saveBlob.mockResolvedValueOnce("iptal");
+    bas();
+
+    await kullanici.click(screen.getByRole("button", { name: "PDF olarak kaydet" }));
+
+    await waitFor(() => expect(indirme.saveBlob).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole("button", { name: "PDF olarak kaydet" })).toBeEnabled();
+    expect(
+      screen.queryByText("Kurtarma anahtarı belgesi PDF olarak kaydedildi."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByTestId("kurtarma-anahtari")).toHaveTextContent(ANAHTAR);
+  });
+
+  it("dosya yazılamazsa tek ileti çıkar, kaydedildi denmez", async () => {
+    const kullanici = userEvent.setup();
+    guvenlik.kurtarmaAnahtariPdf.mockResolvedValue(new Blob(["%PDF-"]));
+    indirme.saveBlob.mockResolvedValueOnce("hata");
+    bas();
+
+    await kullanici.click(screen.getByRole("button", { name: "PDF olarak kaydet" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(DOSYA_YAZILAMADI_ILETISI);
+    expect(
+      screen.queryByText("Kurtarma anahtarı belgesi PDF olarak kaydedildi."),
+    ).not.toBeInTheDocument();
   });
 
   it("PDF hatasında backend iletisi görünür", async () => {
@@ -230,6 +280,18 @@ describe("KurtarmaAnahtariPaneli", () => {
       "Kayıtlar kilitli. Hesabınızı seçip parolanızla açın.",
     );
     expect(indirme.saveBlob).not.toHaveBeenCalled();
+  });
+
+  it("gövdesiz PDF retde genel ileti değil belgenin metni çıkar", async () => {
+    const kullanici = userEvent.setup();
+    guvenlik.kurtarmaAnahtariPdf.mockRejectedValue(
+      new ApiError(500, "500", BEKLENMEYEN_HATA_ILETISI),
+    );
+    bas();
+    await kullanici.click(screen.getByRole("button", { name: "PDF olarak kaydet" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Kurtarma anahtarı belgesi hazırlanamadı.",
+    );
   });
 
   it("doğrulama kipinde anahtar ekrandan kalkar; iki grup doğru yazılınca sunucuda damgalanır", async () => {

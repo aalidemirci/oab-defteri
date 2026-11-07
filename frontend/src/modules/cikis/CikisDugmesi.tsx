@@ -14,6 +14,7 @@ import Button from "../../ui/Button";
 import Dialog from "../../ui/Dialog";
 import { oturumHataMetni } from "../oturum/hatalar";
 import { cikisApi } from "./api";
+import { PROGRAM_KAPANIYOR_BASLIGI } from "./metinler";
 
 function hataMesaji(err: unknown): string {
   return oturumHataMetni(err, "Programdan çıkılamadı.");
@@ -51,7 +52,7 @@ export function CikisDiyalogu({ open, onClose }: CikisDiyaloguProps) {
 
   if (kapaniyor) {
     return (
-      <Dialog open={open} onClose={() => undefined} title="Program kapanıyor">
+      <Dialog open={open} onClose={() => undefined} title={PROGRAM_KAPANIYOR_BASLIGI}>
         <p role="status">OAB Defteri kapanıyor…</p>
       </Dialog>
     );

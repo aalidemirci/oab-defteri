@@ -107,7 +107,13 @@ def test_bir_dk_uyesinin_gordumu_karti_herkes_icin_kaldirir() -> None:
 
     assert yanit.status_code == 200, yanit.content
     govde = yanit.json()
-    assert set(govde) == {"butunluk", "geri_yukleme", "muhru_tutmayan", "okunamayan"}
+    assert set(govde) == {
+        "butunluk",
+        "geri_yukleme",
+        "muhru_tutmayan",
+        "eksik_ekler",
+        "okunamayan",
+    }
     assert govde["geri_yukleme"] is None
     (isaret,) = _isaretler()
     assert (isaret.model, isaret.object_id) == ("okul.AuditTrail", str(geri.seq))

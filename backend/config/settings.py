@@ -84,6 +84,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # API yanıtları önbelleğe yazılmaz (KVKK; tasarım §4.3 tehdit 24): pencere bileşeni
+    # yanıtları diskteki önbelleğine düz metin yazıyordu. Kapıların yanıtları da bu
+    # katmandan geçsin diye listenin başındadır (yalnız oturum belirteci daha dıştadır).
+    "apps.okul.onbellek_middleware.ApiNoStoreMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -201,13 +205,23 @@ WHITENOISE_ROOT = FRONTEND_DIR
 WHITENOISE_INDEX_FILE = True
 
 # ---------------------------------------------------------------------------
-# Medya (kullanıcı dosyaları — veri dizini altında)
+# Dosya deposu ve yükleme (tasarım §2.3.2, §4.4.7; plan F1b-3 "Dosya deposu")
 # ---------------------------------------------------------------------------
-MEDIA_ROOT = DATA_DIR / "media"
+# Ekler ve üretilmiş evrak `dosyalar/<stored_name>`'de şifreli durur (`apps.okul.services.
+# dosya_deposu`). Ailenin `MEDIA_ROOT`'u yoktur: Django'nun dosya alanları ve depolama API'si
+# düz dosya yazar; depo onları kullanmaz.
+DOSYA_DEPOSU_DIR = DATA_DIR / "dosyalar"
 
-# Dosya eki yükleme sınırı (MB) — aile iskeletinden gelen varsayılan.
+# Yükleme sınırı (MB) — aile iskeletinden gelen varsayılan (OYS `file_storage` AYNEN; tasarım TK18).
 MAX_UPLOAD_SIZE_MB = int(os.environ.get("OD_MAX_UPLOAD_SIZE_MB", "20"))
 DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+# Açık kopya kuralı (§4.4.7): yüklenen dosya sınıra kadar diske yazılmadan bellekte okunur; gömülü
+# sunucunun tampon eşiği de bu sınıra çekilir (`desktop/server.py`). Django'nun varsayılan ikilisi
+# 2,5 MB'ı aşan dosyayı sistemin geçici dizinine DÜZ yazardı; bellek işleyicisi sınırı aşanı
+# sessizce düşürdüğü için `SinirliBellekIsleyicisi` onu reddeder. Şifreli yedeğin yüklemesi bu
+# kuralın dışındadır (`views.BackupRestoreView`).
+FILE_UPLOAD_HANDLERS = ["shared.yukleme.SinirliBellekIsleyicisi"]
+FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 # ---------------------------------------------------------------------------
 # Django REST Framework

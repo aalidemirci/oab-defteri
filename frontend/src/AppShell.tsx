@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 
@@ -58,6 +58,13 @@ const PAGE_TITLES: Array<[prefix: string, title: string]> = [
 
 const COLLAPSE_KEY = "oab-defteri-sidebar-collapsed";
 
+// Kenar çubuğu iki temada da koyudur: düğmeler `navLinkClass`ın pasif rengini taşır.
+const KENAR_DUGME_RENGI = "text-on-sidebar-muted hover:bg-on-sidebar/8 hover:text-on-sidebar";
+
+// Yan menü açıkken arka sayfa kaymasın diye kök öğeye yazılır. `max-lg`: yan menü `lg:hidden`dır;
+// açıkken pencere büyütülürse menü gizlenir, sayfa kilitli kalmaz.
+const ARKA_SAYFA_KILIDI = "max-lg:overflow-hidden";
+
 /**
  * Rolün gördüğü gezinme girdileri: yeteneksiz girdi her zaman, yetenekli girdi yalnız yetenek
  * açıkken (yüklenirken ve özet okunamadıysa görünmez; kurulumda süzme yok — `oturum/yetki`).
@@ -92,7 +99,12 @@ function SidebarContent({
 }) {
   const girdiler = gezinmeGirdileri(NAV_ITEMS, useYetki());
   return (
-    <>
+    // Kısa pencerede içerik kendi içinde kayar (gerçek pencere sınaması 07.11.2026: alttaki
+    // satırlar görünmüyordu, tekerlek arkadaki sayfayı kaydırıyordu). Kap `aside`ın içindedir,
+    // kendisi değil: `aside` kaydırılsaydı kenardan taşan daraltma düğmesi kırpılırdı.
+    // Kaydırmanın arkaya geçmemesi (`overscroll-contain`) yalnız yan menüdedir (lg altı): masaüstünde
+    // uzun pencerede kap taşmazken de tekerleği tutuyor, sayfa kaymıyordu (sınama 07.11.2026, kusur 22).
+    <div className="od-sidebar-scroll flex min-h-0 flex-1 flex-col overflow-y-auto max-lg:overscroll-contain">
       <div
         className={`flex h-20 shrink-0 items-center border-b border-on-sidebar/10 ${
           collapsed ? "justify-center px-2" : "gap-3 px-4"
@@ -155,20 +167,10 @@ function SidebarContent({
           <Icon name="info" size="xl" filled className="relative z-10 shrink-0 opacity-95" />
           {!collapsed && <span className="relative z-10 truncate">Hakkında ve Lisans</span>}
         </NavLink>
-        <DensitySwitcher
-          collapsed={collapsed}
-          className="text-on-sidebar-muted hover:bg-on-sidebar/8 hover:text-on-sidebar"
-        />
-        <div
-          className={`flex min-h-10 items-center rounded-shape-md ${
-            collapsed ? "justify-center" : "gap-1 px-1"
-          }`}
-        >
-          <ThemeSwitcher className="text-on-sidebar-muted hover:bg-on-sidebar/8 hover:text-on-sidebar" />
-          {!collapsed && <span className="text-label-large text-on-sidebar-muted">Tema</span>}
-        </div>
+        <DensitySwitcher collapsed={collapsed} className={KENAR_DUGME_RENGI} />
+        <ThemeSwitcher satir collapsed={collapsed} className={KENAR_DUGME_RENGI} />
       </div>
-    </>
+    </div>
   );
 }
 
@@ -184,6 +186,25 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const { durumBasligi, yaz } = useDurumBasligiYonetimi();
   const title = durumBasligi ?? pageTitle(location.pathname);
   const yetki = useYetki();
+
+  // Sayfa değişince kaydırma başa döner (gerçek pencere sınaması 07.11.2026). Kaydıran pencerenin
+  // kendisidir: kök `min-h-screen`dir, `main`in yüksekliği sınırsızdır, kendi içinde kaymaz. Yalnız
+  // yol adına bakılır: sekme (`?tab=`) ve çapa (`#`) aynı sayfadır, kaydırmaya dokunulmaz. Çapalı
+  // gelişte (`/kilavuz#bolum`) bu etki önce koşar, `useCapayaKaydir`ın etkisi sonra bölüme götürür.
+  // Çizimden önce koşar: yeni sayfa eski kaydırma yerinde görünmez. İlk açılışta dokunulmaz.
+  const oncekiYol = useRef(location.pathname);
+  useLayoutEffect(() => {
+    if (oncekiYol.current === location.pathname) return;
+    oncekiYol.current = location.pathname;
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const kok = document.documentElement;
+    kok.classList.add(ARKA_SAYFA_KILIDI);
+    return () => kok.classList.remove(ARKA_SAYFA_KILIDI);
+  }, [mobileOpen]);
 
   const toggleCollapsed = () => {
     setCollapsed((current) => {
@@ -223,7 +244,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <Icon name="menu" />
           </button>
           <img src="/app-logo.png" alt="" className="h-9 w-9 shrink-0 object-contain lg:hidden" />
-          <div className="min-w-0 lg:w-48">
+          {/* Başlık üst çubukta kalan yerin tamamını alır: yer yetmezse kısalır, yetiyorsa
+              kesilmez. Sabit genişlikte "Programı kapatıp yeniden açın" geniş pencerede de
+              kesiliyordu. */}
+          <div className="min-w-0 flex-1">
             <p className="truncate text-title-medium font-semibold text-on-surface">{title}</p>
             <p className="hidden truncate text-body-small text-on-surface-variant lg:block">
               OAB Defteri

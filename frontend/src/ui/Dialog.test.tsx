@@ -1,7 +1,7 @@
 // Tur 57 — M3 Dialog davranış testi: açık/kapalı render, ESC + scrim kapatma,
 // rol=dialog + aria-modal, başlık + eylem alanı. React Testing Library + Vitest.
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -69,6 +69,9 @@ describe("Dialog", () => {
     );
     await user.click(screen.getByRole("heading", { name: "Onay" }));
     expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.mouseDown(screen.getByRole("dialog").parentElement as HTMLElement);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   // WCAG 2.4.3 (odak sırası): modal kapanınca odak, onu AÇAN öğeye döner.
@@ -102,6 +105,71 @@ describe("Dialog", () => {
       </Dialog>,
     );
     expect(screen.getByRole("button", { name: "Uygula" })).toBeInTheDocument();
+  });
+});
+
+// Gerçek pencere sınaması (07.11.2026): `fixed`, atasında `backdrop-filter` varsa ekrana değil o
+// ataya göre konumlanır. Üst çubuktan açılan pencere çubuğa göre ortalanıp başı kesiliyordu; pencere
+// bu yüzden nereden açılırsa açılsın gövdeye çizilir.
+describe("Dialog — gövdeye çizim", () => {
+  it("üst çubuğun içinden açılsa da document.body'ye çizilir", () => {
+    const { container } = render(
+      <header className="backdrop-blur-md">
+        <Dialog open onClose={() => undefined} title="Onay">
+          İçerik
+        </Dialog>
+      </header>,
+    );
+
+    const pencere = screen.getByRole("dialog");
+    expect(pencere.parentElement?.parentElement).toBe(document.body);
+    expect(container).not.toContainElement(pencere);
+    expect(pencere.closest("header")).toBeNull();
+  });
+
+  it("kapanınca gövdede iz bırakmaz", async () => {
+    const user = userEvent.setup();
+    render(<AcKapa />);
+    const oncekiCocuklar = document.body.childElementCount;
+
+    await user.click(screen.getByRole("button", { name: "Aç" }));
+    expect(document.body.childElementCount).toBe(oncekiCocuklar + 1);
+
+    await user.keyboard("{Escape}");
+    expect(document.body.childElementCount).toBe(oncekiCocuklar);
+  });
+
+  it("katman sırası korunur: olağan pencere z-50, kapanış penceresi z-[70]", () => {
+    const { rerender } = render(
+      <Dialog open onClose={() => undefined} title="Onay">
+        İçerik
+      </Dialog>,
+    );
+    expect(screen.getByRole("dialog").parentElement).toHaveClass("fixed", "inset-0", "z-50");
+
+    rerender(
+      <Dialog open onClose={() => undefined} title="Onay" enUstte>
+        İçerik
+      </Dialog>,
+    );
+    expect(screen.getByRole("dialog").parentElement).toHaveClass("z-[70]");
+  });
+
+  it("pencere gövdedeyken odak tuzağı içerideki öğelerde döner", async () => {
+    const user = userEvent.setup();
+    render(
+      <header className="backdrop-blur-md">
+        <button type="button">Dışarıdaki</button>
+        <Dialog open onClose={() => undefined} title="Tuzak">
+          <button type="button">Tek</button>
+        </Dialog>
+      </header>,
+    );
+
+    await user.keyboard("{Tab}");
+    expect(screen.getByRole("button", { name: "Tek" })).toHaveFocus();
+    await user.keyboard("{Tab}");
+    expect(screen.getByRole("button", { name: "Tek" })).toHaveFocus();
   });
 });
 

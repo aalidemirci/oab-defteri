@@ -5,8 +5,9 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DOSYA_YAZILAMADI_ILETISI } from "../../lib/metinler";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import type { UpdateStatus } from "./api";
 import { denetimSonucunuYayinla } from "./denetimOlayi";
@@ -46,6 +47,11 @@ function yayinla(status: UpdateStatus) {
 }
 
 describe("UpdateBanner", () => {
+  // Gerçek `saveBlob` hep sonuç döndürür: sahte `undefined` dönseydi başarı dalı sınanmazdı.
+  beforeEach(() => {
+    mocks.saveBlob.mockResolvedValue("kaydedildi");
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
@@ -69,8 +75,49 @@ describe("UpdateBanner", () => {
     await user.click(screen.getByRole("button", { name: /güncellemeyi indir/i }));
     await waitFor(() => expect(mocks.downloadInstaller).toHaveBeenCalledTimes(1));
     expect(mocks.saveBlob).toHaveBeenCalledWith(blob, STATUS.installer_name);
+    expect(await screen.findByText(/Güncelleme indirildi/)).toBeInTheDocument();
     // Bant da kendi başına denetim yapmadı.
     expect(mocks.check).not.toHaveBeenCalled();
+  });
+
+  it("köprü yoksa dosya tarayıcıya verilir, indirildi bildirimi yine çıkar", async () => {
+    mocks.downloadInstaller.mockResolvedValue(new Blob(["kurulum"]));
+    mocks.saveBlob.mockResolvedValueOnce("indirildi");
+    const user = userEvent.setup();
+    renderBanner();
+
+    yayinla(STATUS);
+    await user.click(screen.getByRole("button", { name: /güncellemeyi indir/i }));
+
+    expect(await screen.findByText(/Güncelleme indirildi/)).toBeInTheDocument();
+  });
+
+  it("kaydetme penceresinde iptal sessizdir: bildirim çıkmaz, düğme geri gelir", async () => {
+    mocks.downloadInstaller.mockResolvedValue(new Blob(["kurulum"]));
+    mocks.saveBlob.mockResolvedValueOnce("iptal");
+    const user = userEvent.setup();
+    renderBanner();
+
+    yayinla(STATUS);
+    await user.click(screen.getByRole("button", { name: /güncellemeyi indir/i }));
+
+    await waitFor(() => expect(mocks.saveBlob).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole("button", { name: /güncellemeyi indir/i })).toBeEnabled();
+    expect(screen.queryByText(/Güncelleme indirildi/)).not.toBeInTheDocument();
+    expect(screen.queryByText(DOSYA_YAZILAMADI_ILETISI)).not.toBeInTheDocument();
+  });
+
+  it("dosya yazılamazsa tek ileti çıkar, indirildi denmez", async () => {
+    mocks.downloadInstaller.mockResolvedValue(new Blob(["kurulum"]));
+    mocks.saveBlob.mockResolvedValueOnce("hata");
+    const user = userEvent.setup();
+    renderBanner();
+
+    yayinla(STATUS);
+    await user.click(screen.getByRole("button", { name: /güncellemeyi indir/i }));
+
+    expect(await screen.findByText(DOSYA_YAZILAMADI_ILETISI)).toBeInTheDocument();
+    expect(screen.queryByText(/Güncelleme indirildi/)).not.toBeInTheDocument();
   });
 
   it("indirme başarısızsa Ayarlar'a yönlendiren hata bildirimi çıkar", async () => {

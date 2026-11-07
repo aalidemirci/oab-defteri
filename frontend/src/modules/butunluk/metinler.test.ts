@@ -161,6 +161,13 @@ describe("hesap etiketi", () => {
       "Kaydı okunamayan hesap",
     );
   });
+
+  it("geri yüklenen yedekte kaydı olmayan hesap okunamayan hesap sayılmaz", () => {
+    const hesap = { id: "4", tanitici: null, rol_etiketi: null, yedekte_yok: true };
+
+    expect(hesapEtiketi(hesap)).toBe("Bu yedekte kaydı olmayan hesap");
+    expect(hesapEtiketiGunlu(hesap)).toBe("Bu yedekte kaydı olmayan hesap");
+  });
 });
 
 describe("parola yenilenme bildirimi", () => {

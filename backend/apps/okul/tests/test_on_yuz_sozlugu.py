@@ -1,9 +1,10 @@
-"""Ön yüzün F1b-2 metinleri sözlükte yazılıdır (docs/sozluk.md; CLAUDE.md "kullanıcıya görünen her
-metin sözlüğe uyar").
+"""Ön yüzün F1b-2 ve F1b-3 metinleri sözlükte yazılıdır (docs/sozluk.md; CLAUDE.md "kullanıcıya
+görünen her metin sözlüğe uyar").
 
 Ön yüzün konteyneri `docs/`'u görmez; birebirlik burada sınanır (backend konteyneri depo kökünü
 `/repo`'da görür; `test_kurtarma_anahtari_pdf._depo_dosyasi` kalıbı). Kapsam: F1b 2. adımın
-metin modülleri — Kullanıcılar, Erişim Günlüğü, rol kapısı ve yetki, denetim izi kartları.
+metin modülleri (Kullanıcılar, Erişim Günlüğü, rol kapısı ve yetki, denetim izi kartları) ve
+güvenlik metinleri (F1b 3. adımın ekranları `guvenlik/metinler.ts`'ten okur), kapanış pencereleri.
 Her dosyadaki düz `export const AD(: tip)? = "…" (+ "…")*;` dizesi, boşluklar tekleştirilip
 tırnaklar (“ ” → ") eşitlenerek sözlükte aranır. Hesaplanan ya da şablon dizesi kapsam dışıdır
 (işlevlerin metinleri sözlükte kalıp olarak yazılıdır, ör. "Parola sıfırlandı · gg.aa.yyyy …").
@@ -17,6 +18,16 @@ import re
 from pathlib import Path
 
 import pytest
+from desktop.backup import KAPSAM_METINLERI
+from desktop.server import AZAMI_ISTEK_GOVDESI
+from desktop.window import (
+    GENEL_SUZGEC,
+    KAPANIS_BEKLIYOR_OLAYI,
+    PENCERE_METINLERI,
+    TUR_SUZGECLERI,
+)
+
+from apps.okul.services import encrypted_backup, live_restore
 
 #: Kapsanan ön yüz dosyaları (depo köküne göre).
 DOSYALAR = (
@@ -25,10 +36,19 @@ DOSYALAR = (
     "frontend/src/modules/oturum/RolKapisi.tsx",
     "frontend/src/modules/oturum/yetki.tsx",
     "frontend/src/modules/butunluk/metinler.ts",
+    "frontend/src/modules/guvenlik/metinler.ts",
+    "frontend/src/modules/cikis/metinler.ts",
+    "frontend/src/lib/metinler.ts",
 )
 
-#: Kullanıcıya görünmeyen düz dize sabitleri (dosya, ad) → gerekçe. Bugün boştur.
-ISTISNALAR: dict[tuple[str, str], str] = {}
+#: Kullanıcıya görünmeyen düz dize sabitleri (dosya, ad) → gerekçe.
+ISTISNALAR: dict[tuple[str, str], str] = {
+    ("frontend/src/modules/guvenlik/metinler.ts", "YEDEK_DOSYASI_COK_BUYUK"): (
+        "Yalnız köprünün olmadığı geliştirme kipinin yükleme kutusunda çıkar; programın penceresinde "
+        'yedek yüklenmez (kullanıcı kararı 06.11.2026 "Yedek dosyası yüklenmez, programın Aç '
+        'penceresiyle seçilir").'
+    ),
+}
 
 _SABIT = re.compile(
     r'export const (\w+)(?::\s*[\w.<>\[\]| ]+)?\s*=\s*((?:"(?:[^"\\]|\\.)*"\s*\+?\s*)+);'
@@ -74,6 +94,67 @@ def test_on_yuz_metinleri_sozlukte_yazilidir() -> None:
     assert not eksik, "Sözlükte yazılı olmayan ön yüz metinleri:\n" + "\n".join(eksik)
     # Kapsam boşalmasın (ör. dosya taşındı, kalıp artık eşleşmiyor).
     assert sayi >= 100, sayi
+
+
+def test_pencere_basliklari_ve_secilen_dosyanin_iletisi_sozlukte_yazilidir() -> None:
+    """Kullanıcı kararı 06.11.2026 "Yedek dosyası yüklenmez, programın Aç penceresiyle seçilir"."""
+    sozluk = _sade(_depo_dosyasi("docs/sozluk.md"))
+    for metin in (*PENCERE_METINLERI.values(), live_restore.SECILEN_YEDEK_ACILAMADI):
+        assert f'**"{_sade(metin)}"**' in sozluk, metin
+
+
+def test_kaydetme_penceresinin_tur_suzgecleri_sozlukte_yazilidir() -> None:
+    """Kullanıcı kararı 07.11.2026 "Program kaydetsin": Windows'ta tür kutusu Türkçedir."""
+    sozluk = _sade(_depo_dosyasi("docs/sozluk.md"))
+    for grup in (*TUR_SUZGECLERI.values(), GENEL_SUZGEC):
+        for metin in grup:
+            assert f"`{metin}`" in sozluk, metin
+
+
+def test_son_denemenin_iletileri_sozlukte_yazilidir() -> None:
+    """Kart son denemenin iletisini gösterir (kullanıcı kararı 06.11.2026 "Son şifreli yedek denemesi
+    saklanır"): kümedeki her ileti kullanıcıya görünür."""
+    sozluk = _sade(_depo_dosyasi("docs/sozluk.md"))
+    for metin in encrypted_backup._DENEME_ILETILERI:
+        assert f'**"{_sade(metin)}"**' in sozluk, metin
+
+
+def test_yedek_kapsami_metinleri_konsoldakiyle_birebirdir() -> None:
+    """Onay ekranı ve konsol kapsamı aynı sözle söyler (kullanıcı kararı 04.11.2026 "Ekran adları")."""
+    sabitler = _sabitler(_depo_dosyasi("frontend/src/modules/guvenlik/metinler.ts"))
+    assert {sabitler["KAPSAM_YEREL_METNI"], sabitler["KAPSAM_TAM_METNI"]} == set(
+        KAPSAM_METINLERI.values()
+    )
+
+
+def test_ekranin_yedek_siniri_sunucunun_govde_siniridir() -> None:
+    """Ekran sunucunun keseceği dosyayı göndermez (kullanıcı kararı 06.11.2026)."""
+    kaynak = _depo_dosyasi("frontend/src/modules/guvenlik/yedekBilgisi.ts")
+    eslesme = re.search(r"AZAMI_YEDEK_DOSYASI = (\d+) \* 1024 \*\* 3;", kaynak)
+    assert eslesme is not None
+    assert int(eslesme.group(1)) * 1024**3 == AZAMI_ISTEK_GOVDESI
+
+
+def test_ekranin_boy_iletisi_sunucununkiyle_aynidir() -> None:
+    """Sınırı aşan düz dosyanın iletisi iki yerde aynı sözdür (kullanıcı kararı 05.11.2026)."""
+    ekran = re.search(
+        r"`(Dosya çok büyük; en çok )\$\{sinirMb\}( MB olabilir\.)`",
+        _depo_dosyasi("frontend/src/modules/kisiler/AktarimPaneli.tsx"),
+    )
+    sunucu = re.search(
+        r'"(Dosya çok büyük; en çok )\{settings\.MAX_UPLOAD_SIZE_MB\}( MB olabilir\.)"',
+        _depo_dosyasi("backend/shared/yukleme.py"),
+    )
+    assert ekran is not None and sunucu is not None
+    assert ekran.groups() == sunucu.groups()
+
+
+def test_kapanis_olayi_masaustundekiyle_birebirdir() -> None:
+    """Pencere ön yüzün dinlediği olayı yollar (plan F1b-3 "Uzun iş, çarpı, temiz kapanış")."""
+    kaynak = _depo_dosyasi("frontend/src/modules/cikis/KapanisPenceresi.tsx")
+    eslesme = re.search(r'KAPANIS_BEKLIYOR_OLAYI = "([^"]+)";', kaynak)
+    assert eslesme is not None
+    assert eslesme.group(1) == KAPANIS_BEKLIYOR_OLAYI
 
 
 def test_sabit_okuyucu_birlesik_ve_tipli_dizeyi_okur() -> None:

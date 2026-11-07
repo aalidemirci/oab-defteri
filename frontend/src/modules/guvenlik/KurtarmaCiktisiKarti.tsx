@@ -2,7 +2,7 @@
 // başlığı belge adıdır, sözlük §2-§3) — hesap kurulduktan SONRA belgeyi yeniden almak
 // için (ör. elle yazılmış kâğıdın temiz kopyası). Anahtar programda saklanmaz: kullanıcı
 // elindeki anahtarı yazar, backend onu kurtarma sarmalına karşı doğrular (yanlışsa
-// Türkçe ileti + kademeli gecikme) ve yalnız doğruysa PDF üretir. İnen dosyanın adı
+// Türkçe ileti + kademeli gecikme) ve yalnız doğruysa PDF üretir. Kaydedilen dosyanın adı
 // backend'in Content-Disposition'ıyla aynıdır (`kurtarma.kurtarmaBelgesiDosyaAdi`).
 // Güncel anahtarın kimliği (no, üretim tarihi; tasarım TK10) verilirse kartta yazar:
 // zarftaki kâğıdın güncel anahtar olup olmadığı buradan karşılaştırılır.

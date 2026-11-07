@@ -47,6 +47,7 @@ const ACIK: OturumOzeti = {
   bosta_kalan_sn: 600,
   kilit_bekliyor: false,
   kurulum_tamam: true,
+  yukleme_siniri_mb: 20,
 };
 const KILITLI: OturumOzeti = { ...ACIK, durum: "kilitli", hesap: null, bosta_kalan_sn: null };
 

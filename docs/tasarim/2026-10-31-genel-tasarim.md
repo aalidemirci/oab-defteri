@@ -79,7 +79,7 @@ kararları gösterir.
 | T5 | e-Okul verisi | **Personel** (ad-soyad, görev) **+ veli listesi** — veliden yalnız ad-soyad ve öğrencinin sınıfı; telefon, adres, T.C. kimlik no, öğrenci no alınmaz; liste dönem kapanışında silinir | **evet** (öneri yalnız personeldi) |
 | T6 | Pencere | Çarpı **programı kapatır**; tepsi ve otomatik başlatma yok | — |
 | F0-a | Kantin arz bedeli vadesi | Sözleşmedeki **izleyen ayın 10'u** ([EK-2 md. 7](../mevzuat/meb-okul-aile-birligi-yonetmeligi-ek-2-kantin-kiralama-sozlesmesi.md#genel-sartlar-madde-7)) esas, Yönetmelikteki **20'si** ([md. 17/1-a-1](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-17)) üst sınır; iki tarih kural paketinde ayrı kural | — |
-| F0-b | Sert engeller | Sert engel yalnız dört gerekçede (D1 ve D4 ile güncel hâli; §6.1): **hesap bütünlüğü** (toplamlar, numara tekilliği, kapanmış dönem, yeter sayı ve karar hesabı); **programın kendi hesapladığı değerde** yasal oran ve yöntem (D1: gerçekte olan tutar yine kaydedilir, fark uyarıdır; kullanıcının belgeden girdiği değer uyarıdır); **mevzuatın hukuken geçersiz saydığı işlem** (kantin isteklisinde suç ve hısımlık engeli; serviste mülki amir onayı (OLUR) olmadan kesinleştirme — kantinde uyarı, D4; organda mevzuatın saymadığı kişi türü: YK'ye veli olmayan, DK bileşimi); **kullanıcının sert dediği karar** (A-2, KE-15). Eksik belge, taksit sayısı, puan sınırı uyarı + gerekçe; liste genişlemez (CLAUDE.md altın kural 3) | — |
+| F0-b | Sert engeller | Sert engel yalnız dört gerekçede (D1 ve D4 ile güncel hâli; §6.1): **hesap bütünlüğü** (toplamlar, numara tekilliği, kapanmış dönem, yeter sayı ve karar hesabı); **programın kendi hesapladığı değerde** yasal oran ve yöntem (D1: gerçekte olan tutar yine kaydedilir, fark uyarıdır; kullanıcının belgeden girdiği değer uyarıdır); **mevzuatın hukuken geçersiz saydığı işlem** (kantin isteklisinde suç ve hısımlık engeli; serviste mülki amir onayı (OLUR) olmadan kesinleştirme — kantinde uyarı, D4; organda mevzuatın saymadığı kişi türü: YK'ye veli olmayan, DK bileşimi); **kullanıcının sert dediği karar** (A-2, KE-15; iz boşluğu §4.6.3; hesapsız yedek §4.4.4). Eksik belge, taksit sayısı, puan sınırı uyarı + gerekçe; liste genişlemez (CLAUDE.md altın kural 3) | — |
 | F0-c | TEFBİS ve banka örnekleri | Sonra gelecek; tasarım varsayılan şemayla (§8), örnek gelince "F1 eki" | — |
 | F0-d | Saha | Yalnız pilot okul; gönüllü okul aranmaz. Pilot okul görüşmesi yapıldı ([saha.md](../kesif/saha.md)) | **evet** (öneri 2-4 gönüllü okuldu) |
 | F0-e | İl/ilçe MEM'e sorular | Sorulmaz; varsayılanlar: (a) program tasdikli deftere geçirilecek baskı üretir, (b) veri sorumlusu sorusu kılavuzda okul müdürlüğüne bırakılır, (c) internet bankacılığında üçüncü onay okul ayarıdır, (d) okul kendi TEFBİS işlem tipi listesini girer | — |
@@ -115,10 +115,10 @@ karşılığı · **Öneri** = bu belgenin önerisi · **§15 (M-n)** = kullanı
 | TK16 | Denetim izi | Her yazma, veri satırıyla **aynı işlemde** `AuditTrail`'e hesap + rol + zaman (Europe/Istanbul) ile düşer; ekleme-yalnız. Satır **kişisel veri taşımaz** ("kaydın özeti"): kayıt kimliği, değişen alan adları, izinli kişisiz alanların (tutar, tarih, durum, numara, kod) önceki ve sonraki değeri ve kaydın **içerik MAC'i**. Zincir DEK'ten bağımsız **iz anahtarıyla** (İA) HMAC mühürlüdür; kilitliyken yazılan sistem olayları ileriye dönük güvenli **kilitli kip anahtarıyla** mühürlenir; zincirin başı her kilitlenmede **çapa** olarak yazılır, her ay kâğıda iner; kilit açılışında kendiliğinden, DK modülünde tam doğrulanır ("kayıt bütünlüğü denetimi"). Model ve kurallar §4.6 | Altın kural 4; Kütüphane'de `AuditLog` bilerek yoktu ([iskelet envanteri §6.3](../kesif/2026-10-31-iskelet-envanteri.md)). Zincir program dışından SQLite'ta değişikliği görünür kılar (§4.3 tehdit 7). Değer kopyası tutulsaydı ekleme-yalnız iz KVKK silmesini boşa çıkarırdı (denetim KM-2, UY-2). İA DEK'ten türeseydi kilitliyken iz yazılamaz, DEK yenilemesi zinciri yeniden yazıp kâğıttaki çapaları geçersiz kılardı (denetim GA-8, UY-1) | Öneri; model §4.6 |
 | TK17 | Evrak hattı | T2: tek içerik modeli, iki çizici. PDF: `shared/pdf.py` (aile tek kapısı, WeasyPrint, süreç kilidi). Word: `shared/docx.py` (python-docx tek kapısı). Cephe: `shared/evrak.py` (belge tanımı + bağlam → içerik → {pdf, docx}). LibreOffice/Word gerekmez. PDF ↔ Word içerik eşdeğerliği testi (pypdf metni ↔ python-docx metni); `w:caps` kullanılmaz, büyük harf `tr_upper`'dan; `--evrak-duman` (çıkış 12). İçerik modeli ve katalog §9'da | T2 kullanıcı kararı; [iskelet envanteri §7.2](../kesif/2026-10-31-iskelet-envanteri.md) ekleme noktası | Kesin (T2); yerleşim öneri |
 | TK18 | İçe/dışa aktarım güvenliği | İçe alınan dosya (banka özeti, e-Okul listesi, TEFBİS Excel) güvenilmeyen girdidir: boyut tavanı (`OD_MAX_UPLOAD_SIZE_MB`), yalnız `.xlsx`/`.xls`/`.csv`, makrolu biçim reddi, türü imza baytından denetim, openpyxl `read_only` + `data_only`, önizleme + onay. Dışa yazılan xlsx'te dış kaynaklı metin hücreye **metin tipiyle** yazılır. `python-magic` eklenmez | openpyxl `=` ile başlayan dizeyi formül sayar; banka açıklaması dış kaynaklıdır (formül enjeksiyonu). libmagic Windows'ta ayrı DLL ister ([OYS envanteri](../kesif/2026-10-31-oys-oab-envanteri.md) S-26) | Öneri |
-| TK19 | Periyodik işler | Celery yok. Gün değişimi kapısı (`od-gunluk`; açılışta + saatte bir): günlük yedek + bütün yerel yedek öneklerinin rotasyonu (§4.4.7); sonraki fazların işleri kayıt defterine eklenir. **DEK yokken veritabanına iş verisi yazılmaz:** DEK isteyen gün işi kilitliyken "ertelendi" döner ve ilk kilit açılışında koşar; kilitliyken yalnız yedek ve kişisiz sistem olayı yazılır (§4.6.3). Bakım kapısı `katalog/bakim.py`'den `shared/bakim.py`'ye taşınır ve uzun yazma işlerini sayar (§4.2) | Aile T9. Bakım kapısı bugün katalog paketindedir; katalog sökülünce sessizce devre dışı kalır (§13 D3). Ailede kilit DEK'i silmiyordu (görevli kipine iniş); OAB'de boşta kilit DEK'i siler (denetim UY-1) | Öneri |
+| TK19 | Periyodik işler | Celery yok. Gün değişimi kapısı (`od-gunluk`; açılışta + saatte bir): günlük yedek + bütün yerel yedek öneklerinin rotasyonu ve yetim silmesi (§4.4.7); sonraki fazların işleri kayıt defterine eklenir. **DEK yokken veritabanına iş verisi yazılmaz:** DEK isteyen gün işi kilitliyken "ertelendi" döner ve ilk kilit açılışında koşar; kilitliyken yalnız yedek ve kişisiz sistem olayı yazılır (§4.6.3). Bakım kapısı `katalog/bakim.py`'den `shared/bakim.py`'ye taşınır ve uzun yazma işlerini sayar (§4.2) | Aile T9. Bakım kapısı bugün katalog paketindedir; katalog sökülünce sessizce devre dışı kalır (§13 D3). Ailede kilit DEK'i silmiyordu (görevli kipine iniş); OAB'de boşta kilit DEK'i siler (denetim UY-1) | Öneri |
 | TK20 | `SECRET_KEY` | Sabit kalır; program imza, Django oturumu ve CSRF kullanmaz | Aile T17 | Kesin |
 | TK21 | Kimlik | Kimlik sabitleri §2.3; kalıntı taraması F1a kapısıdır | Plan §1.4 | Kesin |
-| TK22 | Dosya deposu ve yedek kapsamı | Ekler ve üretilmiş evrak veri dizinindeki `dosyalar/`'da, **dosya başına rastgele anahtarla** AES-256-GCM şifreli durur; anahtar DEK'ten türeyen sarmal anahtarıyla sarılıp `Attachment.key_wrap`'te tutulur (§4.4.4). **Yerel yedekler** (günlük, `pre-*`) veritabanı görüntüsü + dosya manifestosudur; **dışarı çıkan yedek** (indirme, USB, yeni bilgisayara taşıma) veritabanıyla birlikte dosya deposunun tamamını tek şifreli dosyada taşır. Bütün yerel yedek önekleri 14 günlük rotasyondadır (§4.4.7) | Aile yedeği yalnız SQLite görüntüsüdür; dosyalar yedeğe girmeseydi disk arızasında ve yeni bilgisayara taşımada ekler kaybolurdu (denetim GA-1). Dosya başına anahtar sayesinde DEK yenilemesi dosyaları yeniden yazmaz, yalnız sarmalları tek SQLite işleminde yeniler (yarıda kalan dosya yazımı olmaz; denetim GA-2, UY-3); dosyalar değişmediği için veritabanı yedeği dosya deposuyla tutarlı kalır ve 14 günlük tam yedek dizisinin disk bedeli doğmaz | Öneri |
+| TK22 | Dosya deposu ve yedek kapsamı | Ekler ve üretilmiş evrak veri dizinindeki `dosyalar/`'da, **dosya başına rastgele anahtarla** AES-256-GCM şifreli durur; anahtar DEK'ten türeyen sarmal anahtarıyla sarılıp `Attachment.key_wrap`'te tutulur (§4.4.4). **Yerel yedekler** (günlük, `pre-*`) veritabanı görüntüsü + dosya manifestosudur; **dışarı çıkan yedek** (programın seçilen yere kaydettiği şifreli yedek, USB, yeni bilgisayara taşıma) veritabanıyla birlikte dosya deposunun tamamını tek şifreli dosyada taşır. Bütün yerel yedek önekleri 14 günlük rotasyondadır (§4.4.7) | Aile yedeği yalnız SQLite görüntüsüdür; dosyalar yedeğe girmeseydi disk arızasında ve yeni bilgisayara taşımada ekler kaybolurdu (denetim GA-1). Dosya başına anahtar sayesinde DEK yenilemesi dosyaları yeniden yazmaz, yalnız sarmalları tek SQLite işleminde yeniler (yarıda kalan dosya yazımı olmaz; denetim GA-2, UY-3); dosyalar değişmediği için veritabanı yedeği dosya deposuyla tutarlı kalır ve 14 günlük tam yedek dizisinin disk bedeli doğmaz | Öneri |
 
 ### 2.3 Kimlik sabitleri
 
@@ -142,14 +142,14 @@ Karşılıkların yeri ve sayımı: [iskelet envanteri §4.1-4.2](../kesif/2026-
 | **Oturum, ön yüz** | | | |
 | Oturum çerezi / başlığı | `od_oturum` / `X-OD-Token` | `kd_oturum` / `X-KD-Token` | |
 | Etkinlik başlığı | `X-OD-Etkinlik` | `X-KD-Etkinlik` | Boşta kilit (TK14) yalnız bu başlığı taşıyan istekle tazelenir |
-| Ret kodları | 403 `rol_yetkisiz` · 423 `locked`, `guvenlik_dosyasi_kayip` · 409 `parola_gerekli` · 503 `restart_required` · oturum: 400 `parola_yanlis`, 403 `hesap_askida`, 409 `hesap_muhru_tutmadi`, `iki_depo_tutarsiz`, `parola_yenilenmeli` · 409 `iz_yazilamadi` (denetim izi yazılamadı, yazma yapılmadı) · 409 `geri_yukleme_guncel_degil` ("Gördüm" eski ya da olmayan geri yüklemeyi andı) | 403 `kip_yetkisiz` | `rol_yetkisiz`, oturum kodları, `iz_yazilamadi` ve `geri_yukleme_guncel_degil` yenidir (T1, F1b); ötekiler aynen |
-| DOM olayları | `od:kilit-kapisi`, `od:rol-yetkisiz`, `od:yeniden-baslat-gerekli`, `od:guncelleme-denetlendi` | `kd:*` | `kd:cik-iste` ALMA (T6); `kd:kip-yetkisiz` → `od:rol-yetkisiz` |
+| Ret kodları | 403 `rol_yetkisiz` · 423 `locked`, `guvenlik_dosyasi_kayip` · 409 `parola_gerekli` · 503 `restart_required` · oturum: 400 `parola_yanlis`, 403 `hesap_askida`, 409 `hesap_muhru_tutmadi`, `iki_depo_tutarsiz`, `parola_yenilenmeli` · 409 `iz_yazilamadi` (denetim izi yazılamadı, yazma yapılmadı) · 409 `geri_yukleme_guncel_degil` ("Gördüm" eski ya da olmayan geri yüklemeyi andı) · 409 `ek_onayi_gerekli` (bozuk ekte geri yükleme durdu, hiçbir şey değişmedi; `rapor` kişisiz sayıları ve listeyi taşır) · 409 `yedek_suruyor` (aynı anda ikinci şifreli yedek), `bakim_suruyor` (geri yükleme sürerken şifreli yedek) | 403 `kip_yetkisiz` | `rol_yetkisiz`, oturum kodları, `iz_yazilamadi`, `geri_yukleme_guncel_degil`, `ek_onayi_gerekli`, `yedek_suruyor` ve `bakim_suruyor` yenidir (T1, F1b); ötekiler aynen. Satır kapalı liste değildir: `kurulum_eksik` ve `sifirlama_uygun_degil` burada yazmaz |
+| DOM olayları | `od:kilit-kapisi`, `od:rol-yetkisiz`, `od:yeniden-baslat-gerekli`, `od:guncelleme-denetlendi`, `od:kapanis-bekliyor` | `kd:*` | `kd:cik-iste` ALMA (T6); `kd:kip-yetkisiz` → `od:rol-yetkisiz` |
 | CSS | değişkenler `--od-*`; sınıflar `od-page-title`, `od-page-header`, `od-page-description` | `--kd-*`, `kd-page-*` | Sitedeki `od` paletiyle karıştırılmaz |
 | Tarayıcı deposu anahtarları | `oab-defteri-density`, `oab-defteri-sidebar-collapsed`, `oab-defteri-dismissed-update`, `oab-defteri-theme` | `kutuphane-defteri-*`, `oys-theme` | `-okuma-sesi` ALMA (barkod); `oys-theme` OYS kalıntısıydı (§13 D13). Tarayıcı deposuna kişisel veri ve form taslağı yazılmaz (§4.2) |
 | Ön yüz paket adı | `oab-defteri-frontend` | `kutuphane-defteri-frontend` | |
 | Rol kodları | `yonetici`, `baskan`, `baskan_yardimcisi`, `muhasip`, `sekreter`, `denetleme_kurulu`, `mudur` | — (yeni) | Üç bölümün ortak adı (§4.4, §5, §7) |
 | **Kripto ve yedek** | | | |
-| Yedek uzantısı / MAGIC | `.odbak` / `ODBAK\x03` | `.kdbak` / `KDBAK\x02` | Kap aileden ayrılır: aile kabının ardına dosya bölümü eklenir (§4.4.7); başlık TK10 ile değişir |
+| Yedek uzantısı / MAGIC | `.odbak` / `ODBAK\x03` | `.kdbak` / `KDBAK\x02` | Kap aileden ayrılır: kurtarma başlığının ardına kapsam ve mühürlü bölüm uzunluğu, tam yedekte mühürlü bölümün ardına dosya bölümü gelir (§4.4.7); başlık TK10 ile değişir. 3. adımdan önceki `ODBAK\x02` yedekleri açılmaz, ileti "deneme sürümüyle alınmış" der |
 | Dosya kabı MAGIC | `ODDOSYA\x01` | — (yeni) | Dosya deposundaki her dosyanın başı (§4.4.4) |
 | Yedek HKDF bilgileri | `OABDefteri/backup/private/v1`, `OABDefteri/backup/envelope/v1` | `KutuphaneDefteri/backup/…` | İki dizge |
 | Kör indeks HKDF | `od-kor-indeks` | `kd-kor-indeks` | |
@@ -160,7 +160,7 @@ Karşılıkların yeri ve sayımı: [iskelet envanteri §4.1-4.2](../kesif/2026-
 | Hesap sarmalı HKDF (parolanın Argon2id çıktısından) | `od-hesap-sarmali/v1` ‖ kanonik hesap kimliği (ayraçsız) | — (yeni) | Parola kaydını hesap kimliğine bağlar (§4.4.4; kullanıcı kararı 02.11.2026); kurtarma bölümü kullanmaz |
 | Sarmal özeti HKDF (DEK'ten) | `od-sarmal-ozeti/v1` | — (yeni) | `Account.wrap_digest`, `wrap_digest_pending` (§4.4.4 "Sarmalın tazeliği", §4.6.1); DEK'ten türediği için DEK yenilemesinde özetler yeniden yazılır |
 | İz anahtarı türevleri (HKDF, İA'dan) | `od-denetim-izi/v1` (zincir) · `od-kayit-ozeti/v1` (içerik MAC'i) · `od-iz-capa/v1` (çapa mührü) · `od-iz-kilitli/v1`, `od-iz-kilitli-mac/v1` (kilitli kip) | — (yeni) | §4.6.3. İA DEK'ten **türemez**; kurulumda ayrı üretilir |
-| Yedek indirme adı | `oab-defteri-yedek-<damga>.odbak` | `kutuphane-defteri-yedek-<damga>.kdbak` | Tam yedek (dosyalar dâhil) |
+| Şifreli yedeğin önerilen adı | `oab-defteri-yedek-yyyy-aa-gg-ssddss.odbak` | `kutuphane-defteri-yedek-<damga>.kdbak` | Tam yedek (dosyalar dâhil); adı program önerir, yeri kullanıcı seçer; kullanıcı adı değiştirirse satıra programın adı girer (R1) |
 | `guvenlik.json` şema sürümü | `"surum": 2` (hesaplı şema: `hesaplar[]` ile kimliğe bağlı sarmal ve türetim etiketi `turetim`, `hatali` sayacı ve `askida` işareti; `kurtarma.no`, `kurtarma.tarih`) | 1 | §4.4.4. Sarmalın kimliğe bağlanması sürümü değiştirmedi: sürüm yedek başlığında da geçer, başlığın taşıdığı kurtarma bölümü değişmedi |
 | **Windows** | | | |
 | Inno AppId | **yeni GUID üretilecek** | sabit GUID | Kütüphane'ninki asla kullanılmaz; bir kez üretilir, bir daha değişmez |
@@ -175,7 +175,7 @@ Karşılıkların yeri ve sayımı: [iskelet envanteri §4.1-4.2](../kesif/2026-
 | **Paket ve süreç** | | | |
 | spec / rthook | `oab_defteri.spec`, `rthook_od.py` | `kutuphane_defteri.spec`, `rthook_kd.py` | |
 | Logger | `oab_defteri` + alt adlar (`.server`, `.window`, `.kanal`, `.okul`, `.guvenlik`, `.restore` …) | `kutuphane_defteri.*` | |
-| İş parçacıkları | `od-wsgi`, `od-kanal`, `od-gunluk`, `od-cikis` | `kd-*` | ALMA: `kd-katalog*`, `kd-tepsi` |
+| İş parçacıkları | `od-wsgi`, `od-kanal`, `od-gunluk`, `od-cikis`, `od-kapanis`, `od-kapanis-bildirim` | `kd-*` | ALMA: `kd-katalog*`, `kd-tepsi` |
 | Duman kipleri | `--autotest`, `--pdf-duman`, `--bagimlilik-duman`, `--geri-yukle`, **`--evrak-duman`** (yeni) | + `--dagitim-duman` | `--dagitim-duman` ALMA; çıkış kodları §4.2 |
 | İstisna işleyicisi | `od_exception_handler` | `kd_exception_handler` | |
 | Django `SECRET_KEY` varsayılanı, test veritabanı adı | `oab-defteri` önekli yeni sabitler | program adını taşır | Değer belgeye yazılmaz (gizli değildir, TK20) |
@@ -198,12 +198,14 @@ Karşılıkların yeri ve sayımı: [iskelet envanteri §4.1-4.2](../kesif/2026-
 
 Program adı taşımadıkları ve veri dizinleri ayrı olduğu için kardeş programlarla çakışmazlar; çevrilmez:
 `db.sqlite3`, `instance.lock`, `surum.json`, `guvenlik.json`, `guvenlik-arsiv-<damga>.json`, `yedekleme.json`,
-`temiz-kapanis.json`, `gun-kapisi.json`, `kanal.sock`, `cokme.log`, yedek önekleri `gunluk-`, `pre-migrate-`,
-`pre-parola-`, `db-onceki-<damga>.sqlite3`, kanal komutları `goster`/`kapat`, kapı nöbetçisi `KAPI_OK_<ad>`.
+`temiz-kapanis.json`, `gun-kapisi.json`, `dis-yedek.json`, `kanal.sock`, `cokme.log`, yedek önekleri `gunluk-`,
+`pre-migrate-`, `pre-parola-`, `db-onceki-<damga>.sqlite3`, kanal komutları `goster`/`kapat`, kapı nöbetçisi
+`KAPI_OK_<ad>`.
 
-Yeni genel adlar: dosya deposu dizini `dosyalar/` (dosya adı `stored_name`, uzantısız), denetim izi durum dosyası
-`iz-durumu.json` (çapa ve kilitli kip; §4.6.3), geri yükleme notu `geri-yukleme-notu.json` (§4.4.4). Yeni yedek
-önekleri: `pre-kapanis-` (dönem kapanışı, §7.8) ve `pre-dek-yenileme-` (TK12). `pre-anonim-` F4'ten itibaren elle
+Yeni genel adlar: dosya deposu dizini `dosyalar/` (dosya adı `stored_name`, uzantısız), yetim dizini
+`dosyalar/yetim/<yyyy-aa-gg>/` ve geri yüklemenin hazırlık dizini `dosyalar/.hazirlik-<hex>/` (§4.4.7), denetim izi
+durum dosyası `iz-durumu.json` (çapa ve kilitli kip; §4.6.3), geri yükleme notu `geri-yukleme-notu.json` (§4.4.4). Yeni
+yedek önekleri: `pre-kapanis-` (dönem kapanışı, §7.8) ve `pre-dek-yenileme-` (TK12). `pre-anonim-` F4'ten itibaren elle
 KVKK silme tetiğinde kullanılır. Bütün yedek önekleri (`gunluk-`, `pre-migrate-`, `pre-parola-`, `pre-anonim-`,
 `pre-kapanis-`, `pre-dek-yenileme-`) ve `db-onceki-` rotasyon kümesindedir; küme kapalıdır ve testle sabitlenir
 (§4.4.7).
@@ -416,10 +418,12 @@ oab-defteri.exe   (tek süreç · tek kopya kilidi · OturumDurumu tek nesne)
 ├── ana iş parçacığı: pywebview penceresi — çarpı = çık (T6; uzun yazma işi sürerken bekletir, §4.2)
 │     Windows: WebView2 · Linux: qt_kurulum.hazirla() → PySide6 QtWebEngine + SIGTERM köprüsü
 ├── od-wsgi    waitress 127.0.0.1:<rastgele> → Django (API + SPA, whitenoise)
-│                OturumBelirteci(403) · RestartRequired(503) · AppLock(423) · RolMiddleware(403 rol_yetkisiz)
+│                OturumBelirteci(403) · no-store · RestartRequired(503) · AppLock(423) · RolMiddleware(403 rol_yetkisiz)
 ├── od-kanal   tek kopya kanalı — Windows: OABDefteri.Goster / .Kapat · Linux: kanal.sock (yalnız sahibi)
 ├── od-gunluk  gün değişimi kapısı: açılışta + saatte bir; her iş bakım kapısından geçer; DEK isteyen iş kilitliyken ertelenir
-└── od-cikis   arayüzdeki Çık: HTTP yanıtı gittikten sonra düzenli kapanışı başlatan zamanlayıcı
+├── od-cikis   arayüzdeki Çık: HTTP yanıtı gittikten sonra düzenli kapanışı başlatan zamanlayıcı
+└── od-kapanis uzun iş sürerken kapanışı en çok 60 sn bekleyen yardımcı (daemon; yalnız bekleme varken);
+                 od-kapanis-bildirim pencereyi gösterir ve DOM olayını yollar
 ```
 
 **Değişmezler** (testle kilitlenir):
@@ -437,8 +441,10 @@ oab-defteri.exe   (tek süreç · tek kopya kilidi · OturumDurumu tek nesne)
   taraması (`test_dis_istek_kapilari`) kitaplığın kendi istemcisini görmediği için ayrıca test: `<img
   src="http://…">` içeren belge PDF'e çevrilirken ağ tuzağı tetiklenmez.
 - `OturumDurumu` süreç içi tektir: kilit kapısı, `RolMiddleware`, denetim izi yazıcısı ve uzun iş sayacı aynı nesneyi
-  okur. Masaüstü ile backend arasında tek kanal `masaustu_kanca`dır (çıkış kancası + gün işleri kaydı); katalog
-  denetçisi yoktur.
+  okur. Masaüstü ile backend arasında tek kanal `masaustu_kanca`dır (çıkış kancası, gün işleri kaydı, sistem olayları,
+  kapanış kilidi, artık temizliği ve yetim taraması); katalog denetçisi yoktur. Masaüstü sunucuyu doğrudan çağırmaz:
+  pencere köprüsü (`PencereKoprusu`, §12.B) kaydetme ve Aç pencerelerinin verdiği yolu ön yüze döndürür, yol isteğin
+  içinde sunucuya gider.
 - Veritabanının tek yazarı vardır: istekler ve `od-gunluk` aynı SQLite dosyasına `IMMEDIATE` işlemle yazar; geri
   yükleme bakım kapısını kapatır, uçuştaki işin bitmesini bekler, sonra dosyayı takas eder (TK19, §13 D3).
 - **DEK yokken veritabanına iş verisi yazılmaz.** Kilitliyken yalnız kişisiz sistem olayları (yedek alındı, şema göçü
@@ -463,18 +469,19 @@ ertelenir, ilk kilit açılışında koşar.
 |---|---|---|---|
 | 1 | Veri dizinleri (exe dışında) + günlük yapılandırması; Linux'ta `umask 077` ve dizin kipleri (§4.5) | 1 | |
 | 2 | Tek kopya kilidi (iki mutex + `instance.lock`) | normal ikinci açılış: çalışan kopyanın penceresi öne gelir, ikinci süreç **0** · `--geri-yukle`, `--autotest`, `--pdf-duman`, `--evrak-duman` çalışan kopya bulursa **2** | İleti "OAB Defteri açık. Programı kapatıp yeniden deneyin." — tepsi anlatılmaz |
-| 3 | Temiz kapanış işareti okunur ve silinir; geri yükleme notu (`geri-yukleme-notu.json`) varsa okunur; tek kopya kanalı kurulur | — | İşaret yoksa panoda "son oturumdaki kayıtları kontrol edin" kartı (T15; okuyucusu §13 D4) |
+| 3 | Temiz kapanış işareti okunur ve silinir; geri yükleme notu (`geri-yukleme-notu.json`) varsa okunur; tek kopya kanalı kurulur | — | İşaret yoksa panoda "son oturumdaki kayıtları kontrol edin" kartı (T15; okuyucusu §13 D4). Konsol geri yüklemesi (`--geri-yukle`) başarıda işareti yazar: yerine konan kayıtlar tamdır, boş klasöre geri yüklemeden sonra kart çıkmaz (07.11.2026 sınaması); iptal ve hatada işarete dokunmaz |
 | 4 | Oturum belirteci (ayarlar okunmadan önce) | — | |
 | 5 | Sürüm damgası; damga yoksa göç kaydı denetimi | 4 | Eski program yeni veriyi açmaz |
 | 6 | Bütünlük denetimi | 3 | Yedekten **önce**: bozuk veritabanıyla rotasyon sağlam eski yedekleri silmesin |
-| 7 | Günlük yedek (veritabanı + dosya manifestosu) + yerel yedeklerin rotasyonu (§4.4.7) | günlüğe | İlk hesap kurulmadan atlanır; olay denetim izine kilitli kip anahtarıyla düşer (§4.6.3) |
-| 8 | Göç öncesi yedek (son 5; §4.4.7) + `migrate --no-input` (yalnız şema) | 5 | Veri göçü ilk kilit açılışında; olay denetim izine (§4.6.3) |
-| 9 | waitress `127.0.0.1:<boş port>` + sağlık denetimi | 6 | |
+| 7 | Günlük yedek (veritabanı + dosya manifestosu) + yerel yedeklerin rotasyonu ve yetim silmesi (§4.4.7) | günlüğe | İlk hesap kurulmadan atlanır; yedek alınmadıysa rotasyon ve yetim silmesi de koşmaz; olay denetim izine kilitli kip anahtarıyla düşer (§4.6.3) |
+| 8 | Göç öncesi yedek (son 5; §4.4.7) + `migrate --no-input` (yalnız şema) | 5 | Göç öncesi yedek alınamazsa çıkış 5, göç koşmaz, ipucu yer açmayı söyler (veri sağlamdır). Yedek atlanırsa (ilk hesap kurulmadı, yedek anahtarı bozuk, güvenlik dosyası kayıp) göç koşar: anahtarı kilit açılışı onarır. Veri göçü ilk kilit açılışında; olay denetim izine (§4.6.3) |
+| 8a | Yarım işlerin artıkları silinir, ardından yetim taraması (§4.4.7) | günlüğe | Tek kopya kilidinden ve göçten sonra, sunucudan önce. Tarama `--autotest`te ve `--geri-yukle`de koşmaz; okul kartı tek satır değilse, parmak izi boşsa ya da tablo okunamıyorsa atlanır; olay denetim izine (§4.6.3). `--geri-yukle` bu adıma gelmez, artıkları kendi kilidi altında siler: veritabanı bozukken açılış burada durmadan önce kesilir |
+| 9 | Ana iş parçacığının Django bağlantısı kapanır; waitress `127.0.0.1:<boş port>` + sağlık denetimi | 6 | Açık bağlantı Windows'ta uygulama içi geri yüklemenin takasını düşürürdü: bağlantılar iş parçacığına özgüdür, `live_restore` yalnız kendisininkini kapatır |
 | 10 | Çıkış kancası `masaustu_kanca`'ya kaydolur; `od-gunluk` başlar | — | |
 | 11 | Linux: `qt_kurulum.hazirla()` (`QT_API=pyside6`, `QtWebEngineWidgets`'ın `QApplication`'dan önce yüklenmesi, pencere simgesi) + SIGTERM köprüsü | 1 | `tray.py`'den ayrılmış hâli (§13 D1) |
 | 12 | Windows: WebView2 denetimi → pencere; ilk açılışta kurulum sihirbazı, sonra kilit ekranı | 7 | Kilit açılışındaki denetimler §4.4.3 |
 
-`--autotest`: 1-10 + sağlık denetimi, pencere açılmaz; katalog adımı yoktur (§13 D5). Kurulum sihirbazının ilk adımı
+`--autotest`: 1-9 + sağlık denetimi, pencere açılmaz; katalog adımı yoktur (§13 D5). Kurulum sihirbazının ilk adımı
 (ilk yönetici hesabı) bitmeden kişi yazan uçlar 409 `parola_gerekli` döner (aile).
 
 **Kapanış — tek yol.** Kaynaklar: çarpı · arayüzdeki **Çık** (`POST app/quit/`, her oturum durumunda parolasız) ·
@@ -483,14 +490,18 @@ pencere kapanır (uzun yazma işi sürüyorsa önce biter, aşağıda), `webview
 `od-gunluk` durur → oturum açıksa kilitlenir (çapa `iz-durumu.json`'a yazılır, §4.6.3) → yönetim sunucusu → **WAL
 checkpoint** (TB14) → temiz kapanış işareti (yalnız uzun iş sayacı sıfırsa) → kilit (mutex'ler süreç bitene dek kalır).
 
-- **Uçuştaki iş** (denetim GA-13). `shared/bakim.py`'deki kapı uzun yazma işlerini sayar: banka özeti uygulama, dönem
-  kapanışı ve arşiv paketi, DEK yenileme, canlı geri yükleme, dosya eki yazımı, tam yedek. Çarpıda sayaç sıfır değilse
-  pywebview `closing` işleyicisi kapanışı **bir kez** erteler ve "İşlem bitiyor, program kendiliğinden kapanacak"
-  iletisini gösterir; iş bitince kapanış sürer, en çok 60 sn beklenir. Bu bekletmedir, onay sorusu değildir; T6
-  korunur. Süreç yine de ölürse (zorla kapatma, elektrik) çok adımlı işler kendi `gecis` günlüğünden sürdürülür ya da
-  geri alınır (DEK yenileme §4.4.4); temiz kapanış işareti yazılmaz, sonraki açılışta T15 kartı çıkar. Aynı sayaç
-  boşta kilidi de erteler (§4.4.3). Testler: iş sürerken çarpı → iş tamamlanır, sonra çıkılır · iş öldürüldü →
-  işaret yok.
+- **Uçuştaki iş** (denetim GA-13). `shared/bakim.py`'deki uzun iş sayacı (`UZUN_ISLER`; bakım kapısından ayrıdır) uzun
+  yazma işlerini sayar: banka özeti uygulama, dönem kapanışı ve arşiv paketi, DEK yenileme, canlı geri yükleme, dosya
+  eki yazımı, tam yedek. Çarpıda sayaç sıfır değilse pywebview `closing` işleyicisi kapanışı **bir kez** erteler ve
+  "İşlem bitiyor, program kendiliğinden kapanacak" iletisini gösterir; iş bitince kapanış sürer, en çok 60 sn beklenir.
+  Bu bekletmedir, onay sorusu değildir; T6 korunur. Süreç yine de ölürse (zorla kapatma, elektrik) çok adımlı işler
+  kendi `gecis` günlüğünden sürdürülür ya da geri alınır (DEK yenileme §4.4.4); temiz kapanış işareti yazılmaz, sonraki
+  açılışta T15 kartı çıkar. Aynı sayaç boşta kilidi de erteler (§4.4.3). Testler: iş sürerken çarpı → iş tamamlanır,
+  sonra çıkılır · iş öldürüldü → işaret yok. `on_closing` iş yapmaz: sayaç sıfır değilse kapanmayı iptal eder, yardımcı
+  iş parçacığı (`od-kapanis`) en çok 60 sn bekler, kapanışı bir kez yapar; pencereyi gösterme ve `od:kapanis-bekliyor`
+  olayı ayrı iş parçacığındadır (`od-kapanis-bildirim`). Sayaç okunamazsa kapanış beklemez; temiz kapanış işareti ise
+  yazılmaz. 60 sn dolduğunda iş sürüyorsa pencere kapanır, oturum kilidi uçuştaki isteği en çok 30 sn daha bekler
+  (`UCUSTA_BEKLEME_SN`).
 - Çarpıda onay sorulmaz (T6, Kelebek davranışı). Kaydedilmemiş form kaybı kabul edilen risktir; azaltma: uzun
   akışlar (genel kurul sihirbazı, harcama zinciri) adım adım sunucuya kaydedilir; serbest metinli uzun alanlar (karar
   metni, DK bulgusu, gerekçe) açıkken kısa aralıklarla sunucuya **taslak** kaydedilir ve yeniden açılışta "yarım kalan
@@ -498,8 +509,8 @@ checkpoint** (TB14) → temiz kapanış işareti (yalnız uzun iş sayacı sıf�
   kalırdı (TK8).
 - **Kurucu ve kaldırıcı:** Inno `AppMutex` kullanılmaz (kaldırıcı olayı göndermeden "programı kapatın" iletisinde
   beklerdi). `[Code]` `InitializeSetup`/`InitializeUninstall` `.Kapat`'ı işaretler, iki mutex için en çok 30 sn
-  bekler; program o sürede düzenli kapanır. Kapanmazsa ileti "OAB Defteri açık. Programı kapatıp Yeniden Dene'ye
-  basın."; süreç zorla sonlandırılmaz.
+  bekler; uzun iş yokken program o sürede düzenli kapanır, uzun iş sürerken 60 sn'lik erteleme bu süreyi aşabilir.
+  Kapanmazsa ileti "OAB Defteri açık. Programı kapatıp Yeniden Dene'ye basın."; süreç zorla sonlandırılmaz.
 - **Geri yükleme sonrası** tüm API 503 `restart_required` ile kesilir; ileti "Programı kapatıp yeniden açın"
   (Kütüphane'deki "tepsiden Çık" metni gider).
 
@@ -551,6 +562,7 @@ girer ([KVKK md. 12/1](../mevzuat/6698-kvkk.md#madde-12) idari tedbirler okulund
 | 21 | Yönetici olmayan hesap sahibi konsoldan ("Yedekten Geri Yükle" kısayolu) veritabanını ve denetim izini geri sarar | Konsol geri yüklemesi yalnız kurtarma anahtarıyla ya da rolü `yonetici` olan hesabın parolasıyla yapılır. Denetlenen hesap parolanın açtığı sarmalın kimliğidir ve sarmal bu kimliğe bağlıdır (tehdit 23); satırın mührü, izi (iz boşluğu dahil), rolü, durumu ve sarmalın özeti güncel veritabanında (okunamıyorsa yedeğin görüntüsünde) denetlenir. Geri yükleme ilk kilit açılışında denetim izine ve DK panosuna düşer (§4.4.4) | Kurtarma anahtarını ele geçiren (tehdit 10). Güncel veritabanı okunamaz kılınıp görüntüye düşülürse (okul kartını bozmak, hesap tablosunu silmek ya da bir sütunun adını değiştirmek tek yazımdır, dosyayı 5 sn'den uzun kilitle tutmak da yeter; kod istemez) görüntünün satırı kendi izini tutar: yedek günündeki sarmalı geri koyan, o gün `yonetici` olan ve o günün parolasını bilen biri geri yükler. Güncel veritabanının zinciri doğrulanmaz: askıya alınmış ya da kapatılmış bir `yonetici`nin geri sarılmış satırı §4.6.3'ün girişte görünmeyen düzenlemelerinden biriyle birleşirse kendi parolasıyla geri yükler. Kendi parolasıyla DEK'i dışarıda türetip sahte sarmal ya da mühürlü sahte satır üreten geçer (kod ister; tehdit 6, 19) |
 | 22 | Aynı bilgisayardaki başka yerel hesap veri dizinini okur (Linux) | Açılışta `umask 077`; veri, günlük, önbellek ve yedek dizinleri 0700, gizli dosyalar 0600 (§4.5). Windows'ta `%LOCALAPPDATA%` hesaba özeldir | Pardus'ta yeni kullanıcı ev dizininin varsayılan izni doğrulanmadı (F1a'da elle) |
 | 23 | Veri dizinine yazabilen biri `guvenlik.json`'daki parola kayıtlarını değiştirir: kendi kaydının `id`'sini başka hesabınkine çevirir (yalnız kendi parolasıyla) ya da bir hesabın eski ya da geçici parolasının kaydını (`guvenlik-arsiv-*`'den ya da önceden aldığı kopyadan; geçici parolayı veren `yonetici` dahil) geri koyup o hesap olarak girer — kod gerekmez | Parola kaydının anahtarı hesap kimliğine bağlıdır (`od-hesap-sarmali/v1` ‖ kanonik kimlik; kullanıcı kararı 02.11.2026): kimliği çevrilen kayıt açılmaz, sonuç yanlış parolayla aynıdır; tanıtıcı yalnız kaydı bulmaya yarar. Mühürlü `Account` satırı güncel kaydın DEK'li özetini taşır (`wrap_digest`, `wrap_digest_pending`; kullanıcı kararı 03.11.2026): tutmayan kayıt kilit açılışında ve açık oturumdaki parola doğrulamasında açılmaz (`BUTUNLUK` satırı, hatalı deneme sayılmaz), parolayla geri yükleme yapamaz; geri yükleme özetleri önceki veritabanına göre onarır (§4.4.4) | Kesintiyle yarım kalan bir parola yazımından sonraki ilk kilit açılışına dek bekleyen özet penceresi; çapası kullanılamayan geri yüklemede geri yüklemeden önce dosyaya konmuş yedek günü kaydı (§4.4.4); önüne aynı kimlikli kopya konan hesap açılamaz (hizmet reddi; yetki yükselmez; sıfırlama ya da kurtarma anahtarıyla açılış kopyaları siler); eski kayıt eski parolayla DEK'i program dışında verir (tehdit 6) |
+| 24 | Formlara yazılan ve ekranda görülen kişisel veri pencere bileşeninin (WebView2) önbelleğinde şifresiz kalır (Windows sınaması 07.11.2026). Form önerisi deposu (`EBWebView/Default/Web Data`) yazılanları (adlar, okul adı, kurtarma anahtarları) tutar ve sonraki kullanıcıya öneri olarak gösterir; öneri yalnız aynı alanda çıkmaz: kayıtlar alan kimliğiyle tutulur, React'in `useId` kimlikleri ekranlar arasında yinelenir, sınamada kurulumda yazılan okul adı kilit ekranının parola alanında, oturum açılmadan önerildi. `autoComplete="off"` saklamayı önlemez. Sayfa önbelleği (`EBWebView/Default/Cache`) sunucu yanıtlarını (hesap ve öğrenci listeleri) çözülmüş hâliyle tutar | Pencere gösterilince WebView2'nin form önerisi ve parola saklaması kapatılır (pencere iş parçacığında); her `/api/` yanıtı `Cache-Control: no-store` taşır (`ApiNoStoreMiddleware`; kapıların 503, 423 ve 403 yanıtları dahil, yalnız oturum belirtecinin sabit gövdeli 403'ü dıştadır, §4.4.3); Windows'ta öneri veritabanı ve sayfa önbelleği her açılışta bileşen başlamadan silinir, önceki sürümlerin bıraktığı da gider; önceki oturumun bileşen süreci kapanırken kilitli dosya 3 sn yeniden denenir (`desktop/window.py`, plan F1b-3 ekleri) | Silme kapanışta değil açılıştadır: kapatma bir oturumda tutmazsa yazılan, programın bir sonraki açılışına dek dosyada şifresiz durur; açılışta dosya 3 sn içinde silinemezse günlüğe uyarı düşer, dosya bir sonraki başarılı silmeye dek kalır. Silinen dosyanın içeriği diskte üzerine yazılana dek okunabilir (tam koruma BitLocker, tehdit 9). Arayüzün kendi dosyaları (`index.html`, `/assets/`) önbelleğe girer, kişi verisi taşımaz. Bileşenin çökme dökümleri (`EBWebView/Crashpad`) bellekteki metni taşıyabilir ve Microsoft belgesine göre Windows'un tanılama verisi ayarına bağlı olarak Microsoft'a gidebilir; bunu kapatan ortam seçeneğini (`IsCustomCrashReportingEnabled`) pywebview açmaz (denenmedi). Qt kolunda (Pardus) kapatılacak ayar yoktur: Qt WebEngine'in ayarlarında (`QWebEngineSettings`) form önerisinin karşılığı bulunmaz. Qt'nin sayfa önbelleği profil dizininin dışındadır (`QWebEngineProfile.cachePath`) ve açılışta silinmez: `no-store`dan önceki paketlerin orada yazdıkları kalır, yenilerini `no-store` korur. Pardus'ta gerçek pencerede `~/.cache/oab-defteri` ve `~/.local/share/oab-defteri` altının tamamında yazılan ve görülen uydurma değer aranır |
 
 ### 4.4 Kullanıcılar, roller ve oturum (T1)
 
@@ -624,7 +636,7 @@ detay" ayrımı korunur.
 | Denetim izi | O | O | O | O | O | O | O |
 | Erişim günlüğü (§4.6.4) | O | — | — | — | — | O | — |
 | Kullanıcılar: hesap açma (hesap teslim pusulası E63), kapama, askıdan çıkarma, parola sıfırlama, hesap geçişi | Y | — | — | — | — | — | — |
-| Güvenlik: kurtarma anahtarı, geri yükleme (uygulama içi ve konsol), yedek indirme, DEK yenileme | Y | — | — | — | — | — | — |
+| Güvenlik: kurtarma anahtarı, geri yükleme (uygulama içi ve konsol), şifreli yedeğin kaydedilmesi, Yedek Raporu, DEK yenileme | Y | — | — | — | — | — | — |
 | Ayarlar (K9, boşta süre, küçük alım sınırı, kural sürümü seçimi) | Y | O | O | O | O | O | O |
 | Kişisel veri içeren çıktı ve dışa aktarım: veli listesi, adlı davet teslim çizelgesi (E07) ve katılım cetveli (E08), kişi dökümü, ihlal dökümü, maskesiz T.C. kimlik no | Y¹⁰ | — | — | — | — | — | — |
 | Güncelleme denetimi (tek dış istek) | Y | — | — | — | — | — | — |
@@ -722,21 +734,25 @@ her durum ──(geri yükleme uygulandı)──▶ YENİDEN_BAŞLAT_GEREK
   izine ayrı türle (`KURTARMA`: hangi hesap, yeni mi) düşer; parolası yenilenen hesabın sahibine ilk girişinde
   "parolanız … tarihinde kurtarma anahtarıyla yenilendi" bildirimi ve o tarihten sonraki girişler gösterilir (tehdit 12
   deseni). Anahtar müdürlükte durduğu için (D3) bu iz zarfın açıldığını görünür kılan kayıttır.
-- **Ara katman sırası:** belirteç → güvenlik → whitenoise → common → `RestartRequired` (503) → `AppLock` (423) →
+- **Ara katman sırası:** belirteç → no-store (`/api/` yanıtları önbelleğe yazılmaz, §4.3 tehdit 24) → güvenlik →
+  whitenoise → common → `RestartRequired` (503) → `AppLock` (423) →
   `RolMiddleware` (403 `rol_yetkisiz`). `RolMiddleware` yalnız AÇIK durumda (isteğin yazarı bir hesapken) devreye girer;
   güvenlik dosyası kayıp kilidinde, açık kalmış oturumda da kesmez (açık listeyi `AppLock` tutar, rol kapısı onun bu
   istek için verdiği kararı kullanır). `HEALTH_PATH` (`setup/status/`) ve `security/status/` yalnız okumada (GET, HEAD)
   hiçbir durumda kesilmez, öteki yöntemleri kural tablosundan geçer (aile). Açık oturumda kuralı olmayan (uç, yöntem)
   çifti ve çözülemeyen `/api/` yolu her rolde 403 alır.
 - **Boşta kilit** sunucuda tembel dolar: her istekte `son_etkinlik + N < şimdi` ise oturum kilitlenir, DEK bellekten
-  silinir. `son_etkinlik` yalnız `X-OD-Etkinlik` başlıklı (kullanıcı eylemli) istekle tazelenir; durum ve pano
-  sorguları tazelemez. Saat uykuyu sayar (`UykuyuSayanSaat`). Ön yüzdeki geri sayım yalnız görseldir. Kurulum
-  sihirbazı bitene dek süre kilitlemez (kurtarma anahtarı ekrandayken; TB19 dersi); elle Kilitle çalışır. **Uzun
-  yazma işi sürerken** (bakım kapısı sayacı sıfır değilken) kilit ertelenir, iş bitince ilk istekte uygulanır: DEK
-  işin ortasında silinmez (denetim UY-1).
-- **Ön yüz belleği** (denetim GA-23). Kilitlenme (elle, boşta ya da 423) ve her kilit açılışı ön yüzde sorgu
-  önbelleğini ve modül belleğini sıfırlar; yol, pencere içeriğinin yeniden yüklenmesidir (oturum çerezi kalır). Önceki
-  hesabın yüklediği maskesiz veri sonraki hesabın oturumunda kalmaz. Vitest testiyle sabitlenir.
+  silinir. `son_etkinlik` yalnız `X-OD-Etkinlik` başlıklı (kullanıcı eylemli) istekle tazelenir; durum ve pano sorguları
+  tazelemez. Yerel "Farklı kaydet" ve Aç pencerelerindeki seçim DOM olayı üretmez; ekran seçilen yer dönünce etkileşimi
+  kendisi kaydeder. Bu zamanlayıcıyla başlık göndermek değildir, kullanıcının seçimidir; iptalde kaydedilmez. Saat
+  uykuyu sayar (`UykuyuSayanSaat`). Ön yüzdeki geri sayım yalnız görseldir. Kurulum sihirbazı bitene dek süre kilitlemez
+  (kurtarma anahtarı ekrandayken; TB19 dersi); elle Kilitle çalışır. **Uzun yazma işi sürerken** (uzun iş sayacı sıfır
+  değilken) kilit ertelenir, iş bitince ilk istekte uygulanır: DEK işin ortasında silinmez (denetim UY-1).
+- **Ön yüz belleği** (denetim GA-23). Kilitlenme (elle, boşta ya da 423) ve her kilit açılışı ön yüzde sorgu önbelleğini
+  ve modül belleğini sıfırlar; yol, pencere içeriğinin yeniden yüklenmesidir (oturum çerezi kalır). Önceki hesabın
+  yüklediği maskesiz veri sonraki hesabın oturumunda kalmaz. Vitest testiyle sabitlenir. Bu yeniden yükleme ekran
+  belleğini siler; şifreli yedeğin sonucu `GET backups/external/`'ın `son_deneme` alanından yeniden okunur (§16 R6).
+  Geri yüklemenin 409 `ek_onayi_gerekli` listesi kalıcı değildir: kullanıcı akışı baştan yürütür, veri değişmez.
 
 #### 4.4.4 Anahtarlar ve `guvenlik.json` (şema 2)
 
@@ -777,15 +793,19 @@ her durum ──(geri yükleme uygulandı)──▶ YENİDEN_BAŞLAT_GEREK
   anlattığını gösterir. `enable()` → ilk yönetici hesabı; ön koşulları aile ile aynı (dosya yok, parmak izi boş,
   kişi tabloları boş).
 - **Dosya anahtarı** (yeni; TK22; denetim GA-2, UY-3). Her dosya kendi rastgele 32 baytlık anahtarıyla AES-256-GCM
-  şifrelenir (`ODDOSYA\x01` + nonce + şifreli metin; AAD = `stored_name`). Dosya anahtarı
-  `HKDF(DEK, "od-dosya-sarmal/v1")` ile AES-GCM sarılır (AAD = `stored_name`) ve `Attachment.key_wrap`'te durur. DEK
-  yenilemesi dosyaları yeniden yazmaz, yalnız sarmalları tek SQLite işleminde yeniler. Aile `shared/crypto.py`'si
+  şifrelenir (`ODDOSYA\x01` + 12 bayt nonce + şifreli metin ve 16 bayt etiket; AAD = `stored_name`'in ASCII baytları;
+  şifreli boy üst sınırı 64 MiB, çözmeden önce denetlenir). Dosya anahtarı `HKDF(DEK, "od-dosya-sarmal/v1")` anahtarıyla
+  AES-GCM sarılır (AAD = `stored_name`) ve `Attachment.key_wrap`'te base64(nonce 12 ‖ şifreli anahtar 32 ‖ etiket 16)
+  metni olarak durur. Sarmal anahtarını `shared.crypto.file_wrap_key` türetir; `shared/dosya_sifreleme.py` DEK'i görmez.
+  DEK yenilemesi dosyaları yeniden yazmaz, yalnız sarmalları tek SQLite işleminde yeniler. Aile `shared/crypto.py`'si
   dosya şifrelemez; yeni modül `shared/dosya_sifreleme.py` (§12.B YENİ). Açık kopya kuralı §4.4.7.
-- **Yedek başlığı (TK10):** `{surum, kdf, kurtarma: {no, tarih, salt, sarmal}}` — hesap yok. Geri yüklemede aday
-  sırası: (1) güncel `guvenlik.json` + bir `yonetici` hesabının parolası; (2) yedek başlığı + kurtarma anahtarı. Program
-  yedeğin hangi anahtarla açılacağını (no, tarih) gösterir. (2) ile açılırsa `guvenlik.json` yalnız kurtarma bölümüyle
-  yazılır; program "kurtarma anahtarıyla aç + yönetici parolası" ekranına gelir, öteki hesaplar "parola yenilenmeli"
-  durumuna düşer (geçici parolayı yönetici verir).
+- **Yedek başlığı (TK10):** `{surum, kdf, kurtarma: {no, tarih, salt, sarmal}}` — hesap yok. Geri yüklemede aday sırası:
+  (1) güncel `guvenlik.json` + bir `yonetici` hesabının parolası; (2) yedek başlığı + kurtarma anahtarı. Program yedeğin
+  hangi anahtarla açılacağını (no, tarih) gösterir. (2) ile açılırsa `guvenlik.json` yalnız kurtarma bölümüyle yazılır;
+  program "kurtarma anahtarıyla aç + yönetici parolası" ekranına gelir, öteki hesaplar "parola yenilenmeli" durumuna
+  düşer (geçici parolayı yönetici verir). Başlığın `kdf`'si mühürden önce kullanıldığı için güvenilmezdir: geri yükleme
+  onu Argon2id'den önce sınar. Değerler Argon2'nin aralığında değilse ya da programın profilinin 16 katını aşıyorsa
+  başlık aday olmaz.
 - **Geri yükleme yetkisi** (denetim GA-3). Geri yükleme yalnız **kurtarma anahtarıyla** ya da rolü `yonetici` olan
   hesabın parolasıyla yapılır. Uygulama içi yol açık oturumda `RolMiddleware`'den (yalnız `yonetici`), parola yolunda
   servisin yetki kapısından da geçer; parola oturumdaki hesabınkidir, oturum yoksa parola yolu kapalıdır; güvenlik
@@ -808,9 +828,11 @@ her durum ──(geri yükleme uygulandı)──▶ YENİDEN_BAŞLAT_GEREK
   komutta `CommandError`, uygulama içinde 400; ret denetim izine yazılmaz, günlüğe sırsız uyarı olarak düşer. Program
   kapalıyken (WAL başlıklı veritabanının yanında `-wal` ve `-shm` yokken) salt okunur okuma, ret yolunda da kabul
   yolunda da 0 baytlık bir `-wal` ve 32 KiB'lık bir `-shm` bırakır; veritabanının baytları, önceden var olan `-wal`'ın
-  baytları ve öteki dosyalar değişmez. Başarılı geri yükleme `geri-yukleme-notu.json`'a yedeğin adını, kenara alınan
-  `db-onceki-<damga>` dosyasının adını ve sha256'sını, kullanılan yolu (hesap tanıtıcısı ya da kurtarma anahtarı no'su)
-  ve kenara alınan veritabanının zincir başını (son `seq` + MAC) yazar. İlk kilit açılışında not denetim izine
+  baytları ve öteki dosyalar değişmez. Başarılı geri yükleme `geri-yukleme-notu.json`'a yedeğin adını (yalnız programın
+  ürettiği adsa; serbest ad yazılmaz, R1), kenara alınan `db-onceki-<damga>` dosyasının adını ve sha256'sını, kullanılan
+  yolu (hesap tanıtıcısı ya da kurtarma anahtarı no'su), kenara alınan veritabanının zincir başını (son `seq` + MAC) ve
+  dosya ayağının kişisiz sayılarını (kapsam, yerine konan, yetimden dönen, eksik, bozuk, onayla sürülen) yazar. İlk
+  kilit açılışında not denetim izine
   `GERI_YUKLEME` satırı olarak geçer, çapa yenilenir ve `yonetici` ile DK panosunda kart çıkar; kart DK "gördüm" diyene
   dek kalır: Denetleme Kurulunun bir üyesinin "Gördüm"ü kartı herkes için (`yonetici`de ve öteki üyelerde) kaldırır
   (kullanıcı kararı 02.11.2026). "Gördüm" denetim izine `ISARET` satırıdır (kaydı denetim izinin kendisi, kimliği son
@@ -818,6 +840,16 @@ her durum ──(geri yükleme uygulandı)──▶ YENİDEN_BAŞLAT_GEREK
   satırından sonra yazılmış, doğrulanan ve yazarı bir DK hesabı olan `ISARET` satırıyla kalkar; yeni bir geri yükleme
   kartı yeniden açar; açık DK hesabı yoksa kart kalır. `db-onceki-*` 14 günlük rotasyondadır (§4.4.7): bu sürede DK
   kenara alınan veritabanını isteyebilir; zincir başı izde kaldığı için sonra da kâğıt çapasıyla karşılaştırılabilir.
+- **Hesapsız yedek** (kullanıcı kararı 07.11.2026). Kurulum yedeği hesap satırı yazılmadan önce alınır: geri yüklenseydi
+  kilit ekranında hesap seçilemez, kurtarma listesi boş kalır, programa girilemezdi. Bu yüzden yedeğin görüntüsünde rolü
+  `yonetici`, durumu `ACIK` ya da `PAROLA_YENILENMELI` en az bir `okul_account` satırı yoksa geri yükleme reddedilir
+  (süzgeç kurtarma listesininkidir: `hesaplar.recovery_accounts`). Kural dosyanın adına değil içeriğine bakar; mühür ve
+  iz denetlenmez. Denetim ORM'sizdir (`geri_yukleme_yetkisi`), parola yolunda da kurtarma anahtarı yolunda da hiçbir
+  dosyaya dokunulmadan önce koşar; parola yolunda yetkiden sonradır, yetkisiz hesap yedeğin içeriğini öğrenmez. Ret
+  masaüstünde çıkış 9, komutta `CommandError`, uygulama içinde 400'dür: hiçbir dosya değişmez, bakım kapısı açılır,
+  "yeniden başlat" kapısı kurulmaz, oturum açık kalır, günlüğe kişisiz uyarı düşer. Ret yalnız olumlu kanıtla olur:
+  görüntü okunamazsa (`sqlite3` hatası, tablo yok dahil; geçici dizin yazılamazsa `OSError`) denetim karar vermez,
+  geri yükleme eskisi gibi sürer. Kurulum yedeği listede durur, seçilince ileti çıkar; alınma sırası değişmez.
 - **Özet onarımı** (kullanıcı kararı 03.11.2026). Geri yükleme güncel `guvenlik.json`'u eski veritabanıyla birleştirir;
   onarılmasaydı yedekten sonra parolası değişen hesap yeni parolasıyla açamaz, yedek günündeki parola kaydı ise açardı.
   Bu yüzden geri yüklenecek veritabanının hesap satırlarının özetleri takastan önce `.tmp` dosyasında, ORM'siz onarılır
@@ -923,9 +955,24 @@ kalır). Veli adı taşıyan E07 çizelgesi ve adlı E08 depoya hiç yazılmaz (
 
 - **Açık kopya kuralı** (denetim GA-2, EK-15). İndirme ve yazdırma yanıtı bellekten akar, `Cache-Control: no-store`
   taşır; program kendi geçici dizinine açık kopya bırakmaz; açık dosya yalnız kullanıcının "kaydet" dediği yerde oluşur
-  (tehdit 15). İçe aktarılan ham dosyalar da diske yazılmadan bellekte okunur (§5.4).
-- **Yetim ve eksik dosya.** Açılışta satırı olmayan dosya (eski bir yedeğin geri yüklenmesinden sonra) `dosyalar/yetim/`'e
-  taşınır, 14 gün sonra silinir; satırı olup dosyası olmayan kayıt "dosya yok" gösterir ve panoya bütünlük uyarısı düşer.
+  (tehdit 15). İçe aktarılan ham dosyalar da yükleme sınırına kadar diske yazılmadan bellekte okunur (§5.4); genel
+  yükleme işleyicisi yalnız bellektir ve sınırı aşan isteği reddeder (`shared/yukleme.py`), ekran sınırı aşan dosyayı
+  göndermez, sınırı oturum özetinden okur. Gömülü sunucunun gövde ve yanıt tamponları da bu sınıra kadar bellektedir
+  (`desktop/server.py`). Tampon eşiğini aşan gövde uygulamaya varmadan sunucunun sistem geçici dizinindeki dosyasına düz
+  iner: ekran denetiminden geçmeyen gövde ve geliştirme kipi için kalan risktir (plan F1b-3 "Dosya deposu").
+- **Yetim ve eksik dosya.** Açılışta, göçten sonra ve sunucudan önce, satırı olmayan dosya (eski bir yedeğin geri
+  yüklenmesinden, yarım kalmış bir geri yüklemeden ya da kaydı düşmüş bir ek yazımından sonra)
+  `dosyalar/yetim/<yyyy-aa-gg>/`'e taşınır, 14 gün sonra rotasyonla aynı tetikte silinir; bu sürede ona bağlı yerel
+  yedek geri yüklenirse oradan geri alınır (tam yedekte manifestodaki eke yetimde bakılmaz: kopya yedeğin dosya
+  bölümünden gelir, `eksik` işaretli ek eksik kalır). Aynı gün aynı adla düşen ikinci kopya sıra ekiyle (`<ad>-<n>`)
+  yanına konur ve o da aranır. Tam yedek geri yüklenirken depoda aynı adla duran kopya tutmuyorsa o da `yetim/`'e
+  alınır, yerine doğrulanmış kopya konur; yerel yedekte dokunulmaz, ek bozuk sayılır. Okul kartı tek satır değilse,
+  parmak izi boşsa ya da tablolar okunamıyorsa tarama atlanır: boş veritabanı depoyu yetime göndermez. Satırı olan her
+  ad yerinde kalır; `purged_at` dolu satır da satırdır, imhanın dosyasını imha siler. Olay `BUTUNLUK` satırıdır (nesne
+  `dosya.deposu`; taşınan ve taşınamayan sayısı, ad yok), kart üretmez. Satırı olup dosyası olmayan kayıt "dosya yok"
+  gösterir ve Genel Bakış'ta **Eksik Ekler** kartı çıkar (program yöneticisi ve Denetleme Kurulu; denetim kartlarının
+  `eksik_ekler` alanı canlı okunur; özgün ad kilit açıkken çözülür, yalnız bu kartta ve kaydın kendisinde görünür; liste
+  okunamazsa kart okunamadığını söyler, "eksik yok" demez).
 
 **Yedek türleri** (denetim GA-1, GA-5, KM-10; R10):
 
@@ -933,19 +980,56 @@ kalır). Veli adı taşıyan E07 çizelgesi ve adlı E08 depoya hiç yazılmaz (
 |---|---|---|---|
 | `gunluk-<tarih>.odbak` | Açılışta ve gün değişiminde, günde bir | Veritabanı + manifesto | 14 gün |
 | `pre-migrate-<sürüm>-<tarih>.odbak` | Göçten önce | Veritabanı + manifesto | Son 5; ayrıca KVKK silme tetiğinden önce alınmış olanlar tetikten sonra silinir |
-| `pre-parola-*` | Kurulumda (kişi verisi yokken) | Veritabanı | 14 gün |
+| `pre-parola-acilis-<tarih>-<saat>.odbak` | Kurulumda (kişi verisi yokken, hesap satırı yazılmadan önce; geri yüklenemez, §4.4.4 "Hesapsız yedek") | Veritabanı (manifestosu boş) | 14 gün |
 | `pre-anonim-<tarih-saat>.odbak` | Elle KVKK silme tetiğinden önce (F4+) | Veritabanı + manifesto | 14 gün |
 | `pre-kapanis-<tarih>.odbak` | Dönem kapanışından önce (§7.8) | Veritabanı + manifesto | 14 gün |
 | `pre-dek-yenileme-<tarih>.odbak` | DEK yenilemesinden önce (eski DEK) | Veritabanı + manifesto | 14 gün; eski zarf imha edilince açılamaz |
 | `db-onceki-<damga>.sqlite3` | Geri yüklemede kenara alınan veritabanı | Veritabanı (şifreli alanlar şifreli) | 14 gün |
-| İndirilen yedek (`oab-defteri-yedek-<damga>.odbak`), dış (USB) yedek | Kullanıcı ister; program hatırlatır | **Tam:** veritabanı + dosya deposunun tamamı | Kullanıcının elindedir; imha kuralı kılavuzda |
+| Kaydedilen şifreli yedek (`oab-defteri-yedek-<damga>.odbak`), dış (USB) yedek | Kullanıcı ister; program hatırlatır | **Tam:** veritabanı + dosya deposunun tamamı | Kullanıcının elindedir; imha kuralı kılavuzda |
 
-- **Kap** (`ODBAK\x03`). Aile kabı (MAGIC, geçici X25519 açık anahtar, nonce, uzunluk, kurtarma başlığı, AES-256-GCM
-  (veritabanı görüntüsü ‖ manifesto)) aynen kalır; tam yedekte ardına **dosya bölümü** eklenir: her dosya ad, boyut ve
-  şifreli içerikle sırayla, ikinci kez şifrelenmeden (dosyalar zaten dosya anahtarıyla şifrelidir, sarmallar mühürlü
-  veritabanının içindedir). Manifesto (ad, boyut, sha256) mühürlü bölümdedir: geri yükleme dosya bölümünü manifestoyla
-  doğrulamadan takas yapmaz. Yerel yedek manifestoyu taşır, dosya bölümünü taşımaz; geri yüklemede manifestodaki
-  dosyalar depoda aranır, eksikler adıyla listelenir. Dosyalar bellekte toplanmaz, akışla kopyalanır (4 GB'lık makine).
+- **Şifreli yedeğin kaydedilmesi** (kullanıcı kararı 04.11.2026). Şifreli yedeği program kaydeder: seçilen yere geçici
+  adla parça parça yazar, yeniden açıp denetler, `YEDEK` satırını yazar, dosyaya asıl adını verir; dış yedek
+  hatırlatması ancak bundan sonra sıfırlanır.
+- **Öteki dosyaları da program kaydeder** (kullanıcı kararları 07.11.2026 "Program kaydetsin", "Hep ev klasöründe";
+  sözlük §3). PDF, Excel ve kurulum dosyası WebView'ın indirmesine bırakılmaz: indirme sonucu bilmez, Windows'ta
+  kaydetme penceresi açıkken ve iptalde de "kaydedildi" bildirimi çıkıyordu. Ön yüz içeriği base64 metin olarak köprüye
+  verir (`dosya_kaydet`); köprü kaydetme penceresini açar, seçilen yere atomik yazar (aynı klasörde geçici ad, `fsync`,
+  `os.replace`; dizin `fsync`'i yoktur), yalnız durum döner (`kaydedildi` · `iptal` · `hata`). Yol ve içerik ön yüze,
+  yanıta ve günlüğe girmez. İptal sessizdir; hata tek iletidir. Tür süzgeci uzantıya göredir ve yalnız Windows'ta
+  görünür (pywebview 5.3.2'nin Qt kolu kaydetmede süzgeç geçirmez); uzantısız yazılan ada uzantıyı köprü ekler, noktalı
+  tarih uzantı sayılmaz, eklenen ad zaten varsa pencere seçilen klasörde o adla yeniden açılır. Kaydetme, Aç ve şifreli
+  yedek pencereleri son seçilen klasörde açılır (yalnız bellekte; iptal değiştirmez; klasör yoksa ev klasörü); kurtarma
+  anahtarı belgesinin penceresi her seferinde ev klasöründe açılır, son klasörü ne okur ne değiştirir: anahtar şifreli
+  yedeğin yanına önerilmez. Köprü yoksa (geliştirme kipi ya da paketli programda köprü sayfaya yetişmeden basılan düğme)
+  WebView'ın indirmesine düşülür: sonuç bilinmez (`indirildi`), bildirim iptalde de çıkar, Windows'ta pencere
+  İndirilenler'de açılır. `BASIM` satırı PDF'in üretildiğini kaydeder,
+  dosyanın kaydedildiğini değil: kaydetmede iptal satırı geri almaz. Kalan risk: kurulum dosyası (yaklaşık 46 MB) köprüden
+  yaklaşık 61 MB metin olarak geçer; ilk sürüm yayımlanmadan uygulama içinde denenemez.
+- **Elindeki yedekten geri yükleme** (kullanıcı kararları 06.11.2026). Yedek dosyası sunucuya yüklenmez: programın Aç
+  penceresi (`yedek_dosyasi_sor` köprüsü) yolu verir, yol ve sır küçük istekle gider (`POST backups/restore/`, `yol`),
+  dosya yerinde okunur, silinmez, geçici kopya alınmaz. Sır diske inmez, ikinci onayda dosya yeniden gönderilmez. Yol
+  denetimi dosyayı açıp kapatır; çekirdek bir kez açar, baştan sona bir kez okur; okuma ekler depoya girmeden ve
+  veritabanı takasından önce biter. Okuma bitmeden bellek çıkarılırsa hedefe dokunulmaz, bakım kapısı açılır, geçici
+  dosya kalmaz; okuma bittikten sonra kaynağa dönülmez, çıkarma geri yüklemeyi etkilemez. Dosya seçilince
+  `POST backups/inspect/` listedeki satırı verir; başlık okunamazsa kapsam ve anahtar kimliği `null`'dır, geri yüklemeyi
+  sunucu reddeder. Yol günlüğe, yanıta ve denetim izine girmez. Ekran dosyanın yalnız adını gösterir; yol yalnız kartın
+  durumunda ve istek gövdesinde durur. Pencere açıkken kaynağı değiştiren ve isteği gönderen denetimler kapalıdır, sır
+  alanları yalnız istek sürerken kapalıdır (pencere modaldır); iptalde önceki kaynak kalır. Yanıt beklenirken geri
+  yükleme düğmesi kapalıdır; istek düşerse kapsam yazılmaz, ad yoldan türetilir, geri yükleme engellenmez. Yükleme
+  kutusu yalnız köprünün olmadığı geliştirme kipindedir; orada eşiği aşan gövde, içindeki sırla birlikte waitress'in düz
+  geçici dosyasına iner.
+- **Kap** (`ODBAK\x03`). Aile kabının başı (MAGIC, geçici X25519 açık anahtar, nonce, uzunluk, kurtarma başlığı) aynen
+  kalır; ardına 1 bayt kapsam (`01` yerel, `02` tam) ve 8 bayt mühürlü bölüm uzunluğu gelir, şifreli metinden önceki her
+  bayt AAD'dir. Mühürlü bölüm AES-256-GCM(8 bayt veritabanı uzunluğu ‖ veritabanı görüntüsü ‖ manifesto)'dur. Tam
+  yedekte ardına **dosya bölümü** eklenir: manifesto sırasıyla her ek için 32 bayt ad ‖ 8 bayt şifreli boy ‖ `ODDOSYA`
+  baytları, ikinci kez şifrelenmeden (dosyalar zaten dosya anahtarıyla şifrelidir, sarmallar mühürlü veritabanının
+  içindedir); bölüm 40 baytlık bitiş işaretiyle kapanır, ardında bayt kalırsa yedek reddedilir. Manifesto (ad, boyut,
+  sha256) mühürlü bölümdedir: geri yükleme dosya bölümünü manifestoyla doğrulamadan takas yapmaz. Kap düzeyinde bozuk
+  bölüm yedeği reddeder; özeti tutmayan ekte geri yükleme hiçbir şeyi değiştirmeden durur, kullanıcı ikinci kez
+  onaylarsa kayıtlar o ekler olmadan geri yüklenir (kullanıcı kararı 04.11.2026). Yerel yedek manifestoyu taşır, dosya
+  bölümünü taşımaz; geri yüklemede manifestodaki dosyalar depoda ve `yetim/`'de aranır, bulunamayanlar kişisiz bilgiyle
+  (kayıt türü, kayıt no, yükleme tarihi, boy) listelenir; asıl dosya adı yalnız program açıkken görünür. Dosyalar
+  bellekte toplanmaz, akışla kopyalanır (4 GB'lık makine).
 - **Neden yerel yedek dosyasız:** yerel yedekler aynı diskte durur; disk arızasında dosya deposuyla birlikte gider,
   bu riske karşılık dış (tam) yedektir. Dosya içeriği değişmediği ve DEK yenilemesi yalnız sarmalları yenilediği için
   veritabanı yedeği dosya deposuyla tutarlı kalır. Her günlük yedeğe dosyaları koymak, yıllar içinde büyüyen depoyu
@@ -953,13 +1037,18 @@ kalır). Veli adı taşıyan E07 çizelgesi ve adlı E08 depoya hiç yazılmaz (
 
 **Rotasyon ve KVKK sınırı** (denetim GA-5, KM-10).
 
-1. Rotasyon tek işlevdir ve yukarıdaki önek kümesini kapsar; adı desene uymayan dosyaya dokunulmaz (aile kuralı).
-   Küme testle sabitlenir: her önek için "15. günde silinir" testi.
+1. Rotasyon tek işlevdir (`rotate_backups`; yedek ve veri dizinini alır) ve yukarıdaki önek kümesini kapsar.
+   `db-onceki-*` veri dizinindedir, `-wal`/`-shm` eşleriyle karar görür: veritabanı silinemezse eşleri de kalır. Adı
+   desene uymayan dosyaya dokunulmaz (aile kuralı); yaş addaki günden okunur; tek dosyanın silinememesi rotasyonu
+   düşürmez, adı günlüğe yazılır (elle adlandırılmış `pre-migrate` dosyasının adı yazılmaz, R1). Küme testle sabitlenir:
+   her önek için "15. günde silinir" testi.
 2. Dönem kapanışı silmelerinden ve elle KVKK silme tetiğinden sonra: `PRAGMA wal_checkpoint(TRUNCATE)` (TB24); tetik
    anından eski `pre-migrate-*` yedekleri adıyla silinir, silinemeyen adıyla yeniden denenir (ailenin
    `pre_migrate_before` + `remove_pre_migrate_named` kalıbı).
 3. Sonuç: silinen kişisel veri programın **yerel** yedeklerinde en çok 14 gün kalır. Rotasyon program açıkken koşar;
-   program açılmadan geçen günlerde silme bekler.
+   program açılmadan geçen günlerde silme bekler. Program açıkken rotasyon saat çapasıyla korunur: ileri sıçrayan saat
+   yedekleri, `db-onceki-*`'yi ve yetim dosyaları erken sildirmez. Açılıştaki rotasyon ve yetim silmesi çapasızdır:
+   program kapalıyken ileri alınmış saat onları erken sildirebilir (kalan risk; yedeklerde aile davranışı).
 4. Dışarı alınmış yedekler programın erişiminde değildir: kapanışta "bu tarihten önce dışarı aldığınız yedekler silinen
    veriyi taşır; imha kuralı kılavuzdadır" kartı gösterilir. Eski kurtarma zarfı imha edilince bu yedekler de açılmaz
    olur (§4.4.6-2).
@@ -970,7 +1059,7 @@ kalır). Veli adı taşıyan E07 çizelgesi ve adlı E08 depoya hiç yazılmaz (
 
 | Konu | Davranış | Not |
 |---|---|---|
-| Çarpı | Programı kapatır, onay sorulmaz. `closing` işleyicisi yalnız uzun yazma işi sürerken kapanışı bir kez erteler (§4.2); başka hâlde kapanmayı iptal etmez | T6; Windows oturum kapanışındaki iptal-geri-alma geçişi gereksizleşir, testle sabitlenip silinir |
+| Çarpı | Programı kapatır, onay sorulmaz. `closing` işleyicisi yalnız uzun yazma işi sürerken kapanışı bir kez erteler (§4.2); ön yüz o sırada kapatılamaz "İşlem bitiyor, program kendiliğinden kapanacak." penceresini gösterir (kilit, kurulum ve yeniden başlat ekranında da); başka hâlde kapanmayı iptal etmez | T6; `closing` olayı kapanmanın nedenini taşımaz: uzun iş sürerken Windows oturum kapanışında da kapanış bir kez, en çok 60 sn ertelenir; iptali geri alan .NET işleyicisi yoktur, davranış testle sabittir |
 | Tepsi | Yok: `tray.py`, pystray/six, `gorev-kur.ps1`, `.iss` `otobaslat`/`tepside` görevleri sökülür | Qt kurulumu önce ayrılır (§13 D1) |
 | Otomatik başlatma, uyku engeli | Yok | Katalog olmadığı için uyku engeli gerekçesi düşer |
 | İkinci açılış | Çalışan pencere öne gelir (`goster`), ikinci süreç 0 ile çıkar | `instance_channel.py` aynen |
@@ -980,9 +1069,11 @@ kalır). Veli adı taşıyan E07 çizelgesi ve adlı E08 depoya hiç yazılmaz (
 | Ekran | 1366×768'de yatay kaydırmasız kullanılabilir ([ön değerlendirme §5.2](../kesif/2026-10-31-on-degerlendirme.md)); pencere boyutu aile değeri | 4 GB RAM'li eski okul bilgisayarı |
 | Başlık ve görev çubuğu | "OAB Defteri"; AUMID `OABDefteri.Desktop`; Linux `StartupWMClass=oab-defteri` | §2.3 |
 
-**Kanıt.** Birim: `on_closing` iş yokken kapanmayı iptal etmez, iş sürerken bir kez erteler; `serve` sonrası WAL
-checkpoint ve temiz kapanış işareti yazılır, iş öldürülmüşse yazılmaz. "Exe açılır, çarpıyla kapanır, çıkış kodu doğru"
-F1a kapısında **elle** doğrulanır (CI pencereye tıklayamaz); `packaging/windows/NOTLAR.md`'ye madde olarak girer.
+**Kanıt.** Birim: `on_closing` iş yokken kapanmayı iptal etmez, iş sürerken bir kez erteler, bekleme sırasında gelen
+istekler beklemeye katılır, 60 sn dolunca kapanış bir kez yapılır; `serve` sonrası WAL checkpoint ve temiz kapanış
+işareti yazılır, sayaç sıfır değilse ya da okunamazsa yazılmaz. Süreç uzun iş sürerken öldürülünce işaret yazılmaz (alt
+süreç testi). "Exe açılır, çarpıyla kapanır, çıkış kodu doğru" F1a kapısında **elle** doğrulanır (CI pencereye
+tıklayamaz); `packaging/windows/NOTLAR.md`'ye madde olarak girer.
 
 **Hesap ve bilgisayar.**
 
@@ -1124,8 +1215,9 @@ değerleri))`; yazmadan sonraki hâli özetler. Kayıt bütünlüğü denetimi k
 ve o kaydın son iz satırıyla karşılaştırır: program dışından yapılan değişiklik, şifreli sütuna yazılmış düz metin ve
 bir satırdan ötekine taşınmış Fernet token'ı burada görünür (denetim GA-9). **MAC dışı alanlar:** KVKK gereği boşaltılan
 ya da silinen alanlar (§5.4: bağışçı T.C. kimlik no, istekli iletişim bilgisi, katılım ve görev alma engelinin dayanağı,
-imha edilen dosya) ve veli listesi modelinin tamamı MAC'e girmez. Gerekçe: silinen değerin MAC'i kalsaydı anahtara
-erişen biri olasılık uzayı dar değeri (telefon, T.C. kimlik no) deneyerek geri bulabilir, silme anlamsızlaşırdı.
+imha edilen dosyanın özgün adı ve anahtar sarmalı: `Attachment.original_name`, `key_wrap`) ve veli listesi modelinin
+tamamı MAC'e girmez. Gerekçe: silinen değerin MAC'i kalsaydı anahtara erişen biri olasılık uzayı dar değeri (telefon,
+T.C. kimlik no) deneyerek geri bulabilir, silme anlamsızlaşırdı.
 `Account` satırında bu karşılaştırma girişte de yapılır ve katıdır (satırın izi; kullanıcı kararı 03.11.2026 "Girişte
 reddet"; §4.6.1 kural 1): hesabın iz satırları en yeniden geriye okunur; okunan her satırın sırası SQLite'ta tamsayı
 türünde, satır açık kipte ve kendi zincir MAC'i satırın sırasında yürürlükteki iz anahtarıyla tutmalıdır; ilk içerik
@@ -1143,7 +1235,8 @@ tasarlanmadan alan kümesi değişmez (kullanıcı kararı bekler).
    bağlamı olmayan yazma reddedilir.
 2. Ekleme-yalnızdır: modelde güncelleme ve silme hata verir; ayrıca SQLite tetikleyicisi (`BEFORE UPDATE`,
    `BEFORE DELETE` → `RAISE`) program içi kazayı önler. Program dışındaki değişikliği zincir yakalar.
-3. Her durum geçişi ayrı satırdır (§5 O4); evrak basımı `BASIM` satırıdır (tür, sha256; evrak izi §9).
+3. Her durum geçişi ayrı satırdır (§5 O4); evrak basımı `BASIM` satırıdır (tür, sha256; evrak izi §9). Program belgesi
+   E-kodu almaz: Yedek Raporu'nun satırı sabit kodu (`YEDEK-RAPORU`) taşır.
 4. KVKK silmesi `KVKK_SILME` satırıdır: model, alan adları, adet, tetik; değer yok (§5.4).
 5. Satır silinmez, anonimleştirilmez (birlik kaydı; §5.4). Arşiv paketindeki "denetim izi dökümü" aynı sütunlardan
    üretilir, fazlasını taşımaz (§8.5).
@@ -1178,10 +1271,12 @@ orada olsaydı kaybolurdu.
   üye yenilemeden sonraki satırları mühürleyemez; zincir bağlı olduğu için eski satırları da fark edilmeden
   değiştiremez.
 
-**Kilitliyken yazım.** DEK yokken iş verisi yazılmaz (§4.1). Kilitliyken yalnız kapalı bir kümedeki kişisiz sistem
-olayı yazılır: `YEDEK` (alındı, rotasyon), `GOC` (şema göçü uygulandı), `GUN_ISI` (DEK istediği için ertelendi),
-`BUTUNLUK` (açılış bütünlük denetimi). Bunlar `record_mac` taşımaz, hiçbir veri değişikliğini meşrulaştıramaz.
-Mühürleri **kilitli kip anahtarıyla**dır:
+**Kilitliyken yazım.** DEK yokken iş verisi yazılmaz (§4.1). Kilitliyken yalnız kapalı bir kümedeki kişisiz sistem olayı
+yazılır: `YEDEK` (alındı, rotasyon), `GOC` (şema göçü uygulandı), `GUN_ISI` (DEK istediği için ertelendi), `BUTUNLUK`
+(açılış bütünlük denetimi, dosya deposunun yetim taraması). Bunlar `record_mac` taşımaz, hiçbir veri değişikliğini
+meşrulaştıramaz. Kullanıcının kaydettiği tam yedeğin `YEDEK` satırı açık kipte yazılır; değerleri kişisizdir: `kapsam`,
+`dosya_sayisi`, `boyut`, `eksik`. Yol ve serbest ad satıra girmez. Kilitli satırların mühürleri **kilitli kip
+anahtarıyla**dır:
 
 - Her kilitlenmede ve düzenli kapanışta `iz-durumu.json`'a (atomik yazım, Linux'ta 0600) **çapa** yazılır:
   `{seq, mac, muhur}`, `muhur = HMAC(HKDF(İA, "od-iz-capa/v1"), seq ‖ mac)`. Aynı anda kilitli kip tohumu yazılır:
@@ -1215,9 +1310,9 @@ ve çapa bulguları girişi engellemez. **Tam doğrulama** DK modülünde elle v
 deftere geçirilecek aylık baskıya ve devir-teslim tutanağına basılır (E31, E17, E37; §9); kilit açılışındaki "son girişler" kartında da
 görünür. Zincir böylece her ay programın dışına, kâğıda iner.
 
-**Uzun iş sayacı.** Kapanış, arşiv paketi, DEK yenileme, banka özeti uygulama, canlı geri yükleme ve tam yedek
-`shared/bakim.py` sayacını artırır; sayaç sıfır değilken boşta kilit ertelenir (§4.4.3) ve çarpı kapanışı bekletir
-(§4.2).
+**Uzun iş sayacı.** Kapanış, arşiv paketi, DEK yenileme, banka özeti uygulama, canlı geri yükleme, dosya eki yazımı ve
+tam yedek `shared/bakim.py` sayacını artırır; sayaç sıfır değilken boşta kilit ertelenir (§4.4.3) ve çarpı kapanışı
+bekletir (§4.2).
 
 **Kalan risk** (dürüst sınır). Veritabanı ve `iz-durumu.json` birlikte eski kopyayla değiştirilirse program fark etmez;
 aylık kâğıt çapası yakalar. Parolasını bilen biri DEK'i ve İA'yı dışarıda çözüp zinciri yeniden hesaplayabilir (tehdit
@@ -1225,8 +1320,9 @@ aylık kâğıt çapası yakalar. Parolasını bilen biri DEK'i ve İA'yı dış
 satırları taklit edebilir; bu satırlar veri değiştirmez. Çapa ile geri yükleme kartı bağımsız değildir: geri yükleme
 notu MAC'sizdir; önceki zincir başını çapanın ilerisinde gösteren sahte bir not (1)'deki uyarının yerine alanları boş
 bir geri yükleme kartı çıkarır, gerçek bir geri yüklemeden sonra notu silmek ve `iz-durumu.json`'u eski kopyasıyla
-değiştirmek kartı da kaldırır; kalıcı sinyaller kâğıt çapası, günlük yedekler, `db-onceki-*` ve onarımın `SISTEM`
-`HESAP` satırlarıdır. Hesabın son kaydından sonraki iz satırlarıyla yapılan şu değişiklikler girişte görünmez: satırı
+değiştirmek kartı da kaldırır; kalıcı sinyaller kâğıt çapası ve onarımın `SISTEM` `HESAP` satırlarıdır; günlük yedekler
+ve `db-onceki-*` yalnız 14 gün durur (§4.4.7). Hesabın son kaydından sonraki iz satırlarıyla yapılan şu değişiklikler
+girişte görünmez: satırı
 silmeden başka kayda çevirmek ya da içeriğini değiştirmek; iki satırın tamsayı sırayla yer değiştirmesi; hesabın yeni
 satırının son kaydın gerisinde boş bir tamsayıya taşınması; silinen satırın yerine başka bir satırın ya da kopyasının
 konması; dayanağı da bozan (tek hücre yeter), zincir başına sahte bir açık kip satırı ekleyen, on binden büyük ya da
@@ -1491,7 +1587,7 @@ yoktur.
 | `OfficialBook` | `kind` (`KARAR_DEFTERI` · `GELIR_GIDER_DEFTERI` · `GELEN_GIDEN_EVRAK_DEFTERI` · `DIGER`) · `certified_by` (`NOTER` · `IL_ILCE_MEM`) · `certified_on` · `certification_no` · `page_count` · `lines_per_page` (gelir-gider defterinde sayfa başına satır; E17 baskısı ve toplu işaret) · `last_no_before_program`, `last_page_before_program` (geçiş kurulumunda defterdeki son sıra no ve sayfa, §7.9) · `opened_on`, `closed_on` · `status` (`KULLANIMDA` · `DOLDU` · `ARSIVDE`) | Karar defteri noterce, diğerleri il/ilçe MEM'ce tasdik edilir ([md. 23/2](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-23)); tasdik kaydı yokken ya da yanlış makamla kullanım — uyarı (defter başına bir toplu gerekçe, O3). Dönemsizdir, devredilir | YENİ (ön değerlendirme §2.2 "Defterler", [md. 23/1](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-23)) |
 | `DocumentRecord` | `book` → `OfficialBook` (gelen-giden) · `direction` (`GELEN` · `GIDEN`) · `year` · `record_no` · `date` · `counterparty` (şifreli) · `subject` (şifreli) · `external_ref` (karşı tarafın ya da EBYS sayısı) · `generated_document` → `GeneratedDocument` (giden yazının programdaki karşılığı) · `attachments` → `Attachment` · `term` | (defter, yıl, kayıt no) tekil — sert. Sıra atlama uyarı | YENİ — ADR-0028'deki `OabDocumentRecord`'un karşılığı; OYS'de hiç yazılmamıştı (envanter §0-9) |
 | `GeneratedDocument` | `doc_type` (evrak kataloğu kimliği, §9) · `subject_type`, `subject_id` · `term` · `version` · `formats` (`DOCX` · `PDF` · `XLSX` · `HTML`) · `content_sha256` (tek içerik modelinin kanonik JSON özeti, §9.1) · `content_json` (şifreli; içerik modelinin her üretimde saklanan kanonik JSON'u — yeniden basım bundan çizilir, §6.2-6) · `files` → `Attachment` · `personal_list` (katalogdan; veli adı taşıyan belge: E07 sınıf teslim çizelgesi, adlı E08 katılım cetveli) · `row_count` · `rule_package` · `generated_at`, `generated_by` · `wet_signed_on` (ıslak imzalandı işareti) · `status` (`GECERLI` · `YERINI_ALDI`) | Aynı nesne için yeniden üretim yeni sürüm satırıdır; eski satır silinmez; kapanmış dönemde de yazılabilir (O2) ve aynı `content_sha256`'yı vermelidir (§6.2-6). Dosya imha edilse de tür, tarih ve özet kalır (Kütüphane `BelgeIzi` kalıbı). **Veli adı taşıyan belge (R9):** yalnız `yonetici` üretir; program dosyasını ve `content_json`'unu saklamaz — `files` ve `content_json` boş kalır, satırda tür, tarih, satır sayısı ve sha256 durur; dosya kullanıcının kaydettiği yerde, basılı ve imzalı aslı genel kurul tutanak dosyasındadır ([md. 23/1-a](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-23)). Bu belgeler veli listesi silindikten sonra yeniden basılmaz, arşiv paketine girmez; "kapanmış dönemde aynı özet" vaadi bunlar için geçerli değildir. Hesap teslim pusulasının (E63) dosyası saklanmaz, yalnız `content_json`'u | YENİ |
-| `Attachment` | `stored_name` (uuid) · `original_name` (şifreli) · `key_wrap` (dosya anahtarı sarmalı, §4.4.4) · `sha256` · `mime` · `size` · `sensitivity` (`NORMAL` · `OZEL_NITELIKLI`) · `retention_until` · `owner_type`, `owner_id` · `uploaded_by`, `uploaded_at` · `purged_at` | Dosya `dosyalar/<stored_name>`'de dosya başına anahtarla şifreli durur (§4.4.4). İçe aktarılan ham dosya diske yazılmadan bellekte okunur. Kabul: PDF, JPEG, PNG; tür imza baytından denetlenir (libmagic yok). İmha edilen dosyanın satırı `purged_at` ile kalır | OYS `file_storage.py` UYARLA (sha256, uuid adı, boyut sınırı AYNEN; libmagic ve yalnız-PDF kalkar) |
+| `Attachment` | `stored_name` (`uuid4().hex`: 32 küçük onaltılık hane, uzantısız; her yol birleştirmesinden önce desen denetlenir) · `original_name` (şifreli) · `key_wrap` (dosya anahtarı sarmalı, §4.4.4) · `sha256` · `mime` · `size` · `sensitivity` (`NORMAL` · `OZEL_NITELIKLI`) · `retention_until` · `owner_type`, `owner_id` · `uploaded_by`, `uploaded_at` · `purged_at` | Dosya `dosyalar/<stored_name>`'de dosya başına anahtarla şifreli durur (§4.4.4). İçe aktarılan ham dosya yükleme sınırına kadar diske yazılmadan bellekte okunur (§4.4.7). Kabul: PDF, JPEG, PNG; tür imza baytından denetlenir (libmagic yok). İmha edilen dosyanın satırı `purged_at` ile kalır. Canlı satırda `key_wrap` ve `original_name` dolu, imhalı satırda ikisi de boştur; `uploaded_by` `SISTEM` yazarında boştur. Model F1b'de `apps/okul`'dadır | OYS `file_storage.py` UYARLA (sha256, uuid adı, boyut sınırı AYNEN; libmagic ve yalnız-PDF kalkar) |
 | `Handover` | `from_term`, `to_term` · `assembly` → `GeneralAssembly` · `date` · `handed_by`, `received_by` (→ `OabPerson`, çoğul) · `cash_count` (kasa sayımı) · `bank_balance`, `bank_balance_on` · `document` → `GeneratedDocument` · `status` (`TASLAK` → `BASILDI` → `IMZALANDI`) | Kasa sayımı ≠ `KASA` bakiyesi ise uyarı; düzeltme kaydını `muhasip` girer (D2). Banka bakiyesiyle defter bakiyesinin devir günündeki farkı bilgidir (aylık kayıt düzeninde her yıl çıkar; denklik kapanışta sert denetlenir, §7.8). Olağanüstü genel kurulda `from_term` = `to_term` (ara devir) | YENİ ([md. 10/1-ç](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-10); saha 9: devir tutanağı yok) |
 | `HandoverItem` | `handover` · `kind` (`DEFTER` · `KOCAN` · `DOSYA` · `BANKA_YETKISI` · `PROGRAM_HESABI` · `KURTARMA_ZARFI` · `ACIK_IS` · `DIGER`) · `ref_type`, `ref_id` · `description` · `state` (`TESLIM_EDILDI` · `EKSIK` · `SONRA_TESLIM`) · `note` (şifreli) | Kalemler kayıtlardan otomatik önerilir (§7.8); elle eklenebilir. `KURTARMA_ZARFI` kalemi yalnız "kurtarma anahtarı zarfı okul müdürlüğünde, mührü sağlam" kaydıdır; zarf devredilmez, veliye geçmez (kullanıcı kararı D3) | YENİ |
 
@@ -3191,7 +3287,7 @@ imzalar, oluşturmaz — istisna md. 13/8 çağrısında E05 ve aylık bildirim 
 | E60 | `LedgerEntry`, `TefbisTypeMapping`, `BankTransaction`, TEFBİS Excel içe aktarımı (§8) | yonetici, muhasip | Muhasip + yönetici (iç) | TFB | Fark satırları türüne göre: TEFBİS'te yok · defterde yok · tutar farkı |
 | E61 | personel modeli (sürüm 2), `LedgerEntry` (ücret, prim) | muhasip, yonetici (özlük bölümü; ücret ve prim satırları muhasibin kaydından) | Muhasip + Birlik Başkanı | — | Yalnız "doğrudan işveren" okulda açılır; izin ve ihbar süreleri kural paketinden; müdür bloğu yok (MB-15) |
 | E62 | personel modeli (sürüm 2) | muhasip, yonetici | İşveren adına Birlik Başkanı + işçi | — | Hak edilen, kullanılan, kalan; bölüm ≥ 10 gün; sözleşmeyle verilen fazla izin uyarısız |
-| E63 | `Account` (giriş adı, rol, açılış tarihi; §4.6), rol-izin matrisi (§4.4.2; rolün bugün yazabildiği satırlar), parola politikası (TK15), boşta kilit süresi (TK14), okul kartının anteti | yonetici | Teslim eden: program yöneticisi; Teslim alan: hesap sahibi (ikisi de elle: ad-soyad, imza, tarih) | — | Tanıtıcı (giriş adı), rol ve "bu programda sizin işiniz" özeti matristen: rolün bugün yazabildiği satırlar, her biri yalnız bugün programda yapılabilen işin adıyla (işi yapan ekranın, kartın ya da düğmenin adı; sonraki fazların işleri ekranları geldikçe eklenir); ilk giriş adımları (geçici parolayla giriş → parolayı değiştirme); parola kuralları: en az 8 karakter, küçük-büyük harf, rakam ve simgeli karışık yapı, en geç altı ayda bir değişim (BSG 9/2-a, b, ç; yönergenin adı ilk atıfta açık yazılır, kısaltma parantezdedir), başta ve sonda boşluk yok ve 180 günde yeni parola (programın kuralları); kilitleme: boşta kalınca oturum kilitlenir (BSG 10/2; programa kıyasen), "Kilitle" düğmesi (BSG 7/4; programa kıyasen), yanlış denemede artan bekleme (programın kuralı), organ ve müdür hesabında 10. yanlış denemede askı, askıyı program yöneticisi kaldırır (BSG 7/3, 9/2-c; programa kıyasen), program yöneticisinin pusulasında "Program yöneticisi hesabı yanlış denemede askıya alınmaz."; kalıcı kilit yok; **parola alanı yok** (ne değer ne boş satır); ad-soyad basılmaz; "İlk parolanız ayrı kapalı zarftadır; parolanızı kimseyle paylaşmayın, görünür yere yazmayın" cümlesi (BSG 9/2-e, 10/1; kapalı zarf okul uygulaması); kişisel veri dipnotu (tek dipnot); dosya saklanmaz, indirme adı `Hesap-Teslim-Pusulası_<rol etiketi>_gg.aa.yyyy.pdf` (tanıtıcı ve ad yok); program yöneticisinin pusulası en çok iki, öteki rollerinki bir sayfa (kullanıcı kararı 04.11.2026) |
+| E63 | `Account` (giriş adı, rol, açılış tarihi; §4.6), rol-izin matrisi (§4.4.2; rolün bugün yazabildiği satırlar), parola politikası (TK15), boşta kilit süresi (TK14), okul kartının anteti | yonetici | Teslim eden: program yöneticisi; Teslim alan: hesap sahibi (ikisi de elle: ad-soyad, imza, tarih) | — | Tanıtıcı (giriş adı), rol ve "bu programda sizin işiniz" özeti matristen: rolün bugün yazabildiği satırlar, her biri yalnız bugün programda yapılabilen işin adıyla (işi yapan ekranın, kartın ya da düğmenin adı; sonraki fazların işleri ekranları geldikçe eklenir); ilk giriş adımları (geçici parolayla giriş → parolayı değiştirme); parola kuralları: en az 8 karakter, küçük-büyük harf, rakam ve simgeli karışık yapı, en geç altı ayda bir değişim (BSG 9/2-a, b, ç; yönergenin adı ilk atıfta açık yazılır, kısaltma parantezdedir), başta ve sonda boşluk yok ve 180 günde yeni parola (programın kuralları); kilitleme: boşta kalınca oturum kilitlenir (BSG 10/2; programa kıyasen), "Kilitle" düğmesi (BSG 7/4; programa kıyasen), yanlış denemede artan bekleme (programın kuralı), organ ve müdür hesabında 10. yanlış denemede askı, askıyı program yöneticisi kaldırır (BSG 7/3, 9/2-c; programa kıyasen), program yöneticisinin pusulasında "Program yöneticisi hesabı yanlış denemede askıya alınmaz."; kalıcı kilit yok; **parola alanı yok** (ne değer ne boş satır); ad-soyad basılmaz; "İlk parolanız ayrı kapalı zarftadır; parolanızı kimseyle paylaşmayın, görünür yere yazmayın" cümlesi (BSG 9/2-e, 10/1; kapalı zarf okul uygulaması); kişisel veri dipnotu (tek dipnot); dosya saklanmaz, kaydedilen dosya adı `Hesap-Teslim-Pusulası_<rol etiketi>_gg.aa.yyyy.pdf` (tanıtıcı ve ad yok); program yöneticisinin pusulası en çok iki, öteki rollerinki bir sayfa (kullanıcı kararı 04.11.2026) |
 | E64 | `GeneralAssembly` (dondurulmuş yeter sayı, mevcut anlık değeri, katılan sayısı ve türe göre dağılımı, gözlemci sayısı, toplantı: birinci/ikinci) | sekreter, yonetici | Sağlandıysa Divan Başkanı + Kâtip; sağlanamadıysa Birlik Başkanı + Sekreter + "Görüldü — Okul Müdürü" (KE-10) | — | Kişisizdir, yalnız sayılar (E08'den ayrıldı, KE-21; R9 kapsamı dışında); 99 öğrenci → 32, 100 → 64; ikinci toplantıda "çoğunluk aranmaz" satırı; gözlemciler sayıya girmez (9/5); kapanmış dönemde içerik özeti aynı |
 | E65 | `OrganMembership` (yedek, oy sırası, `promoted_on`, `promoted_by_decision`), `BoardDecision` (`YEDEK_CAGIRMA`; yalnız YK yedeğinde) | YK yedeğinde sekreter (YK kararıyla, 13/6); DK yedeğinde yonetici (14/6; üyelik kaydıdır, YK kararı gerekmez — M2) | Birlik Başkanı + Sekreter | — | Çağrılan oy sırasındaki ilk yedek (sıra dışıysa gerekçe satırı); boşalan koltuk ve düşme nedeni (kişisel ayrıntı yok); YK yedeğinde görev bölümü için 7 günlük süre ve karar no yazılı, DK yedeğinde karar satırı yok, neden "dört aydan uzun görevlendirme" (14/6); kişisel veri dipnotu |
 | E66 | `BankAccount` (banka, şube, IBAN), `OrganMembership` (başkan, başkan yardımcısı, muhasip), `BoardDecision` (`GOREV_BOLUMU`) | sekreter | Birlik Başkanı + Sekreter | — | Üst yazı; ek E01 karar örneği; müşterek yetkililer başkan + muhasip (başkan yokken başkan yardımcısı); değişiklikte eski yetkililerin yetkisinin kaldırılması satırı; bankanın kendi formu ve imza sirküleri program dışı (§9.7); gönderim tarihi E01'deki alana döner |
@@ -3223,17 +3319,17 @@ imzalar, oluşturmaz — istisna md. 13/8 çağrısında E05 ve aylık bildirim 
 | Öğretmenler kurulu tutanağı (DK öğretmen üyeleri, servis komisyonu öğretmeni) | Okulun kurul evrakı | Seçim sonucu üyelik kaydına girer |
 | Varlık İşlem Fişi | TKYS'de taşınır kayıt yetkilisi düzenler ([TMY 16/1](../mevzuat/tasinir-mal-yonetmeligi.md#madde-16), [TMY 41/2](../mevzuat/tasinir-mal-yonetmeligi.md#madde-41)) | Fiş no ve tarih alanı |
 | Banka talimatının elektronik onayı; bankanın imza yetkisi formları ve imza sirküleri | Bankanın sistemi ve formu (biçimi DOĞRULANMADI) | Kâğıt talimat (E27); imza yetkisi üst yazısı (E66); üçüncü onay ayarı |
-| Kurtarma anahtarı belgesi, zarf imha tutanağı, yedek raporu | Programın kendi güvenlik belgeleridir, birlik evrakı değildir | Aşağıdaki "program belgeleri"; devir-teslim tutanağına (E37) yalnız "zarf müdürlükte, mührü sağlam; anahtar no ve tarihi" satırı girer |
+| Kurtarma anahtarı belgesi, zarf imha tutanağı, Yedek Raporu | Programın kendi güvenlik belgeleridir, birlik evrakı değildir | Aşağıdaki "program belgeleri"; devir-teslim tutanağına (E37) yalnız "zarf müdürlükte, mührü sağlam; anahtar no ve tarihi" satırı girer |
 
-**Program belgeleri (katalog dışı).** E-kodu almazlar ve katalog sayımına (79) girmezler; kurtarma anahtarı
-belgesinin PDF'i bilgisayarda bırakılmaz (§12.B). Kurtarma anahtarı belgesi ve yedek raporu aile iskeletinden gelir, metni OAB'ye
-göre yeniden yazılır (§12.B); zarf imha tutanağı yenidir (D3):
+**Program belgeleri (katalog dışı).** E-kodu almazlar ve katalog sayımına (79) girmezler; kurtarma anahtarı belgesinin
+PDF'i bilgisayarda bırakılmaz (§12.B). Kurtarma anahtarı belgesi aile iskeletinden gelir, metni OAB'ye göre yeniden
+yazılır (§12.B); Yedek Raporu yenidir, aileden gelmez; zarf imha tutanağı yenidir (D3):
 
 | Belge | Dayanak | Faz · üreten · imza | İçerik |
 |---|---|---|---|
 | Kurtarma anahtarı belgesi (`recovery_key_document.py`) | D3; §4.4.4 adım 6 | F1b · yonetici · — | Anahtarın no'su ve üretim tarihi; anahtarın üç kullanımı (program yöneticisinin unutulan parolası, kayıtların yeni bilgisayara taşınması ve zarfın üçüncü durumu: bu bilgisayarın güvenlik dosyası ya da kayıtları kaybolduğunda, bozulduğunda ya da program dışından değiştirildiğinde, çaresi yedekten geri yükleme ya da kurtarma anahtarıyla açılış; kullanıcı kararları 02.11.2026 ve 03.11.2026) ve zarfın yalnız bu üç durumda açıldığı; üçüncü durumun sözü belgede, anahtar panelinde, kilit ekranında ve sözlükte birebirdir (arka yüzde `recovery_key_document.UCUNCU_DURUM`, `UCUNCU_DURUMUN_CARESI`; birebirliği `test_kurtarma_anahtari_pdf.test_ucuncu_durum_metni_her_yerde_birebir` sınar); saklama yeri okul müdürlüğünde mühürlü zarf, veliye geçmez; "parola paylaşılmaz, herkes kendi hesabıyla" ([BSG Yön. md. 7/2](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-7), [9/2-e](../mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-9)); dönemlik yenileme ve eski zarfın imha tutanağıyla yok edileceği |
 | Kurtarma anahtarı zarfı imha tutanağı | D3; §4.4.4 DEK yenilemesinin 7. adımı | F4 · yonetici · Okul Müdürü + Müdür Yardımcısı (program yöneticisi) | Eski anahtarın no ve tarihi; yeni anahtarla alınan tam yedeğin açılıp doğrulandığı tarih; zarfın mührü sağlam bulunarak yok edildiği; anahtarın kendisi basılmaz; yenilemeden önceki yedeklerin artık açılmayacağı bilgi satırı (§4.4.6) |
-| Yedek raporu | §4.4.7 | F1b · yonetici · — | İçeriği §4.4.7'deki yedek türlerine göre F1b'de yazılır |
+| Yedek Raporu (`services/yedek_raporu.py`) | §4.4.7 | F1b · yonetici · — | Tek sayfa, kişisiz PDF; dosyası saklanmaz, izi `BASIM` satırıdır (kod `YEDEK-RAPORU`, PDF'in sha256'sı). Bu bilgisayardaki yedekler türlerine göre (adet, en eski ve en yeni tarih, saklama kuralı; varsa adı F4'te yazılacak türler **Öteki yedek** satırında aynı bilgiyle, adı desene uymayan dosya **Elle konmuş yedek** satırında tarihsiz, yalnız sayıyla), yedekleri açan kurtarma anahtarlarının no'su ve üretim tarihi (başlıktan, anahtarsız; okunamayan dosya sayılır), kenara alınan önceki veritabanları, son şifreli yedeğin tarihi, denetlendiği ve kaç ek taşıdığı, hatırlatma süresi, "USB bellekteki yedek programın dışındadır" cümlesi. Kişi adı, yol ve elle konmuş dosyanın adı basılmaz |
 
 ---
 
@@ -3691,6 +3787,7 @@ bölümde değil §12.A'da kesilir.*
 | 4 | `packaging/pyinstaller/giris.py::RUNTIME_MODULES` | Küme eşitliği testi; paketli ikilide `--bagimlilik-duman` |
 | Lisans | `bash packaging/lisanslar/uret.sh` → `THIRD_PARTY_LICENSES/` + `test_lisans_kapisi.BEKLENEN_PYTHON_KUMELERI` (Windows, Linux) + `lisanslar.py kisitlar` + derlemede `lisanslar.py paket` | Kapı testi; GPL'li bileşende derleme durur |
 | Masaüstü | `requirements-paketleme.txt` (win32) ↔ `PAKETLEME_IMPORT_ESLEME` ↔ spec Windows bloğu ↔ `DESKTOP_RUNTIME_MODULES` | `test_masaustu_modulleri_*` |
+| Masaüstü modülü | Backend'in kullandığı `desktop.*` ↔ `giris.py`'nin statik zinciri ya da spec `hiddenimports` | `test_backendin_ice_aktardigi_masaustu_modulleri_pakete_girer` |
 | Linux Qt | `QtPy` + `PySide6` (linux) ↔ spec `WITH_QT` bloğu ↔ `LINUX_DUMAN_DISI` ↔ `build.sh` 4b | Test + derleme |
 | npm | `package.json` ↔ `on_yuz_paketleri.mjs` ↔ `lisanslar.py npm-denetle` | `gates.sh` |
 
@@ -3893,18 +3990,24 @@ dört bağı F1a-1'de kesmek iki işi karıştırırdı.
 taraması bu metinleri yakalamaz (denetim GA-19). Bu yüzden `lock_middleware.py`, `recovery_key_document.py`,
 `kurtarma_anahtari.html`, `shared/pdf.py`, `shared/crypto.py`, `desktop/paths.py` ve `encrypted_backup.py` UYARLA'ya
 alındı. F1b'de değişen `ui/DataTable.tsx` (metin kimlikli satır, görünmez başlık), `ui/TextField.tsx`,
-`ui/ErrorBand.tsx`, `modules/takvim/KapaliGunlerPaneli.tsx` (salt okur kip), `desktop/integrity.py` (ipucu metni) ve
-`backend/conftest.py` (varsayılan hesabın iz satırı) de UYARLA sınıfındadır; `views_calendar.py`, `views_yedek.py` ve
-`modules/guncelleme/UpdateBanner.tsx`'te yalnız yorum değişti (F1b ekleri).*
+`ui/ErrorBand.tsx`, `ui/Dialog.tsx` (`enUstte`), `hooks/useTheme.ts` (pencere köprüsünün tipi),
+`modules/guncelleme/UpdatePanel.tsx` (gövdesiz ret), `modules/takvim/KapaliGunlerPaneli.tsx` (salt okur kip),
+`desktop/integrity.py` (ipucu metni), `desktop/dialogs.py` (`gunluk`), `desktop/django_bootstrap.py`
+(`baglantilari_kapat`), `desktop/logging_setup.py` (ev dizini) ve `backend/conftest.py` (varsayılan hesabın iz satırı)
+de UYARLA sınıfındadır; `views_calendar.py`'de yalnız yorum değişti (F1b ekleri). Windows sınamasından sonra
+(07.11.2026, plan F1b-3 ekleri) değişen `ui/Dialog.tsx` (gövdeye `createPortal`), `ui/SnackbarProvider.tsx` (bildirim
+kabı z-[55]), `ui/ThemeSwitcher.tsx` (satır kipi, renk sınıfı varsayılanın yerine geçer), `ui/DensitySwitcher.tsx` (renk
+sınıfı), `desktop/version.py` (eski sürüm iletisinde günlüğün gerçek yeri), `src/test/setup.ts` (`window.scrollTo` taklidi), `hooks/useTheme.ts` (`dosya_kaydet` tipi) ve
+`modules/guncelleme/UpdateBanner.tsx` (dosyayı program kaydeder) de UYARLA sınıfındadır.*
 
 | Dizin | Dosyalar |
 |---|---|
-| `desktop/` | `dialogs.py`, `integrity.py`, `version.py`, `django_bootstrap.py` (WAL checkpoint, bilinmeyen göç denetimi), `logging_setup.py`, `session_guard.py`, `win32_objects.py`, `instance_channel.py`; ALMA ve UYARLA dışındaki testler |
+| `desktop/` | `dialogs.py` (`show_error`'a `gunluk` eklendi: ileti serbest ad ya da yol taşıyorsa günlüğe adsız hâli yazılır, R1), `integrity.py`, `version.py`, `django_bootstrap.py` (WAL checkpoint, bilinmeyen göç denetimi, `baglantilari_kapat`), `session_guard.py`, `win32_objects.py`, `instance_channel.py`; ALMA ve UYARLA dışındaki testler |
 | `packaging/` | `fontlar/`, `pyinstaller/fonts.conf.tmpl`, `fonts.paket.conf`, `linux/apt_dene.sh`, `docker-build.sh`, `postinst`, `prerm`, `windows/build.ps1`, `dll_kapanisi.py`, `paket_kapanisi.py`, `lisanslar/on_yuz_paketleri.mjs`, `uret.sh`; testler `test_apt_dene`, `test_betik_kodlamasi`, `test_paket_kapanisi`, `test_paketleme_tetigi` |
 | `backend/` kök ve `shared/` | `conftest.py`, `manage.py`, `requirements-dev.txt`, `apps/__init__.py`, `config/wsgi.py`; `shared/models.py`, `text.py`, `working_days.py` |
-| `backend/apps/okul/` | `name_match.py`, `normalize.py`, `views_calendar.py`, `views_yedek.py`, `services/calendar.py`, `dis_yedek.py`, `school_year.py`, `terms.py`; testlerin kütüphaneye bağlı olmayanları |
+| `backend/apps/okul/` | `name_match.py`, `normalize.py`, `views_calendar.py`, `services/calendar.py`, `school_year.py`, `terms.py`; testlerin kütüphaneye bağlı olmayanları |
 | `backend/templates/` | `BENIOKU.md`, `print/_design.css`, `documents/base.html` |
-| `frontend/` | `src/ui/` (50; `BarcodeInput` hariç), `src/hooks/` (11; depo anahtarları §2.3), `src/test/setup.ts`, `kurulumDurumu.ts`, `modules/takvim`, `modules/guncelleme` ("iki kapı" yorumu tek kapıya) |
+| `frontend/` | `src/ui/` (50; `BarcodeInput` hariç), `src/hooks/` (11; depo anahtarları §2.3), `src/test/setup.ts`, `kurulumDurumu.ts`, `modules/takvim`, `modules/guncelleme` (`UpdatePanel.tsx` hariç; "iki kapı" yorumu tek kapıya) |
 | kök | `.gitattributes` (OAB'deki bayt bayt aynı), `LICENSE` (OAB'de var, K7) |
 
 #### UYARLA
@@ -3914,56 +4017,58 @@ alındı. F1b'de değişen `ui/DataTable.tsx` (metin kimlikli satır, görünmez
 | `VERSION` | Kopyalanmaz; OAB'nin ilk sürümü aile CalVer biçimiyle yazılır | F1a-1 |
 | `SECURITY.md` | `.odbak`; "ağ kataloğu yüzeyi" çıkar; "ağ servisi sunmaz" cümlesi; iletişim satırı kalır | F1a-1 |
 | `docker-compose.yml` | Proje adı; "yerel ağa katalog" yorumu → ağ servisi yok | F1a-1 |
-| `.gitignore` | Birleştirme: sentetik e-Okul personel ve veli örneklerinin **adıyla** istisnası, `.od-depo-listesi.tmp`, `.od-yasakli-adlar.txt` (§13 D42), `.claude/settings.local.json`, evrak denemesi dizini; `*.docx`, `*.ods` (şablonlar adıyla istisna) | F1a-1 |
+| `.gitignore` | Birleştirme: sentetik e-Okul personel ve veli örneklerinin **adıyla** istisnası, `.od-depo-listesi.tmp`, `.od-yasakli-adlar.txt` (§13 D42), `.claude/settings.local.json`, evrak denemesi dizini; `*.docx`, `*.ods` (şablonlar adıyla istisna); `dosyalar/` | F1a-1, F1b |
 | `.github/ISSUE_TEMPLATE/`, `workflows/` | Depo adresi; `kapilar.yml` gecelik `KD_YAVAS` dalı çıkar; `paketleme.yml` Debian 13 matrisi, adlar; `r2-yukle.yml` önek | F1a-1, F1a-2 |
 | `THIRD_PARTY_LICENSES/` | Elle değil, `uret.sh` ile yeniden üretilir (§11.4) | F1a-2 |
 | `scripts/gates.sh` | 3. adım (yavaş testler + ağ provası) sökülür; geçici dosya adı | F1a-2 |
 | `docker/backend.Dockerfile` | Son `runserver 0.0.0.0:8000` satırı silinir | F1a-1 |
-| `desktop/__init__.py`, `server.py` | Belge dizeleri: katalog paragrafı → "ağ servisi sunmaz" | F1a-2 |
-| `desktop/paths.py` | Linux'ta dizinler 0700 oluşturulur, var olanlar 0700'e çekilir; açılışta `umask 077`; test (§4.5, §13 D52) | F1a-2 |
-| `desktop/backup.py` | `.odbak`; `encrypt_legacy_backups` ve düz `*.sqlite3` yedek kalıpları sökülür (OAB'de düz yedek hiç olmadı, §13 D29); yerel yedek = veritabanı + dosya manifestosu, tam yedek = + dosya bölümü (§4.4.7); önekler `pre-kapanis`, `pre-dek-yenileme`; `pre-anonim` F4'te; **`rotate_backups` önek kümesi genişler**: bütün yerel önekler ve `db-onceki-` 14 gün, `pre-migrate` son 5 + KVKK tetiğinden eskiler silinir; küme testle sabitlenir (§13 D49) | F1a-1, F1a-2, F1b, F4 |
-| `desktop/backup_crypto.py` | Kimlik (F1a-1); kap `ODBAK\x03` (dosya bölümü, manifesto mühürlü bölümde); başlıkta kurtarma anahtarının no ve tarihi (TK10); `is_usable_security_state` şema 2'ye, `recovery_metadata` yalnız kurtarma bölümüne | F1a-1, F1b |
-| `desktop/clean_shutdown.py` | İleti "son oturumdaki kayıtları kontrol edin"; `OD_ONCEKI_OTURUM`; işaret yalnız uzun iş sayacı sıfırken yazılır (§4.2) | F1a-1, F1b |
-| `desktop/errors.py` | Başlıklar "OAB Defteri …"; 11 ayrılmış; 12 `--evrak-duman`; 9 "geri yükleme başarısız ya da yetkisiz" | F1a-2, F1a-3, F1b |
+| `desktop/__init__.py`, `server.py` | Belge dizeleri: katalog paragrafı → "ağ servisi sunmaz"; `server.py`: tampon eşiği yükleme sınırı ile 64 KiB pay (§4.4.7), `max_request_body_size` 8 GiB (kullanıcı kararı 06.11.2026) | F1a-2, F1b |
+| `desktop/paths.py` | Linux'ta dizinler 0700 oluşturulur, var olanlar 0700'e çekilir; açılışta `umask 077`; test (§4.5, §13 D52); `dosyalar/` ve `yetim/` de kurulur; eşitleme uyarısı yol taşımaz | F1a-2, F1b |
+| `desktop/logging_setup.py` | `PiiSafeFormatter` çıktıda ev dizinini `~` yapar (kullanıcı kararı 06.11.2026 "Biçimleyici silsin"); `gunluk_dosyasi_yeri` iletilere günlüğün gerçek yerini verir; `cokme.log`'a Windows'ta oturum notu (plan F1b-3 ekleri, 07.11.2026) | F1b |
+| `desktop/backup.py` | `.odbak`; `encrypt_legacy_backups` ve düz `*.sqlite3` yedek kalıpları sökülür (OAB'de düz yedek hiç olmadı, §13 D29); yerel yedek = veritabanı + dosya manifestosu (`goruntu_ve_manifesto`; ham SQL, DEK'siz), tam yedek = + dosya bölümü (§4.4.7); önekler `pre-kapanis`, `pre-dek-yenileme` (üreticileri F4'te); `pre-anonim` yedeği aileden hazır, tetiği F4'te; **`rotate_backups` önek kümesi genişler** (`ROTASYON_KUMESI`): bütün yerel önekler ve `db-onceki-` 14 gün, `pre-migrate` son 5 + KVKK tetiğinden eskiler silinir; küme testle sabitlenir (§13 D49); `db-onceki` ad kuralı buradadır, `backup_restore` buradan alır; `wal_bosalt` kapanışın ve KVKK tetiğinin ortak TRUNCATE yardımcısıdır; `eski_yetimleri_sil` (gün dizinleri 14 gün, rotasyonla aynı tetikte) | F1a-1, F1a-2, F1b, F4 |
+| `desktop/backup_crypto.py` | Kimlik (F1a-1); kap `ODBAK\x03` (kapsam baytı, mühürlü bölüm uzunluğu, manifesto mühürlü bölümde, tam yedekte dosya bölümü); başlıkta kurtarma anahtarının no ve tarihi (TK10); `is_usable_security_state` şema 2'ye; başlık tek kaynaktan, `usable_recovery_header`'dan alınır (`recovery_metadata` kalktı; arşive ve boş başlığa düşüş yok) | F1a-1, F1b |
+| `desktop/clean_shutdown.py` | İleti "son oturumdaki kayıtları kontrol edin"; `OD_ONCEKI_OTURUM`; işaret yalnız uzun iş sayacı sıfırken yazılır (§4.2); konsol geri yüklemesi başarıda yazar (`restore.py`, §4.2 açılış tablosu 3. adım) | F1a-1, F1b |
+| `desktop/errors.py` | Başlıklar "OAB Defteri …"; 11 ayrılmış; 12 `--evrak-duman`; 9 "geri yükleme başarısız ya da yetkisiz"; `StartupError.gunluk_ipucu` kullanıcı iletisiyle günlük metnini ayırır | F1a-2, F1a-3, F1b |
 | `desktop/gunluk.py` | Uyku engelleme, IP işi, saatlik katalog denetimi sökülür; bakım kapısı `shared/bakim.py`'den, `ImportError` düşüşü kalkar (§13 D3); DEK isteyen iş kilitliyken "ertelendi" döner ve iz satırı kilitli kip anahtarıyla düşer (§4.6.3) | F1a-2, F1b |
-| `desktop/lock.py`, `restore.py` | Mutex adları; "tepside" iletileri; `restore.py` `--hesap` + parola ya da kurtarma anahtarı; **rol denetimi** geri yükleme çekirdeğindedir (`backup_restore` → `geri_yukleme_yetkisi`; uygulama içi yol ve `restore_backup` de aynı çekirdekten geçer): parola yolunda güncel veritabanı salt okunur `sqlite3` ile (ORM yok) okunur, okunamazsa yedeğin görüntüsü bellekte okunur (Pardus 21'de 0700 izinli geçici dizinde, hemen silinir), `yonetici` doğrulanmazsa kenara alma yapılmadan çıkış 9; `geri-yukleme-notu.json` yazılır (§4.4.4) | F1a-2, F1b |
-| `desktop/main.py` | Tepsi, katalog, `--tepside`, uyku, güvenlik duvarı yardımcı kipi, `encrypt_legacy_backups`, `--autotest` katalog adımı sökülür; Linux'ta `umask 077` ve `qt_kurulum.hazirla()`; `--evrak-duman`; kapanışta kilitleme ve çapa (§4.2) | F1a-2, F1a-3, F1b |
-| `desktop/window.py` | T6 (§4.5): `tray_available`, `ask_quit_in_spa`, `kd:cik-iste`, gizleme sökülür; `show()` ve `request_quit()` kalır; `closing` işleyicisi yalnız uzun yazma işi sürerken kapanışı bir kez erteler (§4.2) | F1a-2, F1b |
+| `desktop/lock.py`, `restore.py` | Mutex adları; "tepside" iletileri; `restore.py` `--hesap` + parola ya da kurtarma anahtarı; **rol denetimi** geri yükleme çekirdeğindedir (`backup_restore` → `geri_yukleme_yetkisi`; uygulama içi yol ve `restore_backup` de aynı çekirdekten geçer): parola yolunda güncel veritabanı salt okunur `sqlite3` ile (ORM yok) okunur, okunamazsa yedeğin görüntüsü bellekte okunur (Pardus 21'de 0700 izinli geçici dizinde, hemen silinir), `yonetici` doğrulanmazsa kenara alma yapılmadan çıkış 9; `geri-yukleme-notu.json` yazılır (§4.4.4); onay kapsamı söyler, bozuk ekte ikinci soru sorulur (`--evet` onay sayılmaz), artıklar kendi kilidi altında silinir | F1a-2, F1b |
+| `desktop/main.py` | Tepsi, katalog, `--tepside`, uyku, güvenlik duvarı yardımcı kipi, `encrypt_legacy_backups`, `--autotest` katalog adımı sökülür; Linux'ta `umask 077` ve `qt_kurulum.hazirla()`; `--evrak-duman`; kapanışta kilitleme ve çapa (§4.2); 7. adımın hatası (yedek, manifesto, rotasyon, yetim silmesi) günlüğe yazılır, program açılır; 8. adımdaki göç öncesi yedeğin hatası çıkış 5'tir, göç koşmaz (§4.2); `_acilis_bakimi` (artık temizliği ve yetim taraması, göçten sonra, sunucudan önce); sunucudan önce ana iş parçacığının Django bağlantısı kapanır | F1a-2, F1a-3, F1b |
+| `desktop/window.py` | T6 (§4.5): `tray_available`, `ask_quit_in_spa`, `kd:cik-iste`, gizleme sökülür; `show()` ve `request_quit()` kalır; `closing` işleyicisi yalnız uzun yazma işi sürerken kapanışı bir kez erteler (§4.2); erteleme `WindowController` içindedir; `PencereKoprusu`: başlık çubuğu teması, kaydetme yeri (`kaydetme_yeri_sor`; pywebview 5.3.2 WinForms düz metin, Qt tek öğeli demet döndürür) ve Aç penceresi (`yedek_dosyasi_sor`; §4.4.7); `PENCERE_METINLERI` Qt kolunda (Pardus) kaydetme ve Aç pencerelerinin başlığını Türkçe verir, Windows'ta başlığı işletim sistemi yazar, WebView2 indirme penceresinin tür kutusu "Tüm dosyalar"dır; dosya kaydı (`dosya_kaydet`) ve son klasör (§4.4.7); WebView2'nin form önerisi kapalı, öneri dosyası ve sayfa önbelleği açılışta silinir (§4.3 tehdit 24) | F1a-2, F1b |
 | `desktop/tests/` | `test_main`, `test_window_controller`, `test_window_f5`, `test_restore`, `test_gunluk`, `test_acilista_dis_istek`, `test_geri_yukleme_provasi` + `prova_betigi.py`, `alt_surec.py`, `conftest.py`. **Taşınacak parçalar:** `test_katalog_server.py`'deki "yalnız 127.0.0.1" testleri → `test_server.py`; `test_main_f5.py`'deki WAL checkpoint ve kapanış sırası testleri → `test_main.py`; `test_tray.py`'deki Qt kurulum testleri → `test_qt_kurulum.py`. **Yeni testler:** Linux dizin ve dosya kipleri; iş sürerken çarpı; yönetici olmayan hesapla `--geri-yukle` reddi | F1a-2, F1b |
 | `packaging/README.md`, `requirements-paketleme.txt`, `r2-yukle.sh` | pystray, segno, katalog paragrafları; `R2_ONEK` | F1a-2 |
 | `packaging/ikonlar/` | Üreteçler (`logo_uret.py`, `ikon_uret.py`; elle çizilmiş 16/24/32, yedi kareli `.ico`) kalır, çizim ve adlar yeni | F1a-2 |
 | `packaging/linux/` | `build.sh` (ufw/firewalld, katalog öz sınaması), `debian-control.tmpl` (`Description`), `kutuphane-defteri.desktop` → `oab-defteri.desktop`, `kur.sh`, `kaldir.sh`, `BENIOKU.txt`, `kap-ici-test.sh` ve `test-kurulum.sh` (`--dagitim-duman` çıkar, Debian 13, `--evrak-duman` girer) | F1a-2 |
 | `packaging/lisanslar/lisanslar.py` | pystray kaynağı, segno, yazılı teklif kapsamı; `OD_WITH_QT`, `OD_DLL_DIR` | F1a-2 |
-| `packaging/pyinstaller/` | `giris.py` (`RUNTIME_MODULES` — `docx`, `lxml`, `typing_extensions` girer —, `DESKTOP_RUNTIME_MODULES`, `--dagitim-duman` çıkar, `--evrak-duman` girer) · `kutuphane_defteri.spec` → `oab_defteri.spec` (`Tree(backend/katalog)`, segno, pystray çıkar; docx girer: `collect_submodules` + `collect_data_files`, §11 B10; Qt GPL ayıklaması, UCRT süzgeci, fontconfig kalır) · `rthook_kd.py` → `rthook_od.py` (UAC yardımcı kipi dalı sökülür) | F1a-1, F1a-2, F1a-3 |
+| `packaging/pyinstaller/` | `giris.py` (`RUNTIME_MODULES` — `docx`, `lxml`, `typing_extensions` girer —, `DESKTOP_RUNTIME_MODULES`, `--dagitim-duman` çıkar, `--evrak-duman` girer) · `kutuphane_defteri.spec` → `oab_defteri.spec` (`Tree(backend/katalog)`, segno, pystray çıkar; docx girer: `collect_submodules` + `collect_data_files`, §11 B10; Qt GPL ayıklaması, UCRT süzgeci, fontconfig kalır; yalnız backend'in içe aktardığı `desktop.dosya_sistemi` `hiddenimports`'ta adıyla durur) · `rthook_kd.py` → `rthook_od.py` (UAC yardımcı kipi dalı sökülür) | F1a-1, F1a-2, F1a-3, F1b |
 | `packaging/windows/` | `kutuphane-defteri.iss` → `oab-defteri.iss` (T6, TK7: `lowest` + `dialog`, ortak hesapta yönetici kipi kılavuzda; katalog, güvenlik duvarı, otomatik başlatma, tepsi iletileri) · `NOTLAR.md` (W13-W20 düşer ya da değişir; "çarpıyla kapanır" elle doğrulama maddesi) | F1a-2 |
-| `packaging/` sızıntı kapıları | `depo_sizintisi.py` (`.odbak`; `.docx`, `.ods`; **IBAN mod-97**; sınıf listesi muafiyeti → sentetik veli örneği; depo dışındaki yasaklı adlar listesi, §13 D42) · `veri_sizintisi.py` (uzantı kümesi eşitliği) | F1a-2, F6 |
+| `packaging/` sızıntı kapıları | `depo_sizintisi.py` (`.odbak`; `.docx`, `.ods`; **IBAN mod-97**; sınıf listesi muafiyeti → sentetik veli örneği; depo dışındaki yasaklı adlar listesi, §13 D42) · `veri_sizintisi.py` (uzantı kümesi eşitliği); ikisi de `dosyalar/`'ı kapsar | F1a-2, F1b, F6 |
 | `packaging/tests/` | `test_kimlik_kalintisi` (§2.3.3), `test_lisans_kapisi`, `test_spec_kapsami`, `test_rthook`, `test_ikonlar` (`docs/site-icerigi.md` bağı koparılır ya da OAB'nin belgesi o güne yazılır), `test_depo_sizintisi`, `test_veri_sizintisi`, `test_surum_yolu` | F1a-1, F1a-2 |
 | `backend/pyproject.toml` | `testpaths` ve `--cov=katalog` çıkar; ruff, mypy strict, kapsam eşiği 75 kalır | F1a-2 |
-| `backend/config/settings.py`, `urls.py` | `INSTALLED_APPS`, `include("apps.kutuphane.urls")`, belge dizesi, `SECRET_KEY` ve test VT adı, `RolMiddleware`, `od_exception_handler`; **`ALLOWED_HOSTS` koşullu** (`OD_SESSION_TOKEN` doluysa `backend` yok) + test (§4.1, §13 D46) | F1a-2, F1b |
-| `backend/shared/crypto.py` | Kimlik dizgeleri; `from_db_value` **katı kip**: kilit açıkken çözülemeyen ya da token olmayan dolu değer `CorruptField` işaretiyle döner, panoya bütünlük uyarısı; hoşgörü yalnız `gecis` sürerken (TK8, §13 D48). Öteki ilkel işlevler aynen | F1a-1, F1b |
+| `backend/config/settings.py`, `urls.py` | `INSTALLED_APPS`, `include("apps.kutuphane.urls")`, belge dizesi, `SECRET_KEY` ve test VT adı, `RolMiddleware`, `ApiNoStoreMiddleware` (§4.3 tehdit 24), `od_exception_handler`; **`ALLOWED_HOSTS` koşullu** (`OD_SESSION_TOKEN` doluysa `backend` yok) + test (§4.1, §13 D46); `MEDIA_ROOT` kalkar, `DOSYA_DEPOSU_DIR`, `FILE_UPLOAD_HANDLERS` (`shared.yukleme`), `FILE_UPLOAD_MAX_MEMORY_SIZE` (§4.4.7) | F1a-2, F1b |
+| `backend/shared/crypto.py` | Kimlik dizgeleri; `from_db_value` **katı kip**: kilit açıkken çözülemeyen ya da token olmayan dolu değer `CorruptField` işaretiyle döner, panoya bütünlük uyarısı; hoşgörü yalnız `gecis` sürerken (TK8, §13 D48); `file_wrap_key` (`od-dosya-sarmal/v1`; §4.4.4). Öteki ilkel işlevler aynen | F1a-1, F1b |
 | `backend/shared/pdf.py` | WeasyPrint `url_fetcher`: yalnız `data:` ve paket içi `file:`; öteki şemada istisna; ağ tuzaklı test (§4.1, §13 D47) | F1a-2 |
 | `backend/shared/exceptions.py`, `letterhead.py` | İşleyici adı; okul antedi aynen, birlik antedi kararı §9.1 ([iskelet envanteri](../kesif/2026-10-31-iskelet-envanteri.md) §11-6; E01-E03 F1c'de basılacağından F1c'nin ön koşulu) | F1a-1, F1c |
-| `apps/okul/models.py`, `migrations/` | `SchoolConfig.kutuphane_saatleri` çıkar; OAB alanları §5'te; `Account`, `AuditTrail`, `AuditKey`, `AccessLog` §4.6'da; `AuditTrail` için ekleme-yalnız SQLite tetikleyicileri; `Student` ALMA; `ClassSection` §5 (T5); göçler tek `0001_initial` | F1b |
+| `apps/okul/models.py`, `migrations/` | `SchoolConfig.kutuphane_saatleri` çıkar; OAB alanları §5'te; `Account`, `AuditTrail`, `AuditKey`, `AccessLog` §4.6'da; `Attachment` F1b'de buradadır (§5.2.8); `AuditTrail` için ekleme-yalnız SQLite tetikleyicileri; `Student` ALMA; `ClassSection` §5 (T5); göçler tek `0001_initial` | F1b |
 | `apps/okul/excel_personel.py`, sentetik personel örneği, `uret_eokul_ornekleri.py` | "Görevi" yalnız üye türünü belirlemek için okunur (öğretmen/yönetici) | F1b |
 | `apps/okul/eokul.py`, `excel_ogrenci.py` | **Veli listesi ayrıştırıcısına** dönüşür (T5): blok düzleştirici ve sınıf/şube çıkarımı korunur; yalnız veli ad-soyadı ve öğrencinin sınıfı okunur, öğrenci adı, numarası, T.C. kimlik no okunmaz ve tutulmaz. Hangi e-Okul raporunun veli adını taşıdığı **doğrulanmadı** (sınıf listesi OOG01001R020 taşımaz) — §15 M-10 | F1b |
 | `apps/okul/kip.py`, `kip_izinleri.py`, `kip_middleware.py`, `views_mode.py` | → `oturum.py` (`OturumDurumu`), `rol_izinleri.py` (uç + yöntem + parametre; parametre denetçileri aynen), `rol_middleware.py`, `views_oturum.py`; görevli/yönetici kipi → oturum + rol (§4.4); servis katmanı yetki kapısı yeni (§4.4.2). Yeniden adlandırma bilinçli: "kip" kavramı kalkar | F1b |
 | `apps/okul/lock_middleware.py` | 423 iletisi: "Kayıtlar kilitli. Hesabınızı seçip parolanızla açın (parolanızı unuttuysanız program yöneticisine başvurun)." — ailedeki "yönetici parolası" dili OAB'de her kullanıcının kendi hesabıyla açtığı düzene uymaz (§13 D50) | F1b |
 | `apps/okul/services/recovery_key_document.py`, `templates/documents/kurtarma_anahtari.html` | Metin OAB'ye göre yeniden yazılır (§13 D50): amacı; anahtarın no'su ve üretim tarihi; saklama yeri **okul müdürlüğünde mühürlü zarf**, veliye geçmez, devir tutanağına yalnız zarfın durumu girer (D3); "parola paylaşılmaz, herkes kendi hesabıyla" (BSG md. 7/2, 9/2-e); dönemlik yenileme ve eski zarfın imha tutanağıyla yok edilmesi; PDF dosyası bilgisayarda bırakılmaz. Ailedeki "yönetici parolası en az iki kişide bulunsun", "öğrenci … okul numaraları", "kütüphane masası" ifadeleri çıkar. Aynı modül F4'te **kurtarma anahtarı zarfı imha tutanağını** da üretir (katalog dışı program belgesi, §9.7; DEK yenilemesinin 7. adımı, §4.4.4) | F1b, F4 |
 | `apps/okul/permissions.py`, `views_app.py`, `restart_gate.py` | `RequiresAdminPassword` kurulum durumunun 409 kapısı olarak kalır, rol işi `RolMiddleware`'e geçer (§4.4.2); `app/quit/`'te görevli parola dalı sökülür; "tepsiden Çık" iletisi | F1a-2, F1b |
-| `apps/okul/masaustu_kanca.py` | `KatalogKontrolu` protokolü ve katalog bakım çağrıları sökülür; çıkış kancası ve gün işleri kaydı kalır | F1a-2 |
+| `apps/okul/masaustu_kanca.py` | `KatalogKontrolu` protokolü ve katalog bakım çağrıları sökülür; çıkış kancası ve gün işleri kaydı kalır; yetim taraması (okul kartı ve parmak izi koruması, `BUTUNLUK` olayı) ve artık temizliği (§4.4.7; açılışta ve `--geri-yukle`de) | F1a-2, F1b |
 | `apps/okul/services/app_password.py` | Şema 2: `enable` → ilk yönetici hesabı ve ilk İA; `unlock(hesap, parola)` + hesap mührü ve iki depo kuralı (§4.6.1); hesap aç, kapat (TK11), sıfırla, askı (hesap başına hatalı deneme sayacı, §15 M-12); kurtarma anahtarıyla açılış yalnız `yonetici` hesabına (§4.4.3); `start_handover` yerine hesap geçişi; DEK yenileme `gecis: DEK_YENILEME` (TK12, F4). Dosya adı korunur: "parolayla DEK açma" kavramı sürer | F1b, F4 |
-| `apps/okul/services/backup_restore.py`, `live_restore.py` | Bakım kapısı `shared/bakim.py`'den; aday durumlar şema 2 ve TK10 (anahtar no'su gösterilir); hesap seçimi; tam yedekte dosya deposunun manifestoyla doğrulanıp takası; `geri-yukleme-notu.json` | F1a-2, F1b |
-| `apps/okul/services/encrypted_backup.py` | İndirme yedeği **tam yedektir** (veritabanı + dosya deposu; §4.4.7) | F1b |
+| `apps/okul/services/backup_restore.py`, `live_restore.py` | Bakım kapısı `shared/bakim.py`'den; aday durumlar şema 2 ve TK10 (anahtar no'su gösterilir); hesap seçimi; kabın akışla okunması; bozuk ekte ikinci onay (`EkOnayiGerekli`, uçta 409 `ek_onayi_gerekli`); dosya ayağı `geri_yukleme_ekleri`'nde; takas tek kesinleşme noktasıdır (`.tmp` fsync'li, takastan sonraki adımlar başarısızlık üretmez); Aç penceresinde seçilen dosya (`yol`) ve başlığın okunması (`backups/inspect/`); geliştirme kipinde yüklenen yedeğin `.yukleme-<hex>.tmp` işleyicisi; bakım kapısının süresi dolarsa takas yapılmaz; yedek listesi kapsam taşır; `geri-yukleme-notu.json` | F1a-2, F1b |
+| `apps/okul/services/encrypted_backup.py` | Kaydedilen şifreli yedek **tam yedektir** (veritabanı + dosya deposu; §4.4.7); program seçilen yere yazar, yeniden açıp denetler | F1b |
+| `apps/okul/services/dis_yedek.py`, `apps/okul/views_yedek.py` | Hatırlatma tarihi yedek kaydedilince yazılır; son deneme (`son_deneme`; §16 R6); `POST backups/report/` Yedek Raporu ucu (§9.7) | F1b |
 | `apps/okul/services/imports.py`, `persons.py`, `sections.py`, `templates.py`, `setup.py` | Öğrenci mutabakatı ve şablonu çıkar; kayıt defteri kancaları OAB modelleriyle (F1c); sihirbaz adımları plan §2.2, yol haritası maddeleri | F1a-1, F1b, F1c |
 | `apps/okul/services/updates.py` | Varsayılan depo ve `INSTALLER_PATTERN`; `OD_UPDATE_REPOSITORY` paketli yapıda (`sys.frozen`) okunmaz, test (§13 D51); kurucu çalıştırılmadan hemen önce SHA-256 yeniden doğrulanır (ailede bu adım var mı doğrulanmadı) | F1a-1, F1a-2 |
 | `apps/okul/views_pool.py`, `selectors.py`, `serializers.py`, `views.py`, `urls.py` | Öğrenci dalları sökülür; personel ayrılış havuzu kalır | F1b |
-| `apps/okul/management/commands/` | `restore_backup`: `--hesap` + parola (gizli istem ya da `--password`) ya da `--recovery-key`; var olan bir hesabın parolasını alan tek komuttur, rol denetimi `restore.py` ile aynı çekirdektedir (§4.4.4). `app_password`'a var olan hesabın parolası eklenmez: `status` kişisizdir, `enable` yalnız ilk kurulumda çalışır, `recover --hesap` yalnız var olan, kapanmamış program yöneticisini kabul eder (yetkiyi kurtarma anahtarı verir) | F1b |
+| `apps/okul/management/commands/` | `restore_backup`: `--hesap` + parola (gizli istem ya da `--password`) ya da `--recovery-key`; bozuk ekte ikinci onay `--ekler-olmadan-surdur`'dur (`--yes` onay sayılmaz); var olan bir hesabın parolasını alan tek komuttur, rol denetimi `restore.py` ile aynı çekirdektedir (§4.4.4). `app_password`'a var olan hesabın parolası eklenmez: `status` kişisizdir, `enable` yalnız ilk kurulumda çalışır, `recover --hesap` yalnız var olan, kapanmamış program yöneticisini kabul eder (yetkiyi kurtarma anahtarı verir) | F1b |
 | `apps/okul/tests/` | `test_cikis_ucu`, `test_dis_istek_kapilari` (izinli listeden katalog ve künye satırları çıkar), `test_imports`, `test_kip_koruma` → `test_rol_koruma` (+ hücre başına anlık görüntü testi), `test_kisi_yazan_uclar` | F1a-2, F1b |
 | `templates/documents/aydinlatma_metni.html` | **Silindi** (F1b 0. adım): hiçbir yerden çağrılmıyordu, içeriği ailenindi. OAB'nin aydınlatma metni E04'tür (§3.4): metni F1b 5. adımda içe aktarma ekranına, belgesi F2'de (plan §2.2) | F1b |
 | `frontend/` yapılandırma, `public/app-logo.png` | `package.json` adı; `tailwind.config.js` `--od-*`; `vitest.config.ts` eşiği (82/82/78/55) aynen; logo | F1a-1 |
-| `frontend/src/` kökü | `App.tsx` rotaları (≈20 ALMA sayfası), `AppShell` gezinmesi, `index.css` `--od-*`, `KurulumKapisi` | F1a-2 |
-| `frontend/src/lib/` | `api.ts` (`X-OD-Etkinlik`), `kilit.ts` (kilitlenmede ve kilit açılışında sorgu önbelleği ve modül belleği sıfırlanır: pencere içeriği yeniden yüklenir; Vitest; §4.4.3, §13 D53), `kip.ts` → `oturum.ts`, `restart.ts` (olaylar), `mevzuat.ts` (Yönetmelik adı), `format.ts` (`formatAccessionNo` çıkar), `gradeLevels.ts` (T5) | F1a-1, F1a-2, F1b |
-| `frontend/src/modules/` | `kurulum` (1. adım ilk yönetici hesabı) · `guvenlik` (kilit ekranında hesap seçimi, askıdaki hesap etiketi; `GorevDevri` sökülür) · `ayarlar` (dört kütüphane paneli çıkar) · `hakkinda` (tek dış istek kapısı, ağ servisi yok, dürüst sınırlar §4.4.6) · `kilavuz` (5.080 satırlık dosyadan kabuk bileşenleri ayıklanır, içerik silinir) · `panel` (kütüphane kartları çıkar; son oturum kartı §13 D4; bütünlük ve geri yükleme kartları §4.6.3) · `cikis` (görevli dalı) · `kip` → `oturum` · `okul`, `kisiler` (kütüphane içe aktarımları) | F1a-2, F1b |
+| `frontend/src/` kökü | `App.tsx` rotaları (≈20 ALMA sayfası), kapıların dışında kapanış penceresi, `AppShell` gezinmesi, `index.css` `--od-*`, `KurulumKapisi` | F1a-2, F1b |
+| `frontend/src/lib/` | `api.ts` (`X-OD-Etkinlik`; `etkilesimKaydet` yerel pencere seçimi için dışa açık, `ApiError.govde`), `kilit.ts` (kilitlenmede ve kilit açılışında sorgu önbelleği ve modül belleği sıfırlanır: pencere içeriği yeniden yüklenir; Vitest; §4.4.3, §13 D53), `kip.ts` → `oturum.ts`, `restart.ts` (olaylar; yeniden başlat olayı dosya raporunu taşır), `mevzuat.ts` (Yönetmelik adı), `format.ts` (`formatAccessionNo` çıkar), `gradeLevels.ts` (T5) | F1a-1, F1a-2, F1b |
+| `frontend/src/modules/` | `kurulum` (1. adım ilk yönetici hesabı) · `guvenlik` (kilit ekranında hesap seçimi, askıdaki hesap etiketi; `GorevDevri` sökülür; Şifreli Yedek ve Yedekten Geri Yükleme kartları) · `ayarlar` (dört kütüphane paneli çıkar) · `hakkinda` (tek dış istek kapısı, ağ servisi yok, dürüst sınırlar §4.4.6) · `kilavuz` (5.080 satırlık dosyadan kabuk bileşenleri ayıklanır, içerik silinir) · `panel` (kütüphane kartları çıkar; son oturum kartı §13 D4; bütünlük, geri yükleme ve Eksik Ekler kartlarını `modules/butunluk`'tan çizer, §4.6.3, §4.4.7) · `cikis` (görevli dalı) · `kip` → `oturum` · `okul`, `kisiler` (kütüphane içe aktarımları) | F1a-2, F1b |
 
 #### ALMA
 
@@ -3986,15 +4091,22 @@ alındı. F1b'de değişen `ui/DataTable.tsx` (metin kimlikli satır, görünmez
 
 | Yol | Ne | Zaman |
 |---|---|---|
-| `desktop/qt_kurulum.py` (+ `test_qt_kurulum.py`) | `tray.py`'den taşınan `load_qt`, `prepare_qt_application`, SIGTERM köprüsü | F1a-2 |
+| `desktop/qt_kurulum.py` (+ `test_qt_kurulum.py`) | `tray.py`'den taşınan `load_qt`, `prepare_qt_application`, SIGTERM köprüsü; pywebview 5.3.2 Qt indirme işleyicisinin yerine geçen işleyici (`indirme_isleyicisi`; `setPath` Qt6'da yok) | F1a-2, F1b |
+| `desktop/dosya_sistemi.py` (+ `test_dosya_sistemi.py`) | Seçilen yerin dosya sistemi (`GetVolumeInformationW`, `/proc/self/mountinfo`); FAT32 tek dosya sınırı için; okunamazsa `None`; yalnız backend içe aktardığı için spec `hiddenimports`'ta adıyla durur | F1b |
 | `backend/shared/bakim.py` | `katalog/bakim.py`'deki `BakimKapisi` (yalnız stdlib); geri yükleme ↔ gün işleri dışlaşması; **uzun yazma işi sayacı** (boşta kilit ve çarpı ertelemesi, §4.2) | F1a-2, F1b |
 | `backend/shared/docx.py`, `shared/evrak.py` | T2 çizici ve cephe (TK17); `--evrak-duman`; `evrak.py` WeasyPrint'i `shared/pdf.py`'nin `url_fetcher`'ıyla çağırır | F1a-3 |
-| `backend/shared/dosya_sifreleme.py` (+ testleri) | Dosya deposu: dosya başına anahtar, `ODDOSYA\x01` kabı, sarmal (`od-dosya-sarmal/v1`), bellekten akan açma, yetim taraması (§4.4.4, §4.4.7; TK22) | F1b |
+| `backend/shared/dosya_sifreleme.py` (+ testleri) | Dosya deposu: dosya başına anahtar, `ODDOSYA\x01` kabı, sarmal (`od-dosya-sarmal/v1`), bellekten akan açma, yetim taramasının saf parçaları (desene uyan adlar, taşıma, tarih dizini, sıra ekli kopyalar) ve geri yüklemenin hazırlık dizini (§4.4.4, §4.4.7; TK22). Veritabanını okuyan koruma ve kanca `apps/okul/masaustu_kanca.py`'dedir; yetim silmesi 7. adımda Django'dan önce koştuğu için `desktop/backup.py`'dedir | F1b |
+| `backend/shared/yukleme.py` | Genel yükleme işleyicisi: yalnız bellek, sınırı aşan istek 400 (§4.4.7 açık kopya kuralı) | F1b |
+| `backend/apps/okul/services/dosya_deposu.py` (+ testleri) | `Attachment` yazımı ve okunması: önce dosya, sonra tek işlemde satır ve iz; R9 reddi; `UZUN_ISLER`; özel nitelikli ekte erişim günlüğü (§4.4.7, §5.2.8) | F1b |
+| `backend/apps/okul/services/geri_yukleme_ekleri.py` (+ `tests/test_tam_yedek.py`) | Geri yüklemenin dosya ayağı: dosya bölümünün hazırlık dizinine akması ve girdi girdi doğrulanması, depoda ve `yetim/`'de arama, yerleşim, geri alma ve kesinleşme, kişisiz eksik ve bozuk ek raporu (§4.4.7) | F1b |
+| `backend/apps/okul/services/yedek_raporu.py` (+ `tests/test_yedek_raporu.py`), `backend/templates/documents/yedek_raporu.html` | Yedek Raporu (§9.7; aileden gelmez), uç `POST backups/report/` | F1b |
 | `Account`, `AuditTrail`, `AuditKey`, `AccessLog` modelleri ve servisleri | T1, TK16 (§4.6): hesap mührü ve iki depo kuralı, denetim izi yazıcısı (aynı işlem, izinli alan listesi, içerik MAC'i), İA, çapa ve kilitli kip (`iz-durumu.json`), kendiliğinden doğrulama, erişim günlüğü ve 2 yıllık silmesi | F1b |
 | `frontend/src/modules/kullanicilar` | Hesap aç, kapat, askıdan çıkar, parola sıfırla; hesap teslim pusulası (E63); hesap önerileri ve hesap geçişi (F4); son girişler | F1b, F4 |
 | `frontend/src/modules/erisim` | Erişim Günlüğü ekranı (§4.6.4): tarih, tür ve hesap süzgeçli, sayfalı, kişisiz liste; okuma iz bırakmaz | F1b |
 | `frontend/src/modules/oturum/yetki.tsx`, `RolKapisi.tsx` | Ön yüz rol süzmesi (§4.4.2): oturum özetindeki yeteneklerden gezinme, rota kapısı ve salt okur notu | F1b |
-| `backend/apps/okul/services/satir_izi.py`, `ozet_onarimi.py`, `geri_yukleme_yetkisi.py`; `backend/shared/sqlite_adres.py` | Satırın izi ve iz boşluğu (ORM'siz tek karar işlevi), geri yüklemenin özet onarımı, geri yüklemenin parola yolunun rol denetimi, salt okunur SQLite adresi (§4.4.4, §4.6.1, §4.6.3) | F1b |
+| `frontend/src/modules/butunluk` | Genel Bakış'ın denetim izi kartları (Denetim İzi Bütünlüğü, Değiştirilmiş Hesap Kaydı, Yedekten Geri Yükleme Yapıldı, Hesaplar ve Güvenlik Dosyası, Eksik Ekler, Bütünlük Durumu Okunamadı) ve Son Girişler; kilit açılışından sonra her sayfada çıkan parola yenilenme bildirimi; role göre üç uç (§4.4.2, §4.4.3, §4.4.7, §4.6.3) | F1b |
+| `frontend/src/modules/guvenlik/kaydetmeKoprusu.ts`, `yedekIsleri.ts`, `yedekBilgisi.ts`, `EkListesi.tsx`, `YedekRaporuKarti.tsx`; `modules/cikis/KapanisPenceresi.tsx`, `metinler.ts` | Pencere köprüleri, süren iş belleği, yedek listesinin ve dosya raporunun metinleri, eksik ve bozuk ek listesi, Yedek Raporu kartı, kapanış penceresi (§4.4.7, §4.5, §9.7) | F1b |
+| `backend/apps/okul/services/satir_izi.py`, `ozet_onarimi.py`, `geri_yukleme_yetkisi.py`, `geri_yukleme_notu.py`; `backend/shared/sqlite_adres.py` | Satırın izi ve iz boşluğu (ORM'siz tek karar işlevi), geri yüklemenin özet onarımı, geri yüklemenin parola yolunun rol denetimi, geri yükleme notu (`geri-yukleme-notu.json`), salt okunur SQLite adresi (§4.4.4, §4.6.1, §4.6.3) | F1b |
 | `backend/apps/okul/views_hesaplar.py`, `views_erisim_gunlugu.py`, `services/hesap_teslim_pusulasi.py` | Kullanıcılar uçları, erişim günlüğü okuma ucu, E63 | F1b |
 | `frontend/src/modules/` F1c ekranları: `birlik-donemi`, `organlar`, `temsilciler`, `gecis-kurulumu`, `pano` | Birlik dönemi (hazırlık ve açılış), organ üyelikleri ve görev bölümü, temsilciler çizelgesi, geçiş kurulumunun organ adımları (§7.9), pano kabuğu (§7.10); aile kitiyle yeni yazılır, OYS ön yüzü alınmaz (§12.A) | F1c |
 
@@ -4261,7 +4373,7 @@ Tasarım denetiminin (F0-9) beş bulgusu kullanıcı kararı gerektirdi; cevapla
 | R3 | **Mevzuat değişikliği:** Yönetmelik 2012'den beri beş kez değişti; TEFBİS işlem tipleri değişiyor | Kural paketi + korpus + atıf kilidi; TEFBİS eşleme tablosu okulca güncellenir |
 | R4 | **Okul türü çeşitliliği ve tek saha:** gönüllü okul aranmayacağı için ilkokul/ortaokul, küçük okul ve il merkezi farkları sahada sınanmaz (F0-d) | Bu farklar okul kartından okunan kurallardır; kural testleri ve uydurma senaryolarla sınanır (§10); kapsam resmî örgün okullar |
 | R5 | **Gönüllü velilerin bilgisayar yetkinliği** | Arayüz MY odaklı (saha 10); velilere sihirbaz, büyük yazı, az ekran; hesap teslim pusulası (E63) ve kılavuzun "yeni kurulun ilk ayı" bölümü (F7); her faz kapısında kılavuz bölümü (§14); panonun açılış görünümü "bu ay sizden beklenenler" ve büyük yazı (§7.10); F7'de veli rollerinin işini yardımsız yapması ölçülür |
-| R6 | **Veri kaybı:** tek bilgisayar = tek nokta | Zorunlu yedek hatırlatması, USB'ye şifreli **tam** yedek (ekler ve üretilmiş evrak dâhil, §4.4.7), yıl sonu açık biçimli arşiv |
+| R6 | **Veri kaybı:** tek bilgisayar = tek nokta | Zorunlu yedek hatırlatması, USB'ye şifreli **tam** yedek (ekler ve üretilmiş evrak dâhil, §4.4.7), yıl sonu açık biçimli arşiv. Hatırlatma kaydı veri dizinindeki `dis-yedek.json`'dadır; veritabanında olmadığı için geri yükleme onu geri sarmaz. Dosya son şifreli yedek denemesinin kişisiz özetini de tutar (`son_deneme`: an, sonuç, boy, ek sayısı, eksik, programın sabit iletisi; ad ve yol yok). Uzun iş biterken ertelenen kilit pencereyi yeniden yükleyince ekrandaki sonuç gider; kart girişten sonra bu kaydı gösterir. Kart bu kaydı yalnız ekranda yeni bir sonuç yokken gösterir; yedek dosyasının adı ve yeri yazılmaz. Hatırlatma yalnız başarıda sıfırlanır; deneme yazımı okunamayan `dis-yedek.json`'un üstüne yazmaz, hatırlatma alanlarına dokunmaz; başarıda son yedeğin tarihi yine yazılır, süre ayarı o an varsayılana düşebilir |
 | R7 | **Bakım yükü:** ailede bir program daha | Ortak iskelet, kural paketi veri, testler OYS'den |
 | R8 | **KVKK konumu belirsiz** ve veli listesi (T5) | Veri en aza (iki alan), dönem sonunda silme, erişim günlüğü, kılavuzda açık soru (§3.4) |
 | R9 | **Rejim değişebilir** ("mali yetkiler kaldırılsın" tartışması) | Tam ve açık biçimli dışa aktarım; TEFBİS'i besleyen konum değişiklikte değer kazanır |

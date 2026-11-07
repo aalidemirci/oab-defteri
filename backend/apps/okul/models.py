@@ -28,6 +28,8 @@ tasarımının §5.1 ve §12.B'sindedir (öğrenci ve kütüphane alanları F1b'
 - Koşullu UniqueConstraint'ler SQLite partial index ile çalışır (ailede kanıtlı).
 - Güvenlik çekirdeği (tasarım §4.6, F1b-1): `Account`, `AuditKey`, `AuditTrail` ve
   `AccessLog` (erişim günlüğü; zincir dışı, değer tutmaz, 2 yıl saklanır).
+- `Attachment` (tasarım §5.2.8, TK22; plan F1b-3 "Sapma"): dosya deposundaki ekin satırı. Tasarım
+  onu OAB modelleri arasında sayar; `apps/oab` F1c'de doğar, bağımlılık yönü oab'den okula kalır.
 """
 
 from __future__ import annotations
@@ -1570,4 +1572,163 @@ class AccessLog(models.Model):
     def delete(self, using: Any = None, keep_parents: bool = False) -> tuple[int, dict[str, int]]:
         raise ImmutableRecord(
             "Erişim günlüğü satırı yalnız saklama süresi dolunca silinir (tasarım §4.6.4)."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Dosya deposu (tasarım TK22, §4.4.7, §5.2.8; plan F1b-3 "Dosya deposu")
+# ---------------------------------------------------------------------------
+class AttachmentSensitivity(models.TextChoices):
+    """Ekin hassasiyeti (tasarım §5.2.8); özel nitelikli ekin okunması erişim günlüğüne düşer."""
+
+    NORMAL = "NORMAL", "Normal"
+    OZEL_NITELIKLI = "OZEL_NITELIKLI", "Özel nitelikli"
+
+
+class Attachment(models.Model):
+    """Dosya deposundaki bir ekin satırı (tasarım §5.2.8, §4.4.4 "Dosya anahtarı", §5.3 "Dosyalar").
+
+    Dosya `dosyalar/<stored_name>`'de dosya başına rastgele anahtarla AES-256-GCM şifreli durur;
+    kabı `shared.dosya_sifreleme`, yazım sırası ve okuma `services.dosya_deposu`'ndadır (tek yazarı
+    odur). F1b'de ek ucu ve ekranı yoktur; ilk sahip F1c'de `GeneratedDocument`'tır (plan F1b-3).
+
+    ALANLAR:
+
+    * `stored_name`: `uuid4().hex` (32 küçük onaltılık hane, uzantısız). `UUIDField` DEĞİLDİR:
+      ORM ile ham SQL aynı metni görmeli; AAD ve dosya adı bu metnin ASCII baytlarıdır.
+    * `original_name`: kullanıcının verdiği dosya adı; kişi adı taşıyabilir, şifrelidir (§5.3).
+    * `key_wrap`: dosya anahtarının sarmalı, base64(nonce 12 ‖ şifreli anahtar 32 ‖ etiket 16) =
+      80 karakterlik metin. DEK yenilemesi (TK12, F4) dosyaya dokunmadan bunu yeniler.
+    * `sha256`, `size`: AÇIK içeriğin özeti ve boyu (OYS `file_storage.py` AYNEN); manifesto onları
+      bu açık sütunlardan DEK'siz alır (plan F1b-3 "Kap ve manifesto").
+    * `mime`: imza baytından belirlenen tür (kullanıcının sözü değil). Boyu OYS'deki gibi 100'dür:
+      F1c'nin DOCX ve XLSX adları 64'e sığmaz.
+    * `owner_type`, `owner_id`: genel bağ (§5.2.10). `owner_type` kayıtlı bir model etiketidir
+      (`okul.SchoolYear` biçimi; küme `services.dosya_deposu`'nda, F1b'de boş); `contenttypes`
+      kimlikleri kurulumdan kuruluma değişeceği için kullanılmaz. `owner_id`
+      `denetim_izi.kimlik_metni` biçimindedir.
+    * `uploaded_by`: yazan hesap; `SISTEM` yazarında boştur.
+    * `retention_until`, `purged_at`: KVKK saklama sınırı ve imha anı; imhanın kendisi F4-F6'dadır.
+
+    SİLİNMEZ (tasarım §5 O1; altın kural 4): `delete()` ve toplu silme `DeletionNotAllowed`
+    yükseltir; `_base_manager` da `objects`'tir (`base_manager_name`), düz yöneticiden silinemez.
+    `_raw_delete` bu yolla kapanmaz; onu izsiz yazım ve tek yazar taramaları yakalar.
+    `BaseModel`'in yumuşak silmesi ve `updated_at`'i alınmaz. Depo tek yazımlıdır: KVKK
+    imhasında dosya silinir, satır `purged_at` ile kalır; `key_wrap` ve `original_name` boşalır
+    (anahtar imhası). Canlı satırda ikisi doludur, imhalı satırda ikisi boştur (veritabanı kısıtı).
+
+    DENETİM İZİ (tasarım §4.6.2; plan F1b-3 "Dosya deposu"): her yazma satırla AYNI işlemde iz satırı
+    yazar. İçerik MAC'i `IZ_OZET_ALANLARI`'nı kapsar. `original_name` ve `key_wrap` MAC DIŞIDIR
+    (`IZ_MAC_DISI_ALANLARI`; §4.6.2 "imha edilen dosya"): imhada boşalırlar, MAC'te kalsalardı
+    anahtara erişen biri dar uzaylı dosya adını aday sözlüğüyle geri bulabilirdi; `key_wrap` DEK
+    yenilemesinde de değişir ve kendini AES-GCM etiketiyle doğrular. Değeri satıra girenler kişisiz
+    alanlardır (`IZ_DEGER_ALANLARI`); özet değere girmez. İmha `purged_at` üzerinden durum geçişidir
+    (`IZ_DURUM_ALANLARI`).
+    """
+
+    #: Denetim izinde önce/sonra değeri yazılabilen kişisiz alanlar (tasarım §4.6.2).
+    IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "mime",
+        "size",
+        "sensitivity",
+        "retention_until",
+        "owner_type",
+        "owner_id",
+        "uploaded_at",
+        "purged_at",
+    )
+    #: İçerik MAC'ine giren alanlar (plan F1b-3 "Dosya deposu"; kimlik hariç).
+    IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "stored_name",
+        "sha256",
+        "mime",
+        "size",
+        "sensitivity",
+        "retention_until",
+        "owner_type",
+        "owner_id",
+        "uploaded_by",
+        "uploaded_at",
+        "purged_at",
+    )
+    #: İçerik MAC'inin DIŞINDAKİ alanlar: imhada boşalanlar (tasarım §4.6.2; belge dizesi).
+    IZ_MAC_DISI_ALANLARI: ClassVar[tuple[str, ...]] = ("original_name", "key_wrap")
+    #: Durum alanı: imha (§4.6.2 kural 3; ayrı `DURUM` satırı).
+    IZ_DURUM_ALANLARI: ClassVar[tuple[str, ...]] = ("purged_at",)
+
+    stored_name = models.CharField("depo adı", max_length=32, unique=True)
+    original_name = EncryptedCharField("özgün dosya adı", max_length=255, blank=True, default="")
+    key_wrap = models.CharField("dosya anahtarı sarmalı", max_length=80, blank=True, default="")
+    sha256 = models.CharField("açık içeriğin sha256'sı", max_length=64)
+    mime = models.CharField("tür", max_length=100)
+    size = models.PositiveBigIntegerField("açık boyut (bayt)")
+    sensitivity = models.CharField(
+        "hassasiyet",
+        max_length=16,
+        choices=AttachmentSensitivity.choices,
+        default=AttachmentSensitivity.NORMAL,
+    )
+    retention_until = models.DateField("saklama sınırı", null=True, blank=True)
+    owner_type = models.CharField("sahip kaydın modeli", max_length=64)
+    owner_id = models.CharField("sahip kaydın kimliği", max_length=64)
+    uploaded_by = models.ForeignKey(
+        Account,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="yükleyen hesap",
+    )
+    uploaded_at = models.DateTimeField("yükleme anı", default=timezone.now)
+    purged_at = models.DateTimeField("imha anı", null=True, blank=True)
+
+    objects = _NoDeleteQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = "ek"
+        verbose_name_plural = "ekler"
+        ordering = ["uploaded_at", "id"]
+        base_manager_name = "objects"
+        indexes = [
+            models.Index(fields=["owner_type", "owner_id"], name="okul_attachment_sahip_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(sensitivity__in=AttachmentSensitivity.values),
+                name="ck_attachment_sensitivity",
+            ),
+            # Canlı satırda sarmal ve ad dolu, imhalı satırda ikisi de boş (belge dizesi).
+            models.CheckConstraint(
+                condition=models.Q(purged_at__isnull=False, key_wrap="", original_name="")
+                | (
+                    models.Q(purged_at__isnull=True)
+                    & ~models.Q(key_wrap="")
+                    & ~models.Q(original_name="")
+                ),
+                name="ck_attachment_purged_fields",
+            ),
+            # Biçimleri servis ve okuyucular denetler; SQLite `max_length`'i zorlamaz.
+            models.CheckConstraint(
+                condition=models.Q(Exact(Length("stored_name"), 32)),
+                name="ck_attachment_stored_name",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(Exact(Length("sha256"), 64)), name="ck_attachment_sha256"
+            ),
+            # Boş dosya eklenemez (`shared.dosya_sifreleme.tur_belirle`).
+            models.CheckConstraint(condition=models.Q(size__gt=0), name="ck_attachment_size"),
+            # Sahipsiz ek yoktur (§5.2.10 genel bağ).
+            models.CheckConstraint(
+                condition=~models.Q(owner_type="") & ~models.Q(owner_id=""),
+                name="ck_attachment_owner",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        # Özgün ad şifreli ve kişi adı taşıyabilir: temsil depo adıdır.
+        return f"Ek {self.stored_name}"
+
+    def delete(self, using: Any = None, keep_parents: bool = False) -> tuple[int, dict[str, int]]:
+        raise DeletionNotAllowed(
+            "Ek kaydı silinmez; imhada `purged_at` ile kalır (tasarım §4.4.7)."
         )

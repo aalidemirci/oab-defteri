@@ -60,6 +60,16 @@ export function formatDateTime(iso: string | null | undefined): string {
   return `${parts.day}.${parts.month}.${parts.year} ${parts.hour}:${parts.minute}`;
 }
 
+const MB = 1024 * 1024;
+const GB = 1024 * MB;
+
+/** Dosya boyu, Türkçe sayı biçimiyle (ondalık virgül): "820 KB", "2,5 MB", "1,2 GB"; en az 1 KB. */
+export function formatBoyut(bayt: number): string {
+  if (bayt >= GB) return `${nf.format(Math.round((bayt / GB) * 10) / 10)} GB`;
+  if (bayt >= MB) return `${nf.format(Math.round((bayt / MB) * 10) / 10)} MB`;
+  return `${nf.format(Math.max(1, Math.round(bayt / 1024)))} KB`;
+}
+
 /** Bugünü ISO yyyy-mm-dd olarak (yerel saat) — tarih input varsayılanı için. */
 export function todayIso(): string {
   const d = new Date();

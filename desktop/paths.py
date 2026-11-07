@@ -40,6 +40,11 @@ DIZIN_KIPI = 0o700
 DB_FILE_NAME = "db.sqlite3"
 LOCK_FILE_NAME = "instance.lock"
 VERSION_STAMP_FILE_NAME = "surum.json"
+#: Dosya deposu ve yetim dizini (tasarım §2.3.2, §4.4.7): veri dizinindeki `dosyalar/`,
+#: `dosyalar/yetim/`. Backend bu pakete bağımlı değildir; eşi `settings.DOSYA_DEPOSU_DIR` ve
+#: `shared.dosya_sifreleme.YETIM_DIZINI`'dir (eşitliği `test_dosya_deposu.py` sınar).
+DOSYA_DEPOSU_DIR_NAME = "dosyalar"
+YETIM_DIR_NAME = "yetim"
 
 # Bulut/gezici profil senkronu belirtileri — SQLite dosyasını bozabilir.
 _SYNC_MARKERS = (
@@ -83,10 +88,28 @@ class AppPaths:
         """Pencere motorunun profil dizini — önbellekte (silinebilir, veri değil)."""
         return self.cache / "webview"
 
+    @property
+    def dosya_deposu(self) -> Path:
+        """Ekler ve üretilmiş evrakın şifreli deposu (tasarım §2.3.2, §4.4.7)."""
+        return self.data / DOSYA_DEPOSU_DIR_NAME
+
+    @property
+    def yetim_dizini(self) -> Path:
+        """Satırı olmayan dosyaların taşındığı dizin (tasarım §4.4.7 "Yetim ve eksik dosya")."""
+        return self.dosya_deposu / YETIM_DIR_NAME
+
     def ensure(self, *, platform: str | None = None) -> None:
         """Dizinleri oluşturur; POSIX'te hepsini 0700'e çeker (içeriklerine dokunmaz)."""
         posix = not (sys.platform if platform is None else platform).startswith("win")
-        for directory in (self.root, self.data, self.backups, self.logs, self.cache):
+        for directory in (
+            self.root,
+            self.data,
+            self.backups,
+            self.logs,
+            self.cache,
+            self.dosya_deposu,
+            self.yetim_dizini,
+        ):
             directory.mkdir(parents=True, exist_ok=True)
             if posix:
                 directory.chmod(DIZIN_KIPI)
@@ -156,13 +179,14 @@ def resolve_app_paths(
 def check_sync_hazard(path: Path) -> str | None:
     """Veri dizini buluta/gezici profile denk geliyorsa Türkçe uyarı döndürür.
 
-    Engellemez (kullanıcı bilinçli taşımış olabilir) — yalnız günlüğe yazılır.
+    Engellemez (kullanıcı bilinçli taşımış olabilir) — yalnız günlüğe yazılır. İleti yolu
+    taşımaz: Windows yolu hesap adını içerir, bu günlük BTR'ye iletilen dosyadır.
     """
     lowered = str(path).lower().replace("\\", "/")
     for marker in _SYNC_MARKERS:
         if marker.replace("\\", "/") in lowered:
             return (
-                f"Veri dizini bulut/gezici profil ile eşitlenen bir konumda görünüyor: {path}. "
+                "Veri dizini bulut/gezici profil ile eşitlenen bir konumda görünüyor. "
                 "Eşitleme açık veritabanı dosyasını bozabilir; verinizi eşitlenmeyen bir "
                 "klasöre almanız ve düzenli yedek almanız önerilir."
             )

@@ -56,6 +56,7 @@ function ozet(durum: OturumDurumAdi, yetenekler: string[] = []): OturumOzeti {
     bosta_kalan_sn: durum === "acik" ? 600 : null,
     kilit_bekliyor: false,
     kurulum_tamam: durum !== "kurulum",
+    yukleme_siniri_mb: 20,
   };
 }
 

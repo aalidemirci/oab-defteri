@@ -18,8 +18,8 @@ damga dosyasında tutar ve günü eskiyen işi çalıştırır.
   bitene dek geri yükleme bekler. İş bitince bu iş parçacığının Django
   bağlantıları kapatılır: açık kalan bir bağlantı Windows'ta geri yüklemedeki
   dosya takasını bozardı.
-* **Yerleşik iş** (`desktop/main.py` kaydeder): günlük yedek + 14 gün rotasyonu
-  (yedek alınmadıysa rotasyon koşmaz).
+* **Yerleşik iş** (`desktop/main.py` kaydeder): günlük yedek + 14 gün rotasyonu ve yetim
+  silmesi (yedek alınmadıysa ikisi de koşmaz).
 * **Saatlik işler** (`saatlik_kaydet`): damgasız, HER tikte koşar. Günde bir
   yetmeyen denetimler içindir; bakım kapısından aynı biçimde geçer.
 * **Ertelenenleri şimdi dene** (`ertelenenleri_dene`; TK19 "DEK isteyen gün işi kilitliyken

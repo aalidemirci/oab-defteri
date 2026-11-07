@@ -1,12 +1,15 @@
-"""Geri yükleme yetkisi — parola yolunun ORM'SİZ hesap denetimi (tasarım §4.4.4, §4.6.1; plan F1b-2).
+"""Geri yükleme yetkisi — ORM'SİZ hesap denetimleri (tasarım §4.4.4, §4.6.1; plan F1b-2).
+
+İki denetim durur: parola yolunun hesap denetimi (`yonetici_dogrula`; başlığın çoğu onundur) ve iki
+yolda da koşan hesapsız yedek denetimi (`goruntude_giris_hesabi_yok_mu`; "HESAPSIZ YEDEK").
 
 Yedekten geri yükleme yalnız KURTARMA ANAHTARIYLA ya da rolü program yöneticisi olan hesabın
 PAROLASIYLA yapılır (tasarım §4.4.4 "Geri yükleme yetkisi", denetim GA-3, tehdit 21). Uygulama
 içi yol ayrıca rol kapısından (`RolMiddleware`) ve servis kapısından (`live_restore`) geçer;
 konsol yolu (`oab-defteri --geri-yukle`, Başlat menüsündeki "Yedekten Geri Yükle" kısayolu,
 `manage.py restore_backup`) Django ara katmanından geçmez. Bu yüzden denetim üç kapının ortak
-çekirdeğindedir: `backup_restore.restore_database` bu modülü YALNIZ PAROLA YOLUNDA, yedek
-parolayla çözüldükten (DEK ve görüntü elde edildikten) SONRA ve hiçbir dosyaya dokunmadan
+çekirdeğindedir: `backup_restore.restore_database` `yonetici_dogrula`'yı YALNIZ PAROLA YOLUNDA,
+yedek parolayla çözüldükten (DEK ve görüntü elde edildikten) SONRA ve hiçbir dosyaya dokunmadan
 ÖNCE çağırır. Yanlış parola rolü sızdırmaz: denetime ancak doğru parola ulaşır. KURTARMA
 ANAHTARI YOLUNDA ROL DENETİMİ YOKTUR: anahtarın kendisi yetkidir, zarfı okul müdürlüğündedir.
 
@@ -145,17 +148,32 @@ bilen biri görüntüye düşürülmüş bir veritabanıyla geri yükler (görü
 izini tutar). Bu denetim kaza önleyicidir ve izlenebilirlik sağlar; GA-3'ü kriptografik olarak
 kapatmaz.
 
+HESAPSIZ YEDEK (kullanıcı kararı 07.11.2026; `goruntude_giris_hesabi_yok_mu`). Kurulum yedeği hesap
+satırı yazılmadan önce alınır (`app_password.take_transition_backup`): geri yüklenseydi veritabanında
+satır kalmaz, `guvenlik.json`'da sarmal kalırdı; kilit ekranında hesap seçilemez, kurtarma listesi
+boş olur, programa girilemezdi. Bu yüzden yedeğin görüntüsünde `okul_account` tablosunda rolü program
+yöneticisi, durumu `GIRIS_DURUMLARI`'nda en az bir satır yoksa geri yükleme reddedilir. Süzgeç
+`hesaplar.recovery_accounts` ile aynıdır (eşitliği test sabitler): güvenlik dosyası kayıpken tek kapı
+o listedir, liste boşsa programa girilemez. Kural içeriğe bakar, dosyanın adına bakmaz: adı
+değiştirilmiş kurulum yedeği de yakalanır. Yalnız hesap satırının rolü ve durumu okunur; mühür ve iz
+denetlenmez, liste de düz sütunlardan çıkar. Denetim parola yolunda da kurtarma anahtarı yolunda da
+koşar; ret `YetkiReddi` değildir, çünkü hesaba değil yedeğin içeriğine bağlıdır (çağıran
+`backup_restore._hesapsiz_yedegi_reddet`). Bu sert engelin kapsamı bilerek dardır: ret yalnız olumlu
+kanıtla olur. Görüntü okunamazsa (`sqlite3` hatası, tablo yok dâhil; geçici dizin yazılamazsa
+`OSError`) denetim karar vermez, geri yükleme eskisi gibi sürer, günlüğe kişisiz uyarı düşer.
+
 YEDEĞİN GÖRÜNTÜSÜ BELLEKTE açılır: `sqlite3.connect(":memory:")` + `deserialize`. Programın
 yedeği WAL kipindeki kaynaktan `Connection.backup()` ile alındığı için görüntünün başlığı WAL
 işaretlidir (18-19. baytlar 2); `deserialize` böyle görüntüyü açmaz ("unable to open database
 file"). Bu yüzden görüntünün BELLEKTEKİ kopyasında iki bayt 1'e çekilir (geri yükleme ise
-görüntünün kendisini aynen yazar). Görüntü bugün yalnız veritabanı baytlarıdır; F1b 3. adımda
-kap manifesto ya da dosya bölümü taşırsa buraya yalnız veritabanı baytları verilmelidir.
+görüntünün kendisini aynen yazar). Görüntü yalnız veritabanı baytlarıdır: kabın manifestosunu ve
+dosya bölümünü `backup_crypto` ayırır, buraya gelmezler (plan F1b-2 ekleri; çağıran
+`backup_restore._yetkiyi_denetle`).
 
 **Tasarımın "bellekte" lafzından sapma (F1b-2 ekleri):** `deserialize` olmayan SQLite'ta
 (< 3.36; Pardus 21'in 3.34'ü) görüntü, veri dizini altında 0700 izinli bir geçici dizine
 yazılır, salt okunur açılır ve okunur okunmaz (hata yolunda da) silinir. Aile emsali
-`desktop/backup.py::database_snapshot`'tır (aynı platform için aynı kısa temas bilerek kabul
+`desktop/backup.py::goruntu_ve_manifesto`'dur (aynı platform için aynı kısa temas bilerek kabul
 edilir). Çözülen görüntü alan düzeyinde şifrelidir: geçici dosyanın açıklığı, diskte her zaman
 duran `db.sqlite3` ile aynıdır; yine de kalıcı düz kopya bırakılmaz.
 """
@@ -206,6 +224,12 @@ ILETI_OZET: Final = (
     "Bu hesabın parola kaydı kayıtlardakiyle uyuşmuyor; geri yükleme yapılmadı. Güvenlik "
     "dosyası ya da kayıtlar bozulduysa ya da program dışından değiştirildiyse yedeği kurtarma "
     "anahtarıyla geri yükleyin ve Denetleme Kuruluna bildirin."
+)
+#: Yedekte girişe açık program yöneticisi yok (`goruntude_giris_hesabi_yok_mu`; kullanıcı kararı
+#: 07.11.2026). `YetkiReddi` iletisi değildir: hesaba değil yedeğin içeriğine bağlıdır.
+ILETI_HESAPSIZ_YEDEK: Final = (
+    "Bu yedekte açık bir program yöneticisi hesabı yok; geri yüklenirse programa girilemez. "
+    "Kurulum yedeği hesap kurulmadan önce alınır. Geri yükleme yapılmadı; başka bir yedek seçin."
 )
 
 #: Ret nedenleri (günlüğe ve teste; kullanıcı metnine çıkmaz) → ileti.
@@ -331,6 +355,29 @@ def yonetici_dogrula(
     if askida:
         raise YetkiReddi(RET_ASKIDA, kaynak=kaynak)
     return kaynak
+
+
+def goruntude_giris_hesabi_yok_mu(dizin: Path, goruntu: bytes) -> bool:
+    """Yedeğin görüntüsünde girişe açık program yöneticisi olmadığı kanıtlandı mı?
+
+    True yalnız hesap tablosu okunup uygun satır bulunmadığında döner. Görüntü okunamazsa False
+    döner ve günlüğe kişisiz uyarı düşer: denetim karar vermez (modül başlığı "HESAPSIZ YEDEK").
+    `dizin` veri dizinidir; `deserialize` olmayan SQLite'ta görüntü onun altındaki geçici dizine
+    yazılır, geçici dizin çıkışta silinir.
+    """
+    try:
+        with _goruntu_baglantisi(dizin, wal_basligini_yama(goruntu)) as baglanti:
+            durumlar = baglanti.execute(
+                "SELECT status FROM okul_account WHERE role = ?", (ROL_YONETICI,)
+            ).fetchall()
+    except sqlite3.Error as exc:
+        neden = _sqlite_hatasi(exc).neden
+    except OSError as exc:
+        neden = type(exc).__name__
+    else:
+        return not any(satir[0] in GIRIS_DURUMLARI for satir in durumlar)
+    logger.warning("Yedeğin hesapları okunamadı (neden: %s); hesap denetimi yapılmadı.", neden)
+    return False
 
 
 def satirdan_muhur_alanlari(satir: Sequence[Any]) -> dict[str, Any]:

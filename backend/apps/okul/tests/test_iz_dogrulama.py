@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from desktop.backup import ROTASYON_KUMESI
 from django.db import connection, transaction
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -833,6 +834,79 @@ def test_geri_yukleme_notu_ilk_kilit_acilisinda_satir_olur_bekleyenler_yazilir()
     assert denetim_izi.zinciri_dogrula() == []
 
 
+_DOSYA_SAYILARI = {
+    "kapsam": "tam",
+    "yerine_konan": 3,
+    "yetimden_donen": 1,
+    "eksik": 2,
+    "bozuk": 1,
+    "onayla_suruldu": 1,
+}
+
+
+def test_geri_yukleme_satiri_ve_karti_dosya_sayilarini_tasir() -> None:
+    """Plan F1b-3 "Geri yükleme": not ve satır kişisiz sayıları taşır; kart satırdan okur."""
+    kilitle()
+    notu_yaz(dosya_sayilari=_DOSYA_SAYILARI)
+
+    ac()
+
+    (geri,) = satirlar(action="GERI_YUKLEME")
+    for ad, deger in _DOSYA_SAYILARI.items():
+        assert geri.values[ad] == [None, deger]
+        assert ad in geri.changed_fields
+    assert pano(TEST_HESAP_ID)["geri_yukleme"]["dosyalar"] == _DOSYA_SAYILARI
+
+
+def test_dosya_sayisi_tasimayan_eski_not_bos_sozluk_verir() -> None:
+    kilitle()
+    notu_yaz()
+
+    ac()
+
+    (geri,) = satirlar(action="GERI_YUKLEME")
+    assert "kapsam" not in geri.values
+    assert pano(TEST_HESAP_ID)["geri_yukleme"]["dosyalar"] == {}
+
+
+@pytest.mark.parametrize(
+    "bozuk",
+    [
+        {"kapsam": "Uydurgül Masalcıoğlu"},
+        {"kapsam": 2},
+        {"yerine_konan": -1},
+        {"eksik": True},
+        {"bozuk": "1"},
+        {"onayla_suruldu": 1.5},
+        {"yetimden_donen": None},
+    ],
+    ids=["serbest_kapsam", "sayi_kapsam", "eksi", "bool", "metin", "kesirli", "bos"],
+)
+def test_bicimi_tutmayan_dosya_sayisi_satira_girmez(bozuk: dict[str, Any]) -> None:
+    """Not dosyası program dışından değiştirilebilir: serbest metin ve biçimsiz sayı girmez (R1)."""
+    kilitle()
+    notu_yaz(dosya_sayilari={**_DOSYA_SAYILARI, **bozuk})
+
+    ac()
+
+    (geri,) = satirlar(action="GERI_YUKLEME")
+    (alan,) = bozuk
+    assert alan not in geri.values
+    assert "Masalcıoğlu" not in json.dumps(geri.values, ensure_ascii=False)
+
+
+def test_dosya_bolumu_sozluk_degilse_satira_girmez() -> None:
+    kilitle()
+    kayit = not_kaydi()
+    kayit["dosyalar"] = ["kapsam", "tam"]
+    geri_yukleme_notu.geri_yukleme_ekle(iz_durumu.dizin(), kayit)
+
+    ac()
+
+    (geri,) = satirlar(action="GERI_YUKLEME")
+    assert "kapsam" not in geri.values
+
+
 def test_iki_geri_yukleme_iki_satir_kurtarma_yolu_no_tasir() -> None:
     kilitle()
     notu_yaz(yol_bilgisi={"tur": "kurtarma", "no": 3}, onceki_dosya=None)
@@ -955,6 +1029,56 @@ def test_kurtarma_yoluyla_uygulama_ici_geri_yukleme_oturumdaki_hesaba_baglanir()
     assert kart["oturum_hesap"] == yonetici_ozeti() and kart["yol_hesap"] is None
 
 
+#: Geri yüklenen yedekte kaydı olmayan hesabın kimliği (biçimi geçerli; bu veritabanında satırı yok).
+YEDEKTE_OLMAYAN_HESAP = "00000000-0000-4000-8000-0000000000aa"
+
+
+def yedekte_yok_ozeti() -> dict[str, Any]:
+    return {
+        "id": YEDEKTE_OLMAYAN_HESAP,
+        "tanitici": None,
+        "rol_etiketi": None,
+        "acilis": None,
+        "kapanis": None,
+        "yedekte_yok": True,
+    }
+
+
+def test_baslatan_oturumun_hesabi_yedekte_yoksa_kart_bunu_ayirir() -> None:
+    """07.11.2026 sınaması (kod okuması): sihirbazı dolduran hesapla yabancı yedek geri yüklenince
+    oturumun hesabı yeni kayıtlarda yoktur. Kart "Kaydı okunamayan hesap" diyordu: kayıt
+    okunamaz değildir, yedekte hiç yoktur. Özet kişisizdir, yanıt bunu ayrı bir alanla söyler."""
+    assert not Account.objects.filter(pk=YEDEKTE_OLMAYAN_HESAP).exists()
+    kilitle()
+    notu_yaz(yol_bilgisi={"tur": "kurtarma", "no": 3}, oturum_hesabi=YEDEKTE_OLMAYAN_HESAP)
+
+    ac()
+
+    kart = pano(TEST_HESAP_ID)["geri_yukleme"]
+    assert kart["oturum_hesap"] == yedekte_yok_ozeti()
+
+
+def test_yedegi_acan_hesap_yedekte_yoksa_kart_bunu_ayirir() -> None:
+    """Yedek hesabın açılışından eskiyse parolayla açan program yöneticisi de yedekte yoktur."""
+    kilitle()
+    notu_yaz(
+        yol_bilgisi={"tur": "hesap", "hesap": YEDEKTE_OLMAYAN_HESAP, "tanitici": "yeni-yonetici"}
+    )
+
+    ac()
+
+    assert pano(TEST_HESAP_ID)["geri_yukleme"]["yol_hesap"] == yedekte_yok_ozeti()
+
+
+def test_yedekte_yok_alani_yalniz_gecerli_kimligi_satiri_olmayan_hesapta_gelir() -> None:
+    """Biçimsiz kimlikte hesap "yedekte yok" denemez: kayıt okunamıyordur, eski metin kalır. Kaydı
+    olan hesabın özeti değişmez. Öteki kartlarda satırın yokluğu yedekle açıklanamaz: ortak özet
+    (`_hesap_ozeti`) bu alanı taşımaz."""
+    assert "yedekte_yok" not in iz_dogrulama._geri_yukleme_hesabi("biçimsiz")
+    assert iz_dogrulama._geri_yukleme_hesabi(TEST_HESAP_ID) == yonetici_ozeti()
+    assert "yedekte_yok" not in iz_dogrulama._hesap_ozeti(YEDEKTE_OLMAYAN_HESAP)
+
+
 @pytest.mark.parametrize(
     "ad",
     [
@@ -991,6 +1115,10 @@ def test_kullanicinin_sectigi_ya_da_adlandirdigi_yedek_adi_satira_girmez(ad: str
         "pre-migrate-1.0.0-beta.10-2026-11-01.odbak",
         "pre-anonim-2026-11-01-101530.odbak",
         "pre-anonim-2026-11-01-101530-2.odbak",
+        "pre-parola-acilis-2026-11-01-101530.odbak",
+        "pre-kapanis-2026-11-01.odbak",
+        "pre-dek-yenileme-2026-11-01.odbak",
+        "db-onceki-2026-11-01-101530.sqlite3",
         "oab-defteri-yedek-2026-11-02-101530.odbak",
     ],
 )
@@ -1000,11 +1128,50 @@ def test_programin_urettigi_yedek_adlari_kayda_gecer(ad: str) -> None:
     assert denetim_izi.yedek_kimligi(f"klasor/{ad}") == ""
 
 
+@pytest.mark.parametrize(
+    "ad",
+    [
+        "pre-parola-Pelinsu-2026-11-01-101530.odbak",
+        "pre-parola-acilis-2026-11-01-101530-Pelinsu.odbak",
+        "pre-kapanis-2026-11-01-Pelinsu.odbak",
+        "pre-dek-yenileme-Pelinsu-2026-11-01.odbak",
+        "db-onceki-2026-11-01-101530.odbak",
+        "db-onceki-2026-11-01-101530.sqlite3-wal",
+        "db-onceki-2026-11-01-101530.sqlite3-shm",
+        "db-onceki-Pelinsu-2026-11-01-101530.sqlite3",
+        "gunluk-2026-11-01.sqlite3",
+    ],
+)
+def test_onekini_koruyan_serbest_ad_kayda_gecmez(ad: str) -> None:
+    """Plan F1b-1 ekleri: genişleyen desen de birebir biçimdir; önekten sonra serbest metin kişi adı
+    taşıyabilir (R1). `-wal`/`-shm` eşi yedek değildir."""
+    assert denetim_izi.program_yedegi_mi(ad) is False
+    assert denetim_izi.yedek_kimligi(ad) == ""
+
+
+def test_rotasyon_kumesinin_her_oneginin_adi_kayda_gecer() -> None:
+    """Küme genişlerse desen de genişler (plan F1b-1 ekleri); yoksa silinen dosya adsız kalırdı."""
+    ornekler = {
+        "gunluk": "gunluk-2026-11-01.odbak",
+        "pre-parola": "pre-parola-acilis-2026-11-01-101530.odbak",
+        "pre-anonim": "pre-anonim-2026-11-01-101530.odbak",
+        "pre-kapanis": "pre-kapanis-2026-11-01.odbak",
+        "pre-dek-yenileme": "pre-dek-yenileme-2026-11-01.odbak",
+        "pre-migrate": "pre-migrate-0.2.0-2026-11-01.odbak",
+        "db-onceki": "db-onceki-2026-11-01-101530.sqlite3",
+    }
+    assert set(ornekler) == {kural.onek for kural in ROTASYON_KUMESI}
+    for kural in ROTASYON_KUMESI:
+        assert kural.desen.fullmatch(ornekler[kural.onek])
+        assert denetim_izi.program_yedegi_mi(ornekler[kural.onek]) is True
+
+
 def test_rotasyonun_sildigi_elle_konmus_dosyanin_adi_yedek_satirina_girmez() -> None:
-    """Rotasyon tarihi adın herhangi bir yerinde arar: elle konmuş "gunluk-<gün> <ad>.odbak" da
-    silinir. Olay kalır, ad girmez — açık kipte, kilitli kipte ve geri yükleme notunda aynı
-    kural (`denetim_izi.yedek_kimligi`)."""
-    elle = "gunluk-2026-10-01 Pelinsu Uydurmakaya.odbak"
+    """Rotasyonun `pre-migrate` deseni sürümü geniş alır: elle yeniden adlandırılmış dosya da silinir.
+    Olay kalır, ad girmez — açık kipte, kilitli kipte ve geri yükleme notunda aynı kural
+    (`denetim_izi.yedek_kimligi`)."""
+    elle = "pre-migrate-Pelinsu.Uydurmakaya-2026-10-01.odbak"
+    assert next(k for k in ROTASYON_KUMESI if k.adetle).desen.fullmatch(elle)
     assert masaustu_kanca.yedek_olaylarini_yaz(silinen=[elle]) == 1  # oturum açık: açık kip
     kilitle()
     assert masaustu_kanca.yedek_olaylarini_yaz(silinen=[elle]) == 1  # kilitli kip
@@ -1034,6 +1201,37 @@ def test_bozuk_not_ayrintisiz_geri_yukleme_satiri_yazar(icerik: str) -> None:
     assert (geri.object_id, geri.changed_fields, geri.values) == ("", ["not_okunamadi"], {})
     assert not geri_yukleme_notu.var_mi(iz_durumu.dizin())
     assert not satirlar(action="BUTUNLUK")
+
+
+def test_notta_bekleyen_yedek_olayi_kisisiz_degerlerini_tasir_yol_tasiyamaz() -> None:
+    """Plan F1b-3: `YEDEK` satırının izinli değerleri kişisizdir; `yol` izin listesinde yoktur."""
+    kilitle()
+    notu_yaz()
+    notu = geri_yukleme_notu.oku(iz_durumu.dizin())
+    assert notu is not None
+    degerler = {
+        "kapsam": [None, "tam"],
+        "dosya_sayisi": [None, 2],
+        "boyut": [None, 4096],
+        "eksik": [None, 1],
+    }
+    olay = {
+        "eylem": "YEDEK",
+        "model": denetim_izi.YEDEK_DOSYASI,
+        "object_id": "oab-defteri-yedek-2026-11-06-101530.odbak",
+        "changed_fields": sorted(degerler),
+    }
+    notu["bekleyen_olaylar"] += [
+        {**olay, "values": degerler},
+        {**olay, "values": {"yol": [None, "uydurma-yol"]}},
+    ]
+    geri_yukleme_notu.yol(iz_durumu.dizin()).write_text(json.dumps(notu), encoding="utf-8")
+
+    ac()
+
+    yeni = satirlar(seq__gt=satirlar(action="KILIT")[-1].seq)
+    assert [s.action for s in yeni] == ["GERI_YUKLEME", "YEDEK", "GIRIS"]
+    assert yeni[1].values == degerler
 
 
 def test_notta_bicimsiz_bekleyen_olay_atlanir_giris_acilir() -> None:
@@ -1240,7 +1438,13 @@ def test_butunluk_ucu_kartlari_kagit_capasini_ve_son_girisleri_verir() -> None:
     assert veri["parola_yenilenme"] is None
     assert veri["okunamayan"] == []
     denetim = APIClient().get("/api/v1/security/integrity/audit/").json()
-    assert denetim == {"butunluk": [], "geri_yukleme": None, "muhru_tutmayan": [], "okunamayan": []}
+    assert denetim == {
+        "butunluk": [],
+        "geri_yukleme": None,
+        "muhru_tutmayan": [],
+        "eksik_ekler": [],
+        "okunamayan": [],
+    }
     iki_depo = APIClient().get("/api/v1/security/integrity/two-store/").json()
     assert iki_depo == {
         "iki_depo": {

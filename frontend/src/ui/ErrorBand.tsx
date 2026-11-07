@@ -11,7 +11,7 @@
 
 import { Link } from "react-router-dom";
 
-import { ApiError } from "../lib/api";
+import { ApiError, BEKLENMEYEN_HATA_ILETISI } from "../lib/api";
 import Icon from "./Icon";
 
 /** Fail-closed yazma (tasarım TK8): hesap kurulmamışken şifreli alan yazan uç 409 döner. */
@@ -26,7 +26,9 @@ export interface SayfaHatasi {
 /** Herhangi bir hatayı sayfa hatasına çevirir; backend iletisi yoksa `yedek` kullanılır. */
 export function hataOku(e: unknown, yedek: string): SayfaHatasi {
   if (e instanceof ApiError) {
-    return { message: e.message, parolaGerekli: e.code === PAROLA_GEREKLI_KODU };
+    // Gövdesiz yanıtın genel iletisi backend iletisi sayılmaz: ekranın metni daha çok şey söyler.
+    const message = e.message === BEKLENMEYEN_HATA_ILETISI ? yedek : e.message;
+    return { message, parolaGerekli: e.code === PAROLA_GEREKLI_KODU };
   }
   return { message: yedek, parolaGerekli: false };
 }

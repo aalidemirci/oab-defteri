@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import sqlite3
 from contextlib import closing
@@ -33,12 +34,22 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from desktop.backup_crypto import (
-    encrypt_bytes,
-    ensure_public_config,
-    private_key_from_data_key,
-    recovery_header_from_state,
+from argon2.exceptions import HashingError
+from desktop.backup import (
+    is_old_database_file,
+    old_database_stamp,
+    remove_old_databases_named,
 )
+from desktop.backup_crypto import (
+    DENEME_MAGIC,
+    DOSYA_BOLUMU_SONU,
+    KAPSAM_TAM,
+    KAPSAM_YEREL,
+    Manifesto,
+    ManifestoGirdisi,
+    ensure_public_config,
+)
+from desktop.tests.kap_ortak import bolum_girdisi, durum_basligi, kap_kur
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -93,15 +104,8 @@ def _dek_ile_durum(parola: str, kurtarma: str | None = None) -> tuple[bytes, dic
 
 def _sifreli_kapsayici(icerik: bytes, dek: bytes, durum: dict[str, Any] | None) -> bytes:
     """Başlığa güvenlik durumunun TK10 izdüşümü (yalnız kurtarma bölümü) gömülür."""
-    baslik_verisi = recovery_header_from_state(durum) if durum is not None else None
-    baslik = (
-        json.dumps(baslik_verisi, ensure_ascii=False).encode("utf-8")
-        if baslik_verisi is not None
-        else b""
-    )
-    acik = private_key_from_data_key(dek).public_key()
     # desktop.* backend mypy koşusunda çözümlenmez (Any) → dönüş tipi sabitlenir.
-    return cast("bytes", encrypt_bytes(icerik, acik, recovery_header=baslik))
+    return cast("bytes", kap_kur(icerik, dek, baslik=durum_basligi(durum)))
 
 
 def _guncel_yaz(veri_dizini: Path, durum: dict[str, Any]) -> None:
@@ -159,12 +163,12 @@ def test_yedek_geri_yuklenir_eski_dosya_ve_wal_kenara_alinir(
     assert not (veri_dizini / "surum.json").exists()
     # Saklama tetiği yaşı adın damgasından okur (aile iskeletinin kullanıcı kararı): adı üreten ile
     # okuyan aynı biçimi konuşur; damga geri yüklemenin yerel anıdır, eşler aynı damgayı taşır.
-    damga = backup_restore.old_database_stamp(sonuc.old_db_path.name)
+    damga = old_database_stamp(sonuc.old_db_path.name)
     assert damga is not None
     assert abs(damga - timezone.localtime().replace(tzinfo=None)) < timedelta(minutes=5)
-    assert backup_restore.old_database_stamp(yan_wal.name) == damga
-    assert backup_restore.is_old_database_file(sonuc.old_db_path.name)
-    assert not backup_restore.is_old_database_file(yan_wal.name)
+    assert old_database_stamp(yan_wal.name) == damga
+    assert is_old_database_file(sonuc.old_db_path.name)
+    assert not is_old_database_file(yan_wal.name)
 
 
 def test_hedef_yokken_calisir_ve_basibos_wal_temizlenir(tmp_path: Path, veri_dizini: Path) -> None:
@@ -199,7 +203,7 @@ def _aile(dizin: Path, ad: str) -> list[Path]:
 def test_onceki_veritabani_damgasi_addan_okunur() -> None:
     beklenen = datetime(2026, 9, 1, 10, 10, 10)
     for ek in ("", "-wal", "-shm"):
-        assert backup_restore.old_database_stamp(ESKI_AD + ek) == beklenen
+        assert old_database_stamp(ESKI_AD + ek) == beklenen
 
 
 @pytest.mark.parametrize(
@@ -216,32 +220,16 @@ def test_onceki_veritabani_damgasi_addan_okunur() -> None:
     ],
 )
 def test_programin_bicimi_olmayan_ad_taninmaz_ve_silinmez(ad: str, veri_dizini: Path) -> None:
-    assert backup_restore.old_database_stamp(ad) is None
+    assert old_database_stamp(ad) is None
     disarida = veri_dizini.parent / ESKI_AD
     disarida.write_bytes(b"x")
     hedef = veri_dizini / Path(ad).name
     hedef.write_bytes(b"x")
 
-    silinen, kalan = backup_restore.remove_old_databases_named(veri_dizini, [ad])
+    silinen, kalan = remove_old_databases_named(veri_dizini, [ad])
 
     assert (silinen, kalan) == ([], [])
     assert disarida.exists() and hedef.exists()
-
-
-def test_eskiler_addaki_damgaya_gore_esleriyle_listelenir(veri_dizini: Path) -> None:
-    eski = _aile(veri_dizini, ESKI_AD)
-    yeni = _aile(veri_dizini, "db-onceki-2026-09-20-080000.sqlite3")
-    (veri_dizini / "db-onceki-elle.sqlite3").write_bytes(b"x")
-    # Dosya zamanı ölçü değildir: yeni dosya çok eski, eski dosya çok yeni görünse de.
-    for yol in yeni:
-        os.utime(yol, (0, 0))
-    sinir = datetime(2026, 9, 15, 12, 0)
-
-    beklenen = sorted(yol.name for yol in eski)
-    assert backup_restore.old_databases_before(veri_dizini, sinir) == beklenen
-    # Saat dilimli sınır yerel saate çevrilir (damga yerel saattir).
-    assert backup_restore.old_databases_before(veri_dizini, timezone.make_aware(sinir)) == beklenen
-    assert backup_restore.old_databases_before(veri_dizini / "yok", sinir) == []
 
 
 def test_veritabani_silinemezse_esleri_de_kalir(
@@ -260,7 +248,7 @@ def test_veritabani_silinemezse_esleri_de_kalir(
     monkeypatch.setattr(Path, "unlink", sil)
     adlar = [yol.name for yol in (*kilitli, *ikinci)] + ["db-onceki-2026-09-03-101010.sqlite3"]
 
-    silinen, kalan = backup_restore.remove_old_databases_named(veri_dizini, adlar)
+    silinen, kalan = remove_old_databases_named(veri_dizini, adlar)
 
     assert kalan == [ESKI_AD, f"{ESKI_AD}-shm", f"{ESKI_AD}-wal"]
     assert all(yol.exists() for yol in kilitli)
@@ -275,10 +263,12 @@ def test_veritabani_silinemezse_esleri_de_kalir(
     [b"SQLite format 3\x00" + b"\x00" * 100, b"HERHANGI BIR ICERIK"],
     ids=["duz", "yabanci"],
 )
-def test_ret_iletileri_teknik_uzanti_anmaz(icerik: bytes) -> None:
+def test_ret_iletileri_teknik_uzanti_anmaz(icerik: bytes, tmp_path: Path) -> None:
     """Sözlük: ".odbak" ve "kapsayıcı" kullanıcı metninde geçmez (yalnız Hakkında)."""
+    yedek = tmp_path / "yedek.odbak"
+    yedek.write_bytes(icerik)
     with pytest.raises(backup_restore.BackupRestoreError) as hata:
-        backup_restore.inspect_backup(icerik)
+        backup_restore.inspect_backup(yedek)
 
     ileti = str(hata.value)
     assert "odbak" not in ileti
@@ -341,6 +331,126 @@ def test_kurtarma_anahtariyla_acilir_ve_yalniz_kurtarma_bolumu_yazilir(
         assert yazilan["kurtarma"][alan] == durum["kurtarma"][alan]
     assert yazilan["kurtarma"]["dogrulandi"]
     assert app_password._unwrap_with_recovery(yazilan, kurtarma) == dek
+
+
+@pytest.mark.parametrize("kapsam", [KAPSAM_YEREL, KAPSAM_TAM], ids=["yerel", "tam"])
+def test_iki_kapsam_da_geri_yuklenir_hedefe_yalniz_veritabani_yazilir(
+    kapsam: int, tmp_path: Path, veri_dizini: Path
+) -> None:
+    """Plan F1b-3 "Kap ve manifesto" (manifesto boşken; dosyalar (c)'dedir): kap taşısa da
+    manifesto ve dosya bölümü hedefe girmez, veritabanı bayt bayt aynıdır."""
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
+    icerik = _sqlite_baytlari(tmp_path, "gizli")
+    yedek = tmp_path / "yedek.odbak"
+    yedek.write_bytes(
+        kap_kur(icerik, dek, baslik=durum_basligi(durum), manifesto=Manifesto(kapsam))
+    )
+    db = veri_dizini / "db.sqlite3"
+
+    backup_restore.restore_database(yedek, db, recovery_key=kurtarma)
+
+    assert db.read_bytes() == icerik
+
+
+_EK = ManifestoGirdisi("1" * 32, 2, "a" * 64)
+_EK_BOLUMU = bolum_girdisi(_EK.ad.encode("ascii"), bytes(_EK.sifreli_boy))
+
+
+@pytest.mark.parametrize(
+    "dosya_bolumu",
+    [
+        b"",
+        DOSYA_BOLUMU_SONU,
+        _EK_BOLUMU,
+        _EK_BOLUMU + DOSYA_BOLUMU_SONU + b"x",
+    ],
+    ids=["bolum_yok", "girdi_yok", "bitis_yok", "fazla_bayt"],
+)
+def test_dosya_bolumu_kap_duzeyinde_bozuk_tam_yedek_geri_yuklenmez(
+    dosya_bolumu: bytes, tmp_path: Path, veri_dizini: Path
+) -> None:
+    """Kullanıcı kararı "Bozuk ekte geri yükleme durur, ikinci onayla sürer": kap düzeyinde bozuk
+    yedek geri yüklenmez, ileti de yanlış sır gibi anlatmaz. Hiçbir dosya değişmez."""
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
+    yedek = tmp_path / "yedek.odbak"
+    yedek.write_bytes(
+        kap_kur(
+            _sqlite_baytlari(tmp_path, "gizli"),
+            dek,
+            baslik=durum_basligi(durum),
+            manifesto=Manifesto(KAPSAM_TAM, (_EK,)),
+            dosya_bolumu=dosya_bolumu,
+        )
+    )
+    db = veri_dizini / "db.sqlite3"
+    db.write_bytes(b"onceki")
+
+    with pytest.raises(backup_restore.BackupRestoreError, match="bölümü bozuk") as hata:
+        backup_restore.restore_database(yedek, db, recovery_key=kurtarma)
+
+    assert "Yedek açılamadı" not in str(hata.value)
+    assert db.read_bytes() == b"onceki"
+    assert not list(veri_dizini.glob("db-onceki-*"))
+    assert not (veri_dizini / "guvenlik.json").exists()
+
+
+def test_kapsami_tutmayan_manifesto_yanlis_sir_gibi_anlatilmaz(
+    tmp_path: Path, veri_dizini: Path
+) -> None:
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
+    yedek = tmp_path / "yedek.odbak"
+    yedek.write_bytes(
+        kap_kur(
+            _sqlite_baytlari(tmp_path, "gizli"),
+            dek,
+            baslik=durum_basligi(durum),
+            ham_manifesto=Manifesto(KAPSAM_TAM).baytlar(),
+            kapsam=KAPSAM_YEREL,
+        )
+    )
+
+    with pytest.raises(backup_restore.BackupRestoreError, match="dosya listesi"):
+        backup_restore.restore_database(yedek, veri_dizini / "db.sqlite3", recovery_key=kurtarma)
+
+
+def test_baska_kurulumun_tam_yedegi_guncel_dosyayla_acilmaz_baslikla_acilir(
+    tmp_path: Path, veri_dizini: Path
+) -> None:
+    """Aday sırası kapsamdan bağımsızdır: güncel dosyanın DEK'i bu yedeği açmaz, sıradaki aday
+    (gömülü başlık) açar. Yanlış anahtar yedeğin bozukluğu sayılsaydı ilk adayda dururdu."""
+    kurtarma = app_password.generate_recovery_key()
+    _guncel_yaz(veri_dizini, _durum(crypto.new_data_key(), PAROLA, kurtarma))
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
+    icerik = _sqlite_baytlari(tmp_path, "gizli")
+    yedek = tmp_path / "yedek.odbak"
+    yedek.write_bytes(
+        kap_kur(icerik, dek, baslik=durum_basligi(durum), manifesto=Manifesto(KAPSAM_TAM))
+    )
+    db = veri_dizini / "db.sqlite3"
+
+    backup_restore.restore_database(yedek, db, recovery_key=kurtarma)
+
+    assert db.read_bytes() == icerik
+
+
+@pytest.mark.parametrize("kuyruk", [b"", bytes(200)], ids=["yalniz_sihirli_bayt", "tam_boy"])
+def test_deneme_yedegi_ayri_iletiyle_reddedilir(
+    kuyruk: bytes, tmp_path: Path, veri_dizini: Path
+) -> None:
+    """Plan F1b-3 "Kap ve manifesto": `ODBAK\\x02` açılmaz; sır sorulmadan, hedefe dokunulmadan
+    "deneme sürümüyle alınmış" denir."""
+    yedek = tmp_path / "gunluk-2026-08-01.odbak"
+    yedek.write_bytes(DENEME_MAGIC + kuyruk)
+    db = veri_dizini / "db.sqlite3"
+    db.write_bytes(b"onceki")
+
+    with pytest.raises(backup_restore.BackupRestoreError, match="deneme sürümüyle alınmış"):
+        backup_restore.restore_database(yedek, db)
+
+    assert db.read_bytes() == b"onceki"
 
 
 def test_parola_hesapsiz_verilirse_reddedilir(tmp_path: Path, veri_dizini: Path) -> None:
@@ -526,25 +636,205 @@ def test_sema_1_baslikli_eski_yedek_aday_degildir(tmp_path: Path, veri_dizini: P
     yedek.write_bytes(
         cast(
             "bytes",
-            encrypt_bytes(
-                _sqlite_baytlari(tmp_path, "eski"),
-                private_key_from_data_key(dek).public_key(),
-                recovery_header=json.dumps(sema_1).encode("utf-8"),
+            kap_kur(
+                _sqlite_baytlari(tmp_path, "eski"), dek, baslik=json.dumps(sema_1).encode("utf-8")
             ),
         )
     )
 
-    assert backup_restore.inspect_backup(yedek.read_bytes()).embedded_state is None
+    assert backup_restore.inspect_backup(yedek).embedded_state is None
+
+
+# ---------------------------------------------------------------------------
+# Yedek başlığının `kdf`'si: mühürden önce kullanılır, güvenilmezdir
+# ---------------------------------------------------------------------------
+#: Sayılar yazılıdır: tavan `crypto.KdfParams()`'tan türer, test de türetseydi katın kayması ya da
+#: tavanın testlerde ucuz profile inen `DEFAULT_KDF`'e bağlanması görünmezdi.
+_UCUZ_KDF = {"time_cost": 1, "memory_cost": 8, "parallelism": 1}
+_PROFIL_KDF = {"time_cost": 3, "memory_cost": 65536, "parallelism": 4}
+_TAVAN_KDF = {"time_cost": 48, "memory_cost": 1048576, "parallelism": 64}
+
+_SINIR_DISI_KDF = [
+    pytest.param({**_TAVAN_KDF, "time_cost": 49}, id="sure_tavan_ustu"),
+    pytest.param({**_TAVAN_KDF, "memory_cost": 1048577}, id="bellek_tavan_ustu"),
+    pytest.param({**_TAVAN_KDF, "parallelism": 65}, id="kulvar_tavan_ustu"),
+    pytest.param({**_UCUZ_KDF, "time_cost": 0}, id="sure_sifir"),
+    pytest.param({**_UCUZ_KDF, "time_cost": -1}, id="sure_eksi"),
+    pytest.param({**_UCUZ_KDF, "parallelism": 0}, id="kulvar_sifir"),
+    pytest.param({**_UCUZ_KDF, "memory_cost": 7}, id="bellek_kulvarin_altinda"),
+    pytest.param({**_PROFIL_KDF, "memory_cost": 31}, id="bellek_dort_kulvarin_altinda"),
+    pytest.param({**_UCUZ_KDF, "memory_cost": 2**40}, id="bellek_uint32_ustu"),
+    pytest.param({**_UCUZ_KDF, "time_cost": "x"}, id="metin"),
+    pytest.param({**_UCUZ_KDF, "time_cost": None}, id="bos"),
+    pytest.param({**_UCUZ_KDF, "parallelism": []}, id="liste"),
+    pytest.param({**_UCUZ_KDF, "memory_cost": float("inf")}, id="sonsuz"),
+    pytest.param({**_UCUZ_KDF, "memory_cost": float("nan")}, id="sayi_degil"),
+]
+
+
+def _argon2_kosamaz(*args: Any, **kwargs: Any) -> bytes:
+    raise HashingError("Memory allocation error")
+
+
+@pytest.mark.parametrize("kdf", _SINIR_DISI_KDF)
+def test_sinir_disi_baslik_kdfsi_argon2ye_gitmez(
+    tmp_path: Path, veri_dizini: Path, monkeypatch: pytest.MonkeyPatch, kdf: dict[str, Any]
+) -> None:
+    """Yeni bilgisayar: tek aday başlıktı, aday olmaz. Mühür sınanmadan süreç belleğe boğulmaz,
+    bitmeyen bir işe girmez, ham hata çıkmaz; hiçbir dosya değişmez."""
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
+    yedek = tmp_path / "hazirlanmis.odbak"
+    yedek.write_bytes(
+        _sifreli_kapsayici(_sqlite_baytlari(tmp_path, "gizli"), dek, {**durum, "kdf": kdf})
+    )
+    db = veri_dizini / "db.sqlite3"
+    turetimler: list[Any] = []
+    monkeypatch.setattr(crypto, "derive_key", lambda *a, **k: turetimler.append(k))
+
+    with pytest.raises(backup_restore.BackupRestoreError, match="kurtarma başlığı yok"):
+        backup_restore.restore_database(yedek, db, recovery_key=kurtarma)
+
+    assert turetimler == []
+    assert not db.exists()
+    assert not (veri_dizini / "guvenlik.json").exists()
+
+
+@pytest.mark.parametrize(
+    "kdf",
+    [
+        pytest.param(_UCUZ_KDF, id="en_ucuz"),
+        pytest.param(_PROFIL_KDF, id="programin_profili"),
+        pytest.param(_TAVAN_KDF, id="tavanin_kendisi"),
+        pytest.param({**_PROFIL_KDF, "memory_cost": 32}, id="dort_kulvarin_alt_siniri"),
+        pytest.param({}, id="yazilmamis_alan_profildir"),
+    ],
+)
+def test_makul_baslik_kdfsi_aday_kalir(kdf: dict[str, Any]) -> None:
+    _dek, durum = _dek_ile_durum(PAROLA)
+    baslik = {**durum, "kdf": kdf}
+
+    adaylar = backup_restore._candidate_states(backup_restore.BackupInfo(embedded_state=baslik))
+
+    assert adaylar == [(backup_restore._SOURCE_EMBEDDED, baslik)]
+
+
+def test_sinir_disi_baslik_guncel_dosyayla_acilmayi_engellemez(
+    tmp_path: Path, veri_dizini: Path
+) -> None:
+    """Başlık aday olmasa da aynı bilgisayarda güncel dosya yedeği açar."""
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
+    _guncel_yaz(veri_dizini, durum)
+    icerik = _sqlite_baytlari(tmp_path, "gizli")
+    yedek = tmp_path / "hazirlanmis.odbak"
+    yedek.write_bytes(_sifreli_kapsayici(icerik, dek, {**durum, "kdf": {"memory_cost": 2**40}}))
+    db = veri_dizini / "db.sqlite3"
+
+    sonuc = backup_restore.restore_database(yedek, db, recovery_key=kurtarma)
+
+    assert db.read_bytes() == icerik
+    assert sonuc.state_written is False
+
+
+def test_guncel_dosyanin_kdfsi_baslik_sinirindan_gecmez(veri_dizini: Path) -> None:
+    """Sınır yalnız güvenilmez başlığındır: güncel dosya aday kalır, "kayıp" sayılmaz (kural tek;
+    `guvenlik.json`'un biçimsiz `kdf`'si kabul edilmiş kalan risktir, plan F1b-2 ekleri)."""
+    _dek, durum = _dek_ile_durum(PAROLA)
+    guncel = {**durum, "kdf": {**durum["kdf"], "parallelism": 0}}
+    _guncel_yaz(veri_dizini, guncel)
+
+    adaylar = backup_restore._candidate_states(backup_restore.BackupInfo())
+
+    assert adaylar == [(backup_restore._SOURCE_CURRENT, guncel)]
+    assert app_password.security_file_missing() is False
+
+
+@pytest.mark.parametrize("neden", ["bellek_ayrilamadi", "tuz_kisa"])
+def test_baslikta_argon2_hatasi_turkce_hataya_cikar(
+    tmp_path: Path,
+    veri_dizini: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    neden: str,
+) -> None:
+    """Değerleri makul başlıkta Argon2 yine de koşamayabilir; ham hata kullanıcıya çıkmaz.
+
+    Doğru anahtarın "hatalı" görünmesinin nedeni günlükte durur (BTR için); sır yazılmaz."""
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
+    if neden == "tuz_kisa":
+        durum = {**durum, "kurtarma": {**durum["kurtarma"], "salt": "eA=="}}
+    yedek = tmp_path / "gunluk.odbak"
+    yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "gizli"), dek, durum))
+    if neden == "bellek_ayrilamadi":
+        monkeypatch.setattr(crypto, "derive_key", _argon2_kosamaz)
+    db = veri_dizini / "db.sqlite3"
+
+    with (
+        caplog.at_level(logging.WARNING, logger="oab_defteri.restore"),
+        pytest.raises(backup_restore.BackupRestoreError, match="Yedek açılamadı"),
+    ):
+        backup_restore.restore_database(yedek, db, recovery_key=kurtarma)
+
+    assert not db.exists()
+    uyarilar = [
+        kayit.getMessage() for kayit in caplog.records if kayit.name == "oab_defteri.restore"
+    ]
+    assert uyarilar == [
+        "Yedek başlığıyla anahtar türetilemedi (bellek yetersiz ya da başlık bozuk); "
+        "sıradaki aday deneniyor."
+    ]
+    assert kurtarma not in caplog.text
+
+
+def test_guncel_dosyada_argon2_hatasi_cagirana_cikar(
+    tmp_path: Path, veri_dizini: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Güncel dosyanın kolu değişmez: `_try_unwrap_account`'un "kdf hatası çağırana çıkar" kuralı."""
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
+    _guncel_yaz(veri_dizini, durum)
+    yedek = tmp_path / "gunluk.odbak"
+    yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "gizli"), dek, durum))
+    monkeypatch.setattr(crypto, "derive_key", _argon2_kosamaz)
+
+    with pytest.raises(HashingError):
+        backup_restore.restore_database(yedek, veri_dizini / "db.sqlite3", recovery_key=kurtarma)
+
+
+def test_baslikta_kdf_bolumunun_tek_bit_donmesi_turkce_hataya_cikar(
+    tmp_path: Path, veri_dizini: Path
+) -> None:
+    """Kasıtsız yol: gerçek bir yedeğin başlığında tek bit dönmesi kulvarı sıfıra indirebilir
+    (0x31 → 0x30). Her dönmede kullanıcı Türkçe iletiyi görür, hiçbir dosya değişmez."""
+    kurtarma = app_password.generate_recovery_key()
+    dek, durum = _dek_ile_durum(PAROLA, kurtarma)
+    kap = _sifreli_kapsayici(_sqlite_baytlari(tmp_path, "gizli"), dek, durum)
+    yedek = tmp_path / "bit.odbak"
+    db = veri_dizini / "db.sqlite3"
+
+    for konum in range(kap.index(b'"kdf"'), kap.index(b'"kurtarma"')):
+        for bit in range(8):
+            bozuk = bytearray(kap)
+            bozuk[konum] ^= 1 << bit
+            yedek.write_bytes(bozuk)
+            with pytest.raises(backup_restore.BackupRestoreError):
+                backup_restore.restore_database(yedek, db, recovery_key=kurtarma)
+
+    assert not db.exists()
 
 
 def test_yedek_kurtarma_anahtarinin_kimligini_soyler(tmp_path: Path) -> None:
     dek, durum = _dek_ile_durum(PAROLA)
     durum["kurtarma"].update(no=3, tarih="2026-11-01")
-    bilgi = backup_restore.inspect_backup(_sifreli_kapsayici(b"x", dek, durum))
+    yedek = tmp_path / "yedek.odbak"
+    yedek.write_bytes(_sifreli_kapsayici(b"x", dek, durum))
+    bilgi = backup_restore.inspect_backup(yedek)
     assert bilgi.recovery_key_label == "3 numaralı, 01.11.2026 tarihli"
-    assert (
-        backup_restore.inspect_backup(_sifreli_kapsayici(b"x", dek, None)).recovery_key_label == ""
-    )
+    assert bilgi.kapsam == KAPSAM_YEREL
+    yedek.write_bytes(_sifreli_kapsayici(b"x", dek, None))
+    assert backup_restore.inspect_backup(yedek).recovery_key_label == ""
 
 
 # ---------------------------------------------------------------------------
@@ -589,6 +879,9 @@ def test_komut_sifreli_yedegi_hesap_ve_parolayla_acar(
 
     assert db.read_bytes() == icerik
     assert "kurtarma başlığından" not in cikti.getvalue()
+    # `db-onceki` rotasyondadır (tasarım §4.4.7): "silinmez" sözü verilmez.
+    assert "14 gün saklanır, sonra silinir" in cikti.getvalue()
+    assert "silinmez" not in cikti.getvalue()
 
 
 def test_komut_kurtarma_anahtariyla_baslik_yazar(

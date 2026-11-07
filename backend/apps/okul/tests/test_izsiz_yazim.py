@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import ast
 import json
+import tempfile
 import time
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
@@ -68,6 +69,7 @@ from typing import Any
 
 import desktop
 import pytest
+from desktop.backup_crypto import BOS_YEREL_MANIFESTO
 from django.apps import apps as django_apps
 from django.db import connection, transaction
 from django.urls import URLPattern, URLResolver, get_resolver
@@ -83,6 +85,8 @@ from apps.okul.models import (
     Account,
     AccountRole,
     AccountStatus,
+    Attachment,
+    AttachmentSensitivity,
     AuditTrail,
     ClassSection,
     Holiday,
@@ -94,7 +98,7 @@ from apps.okul.models import (
     Student,
     SuspendReason,
 )
-from apps.okul.services import app_password, encrypted_backup, persons
+from apps.okul.services import app_password, dosya_deposu, encrypted_backup, persons
 from apps.okul.services import calendar as calendar_service
 from apps.okul.services import imports as import_service
 from apps.okul.services import school_year as school_year_service
@@ -103,7 +107,13 @@ from apps.okul.services import setup as setup_service
 from apps.okul.services import terms as term_service
 from apps.okul.services.templates import STUDENT_TEMPLATE_HEADERS
 from apps.okul.tests.hesap_ortak import GECICI_PAROLA, YENI_PAROLA, hesap_ac, muhurle
-from conftest import TEST_HESAP_ID, TEST_KURTARMA_ANAHTARI, TEST_PAROLA, oturumu_ac_test
+from conftest import (
+    TEST_HESAP_ID,
+    TEST_KURTARMA_ANAHTARI,
+    TEST_PAROLA,
+    oturumu_ac_test,
+    varsayilan_yazar,
+)
 from shared import crypto
 
 YAZMA_YONTEMLERI = ("post", "put", "patch", "delete")
@@ -299,8 +309,15 @@ def _personel_listesi() -> dict[str, Any]:
 
 def _sifreli_yedek(monkeypatch: pytest.MonkeyPatch) -> Istek:
     # Görüntü sabit baytlardır: açık test işleminin dosyasından ayrı bağlantıyla okunmaz.
-    monkeypatch.setattr(encrypted_backup, "database_snapshot", lambda _yol: b"SQLite format 3\0")
-    return Istek("/api/v1/backups/encrypted/", None, _turler("YEDEK"))
+    monkeypatch.setattr(
+        encrypted_backup,
+        "goruntu_ve_manifesto",
+        lambda _yol: (b"SQLite format 3\0", BOS_YEREL_MANIFESTO),
+    )
+    # Seçilen yer program dizinlerinin dışındadır: pytest'in temizlediği taban geçici dizin.
+    usb = tempfile.mkdtemp(prefix="od-usb-", dir=app_password.state_path().parent.parent)
+    hedef = Path(usb) / "oab-defteri-yedek-2026-11-06-101530.odbak"
+    return Istek("/api/v1/backups/encrypted/", {"hedef": str(hedef)}, _turler("YEDEK"))
 
 
 def _sahipsiz_sarmal(_: pytest.MonkeyPatch) -> Istek:
@@ -524,6 +541,8 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     ("account-unsuspend", "POST"): Senaryo(_askidan_cikar),
     ("account-reset-password", "POST"): Senaryo(_parolayi_sifirla),
     ("account-handover-slip", "POST"): Senaryo(_teslim_pusulasi),
+    # Yedek Raporu (plan F1b-3): dosya saklanmaz, tek izi `BASIM` satırıdır.
+    ("backup-report", "POST"): _sabit("/api/v1/backups/report/", None, "BASIM"),
 }
 
 #: Plan F1b-1'in adıyla muaf tuttuğu yollar: kişi silme ve birleştirme 5. adımda yeniden
@@ -553,6 +572,10 @@ MUAF_UCLAR: dict[tuple[str, str], str] = {
     ("security-state-reset", "POST"): (
         "Yalnız hesap ve iz anahtarı YOKKEN çalışır (parmak izi ve şifreli tablolar boş): "
         "zincir yoktur, ilk hesaptan önce olay yazılmaz (plan F1b-1)."
+    ),
+    ("backup-inspect", "POST"): (
+        "Kayıt yazmaz: seçilen dosyanın başlığını okur, yol gövdede gittiği için POST'tur "
+        '(kullanıcı kararı 06.11.2026 "Elden seçilen yedeğin başlığını sunucu okur").'
     ),
     ("backup-restore", "POST"): (
         "Veritabanını değiştirir: satır kenara alınan veritabanına yazılamaz, yenisinde oturum "
@@ -729,7 +752,15 @@ _ORNEK_YAZIMLARI = frozenset({"save", "hard_delete", "restore"})
 #: (örnek ya da queryset silmesi; `cache.delete(anahtar)` ORM dışıdır). Aynı adlı ORM dışı
 #: çağrılar (`set.update`, `hashlib…update`) `ORM_DISI_CAGRILAR`'da ADIYLA ve gerekçesiyle.
 _TOPLU_YAZIMLAR = frozenset(
-    {"create", "get_or_create", "update_or_create", "bulk_create", "bulk_update", "update"}
+    {
+        "create",
+        "get_or_create",
+        "update_or_create",
+        "bulk_create",
+        "bulk_update",
+        "update",
+        "_raw_delete",  # model yöntemlerini atlar; üretimde çağrısı yoktur
+    }
 )
 #: Ham SQL yazımı.
 _HAM_SQL = frozenset({"execute", "executemany", "executescript"})
@@ -815,16 +846,19 @@ ORM_DISI_CAGRILAR: dict[tuple[str, str, str], str] = {
         "Okuma işleminin sınırları (`BEGIN`, `COMMIT`, hata yolunda `ROLLBACK`): kayıt yazmaz; "
         "satırın izinin okumaları tek anlık görüntüdedir (bağımsız denetim bulgusu: yanlış alarm)."
     ),
+    ("desktop/backup.py", "_goruntunun_manifestosu", "goruntu.execute"): (
+        "Yedek görüntüsünden `SELECT`: manifestoyu okur, kayıt yazmaz; canlı veritabanına dokunmaz."
+    ),
+    ("desktop/backup.py", "wal_bosalt", "baglanti.execute"): (
+        "`PRAGMA wal_checkpoint`: kayıt yazmaz, WAL günlüğünü ana dosyaya aktarır."
+    ),
     ("desktop/django_bootstrap.py", "unknown_applied_migrations", "bilinen.update"): (
         "Python kümesi (`set.update`): bilinen göç adları."
-    ),
-    ("desktop/django_bootstrap.py", "wal_checkpoint", "baglanti.execute"): (
-        "`PRAGMA wal_checkpoint`: kayıt yazmaz, WAL günlüğünü ana dosyaya aktarır."
     ),
     ("desktop/integrity.py", "check_database_integrity", "connection.execute"): (
         "`PRAGMA integrity_check`: açılıştaki bütünlük denetimi, salt okur."
     ),
-    ("desktop/window.py", "WindowController.show", "window.restore"): (
+    ("desktop/window.py", "WindowController._one_getir", "window.restore"): (
         "Pencereyi simge durumundan geri getirir (pywebview); veritabanına dokunmaz."
     ),
 }
@@ -1268,6 +1302,10 @@ def izli_silme(gun):
     denetim_izi.degisiklik(gun, onceki=onceki)
 
 
+def izsiz_ham_silme():
+    Holiday.objects.filter(kind="OTHER")._raw_delete("default")
+
+
 def izsiz_gunluk_silme(sinir):
     AccessLog.objects.all()._saklama_disini_sil(sinir)
 
@@ -1289,6 +1327,7 @@ def test_gercek_agaca_eklenen_izsiz_yazimlar_yakalanir() -> None:
     kaynaklar = {**_taranan_kaynaklar(), "apps/okul/services/sonda.py": _SONDA}
     bulunan = {ad for yol, ad, _ in _izsiz_yazimlar(kaynaklar) if yol.endswith("sonda.py")}
     assert bulunan == {
+        "izsiz_ham_silme",
         "izsiz_gunluk_silme",
         "izsiz_yumusak_silme",
         "izsiz_toplu_silme",
@@ -1572,13 +1611,13 @@ def _xlsx(satirlar: list[tuple[str, ...]]) -> bytes:
 
 
 @pytest.mark.django_db
-def test_denetim_izinde_uydurma_kisisel_veri_yok() -> None:
+def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch) -> None:
     """Tasarım §4.6.2 kural 6, §14 F1b kapısı (modül başlığı, madde 3).
 
     Her izli model (`Account`, `SchoolConfig`, `SchoolYear`, `SchoolTerm`, `Holiday`,
-    `Student`, `Personnel`, `ClassSection`, `ImportRun`) uydurma kişi verisiyle yazılır,
-    güncellenir ve durumu değişir; iz satırlarının hiçbir sütununda bu değerler, parçaları,
-    büyük-küçük harf biçimleri ve şifreli token'ları geçmez. Arşiv dökümü henüz yoktur.
+    `Student`, `Personnel`, `ClassSection`, `ImportRun`, `Attachment`) uydurma kişi verisiyle
+    yazılır, güncellenir ve durumu değişir; iz satırlarının hiçbir sütununda bu değerler,
+    parçaları, büyük-küçük harf biçimleri ve şifreli token'ları geçmez. Arşiv dökümü henüz yoktur.
     """
     # Hesap (ad-soyad şifreli kişi verisi).
     hesap_ac(AccountRole.MUHASIP, ad=f"{UYDURMA_AD} {UYDURMA_SOYAD}")
@@ -1642,6 +1681,16 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok() -> None:
     )
     with pytest.raises(ParserError):
         import_service.commit_students_file(file_bytes=b"bozuk", file_name=dosya_adi)
+    # Ek: özgün dosya adı kişi adı taşıyabilir, sarmal güvenlik öğesidir (plan F1b-3).
+    monkeypatch.setattr(dosya_deposu, "_SAHIP_ETIKETLERI", {"okul.SchoolYear"})
+    dosya_deposu.yaz(
+        b"%PDF-1.7 uydurma",
+        original_name=f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_TCKN} {UYDURMA_METIN}.pdf",
+        sensitivity=AttachmentSensitivity.OZEL_NITELIKLI,
+        owner=yil,
+        yazar=varsayilan_yazar(),
+        kisi_listesi=False,
+    )
 
     metin = _iz_metni()
     modeller = set(AuditTrail.objects.values_list("model", flat=True))
@@ -1655,6 +1704,7 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok() -> None:
         "okul.Personnel",
         "okul.ClassSection",
         "okul.ImportRun",
+        "okul.Attachment",
     } <= modeller
     for parca in ARANACAKLAR:
         assert parca not in metin, parca
@@ -1662,12 +1712,14 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok() -> None:
         *_ham_sutunlar("okul_student", ("first_name", "last_name", "student_number")),
         *_ham_sutunlar("okul_personnel", ("first_name", "last_name")),
         *_ham_sutunlar("okul_account", ("display_name",)),
+        *_ham_sutunlar("okul_attachment", ("original_name", "key_wrap", "sha256")),
     ]
     assert tokenlar
     for token in tokenlar:
         assert token not in metin
     # Şifreli alanların değiştiği yalnız ADIYLA görünür.
     assert "first_name" in metin and "school_name" in metin and "file_name" in metin
+    assert "original_name" in metin
     # Yolların hepsi izlidir: izi olan her kaydın içerik MAC'i son satırını tutar.
     assert denetim_izi.zinciri_dogrula() == []
     for etiket, kimlik in set(
@@ -1757,6 +1809,7 @@ IZLI_MODELLER = (
     Personnel,
     ClassSection,
     ImportRun,
+    Attachment,
 )
 
 

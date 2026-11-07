@@ -9,8 +9,9 @@ AYRI süreçte koşar ve sonucunu stdout'un son satırına JSON olarak yazar. To
 Komutlar:
 
 * `hazirla --data-dir A --usb U` — göç, ilk program yöneticisi hesabı (tanıtıcı
-  `yonetici`) + kurtarma anahtarı (doğrulanmış), uydurma kişi kayıtları, **dış
-  yedek** (kullanıcının indirdiği şifreli yedek, `encrypted_backup`) U klasörüne.
+  `yonetici`) + kurtarma anahtarı (doğrulanmış), uydurma kişi kayıtları, uydurma bir ek (plan
+  F1b-3 "Ötekiler": F1b'de ek ekleyen ekran yoktur, ek betikle tohumlanır), **dış yedek**
+  (kullanıcının kaydettiği şifreli tam yedek, `encrypted_backup`) U klasörüne.
 * `dogrula --data-dir B (--parola P | --kurtarma K --yeni-parola P2) [--hesap T]` —
   kilidi hesabın parolasıyla ya da kurtarma anahtarıyla (program yöneticisinin
   parolası yenilenir) açar, özeti yazar.
@@ -26,6 +27,10 @@ Komutlar:
   işleriyle bir kez çalıştırır: yerleşik günlük yedek + backend'in kayıtlı bütün
   işleri. Ağ tuzağı altında koşar (açılışta dış istek yok testinin kapıyı da
   kapsaması).
+* `ek-oku --data-dir B --parola P | --kurtarma K` — kilidi açar ve tohumlanan eki depodan çözer:
+  tam yedeğin eki taşıdığının kanıtı (tasarım §10.6, F1b kapısı "ekler dâhil").
+* `uzun-is-surerken --data-dir A` — gerçek programı (`desktop.main.run`) pencere yerine uzun iş
+  tutan bir oturumla açar, "uzun is suruyor" yazıp bekler. Test süreci öldürür.
 
 Aile iskeletinin katalog, üyelik, ödünç ve verilmiş kart defteri adımları
 kütüphane uygulamasıyla birlikte söküldü (F1a-2); OAB'nin kayıtları geldikçe
@@ -41,6 +46,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -56,6 +62,9 @@ PAROLA = "Prova-Yonetici-Parolasi-1"
 YENI_PAROLA = "Prova-Yeni-Parola-2"
 #: Sahte "gelecek sürüm" göçü (program tanımaz).
 GELECEK_GOC = ("okul", "9999_gelecek_surum")
+#: Uydurma ekin içeriği (PDF imzası türü geçirir) ve özgün adı.
+EK_ICERIGI = b"%PDF-1.4\nuydurma prova eki\n%%EOF\n"
+EK_ADI = "uydurma-ek.pdf"
 
 _UCUZ_KDF = {"time_cost": 1, "memory_cost": 8, "parallelism": 1}
 
@@ -68,6 +77,15 @@ def _django(veri_koku: str) -> Path:
     return paths.data
 
 
+def _oturum_yazari() -> Any:
+    from apps.okul.oturum import OTURUM, Yazar
+
+    hesap = OTURUM.hesap()
+    if hesap is None:
+        raise SystemExit("oturum açık değil")
+    return Yazar.hesaptan(hesap)
+
+
 @contextmanager
 def _oturum_istegi() -> Iterator[None]:
     """Açık oturumdaki hesabın isteği gibi: yazar bağlamı istek başında kurulur.
@@ -76,12 +94,9 @@ def _oturum_istegi() -> Iterator[None]:
     için bağlamı kendisi kurar. Denetim izi yazarsız yazmayı reddeder (tasarım §4.6.2):
     kurtarma anahtarı damgası `KURTARMA`, dış yedek `YEDEK` satırı yazar.
     """
-    from apps.okul.oturum import OTURUM, Yazar, yazar_olarak
+    from apps.okul.oturum import yazar_olarak
 
-    hesap = OTURUM.hesap()
-    if hesap is None:
-        raise SystemExit("oturum açık değil")
-    with yazar_olarak(Yazar.hesaptan(hesap)):
+    with yazar_olarak(_oturum_yazari()):
         yield
 
 
@@ -96,6 +111,33 @@ def _ozet() -> dict[str, Any]:
         ],
         "personel": [[p.first_name, p.last_name] for p in Personnel.objects.order_by("pk")],
     }
+
+
+def _ek_tohumla() -> str:
+    """Uydurma ek: depoda dosya, tabloda satır; tam yedek bunları taşır.
+
+    Geçici sahip ders yılıdır: F1b'de sahip kümesi boştur, ilk sahip F1c'de gelir (plan "Dosya
+    deposu").
+    """
+    from datetime import date
+
+    from apps.okul.models import AttachmentSensitivity, SchoolYear
+    from apps.okul.services import dosya_deposu
+    from apps.okul.services import school_year as school_year_service
+
+    dosya_deposu.sahip_kaydet(SchoolYear)
+    yil = school_year_service.create_school_year(
+        name="2026-2027", start_date=date(2026, 9, 7), end_date=date(2027, 6, 25), activate=True
+    )
+    ek = dosya_deposu.yaz(
+        EK_ICERIGI,
+        original_name=EK_ADI,
+        sensitivity=AttachmentSensitivity.NORMAL,
+        owner=yil,
+        yazar=_oturum_yazari(),
+        kisi_listesi=False,
+    )
+    return str(ek.stored_name)
 
 
 def hazirla(args: argparse.Namespace) -> dict[str, Any]:
@@ -128,18 +170,20 @@ def hazirla(args: argparse.Namespace) -> dict[str, Any]:
         first_name="Deneme Şükrü", last_name="Öğretmenoğlu", member_kind=MemberKind.TEACHER
     )
 
-    # Dış yedek: kullanıcının Ayarlar → Güvenlik'ten indirip USB'ye aldığı şifreli yedek.
-    with _oturum_istegi():
-        icerik, ad = encrypted_backup.create_encrypted_backup()
+    # Dış yedek: kullanıcının Ayarlar → Güvenlik'ten USB belleğe kaydettiği şifreli yedek.
     usb = Path(args.usb)
     usb.mkdir(parents=True, exist_ok=True)
-    yedek = usb / ad
-    yedek.write_bytes(icerik)
+    with _oturum_istegi():
+        ek = _ek_tohumla()
+        yedek = usb / encrypted_backup.onerilen_ad()
+        sonuc = encrypted_backup.sifreli_yedegi_kaydet(str(yedek))
     return {
         "tanitici": TANITICI,
         "parola": PAROLA,
         "kurtarma": kurtarma,
         "yedek": str(yedek),
+        "ek": ek,
+        "yedek_ozeti": sonuc.yanit(),
         "beklenen": _ozet(),
     }
 
@@ -168,6 +212,40 @@ def dogrula(args: argparse.Namespace) -> dict[str, Any]:
     return {"ozet": _ozet(), "durum": app_password.status()}
 
 
+def ek_oku(args: argparse.Namespace) -> dict[str, Any]:
+    _django(args.data_dir)
+    from apps.okul.models import Attachment
+    from apps.okul.services import app_password, dosya_deposu
+
+    if args.parola:
+        _ac(args.hesap, args.parola)
+    else:
+        hesap_id = app_password.account_id_for_login_name(args.hesap)
+        app_password.unlock_with_recovery(
+            recovery_key=args.kurtarma, hesap_id=hesap_id, new_password=args.yeni_parola
+        )
+    with _oturum_istegi():
+        ek = Attachment.objects.get(stored_name=args.ad)
+        acik = dosya_deposu.oku(ek)
+    return {"ayni": acik == EK_ICERIGI, "ad": ek.original_name}
+
+
+def uzun_is_surerken(args: argparse.Namespace) -> dict[str, Any]:
+    """Gerçek açılış ve sunucu; pencere yerine uzun iş tutan oturum. Süreci test öldürür."""
+    from desktop import main as masaustu
+
+    def oturum(*_a: Any, **_k: Any) -> None:
+        from shared.bakim import UZUN_ISLER
+
+        with UZUN_ISLER.is_():
+            sys.stdout.write("uzun is suruyor\n")
+            sys.stdout.flush()
+            threading.Event().wait()
+
+    masaustu.run_window_session = oturum
+    return {"kod": masaustu.run(["--data-dir", args.data_dir])}
+
+
 def gelecek_yedek(args: argparse.Namespace) -> dict[str, Any]:
     _django(args.data_dir)
     from django.db import connection
@@ -176,17 +254,16 @@ def gelecek_yedek(args: argparse.Namespace) -> dict[str, Any]:
     from apps.okul.services import encrypted_backup
 
     _ac(args.hesap, args.parola)
+    usb = Path(args.usb)
+    usb.mkdir(parents=True, exist_ok=True)
+    yedek = usb / "gelecek-surum-yedegi.odbak"
     kayit = MigrationRecorder(connection)
     kayit.record_applied(*GELECEK_GOC)
     try:
         with _oturum_istegi():
-            icerik, _ad = encrypted_backup.create_encrypted_backup()
+            encrypted_backup.sifreli_yedegi_kaydet(str(yedek))
     finally:
         kayit.record_unapplied(*GELECEK_GOC)
-    usb = Path(args.usb)
-    usb.mkdir(parents=True, exist_ok=True)
-    yedek = usb / "gelecek-surum-yedegi.odbak"
-    yedek.write_bytes(icerik)
     return {"yedek": str(yedek)}
 
 
@@ -243,6 +320,15 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--data-dir", required=True)
     c.add_argument("--parola", required=True)
     c.add_argument("--hesap", default=TANITICI)
+    e = alt.add_parser("ek-oku")
+    e.add_argument("--data-dir", required=True)
+    e.add_argument("--ad", required=True)
+    e.add_argument("--parola", default="")
+    e.add_argument("--kurtarma", default="")
+    e.add_argument("--yeni-parola", default=YENI_PAROLA)
+    e.add_argument("--hesap", default=TANITICI)
+    u = alt.add_parser("uzun-is-surerken")
+    u.add_argument("--data-dir", required=True)
     args = ayristirici.parse_args(argv)
     islem = {
         "hazirla": hazirla,
@@ -250,6 +336,8 @@ def main(argv: list[str] | None = None) -> int:
         "gelecek-yedek": gelecek_yedek,
         "sihirbaz": sihirbaz,
         "gun-kapisi": gun_kapisi,
+        "ek-oku": ek_oku,
+        "uzun-is-surerken": uzun_is_surerken,
     }[args.komut]
     sonuc = islem(args)
     sys.stdout.write(json.dumps(sonuc, ensure_ascii=False) + "\n")

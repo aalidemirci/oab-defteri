@@ -11,7 +11,9 @@ import {
   ETKINLIK_PENCERESI_MS,
   ROL_YETKISIZ_KODU,
   ROL_YETKISIZ_OLAYI,
+  BEKLENMEYEN_HATA_ILETISI,
   api,
+  etkilesimKaydet,
   etkinlikSaatleriniSifirla,
   sonEtkilesimAni,
   sonEtkinlikGonderimiAni,
@@ -53,6 +55,41 @@ describe("api — restart_required sözleşmesi", () => {
     } finally {
       window.removeEventListener(YENIDEN_BASLAT_OLAYI, dinleyici);
     }
+  });
+
+  it("hata gövdesinin sözleşme dışı alanı ApiError.govde'de kalır (409 ek_onayi_gerekli)", async () => {
+    const rapor = { kapsam: "tam", bozuk: 1 };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        sahteYanit(409, {
+          code: "ek_onayi_gerekli",
+          message: "1 ek yedek alınırkenki hâlini tutmuyor; geri yükleme yapılmadı.",
+          fields: {},
+          rapor,
+        }),
+      ),
+    );
+
+    const hata = await api.postForm("/backups/restore/", new FormData()).catch((e: unknown) => e);
+
+    expect(hata).toBeInstanceOf(ApiError);
+    expect((hata as ApiError).govde.rapor).toEqual(rapor);
+  });
+
+  it("gövdesiz dosya yanıtının iletisi JSON yolundakiyle aynıdır (ekranlar kendi metnine düşer)", async () => {
+    const bozuk = {
+      ok: false,
+      status: 500,
+      json: () => Promise.reject(new SyntaxError("Unexpected token <")),
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(bozuk));
+
+    const hata = await api.postDosya("/backups/report/").catch((e: unknown) => e);
+
+    expect(hata).toBeInstanceOf(ApiError);
+    expect((hata as ApiError).message).toBe(BEKLENMEYEN_HATA_ILETISI);
+    expect((hata as ApiError).code).toBe("500");
   });
 
   it("sıradan hata olayı yayınlamaz", async () => {
@@ -116,6 +153,14 @@ describe("api — etkinlik başlığı", () => {
     },
   );
 
+  it("yerel pencereden dönen seçim etkileşim sayılır: sonraki istek başlığı taşır", async () => {
+    etkilesimKaydet();
+
+    await api.post("/backups/encrypted/", { hedef: "E:\\yedek.odbak" });
+
+    expect(gonderilenBasliklar(fetchSahte)[ETKINLIK_BASLIGI]).toBe("1");
+  });
+
   it("pencere dolduktan sonraki istek başlık taşımaz", async () => {
     const simdi = Date.now();
     const saat = vi.spyOn(Date, "now").mockReturnValue(simdi);
@@ -140,7 +185,7 @@ describe("api — etkinlik başlığı", () => {
 
   it("dosya indirmesinde etkinlik:false başlığı keser", async () => {
     window.dispatchEvent(new Event("pointerdown"));
-    await api.postBlob("/backups/encrypted/", undefined, { etkinlik: false });
+    await api.postBlob("/backups/report/", undefined, { etkinlik: false });
     expect(gonderilenBasliklar(fetchSahte)).not.toHaveProperty(ETKINLIK_BASLIGI);
   });
 });

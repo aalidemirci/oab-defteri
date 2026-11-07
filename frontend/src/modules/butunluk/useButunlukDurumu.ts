@@ -64,6 +64,7 @@ export function duzenle(yanit: unknown): ButunlukDurumu | null {
     butunluk: Array.isArray(d.butunluk) ? d.butunluk : [],
     geri_yukleme: geriYukleme(d.geri_yukleme),
     iki_depo: d.iki_depo ?? null,
+    eksik_ekler: Array.isArray(d.eksik_ekler) ? d.eksik_ekler : [],
     kagit_capasi: d.kagit_capasi ?? null,
     son_girisler: Array.isArray(d.son_girisler) ? d.son_girisler : [],
     parola_yenilenme: d.parola_yenilenme ?? null,

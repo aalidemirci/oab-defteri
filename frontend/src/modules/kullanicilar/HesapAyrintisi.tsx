@@ -13,6 +13,7 @@ import { useId, useState } from "react";
 import type { ReactNode } from "react";
 
 import { formatDateTime } from "../../lib/format";
+import { DOSYA_YAZILAMADI_ILETISI } from "../../lib/metinler";
 import Button from "../../ui/Button";
 import Dialog from "../../ui/Dialog";
 import ErrorBand from "../../ui/ErrorBand";
@@ -110,8 +111,9 @@ export default function HesapAyrintisi({ hesap, onClose, onSifirla, onKapat, onD
     setSurer("pusula");
     setHata(null);
     try {
-      await pusulayiKaydet(hesap);
-      snackbar.success(PUSULA_KAYDEDILDI_ILETISI);
+      const sonuc = await pusulayiKaydet(hesap);
+      if (sonuc === "hata") setHata(DOSYA_YAZILAMADI_ILETISI);
+      else if (sonuc !== "iptal") snackbar.success(PUSULA_KAYDEDILDI_ILETISI);
     } catch (err) {
       setHata(oturumHataMetni(err, PUSULA_HAZIRLANAMADI));
     } finally {

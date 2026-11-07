@@ -14,14 +14,16 @@ yenilenir, iki depo karşılaştırılır (tasarım §4.6.1 kural 4).
     {"surum": 1,
      "geri_yuklemeler": [{
          "zaman": "<yerel ISO>",
-         "yedek": "<yedeğin dosya adı>",
+         "yedek": "<programın ürettiği yedek adı>" | null,
          "onceki": {"dosya": "db-onceki-<damga>.sqlite3", "sha256": "…",
                     "zincir_basi": {"seq": N, "mac": "…"} | {"seq": 0, "mac": ""} | null}
                    | null,
          "yol": {"tur": "hesap", "hesap": "<kimlik>", "tanitici": "…"}
               | {"tur": "kurtarma", "no": N},
          "capa": {"seq": N, "mac": "…"} | null,
-         "oturum": "<uygulama içi geri yüklemede oturumdaki hesabın kimliği>"}],
+         "oturum": "<uygulama içi geri yüklemede oturumdaki hesabın kimliği>",
+         "dosyalar": {"kapsam": "yerel" | "tam", "yerine_konan": N, "yetimden_donen": N,
+                      "eksik": N, "bozuk": N, "onayla_suruldu": N}}],
      "bekleyen_olaylar": [{"eylem", "model", "object_id", "changed_fields", "values",
                            "zaman": "<yerel ISO>"}]}
 
@@ -48,6 +50,11 @@ yenilenir, iki depo karşılaştırılır (tasarım §4.6.1 kural 4).
 * Uygulama içi geri yüklemede oturumdaki hesabın kimliği de notta durur (`oturum`; kurtarma
   anahtarı yolunda da): geri yükleme, onu başlatan oturumun hesabına bağlanır (Hakkında
   "Açık oturum, sahibinin imzasıdır"). Konsol geri yüklemesinde oturum yoktur, alan yazılmaz.
+* `yedek` yalnız programın ürettiği addır: kullanıcının seçtiği ya da yüklediği dosyanın adı serbest
+  metindir, kişi adı içerebilir (R1); uymuyorsa `null` yazılır, kart "Elden getirilen dosya" der.
+* `dosyalar` kişisiz sayılardır (plan F1b-3 "Geri yükleme"; `geri_yukleme_ekleri`): kapsam, yerine
+  konan, yetimden dönen, eksik, bozuk ve ikinci onayla geride bırakılan ek sayısı. Eklerin listesi
+  nota GİRMEZ (kullanıcı kararı 04.11.2026 "Eksik ve bozuk ekler kişisiz bilgiyle listelenir").
 * Bozuk not okunamadı sayılır (`NotOkunamadi`): ilk kilit açılışı yine `GERI_YUKLEME`
   satırı yazar (ayrıntısız) ve notu siler. Bozuk notun üstüne yeni olgu yazılırken eski
   içerik kurtarılamaz; yeni not `bozuk_not_vardi` işaretini taşır.
@@ -86,6 +93,10 @@ BOS_ZINCIR: Final[dict[str, Any]] = {"seq": 0, "mac": ""}
 
 #: Takastan önceki çapa okunamadı: kayıtta `capa` alanı yazılmaz (modül başlığı).
 CAPA_BILINMIYOR: Final = "bilinmiyor"
+
+#: `dosyalar` bölümünün kapsam kodları ve sayı alanları (modül başlığı).
+DOSYA_KAPSAMLARI: Final = ("yerel", "tam")
+DOSYA_SAYILARI: Final = ("yerine_konan", "yetimden_donen", "eksik", "bozuk", "onayla_suruldu")
 
 
 class NotOkunamadi(ValueError):
@@ -163,18 +174,19 @@ def _guncel_ya_da_bos(dizin: Path) -> dict[str, Any]:
 
 def geri_yukleme_kaydi(
     *,
-    yedek: str,
+    yedek: str | None,
     onceki_dosya: str | None,
     onceki_sha256: str | None,
     onceki_zincir_basi: dict[str, Any] | None,
     yol_bilgisi: dict[str, Any],
     oturum_hesabi: str | None = None,
     onceki_capa: dict[str, Any] | str | None = CAPA_BILINMIYOR,
+    dosya_sayilari: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Bir geri yüklemenin notdaki kaydı (modül başlığındaki biçim).
 
     `onceki_capa`: takastan önceki çapa `{seq, mac}`, yoksa None; `CAPA_BILINMIYOR` ise
-    alan yazılmaz.
+    alan yazılmaz. `dosya_sayilari`: dosya ayağının kişisiz sayıları.
     """
     onceki: dict[str, Any] | None = None
     if onceki_dosya is not None:
@@ -193,6 +205,8 @@ def geri_yukleme_kaydi(
         kayit["capa"] = onceki_capa
     if oturum_hesabi:
         kayit["oturum"] = str(oturum_hesabi)
+    if dosya_sayilari is not None:
+        kayit["dosyalar"] = dict(dosya_sayilari)
     return kayit
 
 

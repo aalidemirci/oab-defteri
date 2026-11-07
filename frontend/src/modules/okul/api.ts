@@ -544,7 +544,7 @@ export function importCounts(report: ImportReport): {
   };
 }
 
-/** Şablon dosya adları — indirme sırasında tarayıcıya verilir (backend ile aynı). */
+/** Şablon dosya adları — kaydetme penceresinde önerilir (backend ile aynı). */
 export const STUDENT_TEMPLATE_FILENAME = "sablon-ogrenci.xlsx";
 export const PERSONNEL_TEMPLATE_FILENAME = "sablon-personel.xlsx";
 

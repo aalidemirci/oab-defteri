@@ -33,6 +33,7 @@ import {
   useEtkinlikNabzi,
   useOturum,
   useYetenekler,
+  useYuklemeSiniri,
   yeteneklerOku,
 } from "./useOturum";
 
@@ -53,6 +54,7 @@ function ozetOlustur(durum: OturumDurumAdi, ek: Partial<OturumOzeti> = {}): Otur
     bosta_kalan_sn: acik ? 600 : null,
     kilit_bekliyor: false,
     kurulum_tamam: true,
+    yukleme_siniri_mb: 20,
     ...ek,
   };
 }
@@ -287,6 +289,43 @@ function yetenekleriBas() {
   );
   return queryClient;
 }
+
+function SinirYazici() {
+  return <p>{`sınır: ${useYuklemeSiniri() ?? "bilinmiyor"}`}</p>;
+}
+
+function sinirBas() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <SinirYazici />
+    </QueryClientProvider>,
+  );
+}
+
+describe("useYuklemeSiniri", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("sınır özetten okunur", async () => {
+    oturum.ozet.mockResolvedValue(ozetOlustur("acik", { yukleme_siniri_mb: 7 }));
+    sinirBas();
+    expect(await screen.findByText("sınır: 7")).toBeInTheDocument();
+    expect(oturum.ozet).toHaveBeenCalledWith(false);
+  });
+
+  it("özet beklenirken sınır bilinmez", async () => {
+    oturum.ozet.mockReturnValue(new Promise(() => {}));
+    sinirBas();
+    expect(await screen.findByText("sınır: bilinmiyor")).toBeInTheDocument();
+  });
+
+  it("özet okunamazsa sınır bilinmez", async () => {
+    oturum.ozet.mockRejectedValue(new TypeError("çevrimdışı"));
+    sinirBas();
+    await waitFor(() => expect(oturum.ozet).toHaveBeenCalled());
+    expect(await screen.findByText("sınır: bilinmiyor")).toBeInTheDocument();
+  });
+});
 
 describe("useYetenekler (yükleniyor, okundu, okunamadı ayrıdır)", () => {
   beforeEach(() => vi.clearAllMocks());

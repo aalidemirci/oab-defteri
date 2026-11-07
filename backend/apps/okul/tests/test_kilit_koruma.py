@@ -64,10 +64,11 @@ def _kod(yanit: HttpResponse) -> str | None:
 
 
 def test_ara_katman_sirasi_tasarimdaki_gibidir() -> None:
-    """Tasarım §4.4.3: belirteç → güvenlik → whitenoise → common → RestartRequired (503) →
-    AppLock (423) → RolMiddleware (403 `rol_yetkisiz`). Kip kapısı söküldü."""
+    """Tasarım §4.4.3: belirteç → no-store → güvenlik → whitenoise → common → RestartRequired
+    (503) → AppLock (423) → RolMiddleware (403 `rol_yetkisiz`). Kip kapısı söküldü."""
     zincir = [m for m in settings.MIDDLEWARE if m != "desktop.session_guard.SessionTokenMiddleware"]
     assert zincir == [
+        "apps.okul.onbellek_middleware.ApiNoStoreMiddleware",
         "django.middleware.security.SecurityMiddleware",
         "whitenoise.middleware.WhiteNoiseMiddleware",
         "django.middleware.common.CommonMiddleware",
@@ -100,6 +101,7 @@ def test_kayip_acik_listesi_anlik_goruntuyle_sabittir() -> None:
         "/api/v1/security/session/": ["GET", "HEAD"],
         "/api/v1/security/state/reset/": ["POST"],
         "/api/v1/backups/": ["GET", "HEAD"],
+        "/api/v1/backups/inspect/": ["POST"],
         "/api/v1/backups/restore/": ["POST"],
         "/api/v1/app/quit/": ["POST"],
     }

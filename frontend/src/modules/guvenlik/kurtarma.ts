@@ -17,9 +17,10 @@
 
 import { useState } from "react";
 
-import { ApiError } from "../../lib/api";
 import { dosyaAdi, saveBlob } from "../../lib/download";
 import { formatDate, formatNumber, todayIso } from "../../lib/format";
+import { DOSYA_YAZILAMADI_ILETISI } from "../../lib/metinler";
+import { oturumHataMetni } from "../oturum/hatalar";
 import { guvenlikApi } from "./api";
 import type { GuvenlikDurumu, KurtarmaKimligi } from "./api";
 
@@ -30,7 +31,7 @@ export const GRUP_UZUNLUGU = 4;
 export const KURTARMA_BELGESI_ADI = "Kurtarma anahtarı belgesi";
 
 /**
- * İndirilen dosyanın adının kökü — backend `recovery_key_document.DOCUMENT_NAME` ile
+ * Kaydedilen dosyanın adının kökü — backend `recovery_key_document.DOCUMENT_NAME` ile
  * BİREBİR ("Kurtarma Anahtarı Belgesi"; Content-Disposition ile aynı ad iner).
  */
 export const KURTARMA_BELGESI_DOSYA_KOKU = "Kurtarma Anahtarı Belgesi";
@@ -106,14 +107,16 @@ export function yedekAnahtarCumlesi(kimlik: KurtarmaKimligi | null | undefined):
   return "Bu yedeği hangi kurtarma anahtarının açtığı okunamadı.";
 }
 
-/** İndirilen PDF'in adı: belge adı + YEREL tarih (backend `recovery_key_pdf_filename` ile aynı). */
+/** Kaydedilen PDF'in adı: belge adı + YEREL tarih (backend `recovery_key_pdf_filename` ile aynı). */
 export function kurtarmaBelgesiDosyaAdi(): string {
   return dosyaAdi([KURTARMA_BELGESI_DOSYA_KOKU, formatDate(todayIso())], "pdf");
 }
 
 /**
- * Kurtarma anahtarı belgesini (PDF) indirir. Backend anahtarı kurtarma sarmalına karşı
- * doğrular; yanlışsa Türkçe iletiyle 400 döner ve dosya inmez.
+ * Kurtarma anahtarı belgesini (PDF) ister ve kaydeder. Backend anahtarı kurtarma sarmalına karşı
+ * doğrular; yanlışsa Türkçe iletiyle 400 döner, dosya kaydedilmez. `indir` yalnız dosya kaydedilince
+ * `true` döner: iptalde hata da yoktur, `false`tur; kart anahtar alanını boşaltmaz, bildirim
+ * çıkmaz. Yazılamazsa `hata` iletiyi taşır.
  */
 export function useKurtarmaBelgesi() {
   const [indiriliyor, setIndiriliyor] = useState(false);
@@ -124,10 +127,13 @@ export function useKurtarmaBelgesi() {
     setHata(null);
     try {
       const pdf = await guvenlikApi.kurtarmaAnahtariPdf(anahtar);
-      saveBlob(pdf, kurtarmaBelgesiDosyaAdi());
-      return true;
+      // Pencere son klasörde değil ev klasöründe açılır: anahtar şifreli yedeğin yanına önerilmez
+      // (kullanıcı kararı 07.11.2026 "Hep ev klasöründe").
+      const sonuc = await saveBlob(pdf, kurtarmaBelgesiDosyaAdi(), { evKlasorunde: true });
+      if (sonuc === "hata") setHata(DOSYA_YAZILAMADI_ILETISI);
+      return sonuc !== "hata" && sonuc !== "iptal";
     } catch (err) {
-      setHata(err instanceof ApiError ? err.message : "Kurtarma anahtarı belgesi hazırlanamadı.");
+      setHata(oturumHataMetni(err, "Kurtarma anahtarı belgesi hazırlanamadı."));
       return false;
     } finally {
       setIndiriliyor(false);

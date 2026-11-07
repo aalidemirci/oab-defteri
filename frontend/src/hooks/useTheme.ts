@@ -21,6 +21,26 @@ declare global {
     pywebview?: {
       api?: {
         set_titlebar_theme?: (dark: boolean) => Promise<boolean>;
+        /**
+         * Kaydetme penceresini açar, seçilen yolu döndürür (`desktop/window.py`
+         * `PencereKoprusu`); iptalde, pencere yoksa ya da açılamazsa "" döner.
+         */
+        kaydetme_yeri_sor?: (onerilen_ad: string) => Promise<string>;
+        /**
+         * Aç penceresini açar, seçilen dosyanın yolunu döndürür (`desktop/window.py`
+         * `PencereKoprusu`); iptalde, pencere yoksa ya da açılamazsa "" döner.
+         */
+        yedek_dosyasi_sor?: () => Promise<string>;
+        /**
+         * Kaydetme penceresini açar, base64 içeriği seçilen yere yazar, yalnız durum döndürür
+         * (`desktop/window.py` `dosya_kaydet`); yol ön yüze gelmez. `ev_klasorunde` pencereyi
+         * son klasör yerine ev klasöründe açar (kurtarma anahtarı belgesi).
+         */
+        dosya_kaydet?: (
+          icerik: string,
+          onerilen_ad: string,
+          ev_klasorunde: boolean,
+        ) => Promise<"kaydedildi" | "iptal" | "hata">;
       };
     };
   }

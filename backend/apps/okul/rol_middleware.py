@@ -21,8 +21,9 @@ Her `/api/` isteği sırasıyla:
    yolu her rolde (program yöneticisi dahil) reddedilir: var olmayan uç ile kapalı uç ayırt
    edilmez (fail-closed). OPTIONS hiçbir rolde açık değildir.
 4. **Güvenlik dosyası kayıpken** (oturum açık kalmış olabilir) kesmez: o durumda açık listeyi
-   kilit kapısı tutar (`lock_middleware.KAYIP_IZINLI`; yedek listesi ve geri yükleme
-   kayıp kilidinin çıkış yoludur, servis o kipte yalnız kurtarma anahtarını kabul eder).
+   kilit kapısı tutar (`lock_middleware.KAYIP_IZINLI`; yedek listesi, seçilen dosyanın başlığı
+   ve geri yükleme kayıp kilidinin çıkış yoludur, servis o kipte yalnız kurtarma anahtarını kabul
+   eder).
    Karar diskten YENİDEN OKUNMAZ: kilit kapısının bu istek için verdiği karar kullanılır
    (`lock_middleware.guvenlik_dosyasi_kayip_karari`). İki okuma arasında dosya silinirse
    olağan kilitte geçmiş bir isteğin rol kapısını aşması (fail-open yarış) böylece olmaz.

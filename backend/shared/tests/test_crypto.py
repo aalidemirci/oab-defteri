@@ -257,6 +257,7 @@ def test_hesap_sarmali_anahtari_kimlige_bagli_hkdf_ile_turer() -> None:
         crypto.BLIND_INDEX_INFO,
         crypto.AUDIT_CHAIN_INFO,
         crypto.RECORD_SUMMARY_INFO,
+        crypto.FILE_WRAP_INFO,
     }
 
 
@@ -279,6 +280,7 @@ def test_sarmal_ozeti_tasarimdaki_hkdf_dizgesiyle_ve_bicimle_hesaplanir() -> Non
         crypto.BLIND_INDEX_INFO,
         crypto.AUDIT_CHAIN_INFO,
         crypto.RECORD_SUMMARY_INFO,
+        crypto.FILE_WRAP_INFO,
     }
     assert base64.b64encode(_TUZ) == b"AAECAwQFBgcICQoLDA0ODw=="
     yuk = (
@@ -357,6 +359,62 @@ def test_metin_ve_uuid_disindaki_kimlik_reddedilir(deger: object) -> None:
         crypto.canonical_account_id(deger)
     with pytest.raises(TypeError):
         _sarma_anahtari(deger)
+
+
+def test_dosya_sarmal_anahtari_tasarimdaki_hkdf_dizgesiyle_turer() -> None:
+    """Tasarım §2.3.1, §4.4.4 "Dosya anahtarı": `HKDF(DEK, "od-dosya-sarmal/v1")`. Formül açıkça
+    yeniden hesaplanır ve değer DONMUŞTUR (`test_dosya_sifreleme` altın vektörü aynı anahtarla
+    sarar): dizgeyi ya da HKDF kullanımını değiştiren, sarmalı DEK'in kendisiyle kuran bir
+    değişiklik bu testi düşürür."""
+    beklenen = HKDF(
+        algorithm=hashes.SHA256(), length=32, salt=None, info=b"od-dosya-sarmal/v1"
+    ).derive(TEST_DEK)
+    assert crypto.FILE_WRAP_INFO == b"od-dosya-sarmal/v1"
+    assert crypto.file_wrap_key(TEST_DEK) == beklenen
+    assert beklenen.hex() == "ebaf847c939314dead95db481a93f68b2d089ed59c0a0dfa0a31193c31683a40"
+    assert beklenen not in {
+        TEST_DEK,
+        crypto.account_seal_key(TEST_DEK),
+        crypto.account_wrap_digest_key(TEST_DEK),
+        crypto._derive_blind_index_key(TEST_DEK),
+    }
+
+
+#: Tasarım §2.3.1 kimlik tablosundaki HKDF bilgi dizgeleri (`shared.crypto`'daki `*_INFO`
+#: sabitleri). Yeni dizge buraya BİLİNÇLİ eklenir: modüldeki küme bununla birebir eşit olmalı.
+_HKDF_DIZGELERI = {
+    "BLIND_INDEX_INFO": b"od-kor-indeks",
+    "ACCOUNT_SEAL_INFO": b"od-hesap-muhru/v1",
+    "ACCOUNT_WRAP_DIGEST_INFO": b"od-sarmal-ozeti/v1",
+    "ACCOUNT_WRAP_INFO": b"od-hesap-sarmali/v1",
+    "FILE_WRAP_INFO": b"od-dosya-sarmal/v1",
+    "AUDIT_CHAIN_INFO": b"od-denetim-izi/v1",
+    "RECORD_SUMMARY_INFO": b"od-kayit-ozeti/v1",
+    "AUDIT_ANCHOR_INFO": b"od-iz-capa/v1",
+    "AUDIT_LOCKED_SEED_INFO": b"od-iz-kilitli/v1",
+    "AUDIT_LOCKED_MAC_INFO": b"od-iz-kilitli-mac/v1",
+}
+
+
+def test_hkdf_dizgeleri_tam_listedir_ve_birbirleriyle_cakismaz() -> None:
+    """Her amaç ayrı dizge kullanır; bir amacın anahtarı ötekini vermez (tasarım §2.3.1).
+
+    Kümeye yedek kabının iki dizgesi de girer (`desktop.backup_crypto`; DEK'ten türer ama masaüstü
+    katmanında durur). Hiçbir dizge ötekinin öneki de değildir: hesap sarmalının bilgisi önek ‖
+    36 karakterlik kimliktir ve başka bir amacın dizgesine denk gelmemelidir."""
+    from desktop import backup_crypto
+
+    modulde = {ad: deger for ad, deger in vars(crypto).items() if ad.endswith("_INFO")}
+    assert modulde == _HKDF_DIZGELERI
+    hepsi = [
+        *modulde.values(),
+        backup_crypto._PRIVATE_INFO,
+        backup_crypto._ENVELOPE_INFO,
+    ]
+    assert len(set(hepsi)) == len(hepsi)
+    for bir in hepsi:
+        for oteki in hepsi:
+            assert bir == oteki or not oteki.startswith(bir), (bir, oteki)
 
 
 def test_iz_anahtari_turevlerinin_hkdf_dizgeleri_tasarimdakidir() -> None:

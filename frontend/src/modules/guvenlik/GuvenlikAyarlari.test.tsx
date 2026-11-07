@@ -18,6 +18,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../lib/api";
 import { pencereIcerigi } from "../../lib/kilit";
+import { DOSYA_YAZILAMADI_ILETISI } from "../../lib/metinler";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 
@@ -46,6 +47,7 @@ vi.mock("../oturum/api", async (importOriginal) => ({
 // Yedek kartlarının kendi testleri var; burada yalnız görünüp görünmedikleri (rol süzmesi) sınanır.
 vi.mock("./SifreliYedekleme", () => ({ default: () => <div>ŞİFRELİ YEDEK KARTI</div> }));
 vi.mock("./YedektenGeriYukleme", () => ({ default: () => <div>GERİ YÜKLEME KARTI</div> }));
+vi.mock("./YedekRaporuKarti", () => ({ default: () => <div>YEDEK RAPORU KARTI</div> }));
 vi.mock("../../lib/download", async (importOriginal) => {
   const gercek = await importOriginal<typeof import("../../lib/download")>();
   return { ...gercek, saveBlob: download.saveBlob };
@@ -95,6 +97,7 @@ const ACIK_OTURUM = {
   bosta_kalan_sn: 600,
   kilit_bekliyor: false,
   kurulum_tamam: true,
+  yukleme_siniri_mb: 20,
 };
 /** Anahtarı doğrulanmamış kurulum (yenilenmiş ve henüz doğrulanmamış anahtar). */
 const DOGRULANMAMIS = { ...PAROLALI, recovery_key_confirmed: false };
@@ -126,6 +129,8 @@ function ekranaBas(yetenekler: readonly string[] = YETENEK_ADLARI) {
 describe("GuvenlikAyarlari", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Gerçek `saveBlob` hep sonuç döndürür: sahte `undefined` dönseydi başarı dalı sınanmazdı.
+    download.saveBlob.mockResolvedValue("kaydedildi");
     guvenlik.durum.mockResolvedValue(PAROLASIZ);
     oturum.ozet.mockResolvedValue(ACIK_OTURUM);
     oturum.bostaKilitSuresi.mockResolvedValue({ dakika: 10 });
@@ -208,12 +213,70 @@ describe("GuvenlikAyarlari", () => {
     expect(download.saveBlob).toHaveBeenCalledWith(
       pdf,
       expect.stringMatching(/^Kurtarma-Anahtarı-Belgesi_\d{2}\.\d{2}\.\d{4}\.pdf$/),
+      { evKlasorunde: true },
     );
     // Anahtar işi bitince alanda bekletilmez.
     await waitFor(() => expect(alan).toHaveValue(""));
     expect(
       await screen.findByText("Kurtarma anahtarı belgesi PDF olarak kaydedildi."),
     ).toBeInTheDocument();
+  });
+
+  it("köprü yoksa dosya tarayıcıya verilir: anahtar alanı boşalır, bildirim çıkar", async () => {
+    const kullanici = userEvent.setup();
+    guvenlik.durum.mockResolvedValue(PAROLALI);
+    guvenlik.kurtarmaAnahtariPdf.mockResolvedValue(new Blob(["%PDF-"]));
+    download.saveBlob.mockResolvedValueOnce("indirildi");
+    ekranaBas();
+
+    const alan = await screen.findByLabelText(/^Kurtarma anahtarı/);
+    await kullanici.type(alan, "AAAA-BBBB-CCCC-DDDD");
+    await kullanici.click(screen.getByRole("button", { name: "PDF olarak kaydet" }));
+
+    await waitFor(() => expect(alan).toHaveValue(""));
+    expect(
+      await screen.findByText("Kurtarma anahtarı belgesi PDF olarak kaydedildi."),
+    ).toBeInTheDocument();
+  });
+
+  it("kaydetme penceresinde iptal sessizdir: anahtar alanı boşalmaz, bildirim çıkmaz", async () => {
+    const kullanici = userEvent.setup();
+    guvenlik.durum.mockResolvedValue(PAROLALI);
+    guvenlik.kurtarmaAnahtariPdf.mockResolvedValue(new Blob(["%PDF-"]));
+    download.saveBlob.mockResolvedValueOnce("iptal");
+    ekranaBas();
+
+    const alan = await screen.findByLabelText(/^Kurtarma anahtarı/);
+    await kullanici.type(alan, "AAAA-BBBB-CCCC-DDDD");
+    await kullanici.click(screen.getByRole("button", { name: "PDF olarak kaydet" }));
+
+    await waitFor(() => expect(download.saveBlob).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "PDF olarak kaydet" })).toBeEnabled(),
+    );
+    expect(alan).toHaveValue("AAAA-BBBB-CCCC-DDDD");
+    expect(
+      screen.queryByText("Kurtarma anahtarı belgesi PDF olarak kaydedildi."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(DOSYA_YAZILAMADI_ILETISI)).not.toBeInTheDocument();
+  });
+
+  it("dosya yazılamazsa tek ileti çıkar, anahtar alanı boşalmaz", async () => {
+    const kullanici = userEvent.setup();
+    guvenlik.durum.mockResolvedValue(PAROLALI);
+    guvenlik.kurtarmaAnahtariPdf.mockResolvedValue(new Blob(["%PDF-"]));
+    download.saveBlob.mockResolvedValueOnce("hata");
+    ekranaBas();
+
+    const alan = await screen.findByLabelText(/^Kurtarma anahtarı/);
+    await kullanici.type(alan, "AAAA-BBBB-CCCC-DDDD");
+    await kullanici.click(screen.getByRole("button", { name: "PDF olarak kaydet" }));
+
+    expect(await screen.findByText(DOSYA_YAZILAMADI_ILETISI)).toBeInTheDocument();
+    expect(alan).toHaveValue("AAAA-BBBB-CCCC-DDDD");
+    expect(
+      screen.queryByText("Kurtarma anahtarı belgesi PDF olarak kaydedildi."),
+    ).not.toBeInTheDocument();
   });
 
   it("yanlış anahtarda backend iletisini gösterir, dosya inmez", async () => {
@@ -689,6 +752,7 @@ describe("GuvenlikAyarlari — rol süzmesi (plan F1b-2 'Ayarlar ve bant')", () 
     expect(screen.queryByText(/Kurtarma anahtarı doğrulanmadı/)).toBeNull();
     expect(screen.queryByText("ŞİFRELİ YEDEK KARTI")).toBeNull();
     expect(screen.queryByText("GERİ YÜKLEME KARTI")).toBeNull();
+    expect(screen.queryByText("YEDEK RAPORU KARTI")).toBeNull();
     // Kendi parolası ve Kilitle her rolde (KENDI satırı).
     expect(screen.getByRole("button", { name: "Parolayı değiştir" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Kilitle" })).toBeInTheDocument();
@@ -718,6 +782,15 @@ describe("GuvenlikAyarlari — rol süzmesi (plan F1b-2 'Ayarlar ve bant')", () 
     expect(screen.getByRole("button", { name: "Kaydet" })).toBeInTheDocument();
   });
 
+  it("hesap kurulmadan Yedek Raporu kartı çizilmez; öteki yedek kartları durur", async () => {
+    guvenlik.durum.mockResolvedValue(PAROLASIZ);
+    ekranaBas();
+
+    expect(await screen.findByText("ŞİFRELİ YEDEK KARTI")).toBeInTheDocument();
+    expect(screen.getByText("GERİ YÜKLEME KARTI")).toBeInTheDocument();
+    expect(screen.queryByText("YEDEK RAPORU KARTI")).toBeNull();
+  });
+
   it("program yöneticisinde kurtarma ve yedek kartlarının hepsi durur", async () => {
     guvenlik.durum.mockResolvedValue(PAROLALI);
     ekranaBas();
@@ -728,5 +801,6 @@ describe("GuvenlikAyarlari — rol süzmesi (plan F1b-2 'Ayarlar ve bant')", () 
     );
     expect(screen.getByText("ŞİFRELİ YEDEK KARTI")).toBeInTheDocument();
     expect(screen.getByText("GERİ YÜKLEME KARTI")).toBeInTheDocument();
+    expect(screen.getByText("YEDEK RAPORU KARTI")).toBeInTheDocument();
   });
 });

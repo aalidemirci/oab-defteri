@@ -2,7 +2,8 @@
 // silinir, yeniden adlandırılır ya da içi boşaltılır/bozulur; backend ikisini
 // aynı `security_file_missing` durumuyla bildirir). Program "parolasız"a DÖNMEZ; backend bu
 // durumda veri uçlarını 423 `guvenlik_dosyasi_kayip` ile keser ve yalnız durum
-// uçlarını, yedek listesini ve yedekten geri yüklemeyi açık bırakır.
+// uçlarını, yedek listesini, seçilen dosyanın başlık okumasını ve yedekten geri
+// yüklemeyi açık bırakır.
 //
 // Ekran iki çıkış yolunu anlaşılır dille söyler:
 // 1. Dosyanın kopyasını veri klasörüne geri koymak → "Yeniden denetle"

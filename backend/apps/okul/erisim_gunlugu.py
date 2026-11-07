@@ -46,11 +46,12 @@ yoktur; yazıcı bu yüzden hiçbir uca bağlı değildir. Kişisel veriye dokun
 öğrenci ve personel listesi ve ayrıntısı, ayrılış havuzu (olağan okuma; tasarımın "okuma ≠
 hassas detay" ayrımında okuma), içe aktarma önizlemesi (kullanıcının yüklediği dosyanın
 işlenmesi; programın verisinin çıktısı değildir), boş şablonlar ve kurtarma anahtarı belgesi
-(kişisel veri yok), şifreli yedek indirme (bütün veritabanı, şifreli; tasarımda "Güvenlik"
+(kişisel veri yok), şifreli yedeğin kaydedilmesi (bütün veritabanı, şifreli; tasarımda "Güvenlik"
 satırındadır, izi denetim izinde `YEDEK` satırıdır — erişim günlüğü türlerinde yoktur).
 T.C. kimlik no (K9, F3), veli listesi ve adlı E07/E08 (F2), kişi dökümü ve ihlal dökümü,
 özel nitelikli alan ve ek (F1c-F5) henüz yoktur; o okumaları getiren adımlar bu yazıcıya
-bağlar.
+bağlar. Özel nitelikli ekin tek okuma yolu `services.dosya_deposu.oku` F1b-3'ten beri bu
+yazıcıyı çağırır; ona bağlı uç F1c'dedir.
 
 OKUMA (`liste`; ucu `GET access-log/`, `views_erisim_gunlugu`; plan F1b-2 "Erişim günlüğü okuma
 ucu"; tasarım §4.6.4 "Okuyan: yonetici ve DK"):

@@ -135,8 +135,9 @@ hesapların parola kaydının özeti (eski sarmallar arşivden de geri konmazsa 
 bağımsız değildir. Geri yükleme notu MAC'siz bir dosyadır: önceki zincir başını çapanın ilerisinde
 gösteren sahte bir not çapa denetimini atlatır ve yerine alanları boş bir geri yükleme kartı
 çıkarır. Gerçek bir geri yüklemeden sonra not silinip `iz-durumu.json` eski bir kopyasıyla
-değiştirilirse kart da çıkmaz. Kalıcı sinyaller aylık kâğıt çapası, günlük yedekler, `db-onceki-*`
-dosyası ve onarımın `SISTEM` `HESAP` satırlarıdır. İZ BOŞLUĞU ARTIK REDDEDİLİR (kullanıcı kararı
+değiştirilirse kart da çıkmaz. Kalıcı sinyaller aylık kâğıt çapası ve onarımın `SISTEM` `HESAP`
+satırlarıdır; günlük yedekler ve `db-onceki-*` dosyası yalnız 14 gün durur (tasarım §4.4.7). İZ
+BOŞLUĞU ARTIK REDDEDİLİR (kullanıcı kararı
 03.11.2026 "Boşluğu engelle"; `satir_izi` modül başlığı "İZ BOŞLUĞU"): satır geri sarmayla
 birlikte hesabın son kaydından sonra izin ARASINDAN satır SİLMEK (kuyruk değil; hesabın kendi
 satırını da ilgisiz bir satırı da; birincil anahtarsız yeniden kurulmuş tabloda yerine birebir kopya
@@ -374,7 +375,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, Final, TypeVar
 
-from desktop.backup import database_snapshot
+from desktop.backup import PRE_PAROLA_PREFIX, database_snapshot
 from desktop.backup_crypto import (
     BACKUP_SUFFIX,
     SECURITY_STATE_VERSION,
@@ -386,7 +387,7 @@ from desktop.backup_crypto import (
     load_public_key,
     parse_security_state,
     recovery_key_identity,
-    recovery_metadata,
+    usable_recovery_header,
 )
 from django.apps import apps as django_apps
 from django.conf import settings
@@ -445,8 +446,8 @@ SUSPEND_AFTER_FAILURES = 10
 #: damgasız yazılır.
 RECOVERY_CONFIRMED_FIELD = "dogrulandi"
 #: Kenara alınan güvenlik dosyalarının ad öneki (`guvenlik-arsiv-<damga>.json`);
-#: geri yükleme (`backup_restore._ensure_state_file`) ve `recovery_metadata`
-#: aynı deseni kullanır.
+#: geri yükleme (`backup_restore._ensure_state_file`) aynı deseni kullanır. Yedek başlığı
+#: arşivden alınmaz (`backup_crypto.usable_recovery_header`).
 STATE_ARCHIVE_PREFIX = "guvenlik-arsiv-"
 
 #: Hesap sarmalının türetim etiketi (modül başlığı "HESAP SARMALI KİMLİĞE BAĞLIDIR"). YALNIZ
@@ -1466,9 +1467,17 @@ def take_transition_backup(label: str) -> Path | None:
     """Geçiş ÖNCESİ tam veritabanı kopyası alır; yolunu döndürür (alınamazsa None).
 
     Masaüstü kabuğuyla aynı RAM-içi SQLite görüntüsü ve `.odbak` şifreli kapsayıcı
-    yordamları kullanılır. Adı rotasyon desenlerine ÇAKIŞMAZ (`pre-parola-*`);
-    kabuğun 14 günlük rotasyonu bu dosyalara DOKUNMAZ. Başlık TK10 izdüşümüdür
-    (yalnız kurtarma bölümü).
+    yordamları kullanılır. Yedek `pre-parola-acilis-<damga>.odbak` adıyla 14 günlük rotasyona
+    girer (`desktop.backup.ROTASYON_KUMESI`; tasarım §4.4.7); küme yalnız `acilis` etiketini tanır,
+    yeni etiket eklenirse desen ve `_PROGRAM_YEDEGI` de genişler. Kurulum yedeğidir, manifestosu
+    boştur. Başlık TK10 izdüşümüdür
+    (yalnız kurtarma bölümü) ve güncel `guvenlik.json`'dan alınır; başlıksız yedek üretilmez
+    (plan F1b-3 "Kap ve manifesto"): başlık kullanılamıyorsa `AppPasswordError`, ilk hesap
+    kurulumu durur ve geri alınır (`enable`).
+
+    BU YEDEK GERİ YÜKLENEMEZ (kullanıcı kararı 07.11.2026): `enable` onu hesap satırı yazılmadan
+    önce alır, içinde girişe açık program yöneticisi yoktur; geri yükleme içeriğe bakıp reddeder
+    (`backup_restore` modül başlığı "HESAPSIZ YEDEK"). Alınma sırası bilerek değişmez.
 
     KOPYA AYRI BİR BAĞLANTIDAN alınır (canlı Django bağlantısından DEĞİL): açık
     bir işlem varken `sqlite3.Connection.backup()` SQLITE_BUSY'de sonsuz döngüye
@@ -1485,13 +1494,19 @@ def take_transition_backup(label: str) -> Path | None:
     hedef_dizin = backup_dir()
     hedef_dizin.mkdir(parents=True, exist_ok=True)
     damga = timezone.localtime().strftime("%Y-%m-%d-%H%M%S")
-    hedef = hedef_dizin / f"pre-parola-{label}-{damga}{BACKUP_SUFFIX}"
+    hedef = hedef_dizin / f"{PRE_PAROLA_PREFIX}-{label}-{damga}{BACKUP_SUFFIX}"
+    baslik = usable_recovery_header(_data_dir())
+    if baslik is None:
+        raise AppPasswordError(
+            "Güvenlik değişikliği öncesi yedek alınamadı: güvenlik dosyası okunamıyor; işlem "
+            "yapılmadı."
+        )
     try:
         encrypt_to_path(
             database_snapshot(kaynak),
             hedef,
             load_public_key(_data_dir()),
-            recovery_header=recovery_metadata(_data_dir()),
+            recovery_header=baslik,
         )
     except (sqlite3.Error, OSError, BackupCryptoError):
         logger.exception("Geçiş öncesi yedek alınamadı.")
@@ -1815,7 +1830,7 @@ def _encrypted_rows_exist() -> bool:
 
 #: Hesap kurulurken alınan geçiş yedeğinin adı (`take_transition_backup("acilis")`).
 #: `enable()` yalnız kişi tabloları boşken çalıştığı için bu yedek kişi verisi taşımaz.
-_TRANSITION_BACKUP_PREFIX = "pre-parola-"
+_TRANSITION_BACKUP_PREFIX = f"{PRE_PAROLA_PREFIX}-"
 #: Yedek klasöründe veri taşıyabilen dosyalar: şifreli yedek ve (dönüştürülmemiş) eski düz yedek.
 _DATA_BACKUP_SUFFIXES = (BACKUP_SUFFIX, ".sqlite3")
 

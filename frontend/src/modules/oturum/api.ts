@@ -89,6 +89,8 @@ export interface OturumOzeti {
   kilit_bekliyor: boolean;
   /** Kurulum sihirbazı tamamlandı mı? (Boşta kilidin ve geri sayımın koşulu.) */
   kurulum_tamam: boolean;
+  /** Düz dosya yüklemesinin sınırı (MB; `settings.MAX_UPLOAD_SIZE_MB`). */
+  yukleme_siniri_mb: number;
 }
 
 /** `POST /security/lock/` yanıtı: kilidin sonucu + güncel özet. */

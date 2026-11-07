@@ -56,11 +56,15 @@ def show_error(
     title: str,
     message: str,
     *,
+    gunluk: str | None = None,
     platform: str | None = None,
     runner: DialogRunner | None = None,
 ) -> None:
-    """Hatayı günlüğe yazar ve mümkünse görsel ileti kutusunda gösterir."""
-    logger.error("%s — %s", title, message)
+    """Hatayı günlüğe yazar ve mümkünse görsel ileti kutusunda gösterir.
+
+    `gunluk`: iletinin günlüğe yazılacak hâli; ileti serbest ad ya da yol taşıyorsa verilir (R1).
+    """
+    logger.error("%s — %s", title, message if gunluk is None else gunluk)
 
     system = sys.platform if platform is None else platform
     if system.startswith("win"):

@@ -61,7 +61,8 @@ siteyi ve evrakı kapsar.
    kararıyla** (aynı kişi aynı dönemde YK'de ve DK'de olamaz; okul müdürü YK'ye giremez;
    hesabın son kaydından sonra denetim izinden silinmiş ya da sırası değiştirilmiş kayıt o
    hesabın girişini kapatır — 03.11.2026, tasarım §4.6.3; öteki zincir bulguları girişi
-   engellemez).
+   engellemez; girişe açık program yöneticisi taşımayan yedek geri yüklenmez — 07.11.2026,
+   tasarım §4.4.4).
    Kullanıcının belgeden **girdiği** değer (teminat, kira, artış, ay sayısı, EK-3 puanı,
    taksit) mevzuattan saparsa, eksik belge ve kantinde onay eksikliği uyarı + gerekçedir.
    Henüz girilmemiş veri "eksik"tir, gerekçe istemez; gerekçe yalnız bilinçli sapmada.
@@ -107,7 +108,7 @@ siteyi ve evrakı kapsar.
 | Faz | Durum |
 |---|---|
 | F0 Keşif tamamlama + genel tasarım + mevzuat | **tamam (31.10.2026)** — korpus, envanterler, kullanıcı kararları, saha notu, genel tasarım taslak v2, bağımsız denetim (129 bulgu işlendi); kullanıcı "F0 tamam" dedi. Ayrıntı planın §1.7'sinde |
-| F1 İskelet + çekirdek + organlar + kural paketi | **sürüyor** — F1a (aile iskeleti) **tamam (31.10.2026)**: kapı CI'da ve Windows'ta elle geçti, ekler planın §2.1'inde. **F1b** (güvenlik çekirdeği, kurulum, okul kartı, roller) sürüyor: 0. adım (yeni logo "okul çatısı ve aile", görünen kütüphane metinleri, sözlük, ölü atıflar) **tamam (01.11.2026)**; 1. adım (kişisel hesaplar ve oturum, denetim izi, erişim günlüğü) **dalda tamam (02.11.2026)**; 2. adım (rol matrisi, rol ve yetki kapısı, konsol geri yüklemesinin rol denetimi, parola kaydı ve hesap satırının izi, Kullanıcılar ve E63, Erişim Günlüğü, ön yüz rol süzmesi) **dalda tamam (04.11.2026)**; 1. ve 2. adım `f1b-hesaplar` dalında tek PR'la `main`'e gider; iki adımın ekleri planın §2.2'sinde; sıradaki 3. adım tam yedek ve dosya deposu |
+| F1 İskelet + çekirdek + organlar + kural paketi | **sürüyor** — F1a (aile iskeleti) **tamam (31.10.2026)**: kapı CI'da ve Windows'ta elle geçti, ekler planın §2.1'inde. **F1b** (güvenlik çekirdeği, kurulum, okul kartı, roller) sürüyor: 0. adım (yeni logo "okul çatısı ve aile", görünen kütüphane metinleri, sözlük, ölü atıflar) **tamam (01.11.2026)**; 1. adım (kişisel hesaplar ve oturum, denetim izi, erişim günlüğü) **tamam (02.11.2026)**; 2. adım (rol matrisi, rol ve yetki kapısı, konsol geri yüklemesinin rol denetimi, parola kaydı ve hesap satırının izi, Kullanıcılar ve E63, Erişim Günlüğü, ön yüz rol süzmesi) **tamam (04.11.2026)**; 1. ve 2. adım tek PR'la (`f1b-hesaplar`, #4) 04.11.2026'da `main`'e girdi; iki adımın ekleri planın §2.2'sinde; 3. adım (tam yedek ve dosya deposu) **tamam (06.11.2026)**: kod kapısı yeşil, ekleri planın §2.2'sinde, `f1b-yedek` dalından PR'la (#5) 07.11.2026'da `main`'e girdi; Windows'ta Claude sınadı (07.11.2026, paket `bde6adc`: 211 adımdan 182'si geçti), bulunan kusurlar düzeltildi ve paket `76e7979` Windows'ta yeniden sınandı; yeniden sınamada çıkan kusurlar (WebView2'nin form önerisini ve sayfa önbelleğini şifresiz saklaması, kenar çubuğunda tekerlek) düzeltildi ve paket `ccea9c2` Windows'ta sınandı (planın §2.2'sinde iki "Windows ... sonra" eki); USB bellek adımları ve gerçek Pardus kullanıcıda; sıradaki 4. adım kurulum sihirbazının ilk üç adımı (ilk yönetici hesabı ve kurtarma anahtarı, okul kartının OAB alanları, ders yılı ve dönemler) |
 
 Sapmalar ve tasarımda yazmayan kararlar faz bittikçe "F<n> ekleri (tarih)" satırıyla
 plan/tasarım belgesine işlenir.

@@ -11,6 +11,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../lib/api";
+import { DOSYA_YAZILAMADI_ILETISI } from "../../lib/metinler";
 import {
   HESAP_KAPALI,
   KAPALI_HESAP,
@@ -122,6 +123,8 @@ async function ayrintiyiAc(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Gerçek `saveBlob` hep sonuç döndürür: sahte `undefined` dönseydi başarı dalı sınanmazdı.
+  indirme.saveBlob.mockResolvedValue("kaydedildi");
   apiMock.liste.mockResolvedValue(LISTE);
   apiMock.ayrinti.mockImplementation((id: string) =>
     Promise.resolve(ayrinti(LISTE.find((h) => h.id === id) ?? MUHASIP)),
@@ -337,6 +340,40 @@ describe("Kullanıcılar — ayrıntı", () => {
     expect(indirme.saveBlob.mock.calls[1][1]).toMatch(
       /^Hesap-Teslim-Pusulası_Muhasip_\d{2}\.\d{2}\.\d{4}\.pdf$/,
     );
+  });
+
+  it("köprü yoksa dosya tarayıcıya verilir, bildirim yine çıkar", async () => {
+    const user = userEvent.setup();
+    apiMock.pusula.mockResolvedValue({ blob: new Blob(["%PDF-"]), ad: "pusula.pdf" });
+    indirme.saveBlob.mockResolvedValueOnce("indirildi");
+    bas();
+    const pencere = await ayrintiyiAc(user, "Muhasip · tanıtıcı muhasip");
+
+    await user.click(
+      within(pencere).getByRole("button", { name: "Hesap teslim pusulasını kaydet" }),
+    );
+
+    expect(await screen.findByText("Hesap teslim pusulası PDF olarak kaydedildi.")).toBeVisible();
+  });
+
+  it("kaydetme penceresinde iptal sessizdir, yazılamazsa pencerede tek ileti çıkar", async () => {
+    const user = userEvent.setup();
+    apiMock.pusula.mockResolvedValue({ blob: new Blob(["%PDF-"]), ad: "pusula.pdf" });
+    bas();
+    const pencere = await ayrintiyiAc(user, "Muhasip · tanıtıcı muhasip");
+    const dugme = within(pencere).getByRole("button", { name: "Hesap teslim pusulasını kaydet" });
+
+    indirme.saveBlob.mockResolvedValueOnce("iptal");
+    await user.click(dugme);
+    await waitFor(() => expect(indirme.saveBlob).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(dugme).toBeEnabled());
+    expect(screen.queryByText("Hesap teslim pusulası PDF olarak kaydedildi.")).toBeNull();
+    expect(within(pencere).queryByText(DOSYA_YAZILAMADI_ILETISI)).toBeNull();
+
+    indirme.saveBlob.mockResolvedValueOnce("hata");
+    await user.click(dugme);
+    expect(await within(pencere).findByText(DOSYA_YAZILAMADI_ILETISI)).toBeInTheDocument();
+    expect(screen.queryByText("Hesap teslim pusulası PDF olarak kaydedildi.")).toBeNull();
   });
 
   it("pusulanın reddi (kaydı tutmayan hesap) pencerede sunucunun iletisiyle", async () => {

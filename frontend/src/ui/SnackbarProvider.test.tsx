@@ -40,6 +40,19 @@ describe("useSnackbar", () => {
 });
 
 describe("SnackbarProvider", () => {
+  // Pencere gövdeye çizilir (ui/Dialog): aynı z değerinde DOM sırası onu öne alır, açık pencereden
+  // verilen bildirim (ör. "PDF olarak kaydedildi") örtünün altında kalırdı. "Programı kapatıp
+  // yeniden açın" ekranı (z-[60]) ise bildirimin üstünde kalır.
+  it("bildirim pencerenin üstünde, yeniden başlat ekranının altında durur", async () => {
+    const user = userEvent.setup();
+    renderWithProvider();
+
+    await user.click(screen.getByRole("button", { name: "basari" }));
+
+    const kap = screen.getByText("Kaydedildi.").closest(".fixed");
+    expect(kap).toHaveClass("z-[55]");
+  });
+
   it("success çağrısı mesajı gösterir", async () => {
     const user = userEvent.setup();
     renderWithProvider();

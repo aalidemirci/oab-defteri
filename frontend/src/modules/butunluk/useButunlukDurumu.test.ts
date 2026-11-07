@@ -24,6 +24,7 @@ const DURUM: ButunlukDurumu = {
       { id: "h-4", tanitici: "dk-1", rol_etiketi: "Denetleme Kurulu", kapali: false },
     ],
   },
+  eksik_ekler: [],
   kagit_capasi: { kayit_no: 3, zincir: "AAAA-BBBB" },
   son_girisler: [],
   parola_yenilenme: null,
@@ -38,6 +39,7 @@ describe("bütünlük durumunun düzenlenmesi", () => {
       butunluk: [],
       geri_yukleme: null,
       iki_depo: null,
+      eksik_ekler: [],
       kagit_capasi: null,
       son_girisler: [],
       parola_yenilenme: null,
@@ -171,6 +173,7 @@ describe("useButunlukDurumu — geri yükleme kartının “Gördüm”ü", () =
         butunluk: [],
         geri_yukleme: null,
         muhru_tutmayan: [],
+        eksik_ekler: [],
         okunamayan: [],
       }),
     );
@@ -202,6 +205,7 @@ describe("useButunlukDurumu — geri yükleme kartının “Gördüm”ü", () =
         butunluk: [],
         geri_yukleme: null,
         muhru_tutmayan: [],
+        eksik_ekler: [],
         okunamayan: [],
       }),
     );

@@ -281,6 +281,10 @@ ediyorsa dört halka birlikte güncellenir:
 3. `oab_defteri.spec` → `hiddenimports`,
 4. `giris.py` → `RUNTIME_MODULES`.
 
+Yalnız backend'in içe aktardığı masaüstü modülü de spec `hiddenimports`'una
+adıyla yazılır; `desktop/` arşive yalnız `giris.py`'nin statik zincirinden
+girer (`test_backendin_ice_aktardigi_masaustu_modulleri_pakete_girer`).
+
 Testler halkalardan biri eksikse kırılır. Gerekçe ve ayrıntı spec dosyasının
 başındaki açıklamada.
 

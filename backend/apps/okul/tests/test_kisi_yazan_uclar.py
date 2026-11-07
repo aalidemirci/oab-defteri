@@ -66,7 +66,11 @@ DIGER_UCLAR = frozenset(
         "account-unsuspend",
         # Çık (tasarım §4.2): kişi yazmaz; her oturum durumunda parolasız.
         "app-quit",
+        # Seçilen yedek dosyasının başlığını okur, hiçbir şey yazmaz.
+        "backup-inspect",
         "backup-list",
+        # Yedek Raporu: `BASIM` satırı yazar, kişi yazmaz.
+        "backup-report",
         "backup-restore",
         # Dış yedek hatırlatması (tasarım §16 R6) veri dizinindeki dosyaya (tarih ve
         # süre) yazar — kişi sicili yazmaz.

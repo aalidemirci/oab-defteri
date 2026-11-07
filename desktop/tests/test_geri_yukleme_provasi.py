@@ -2,11 +2,11 @@
 şifreli yedek geri yüklenir).
 
 Bilgisayar değişir, disk bozulur, program yeniden kurulur: okulun elinde kalan,
-kullanıcının indirip USB belleğe aldığı şifreli yedektir. Prova GERÇEK süreçlerle
+kullanıcının USB belleğe kaydettiği şifreli yedektir. Prova GERÇEK süreçlerle
 koşar (`desktop.main`, gerçek göç, gerçek şifreleme, gerçek yedek kapsayıcısı):
 
 1. **Eski bilgisayar** (`hazirla`): ilk program yöneticisi hesabı + doğrulanmış
-   kurtarma anahtarı, uydurma kişi kayıtları; dış yedek USB'ye.
+   kurtarma anahtarı, uydurma kişi kayıtları, uydurma bir ek; dış (tam) yedek USB'ye.
 2. **Temiz bilgisayar**: yedeğin başlığı yalnız kurtarma bölümünü taşır (tasarım
    TK10): hesap parolası yeni bilgisayarda yedeği AÇMAZ; boş veri dizininde
    `--geri-yukle` kurtarma anahtarıyla → güvenlik dosyası yalnız kurtarma bölümüyle
@@ -20,6 +20,9 @@ koşar (`desktop.main`, gerçek göç, gerçek şifreleme, gerçek yedek kapsay�
 5. **Sihirbazı başka hesapla doldurulmuş yeni bilgisayar** (aile iskeletinin düzeltmesi):
    kurucunun sonunda açılan programda hesap kurulmuşsa geri yükleme yabancı güvenlik
    dosyasını ve boş veritabanını kenara alır; veri yine birebir aynıdır.
+6. **Ekler dâhil** (tasarım §10.6, F1b kapısı; plan F1b-3 "Ötekiler"): temiz bilgisayarda
+   tam yedekten dönen ek depoda durur ve çözülür. F1b'de ek ekleyen ekran yoktur: ek betikle
+   tohumlanır, gerçek programdaki elle denetim eksiz yedekle yapılır.
 
 Aile iskeletinin verilmiş kart defteri sınamaları kütüphane uygulamasıyla söküldü
 (F1a-2).
@@ -116,6 +119,30 @@ def test_temiz_makinede_kurtarma_anahtariyla_acilir_ve_parola_yenilenir(
     # açılış onunla yapılır.
     yeni_parola = betik("dogrula", "--data-dir", str(yeni), "--parola", "Prova-Yeni-Parola-2")
     assert yeni_parola["ozet"] == eski_bilgisayar["beklenen"]
+
+
+def test_tam_yedek_eki_tasir_ve_temiz_makinede_ek_acilir(
+    eski_bilgisayar: dict[str, Any], tmp_path: Path
+) -> None:
+    """Gerçek süreçlerle `sifreli_yedegi_kaydet` → `--geri-yukle` → ek depodan çözülür."""
+    ozet = eski_bilgisayar["yedek_ozeti"]
+    assert (ozet["ek_sayisi"], ozet["eksik"], ozet["denetlendi"]) == (1, 0, True)
+    yeni = tmp_path / "yeni-bilgisayar"
+
+    _geri_yukle(yeni, eski_bilgisayar["yedek"], "--kurtarma-anahtari", eski_bilgisayar["kurtarma"])
+    _acilis(yeni)
+
+    assert (yeni / "data" / "dosyalar" / eski_bilgisayar["ek"]).is_file()
+    sonuc = betik(
+        "ek-oku",
+        "--data-dir",
+        str(yeni),
+        "--ad",
+        eski_bilgisayar["ek"],
+        "--kurtarma",
+        eski_bilgisayar["kurtarma"],
+    )
+    assert sonuc == {"ayni": True, "ad": "uydurma-ek.pdf"}
 
 
 def test_ayni_bilgisayarda_hesap_parolasiyla_geri_yuklenir(

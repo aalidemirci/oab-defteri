@@ -27,6 +27,12 @@ if (typeof window !== "undefined" && !window.matchMedia) {
   });
 }
 
+// jsdom `window.scrollTo`'yu uygulamaz ("Not implemented" yazar). Kabuk sayfa değişince çağırır
+// (`AppShell`); çağrıları `AppShell.test.tsx` sınar.
+if (typeof window !== "undefined") {
+  window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
+}
+
 // Pencerenin yeniden yüklenmesi (tasarım §13 D53; `lib/kilit.ts`) jsdom'da uygulanmaz:
 // tek çağrı noktası her testte TAZE bir taklitle değiştirilir (casus değil: dosyaların
 // `restoreAllMocks`'u gerçek yüklemeyi geri getirmesin). Kilit ve açılış akışlarını

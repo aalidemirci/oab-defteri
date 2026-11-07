@@ -70,7 +70,9 @@ anahtarıyla mühürlü, kuralına uyan ve MAC'i tutan satırları okur
 sahte bir `GIRIS`, `BUTUNLUK` ya da `GERI_YUKLEME` satırı karta çıkmaz, (3). denetimin
 bulgusu olur. Bütünlük kartı oturumdaki hesabın bir önceki girişinden beri
 yazılmış `BUTUNLUK` satırlarıdır (doğrulama bulgusu ve girişte hesap mührü tutmadı); her hesap
-kendi bir sonraki girişinde görür. Geri yükleme kartı son `GERI_YUKLEME` satırıdır (aynı kilit
+kendi bir sonraki girişinde görür. Dosya deposunun yetim taraması da `BUTUNLUK` satırıdır ama bulgu
+değildir, karta çıkmaz: yazıldığı kip açılışa göre değişir, kart kilitli satırı zaten okumaz.
+Geri yükleme kartı son `GERI_YUKLEME` satırıdır (aynı kilit
 açılışında yazılmış öncekilerle birlikte: iki geri yükleme arasında kilit açılmadıysa asıl dönüş
 yolu ilkinin kenara aldığı veritabanıdır) ve Denetleme Kurulu "gördüm" diyene dek kalır (aşağıda
 "GÖRDÜM"). İki depo kartı ve mührü tutmayan hesaplar canlı
@@ -81,6 +83,7 @@ kartıyla söyler ("Bütünlük Durumu Okunamadı"; `_kartlar`). Bulgu kodları 
 koddur, kullanıcı metnine çıkmaz: ön yüz sözlükteki metni yazar (`modules/butunluk/metinler`).
 Kartlardaki hesap kişisizdir (`_hesap_ozeti`): kimlik, tanıtıcı, rol etiketi, açılış ve kapanış
 günü (aynı tanıtıcıyı alan eski ve yeni hesap ayrılsın; orkestratör maddesi F-3); ad-soyad yok.
+Geri yükleme kartında kaydı yedekte olmayan hesap ayrılır (`_geri_yukleme_hesabi`).
 
 GÖRDÜM (`geri_yukleme_goruldu_mu`, `son_geri_yukleme`; yazımı `hesaplar.acknowledge_restore`,
 `POST security/integrity/restore-seen/` `{seq}`; plan F1b-2 "Gördüm."; tasarım §4.4.4): geri
@@ -131,7 +134,7 @@ from apps.okul.oturum import (
     rol_etiketi,
     sistem_olarak,
 )
-from apps.okul.services import geri_yukleme_notu
+from apps.okul.services import dosya_deposu, geri_yukleme_notu
 from shared import crypto, kanonik
 
 if TYPE_CHECKING:
@@ -510,6 +513,24 @@ def _not_zamani(deger: Any) -> datetime | None:
     return geri_yukleme_notu.zaman_coz(deger)
 
 
+def _dosya_sayilari(dosyalar: Any) -> dict[str, Any]:
+    """Notun `dosyalar` bölümünden yalnız bilinen kapsam kodu ve sıfırdan küçük olmayan tamsayılar.
+
+    Not dosyası program dışından değiştirilebilir: biçimi tutmayan değer satıra girmez.
+    """
+    if not isinstance(dosyalar, dict):
+        return {}
+    degerler: dict[str, Any] = {}
+    kapsam = dosyalar.get("kapsam")
+    if isinstance(kapsam, str) and kapsam in geri_yukleme_notu.DOSYA_KAPSAMLARI:
+        degerler["kapsam"] = kapsam
+    for alan in geri_yukleme_notu.DOSYA_SAYILARI:
+        sayi = dosyalar.get(alan)
+        if isinstance(sayi, int) and not isinstance(sayi, bool) and sayi >= 0:
+            degerler[alan] = sayi
+    return degerler
+
+
 def _geri_yukleme_satiri(kayit: Any) -> tuple[str, list[str], dict[str, list[Any]]]:
     """Notun bir geri yükleme kaydından satırın kimliği, değişen alanları ve değerleri.
 
@@ -542,6 +563,7 @@ def _geri_yukleme_satiri(kayit: Any) -> tuple[str, list[str], dict[str, list[Any
         hesap = denetim_izi.kimlik_metni_ya_da_none(Account, yol.get("hesap"))
         if hesap is not None:
             degerler["hesap"] = hesap
+    degerler |= _dosya_sayilari(kayit.get("dosyalar"))
     kimlik = ""
     onceki = kayit.get("onceki")
     if isinstance(onceki, dict):
@@ -574,6 +596,7 @@ _SISTEM_OLAYI_NESNELERI: Final = frozenset(
         denetim_izi.SEMA_GOCU,
         denetim_izi.GUN_ISI_ERTELEME,
         denetim_izi.IZ_DOGRULAMASI,
+        denetim_izi.DOSYA_DEPOSU,
     }
 )
 #: Sistem olayının kimliği, alan adları ve metin değerleri programın ürettiği kodlardır
@@ -753,13 +776,17 @@ def _onceki_giris_seq(hesap_id: str, gecerli: Suzgec) -> int:
 def _butunluk_kartlari(hesap_id: str | None, gecerli: Suzgec) -> list[dict[str, Any]]:
     alt = _onceki_giris_seq(hesap_id, gecerli) if hesap_id else 0
     satirlar = _dogrulanmis(
-        AuditTrail.objects.filter(action=AuditAction.BUTUNLUK, seq__gt=alt), _AZAMI_KART, gecerli
+        AuditTrail.objects.filter(action=AuditAction.BUTUNLUK, seq__gt=alt).exclude(
+            model=denetim_izi.DOSYA_DEPOSU
+        ),
+        _AZAMI_KART,
+        gecerli,
     )
     kartlar: list[dict[str, Any]] = []
     for satir in satirlar:
         if satir.model != _HESAP_MODELI:
-            # Kilit açılışı doğrulaması (`IZ_DOGRULAMASI`). Hesap mührü dışındaki her
-            # `BUTUNLUK` satırı bu biçimdedir; değeri yoksa düzey uyarı, bulgu listesi boştur.
+            # Kilit açılışı doğrulaması (`IZ_DOGRULAMASI`). Hesap mührü ve yetim taraması dışındaki
+            # her `BUTUNLUK` satırı bu biçimdedir; değeri yoksa düzey uyarı, bulgu listesi boştur.
             degerler = satir.values or {}
             kartlar.append(
                 {
@@ -819,6 +846,20 @@ def _hesap_ozeti(hesap_id: object) -> dict[str, Any]:
         "acilis": None if satir is None else hesap_gunu(hesap_ani(satir["ham_acilis"])),
         "kapanis": None if satir is None else hesap_gunu(hesap_ani(satir["ham_kapanis"])),
     }
+
+
+def _geri_yukleme_hesabi(hesap_id: str) -> dict[str, Any]:
+    """Geri yükleme kartının hesabı; kimliği geçerli ama satırı yoksa özet `yedekte_yok` taşır.
+
+    Yedek hesaptan eskiyse ya da başka bir kurulumunsa geri yüklemeyi başlatan oturumun, parolayla
+    açan hesabın kaydı yerine konan kayıtlarda yoktur. Bu okuma hatası değildir (07.11.2026 sınama
+    listesi, kod okuması, gerçek pencerede denenmedi: kart sihirbazı dolduran hesabı "Kaydı okunamayan
+    hesap" diye anardı). Yalnız bu kartta: öteki kartlarda satırın yokluğu yedekle açıklanamaz;
+    biçimsiz kimlikte kayıt okunamıyordur.
+    """
+    ozet = _hesap_ozeti(hesap_id)
+    gecerli = denetim_izi.kimlik_metni_ya_da_none(Account, hesap_id) is not None
+    return {**ozet, "yedekte_yok": True} if gecerli and ozet["tanitici"] is None else ozet
 
 
 #: "Gördüm"ün `ISARET` satırının modeli: işaretlenen kayıt denetim izinin kendi satırıdır (kimlik
@@ -904,11 +945,13 @@ def _geri_yukleme_ozeti(satir: AuditTrail) -> dict[str, Any]:
         # Parola yolunda geri yüklemeyi açan hesap: satırdaki kimliğinden kişisiz özeti
         # (tanıtıcı satıra yazılmaz, `_geri_yukleme_satiri`; burada güncel satırdan okunur).
         "yol_hesap": (
-            _hesap_ozeti(degerler["hesap"]) if isinstance(degerler.get("hesap"), str) else None
+            _geri_yukleme_hesabi(degerler["hesap"])
+            if isinstance(degerler.get("hesap"), str)
+            else None
         ),
         # Uygulama içi geri yüklemeyi başlatan oturumun hesabı (iki yolda da; konsolda yok).
         "oturum_hesap": (
-            _hesap_ozeti(degerler["oturum_hesap"])
+            _geri_yukleme_hesabi(degerler["oturum_hesap"])
             if isinstance(degerler.get("oturum_hesap"), str)
             else None
         ),
@@ -921,6 +964,12 @@ def _geri_yukleme_ozeti(satir: AuditTrail) -> dict[str, Any]:
             kanonik.zincir_kisaltmasi(onceki_mac) if isinstance(onceki_mac, str) else None
         ),
         "ayrintisiz": "not_okunamadi" in (satir.changed_fields or []),
+        # Dosya ayağının kişisiz sayıları; bu bilgiyi taşımayan satırda boş sözlük.
+        "dosyalar": {
+            ad: degerler[ad]
+            for ad in ("kapsam", *geri_yukleme_notu.DOSYA_SAYILARI)
+            if ad in degerler
+        },
     }
 
 
@@ -1119,7 +1168,9 @@ def denetim_kartlari(hesap_id: str | None) -> dict[str, Any]:
 
     `butunluk`: oturumdaki hesabın bir önceki girişinden beri yazılmış `BUTUNLUK` satırları;
     `geri_yukleme`: son geri yükleme kartı; `muhru_tutmayan`: kaydı ya da denetim izi program
-    dışından değiştirilmiş görünen hesaplar (canlı).
+    dışından değiştirilmiş görünen hesaplar (canlı); `eksik_ekler`: satırı olup dosyası olmayan ekler
+    (canlı; tasarım §4.4.7 "Yetim ve eksik dosya": Genel Bakış'ın Eksik Ekler kartı;
+    `dosya_deposu.eksik_ekler`).
     """
     kimlik = _hesap_kimligi(hesap_id)
     gecerli = denetim_izi.acik_satir_dogrulayici()
@@ -1128,6 +1179,7 @@ def denetim_kartlari(hesap_id: str | None) -> dict[str, Any]:
             "butunluk": (lambda: _butunluk_kartlari(kimlik, gecerli), []),
             "geri_yukleme": (lambda: _geri_yukleme_karti(gecerli), None),
             "muhru_tutmayan": (_muhru_tutmayan, []),
+            "eksik_ekler": (dosya_deposu.eksik_ekler, []),
         }
     )
 

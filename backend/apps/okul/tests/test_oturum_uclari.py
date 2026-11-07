@@ -9,7 +9,6 @@ göstermez, tasarım §4.4.3).
 
 from __future__ import annotations
 
-import json
 import sqlite3
 import uuid
 from contextlib import closing
@@ -17,11 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from desktop.backup_crypto import (
-    encrypt_bytes,
-    private_key_from_data_key,
-    recovery_header_from_state,
-)
+from desktop.tests.kap_ortak import durum_basligi, kap_kur
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -98,6 +93,7 @@ def test_oturum_ozetinin_anahtarlari_sabittir(client: APIClient) -> None:
         "hesap",
         "kilit_bekliyor",
         "kurulum_tamam",
+        "yukleme_siniri_mb",
     ]
     assert veri["durum"] == "acik"
     assert veri["hesap"] == {
@@ -142,6 +138,13 @@ def test_kilitliyken_oturum_ozeti_yanit_verir(client: APIClient, kilitli: None) 
     assert _govde(yanit)["durum"] == "kilitli"
     assert _govde(yanit)["hesap"] is None
     assert _govde(yanit)["bosta_kalan_sn"] is None
+
+
+def test_oturum_ozeti_yukleme_sinirini_ayardan_verir(client: APIClient, settings: Any) -> None:
+    """Ekran sınırı aşan düz dosyayı göndermez; değer ayardan gelir (kullanıcı kararı 05.11.2026)."""
+    settings.MAX_UPLOAD_SIZE_MB = 7
+
+    assert _govde(client.get(OTURUM_UCU))["yukleme_siniri_mb"] == 7
 
 
 def test_hesap_kurulmadan_oturum_ozeti_kurulum_der(client: APIClient, parolasiz: None) -> None:
@@ -464,14 +467,9 @@ def test_kurtarmayla_geri_yuklemeden_sonra_program_yoneticisi_arayuzden_acar(
     with closing(sqlite3.connect(kaynak)) as baglanti:
         baglanti.execute("CREATE TABLE kayit (deger TEXT)")
         baglanti.commit()
-    baslik = json.dumps(recovery_header_from_state(app_password.read_state())).encode("utf-8")
     yedek = tmp_path / "tasima.odbak"
     yedek.write_bytes(
-        encrypt_bytes(
-            kaynak.read_bytes(),
-            private_key_from_data_key(TEST_DEK).public_key(),
-            recovery_header=baslik,
-        )
+        kap_kur(kaynak.read_bytes(), TEST_DEK, baslik=durum_basligi(app_password.read_state()))
     )
     app_password.lock()
     app_password.state_path().unlink()  # yeni bilgisayar: güvenlik dosyası yok
