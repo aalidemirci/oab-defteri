@@ -102,7 +102,9 @@ function SidebarContent({
     // Kısa pencerede içerik kendi içinde kayar (gerçek pencere sınaması 07.11.2026: alttaki
     // satırlar görünmüyordu, tekerlek arkadaki sayfayı kaydırıyordu). Kap `aside`ın içindedir,
     // kendisi değil: `aside` kaydırılsaydı kenardan taşan daraltma düğmesi kırpılırdı.
-    <div className="od-sidebar-scroll flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+    // Kaydırmanın arkaya geçmemesi (`overscroll-contain`) yalnız yan menüdedir (lg altı): masaüstünde
+    // uzun pencerede kap taşmazken de tekerleği tutuyor, sayfa kaymıyordu (sınama 07.11.2026, kusur 22).
+    <div className="od-sidebar-scroll flex min-h-0 flex-1 flex-col overflow-y-auto max-lg:overscroll-contain">
       <div
         className={`flex h-20 shrink-0 items-center border-b border-on-sidebar/10 ${
           collapsed ? "justify-center px-2" : "gap-3 px-4"

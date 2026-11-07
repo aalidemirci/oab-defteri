@@ -3,30 +3,64 @@
 from __future__ import annotations
 
 import base64
+import errno
+import inspect
 import logging
 import os
 import re
 import stat
-from collections.abc import Callable
+import time
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+import desktop.window as window_mod
 from desktop.errors import WebViewUnavailableError
 from desktop.window import (
+    FORM_ONERISI_DOSYALARI,
     GENEL_SUZGEC,
     KAYDETME_SUZGECI,
+    SAYFA_ONBELLEGI_DIZINI,
+    TEMIZLIK_BEKLEME_SN,
     TUR_SUZGECLERI,
     WINDOW_TITLE,
     PencereKoprusu,
+    form_onerisini_kapat,
     gui_backend_for,
     open_window,
+    pencere_onbellegini_temizle,
     require_window_runtime,
     set_windows_titlebar_theme,
     set_windows_window_icon,
     webview2_installed,
 )
+
+
+class _SahteOlay:
+    """pywebview `Event`: `+=` ile işleyici eklenir, `set()` hepsini koşturur."""
+
+    def __init__(self) -> None:
+        self.isleyiciler: list[Callable[[], Any]] = []
+
+    def __iadd__(self, isleyici: Callable[[], Any]) -> _SahteOlay:
+        self.isleyiciler.append(isleyici)
+        return self
+
+    def set(self) -> None:
+        for isleyici in list(self.isleyiciler):
+            isleyici()
+
+
+class _SahtePencere:
+    """pywebview penceresi: yalnız `events.shown` ve WinForms formu (`native`)."""
+
+    def __init__(self) -> None:
+        self.events = SimpleNamespace(shown=_SahteOlay())
+        self.native: Any = None
 
 
 class _SahteWebview:
@@ -36,13 +70,18 @@ class _SahteWebview:
         self.settings: dict[str, Any] = {"ALLOW_DOWNLOADS": False}
         self.pencereler: list[dict[str, Any]] = []
         self.start_kwargs: dict[str, Any] = {}
+        self.pencere = _SahtePencere()
+        #: `start` çağrıldığında profil dizininde bulunan dosyalar (temizlik sırası için).
+        self.start_aninda_dosyalar: set[Path] = set()
 
-    def create_window(self, title: str, url: str, **kwargs: Any) -> object:
+    def create_window(self, title: str, url: str, **kwargs: Any) -> _SahtePencere:
         self.pencereler.append({"title": title, "url": url, **kwargs})
-        return object()
+        return self.pencere
 
     def start(self, **kwargs: Any) -> None:
         self.start_kwargs = kwargs
+        kok = Path(kwargs["storage_path"])
+        self.start_aninda_dosyalar = {yol.relative_to(kok) for yol in kok.rglob("*")}
 
 
 def _kayit(bulunan: dict[tuple[str, str], str]) -> Any:
@@ -885,3 +924,514 @@ def test_pywebview_kurulu_degilse_turkce_hata(tmp_path: Path) -> None:
         )
 
     assert "pencere" in str(hata.value).lower()
+
+
+# ------------------------- pencere bileşeninin izleri (KVKK; tasarım §4.3 tehdit 24; kusur 23, 24)
+
+
+class _UI:
+    """Pencere iş parçacığı: bileşenin nesneleri yalnız `Invoke`un ve bileşen olayının içinde
+    kullanılabilir (WebView2 dışarıdan erişimde hata verir). Sahteler bunu zorlar."""
+
+    icinde = False
+
+
+@contextmanager
+def _ui_icinde() -> Iterator[None]:
+    onceki, _UI.icinde = _UI.icinde, True
+    try:
+        yield
+    finally:
+        _UI.icinde = onceki
+
+
+def _ui_gerekir() -> None:
+    if not _UI.icinde:
+        raise RuntimeError("CoreWebView2 yalnız pencere iş parçacığında kullanılabilir")
+
+
+class _Ayarlar:
+    """`CoreWebView2Settings`. WebView2'de `IsGeneralAutofillEnabled` açık gelir (sınamada form önerisi
+    saklandı), `IsPasswordAutosaveEnabled` kapalı gelir; sahte ikisini de açık kurar ki kapatma görülsün."""
+
+    IsGeneralAutofillEnabled: bool
+    IsPasswordAutosaveEnabled: bool
+
+    def __init__(self) -> None:
+        object.__setattr__(self, "IsGeneralAutofillEnabled", True)
+        object.__setattr__(self, "IsPasswordAutosaveEnabled", True)
+
+    def __setattr__(self, ad: str, deger: Any) -> None:
+        _ui_gerekir()
+        object.__setattr__(self, ad, deger)
+
+
+class _Core:
+    def __init__(self) -> None:
+        self.ayarlar = _Ayarlar()
+
+    @property
+    def Settings(self) -> _Ayarlar:  # noqa: N802 — .NET adı
+        _ui_gerekir()
+        return self.ayarlar
+
+
+class _NetOlayi:
+    """.NET olayı: pythonnet'te `+=` ile işleyici eklenir, işleyici `(gönderen, olay)` alır."""
+
+    def __init__(self) -> None:
+        self.isleyiciler: list[Callable[[Any, Any], None]] = []
+
+    def __iadd__(self, isleyici: Callable[[Any, Any], None]) -> _NetOlayi:
+        _ui_gerekir()
+        self.isleyiciler.append(isleyici)
+        return self
+
+    def tetikle(self, gonderen: Any, olay: Any) -> None:
+        """Bileşenin olayı pencere iş parçacığında gelir."""
+        with _ui_icinde():
+            for isleyici in self.isleyiciler:
+                isleyici(gonderen, olay)
+
+
+class _Denetim:
+    """WinForms `WebView2` denetimi: bileşen hazır olunca `CoreWebView2` dolar."""
+
+    def __init__(self, core: _Core | None = None) -> None:
+        self.core = core
+        self.olay = _NetOlayi()
+
+    @property
+    def CoreWebView2(self) -> _Core | None:  # noqa: N802 — .NET adı
+        _ui_gerekir()
+        return self.core
+
+    @property
+    def CoreWebView2InitializationCompleted(self) -> _NetOlayi:  # noqa: N802 — .NET adı
+        _ui_gerekir()
+        return self.olay
+
+    @CoreWebView2InitializationCompleted.setter
+    def CoreWebView2InitializationCompleted(self, deger: _NetOlayi) -> None:  # noqa: N802
+        _ui_gerekir()
+        self.olay = deger
+
+    def hazir_ol(self, core: _Core, *, basarili: bool = True) -> None:
+        """Bileşen başlar: `CoreWebView2` dolar, olay pencere iş parçacığında gelir."""
+        self.core = core if basarili else None
+        self.olay.tetikle(self, SimpleNamespace(IsSuccess=basarili))
+
+
+def _form_penceresi(denetim: _Denetim) -> _SahtePencere:
+    pencere = _SahtePencere()
+    pencere.native = SimpleNamespace(webview=denetim)
+    return pencere
+
+
+def _kapali(core: _Core) -> bool:
+    return not core.ayarlar.IsGeneralAutofillEnabled and not core.ayarlar.IsPasswordAutosaveEnabled
+
+
+class _IsParcacigi:
+    """`Invoke` yerine: işlevi pencere iş parçacığındaymış gibi koşturur, formu kaydeder."""
+
+    def __init__(self) -> None:
+        self.formlar: list[Any] = []
+
+    def __call__(self, form: Any, islev: Callable[[], None]) -> None:
+        self.formlar.append(form)
+        with _ui_icinde():
+            islev()
+
+
+def _kayitlar(gunluk: list[logging.LogRecord]) -> list[tuple[int, str, Any]]:
+    """Düzey, ileti ve yığın: uyarı DEBUG'a inse ya da yığın taşısa (yol sızar) test düşer."""
+    return [(kayit.levelno, kayit.getMessage(), kayit.exc_info) for kayit in gunluk]
+
+
+_KAPATILAMADI = (
+    logging.WARNING,
+    "Pencere bileşeninin form önerisi kapatılamadı (RuntimeError).",
+    None,
+)
+_HESAP_YOLU = r"C:\Users\Uydurma Kisi\AppData"
+
+
+def test_bilesen_hazirsa_form_onerisi_pencere_is_parcaciginda_kapanir(
+    od_gunlugu: list[logging.LogRecord],
+) -> None:
+    core = _Core()
+    pencere = _form_penceresi(_Denetim(core))
+    is_parcacigi = _IsParcacigi()
+
+    form_onerisini_kapat(pencere, is_parcaciginda=is_parcacigi)
+
+    assert _kapali(core)
+    assert is_parcacigi.formlar == [pencere.native]
+    assert not od_gunlugu
+
+
+def test_bilesen_hazir_degilse_hazir_olunca_kapanir(od_gunlugu: list[logging.LogRecord]) -> None:
+    denetim = _Denetim()
+    form_onerisini_kapat(_form_penceresi(denetim), is_parcaciginda=_IsParcacigi())
+    assert len(denetim.olay.isleyiciler) == 1
+
+    core = _Core()
+    denetim.hazir_ol(core)
+
+    assert _kapali(core)
+    assert not od_gunlugu
+
+
+def test_pencere_is_parcacigi_disinda_bilesene_dokunulamaz(
+    od_gunlugu: list[logging.LogRecord],
+) -> None:
+    """Sahtelerin sınaması: işi `Invoke`un dışında yapan kod kapatamaz, uyarı düşer.
+
+    Denetim ya da bağlanma `Invoke`un dışına taşınsaydı yukarıdaki iki test bu yüzden düşerdi.
+    """
+
+    def disarida(_form: Any, islev: Callable[[], None]) -> None:
+        islev()
+
+    core = _Core()
+    form_onerisini_kapat(_form_penceresi(_Denetim(core)), is_parcaciginda=disarida)
+
+    assert not _kapali(core)
+    assert _kayitlar(od_gunlugu) == [_KAPATILAMADI]
+
+
+def test_bilesen_baslayamadiysa_ayar_denenmez(od_gunlugu: list[logging.LogRecord]) -> None:
+    denetim = _Denetim()
+    form_onerisini_kapat(_form_penceresi(denetim), is_parcaciginda=_IsParcacigi())
+
+    # Başlayamayan bileşende `CoreWebView2` boştur; ona dokunulsaydı uyarı düşerdi.
+    denetim.hazir_ol(_Core(), basarili=False)
+
+    assert not od_gunlugu
+
+
+def test_hazir_olayindaki_hata_disari_tasmaz(od_gunlugu: list[logging.LogRecord]) -> None:
+    """Olay pencere iş parçacığında koşar; Python hatası .NET'e taşsa pencere düşebilirdi."""
+
+    class _BozukCore(_Core):
+        @property
+        def Settings(self) -> _Ayarlar:  # noqa: N802 — .NET adı
+            raise RuntimeError(_HESAP_YOLU)
+
+    denetim = _Denetim()
+    form_onerisini_kapat(_form_penceresi(denetim), is_parcaciginda=_IsParcacigi())
+
+    denetim.hazir_ol(_BozukCore())
+
+    assert _kayitlar(od_gunlugu) == [_KAPATILAMADI]
+
+
+def test_form_onerisi_kapatilamazsa_pencere_durmaz_gunluge_yalniz_tur(
+    od_gunlugu: list[logging.LogRecord],
+) -> None:
+    def patlat(_form: Any, _islev: Callable[[], None]) -> None:
+        raise RuntimeError(_HESAP_YOLU)
+
+    form_onerisini_kapat(_form_penceresi(_Denetim(_Core())), is_parcaciginda=patlat)
+
+    assert _kayitlar(od_gunlugu) == [_KAPATILAMADI]
+
+
+def test_bilesen_bulunamazsa_uyari_duser(od_gunlugu: list[logging.LogRecord]) -> None:
+    form_onerisini_kapat(_SahtePencere(), is_parcaciginda=_IsParcacigi())
+
+    assert _kayitlar(od_gunlugu) == [
+        (
+            logging.WARNING,
+            "Pencere bileşeninin form önerisi kapatılamadı (bileşen bulunamadı).",
+            None,
+        )
+    ]
+
+
+def test_windows_ta_form_onerisi_pencere_gosterilince_kapanir_isleyici_starttan_once_baglanir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`webview.start` pencere kapanana dek bloklar: işleyici ondan önce bağlanmalıdır."""
+    monkeypatch.setattr(window_mod, "_pencere_is_parcaciginda", _IsParcacigi())
+    sahte = _SahteWebview()
+    core = _Core()
+    sahte.pencere.native = SimpleNamespace(webview=_Denetim(core))
+    asil_start = sahte.start
+    gosterilmeden: list[bool] = []
+
+    def start(**kwargs: Any) -> None:
+        asil_start(**kwargs)
+        gosterilmeden.append(_kapali(core))
+        sahte.pencere.events.shown.set()  # pencere start sırasında gösterilir
+
+    sahte.start = start  # type: ignore[method-assign]
+
+    open_window("http://127.0.0.1:1/", webview=sahte, platform="win32", storage_path=tmp_path)
+
+    assert gosterilmeden == [False]
+    assert _kapali(core)
+
+
+def test_windows_disinda_form_onerisi_isleyicisi_baglanmaz(tmp_path: Path) -> None:
+    sahte = _SahteWebview()
+
+    open_window("http://127.0.0.1:1/", webview=sahte, platform="linux", storage_path=tmp_path)
+
+    assert sahte.pencere.events.shown.isleyiciler == []
+
+
+#: Sınamada (07.11.2026) değerler bu veritabanında ve sayfa önbelleğinde bulundu. Elle yazılır: sabitten
+#: bir ad düşerse o dosya silinmeden kalırdı, test sabitten türeseydi bunu görmezdi.
+_PROFIL = Path("EBWebView", "Default")
+_BEKLENEN_DOSYALAR = tuple(
+    _PROFIL / ad for ad in ("Web Data-journal", "Web Data-wal", "Web Data-shm", "Web Data")
+)
+_SAYFA_ONBELLEGI_ICERIGI = (
+    _PROFIL / "Cache" / "Cache_Data" / "data_1",
+    _PROFIL / "Cache" / "Cache_Data" / "f_000001",
+)
+
+
+def test_silinen_ogeler_webview2_profilinin_oneri_veritabani_ve_sayfa_onbellegidir() -> None:
+    assert FORM_ONERISI_DOSYALARI == _BEKLENEN_DOSYALAR
+    assert SAYFA_ONBELLEGI_DIZINI == _PROFIL / "Cache"
+
+
+def _yaz(profil: Path, *goreliler: Path, icerik: str = "Uydurma Okul Adi") -> None:
+    for goreli in goreliler:
+        (profil / goreli).parent.mkdir(parents=True, exist_ok=True)
+        (profil / goreli).write_text(icerik, encoding="utf-8")
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+def test_acilista_eski_oneriler_ve_sayfa_onbellegi_bilesen_baslamadan_silinir(
+    tmp_path: Path, platform: str
+) -> None:
+    profil = tmp_path / "webview"
+    _yaz(profil, *_BEKLENEN_DOSYALAR, *_SAYFA_ONBELLEGI_ICERIGI)
+    kalacak = (
+        _PROFIL / "Local Storage" / "leveldb" / "000003.log",
+        _PROFIL / "Code Cache" / "js" / "index",
+        _PROFIL / "Cookies",
+        Path("EBWebView", "Local State"),
+    )
+    _yaz(profil, *kalacak, icerik="tercih")
+    sahte = _SahteWebview()
+
+    open_window("http://127.0.0.1:1/", webview=sahte, platform=platform, storage_path=profil)
+
+    silinmesi_gereken = {*_BEKLENEN_DOSYALAR, *_SAYFA_ONBELLEGI_ICERIGI, _PROFIL / "Cache"}
+    assert not silinmesi_gereken & sahte.start_aninda_dosyalar
+    assert set(kalacak) <= sahte.start_aninda_dosyalar
+
+
+def test_gunluk_dosyalari_ana_veritabanindan_once_silinir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ana dosya gidip günlük kalsaydı yeni veritabanına eski sayfalar uygulanabilirdi."""
+    sira: list[str] = []
+    asil_sil = window_mod._sil
+
+    def kaydet(hedef: Path, *, dizin: bool) -> None:
+        sira.append(hedef.name)
+        asil_sil(hedef, dizin=dizin)
+
+    monkeypatch.setattr(window_mod, "_sil", kaydet)
+
+    pencere_onbellegini_temizle(tmp_path)
+
+    assert sira == ["Web Data-journal", "Web Data-wal", "Web Data-shm", "Web Data", "Cache"]
+
+
+class _SahteSaat:
+    """`bekle` saati ilerletir; gerçek süre geçmez."""
+
+    def __init__(self) -> None:
+        self.simdi = 100.0
+        self.beklemeler: list[float] = []
+
+    def saat(self) -> float:
+        return self.simdi
+
+    def bekle(self, sure: float) -> None:
+        self.beklemeler.append(sure)
+        self.simdi += sure
+
+
+def _kilitli(monkeypatch: pytest.MonkeyPatch, adlar: dict[str, int | None]) -> None:
+    """`adlar`daki öğe verilen sayıda (`None`: hep) `PermissionError` verir, sonra gerçekten silinir."""
+    asil_sil = window_mod._sil
+
+    def sil(hedef: Path, *, dizin: bool) -> None:
+        if hedef.name in adlar:
+            kalan = adlar[hedef.name]
+            if kalan is None or kalan > 0:
+                if kalan is not None:
+                    adlar[hedef.name] = kalan - 1
+                raise PermissionError(13, "Kilitli", str(hedef))
+        asil_sil(hedef, dizin=dizin)
+
+    monkeypatch.setattr(window_mod, "_sil", sil)
+
+
+def test_kilitli_dosya_kisa_aralarla_yeniden_denenir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    """Önceki oturumun bileşen süreci programdan sonra kapanır; o sırada dosya kilitlidir."""
+    _yaz(tmp_path, *_BEKLENEN_DOSYALAR)
+    _kilitli(monkeypatch, {"Web Data": 2})
+    zaman = _SahteSaat()
+
+    pencere_onbellegini_temizle(tmp_path, bekle=zaman.bekle, saat=zaman.saat)
+
+    assert zaman.beklemeler == [0.25, 0.25]
+    assert not any((tmp_path / goreli).exists() for goreli in _BEKLENEN_DOSYALAR)
+    assert not od_gunlugu
+
+
+def test_bekleme_suresi_ve_araligi_belgedeki_gibidir() -> None:
+    """Tasarım §4.3 tehdit 24 ve plan: 3 sn, 0,25 sn arayla; gerçekte uyunur (meşgul döngü yok)."""
+    assert TEMIZLIK_BEKLEME_SN == 3.0
+    assert window_mod._TEMIZLIK_ARALIGI_SN == 0.25
+    assert inspect.signature(pencere_onbellegini_temizle).parameters["bekle"].default is time.sleep
+
+
+def test_kilit_kalkmazsa_sure_dolunca_tek_uyariyla_acilis_surer_oteki_ogeler_yine_silinir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    _yaz(tmp_path, *_BEKLENEN_DOSYALAR, *_SAYFA_ONBELLEGI_ICERIGI)
+    _kilitli(monkeypatch, {"Web Data": None})
+    zaman = _SahteSaat()
+
+    pencere_onbellegini_temizle(tmp_path, bekle=zaman.bekle, saat=zaman.saat)
+
+    assert sum(zaman.beklemeler) == pytest.approx(3.0)
+    assert _kayitlar(od_gunlugu) == [
+        (
+            logging.WARNING,
+            "Pencere bileşeninin eski önbelleğinden 1 öğe silinemedi (PermissionError).",
+            None,
+        )
+    ]
+    assert (tmp_path / _PROFIL / "Web Data").exists()
+    # Süre dolduktan sonraki öğe de denenir ve silinir.
+    assert not (tmp_path / SAYFA_ONBELLEGI_DIZINI).exists()
+
+
+def test_sure_butun_ogeler_icin_ortaktir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    _yaz(tmp_path, *_BEKLENEN_DOSYALAR)
+    _kilitli(monkeypatch, {"Web Data-journal": None, "Web Data": None})
+    zaman = _SahteSaat()
+
+    pencere_onbellegini_temizle(tmp_path, bekle=zaman.bekle, saat=zaman.saat)
+
+    # İkinci kilitli öğe yeniden beklemez: açılışa eklenen gecikme en çok 3 sn'dir.
+    assert sum(zaman.beklemeler) == pytest.approx(3.0)
+    assert [kayit.getMessage() for kayit in od_gunlugu] == [
+        "Pencere bileşeninin eski önbelleğinden 2 öğe silinemedi (PermissionError)."
+    ]
+
+
+def test_kilit_disindaki_hata_yeniden_denenmez(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    asil_sil = window_mod._sil
+
+    def sil(hedef: Path, *, dizin: bool) -> None:
+        if hedef.name == "Web Data":
+            raise OSError(errno.EIO, "Giriş/çıkış hatası", str(hedef))
+        asil_sil(hedef, dizin=dizin)
+
+    monkeypatch.setattr(window_mod, "_sil", sil)
+    zaman = _SahteSaat()
+
+    pencere_onbellegini_temizle(tmp_path, bekle=zaman.bekle, saat=zaman.saat)
+
+    assert zaman.beklemeler == []
+    assert [kayit.getMessage() for kayit in od_gunlugu] == [
+        "Pencere bileşeninin eski önbelleğinden 1 öğe silinemedi (OSError)."
+    ]
+
+
+def _isletim_sistemi_kilitli(monkeypatch: pytest.MonkeyPatch, ad: str, kez: int | None) -> None:
+    """`os.unlink`'i yamalar: `shutil.rmtree`'nin kendisi hata versin (gerçek silme yolu).
+
+    Linux'ta rmtree dosyayı `dir_fd` ile ve yalnız adıyla siler; ad bu yüzden yolun sonundan okunur.
+    """
+    asil = os.unlink
+    kalan = [kez]
+
+    def unlink(yol: Any, *args: Any, **kwargs: Any) -> None:
+        if os.path.basename(os.fsdecode(yol)) == ad and (kalan[0] is None or kalan[0] > 0):
+            if kalan[0] is not None:
+                kalan[0] -= 1
+            raise PermissionError(13, "Kilitli", os.fsdecode(yol))
+        asil(yol, *args, **kwargs)
+
+    monkeypatch.setattr(os, "unlink", unlink)
+
+
+def test_sayfa_onbelleginde_kilitli_dosya_yeniden_denenir_kalanlar_silinir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    """rmtree kısmen silip durur; yeniden denemede kalanı siler."""
+    _yaz(tmp_path, *_SAYFA_ONBELLEGI_ICERIGI)
+    _isletim_sistemi_kilitli(monkeypatch, "f_000001", 2)
+    zaman = _SahteSaat()
+
+    pencere_onbellegini_temizle(tmp_path, bekle=zaman.bekle, saat=zaman.saat)
+
+    assert zaman.beklemeler == [0.25, 0.25]
+    assert not (tmp_path / SAYFA_ONBELLEGI_DIZINI).exists()
+    assert not od_gunlugu
+
+
+def test_sayfa_onbelleginde_kilit_kalkmazsa_uyari_duser(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    """rmtree'nin hatası yutulsaydı (`ignore_errors`) kalan dosya sessizce kalırdı."""
+    _yaz(tmp_path, *_SAYFA_ONBELLEGI_ICERIGI)
+    _isletim_sistemi_kilitli(monkeypatch, "f_000001", None)
+    zaman = _SahteSaat()
+
+    pencere_onbellegini_temizle(tmp_path, bekle=zaman.bekle, saat=zaman.saat)
+
+    assert sum(zaman.beklemeler) == pytest.approx(3.0)
+    assert [kayit.getMessage() for kayit in od_gunlugu] == [
+        "Pencere bileşeninin eski önbelleğinden 1 öğe silinemedi (PermissionError)."
+    ]
+    assert (tmp_path / _SAYFA_ONBELLEGI_ICERIGI[1]).exists()
+
+
+def test_kilit_disindaki_hata_beklenmez_acilis_surer_gunluge_yalniz_tur(
+    tmp_path: Path, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    profil = tmp_path / "webview"
+    # Silinemeyen öğe: aynı adda klasör (unlink klasörü silmez; Linux'ta IsADirectoryError).
+    (profil / _PROFIL / "Web Data").mkdir(parents=True)
+    sahte = _SahteWebview()
+
+    open_window("http://127.0.0.1:1/", webview=sahte, platform="linux", storage_path=profil)
+
+    assert sahte.start_kwargs["gui"] == "qt"
+    uyarilar = [kayit for kayit in od_gunlugu if kayit.levelno >= logging.WARNING]
+    assert _kayitlar(uyarilar) == [
+        (
+            logging.WARNING,
+            "Pencere bileşeninin eski önbelleğinden 1 öğe silinemedi (IsADirectoryError).",
+            None,
+        )
+    ]
+    assert str(tmp_path) not in logging.Formatter().format(uyarilar[0])
+
+
+def test_profil_yoksa_temizlik_sessizdir(
+    tmp_path: Path, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    pencere_onbellegini_temizle(tmp_path / "yok")
+
+    assert not od_gunlugu

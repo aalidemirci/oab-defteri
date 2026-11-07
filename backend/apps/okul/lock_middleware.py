@@ -63,9 +63,10 @@ API dışı yollar (SPA'nın kendisi, statik dosyalar) daima serbesttir — kili
 yüklenebilmelidir. **Yerel yedekleme etkilenmez**: günlük yedek bir HTTP ucu değildir;
 masaüstü kabuğu onu açık yedek anahtarıyla alır (`desktop/main.py`).
 
-`config/settings.py` MIDDLEWARE sırası (tasarım §4.4.3): belirteç → güvenlik →
-whitenoise → common → `RestartRequired` (503) → **`AppLock` (423)** → `RolMiddleware`
-(403 `rol_yetkisiz`; yalnız açık oturumda keser, `rol_middleware`).
+`config/settings.py` MIDDLEWARE sırası (tasarım §4.4.3): belirteç → no-store
+(`onbellek_middleware.ApiNoStoreMiddleware`, §4.3 tehdit 24) → güvenlik → whitenoise → common →
+`RestartRequired` (503) → **`AppLock` (423)** → `RolMiddleware` (403 `rol_yetkisiz`; yalnız açık
+oturumda keser, `rol_middleware`).
 """
 
 from __future__ import annotations

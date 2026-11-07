@@ -72,6 +72,39 @@ süreç kapanınca unutulur, diske ve günlüğe yazılmaz. İptal onu değişti
 her seferinde ev dizininde açılır, son klasörü ne okur ne değiştirir (kullanıcı kararı 07.11.2026 "Hep ev
 klasöründe"). Şifreli yedek USB belleğe kaydedildikten hemen sonra anahtar onun yanına önerilseydi,
 bellek kaybolunca yedek de onu açan anahtar da birlikte giderdi; yedek de anahtarın yanına önerilmez.
+
+**WebView2'nin form önerisi kapalıdır, öneri veritabanı ve sayfa önbelleği açılışta silinir** (KVKK;
+tasarım §4.3 tehdit 24; Windows sınaması 07.11.2026, bilinen kusurlar 23 ve 24). WebView2 iki yerde
+şifresiz iz bırakıyordu:
+  - Genel otomatik doldurma formlara yazılanları (adlar, okul adı, kurtarma anahtarı) profil dizinindeki
+    `EBWebView/Default/Web Data` SQLite dosyasına yazıyor, sonraki kullanıcıya öneri olarak gösteriyordu.
+    Öneri yalnız aynı alanda çıkmaz: kayıtlar alanın kimliğiyle tutulur, React'in `useId` kimlikleri
+    (`:r4:` gibi) ekranlar arasında yinelenir; sınamada kurulumda yazılan okul adı kilit ekranının parola
+    alanında, oturum açılmadan önerildi. Alanlardaki `autoComplete="off"` saklamayı önlemedi.
+  - Sayfa önbelleği (`EBWebView/Default/Cache`) sunucu yanıtlarını çözülmüş hâliyle tutuyordu. Sunucu
+    artık her `/api/` yanıtına `Cache-Control: no-store` koyar (`apps.okul.onbellek_middleware`).
+
+pywebview 5.3.2 bu ayarlara dokunmaz (`edgechromium.py` `on_webview_ready`); `form_onerisini_kapat`
+pywebview'ı `window.native` üzerinden aşar. Pencere gösterilince (`shown`) `CoreWebView2.Settings`'in
+`IsGeneralAutofillEnabled` ve `IsPasswordAutosaveEnabled` değerlerini kapatır (parola saklama WebView2'de
+zaten kapalı gelir, açıkça da kapatılır). Bileşen henüz hazır değilse hazır olduğunu bildiren olaya
+bağlanır. Bileşenin nesneleri yalnız pencere iş parçacığında kullanılabilir: denetim de bağlanma da
+oradadır (`Invoke`), hazır olma olayı da orada koşar, ikisinin arasında yarış yoktur. Kapatılamazsa
+pencere yine açılır, günlüğe yalnız hata türü düşer.
+
+Profil önbellektir, programın verisi değildir: `pencere_onbellegini_temizle` öneri veritabanını ve sayfa
+önbelleğini her açılışta bileşen başlamadan siler. Önceki sürümlerin bıraktığı da, kapatmanın tutmadığı
+bir oturumda yazılan da sonraki açılışta gider; silme kapanışta yapılmaz, o güne dek dosyada durur.
+Önceki oturumun bileşen süreci programdan sonra kapanır, o sırada dosyalar kilitlidir: kilitli dosya
+`TEMIZLIK_BEKLEME_SN` boyunca yeniden denenir, süre dolarsa açılış uyarıyla sürer. Günlük dosyaları ana
+veritabanından önce silinir: ana dosya gidip günlük kalsaydı yeni veritabanına eski sayfalar uygulanabilirdi.
+Silinen yollar yalnız WebView2'nindir; Qt kolunda (Pardus) işlev hiçbir şey silmez. Orada kapatılacak
+ayar da yoktur: Qt WebEngine'in ayarlarında (`QWebEngineSettings`) form önerisinin karşılığı bulunmaz.
+Qt'nin sayfa önbelleği profil dizininin (`storage_path`) dışındadır (`QWebEngineProfile.cachePath`;
+büyük olasılıkla `~/.cache/oab-defteri/QtWebEngine`), yeni yanıtları sunucunun `no-store`u korur. Qt
+WebEngine'in neyi sakladığı Pardus'ta gerçek pencerede denetlenir (plan F1b-3 ekleri). Öteki kalan
+riskler (kapatmanın tutmadığı oturumda açılışa dek bekleyen dosya, silinen dosyanın diskte kalan
+içeriği, bileşenin çökme dökümleri `EBWebView/Crashpad`) tasarım §4.3 tehdit 24'tedir.
 """
 
 from __future__ import annotations
@@ -79,6 +112,7 @@ from __future__ import annotations
 import base64
 import logging
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -150,6 +184,17 @@ KAPANIS_BEKLIYOR_OLAYI: Final = "od:kapanis-bekliyor"
 _KAPANIS_BEKLIYOR_BETIGI: Final = (
     f"window.dispatchEvent(new CustomEvent('{KAPANIS_BEKLIYOR_OLAYI}'))"
 )
+#: WebView2'nin form önerisi veritabanı, profil dizinine göre (modül başlığı). Önce aynı SQLite
+#: veritabanının günlük dosyaları gelir (hangisinin oluştuğu bileşenin sürümüne bağlıdır), ana dosya sondadır.
+FORM_ONERISI_DOSYALARI: Final = tuple(
+    Path("EBWebView", "Default", ad)
+    for ad in ("Web Data-journal", "Web Data-wal", "Web Data-shm", "Web Data")
+)
+#: WebView2'nin sayfa önbelleği (HTTP disk önbelleği), profil dizinine göre (modül başlığı).
+SAYFA_ONBELLEGI_DIZINI: Final = Path("EBWebView", "Default", "Cache")
+#: Önceki oturumun bileşen süreci kapanırken kilitli dosyanın yeniden deneneceği en uzun süre.
+TEMIZLIK_BEKLEME_SN: Final = 3.0
+_TEMIZLIK_ARALIGI_SN: Final = 0.25
 
 
 class UzunIsBeklenebilir(Protocol):
@@ -748,6 +793,105 @@ class WindowController:
             logger.exception("Pencere kapatılamadı.")
 
 
+def _sil(hedef: Path, *, dizin: bool) -> None:
+    """Dosyayı ya da dizini (içiyle) siler; yoksa sessizdir."""
+    if not dizin:
+        hedef.unlink(missing_ok=True)
+        return
+    try:
+        shutil.rmtree(hedef)
+    except FileNotFoundError:
+        pass
+
+
+def pencere_onbellegini_temizle(
+    storage_path: Path,
+    *,
+    bekle: Callable[[float], None] = time.sleep,
+    saat: Callable[[], float] = time.monotonic,
+    bekleme_sn: float = TEMIZLIK_BEKLEME_SN,
+) -> None:
+    """WebView2'nin önceki oturumlarda bıraktığı öneri ve sayfa önbelleğini siler (modül başlığı).
+
+    Bileşen başlamadan, iki platformda da çağrılır; Qt kolunda bu yollar yoktur, işlev sessizdir. Kilitli öğe (`PermissionError`) süre dolana dek yeniden denenir; süre
+    bütün öğeler için ortaktır. Silinemeyen öğe açılışı durdurmaz: günlüğe tek uyarı, yalnız hata
+    türleriyle gider (yol hesap adını taşır).
+    """
+    son = saat() + bekleme_sn
+    silinemeyen: list[str] = []
+    ogeler = [(goreli, False) for goreli in FORM_ONERISI_DOSYALARI]
+    ogeler.append((SAYFA_ONBELLEGI_DIZINI, True))
+    for goreli, dizin in ogeler:
+        while True:
+            try:
+                _sil(storage_path / goreli, dizin=dizin)
+            except PermissionError as hata:
+                if saat() < son:
+                    bekle(_TEMIZLIK_ARALIGI_SN)
+                    continue
+                silinemeyen.append(type(hata).__name__)
+            except OSError as hata:
+                silinemeyen.append(type(hata).__name__)
+            break
+    if silinemeyen:
+        logger.warning(
+            "Pencere bileşeninin eski önbelleğinden %d öğe silinemedi (%s).",
+            len(silinemeyen),
+            ", ".join(sorted(set(silinemeyen))),
+        )
+
+
+def _pencere_is_parcaciginda(form: Any, islev: Callable[[], None]) -> None:
+    """İşlevi WinForms formunun iş parçacığında koşturur, bitene dek bekler (pywebview'ın kalıbı)."""
+    from System import Func, Type  # pythonnet; yalnız Windows'ta, pywebview yükler
+
+    form.Invoke(Func[Type](islev))
+
+
+def _oneriyi_kapat(core: Any) -> None:
+    ayarlar = core.Settings
+    ayarlar.IsGeneralAutofillEnabled = False
+    ayarlar.IsPasswordAutosaveEnabled = False
+
+
+def form_onerisini_kapat(
+    window: Any,
+    *,
+    is_parcaciginda: Callable[[Any, Callable[[], None]], None] | None = None,
+) -> None:
+    """WebView2'nin form önerisini ve parola saklamasını kapatır (Windows; modül başlığı).
+
+    `shown` olayında, ayrı bir iş parçacığından çağrılır. Hata pencereyi durdurmaz.
+    """
+    form = getattr(window, "native", None)
+    denetim = getattr(form, "webview", None)
+    if form is None or denetim is None:
+        logger.warning("Pencere bileşeninin form önerisi kapatılamadı (bileşen bulunamadı).")
+        return
+
+    def hazir(gonderen: Any, olay: Any) -> None:
+        # Bileşenin olayı pencere iş parçacığında koşar; hata .NET'e taşmasın.
+        try:
+            if olay.IsSuccess:
+                _oneriyi_kapat(gonderen.CoreWebView2)
+        except Exception as hata:  # noqa: BLE001 — pencere hata yüzünden düşmesin
+            logger.warning(
+                "Pencere bileşeninin form önerisi kapatılamadı (%s).", type(hata).__name__
+            )
+
+    def bagla() -> None:
+        core = denetim.CoreWebView2
+        if core is not None:
+            _oneriyi_kapat(core)
+        else:
+            denetim.CoreWebView2InitializationCompleted += hazir
+
+    try:
+        (is_parcaciginda or _pencere_is_parcaciginda)(form, bagla)
+    except Exception as hata:  # noqa: BLE001 — pencere hata yüzünden düşmesin
+        logger.warning("Pencere bileşeninin form önerisi kapatılamadı (%s).", type(hata).__name__)
+
+
 def open_window(
     url: str,
     *,
@@ -775,6 +919,7 @@ def open_window(
             ) from exc
 
     storage_path.mkdir(parents=True, exist_ok=True)
+    pencere_onbellegini_temizle(storage_path)
     set_windows_app_id(platform=system)
     # pywebview 5.x dosya indirmelerini varsayılan olarak engeller. `saveBlob` dosyayı köprüyle
     # kaydeder (`dosya_kaydet`); köprü sayfaya yetişmeden gelen istek `<a download>` yoluna düşer.
@@ -791,6 +936,8 @@ def open_window(
         js_api=kopru,
     )
     kopru.bind_window(window)
+    if system.startswith("win"):
+        window.events.shown += lambda: form_onerisini_kapat(window)
     if controller is not None:
         controller.bind(window)
         if controller.quitting:

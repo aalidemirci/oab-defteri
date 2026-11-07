@@ -84,6 +84,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # API yanıtları önbelleğe yazılmaz (KVKK; tasarım §4.3 tehdit 24): pencere bileşeni
+    # yanıtları diskteki önbelleğine düz metin yazıyordu. Kapıların yanıtları da bu
+    # katmandan geçsin diye listenin başındadır (yalnız oturum belirteci daha dıştadır).
+    "apps.okul.onbellek_middleware.ApiNoStoreMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.common.CommonMiddleware",

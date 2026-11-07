@@ -116,7 +116,14 @@ describe("Kenar çubuğunun kaydırılması", () => {
     const kap = kaydirmaKabi(within(kenar).getByRole("navigation", { name: "Ana gezinme" }));
 
     // `od-sidebar-scroll` kaydırma çubuğunun rengini kenar çubuğuna uydurur (`index.css`).
-    expect(kap).toHaveClass("od-sidebar-scroll", "overscroll-contain", "min-h-0", "flex-1");
+    expect(kap).toHaveClass("od-sidebar-scroll", "min-h-0", "flex-1");
+    // Masaüstünde kaydırma arkaya geçebilir: uzun pencerede kap taşmazken tekerlek sayfayı
+    // kaydırmalı (sınama 07.11.2026, kusur 22). Arkaya geçmeme yalnız yan menüdedir (lg altı).
+    expect(kap).toHaveClass("max-lg:overscroll-contain");
+    expect(kap).not.toHaveClass("overscroll-contain");
+    // `max-lg:` masaüstünde etkisizdir, çünkü masaüstü kenar çubuğu yalnız lg ve üstünde görünür;
+    // kırılma noktası birlikte sabitlenir (`md:flex` olsaydı 768-1023 pikselde kusur 22 dönerdi).
+    expect(kenar).toHaveClass("hidden", "lg:flex");
     expect(kap).toContainElement(within(kenar).getByText("Hakkında ve Lisans"));
     expect(kap).toContainElement(within(kenar).getByText("Tema"));
     // Aside'ın kendisi kaydırılsaydı kenardan taşan daraltma düğmesi kırpılırdı.
@@ -133,7 +140,9 @@ describe("Kenar çubuğunun kaydırılması", () => {
 
     const cekmece = screen.getAllByRole("complementary")[1];
     const kap = kaydirmaKabi(within(cekmece).getByRole("navigation", { name: "Ana gezinme" }));
-    expect(kap).toHaveClass("overscroll-contain");
+    expect(kap).toHaveClass("max-lg:overscroll-contain");
+    // Yan menü yalnız lg altında görünür: `max-lg:` orada her zaman etkindir.
+    expect(cekmece.parentElement).toHaveClass("lg:hidden");
     expect(kap).toContainElement(within(cekmece).getByText("Tema"));
   });
 
