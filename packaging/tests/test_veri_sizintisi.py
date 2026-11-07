@@ -46,12 +46,21 @@ def test_excel_dosyasi_reddedilir(tmp_path: Path) -> None:
 
 
 def test_medya_klasoru_reddedilir(tmp_path: Path) -> None:
-    # MEDIA_ROOT = DATA_DIR/media → paket içi yol backend/data/media/...
+    # Ailenin kalkan MEDIA_ROOT'undan kalan dizin → paket içi yol backend/data/media/...
     dosya = tmp_path / "_internal" / "backend" / "data" / "media" / "ek.pdf"
     dosya.parent.mkdir(parents=True)
     dosya.touch()
 
     assert YASAK_DOSYALARI_BUL(tmp_path) == [Path("_internal/backend/data/media/ek.pdf")]
+
+
+def test_dosya_deposu_klasoru_reddedilir(tmp_path: Path) -> None:
+    """Depo adı uzantısızdır: yalnız ("data","dosyalar") çifti yakalar (`backend` kökü olmasa da)."""
+    dosya = tmp_path / "_internal" / "data" / "dosyalar" / ("0" * 32)
+    dosya.parent.mkdir(parents=True)
+    dosya.touch()
+
+    assert YASAK_DOSYALARI_BUL(tmp_path) == [Path("_internal/data/dosyalar") / ("0" * 32)]
 
 
 def test_odbak_yedegi_reddedilir(tmp_path: Path) -> None:

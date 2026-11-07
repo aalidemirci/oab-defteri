@@ -134,6 +134,21 @@ export function useYetenekler(): YetenekBilgisi {
 }
 
 /**
+ * Düz dosya yüklemesinin sınırı (MB): `useYetenekler` gibi oturum göstergesinin önbelleğinden
+ * okunur, yan etkisizdir. Özet henüz okunmadıysa ya da okunamadıysa null: ekran dosyayı gönderir,
+ * sınırı sunucu uygular (kullanıcı kararı 05.11.2026 "Sınırı aşan düz dosyayı ön yüz de durdurur").
+ */
+export function useYuklemeSiniri(): number | null {
+  const sorgu = useQuery({
+    queryKey: OTURUM_SORGU_ANAHTARI,
+    queryFn: () => oturumApi.ozet(false),
+    staleTime: OTURUM_YOKLAMA_MS,
+    retry: false,
+  });
+  return sorgu.data?.yukleme_siniri_mb ?? null;
+}
+
+/**
  * Açık oturumda gerçek etkileşimin ardından (en sık `NABIZ_ARALIGI_MS`'de bir) oturum
  * sorgusunu `X-OD-Etkinlik` ile gönderir. Başlığı `lib/api` ekler: etkileşim yakalama
  * evresinde kaydedildiği için bu istek "kullanıcı eylemi" sayılır. Yalnız bir yerde

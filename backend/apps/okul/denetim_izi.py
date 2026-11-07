@@ -155,15 +155,21 @@ IZ_ANAHTARI_BAYT: Final = 32
 #:   Kullanıcının istediği yedek açık kipte, açılıştaki günlük ve göç öncesi yedekler
 #:   kilitli kipte yazılır (tasarım §4.6.3). Yalnız programın ürettiği ad kimlik olur
 #:   (`yedek_kimligi`); elle konmuş ya da yeniden adlandırılmış dosyanın adı satıra girmez.
+#:   Kullanıcının kaydettiği tam yedeğin değerleri kişisizdir (plan F1b-3 "Uzun iş, çarpı, temiz
+#:   kapanış"): kapsam, dosya sayısı, boyut, eksik; yol ve serbest ad satıra girmez.
 #: * Dış yedek hatırlatmasının süresi (`dis-yedek.json`, tasarım §16 R6; gün sayısı).
 #: * Şema göçü (`GOC`; kimliği programın sürümü, değeri uygulanan göçlerin adları).
 #: * Ertelenen gün işi (`GUN_ISI`; kimliği işin ASCII adı).
 #: * Kilit açılışındaki kendiliğinden doğrulama (`BUTUNLUK`; bulgu kodları, düzey, çapanın
 #:   sırası, kilitli satır sayıları, bulgulu satırların sıraları — hepsi sayı ya da iç kod).
+#: * Dosya deposunun yetim taraması (`BUTUNLUK`; tasarım §4.4.7, plan F1b-3 "Geri yükleme"; kimliği
+#:   sabit `yetim`, değerleri yalnız sayıdır: taşınan, taşınamayan). Satırı olmayan dosyanın adı
+#:   satıra girmez.
 #: * Geri yükleme (`GERI_YUKLEME`; kimliği kenara alınan veritabanının adı; yol, kurtarma
 #:   anahtarı no'su, parolayla açan hesabın kimliği, uygulama içi geri yüklemede oturumdaki
-#:   hesabın kimliği, kenara alınanın sha256'sı ve zincir başı). Tanıtıcı satıra girmez:
-#:   kişinin adını içerebilir (program yalnız uyarır).
+#:   hesabın kimliği, kenara alınanın sha256'sı ve zincir başı; dosya ayağının kapsamı ve
+#:   sayıları: yerine konan, yetimden dönen, eksik, bozuk, onayla sürülen). Tanıtıcı satıra
+#:   girmez: kişinin adını içerebilir (program yalnız uyarır).
 #:
 #: `zaman`: satırın anı (`at`) yazıldığı andır. Sistem olayı yazılamayıp beklemişse (geri
 #: yükleme notunda ya da düşen bir kilitli yazımdan sonra bellekte; `iz_durumu`) ilk kilit
@@ -177,10 +183,13 @@ SEMA_GOCU: Final = "sema.goc"
 GUN_ISI_ERTELEME: Final = "gun_isi.erteleme"
 IZ_DOGRULAMASI: Final = "denetim_izi.dogrulama"
 GERI_YUKLEME_KAYDI: Final = "yedek.geri_yukleme"
+DOSYA_DEPOSU: Final = "dosya.deposu"
+#: Yedek Raporu'nun basımı (`basim`); satırı `BASIM_DEGERLERI`'ni taşır, bu listeye girmez.
+YEDEK_RAPORU: Final = "yedek.rapor"
 DOSYA_NESNELERI: Final[Mapping[str, tuple[str, ...]]] = {
     KURTARMA_ANAHTARI: ("no", "tarih"),
     HESAP_SARMALI: ("hatali", "askida"),
-    YEDEK_DOSYASI: ("zaman",),
+    YEDEK_DOSYASI: ("zaman", "kapsam", "dosya_sayisi", "boyut", "eksik"),
     DIS_YEDEK_AYARI: ("hatirlatma_gun",),
     SEMA_GOCU: ("gocler", "zaman"),
     GUN_ISI_ERTELEME: ("zaman",),
@@ -193,6 +202,7 @@ DOSYA_NESNELERI: Final[Mapping[str, tuple[str, ...]]] = {
         "bulgu_satirlari",
         "zaman",
     ),
+    DOSYA_DEPOSU: ("tasinan", "tasinamayan", "zaman"),
     GERI_YUKLEME_KAYDI: (
         # Geri yüklemenin anı (nottan; satırın kendi anı ilk kilit açılışınındır).
         "zaman",
@@ -204,23 +214,36 @@ DOSYA_NESNELERI: Final[Mapping[str, tuple[str, ...]]] = {
         "onceki_sha256",
         "onceki_seq",
         "onceki_mac",
+        "kapsam",
+        "yerine_konan",
+        "yetimden_donen",
+        "eksik",
+        "bozuk",
+        "onayla_suruldu",
     ),
 }
 
 #: Programın ürettiği yedek adları — BİREBİR biçimleriyle (`desktop/backup.py`,
 #: `services/encrypted_backup.py`): günlük `gunluk-<gün>`, göç öncesi
-#: `pre-migrate-<sürüm>-<gün>`, saklama tetiği öncesi `pre-anonim-<gün>-<saat>[-<sıra>]`,
-#: indirilen `oab-defteri-yedek-<gün>-<saat>`. Önekten sonra serbest harf KABUL EDİLMEZ:
+#: `pre-migrate-<sürüm>-<gün>`, kurulum `pre-parola-acilis-<gün>-<saat>`, saklama tetiği öncesi
+#: `pre-anonim-<gün>-<saat>[-<sıra>]`, dönem kapanışı öncesi `pre-kapanis-<gün>`, DEK yenilemesi
+#: öncesi `pre-dek-yenileme-<gün>`, kaydedilen `oab-defteri-yedek-<gün>-<saat>` (`.odbak`) ve
+#: kenara alınan veritabanı `db-onceki-<gün>-<saat>.sqlite3` (plan F1b-1 ekleri; `-wal`/`-shm`
+#: eşleri yedek değildir, satıra girmez). Önekten sonra serbest harf KABUL EDİLMEZ:
 #: kullanıcı programın önekini koruyup dosyaya bir ad ekleyebilir ("oab-defteri-yedek-…-
 #: Uydurma.odbak"); o ad serbest metindir, kişi adı içerebilir (R1). Sürüm yalnız
 #: `x.y.z[-alpha|beta|rc|dev[.n]]` biçimindedir; uymayan sürümlü ad da satıra girmez
 #: (fail-closed: ad düşer, olay kalır).
 _GUN = r"\d{4}-\d{2}-\d{2}"
 _PROGRAM_YEDEGI: Final = re.compile(
-    rf"^(?:gunluk-{_GUN}"
+    rf"^(?:(?:gunluk-{_GUN}"
     rf"|pre-migrate-\d{{1,4}}\.\d{{1,4}}\.\d{{1,4}}(?:-(?:alpha|beta|rc|dev)(?:\.\d{{1,4}})?)?-{_GUN}"
+    rf"|pre-parola-acilis-{_GUN}-\d{{6}}"
     rf"|pre-anonim-{_GUN}-\d{{6}}(?:-\d{{1,4}})?"
-    rf"|oab-defteri-yedek-{_GUN}-\d{{6}})\.odbak$"
+    rf"|pre-kapanis-{_GUN}"
+    rf"|pre-dek-yenileme-{_GUN}"
+    rf"|oab-defteri-yedek-{_GUN}-\d{{6}})\.odbak"
+    rf"|db-onceki-{_GUN}-\d{{6}}\.sqlite3)$"
 )
 
 
@@ -232,9 +255,10 @@ def program_yedegi_mi(ad: object) -> bool:
 def yedek_kimligi(ad: object) -> str:
     """`YEDEK` satırının kimliği: programın ürettiği ad, değilse BOŞ (adı kayda geçmez; R1).
 
-    Rotasyon tarihi adın herhangi bir yerinde arar (`desktop/backup.py`): yedek klasörüne
-    elle konmuş "gunluk-2026-10-01 <ad>.odbak" da silinir; silinen dosyanın adı satıra
-    girmez, olay kalır. Geri yükleme notunda bekleyen olay da aynı kuraldan geçer.
+    Rotasyonun `pre-migrate` deseni sürümü bu desenden geniş alır (`desktop/backup.py`
+    `_safe_name` alfabesi): elle yeniden adlandırılmış "pre-migrate-<ad>-2026-10-01.odbak" da
+    silinir; silinen dosyanın adı satıra girmez, olay kalır. Geri yükleme notunda bekleyen olay
+    da aynı kuraldan geçer.
     """
     return ad if isinstance(ad, str) and program_yedegi_mi(ad) else ""
 
@@ -638,8 +662,10 @@ def olay(
 #: Evrak basımının satırının değerleri (tasarım §4.6.2 kural 3: "evrak basımı `BASIM` satırıdır
 #: (tür, sha256)"): YALNIZ evrak kodu ve basılan dosyanın SHA-256'sı. İkisi de kişisel veri
 #: değildir; biçimleri `basim`'de denetlenir (kod `E01`…`E79` biçiminde, özet 64 küçük onaltılık).
+#: Yedek Raporu program belgesidir, E-kodu almaz (tasarım §9.7): satırı sabit kodunu taşır.
 BASIM_DEGERLERI: Final = ("kod", "sha256")
-_EVRAK_KODU: Final = re.compile(r"E\d{2}")
+YEDEK_RAPORU_KODU: Final = "YEDEK-RAPORU"
+_EVRAK_KODU: Final = re.compile(rf"E\d{{2}}|{YEDEK_RAPORU_KODU}")
 _SHA256_OZETI: Final = re.compile(r"[0-9a-f]{64}")
 
 

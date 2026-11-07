@@ -7,6 +7,7 @@ doğrulanır. Gerçek uçtan uca açılış (migrate + waitress + belirteç koru
 
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
 import subprocess
@@ -19,26 +20,48 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from django.test import override_settings
 
 from desktop import main as main_mod
 from desktop import qt_kurulum as qt_kurulum_mod
 from desktop import restore as restore_mod
-from desktop.backup import daily_backup_path
+from desktop.backup import daily_backup_path, rotate_backups
+from desktop.backup_crypto import BackupCryptoError
 from desktop.clean_shutdown import ENV_PREVIOUS_SESSION, MARKER_FILE_NAME
 from desktop.django_bootstrap import is_parcacigi_baglantisiyla, wal_checkpoint
 from desktop.errors import (
     EXIT_ALREADY_RUNNING,
     EXIT_DATABASE_CORRUPT,
+    EXIT_MIGRATION_FAILED,
     EXIT_OK,
+    EXIT_UNEXPECTED,
     EXIT_WEBVIEW_UNAVAILABLE,
     DatabaseCorruptError,
+    MigrationError,
     WebViewUnavailableError,
 )
 from desktop.instance_channel import open_channel
 from desktop.lock import SingleInstanceLock
 from desktop.paths import ENV_APP_HOME, resolve_app_paths
+from desktop.server import TAMPON_PAYI
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+class _Sayac:
+    """Uzun iş sayacının yüzeyi. Masaüstü testlerinde backend `sys.path`'te değildir."""
+
+    def __init__(self, sayi: int = 0) -> None:
+        self.sayi = sayi
+
+    def sifirlanmasini_bekle(self, sure: float) -> bool:
+        return self.sayi == 0
+
+
+@pytest.fixture(autouse=True)
+def _uzun_is_yok(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sayaç sıfırdır; `shared` içe aktarılmış mı diye test sırasına bağlı kalınmaz."""
+    monkeypatch.setattr(main_mod, "uzun_is_sayaci", _Sayac)
 
 
 # ------------------------------------------------------------------ argümanlar
@@ -137,6 +160,168 @@ def test_gunluk_yedek_alinmadiysa_rotasyon_kosmaz(
     assert "rotasyon" not in izlenen_adimlar
 
 
+def _gunlukte(kayitlar: list[logging.LogRecord], parca: str) -> bool:
+    return any(parca in kayit.getMessage() for kayit in kayitlar)
+
+
+def _patlayan(hata: Exception) -> Any:
+    def patla(*args: Any, **kwargs: Any) -> Any:
+        raise hata
+
+    return patla
+
+
+#: 7. adımın yedek hataları: disk dolu, SQLite, manifesto ve kap, bellek.
+_YEDEK_HATALARI = [
+    pytest.param(OSError(28, "No space left on device"), id="disk-dolu"),
+    pytest.param(sqlite3.OperationalError("database is locked"), id="sqlite"),
+    pytest.param(sqlite3.DatabaseError("no such column: stored_name"), id="manifesto"),
+    pytest.param(BackupCryptoError("Veritabanı tek yedeğe sığmayacak kadar büyük."), id="kap"),
+    pytest.param(MemoryError(), id="bellek"),
+]
+
+
+@pytest.mark.parametrize("hata", _YEDEK_HATALARI)
+def test_adim_7_yedek_hatasi_gunluge_yazilir_acilis_surer(
+    tmp_path: Path,
+    izlenen_adimlar: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    od_gunlugu: list[logging.LogRecord],
+    hata: Exception,
+) -> None:
+    """Tasarım §4.2 açılış tablosu: 7. adımın hatası "günlüğe"dir, çıkış kodu değil. Yedek
+    alınamadıysa rotasyon da koşmaz, eski yedekler kalır (§4.3 tehdit 8)."""
+    monkeypatch.setattr(main_mod, "daily_backup", _patlayan(hata))
+    gorulen = _acilis_olaylarini_topla(monkeypatch)
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+
+    main_mod.prepare_data(paths, "0.1.0")
+
+    assert "rotasyon" not in izlenen_adimlar
+    assert izlenen_adimlar[-3:] == ["goc-oncesi-yedek", "goc", "damga-yaz"]
+    assert _gunlukte(od_gunlugu, "Günlük yedek alınamadı")
+    ((olaylar, _surum),) = gorulen
+    assert olaylar.alinan_yedekler == [] and olaylar.silinen_yedekler == []
+
+
+def test_adim_7_rotasyon_hatasi_gunluge_yazilir_alinan_yedek_kayda_gecer(
+    tmp_path: Path,
+    izlenen_adimlar: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    od_gunlugu: list[logging.LogRecord],
+) -> None:
+    monkeypatch.setattr(main_mod, "rotate_backups", _patlayan(PermissionError("kilitli")))
+    gorulen = _acilis_olaylarini_topla(monkeypatch)
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+
+    main_mod.prepare_data(paths, "0.1.0")
+
+    assert izlenen_adimlar[-3:] == ["goc-oncesi-yedek", "goc", "damga-yaz"]
+    assert _gunlukte(od_gunlugu, "Yedek rotasyonu tamamlanamadı")
+    ((olaylar, _surum),) = gorulen
+    assert olaylar.alinan_yedekler == ["gunluk-2026-09-22.odbak"]
+    assert olaylar.silinen_yedekler == []
+
+
+@pytest.mark.parametrize("patlayan", ["daily_backup", "rotate_backups", "eski_yetimleri_sil"])
+def test_adim_7_hatasinda_program_acilir_cikis_kodu_olagandir(
+    tmp_path: Path,
+    izlenen_adimlar: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    patlayan: str,
+) -> None:
+    """Hata `run()`'daki genel yakalamaya düşmez: bugüne dek "OAB Defteri açılamadı", çıkış 1."""
+    hatalar: list[Any] = []
+
+    def sunucu(*args: Any, **kwargs: Any) -> int:
+        izlenen_adimlar.append("sunucu")
+        return EXIT_OK
+
+    monkeypatch.setenv(ENV_APP_HOME, str(tmp_path))
+    monkeypatch.setenv(ENV_PREVIOUS_SESSION, "")
+    monkeypatch.setattr(main_mod, patlayan, _patlayan(OSError(28, "No space left on device")))
+    monkeypatch.setattr(main_mod, "serve", sunucu)
+    monkeypatch.setattr(main_mod, "show_error", lambda *a, **_: hatalar.append(a))
+
+    assert main_mod.run([]) == EXIT_OK
+    assert hatalar == [] and izlenen_adimlar[-1] == "sunucu"
+
+
+@pytest.mark.parametrize(
+    "patlayanlar",
+    [
+        pytest.param(("pre_migrate_backup",), id="yalniz-goc-oncesi-yedek"),
+        pytest.param(("daily_backup", "pre_migrate_backup"), id="disk-dolu-iki-yedek-birden"),
+        pytest.param(("pre_migrate_backup_path",), id="hedef-denetlenemedi"),
+    ],
+)
+def test_adim_8_yedek_hatasi_5_ile_durur(
+    tmp_path: Path,
+    izlenen_adimlar: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    patlayanlar: tuple[str, ...],
+) -> None:
+    """Tasarım §4.2 açılış tablosu: 8. adımın hatası 5'tir. 7. adım aynı nedenle düşüp sürse de
+    yedek HATASINDA göç koşmaz; hata beklenmeyen hataya düşseydi temiz kapanış işareti geri
+    konmazdı."""
+    ekran: list[tuple[str, str]] = []
+    geri_konan: list[Any] = []
+    monkeypatch.setenv(ENV_APP_HOME, str(tmp_path))
+    monkeypatch.setenv(ENV_PREVIOUS_SESSION, "")
+    for ad in patlayanlar:
+        monkeypatch.setattr(main_mod, ad, _patlayan(OSError(28, "No space left on device")))
+    monkeypatch.setattr(main_mod, "restore_after_failed_startup", lambda *a: geri_konan.append(a))
+    monkeypatch.setattr(main_mod, "show_error", lambda *a, **_: ekran.append(a))
+
+    assert main_mod.run([]) == EXIT_MIGRATION_FAILED
+
+    assert "goc" not in izlenen_adimlar and "damga-yaz" not in izlenen_adimlar
+    assert len(geri_konan) == 1
+    ((baslik, metin),) = ekran
+    assert baslik == "Veritabanı güncellenemedi"
+    assert metin.startswith("Güncelleme öncesi yedek alınamadı; program veriyi korumak")
+    # Veri sağlamdır: ipucu yedekten dönüşü değil yer açmayı söyler.
+    assert "Diskte yer açıp" in metin and "geri-yukle" not in metin
+
+
+def test_adim_8_yedek_hatasi_nedeniyle_gunluge_yazilir(
+    tmp_path: Path,
+    izlenen_adimlar: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    od_gunlugu: list[logging.LogRecord],
+) -> None:
+    neden = OSError(28, "No space left on device")
+    monkeypatch.setattr(main_mod, "pre_migrate_backup", _patlayan(neden))
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+
+    with pytest.raises(MigrationError) as hata:
+        main_mod.prepare_data(paths, "0.1.0")
+
+    assert hata.value.__cause__ is neden
+    assert _gunlukte(od_gunlugu, "Güncelleme öncesi yedek alınamadı")
+    assert izlenen_adimlar[-1] == "bekleyen-goc-var-mi"
+
+
+def test_acilis_rotasyonu_veri_dizinindeki_db_oncekiyi_eslerle_siler_olaya_yalniz_kendisi_gider(
+    tmp_path: Path, izlenen_adimlar: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§4.4.7: açılışın rotasyonu veri dizinini de alır; `YEDEK` olayı dosya başınadır."""
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    paths.ensure()
+    monkeypatch.setattr(main_mod, "rotate_backups", rotate_backups)
+    gorulen = _acilis_olaylarini_topla(monkeypatch)
+    onceki = paths.data / "db-onceki-2020-01-01-101530.sqlite3"
+    wal = onceki.with_name(onceki.name + "-wal")
+    onceki.write_bytes(b"x")
+    wal.write_bytes(b"x")
+
+    main_mod.prepare_data(paths, "0.1.0")
+
+    assert not onceki.exists() and not wal.exists()
+    ((olaylar, _surum),) = gorulen
+    assert olaylar.silinen_yedekler == [onceki.name]
+
+
 def test_bekleyen_goc_yoksa_ek_yedek_alinmaz(
     tmp_path: Path, izlenen_adimlar: list[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -220,7 +405,7 @@ def sahte_calisma(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         kayit["kanal"] = channel
         return EXIT_OK
 
-    def sahte_hata(title: str, message: str) -> None:
+    def sahte_hata(title: str, message: str, **_: Any) -> None:
         kayit["hata"].append((title, message))
 
     monkeypatch.setattr(main_mod, "prepare_data", lambda paths, version: None)
@@ -511,6 +696,18 @@ def test_linuxta_qt_kurulumu_pencereden_once_ve_cikista_durdurulur(
     assert pencere_oturumu["qt_cikis"] == pencere_oturumu["denetci"].request_quit
 
 
+def test_pencere_denetcisi_uzun_is_sayacini_alir(
+    tmp_path: Path, pencere_oturumu: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Çarpı ertelemesi ve temiz kapanış işareti aynı sayacı okur (§4.2)."""
+    sayac = _Sayac(1)
+    monkeypatch.setattr(main_mod, "uzun_is_sayaci", lambda: sayac)
+
+    main_mod.run_window_session("http://127.0.0.1:1/", tmp_path, None, platform="win32")
+
+    assert pencere_oturumu["denetci"]._sayac is sayac  # noqa: SLF001
+
+
 def test_windowsta_qt_kurulmaz(tmp_path: Path, pencere_oturumu: dict[str, Any]) -> None:
     main_mod.run_window_session("http://127.0.0.1:1/", tmp_path, None, platform="win32")
 
@@ -615,6 +812,201 @@ def test_isaret_yoksa_beklenmedik_kapanma_backende_bildirilir(
     assert gorulen == ["beklenmedik"]
 
 
+def test_is_oldurulunce_temiz_kapanis_isareti_yok(
+    tmp_path: Path, sahte_calisma: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§4.2: 60 sn dolup kapanış sürdüyse iş yarım kalır, sayaç sıfır değildir: işaret yazılmaz,
+    sonraki açılış "son oturumdaki kayıtları kontrol edin" kartını gösterir."""
+    monkeypatch.setenv(ENV_APP_HOME, str(tmp_path))
+    _db_olustur(tmp_path)
+    main_mod.run([])
+    assert _isaret(tmp_path).is_file()
+    monkeypatch.setattr(main_mod, "uzun_is_sayaci", lambda: _Sayac(1))
+
+    assert main_mod.run([]) == EXIT_OK
+
+    assert not _isaret(tmp_path).exists()
+    monkeypatch.setattr(main_mod, "uzun_is_sayaci", _Sayac)
+    main_mod.run([])
+    assert os.environ[ENV_PREVIOUS_SESSION] == "beklenmedik"
+
+
+@pytest.mark.parametrize(
+    "sayac",
+    [
+        pytest.param(lambda: None, id="sayac_yok"),
+        pytest.param(lambda: (_ for _ in ()).throw(RuntimeError("okunamadı")), id="hata"),
+    ],
+)
+def test_sayac_okunamazsa_isaret_yazilmaz(
+    tmp_path: Path,
+    sahte_calisma: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    sayac: Any,
+) -> None:
+    """Okunamayan sayaç "sıfır" sayılmaz; program yine 0 ile çıkar."""
+    monkeypatch.setenv(ENV_APP_HOME, str(tmp_path))
+    monkeypatch.setattr(main_mod, "uzun_is_sayaci", sayac)
+
+    assert main_mod.run([]) == EXIT_OK
+
+    assert not _isaret(tmp_path).exists()
+
+
+def test_sayac_serve_bittikten_sonra_okunur(
+    tmp_path: Path, sahte_calisma: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sıra: pencere, sunucu, WAL; sayaç en sonda sorulur. Daha önce okunsa, kapanış sırasında biten
+    ya da süren iş yanlış sayılırdı."""
+    monkeypatch.setenv(ENV_APP_HOME, str(tmp_path))
+    sira: list[str] = []
+
+    def serve(paths: Any, token: str, autotest: bool, channel: Any = None, **_: Any) -> int:
+        sira.append("serve")
+        return EXIT_OK
+
+    class _Izleyen(_Sayac):
+        @property
+        def sayi(self) -> int:
+            sira.append("sayac")
+            return 0
+
+        @sayi.setter
+        def sayi(self, _deger: int) -> None:
+            pass
+
+    monkeypatch.setattr(main_mod, "serve", serve)
+    monkeypatch.setattr(main_mod, "uzun_is_sayaci", _Izleyen)
+
+    main_mod.run([])
+
+    assert sira == ["serve", "sayac"]
+    assert _isaret(tmp_path).is_file()
+
+
+def test_sayac_ortak_uzun_is_sayacidir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`monkeypatch` fikstürünün altındaki gerçek işlev: pencere ve işaret aynı nesneyi okur."""
+    monkeypatch.undo()
+    monkeypatch.syspath_prepend(str(REPO_ROOT / "backend"))
+    from shared.bakim import UZUN_ISLER
+
+    assert main_mod.uzun_is_sayaci() is UZUN_ISLER
+
+
+def test_backend_yoksa_sayac_yoktur(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.undo()
+    monkeypatch.setitem(sys.modules, "shared.bakim", None)  # içe aktarma ImportError verir
+
+    assert main_mod.uzun_is_sayaci() is None
+
+
+def test_acilis_hatasinda_gunluge_yol_dusmez(
+    tmp_path: Path, sahte_calisma: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bozuk veritabanı iletisi kullanıcıya yedek klasörünü söyler, günlüğe yolu yazmaz: Windows
+    yolu hesap adını içerir (R1)."""
+    monkeypatch.setenv(ENV_APP_HOME, str(tmp_path))
+    ekran: list[tuple[str, str, str | None]] = []
+
+    def hata(paths: Any, app_version: str) -> None:
+        raise DatabaseCorruptError(
+            "Veri dosyası bozuk görünüyor.",
+            hint=f"Yedek klasörü: {tmp_path}",
+            gunluk_ipucu="Yedek klasörü günlüğe yazılmaz.",
+        )
+
+    def show_error(baslik: str, ileti: str, *, gunluk: str | None = None) -> None:
+        ekran.append((baslik, ileti, gunluk))
+
+    monkeypatch.setattr(main_mod, "prepare_data", hata)
+    monkeypatch.setattr(main_mod, "show_error", show_error)
+
+    assert main_mod.run([]) == EXIT_DATABASE_CORRUPT
+
+    ((_, ileti, gunluk),) = ekran
+    assert str(tmp_path) in ileti
+    assert gunluk is not None and str(tmp_path) not in gunluk
+    assert "Veri dosyası bozuk görünüyor." in gunluk
+
+
+def _goc_oncesi_hatasi(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> MigrationError:
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path / "Uydurgul")})
+    monkeypatch.setattr(main_mod, "pre_migrate_backup", _patlayan(OSError(28, "disk dolu")))
+    with pytest.raises(MigrationError) as hata:
+        main_mod._goc_oncesi_yedegi_al(paths, "2026.9.0", main_mod.AcilisOlaylari())
+    return hata.value
+
+
+def test_hata_ipuclari_windowsta_gunlugun_gercek_yerini_soyler(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Günlük `data`nın içinde değil yanındadır (07.11.2026 sınama turu, kod okuması)."""
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setenv("LOCALAPPDATA", "C:/Uydurgul")
+    paths = resolve_app_paths(environ={"LOCALAPPDATA": "C:/Uydurgul"}, platform="win32")
+
+    assert main_mod._beklenmeyen_ipucu(paths) == (
+        "Programı yeniden başlatmayı deneyin. Sorun sürerse "
+        "%LOCALAPPDATA%\\OABDefteri\\logs\\uygulama.log dosyasını okulun bilişim teknolojileri "
+        "rehber öğretmenine (BTR) iletin."
+    )
+    ipucu = _goc_oncesi_hatasi(tmp_path, monkeypatch).hint
+    assert ipucu.startswith("Diskte yer açıp programı yeniden başlatın. Sorun sürerse ")
+    assert "Uydurgul\\logs\\uygulama.log dosyasını okulun bilişim" in ipucu
+    assert "veri klasöründeki" not in ipucu
+
+
+def test_hata_ipuclari_pardusta_gunlugun_gercek_yerini_soyler(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pardus'ta günlük XDG ayrımıyla başka köktedir (`desktop.paths`)."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    paths = resolve_app_paths(environ={"HOME": str(tmp_path)}, platform="linux")
+
+    ipucu = main_mod._beklenmeyen_ipucu(paths)
+
+    assert "~/.local/state/oab-defteri/logs/uygulama.log dosyasını" in ipucu
+    assert "veri klasöründeki" not in ipucu
+
+
+def test_goc_oncesi_yedek_hatasinin_gunlugune_yol_dusmez(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Günlüğün yeri kullanıcıya gösterilir; günlüğe yazılmaz (R1: yol hesap adını taşır)."""
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    hata = _goc_oncesi_hatasi(tmp_path, monkeypatch)
+
+    assert "Uydurgul" in hata.full_message
+    assert hata.gunluk_metni is not None
+    assert "Uydurgul" not in hata.gunluk_metni
+    assert "Diskte yer açıp programı yeniden başlatın." in hata.gunluk_metni
+
+
+def test_beklenmeyen_acilis_hatasinin_gunlugune_yol_dusmez(
+    tmp_path: Path, sahte_calisma: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Kullanıcı günlüğün yerini görür, günlüğe yol yazılmaz (R1)."""
+    kok = tmp_path / "Uydurgul"
+    monkeypatch.setenv(ENV_APP_HOME, str(kok))
+    monkeypatch.setenv("HOME", str(tmp_path / "baska"))
+    ekran: list[tuple[str, str, str | None]] = []
+
+    def show_error(baslik: str, ileti: str, *, gunluk: str | None = None) -> None:
+        ekran.append((baslik, ileti, gunluk))
+
+    monkeypatch.setattr(main_mod, "prepare_data", _patlayan(RuntimeError("uydurma hata")))
+    monkeypatch.setattr(main_mod, "show_error", show_error)
+
+    assert main_mod.run([]) == EXIT_UNEXPECTED
+
+    ((_, ileti, gunluk),) = ekran
+    assert str(kok / "logs" / "uygulama.log") in ileti
+    assert gunluk is not None and "Uydurgul" not in gunluk
+    assert "beklenmeyen bir hata" in gunluk
+
+
 def test_beklenmeyen_hatada_isaret_yazilmaz(
     tmp_path: Path, sahte_calisma: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -706,6 +1098,76 @@ def test_autotest_kipi_gercek_acilisi_dogrular(tmp_path: Path) -> None:
 
 
 @pytest.mark.slow
+def test_autotest_gercek_acilista_artiklari_siler_depoya_dokunmaz(tmp_path: Path) -> None:
+    """Kanca gerçek backend'le koşar: sahte modülün saklayacağı içe aktarma hatası burada çıkar."""
+    ad = "ab" * 16
+    depo = tmp_path / "data" / "dosyalar"
+    depo.mkdir(parents=True)
+    (tmp_path / "backups").mkdir()
+    artik = tmp_path / "backups" / f".yukleme-{ad}.tmp"
+    artik.write_bytes(b"yarim yukleme")
+    (depo / ad).write_bytes(b"satirsiz")
+
+    sonuc = subprocess.run(  # noqa: S603 — sabit argümanlar, kabuk yok
+        [sys.executable, "-m", "desktop.main", "--autotest", "--data-dir", str(tmp_path)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+
+    assert sonuc.returncode == EXIT_OK, sonuc.stderr
+    assert not artik.exists()
+    assert (depo / ad).read_bytes() == b"satirsiz"
+    assert not list((depo / "yetim").iterdir())
+    gunluk = (tmp_path / "logs" / "uygulama.log").read_text(encoding="utf-8")
+    assert "1 artık silindi" in gunluk
+    assert "artıkları silinemedi" not in gunluk
+
+
+#: Gerçek açılış zincirini koşar, ana iş parçacığının bağlantısını `serve`'de ve sağlık denetiminden
+#: sonra yazar. Sonda ayrı süreçtedir: bağlantı bu sürecin Django'sunda değil, o sürecinkindedir.
+_BAGLANTI_SONDASI = """
+import sys
+import desktop.main as m
+
+def durum(asama):
+    from django.db import connections
+    print(asama, connections["default"].connection is None, flush=True)
+
+asil_serve, asil_saglik = m.serve, m.check_health
+
+def serve(*a, **k):
+    durum("sunucu")
+    return asil_serve(*a, **k)
+
+def saglik(*a, **k):
+    asil_saglik(*a, **k)
+    durum("saglik")
+
+m.serve, m.check_health = serve, saglik
+sys.exit(m.run(["--autotest", "--data-dir", sys.argv[1]]))
+"""
+
+
+@pytest.mark.slow
+def test_ana_is_parcacigi_gercek_acilistan_sonra_baglanti_tutmaz(tmp_path: Path) -> None:
+    """Django bağlantıları iş parçacığına özgüdür; `live_restore`'un `close_all`'u ana iş parçacığının
+    bağlantısına ulaşamaz. Açık kalırsa Windows'ta uygulama içi geri yüklemenin takası düşer."""
+    sonuc = subprocess.run(  # noqa: S603 — sabit argümanlar, kabuk yok
+        [sys.executable, "-c", _BAGLANTI_SONDASI, str(tmp_path)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+
+    assert sonuc.returncode == EXIT_OK, sonuc.stderr
+    assert "sunucu True" in sonuc.stdout
+    assert "saglik True" in sonuc.stdout
+
+
+@pytest.mark.slow
 def test_parola_kurulmadan_ikinci_acilista_gunluk_yedek_atlanir(tmp_path: Path) -> None:
     """Tasarım §4.2 adım 7 (yedek kabı §4.4.7): ilk açılışta `yedekleme.json` (ve kişi
     verisi) yokken günlük yedek ATLANIR; düz kopya hiçbir koşulda yazılmaz. İlk yedek, ilk hesap
@@ -776,6 +1238,49 @@ def test_zorla_sonlandirmada_isaret_eksik_kalir_ve_sonraki_acilis_uyarir(
     gunluk = (tmp_path / "logs" / "uygulama.log").read_text(encoding="utf-8")
     assert "Önceki oturum beklenmedik biçimde kapandı" in gunluk
     assert isaret.is_file()  # üçüncü oturum düzenli kapandı
+
+
+@pytest.mark.slow
+def test_is_oldurulunce_temiz_kapanis_isareti_yok_alt_surec(tmp_path: Path) -> None:
+    """§4.2 "iş öldürüldü → işaret yok": gerçek süreç, gerçek sunucu ve gerçek sayaç. Süreç uzun iş
+    sürerken öldürülür; işaret yazılmaz, sonraki açılış bunu görür."""
+    ilk = _autotest_sureci(tmp_path)
+    assert ilk.wait(timeout=300) == EXIT_OK
+    isaret = tmp_path / "data" / MARKER_FILE_NAME
+    assert isaret.is_file()
+
+    surec = subprocess.Popen(  # noqa: S603 — sabit argümanlar, kabuk yok
+        [
+            sys.executable,
+            "-m",
+            "desktop.tests.prova_betigi",
+            "uzun-is-surerken",
+            "--data-dir",
+            str(tmp_path),
+        ],
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    bekci = threading.Timer(120, surec.kill)  # açılış takılırsa `readline` süresiz beklemesin
+    bekci.start()
+    try:
+        assert surec.stdout is not None
+        assert surec.stdout.readline().strip() == "uzun is suruyor"
+        assert not isaret.exists()  # açılış işareti tüketti, düzenli çıkış yazmadı
+        surec.kill()  # SIGKILL: temizlik kodu koşmaz
+    finally:
+        bekci.cancel()
+        surec.wait(timeout=60)
+        if surec.stdout is not None:
+            surec.stdout.close()
+    assert not isaret.exists()
+
+    son = _autotest_sureci(tmp_path)
+    assert son.wait(timeout=300) == EXIT_OK
+    gunluk = (tmp_path / "logs" / "uygulama.log").read_text(encoding="utf-8")
+    assert "Önceki oturum beklenmedik biçimde kapandı" in gunluk
 
 
 @pytest.mark.slow
@@ -946,6 +1451,81 @@ def test_gunluk_yedek_isi_yeni_yedegi_ve_silinenleri_denetim_izine_verir(
     ]
 
 
+@pytest.mark.parametrize("hata", _YEDEK_HATALARI)
+def test_gunluk_yedek_isi_yedek_hatasinda_duser_rotasyon_kosmaz(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    od_gunlugu: list[logging.LogRecord],
+    hata: Exception,
+) -> None:
+    """Gün işi de aynı kapıdan geçer: hata günlüğe yazılır, bir saat sonra yeniden denenir."""
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    olaylar: list[str] = []
+    monkeypatch.setattr(main_mod, "daily_backup", _patlayan(hata))
+    monkeypatch.setattr(main_mod, "rotate_backups", lambda *a, **k: olaylar.append("rotasyon"))
+    monkeypatch.setattr(main_mod, "_yedek_olaylarini_yaz", lambda **k: olaylar.append("olay"))
+
+    assert main_mod.gunluk_yedek_isi(paths, bugun=lambda: date(2026, 9, 24))() is False
+
+    assert olaylar == []
+    assert _gunlukte(od_gunlugu, "Günlük yedek alınamadı")
+
+
+def test_gunluk_yedek_isi_rotasyon_dusse_de_alinan_yedegin_olayi_yazilir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    """Yeniden denemede yedek "yeni" görünmez: olay rotasyonla birlikte düşseydi kaybolurdu."""
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    paths.ensure()
+    _sahte_gunluk_yedek(monkeypatch)
+    monkeypatch.setattr(main_mod, "rotate_backups", _patlayan(PermissionError("kilitli")))
+    gorulen: list[tuple[list[str], list[str]]] = []
+    monkeypatch.setattr(
+        main_mod,
+        "_yedek_olaylarini_yaz",
+        lambda *, alinan, silinen: gorulen.append((alinan, silinen)),
+    )
+    is_ = main_mod.gunluk_yedek_isi(paths, bugun=lambda: date(2026, 9, 24))
+
+    assert is_() is False  # damga yazılmaz: rotasyon bir saat sonra yeniden denenir
+    monkeypatch.setattr(
+        main_mod, "rotate_backups", lambda *a, **k: [paths.backups / "gunluk-2026-09-09.odbak"]
+    )
+    assert is_() is True
+
+    assert _gunlukte(od_gunlugu, "Yedek rotasyonu tamamlanamadı")
+    assert gorulen == [
+        (["gunluk-2026-09-24.odbak"], []),
+        ([], ["gunluk-2026-09-09.odbak"]),
+    ]
+
+
+def test_saat_ileri_sicrarsa_oturum_ici_rotasyon_db_oncekiyi_silmez(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Çapalı gün kenara alınmış veritabanına da uygulanır (bozuk verinin tek nüshası, DK'nin
+    isteyebileceği dosya; tasarım §4.4.4); olağan süresi dolanı yine silinir."""
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    paths.ensure()
+    _sahte_gunluk_yedek(monkeypatch)
+    gun = [date(2026, 9, 24)]
+    saat = [1_000.0]
+    is_ = main_mod.gunluk_yedek_isi(paths, bugun=lambda: gun[0], saat=lambda: saat[0])
+    yeni = paths.data / "db-onceki-2026-09-20-101530.sqlite3"
+    eski = paths.data / "db-onceki-2026-09-01-101530.sqlite3"
+    for yol in (yeni, eski):
+        yol.write_bytes(b"x")
+
+    assert is_() is True  # çapa: 24.09; 01.09 olağan süresini doldurmuştur
+    assert yeni.exists() and not eski.exists()
+
+    gun[0] = date(2026, 10, 30)  # saat bir saat içinde 36 gün ileri sıçradı
+    saat[0] += 3_600
+    assert is_() is True
+
+    assert yeni.exists()
+
+
 def _sahte_gunluk_yedek(monkeypatch: pytest.MonkeyPatch) -> None:
     """Günlük yedeği yalnız dosya adıyla taklit eder (şifreleme `test_backup.py`'dedir)."""
     from desktop.backup import DAILY_PREFIX
@@ -1020,9 +1600,11 @@ class _SahteYonetim:
     """Yönetim `BackgroundServer`'ının yerine geçer; sırayı kaydeder."""
 
     sira: list[str] = []
+    kurulum: dict[str, Any] = {}
 
-    def __init__(self, application: object) -> None:
+    def __init__(self, application: object, **kurulum: Any) -> None:
         self.base_url = "http://127.0.0.1:54321"
+        self.kurulum.update(kurulum)
 
     def start(self) -> str:
         self.sira.append("yonetim-basla")
@@ -1054,6 +1636,7 @@ def sahte_servis(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, A
     """`serve()` çevresini izole eder: Django ve pencere sahte, sıra kayıtlı."""
     sira: list[str] = []
     monkeypatch.setattr(_SahteYonetim, "sira", sira)
+    monkeypatch.setattr(_SahteYonetim, "kurulum", {})
     kayit: dict[str, Any] = {
         "sira": sira,
         "paths": resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)}),
@@ -1097,6 +1680,16 @@ def test_kapanis_sirasi_gun_kapisi_oturum_sunucu_ve_wal_checkpoint(
         "yonetim-dur",
         "wal-checkpoint",  # TB14: sunucu durduktan SONRA
     ]
+
+
+def test_yonetim_sunucusunun_tampon_esigi_yukleme_sinirindan_turer(
+    sahte_servis: dict[str, Any],
+) -> None:
+    """Açık kopya kuralı (tasarım §4.4.7): eşik ayardaki sınırı izler, sabit yazılmaz."""
+    with override_settings(FILE_UPLOAD_MAX_MEMORY_SIZE=7_340_032):
+        main_mod.serve(sahte_servis["paths"], "belirtec", False)
+
+    assert _SahteYonetim.kurulum == {"tampon_esigi": 7_340_032 + TAMPON_PAYI}
 
 
 def test_kilit_acilisinin_sinyali_gun_kapisina_baglanir(sahte_servis: dict[str, Any]) -> None:
@@ -1252,3 +1845,229 @@ def test_kapanis_oturum_kilidi_backend_yoksa_sessizdir(monkeypatch: pytest.Monke
     monkeypatch.setitem(sys.modules, "apps.okul.masaustu_kanca", None)
 
     main_mod._oturumu_kilitle()  # ImportError yutulur
+
+
+# ------------------------------------------- açılış bakımı (§4.4.7; plan F1b-3 "Geri yükleme")
+
+
+@pytest.fixture
+def bakim_kancasi(monkeypatch: pytest.MonkeyPatch, sahte_calisma: dict[str, Any]) -> list[Any]:
+    """`apps.okul.masaustu_kanca` yerine artık ve tarama kancalarını kaydeden sahte modül.
+
+    Açılış adımları da aynı listeye düşer: sıra sınanır.
+    """
+    import types
+
+    sira: list[Any] = []
+    sahte = types.ModuleType("apps.okul.masaustu_kanca")
+    sahte.artiklari_temizle = lambda *a: sira.append(("artik", *a))  # type: ignore[attr-defined]
+    sahte.yetim_taramasi = lambda *a: sira.append(("tarama", *a))  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "apps.okul.masaustu_kanca", sahte)
+    monkeypatch.setattr(main_mod, "prepare_data", lambda paths, version: sira.append(("veri",)))
+    monkeypatch.setattr(main_mod, "baglantilari_kapat", lambda: sira.append(("kapat",)))
+    asil_serve = main_mod.serve
+
+    def serve(*args: Any, **kwargs: Any) -> int:
+        sira.append(("sunucu",))
+        return asil_serve(*args, **kwargs)
+
+    monkeypatch.setattr(main_mod, "serve", serve)
+    return sira
+
+
+def test_acilis_bakimi_gocten_sonra_sunucudan_once_kosar(
+    tmp_path: Path, bakim_kancasi: list[Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(ENV_APP_HOME, str(tmp_path))
+    paths = resolve_app_paths()
+
+    assert main_mod.run([]) == EXIT_OK
+
+    assert bakim_kancasi == [
+        ("veri",),
+        ("artik", paths.db_path, paths.backups, paths.dosya_deposu),
+        ("tarama", paths.db_path, paths.dosya_deposu),
+        ("kapat",),
+        ("sunucu",),
+    ]
+
+
+def test_autotest_kipinde_tarama_kosmaz_artik_temizligi_kosar(
+    tmp_path: Path, bakim_kancasi: list[Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(ENV_APP_HOME, str(tmp_path))
+
+    assert main_mod.run(["--autotest"]) == EXIT_OK
+
+    assert [adim[0] for adim in bakim_kancasi] == ["veri", "artik", "kapat", "sunucu"]
+
+
+def test_geri_yukle_kipi_acilis_bakimina_gelmez(
+    tmp_path: Path, bakim_kancasi: list[Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Artıklarını kendi kilidi altında siler (`test_restore.py`); tarama o kipte de yoktur."""
+    monkeypatch.setenv(ENV_APP_HOME, str(tmp_path))
+    monkeypatch.setattr(main_mod, "run_restore", lambda paths, args: EXIT_OK)
+
+    assert main_mod.run(["--geri-yukle", "yedek.odbak"]) == EXIT_OK
+
+    assert bakim_kancasi == []
+
+
+def test_acilis_durursa_bakim_kosmaz(
+    tmp_path: Path, bakim_kancasi: list[Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bozuk veritabanında durulur: ne temizlik ne tarama, hiçbir dosyaya dokunulmaz."""
+    monkeypatch.setenv(ENV_APP_HOME, str(tmp_path))
+
+    def patla(paths: Any, version: str) -> None:
+        raise DatabaseCorruptError("Veri dosyası bozuk görünüyor.", hint="Son yedekten dönün.")
+
+    monkeypatch.setattr(main_mod, "prepare_data", patla)
+
+    assert main_mod.run([]) == EXIT_DATABASE_CORRUPT
+
+    assert bakim_kancasi == []
+
+
+@pytest.mark.parametrize("patlayan", ["artiklari_temizle", "yetim_taramasi"])
+def test_bakim_hatasi_acilisi_durdurmaz_oteki_kosar(
+    patlayan: str,
+    tmp_path: Path,
+    bakim_kancasi: list[Any],
+    monkeypatch: pytest.MonkeyPatch,
+    od_gunlugu: list[logging.LogRecord],
+) -> None:
+    monkeypatch.setenv(ENV_APP_HOME, str(tmp_path))
+    monkeypatch.setattr(main_mod, "configure_logging", lambda *a, **k: None)  # toplayıcı kalsın
+    monkeypatch.setattr(
+        sys.modules["apps.okul.masaustu_kanca"], patlayan, _patlayan(OSError("erişilemedi"))
+    )
+
+    assert main_mod.run([]) == EXIT_OK
+
+    assert ("sunucu",) in bakim_kancasi
+    beklenen = {"artiklari_temizle": "tarama", "yetim_taramasi": "artik"}[patlayan]
+    assert beklenen in [adim[0] for adim in bakim_kancasi]
+    metin = {"artiklari_temizle": "artıkları silinemedi", "yetim_taramasi": "taranamadı"}[patlayan]
+    assert _gunlukte(od_gunlugu, metin)
+
+
+def test_backend_yoksa_acilis_bakimi_sessizce_atlanir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(sys.modules, "apps.okul.masaustu_kanca", None)
+
+    main_mod._acilis_bakimi(
+        resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)}), autotest=False
+    )  # ImportError yutulur
+
+
+# --------------------------------------------------- yetim silmesi rotasyonla aynı tetikte
+
+
+def _yetim_gunu(paths: Any, gun: str) -> Path:
+    dizin: Path = paths.yetim_dizini / gun
+    dizin.mkdir(parents=True)
+    (dizin / ("ab" * 16)).write_bytes(b"kap")
+    return dizin
+
+
+def test_yetim_silmesi_rotasyonla_ayni_gunu_alir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    gunler: list[Any] = []
+
+    def rotasyon(*_a: Any, today: date) -> list[Path]:
+        gunler.append(today)
+        return []
+
+    monkeypatch.setattr(main_mod, "rotate_backups", rotasyon)
+    monkeypatch.setattr(
+        main_mod, "eski_yetimleri_sil", lambda dizin, *, today: gunler.append((dizin, today))
+    )
+
+    assert main_mod._rotasyonu_kos(paths, date(2026, 9, 24)) == []
+
+    assert gunler == [date(2026, 9, 24), (paths.yetim_dizini, date(2026, 9, 24))]
+
+
+def test_rotasyon_dusse_de_yetim_silmesi_kosar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    paths.ensure()
+    eski = _yetim_gunu(paths, "2026-09-01")
+    monkeypatch.setattr(main_mod, "rotate_backups", _patlayan(OSError("kilitli")))
+
+    assert main_mod._rotasyonu_kos(paths, date(2026, 9, 24)) is None
+
+    assert not eski.exists()
+    assert _gunlukte(od_gunlugu, "Yedek rotasyonu tamamlanamadı")
+
+
+def test_yetim_silmesi_duserse_rotasyonun_sonucu_kaybolmaz_acilis_surer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    monkeypatch.setattr(
+        main_mod, "rotate_backups", lambda *a, **k: [paths.backups / "gunluk-2026-09-09.odbak"]
+    )
+    monkeypatch.setattr(main_mod, "eski_yetimleri_sil", _patlayan(RuntimeError("beklenmedik")))
+
+    assert main_mod._rotasyonu_kos(paths, date(2026, 9, 24)) == ["gunluk-2026-09-09.odbak"]
+
+    assert _gunlukte(od_gunlugu, "Yetim dosyalar silinemedi")
+
+
+def test_gunun_yedegi_alinamazsa_yetim_dosyalar_silinmez(
+    tmp_path: Path, izlenen_adimlar: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Kayıp kilidinden çıkış yolu eski yedeklerdir; yedek yoksa rotasyonla yetim silmesi de yok."""
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    paths.ensure()
+    eski = _yetim_gunu(paths, "2020-01-01")
+    monkeypatch.setattr(main_mod, "daily_backup", lambda *a, **k: None)
+
+    main_mod.prepare_data(paths, "0.1.0")
+
+    assert eski.exists()
+    assert main_mod.gunluk_yedek_isi(paths, bugun=lambda: date(2026, 9, 24))() is False
+    assert eski.exists()
+
+
+def test_adim_7_yetim_silmesini_bugunun_tarihiyle_kosar(
+    tmp_path: Path, izlenen_adimlar: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    paths.ensure()
+    eski = _yetim_gunu(paths, "2020-01-01")
+    yeni = _yetim_gunu(paths, date.today().isoformat())
+
+    main_mod.prepare_data(paths, "0.1.0")
+
+    assert not eski.exists() and yeni.exists()
+
+
+def test_saat_ileri_sicrarsa_oturum_ici_rotasyon_yetim_dosyalari_silmez(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Çapalı gün yetim silmesine de uygulanır; olağan süresi dolanı yine silinir."""
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+    paths.ensure()
+    _sahte_gunluk_yedek(monkeypatch)
+    gun = [date(2026, 9, 24)]
+    saat = [1_000.0]
+    is_ = main_mod.gunluk_yedek_isi(paths, bugun=lambda: gun[0], saat=lambda: saat[0])
+    yeni = _yetim_gunu(paths, "2026-09-20")
+    eski = _yetim_gunu(paths, "2026-09-01")
+
+    assert is_() is True  # çapa: 24.09; 01.09 olağan süresini doldurmuştur
+    assert yeni.exists() and not eski.exists()
+
+    gun[0] = date(2026, 10, 30)  # saat bir saat içinde 36 gün ileri sıçradı
+    saat[0] += 3_600
+    assert is_() is True
+
+    assert yeni.exists()

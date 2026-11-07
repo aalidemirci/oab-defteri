@@ -1,4 +1,6 @@
-"""Otomatik yedek testleri (tasarım §4.2 — `Connection.backup()`, 14 gün rotasyon).
+"""Otomatik yedek testleri (tasarım §4.2 — `Connection.backup()`, manifesto, 14 gün rotasyon).
+
+Rotasyonun kümesi ve KVKK tetiğinin araçları `test_backup_saklama.py`'dedir.
 
 Yedek YALNIZ şifreli alınır (tasarım §4.4.7; ailenin düz yedek dalı söküldü, §13 D29).
 Yedek anahtarı (`yedekleme.json`) ya da kurtarma başlığı (`guvenlik.json`) yoksa
@@ -10,8 +12,14 @@ kendisi değil, yalnız kurtarma bölümünün izdüşümüdür (tasarım TK10).
 from __future__ import annotations
 
 import json
+import logging
+import os
 import sqlite3
-from datetime import date
+import stat
+import sys
+from collections.abc import Iterable
+from contextlib import closing
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -20,13 +28,19 @@ import pytest
 from desktop import backup as backup_mod
 from desktop.backup import (
     daily_backup,
+    goruntu_ve_manifesto,
+    pre_anonim_backup,
     pre_migrate_backup,
     rotate_backups,
 )
 from desktop.backup_crypto import (
+    BOS_YEREL_MANIFESTO,
+    KAPSAM_YEREL,
     MAGIC,
     MAX_RECOVERY_HEADER_BYTES,
     BackupCryptoError,
+    Manifesto,
+    ManifestoGirdisi,
     decrypt_bytes,
     embedded_recovery_metadata,
     ensure_public_config,
@@ -35,6 +49,7 @@ from desktop.backup_crypto import (
     read_embedded_recovery_metadata,
     recovery_header_from_state,
     recovery_key_identity,
+    usable_recovery_header,
 )
 
 _TEST_KEY = b"k" * 32
@@ -88,7 +103,7 @@ def _satir_sayisi(path: Path) -> int:
     content = path.read_bytes()
     restored = path.with_name(path.name + ".restored.sqlite3")
     assert content.startswith(MAGIC)  # düz yedek hiçbir durumda yazılmaz (§13 D29)
-    restored.write_bytes(decrypt_bytes(content, _TEST_KEY))
+    restored.write_bytes(decrypt_bytes(content, _TEST_KEY).veritabani)
     conn = sqlite3.connect(restored)
     try:
         return int(conn.execute("SELECT COUNT(*) FROM ogrenci").fetchone()[0])
@@ -266,7 +281,7 @@ def test_rotasyon_14_gunden_eskileri_siler_yenileri_korur(tmp_path: Path) -> Non
     for gun in ("2026-07-24", "2026-07-11", "2026-07-10", "2026-07-09"):
         (yedekler / f"gunluk-{gun}.odbak").write_bytes(b"x")
 
-    silinen = rotate_backups(yedekler, today=date(2026, 7, 24))
+    silinen = rotate_backups(yedekler, tmp_path, today=date(2026, 7, 24))
 
     kalanlar = sorted(p.name for p in yedekler.glob("gunluk-*.odbak"))
     # 14 gün: 10 Temmuz sınırda (korunur), 9 Temmuz düşer.
@@ -285,7 +300,7 @@ def test_rotasyon_yabanci_dosyalara_dokunmaz(tmp_path: Path) -> None:
     (yedekler / "gunluk-bozukad.sqlite3").write_bytes(b"x")
     (yedekler / "notlar.txt").write_bytes(b"x")
 
-    rotate_backups(yedekler, today=date(2026, 7, 24))
+    rotate_backups(yedekler, tmp_path, today=date(2026, 7, 24))
 
     assert (yedekler / "elle-alinan-yedek.sqlite3").exists()
     assert (yedekler / "gunluk-bozukad.sqlite3").exists()
@@ -462,6 +477,18 @@ def test_kurtarma_anahtarinin_kimligi_yalniz_no_ve_tarihtir() -> None:
         assert recovery_key_identity(bos) is None
 
 
+def test_guvenlik_dosyasi_bozukken_arsiv_kopyasina_dusulmez(tmp_path: Path) -> None:
+    """Plan F1b-3 "Kap ve manifesto": başlık yalnız güncel `guvenlik.json`'dan alınır. Arşive
+    düşen yazıcı, eski bir kopyanın sarmalıyla yedek üretir; yedek hiç alınmaz."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db)
+    (tmp_path / "guvenlik-arsiv-2026-07-01-101010.json").write_bytes(_GUVENLIK)
+    (tmp_path / "guvenlik.json").write_bytes(b"{bozuk")
+
+    assert usable_recovery_header(tmp_path) is None
+    assert daily_backup(db, tmp_path / "backups", today=date(2026, 7, 24)) is None
+
+
 def test_gomulu_baslik_dosyanin_yalniz_basindan_okunur(tmp_path: Path) -> None:
     """Yedek listesinin okuyucusu bellekteki kuralla aynı sonucu verir, bozuğu reddeder."""
     db = tmp_path / "db.sqlite3"
@@ -477,7 +504,8 @@ def test_gomulu_baslik_dosyanin_yalniz_basindan_okunur(tmp_path: Path) -> None:
         "yedek_degil": b"duz metin",
         "kisa": icerik[: sabit - 1],
         "baslik_kesik": icerik[: sabit + uzunluk - 1],
-        "icerik_yok": icerik[: sabit + uzunluk],
+        "kapsam_yok": icerik[: sabit + uzunluk],
+        "icerik_yok": icerik[: sabit + uzunluk + 9],
         "uzunluk_sinir_disi": icerik[: sabit - 4]
         + (MAX_RECOVERY_HEADER_BYTES + 1).to_bytes(4, "big")
         + icerik[sabit:],
@@ -506,7 +534,7 @@ def test_bosaltilan_guvenlik_json_eski_baslikli_yedekleri_rotasyona_kurban_etmez
     bugun = date(2026, 9, 21)
     alinan = daily_backup(db, yedekler, today=bugun)
     if alinan is not None:  # `desktop/main.py::prepare_data` ile aynı koşul
-        rotate_backups(yedekler, today=bugun)
+        rotate_backups(yedekler, tmp_path, today=bugun)
 
     assert alinan is None
     assert sorted(p.name for p in yedekler.glob("*.odbak")) == ["gunluk-2026-09-01.odbak"]
@@ -514,7 +542,7 @@ def test_bosaltilan_guvenlik_json_eski_baslikli_yedekleri_rotasyona_kurban_etmez
 
 
 def test_rotasyon_olmayan_dizinde_patlamaz(tmp_path: Path) -> None:
-    assert rotate_backups(tmp_path / "yok", today=date(2026, 7, 24)) == []
+    assert rotate_backups(tmp_path / "yok", tmp_path / "o-da-yok", today=date(2026, 7, 24)) == []
 
 
 def test_migrate_oncesi_yedek_surum_adiyla_alinir(tmp_path: Path) -> None:
@@ -562,7 +590,7 @@ def test_rotasyon_migrate_oncesi_yedeklerin_son_besini_tutar(tmp_path: Path) -> 
     for i in range(1, 8):
         (yedekler / f"pre-migrate-0.{i}.0-2020-01-0{i}.odbak").write_bytes(b"x")
 
-    rotate_backups(yedekler, today=date(2026, 7, 24), keep_pre_migrate=5)
+    rotate_backups(yedekler, tmp_path, today=date(2026, 7, 24), keep_pre_migrate=5)
 
     kalanlar = sorted(p.name for p in yedekler.glob("pre-migrate-*.odbak"))
     assert len(kalanlar) == 5
@@ -581,3 +609,257 @@ def test_yedek_dizini_yoksa_olusturulur(tmp_path: Path) -> None:
 
 def test_varsayilan_saklama_suresi_14_gun(tmp_path: Path) -> None:
     assert backup_mod.DEFAULT_KEEP_DAYS == 14
+
+
+# ------------------------------------------- manifesto (tasarım §4.4.7; plan F1b-3)
+
+#: `okul_attachment`'ın manifestonun okuduğu sütunları ve kısıtsız birer kopyası: kısıtlı gerçek
+#: şema `apps/okul/tests/test_yedek_manifestosu.py`'de sınanır; burada program dışından bozulmuş
+#: satırlar da kurulabilir.
+_EK_TABLOSU_SQL = """
+    CREATE TABLE okul_attachment (
+        id INTEGER PRIMARY KEY,
+        stored_name,
+        original_name TEXT DEFAULT 'gAAAA-sifreli-ad',
+        key_wrap TEXT DEFAULT 'uydurma-sarmal',
+        size,
+        sha256,
+        purged_at
+    )
+"""
+_AD_1 = "a" * 32
+_AD_2 = "b" * 32
+_AD_3 = "c" * 32
+_OZET_1 = "1" * 64
+_OZET_2 = "2" * 64
+_OZET_3 = "3" * 64
+
+
+def _ekler(db: Path, *satirlar: tuple[Any, Any, Any, Any]) -> None:
+    """`okul_attachment` tablosunu kurar; satır: (stored_name, size, sha256, purged_at)."""
+    with closing(sqlite3.connect(db)) as baglanti:
+        baglanti.execute(_EK_TABLOSU_SQL)
+        ek_yaz(baglanti, satirlar)
+
+
+def ek_yaz(baglanti: sqlite3.Connection, satirlar: Iterable[tuple[Any, Any, Any, Any]]) -> None:
+    baglanti.executemany(
+        "INSERT INTO okul_attachment (stored_name, size, sha256, purged_at) VALUES (?, ?, ?, ?)",
+        satirlar,
+    )
+    baglanti.commit()
+
+
+def _manifesto(yedek: Path | None) -> Manifesto:
+    assert yedek is not None
+    return decrypt_bytes(yedek.read_bytes(), _TEST_KEY).manifesto
+
+
+def test_yerel_yedek_goruntudeki_canli_ekleri_listeler_imhali_satir_girmez(tmp_path: Path) -> None:
+    """Plan F1b-3: manifesto `purged_at`'i boş satırların açık sütunlarından, ada göre sıralı."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db)
+    _ekler(
+        db,
+        (_AD_2, 20, _OZET_2, None),
+        (_AD_3, 30, _OZET_3, "2026-07-01 09:00:00"),
+        (_AD_1, 10, _OZET_1, None),
+    )
+
+    manifesto = _manifesto(daily_backup(db, tmp_path / "backups", today=date(2026, 7, 24)))
+
+    assert manifesto == Manifesto(
+        KAPSAM_YEREL,
+        (ManifestoGirdisi(_AD_1, 10, _OZET_1), ManifestoGirdisi(_AD_2, 20, _OZET_2)),
+    )
+
+
+def test_her_yerel_yedek_manifesto_tasir(tmp_path: Path) -> None:
+    """Tasarım §4.4.7 tablosu: günlük, güncelleme öncesi ve saklama tetiği öncesi yedek."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db)
+    _ekler(db, (_AD_1, 10, _OZET_1, None))
+    yedekler = tmp_path / "backups"
+    beklenen = Manifesto(KAPSAM_YEREL, (ManifestoGirdisi(_AD_1, 10, _OZET_1),))
+
+    assert _manifesto(daily_backup(db, yedekler, today=date(2026, 7, 24))) == beklenen
+    assert (
+        _manifesto(pre_migrate_backup(db, yedekler, "0.2.0", today=date(2026, 7, 24))) == beklenen
+    )
+    assert _manifesto(pre_anonim_backup(db, yedekler, now=datetime(2026, 7, 24, 9))) == beklenen
+
+
+def test_ek_tablosu_yoksa_manifesto_bostur(tmp_path: Path) -> None:
+    """Göçten önceki veritabanı: tablo henüz kurulmamıştır, yedek yine alınır."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db)
+
+    yedek = daily_backup(db, tmp_path / "backups", today=date(2026, 7, 24))
+
+    assert _manifesto(yedek) == BOS_YEREL_MANIFESTO
+    assert yedek is not None and _satir_sayisi(yedek) == 3
+
+
+def test_manifesto_gercek_goruntunun_kendisinden_okunur(
+    tmp_path: Path, izlenen_connect: type[_IzlenenBaglanti], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Görüntü alındıktan sonra kaynağa yazılan ek manifestoya girmez: ikisi aynı anı söyler."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db)
+    _ekler(db, (_AD_1, 10, _OZET_1, None))
+    asil_yedek = _IzlenenBaglanti.backup
+
+    def yedekten_sonra_yaz(self: _IzlenenBaglanti, target: Any, **kwargs: Any) -> None:
+        asil_yedek(self, target, **kwargs)
+        ek_yaz(self._real, [(_AD_2, 20, _OZET_2, None)])
+
+    monkeypatch.setattr(_IzlenenBaglanti, "backup", yedekten_sonra_yaz)
+
+    baytlar, manifesto = goruntu_ve_manifesto(db)
+
+    assert [girdi.ad for girdi in manifesto.dosyalar] == [_AD_1]
+    assert _AD_2.encode() not in baytlar
+
+
+def test_pardus21_yolunda_manifesto_gecici_goruntuden_okunur(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`serialize` yoksa görüntü geçici dosyadadır: manifesto dosya silinmeden okunur, artık kalmaz."""
+    monkeypatch.setattr(backup_mod, "_HAS_SERIALIZE", False)
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db)
+    _ekler(db, (_AD_1, 10, _OZET_1, None))
+
+    manifesto = _manifesto(daily_backup(db, tmp_path / "backups", today=date(2026, 7, 24)))
+
+    assert manifesto.dosyalar == (ManifestoGirdisi(_AD_1, 10, _OZET_1),)
+    assert not list(tmp_path.glob("tmp*"))
+    assert not list(tmp_path.glob(f"{backup_mod.GORUNTU_DIZINI_ONEKI}*"))
+
+
+def test_pardus21_gecici_dizininin_adi_programa_ozgudur(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Süreç o anda ölürse dizin kalır, içinde düz görüntü durur: açılış temizliği adından tanır."""
+    monkeypatch.setattr(backup_mod, "_HAS_SERIALIZE", False)
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db)
+    gorulen: list[str] = []
+    gercek = backup_mod._goruntunun_manifestosu
+
+    def izleyen(goruntu: sqlite3.Connection) -> Manifesto:
+        gorulen.extend(yol.name for yol in tmp_path.iterdir() if yol.is_dir())
+        return gercek(goruntu)
+
+    monkeypatch.setattr(backup_mod, "_goruntunun_manifestosu", izleyen)
+
+    goruntu_ve_manifesto(db)
+
+    assert len(gorulen) == 1
+    assert gorulen[0].startswith(backup_mod.GORUNTU_DIZINI_ONEKI)
+
+
+@pytest.mark.parametrize(
+    "ad,boyut,ozet",
+    [
+        ("../../yedekleme.json", 10, _OZET_2),
+        ("A" * 32, 10, _OZET_2),
+        (None, 10, _OZET_2),
+        (b"\xff" * 32, 10, _OZET_2),
+        (_AD_2, 0, _OZET_2),
+        (_AD_2, -1, _OZET_2),
+        (_AD_2, "on", _OZET_2),
+        (_AD_2, 64 * 1024 * 1024, _OZET_2),
+        (_AD_2, None, _OZET_2),
+        (_AD_2, 10, "kisa"),
+        (_AD_2, 10, None),
+    ],
+    ids=[
+        "yol",
+        "buyuk-harf",
+        "bos-ad",
+        "bayt-ad",
+        "sifir-boy",
+        "eksi-boy",
+        "metin-boy",
+        "sinir-ustu-boy",
+        "bos-boy",
+        "kisa-ozet",
+        "bos-ozet",
+    ],
+)
+def test_bozuk_ek_satiri_yedegi_dusurmez_listeye_girmez(
+    tmp_path: Path, od_gunlugu: list[logging.LogRecord], ad: Any, boyut: Any, ozet: Any
+) -> None:
+    """Program dışından bozulmuş satır: yedeksiz kalmak eksik ekli yedekten ağırdır (plan F1b-3).
+
+    Günlüğe sayı düşer; satırın değeri yazılmaz.
+    """
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db)
+    _ekler(db, (_AD_1, 10, _OZET_1, None), (ad, boyut, ozet, None))
+
+    yedek = daily_backup(db, tmp_path / "backups", today=date(2026, 7, 24))
+
+    assert _manifesto(yedek).dosyalar == (ManifestoGirdisi(_AD_1, 10, _OZET_1),)
+    iletiler = [kayit.getMessage() for kayit in od_gunlugu if kayit.levelno >= logging.WARNING]
+    assert len(iletiler) == 1 and "Biçimi bozuk 1 ek kaydı" in iletiler[0]
+    assert "yedekleme.json" not in iletiler[0]
+
+
+def test_utf8_olmayan_metin_satiri_yedegi_dusurmez(
+    tmp_path: Path, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    """SQLite metni çözmeden saklar; çözme hatası okuma anında çıkar ve bütün yedeği düşürürdü."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db)
+    _ekler(db, (_AD_1, 10, _OZET_1, None), (_AD_2, 20, _OZET_2, None))
+    with closing(sqlite3.connect(db)) as baglanti:
+        baglanti.execute(
+            "UPDATE okul_attachment SET stored_name = CAST(X'FFFE' AS TEXT) WHERE stored_name = ?",
+            (_AD_2,),
+        )
+        baglanti.commit()
+
+    yedek = daily_backup(db, tmp_path / "backups", today=date(2026, 7, 24))
+
+    assert _manifesto(yedek).dosyalar == (ManifestoGirdisi(_AD_1, 10, _OZET_1),)
+    assert any("Biçimi bozuk 1 ek kaydı" in kayit.getMessage() for kayit in od_gunlugu)
+
+
+def test_ayni_ad_iki_satirda_ise_yedek_alinir_ilki_kalir(
+    tmp_path: Path, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    """Sütun program dışından `UNIQUE`'siz kurulmuş olabilir; manifesto adları tekildir."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db)
+    _ekler(db, (_AD_1, 10, _OZET_1, None), (_AD_1, 20, _OZET_2, None), (_AD_2, 20, _OZET_2, None))
+
+    yedek = daily_backup(db, tmp_path / "backups", today=date(2026, 7, 24))
+
+    assert _manifesto(yedek).dosyalar == (
+        ManifestoGirdisi(_AD_1, 10, _OZET_1),
+        ManifestoGirdisi(_AD_2, 20, _OZET_2),
+    )
+    assert any("Biçimi bozuk 1 ek kaydı" in kayit.getMessage() for kayit in od_gunlugu)
+
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="POSIX dosya kipleri")
+def test_yerel_yedekler_umask_022_altinda_0600_yazilir(tmp_path: Path) -> None:
+    """Tasarım §4.5, plan F1b-3 "Yazıcılar umask'a güvenmez": `main.py` dışı yol umask ayarlamaz."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db)
+    yedekler = tmp_path / "backups"
+    eski_umask = os.umask(0o022)
+    try:
+        alinanlar = [
+            daily_backup(db, yedekler, today=date(2026, 7, 24)),
+            pre_migrate_backup(db, yedekler, "0.2.0", today=date(2026, 7, 24)),
+            pre_anonim_backup(db, yedekler, now=datetime(2026, 7, 24, 9)),
+        ]
+    finally:
+        os.umask(eski_umask)
+
+    for yedek in alinanlar:
+        assert yedek is not None
+        assert stat.S_IMODE(yedek.stat().st_mode) == 0o600, yedek.name

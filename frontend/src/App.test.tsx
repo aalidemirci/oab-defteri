@@ -11,7 +11,8 @@
 // oturum göstergesi (rol etiketi + tanıtıcı, Kilitle); Kilitle pencereyi yeniden
 // yükler (D53); oturum okunamazsa FAIL-OPEN. Aile iskeletinin görevli kipi (görevli
 // ekranı, gezinmesiz kabuk, gizli güncelleme bandı) yoktur; (6) parola yenilenme
-// bildirimi (tasarım §4.4.3, tehdit 12) Genel Bakış dışındaki sayfada da pencere olarak çıkar.
+// bildirimi (tasarım §4.4.3, tehdit 12) Genel Bakış dışındaki sayfada da pencere olarak çıkar;
+// (7) kapanış bekleme penceresi (plan F1b-3 "Uzun iş, çarpı, temiz kapanış") kapıların dışındadır.
 
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -25,8 +26,11 @@ import tailwindcss from "tailwindcss";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 
+import { yenidenBaslatGerekliYayinla } from "./lib/restart";
 import { ConfirmProvider } from "./ui/ConfirmProvider";
 import { SnackbarProvider } from "./ui/SnackbarProvider";
+import { guvenlikApi } from "./modules/guvenlik/api";
+import { OKUNAMADI as GUVENLIK_OKUNAMADI } from "./modules/guvenlik/GuvenlikKapisi";
 import type { SetupStatus } from "./modules/okul/api";
 import { gorunenMetin } from "./test/gorunenMetin";
 import { KURULU_DURUM } from "./test/kurulumDurumu";
@@ -127,6 +131,7 @@ const ACIK_OTURUM: OturumOzeti = {
   bosta_kalan_sn: 600,
   kilit_bekliyor: false,
   kurulum_tamam: true,
+  yukleme_siniri_mb: 20,
 };
 
 const KURULU: SetupStatus = {
@@ -304,6 +309,65 @@ describe("App — oturum", () => {
     await waitFor(() => expect(oturumApiMock.ozet).toHaveBeenCalled());
     expect(screen.queryByRole("group", { name: "Oturum" })).not.toBeInTheDocument();
     expect(pencereIcerigi.yenidenYukle).not.toHaveBeenCalled();
+  });
+});
+
+describe("App — kapanış penceresi", () => {
+  function kapanisBekliyor() {
+    act(() => {
+      window.dispatchEvent(new CustomEvent("od:kapanis-bekliyor"));
+    });
+  }
+
+  it("açık oturumda açılır", async () => {
+    ekranaBas("/");
+    await screen.findByRole("heading", { name: "Genel Bakış" });
+
+    kapanisBekliyor();
+
+    expect(screen.getByRole("dialog", { name: "Program kapanıyor" })).toBeInTheDocument();
+  });
+
+  it("kilit ekranında da açılır", async () => {
+    const durum = vi.spyOn(guvenlikApi, "durum").mockResolvedValue({
+      ...GUVENLIK_OKUNAMADI,
+      password_set: true,
+      locked: true,
+      account_count: 1,
+    });
+    oturumApiMock.ozet.mockResolvedValue({ ...ACIK_OTURUM, durum: "kilitli", hesap: null });
+    oturumApiMock.hesaplar.mockResolvedValue([]);
+    oturumApiMock.kurtarmaHesaplari.mockResolvedValue([]);
+    ekranaBas("/");
+    await screen.findByRole("heading", { name: "Kayıtlar kilitli" });
+
+    kapanisBekliyor();
+
+    expect(screen.getByRole("dialog", { name: "Program kapanıyor" })).toBeInTheDocument();
+    durum.mockRestore();
+  });
+
+  it("kurulumda da açılır", async () => {
+    okulApiMock.getSetupStatus.mockResolvedValue(KURULMAMIS);
+    ekranaBas("/");
+    await screen.findByRole("heading", { name: "Kurulum Sihirbazı" });
+
+    kapanisBekliyor();
+
+    expect(screen.getByRole("dialog", { name: "Program kapanıyor" })).toBeInTheDocument();
+  });
+
+  it("yeniden başlat ekranında da açılır", async () => {
+    ekranaBas("/");
+    await screen.findByRole("heading", { name: "Genel Bakış" });
+    act(() => {
+      yenidenBaslatGerekliYayinla();
+    });
+    expect(screen.getByRole("alertdialog", { name: "Programı yeniden başlatın" })).toBeTruthy();
+
+    kapanisBekliyor();
+
+    expect(screen.getByRole("dialog", { name: "Program kapanıyor" })).toBeInTheDocument();
   });
 });
 
@@ -740,6 +804,7 @@ describe("App — rol süzmesi", () => {
       hesap: null,
       bosta_kalan_sn: null,
       kurulum_tamam: false,
+      yukleme_siniri_mb: 20,
     } satisfies OturumOzeti);
     okulApiMock.getSetupStatus.mockResolvedValue({
       ...KURULMAMIS,

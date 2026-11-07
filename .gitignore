@@ -4,6 +4,7 @@
 data/raw/
 backend/data/
 media/
+dosyalar/
 *.xlsx
 *.XLSX
 # e-Okul ihraçları BÜYÜK harfli .XLS uzantısıyla iner (OOG01001R020_827.XLS);

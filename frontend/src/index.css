@@ -360,6 +360,23 @@
   .scrollbar-thin:hover::-webkit-scrollbar-thumb {
     background-color: rgb(var(--md-outline)); /* etkileşimde belirginleşir */
   }
+  /* Kenar çubuğunun kendi kaydırması: kenar çubuğu iki temada da koyudur, renk on-sidebar'dan
+     gelir. `.scrollbar-thin`in yer ayırması (`scrollbar-gutter`) burada istenmez: taşma yokken
+     (uzun pencere) içerik kenar çubuğunda ortalı kalmalıdır. */
+  .od-sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--od-on-sidebar) / 0.3) transparent;
+  }
+  .od-sidebar-scroll::-webkit-scrollbar {
+    width: 0.5rem;
+  }
+  .od-sidebar-scroll::-webkit-scrollbar-track {
+    background-color: transparent;
+  }
+  .od-sidebar-scroll::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--od-on-sidebar) / 0.3);
+    border-radius: 9999px;
+  }
   /* Kenar solması — solda/sağda taşan içerik varsa "devam ediyor" sinyali. Ofset
      1rem = Tailwind spacing-4 token değeri (ham px değil). Maske luminance (siyah=opak)
      → renk değil, tema-agnostik. Tabs bileşeni kaydırma konumuna göre sınıfı seçer. */

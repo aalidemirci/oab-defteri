@@ -230,7 +230,8 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
                 "security-recovery-key-renew",
             ),
             _parca("şifreli yedek", "encrypted-backup-download", "backup-external-reminder"),
-            _parca("yedekten geri yükleme", "backup-restore"),
+            _parca("yedekten geri yükleme", "backup-restore", "backup-inspect"),
+            _parca("yedek raporu", "backup-report"),
             # Genel Bakış'ın "Hesaplar ve Güvenlik Dosyası" kartındaki liste ve "Güvenlik dosyasından
             # sil" düğmesi (sözlük §4.5): ad kartın alt başlığıdır.
             _parca(
@@ -349,7 +350,7 @@ def dosya_adi(rol: str, gun: date | None = None) -> str:
     """İndirme adı: 'Hesap-Teslim-Pusulası_Muhasip_03.11.2026.pdf' (yerel gün; orkestratör maddesi
     F-2). Program yöneticisinde 'Hesap-Teslim-Pusulası_Program-yöneticisi_03.11.2026.pdf'.
 
-    Belge adı + kapsam + tarih (sözlük §3 "İndirilen dosya adı"): kapsam rol etiketidir (sıra
+    Belge adı + kapsam + tarih (sözlük §3 "Kaydedilen dosya adı"): kapsam rol etiketidir (sıra
     no'suz; `oturum.rol_etiketi`) — aynı gün birkaç hesaba basılan pusulalar klasörde ayrılır. Ad
     tanıtıcıyı ve ad-soyadı TAŞIMAZ: tanıtıcıda hesap sahibinin adı ya da kimlik numarasına benzer
     bir sayı olabilir (program yalnız uyarır; `hesap_kurallari.login_name_warning`); dosya adları

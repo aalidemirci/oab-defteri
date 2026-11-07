@@ -10,9 +10,17 @@
 // uygular; efekt ardından odağı panele alır (autoFocus etkisiz kalır) ve açan öğe
 // yerine alanın kendisini "açan" diye kaydeder (kapanışta odak geri verilemez).
 // Prop verilmezse odak panele alınır.
+//
+// GÖVDEYE ÇİZİLİR (`createPortal`): `fixed`, atasında `backdrop-filter`, `transform` ya da `filter`
+// varsa ekrana değil o ataya göre konumlanır. Üst çubuk `backdrop-blur-md` taşıdığı için oradan
+// açılan pencere çubuğa göre ortalanıyor, başı ekranın üstünden taşıyordu (gerçek pencere sınaması
+// 07.11.2026). Pencere bu yüzden nereden açılırsa açılsın gövdeye çizilir. React ağacı değişmez:
+// bağlam ve olay kabarcığı açan bileşene gider; değişen yalnız DOM'daki yerdir. Aynı z değerindeki
+// öğeler bu yüzden pencerenin altında kalır: bildirim kabı z-[55]'tedir (SnackbarProvider).
 
 import { useEffect, useRef } from "react";
 import type { ReactNode, RefObject } from "react";
+import { createPortal } from "react-dom";
 
 /** Panel içindeki klavyeyle odaklanabilir öğeler (F29 odak tuzağı).
  *
@@ -43,6 +51,11 @@ interface DialogProps {
    * verilen kararlı bir ref olmalıdır.
    */
   initialFocusRef?: RefObject<HTMLElement | null>;
+  /**
+   * Her şeyin üstünde açılır: "Programı kapatıp yeniden açın" ekranı (z-[60]) diyalogları örter,
+   * kapanış penceresi onun da üstünde görünmelidir.
+   */
+  enUstte?: boolean;
 }
 
 export default function Dialog({
@@ -54,6 +67,7 @@ export default function Dialog({
   wide = false,
   full = false,
   initialFocusRef,
+  enUstte = false,
 }: DialogProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const aciciRef = useRef<HTMLElement | null>(null);
@@ -120,9 +134,11 @@ export default function Dialog({
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex animate-scrim-in items-center justify-center bg-scrim/[0.32] p-4"
+      className={`fixed inset-0 flex animate-scrim-in items-center justify-center bg-scrim/[0.32] p-4 ${
+        enUstte ? "z-[70]" : "z-50"
+      }`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -149,6 +165,7 @@ export default function Dialog({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

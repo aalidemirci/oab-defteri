@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 from pathlib import Path
 
 import pytest
@@ -62,6 +63,90 @@ def test_bozuk_dosya_turkce_hata_ile_reddedilir(tmp_path: Path) -> None:
         "program yöneticisi hesabının tanıtıcısı ve parolası ya da kurtarma anahtarı sorulur"
         in hata.value.hint
     )
+    # `db-onceki` rotasyondadır (tasarım §4.4.7): "silinmez" sözü verilmez.
+    assert "14 gün saklanır, sonra silinir" in hata.value.hint
+    assert "silinmez" not in hata.value.hint
+
+
+def test_bozuk_veritabani_iletisi_yolu_kullaniciya_gosterir_gunluge_yazmaz(tmp_path: Path) -> None:
+    """Yedek klasörü yol gösterir, ama günlük BTR'ye iletilir: yol hesap adını taşır (R1)."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db)
+    with db.open("r+b") as f:
+        f.seek(0)
+        f.write(b"BOZUKBOZUK")
+    yedekler = tmp_path / "Uydurgul" / "backups"
+
+    with pytest.raises(DatabaseCorruptError) as hata:
+        check_database_integrity(db, backup_dir=yedekler, platform="win32")
+
+    assert str(yedekler) in hata.value.full_message
+    gunluk = hata.value.gunluk_metni
+    assert gunluk is not None
+    assert "Uydurgul" not in gunluk
+    assert hata.value.message in gunluk
+    assert "OAB Defteri — Yedekten Geri Yükle" in gunluk
+
+
+def _bozuk_db(tmp_path: Path) -> Path:
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db)
+    with db.open("r+b") as f:
+        f.seek(0)
+        f.write(b"BOZUKBOZUK")
+    return db
+
+
+#: İpucunun ortak bölümü: yedeğin nasıl seçildiği ve bozuk dosyanın saklanması.
+_IPUCU_SONU = (
+    "Yedek listeden seçilir; program yöneticisi hesabının tanıtıcısı ve parolası ya da kurtarma "
+    "anahtarı sorulur. Bozuk dosya 'db-onceki-*' adıyla veri klasöründe 14 gün saklanır, sonra "
+    "silinir."
+)
+
+
+def test_bozuk_veritabani_iletisi_windowsta_kisayolu_soyler(tmp_path: Path) -> None:
+    """Windows metni aynen kalır (07.11.2026 sınama listesi, kod okuması: yanlış olan Pardus'tu)."""
+    with pytest.raises(DatabaseCorruptError) as hata:
+        check_database_integrity(_bozuk_db(tmp_path), platform="win32")
+
+    assert hata.value.hint == (
+        "Son sağlam yedeği geri yüklemek için Başlat menüsündeki 'OAB Defteri — Yedekten Geri "
+        "Yükle' kısayolunu çalıştırın (veya komut satırından: oab-defteri --geri-yukle). "
+        + _IPUCU_SONU
+    )
+
+
+def test_bozuk_veritabani_iletisi_pardusta_kisayolu_anmaz_komutu_soyler(tmp_path: Path) -> None:
+    """Pardus'ta Başlat menüsü yoktur (07.11.2026 sınama listesi, kod okuması); sözlük §1 "Yedek"."""
+    with pytest.raises(DatabaseCorruptError) as hata:
+        check_database_integrity(_bozuk_db(tmp_path), platform="linux")
+
+    assert hata.value.hint == (
+        "Son sağlam yedeği geri yüklemek için uçbirimde oab-defteri --geri-yukle komutunu "
+        "çalıştırın. " + _IPUCU_SONU
+    )
+    assert hata.value.gunluk_metni is not None
+    assert "Başlat" not in hata.value.gunluk_metni
+
+
+@pytest.mark.parametrize(
+    ("sistem", "beklenen", "olmayan"),
+    [("win32", "Başlat menüsündeki", "uçbirimde"), ("linux", "uçbirimde", "Başlat menüsündeki")],
+    ids=["windows", "pardus"],
+)
+def test_platform_verilmezse_calisilan_sistemin_metni_yazilir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sistem: str, beklenen: str, olmayan: str
+) -> None:
+    """Üretim `platform` vermez (`desktop.main`); testlerin açık verdiği değer bu yolu sınamaz."""
+    bozuk = _bozuk_db(tmp_path)
+    monkeypatch.setattr(sys, "platform", sistem)
+
+    with pytest.raises(DatabaseCorruptError) as hata:
+        check_database_integrity(bozuk)
+
+    assert beklenen in (hata.value.hint or "")
+    assert olmayan not in (hata.value.hint or "")
 
 
 def test_pardus_benioku_geri_yuklemede_program_yoneticisini_anar() -> None:
@@ -75,6 +160,9 @@ def test_pardus_benioku_geri_yuklemede_program_yoneticisini_anar() -> None:
         in metin
     )
     assert "hesabınızın tanıtıcısı" not in metin
+    # `db-onceki` rotasyondadır (tasarım §4.4.7): metin de bütünlük iletisi gibi süre söyler.
+    assert "'db-onceki-*' adıyla veri klasöründe 14 gün saklanır, sonra silinir" in metin
+    assert "dosya silinmez" not in metin
 
 
 def test_bozuk_sayfa_integrity_check_ile_yakalanir(tmp_path: Path) -> None:

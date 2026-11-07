@@ -400,7 +400,8 @@ class TestYedekler:
         with pytest.raises(app_password.AppPasswordError):
             app_password._unwrap_with_recovery(eski_baslik, yeni)
         # İçerik aynı DEK'le şifreli (yedek anahtarı değişmedi).
-        assert decrypt_bytes(yeni_yedek.read_bytes(), TEST_DEK).startswith(b"SQLite format 3")
+        icerik = decrypt_bytes(yeni_yedek.read_bytes(), TEST_DEK)
+        assert icerik.veritabani.startswith(b"SQLite format 3")
 
     def test_eski_yedek_bu_bilgisayarda_yeni_anahtarla_da_acilir(
         self, client: APIClient, guvenlik_ortami: Path, yedek_dizini: Path, tmp_path: Path

@@ -42,6 +42,43 @@ describe("ThemeSwitcher", () => {
     expect(btn.className).toContain("w-[var(--od-control-height)]");
   });
 
+  it("satır kipinde yazı düğmenin içindedir, erişilebilir ad değişmez", async () => {
+    const user = userEvent.setup();
+    render(<ThemeSwitcher satir />);
+
+    const btn = screen.getByRole("button", { name: "Karanlık temaya geç" });
+    expect(btn).toContainElement(screen.getByText("Tema"));
+    expect(btn).toHaveClass("w-full", "min-h-[var(--od-control-height)]");
+    expect(btn).not.toHaveClass("w-[var(--od-control-height)]");
+
+    await user.click(screen.getByText("Tema"));
+
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(screen.getByRole("button", { name: "Açık temaya geç" })).toBeInTheDocument();
+  });
+
+  it("satır kipinde simge kenar çubuğunun simge boyundadır", () => {
+    render(<ThemeSwitcher satir />);
+    expect(screen.getByText("dark_mode")).toHaveClass("text-lg");
+  });
+
+  it("daralmış satırda yazı yoktur, simge ortalanır", () => {
+    render(<ThemeSwitcher satir collapsed />);
+    expect(screen.queryByText("Tema")).toBeNull();
+    expect(screen.getByRole("button", { name: "Karanlık temaya geç" })).toHaveClass(
+      "justify-center",
+    );
+  });
+
+  it("className varsayılan rengin yerine geçer, yanına eklenmez", () => {
+    const { rerender } = render(<ThemeSwitcher />);
+    expect(screen.getByRole("button")).toHaveClass("text-on-surface-variant");
+
+    rerender(<ThemeSwitcher className="text-on-sidebar-muted" />);
+    expect(screen.getByRole("button")).toHaveClass("text-on-sidebar-muted");
+    expect(screen.getByRole("button")).not.toHaveClass("text-on-surface-variant");
+  });
+
   it("merkezî .state-layer örtü span'ı içerir (M3 state layer)", () => {
     const { container } = render(<ThemeSwitcher />);
     const layer = container.querySelector('[aria-hidden="true"]');

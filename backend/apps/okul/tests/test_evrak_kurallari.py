@@ -333,7 +333,13 @@ def test_tckn_hicbir_belgede_yok(belge_adi: str, yakalanan: list[evrak.Belge]) -
         (belge,) = yakalanan
         icerik = evrak.kanonik_json(belge)
         satir = AuditTrail.objects.filter(action=AuditAction.BASIM).get()
-        icerik += str(satir.values) + str(satir.changed_fields) + satir.object_id
+        # PDF özeti ve object_id T.C. kimlik no taşıyamaz, ama 11 haneli desene rastlantıyla uyabilir:
+        # özet güne ve belge metnine bağlıdır, kötü günde kapı her koşuda düşerdi. İkisi aramadan
+        # çıkar, değerleri kilitlenir: satıra başka alan girerse bu test düşer.
+        assert set(satir.values) == {"kod", "sha256"}
+        assert satir.values["sha256"] == [None, hashlib.sha256(pdf).hexdigest()]
+        assert satir.object_id == str(hesap.id)
+        icerik += str(satir.values["kod"]) + str(satir.changed_fields)
     else:
         pdf = recovery_key_document.render_recovery_key_pdf(TEST_KURTARMA_ANAHTARI)
         icerik = ""
@@ -700,8 +706,8 @@ def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
             son_oturum,
             "Kullanıcılar: hesap açma, kapama, askıdan çıkarma, parola sıfırlama, hesap teslim "
             "pusulası",
-            "Güvenlik: kurtarma anahtarı, şifreli yedek, yedekten geri yükleme, Genel Bakış'ta "
-            "güvenlik dosyasında kalan eski parola kayıtlarının silinmesi",
+            "Güvenlik: kurtarma anahtarı, şifreli yedek, yedekten geri yükleme, yedek raporu, "
+            "Genel Bakış'ta güvenlik dosyasında kalan eski parola kayıtlarının silinmesi",
             "Ayarlar: boşta kilit süresi",
             "Güncelleme denetimi",
             kendi,

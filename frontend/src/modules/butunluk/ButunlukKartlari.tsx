@@ -20,8 +20,10 @@
 // * **Yedekten Geri Yükleme Yapıldı** — son geri yükleme: yedeğin adı (programın ürettiği
 //   yedekse), yedeği açan yol (hesap ya da kurtarma anahtarı no'su), uygulama içinden
 //   yapıldıysa onu başlatan oturumun hesabı (kurtarma yolunda da; konsolda oturum yok),
-//   kenara alınan önceki veritabanı ve onun son kaydı ("Kayıt no · Zincir"). Aralarında giriş
-//   yapılmadan birden çok geri yükleme olduysa hepsi sırasıyla yazılır: yedekten sonraki
+//   kenara alınan önceki veritabanı ve onun son kaydı ("Kayıt no · Zincir"), yedeğin kapsamı ve
+//   eklerin kişisiz sayıları (plan F1b-3 "Geri yükleme"; bu bilgiyi taşımayan eski satırda
+//   çizilmez). Aralarında giriş yapılmadan birden çok geri yükleme olduysa hepsi sırasıyla
+//   yazılır: yedekten sonraki
 //   kayıtlar İLKİNİN kenara aldığı veritabanındadır. O veritabanı yoktuysa ya da izi boştuysa
 //   (yeni bilgisayara taşıma) kart "kayıtlar ekrandan kalktı" demez. Kart Denetleme Kurulunun
 //   bir üyesi "Gördüm" diyene dek kalır (plan F1b-2 "Gördüm."; kullanıcı kararı 02.11.2026: bir
@@ -33,12 +35,16 @@
 //   yöneticisinde kalır; metni bunu söyler.
 // * **Hesaplar ve Güvenlik Dosyası** — iki depo farkı ve mührü tutmayan hesaplar
 //   (`IkiDepoKarti`; onaylı silme orada).
+// * **Eksik Ekler** — satırı olup dosyası olmayan ekler, canlı (tasarım §4.4.7 "Yetim ve eksik
+//   dosya"). Özgün ad yalnız bu kartta ve kaydın kendisinde görünür (kullanıcı kararı 04.11.2026;
+//   uç kilitliyken kapalıdır). Depo okunamadıysa ("eksik_ekler" `okunamayan`'da) kart "eksik yok"
+//   demez, okunamadığını söyler.
 // * **Bütünlük Durumu Okunamadı** — kartlardan biri ya da hepsi okunamadı (`okunamayan`,
 //   `useButunlukDurumu.okunamadi`; Son Girişler ve denetim izinin son kaydı da): bir uyarı ya
 //   da giriş sessizce kaybolmaz (fail-closed).
 //
-// ROL: ilk üç kart ve mührü tutmayan hesaplar denetim kartları ucundandır (program yöneticisi
-// ve Denetleme Kurulu), iki depo farkı ve silme yalnız program yöneticisinde; öteki rollerde o
+// ROL: ilk üç kart, mührü tutmayan hesaplar ve eksik ekler denetim kartları ucundandır (program
+// yöneticisi ve Denetleme Kurulu), iki depo farkı ve silme yalnız program yöneticisinde; öteki rollerde o
 // uçlar çağrılmaz, kartları boş kalır (`butunluk/api.ts` "ROLE GÖRE ÜÇ UÇ"). "Bütünlük Durumu
 // Okunamadı" her rolde kalır.
 
@@ -49,12 +55,14 @@ import { formatDateTime } from "../../lib/format";
 import Button from "../../ui/Button";
 import ErrorBand from "../../ui/ErrorBand";
 import { useSnackbar } from "../../ui/SnackbarProvider";
+import { eklerOzeti, kapsamMetni } from "../guvenlik/yedekBilgisi";
 import { oturumHataMetni } from "../oturum/hatalar";
-import { butunlukApi } from "./api";
+import { butunlukApi, EKSIK_EKLER_KARTI } from "./api";
 import type {
   ButunlukBulgusu,
   ButunlukDurumu,
   DenetimKartlari,
+  EksikEk,
   GeriYuklemeKaydi,
   GeriYuklemeOzeti,
   HesapOzeti,
@@ -71,7 +79,12 @@ import {
   DENETIM_DENETLENEMEDI_DIP_CUMLESI,
   DENETIM_IZI_KARTI_BASLIGI,
   DENETLEME_KURULUNA_BILDIRIN,
+  EKSIK_EKLER_DIP_CUMLESI,
+  EKSIK_EKLER_KARTI_BASLIGI,
+  EKSIK_EKLER_OKUNAMADI_METNI,
   GERI_YUKLEME_BILDIRIN,
+  GERI_YUKLEME_EKLER_ETIKETI,
+  GERI_YUKLEME_KAPSAM_ETIKETI,
   GERI_YUKLEME_KARTI_BASLIGI,
   GORDUM_ACIKLAMASI,
   GORDUM_DUGMESI,
@@ -85,8 +98,11 @@ import {
   PAROLA_KAYDI_ACIKLAMASI,
   PAROLA_KAYDI_GIRISI,
   ROL_DEGISMIS_OLABILIR,
+  YEDEKTE_KAYDI_OLMAYAN_HESABIN_PAROLASI,
   bulguMetinleri,
   degisiklikGosterir,
+  eksikEklerGirisi,
+  eksikEkSatiri,
   hesapBulgusuTuru,
   hesapEtiketiGunlu,
   hesapGunleri,
@@ -258,9 +274,9 @@ function yedegiAcan(geri: GeriYuklemeKaydi): string {
       : `Kurtarma anahtarı (anahtar no ${geri.kurtarma_no})`;
   }
   if (geri.yol === "hesap") {
-    return geri.yol_hesap === null
-      ? "Bir hesabın parolası"
-      : `${hesapEtiketiGunlu(geri.yol_hesap)} hesabının parolası`;
+    if (geri.yol_hesap === null) return "Bir hesabın parolası";
+    if (geri.yol_hesap.yedekte_yok === true) return YEDEKTE_KAYDI_OLMAYAN_HESABIN_PAROLASI;
+    return `${hesapEtiketiGunlu(geri.yol_hesap)} hesabının parolası`;
   }
   return "Okunamadı";
 }
@@ -277,12 +293,18 @@ export function oncedenKayitYoktu(geri: GeriYuklemeKaydi): boolean {
   );
 }
 
-/** Bir geri yüklemenin ayrıntıları: an, yedek, açan yol, başlatan oturum, kenara alınan. */
+/**
+ * Bir geri yüklemenin ayrıntıları: an, yedek, açan yol, başlatan oturum, kenara alınan, kapsam ve
+ * ekler. Dosya bilgisini taşımayan eski satırda (`dosyalar` boş) kapsam ve ek satırı çizilmez.
+ */
 function GeriYuklemeAyrintisi({ geri }: { geri: GeriYuklemeKaydi }) {
   const oncekiSonKayit =
     geri.onceki_kayit_no !== null && geri.onceki_zincir !== null
       ? kagitCapasiSatiri({ kayit_no: geri.onceki_kayit_no, zincir: geri.onceki_zincir })
       : null;
+  const dosyalar = geri.dosyalar ?? {};
+  const kapsam = kapsamMetni(dosyalar.kapsam ?? null);
+  const ekler = eklerOzeti(dosyalar);
   return (
     <>
       {geri.ayrintisiz && (
@@ -336,6 +358,22 @@ function GeriYuklemeAyrintisi({ geri }: { geri: GeriYuklemeKaydi }) {
                   <dd className="min-w-0 font-mono text-on-surface">{oncekiSonKayit}</dd>
                 </>
               )}
+              {kapsam !== null && (
+                <>
+                  <dt className="text-label-large text-on-surface-variant">
+                    {GERI_YUKLEME_KAPSAM_ETIKETI}
+                  </dt>
+                  <dd className="min-w-0 text-on-surface">{kapsam}</dd>
+                </>
+              )}
+              {ekler !== null && (
+                <>
+                  <dt className="text-label-large text-on-surface-variant">
+                    {GERI_YUKLEME_EKLER_ETIKETI}
+                  </dt>
+                  <dd className="min-w-0 text-on-surface">{ekler}</dd>
+                </>
+              )}
             </>
           )}
         </dl>
@@ -344,16 +382,20 @@ function GeriYuklemeAyrintisi({ geri }: { geri: GeriYuklemeKaydi }) {
   );
 }
 
-/** Kartın dip cümlesinin ilk yarısı: ekrandan kalkan kayıtlar nerede (sözlük §4.5). */
+/**
+ * Kartın dip cümlesinin ilk yarısı: ekrandan kalkan kayıtlar nerede (sözlük §4.5). Kenara alınan
+ * veritabanı 14 günlük rotasyondadır (tasarım §4.4.7), kart ise "Gördüm"e dek kalır ve iz
+ * satırından okuduğu adı göstermeyi sürdürür: cümle dosyanın silineceğini söyler.
+ */
 export function geriYuklemeDipCumlesi(kayitlar: readonly GeriYuklemeKaydi[]): string {
   if (kayitlar.length > 0 && oncedenKayitYoktu(kayitlar[0])) {
     return "Geri yüklemeden önce bu bilgisayarda kayıt yoktu.";
   }
   return kayitlar.length > 1
     ? "Yedeğin alındığı günden sonra girilen kayıtlar ekrandan kalkmıştır; ilk geri yüklemede " +
-        "kenara alınan veritabanında durur."
+        "kenara alınan veritabanında durur. O dosya geri yüklemeden 14 gün sonra silinir."
     : "Yedeğin alındığı günden sonra girilen kayıtlar ekrandan kalkmıştır; kenara alınan önceki " +
-        "veritabanında durur.";
+        "veritabanında durur. O dosya geri yüklemeden 14 gün sonra silinir.";
 }
 
 /** "Gördüm"ün işi (yalnız `geri_yukleme_gordum` yeteneğinde verilir). */
@@ -462,6 +504,50 @@ export function GeriYuklemeKarti({ geri, gordum = null }: GeriYuklemeKartiProps)
   );
 }
 
+interface EksikEklerKartiProps {
+  ekler: readonly EksikEk[];
+  /** Depo okunamadı: boş liste "eksik yok" demek değildir. */
+  okunamadi: boolean;
+}
+
+/**
+ * Eksik Ekler (dosya başı): söyleyecek bir şey yoksa çizilmez. Liste uzun olabilir (depo silindiyse
+ * bütün ekler); kendi içinde kayar. Ad kişi adı taşıyabilir, yalnız burada görünür.
+ */
+export function EksikEklerKarti({ ekler, okunamadi }: EksikEklerKartiProps) {
+  if (ekler.length === 0 && !okunamadi) return null;
+  return (
+    <KartKabugu
+      id="eksik-ekler-karti"
+      baslik={EKSIK_EKLER_KARTI_BASLIGI}
+      ikon="attach_file"
+      ton="uyari"
+    >
+      {okunamadi && (
+        <p className="text-body-medium text-on-surface">{EKSIK_EKLER_OKUNAMADI_METNI}</p>
+      )}
+      {ekler.length > 0 && (
+        <>
+          <p className="text-body-medium text-on-surface">{eksikEklerGirisi(ekler.length)}</p>
+          {/* Kendi içinde kayar; klavyeyle de kaysın diye odak alır. */}
+          <ul
+            tabIndex={0}
+            aria-label={EKSIK_EKLER_KARTI_BASLIGI}
+            className="max-h-40 list-disc space-y-0.5 overflow-y-auto pl-5 pr-1 text-body-medium text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            {ekler.map((ek, sira) => (
+              <li key={sira} className="break-words">
+                {eksikEkSatiri(ek)}
+              </li>
+            ))}
+          </ul>
+          <p className="text-body-small text-on-surface-variant">{EKSIK_EKLER_DIP_CUMLESI}</p>
+        </>
+      )}
+    </KartKabugu>
+  );
+}
+
 /**
  * Bütünlük kartlarından biri ya da hepsi okunamadı (backend `okunamayan` ya da okuma düştü):
  * uyarı ya da giriş sessizce kaybolmaz (fail-closed). Son Girişler de kapsanır: o kart kendi
@@ -510,6 +596,10 @@ export default function ButunlukKartlari({
           kullanicilarAcik={kullanicilarAcik}
         />
       )}
+      <EksikEklerKarti
+        ekler={durum.eksik_ekler}
+        okunamadi={durum.okunamayan.includes(EKSIK_EKLER_KARTI)}
+      />
     </>
   );
 }

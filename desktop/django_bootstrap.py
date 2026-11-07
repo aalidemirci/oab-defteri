@@ -14,6 +14,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from desktop.backup import wal_bosalt
 from desktop.errors import MigrationError, ServerStartError
 from desktop.logging_setup import apply_access_log_policy
 from desktop.session_guard import ENV_TOKEN
@@ -95,7 +96,23 @@ def unknown_applied_migrations() -> list[str]:
     )
 
 
-def run_migrations() -> None:
+def _goc_hatasi_ipucu(platform: str) -> str:
+    """Geri yüklemenin başlatıldığı yer: Başlat menüsü kısayolu yalnız Windows'ta vardır (sözlük §4.2;
+    `desktop.integrity` aynı kuralı Veritabanı bozuk iletisinde uygular)."""
+    if platform.startswith("win"):
+        return (
+            "Yedek klasöründeki en son 'pre-migrate-*' veya günlük yedeği geri "
+            "yüklemek için Başlat menüsündeki 'OAB Defteri — Yedekten Geri "
+            "Yükle' kısayolunu (veya 'oab-defteri --geri-yukle' komutunu) "
+            "çalıştırıp programı yeniden açın."
+        )
+    return (
+        "Yedek klasöründeki en son 'pre-migrate-*' veya günlük yedeği geri yüklemek için uçbirimde "
+        "oab-defteri --geri-yukle komutunu çalıştırıp programı yeniden açın."
+    )
+
+
+def run_migrations(*, platform: str | None = None) -> None:
     """`migrate --no-input` — hata halinde açılış durur (pencere açılmaz)."""
     from django.core.management import call_command
 
@@ -105,12 +122,7 @@ def run_migrations() -> None:
         logger.exception("Veritabanı güncellemesi başarısız.")
         raise MigrationError(
             "Veritabanı güncellenemedi; program veriyi korumak için açılmadı.",
-            hint=(
-                "Yedek klasöründeki en son 'pre-migrate-*' veya günlük yedeği geri "
-                "yüklemek için Başlat menüsündeki 'OAB Defteri — Yedekten Geri "
-                "Yükle' kısayolunu (veya 'oab-defteri --geri-yukle' komutunu) "
-                "çalıştırıp programı yeniden açın."
-            ),
+            hint=_goc_hatasi_ipucu(sys.platform if platform is None else platform),
         ) from exc
 
 
@@ -154,37 +166,42 @@ def is_parcacigi_baglantisiyla[T](islem: Callable[[], T]) -> T:
             baglanti.close()
 
 
-def wal_checkpoint(db_path: Path) -> bool:
-    """Düzenli kapanışta WAL'i ana dosyaya yazar ve kırpar (TB14).
+def baglantilari_kapat() -> None:
+    """Bu iş parçacığının Django bağlantılarını kapatır; Django kurulmamışsa sessiz.
 
-    İki sunucu durduktan SONRA çağrılır: `PRAGMA wal_checkpoint(TRUNCATE)`
-    bütün WAL sayfalarını veritabanı dosyasına aktarır ve `-wal` dosyasını
-    sıfırlar. Böylece kurucunun kapatma olayında ya da elektrik kesintisinde
-    geriye tek, tutarlı bir dosya kalır. Başka bir bağlantı hâlâ okuyorsa
-    checkpoint kısmi kalır (sonuç `False`); hata çıkışı durdurmaz.
+    Açılış zinciri ORM'yi ANA iş parçacığında kullanır (göç, açılış olayları, yetim taramasının
+    olayı). Kimse kapatmazsa bu bağlantı oturum boyunca `db.sqlite3`, `-wal` ve `-shm` tanıtıcılarını
+    tutar; `live_restore`'un `connections.close_all()`'u yalnız kendi iş parçacığını kapattığı için
+    Windows'ta uygulama içi geri yüklemenin takası her denemede erişim hatasıyla düşerdi
+    (`is_parcacigi_baglantisiyla`'daki kural). Masaüstü kabuğu bu yüzden sunucudan önce çağırır.
     """
-    import sqlite3
-    from contextlib import closing
-
-    if not db_path.exists():
-        return False
     try:
         from django.db import connections
 
-        connections.close_all()  # bu iş parçacığının Django bağlantıları
+        connections.close_all()
     except Exception:  # noqa: BLE001 — Django kurulmamış olabilir (açılış hatası)
         logger.debug("Django bağlantıları kapatılamadı (Django kurulmamış olabilir).")
-    try:
-        with closing(sqlite3.connect(db_path, timeout=5)) as baglanti:
-            mesgul, _, _ = baglanti.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
-    except sqlite3.Error:
-        logger.warning("Kapanışta WAL checkpoint yapılamadı.", exc_info=True)
+
+
+def wal_checkpoint(db_path: Path) -> bool:
+    """Düzenli kapanışta WAL'i ana dosyaya yazar ve kırpar (TB14).
+
+    İki sunucu durduktan SONRA çağrılır: bütün WAL sayfaları veritabanı dosyasına aktarılır,
+    `-wal` dosyası sıfırlanır (`backup.wal_bosalt`). Böylece kurucunun kapatma olayında ya da
+    elektrik kesintisinde geriye tek, tutarlı bir dosya kalır. Başka bir bağlantı hâlâ okuyorsa
+    checkpoint kısmi kalır (sonuç `False`); hata çıkışı durdurmaz.
+    """
+    if not db_path.exists():
         return False
-    if mesgul:
-        logger.warning("Kapanışta WAL checkpoint kısmi kaldı (veritabanı meşgul).")
-        return False
-    logger.info("Kapanışta WAL checkpoint yapıldı.")
-    return True
+    baglantilari_kapat()
+    return wal_bosalt(db_path)
+
+
+def upload_limit() -> int:
+    """Ayardaki yükleme sınırı (bayt); gömülü sunucunun tampon eşiği bundan türer."""
+    from django.conf import settings
+
+    return int(settings.FILE_UPLOAD_MAX_MEMORY_SIZE)
 
 
 def build_wsgi_application() -> object:

@@ -43,7 +43,7 @@ VERİLERİNİZ NEREDE?
 Program her gün bir yedek alır (açılışta ve açık kaldığı sürece gün
 değişince) ve 14 günden eski yedekleri siler. Bu yedekler bilgisayarın
 kendisindedir: disk bozulursa onlar da gider. Ayda bir Ayarlar → Güvenlik'teki
-"Şifreli yedeği indir" düğmesiyle yedek alıp USB belleğe kopyalayın ve USB'yi
+"Şifreli yedeği kaydet" düğmesiyle yedeği USB belleğe kaydedin ve belleği
 bilgisayardan ayrı saklayın.
 
 YEDEKTEN GERİ YÜKLEME
@@ -56,8 +56,8 @@ uçbirimden:
 Yedekler listelenir ve seçtiğiniz yedek veritabanının yerine konur. Yedekler
 şifrelidir; program yöneticisi hesabının tanıtıcısı ve parolası ya da kurtarma
 anahtarı sorulur (parolayla geri yüklemeyi yalnız program yöneticisi hesabı
-yapar). Mevcut (bozuk) dosya silinmez; 'db-onceki-*' adıyla veri klasöründe
-saklanır.
+yapar). Mevcut (bozuk) dosya 'db-onceki-*' adıyla veri klasöründe 14 gün
+saklanır, sonra silinir.
 
 GEREKLİ SİSTEM PAKETLERİ
 ------------------------

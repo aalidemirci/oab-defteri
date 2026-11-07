@@ -48,8 +48,9 @@ kartın hatası öteki kartları düşürmez; ön yüz "Bütünlük Durumu Okuna
   doğrulamasının bulgu kodları ve düzeyi ya da girişte tutmayan hesap mührü), `geri_yukleme`
   (son `GERI_YUKLEME` satırı: geri yüklemenin anı nottan, satırın anı ilk girişten; yedeği açan
   yol hesap ya da kurtarma anahtarı no'su; uygulama içinden yapıldıysa başlatan oturumun hesabı;
-  Denetleme Kurulu "gördüm" diyene dek) ve `muhru_tutmayan` (kaydı program dışından
-  değiştirilmiş görünen hesaplar, canlı).
+  Denetleme Kurulu "gördüm" diyene dek), `muhru_tutmayan` (kaydı program dışından
+  değiştirilmiş görünen hesaplar, canlı) ve `eksik_ekler` (satırı olup dosyası olmayan ekler,
+  canlı; özgün ad yalnız burada ve kaydın kendisinde görünür; `dosya_deposu.eksik_ekler`).
 * `GET  security/integrity/two-store/` → iki depo kartı, yalnız program yöneticisi
   (`iz_dogrulama.iki_depo_karti`; §4.6.1 kural 4): `iki_depo` {`fark_var`,
   `sarmalsiz_hesaplar`, `silinebilir_sarmallar`} (canlı fark; fark hesaplanamazsa `null`).

@@ -40,6 +40,7 @@ function ozetOlustur(durum: OturumDurumAdi, ek: Partial<OturumOzeti> = {}): Otur
     bosta_kalan_sn: acik ? 161 : null,
     kilit_bekliyor: false,
     kurulum_tamam: true,
+    yukleme_siniri_mb: 20,
     ...ek,
   };
 }

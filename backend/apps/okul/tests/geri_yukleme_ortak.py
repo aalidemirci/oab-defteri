@@ -23,32 +23,43 @@ satırın YAZILDIĞI hâlinin içerik MAC'iyle `SISTEM` `HESAP` iz satırı yaz�
 gibi). İçerik MAC'i ve zincir MAC'i burada okuyucudan BAĞIMSIZ kurulur (`kanonik` ile, alanlar
 sözlükten): okuyucunun ham sütun çevirisi böylece sınanır. Hesap tablosu içerik MAC'ine giren
 bütün sütunları taşır; ad-soyad DEK'le şifreli uydurma addır.
+
+Ekli görüntü (`ekli_sqlite`; plan F1b-3 "Geri yükleme"): `yetkili_sqlite`'ın dosyasına göçün kurduğu
+`okul_attachment` sütunları eklenir, satırlar depo servisinin yazdığı biçimdedir. Varsayılan hesabı
+`GORUNTU_HESABI`dır: girişe açık program yöneticisi taşımayan yedek geri yüklenmez (kullanıcı kararı
+07.11.2026), ek sınamalarının konusu ise hesap değildir. `OrnekEk` kabı ve
+sarmalı gerçektir (`ds.dosya_hazirla`). Gerçek şema ve gerçek yazıcı
+`test_tam_yedek.py::test_tam_yedekte_ekli_kayit_geri_yuklemeden_sonra_acilir`'de sınanır. Kişi adı
+taşıyan özgün ad uydurmadır ve yalnız raporda ya da notta bulunmadığını göstermek içindir.
 """
 
 from __future__ import annotations
 
 import base64
-import json
 import sqlite3
 import uuid
 from collections.abc import Iterable
 from contextlib import closing
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
 from cryptography.fernet import Fernet
 from desktop.backup_crypto import (
-    encrypt_bytes,
+    KAPSAM_YEREL,
+    Manifesto,
+    ManifestoGirdisi,
     private_key_from_data_key,
-    recovery_header_from_state,
+    tam_yedek_yaz,
 )
+from desktop.tests.kap_ortak import durum_basligi, kap_kur
 from django.db import connection, transaction
 
 from apps.okul.services import app_password, backup_restore, geri_yukleme_yetkisi
-from conftest import TEST_DEK, TEST_IA
+from conftest import TEST_DEK, TEST_HESAP_ID, TEST_IA, TEST_TANITICI
 from shared import crypto, kanonik
+from shared import dosya_sifreleme as ds
 
 #: Uydurma açılış anı (UTC; mikrosaniyesiz: Django kesirsiz yazar).
 ACILIS = datetime(2026, 10, 31, 7, 30, tzinfo=UTC)
@@ -75,6 +86,10 @@ class HesapSatiri:
     bekleyen_ozet: str = ""
     #: Satırın iz satırı yazılsın mı (modül başlığı); yanlışsa satırın izi yoktur (fail-closed).
     iz: bool = True
+
+
+#: Konusu hesap olmayan görüntülerin program yöneticisi satırı (modül başlığı "Ekli görüntü").
+GORUNTU_HESABI = HesapSatiri(TEST_HESAP_ID, TEST_TANITICI)
 
 
 def sarmal_ozeti(dek: bytes, hesap_id: str) -> str:
@@ -313,6 +328,117 @@ def yetkili_sqlite(
     return yol.read_bytes()
 
 
+#: Eklerin uydurma özgün adı: rapora, nota, günlüğe ve iz satırına girmemelidir.
+OZGUN_AD = "Uydurgül Masalcıoğlu dilekçesi.pdf"
+#: Uydurma ek içerikleri (imza baytı kabul edilen türden).
+PDF = b"%PDF-1.7\nuydurma belge icerigi\n"
+PNG = b"\x89PNG\r\n\x1a\nuydurma resim"
+
+
+@dataclass(frozen=True)
+class OrnekEk:
+    """Uydurma bir ek: gerçek kabı ve sarmalı, satırının açık sütunları."""
+
+    hazir: ds.HazirDosya = field(repr=False)
+    owner_type: str = "okul.SchoolYear"
+    owner_id: str = "7"
+    #: Saat dilimsiz UTC metni; 21:30 UTC yerelde ertesi gündür (saat dilimi sınaması).
+    uploaded_at: str = "2026-11-03 21:30:00"
+    purged_at: str | None = None
+
+    @property
+    def ad(self) -> str:
+        return self.hazir.stored_name
+
+    @property
+    def girdi(self) -> ManifestoGirdisi:
+        return ManifestoGirdisi(self.ad, self.hazir.size, self.hazir.sha256)
+
+
+def ornek_ek(acik: bytes = PDF, *, dek: bytes = TEST_DEK, **alanlar: Any) -> OrnekEk:
+    return OrnekEk(ds.dosya_hazirla(acik, sarmal_anahtari=crypto.file_wrap_key(dek)), **alanlar)
+
+
+def ek_tablosu_ekle(yol: Path, ekler: Iterable[OrnekEk]) -> None:
+    """Var olan SQLite dosyasına `okul_attachment` tablosunu ve satırları yazar."""
+    with closing(sqlite3.connect(yol)) as baglanti:
+        baglanti.execute(
+            "CREATE TABLE okul_attachment (stored_name varchar(32) NOT NULL PRIMARY KEY, "
+            "original_name text NOT NULL, key_wrap text NOT NULL, sha256 varchar(64) NOT NULL, "
+            "size integer NOT NULL, owner_type varchar(100) NOT NULL, "
+            "owner_id varchar(64) NOT NULL, uploaded_at datetime NOT NULL, purged_at datetime NULL)"
+        )
+        baglanti.executemany(
+            "INSERT INTO okul_attachment VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    ek.ad,
+                    OZGUN_AD,
+                    ek.hazir.key_wrap,
+                    ek.hazir.sha256,
+                    ek.hazir.size,
+                    ek.owner_type,
+                    ek.owner_id,
+                    ek.uploaded_at,
+                    ek.purged_at,
+                )
+                for ek in ekler
+            ],
+        )
+        baglanti.commit()
+
+
+def ekli_sqlite(
+    yol: Path,
+    ekler: Iterable[OrnekEk],
+    *,
+    dek: bytes = TEST_DEK,
+    hesaplar: Iterable[HesapSatiri] = (GORUNTU_HESABI,),
+    isaret: str = "",
+) -> bytes:
+    """`yetkili_sqlite` ve ek tablosu; dosyanın baytlarını döndürür."""
+    yetkili_sqlite(yol, dek=dek, hesaplar=hesaplar, isaret=isaret)
+    ek_tablosu_ekle(yol, ekler)
+    return yol.read_bytes()
+
+
+def depoya_koy(dizin: Path, *ekler: OrnekEk) -> None:
+    """Eklerin kaplarını `dizin`'e yazar (depo ya da tam yedeğin kaynağı)."""
+    ds.dizin_kur(dizin)
+    for ek in ekler:
+        ds.depoya_yaz(dizin, ek.ad, ek.hazir.kap)
+
+
+def yerel_yedek_yaz(
+    hedef: Path, goruntu: bytes, ekler: Iterable[OrnekEk], *, dek: bytes = TEST_DEK
+) -> None:
+    """Manifestosu `ekler` olan yerel yedek; kurtarma başlığı güncel güvenlik dosyasındandır."""
+    manifesto = Manifesto(KAPSAM_YEREL, tuple(ek.girdi for ek in ekler))
+    baslik = durum_basligi(app_password.read_state() or {})
+    hedef.parent.mkdir(parents=True, exist_ok=True)
+    hedef.write_bytes(kap_kur(goruntu, dek, baslik=baslik, manifesto=manifesto))
+
+
+def tam_yedek_kur(
+    hedef: Path,
+    goruntu: bytes,
+    ekler: Iterable[OrnekEk],
+    kaynak_depo: Path,
+    *,
+    dek: bytes = TEST_DEK,
+) -> Manifesto:
+    """`kaynak_depo`'daki dosyalardan gerçek yazıcıyla tam yedek (`tam_yedek_yaz`)."""
+    manifesto: Manifesto = tam_yedek_yaz(
+        hedef,
+        goruntu,
+        [ek.girdi for ek in ekler],
+        kaynak_depo,
+        private_key_from_data_key(dek).public_key(),
+        recovery_header=durum_basligi(app_password.read_state() or {}),
+    )
+    return manifesto
+
+
 def duz_sqlite(yol: Path, isaret: str) -> bytes:
     """Yalnız `kayit` tablosu taşıyan SQLite dosyası (okul kartı ve hesap tablosu yok)."""
     yol.unlink(missing_ok=True)
@@ -341,11 +467,9 @@ def goruntu(yol: Path) -> bytes:
 
 def sifreli_yedek(icerik: bytes) -> bytes:
     """Bu kurulumun DEK'iyle, güncel kurtarma başlığını gömen şifreli yedek."""
-    baslik = json.dumps(
-        recovery_header_from_state(app_password.read_state() or {}), ensure_ascii=False
-    ).encode("utf-8")
-    acik = private_key_from_data_key(TEST_DEK).public_key()
-    return cast("bytes", encrypt_bytes(icerik, acik, recovery_header=baslik))
+    return cast(
+        "bytes", kap_kur(icerik, TEST_DEK, baslik=durum_basligi(app_password.read_state() or {}))
+    )
 
 
 def geri_yukle(
@@ -354,7 +478,7 @@ def geri_yukle(
     guncel: bytes | None,
     *,
     kapsayici: bytes | None = None,
-    **sir: str,
+    **sir: Any,
 ) -> Path:
     """`guncel` (yoksa veritabanı dosyası yok) yerine `yedek`i geri yükler; hedefin yolunu döndürür.
 

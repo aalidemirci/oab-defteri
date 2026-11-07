@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from desktop import clean_shutdown
 from desktop.clean_shutdown import (
     ENV_PREVIOUS_SESSION,
     MARKER_FILE_NAME,
@@ -19,8 +20,15 @@ from desktop.clean_shutdown import (
     publish,
     restore_after_failed_startup,
     write_marker,
+    write_marker_if_idle,
     write_marker_quietly,
 )
+
+
+def gunluk_metni(kayitlar: list[logging.LogRecord]) -> str:
+    """Kayıtların dosyaya yazılacak metni: `exc_info`'nun yığını ve iletisi dâhil."""
+    bicim = logging.Formatter("%(message)s")
+    return "\n".join(bicim.format(kayit) for kayit in kayitlar)
 
 
 def _veri(tmp_path: Path, *, db: bool) -> tuple[Path, Path]:
@@ -137,3 +145,76 @@ def test_ortam_degiskeni_yoksa_ya_da_tanimsizsa_bilinmiyor() -> None:
     assert previous_session_from_env({}) is None
     assert previous_session_from_env({ENV_PREVIOUS_SESSION: "başka"}) is None
     assert previous_session_from_env({ENV_PREVIOUS_SESSION: "temiz"}) is PreviousSession.CLEAN
+
+
+# ----------------------------------------------- uzun iş sayacı (tasarım §4.2)
+
+
+def test_sayac_sifirsa_isaret_yazilir(tmp_path: Path) -> None:
+    write_marker_if_idle(tmp_path, "1.0.0", lambda: 0)
+
+    assert marker_path(tmp_path).is_file()
+
+
+def test_sayac_sifir_degilse_isaret_yazilmaz(
+    tmp_path: Path, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    write_marker_if_idle(tmp_path, "1.0.0", lambda: 1)
+
+    assert not marker_path(tmp_path).exists()
+    assert "Uzun iş sürerken" in gunluk_metni(od_gunlugu)
+
+
+def test_sayac_okunamazsa_isaret_yazilmaz(
+    tmp_path: Path, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    def patlar() -> int:
+        raise RuntimeError(f"okunamadı: {tmp_path}")
+
+    write_marker_if_idle(tmp_path, "1.0.0", patlar)
+
+    assert not marker_path(tmp_path).exists()
+    assert "okunamadı (RuntimeError)" in gunluk_metni(od_gunlugu)
+    assert str(tmp_path) not in gunluk_metni(od_gunlugu)
+
+
+def test_sayac_sayi_degilse_isaret_yazilmaz(tmp_path: Path) -> None:
+    """`None` sıfır değildir: okunamayan değer işaret yazdırmaz."""
+    write_marker_if_idle(tmp_path, "1.0.0", lambda: None)  # type: ignore[arg-type,return-value]
+
+    assert not marker_path(tmp_path).exists()
+
+
+# ---------------------------------------------------- günlüğe yol düşmez (R1)
+
+
+def test_isaret_silinemezse_gunluge_yol_dusmez(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    """`exc_info` da yolu taşır: Windows yolu hesap adını içerir, bu günlük BTR'ye iletilir."""
+    write_marker(tmp_path, "1.0.0")
+    yol = marker_path(tmp_path)
+
+    def silinemez(_yol: Path) -> None:
+        raise PermissionError(13, "erişim reddedildi", str(yol))
+
+    monkeypatch.setattr(Path, "unlink", silinemez)
+
+    assert consume_marker(tmp_path, tmp_path / "db.sqlite3") is PreviousSession.CLEAN
+
+    assert "silinemedi (PermissionError)" in gunluk_metni(od_gunlugu)
+    assert str(tmp_path) not in gunluk_metni(od_gunlugu)
+
+
+def test_isaret_yazilamazsa_gunluge_yol_dusmez(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    def yazilamaz(*_a: object, **_k: object) -> None:
+        raise PermissionError(13, "erişim reddedildi", str(tmp_path / "temiz-kapanis.json"))
+
+    monkeypatch.setattr(clean_shutdown, "write_marker", yazilamaz)
+
+    clean_shutdown.write_marker_quietly(tmp_path, "1.0.0")
+
+    assert "yazılamadı (PermissionError)" in gunluk_metni(od_gunlugu)
+    assert str(tmp_path) not in gunluk_metni(od_gunlugu)

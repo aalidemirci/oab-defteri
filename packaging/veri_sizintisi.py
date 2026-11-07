@@ -53,11 +53,13 @@ YASAK_UZANTILAR = frozenset(
         ".ods",
     }
 )
-# Medya DATA_DIR altındadır (paket içi yolu backend/data/media/...): ("data","media")
-# çifti onu, ("backend","data") çifti geliştirme veri dizininin tamamını yakalar.
+# Dosya deposu DATA_DIR altındadır (paket içi yolu backend/data/dosyalar/...; plan F1b-3):
+# ("data","dosyalar") çifti onu, ("backend","data") çifti geliştirme veri dizininin tamamını
+# yakalar. ("data","media") ailenin kalkan MEDIA_ROOT'undan kalan dizini tutar.
 YASAK_DIZIN_CIFTLERI = frozenset(
     {
         ("backend", "data"),
+        ("data", "dosyalar"),
         ("data", "media"),
     }
 )

@@ -100,6 +100,7 @@ def test_kayip_acik_listesi_anlik_goruntuyle_sabittir() -> None:
         "/api/v1/security/session/": ["GET", "HEAD"],
         "/api/v1/security/state/reset/": ["POST"],
         "/api/v1/backups/": ["GET", "HEAD"],
+        "/api/v1/backups/inspect/": ["POST"],
         "/api/v1/backups/restore/": ["POST"],
         "/api/v1/app/quit/": ["POST"],
     }

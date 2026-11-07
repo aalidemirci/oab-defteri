@@ -1,4 +1,5 @@
-// saveBlob DOM akışı testi (Tur 535): createObjectURL → <a download> → revoke.
+// saveBlob: masaüstünde dosyayı program kaydeder (`dosya_kaydet`; kullanıcı kararı 07.11.2026
+// "Program kaydetsin"), köprü yoksa DOM akışı: createObjectURL → <a download> → revoke.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -25,10 +26,11 @@ describe("saveBlob", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    delete window.pywebview;
   });
 
-  it("blob için geçici URL açar, bağlantıyı tıklar ve URL'yi gecikmeli bırakır", () => {
-    vi.useFakeTimers();
+  function urlYakala() {
     const createObjectURL = vi.fn(() => "blob:test-url");
     const revokeObjectURL = vi.fn();
     vi.stubGlobal("URL", {
@@ -37,8 +39,14 @@ describe("saveBlob", () => {
       revokeObjectURL,
     });
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    return { createObjectURL, revokeObjectURL, click };
+  }
 
-    saveBlob(new Blob(["test"]), "dosya.xlsx");
+  it("köprü yoksa blob için geçici URL açar, bağlantıyı tıklar, URL'yi gecikmeli bırakır", async () => {
+    vi.useFakeTimers();
+    const { createObjectURL, revokeObjectURL, click } = urlYakala();
+
+    await expect(saveBlob(new Blob(["test"]), "dosya.xlsx")).resolves.toBe("indirildi");
 
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(click).toHaveBeenCalledTimes(1);
@@ -48,6 +56,78 @@ describe("saveBlob", () => {
 
     vi.advanceTimersByTime(1_000);
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:test-url");
+  });
+
+  it("pencere eskiyse (köprüde işlev yoksa) tarayıcının indirmesine düşer", async () => {
+    const { click } = urlYakala();
+    window.pywebview = { api: { set_titlebar_theme: vi.fn() } };
+
+    await expect(saveBlob(new Blob(["test"]), "dosya.xlsx")).resolves.toBe("indirildi");
+
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it("köprü varsa içeriği base64 metin, adı önerilen ad olarak verir; bağlantı tıklanmaz", async () => {
+    const { createObjectURL, click } = urlYakala();
+    const dosya_kaydet = vi.fn().mockResolvedValue("kaydedildi");
+    window.pywebview = { api: { dosya_kaydet } };
+
+    await expect(
+      saveBlob(new Blob(["çğ%PDF"], { type: "application/pdf" }), "Yedek-Raporu.pdf"),
+    ).resolves.toBe("kaydedildi");
+
+    expect(dosya_kaydet).toHaveBeenCalledTimes(1);
+    const [icerik, ad] = dosya_kaydet.mock.calls[0] as [string, string];
+    expect(ad).toBe("Yedek-Raporu.pdf");
+    expect(new TextDecoder().decode(Uint8Array.from(atob(icerik), (c) => c.charCodeAt(0)))).toBe(
+      "çğ%PDF",
+    );
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it("ev klasörü işareti yalnız istenince köprüye true gider (kurtarma anahtarı belgesi)", async () => {
+    const dosya_kaydet = vi.fn().mockResolvedValue("kaydedildi");
+    window.pywebview = { api: { dosya_kaydet } };
+
+    await saveBlob(new Blob(["a"]), "Yedek-Raporu.pdf");
+    await saveBlob(new Blob(["a"]), "Kurtarma-Anahtarı-Belgesi.pdf", { evKlasorunde: true });
+
+    expect(dosya_kaydet.mock.calls.map((cagri) => cagri[2])).toEqual([false, true]);
+  });
+
+  it.each([
+    ["iptal", "iptal"],
+    ["hata", "hata"],
+    // Köprünün tanımadığı dönüşü başarı sayılmaz.
+    ["belirsiz", "hata"],
+  ])("köprünün %s dönüşü sonuç olarak yansır", async (donus, beklenen) => {
+    window.pywebview = { api: { dosya_kaydet: vi.fn().mockResolvedValue(donus) } };
+
+    await expect(saveBlob(new Blob(["test"]), "dosya.pdf")).resolves.toBe(beklenen);
+  });
+
+  it("blob okunamazsa sonuç hatadır; köprüye boş içerik gitmez", async () => {
+    const dosya_kaydet = vi.fn().mockResolvedValue("kaydedildi");
+    window.pywebview = { api: { dosya_kaydet } };
+    class OkunamayanOkuyucu {
+      error = new DOMException("okunamadı", "NotReadableError");
+      onerror: (() => void) | null = null;
+      readAsDataURL() {
+        queueMicrotask(() => this.onerror?.());
+      }
+    }
+    vi.stubGlobal("FileReader", OkunamayanOkuyucu);
+
+    await expect(saveBlob(new Blob(["test"]), "dosya.pdf")).resolves.toBe("hata");
+
+    expect(dosya_kaydet).not.toHaveBeenCalled();
+  });
+
+  it("köprü reddederse sonuç hatadır; ret çağırana yükselmez", async () => {
+    window.pywebview = { api: { dosya_kaydet: vi.fn().mockRejectedValue(new Error("köprü")) } };
+
+    await expect(saveBlob(new Blob(["test"]), "dosya.pdf")).resolves.toBe("hata");
   });
 });
 

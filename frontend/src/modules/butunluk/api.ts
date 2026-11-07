@@ -14,8 +14,8 @@
 //
 // ROLE GÖRE ÜÇ UÇ (tasarım §4.4.2 "kısmi yetki ayrı uçla verilir"; plan F1b-2): kendi kartları
 // (`security/integrity/`: son girişler, parola yenilenme, kâğıt çapası) her role açıktır;
-// denetim kartları (`audit/`: bütünlük, geri yükleme, mührü tutmayan hesaplar) program
-// yöneticisi ve Denetleme Kuruluna; iki depo kartı (`two-store/`) ve sahipsiz kaydın
+// denetim kartları (`audit/`: bütünlük, geri yükleme, mührü tutmayan hesaplar, eksik ekler)
+// program yöneticisi ve Denetleme Kuruluna; iki depo kartı (`two-store/`) ve sahipsiz kaydın
 // silinmesi yalnız program yöneticisine; geri yükleme kartının "Gördüm"ü (`restore-seen/`)
 // yalnız Denetleme Kuruluna. Hangi ucun çağrılacağını oturum özetindeki yetenekler söyler
 // (`butunluk_denetim`, `iki_depo`, `geri_yukleme_gordum`; `oturum/useOturum.useYetenekler`,
@@ -24,6 +24,7 @@
 // Dosyası" kartının listesinde durur (program yöneticisinde iki depo farkıyla birlikte).
 
 import { api } from "../../lib/api";
+import type { DosyaSayilari } from "../guvenlik/api";
 import type { YetenekAdi } from "../oturum/api";
 
 /** Bulgunun düzeyi: yalnız kesinti bilgidir, öteki her bulgu uyarıdır (`iz_dogrulama`). */
@@ -43,6 +44,11 @@ export interface HesapOzeti {
    */
   acilis?: string | null;
   kapanis?: string | null;
+  /**
+   * Yalnız geri yükleme kartında, kimliği geçerli ama yerine konan kayıtlarda satırı olmayan
+   * hesapta true (`iz_dogrulama._geri_yukleme_hesabi`); öteki hesaplarda alan yoktur.
+   */
+  yedekte_yok?: boolean;
 }
 
 /**
@@ -91,6 +97,11 @@ export interface GeriYuklemeKaydi {
   onceki_zincir: string | null;
   /** Geri yükleme notu okunamadı: olgu kayıtlı, ayrıntılar yok. */
   ayrintisiz: boolean;
+  /**
+   * Dosya ayağının kişisiz sayıları (plan F1b-3 "Geri yükleme"). Bu bilgiyi taşımayan eski satırda
+   * boş nesnedir; biçimi tutmayan değer satıra girmediği için alanlar tek tek eksik olabilir.
+   */
+  dosyalar: Partial<DosyaSayilari>;
 }
 
 /**
@@ -135,6 +146,22 @@ export interface IkiDepoFarki extends IkiDepoKaydi {
   muhru_tutmayan: IkiDepoHesabi[];
 }
 
+/**
+ * Satırı olup depoda dosyası bulunmayan ek (`dosya_deposu.eksik_ekler`; tasarım §4.4.7 "Yetim ve
+ * eksik dosya"). Özgün ad yalnız burada ve kaydın kendisinde görünür (kullanıcı kararı 04.11.2026
+ * "Eksik ve bozuk ekler kişisiz bilgiyle listelenir"); kişi adı taşıyabilir, başka yere yazılmaz.
+ */
+export interface EksikEk {
+  kayit_turu: string;
+  kayit_no: string;
+  /** ISO gün (`yyyy-aa-gg`); ekranda gg.aa.yyyy. */
+  yukleme_tarihi: string;
+  /** Bayt cinsinden boy. */
+  boyut: number;
+  /** Çözülemeyen adda null. */
+  ozgun_ad: string | null;
+}
+
 /** Denetim izinin son kaydı — kâğıt çapası (tasarım §4.6.3): "Kayıt no: N · Zincir: XXXX-XXXX". */
 export interface KagitCapasi {
   kayit_no: number;
@@ -165,6 +192,8 @@ export interface DenetimKartlari {
   butunluk: ButunlukBulgusu[];
   geri_yukleme: GeriYuklemeOzeti | null;
   muhru_tutmayan: IkiDepoHesabi[];
+  /** Depo okunamazsa boştur ve adı `okunamayan`'dadır: boş liste "eksik yok" demek değildir. */
+  eksik_ekler: EksikEk[];
   okunamayan: string[];
 }
 
@@ -202,6 +231,8 @@ export interface ButunlukDurumu {
   geri_yukleme: GeriYuklemeOzeti | null;
   /** Kilit kapalıyken, fark hesaplanamazsa ya da rol iki ucu da açamıyorsa null. */
   iki_depo: IkiDepoFarki | null;
+  /** Dosyası bulunamayan ekler (denetim kartlarından; öteki rollerde boş). */
+  eksik_ekler: EksikEk[];
   /** Zincir boşsa null. */
   kagit_capasi: KagitCapasi | null;
   /** Oturumdaki hesabın son girişleri (en yeni önce, en çok 10). */
@@ -247,8 +278,11 @@ function liste<T>(deger: unknown): T[] {
   return Array.isArray(deger) ? [...(deger as T[])] : [];
 }
 
+/** Eksik ekler kartının `okunamayan`'daki adı: depo okunamadı, kart "eksik yok" demez. */
+export const EKSIK_EKLER_KARTI = "eksik_ekler";
+
 /** Denetim kartları ucunun kartları (yanıtı okunamazsa adları `okunamayan`'a yazılır). */
-const DENETIM_KARTLARI = ["butunluk", "geri_yukleme", "muhru_tutmayan"] as const;
+const DENETIM_KARTLARI = ["butunluk", "geri_yukleme", "muhru_tutmayan", EKSIK_EKLER_KARTI] as const;
 
 /**
  * "Hesaplar ve Güvenlik Dosyası" kartının durumu: iki depo kaydı (eksik liste boş) ve mührü
@@ -293,6 +327,7 @@ export function birlestir(
       i.iki_depo as IkiDepoKaydi | null | undefined,
       liste<IkiDepoHesabi>(d.muhru_tutmayan),
     ),
+    eksik_ekler: liste<EksikEk>(d.eksik_ekler),
     kagit_capasi: (kendi.kagit_capasi as KagitCapasi | null | undefined) ?? null,
     son_girisler: liste<string>(kendi.son_girisler),
     parola_yenilenme: (kendi.parola_yenilenme as ParolaYenilenme | null | undefined) ?? null,
@@ -321,8 +356,8 @@ export function ikiDepoyuBirlestir(durum: ButunlukDurumu, yanit: unknown): Butun
 
 /**
  * Denetim kartları ucunun güncel yanıtını ("Gördüm"den dönen) bileşik duruma yazar: bütünlük,
- * geri yükleme ve mührü tutmayan hesaplar yenilenir; iki depo kaydı (yalnız program yöneticisi)
- * korunur, denetim kartlarının okunamayan adları yenilenir. Yanıt nesne değilse denetim kartları
+ * geri yükleme, mührü tutmayan hesaplar ve eksik ekler yenilenir; iki depo kaydı (yalnız program
+ * yöneticisi) korunur, denetim kartlarının okunamayan adları yenilenir. Yanıt nesne değilse denetim kartları
  * okunamamış sayılır (uyarı sessizce kaybolmaz).
  */
 export function denetimiBirlestir(durum: ButunlukDurumu, yanit: unknown): ButunlukDurumu {
@@ -347,6 +382,7 @@ export function denetimiBirlestir(durum: ButunlukDurumu, yanit: unknown): Butunl
     butunluk: liste<ButunlukBulgusu>(y.butunluk),
     geri_yukleme: (y.geri_yukleme as GeriYuklemeOzeti | null | undefined) ?? null,
     iki_depo: ikiDepoFarki(kayit, liste<IkiDepoHesabi>(y.muhru_tutmayan)),
+    eksik_ekler: liste<EksikEk>(y.eksik_ekler),
     okunamayan: [
       ...durum.okunamayan.filter((ad) => !denetimAdlari.includes(ad)),
       ...(nesneMi(yanit) ? liste<string>(y.okunamayan) : DENETIM_KARTLARI),

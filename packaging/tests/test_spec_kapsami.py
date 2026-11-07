@@ -11,6 +11,11 @@ gerektirdiği Windows paketleri `packaging/requirements-paketleme.txt`'te
 toplanır ve `giris.py::DESKTOP_RUNTIME_MODULES` ile paketli ikilide import
 edilir. Testler iki listeyi platform işaretine göre eşitler.
 
+Üçüncü zincir backend'in içe aktardığı masaüstü modülleridir: `desktop/` arşive yalnız
+`giris.py`'nin statik zincirinden girer, kaynak olarak kopyalanan backend o zincire görünmez.
+Yalnız backend'in içe aktardığı modül spec `hiddenimports`'unda adıyla durmak zorundadır; yoksa
+Docker testleri geçer (orada `PYTHONPATH` depoyu gösterir), paketli program ilk istekte düşer.
+
 Ayrıca `giris.py` teşhis kipinin sözleşmesi sabitlenir: bayrak adı, çıkış kodu
 (desktop/errors.py ile ikiz) ve hedef dosya ayrıştırması — üç paket betiği
 (build.ps1, build.sh, kap-ici-test.sh) bu sözleşmeye dışarıdan bağlıdır.
@@ -30,6 +35,8 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 SPEC = REPO / "packaging" / "pyinstaller" / "oab_defteri.spec"
+GIRIS = REPO / "packaging" / "pyinstaller" / "giris.py"
+BACKEND = REPO / "backend"
 REQUIREMENTS = REPO / "backend" / "requirements.txt"
 PAKETLEME_REQUIREMENTS = REPO / "packaging" / "requirements-paketleme.txt"
 
@@ -53,6 +60,7 @@ DAGITIM_IMPORT_ESLEME = {
 }
 
 _PIN = re.compile(r"^([A-Za-z0-9_.\-]+)==", re.MULTILINE)
+_NOKTALI_MASAUSTU_ADI = re.compile(r"desktop(\.\w+)+")
 
 
 def _gereksinimler() -> list[str]:
@@ -73,6 +81,134 @@ def test_her_backend_bagimliligi_spec_kapsaminda() -> None:
         if not kapsandi:
             eksik.append(f"{dagitim} → {modul}")
     assert eksik == [], f"spec hiddenimports şu bağımlılıkları kapsamıyor: {eksik}"
+
+
+def _ithal_adlari(yol: Path, paket: str = "") -> set[str]:
+    """Dosyanın içe aktardığı mutlak modül adları; fonksiyon içi ve koşullu olanlar dâhil.
+
+    PyInstaller'ın modül çizgesi de bütün `import` deyimlerini sayar. `from a import b`'de `b` alt
+    modül olabilir: iki ad da verilir, depoda karşılığı olmayan elenir. `paket` göreli içe aktarmanın
+    tabanıdır.
+    """
+    adlar: set[str] = set()
+    for dugum in ast.walk(ast.parse(yol.read_text(encoding="utf-8"))):
+        if isinstance(dugum, ast.Import):
+            adlar.update(ad.name for ad in dugum.names)
+        elif isinstance(dugum, ast.ImportFrom):
+            taban = dugum.module or ""
+            if dugum.level:
+                ust = paket.rsplit(".", dugum.level - 1)[0]
+                taban = f"{ust}.{taban}" if taban else ust
+            adlar.add(taban)
+            adlar.update(f"{taban}.{ad.name}" for ad in dugum.names)
+    return adlar
+
+
+def _masaustu_dosyasi(modul: str) -> Path | None:
+    """`desktop.x` modülünün depodaki dosyası; masaüstü modülü değilse None."""
+    if not modul.startswith("desktop."):
+        return None
+    yol = REPO.joinpath(*modul.split("."))
+    adaylar = (yol.with_suffix(".py"), yol / "__init__.py")
+    return next((aday for aday in adaylar if aday.is_file()), None)
+
+
+def _statik_kapanis(gizliler: set[str]) -> set[str]:
+    """`giris.py`'den ve `hiddenimports`'tan erişilen bütün masaüstü modülleri."""
+    kapanis: set[str] = set()
+    bekleyen = [*_ithal_adlari(GIRIS), *gizliler]
+    while bekleyen:
+        modul = bekleyen.pop()
+        dosya = _masaustu_dosyasi(modul)
+        if dosya is None or modul in kapanis:
+            continue
+        kapanis.add(modul)
+        bekleyen.extend(_ithal_adlari(dosya, modul.rpartition(".")[0]))
+    return kapanis
+
+
+def _spec_masaustu_gizlileri() -> set[str]:
+    """spec'in dize sabitlerindeki `desktop.*` adları (yorumlar sayılmaz)."""
+    return {
+        dugum.value
+        for dugum in ast.walk(ast.parse(SPEC.read_text(encoding="utf-8")))
+        if isinstance(dugum, ast.Constant)
+        and isinstance(dugum.value, str)
+        and dugum.value.startswith("desktop.")
+    }
+
+
+def _dizeyle_verilen_adlar(yol: Path) -> set[str]:
+    """Dizeyle verilen `desktop.x.Sinif` adlarının modül adayları (ör. ara katman listesi)."""
+    adlar: set[str] = set()
+    for dugum in ast.walk(ast.parse(yol.read_text(encoding="utf-8"))):
+        if (
+            isinstance(dugum, ast.Constant)
+            and isinstance(dugum.value, str)
+            and _NOKTALI_MASAUSTU_ADI.fullmatch(dugum.value)
+        ):
+            parcalar = dugum.value.split(".")
+            adlar.update(".".join(parcalar[:son]) for son in range(2, len(parcalar) + 1))
+    return adlar
+
+
+def _backendin_masaustu_modulleri() -> dict[str, list[str]]:
+    """Pakete giren backend kodunun kullandığı masaüstü modülleri → kullanan dosyalar."""
+    gerekenler: dict[str, list[str]] = {}
+    for yol in BACKEND.rglob("*.py"):
+        goreli = yol.relative_to(BACKEND)
+        if "tests" in goreli.parts or yol.name == "conftest.py":
+            continue  # spec `tests`'i paketlemez; conftest yalnız geliştirmede koşar
+        for modul in _ithal_adlari(yol) | _dizeyle_verilen_adlar(yol):
+            if _masaustu_dosyasi(modul) is not None:
+                gerekenler.setdefault(modul, []).append(goreli.as_posix())
+    return gerekenler
+
+
+def test_backendin_ice_aktardigi_masaustu_modulleri_pakete_girer() -> None:
+    gizliler = _spec_masaustu_gizlileri()
+    kapanis = _statik_kapanis(gizliler)
+    gerekenler = _backendin_masaustu_modulleri()
+
+    assert "desktop.main" in kapanis  # zincir gerçekten yüründü
+    assert "desktop.backup_crypto" in gerekenler  # içe aktarma görüldü
+    assert "desktop.session_guard" in gerekenler  # dizeyle verilen ad görüldü (`settings`)
+    eksik = {modul: gerekenler[modul] for modul in gerekenler.keys() - kapanis}
+    assert eksik == {}, (
+        "Bu masaüstü modüllerini yalnız backend içe aktarıyor, paket onları almaz; spec "
+        f"`hiddenimports`'a adlarıyla ekleyin: {eksik}"
+    )
+
+
+def test_spec_masaustu_gizlileri_depoda_vardir() -> None:
+    """Modül taşınırsa PyInstaller yalnız uyarır; bayat ad burada düşer."""
+    gizliler = _spec_masaustu_gizlileri()
+
+    assert gizliler
+    assert {modul for modul in gizliler if _masaustu_dosyasi(modul) is None} == set()
+
+
+def test_ithal_adlari_fonksiyon_ici_ve_goreli_ice_aktarmayi_gorur(tmp_path: Path) -> None:
+    yol = tmp_path / "ornek.py"
+    yol.write_text(
+        "import desktop.bir\n"
+        "from desktop import iki\n"
+        "from . import uc\n"
+        "from .dort import x\n"
+        "def f():\n"
+        "    from desktop.bes import y\n",
+        encoding="utf-8",
+    )
+
+    adlar = _ithal_adlari(yol, "desktop")
+
+    assert {
+        "desktop.bir",
+        "desktop.iki",
+        "desktop.uc",
+        "desktop.dort",
+        "desktop.bes",
+    } <= adlar
 
 
 def test_spec_yalniz_var_olan_kaynak_agaclarini_paketler() -> None:

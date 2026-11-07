@@ -280,7 +280,7 @@ def test_silme_ilkesinin_tek_cagirani_silme_servisidir() -> None:
     assert yerler == {("apps/okul/erisim_gunlugu.py", "suresi_dolanlari_sil")}
 
 
-#: Kökü `AccessLog` olan zincirde geçince zinciri YAZIM (ya da silme) yapan adlar: yönetici ve
+#: Kökü taranan model olan zincirde geçince zinciri YAZIM (ya da silme) yapan adlar: yönetici ve
 #: queryset yazımları, örnek yazımı, Django'nun iç yazıcıları, ham sorgu, model yöntemlerini
 #: atlayan yöneticiler ve tek silme ilkesi. Kurucu çağrısı (`AccessLog(…)`) da yazımdır.
 _GUNLUK_YAZIM_ADLARI = frozenset(
@@ -335,17 +335,26 @@ def _birim_adi(dugum: ast.AST, ust: dict[ast.AST, ast.AST]) -> str:
     return ".".join(reversed(adlar)) or "<modül>"
 
 
-def _gunluk_yazimlari(kaynaklar: dict[str, str]) -> set[tuple[str, str, tuple[str, ...]]]:
-    """Kökü `AccessLog` olan yazım zincirleri ve kökü gizleyen başvurular: (dosya, birim, adlar).
+def _kok_yazimlari(
+    kaynaklar: dict[str, str],
+    *,
+    kok: str,
+    ad_deseni: re.Pattern[str],
+    okuma_dizeleri: tuple[tuple[str, str], ...] = (),
+) -> set[tuple[str, str, tuple[str, ...]]]:
+    """Kökü `kok` modeli olan yazım zincirleri ve kökü gizleyen başvurular: (dosya, birim, adlar).
 
-    Kök `AccessLog` adı ya da `x.AccessLog` özniteliğidir; zincir kökten yukarı öznitelik,
+    Örneklerdeki model `AccessLog`'dur; `Attachment` taraması `test_dosya_deposu.py`'dedir.
+    Kök modelin adı ya da `x.AccessLog` özniteliğidir; zincir kökten yukarı öznitelik,
     çağrı ve indisle uzar (`AccessLog.objects.all()._saklama_disini_sil(…)` →
     `("objects", "all", "_saklama_disini_sil")`). Zincirde `_GUNLUK_YAZIM_ADLARI`'ndan biri
     geçerse ya da kök çağrılırsa (kurucu) yazımdır; okuma (`filter`, `aggregate`) ve kökün
     argüman olarak verilmesi (`kvkk_silme(AccessLog, …)`) yazım değildir. Kökü gizleyen
     başvurular adlarıyla raporlanır: `import … AccessLog as X` ve `X = AccessLog` (`_TAKMA_AD`),
     belge olmayan bir dizede tablonun ya da modelin adı (`get_model("okul", "AccessLog")`, ham
-    SQL; `_DIZE`). Birim modül düzeyinde `<modül>`, değilse iç içe tanımların noktalı adıdır.
+    SQL; `_DIZE`; adı `ad_deseni` tanır). Birim modül düzeyinde `<modül>`, değilse iç içe
+    tanımların noktalı adıdır. `okuma_dizeleri` ham SQL okumasına verilen izindir: (dosya, dizenin
+    tam metni) çiftleri sayılmaz, aynı dosyadaki başka dize yine yakalanır.
     Kalan sınır veri akışıdır (queryset'i değişkende tutup sonra yazmak, modeli genel bir
     yardımcıya vermek): uçlar için onu izsiz yazım taramasının tablo karşılaştırması yakalar.
     """
@@ -356,19 +365,20 @@ def _gunluk_yazimlari(kaynaklar: dict[str, str]) -> set[tuple[str, str, tuple[st
         for dugum in ast.walk(agac):
             if isinstance(dugum, ast.ImportFrom):
                 for ad in dugum.names:
-                    if ad.name == "AccessLog" and ad.asname not in (None, "AccessLog"):
+                    if ad.name == kok and ad.asname not in (None, kok):
                         bulunan.add((yol, _birim_adi(dugum, ust), (_TAKMA_AD,)))
                 continue
             if (
                 isinstance(dugum, ast.Constant)
                 and isinstance(dugum.value, str)
-                and _GUNLUK_ADI.search(dugum.value)
+                and ad_deseni.search(dugum.value)
                 and not isinstance(ust.get(dugum), ast.Expr)  # belge dizesi
             ):
-                bulunan.add((yol, _birim_adi(dugum, ust), (_DIZE,)))
+                if (yol, dugum.value) not in okuma_dizeleri:
+                    bulunan.add((yol, _birim_adi(dugum, ust), (_DIZE,)))
                 continue
-            kok_mu = (isinstance(dugum, ast.Name) and dugum.id == "AccessLog") or (
-                isinstance(dugum, ast.Attribute) and dugum.attr == "AccessLog"
+            kok_mu = (isinstance(dugum, ast.Name) and dugum.id == kok) or (
+                isinstance(dugum, ast.Attribute) and dugum.attr == kok
             )
             if not kok_mu:
                 continue
@@ -393,6 +403,11 @@ def _gunluk_yazimlari(kaynaklar: dict[str, str]) -> set[tuple[str, str, tuple[st
             if _KURUCU in zincir or _GUNLUK_YAZIM_ADLARI & set(zincir):
                 bulunan.add((yol, _birim_adi(dugum, ust), tuple(zincir)))
     return bulunan
+
+
+def _gunluk_yazimlari(kaynaklar: dict[str, str]) -> set[tuple[str, str, tuple[str, ...]]]:
+    """Kökü `AccessLog` olan yazım zincirleri (`_kok_yazimlari`)."""
+    return _kok_yazimlari(kaynaklar, kok="AccessLog", ad_deseni=_GUNLUK_ADI)
 
 
 def test_erisim_gunlugune_yalniz_yazici_yazar_yalniz_silme_servisi_siler() -> None:

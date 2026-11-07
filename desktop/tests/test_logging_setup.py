@@ -5,6 +5,7 @@ from __future__ import annotations
 import faulthandler
 import logging
 import logging.config
+import os
 import subprocess
 import sys
 import textwrap
@@ -18,10 +19,13 @@ from desktop.logging_setup import (
     CRASH_LOG_NAME,
     LOG_FILE_NAME,
     LOGGER_NAME,
+    PiiSafeFormatter,
     apply_access_log_policy,
     configure_logging,
     enable_crash_log,
+    gunluk_dosyasi_yeri,
 )
+from desktop.paths import resolve_app_paths
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -79,6 +83,169 @@ def test_sorgu_dizesi_gunluge_yazilmaz(tmp_path: Path) -> None:
     icerik = (tmp_path / LOG_FILE_NAME).read_text(encoding="utf-8")
     assert "Ayşe" not in icerik
     assert "/api/v1/students/" in icerik
+
+
+# ---------------------------------------------------------------------------
+# Ev dizini (kullanıcı kararı 06.11.2026 "Biçimleyici silsin"): Windows yolu hesap adını taşır,
+# hesap adı çoğu bilgisayarda kişinin adıdır. Windows yolu işlev parametrelenerek sınanır.
+# ---------------------------------------------------------------------------
+WINDOWS_EVI = r"C:\Users\Ali Veli"
+
+
+def _bicimle(ev: str, mesaj: str, *, windows: bool = False) -> str:
+    bicimleyici = PiiSafeFormatter("%(message)s", ev_dizini=lambda: ev, windows=windows)
+    return bicimleyici.format(_kayit(mesaj))
+
+
+def _kayit(mesaj: str, exc_info: Any = None) -> logging.LogRecord:
+    return logging.LogRecord(LOGGER_NAME, logging.ERROR, __file__, 1, mesaj, None, exc_info)
+
+
+@pytest.mark.parametrize(
+    ("ham", "beklenen"),
+    [
+        (r"C:\Users\Ali Veli\AppData\yedek.odbak", r"~\AppData\yedek.odbak"),
+        (repr(r"C:\Users\Ali Veli\AppData"), repr("~\\AppData")),
+        ("C:/Users/Ali Veli/AppData", "~/AppData"),
+        (r"C:\Users/Ali Veli\AppData", r"~\AppData"),
+        (r"c:\users\ali veli\AppData", r"~\AppData"),
+        (r"C:\USERS\ALİ VELİ\AppData", r"~\AppData"),
+        (r"C:\Users\Ali Veli", "~"),
+        (r"Klasör açılamadı: C:\Users\Ali Veli.", "Klasör açılamadı: ~."),
+        (r"'C:\Users\Ali Veli' ve 'C:\Users\Ali Veli\x'", r"'~' ve '~\x'"),
+        (r"\\?\C:\Users\Ali Veli\x", r"\\?…"),
+    ],
+)
+def test_windows_ev_dizini_her_yazimda_silinir(ham: str, beklenen: str) -> None:
+    assert _bicimle(WINDOWS_EVI, ham, windows=True) == beklenen
+
+
+def test_ev_dizini_turkce_hesap_adinda_buyuk_kucuk_harf_ayirmaz() -> None:
+    ev = r"C:\Users\Ayşe Işık"
+
+    assert _bicimle(ev, r"C:\USERS\AYŞE IŞIK\x", windows=True) == r"~\x"
+
+
+def test_posixte_buyuk_kucuk_harf_ayrilir() -> None:
+    assert _bicimle("/home/ali", "/HOME/ALI/x") == "/HOME/ALI/x"
+    assert _bicimle("/home/ali", "/home/ali/x") == "~/x"
+
+
+def test_windows_kipi_yolu_bilmeyen_platformda_da_buyuk_kucuk_harf_ayirmaz() -> None:
+    assert _bicimle("/home/ali", "/HOME/ALI/x", windows=True) == "~/x"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="varsayılan kip platformdan okunur")
+def test_varsayilan_kip_calisilan_platformun_kuralidir() -> None:
+    bicimleyici = PiiSafeFormatter("%(message)s", ev_dizini=lambda: "/home/ali")
+
+    assert bicimleyici.format(_kayit("/HOME/ALI/x")) == "/HOME/ALI/x"
+
+
+@pytest.mark.parametrize(
+    ("ev", "yol"),
+    [
+        ("/root", "/rootfs/x"),
+        ("/root", "/root2/x"),
+        ("/root", "/root-yedek/x"),
+        ("/root", "/root_yedek/x"),
+        ("/root", "/root.bak/x"),
+        ("/root", "/srv/root/x"),
+        ("/root", "/srv//root/x"),
+        ("/home/ali", "/home/alican/x"),
+        ("/home/ali", "/mnt/yedek/home/ali/x"),
+        (WINDOWS_EVI, r"C:\Users\Ali Veliye\x"),
+        (WINDOWS_EVI, r"D:\Users\Ali Veli\x"),
+        (WINDOWS_EVI, r"XC:\Users\Ali Veli\x"),
+    ],
+)
+def test_benzer_onekli_baska_yol_kirpilmaz(ev: str, yol: str) -> None:
+    assert _bicimle(ev, yol, windows=ev == WINDOWS_EVI) == yol
+
+
+@pytest.mark.parametrize("ev", ["/", "//", "\\", "C:\\", "C:/", "C:", "", "ali", "~", "./ali"])
+def test_ev_dizini_kok_ya_da_mutlak_degilse_dokunulmaz(ev: str) -> None:
+    metin = "C:\\Users\\Ali Veli\\x /home/ali/x /ali/x /./ali/x ali ~"
+
+    assert _bicimle(ev, metin, windows=True) == metin
+
+
+@pytest.mark.parametrize("hata", [RuntimeError("yok"), OSError("yok"), KeyError("HOME")])
+def test_ev_dizini_okunamiyorsa_dokunulmaz(hata: Exception) -> None:
+    def okuyucu() -> str:
+        raise hata
+
+    bicimleyici = PiiSafeFormatter("%(message)s", ev_dizini=okuyucu, windows=True)
+
+    assert bicimleyici.format(_kayit(r"C:\Users\Ali Veli\x")) == r"C:\Users\Ali Veli\x"
+
+
+def test_tek_dizinli_ev_kirpilir() -> None:
+    assert _bicimle("/root", "/root/.cache/x") == "~/.cache/x"
+    assert _bicimle("/root", "Dizin /root açılamadı") == "Dizin ~ açılamadı"
+
+
+def test_ev_dizinindeki_duzenli_ifade_isareti_sozdur() -> None:
+    assert _bicimle("/home/a+b", "/home/a+b/x") == "~/x"
+    assert _bicimle("/home/a+b", "/home/aab/x") == "/home/aab/x"
+
+
+def test_unc_ev_dizini_kirpilir() -> None:
+    assert _bicimle(r"\\sunucu\ev\ali", r"\\sunucu\ev\ali\x", windows=True) == r"~\x"
+
+
+def test_yigin_izindeki_ev_dizini_de_silinir() -> None:
+    """Ham `OSError` metni `repr`'le yazar, yığın izi dosya yolunu tek ters bölüyle."""
+    try:
+        raise OSError(2, "Dosya yok", WINDOWS_EVI + r"\AppData\yedek.odbak")
+    except OSError:
+        bilgi = sys.exc_info()
+    kayit = _kayit("Yedek okunamadı.", bilgi)
+    kayit.exc_text = None
+    bicimleyici = PiiSafeFormatter("%(message)s", ev_dizini=lambda: WINDOWS_EVI, windows=True)
+
+    cikti = bicimleyici.format(kayit)
+
+    assert "Ali Veli" not in cikti
+    assert r"~\\AppData\\yedek.odbak" in cikti
+    assert "Traceback" in cikti
+
+
+def test_yigin_izi_metnindeki_ev_dizini_de_silinir() -> None:
+    bicimleyici = PiiSafeFormatter("%(message)s", ev_dizini=lambda: WINDOWS_EVI, windows=True)
+    kayit = _kayit("Yedek okunamadı.")
+    kayit.exc_text = f'File "{WINDOWS_EVI}\\kod.py", line 1'
+    kayit.stack_info = f'File "{WINDOWS_EVI}\\yigin.py", line 2'
+
+    cikti = bicimleyici.format(kayit)
+
+    assert "Ali Veli" not in cikti
+    assert 'File "~\\kod.py"' in cikti
+    assert 'File "~\\yigin.py"' in cikti
+
+
+def test_ev_dizini_ve_sorgu_dizesi_birlikte_kirpilir() -> None:
+    assert _bicimle("/home/ali", "/home/ali/x ?search=Ayşe") == "~/x ?…"
+
+
+def test_gunluk_dosyasinda_ev_dizini_yoktur(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Varsayılan okuyucu gerçek ev dizinini okur; `configure_logging`'in biçimleyicisi bu sınıftır."""
+    ev = tmp_path / "ali.veli"
+    monkeypatch.setenv("HOME", str(ev))
+    logger = configure_logging(tmp_path / "logs")
+
+    try:
+        raise OSError(2, "Dosya yok", str(ev / "yedek.odbak"))
+    except OSError:
+        logger.exception("Yedek okunamadı: %s", ev / "yedek.odbak")
+    logging.shutdown()
+
+    icerik = (tmp_path / "logs" / LOG_FILE_NAME).read_text(encoding="utf-8")
+    assert "ali.veli" not in icerik
+    assert "Yedek okunamadı: ~/yedek.odbak" in icerik
+    assert "'~/yedek.odbak'" in icerik
 
 
 def test_django_kurulumu_erisim_logu_susturmasini_ezer(tmp_path: Path) -> None:
@@ -162,6 +329,131 @@ def test_cokme_kaydi_buyuyunce_kenara_alinir(
 
     assert (tmp_path / f"{CRASH_LOG_NAME}.1").stat().st_size == 600_000
     assert kayit.stat().st_size < 200
+
+
+def test_cokme_kaydi_windowsta_basligin_altina_not_yazar_faulthandler_acik_kalir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """07.11.2026 sınaması: Windows'ta gömülü pencere bileşeninin yakalanan hataları `faulthandler`a
+    "Windows fatal exception" diye düşer, 8 dakikada 71 kayıt oldu, program çökmedi. Gerçek çökme
+    kanıtı gerektiği için kayıt kapanmaz; dosyayı okuyan yanılmasın diye not yazılır."""
+    cagri: dict[str, Any] = {}
+    monkeypatch.setattr(faulthandler, "enable", lambda **k: cagri.update(k))
+    monkeypatch.setattr(logging_setup, "_crash_log_file", None)
+
+    yol = enable_crash_log(tmp_path, "deneme", platform="win32")
+
+    baslik, not_satiri = yol.read_text(encoding="utf-8").splitlines()
+    assert baslik.endswith("OAB Defteri deneme açıldı ===")
+    assert not_satiri == (
+        "Not: Program kendiliğinden kapanmadıysa bu kayıtlar çökme değildir; gömülü pencere "
+        "bileşeninin yakalanan hatalarıdır."
+    )
+    assert cagri["all_threads"] is True
+
+
+@pytest.mark.parametrize(
+    ("sistem", "satir"), [("win32", 2), ("linux", 1)], ids=["windows", "pardus"]
+)
+def test_cokme_kaydi_platform_verilmezse_calisilan_sistemi_kullanir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sistem: str, satir: int
+) -> None:
+    """Üretim `platform` vermez (`desktop.main`); testlerin açık verdiği değer bu yolu sınamaz."""
+    monkeypatch.setattr(faulthandler, "enable", lambda **k: None)
+    monkeypatch.setattr(logging_setup, "_crash_log_file", None)
+    monkeypatch.setattr(sys, "platform", sistem)
+
+    yol = enable_crash_log(tmp_path, "deneme")
+
+    assert len(yol.read_text(encoding="utf-8").splitlines()) == satir
+
+
+def test_cokme_kaydi_pardusta_not_yazmaz(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Not Windows'un gömülü pencere bileşenini anlatır; Pardus'ta bu kayıtlar düşmez."""
+    monkeypatch.setattr(faulthandler, "enable", lambda **k: None)
+    monkeypatch.setattr(logging_setup, "_crash_log_file", None)
+
+    yol = enable_crash_log(tmp_path, "deneme", platform="linux")
+
+    assert len(yol.read_text(encoding="utf-8").splitlines()) == 1
+
+
+# ---------------------------------------------------------------------------
+# Günlük dosyasının yeri (07.11.2026 sınama listesi, kod okuması): iletiler günlüğü "veri klasöründeki
+# logs/" diye gösteriyordu; günlük iki platformda da `data`nın içinde değildir, Pardus'ta XDG
+# ayrımıyla başka köktedir (`desktop.paths`).
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("yerel", ["C:/Uydurgul", "c:\\uydurgul\\"], ids=["olagan", "kucuk_harf"])
+def test_gunluk_yeri_windowsta_yerel_uygulama_verisinden_yazilir(yerel: str) -> None:
+    """Hesap adı iletiye girmez (R1); Windows yolları büyük-küçük harf ayırmaz."""
+    yerlesim = resolve_app_paths(environ={"LOCALAPPDATA": "C:/Uydurgul"}, platform="win32")
+
+    metin = gunluk_dosyasi_yeri(yerlesim.logs, platform="win32", yerel_veri=lambda: yerel)
+
+    assert metin == "%LOCALAPPDATA%\\OABDefteri\\logs\\uygulama.log"
+
+
+def test_gunluk_yeri_windowsta_ortamdaki_yerel_uygulama_verisini_okur(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LOCALAPPDATA", "C:/Uydurgul")
+    yerlesim = resolve_app_paths(environ={"LOCALAPPDATA": "C:/Uydurgul"}, platform="win32")
+
+    assert gunluk_dosyasi_yeri(yerlesim.logs, platform="win32") == (
+        "%LOCALAPPDATA%\\OABDefteri\\logs\\uygulama.log"
+    )
+
+
+def test_gunluk_yeri_windowsta_kok_disindaysa_ya_da_okunamazsa_tam_yol_yazar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`--data-dir` başka bir yeri gösterir; metin zaten hata yolundadır, ikinci hata çıkmaz."""
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    logs = Path("D:/Okul/OAB/logs")
+
+    assert gunluk_dosyasi_yeri(logs, platform="win32", yerel_veri=lambda: "C:/Uydurgul") == (
+        "D:\\Okul\\OAB\\logs\\uygulama.log"
+    )
+    assert gunluk_dosyasi_yeri(logs, platform="win32") == "D:\\Okul\\OAB\\logs\\uygulama.log"
+
+
+def test_gunluk_yeri_pardusta_gercek_yeri_soyler_ev_dizinini_kirpar() -> None:
+    """Metin `desktop.paths`in çözdüğü yerdir; hesap adı iletiye girmez (R1)."""
+    yerlesim = resolve_app_paths(environ={"HOME": "/home/uydurgul"}, platform="linux")
+
+    metin = gunluk_dosyasi_yeri(yerlesim.logs, platform="linux", ev_dizini=lambda: "/home/uydurgul")
+
+    assert metin == "~/.local/state/oab-defteri/logs/uygulama.log"
+
+
+@pytest.mark.parametrize(
+    "ortam",
+    [
+        {"HOME": "/home/uydurgul", "XDG_STATE_HOME": "/srv/okul/durum"},
+        {"HOME": "/home/uydurgul", "OD_APP_HOME": "/srv/okul/durum"},
+    ],
+    ids=["xdg", "veri_klasoru_bayragi"],
+)
+def test_gunluk_yeri_ev_disindaysa_gercek_yeri_tam_soyler(
+    ortam: dict[str, str],
+) -> None:
+    logs = resolve_app_paths(environ=ortam, platform="linux").logs
+
+    metin = gunluk_dosyasi_yeri(logs, platform="linux", ev_dizini=lambda: "/home/uydurgul")
+
+    assert metin == str(logs / LOG_FILE_NAME)
+
+
+@pytest.mark.parametrize("hata", [RuntimeError, KeyError, OSError])
+def test_gunluk_yeri_ev_dizini_okunamazsa_tam_yol_yazar(hata: type[Exception]) -> None:
+    """Metin zaten hata yolundadır: ikinci hata asıl iletinin yerine geçmesin."""
+
+    def okunamaz() -> str:
+        raise hata("ev dizini yok")
+
+    metin = gunluk_dosyasi_yeri(Path("/srv/okul/logs"), platform="linux", ev_dizini=okunamaz)
+
+    assert metin == "/srv/okul/logs/uygulama.log"
 
 
 def test_gercek_yerel_cokmede_python_yigini_dosyaya_duser(tmp_path: Path) -> None:

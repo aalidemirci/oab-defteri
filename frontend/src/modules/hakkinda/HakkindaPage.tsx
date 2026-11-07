@@ -193,13 +193,13 @@ export default function HakkindaPage() {
                 çıkmaz.
               </li>
               <li>
-                Öğrenci, öğretmen ve diğer personelin ad-soyadları, öğrencilerin okul numaraları ve
-                hesap sahiplerinin ad-soyadları Fernet (AES-128-CBC + HMAC-SHA256) ile şifrelenir.
-                Şifreleme anahtarı her hesap için ayrı şifrelenir ve güvenlik dosyasında o hesabın
-                parola kaydında durur: hesabın parolasından Argon2id ile türetilen anahtar onu tek
-                başına açar; kurtarma anahtarının da kendi kaydı vardır. Okul numarasıyla arama ve
-                e-Okul eşleştirmesi, aynı anahtardan türetilen HMAC-SHA256 kör indeksle numaranın
-                tamamı üzerinden yapılır.
+                Öğrenci, öğretmen ve diğer personelin ad-soyadları, öğrencilerin okul numaraları,
+                hesap sahiplerinin ad-soyadları ve eklerin özgün dosya adları Fernet (AES-128-CBC +
+                HMAC-SHA256) ile şifrelenir. Şifreleme anahtarı her hesap için ayrı şifrelenir ve
+                güvenlik dosyasında o hesabın parola kaydında durur: hesabın parolasından Argon2id
+                ile türetilen anahtar onu tek başına açar; kurtarma anahtarının da kendi kaydı
+                vardır. Okul numarasıyla arama ve e-Okul eşleştirmesi, aynı anahtardan türetilen
+                HMAC-SHA256 kör indeksle numaranın tamamı üzerinden yapılır.
               </li>
               <li>
                 Denetim izinin her kaydı, bir önceki kaydın mührüyle birlikte HMAC-SHA256 ile
@@ -210,11 +210,24 @@ export default function HakkindaPage() {
                 kaydın mührünün ilk sekiz onaltılık hanesidir.
               </li>
               <li>
+                Ekler ve üretilen evrak veri klasöründe, her dosya kendi rastgele anahtarıyla
+                AES-256-GCM ile şifreli durur. Dosyanın anahtarı, kayıtların anahtarından HKDF ile
+                türetilen ayrı bir anahtarla AES-256-GCM ile şifrelenip ekin kaydında saklanır.
+              </li>
+              <li>
                 Şifreli yedekler (<span className="font-mono">.odbak</span>) X25519 ve AES-256-GCM
                 ile şifrelenir. Yedeğin başlığı yalnız kurtarma anahtarının kaydını ve no&apos;sunu
                 taşır, hesapların parola kayıtlarını taşımaz: yedek bu bilgisayarda program
                 yöneticisinin parolasıyla, başka bir bilgisayarda yalnız kurtarma anahtarıyla
                 açılır.
+              </li>
+              <li>
+                Bu bilgisayardaki yedekler veritabanını ve eklerin listesini (rastgele üretilmiş ad,
+                boy, SHA-256 özeti) taşır, dosyaların kendisini taşımaz. Kaydedilen şifreli yedekte
+                bunların ardına dosya bölümü gelir: ekler zaten şifreli olduğu için ikinci kez
+                şifrelenmeden sırayla yazılır, anahtarları yedeğin şifreli bölümündeki
+                veritabanındadır. Liste şifreli bölümdedir; geri yükleme her dosyayı onunla
+                denetler.
               </li>
             </ul>
           </div>

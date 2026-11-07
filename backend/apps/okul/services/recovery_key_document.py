@@ -64,7 +64,7 @@ from shared.pdf import html_to_pdf
 from shared.text import tr_upper
 
 #: Belgenin görünen adı — TEK SABİT: belgenin başlığı (`tr_upper` ile büyük harf;
-#: şablonda text-transform yoktur) ve indirilen dosyanın adı (`recovery_key_pdf_filename`,
+#: şablonda text-transform yoktur) ve kaydedilen dosyanın adı (`recovery_key_pdf_filename`,
 #: yanıtın Content-Disposition'ı) buradan kurulur. Ön yüz aynı adı kurar
 #: (`frontend/src/modules/guvenlik/kurtarma.ts` + `lib/download.ts` `dosyaAdi`: boşluk
 #: tireye döner, tarih alt çizgiyle eklenir). Ad tasarım §9.7'dedir; katalog kodu

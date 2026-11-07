@@ -26,12 +26,13 @@ Süreç içi tektir (`KAPI`).
 
 UZUN İŞ SAYACI (§4.2 "Uçuştaki iş", §4.4.3 "Boşta kilit"; denetim UY-1)
 
-Uzun yazma işi (bugün yalnız canlı geri yükleme; tam yedek, banka özeti uygulama,
-dönem kapanışı, DEK yenileme ve dosya eki yazımı geldikçe girer) sürerken oturum
+Uzun yazma işi (bugün canlı geri yükleme, dosya eki yazımı ve şifreli tam yedek; banka özeti
+uygulama, dönem kapanışı ve DEK yenileme geldikçe girer) sürerken oturum
 kilitlenmez: kilit (elle ya da boşta) ertelenir, iş bitince ilk istekte uygulanır
-(`apps/okul/oturum.py`). Böylece DEK işin ortasında bellekten silinmez. Çarpının
-bir kez ertelenmesi ve temiz kapanış işaretinin "sayaç sıfırken" koşulu ilk yeni
-uzun işle (tam yedek, plan F1b 3. adım) bu sayaca bağlanır.
+(`apps/okul/oturum.py`). Böylece DEK işin ortasında bellekten silinmez. Çarpı
+sürerken kapanış sayacın sıfıra inmesini en çok 60 sn bekler (`sifirlanmasini_bekle`,
+`desktop/window.py`); temiz kapanış işareti yalnız sayaç sıfırken yazılır
+(`desktop/clean_shutdown.py`; plan F1b-3 "Uzun iş, çarpı, temiz kapanış").
 
 Sayaç bakım kapısının uçuştaki iş sayacından AYRIDIR: canlı geri yükleme hem uzun
 iştir hem de bakım kapısını kapatıp gün işlerinin bitmesini bekler; tek sayaç
@@ -121,30 +122,41 @@ class UzunIsSayaci:
     """Süren uzun yazma işlerini sayar (iş parçacığı güvenli; modül başlığı)."""
 
     def __init__(self) -> None:
-        self._kilit = threading.Lock()
+        self._kosul = threading.Condition()
         self._sayi = 0
 
     @property
     def sayi(self) -> int:
         """Şu an süren uzun iş sayısı; sıfır değilken oturum kilidi ertelenir."""
-        with self._kilit:
+        with self._kosul:
             return self._sayi
+
+    def sifirlanmasini_bekle(self, sure: float) -> bool:
+        """Sayaç sıfıra inene dek en çok `sure` saniye bekler.
+
+        `True`: sayaç sıfır. `False`: süre doldu, iş sürüyor. Sayaç sıfırken beklemeden döner.
+        """
+        with self._kosul:
+            return self._kosul.wait_for(lambda: self._sayi == 0, timeout=sure)
 
     @contextmanager
     def is_(self) -> Iterator[None]:
         """`with UZUN_ISLER.is_():` — iş süresince sayaç bir artar; çıkış garantilidir."""
-        with self._kilit:
+        with self._kosul:
             self._sayi += 1
         try:
             yield
         finally:
-            with self._kilit:
+            with self._kosul:
                 self._sayi -= 1
+                if self._sayi == 0:
+                    self._kosul.notify_all()
 
     def _reset_for_tests(self) -> None:
         """Yalnız testler için: sayaç süreç içi olduğundan testler arasında sızar."""
-        with self._kilit:
+        with self._kosul:
             self._sayi = 0
+            self._kosul.notify_all()
 
 
 #: Süreç içi tek uzun iş sayacı: oturum (boşta ve elle kilit) okur, uzun işler artırır.

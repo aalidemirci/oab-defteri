@@ -38,6 +38,12 @@ bu dosyadaki `hiddenimports` → `giris.py::RUNTIME_MODULES`. Paketlenmiş ikili
 `--bagimlilik-duman` her modülü gerçekten import eder; `--pdf-duman` evrak
 şablonlarını ve WeasyPrint zincirini her derlemede sınar.
 
+Aynı tuzak masaüstü modüllerinde de vardır: `desktop/` Tree olarak kopyalanmaz,
+modülleri arşive yalnız `giris.py`'nin statik zincirinden girer. YALNIZ backend'in
+içe aktardığı bir `desktop.*` modülü zincire görünmez; `hiddenimports`'a adıyla
+yazılır, yoksa paketli program ilk API isteğinde 500 ile düşer.
+`test_spec_kapsami.py` bu kuralı da denetler.
+
 Yalnız masaüstünde gereken Windows paketi (pythonnet) ayrı
 zincirdedir: `packaging/requirements-paketleme.txt` (`sys_platform == "win32"`)
 → aşağıdaki `if WINDOWS:` bloğu → `giris.py::DESKTOP_RUNTIME_MODULES`.
@@ -234,6 +240,9 @@ hiddenimports += [
     "cryptography.fernet",
     # Backend yardımcıları
     "sqlparse",
+    # Yalnız backend'in içe aktardığı masaüstü modülü (`encrypted_backup`, FAT32 sınırı):
+    # `giris.py`'nin statik zinciri ona varmaz (başlıktaki "BEDELİ").
+    "desktop.dosya_sistemi",
     # Django SQLite arka ucu (dizeyle import edilir)
     "django.db.backends.sqlite3",
     "django.db.backends.sqlite3.base",

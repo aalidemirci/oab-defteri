@@ -68,6 +68,17 @@ const HEPSI_TAMAM: SetupStatus = {
   },
 };
 
+/** Dış yedek hatırlatmasının sunucu özeti (`GET backups/external/`): süre dolmamış, hiç kayıt yok. */
+const DIS_YEDEK_OZETI = {
+  last_download: null,
+  reminder_days: 30,
+  days_since: null,
+  remind: false,
+  min_reminder_days: 7,
+  max_reminder_days: 90,
+  son_deneme: null,
+};
+
 /** Bulgusuz denetim izi: yalnız "Son Girişler" kartı görünür. */
 const TEMIZ_IZ: ButunlukDurumu = {
   butunluk: [],
@@ -78,6 +89,7 @@ const TEMIZ_IZ: ButunlukDurumu = {
     silinebilir_sarmallar: [],
     muhru_tutmayan: [],
   },
+  eksik_ekler: [],
   kagit_capasi: { kayit_no: 57, zincir: "A1B2-C3D4" },
   son_girisler: ["2026-11-01T08:00:00+03:00"],
   parola_yenilenme: null,
@@ -98,6 +110,7 @@ const YONETICI_OTURUMU: OturumOzeti = {
   bosta_kalan_sn: 600,
   kilit_bekliyor: false,
   kurulum_tamam: true,
+  yukleme_siniri_mb: 20,
 };
 
 function bas() {
@@ -129,7 +142,7 @@ beforeEach(() => {
     process_started_at: "2026-10-31T09:00:00+03:00",
   });
   gapi.durum.mockResolvedValue({ corrupt_field_count: 0 });
-  gapi.disYedek.mockResolvedValue({ remind: false });
+  gapi.disYedek.mockResolvedValue(DIS_YEDEK_OZETI);
   bapi.durum.mockResolvedValue(TEMIZ_IZ);
   otapi.ozet.mockResolvedValue(YONETICI_OTURUMU);
 });
@@ -260,6 +273,7 @@ describe("Genel Bakış", () => {
         onceki_kayit_no: null,
         onceki_zincir: null,
         ayrintisiz: false,
+        dosyalar: {},
         onceki_geri_yuklemeler: [],
       },
     } satisfies ButunlukDurumu);
@@ -272,6 +286,27 @@ describe("Genel Bakış", () => {
       basliklar.indexOf("Son Girişler"),
     );
     expect(basliklar).toContain("Yedekten Geri Yükleme Yapıldı");
+  });
+
+  it("dosyası bulunamayan ek varsa “Eksik Ekler” kartı Son Girişler'den önce gelir", async () => {
+    bapi.durum.mockResolvedValue({
+      ...TEMIZ_IZ,
+      eksik_ekler: [
+        {
+          kayit_turu: "ders yılı",
+          kayit_no: "7",
+          yukleme_tarihi: "2026-10-01",
+          boyut: 4096,
+          ozgun_ad: "toplanti-tutanagi.pdf",
+        },
+      ],
+    } satisfies ButunlukDurumu);
+    bas();
+
+    const kart = await screen.findByRole("region", { name: "Eksik Ekler" });
+    expect(within(kart).getByText(/^toplanti-tutanagi\.pdf · ders yılı/)).toBeInTheDocument();
+    const sonGirisler = screen.getByRole("region", { name: "Son Girişler" });
+    expect(kart.compareDocumentPosition(sonGirisler)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it("denetim izi okunamazsa kartları görünmez, sayfanın geri kalanı çalışır", async () => {
@@ -480,7 +515,7 @@ describe("Genel Bakış — rol süzmesi (kaynak oturum özetinin yetenekleri)",
   it("yol haritası, ayrılış havuzu ve dış yedek kartları yeteneksiz rolde çizilmez, uçları çağrılmaz", async () => {
     otapi.ozet.mockResolvedValue(BASKAN);
     oapi.getLeavePoolSummary.mockResolvedValue({ student_count: 3, personnel_count: 1 });
-    gapi.disYedek.mockResolvedValue({ remind: true, last_download: null, days_since: null });
+    gapi.disYedek.mockResolvedValue({ ...DIS_YEDEK_OZETI, remind: true });
     bas();
 
     await screen.findByRole("region", { name: "Son Girişler" });
@@ -529,7 +564,7 @@ describe("Genel Bakış — rol süzmesi (kaynak oturum özetinin yetenekleri)",
 
   it("program yöneticisinde bütün kartlar ve tam açıklamalar durur", async () => {
     oapi.getLeavePoolSummary.mockResolvedValue({ student_count: 3, personnel_count: 1 });
-    gapi.disYedek.mockResolvedValue({ remind: true, last_download: null, days_since: null });
+    gapi.disYedek.mockResolvedValue({ ...DIS_YEDEK_OZETI, remind: true });
     bas();
 
     expect(await screen.findByRole("region", { name: "Ayrılış Havuzu" })).toBeInTheDocument();

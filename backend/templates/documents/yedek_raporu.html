@@ -1,0 +1,78 @@
+{% extends "documents/base.html" %}
+{% comment %}Yedek Raporu: programın kendi belgesi, katalog dışıdır, E-kodu almaz (tasarım §9.7;
+plan F1b-3 "Yedek raporu bu adımda, tam döküm"). Bağlam apps/okul/services/yedek_raporu.py'den
+gelir; saklama kuralları ve değişken metinler oradadır, başlıklar ve sütun adları bu dosyadadır.
+Sayılar `*_metni` özelliklerinden gelir (sözlük §3, RYUE md. 16/7: dört ve daha çok haneli sayıda
+nokta). Belge kişisizdir: kişi adı, yol ve elle konmuş dosyanın adı basılmaz. Tek sayfadır (sayfa
+bütçesi testi); anahtar tablosunun satır sayısı serviste sınırlıdır. text-transform YOK: başlıklar
+doğrudan büyük harf (WeasyPrint TR "i" tuzağı).{% endcomment %}
+{% block extra_style %}
+<style>
+  .doc-table.sik { margin: 5pt 0 0; font-size: 9pt; }
+  .doc-table.sik th { padding: 3pt 6pt; font-size: 8.5pt; }
+  .doc-table.sik td { padding: 3pt 6pt; }
+  .doc-table td.sayi, .doc-table th.sayi { text-align: right; }
+  .dis-not { margin-top: 12pt; text-align: center; font-size: 10pt; font-weight: bold;
+             color: var(--pr-ink); border-top: 0.6pt solid var(--pr-faint); padding-top: 6pt; }
+</style>
+{% endblock %}
+{% block content %}
+  <div class="doc-title">{{ document_title }}</div>
+  <div class="doc-subtitle">OAB Defteri · bu bilgisayardaki yedeklerin dökümü · {{ basim_gunu }}</div>
+
+  <div class="section">
+    <div class="section-title">BU BİLGİSAYARDAKİ YEDEKLER</div>
+    <table class="doc-table sik">
+      <tr><th>Tür</th><th class="sayi">Adet</th><th>En eski</th><th>En yeni</th><th>Saklama</th></tr>
+      {% for satir in turler %}
+      <tr>
+        <td>{{ satir.ad }}</td>
+        <td class="sayi">{{ satir.adet_metni }}</td>
+        <td>{{ satir.en_eski|default:"—" }}</td>
+        <td>{{ satir.en_yeni|default:"—" }}</td>
+        <td>{{ satir.saklama }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-title">YEDEKLERİ AÇAN KURTARMA ANAHTARLARI</div>
+    {% if anahtarlar %}
+    <table class="doc-table sik">
+      <tr><th>Anahtar no</th><th>Üretim tarihi</th><th class="sayi">Yedek sayısı</th></tr>
+      {% for satir in anahtarlar %}
+      <tr>
+        <td>{{ satir.no }}</td>
+        <td>{{ satir.tarih|default:"—" }}</td>
+        <td class="sayi">{{ satir.adet_metni }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p class="para">Bu bilgisayarda yedek yok.</p>
+    {% endif %}
+  </div>
+
+  <div class="section">
+    <div class="section-title">SON ŞİFRELİ YEDEK</div>
+    {% if son_yedek %}
+    <table class="info">
+      <tr><td class="label">Tarih</td><td>{{ son_yedek.tarih }}</td></tr>
+      <tr><td class="label">Denetim</td><td>{{ denetlendi }}</td></tr>
+      <tr><td class="label">Taşıdığı ek</td><td>{% if son_yedek.ek_sayisi is None %}{{ ek_sayisi_bilinmiyor }}{% else %}{{ son_yedek.ek_sayisi_metni }}{% if son_yedek.eksik %}; {{ son_yedek.eksik_metni }} ek yedek alınırken bulunamadı ya da bozuktu{% endif %}{% endif %}</td></tr>
+    </table>
+    {% else %}
+    <p class="para">{{ hic_alinmadi }}</p>
+    {% endif %}
+  </div>
+
+  <div class="section">
+    <div class="section-title">HATIRLATMA</div>
+    <table class="info">
+      <tr><td class="label">Hatırlatma süresi</td><td>{{ hatirlatma_gun }} gün</td></tr>
+    </table>
+  </div>
+
+  <div class="dis-not">{{ programin_disinda }}</div>
+{% endblock %}

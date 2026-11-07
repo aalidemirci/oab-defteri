@@ -511,11 +511,17 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _yaz("security-recovery-key-renew", "POST", Satir.GUVENLIK),
     # Güvenlik dosyası kayıp kilidinde rol kapısı kesmez (kilit kapısının listesi geçerlidir).
     _yaz("security-state-reset", "POST", Satir.GUVENLIK),
+    # Şifreli yedek: önerilen ad (okuma) ve seçilen yere kaydetme (plan F1b-3 "Ötekiler").
+    _oku("encrypted-backup-download", Satir.GUVENLIK),
     _yaz("encrypted-backup-download", "POST", Satir.GUVENLIK),
     _oku("backup-external-reminder", Satir.GUVENLIK),
     _yaz("backup-external-reminder", "PUT", Satir.GUVENLIK),
     _oku("backup-list", Satir.GUVENLIK),
     _yaz("backup-restore", "POST", Satir.GUVENLIK),
+    # Seçilen dosyanın başlığı: yol gövdede gittiği için POST'tur, yalnız okur; geri yüklemenin
+    # ilk adımıdır, öteki rollere o kadar kapalıdır.
+    _yaz("backup-inspect", "POST", Satir.GUVENLIK),
+    _yaz("backup-report", "POST", Satir.GUVENLIK),
     # İki depo farkı ve sahipsiz parola kayıtlarının onayla silinmesi: güvenlik dosyasının
     # bakımıdır (tasarım §4.6.1 kural 4: "fark yonetici'ye"; plan F1b-2).
     _oku("security-integrity-two-store", Satir.GUVENLIK),
@@ -706,10 +712,12 @@ YETENEKLER: Final[Mapping[str, frozenset[tuple[str, str]]]] = {
         ("security-recovery-key-pdf", "POST"),
         ("security-recovery-key-confirm", "POST"),
         ("security-recovery-key-renew", "POST"),
-        ("encrypted-backup-download", "POST"),
+        ("encrypted-backup-download", ("GET", "POST")),
         ("backup-external-reminder", ("GET", "PUT")),
         ("backup-list", "GET"),
         ("backup-restore", "POST"),
+        ("backup-inspect", "POST"),
+        ("backup-report", "POST"),
     ),
     "guncelleme": _ciftler(("update-latest", "GET"), ("update-installer", "GET")),
     "bosta_sure_yazma": _ciftler(("security-idle-lock", "PUT")),
@@ -864,7 +872,9 @@ EYLEM_KURALLARI: Final[Mapping[Eylem, EylemKurali]] = {
         Satir.GUVENLIK, (YONETICI,), dayanak="Tasarım §4.4.2 Güvenlik satırı, §4.4.4"
     ),
     Eylem.YEDEK_INDIRME: _ek(
-        Satir.GUVENLIK, (YONETICI,), dayanak="Tasarım §4.4.2 Güvenlik satırı (yedek indirme)"
+        Satir.GUVENLIK,
+        (YONETICI,),
+        dayanak="Tasarım §4.4.2 Güvenlik satırı (şifreli yedeğin kaydedilmesi)",
     ),
     Eylem.BOSTA_SURE_YAZMA: _ek(
         Satir.AYARLAR, (YONETICI,), dayanak="Tasarım §4.4.2 Ayarlar satırı (boşta süre)"
@@ -923,7 +933,7 @@ EYLEM_KURALLARI: Final[Mapping[Eylem, EylemKurali]] = {
 
 #: Gerçek servise henüz bağlanmamış eylemler → faz (yalnız küçülebilir; test kaynakta
 #: `Eylem.<AD>` çağrısını arar). Bağlı olanlar: hesap yönetimi, kurtarma anahtarı, geri
-#: yükleme, yedek indirme, boşta süre yazımı, geri yükleme kartının "Gördüm"ü (⁵).
+#: yükleme, şifreli yedeğin kaydedilmesi, boşta süre yazımı, geri yükleme kartının "Gördüm"ü (⁵).
 BAGLANMAMIS_EYLEMLER: Final[Mapping[Eylem, str]] = {
     Eylem.GENEL_KURUL_YAZMA: "F2",
     Eylem.GENEL_KURUL_YENI_OKUL_DAVETI: "F2",

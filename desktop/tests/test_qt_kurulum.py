@@ -5,6 +5,10 @@ uygulama örneği, pencere simgesi, bağlayıcı seçimi ve oturum kapanışınd
 → düzenli kapanış köprüsü. PySide6 Docker imajında yoktur; sahte modülle sınanır.
 Gerçek davranış (Pardus'ta pencere, çarpı, oturum kapanışı) elle doğrulanır
 (packaging/windows/NOTLAR.md).
+
+İndirme işleyicisinin sahtesi gerçek PySide6 6.8.3'ün yüzeyini taşır: `setPath` YOKTUR. Yüzey ve
+blob indirmesi gerçek paketlerle (PySide6 6.8.3, pywebview 5.3.2, offscreen) konteynerde bir kez
+sınandı; imaja girmez, gerçek Pardus'ta elle denenir.
 """
 
 from __future__ import annotations
@@ -95,6 +99,61 @@ class _Sinyal:
             hedef(*args)
 
 
+class _SahteDosyaPenceresi:
+    """`QFileDialog.getSaveFileName`: seçilen yol ve süzgeç döner, iptalde boş metin."""
+
+    def __init__(self, secilen: str) -> None:
+        self.secilen = secilen
+        self.sorulan: list[tuple[Any, str, str]] = []
+
+    def getSaveFileName(self, ebeveyn: Any, baslik: str, yol: str) -> tuple[str, str]:
+        self.sorulan.append((ebeveyn, baslik, yol))
+        return self.secilen, ""
+
+
+class _SahteIndirme:
+    """`QWebEngineDownloadRequest`'in PySide6 6.8.3 yüzeyi: `setPath` ve `path` yoktur."""
+
+    def __init__(self, onerilen: str = "Yedek-Raporu_06.11.2026.pdf") -> None:
+        self.onerilen = onerilen
+        self.cagrilar: list[tuple[str, ...]] = []
+
+    def suggestedFileName(self) -> str:
+        return self.onerilen
+
+    def setDownloadDirectory(self, dizin: str) -> None:
+        self.cagrilar.append(("dizin", dizin))
+
+    def setDownloadFileName(self, ad: str) -> None:
+        self.cagrilar.append(("ad", ad))
+
+    def accept(self) -> None:
+        self.cagrilar.append(("kabul",))
+
+
+class _SahteArkaUc:
+    """`webview.platforms.qt`: işleyici `BrowserView` sınıfındadır."""
+
+    class BrowserView:
+        localization = {"global.saveFile": "Farklı kaydet"}
+
+        def on_download_requested(self, indirme: Any) -> None:
+            indirme.setPath("/uydurma")  # pywebview 5.3.2'nin kırık çağrısı
+
+
+class _SahteWebview:
+    """pywebview paketi: `start`, arka ucu `initialize` ile ve modül düzeyinden alır."""
+
+    def __init__(self) -> None:
+        self.arka_uc = _SahteArkaUc()
+        self.istenen: list[str] = []
+        self.initialize = self._initialize
+
+    def _initialize(self, gui: str) -> Any:
+        self.istenen.append(gui)
+        return self.arka_uc
+
+
 class _SahteQt:
     """PySide6'nın kullandığımız yüzeyi; kurulum sırasını kaydeder."""
 
@@ -167,6 +226,7 @@ class _SahteQt:
             QPixmap,
             QTimer,
         )
+        self.QFileDialog = _SahteDosyaPenceresi("")
 
     def yukleyici(self) -> Any:
         self.sira.append("QtWebEngineWidgets")
@@ -182,12 +242,18 @@ class _SinyalKaydi:
         return "onceki-isleyici" if len(self.kurulan) == 1 else None
 
 
-def _kurulum(qt: _SahteQt, cikis: Callable[[], None], sinyal: _SinyalKaydi | None = None) -> Any:
+def _kurulum(
+    qt: _SahteQt,
+    cikis: Callable[[], None],
+    sinyal: _SinyalKaydi | None = None,
+    webview: Any = None,
+) -> Any:
     return hazirla(
         cikis,
         icon_path=app_icon_path(root=REPO_ROOT),
         qt_loader=qt.yukleyici,
         signal_installer=sinyal or _SinyalKaydi(),
+        webview_loader=lambda: webview if webview is not None else _SahteWebview(),
     )
 
 
@@ -354,7 +420,9 @@ def test_sigterm_sonrasi_cikis_hatasi_qt_dongusunu_dusurmez(
 
 def _qt_modulu_taklidi(_ad: str) -> SimpleNamespace:
     """`load_qt`'nin okuduğu bütün sınıfları taşıyan boş taklit modül."""
-    return SimpleNamespace(QApplication=object, QIcon=object, QPixmap=object, QTimer=object)
+    return SimpleNamespace(
+        QApplication=object, QFileDialog=object, QIcon=object, QPixmap=object, QTimer=object
+    )
 
 
 def test_qt_yukleyici_webengine_i_once_ice_aktarir(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -392,3 +460,104 @@ def test_qt_yukleyici_disaridan_verilen_baglayiciyi_ezmez(
     qt_kurulum.load_qt()
 
     assert os.environ["QT_API"] == "pyqt6"
+
+
+# ------------------------------------------------- indirme işleyicisi (plan F1b-3)
+
+
+def _pencere() -> Any:
+    return SimpleNamespace(localization={"global.saveFile": "Farklı kaydet"})
+
+
+def test_indirme_secilen_yere_iner_ve_setpath_cagrilmaz(tmp_path: Path) -> None:
+    """Qt6'da `setPath` yoktur: dizin ve ad ayrı verilir, sonra istek kabul edilir."""
+    dosya_penceresi = _SahteDosyaPenceresi(str(tmp_path / "secilen.pdf"))
+    indirme = _SahteIndirme()
+
+    qt_kurulum.indirme_isleyicisi(dosya_penceresi)(_pencere(), indirme)
+
+    assert indirme.cagrilar == [("dizin", str(tmp_path)), ("ad", "secilen.pdf"), ("kabul",)]
+
+
+def test_indirme_penceresi_onerilen_adi_ve_turkce_basligi_kullanir() -> None:
+    """Blob adresinin yolu ad değildir: ad `suggestedFileName`'dedir."""
+    dosya_penceresi = _SahteDosyaPenceresi("")
+    pencere = _pencere()
+
+    qt_kurulum.indirme_isleyicisi(dosya_penceresi)(
+        pencere, _SahteIndirme("Kurtarma-Anahtarı-Belgesi_06.11.2026.pdf")
+    )
+
+    ((ebeveyn, baslik, yol),) = dosya_penceresi.sorulan
+    assert ebeveyn is pencere
+    assert baslik == "Farklı kaydet"
+    assert yol == str(Path.home() / "Kurtarma-Anahtarı-Belgesi_06.11.2026.pdf")
+
+
+def test_indirme_onerilen_adi_yol_tasiyamaz() -> None:
+    """Önerilen ad sayfadan gelir: ev dizininin dışına önermez."""
+    dosya_penceresi = _SahteDosyaPenceresi("")
+
+    qt_kurulum.indirme_isleyicisi(dosya_penceresi)(_pencere(), _SahteIndirme("../../gizli/x.pdf"))
+
+    assert dosya_penceresi.sorulan[0][2] == str(Path.home() / "x.pdf")
+
+
+def test_indirme_iptalinde_kabul_edilmez() -> None:
+    indirme = _SahteIndirme()
+
+    qt_kurulum.indirme_isleyicisi(_SahteDosyaPenceresi(""))(_pencere(), indirme)
+
+    assert indirme.cagrilar == []
+
+
+def test_isleyici_arka_uc_yuklenirken_degistirilir() -> None:
+    """`webview.platforms.qt` erken içe aktarılmaz (modül belgesi): değişim `initialize`'ın ardındadır;
+    sınıfın yöntemi olur, pencerenin kurucusu yuvayı oradan bağlar."""
+    webview = _SahteWebview()
+    dosya_penceresi = _SahteDosyaPenceresi("/uydurma/secilen.pdf")
+    eski = _SahteArkaUc.BrowserView.on_download_requested
+
+    try:
+        qt_kurulum.indirme_isleyicisini_bagla(webview, dosya_penceresi)
+        assert webview.istenen == []  # arka uç bu çağrıda yüklenmez
+        assert _SahteArkaUc.BrowserView.on_download_requested is eski
+
+        arka_uc = webview.initialize("qt")
+
+        assert webview.istenen == ["qt"]
+        assert arka_uc is webview.arka_uc
+        indirme = _SahteIndirme()
+        arka_uc.BrowserView().on_download_requested(indirme)
+        assert indirme.cagrilar == [("dizin", "/uydurma"), ("ad", "secilen.pdf"), ("kabul",)]
+    finally:
+        _SahteArkaUc.BrowserView.on_download_requested = eski  # type: ignore[method-assign]
+
+
+def test_kurulum_indirme_isleyicisini_baglar() -> None:
+    qt = _SahteQt()
+    webview = _SahteWebview()
+    eski = webview.initialize
+
+    kurulum = _kurulum(qt, _Sayac(), webview=webview)
+
+    assert webview.initialize != eski
+    kurulum.durdur()
+
+
+def test_pencere_bileseni_yoksa_kurulum_surer(od_gunlugu: list[logging.LogRecord]) -> None:
+    def yuklenemez() -> Any:
+        raise ImportError("webview yok")
+
+    qt = _SahteQt()
+    kurulum = hazirla(
+        _Sayac(),
+        icon_path=None,
+        qt_loader=qt.yukleyici,
+        signal_installer=_SinyalKaydi(),
+        webview_loader=yuklenemez,
+    )
+
+    assert kurulum.hazir is True
+    assert any("İndirme işleyicisi bağlanamadı." in k.getMessage() for k in od_gunlugu)
+    kurulum.durdur()
