@@ -656,6 +656,31 @@ class TestYolHaritasi:
         assert "bütün maddeler tamamlanınca" in yanit.json()["message"]
         assert SchoolConfig.load().yol_haritasi.get("gizli") is not True
 
+    def test_onceden_gizlenmis_kart_okul_karti_eksikken_yeniden_gorunur(
+        self, client: APIClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """KORUMA (bağımsız denetim, F1b-4): kurulumunu okul kartının OAB alanlarından önce
+        bitirip kartı gizlemiş bir kurulumda göç 0013'ten sonra bu alanlar boştur. Kurulum
+        kapısı yeniden kapanmadığı için eksiği gösteren tek yer karttır: kart görünür, saklanan
+        gizleme tercihi silinmez, alanlar dolunca kart yine gizlenir."""
+        gercek = setup_service.setup_status
+        self._hepsi_tamam(client, monkeypatch)
+        assert (
+            client.post("/api/v1/setup/roadmap/", {"hidden": True}, format="json").json()["hidden"]
+            is True
+        )
+        # Bundan sonra gerçek durum özeti (sayımlar kartın görünürlüğüne girmez).
+        monkeypatch.setattr(setup_service, "setup_status", gercek)
+        okul_kartini_dogrudan_yaz(levels=[], institution_code="")  # göçten sonraki boş hâl
+
+        durum = client.get("/api/v1/setup/status/").json()
+        assert durum["school_info_complete"] is False
+        assert durum["roadmap"]["hidden"] is False
+        assert SchoolConfig.load().yol_haritasi["gizli"] is True  # tercih duruyor
+
+        _okul_bilgileri()
+        assert client.get("/api/v1/setup/status/").json()["roadmap"]["hidden"] is True
+
     def test_eksik_madde_varken_gizlenemez(self, client: APIClient) -> None:
         for madde in setup_service.ROADMAP_MANUAL_ITEMS:
             self._isaretle(client, madde)
@@ -668,6 +693,7 @@ class TestYolHaritasi:
     def test_butun_maddeler_tamamken_gizlenir_isaret_kalkinca_yeniden_gorunur(
         self, client: APIClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        _okul_bilgileri()
         for madde in setup_service.ROADMAP_MANUAL_ITEMS:
             self._isaretle(client, madde)
         gercek = setup_service.setup_status
@@ -684,7 +710,9 @@ class TestYolHaritasi:
         assert yanit.json()["hidden"] is False
 
     def _hepsi_tamam(self, client: APIClient, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Yol haritasının bütün maddelerini tamamlar (gizlemenin ön koşulu)."""
+        """Yol haritasının bütün maddelerini tamamlar (gizlemenin ön koşulu); okul kartı gerçekten
+        doldurulur, çünkü kartın görünürlüğünü `roadmap_state` ondan okur."""
+        _okul_bilgileri()
         for madde in setup_service.ROADMAP_MANUAL_ITEMS:
             self._isaretle(client, madde)
         gercek = setup_service.setup_status
@@ -749,6 +777,7 @@ class TestYolHaritasi:
         assert client.get("/api/v1/setup/status/").json()["roadmap"]["hidden"] is True
 
     def test_bozuk_ya_da_bilinmeyen_kayit_disari_sizmaz(self) -> None:
+        _okul_bilgileri()  # okul kartı eksikken kart zaten gizli kalamaz (ayrı test)
         config, _ = SchoolConfig.objects.get_or_create(pk=SchoolConfig.SINGLETON_PK)
         config.yol_haritasi = {
             "isaretler": {"kurtarma_zarfi": "2026-09-22", "bilinmeyen": "x"},

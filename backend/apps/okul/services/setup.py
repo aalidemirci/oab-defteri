@@ -335,7 +335,10 @@ def _stored_roadmap(config: SchoolConfig) -> dict[str, Any]:
 
 
 def roadmap_state(
-    config: SchoolConfig, *, recovery_confirmed: bool | None = None
+    config: SchoolConfig,
+    *,
+    recovery_confirmed: bool | None = None,
+    school_info_complete: bool | None = None,
 ) -> dict[str, Any]:
     """Arayüzün gördüğü yol haritası durumu (saklanan işaretler + gizleme kapısı).
 
@@ -346,14 +349,22 @@ def roadmap_state(
     Bu, var olan "eksik madde varken kart gizli kalmaz" kuralının damgaya
     uygulanmasıdır; SAKLANAN tercih değişmez, damga gelince kart yine gizlenir.
 
-    `recovery_confirmed` verilmezse güvenlik dosyasından okunur; `setup_status`
-    zaten bildiği için geçirir (aynı dosya iki kez okunmasın).
+    Okul kartının zorunlu alanları eksikken de kart gizli kalamaz (aynı kural, `okul_karti`
+    maddesine): kurulumu okul kartının OAB alanlarından önce tamamlanmış ve kartı gizlemiş bir
+    kurulumda göç 0013'ten sonra bu alanlar boştur; kurulum kapısı yeniden kapanmadığı için
+    eksiği gösteren tek yer bu karttır (plan F1b-4 kararları; tasarım §7.10).
+
+    `recovery_confirmed` ve `school_info_complete` verilmezse burada okunur; `setup_status`
+    zaten bildiği için geçirir (aynı dosya ve hesap iki kez yapılmasın).
     """
     state = _stored_roadmap(config)
     dogrulandi = (
         app_password.recovery_key_confirmed() if recovery_confirmed is None else recovery_confirmed
     )
-    state["hidden"] = state["hidden"] and dogrulandi
+    okul_karti_tamam = (
+        not missing_school_fields(config) if school_info_complete is None else school_info_complete
+    )
+    state["hidden"] = state["hidden"] and dogrulandi and okul_karti_tamam
     return state
 
 
@@ -489,13 +500,14 @@ def setup_status() -> dict[str, Any]:
     aktif_yil = _active_year_summary()
     parola_kurulu = app_password.is_password_set()
     anahtar_dogrulandi = parola_kurulu and app_password.recovery_key_confirmed()
+    okul_karti_tamam = not missing_school_fields(config)
     return {
         "setup_completed": config.setup_completed,
         "password_set": parola_kurulu,
         # Kurtarma anahtarının saklandığı doğrulandı mı? (1. adımın ikinci koşulu)
         "recovery_key_confirmed": anahtar_dogrulandi,
         "school_name": config.school_name,
-        "school_info_complete": not missing_school_fields(config),
+        "school_info_complete": okul_karti_tamam,
         "has_active_school_year": aktif_yil is not None,
         "active_school_year": aktif_yil,
         "missing_steps": missing_setup_steps(
@@ -511,7 +523,9 @@ def setup_status() -> dict[str, Any]:
             start=aktif_yil["start_date"] if aktif_yil else None,
             end=aktif_yil["end_date"] if aktif_yil else None,
         ),
-        "roadmap": roadmap_state(config, recovery_confirmed=anahtar_dogrulandi),
+        "roadmap": roadmap_state(
+            config, recovery_confirmed=anahtar_dogrulandi, school_info_complete=okul_karti_tamam
+        ),
     }
 
 

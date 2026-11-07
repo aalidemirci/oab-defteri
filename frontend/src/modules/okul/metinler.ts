@@ -12,6 +12,9 @@ export const OKUL_KARTI_ACIKLAMASI =
   "Bu bilgiler programın bastığı evrakın antedinde ve birliğin hesaplarında (genel kurul yeter " +
   "sayısı, kantin arz bedeli ve pay dağılımı) kullanılır.";
 
+/** Antette okul adı birim satırındadır ("<Okul Adı> Müdürlüğü"; `shared/letterhead.py`, RYUE md. 10/3). */
+export const OKUL_ADI_YARDIMI = "Evrak antedinde “… Müdürlüğü” satırında görünür.";
+
 export const KURUM_KODU_YARDIMI = "MEB kurum kodu; altı haneli.";
 
 export const KADEME_YARDIMI = "Birden çok kademesi olan kurumda hepsini seçin.";
@@ -54,8 +57,9 @@ export const ACILIS_YARDIMI =
 /** Başlangıç yol haritasının `okul_karti` maddesi (tasarım §7.10 "okul kartının eksik alanları"). */
 export const OKUL_KARTI_YOL_HARITASI_BASLIGI = "Okul bilgilerini tamamlayın";
 export const OKUL_KARTI_YOL_HARITASI_ACIKLAMASI =
-  "Kurum kodu, kademe, öğrenci mevcudu, yerleşim türü, kantin ve personel çalıştırma biçimi " +
-  "girilmeden birliğin hesapları yapılamaz.";
+  "Okul Bilgileri'nin zorunlu alanları (il, ilçe, kurum kodu, kademe, öğrenci mevcudu, yerleşim " +
+  "türü, kantin ve personel çalıştırma biçimi) evrakın antedinde ve birliğin hesaplarında " +
+  "kullanılır.";
 
 /**
  * Sihirbazın 3. adımındaki ders yılı kartının ilk cümlesi: dönemler md. 13/10'un dönemlik

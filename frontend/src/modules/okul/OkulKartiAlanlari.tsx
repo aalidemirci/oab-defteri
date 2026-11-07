@@ -30,6 +30,7 @@ import {
   KURUM_KODU_YARDIMI,
   MEVCUT_TARIHI_YARDIMI,
   MEVCUT_YARDIMI,
+  OKUL_ADI_YARDIMI,
   PERSONEL_YARDIMI,
   YERLESIM_YARDIMI,
 } from "./metinler";
@@ -49,15 +50,13 @@ const PERSONELLER = secenekler(STAFFING_MODE_TR);
 const ETIKET_SINIFI = "mb-1.5 block text-label-medium font-semibold text-on-surface-variant";
 
 /**
- * Kantin birlikçe işletiliyorsa görünen md. 23/3 bilgisi (uyarı tonunda; engel değil).
- * `role="status"`: seçimle belirince ekran okuyucuya kibarca duyurulur.
+ * Kantin birlikçe işletiliyorsa görünen md. 23/3 bilgisi (uyarı tonunda; engel değil). Kendisi
+ * canlı bölge değildir: formda her zaman DOM'da duran `role="status"` kabının içine girer
+ * (içeriğiyle birlikte doğan canlı bölgeyi ekran okuyucular çoğu zaman duyurmaz).
  */
 export function KantinIsletmeBilgisi() {
   return (
-    <div
-      role="status"
-      className="flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-4 py-3 text-body-medium text-on-tertiary-container"
-    >
+    <div className="flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-4 py-3 text-body-medium text-on-tertiary-container">
       <Icon name="info" size="lg" className="shrink-0" />
       <span className="min-w-0">{KANTIN_ISLETME_BILGISI}</span>
     </div>
@@ -214,27 +213,7 @@ export default function OkulKartiAlanlari({
         onChange={(e) => onChange({ okulAdi: e.target.value })}
         error={errors.school_name}
         placeholder="Örn. Örnek Anadolu Lisesi"
-        helperText="Evrak antedinin ilk satırı."
-      />
-      <TextField
-        label="Kurum kodu"
-        required
-        disabled={disabled}
-        inputMode="numeric"
-        autoComplete="off"
-        maxLength={6}
-        value={form.kurumKodu}
-        onChange={(e) => onChange({ kurumKodu: e.target.value })}
-        error={errors.institution_code}
-        helperText={KURUM_KODU_YARDIMI}
-      />
-      <TextField
-        label="Okul müdürü"
-        disabled={disabled}
-        value={form.mudur}
-        onChange={(e) => onChange({ mudur: e.target.value })}
-        error={errors.principal_name}
-        helperText="Evrak imza bloğunda görünür; boş bırakılırsa şablon yer tutucu basar."
+        helperText={OKUL_ADI_YARDIMI}
       />
       <TextField
         label="İl"
@@ -251,6 +230,27 @@ export default function OkulKartiAlanlari({
         value={form.ilce}
         onChange={(e) => onChange({ ilce: e.target.value })}
         error={errors.district}
+      />
+      <TextField
+        label="Okul müdürü"
+        disabled={disabled}
+        value={form.mudur}
+        onChange={(e) => onChange({ mudur: e.target.value })}
+        error={errors.principal_name}
+        helperText="Evrak imza bloğunda görünür; boş bırakılırsa şablon yer tutucu basar."
+      />
+      <TextField
+        label="Kurum kodu"
+        required
+        disabled={disabled}
+        inputMode="numeric"
+        autoComplete="off"
+        // Uzunluk sınırı yok: tarayıcı `maxLength`i kırpmadan önce uygular, baştaki boşlukla
+        // yapıştırılan geçerli kodun son hanesi düşerdi. Denetim kırpılmış değerdedir.
+        value={form.kurumKodu}
+        onChange={(e) => onChange({ kurumKodu: e.target.value })}
+        error={errors.institution_code}
+        helperText={KURUM_KODU_YARDIMI}
       />
 
       <SecimGrubu
@@ -315,11 +315,10 @@ export default function OkulKartiAlanlari({
         disabled={disabled}
         onSec={(kantin) => onChange({ kantin })}
       />
-      {form.kantin === "BIRLIKCE_ISLETILIYOR" && (
-        <div className="sm:col-span-2">
-          <KantinIsletmeBilgisi />
-        </div>
-      )}
+      {/* Canlı bölge her zaman DOM'dadır; bilgi seçimle içine girer (duyurulsun diye). */}
+      <div role="status" className="empty:hidden sm:col-span-2">
+        {form.kantin === "BIRLIKCE_ISLETILIYOR" && <KantinIsletmeBilgisi />}
+      </div>
       <RadyoGrubu<StaffingMode>
         etiket="Personel çalıştırma biçimi"
         yardim={PERSONEL_YARDIMI}
@@ -390,10 +389,10 @@ export function mevcutYazimi(sayi: number | null, tarih: string | null): string 
 export function OkulKartiListesi({ kayit }: { kayit: SchoolConfig }) {
   const satirlar: Array<[etiket: string, deger: string]> = [
     ["Okul adı", kayit.school_name],
-    ["Kurum kodu", kayit.institution_code],
     ["İl", kayit.province],
     ["İlçe", kayit.district],
     ["Okul müdürü", kayit.principal_name],
+    ["Kurum kodu", kayit.institution_code],
     [
       "Kademe",
       kademeleriSirala(kayit.levels)

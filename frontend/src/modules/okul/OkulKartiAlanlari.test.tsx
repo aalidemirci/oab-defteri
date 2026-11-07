@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 import { todayIso } from "../../lib/format";
 import { BOS_OKUL_KARTI, ORNEK_OKUL_KARTI } from "../../test/okulKarti";
 import OkulKartiAlanlari, { OkulKartiListesi, mevcutYazimi } from "./OkulKartiAlanlari";
-import { KANTIN_ISLETME_BILGISI, KAMPUS_ETIKETI } from "./metinler";
+import { KANTIN_ISLETME_BILGISI, KAMPUS_ETIKETI, OKUL_ADI_YARDIMI } from "./metinler";
 import { bosOkulFormu } from "./okulBilgileri";
 import type { OkulFormu } from "./okulBilgileri";
 
@@ -138,13 +138,41 @@ describe("OkulKartiAlanlari — form", () => {
   it("kantin birlikçe işletilince md. 23/3 bilgisi görünür; başka seçimde kalkar", async () => {
     const user = userEvent.setup();
     bas();
+    // Canlı bölge seçimden ÖNCE de DOM'dadır (içeriğiyle doğan bölge duyurulmaz; denetim F1b-4).
+    const bolge = screen.getByRole("status");
+    expect(bolge).toBeEmptyDOMElement();
     expect(screen.queryByText(KANTIN_ISLETME_BILGISI)).toBeNull();
 
     await user.click(screen.getByRole("radio", { name: "Birlikçe işletiliyor" }));
-    expect(screen.getByRole("status")).toHaveTextContent(KANTIN_ISLETME_BILGISI);
+    expect(screen.getByRole("status")).toBe(bolge);
+    expect(bolge).toHaveTextContent(KANTIN_ISLETME_BILGISI);
 
     await user.click(screen.getByRole("radio", { name: "Kiraya veriliyor" }));
     expect(screen.queryByText(KANTIN_ISLETME_BILGISI)).toBeNull();
+    expect(bolge).toBeEmptyDOMElement();
+  });
+
+  it("künye alanları sözlükteki sırayla durur: okul adı, il, ilçe, müdür, kurum kodu", () => {
+    bas();
+    const sira = [/^Okul adı/, /^İl \*$/, /^İlçe/, /^Okul müdürü/, /^Kurum kodu/].map((e) =>
+      screen.getByLabelText(e),
+    );
+    for (let i = 1; i < sira.length; i++) {
+      expect(
+        sira[i - 1].compareDocumentPosition(sira[i]) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+    expect(screen.getByText(OKUL_ADI_YARDIMI)).toBeInTheDocument();
+  });
+
+  it("kurum kodunda uzunluk sınırı yoktur: boşlukla yapıştırılan kod kırpılmadan önce kesilmez", async () => {
+    const user = userEvent.setup();
+    const { son } = bas();
+    const alan = screen.getByLabelText(/^Kurum kodu/);
+    expect(alan).not.toHaveAttribute("maxlength");
+    await user.click(alan);
+    await user.paste(" 123456");
+    expect(son()?.kurumKodu).toBe(" 123456");
   });
 
   it("mevcudun tarihinin varsayılanı bugündür ve bugünden sonrası seçtirilmez", () => {
@@ -212,6 +240,11 @@ describe("OkulKartiListesi — salt okur", () => {
     render(<OkulKartiListesi kayit={{ ...ORNEK_OKUL_KARTI, levels: ["ORTAOKUL", "ILKOKUL"] }} />);
     const deger = (etiket: string) =>
       (screen.getByText(etiket, { selector: "dt" }).nextElementSibling as HTMLElement).textContent;
+    expect(
+      Array.from(document.querySelectorAll("dt"))
+        .slice(0, 5)
+        .map((dt) => dt.textContent),
+    ).toEqual(["Okul adı", "İl", "İlçe", "Okul müdürü", "Kurum kodu"]);
     expect(deger("Okul adı")).toBe("Örnek Anadolu Lisesi");
     expect(deger("Kurum kodu")).toBe("123456");
     expect(deger("Kademe")).toBe("İlkokul, Ortaokul");
