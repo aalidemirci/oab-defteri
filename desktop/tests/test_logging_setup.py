@@ -23,7 +23,9 @@ from desktop.logging_setup import (
     apply_access_log_policy,
     configure_logging,
     enable_crash_log,
+    gunluk_dosyasi_yeri,
 )
+from desktop.paths import resolve_app_paths
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -327,6 +329,131 @@ def test_cokme_kaydi_buyuyunce_kenara_alinir(
 
     assert (tmp_path / f"{CRASH_LOG_NAME}.1").stat().st_size == 600_000
     assert kayit.stat().st_size < 200
+
+
+def test_cokme_kaydi_windowsta_basligin_altina_not_yazar_faulthandler_acik_kalir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """07.11.2026 sınaması: Windows'ta gömülü pencere bileşeninin yakalanan hataları `faulthandler`a
+    "Windows fatal exception" diye düşer, 8 dakikada 71 kayıt oldu, program çökmedi. Gerçek çökme
+    kanıtı gerektiği için kayıt kapanmaz; dosyayı okuyan yanılmasın diye not yazılır."""
+    cagri: dict[str, Any] = {}
+    monkeypatch.setattr(faulthandler, "enable", lambda **k: cagri.update(k))
+    monkeypatch.setattr(logging_setup, "_crash_log_file", None)
+
+    yol = enable_crash_log(tmp_path, "deneme", platform="win32")
+
+    baslik, not_satiri = yol.read_text(encoding="utf-8").splitlines()
+    assert baslik.endswith("OAB Defteri deneme açıldı ===")
+    assert not_satiri == (
+        "Not: Program kendiliğinden kapanmadıysa bu kayıtlar çökme değildir; gömülü pencere "
+        "bileşeninin yakalanan hatalarıdır."
+    )
+    assert cagri["all_threads"] is True
+
+
+@pytest.mark.parametrize(
+    ("sistem", "satir"), [("win32", 2), ("linux", 1)], ids=["windows", "pardus"]
+)
+def test_cokme_kaydi_platform_verilmezse_calisilan_sistemi_kullanir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sistem: str, satir: int
+) -> None:
+    """Üretim `platform` vermez (`desktop.main`); testlerin açık verdiği değer bu yolu sınamaz."""
+    monkeypatch.setattr(faulthandler, "enable", lambda **k: None)
+    monkeypatch.setattr(logging_setup, "_crash_log_file", None)
+    monkeypatch.setattr(sys, "platform", sistem)
+
+    yol = enable_crash_log(tmp_path, "deneme")
+
+    assert len(yol.read_text(encoding="utf-8").splitlines()) == satir
+
+
+def test_cokme_kaydi_pardusta_not_yazmaz(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Not Windows'un gömülü pencere bileşenini anlatır; Pardus'ta bu kayıtlar düşmez."""
+    monkeypatch.setattr(faulthandler, "enable", lambda **k: None)
+    monkeypatch.setattr(logging_setup, "_crash_log_file", None)
+
+    yol = enable_crash_log(tmp_path, "deneme", platform="linux")
+
+    assert len(yol.read_text(encoding="utf-8").splitlines()) == 1
+
+
+# ---------------------------------------------------------------------------
+# Günlük dosyasının yeri (07.11.2026 sınama listesi, kod okuması): iletiler günlüğü "veri klasöründeki
+# logs/" diye gösteriyordu; günlük iki platformda da `data`nın içinde değildir, Pardus'ta XDG
+# ayrımıyla başka köktedir (`desktop.paths`).
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("yerel", ["C:/Uydurgul", "c:\\uydurgul\\"], ids=["olagan", "kucuk_harf"])
+def test_gunluk_yeri_windowsta_yerel_uygulama_verisinden_yazilir(yerel: str) -> None:
+    """Hesap adı iletiye girmez (R1); Windows yolları büyük-küçük harf ayırmaz."""
+    yerlesim = resolve_app_paths(environ={"LOCALAPPDATA": "C:/Uydurgul"}, platform="win32")
+
+    metin = gunluk_dosyasi_yeri(yerlesim.logs, platform="win32", yerel_veri=lambda: yerel)
+
+    assert metin == "%LOCALAPPDATA%\\OABDefteri\\logs\\uygulama.log"
+
+
+def test_gunluk_yeri_windowsta_ortamdaki_yerel_uygulama_verisini_okur(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LOCALAPPDATA", "C:/Uydurgul")
+    yerlesim = resolve_app_paths(environ={"LOCALAPPDATA": "C:/Uydurgul"}, platform="win32")
+
+    assert gunluk_dosyasi_yeri(yerlesim.logs, platform="win32") == (
+        "%LOCALAPPDATA%\\OABDefteri\\logs\\uygulama.log"
+    )
+
+
+def test_gunluk_yeri_windowsta_kok_disindaysa_ya_da_okunamazsa_tam_yol_yazar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`--data-dir` başka bir yeri gösterir; metin zaten hata yolundadır, ikinci hata çıkmaz."""
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    logs = Path("D:/Okul/OAB/logs")
+
+    assert gunluk_dosyasi_yeri(logs, platform="win32", yerel_veri=lambda: "C:/Uydurgul") == (
+        "D:\\Okul\\OAB\\logs\\uygulama.log"
+    )
+    assert gunluk_dosyasi_yeri(logs, platform="win32") == "D:\\Okul\\OAB\\logs\\uygulama.log"
+
+
+def test_gunluk_yeri_pardusta_gercek_yeri_soyler_ev_dizinini_kirpar() -> None:
+    """Metin `desktop.paths`in çözdüğü yerdir; hesap adı iletiye girmez (R1)."""
+    yerlesim = resolve_app_paths(environ={"HOME": "/home/uydurgul"}, platform="linux")
+
+    metin = gunluk_dosyasi_yeri(yerlesim.logs, platform="linux", ev_dizini=lambda: "/home/uydurgul")
+
+    assert metin == "~/.local/state/oab-defteri/logs/uygulama.log"
+
+
+@pytest.mark.parametrize(
+    "ortam",
+    [
+        {"HOME": "/home/uydurgul", "XDG_STATE_HOME": "/srv/okul/durum"},
+        {"HOME": "/home/uydurgul", "OD_APP_HOME": "/srv/okul/durum"},
+    ],
+    ids=["xdg", "veri_klasoru_bayragi"],
+)
+def test_gunluk_yeri_ev_disindaysa_gercek_yeri_tam_soyler(
+    ortam: dict[str, str],
+) -> None:
+    logs = resolve_app_paths(environ=ortam, platform="linux").logs
+
+    metin = gunluk_dosyasi_yeri(logs, platform="linux", ev_dizini=lambda: "/home/uydurgul")
+
+    assert metin == str(logs / LOG_FILE_NAME)
+
+
+@pytest.mark.parametrize("hata", [RuntimeError, KeyError, OSError])
+def test_gunluk_yeri_ev_dizini_okunamazsa_tam_yol_yazar(hata: type[Exception]) -> None:
+    """Metin zaten hata yolundadır: ikinci hata asıl iletinin yerine geçmesin."""
+
+    def okunamaz() -> str:
+        raise hata("ev dizini yok")
+
+    metin = gunluk_dosyasi_yeri(Path("/srv/okul/logs"), platform="linux", ev_dizini=okunamaz)
+
+    assert metin == "/srv/okul/logs/uygulama.log"
 
 
 def test_gercek_yerel_cokmede_python_yigini_dosyaya_duser(tmp_path: Path) -> None:

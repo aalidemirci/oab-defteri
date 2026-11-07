@@ -52,13 +52,27 @@ def test_taninmayan_goc_acilisi_durdurur_ve_iletisi_turkcedir(
     assert "tanımadığı değişiklikler var." in metin
     assert "güncel sürüme yükseltip" in metin
     assert "yedeği eski programa geri yükleyince" in metin
-    assert "logs/uygulama.log" in metin
+    assert "programın günlük dosyasındadır." in metin
     assert "9999_gelecek_surum" not in metin
     assert not re.search(r"migration|göç|şema", metin, flags=re.IGNORECASE)
 
     gunluk = " ".join(kayit.getMessage() for kayit in od_gunlugu)
     assert "okul.9999_gelecek_surum" in gunluk
     assert "2026.9.0" in gunluk
+
+
+def test_ipucu_gunlugun_gercek_yerini_soyler_gunluge_yolsuz_gider() -> None:
+    """Günlük `data`nın içinde değildir; ileti gerçek yeri yazar, yol günlüğe girmez (R1;
+    `logging_setup.gunluk_dosyasi_yeri`, 07.11.2026 bağımsız denetim)."""
+    yer = "C:\\Users\\Uydurgul\\OAB\\logs\\uygulama.log"
+    with pytest.raises(SchemaTooNewError) as hata:
+        ensure_no_unknown_migrations(["okul.9999_gelecek_surum"], "2026.9.0", gunluk_yeri=yer)
+
+    assert hata.value.hint.endswith(f"programın günlük dosyasındadır ({yer}).")
+    gunluk_metni = hata.value.gunluk_metni
+    assert gunluk_metni is not None
+    assert gunluk_metni.endswith("programın günlük dosyasındadır.")
+    assert "Uydurgul" not in gunluk_metni
 
 
 def test_cok_sayida_taninmayan_goc_iletiyi_tasirmaz_gunluge_hepsi_yazilir(

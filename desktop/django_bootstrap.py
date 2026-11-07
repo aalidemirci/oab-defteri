@@ -96,7 +96,23 @@ def unknown_applied_migrations() -> list[str]:
     )
 
 
-def run_migrations() -> None:
+def _goc_hatasi_ipucu(platform: str) -> str:
+    """Geri yüklemenin başlatıldığı yer: Başlat menüsü kısayolu yalnız Windows'ta vardır (sözlük §4.2;
+    `desktop.integrity` aynı kuralı Veritabanı bozuk iletisinde uygular)."""
+    if platform.startswith("win"):
+        return (
+            "Yedek klasöründeki en son 'pre-migrate-*' veya günlük yedeği geri "
+            "yüklemek için Başlat menüsündeki 'OAB Defteri — Yedekten Geri "
+            "Yükle' kısayolunu (veya 'oab-defteri --geri-yukle' komutunu) "
+            "çalıştırıp programı yeniden açın."
+        )
+    return (
+        "Yedek klasöründeki en son 'pre-migrate-*' veya günlük yedeği geri yüklemek için uçbirimde "
+        "oab-defteri --geri-yukle komutunu çalıştırıp programı yeniden açın."
+    )
+
+
+def run_migrations(*, platform: str | None = None) -> None:
     """`migrate --no-input` — hata halinde açılış durur (pencere açılmaz)."""
     from django.core.management import call_command
 
@@ -106,12 +122,7 @@ def run_migrations() -> None:
         logger.exception("Veritabanı güncellemesi başarısız.")
         raise MigrationError(
             "Veritabanı güncellenemedi; program veriyi korumak için açılmadı.",
-            hint=(
-                "Yedek klasöründeki en son 'pre-migrate-*' veya günlük yedeği geri "
-                "yüklemek için Başlat menüsündeki 'OAB Defteri — Yedekten Geri "
-                "Yükle' kısayolunu (veya 'oab-defteri --geri-yukle' komutunu) "
-                "çalıştırıp programı yeniden açın."
-            ),
+            hint=_goc_hatasi_ipucu(sys.platform if platform is None else platform),
         ) from exc
 
 

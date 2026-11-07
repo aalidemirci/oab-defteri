@@ -140,6 +140,8 @@ function renderPage(route = "/kisiler", yetenekler: readonly string[] = YETENEK_
 }
 
 beforeEach(() => {
+  // Gerçek `saveBlob` hep sonuç döndürür; sahte de öyle olsun.
+  vi.mocked(saveBlob).mockResolvedValue("kaydedildi");
   okulApiMock.getGradeLevels.mockResolvedValue({
     levels: [
       { value: 9, label: "9" },

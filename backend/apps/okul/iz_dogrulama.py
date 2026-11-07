@@ -83,6 +83,7 @@ kartıyla söyler ("Bütünlük Durumu Okunamadı"; `_kartlar`). Bulgu kodları 
 koddur, kullanıcı metnine çıkmaz: ön yüz sözlükteki metni yazar (`modules/butunluk/metinler`).
 Kartlardaki hesap kişisizdir (`_hesap_ozeti`): kimlik, tanıtıcı, rol etiketi, açılış ve kapanış
 günü (aynı tanıtıcıyı alan eski ve yeni hesap ayrılsın; orkestratör maddesi F-3); ad-soyad yok.
+Geri yükleme kartında kaydı yedekte olmayan hesap ayrılır (`_geri_yukleme_hesabi`).
 
 GÖRDÜM (`geri_yukleme_goruldu_mu`, `son_geri_yukleme`; yazımı `hesaplar.acknowledge_restore`,
 `POST security/integrity/restore-seen/` `{seq}`; plan F1b-2 "Gördüm."; tasarım §4.4.4): geri
@@ -847,6 +848,20 @@ def _hesap_ozeti(hesap_id: object) -> dict[str, Any]:
     }
 
 
+def _geri_yukleme_hesabi(hesap_id: str) -> dict[str, Any]:
+    """Geri yükleme kartının hesabı; kimliği geçerli ama satırı yoksa özet `yedekte_yok` taşır.
+
+    Yedek hesaptan eskiyse ya da başka bir kurulumunsa geri yüklemeyi başlatan oturumun, parolayla
+    açan hesabın kaydı yerine konan kayıtlarda yoktur. Bu okuma hatası değildir (07.11.2026 sınama
+    listesi, kod okuması, gerçek pencerede denenmedi: kart sihirbazı dolduran hesabı "Kaydı okunamayan
+    hesap" diye anardı). Yalnız bu kartta: öteki kartlarda satırın yokluğu yedekle açıklanamaz;
+    biçimsiz kimlikte kayıt okunamıyordur.
+    """
+    ozet = _hesap_ozeti(hesap_id)
+    gecerli = denetim_izi.kimlik_metni_ya_da_none(Account, hesap_id) is not None
+    return {**ozet, "yedekte_yok": True} if gecerli and ozet["tanitici"] is None else ozet
+
+
 #: "Gördüm"ün `ISARET` satırının modeli: işaretlenen kayıt denetim izinin kendi satırıdır (kimlik
 #: geri yüklemenin `seq`'i; plan F1b-2 "Gördüm.").
 IZ_SATIRI_MODELI: Final = denetim_izi.model_etiketi(AuditTrail)
@@ -930,11 +945,13 @@ def _geri_yukleme_ozeti(satir: AuditTrail) -> dict[str, Any]:
         # Parola yolunda geri yüklemeyi açan hesap: satırdaki kimliğinden kişisiz özeti
         # (tanıtıcı satıra yazılmaz, `_geri_yukleme_satiri`; burada güncel satırdan okunur).
         "yol_hesap": (
-            _hesap_ozeti(degerler["hesap"]) if isinstance(degerler.get("hesap"), str) else None
+            _geri_yukleme_hesabi(degerler["hesap"])
+            if isinstance(degerler.get("hesap"), str)
+            else None
         ),
         # Uygulama içi geri yüklemeyi başlatan oturumun hesabı (iki yolda da; konsolda yok).
         "oturum_hesap": (
-            _hesap_ozeti(degerler["oturum_hesap"])
+            _geri_yukleme_hesabi(degerler["oturum_hesap"])
             if isinstance(degerler.get("oturum_hesap"), str)
             else None
         ),

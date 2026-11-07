@@ -20,7 +20,12 @@ from pathlib import Path
 import pytest
 from desktop.backup import KAPSAM_METINLERI
 from desktop.server import AZAMI_ISTEK_GOVDESI
-from desktop.window import KAPANIS_BEKLIYOR_OLAYI, PENCERE_METINLERI
+from desktop.window import (
+    GENEL_SUZGEC,
+    KAPANIS_BEKLIYOR_OLAYI,
+    PENCERE_METINLERI,
+    TUR_SUZGECLERI,
+)
 
 from apps.okul.services import encrypted_backup, live_restore
 
@@ -33,6 +38,7 @@ DOSYALAR = (
     "frontend/src/modules/butunluk/metinler.ts",
     "frontend/src/modules/guvenlik/metinler.ts",
     "frontend/src/modules/cikis/metinler.ts",
+    "frontend/src/lib/metinler.ts",
 )
 
 #: Kullanıcıya görünmeyen düz dize sabitleri (dosya, ad) → gerekçe.
@@ -95,6 +101,14 @@ def test_pencere_basliklari_ve_secilen_dosyanin_iletisi_sozlukte_yazilidir() -> 
     sozluk = _sade(_depo_dosyasi("docs/sozluk.md"))
     for metin in (*PENCERE_METINLERI.values(), live_restore.SECILEN_YEDEK_ACILAMADI):
         assert f'**"{_sade(metin)}"**' in sozluk, metin
+
+
+def test_kaydetme_penceresinin_tur_suzgecleri_sozlukte_yazilidir() -> None:
+    """Kullanıcı kararı 07.11.2026 "Program kaydetsin": Windows'ta tür kutusu Türkçedir."""
+    sozluk = _sade(_depo_dosyasi("docs/sozluk.md"))
+    for grup in (*TUR_SUZGECLERI.values(), GENEL_SUZGEC):
+        for metin in grup:
+            assert f"`{metin}`" in sozluk, metin
 
 
 def test_son_denemenin_iletileri_sozlukte_yazilidir() -> None:

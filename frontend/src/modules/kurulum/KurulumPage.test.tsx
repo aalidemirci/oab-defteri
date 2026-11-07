@@ -299,6 +299,8 @@ async function parolaAdiminiGec(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   sunucuyuKur();
+  // Gerçek `saveBlob` hep sonuç döndürür; sahte de öyle olsun.
+  indirme.saveBlob.mockResolvedValue("kaydedildi");
   // Bekleyen anahtar modül belleğindedir: testler arasında sızmasın.
   bekleyenKurtarmaAnahtariniYaz(null);
   // Doğrulanacak gruplar sabit: 1. ve 2. grup (rastgeleIkiGrup(8, () => 0.125)).
@@ -546,6 +548,7 @@ describe("KurulumPage — 1. adım: program yöneticisi hesabı (atlanamaz)", ()
     expect(indirme.saveBlob).toHaveBeenCalledWith(
       pdf,
       expect.stringMatching(/^Kurtarma-Anahtarı-Belgesi_\d{2}\.\d{2}\.\d{4}\.pdf$/),
+      { evKlasorunde: true },
     );
   });
 });

@@ -49,12 +49,38 @@ inmez (`desktop/server.py` başlığı). Aç penceresinde iki platform da tek ö
 Qt kolu pencerenin başlığını `linux.openFile`'dan alır (`PENCERE_METINLERI`), tür süzgecini bu
 pencerede uygular; Windows'ta başlığı işletim sistemi yazar. Süzgeç yalnız kolaylıktır, kullanıcı
 başka dosya seçebilir: dosyanın yedek olup olmadığını sunucu okur.
+
+**Dosyayı program kaydeder** (`dosya_kaydet`; kullanıcı kararı 07.11.2026 "Program kaydetsin"). PDF,
+Excel ve kurulum dosyasını WebView'ın indirmesine bırakmak sonucu bilmez: Windows'ta kaydetme penceresi
+açıkken ve iptalde de "kaydedildi" bildirimi çıkıyor, İndirilenler'de geçici dosya duruyor, Edge'in
+indirme paneli açılıyordu; Pardus'ta 1 sn'den uzun açık pencerede blob adresi kapanıp dosya boş
+kalabiliyordu. Ön yüz içeriği base64 metin olarak verir, köprü pencereyi açar, seçilen yere yazar,
+yalnız durum döner (`kaydedildi`, `iptal`, `hata`). Yol ön yüze, günlüğe, yanıta girmez; içerik
+günlüğe girmez: kurtarma belgesi anahtar taşır. İçerik pencereden önce çözülür, bozuksa pencere
+açılmaz. Yazım atomiktir (`_atomik_yaz`): yarım dosya seçilen adda görünmez.
+
+Tür süzgeci uzantıya göredir (`TUR_SUZGECLERI`); Windows'ta süzgecin uzantısını ve üzerine yazma
+sorusunu pencere kendi yapar. Qt kolu kaydetmede süzgeç uygulamaz, uzantı eklemez: ad uzantısız
+kaldıysa önerilen addaki uzantıyı köprü ekler. Noktalı son ek her zaman uzantı değildir (`_uzanti`):
+programın adları tarihle biter, `Rapor_07.11.2026`nin `.2026`sı uzantı sayılsaydı dosya `.pdf`siz
+yazılırdı. Pencere yalnız yazılan adı sormuştur: uzantı eklenen ad zaten varsa dosya ezilmez, pencere
+kullanıcının seçtiği klasörde o adla yeniden açılır, soruyu pencere sorar.
+
+**Son klasör.** Üç pencere de son seçilen klasörde açılır; klasör yalnız bellektedir,
+süreç kapanınca unutulur, diske ve günlüğe yazılmaz. İptal onu değiştirmez; klasör artık yoksa (bellek
+çekildi) ev dizinine düşülür. Kurtarma anahtarı belgesinin penceresi (`ev_klasorunde`) bunun dışındadır:
+her seferinde ev dizininde açılır, son klasörü ne okur ne değiştirir (kullanıcı kararı 07.11.2026 "Hep ev
+klasöründe"). Şifreli yedek USB belleğe kaydedildikten hemen sonra anahtar onun yanına önerilseydi,
+bellek kaybolunca yedek de onu açan anahtar da birlikte giderdi; yedek de anahtarın yanına önerilmez.
 """
 
 from __future__ import annotations
 
+import base64
 import logging
+import os
 import sys
+import tempfile
 import threading
 import time
 from collections.abc import Callable
@@ -95,9 +121,26 @@ _WEBVIEW2_HINT = (
 #: Kaydetme ve Aç pencerelerinin tür süzgeci. pywebview açıklamada yalnız harf, rakam ve boşluk kabul
 #: eder (`util.parse_file_type`); uymayan süzgeç pencereyi açmadan `ValueError` verirdi.
 KAYDETME_SUZGECI = ("OAB Defteri yedeği (*.odbak)",)
+#: `dosya_kaydet` penceresinin uzantıya göre tür süzgeci; açıklama kuralı yukarıdakinin aynısıdır.
+TUR_SUZGECLERI: Final = {
+    ".pdf": ("PDF belgesi (*.pdf)",),
+    ".xlsx": ("Excel dosyası (*.xlsx)",),
+}
+#: Öteki uzantıların süzgeci: süzgeç hiç verilmezse pywebview İngilizce "All files" yazardı.
+GENEL_SUZGEC: Final = ("Tüm dosyalar (*.*)",)
+#: `dosya_kaydet`'in dönüşleri; ön yüze yalnız bunlar gider (modül başlığı).
+KAYIT_KAYDEDILDI: Final = "kaydedildi"
+KAYIT_IPTAL: Final = "iptal"
+KAYIT_HATA: Final = "hata"
 #: pywebview'ın kendi metinleri (`webview.start(localization=...)`). Qt kolu kaydetme ve Aç
 #: pencerelerinin başlığını buradan alır (`qt.py`); Windows'ta başlığı işletim sistemi yazar.
-PENCERE_METINLERI: Final = {"global.saveFile": "Farklı kaydet", "linux.openFile": "Dosya aç"}
+#: `windows.fileFilter.allFiles` WebView2'nin indirme penceresinin tür kutusudur
+#: (`edgechromium.py`): köprü sayfaya yetişmeden basılan düğmede `saveBlob` o yola düşer.
+PENCERE_METINLERI: Final = {
+    "global.saveFile": "Farklı kaydet",
+    "linux.openFile": "Dosya aç",
+    "windows.fileFilter.allFiles": "Tüm dosyalar",
+}
 #: Uzun iş sürerken kapanışın en çok bekleyeceği süre (tasarım §4.2, TK5).
 KAPANIS_BEKLEME_SN: Final = 60.0
 #: Süre enjekte edilen saatle ölçülür; sayaç bu aralıklarla sorulur (iş bitince hemen uyanır).
@@ -327,18 +370,120 @@ def _secilen_yol(sonuc: object) -> str:
     return str(sonuc)
 
 
+def _tur_suzgeci(ad: str) -> tuple[str, ...]:
+    return TUR_SUZGECLERI.get(Path(ad).suffix.lower(), GENEL_SUZGEC)
+
+
+def _uzanti(ad: str) -> str:
+    """Addaki uzantı, yoksa boş metin: uzantı boşluk taşımaz, en az bir harf içerir (modül başlığı)."""
+    son_ek = Path(ad).suffix
+    if " " in son_ek or not any(harf.isalpha() for harf in son_ek):
+        return ""
+    return son_ek
+
+
+def _atomik_yaz(hedef: Path, veri: bytes) -> None:
+    """Aynı dizinde geçici adla yazar, `fsync` eder, `os.replace` ile yerine koyar.
+
+    Hata olursa geçici dosya kalmaz, var olan dosya bozulmaz. `mkstemp` dosyayı yalnız kullanıcıya
+    açık kurar (0600): kurtarma belgesi anahtar taşır.
+    """
+    tanitici, gecici = tempfile.mkstemp(dir=hedef.parent, prefix=".oab-defteri-", suffix=".tmp")
+    try:
+        with os.fdopen(tanitici, "wb") as akis:
+            akis.write(veri)
+            akis.flush()
+            os.fsync(akis.fileno())
+        os.replace(gecici, hedef)
+    finally:
+        Path(gecici).unlink(missing_ok=True)
+
+
 class PencereKoprusu(TitleBarApi):
-    """Pencerenin `js_api`'si: başlık çubuğu teması, kaydetme yeri, yedek dosyası (modül başlığı).
+    """Pencerenin `js_api`'si: başlık çubuğu teması, kaydetme yeri, yedek dosyası, dosya kaydı.
 
     Köprünün varlığı ön yüzün yetenek işaretidir: `kaydetme_yeri_sor` yoksa (geliştirme kipi,
     tarayıcı) "Şifreli yedeği kaydet" düğmesi kapalıdır, `yedek_dosyasi_sor` yoksa geri yüklemede
-    yükleme kutusu çıkar. `_webview`'in adı `_` ile başlar: pywebview `js_api`'nin açık
-    özniteliklerini dolaşıp ön yüze açar.
+    yükleme kutusu çıkar, `dosya_kaydet` yoksa `saveBlob` tarayıcının indirmesine düşer. Adları `_`
+    ile başlayan öznitelikler ön yüze açılmaz: pywebview `js_api`'nin açık özniteliklerini dolaşır.
+    Her çağrı ayrı iş parçacığında koşar; `_son_klasor`'e tek atama yapılır, kilit gerekmez.
     """
 
     def __init__(self, *, platform: str, webview: Any) -> None:
         super().__init__(platform=platform)
         self._webview = webview
+        self._son_klasor: Path | None = None
+
+    def _acilis_klasoru(self, *, son_klasor: bool) -> Path:
+        """Pencerenin açılacağı klasör: son klasör, yoksa ya da istenmezse ev dizini."""
+        klasor = self._son_klasor if son_klasor else None
+        return klasor if klasor is not None and os.path.isdir(klasor) else Path.home()
+
+    def _dosya_penceresi(self, window: Any, tur: int, **secenekler: Any) -> str:
+        """Pencereyi son klasörde açar; seçilen yolu döndürür, iptalde boş metin (modül başlığı)."""
+        acilis = self._acilis_klasoru(son_klasor=True)
+        yol = _secilen_yol(window.create_file_dialog(tur, directory=str(acilis), **secenekler))
+        if yol:
+            self._son_klasor = Path(yol).parent
+        return yol
+
+    def _kayit_hedefi(self, window: Any, ad: str, *, son_klasor: bool) -> Path | None:
+        """Kaydetme penceresinin seçtirdiği yer; iptalde `None` (uzantı kuralı modül başlığında).
+
+        `son_klasor=False` pencereyi ev dizininde açar, son klasöre dokunmaz (kurtarma belgesi).
+        Uzantı eklenen ad zaten varsa pencere kullanıcının seçtiği klasörde, o adla yeniden açılır;
+        son klasör yalnız iş iptalsiz biterse yazılır (iptal onu değiştirmez).
+        """
+        uzanti = _uzanti(ad)
+        suzgec = _tur_suzgeci(ad)
+        acilis = self._acilis_klasoru(son_klasor=son_klasor)
+        while True:
+            yol = _secilen_yol(
+                window.create_file_dialog(
+                    self._webview.SAVE_DIALOG,
+                    directory=str(acilis),
+                    save_filename=ad,
+                    file_types=suzgec,
+                )
+            )
+            if not yol:
+                return None
+            hedef = Path(yol)
+            if not _uzanti(hedef.name) and uzanti:
+                hedef = hedef.with_name(hedef.name.rstrip(".") + uzanti)
+                if os.path.lexists(hedef):
+                    ad, acilis = hedef.name, hedef.parent
+                    continue
+            if son_klasor:
+                self._son_klasor = hedef.parent
+            return hedef
+
+    def dosya_kaydet(self, icerik: str, onerilen_ad: str = "", ev_klasorunde: bool = False) -> str:
+        """Kaydetme penceresini açar, içeriği (base64) seçilen yere yazar; yalnız durum döndürür.
+
+        `kaydedildi`, `iptal` ya da `hata`; hata ön yüze ham geçmez, yol ve içerik hiçbir yere
+        çıkmaz (modül başlığı). Pencere yoksa (`--autotest`, bağlanmadan gelen çağrı) dosya
+        yazılmamıştır: ön yüz bunu bilsin diye `hata` döner, günlüğe düşmez. `ev_klasorunde`
+        yalnız `True` iken pencere ev dizininde açılır (kurtarma belgesi, modül başlığı). Seçilen
+        yer son klasör olur, dosya sonra yazılamasa da: kullanıcı o klasörü seçmiştir.
+        """
+        window = self._window
+        if window is None:
+            return KAYIT_HATA
+        try:
+            veri = base64.b64decode(icerik, validate=True)
+            hedef = self._kayit_hedefi(
+                window,
+                Path(str(onerilen_ad)).name,
+                son_klasor=ev_klasorunde is not True,
+            )
+            if hedef is None:
+                return KAYIT_IPTAL
+            _atomik_yaz(hedef, veri)
+        except Exception as hata:  # noqa: BLE001 — köprü hatası ön yüze ham geçmesin
+            logger.warning("Dosya kaydedilemedi (%s).", type(hata).__name__)
+            return KAYIT_HATA
+        return KAYIT_KAYDEDILDI
 
     def kaydetme_yeri_sor(self, onerilen_ad: str = "") -> str:
         """Kaydetme penceresini açar; seçilen yolu döndürür.
@@ -350,16 +495,15 @@ class PencereKoprusu(TitleBarApi):
         if window is None:
             return ""
         try:
-            sonuc = window.create_file_dialog(
+            return self._dosya_penceresi(
+                window,
                 self._webview.SAVE_DIALOG,
-                directory=str(Path.home()),
                 save_filename=Path(str(onerilen_ad)).name,
                 file_types=KAYDETME_SUZGECI,
             )
         except Exception as hata:  # noqa: BLE001 — köprü hatası ön yüze ham geçmesin
             logger.warning("Kaydetme penceresi açılamadı (%s).", type(hata).__name__)
             return ""
-        return _secilen_yol(sonuc)
 
     def yedek_dosyasi_sor(self) -> str:
         """Aç penceresini açar; seçilen yedek dosyasının yolunu döndürür.
@@ -371,16 +515,15 @@ class PencereKoprusu(TitleBarApi):
         if window is None:
             return ""
         try:
-            sonuc = window.create_file_dialog(
+            return self._dosya_penceresi(
+                window,
                 self._webview.OPEN_DIALOG,
-                directory=str(Path.home()),
                 allow_multiple=False,
                 file_types=KAYDETME_SUZGECI,
             )
         except Exception as hata:  # noqa: BLE001 — köprü hatası ön yüze ham geçmesin
             logger.warning("Aç penceresi açılamadı (%s).", type(hata).__name__)
             return ""
-        return _secilen_yol(sonuc)
 
 
 class WindowController:
@@ -633,10 +776,9 @@ def open_window(
 
     storage_path.mkdir(parents=True, exist_ok=True)
     set_windows_app_id(platform=system)
-    # pywebview 5.x dosya indirmelerini varsayılan olarak engeller. Frontend'in
-    # ortak `saveBlob` akışı Excel şablonları, resmî PDF'ler, ekler ve kurtarma
-    # anahtarı için `<a download>` kullandığından bu izin pencere oluşturulmadan
-    # önce açılmalıdır; aksi hâlde tıklama hata vermeden sessizce yutulur.
+    # pywebview 5.x dosya indirmelerini varsayılan olarak engeller. `saveBlob` dosyayı köprüyle
+    # kaydeder (`dosya_kaydet`); köprü sayfaya yetişmeden gelen istek `<a download>` yoluna düşer.
+    # İzin o yol için pencere oluşturulmadan önce açılır: tıklama sessizce yutulmasın.
     module.settings["ALLOW_DOWNLOADS"] = True
     kopru = PencereKoprusu(platform=system, webview=module)
     window = module.create_window(

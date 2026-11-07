@@ -1,5 +1,5 @@
 // Yedek Raporu kartı (tasarım §9.7; kullanıcı kararı 04.11.2026 "Yedek raporu"): PDF sunucudan gelir,
-// inen ad sunucunun verdiği addır, ekranın kurduğu ad yalnız o ad okunamazsa kullanılır (sözlük §3);
+// önerilen ad sunucunun verdiği addır, ekranın kurduğu ad yalnız o ad okunamazsa kullanılır (sözlük §3);
 // iş sürerken düğme kapalıdır; ret sunucunun iletisiyle gösterilir, iletisiz ret ve kopan bağlantı
 // sözlükteki metinle (İngilizce ham ileti ekrana çıkmaz). Uç gövdesizdir.
 
@@ -8,6 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { ApiError, BEKLENMEYEN_HATA_ILETISI } from "../../lib/api";
+import { DOSYA_YAZILAMADI_ILETISI } from "../../lib/metinler";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 
 const mocks = vi.hoisted(() => ({ postDosya: vi.fn(), saveBlob: vi.fn() }));
@@ -35,7 +36,11 @@ function bas() {
 
 const dugme = () => screen.getByRole("button", { name: "PDF olarak kaydet" });
 
-beforeEach(() => vi.clearAllMocks());
+// Gerçek `saveBlob` hep sonuç döndürür: sahte `undefined` dönseydi başarı dalı sınanmazdı.
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.saveBlob.mockResolvedValue("kaydedildi");
+});
 afterEach(() => vi.useRealTimers());
 
 it("kart adı belge adıdır; raporu gövdesiz ister, sunucunun adıyla kaydeder", async () => {
@@ -50,6 +55,40 @@ it("kart adı belge adıdır; raporu gövdesiz ister, sunucunun adıyla kaydeder
   );
   expect(mocks.postDosya).toHaveBeenCalledWith("/backups/report/");
   expect(await screen.findByText("Yedek Raporu PDF olarak kaydedildi.")).toBeInTheDocument();
+});
+
+it("köprü yoksa dosya tarayıcıya verilir, bildirim yine çıkar", async () => {
+  mocks.postDosya.mockResolvedValue({ blob: PDF, ad: "Yedek-Raporu_06.11.2026.pdf" });
+  mocks.saveBlob.mockResolvedValueOnce("indirildi");
+  bas();
+
+  await userEvent.click(dugme());
+
+  expect(await screen.findByText("Yedek Raporu PDF olarak kaydedildi.")).toBeInTheDocument();
+});
+
+it("kaydetme penceresinde iptal sessizdir: bildirim çıkmaz, düğme geri gelir", async () => {
+  mocks.postDosya.mockResolvedValue({ blob: PDF, ad: "Yedek-Raporu_06.11.2026.pdf" });
+  mocks.saveBlob.mockResolvedValueOnce("iptal");
+  bas();
+
+  await userEvent.click(dugme());
+
+  await waitFor(() => expect(mocks.saveBlob).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(dugme()).toBeEnabled());
+  expect(screen.queryByText("Yedek Raporu PDF olarak kaydedildi.")).not.toBeInTheDocument();
+  expect(screen.queryByText(DOSYA_YAZILAMADI_ILETISI)).not.toBeInTheDocument();
+});
+
+it("dosya yazılamazsa tek ileti çıkar, kaydedildi denmez", async () => {
+  mocks.postDosya.mockResolvedValue({ blob: PDF, ad: "Yedek-Raporu_06.11.2026.pdf" });
+  mocks.saveBlob.mockResolvedValueOnce("hata");
+  bas();
+
+  await userEvent.click(dugme());
+
+  expect(await screen.findByText(DOSYA_YAZILAMADI_ILETISI)).toBeInTheDocument();
+  expect(screen.queryByText("Yedek Raporu PDF olarak kaydedildi.")).not.toBeInTheDocument();
 });
 
 it("sunucunun adı okunamazsa aynı kalıpla ve yerel tarihle kurar", async () => {

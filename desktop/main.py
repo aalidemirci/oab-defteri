@@ -105,7 +105,7 @@ from desktop.gunluk import DAMGA_DOSYASI, GunDegisimiKapisi, acik_kalma_saati
 from desktop.instance_channel import COMMAND_QUIT, COMMAND_SHOW, CommandChannel, open_channel
 from desktop.integrity import check_database_integrity
 from desktop.lock import SingleInstanceLock, signal_running_instance
-from desktop.logging_setup import configure_logging, enable_crash_log
+from desktop.logging_setup import configure_logging, enable_crash_log, gunluk_dosyasi_yeri
 from desktop.paths import (
     ENV_APP_HOME,
     AppPaths,
@@ -133,11 +133,18 @@ from desktop.window import (
 logger = logging.getLogger("oab_defteri")
 
 _UNEXPECTED_MESSAGE = "Program açılırken beklenmeyen bir hata oluştu."
-_UNEXPECTED_HINT = (
-    "Programı yeniden başlatmayı deneyin. Sorun sürerse veri klasöründeki "
-    "logs/uygulama.log dosyasını okulun bilişim teknolojileri rehber "
-    "öğretmenine (BTR) iletin."
-)
+
+
+def _btr_cumlesi(paths: AppPaths) -> str:
+    """Hata ipuçlarının son cümlesi; günlüğün yeri işletim sistemine göredir (yol günlüğe yazılmaz)."""
+    return (
+        f"Sorun sürerse {gunluk_dosyasi_yeri(paths.logs)} dosyasını okulun bilişim teknolojileri "
+        "rehber öğretmenine (BTR) iletin."
+    )
+
+
+def _beklenmeyen_ipucu(paths: AppPaths) -> str:
+    return f"Programı yeniden başlatmayı deneyin. {_btr_cumlesi(paths)}"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -246,7 +253,9 @@ def prepare_data(paths: AppPaths, app_version: str) -> None:
     prepare_django(resolve_backend_dir(), paths.data)
     # İkinci hat (§4.2 adım 5): damga yoksa (geri yükleme siler) veritabanının göç kaydı
     # konuşur — tanınmayan göç = daha yeni sürümün şeması; göç ve yazım başlamadan dur.
-    ensure_no_unknown_migrations(unknown_applied_migrations(), app_version)
+    ensure_no_unknown_migrations(
+        unknown_applied_migrations(), app_version, gunluk_yeri=gunluk_dosyasi_yeri(paths.logs)
+    )
     bekleyen = pending_migrations()
     if bekleyen:
         _goc_oncesi_yedegi_al(paths, app_version, olaylar)
@@ -284,13 +293,11 @@ def _goc_oncesi_yedegi_al(paths: AppPaths, app_version: str, olaylar: AcilisOlay
         goc_oncesi = pre_migrate_backup(paths.db_path, paths.backups, app_version)
     except Exception as exc:  # noqa: BLE001 — her yedek hatası aynı kullanıcı akışına çıkar
         logger.exception("Güncelleme öncesi yedek alınamadı.")
+        yer_ac = "Diskte yer açıp programı yeniden başlatın."
         raise MigrationError(
             "Güncelleme öncesi yedek alınamadı; program veriyi korumak için açılmadı.",
-            hint=(
-                "Diskte yer açıp programı yeniden başlatın. Sorun sürerse veri klasöründeki "
-                "logs/uygulama.log dosyasını okulun bilişim teknolojileri rehber öğretmenine "
-                "(BTR) iletin."
-            ),
+            hint=f"{yer_ac} {_btr_cumlesi(paths)}",
+            gunluk_ipucu=yer_ac,
         ) from exc
     if goc_oncesi is not None and not hedef_vardi:
         olaylar.alinan_yedekler.append(goc_oncesi.name)
@@ -681,7 +688,11 @@ def run(argv: Sequence[str] | None = None) -> int:
         return exc.exit_code
     except Exception:
         logger.exception("Açılışta beklenmeyen hata.")
-        show_error("OAB Defteri açılamadı", f"{_UNEXPECTED_MESSAGE}\n\n{_UNEXPECTED_HINT}")
+        show_error(
+            "OAB Defteri açılamadı",
+            f"{_UNEXPECTED_MESSAGE}\n\n{_beklenmeyen_ipucu(paths)}",
+            gunluk=_UNEXPECTED_MESSAGE,
+        )
         return EXIT_UNEXPECTED
 
 

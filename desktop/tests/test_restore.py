@@ -9,6 +9,7 @@ sondaki yavaş alt-süreç testinde doğrulanır.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sqlite3
@@ -25,6 +26,13 @@ import pytest
 from desktop import main as main_mod
 from desktop import restore as restore_mod
 from desktop.backup_crypto import BOS_YEREL_MANIFESTO, KAPSAM_TAM, MAGIC, Manifesto
+from desktop.clean_shutdown import (
+    MARKER_FILE_NAME,
+    PreviousSession,
+    consume_marker,
+    marker_path,
+    write_marker,
+)
 from desktop.errors import (
     EXIT_ALREADY_RUNNING,
     EXIT_OK,
@@ -789,6 +797,205 @@ def test_backend_yoksa_artik_temizligi_sessizce_atlanir(
     restore_mod._artiklari_temizle(_paths(tmp_path))  # ImportError yutulur
 
 
+# ------------------------------------------------------------------ temiz kapanış işareti
+
+
+def _yedekli_argumanlar(paths: AppPaths, *ek: str) -> argparse.Namespace:
+    yedek = paths.backups / "gunluk.odbak"
+    yedek.write_bytes(MAGIC)
+    return main_mod.build_parser().parse_args(
+        ["--geri-yukle", str(yedek), "--kurtarma-anahtari", "UYDURMA-ANAHTAR", *ek]
+    )
+
+
+def test_geri_yukleme_temiz_kapanis_isaretini_program_surumuyle_yazar(
+    tmp_path: Path, sahte_ortam: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """07.11.2026 sınaması: boş klasöre geri yüklemeden sonraki ilk açılış yanlış "Son Oturumu
+    Kontrol Edin" kartı veriyordu. İlk açılış veritabanının yokluğundan anlaşılır, geri yükleme
+    veritabanını koyar ama işaret yazmazdı. Geri yüklemede oturum açık değildir, veri tamdır."""
+    monkeypatch.setenv("OD_APP_VERSION", "2026.11.0-deneme")
+    paths = _paths(tmp_path)
+
+    kod = restore_mod._restore_flow(paths, _yedekli_argumanlar(paths, "--evet"))
+
+    assert kod == EXIT_OK
+    icerik = json.loads(marker_path(paths.data).read_text(encoding="utf-8"))
+    assert icerik["surum"] == "2026.11.0-deneme"
+    paths.db_path.write_bytes(SQLITE_MAGIC)  # sahte çekirdeğin yerine: dosya yerine kondu
+    assert consume_marker(paths.data, paths.db_path) is PreviousSession.CLEAN
+
+
+def test_bozuk_veritabanindan_donuste_de_isaret_yazilir(
+    tmp_path: Path, sahte_ortam: dict[str, Any]
+) -> None:
+    """Önceki oturum çökmüş olsa da (işaret yok, veritabanı bozuk) yerine konan kayıtlar tamdır."""
+    paths = _paths(tmp_path)
+    paths.db_path.write_bytes(b"BOZUKBOZUK")
+    assert not marker_path(paths.data).exists()
+
+    assert restore_mod._restore_flow(paths, _yedekli_argumanlar(paths, "--evet")) == EXIT_OK
+
+    assert consume_marker(paths.data, paths.db_path) is PreviousSession.CLEAN
+
+
+def test_konsolsuz_basarili_geri_yukleme_de_isaret_yazar(
+    tmp_path: Path, sahte_ortam: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """İşaret ekrana yazmaya bağlı değildir: pencereli pakette konsol açılmayabilir."""
+    monkeypatch.setattr(restore_mod, "ensure_console", lambda: False)
+    paths = _paths(tmp_path)
+
+    assert restore_mod._restore_flow(paths, _yedekli_argumanlar(paths, "--evet")) == EXIT_OK
+
+    assert marker_path(paths.data).is_file()
+
+
+def test_ikinci_onayla_surulen_geri_yukleme_isaret_yazar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths, args, _ = _ekli_akis(tmp_path, monkeypatch, "--evet", bozuk=[_BOZUK_SATIR])
+    monkeypatch.setattr("builtins.input", lambda *a: "e")
+
+    assert restore_mod._restore_flow(paths, args) == EXIT_OK
+
+    assert marker_path(paths.data).is_file()
+
+
+def test_isaret_yazilamazsa_geri_yukleme_basarili_kalir(
+    tmp_path: Path,
+    sahte_ortam: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    od_gunlugu: list[logging.LogRecord],
+) -> None:
+    """Veri yerine kondu: işaret yalnız bilgidir. Eksik kalırsa kart çıkar, hepsi bu."""
+    paths = _paths(tmp_path)
+
+    def yazilamaz(*_: Any, **__: Any) -> None:
+        raise PermissionError(13, "erişim engellendi", str(paths.data / "Uydurgul"))
+
+    monkeypatch.setattr("desktop.clean_shutdown.write_marker", yazilamaz)
+
+    kod = restore_mod._restore_flow(paths, _yedekli_argumanlar(paths, "--evet"))
+
+    assert kod == EXIT_OK
+    assert "tamamlandı" in capsys.readouterr().out
+    metin = _gunluk_metni(od_gunlugu)
+    assert "Temiz kapanış işareti yazılamadı (PermissionError)." in metin
+    assert "Uydurgul" not in metin
+
+
+def _vazgec_secim(paths: AppPaths, monkeypatch: pytest.MonkeyPatch) -> argparse.Namespace:
+    (paths.backups / "gunluk.odbak").write_bytes(MAGIC)
+    monkeypatch.setattr("builtins.input", lambda *a: "")
+    return main_mod.build_parser().parse_args(["--geri-yukle"])
+
+
+def _vazgec_onay(paths: AppPaths, monkeypatch: pytest.MonkeyPatch) -> argparse.Namespace:
+    monkeypatch.setattr("builtins.input", lambda *a: "h")
+    return _yedekli_argumanlar(paths)
+
+
+def _servis_hatasi(paths: AppPaths, monkeypatch: pytest.MonkeyPatch) -> argparse.Namespace:
+    monkeypatch.setattr(restore_mod, "_load_service", lambda: _sahte_servis({}, hata="Yanlış."))
+    return _yedekli_argumanlar(paths, "--evet")
+
+
+def _beklenmeyen_hata(paths: AppPaths, monkeypatch: pytest.MonkeyPatch) -> argparse.Namespace:
+    def patlar() -> Any:
+        raise RuntimeError("uydurma hata")
+
+    monkeypatch.setattr(restore_mod, "_load_service", patlar)
+    return _yedekli_argumanlar(paths, "--evet")
+
+
+@pytest.mark.parametrize("onceki_isaret", [False, True], ids=["isaretsiz", "isaretli"])
+@pytest.mark.parametrize(
+    "hazirla",
+    [_vazgec_secim, _vazgec_onay, _servis_hatasi, _beklenmeyen_hata],
+    ids=["secimden_vazgecildi", "onay_reddedildi", "servis_hatasi", "beklenmeyen_hata"],
+)
+def test_iptal_ve_hatada_isarete_dokunulmaz(
+    tmp_path: Path,
+    sahte_ortam: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    hazirla: Any,
+    onceki_isaret: bool,
+) -> None:
+    """Veritabanı değişmedi: önceki oturumun durumu ne ise o kalır (çökmüşse kart yine çıkar)."""
+    paths = _paths(tmp_path)
+    if onceki_isaret:
+        write_marker(paths.data, "2026.1.0")
+    once = marker_path(paths.data).read_bytes() if onceki_isaret else None
+    args = hazirla(paths, monkeypatch)
+
+    restore_mod._restore_flow(paths, args)
+
+    assert "cagri" not in sahte_ortam
+    if once is None:
+        assert not marker_path(paths.data).exists()
+    else:
+        assert marker_path(paths.data).read_bytes() == once
+
+
+def test_ikinci_onay_reddinde_isaret_yazilmaz(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths, args, _ = _ekli_akis(tmp_path, monkeypatch, "--evet", bozuk=[_BOZUK_SATIR])
+    monkeypatch.setattr("builtins.input", lambda *a: "h")
+
+    assert restore_mod._restore_flow(paths, args) == EXIT_OK
+
+    assert not marker_path(paths.data).exists()
+
+
+# ------------------------------------------------------------------ beklenmeyen hata iletisi
+
+
+def test_beklenmeyen_hata_iletisi_windowsta_gunlugun_gercek_yerini_soyler(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Günlük `data`nın içinde değil yanındadır (07.11.2026 sınama turu, kod okuması)."""
+    paths = resolve_app_paths(environ={"LOCALAPPDATA": str(tmp_path)}, platform="win32")
+    paths.ensure()
+    args = _beklenmeyen_hata(paths, monkeypatch)
+    monkeypatch.setattr(restore_mod, "prepare_django", lambda *a, **k: None)
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+
+    assert restore_mod._restore_flow(paths, args) == EXIT_RESTORE_FAILED
+
+    cikti = capsys.readouterr().out
+    assert (
+        "HATA: Geri yükleme beklenmeyen bir hatayla durdu; ayrıntı "
+        "%LOCALAPPDATA%\\OABDefteri\\logs\\uygulama.log dosyasındadır." in cikti
+    )
+    assert "veri klasöründeki" not in cikti
+
+
+def test_beklenmeyen_hata_iletisi_pardusta_gunlugun_yerini_soyler_gunluge_yol_yazmaz(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    od_gunlugu: list[logging.LogRecord],
+) -> None:
+    """Pardus'ta günlük XDG ayrımıyla başka köktedir; yol yalnız konsola çıkar (R1)."""
+    paths = _paths(tmp_path / "Uydurgul")
+    args = _beklenmeyen_hata(paths, monkeypatch)
+    monkeypatch.setattr(restore_mod, "prepare_django", lambda *a, **k: None)
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("HOME", str(tmp_path / "baska"))
+
+    assert restore_mod._restore_flow(paths, args) == EXIT_RESTORE_FAILED
+
+    cikti = capsys.readouterr().out
+    assert f"ayrıntı {paths.logs / 'uygulama.log'} dosyasındadır." in cikti
+    assert "veri klasöründeki" not in cikti
+    metin = _gunluk_metni(od_gunlugu)
+    assert "Geri yükleme başarısız" in metin and "Uydurgul" not in metin
+
+
 # ------------------------------------------------------------------ uçtan uca
 
 
@@ -803,7 +1010,6 @@ def _gomulu_durum(dek: bytes, kurtarma: str) -> bytes:
     çekirdek de öyle açar (`app_password.normalize_recovery_key`).
     """
     import base64
-    import json
 
     from argon2.low_level import Type, hash_secret_raw
     from cryptography.fernet import Fernet
@@ -892,6 +1098,8 @@ def test_geri_yukleme_kipi_gercek_akista_calisir(tmp_path: Path) -> None:
 
     assert sonuc.returncode == EXIT_OK, sonuc.stderr
     assert b"yeni-icerik" in (veri / "db.sqlite3").read_bytes()
+    # Sonraki açılış "Son Oturumu Kontrol Edin" kartını vermez (07.11.2026 sınaması).
+    assert (veri / MARKER_FILE_NAME).is_file()
     assert not hazirlik.exists() and not yukleme.exists()
     assert satirsiz.read_bytes() == b"satirsiz"
     onceki = list(veri.glob("db-onceki-*.sqlite3"))

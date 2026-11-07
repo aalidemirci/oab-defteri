@@ -43,6 +43,12 @@ adını taşıyabilir): çekirdek adı süzerek kendisi yazar, konsol iletisi on
 Yarım işlerin artıkları bu kipte de silinir (plan F1b-3 "Geri yükleme"; `masaustu_kanca`): veritabanı
 bozukken program açılmaz, açılış temizliği koşmaz; kesilen bir denemenin hazırlık dizini yeniden
 denemenin yerini tüketirdi. Kilit alınmıştır, artıklar sahipsizdir. Yetim taraması bu kipte koşmaz.
+
+Başarılı geri yükleme temiz kapanış işaretini yazar (07.11.2026 sınaması; `desktop.clean_shutdown`):
+ilk açılış veritabanının yokluğundan anlaşılır, bu kip veritabanını koyar, işaret yazmazsa sonraki
+açılış boş klasörde de yanlış "Son Oturumu Kontrol Edin" kartı verirdi. Bu kipte oturum açık değildir,
+yerine konan kayıtlar tamdır; önceki oturum çökmüş ya da veritabanı bozuk olsa da aynıdır. İptal ve
+hatada veritabanı değişmez: işarete dokunulmaz.
 """
 
 from __future__ import annotations
@@ -56,11 +62,14 @@ from typing import Any
 
 from desktop.backup import DEFAULT_KEEP_DAYS, KAPSAM_METINLERI
 from desktop.backup_crypto import BACKUP_SUFFIX, BackupCryptoError, kap_basligini_oku
+from desktop.clean_shutdown import write_marker_quietly
 from desktop.dialogs import show_error
 from desktop.django_bootstrap import prepare_django
 from desktop.errors import EXIT_OK, EXIT_RESTORE_FAILED, AlreadyRunningError
 from desktop.lock import SingleInstanceLock
+from desktop.logging_setup import gunluk_dosyasi_yeri
 from desktop.paths import AppPaths, resolve_backend_dir
+from desktop.version import get_app_version
 
 logger = logging.getLogger("oab_defteri.restore")
 
@@ -113,9 +122,10 @@ def _restore_flow(paths: AppPaths, args: argparse.Namespace) -> int:
     except Exception:  # noqa: BLE001 — kip her hatada Türkçe mesajla bitmeli
         logger.exception("Geri yükleme beklenmeyen hatayla durdu.")
         _report_error(
-            "Geri yükleme beklenmeyen bir hatayla durdu; ayrıntı veri klasöründeki "
-            "logs/uygulama.log dosyasındadır.",
+            "Geri yükleme beklenmeyen bir hatayla durdu; ayrıntı "
+            f"{gunluk_dosyasi_yeri(paths.logs)} dosyasındadır.",
             interactive,
+            gunluk="Geri yükleme beklenmeyen bir hatayla durdu.",
         )
     _pause_before_exit(skip=bool(getattr(args, "evet", False)))
     return kod
@@ -184,6 +194,7 @@ def _run_steps(paths: AppPaths, args: argparse.Namespace, interactive: bool) -> 
         print("Geri yükleme iptal edildi.")
         return EXIT_OK
 
+    write_marker_quietly(paths.data, get_app_version())
     if interactive:
         print("\nGeri yükleme tamamlandı.")
         _ekleri_yaz(sonuc.dosya_raporu)

@@ -311,10 +311,12 @@ def test_denetci_pencereye_start_tan_once_baglanir(tmp_path: Path) -> None:
     assert sahte.pencere.events.closing.isleyiciler == [denetci.on_closing]
     # Qt kolu kaydetme ve Aç pencerelerinin başlığını pywebview'ın metinlerinden alır (sözlük:
     # Türkçe). Anahtarlar pywebview 5.3.2 `localization.py`'den; yanlış anahtar sessizce İngilizce
-    # başlık bırakırdı.
+    # başlık bırakırdı. `windows.fileFilter.allFiles` WebView2'nin indirme penceresinin tür kutusudur
+    # (`edgechromium.py`; 07.11.2026 sınama listesi, 10. madde).
     assert sahte.start_kwargs["localization"] == {
         "global.saveFile": "Farklı kaydet",
         "linux.openFile": "Dosya aç",
+        "windows.fileFilter.allFiles": "Tüm dosyalar",
     }
 
 

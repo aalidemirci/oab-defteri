@@ -830,13 +830,14 @@ def test_dizin_esitlenemezse_yedek_gecerlidir(
     assert "son_indirme" in _dis_yedek_kaydi()
 
 
-def test_gecici_dosya_silinemezse_asil_ileti_kalir(
+def test_gecici_dosya_silinemezse_ileti_silindi_demez(
     client: APIClient,
     usb: Path,
     goruntu: Callable[..., None],
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    """07.11.2026 sınama listesi, kod okuması: "dosya silindi" sözü silmenin sonucuna bakmıyordu."""
     _yazimdan_sonra(monkeypatch, _muhurlu_bolumde_bit)
     asil_unlink = Path.unlink
 
@@ -850,8 +851,47 @@ def test_gecici_dosya_silinemezse_asil_ileti_kalir(
     with caplog.at_level(logging.DEBUG):
         yanit = _kaydet(client, usb / AD)
 
-    assert yanit.json()["message"] == encrypted_backup.DENETIM_DUSTU
+    ileti = yanit.json()["message"]
+    assert ileti == encrypted_backup.DENETIM_DUSTU_SILINEMEDI
+    assert "dosya silindi" not in ileti
+    assert _dis_yedek_kaydi()["son_deneme"]["ileti"] == ileti  # sabit iletidir, kart da söyler
     assert UYDURMA_KISI not in caplog.text
+
+
+def test_gecici_dosya_baskasi_silmisse_yer_duruyorsa_ileti_silindi_der(
+    client: APIClient, usb: Path, goruntu: Callable[..., None], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Virüs tarayıcısı dosyayı denetim sırasında kaldırdı: silinecek dosya yoktur, "elle silin"
+    denmez. Yer durduğu için dosyanın gittiği bilinir."""
+
+    def tarayici_sildi(*_: Any) -> None:
+        for yol in usb.iterdir():
+            yol.unlink()
+        raise OSError(errno.EIO, "dosya gitti")
+
+    monkeypatch.setattr(encrypted_backup, "baslik_oku", tarayici_sildi)
+
+    yanit = _kaydet(client, usb / AD)
+
+    assert yanit.json()["message"] == encrypted_backup.DENETIM_DUSTU
+    assert not list(usb.iterdir())
+
+
+def test_denetim_sirasinda_yer_kaybolursa_ileti_silindi_demez(
+    client: APIClient, usb: Path, goruntu: Callable[..., None], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bellek çekildi: yer de dosya da görünmez, ama dosya bellekte kalmış olabilir. `unlink`in
+    "dosya yok" demesi silindiği anlamına gelmez."""
+
+    def bellek_cekildi(*_: Any) -> None:
+        shutil.rmtree(usb)
+        raise OSError(errno.EIO, "aygıt yok")
+
+    monkeypatch.setattr(encrypted_backup, "baslik_oku", bellek_cekildi)
+
+    yanit = _kaydet(client, usb / AD)
+
+    assert yanit.json()["message"] == encrypted_backup.DENETIM_DUSTU_SILINEMEDI
 
 
 # ============================================================ ön okuma

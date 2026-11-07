@@ -98,6 +98,16 @@ const BOS: ButunlukDurumu = {
   okunamayan: [],
 };
 
+/** Geri yüklenen yedekte kaydı olmayan hesap (`iz_dogrulama._geri_yukleme_hesabi`). */
+const YEDEKTE_OLMAYAN: HesapOzeti = {
+  id: "yedekte-yok",
+  tanitici: null,
+  rol_etiketi: null,
+  acilis: null,
+  kapanis: null,
+  yedekte_yok: true,
+};
+
 const GERI: GeriYuklemeOzeti = {
   seq: 40,
   zaman: ZAMAN,
@@ -436,6 +446,33 @@ describe("Yedekten Geri Yükleme Yapıldı kartı", () => {
 
     expect(screen.getByText("Başlatan oturum").nextElementSibling?.textContent).toBe(
       "Program yöneticisi · tanıtıcı yonetici (açılış 01.11.2026)",
+    );
+  });
+
+  it("başlatan oturumun hesabı yedekte yoksa kaydı okunamadı demez", () => {
+    render(
+      <GeriYuklemeKarti
+        geri={{
+          ...GERI,
+          yol: "kurtarma",
+          yol_hesap: null,
+          kurtarma_no: 3,
+          oturum_hesap: YEDEKTE_OLMAYAN,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Başlatan oturum").nextElementSibling?.textContent).toBe(
+      "Bu yedekte kaydı olmayan hesap",
+    );
+    expect(screen.queryByText(/okunamayan/)).not.toBeInTheDocument();
+  });
+
+  it("yedeği parolasıyla açan hesap yedekte yoksa cümle bozulmaz", () => {
+    render(<GeriYuklemeKarti geri={{ ...GERI, yol_hesap: YEDEKTE_OLMAYAN }} />);
+
+    expect(screen.getByText("Yedeği açan").nextElementSibling?.textContent).toBe(
+      "Bu yedekte kaydı olmayan hesabın parolası",
     );
   });
 

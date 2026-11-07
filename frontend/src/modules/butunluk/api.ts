@@ -44,6 +44,11 @@ export interface HesapOzeti {
    */
   acilis?: string | null;
   kapanis?: string | null;
+  /**
+   * Yalnız geri yükleme kartında, kimliği geçerli ama yerine konan kayıtlarda satırı olmayan
+   * hesapta true (`iz_dogrulama._geri_yukleme_hesabi`); öteki hesaplarda alan yoktur.
+   */
+  yedekte_yok?: boolean;
 }
 
 /**

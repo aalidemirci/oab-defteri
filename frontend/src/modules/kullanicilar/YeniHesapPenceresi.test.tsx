@@ -12,6 +12,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../lib/api";
+import { DOSYA_YAZILAMADI_ILETISI } from "../../lib/metinler";
 import { KENDI_HESABI, ROL_SECENEKLERI, hesapSatiri } from "../../test/kullanicilar";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import {
@@ -79,6 +80,8 @@ const alan = (p: HTMLElement, ad: RegExp) => within(p).getByLabelText(ad) as HTM
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Gerçek `saveBlob` hep sonuç döndürür: sahte `undefined` dönseydi başarı dalı sınanmazdı.
+  indirme.saveBlob.mockResolvedValue("kaydedildi");
   apiMock.secenekler.mockResolvedValue({ roller: ROL_SECENEKLERI });
   apiMock.liste.mockResolvedValue([KENDI_HESABI]);
 });
@@ -254,8 +257,49 @@ describe("Yeni hesap — gönderim", () => {
         "Hesap-Teslim-Pusulası_Başkan_04.11.2026.pdf",
       ),
     );
+    expect(await screen.findByText("Hesap teslim pusulası PDF olarak kaydedildi.")).toBeVisible();
     await user.click(within(p).getByRole("button", { name: "Kapat" }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("sonuçta köprü yoksa dosya tarayıcıya verilir, bildirim yine çıkar", async () => {
+    const user = userEvent.setup();
+    apiMock.ac.mockResolvedValue({ hesap: BASKAN, uyari: null, bilgi: null });
+    apiMock.pusula.mockResolvedValue({ blob: new Blob(["%PDF"]), ad: "pusula.pdf" });
+    indirme.saveBlob.mockResolvedValueOnce("indirildi");
+    bas();
+    const p = await pencere();
+    await doldurVeGonder(user, p);
+    await within(p).findByText("Hesap açıldı.");
+
+    await user.click(within(p).getByRole("button", { name: DUGME_PUSULA }));
+
+    expect(await screen.findByText("Hesap teslim pusulası PDF olarak kaydedildi.")).toBeVisible();
+  });
+
+  it("sonuçta pusula kaydında iptal sessizdir, yazılamazsa pencerede tek ileti çıkar", async () => {
+    const user = userEvent.setup();
+    apiMock.ac.mockResolvedValue({ hesap: BASKAN, uyari: null, bilgi: null });
+    apiMock.pusula.mockResolvedValue({ blob: new Blob(["%PDF"]), ad: "pusula.pdf" });
+    bas();
+    const p = await pencere();
+    await doldurVeGonder(user, p);
+    await within(p).findByText("Hesap açıldı.");
+    const dugme = within(p).getByRole("button", { name: DUGME_PUSULA });
+
+    indirme.saveBlob.mockResolvedValueOnce("iptal");
+    await user.click(dugme);
+    await waitFor(() => expect(indirme.saveBlob).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(within(p).getByRole("button", { name: DUGME_PUSULA })).toBeEnabled(),
+    );
+    expect(screen.queryByText("Hesap teslim pusulası PDF olarak kaydedildi.")).toBeNull();
+    expect(within(p).queryByText(DOSYA_YAZILAMADI_ILETISI)).toBeNull();
+
+    indirme.saveBlob.mockResolvedValueOnce("hata");
+    await user.click(within(p).getByRole("button", { name: DUGME_PUSULA }));
+    expect(await within(p).findByText(DOSYA_YAZILAMADI_ILETISI)).toBeInTheDocument();
+    expect(screen.queryByText("Hesap teslim pusulası PDF olarak kaydedildi.")).toBeNull();
   });
 
   it("sonuçta pusula basılamıyorsa sunucunun nedeni; ikinci program yöneticisinin bilgisi", async () => {

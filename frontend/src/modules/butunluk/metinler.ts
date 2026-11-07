@@ -140,10 +140,19 @@ export function kagitCapasiSatiri(capa: KagitCapasi): string {
 }
 
 /**
+ * Geri yüklenen yedekte kaydı olmayan hesap: yedek hesaptan eski ya da başka bir kurulumundur,
+ * kayıt okunamaz değildir (sözlük §4.5, Yedekten Geri Yükleme Yapıldı kartı).
+ */
+export const YEDEKTE_KAYDI_OLMAYAN_HESAP = "Bu yedekte kaydı olmayan hesap";
+/** Aynı hesap "Yedeği açan" satırında (parola yolu). */
+export const YEDEKTE_KAYDI_OLMAYAN_HESABIN_PAROLASI = "Bu yedekte kaydı olmayan hesabın parolası";
+
+/**
  * Hesabın kişisiz adı: "Muhasip · tanıtıcı muhasip" (sözlük §1 "Hesap"; Ayarlar → Güvenlik'in
  * "Bu oturum: …" satırıyla aynı biçim). Kaydı olmayan hesapta yalnız tanıtıcı yazar.
  */
 export function hesapEtiketi(hesap: HesapOzeti): string {
+  if (hesap.yedekte_yok === true) return YEDEKTE_KAYDI_OLMAYAN_HESAP;
   if (hesap.tanitici === null) return hesap.rol_etiketi ?? "Kaydı okunamayan hesap";
   if (hesap.rol_etiketi === null) return `tanıtıcı ${hesap.tanitici}`;
   return `${hesap.rol_etiketi} · tanıtıcı ${hesap.tanitici}`;

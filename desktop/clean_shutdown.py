@@ -18,6 +18,8 @@ kalır; sayaç okunamazsa da yazılmaz, "sıfır" saymak §13 D3 dersine aykır�
 öldürülürse işaret eksik kalır. Açılış bir
 `StartupError` ile durursa (bozuk veritabanı, WebView2 yok…) bu oturumda işlem
 yapılmamıştır: önceki oturumun durumu korunur (`restore_after_failed_startup`).
+Konsol geri yüklemesi de başarıda işareti yazar (`desktop.restore`): veritabanını koyar, oturum
+açmaz; işaret olmazsa boş klasördeki ilk açılış "beklenmedik" sayılırdı.
 
 Sonuç süreç içinde `OD_ONCEKI_OTURUM` ortam değişkeniyle backend'e taşınır;
 okuma yardımcısı `previous_session_from_env`. Değişken Django ayarlarından

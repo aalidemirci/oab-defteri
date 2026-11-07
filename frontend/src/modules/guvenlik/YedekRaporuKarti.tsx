@@ -3,12 +3,14 @@
 // yedekleri açan kurtarma anahtarları, kenara alınan önceki veritabanları, son şifreli yedek,
 // hatırlatma süresi. Yalnız program yöneticisi basar (yetenek `guvenlik`; kartı `GuvenlikAyarlari`
 // süzer). Dosyası saklanmaz, basımı `BASIM` satırıdır; adı sunucu kurar, ekranın kurduğu ad yalnız
-// o ad okunamazsa kullanılır (sözlük §3 "İndirilen dosya adı").
+// o ad okunamazsa kullanılır (sözlük §3 "Kaydedilen dosya adı"). Satır PDF üretilince yazılır:
+// kaydetme penceresinde iptal satırı geri almaz, bildirim yalnız dosya kaydedilince çıkar.
 
 import { useState } from "react";
 
 import { dosyaAdi, saveBlob } from "../../lib/download";
 import { formatDate, todayIso } from "../../lib/format";
+import { DOSYA_YAZILAMADI_ILETISI } from "../../lib/metinler";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import Icon from "../../ui/Icon";
@@ -30,8 +32,12 @@ export default function YedekRaporuKarti() {
     setCalisiyor(true);
     try {
       const { blob, ad } = await guvenlikApi.yedekRaporu();
-      saveBlob(blob, ad ?? dosyaAdi([YEDEK_RAPORU_ADI, formatDate(todayIso())], "pdf"));
-      snackbar.success(YEDEK_RAPORU_KAYDEDILDI);
+      const sonuc = await saveBlob(
+        blob,
+        ad ?? dosyaAdi([YEDEK_RAPORU_ADI, formatDate(todayIso())], "pdf"),
+      );
+      if (sonuc === "hata") snackbar.error(DOSYA_YAZILAMADI_ILETISI);
+      else if (sonuc !== "iptal") snackbar.success(YEDEK_RAPORU_KAYDEDILDI);
     } catch (error) {
       snackbar.error(oturumHataMetni(error, YEDEK_RAPORU_HAZIRLANAMADI));
     } finally {

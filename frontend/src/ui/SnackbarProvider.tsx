@@ -91,8 +91,10 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
   return (
     <SnackbarContext.Provider value={api}>
       {children}
+      {/* z-[55]: pencerenin (z-50, gövdeye çizilir) üstünde, "Programı kapatıp yeniden açın"
+          ekranının (z-[60]) altında; açık pencereden verilen bildirim örtünün altında kalmaz. */}
       {current && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center p-4 sm:justify-start">
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[55] flex justify-center p-4 sm:justify-start">
           <Snackbar
             key={current.id}
             message={current.message}

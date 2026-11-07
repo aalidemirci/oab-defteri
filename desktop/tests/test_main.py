@@ -34,6 +34,7 @@ from desktop.errors import (
     EXIT_DATABASE_CORRUPT,
     EXIT_MIGRATION_FAILED,
     EXIT_OK,
+    EXIT_UNEXPECTED,
     EXIT_WEBVIEW_UNAVAILABLE,
     DatabaseCorruptError,
     MigrationError,
@@ -926,6 +927,84 @@ def test_acilis_hatasinda_gunluge_yol_dusmez(
     assert str(tmp_path) in ileti
     assert gunluk is not None and str(tmp_path) not in gunluk
     assert "Veri dosyası bozuk görünüyor." in gunluk
+
+
+def _goc_oncesi_hatasi(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> MigrationError:
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path / "Uydurgul")})
+    monkeypatch.setattr(main_mod, "pre_migrate_backup", _patlayan(OSError(28, "disk dolu")))
+    with pytest.raises(MigrationError) as hata:
+        main_mod._goc_oncesi_yedegi_al(paths, "2026.9.0", main_mod.AcilisOlaylari())
+    return hata.value
+
+
+def test_hata_ipuclari_windowsta_gunlugun_gercek_yerini_soyler(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Günlük `data`nın içinde değil yanındadır (07.11.2026 sınama turu, kod okuması)."""
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setenv("LOCALAPPDATA", "C:/Uydurgul")
+    paths = resolve_app_paths(environ={"LOCALAPPDATA": "C:/Uydurgul"}, platform="win32")
+
+    assert main_mod._beklenmeyen_ipucu(paths) == (
+        "Programı yeniden başlatmayı deneyin. Sorun sürerse "
+        "%LOCALAPPDATA%\\OABDefteri\\logs\\uygulama.log dosyasını okulun bilişim teknolojileri "
+        "rehber öğretmenine (BTR) iletin."
+    )
+    ipucu = _goc_oncesi_hatasi(tmp_path, monkeypatch).hint
+    assert ipucu.startswith("Diskte yer açıp programı yeniden başlatın. Sorun sürerse ")
+    assert "Uydurgul\\logs\\uygulama.log dosyasını okulun bilişim" in ipucu
+    assert "veri klasöründeki" not in ipucu
+
+
+def test_hata_ipuclari_pardusta_gunlugun_gercek_yerini_soyler(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pardus'ta günlük XDG ayrımıyla başka köktedir (`desktop.paths`)."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    paths = resolve_app_paths(environ={"HOME": str(tmp_path)}, platform="linux")
+
+    ipucu = main_mod._beklenmeyen_ipucu(paths)
+
+    assert "~/.local/state/oab-defteri/logs/uygulama.log dosyasını" in ipucu
+    assert "veri klasöründeki" not in ipucu
+
+
+def test_goc_oncesi_yedek_hatasinin_gunlugune_yol_dusmez(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Günlüğün yeri kullanıcıya gösterilir; günlüğe yazılmaz (R1: yol hesap adını taşır)."""
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    hata = _goc_oncesi_hatasi(tmp_path, monkeypatch)
+
+    assert "Uydurgul" in hata.full_message
+    assert hata.gunluk_metni is not None
+    assert "Uydurgul" not in hata.gunluk_metni
+    assert "Diskte yer açıp programı yeniden başlatın." in hata.gunluk_metni
+
+
+def test_beklenmeyen_acilis_hatasinin_gunlugune_yol_dusmez(
+    tmp_path: Path, sahte_calisma: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Kullanıcı günlüğün yerini görür, günlüğe yol yazılmaz (R1)."""
+    kok = tmp_path / "Uydurgul"
+    monkeypatch.setenv(ENV_APP_HOME, str(kok))
+    monkeypatch.setenv("HOME", str(tmp_path / "baska"))
+    ekran: list[tuple[str, str, str | None]] = []
+
+    def show_error(baslik: str, ileti: str, *, gunluk: str | None = None) -> None:
+        ekran.append((baslik, ileti, gunluk))
+
+    monkeypatch.setattr(main_mod, "prepare_data", _patlayan(RuntimeError("uydurma hata")))
+    monkeypatch.setattr(main_mod, "show_error", show_error)
+
+    assert main_mod.run([]) == EXIT_UNEXPECTED
+
+    ((_, ileti, gunluk),) = ekran
+    assert str(kok / "logs" / "uygulama.log") in ileti
+    assert gunluk is not None and "Uydurgul" not in gunluk
+    assert "beklenmeyen bir hata" in gunluk
 
 
 def test_beklenmeyen_hatada_isaret_yazilmaz(

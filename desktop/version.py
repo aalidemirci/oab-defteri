@@ -116,7 +116,9 @@ def write_version_stamp(path: Path, app_version: str) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def ensure_no_unknown_migrations(unknown: Sequence[str], app_version: str) -> None:
+def ensure_no_unknown_migrations(
+    unknown: Sequence[str], app_version: str, *, gunluk_yeri: str | None = None
+) -> None:
     """Veritabanında bu programın tanımadığı göç varsa açılışı durdurur (ikinci hat).
 
     Damga (`surum.json`) yoksa `ensure_stamp_compatible` geçer — geri yükleme
@@ -129,8 +131,10 @@ def ensure_no_unknown_migrations(unknown: Sequence[str], app_version: str) -> No
     Göç adları YALNIZ günlüğe (`uygulama.log`) yazılır; kullanıcı iletisi sade Türkçedir
     (aile iskeletinin 27.09.2026 kararı — sözlük §2 "iç kimlikler yüzeye çıkmaz" ve "Eski
     program, yeni veri" satırı: kullanıcı metninde şema, migration, göç geçmez). Tanı
-    için BTR günlüğe bakar; iletinin ipucu günlük dosyasını anar. Günlüğe bütün adlar
-    yazılır (ileti kutusu taşması kaygısı günlükte yoktur).
+    için BTR günlüğe bakar; iletinin ipucu günlük dosyasını gerçek yeriyle anar (`gunluk_yeri`,
+    `logging_setup.gunluk_dosyasi_yeri`; 07.11.2026 bağımsız denetim). Yer yol taşıyabildiği için
+    günlüğe yolsuz ipucu gider (R1). Günlüğe bütün adlar yazılır (ileti kutusu taşması kaygısı
+    günlükte yoktur).
     """
     if not unknown:
         return
@@ -140,15 +144,17 @@ def ensure_no_unknown_migrations(unknown: Sequence[str], app_version: str) -> No
         len(unknown),
         ", ".join(unknown),
     )
+    ipucu = (
+        "Veriyi bozmamak için program açılmadı. Bu bilgisayardaki programı güncel "
+        "sürüme yükseltip yeniden açın. Bu durum daha yeni bir sürümle alınmış bir "
+        "yedeği eski programa geri yükleyince de görülür. Tanınmayan değişikliklerin "
+        "listesi programın günlük dosyasındadır."
+    )
     raise SchemaTooNewError(
         "Bu veri, programın daha yeni bir sürümüyle güncellenmiş: veritabanında bu "
         f"sürümün ({app_version}) tanımadığı değişiklikler var.",
-        hint=(
-            "Veriyi bozmamak için program açılmadı. Bu bilgisayardaki programı güncel "
-            "sürüme yükseltip yeniden açın. Bu durum daha yeni bir sürümle alınmış bir "
-            "yedeği eski programa geri yükleyince de görülür. Tanınmayan değişikliklerin "
-            "listesi programın günlük dosyasındadır (logs/uygulama.log)."
-        ),
+        hint=ipucu if gunluk_yeri is None else f"{ipucu[:-1]} ({gunluk_yeri}).",
+        gunluk_ipucu=None if gunluk_yeri is None else ipucu,
     )
 
 

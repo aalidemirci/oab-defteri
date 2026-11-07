@@ -18,6 +18,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../lib/api";
 import { pencereIcerigi } from "../../lib/kilit";
+import { DOSYA_YAZILAMADI_ILETISI } from "../../lib/metinler";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 
@@ -128,6 +129,8 @@ function ekranaBas(yetenekler: readonly string[] = YETENEK_ADLARI) {
 describe("GuvenlikAyarlari", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Gerçek `saveBlob` hep sonuç döndürür: sahte `undefined` dönseydi başarı dalı sınanmazdı.
+    download.saveBlob.mockResolvedValue("kaydedildi");
     guvenlik.durum.mockResolvedValue(PAROLASIZ);
     oturum.ozet.mockResolvedValue(ACIK_OTURUM);
     oturum.bostaKilitSuresi.mockResolvedValue({ dakika: 10 });
@@ -210,12 +213,70 @@ describe("GuvenlikAyarlari", () => {
     expect(download.saveBlob).toHaveBeenCalledWith(
       pdf,
       expect.stringMatching(/^Kurtarma-Anahtarı-Belgesi_\d{2}\.\d{2}\.\d{4}\.pdf$/),
+      { evKlasorunde: true },
     );
     // Anahtar işi bitince alanda bekletilmez.
     await waitFor(() => expect(alan).toHaveValue(""));
     expect(
       await screen.findByText("Kurtarma anahtarı belgesi PDF olarak kaydedildi."),
     ).toBeInTheDocument();
+  });
+
+  it("köprü yoksa dosya tarayıcıya verilir: anahtar alanı boşalır, bildirim çıkar", async () => {
+    const kullanici = userEvent.setup();
+    guvenlik.durum.mockResolvedValue(PAROLALI);
+    guvenlik.kurtarmaAnahtariPdf.mockResolvedValue(new Blob(["%PDF-"]));
+    download.saveBlob.mockResolvedValueOnce("indirildi");
+    ekranaBas();
+
+    const alan = await screen.findByLabelText(/^Kurtarma anahtarı/);
+    await kullanici.type(alan, "AAAA-BBBB-CCCC-DDDD");
+    await kullanici.click(screen.getByRole("button", { name: "PDF olarak kaydet" }));
+
+    await waitFor(() => expect(alan).toHaveValue(""));
+    expect(
+      await screen.findByText("Kurtarma anahtarı belgesi PDF olarak kaydedildi."),
+    ).toBeInTheDocument();
+  });
+
+  it("kaydetme penceresinde iptal sessizdir: anahtar alanı boşalmaz, bildirim çıkmaz", async () => {
+    const kullanici = userEvent.setup();
+    guvenlik.durum.mockResolvedValue(PAROLALI);
+    guvenlik.kurtarmaAnahtariPdf.mockResolvedValue(new Blob(["%PDF-"]));
+    download.saveBlob.mockResolvedValueOnce("iptal");
+    ekranaBas();
+
+    const alan = await screen.findByLabelText(/^Kurtarma anahtarı/);
+    await kullanici.type(alan, "AAAA-BBBB-CCCC-DDDD");
+    await kullanici.click(screen.getByRole("button", { name: "PDF olarak kaydet" }));
+
+    await waitFor(() => expect(download.saveBlob).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "PDF olarak kaydet" })).toBeEnabled(),
+    );
+    expect(alan).toHaveValue("AAAA-BBBB-CCCC-DDDD");
+    expect(
+      screen.queryByText("Kurtarma anahtarı belgesi PDF olarak kaydedildi."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(DOSYA_YAZILAMADI_ILETISI)).not.toBeInTheDocument();
+  });
+
+  it("dosya yazılamazsa tek ileti çıkar, anahtar alanı boşalmaz", async () => {
+    const kullanici = userEvent.setup();
+    guvenlik.durum.mockResolvedValue(PAROLALI);
+    guvenlik.kurtarmaAnahtariPdf.mockResolvedValue(new Blob(["%PDF-"]));
+    download.saveBlob.mockResolvedValueOnce("hata");
+    ekranaBas();
+
+    const alan = await screen.findByLabelText(/^Kurtarma anahtarı/);
+    await kullanici.type(alan, "AAAA-BBBB-CCCC-DDDD");
+    await kullanici.click(screen.getByRole("button", { name: "PDF olarak kaydet" }));
+
+    expect(await screen.findByText(DOSYA_YAZILAMADI_ILETISI)).toBeInTheDocument();
+    expect(alan).toHaveValue("AAAA-BBBB-CCCC-DDDD");
+    expect(
+      screen.queryByText("Kurtarma anahtarı belgesi PDF olarak kaydedildi."),
+    ).not.toBeInTheDocument();
   });
 
   it("yanlış anahtarda backend iletisini gösterir, dosya inmez", async () => {

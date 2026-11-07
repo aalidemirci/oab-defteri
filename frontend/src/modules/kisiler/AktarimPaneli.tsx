@@ -34,6 +34,7 @@ import { Link } from "react-router-dom";
 
 import { saveBlob } from "../../lib/download";
 import { formatNumber } from "../../lib/format";
+import { DOSYA_YAZILAMADI_ILETISI } from "../../lib/metinler";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import { useConfirm } from "../../ui/ConfirmProvider";
@@ -192,7 +193,9 @@ export default function AktarimPaneli({
     try {
       const blob =
         kind === "students" ? await okulApi.studentTemplate() : await okulApi.personnelTemplate();
-      saveBlob(blob, labels.template);
+      if ((await saveBlob(blob, labels.template)) === "hata") {
+        setError({ message: DOSYA_YAZILAMADI_ILETISI, parolaGerekli: false });
+      }
     } catch (e) {
       setError(hataOku(e, "Şablon indirilemedi."));
     }

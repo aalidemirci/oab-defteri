@@ -177,4 +177,20 @@ describe("Üst çubuk başlığı — program durumu ekranları", () => {
     expect(within(ustCubuk()).getByText(YENIDEN_BASLAT_BASLIGI)).toBeInTheDocument();
     expect(within(ustCubuk()).queryByText("Genel Bakış")).not.toBeInTheDocument();
   });
+
+  // Gerçek pencere sınaması (07.11.2026): en uzun başlık "Programı kapatıp yenid…" diye kesiliyordu;
+  // geniş pencerede de, çünkü başlığın kutusu `lg:w-48` ile 12rem'e sabitti. Kutu kalan yeri alır,
+  // yer gerçekten yetmezse `truncate` kısaltır.
+  it("başlık kutusu sabit genişlikte değildir, üst çubukta kalan yerin tamamını alır", async () => {
+    ekranaBas();
+    await screen.findByRole("heading", { level: 1, name: "Genel Bakış" });
+
+    act(() => yenidenBaslatGerekliYayinla());
+
+    const baslik = within(ustCubuk()).getByText(YENIDEN_BASLAT_BASLIGI);
+    expect(baslik).toHaveClass("truncate");
+    const kutu = baslik.parentElement as HTMLElement;
+    expect(kutu).toHaveClass("min-w-0", "flex-1");
+    expect(kutu.className).not.toMatch(/(^|[\s:])w-\d/);
+  });
 });

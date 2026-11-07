@@ -1,6 +1,16 @@
-// Blob'u tarayıcıda/pywebview penceresinde dosya olarak indirtir.
-// Tüm Excel, PDF, ek ve kurtarma anahtarı indirmelerinin ortak hedefidir.
-export function saveBlob(blob: Blob, filename: string): void {
+// Blob'u dosya olarak kaydeder. Tüm Excel, PDF, ek ve kurtarma anahtarı belgesi kayıtlarının ortak
+// hedefidir. Masaüstünde dosyayı program kaydeder (`desktop/window.py` `dosya_kaydet`; kullanıcı
+// kararı 07.11.2026 "Program kaydetsin"): WebView'ın indirmesi sonucu bilmez, kaydetme penceresi
+// açıkken ve iptalde de "kaydedildi" denirdi. Köprü yoksa (geliştirme kipi, tarayıcı) dosya
+// tarayıcının indirmesine verilir; o yolda sonuç bilinmez, dönüş "indirildi"dir.
+
+/**
+ * Kaydın sonucu. "iptal" sessizdir: kullanıcı vazgeçti, ileti çıkmaz, ekran olduğu gibi kalır.
+ * "hata"da çağıran `DOSYA_YAZILAMADI_ILETISI`'ni gösterir (`lib/metinler`).
+ */
+export type KaydetmeSonucu = "kaydedildi" | "iptal" | "hata" | "indirildi";
+
+function tarayicidaIndir(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -8,9 +18,55 @@ export function saveBlob(blob: Blob, filename: string): void {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  // WebView indirme isteğini olay döngüsünün sonunda devralır. URL'yi aynı çağrı
+  // Tarayıcı indirme isteğini olay döngüsünün sonunda devralır. URL'yi aynı çağrı
   // yığını içinde bırakmak bazı motorlarda indirmeyi başlamadan iptal edebilir.
   window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
+/** Blob'un base64 metni: köprü yalnız metin taşır (`dosya_kaydet`). */
+function blobBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const okuyucu = new FileReader();
+    okuyucu.onload = () => {
+      const adres = String(okuyucu.result);
+      resolve(adres.slice(adres.indexOf(",") + 1));
+    };
+    okuyucu.onerror = () => reject(okuyucu.error ?? new Error("Blob okunamadı."));
+    okuyucu.readAsDataURL(blob);
+  });
+}
+
+/** `saveBlob`'un seçenekleri. */
+export interface KaydetmeSecenegi {
+  /**
+   * Pencere son klasörde değil her seferinde ev klasöründe açılır, son klasöre dokunmaz: yalnız
+   * kurtarma anahtarı belgesi (kullanıcı kararı 07.11.2026 "Hep ev klasöründe"; anahtar şifreli
+   * yedeğin yanına önerilmez).
+   */
+  evKlasorunde?: boolean;
+}
+
+/** Dosyayı kaydeder, sonucu döndürür; ret yükseltmez (yukarıdaki açıklama). */
+export async function saveBlob(
+  blob: Blob,
+  filename: string,
+  secenek: KaydetmeSecenegi = {},
+): Promise<KaydetmeSonucu> {
+  const kopru = window.pywebview?.api;
+  if (!kopru?.dosya_kaydet) {
+    tarayicidaIndir(blob, filename);
+    return "indirildi";
+  }
+  try {
+    const sonuc = await kopru.dosya_kaydet(
+      await blobBase64(blob),
+      filename,
+      secenek.evKlasorunde === true,
+    );
+    return sonuc === "kaydedildi" || sonuc === "iptal" ? sonuc : "hata";
+  } catch {
+    return "hata";
+  }
 }
 
 /** Dosya adından atılan karakterler: yol ayraçları ve denetim karakterleri (dosya adı yol olmaz). */
@@ -86,7 +142,7 @@ export function basliktanDosyaAdi(baslik: string | null | undefined): string | n
 }
 
 /**
- * İndirilen dosyanın adı: belge adı + kapsam + tarih (docs/sozluk.md §3).
+ * Kaydedilen dosyanın adı: belge adı + kapsam + tarih (docs/sozluk.md §3).
  * `dosyaAdi(["Genel Kurul Toplantı Tutanağı", "2026-2027", "16.11.2026"], "pdf")`
  * → `Genel-Kurul-Toplantı-Tutanağı_2026-2027_16.11.2026.pdf`. Kimlik numaralı adlar
  * (`belge_3.pdf`) masaüstünde neye ait olduklarını söylemez.

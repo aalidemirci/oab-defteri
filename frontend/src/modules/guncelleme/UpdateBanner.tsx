@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { saveBlob } from "../../lib/download";
+import { DOSYA_YAZILAMADI_ILETISI } from "../../lib/metinler";
 import Button from "../../ui/Button";
 import Icon from "../../ui/Icon";
 import { useSnackbar } from "../../ui/SnackbarProvider";
@@ -43,8 +44,14 @@ export default function UpdateBanner() {
     setBusy(true);
     try {
       const blob = await updateApi.downloadInstaller();
-      saveBlob(blob, update.installer_name || `oab-defteri-${update.latest_version}.exe`);
-      snackbar.success("Güncelleme indirildi. Programı kapatıp kurulum dosyasını çalıştırın.");
+      const sonuc = await saveBlob(
+        blob,
+        update.installer_name || `oab-defteri-${update.latest_version}.exe`,
+      );
+      if (sonuc === "hata") snackbar.error(DOSYA_YAZILAMADI_ILETISI);
+      else if (sonuc !== "iptal") {
+        snackbar.success("Güncelleme indirildi. Programı kapatıp kurulum dosyasını çalıştırın.");
+      }
     } catch {
       snackbar.error("Güncelleme indirilemedi. Ayarlar → Güncelleme bölümünden yeniden deneyin.");
     } finally {

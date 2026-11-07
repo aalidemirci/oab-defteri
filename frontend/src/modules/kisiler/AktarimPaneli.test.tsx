@@ -13,10 +13,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, BEKLENMEYEN_HATA_ILETISI } from "../../lib/api";
 import { saveBlob } from "../../lib/download";
+import { DOSYA_YAZILAMADI_ILETISI } from "../../lib/metinler";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import type { PersonnelImportReport, StudentImportReport } from "../okul/api";
@@ -180,6 +181,11 @@ async function yapistirVeOnizle(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Ya da tabloyu yapıştırın"), "liste");
   await user.click(screen.getByRole("button", { name: /Önizle/ }));
 }
+
+// Gerçek `saveBlob` hep sonuç döndürür; sahte de öyle olsun.
+beforeEach(() => {
+  vi.mocked(saveBlob).mockResolvedValue("kaydedildi");
+});
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -648,5 +654,28 @@ describe("AktarimPaneli — personel mutabakatı ve ayrılış havuzu", () => {
     await user.click(screen.getByRole("button", { name: "Şablon indir" }));
 
     await waitFor(() => expect(saveBlob).toHaveBeenCalledWith(blob, "sablon-personel.xlsx"));
+  });
+
+  it("şablon kaydında iptal sessizdir", async () => {
+    okulApiMock.personnelTemplate.mockResolvedValue(new Blob(["x"]));
+    vi.mocked(saveBlob).mockResolvedValueOnce("iptal");
+    const user = userEvent.setup();
+    kur("personnel");
+
+    await user.click(screen.getByRole("button", { name: "Şablon indir" }));
+
+    await waitFor(() => expect(saveBlob).toHaveBeenCalled());
+    expect(screen.queryByText(DOSYA_YAZILAMADI_ILETISI)).not.toBeInTheDocument();
+  });
+
+  it("şablon yazılamazsa tek ileti çıkar", async () => {
+    okulApiMock.personnelTemplate.mockResolvedValue(new Blob(["x"]));
+    vi.mocked(saveBlob).mockResolvedValueOnce("hata");
+    const user = userEvent.setup();
+    kur("personnel");
+
+    await user.click(screen.getByRole("button", { name: "Şablon indir" }));
+
+    expect(await screen.findByText(DOSYA_YAZILAMADI_ILETISI)).toBeInTheDocument();
   });
 });

@@ -10,9 +10,17 @@
 // uygular; efekt ardından odağı panele alır (autoFocus etkisiz kalır) ve açan öğe
 // yerine alanın kendisini "açan" diye kaydeder (kapanışta odak geri verilemez).
 // Prop verilmezse odak panele alınır.
+//
+// GÖVDEYE ÇİZİLİR (`createPortal`): `fixed`, atasında `backdrop-filter`, `transform` ya da `filter`
+// varsa ekrana değil o ataya göre konumlanır. Üst çubuk `backdrop-blur-md` taşıdığı için oradan
+// açılan pencere çubuğa göre ortalanıyor, başı ekranın üstünden taşıyordu (gerçek pencere sınaması
+// 07.11.2026). Pencere bu yüzden nereden açılırsa açılsın gövdeye çizilir. React ağacı değişmez:
+// bağlam ve olay kabarcığı açan bileşene gider; değişen yalnız DOM'daki yerdir. Aynı z değerindeki
+// öğeler bu yüzden pencerenin altında kalır: bildirim kabı z-[55]'tedir (SnackbarProvider).
 
 import { useEffect, useRef } from "react";
 import type { ReactNode, RefObject } from "react";
+import { createPortal } from "react-dom";
 
 /** Panel içindeki klavyeyle odaklanabilir öğeler (F29 odak tuzağı).
  *
@@ -126,7 +134,7 @@ export default function Dialog({
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       className={`fixed inset-0 flex animate-scrim-in items-center justify-center bg-scrim/[0.32] p-4 ${
         enUstte ? "z-[70]" : "z-50"
@@ -157,6 +165,7 @@ export default function Dialog({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

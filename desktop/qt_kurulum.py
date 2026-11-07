@@ -31,8 +31,9 @@ Uygulamanın pencere simgesi de burada atanır (`prepare_qt_application`).
 6.8.3'ün `QWebEngineDownloadRequest`'inde bu yöntem yoktur (Docker'da gerçek paketle sınandı;
 `setDownloadDirectory` ve `setDownloadFileName` vardır): kullanıcı yeri seçer, yuvada
 `AttributeError` çıkar, istek kabul edilmez, dosya inmez. İşleyici ayrıca önerilen adı URL'nin
-yolundan alır, oysa `<a download>` blob adresidir, adı `suggestedFileName`'dedir. Bu bütün indirmeleri
-(kurtarma anahtarı belgesi, E63, yedek raporu, şablonlar) ilgilendirir.
+yolundan alır, oysa `<a download>` blob adresidir, adı `suggestedFileName`'dedir. Dosyaları artık
+köprü kaydeder (`desktop.window.PencereKoprusu.dosya_kaydet`; kullanıcı kararı 07.11.2026 "Program
+kaydetsin"): bu işleyici yalnız köprü yokken tarayıcının indirmesine düşülürse devreye girer.
 
 İşleyici `BrowserView` sınıfında değiştirilir: pencerenin kurucusu yuvayı oradan bağlar, kurulmuş
 pencerede değiştirmek etkisizdir. Değişim `webview.initialize`'ın ardına konur, çünkü

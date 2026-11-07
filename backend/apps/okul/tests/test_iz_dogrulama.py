@@ -1029,6 +1029,56 @@ def test_kurtarma_yoluyla_uygulama_ici_geri_yukleme_oturumdaki_hesaba_baglanir()
     assert kart["oturum_hesap"] == yonetici_ozeti() and kart["yol_hesap"] is None
 
 
+#: Geri yüklenen yedekte kaydı olmayan hesabın kimliği (biçimi geçerli; bu veritabanında satırı yok).
+YEDEKTE_OLMAYAN_HESAP = "00000000-0000-4000-8000-0000000000aa"
+
+
+def yedekte_yok_ozeti() -> dict[str, Any]:
+    return {
+        "id": YEDEKTE_OLMAYAN_HESAP,
+        "tanitici": None,
+        "rol_etiketi": None,
+        "acilis": None,
+        "kapanis": None,
+        "yedekte_yok": True,
+    }
+
+
+def test_baslatan_oturumun_hesabi_yedekte_yoksa_kart_bunu_ayirir() -> None:
+    """07.11.2026 sınaması (kod okuması): sihirbazı dolduran hesapla yabancı yedek geri yüklenince
+    oturumun hesabı yeni kayıtlarda yoktur. Kart "Kaydı okunamayan hesap" diyordu: kayıt
+    okunamaz değildir, yedekte hiç yoktur. Özet kişisizdir, yanıt bunu ayrı bir alanla söyler."""
+    assert not Account.objects.filter(pk=YEDEKTE_OLMAYAN_HESAP).exists()
+    kilitle()
+    notu_yaz(yol_bilgisi={"tur": "kurtarma", "no": 3}, oturum_hesabi=YEDEKTE_OLMAYAN_HESAP)
+
+    ac()
+
+    kart = pano(TEST_HESAP_ID)["geri_yukleme"]
+    assert kart["oturum_hesap"] == yedekte_yok_ozeti()
+
+
+def test_yedegi_acan_hesap_yedekte_yoksa_kart_bunu_ayirir() -> None:
+    """Yedek hesabın açılışından eskiyse parolayla açan program yöneticisi de yedekte yoktur."""
+    kilitle()
+    notu_yaz(
+        yol_bilgisi={"tur": "hesap", "hesap": YEDEKTE_OLMAYAN_HESAP, "tanitici": "yeni-yonetici"}
+    )
+
+    ac()
+
+    assert pano(TEST_HESAP_ID)["geri_yukleme"]["yol_hesap"] == yedekte_yok_ozeti()
+
+
+def test_yedekte_yok_alani_yalniz_gecerli_kimligi_satiri_olmayan_hesapta_gelir() -> None:
+    """Biçimsiz kimlikte hesap "yedekte yok" denemez: kayıt okunamıyordur, eski metin kalır. Kaydı
+    olan hesabın özeti değişmez. Öteki kartlarda satırın yokluğu yedekle açıklanamaz: ortak özet
+    (`_hesap_ozeti`) bu alanı taşımaz."""
+    assert "yedekte_yok" not in iz_dogrulama._geri_yukleme_hesabi("biçimsiz")
+    assert iz_dogrulama._geri_yukleme_hesabi(TEST_HESAP_ID) == yonetici_ozeti()
+    assert "yedekte_yok" not in iz_dogrulama._hesap_ozeti(YEDEKTE_OLMAYAN_HESAP)
+
+
 @pytest.mark.parametrize(
     "ad",
     [

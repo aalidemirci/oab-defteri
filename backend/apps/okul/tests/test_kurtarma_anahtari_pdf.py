@@ -7,7 +7,7 @@ Kanıtlanan maddeler:
 * doğru anahtarla PDF üretilir ve İÇERİKTE anahtar vardır (pypdf ile metin
   çıkarılır); belge tek sayfadır (sayfa bütçesi gerçek uzunlukta verilerle);
 * belgenin adı "Kurtarma anahtarı belgesi"dir (tasarım §9.7): başlıkta Türkçe büyük
-  harfle, indirilen dosyanın adında tek sabitten (`DOCUMENT_NAME`; ön yüz aynı adı
+  harfle, kaydedilen dosyanın adında tek sabitten (`DOCUMENT_NAME`; ön yüz aynı adı
   kurar);
 * belge anahtarın kimliğini basar: anahtar no'su ve üretim tarihi `guvenlik.json`
   `kurtarma.no` ve `kurtarma.tarih`'tendir (gg.aa.yyyy; plan F1b-1);

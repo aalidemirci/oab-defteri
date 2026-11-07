@@ -98,6 +98,7 @@ import {
   PAROLA_KAYDI_ACIKLAMASI,
   PAROLA_KAYDI_GIRISI,
   ROL_DEGISMIS_OLABILIR,
+  YEDEKTE_KAYDI_OLMAYAN_HESABIN_PAROLASI,
   bulguMetinleri,
   degisiklikGosterir,
   eksikEklerGirisi,
@@ -273,9 +274,9 @@ function yedegiAcan(geri: GeriYuklemeKaydi): string {
       : `Kurtarma anahtarı (anahtar no ${geri.kurtarma_no})`;
   }
   if (geri.yol === "hesap") {
-    return geri.yol_hesap === null
-      ? "Bir hesabın parolası"
-      : `${hesapEtiketiGunlu(geri.yol_hesap)} hesabının parolası`;
+    if (geri.yol_hesap === null) return "Bir hesabın parolası";
+    if (geri.yol_hesap.yedekte_yok === true) return YEDEKTE_KAYDI_OLMAYAN_HESABIN_PAROLASI;
+    return `${hesapEtiketiGunlu(geri.yol_hesap)} hesabının parolası`;
   }
   return "Okunamadı";
 }

@@ -27,7 +27,9 @@ SIRA (`sifreli_yedegi_kaydet`):
    sayfaları okumadan önce bırakılır (`_onbellegi_birak`): okuma aygıttan gelir, denetim yerin okuma
    hızında koşar. Kalan risk: Windows'ta bu adım yoktur, denetim işletim sisteminin önbelleğinden
    okuyabilir; aygıtın kendi önbelleğini hiçbir platformda görmez. Düşerse geçici dosya silinir, satır
-   yazılmaz.
+   yazılmaz. İleti silmenin sonucunu söyler: dosya kaldıysa `DENETIM_DUSTU_SILINEMEDI` (07.11.2026
+   sınama listesi, kod okuması). Yeri de görünmüyorsa (bellek çekildi) dosya bellekte kalmış olabilir,
+   silinmiş sayılmaz.
 6. `YEDEK` satırı (tasarım §4.6.3): oturumdaki hesabın satırı, açık kip, nesne `yedek.dosya`. Satır
    yazılamazsa geçici dosya silinir, yedek verilmez (izsiz yedek yoktur). Yedek görüntüsü satırdan
    önce alındığı için yedeğin içinde kendi satırı yoktur.
@@ -159,6 +161,10 @@ DENETIM_DUSTU: Final = (
     "Yazılan şifreli yedek denetimden geçmedi; dosya silindi. Yeniden deneyin, sorun sürerse "
     "başka bir yer seçin."
 )
+DENETIM_DUSTU_SILINEMEDI: Final = (
+    "Yazılan şifreli yedek denetimden geçmedi ve dosya silinemedi; seçilen yerde kalan dosyayı "
+    "kullanmayın, elle silin. Yeniden deneyin, sorun sürerse başka bir yer seçin."
+)
 ASIL_AD_VERILEMEDI: Final = (
     "Şifreli yedek yazıldı ama dosyaya adı verilemedi; yedek alınmış sayılmadı. Aynı adlı dosya "
     "açıksa kapatıp yeniden deneyin."
@@ -180,6 +186,7 @@ _DENEME_ILETILERI: Final = YAZIM_ILETILERI | frozenset(
         FAT_SINIRI,
         YAZILAMADI,
         DENETIM_DUSTU,
+        DENETIM_DUSTU_SILINEMEDI,
         ASIL_AD_VERILEMEDI,
     }
 )
@@ -384,7 +391,7 @@ def _yazilani_denetle(
     sarmallar: Mapping[str, str],
     sarmal_anahtari: bytes,
 ) -> None:
-    """Yazılan dosyayı diskte yeniden açar; tutmazsa `EncryptedBackupError` (modül başlığı)."""
+    """Yazılan dosyayı diskte yeniden açar; tutmazsa siler, `EncryptedBackupError` (modül başlığı)."""
     try:
         with gecici.open("rb") as akis:
             _onbellegi_birak(akis)
@@ -402,7 +409,8 @@ def _yazilani_denetle(
                 ek_denetle(bolum.girdi, ds.coz(kap, dosya_anahtari=anahtar, stored_name=ad))
     except (BackupCryptoError, ds.DosyaSifrelemeHatasi, OSError) as hata:
         logger.warning("Yazılan şifreli yedek denetimden geçmedi (%s).", type(hata).__name__)
-        raise EncryptedBackupError(DENETIM_DUSTU) from None
+        ileti = DENETIM_DUSTU if _gecici_sil(gecici) else DENETIM_DUSTU_SILINEMEDI
+        raise EncryptedBackupError(ileti) from None
 
 
 def _satiri_yaz(kimlik: str, boyut: int, manifesto: Manifesto, eksik: int) -> None:
@@ -435,11 +443,16 @@ def _asil_adi_ver(gecici: Path, hedef: Path) -> None:
         logger.warning("Yedeğin dizini eşitlenemedi (%s).", type(hata).__name__)
 
 
-def _gecici_sil(gecici: Path) -> None:
+def _gecici_sil(gecici: Path) -> bool:
+    """Dosyanın gittiği biliniyorsa True. Yeri de görünmüyorsa bilinmez (modül başlığı, 5. adım)."""
     try:
-        gecici.unlink(missing_ok=True)
+        gecici.unlink()
+    except FileNotFoundError:
+        return gecici.parent.is_dir()
     except OSError as hata:
         logger.warning("Şifreli yedeğin geçici dosyası silinemedi (%s).", type(hata).__name__)
+        return False
+    return True
 
 
 def _kaydet(hedef: Path) -> KayitSonucu:
