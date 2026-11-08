@@ -57,10 +57,9 @@ import SonOturumKarti from "./SonOturumKarti";
 export const KISILER_KARTI_ACIKLAMASI =
   "Öğretmen ve diğer personel sicili; e-Okul listelerinden içe aktarma.";
 export const KISILER_KARTI_SALT_OKUR_ACIKLAMASI = "Öğretmen ve diğer personel sicili.";
-export const AYARLAR_KARTI_ACIKLAMASI =
-  "Ders yılı, şubeler, okul bilgileri, güvenlik, yedek ve güncelleme.";
+export const AYARLAR_KARTI_ACIKLAMASI = "Ders yılı, okul bilgileri, güvenlik, yedek ve güncelleme.";
 export const AYARLAR_KARTI_SALT_OKUR_ACIKLAMASI =
-  "Ders yılı, şubeler, okul bilgileri, parolanız ve boşta kilit süresi.";
+  "Ders yılı, okul bilgileri, parolanız ve boşta kilit süresi.";
 
 export default function PanelPage() {
   const snackbar = useSnackbar();

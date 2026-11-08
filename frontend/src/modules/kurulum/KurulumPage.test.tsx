@@ -747,6 +747,7 @@ describe("KurulumPage — 2. adım: okul bilgileri", () => {
         opened_on: "2025-09-08",
         demirbas_onayi: true,
         demirbas_no: "BLG-17",
+        data_controller_text: "",
       }),
     );
     expect(await screen.findByText("3. Ders Yılı")).toBeInTheDocument();

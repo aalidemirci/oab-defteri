@@ -6,6 +6,9 @@ ve kayıtta `bozuk_alanlar` listesi durur; arama ve eşleme kaydı dışarıda b
 kayıt yeniden kaydedilince ham değer aynen kalır (işaret şifrelenip meşru veriye
 dönmez); güvenlik durumu bozuk alan sayısını bildirir. Alan birimi testleri
 (`test_from_db_value_kati_kip`) `shared/tests/test_crypto.py`'dedir.
+
+Öğrenci sicili F1b 5. adımda söküldü: "bozuk okul no'dan kör indeks hesaplanmaz" sınaması onunla
+gitti; veli listesinin ad indeksi (`ParentRoster.name_index`) gelince aynı kural ona sınanır.
 """
 
 from __future__ import annotations
@@ -17,8 +20,8 @@ from django.db import connection
 from rest_framework.test import APIClient
 
 from apps.okul import name_match, selectors
-from apps.okul.models import Personnel, Student
-from apps.okul.serializers import PersonnelSerializer, StudentSerializer
+from apps.okul.models import Personnel
+from apps.okul.serializers import PersonnelSerializer
 from apps.okul.services import app_password
 from conftest import oturumu_ac_test
 from shared import crypto
@@ -69,22 +72,11 @@ def test_baska_dekin_tokeni_okunmaz() -> None:
 
 
 def test_kaydedilince_ham_deger_aynen_kalir(bozuk_personel: Personnel) -> None:
-    bozuk_personel.member_kind = "STAFF"
+    bozuk_personel.member_kind = "DIGER"
     bozuk_personel.save()  # update_fields'siz tam kayıt
     assert _ham_oku("okul_personnel", bozuk_personel.pk, "first_name") == "AYŞE"
     bozuk_personel.full_clean()  # temizleme işareti "" yapmaz
     assert crypto.is_corrupt(bozuk_personel.first_name)
-
-
-def test_ogrenci_kor_indeksi_bozuk_okul_nodan_hesaplanmaz() -> None:
-    ogrenci = Student.objects.create(first_name="EMRE", last_name="CAN", student_number="101")
-    indeks = ogrenci.student_number_index
-    _ham_yaz("okul_student", ogrenci.pk, student_number="101")  # düz metin
-    okunan = Student.objects.get(pk=ogrenci.pk)
-    assert crypto.is_corrupt(okunan.student_number)
-    okunan.save()
-    assert Student.objects.get(pk=ogrenci.pk).student_number_index == indeks
-    assert _ham_oku("okul_student", ogrenci.pk, "student_number") == "101"
 
 
 def test_api_alani_null_verir_ve_bozuk_alanlari_listeler(bozuk_personel: Personnel) -> None:
@@ -101,24 +93,16 @@ def test_api_alani_null_verir_ve_bozuk_alanlari_listeler(bozuk_personel: Personn
     assert yanit.json()["first_name"] is None and "AYŞE" not in yanit.content.decode()
 
 
-def test_ogrenci_serializeri_da_isaretler() -> None:
-    ogrenci = Student.objects.create(first_name="EMRE", last_name="CAN", student_number="7")
-    _ham_yaz("okul_student", ogrenci.pk, student_number="7")
-    veri = StudentSerializer(Student.objects.get(pk=ogrenci.pk)).data
-    assert veri["student_number"] is None and veri["full_name"] == "EMRE CAN"
-    assert veri["bozuk_alanlar"] == ["student_number"]
-
-
 def test_arama_ve_siralama_bozuk_kaydi_disarida_birakir(bozuk_personel: Personnel) -> None:
     Personnel.objects.create(first_name="AHMET", last_name="KAYA")
     bulunan = selectors.personnel_list(search="kaya")
     assert [p.first_name for p in bulunan] == ["AHMET"]  # bozuk kayıt sağlam soyadıyla bulunmaz
     assert len(selectors.personnel_sorted()) == 2  # listede durur, sıralama patlamaz
 
-    ogrenci = Student.objects.create(first_name="EMRE", last_name="CAN", student_number="9")
-    _ham_yaz("okul_student", ogrenci.pk, first_name="EMRE")
-    assert selectors.student_list(search="can") == []
-    assert selectors.student_list(search="9") == []
+    soyadi_bozuk = Personnel.objects.create(first_name="EMRE", last_name="CAN")
+    _ham_yaz("okul_personnel", soyadi_bozuk.pk, last_name="CAN")
+    assert [p.first_name for p in selectors.personnel_list(search="emre")] == []
+    assert [p.first_name for p in selectors.personnel_list(search="can")] == []
 
 
 def test_olasi_ayni_kisi_bozuk_kaydi_onermez(bozuk_personel: Personnel) -> None:

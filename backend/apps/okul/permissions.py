@@ -5,7 +5,7 @@ görünümden önce keser. Tasarım §12.B'deki "`RequiresAdminPassword` → rol
 böyle okunur (plan F1b-2): rol işi `RolMiddleware`'e geçti, bu sınıf kurulum durumunun 409
 kapısı olarak kaldı — rol kapısı yalnız açık oturumda çalıştığı için kurulumdaki 409'u
 başka hiçbir şey vermez. Buradaki izin sınıfı kimlik sormaz, **programın durumunu** sorar: ilk program
-yöneticisi hesabı kurulmadan kişi yazan bir uç (öğrenci/personel oluşturma, güncelleme,
+yöneticisi hesabı kurulmadan kişi yazan bir uç (personel oluşturma, güncelleme,
 silme, içe aktarma önizleme ve uygulama) çalışmaz, **409 `parola_gerekli`**
 döner. Okuma yöntemleri serbesttir.
 

@@ -11,7 +11,12 @@ import { describe, expect, it, vi } from "vitest";
 import { todayIso } from "../../lib/format";
 import { BOS_OKUL_KARTI, ORNEK_OKUL_KARTI } from "../../test/okulKarti";
 import OkulKartiAlanlari, { OkulKartiListesi, mevcutYazimi } from "./OkulKartiAlanlari";
-import { KANTIN_ISLETME_BILGISI, KAMPUS_ETIKETI, OKUL_ADI_YARDIMI } from "./metinler";
+import {
+  KANTIN_ISLETME_BILGISI,
+  KAMPUS_ETIKETI,
+  OKUL_ADI_YARDIMI,
+  VERI_SORUMLUSU_YARDIMI,
+} from "./metinler";
 import { bosOkulFormu } from "./okulBilgileri";
 import type { OkulFormu } from "./okulBilgileri";
 
@@ -84,6 +89,18 @@ describe("OkulKartiAlanlari — form", () => {
     expect(screen.getByRole("group", { name: "Kademe *" })).toBeInTheDocument();
     expect(screen.getByLabelText(/^Okul müdürü/)).not.toBeRequired();
     expect(screen.getByLabelText(/^Okulun açılış tarihi/)).not.toBeRequired();
+    expect(screen.getByLabelText(/^Veri sorumlusu/)).not.toBeRequired();
+  });
+
+  it("veri sorumlusu isteğe bağlı serbest metindir; yardımı uydurma örneklidir", async () => {
+    const user = userEvent.setup();
+    const { son } = bas();
+    const alan = screen.getByLabelText(/^Veri sorumlusu/);
+    expect(alan).toHaveAccessibleDescription(VERI_SORUMLUSU_YARDIMI);
+    expect(VERI_SORUMLUSU_YARDIMI).toContain("Okul müdürlüğünce belirlenir");
+    expect(VERI_SORUMLUSU_YARDIMI).toContain("Örnek Anadolu Lisesi Müdürlüğü");
+    await user.type(alan, "Örnek Ortaokulu Müdürlüğü");
+    expect(son()?.veriSorumlusu).toBe("Örnek Ortaokulu Müdürlüğü");
   });
 
   it("kademe çoklu seçilir; liste backend sırasıyla tutulur, işaret kaldırılabilir", async () => {
@@ -255,6 +272,7 @@ describe("OkulKartiListesi — salt okur", () => {
     expect(deger(KAMPUS_ETIKETI)).toBe("Hayır");
     expect(deger("Okulun açılış tarihi")).toBe("—");
     expect(deger("Okul müdürü")).toBe("—");
+    expect(deger("Veri sorumlusu")).toBe("—");
     expect(screen.getByText("Bu bilgisayar okul demirbaşıdır.")).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.queryByText(KANTIN_ISLETME_BILGISI)).toBeNull();

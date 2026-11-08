@@ -88,6 +88,7 @@ UPDATABLE_FIELDS: tuple[str, ...] = (
     "opened_on",
     "demirbas_onayi",
     "demirbas_no",
+    "data_controller_text",
 )
 
 # Sihirbaz adımları, sırasıyla (API ve ön yüz aynı anahtarları kullanır).
@@ -175,7 +176,9 @@ def missing_school_fields(config: SchoolConfig) -> list[str]:
 
     Okul kartının zorunlu alanları (plan F1b-4 kararları "Zorunluluk"): kurum kodu altı
     rakam değilse, kademe listesi boş ya da tanınmayan değer taşıyorsa, mevcut ya da tarihi
-    boşsa eksik sayılır. Müdür adı, kampüs işareti ve açılış tarihi isteğe bağlıdır.
+    boşsa eksik sayılır. Müdür adı, kampüs işareti, açılış tarihi ve veri sorumlusu isteğe
+    bağlıdır (veri sorumlusu boşken aktarım ekranları uyarır, kurulumu engellemez; plan "F1b-5
+    uygulama kararları").
     """
     eksik: list[str] = []
     if not config.school_name.strip():
@@ -293,8 +296,9 @@ def mark_setup_completed() -> SchoolConfig:
 # Başlangıç Yol Haritası (Genel Bakış kartı)
 # ---------------------------------------------------------------------------
 # Kendiliğinden tespit edilen maddeler ön yüzde `setup_status` sayılarından
-# okunur (öğrenci/personel sayısı, aktif ders yılındaki öğrenciye kapalı gün
-# sayısı). Burada yalnız KULLANICININ İŞARETLEDİĞİ maddeler tutulur: program
+# okunur (personel sayısı, aktif ders yılındaki öğrenciye kapalı gün sayısı; öğrenci
+# aktarımı maddesi F1b 5. adımda öğrenci tarafıyla kalktı, veli listesi dönemlik olduğu için
+# madde olmaz — plan "F1b-5 uygulama kararları"). Burada yalnız KULLANICININ İŞARETLEDİĞİ maddeler tutulur: program
 # bunların yapıldığını bilemez (ör. zarfın kapatılması). OAB'nin maddeleri
 # F1b/F1c'de eklenir (plan §2.2; genel tasarım §7.10).
 #
@@ -378,7 +382,6 @@ def roadmap_auto_items(status: dict[str, Any]) -> dict[str, bool]:
     """
     return {
         "okul_karti": bool(status["school_info_complete"]),
-        "ogrenci_aktarimi": int(status["student_count"]) > 0,
         "personel_aktarimi": int(status["personnel_count"]) > 0,
         "kapali_gunler": int(status["school_break_count"]) > 0,
     }
@@ -516,9 +519,7 @@ def setup_status() -> dict[str, Any]:
             password_set=parola_kurulu,
             recovery_confirmed=anahtar_dogrulandi,
         ),
-        "student_count": selectors.student_count(),
         "personnel_count": selectors.personnel_count(),
-        "class_section_count": selectors.class_sections().count(),
         "school_break_count": selectors.school_break_count(
             start=aktif_yil["start_date"] if aktif_yil else None,
             end=aktif_yil["end_date"] if aktif_yil else None,

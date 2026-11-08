@@ -48,6 +48,7 @@ YASAK_UZANTILAR = frozenset(
         ".xlsx",
         ".xlsm",
         ".csv",
+        ".tsv",
         ".odbak",
         ".docx",
         ".ods",

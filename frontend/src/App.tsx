@@ -92,7 +92,7 @@ export default function App() {
                   </RolKapisi>
                 }
               />
-              {/* Ders yılı, şubeler, okul bilgileri, güvenlik, güncelleme. */}
+              {/* Ders yılı, kapalı günler, okul bilgileri, güvenlik, güncelleme. */}
               <Route path="/ayarlar" element={<AyarlarPage />} />
               {/* Kullanım kılavuzu (statik içerik, çevrimdışı). */}
               <Route path="/kilavuz" element={<KilavuzPage />} />

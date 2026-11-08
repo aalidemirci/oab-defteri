@@ -16,7 +16,7 @@ import pytest
 from desktop.backup_crypto import config_path, ensure_public_config
 from rest_framework.test import APIClient
 
-from apps.okul.models import Student
+from apps.okul.models import Personnel
 from apps.okul.services import app_password
 from conftest import TEST_DEK
 from shared import crypto
@@ -47,7 +47,7 @@ def test_kosullar_saglaninca_yol_gorunur_ve_dosya_arsivlenir(
     assert durum["security_file_missing"] is True
     assert durum["reset_available"] is True
     # Kayıp kilidi yürürlükte; sıfırlama ucu buna rağmen erişilebilir.
-    assert client.get("/api/v1/students/").json()["code"] == "guvenlik_dosyasi_kayip"
+    assert client.get("/api/v1/personnel/").json()["code"] == "guvenlik_dosyasi_kayip"
 
     yanit = client.post(URL)
 
@@ -94,8 +94,8 @@ def test_parmak_izi_doluysa_409_ve_dosyaya_dokunulmaz(
 
 
 def test_silinmis_bile_olsa_kisi_kaydi_varsa_409(client: APIClient) -> None:
-    ogrenci = Student.objects.create(first_name="DENEME", last_name="ÖĞRENCİ", class_level=9)
-    ogrenci.delete()  # yumuşak silme: satır tabloda kalır
+    kisi = Personnel.objects.create(first_name="DENEME", last_name="ÖĞRETMEN")
+    kisi.delete()  # yumuşak silme: satır tabloda kalır
     app_password.state_path().write_bytes(BOZUK)
     crypto.unload_key()
 

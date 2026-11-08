@@ -181,7 +181,6 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
                 "school-year-activate",
             ),
             _parca("kapalı günler", "holiday-list", "holiday-seed", "holiday-detail"),
-            _parca("şubeler", "class-section-list", "class-section-detail"),
         )
     ),
     Satir.M2: BugunkuIs(
@@ -244,6 +243,17 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
     Satir.AYARLAR: BugunkuIs(
         (_parca("boşta kilit süresi", "security-idle-lock"),), baslik="Ayarlar"
     ),
+    Satir.KISISEL_VERI: BugunkuIs(
+        (
+            _parca(
+                "veli listesinin aktarımı ve silinmesi",
+                "import-parents-preview",
+                "import-parents-commit",
+                "parent-roster",
+            ),
+        ),
+        baslik="Kişiler",
+    ),
     Satir.GUNCELLEME: BugunkuIs(
         (_parca("Güncelleme denetimi", "update-latest", "update-installer"),)
     ),
@@ -265,11 +275,6 @@ ADSIZ_UCLAR: Final[Mapping[str, str]] = {
     "setup-roadmap": (
         "Genel Bakış'taki Başlangıç Yol Haritası işaretleri; okul bilgileri işinin yan ürünüdür."
     ),
-    "student-list": "Tasarım T5: OAB öğrenci tutmaz; öğrenci uçları F1b 5. adımda sökülür.",
-    "student-detail": "Tasarım T5: OAB öğrenci tutmaz; öğrenci uçları F1b 5. adımda sökülür.",
-    "student-leave": "Tasarım T5: OAB öğrenci tutmaz; öğrenci uçları F1b 5. adımda sökülür.",
-    "import-students-preview": "Tasarım T5: OAB öğrenci tutmaz; öğrenci uçları F1b 5. adımda sökülür.",
-    "import-students-commit": "Tasarım T5: OAB öğrenci tutmaz; öğrenci uçları F1b 5. adımda sökülür.",
     "security-state-reset": (
         "Güvenlik dosyası kayıp ekranındaki sıfırlama; yalnız hiç hesap ve şifreli kayıt yokken "
         "açıktır, açık oturumda 409 döner; hesap sahibinin işi değildir."

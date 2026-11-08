@@ -59,6 +59,7 @@ RISKLI_UZANTILAR = frozenset(
         ".xlsx",
         ".xlsm",
         ".csv",
+        ".tsv",
         ".sqlite",
         ".sqlite3",
         ".db",
@@ -78,6 +79,8 @@ RISKLI_DIZIN_ONEKLERI = ("backend/data/", "data/raw/", "media/", "dosyalar/")
 MUAF_YOLLAR = frozenset(
     {
         "backend/apps/okul/tests/veri/eokul_personel_listesi.xls",
+        # Okulun doldurduğu veli listesinin sentetik örneği (T5; F1b 5. adım).
+        "backend/apps/okul/tests/veri/veli_listesi_ornegi.xlsx",
     }
 )
 

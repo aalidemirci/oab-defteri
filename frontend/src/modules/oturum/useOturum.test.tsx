@@ -252,10 +252,9 @@ describe("yetenekler (ön yüz süzmesinin tek kaynağı; plan F1b-2)", () => {
       "kisi_yazma",
       "kullanicilar",
       "kurulum_tamamlama",
-      "ogrenciler",
       "okul_karti_yazma",
       "son_oturum_onay",
-      "sube_yazma",
+      "veli_listesi",
       "yol_haritasi",
     ]);
   });

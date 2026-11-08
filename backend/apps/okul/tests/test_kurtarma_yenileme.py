@@ -39,7 +39,7 @@ from desktop.backup_crypto import config_path, decrypt_bytes, embedded_recovery_
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.okul.models import SchoolConfig, Student
+from apps.okul.models import Personnel, SchoolConfig
 from apps.okul.oturum import OTURUM
 from apps.okul.services import app_password, backup_restore
 from apps.okul.tests.hesap_ortak import GECICI_PAROLA, YENI_PAROLA, hesap_ac
@@ -138,14 +138,10 @@ def test_yeni_anahtar_acar_eski_anahtar_acmaz(client: APIClient) -> None:
 
 
 def test_dek_ve_kor_indeks_degismez_kayitlar_okunur(client: APIClient) -> None:
-    ogrenci = Student.objects.create(
-        first_name="DENEME",
-        last_name="ÖĞRENCİ",
-        student_number="4711",
-        class_level=9,
-        class_section="A",
-    )
-    indeks_once = ogrenci.student_number_index
+    kisi = Personnel.objects.create(first_name="DENEME", last_name="ÖĞRETMEN")
+    # Kör indeksin bugün kayıtlı kullanıcısı yok (öğrenci okul numarası F1b 5. adımda söküldü);
+    # anahtar DEK'ten türediği için doğrudan sınanır.
+    indeks_once = crypto.blind_index("4711")
     yedek_ayari_once = config_path(app_password.state_path().parent).read_bytes()
 
     yeni = _yenile(client).json()["recovery_key"]
@@ -156,13 +152,9 @@ def test_dek_ve_kor_indeks_degismez_kayitlar_okunur(client: APIClient) -> None:
         recovery_key=yeni, hesap_id=TEST_HESAP_ID, new_password="Yeni-Parola-42"
     )
     assert crypto.active_fingerprint() == crypto.key_fingerprint(TEST_DEK)
-    okunan = Student.objects.get(pk=ogrenci.pk)
-    assert (okunan.first_name, okunan.last_name, okunan.student_number) == (
-        "DENEME",
-        "ÖĞRENCİ",
-        "4711",
-    )
-    assert okunan.student_number_index == indeks_once
+    okunan = Personnel.objects.get(pk=kisi.pk)
+    assert (okunan.first_name, okunan.last_name) == ("DENEME", "ÖĞRETMEN")
+    assert crypto.blind_index("4711") == indeks_once
     # Yedek anahtarı (DEK'ten türer) değişmez.
     assert config_path(app_password.state_path().parent).read_bytes() == yedek_ayari_once
 

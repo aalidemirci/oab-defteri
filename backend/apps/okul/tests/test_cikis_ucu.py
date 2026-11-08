@@ -119,7 +119,7 @@ def test_kilitliyken_cikis_disindaki_uclar_yine_423(
     kilitli: None, client: APIClient, kancalar: list[str]
 ) -> None:
     """Muafiyet tam yoldur: `app/` altındaki başka bir yol kilit kapısını aşamaz."""
-    assert client.get("/api/v1/grade-levels/").status_code == 423
+    assert client.get("/api/v1/school-years/").status_code == 423
     assert client.post("/api/v1/app/quit/baska/", {}, format="json").status_code == 423
 
 
@@ -134,7 +134,7 @@ def test_guvenlik_dosyasi_kayipken_cikis_parolasizdir(
     parmak_izi_yazili: str, client: APIClient, kancalar: list[str]
 ) -> None:
     app_password.state_path().unlink()
-    assert client.get("/api/v1/grade-levels/").status_code == 423
+    assert client.get("/api/v1/school-years/").status_code == 423
 
     assert client.post(CIK, {}, format="json").status_code == 202
     assert kancalar == ["cik"]

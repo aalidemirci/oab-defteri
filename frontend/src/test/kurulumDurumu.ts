@@ -20,9 +20,7 @@ export const KURULU_DURUM: SetupStatus = {
     terms_ready: true,
   },
   missing_steps: [],
-  student_count: 0,
   personnel_count: 0,
-  class_section_count: 0,
   school_break_count: 0,
   roadmap: { marks: {}, hidden: false },
 };

@@ -224,7 +224,7 @@ def check_health(
 
     İki istek atar:
     1. **Belirteçsiz** → 403 beklenir. 200 dönerse koruma devrede değildir; bu,
-       aynı makinedeki her işlemin öğrenci verisini okuyabilmesi demektir → durulur.
+       aynı makinedeki her işlemin kişi verisini okuyabilmesi demektir → durulur.
     2. **Belirteçli** → 2xx beklenir (uygulama + veritabanı ayakta).
     """
     root = base_url.rstrip("/")

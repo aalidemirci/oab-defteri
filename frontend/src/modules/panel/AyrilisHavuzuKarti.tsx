@@ -1,7 +1,8 @@
 // Genel Bakış'ta "Ayrılış Havuzu" kartı (genel tasarım §5.1, §8.4). e-Okul aktarımı
 // kimseyi ayırmaz: listede bulunmayan kişiler Kişiler → Ayrılış Havuzu'nda karar
 // bekler. Havuz boş değilse kart "N kişi ayrılış kararı bekliyor" der ve havuza
-// bağlanır; boşsa ya da sayı okunamazsa hiçbir şey göstermez.
+// bağlanır; boşsa ya da sayı okunamazsa hiçbir şey göstermez. Havuz yalnız öğretmen ve diğer
+// personeli taşır (öğrenci sicili F1b 5. adımda söküldü).
 //
 // Yalnız SAYILAR istenir (`GET leave-pool/?summary=true`): kişi adı bu ekrana gelmez.
 
@@ -32,14 +33,8 @@ export default function AyrilisHavuzuKarti() {
   }, []);
 
   if (ozet === null) return null;
-  const toplam = ozet.student_count + ozet.personnel_count;
+  const toplam = ozet.personnel_count;
   if (toplam === 0) return null;
-
-  const parcalar: string[] = [];
-  if (ozet.student_count > 0) parcalar.push(`${formatNumber(ozet.student_count)} öğrenci`);
-  if (ozet.personnel_count > 0) {
-    parcalar.push(`${formatNumber(ozet.personnel_count)} öğretmen ve diğer personel`);
-  }
 
   return (
     <section aria-labelledby="ayrilis-havuzu-karti">
@@ -56,7 +51,7 @@ export default function AyrilisHavuzuKarti() {
               Ayrılış Havuzu
             </h2>
             <p className="text-body-medium text-on-surface">
-              {formatNumber(toplam)} kişi ayrılış kararı bekliyor ({parcalar.join(", ")}).
+              {formatNumber(toplam)} kişi ayrılış kararı bekliyor.
             </p>
             <p className="text-body-small text-on-surface-variant">
               e-Okul listesinde bulunmadıkları için havuza eklendiler; durumları aktif. Okuldan

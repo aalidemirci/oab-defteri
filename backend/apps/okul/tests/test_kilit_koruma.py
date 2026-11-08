@@ -35,7 +35,7 @@ pytestmark = pytest.mark.django_db
 
 YONTEMLER = ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
 ETKINLIK = {"X-OD-Etkinlik": "1"}
-VERI_UCU = "/api/v1/grade-levels/"
+VERI_UCU = "/api/v1/school-years/"
 OTURUM_UCU = "/api/v1/security/session/"
 BOSTA = 10 * 60
 
@@ -175,7 +175,7 @@ def test_kendi_parolasini_degistirme_kilitliyken_kapalidir(kilitli: None) -> Non
 
 
 def test_kilitliyken_red_govdesi_sabittir_ve_ucu_yankilamaz(kilitli: None) -> None:
-    yanit = Client().get("/api/v1/students/")
+    yanit = Client().get("/api/v1/personnel/")
 
     assert yanit.json() == {
         "code": "locked",

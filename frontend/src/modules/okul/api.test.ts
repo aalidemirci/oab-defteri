@@ -68,10 +68,8 @@ describe("okulApi — kapalı günler", () => {
   });
 });
 
-describe("okulApi — kişi ayrılışı, birleştirme ve mutabakat seçenekleri", () => {
-  it("leaveStudent / leavePersonnel → POST …/<id>/leave/ (gövdesiz)", async () => {
-    await okulApi.leaveStudent(3);
-    expect(apiMock.post).toHaveBeenLastCalledWith("/students/3/leave/");
+describe("okulApi — kişi ayrılışı, birleştirme ve aktarım", () => {
+  it("leavePersonnel → POST …/<id>/leave/ (gövdesiz)", async () => {
     await okulApi.leavePersonnel(4);
     expect(apiMock.post).toHaveBeenLastCalledWith("/personnel/4/leave/");
   });
@@ -81,30 +79,27 @@ describe("okulApi — kişi ayrılışı, birleştirme ve mutabakat seçenekleri
     expect(apiMock.post).toHaveBeenCalledWith("/personnel/11/merge/", { into_id: 21 });
   });
 
-  it("metin yolunda tam liste seçeneği JSON gövdeye yalnız anlamlıysa girer", async () => {
-    await okulApi.previewStudentImport({ text: "x" });
-    expect(apiMock.post).toHaveBeenLastCalledWith("/imports/students/preview/", { text: "x" });
-    await okulApi.commitStudentImport({ text: "x" }, { fullList: true });
-    expect(apiMock.post).toHaveBeenLastCalledWith("/imports/students/commit/", {
-      text: "x",
-      full_list: true,
-    });
-    // Personelde seçenek yoktur: listede olmayanlar Ayrılış Havuzu'na girer.
+  it("metin yolu JSON gövdede yalnız metni taşır (mutabakat seçeneği yoktur)", async () => {
+    await okulApi.previewPersonnelImport({ text: "x" });
+    expect(apiMock.post).toHaveBeenLastCalledWith("/imports/personnel/preview/", { text: "x" });
+    // Seçenek yoktur: listede olmayanlar Ayrılış Havuzu'na girer.
     await okulApi.commitPersonnelImport({ text: "x" });
     expect(apiMock.post).toHaveBeenLastCalledWith("/imports/personnel/commit/", { text: "x" });
   });
 
-  it("dosya yolunda seçenek çok parçalı gövdeye eklenir; personelde ayrılış seçimi gitmez", async () => {
+  it("dosya yolu çok parçalı gövdede yalnız dosyayı taşır; ayrılış ya da tam liste seçimi gitmez", async () => {
     const dosya = new File(["x"], "liste.xls");
     await okulApi.commitPersonnelImport({ file: dosya });
     const [yol, form] = apiMock.postForm.mock.calls.at(-1) as unknown as [string, FormData];
     expect(yol).toBe("/imports/personnel/commit/");
     expect(form.getAll("mark_left_ids")).toEqual([]);
+    expect(form.getAll("full_list")).toEqual([]);
     expect(form.get("file")).toBeInstanceOf(File);
+  });
 
-    await okulApi.previewStudentImport({ file: dosya }, { fullList: true });
-    const [, ogrenciFormu] = apiMock.postForm.mock.calls.at(-1) as unknown as [string, FormData];
-    expect(ogrenciFormu.get("full_list")).toBe("true");
+  it("öğrenci, şube ve öğrenim seviyesi uçları yoktur (F1b 5. adımda söküldü)", () => {
+    const adlar = Object.keys(okulApi);
+    expect(adlar.filter((ad) => /student|classsection|gradelevel/i.test(ad))).toEqual([]);
   });
 
   it("Ayrılış Havuzu: liste, yalnız sayılı özet ve toplu karar uçları", async () => {
@@ -112,13 +107,17 @@ describe("okulApi — kişi ayrılışı, birleştirme ve mutabakat seçenekleri
     expect(apiMock.get).toHaveBeenLastCalledWith("/leave-pool/");
     await okulApi.getLeavePoolSummary();
     expect(apiMock.get).toHaveBeenLastCalledWith("/leave-pool/?summary=true");
-    const govde = { students: { leave: [1, 2], keep: [3] }, personnel: { keep: [9] } };
+    const govde = { personnel: { leave: [1, 2], keep: [9] } };
     await okulApi.resolveLeavePool(govde);
     expect(apiMock.post).toHaveBeenLastCalledWith("/leave-pool/resolve/", govde);
   });
 
-  it("üye türü adları sözlüğe uyar: öğretmen / diğer personel", () => {
-    expect(MEMBER_KIND_TR).toEqual({ TEACHER: "Öğretmen", STAFF: "Diğer personel" });
+  it("görev türü adları sözlüğe uyar: öğretmen / yönetici / diğer personel", () => {
+    expect(MEMBER_KIND_TR).toEqual({
+      OGRETMEN: "Öğretmen",
+      YONETICI: "Yönetici",
+      DIGER: "Diğer personel",
+    });
   });
 });
 
@@ -188,5 +187,26 @@ describe("okulApi — kurulum ve başlangıç yol haritası", () => {
       HIZMET_ALIMI: "Hizmet alımıyla",
       CALISTIRMIYOR: "Personel çalıştırmıyor",
     });
+  });
+});
+
+describe("okulApi — veli listesi (T5)", () => {
+  it("özet, silme, şablon ve dosyayla aktarım uçları", async () => {
+    await okulApi.getParentRoster();
+    expect(apiMock.get).toHaveBeenLastCalledWith("/parent-roster/");
+    await okulApi.deleteParentRoster();
+    expect(apiMock.del).toHaveBeenLastCalledWith("/parent-roster/");
+    await okulApi.parentTemplate();
+    expect(apiMock.getBlob).toHaveBeenLastCalledWith("/templates/parents/");
+
+    const dosya = new File(["x"], "veli.xlsx");
+    await okulApi.previewParentImport(dosya);
+    let [yol, form] = apiMock.postForm.mock.calls.at(-1) as unknown as [string, FormData];
+    expect(yol).toBe("/imports/parents/preview/");
+    expect(form.get("file")).toBe(dosya);
+    await okulApi.commitParentImport(dosya);
+    [yol, form] = apiMock.postForm.mock.calls.at(-1) as unknown as [string, FormData];
+    expect(yol).toBe("/imports/parents/commit/");
+    expect([...form.keys()]).toEqual(["file"]);
   });
 });

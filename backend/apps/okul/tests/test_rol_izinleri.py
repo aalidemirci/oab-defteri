@@ -366,20 +366,18 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     "backup-list": {"GET": "Y", "HEAD": "Y"},
     "backup-report": {"POST": "Y"},
     "backup-restore": {"POST": "Y"},
-    "class-section-detail": {"DELETE": "Y"},
-    "class-section-list": {"GET": "H", "HEAD": "H", "POST": "Y"},
     "dashboard-last-session": {"GET": "H", "HEAD": "H", "POST": "Y+YK"},
     "encrypted-backup-download": {"GET": "Y", "HEAD": "Y", "POST": "Y"},
-    "grade-levels": {"GET": "H", "HEAD": "H"},
     "holiday-detail": {"DELETE": "Y"},
     "holiday-list": {"GET": "H", "HEAD": "H", "POST": "Y"},
     "holiday-seed": {"POST": "Y"},
     "import-personnel-commit": {"POST": "Y"},
     "import-personnel-preview": {"POST": "Y"},
-    "import-students-commit": {"POST": "Y"},
-    "import-students-preview": {"POST": "Y"},
     "leave-pool": {"GET": "Y", "HEAD": "Y"},
     "leave-pool-resolve": {"POST": "Y"},
+    "import-parents-commit": {"POST": "Y"},
+    "import-parents-preview": {"POST": "Y"},
+    "parent-roster": {"DELETE": "Y", "GET": "Y", "HEAD": "Y"},
     "personnel-detail": {"DELETE": "Y", "GET": "H", "HEAD": "H", "PATCH": "Y", "PUT": "Y"},
     "personnel-leave": {"POST": "Y"},
     "personnel-list": {"GET": "H", "HEAD": "H", "POST": "Y"},
@@ -409,11 +407,8 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     "setup-roadmap": {"POST": "Y"},
     "setup-school-config": {"GET": "H", "HEAD": "H", "PUT": "Y"},
     "setup-status": {"GET": "H", "HEAD": "H"},
-    "student-detail": {"DELETE": "Y", "GET": "Y", "HEAD": "Y", "PATCH": "Y", "PUT": "Y"},
-    "student-leave": {"POST": "Y"},
-    "student-list": {"GET": "Y", "HEAD": "Y", "POST": "Y"},
+    "template-parents": {"GET": "Y", "HEAD": "Y"},
     "template-personnel": {"GET": "Y", "HEAD": "Y"},
-    "template-students": {"GET": "Y", "HEAD": "Y"},
     "update-installer": {"GET": "Y", "HEAD": "Y"},
     "update-latest": {"GET": "Y", "HEAD": "Y"},
 }
@@ -442,7 +437,6 @@ BEKLEYEN_HUCRE_GORUNTUSU: dict[str, dict[str, set[str]]] = {
     "F2": {
         "M3": {*Y_YK, "mudur"},
         "M10": set(Y_YK),
-        "KISISEL_VERI": {"yonetici"},
     },
     "F3": {"M4": set(Y_YK), "M5": {"muhasip"}},
     "F4": {
@@ -499,6 +493,7 @@ def test_etkin_hucreler_bekleyende_olmayan_y_hucreleridir() -> None:
         "KULLANICILAR",
         "GUVENLIK",
         "AYARLAR",
+        "KISISEL_VERI",
         "GUNCELLEME",
         "KENDI",
     ]
@@ -707,10 +702,9 @@ def test_yetenek_adlari_ve_rollerin_yetenekleri_anlik_goruntusu() -> None:
         "kisi_yazma",
         "kullanicilar",
         "kurulum_tamamlama",
-        "ogrenciler",
         "okul_karti_yazma",
         "son_oturum_onay",
-        "sube_yazma",
+        "veli_listesi",
         "yol_haritasi",
     ]
     # "Gördüm" yalnız Denetleme Kurulunundur; program yöneticisi kartı görür, kaldıramaz.
@@ -754,25 +748,27 @@ def test_yetenegin_kuralsiz_cifti_reddedilir(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_izinli_mi_adsiz_uc_ve_bilinmeyen_rol_kapali() -> None:
-    assert rol_izinleri.izinli_mi("grade-levels", "GET", "muhasip") is True
-    assert rol_izinleri.izinli_mi("grade-levels", "get", "muhasip") is True
+    assert rol_izinleri.izinli_mi("school-year-list", "GET", "muhasip") is True
+    assert rol_izinleri.izinli_mi("school-year-list", "get", "muhasip") is True
     assert rol_izinleri.izinli_mi(None, "GET", "yonetici") is False
-    assert rol_izinleri.izinli_mi("grade-levels", "GET", None) is False
-    assert rol_izinleri.izinli_mi("grade-levels", "GET", "admin") is False
-    assert rol_izinleri.izinli_mi("grade-levels", "OPTIONS", "yonetici") is False
+    assert rol_izinleri.izinli_mi("school-year-list", "GET", None) is False
+    assert rol_izinleri.izinli_mi("school-year-list", "GET", "admin") is False
+    assert rol_izinleri.izinli_mi("school-year-list", "OPTIONS", "yonetici") is False
     assert rol_izinleri.izinli_mi("security-enable", "POST", "yonetici") is False
 
 
 def test_parametre_denetcisi_yanlis_derse_istek_kesilir(monkeypatch: pytest.MonkeyPatch) -> None:
     """Parametre denetçili kural (F1b'de yok; mekanizma aileden): denetçi yanlışsa kapalı,
     istek yoksa fail-closed."""
-    kural = RolKurali("grade-levels", OKUMA, Satir.M1, KuralTuru.OKUMA, parametre=yalniz_sorgu("q"))
-    monkeypatch.setitem(rol_izinleri._TABLO_KURAL, ("grade-levels", "GET"), kural)
-    istek = RequestFactory().get("/api/v1/grade-levels/?q=1")
-    assert rol_izinleri.izinli_mi("grade-levels", "GET", "muhasip", istek) is True
-    istek = RequestFactory().get("/api/v1/grade-levels/?format=json")
-    assert rol_izinleri.izinli_mi("grade-levels", "GET", "muhasip", istek) is False
-    assert rol_izinleri.izinli_mi("grade-levels", "GET", "muhasip") is False
+    kural = RolKurali(
+        "school-year-list", OKUMA, Satir.M1, KuralTuru.OKUMA, parametre=yalniz_sorgu("q")
+    )
+    monkeypatch.setitem(rol_izinleri._TABLO_KURAL, ("school-year-list", "GET"), kural)
+    istek = RequestFactory().get("/api/v1/school-years/?q=1")
+    assert rol_izinleri.izinli_mi("school-year-list", "GET", "muhasip", istek) is True
+    istek = RequestFactory().get("/api/v1/school-years/?format=json")
+    assert rol_izinleri.izinli_mi("school-year-list", "GET", "muhasip", istek) is False
+    assert rol_izinleri.izinli_mi("school-year-list", "GET", "muhasip") is False
 
 
 # ============================================================ parametre denetçileri (aile)

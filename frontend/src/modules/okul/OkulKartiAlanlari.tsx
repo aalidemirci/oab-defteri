@@ -8,7 +8,8 @@
 // birden çok kademeli kurum hepsini seçer), öğrenci mevcudu ve tarihi (md. 9/2), yerleşim türü
 // (md. 17/1-a-2), kantin işletme biçimi (md. 17/1; birlikçe işletiliyorsa md. 23/3'ün bilgisi —
 // uyarıdır, engel değil), personel çalıştırma biçimi (K3, md. 6/1-d), eğitim kampüsü (md. 13/7),
-// yeni okulun açılış tarihi (md. 9/1) ve demirbaş onayı. Uzun seçenek etiketleri sarar (seçim
+// yeni okulun açılış tarihi (md. 9/1), veri sorumlusu (isteğe bağlı; aydınlatma metninde, F1b 5.
+// adım) ve demirbaş onayı. Uzun seçenek etiketleri sarar (seçim
 // alanları radyo grubudur, açılır liste değil): ekran 1366×768'de yatay kaydırmasız kalır.
 
 import { useId } from "react";
@@ -32,6 +33,8 @@ import {
   MEVCUT_YARDIMI,
   OKUL_ADI_YARDIMI,
   PERSONEL_YARDIMI,
+  VERI_SORUMLUSU_ETIKETI,
+  VERI_SORUMLUSU_YARDIMI,
   YERLESIM_YARDIMI,
 } from "./metinler";
 import { kademeleriSirala } from "./okulBilgileri";
@@ -362,6 +365,17 @@ export default function OkulKartiAlanlari({
         helperText={ACILIS_YARDIMI}
       />
 
+      <TextField
+        className="sm:col-span-2"
+        label={VERI_SORUMLUSU_ETIKETI}
+        disabled={disabled}
+        maxLength={500}
+        value={form.veriSorumlusu}
+        onChange={(e) => onChange({ veriSorumlusu: e.target.value })}
+        error={errors.data_controller_text}
+        helperText={VERI_SORUMLUSU_YARDIMI}
+      />
+
       <div className="sm:col-span-2">
         <DemirbasAlanlari
           onay={form.demirbasOnayi}
@@ -409,6 +423,7 @@ export function OkulKartiListesi({ kayit }: { kayit: SchoolConfig }) {
     [KAMPUS_ETIKETI, kayit.in_campus ? "Evet" : "Hayır"],
     ["Okulun açılış tarihi", kayit.opened_on ? formatDate(kayit.opened_on) : ""],
     ["Bilgisayarın demirbaş no'su", kayit.demirbas_no],
+    [VERI_SORUMLUSU_ETIKETI, kayit.data_controller_text],
   ];
   return (
     <>

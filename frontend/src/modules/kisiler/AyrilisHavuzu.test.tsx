@@ -1,8 +1,9 @@
 // Ayrılış Havuzu (genel tasarım §5.1): e-Okul aktarımı kimseyi ayırmaz; listede bulunmayanlar
-// burada karar bekler. Öğrenci ve personel ayrı listelerde; tek tek ve toplu
+// burada karar bekler. Havuz yalnız öğretmen ve diğer personeli taşır (öğrenci bölümü ve yıl
+// sonu sınıf süzgeci F1b 5. adımda öğrenci sicili ile söküldü); tek tek ve toplu
 // "Ayrıldı olarak işaretle" (onay diyaloğu, kayıt silinmez) ve "Aktif kalsın"
-// (onaysız, havuzdan çıkar); yıl sonu için sınıf süzgeci; personelde "olası aynı kişi"
-// ve onaylı "Birleştir"; bayat seçimde backend reddi. Tüm adlar uydurmadır (KVKK).
+// (onaysız, havuzdan çıkar); "olası aynı kişi" ve onaylı "Birleştir"; bayat seçimde backend
+// reddi. Tüm adlar uydurmadır (KVKK).
 
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -28,46 +29,19 @@ vi.mock("../okul/api", async (importOriginal) => {
 import AyrilisHavuzu from "./AyrilisHavuzu";
 
 const HAVUZ: LeavePool = {
-  student_count: 3,
-  personnel_count: 2,
-  students: [
-    {
-      id: 1,
-      full_name: "ALİ MEZUN",
-      student_number: "301",
-      class_label: "12/A",
-      leave_candidate_since: "2026-06-20",
-      run: { id: 5, file_name: "OOG01001R020.XLS", date: "2026-06-20" },
-    },
-    {
-      id: 2,
-      full_name: "VELİ MEZUN",
-      student_number: "302",
-      class_label: "12/A",
-      leave_candidate_since: "2026-06-20",
-      run: { id: 5, file_name: "OOG01001R020.XLS", date: "2026-06-20" },
-    },
-    {
-      id: 3,
-      full_name: "CAN NAKİL",
-      student_number: "101",
-      class_label: "9/B",
-      leave_candidate_since: "2026-09-22",
-      run: { id: 6, file_name: "", date: "2026-09-22" },
-    },
-  ],
+  personnel_count: 3,
   personnel: [
     {
       id: 11,
       full_name: "AYŞE KARA",
-      member_kind: "TEACHER",
+      member_kind: "OGRETMEN",
       leave_candidate_since: "2026-09-22",
       run: null,
       similar: [
         {
           id: 21,
           full_name: "AYŞE BEYAZ",
-          member_kind: "TEACHER",
+          member_kind: "OGRETMEN",
           created_on: "2026-09-22",
           reason: "ad_ayni_soyad_farkli",
         },
@@ -76,15 +50,23 @@ const HAVUZ: LeavePool = {
     {
       id: 12,
       full_name: "MEHMET DEMİR",
-      member_kind: "STAFF",
+      member_kind: "DIGER",
       leave_candidate_since: "2026-09-22",
-      run: null,
+      run: { id: 6, file_name: "", date: "2026-09-22" },
+      similar: [],
+    },
+    {
+      id: 13,
+      full_name: "ZEHRA EMEKLİ",
+      member_kind: "OGRETMEN",
+      leave_candidate_since: "2026-06-20",
+      run: { id: 5, file_name: "OOK01001R1.XLS", date: "2026-06-20" },
       similar: [],
     },
   ],
 };
 
-const BOS: LeavePool = { student_count: 0, personnel_count: 0, students: [], personnel: [] };
+const BOS: LeavePool = { personnel_count: 0, personnel: [] };
 
 function kur(onDegisti = vi.fn(), birlestirebilir = true) {
   render(
@@ -99,12 +81,13 @@ function kur(onDegisti = vi.fn(), birlestirebilir = true) {
   return onDegisti;
 }
 
-function ogrenciBolumu(): HTMLElement {
-  return screen.getByRole("region", { name: /^Öğrenciler/ });
-}
-
 function personelBolumu(): HTMLElement {
   return screen.getByRole("region", { name: /^Öğretmenler ve Diğer Personel/ });
+}
+
+/** Hazır olma sinyali: personel bölümünün başlığı (sayısıyla). */
+async function hazir(sayi = 3): Promise<void> {
+  await screen.findByRole("heading", { name: `Öğretmenler ve Diğer Personel (${sayi})` });
 }
 
 beforeEach(() => {
@@ -116,24 +99,24 @@ afterEach(() => {
 });
 
 describe("AyrilisHavuzu — liste", () => {
-  it("öğrenci ve personel ayrı listelerde; giriş tarihi, aktarım ve sayılar görünür", async () => {
+  it("personel listelenir; giriş tarihi, aktarım ve sayı görünür; öğrenci bölümü yoktur", async () => {
     kur();
+    await hazir();
 
-    expect(await screen.findByRole("heading", { name: "Öğrenciler (3)" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Öğretmenler ve Diğer Personel (2)" }),
-    ).toBeInTheDocument();
-    const ogrenci = ogrenciBolumu();
-    const satir = within(ogrenci).getByRole("row", { name: /ALİ MEZUN/ });
+    const bolum = personelBolumu();
+    const satir = within(bolum).getByRole("row", { name: /ZEHRA EMEKLİ/ });
     expect(
       within(satir)
         .getAllByRole("cell")
-        .slice(1)
+        .slice(1, 5)
         .map((c) => c.textContent),
-    ).toEqual(["301", "ALİ MEZUN", "12/A", "20.06.2026", "OOG01001R020.XLS"]);
-    expect(within(ogrenci).getByText("Yapıştırılan liste")).toBeInTheDocument();
-    expect(within(personelBolumu()).getByText("Diğer personel")).toBeInTheDocument();
+    ).toEqual(["ZEHRA EMEKLİ", "Öğretmen", "20.06.2026", "OOK01001R1.XLS"]);
+    expect(within(bolum).getByText("Yapıştırılan liste")).toBeInTheDocument();
+    expect(within(bolum).getByText("Diğer personel")).toBeInTheDocument();
     expect(screen.getByText(/kimseyi ayırmaz ve kimsenin kaydını silmez/)).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: /^Öğrenciler/ })).toBeNull();
+    expect(screen.queryByLabelText("Sınıf")).toBeNull();
+    expect(screen.getByText(/Listede bulunmayan öğretmen ve\s+diğer personel/)).toBeInTheDocument();
   });
 
   it("havuz boşsa boş durum gösterilir", async () => {
@@ -157,103 +140,56 @@ describe("AyrilisHavuzu — liste", () => {
 describe("AyrilisHavuzu — karar", () => {
   it("seçim yokken eylemler kapalıdır", async () => {
     kur();
-    await screen.findByRole("heading", { name: "Öğrenciler (3)" });
+    await hazir();
 
-    const bolum = ogrenciBolumu();
-    expect(within(bolum).getByText("Karar vermek için öğrenci seçin.")).toBeInTheDocument();
+    const bolum = personelBolumu();
+    expect(within(bolum).getByText("Karar vermek için kişi seçin.")).toBeInTheDocument();
     expect(within(bolum).getByRole("button", { name: "Ayrıldı olarak işaretle" })).toBeDisabled();
     expect(within(bolum).getByRole("button", { name: "Aktif kalsın" })).toBeDisabled();
   });
 
-  it("yıl sonu: sınıf süzgeciyle mezunlar toplu seçilir, onayla ayrılır (kayıt silinmez)", async () => {
+  it("toplu seçim onayla ayrılır (kayıt silinmez); liste ve seçim tazelenir", async () => {
     okulApiMock.resolveLeavePool.mockResolvedValue({
-      students_left: 2,
-      students_kept: 0,
-      personnel_left: 0,
+      personnel_left: 3,
       personnel_kept: 0,
-      student_count: 1,
-      personnel_count: 2,
+      personnel_count: 0,
     });
     const user = userEvent.setup();
     const onDegisti = kur();
-    await screen.findByRole("heading", { name: "Öğrenciler (3)" });
-    const bolum = ogrenciBolumu();
+    await hazir();
+    const bolum = personelBolumu();
 
-    await user.selectOptions(within(bolum).getByLabelText("Sınıf"), "12/A");
-    expect(within(bolum).queryByText("CAN NAKİL")).toBeNull();
-    await user.click(
-      within(bolum).getByRole("checkbox", { name: "Görünen öğrencilerin tümünü seç" }),
-    );
-    expect(within(bolum).getByText("2 öğrenci seçili.")).toBeInTheDocument();
+    await user.click(within(bolum).getByRole("checkbox", { name: "Bütün kişileri seç" }));
+    expect(within(bolum).getByText("3 kişi seçili.")).toBeInTheDocument();
     await user.click(within(bolum).getByRole("button", { name: "Ayrıldı olarak işaretle" }));
 
     const onay = await screen.findByRole("dialog", {
-      name: "2 öğrenci ayrıldı olarak işaretlensin mi?",
+      name: "3 kişi ayrıldı olarak işaretlensin mi?",
     });
     expect(within(onay).getByText(/Kayıtları silinmez/)).toBeInTheDocument();
     await user.click(within(onay).getByRole("button", { name: "Ayrıldı olarak işaretle" }));
 
     await waitFor(() =>
       expect(okulApiMock.resolveLeavePool).toHaveBeenCalledWith({
-        students: { leave: [1, 2] },
+        personnel: { leave: [11, 12, 13] },
       }),
     );
-    expect(await screen.findByText("2 öğrenci ayrıldı olarak işaretlendi.")).toBeInTheDocument();
+    expect(await screen.findByText("3 kişi ayrıldı olarak işaretlendi.")).toBeInTheDocument();
     expect(onDegisti).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(okulApiMock.getLeavePool).toHaveBeenCalledTimes(2));
-  });
-
-  it("karardan sonra listeden düşen sınıf süzgeci sıfırlanır (kalanlar görünür kalır)", async () => {
-    okulApiMock.resolveLeavePool.mockResolvedValue({
-      students_left: 2,
-      students_kept: 0,
-      personnel_left: 0,
-      personnel_kept: 0,
-      student_count: 1,
-      personnel_count: 2,
-    });
-    const kalan: LeavePool = {
-      ...HAVUZ,
-      student_count: 1,
-      students: HAVUZ.students.filter((o) => o.class_label === "9/B"),
-    };
-    okulApiMock.getLeavePool.mockResolvedValueOnce(HAVUZ).mockResolvedValue(kalan);
-    const user = userEvent.setup();
-    kur();
-    await screen.findByRole("heading", { name: "Öğrenciler (3)" });
-
-    await user.selectOptions(within(ogrenciBolumu()).getByLabelText("Sınıf"), "12/A");
-    await user.click(
-      within(ogrenciBolumu()).getByRole("checkbox", { name: "Görünen öğrencilerin tümünü seç" }),
-    );
-    await user.click(
-      within(ogrenciBolumu()).getByRole("button", { name: "Ayrıldı olarak işaretle" }),
-    );
-    await user.click(
-      within(
-        await screen.findByRole("dialog", { name: "2 öğrenci ayrıldı olarak işaretlensin mi?" }),
-      ).getByRole("button", { name: "Ayrıldı olarak işaretle" }),
-    );
-
-    // 12/A seçeneği listeden düştü: süzgeç bayat kalsaydı tablo boş görünür,
-    // seçici ise eşleşen seçenek bulamadığı için "Tümü" yazardı.
-    expect(await screen.findByRole("heading", { name: "Öğrenciler (1)" })).toBeInTheDocument();
-    const bolum = ogrenciBolumu();
-    await waitFor(() => expect(within(bolum).getByLabelText("Sınıf")).toHaveValue(""));
-    expect(within(bolum).getByText("CAN NAKİL")).toBeInTheDocument();
   });
 
   it("ayrılış onayından vazgeçilirse istek atılmaz", async () => {
     const user = userEvent.setup();
     kur();
-    await screen.findByRole("heading", { name: "Öğrenciler (3)" });
-    const bolum = ogrenciBolumu();
+    await hazir();
+    const bolum = personelBolumu();
 
-    await user.click(within(bolum).getByRole("checkbox", { name: "CAN NAKİL seç" }));
+    await user.click(within(bolum).getByRole("checkbox", { name: "ZEHRA EMEKLİ seç" }));
     await user.click(within(bolum).getByRole("button", { name: "Ayrıldı olarak işaretle" }));
     await user.click(
       within(
-        await screen.findByRole("dialog", { name: "1 öğrenci ayrıldı olarak işaretlensin mi?" }),
+        await screen.findByRole("dialog", { name: "1 kişi ayrıldı olarak işaretlensin mi?" }),
       ).getByRole("button", { name: "Vazgeç" }),
     );
 
@@ -262,16 +198,13 @@ describe("AyrilisHavuzu — karar", () => {
 
   it("tek kişi “Aktif kalsın”: onaysız, yalnız havuzdan çıkar", async () => {
     okulApiMock.resolveLeavePool.mockResolvedValue({
-      students_left: 0,
-      students_kept: 0,
       personnel_left: 0,
       personnel_kept: 1,
-      student_count: 3,
-      personnel_count: 1,
+      personnel_count: 2,
     });
     const user = userEvent.setup();
     kur();
-    await screen.findByRole("heading", { name: "Öğrenciler (3)" });
+    await hazir();
     const bolum = personelBolumu();
 
     await user.click(within(bolum).getByRole("checkbox", { name: "MEHMET DEMİR seç" }));
@@ -286,6 +219,28 @@ describe("AyrilisHavuzu — karar", () => {
     ).toBeInTheDocument();
   });
 
+  it("liste yenilenince artık havuzda olmayan kişi seçimden düşer", async () => {
+    okulApiMock.resolveLeavePool.mockResolvedValue({
+      personnel_left: 0,
+      personnel_kept: 1,
+      personnel_count: 2,
+    });
+    const kalan: LeavePool = {
+      personnel_count: 2,
+      personnel: HAVUZ.personnel.filter((k) => k.id !== 12),
+    };
+    okulApiMock.getLeavePool.mockResolvedValueOnce(HAVUZ).mockResolvedValue(kalan);
+    const user = userEvent.setup();
+    kur();
+    await hazir();
+
+    await user.click(within(personelBolumu()).getByRole("checkbox", { name: "MEHMET DEMİR seç" }));
+    await user.click(within(personelBolumu()).getByRole("button", { name: "Aktif kalsın" }));
+
+    await hazir(2);
+    expect(within(personelBolumu()).getByText("Karar vermek için kişi seçin.")).toBeInTheDocument();
+  });
+
   it("bayat seçim: backend reddi bantta gösterilir, liste yenilenir", async () => {
     okulApiMock.resolveLeavePool.mockRejectedValue(
       new ApiError(
@@ -296,10 +251,10 @@ describe("AyrilisHavuzu — karar", () => {
     );
     const user = userEvent.setup();
     kur();
-    await screen.findByRole("heading", { name: "Öğrenciler (3)" });
-    const bolum = ogrenciBolumu();
+    await hazir();
+    const bolum = personelBolumu();
 
-    await user.click(within(bolum).getByRole("checkbox", { name: "ALİ MEZUN seç" }));
+    await user.click(within(bolum).getByRole("checkbox", { name: "ZEHRA EMEKLİ seç" }));
     await user.click(within(bolum).getByRole("button", { name: "Aktif kalsın" }));
 
     expect(await screen.findByText(/artık ayrılış havuzunda değil/)).toBeInTheDocument();
@@ -312,7 +267,7 @@ describe("AyrilisHavuzu — olası aynı kişi", () => {
     okulApiMock.mergePersonnel.mockResolvedValue({});
     const user = userEvent.setup();
     const onDegisti = kur();
-    await screen.findByRole("heading", { name: "Öğrenciler (3)" });
+    await hazir();
 
     expect(screen.getByText(/Öyleyse ayrıldı diye işaretlemeyin/)).toBeInTheDocument();
     await user.click(
@@ -343,7 +298,7 @@ describe("AyrilisHavuzu — olası aynı kişi", () => {
 
   it("kişi yazma yeteneği yoksa aday gösterilir, “Birleştir” çizilmez", async () => {
     kur(vi.fn(), false);
-    await screen.findByRole("heading", { name: "Öğrenciler (3)" });
+    await hazir();
 
     expect(within(personelBolumu()).getByText("AYŞE BEYAZ")).toBeInTheDocument();
     expect(within(personelBolumu()).queryByRole("button", { name: /birleştir/i })).toBeNull();
@@ -355,7 +310,7 @@ describe("AyrilisHavuzu — olası aynı kişi", () => {
 
   it("aday satırı neden aday olduğunu yazar (ad benzerliği adaşı da yakalar)", async () => {
     kur();
-    await screen.findByRole("heading", { name: "Öğrenciler (3)" });
+    await hazir();
 
     expect(
       within(personelBolumu()).getByText(
@@ -368,7 +323,7 @@ describe("AyrilisHavuzu — olası aynı kişi", () => {
   it("doğrulama kutusu işaretlenmeden birleştirme çağrılmaz", async () => {
     const user = userEvent.setup();
     kur();
-    await screen.findByRole("heading", { name: "Öğrenciler (3)" });
+    await hazir();
     await user.click(
       within(personelBolumu()).getByRole("button", {
         name: "AYŞE KARA kaydını AYŞE BEYAZ kaydıyla birleştir",
@@ -386,30 +341,19 @@ describe("AyrilisHavuzu — olası aynı kişi", () => {
 // Çözülemeyen şifreli alan (tasarım §13 D48): havuz satırında da boş hücre değil
 // "okunamadı" yazar; seçim kutusunun adı kişi adı tahmin etmez.
 describe("AyrilisHavuzu — okunamayan şifreli alan", () => {
-  it("okunamayan ad ve okul no'su “okunamadı” diye görünür", async () => {
+  it("okunamayan ad “okunamadı” diye görünür; seçim kutusu kişi adı tahmin etmez", async () => {
     okulApiMock.getLeavePool.mockResolvedValue({
       ...BOS,
-      student_count: 1,
       personnel_count: 1,
-      students: [
-        {
-          ...HAVUZ.students[0],
-          full_name: null,
-          student_number: null,
-          bozuk_alanlar: ["last_name", "student_number"],
-        },
-      ],
       personnel: [{ ...HAVUZ.personnel[1], full_name: null, bozuk_alanlar: ["first_name"] }],
     });
     kur();
 
-    const ogrenci = await screen.findByRole("region", { name: /^Öğrenciler/ });
-    expect(within(ogrenci).getAllByText("okunamadı")).toHaveLength(2);
-    expect(
-      within(ogrenci).getByRole("checkbox", { name: "Adı okunamayan kayıt seç" }),
-    ).toBeInTheDocument();
-    const personel = personelBolumu();
+    const personel = await screen.findByRole("region", { name: /^Öğretmenler/ });
     expect(within(personel).getByText("okunamadı")).toBeInTheDocument();
+    expect(
+      within(personel).getByRole("checkbox", { name: "Adı okunamayan kayıt seç" }),
+    ).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/null/);
   });
 

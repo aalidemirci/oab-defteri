@@ -53,14 +53,14 @@ describe("güvenlik metinleri", () => {
     expect(sinirlar).toContain("Açık oturum, sahibinin imzasıdır.");
   });
 
-  it("dürüst sınır: her iş denetim izine yazılır (bugünkü istisnasıyla); iz değişikliği gösterir, önlemez", () => {
+  it("dürüst sınır: her iş denetim izine yazılır (istisnasız); iz değişikliği gösterir, önlemez", () => {
     const sinir = (baslik: string) =>
       metinler.DURUST_SINIRLAR.find((s) => s.baslik === baslik)?.metin ?? "";
     // F1b alt commit c'den beri doğru: yazmalar oturumdaki hesabın adına denetim izinde.
     const oturum = sinir("Açık oturum, sahibinin imzasıdır.");
     expect(oturum).toMatch(/her iş o hesabın adına denetim izine yazılır/);
-    // Plan F1b-1: kişi silme ve birleştirme 5. adıma dek izsiz — metin bunu saklamaz.
-    expect(oturum).toMatch(/tek\s+istisna: öğrenci ve personelin sicilden silinmesi/);
+    // F1b 5. adım: personel silme ve birleştirme de izlidir; "tek istisna" cümlesi kalktı.
+    expect(oturum).not.toMatch(/istisna/);
     // Geri yükleme ilk girişte, başlatan hesapla birlikte yazılır (kurtarma yolunda da).
     expect(oturum).toMatch(
       /Yedekten geri yükleme, ardından yapılan ilk girişte, onu başlatan\s+hesapla/,

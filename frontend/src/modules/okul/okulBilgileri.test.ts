@@ -140,6 +140,7 @@ describe("kayıttan forma, formdan gövdeye", () => {
       acilis: "2025-09-08",
       demirbasOnayi: true,
       demirbasNo: " BLG-17 ",
+      veriSorumlusu: "  Örnek Anadolu Lisesi Müdürlüğü ",
     });
     expect(govde).toEqual({
       school_name: "Örnek Ortaokulu",
@@ -157,6 +158,7 @@ describe("kayıttan forma, formdan gövdeye", () => {
       opened_on: "2025-09-08",
       demirbas_onayi: true,
       demirbas_no: "BLG-17",
+      data_controller_text: "Örnek Anadolu Lisesi Müdürlüğü",
     });
   });
 

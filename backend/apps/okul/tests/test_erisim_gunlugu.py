@@ -39,7 +39,7 @@ from apps.okul.models import (
     AuditAction,
     AuditTrail,
     ImmutableRecord,
-    Student,
+    Personnel,
     _AccessLogQuerySet,
 )
 from apps.okul.oturum import IZ_KIP_KILIDI, OTURUM, sistem_olarak, yazar_olarak
@@ -73,7 +73,7 @@ def satir(an: datetime, **alanlar: Any) -> AccessLog:
         "account_id": TEST_HESAP_ID,
         "role": "yonetici",
         "kind": AccessKind.KISI_DOKUMU,
-        "model": "okul.Student",
+        "model": "okul.Personnel",
         "object_id": "7",
     }
     return AccessLog.objects.create(at=an, **{**varsayilan, **alanlar})
@@ -196,7 +196,7 @@ def test_orm_ile_toplu_ekleme_reddedilir() -> None:
         account_id=TEST_HESAP_ID,
         role="yonetici",
         kind=AccessKind.KISI_DOKUMU,
-        model="okul.Student",
+        model="okul.Personnel",
         object_id=UYDURMA_AD,
     )
     with pytest.raises(ImmutableRecord, match="toplu"):
@@ -426,8 +426,8 @@ from apps.okul.models import AccessLog as Gunluk
 from django.apps import apps as django_apps
 
 
-def izli_serviste_dogrudan_yazim(ogrenci):
-    denetim_izi.olay("BASIM", model="okul.Student", object_id=str(ogrenci.pk))
+def izli_serviste_dogrudan_yazim(kisi):
+    denetim_izi.olay("BASIM", model="okul.Personnel", object_id=str(kisi.pk))
     AccessLog.objects.create(object_id="Uydurma Ad")
 
 
@@ -439,9 +439,9 @@ def kurucuyla_yazim():
     AccessLog(object_id="1").save()
 
 
-def yoneticiyi_atlayan_silme(ogrenci):
-    denetim_izi.degisiklik(ogrenci, onceki=None)
-    AccessLog._base_manager.filter(object_id=str(ogrenci.pk)).delete()
+def yoneticiyi_atlayan_silme(kisi):
+    denetim_izi.degisiklik(kisi, onceki=None)
+    AccessLog._base_manager.filter(object_id=str(kisi.pk)).delete()
 
 
 def ilkelle_izli_silme(sinir, gun):
@@ -502,7 +502,7 @@ def test_gunluk_taramasi_izli_islevdeki_yazimi_ve_atlatmalari_yakalar() -> None:
 
 def test_yazici_okuyan_hesabi_ve_rolu_baglamdan_yazar() -> None:
     once = timezone.now()
-    kayit = erisim_gunlugu.yaz(AccessKind.KISI_DOKUMU, model=Student, object_id=12)
+    kayit = erisim_gunlugu.yaz(AccessKind.KISI_DOKUMU, model=Personnel, object_id=12)
 
     kayit = AccessLog.objects.get(pk=kayit.pk)
     assert (str(kayit.account_id), kayit.role, kayit.kind) == (
@@ -510,7 +510,7 @@ def test_yazici_okuyan_hesabi_ve_rolu_baglamdan_yazar() -> None:
         "yonetici",
         "KISI_DOKUMU",
     )
-    assert (kayit.model, kayit.object_id, kayit.field) == ("okul.Student", "12", "")
+    assert (kayit.model, kayit.object_id, kayit.field) == ("okul.Personnel", "12", "")
     assert (kayit.document_sha256, kayit.row_count) == ("", None)
     assert once <= kayit.at <= timezone.now()
 
@@ -522,7 +522,7 @@ def test_yazici_kimligi_tek_metne_indirir_ve_alan_adini_yazar() -> None:
         object_id=TEST_HESAP_ID.replace("-", "").upper(),
         field="display_name",
     )
-    sayi = erisim_gunlugu.yaz(AccessKind.MASKESIZ_TCKN, model=Student, object_id="15", field="id")
+    sayi = erisim_gunlugu.yaz(AccessKind.MASKESIZ_TCKN, model=Personnel, object_id="15", field="id")
     assert (hesap.model, hesap.object_id, hesap.field) == (
         "okul.Account",
         TEST_HESAP_ID,
@@ -554,28 +554,32 @@ def test_yazici_baglamsiz_ve_sistem_yazarini_reddeder() -> None:
     [
         pytest.param("SIL", {}, id="kume-disi-tur"),
         pytest.param("kisi_dokumu", {}, id="kucuk-harfli-tur"),
-        pytest.param("KISI_DOKUMU", {"model": "okul.Student"}, id="model-metin"),
+        pytest.param("KISI_DOKUMU", {"model": "okul.Personnel"}, id="model-metin"),
         pytest.param("KISI_DOKUMU", {"model": dict}, id="model-degil"),
         pytest.param(
-            "KISI_DOKUMU", {"model": Student, "object_id": f"{UYDURMA_AD}"}, id="kimlikte-ad"
+            "KISI_DOKUMU", {"model": Personnel, "object_id": f"{UYDURMA_AD}"}, id="kimlikte-ad"
         ),
-        pytest.param("KISI_DOKUMU", {"model": Student, "object_id": "12; 13"}, id="kimlikte-metin"),
-        pytest.param("KISI_DOKUMU", {"model": Student, "object_id": True}, id="kimlik-bool"),
-        pytest.param("KISI_DOKUMU", {"model": Student, "object_id": ""}, id="bos-kimlik"),
+        pytest.param(
+            "KISI_DOKUMU", {"model": Personnel, "object_id": "12; 13"}, id="kimlikte-metin"
+        ),
+        pytest.param("KISI_DOKUMU", {"model": Personnel, "object_id": True}, id="kimlik-bool"),
+        pytest.param("KISI_DOKUMU", {"model": Personnel, "object_id": ""}, id="bos-kimlik"),
         pytest.param(
             "KISI_DOKUMU", {"model": Account, "object_id": UYDURMA_SOYAD}, id="uuid-yerine-ad"
         ),
         pytest.param(
             "OZEL_NITELIKLI_ALAN",
-            {"model": Student, "object_id": 3, "field": f"{UYDURMA_AD} {UYDURMA_SOYAD}"},
+            {"model": Personnel, "object_id": 3, "field": f"{UYDURMA_AD} {UYDURMA_SOYAD}"},
             id="alanda-deger",
         ),
         pytest.param(
             "OZEL_NITELIKLI_ALAN",
-            {"model": Student, "object_id": 3, "field": "classsection"},
+            {"model": Personnel, "object_id": 3, "field": "classsection"},
             id="alan-degil",
         ),
-        pytest.param("OZEL_NITELIKLI_ALAN", {"model": Student, "field": "id"}, id="kimliksiz-alan"),
+        pytest.param(
+            "OZEL_NITELIKLI_ALAN", {"model": Personnel, "field": "id"}, id="kimliksiz-alan"
+        ),
         pytest.param("KISI_DOKUMU", {"object_id": 3}, id="modelsiz-kimlik"),
         pytest.param("KISI_DOKUMU", {"field": "id"}, id="modelsiz-alan"),
         pytest.param(
@@ -596,11 +600,11 @@ def test_yazici_baglamsiz_ve_sistem_yazarini_reddeder() -> None:
         ),
         pytest.param("KISISEL_DISA_AKTARIM", {}, id="ciktisiz-disa-aktarim"),
         pytest.param("VELI_LISTESI_CIKTISI", {}, id="ciktisiz-veli-listesi"),
-        pytest.param("MASKESIZ_TCKN", {"model": Student, "object_id": 3}, id="alansiz-tckn"),
+        pytest.param("MASKESIZ_TCKN", {"model": Personnel, "object_id": 3}, id="alansiz-tckn"),
         pytest.param(
             "MASKESIZ_TCKN",
             {
-                "model": Student,
+                "model": Personnel,
                 "object_id": 3,
                 "field": "id",
                 "document_sha256": OZET,
@@ -621,7 +625,7 @@ def test_yazici_kume_disi_turu_serbest_metni_ve_degeri_reddeder(
 def test_yazici_iz_satiri_yazmaz() -> None:
     """Zincir dışıdır (tasarım §4.6.4): okumanın kaydı denetim izinde satır doğurmaz."""
     bas = son_seq()
-    erisim_gunlugu.yaz(AccessKind.KISI_DOKUMU, model=Student, object_id=1)
+    erisim_gunlugu.yaz(AccessKind.KISI_DOKUMU, model=Personnel, object_id=1)
     assert son_seq() == bas
 
 
@@ -748,25 +752,21 @@ def test_kvkk_silme_satiri_kisisizdir_ve_tek_islemdedir(monkeypatch: pytest.Monk
     """Tasarım §4.6.2 kural 4 ve 6: uydurma ad ve numaralı kişinin okuma kayıtları silinir; tek
     `KVKK_SILME` satırı (model, alan adları, adet, en yeni gün, tetik; SISTEM) yazılır ve denetim
     izinin HİÇBİR sütununda uydurma kişisel veri yoktur."""
-    ogrenci = persons.create_student(
-        first_name=UYDURMA_AD,
-        last_name=UYDURMA_SOYAD,
-        student_number=UYDURMA_OKUL_NO,
-        class_level=9,
-        class_section="A",
+    kisi = persons.create_personnel(
+        first_name=UYDURMA_AD, last_name=f"{UYDURMA_SOYAD} {UYDURMA_OKUL_NO}"
     )
     eski = timezone.now() - timedelta(days=3 * 366)
     with monkeypatch.context() as yama:  # okuma iki yıldan eskiymiş gibi: yazıcının kendi yolu
         yama.setattr(timezone, "now", lambda: eski)
-        erisim_gunlugu.yaz(AccessKind.KISI_DOKUMU, model=Student, object_id=ogrenci.pk)
+        erisim_gunlugu.yaz(AccessKind.KISI_DOKUMU, model=Personnel, object_id=kisi.pk)
         erisim_gunlugu.yaz(
             AccessKind.KISISEL_DISA_AKTARIM,
-            model=Student,
-            object_id=ogrenci.pk,
+            model=Personnel,
+            object_id=kisi.pk,
             document_sha256=OZET,
             row_count=1,
         )
-    yeni = erisim_gunlugu.yaz(AccessKind.KISI_DOKUMU, model=Student, object_id=ogrenci.pk)
+    yeni = erisim_gunlugu.yaz(AccessKind.KISI_DOKUMU, model=Personnel, object_id=kisi.pk)
     bas = son_seq()
 
     assert erisim_gunlugu.suresi_dolanlari_sil() == 2

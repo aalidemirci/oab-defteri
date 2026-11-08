@@ -102,14 +102,12 @@ def _oturum_istegi() -> Iterator[None]:
 
 def _ozet() -> dict[str, Any]:
     """Veri eşitliğinin ölçüsü: şifreli adlar ÇÖZÜLMÜŞ olarak, TR sırasıyla değil pk ile."""
-    from apps.okul.models import Personnel, Student
+    from apps.okul.models import Personnel
 
     return {
-        "ogrenciler": [
-            [o.first_name, o.last_name, o.student_number, o.class_level, o.class_section]
-            for o in Student.objects.order_by("pk")
+        "personel": [
+            [p.first_name, p.last_name, p.member_kind] for p in Personnel.objects.order_by("pk")
         ],
-        "personel": [[p.first_name, p.last_name] for p in Personnel.objects.order_by("pk")],
     }
 
 
@@ -142,7 +140,7 @@ def _ek_tohumla() -> str:
 
 def hazirla(args: argparse.Namespace) -> dict[str, Any]:
     _django(args.data_dir)  # backend/ sys.path'e ÖNCE girer; `apps` ancak sonra import edilir
-    from apps.okul.models import MemberKind, Personnel, Student
+    from apps.okul.models import MemberKind, Personnel
     from apps.okul.services import app_password, encrypted_backup
     from shared import crypto
 
@@ -152,22 +150,16 @@ def hazirla(args: argparse.Namespace) -> dict[str, Any]:
     with _oturum_istegi():
         app_password.confirm_recovery_key(kurtarma)
 
-    Student.objects.create(
-        first_name="Deneme Çağla",
-        last_name="Öğrenci Işıklı",
-        student_number="700123",
-        class_level=9,
-        class_section="A",
-    )
-    Student.objects.create(
-        first_name="Deneme İlkay",
-        last_name="Şahinoğlu",
-        student_number="700124",
-        class_level=10,
-        class_section="B",
+    # Kişi kayıtları personeldir (öğrenci sicili F1b 5. adımda söküldü); Türkçe harfli
+    # şifreli adlar yedekten aynen dönmelidir.
+    Personnel.objects.create(
+        first_name="Deneme Çağla", last_name="Işıklı", member_kind=MemberKind.OGRETMEN
     )
     Personnel.objects.create(
-        first_name="Deneme Şükrü", last_name="Öğretmenoğlu", member_kind=MemberKind.TEACHER
+        first_name="Deneme İlkay", last_name="Şahinoğlu", member_kind=MemberKind.DIGER
+    )
+    Personnel.objects.create(
+        first_name="Deneme Şükrü", last_name="Öğretmenoğlu", member_kind=MemberKind.OGRETMEN
     )
 
     # Dış yedek: kullanıcının Ayarlar → Güvenlik'ten USB belleğe kaydettiği şifreli yedek.

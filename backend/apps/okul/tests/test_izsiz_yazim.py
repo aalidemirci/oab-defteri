@@ -1,8 +1,9 @@
 """İzsiz yazım taraması ve kaydın özeti kapısı (TK16; tasarım §4.6.2, §14 F1b kapısı; plan F1b-1).
 
-Plan F1b-1 "Denetim izi": okul çekirdeğinin bütün yazma servisleri izlidir; kişi silme ve
-birleştirme 5. adımda yeniden yazılacağı için izsiz yazım taramasında ADIYLA muaftır.
-Yeni bir izsiz yazma yolu eklenince bu dosyadaki testlerden en az biri düşer:
+Plan F1b-1 "Denetim izi": okul çekirdeğinin bütün yazma servisleri izlidir. Personelin silinmesi
+ve birleştirmede kaynağın silinmesi F1b 5. adımdan beri izlidir (kişisiz `KVKK_SILME` satırı;
+plan "F1b-5 uygulama kararları"). Yeni bir izsiz yazma yolu eklenince bu dosyadaki testlerden en
+az biri düşer:
 
 1. **Yazma uçları, çalışma anında** — URL desenleri dolaşılır (`_api_uclari`); her
    yazma yöntemi (POST, PUT, PATCH, DELETE) ya `IZLI_UCLAR`'da bir senaryoyla ya da
@@ -13,14 +14,20 @@ Yeni bir izsiz yazma yolu eklenince bu dosyadaki testlerden en az biri düşer:
    MAC'i kaydın bugünkü değerini tutmalı ve zincir bütün olmalıdır. Üstelik uçtan önce ve
    sonra okul tablolarının bütün satırları karşılaştırılır: değişen, eklenen ya da silinen
    HER kaydın bu istekte yazılmış bir iz satırı olmalı ve kayıt bütünlüğü (`kaydi_dogrula`)
-   tutmalıdır — iki kayıt yazıp birini izleyen uç düşer.
+   tutmalıdır — iki kayıt yazıp birini izleyen uç düşer. KVKK silmesinin satırı kimlik
+   taşımaz (`denetim_izi.kvkk_silme`): bir modelin SİLİNEN kayıtlarını, o modelin bu istekte
+   yazılmış `KVKK_SILME` satırlarının adetleri toplamı silinen kayıt sayısına eşitse karşılar
+   (`_kvkk_silme_karsiligi`); fazla ya da eksik adet ucu düşürür. Veli listesi (`ParentRoster`)
+   satır başına iz yazmaz: eklenen satırını, partisinin (`import_run`) bu istekte yazılmış iz
+   satırı karşılar (`_parti_karsiligi`; plan "F1b-5 uygulama kararları": aktarım kişisiz parti
+   satırıdır); satırın içerik MAC'i yoktur, kayıt bütünlüğü denetimi ona uygulanmaz.
 2. **Kaynak taraması** — `apps/` altındaki bütün uygulamalar, `shared` ve masaüstü kabuğu
    (testler ve göçler hariç; modeller DAHİL) AST ile taranır: ORM yazma çağrısı (kural
    `_orm_yazimi_mi`'de: `update`, `create`, `delete`, modelin adlı yazım ilkeleri… HER
    alıcıda — queryset değişkeni, ilişki yöneticisi, seçicinin queryset'i) taşıyan her birim
    ya yazıcıyı (`denetim_izi.kayit`, `olay`, `degisiklik`, `kilit_olayi`, `basim`) doğrudan ya da `SAF_IZ_YARDIMCILARI`'nda
    ADIYLA duran bir yardımcıyla çağırmalı, ya izi çağıranları düşen modüle özel bir
-   yardımcı olmalı (kurallar `_tara`'da) ya da `MUAF_ISLEVLER`'de (plan muafiyeti) ya da
+   yardımcı olmalı (kurallar `_tara`'da) ya da `MUAF_ISLEVLER`'de (gerekçeli muafiyet) ya da
    `ILKELLER`'de (yazıcı ve model ilkelleri) adıyla durmalıdır. Çağrılar (modül, işlev)
    çiftiyle eşlenir, ada göre DEĞİL: görünümün `delete` yöntemi bir ORM `.delete()`
    çağrısını izli kılmaz. Aynı adlı ORM dışı çağrılar (`set.update`, `hashlib…update`, salt
@@ -35,10 +42,11 @@ Yeni bir izsiz yazma yolu eklenince bu dosyadaki testlerden en az biri düşer:
    ve serbest metinle yazılır, güncellenir, durumu değişir; sonra `AuditTrail`'in BÜTÜN
    sütunlarında bu değerler aranır — sonuç sıfır. Arşiv paketinin "denetim izi dökümü"
    (§8.5) henüz yoktur (F4); döküm gelince aynı arama ona da uygulanır. KVKK silmesi
-   (`KVKK_SILME`, `denetim_izi.kvkk_silme`) bugün yalnız erişim günlüğünün saklama süresi
-   silmesindedir (`apps.okul.erisim_gunlugu`; uydurma veriyle araması
-   `test_erisim_gunlugu.py`'de); kişi silmenin satırı dönem kapanışıyla ve 5. adımla gelir,
-   bugün kişi silme izsizdir (muafiyet).
+   (`KVKK_SILME`, `denetim_izi.kvkk_silme`) erişim günlüğünün saklama süresi silmesinde
+   (`apps.okul.erisim_gunlugu`; uydurma veriyle araması `test_erisim_gunlugu.py`'de) ve
+   personelin elle silinmesiyle birleştirmesinde, veli listesinin aktarımda yerine geçen
+   satırlarında ve elle silinmesindedir (uydurma veriyle araması burada); dönem kapanışının
+   silmeleri F4'te gelir.
 
 ERİŞİM GÜNLÜĞÜ (`AccessLog`, tasarım §4.6.4) ZİNCİR DIŞIDIR: yazıcısı (`erisim_gunlugu.yaz`)
 iz satırı yazmaz ve `MUAF_ISLEVLER`'de adıyla durur; model izin listesi taşımaz
@@ -71,6 +79,7 @@ import desktop
 import pytest
 from desktop.backup_crypto import BOS_YEREL_MANIFESTO
 from django.apps import apps as django_apps
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection, transaction
 from django.urls import URLPattern, URLResolver, get_resolver
 from django.utils import timezone
@@ -78,7 +87,7 @@ from openpyxl import Workbook
 from rest_framework.test import APIClient
 
 from apps.okul import denetim_izi, erisim_gunlugu, iz_durumu
-from apps.okul.excel_ogrenci import ParserError
+from apps.okul.excel_ortak import ParserError
 from apps.okul.models import (
     AccessKind,
     AccessLog,
@@ -88,24 +97,22 @@ from apps.okul.models import (
     Attachment,
     AttachmentSensitivity,
     AuditTrail,
-    ClassSection,
     Holiday,
     ImportRun,
+    ParentRoster,
     Personnel,
     SchoolConfig,
     SchoolTerm,
     SchoolYear,
-    Student,
     SuspendReason,
 )
 from apps.okul.services import app_password, dosya_deposu, encrypted_backup, persons
 from apps.okul.services import calendar as calendar_service
 from apps.okul.services import imports as import_service
 from apps.okul.services import school_year as school_year_service
-from apps.okul.services import sections as section_service
 from apps.okul.services import setup as setup_service
 from apps.okul.services import terms as term_service
-from apps.okul.services.templates import STUDENT_TEMPLATE_HEADERS
+from apps.okul.services.templates import PARENT_TEMPLATE_HEADERS, PERSONNEL_TEMPLATE_HEADERS
 from apps.okul.tests.hesap_ortak import GECICI_PAROLA, YENI_PAROLA, hesap_ac, muhurle
 from apps.okul.tests.okul_karti_ortak import okul_karti
 from conftest import (
@@ -121,7 +128,6 @@ YAZMA_YONTEMLERI = ("post", "put", "patch", "delete")
 #: `backend/` kökü (kaynak taraması buradan göreli yol yazar).
 KOK = Path(__file__).resolve().parents[3]
 
-OGRENCI_BASLIGI = "Sınıf\tOkul No\tAdı Soyadı"
 PERSONEL_BASLIGI = "Adı\tSoyadı\tGörevi\tBranşı"
 
 
@@ -167,6 +173,8 @@ class Istek:
     beklenen: frozenset[str]
     #: Satırların hesabı; None: isteğin açtığı yeni hesap (ilk hesap).
     hesap: str | None = TEST_HESAP_ID
+    #: Çok parçalı gövdeyle yüklenen dosya (ad, baytlar); verilirse `govde` kullanılmaz.
+    dosya: tuple[str, bytes] | None = None
 
 
 @dataclass(frozen=True)
@@ -189,17 +197,6 @@ def _yil(ad: str = "2026-2027", *, aktif: bool = True, kayma: int = 0) -> School
         end_date=date(2027 + kayma, 6, 25),
         activate=aktif,
     )
-
-
-def _ogrenci(**alanlar: Any) -> Student:
-    varsayilan: dict[str, Any] = {
-        "first_name": "Uydurcan",
-        "last_name": "Örnekoğlu",
-        "student_number": "501",
-        "class_level": 9,
-        "class_section": "A",
-    }
-    return persons.create_student(**{**varsayilan, **alanlar})
 
 
 def _personel() -> Personnel:
@@ -246,55 +243,53 @@ def _kapali_gun_sil(_: pytest.MonkeyPatch) -> Istek:
     return Istek(f"/api/v1/holidays/{gun.pk}/", None, _turler("DURUM"))
 
 
-def _ogrenci_guncelle_tam(_: pytest.MonkeyPatch) -> Istek:
-    ogrenci = _ogrenci()
-    govde = {
-        "first_name": "Uydurcan",
-        "last_name": "Örnekoğlu",
-        "student_number": "501",
-        "class_level": 9,
-        "class_section": "B",
-    }
-    return Istek(f"/api/v1/students/{ogrenci.pk}/", govde, _turler("GUNCELLE"))
-
-
-def _ogrenci_guncelle(_: pytest.MonkeyPatch) -> Istek:
-    return Istek(f"/api/v1/students/{_ogrenci().pk}/", {"class_section": "B"}, _turler("GUNCELLE"))
-
-
 def _personel_guncelle_tam(_: pytest.MonkeyPatch) -> Istek:
-    govde = {"first_name": "Uydurnur", "last_name": "Örnekkaya", "member_kind": "STAFF"}
+    govde = {"first_name": "Uydurnur", "last_name": "Örnekkaya", "member_kind": "DIGER"}
     return Istek(f"/api/v1/personnel/{_personel().pk}/", govde, _turler("GUNCELLE"))
 
 
 def _personel_guncelle(_: pytest.MonkeyPatch) -> Istek:
     return Istek(
-        f"/api/v1/personnel/{_personel().pk}/", {"member_kind": "STAFF"}, _turler("GUNCELLE")
+        f"/api/v1/personnel/{_personel().pk}/", {"member_kind": "DIGER"}, _turler("GUNCELLE")
     )
+
+
+def _birlestir(_: pytest.MonkeyPatch) -> Istek:
+    eski = _personel()
+    yeni = persons.create_personnel(first_name="Uydurnur", last_name="Yenisoyad")
+    return Istek(f"/api/v1/personnel/{eski.pk}/merge/", {"into_id": yeni.pk}, _turler("KVKK_SILME"))
 
 
 def _havuz_karari(_: pytest.MonkeyPatch) -> Istek:
-    ogrenci = _ogrenci()
-    persons.add_to_leave_pool(ogrenci, run=None)
+    kisi = _personel()
+    persons.add_to_leave_pool(kisi, run=None)
     return Istek(
-        "/api/v1/leave-pool/resolve/", {"students": {"keep": [ogrenci.pk]}}, _turler("DURUM")
+        "/api/v1/leave-pool/resolve/", {"personnel": {"keep": [kisi.pk]}}, _turler("DURUM")
     )
 
 
-def _sube_ekle(_: pytest.MonkeyPatch) -> Istek:
-    govde = {"school_year": _yil().pk, "class_level": 9, "class_section": "A"}
-    return Istek("/api/v1/class-sections/", govde, _turler("OLUSTUR"))
+def _veli_listesi_dosyasi() -> tuple[str, bytes]:
+    """İki sınıflı uydurma veli listesi (.xlsx şablon biçimi)."""
+    return "veli-listesi.xlsx", _veli_xlsx([("UYDURMA VELİ", "9-A"), ("DENEME VELİ", "10/B")])
 
 
-def _sube_sil(_: pytest.MonkeyPatch) -> Istek:
-    sube = section_service.create_class_section(
-        school_year=_yil(), class_level=9, class_section="A"
+def _veli_listesi_yerine_koy() -> Istek:
+    """Önce bir liste aktarılır; uç aynı sınıflı listeyle eski satırların yerine geçer."""
+    ad, baytlar = _veli_listesi_dosyasi()
+    import_service.commit_parents_file(file_bytes=baytlar, file_name=ad)
+    yeni = _veli_xlsx([("ÖRNEK VELİ", "9-A"), ("UYDURMA VELİ", "11-C")])
+    return Istek(
+        "/api/v1/imports/parents/commit/",
+        None,
+        _turler("OLUSTUR", "DURUM", "KVKK_SILME"),
+        dosya=("ikinci.xlsx", yeni),
     )
-    return Istek(f"/api/v1/class-sections/{sube.pk}/", None, _turler("DURUM"))
 
 
-def _ogrenci_listesi() -> dict[str, Any]:
-    return {"text": "\n".join([OGRENCI_BASLIGI, "9/A\t501\tUYDURCAN ÖRNEKOĞLU"])}
+def _veli_listesini_sil() -> Istek:
+    ad, baytlar = _veli_listesi_dosyasi()
+    import_service.commit_parents_file(file_bytes=baytlar, file_name=ad)
+    return Istek("/api/v1/parent-roster/", None, _turler("KVKK_SILME"))
 
 
 def _personel_listesi() -> dict[str, Any]:
@@ -419,42 +414,20 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     ),
     ("holiday-seed", "POST"): _sabit("/api/v1/holidays/seed/", {"year": 2026}, "OLUSTUR"),
     ("holiday-detail", "DELETE"): Senaryo(_kapali_gun_sil),
-    ("student-list", "POST"): _sabit(
-        "/api/v1/students/",
-        {
-            "first_name": "Uydurcan",
-            "last_name": "Örnekoğlu",
-            "student_number": "501",
-            "class_level": 9,
-            "class_section": "A",
-        },
-        "OLUSTUR",
-    ),
-    ("student-detail", "PUT"): Senaryo(_ogrenci_guncelle_tam),
-    ("student-detail", "PATCH"): Senaryo(_ogrenci_guncelle),
-    ("student-leave", "POST"): _istek(
-        lambda: Istek(f"/api/v1/students/{_ogrenci().pk}/leave/", None, _turler("DURUM"))
-    ),
     ("personnel-list", "POST"): _sabit(
         "/api/v1/personnel/", {"first_name": "Uydurnur", "last_name": "Örnekkaya"}, "OLUSTUR"
     ),
     ("personnel-detail", "PUT"): Senaryo(_personel_guncelle_tam),
     ("personnel-detail", "PATCH"): Senaryo(_personel_guncelle),
+    ("personnel-detail", "DELETE"): _istek(
+        lambda: Istek(f"/api/v1/personnel/{_personel().pk}/", None, _turler("KVKK_SILME"))
+    ),
     ("personnel-leave", "POST"): _istek(
         lambda: Istek(f"/api/v1/personnel/{_personel().pk}/leave/", None, _turler("DURUM"))
     ),
+    ("personnel-merge", "POST"): Senaryo(_birlestir),
     ("leave-pool-resolve", "POST"): Senaryo(_havuz_karari),
-    ("class-section-list", "POST"): Senaryo(_sube_ekle),
-    ("class-section-detail", "DELETE"): Senaryo(_sube_sil),
     # Önizlemenin kayıt yazımları geri sarılır; kalıcı olan yalnız PREVIEWED koşusudur.
-    ("import-students-preview", "POST"): _istek(
-        lambda: Istek("/api/v1/imports/students/preview/", _ogrenci_listesi(), _turler("OLUSTUR"))
-    ),
-    ("import-students-commit", "POST"): _istek(
-        lambda: Istek(
-            "/api/v1/imports/students/commit/", _ogrenci_listesi(), _turler("OLUSTUR", "DURUM")
-        )
-    ),
     ("import-personnel-preview", "POST"): _istek(
         lambda: Istek("/api/v1/imports/personnel/preview/", _personel_listesi(), _turler("OLUSTUR"))
     ),
@@ -463,6 +436,18 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
             "/api/v1/imports/personnel/commit/", _personel_listesi(), _turler("OLUSTUR", "DURUM")
         )
     ),
+    # Veli listesi (T5): kişisiz parti satırı (koşunun izi); yerine geçen ve silinen satırlar
+    # `KVKK_SILME` (plan "F1b-5 uygulama kararları"). Önizlemenin kalıcı izi PREVIEWED koşusudur.
+    ("import-parents-preview", "POST"): _istek(
+        lambda: Istek(
+            "/api/v1/imports/parents/preview/",
+            None,
+            _turler("OLUSTUR"),
+            dosya=_veli_listesi_dosyasi(),
+        )
+    ),
+    ("import-parents-commit", "POST"): Senaryo(lambda _m: _veli_listesi_yerine_koy()),
+    ("parent-roster", "DELETE"): Senaryo(lambda _m: _veli_listesini_sil()),
     # İlk hesap: satırlar yeni hesabındır (plan F1b-1); okul kartı parmak iziyle oluşur.
     ("security-enable", "POST"): _istek(
         lambda: Istek(
@@ -539,18 +524,9 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     ("backup-report", "POST"): _sabit("/api/v1/backups/report/", None, "BASIM"),
 }
 
-#: Plan F1b-1'in adıyla muaf tuttuğu yollar: kişi silme ve birleştirme 5. adımda yeniden
-#: yazılır (katı silme kaydı yok eder; `KVKK_SILME` satırı dönem kapanışıyla gelir).
-PLAN_MUAFIYETI = (
-    "Plan F1b-1 'Denetim izi': kişi silme ve birleştirme 5. adımda yeniden yazılacağı için "
-    "izsiz yazım taramasında adıyla muaftır."
-)
-
 #: İz satırı YAZMAYAN yazma uçları ve gerekçeleri. Yeni bir uç buraya ancak gerekçesiyle girer.
+#: Personel silme ve birleştirme F1b 5. adımdan beri izlidir (`IZLI_UCLAR`; `KVKK_SILME`).
 MUAF_UCLAR: dict[tuple[str, str], str] = {
-    ("student-detail", "DELETE"): PLAN_MUAFIYETI,
-    ("personnel-detail", "DELETE"): PLAN_MUAFIYETI,
-    ("personnel-merge", "POST"): PLAN_MUAFIYETI,
     ("app-quit", "POST"): (
         "Kayıt yazmaz: düzenli kapanışı başlatır. Oturum açıksa kapanış kilidi `KILIT` "
         "satırını oturumdaki hesabın adına yazar (masaüstü kancası, "
@@ -661,6 +637,52 @@ def _eklenen_gunluk_satirlari(
     }
 
 
+def _kvkk_silme_karsiligi(
+    once: dict[str, dict[str, tuple[Any, ...]]],
+    sonra: dict[str, dict[str, tuple[Any, ...]]],
+    satirlar: Iterable[AuditTrail],
+) -> set[tuple[str, str]]:
+    """`KVKK_SILME` satırlarının karşıladığı silinen kayıtlar (modül başlığı, madde 1).
+
+    Satır kimlik taşımaz: bir modelin bu istekte silinen kayıtları, o modelin `KVKK_SILME`
+    satırlarının adetleri toplamı silinen kayıt sayısına EŞİTSE karşılanır. Erişim günlüğü
+    (`_YALNIZ_EKLENEN`) dışarıdadır: onun silmesini bir uç yapmaz (gün işi).
+    """
+    adetler: dict[str, int] = {}
+    for satir in satirlar:
+        if satir.action == "KVKK_SILME":
+            adetler[satir.model] = adetler.get(satir.model, 0) + int(satir.values["adet"][1])
+    karsilanan: set[tuple[str, str]] = set()
+    for etiket, adet in adetler.items():
+        if etiket in _YALNIZ_EKLENEN:
+            continue
+        silinen = once.get(etiket, {}).keys() - sonra.get(etiket, {}).keys()
+        if len(silinen) == adet:
+            karsilanan |= {(etiket, kimlik) for kimlik in silinen}
+    return karsilanan
+
+
+#: Satır başına iz yazmayan, partisinin iziyle karşılanan modeller (modül başlığı, madde 1).
+_PARTI_MODELLERI = frozenset({"okul.ParentRoster"})
+
+
+def _parti_karsiligi(
+    once: dict[str, dict[str, tuple[Any, ...]]],
+    sonra: dict[str, dict[str, tuple[Any, ...]]],
+    satirlar: Iterable[AuditTrail],
+) -> set[tuple[str, str]]:
+    """Partisinin izi bu istekte yazılmış EKLENEN veli satırları.
+
+    Veli satırı kişisiz parti satırıyla yazılır (`services.imports`): eklenen satır, bağlı
+    olduğu aktarım koşusunun (`ImportRun`) bu istekte yazılmış bir iz satırı varsa karşılanır.
+    Değişen satır karşılanmaz (veli satırı güncellenmez); silinen satırı `KVKK_SILME` karşılar.
+    """
+    kosular = {satir.object_id for satir in satirlar if satir.model == "okul.ImportRun"}
+    eklenen = sonra.get("okul.ParentRoster", {}).keys() - once.get("okul.ParentRoster", {}).keys()
+    bagli = ParentRoster.objects.filter(pk__in=eklenen).values_list("pk", "import_run_id")
+    return {("okul.ParentRoster", str(pk)) for pk, kosu in bagli if str(kosu) in kosular}
+
+
 def _izsiz_degisiklikler(
     once: dict[str, dict[str, tuple[Any, ...]]],
     sonra: dict[str, dict[str, tuple[Any, ...]]],
@@ -669,7 +691,8 @@ def _izsiz_degisiklikler(
     """İzi olmayan değişiklikler: eklenen erişim günlüğü satırı dışında değişen her kayıt.
 
     Silinen ya da değişen erişim günlüğü satırı burada kalır: onun iz satırı yoktur
-    (`KVKK_SILME`'nin kimliği boştur), uç düşer.
+    (`KVKK_SILME`'nin kimliği boştur), uç düşer. Öteki modellerin `KVKK_SILME` karşılığı
+    `izlenen`'e çağıran ekler (`_kvkk_silme_karsiligi`).
     """
     degisen = _degisen_kayitlar(once, sonra)
     return degisen - _eklenen_gunluk_satirlari(once, degisen) - izlenen
@@ -694,12 +717,20 @@ def test_izli_yazma_ucu_iz_satiri_yazar(
     bas = _son_seq()
     once = _tablolar()
 
-    yanit = APIClient().generic(
-        uc[1],
-        istek.yol,
-        data=json.dumps(istek.govde) if istek.govde is not None else "",
-        content_type="application/json",
-    )
+    yanit: Any
+    if istek.dosya is not None:
+        yanit = APIClient().post(
+            istek.yol,
+            {"file": SimpleUploadedFile(istek.dosya[0], istek.dosya[1])},
+            format="multipart",
+        )
+    else:
+        yanit = APIClient().generic(
+            uc[1],
+            istek.yol,
+            data=json.dumps(istek.govde) if istek.govde is not None else "",
+            content_type="application/json",
+        )
 
     assert 200 <= yanit.status_code < 300, (uc, yanit.status_code, yanit.content[:300])
     yeni = list(AuditTrail.objects.filter(seq__gt=bas).order_by("seq"))
@@ -715,11 +746,16 @@ def test_izli_yazma_ucu_iz_satiri_yazar(
     # izleyen uç burada düşer); erişim günlüğünde yalnız ekleme izsiz geçer.
     sonra = _tablolar()
     degisen = _degisen_kayitlar(once, sonra)
-    izsiz = _izsiz_degisiklikler(once, sonra, {(satir.model, satir.object_id) for satir in yeni})
+    izlenen = {(satir.model, satir.object_id) for satir in yeni}
+    izlenen |= _kvkk_silme_karsiligi(once, sonra, yeni)
+    izlenen |= _parti_karsiligi(once, sonra, yeni)
+    izsiz = _izsiz_degisiklikler(once, sonra, izlenen)
     assert not izsiz, (uc, sorted(izsiz))
     if crypto.is_unlocked():
         assert denetim_izi.zinciri_dogrula() == []
         for etiket, kimlik in sorted(degisen - _eklenen_gunluk_satirlari(once, degisen)):
+            if etiket in _PARTI_MODELLERI:
+                continue  # içerik MAC'i yoktur (`models.ParentRoster`)
             model = django_apps.get_model(etiket)
             if model._base_manager.filter(pk=kimlik).exists():
                 assert denetim_izi.kaydi_dogrula(model, kimlik) is True, (uc, etiket, kimlik)
@@ -742,7 +778,7 @@ YAZICI_GIRISLERI = frozenset(
 _ORNEK_YAZIMLARI = frozenset({"save", "hard_delete", "restore"})
 #: Yönetici, queryset ve ilişki yöneticisi yazımı: alıcısı NE OLURSA OLSUN yazım sayılır —
 #: `qs = X.objects.filter(..); qs.update(..)`, `yil.terms.update_or_create(..)`,
-#: `selectors.active_students().update(..)` de. `delete` yalnız konumsal argümansızken
+#: `selectors.personnel_all().update(..)` de. `delete` yalnız konumsal argümansızken
 #: (örnek ya da queryset silmesi; `cache.delete(anahtar)` ORM dışıdır). Aynı adlı ORM dışı
 #: çağrılar (`set.update`, `hashlib…update`) `ORM_DISI_CAGRILAR`'da ADIYLA ve gerekçesiyle.
 _TOPLU_YAZIMLAR = frozenset(
@@ -797,9 +833,6 @@ ILKELLER: dict[tuple[str, str], str] = {
 
 #: İzsiz kalabilen işlevler (göreli dosya yolu, birim) → gerekçe. Başka muafiyet yoktur.
 MUAF_ISLEVLER: dict[tuple[str, str], str] = {
-    ("apps/okul/services/persons.py", "delete_student"): PLAN_MUAFIYETI,
-    ("apps/okul/services/persons.py", "delete_personnel"): PLAN_MUAFIYETI,
-    ("apps/okul/services/persons.py", "merge_personnel"): PLAN_MUAFIYETI,
     ("apps/okul/services/ozet_onarimi.py", "ozetleri_onar"): (
         "Geri yüklemenin parola kaydı özeti onarımı (kullanıcı kararı 03.11.2026): ORM'siz, "
         "takastan ÖNCE geri yüklenecek `.tmp` dosyasında; o veritabanında oturum yoktur, "
@@ -1237,11 +1270,11 @@ def izsiz_queryset_degiskeni():
 
 def izsiz_iliski_yoneticisi(yil):
     yil.terms.update_or_create(term_no=1)
-    yil.class_sections.create(class_level=9, class_section="A")
+    yil.terms.create(sequence=2, start_date=None, end_date=None)
 
 
 def izsiz_secici(_):
-    selectors.active_students().update(class_section="B")
+    selectors.personnel_all().update(member_kind="DIGER")
 
 
 def sistem_olayiyla_izlenmis_sanilan(gun):
@@ -1592,11 +1625,23 @@ def _ham_sutunlar(tablo: str, sutunlar: tuple[str, ...]) -> list[str]:
         return [str(deger) for satir in cursor.fetchall() for deger in satir if deger]
 
 
+def _veli_xlsx(satirlar: list[tuple[str, ...]]) -> bytes:
+    kitap = Workbook()
+    sayfa = kitap.active
+    assert sayfa is not None
+    sayfa.append(list(PARENT_TEMPLATE_HEADERS))
+    for satir in satirlar:
+        sayfa.append(list(satir))
+    tampon = BytesIO()
+    kitap.save(tampon)
+    return tampon.getvalue()
+
+
 def _xlsx(satirlar: list[tuple[str, ...]]) -> bytes:
     kitap = Workbook()
     sayfa = kitap.active
     assert sayfa is not None
-    sayfa.append(list(STUDENT_TEMPLATE_HEADERS))
+    sayfa.append(list(PERSONNEL_TEMPLATE_HEADERS))
     for satir in satirlar:
         sayfa.append(list(satir))
     tampon = BytesIO()
@@ -1609,9 +1654,11 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
     """Tasarım §4.6.2 kural 6, §14 F1b kapısı (modül başlığı, madde 3).
 
     Her izli model (`Account`, `SchoolConfig`, `SchoolYear`, `SchoolTerm`, `Holiday`,
-    `Student`, `Personnel`, `ClassSection`, `ImportRun`, `Attachment`) uydurma kişi verisiyle
-    yazılır, güncellenir ve durumu değişir; iz satırlarının hiçbir sütununda bu değerler,
-    parçaları, büyük-küçük harf biçimleri ve şifreli token'ları geçmez. Arşiv dökümü henüz yoktur.
+    `Personnel`, `ImportRun`, `Attachment`) uydurma kişi verisiyle yazılır, güncellenir ve
+    durumu değişir; iz satırlarının hiçbir sütununda bu değerler, parçaları, büyük-küçük harf
+    biçimleri ve şifreli token'ları geçmez. Arşiv dökümü henüz yoktur. Veli listesi (T5)
+    uydurma veli adıyla aktarılır, sınıfı yerine konur ve elle silinir: ne adı ne token'ı izde
+    geçer. (Öğrenci sicili ve şube kataloğu F1b 5. adımda söküldü.)
     """
     # Hesap (ad-soyad şifreli kişi verisi).
     hesap_ac(AccountRole.MUHASIP, ad=f"{UYDURMA_AD} {UYDURMA_SOYAD}")
@@ -1644,37 +1691,50 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
     )
     calendar_service.delete_holiday(gun)
     calendar_service.seed_holidays(2026)
-    # Öğrenci: ad, soyad, okul no; güncelleme, havuz, ayrılış.
-    ogrenci = persons.create_student(
-        first_name=UYDURMA_AD,
-        last_name=f"{UYDURMA_SOYAD} {UYDURMA_ADRES}",
-        student_number=UYDURMA_TCKN,
-        class_level=9,
-        class_section="A",
+    # Personel: ad, soyad; güncelleme, havuz, ayrılış.
+    personel = persons.create_personnel(
+        first_name=UYDURMA_AD, last_name=f"{UYDURMA_SOYAD} {UYDURMA_ADRES}"[:100]
     )
-    persons.update_student(
-        ogrenci, first_name=f"{UYDURMA_AD} {UYDURMA_METIN}", last_name=UYDURMA_TELEFON
+    persons.update_personnel(
+        personel, first_name=f"{UYDURMA_AD} {UYDURMA_METIN}"[:100], last_name=UYDURMA_TELEFON
     )
-    persons.add_to_leave_pool(ogrenci, run=None)
-    persons.leave_student(ogrenci)
-    # Personel: ad, soyad; güncelleme, ayrılış.
-    personel = persons.create_personnel(first_name=UYDURMA_AD, last_name=UYDURMA_UZUN[:100])
-    persons.update_personnel(personel, last_name=f"{UYDURMA_SOYAD} {UYDURMA_TELEFON}")
+    persons.add_to_leave_pool(personel, run=None)
     persons.leave_personnel(personel)
-    # Şube (elle ve aktarımla), aktarım koşusu (dosya adı serbest metin), önizleme.
-    section_service.create_class_section(school_year=yil, class_level=10, class_section="B")
-    dosya = _xlsx([("9/C", "777", f"{UYDURMA_AD} {UYDURMA_METIN}", UYDURMA_SOYAD)])
+    ikinci_personel = persons.create_personnel(first_name=UYDURMA_AD, last_name=UYDURMA_UZUN[:100])
+    persons.update_personnel(ikinci_personel, last_name=f"{UYDURMA_SOYAD} {UYDURMA_TELEFON}")
+    persons.leave_personnel(ikinci_personel)
+    # Elle silme ve birleştirmede kaynağın silinmesi: `KVKK_SILME` satırı kişisizdir.
+    silinen = persons.create_personnel(
+        first_name=f"{UYDURMA_AD} {UYDURMA_TCKN}"[:100], last_name=UYDURMA_SOYAD
+    )
+    persons.delete_personnel(silinen)
+    kaynak = persons.create_personnel(first_name=UYDURMA_AD, last_name=UYDURMA_ADRES[:100])
+    persons.merge_personnel(kaynak, ikinci_personel)
+    # Aktarım koşusu (dosya adı serbest metin), önizleme; görev hücresi serbest metindir.
+    dosya = _xlsx([(f"{UYDURMA_AD} {UYDURMA_METIN}", UYDURMA_SOYAD, UYDURMA_ADRES)])
     dosya_adi = f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_TELEFON_ARALIKLI}.xlsx"
-    import_service.preview_students_file(file_bytes=dosya, file_name=dosya_adi)
-    import_service.commit_students_file(file_bytes=dosya, file_name=dosya_adi)
-    # Aynı öğrenci başka şubeyle ve yeni adla: aktarımın güncelleme yolu.
-    ikinci = _xlsx([("9/D", "777", f"{UYDURMA_SOYAD} {UYDURMA_ADRES}", UYDURMA_AD)])
-    import_service.commit_students_file(file_bytes=ikinci, file_name=f"{UYDURMA_METIN}.xlsx")
+    import_service.preview_personnel_file(file_bytes=dosya, file_name=dosya_adi)
+    import_service.commit_personnel_file(file_bytes=dosya, file_name=dosya_adi)
+    # Aynı kişi başka türle: aktarımın güncelleme yolu (görev türü), havuzdan çıkış.
+    ikinci = _xlsx([(f"{UYDURMA_AD} {UYDURMA_METIN}", UYDURMA_SOYAD, "Memur")])
+    import_service.commit_personnel_file(file_bytes=ikinci, file_name=f"{UYDURMA_METIN}.xlsx")
     import_service.commit_personnel_text(
         text="\n".join([PERSONEL_BASLIGI, f"{UYDURMA_AD}\t{UYDURMA_SOYAD}\tÖğretmen\t"])
     )
     with pytest.raises(ParserError):
-        import_service.commit_students_file(file_bytes=b"bozuk", file_name=dosya_adi)
+        import_service.commit_personnel_file(file_bytes=b"bozuk", file_name=dosya_adi)
+    # Veli listesi: ad şifreli, dosya adı serbest metin; önizleme, aktarım, sınıfın yerine
+    # konması (`KVKK_SILME`) ve elle silme. Token'lar silinmeden önce toplanır.
+    veli = _veli_xlsx([(f"{UYDURMA_AD} {UYDURMA_SOYAD}", "9-A"), (UYDURMA_UZUN[:150], "10-B")])
+    import_service.preview_parents_file(file_bytes=veli, file_name=dosya_adi)
+    import_service.commit_parents_file(file_bytes=veli, file_name=dosya_adi)
+    veli_tokenlari = _ham_sutunlar("okul_parentroster", ("full_name", "name_index"))
+    assert len(veli_tokenlari) == 4
+    ikinci_veli = _veli_xlsx([(f"{UYDURMA_SOYAD} {UYDURMA_TELEFON}", "9-A")])
+    import_service.commit_parents_file(file_bytes=ikinci_veli, file_name=f"{UYDURMA_METIN}.csv")
+    veli_tokenlari += _ham_sutunlar("okul_parentroster", ("full_name", "name_index"))
+    import_service.delete_parent_roster()
+    assert not ParentRoster.objects.exists()
     # Ek: özgün dosya adı kişi adı taşıyabilir, sarmal güvenlik öğesidir (plan F1b-3).
     monkeypatch.setattr(dosya_deposu, "_SAHIP_ETIKETLERI", {"okul.SchoolYear"})
     dosya_deposu.yaz(
@@ -1694,19 +1754,17 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
         "okul.SchoolYear",
         "okul.SchoolTerm",
         "okul.Holiday",
-        "okul.Student",
         "okul.Personnel",
-        "okul.ClassSection",
         "okul.ImportRun",
         "okul.Attachment",
     } <= modeller
     for parca in ARANACAKLAR:
         assert parca not in metin, parca
     tokenlar = [
-        *_ham_sutunlar("okul_student", ("first_name", "last_name", "student_number")),
         *_ham_sutunlar("okul_personnel", ("first_name", "last_name")),
         *_ham_sutunlar("okul_account", ("display_name",)),
         *_ham_sutunlar("okul_attachment", ("original_name", "key_wrap", "sha256")),
+        *veli_tokenlari,
     ]
     assert tokenlar
     for token in tokenlar:
@@ -1725,15 +1783,13 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.django_db
-def test_kisi_satirlari_deger_tasimaz_okul_no_dahil() -> None:
-    """KVKK silme kümesindeki modellerin (`Student`, `Personnel`) satırları değer taşımaz."""
-    ogrenci = persons.create_student(
-        first_name="Uydurcan", last_name="Örnekoğlu", student_number="501", class_level=9
-    )
-    persons.leave_student(ogrenci)
+def test_kisi_satirlari_deger_tasimaz() -> None:
+    """KVKK silme kümesindeki modelin (`Personnel`) satırları değer taşımaz (görev türü dahil)."""
     personel = persons.create_personnel(first_name="Uydurnur", last_name="Örnekkaya")
+    persons.update_personnel(personel, member_kind="DIGER")
+    persons.add_to_leave_pool(personel, run=None)
     persons.leave_personnel(personel)
-    satirlar = AuditTrail.objects.filter(model__in=["okul.Student", "okul.Personnel"])
+    satirlar = AuditTrail.objects.filter(model="okul.Personnel")
     assert satirlar.count() == 4
     assert all(satir.values == {} for satir in satirlar)
 
@@ -1750,30 +1806,30 @@ AKTARIM_SINIRI_SN = 60.0
 def test_iki_bin_satirlik_aktarim_kayit_basina_iz_yazar_ve_makul_surer(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Toplu yazım kayıt başına satırdır; 2000 satırlık aktarım ve önizlemesi makul sürer."""
-    SchoolYear.objects.create(
-        name="2026-2027", start_date=date(2026, 9, 7), end_date=date(2027, 6, 25), is_active=True
-    )
+    """Toplu yazım kayıt başına satırdır; 2000 satırlık aktarım ve önizlemesi makul sürer.
+
+    Öğrenci aktarımı F1b 5. adımda söküldü; ölçüm personel aktarımıyla yapılır (ad eşleşmesi
+    Python'dadır, en ağır yol budur).
+    """
     satirlar = [
-        f"{9 + i % 4}/{'ABCD'[i % 4]}\t{1000 + i}\tUYDURMA{i} ÖRNEK{i}"
-        for i in range(AKTARIM_SATIRI)
+        f"UYDURMA{i}\tÖRNEK{i}\t{'Öğretmen' if i % 4 else 'Memur'}\t" for i in range(AKTARIM_SATIRI)
     ]
-    metin = "\n".join([OGRENCI_BASLIGI, *satirlar])
+    metin = "\n".join([PERSONEL_BASLIGI, *satirlar])
 
     basla = time.perf_counter()
-    import_service.preview_students_text(text=metin)
+    import_service.preview_personnel_text(text=metin)
     onizleme_sn = time.perf_counter() - basla
-    assert AuditTrail.objects.filter(model="okul.Student").count() == 0  # geri sarıldı
+    assert AuditTrail.objects.filter(model="okul.Personnel").count() == 0  # geri sarıldı
 
     basla = time.perf_counter()
-    rapor = import_service.commit_students_text(text=metin)
+    rapor = import_service.commit_personnel_text(text=metin)
     uygulama_sn = time.perf_counter() - basla
 
-    assert rapor.created_students == AKTARIM_SATIRI
+    assert rapor.created_personnel == AKTARIM_SATIRI
     assert (
-        AuditTrail.objects.filter(model="okul.Student", action="OLUSTUR").count() == AKTARIM_SATIRI
+        AuditTrail.objects.filter(model="okul.Personnel", action="OLUSTUR").count()
+        == AKTARIM_SATIRI
     )
-    assert AuditTrail.objects.filter(model="okul.ClassSection").count() == 4
     with capsys.disabled():
         print(
             f"\n[ölçüm] {AKTARIM_SATIRI} satır: önizleme {onizleme_sn:.1f} sn, "
@@ -1792,6 +1848,11 @@ LISTESIZ_MODELLER = {
     "AccessLog": (
         "Erişim günlüğü: zincir dışı, değer tutmaz (tasarım §4.6.4); silmesi `KVKK_SILME`."
     ),
+    "ParentRoster": (
+        "Veli listesi: satır başına iz yazılmaz, hiçbir alanı satıra ve içerik MAC'ine girmez "
+        "(tasarım §4.6.2); aktarım kişisiz parti satırıdır (koşunun `ImportRun` izi), silmesi "
+        "`KVKK_SILME` (plan 'F1b-5 uygulama kararları')."
+    ),
 }
 IZLI_MODELLER = (
     Account,
@@ -1799,9 +1860,7 @@ IZLI_MODELLER = (
     SchoolYear,
     SchoolTerm,
     Holiday,
-    Student,
     Personnel,
-    ClassSection,
     ImportRun,
     Attachment,
 )

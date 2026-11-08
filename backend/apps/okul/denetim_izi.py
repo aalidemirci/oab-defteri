@@ -7,14 +7,16 @@ querysetleri ve `bulk_*` sinyali atlardı. Toplu yazım kayıt başına satır y
 kayıtlar okunur, her birinin önceki hâli alınır). İzsiz yazımı iki test yakalar
 (`tests/test_izsiz_yazim.py`): yazma uçlarının hepsini süren çalışma anı testi ve
 servislerdeki ORM yazma çağrılarının kaynak taraması; muafiyetler orada ADIYLA ve
-gerekçesiyle yazılıdır (plan F1b-1: kişi silme ve birleştirme 5. adımda yeniden yazılır).
+gerekçesiyle yazılıdır.
 
 Giriş noktaları: `degisiklik` (okul çekirdeğinin kayıtları; tür modelin durum
 alanlarından seçilir: `OLUSTUR`, `GUNCELLE`, `DURUM`), `kayit` (türü çağıranın verdiği
 kayıt yazımı: hesap olayları), `olay` (kayıt yazımı olmayan olay: kilit, mühür bulgusu,
 `guvenlik.json` bölümü, yedek, dosyadaki ayar, geri yükleme kartının "Gördüm"ü — `ISARET`, kaydı
 denetim izinin kendi satırı: model `okul.AuditTrail`, kimlik `seq`), `kvkk_silme` (KVKK silmesi: model, alan
-adları, adet, tetik; değer yok — bugün erişim günlüğünün saklama süresi dolan satırları),
+adları, adet, tetik; değer yok — erişim günlüğünün saklama süresi dolan satırları, personelin
+elle silinmesi, birleştirmede kaynağın silinmesi, veli listesinin silinmesi ve aktarımda yerine
+geçen satırları),
 `basim` (evrak basımı: `BASIM`, yalnız evrak kodu ve dosyanın sha256'sı — bugün saklanmayan
 hesap teslim pusulası; plan F1b-2 "E63").
 
@@ -43,13 +45,13 @@ KURALLAR (her biri bu modülde zorlanır):
   ve içerik MAC'i. İzin listesi dışındaki alanın değeri `values`'a giremez (yazıcı
   reddeder). `guvenlik.json`'daki bölümler (kurtarma anahtarı, hesap sarmalı), yedek
   dosyası ve dış yedek ayarı veritabanı modeli değildir; izinli alanları burada,
-  `DOSYA_NESNELERI`'ndedir. KVKK silme kümesindeki modellerin (`Student`, `Personnel`)
+  `DOSYA_NESNELERI`'ndedir. KVKK silme kümesindeki modellerin (bugün `Personnel`)
   izin listesi boştur.
 * **İçerik MAC'i** (`record_mac`) kaydın YAZMADAN SONRAKİ hâlinden, veritabanından taze
   okunarak hesaplanır: `HMAC(HKDF(İA, "od-kayit-ozeti/v1"), kanonik(model, object_id,
   özet alanlarının çözülmüş değerleri))` (`shared.kanonik.kayit_mac`; alanlar
-  `IZ_OZET_ALANLARI`, modelde). KVKK silme kümesindeki kişi alanları (öğrenci ve personelin
-  adı, soyadı, okul no'su) içerik MAC'ine GİRMEZ (`IZ_MAC_DISI_ALANLARI`; tasarım §5 O4):
+  `IZ_OZET_ALANLARI`, modelde). KVKK silme kümesindeki kişi alanları (personelin adı ve
+  soyadı) içerik MAC'ine GİRMEZ (`IZ_MAC_DISI_ALANLARI`; tasarım §5 O4):
   silinen kişiyi MAC'ten sözlükle geri bulmak mümkün olmasın. Çözülemeyen şifreli alan (`CorruptField`, D48) hata
   vermez, düz metne de çevrilmez: `kanonik.bozuk_alan` temsiliyle girer. Kilitli kip
   satırı içerik MAC'i taşımaz.
@@ -746,9 +748,23 @@ def kilitli_olay(
 #: değer yok"; §4.6.4: "silinen satır sayısı ve en yeni tarih"). Hepsi kişisizdir: silinen
 #: kayıt SAYISI, silinenlerin en yenisinin GÜNÜ (an değil) ve silmeyi başlatan tetik.
 KVKK_SILME_DEGERLERI: Final = ("adet", "en_yeni", "tetik")
-#: Silmenin tetikleri — KAPALI KÜME. Bugün yalnız gün işi (erişim günlüğünün saklama süresi);
-#: dönem kapanışının silmeleri (F4) ve kişi silme (5. adım) kendi tetikleriyle gelir.
-KVKK_SILME_TETIKLERI: Final = ("GUN_ISI",)
+#: Kullanıcının bilinçli silmesi: personelin "Sil"i ve "Veli listesini sil" (plan "F1b-5
+#: uygulama kararları"; `services.persons.delete_personnel`, `services.imports.delete_parent_roster`).
+KVKK_TETIK_ELLE_SILME: Final = "ELLE_SILME"
+#: "Olası aynı kişi" birleştirmesinde kaynak kaydın silinmesi (`services.persons.merge_personnel`).
+KVKK_TETIK_BIRLESTIRME: Final = "BIRLESTIRME"
+#: Veli listesi aktarımında dosyadaki sınıfların eski satırlarının yerine geçmesi (tasarım §8.4
+#: (1); `services.imports`).
+KVKK_TETIK_AKTARIM: Final = "AKTARIM"
+#: Silmenin tetikleri — KAPALI KÜME: gün işi (erişim günlüğünün saklama süresi), kullanıcının
+#: elle silmesi, birleştirme ve veli listesinin sınıf bazında yerine konması. Dönem kapanışının
+#: silmeleri (F4) kendi tetikleriyle gelir.
+KVKK_SILME_TETIKLERI: Final = (
+    "GUN_ISI",
+    KVKK_TETIK_ELLE_SILME,
+    KVKK_TETIK_BIRLESTIRME,
+    KVKK_TETIK_AKTARIM,
+)
 
 
 def kvkk_silme(

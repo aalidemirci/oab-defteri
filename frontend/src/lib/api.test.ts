@@ -104,7 +104,7 @@ describe("api — restart_required sözleşmesi", () => {
     const dinleyici = vi.fn();
     window.addEventListener(YENIDEN_BASLAT_OLAYI, dinleyici);
     try {
-      await expect(api.get("/students/")).rejects.toBeInstanceOf(ApiError);
+      await expect(api.get("/personnel/")).rejects.toBeInstanceOf(ApiError);
       expect(dinleyici).not.toHaveBeenCalled();
     } finally {
       window.removeEventListener(YENIDEN_BASLAT_OLAYI, dinleyici);
@@ -137,7 +137,7 @@ describe("api — etkinlik başlığı", () => {
   });
 
   it("etkileşim yoksa başlık gönderilmez", async () => {
-    await api.get("/students/");
+    await api.get("/personnel/");
     expect(gonderilenBasliklar(fetchSahte)).not.toHaveProperty(ETKINLIK_BASLIGI);
     expect(sonEtkinlikGonderimiAni()).toBe(Number.NEGATIVE_INFINITY);
   });
@@ -147,7 +147,7 @@ describe("api — etkinlik başlığı", () => {
     async (olay) => {
       window.dispatchEvent(new Event(olay));
       expect(sonEtkilesimAni()).toBeGreaterThan(0);
-      await api.post("/students/", { ad: "x" });
+      await api.post("/personnel/", { ad: "x" });
       expect(gonderilenBasliklar(fetchSahte)[ETKINLIK_BASLIGI]).toBe("1");
       expect(sonEtkinlikGonderimiAni()).toBeGreaterThan(0);
     },
@@ -166,7 +166,7 @@ describe("api — etkinlik başlığı", () => {
     const saat = vi.spyOn(Date, "now").mockReturnValue(simdi);
     window.dispatchEvent(new Event("pointerdown"));
     saat.mockReturnValue(simdi + ETKINLIK_PENCERESI_MS + 1);
-    await api.get("/students/");
+    await api.get("/personnel/");
     expect(gonderilenBasliklar(fetchSahte)).not.toHaveProperty(ETKINLIK_BASLIGI);
   });
 
@@ -179,7 +179,7 @@ describe("api — etkinlik başlığı", () => {
 
   it("dosya indirmeleri de aynı kuralla başlık taşır", async () => {
     window.dispatchEvent(new Event("pointerdown"));
-    await api.getBlob("/templates/students/");
+    await api.getBlob("/templates/personnel/");
     expect(gonderilenBasliklar(fetchSahte)[ETKINLIK_BASLIGI]).toBe("1");
   });
 
@@ -201,7 +201,7 @@ describe("api — 403 kilit ya da kip tepkisi doğurmaz", () => {
       const dinleyici = vi.fn();
       window.addEventListener(KILIT_KAPISI_OLAYI, dinleyici);
       try {
-        await expect(api.get("/students/")).rejects.toMatchObject({ status: 403 });
+        await expect(api.get("/personnel/")).rejects.toMatchObject({ status: 403 });
       } finally {
         window.removeEventListener(KILIT_KAPISI_OLAYI, dinleyici);
       }
@@ -236,9 +236,9 @@ describe("api — kilit kapısı sözleşmesi", () => {
         "fetch",
         vi.fn().mockResolvedValue(sahteYanit(423, { code, message: "Kilitli.", fields: {} })),
       );
-      await expect(api.get("/students/")).rejects.toMatchObject({ status: 423, code });
-      expect(await olaySayisi(() => api.get("/students/"))).toBe(1);
-      expect(await olaySayisi(() => api.getBlob("/templates/students/"))).toBe(1);
+      await expect(api.get("/personnel/")).rejects.toMatchObject({ status: 423, code });
+      expect(await olaySayisi(() => api.get("/personnel/"))).toBe(1);
+      expect(await olaySayisi(() => api.getBlob("/templates/personnel/"))).toBe(1);
       expect(pencereIcerigi.yenidenYukle).not.toHaveBeenCalled();
     },
   );
@@ -251,15 +251,15 @@ describe("api — kilit kapısı sözleşmesi", () => {
         .fn()
         .mockResolvedValue(sahteYanit(423, { code: "locked", message: "Kilitli.", fields: {} })),
     );
-    expect(await olaySayisi(() => api.get("/students/"))).toBe(0);
+    expect(await olaySayisi(() => api.get("/personnel/"))).toBe(0);
     expect(pencereIcerigi.yenidenYukle).toHaveBeenCalledTimes(1);
   });
 
   it("başka kodlu 423 ve 423 dışı kilit kodu olayı yayınlamaz", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(sahteYanit(423, { code: "baska" })));
-    expect(await olaySayisi(() => api.get("/students/"))).toBe(0);
+    expect(await olaySayisi(() => api.get("/personnel/"))).toBe(0);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(sahteYanit(400, { code: "locked" })));
-    expect(await olaySayisi(() => api.get("/students/"))).toBe(0);
+    expect(await olaySayisi(() => api.get("/personnel/"))).toBe(0);
   });
 });
 

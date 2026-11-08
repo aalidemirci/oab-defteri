@@ -43,12 +43,14 @@ SİLME (`suresi_dolanlari_sil`; gün işi `gun_isi`, kayıt `gun_isini_kaydet`):
 
 ENVANTER (02.11.2026). Bugün kodda tasarımın hassas okuma türlerinden birine AÇIKÇA uyan yol
 yoktur; yazıcı bu yüzden hiçbir uca bağlı değildir. Kişisel veriye dokunan bugünkü yollar:
-öğrenci ve personel listesi ve ayrıntısı, ayrılış havuzu (olağan okuma; tasarımın "okuma ≠
-hassas detay" ayrımında okuma), içe aktarma önizlemesi (kullanıcının yüklediği dosyanın
+personel listesi ve ayrıntısı (öğrenci sicili F1b 5. adımda söküldü), ayrılış havuzu
+(olağan okuma; tasarımın "okuma ≠ hassas detay" ayrımında okuma), içe aktarma önizlemesi (kullanıcının yüklediği dosyanın
 işlenmesi; programın verisinin çıktısı değildir), boş şablonlar ve kurtarma anahtarı belgesi
 (kişisel veri yok), şifreli yedeğin kaydedilmesi (bütün veritabanı, şifreli; tasarımda "Güvenlik"
-satırındadır, izi denetim izinde `YEDEK` satırıdır — erişim günlüğü türlerinde yoktur).
-T.C. kimlik no (K9, F3), veli listesi ve adlı E07/E08 (F2), kişi dökümü ve ihlal dökümü,
+satırındadır, izi denetim izinde `YEDEK` satırıdır — erişim günlüğü türlerinde yoktur), veli
+listesi (F1b 5. adım: aktarımı ve silinmesi yalnız denetim izine kişisiz parti satırıdır; ekranı
+yalnız sayıları gösterir, adı okuyan yol yoktur — plan "F1b-5 uygulama kararları").
+T.C. kimlik no (K9, F3), veli adı taşıyan E07/E08 çıktıları (F2), kişi dökümü ve ihlal dökümü,
 özel nitelikli alan ve ek (F1c-F5) henüz yoktur; o okumaları getiren adımlar bu yazıcıya
 bağlar. Özel nitelikli ekin tek okuma yolu `services.dosya_deposu.oku` F1b-3'ten beri bu
 yazıcıyı çağırır; ona bağlı uç F1c'dedir.

@@ -63,11 +63,14 @@ export default function HakkindaPage() {
             {/* KVKK (CLAUDE.md §2 altın kural 5, SECURITY.md): kişi verisi destek iletisine
                 girmez. Okulun kayıtlarına ilişkin başvuru okul müdürlüğüne yönelir; veri
                 sorumlusunun kim olduğu okul müdürlüğünün değerlendirmesidir (tasarım §3.4,
-                §15 KE-20). Aydınlatma metni E04'tür (F2). */}
+                §15 KE-20); bilgisi okul kartındadır (`data_controller_text`). Aydınlatma
+                metinleri personel ve veli listesi aktarım ekranlarındadır (F1b 5. adım),
+                belgesi E04 F2'de gelir. */}
             <p className="mt-2 text-body-small text-on-surface-variant">
               İletinize öğrenci, veli ya da personel bilgisi, gerçek veri içeren ekran görüntüsü,
               yedek ya da veritabanı dosyası eklemeyin. Programdaki kişisel verilere ilişkin
-              başvurular okul müdürlüğüne yapılır.
+              başvurular okul müdürlüğüne yapılır; veri sorumlusu bilgisi Ayarlar → Okul
+              Bilgileri'nde, aydınlatma metinleri personel ve veli listesi aktarım ekranlarındadır.
             </p>
           </div>
         </div>
@@ -193,13 +196,14 @@ export default function HakkindaPage() {
                 çıkmaz.
               </li>
               <li>
-                Öğrenci, öğretmen ve diğer personelin ad-soyadları, öğrencilerin okul numaraları,
-                hesap sahiplerinin ad-soyadları ve eklerin özgün dosya adları Fernet (AES-128-CBC +
-                HMAC-SHA256) ile şifrelenir. Şifreleme anahtarı her hesap için ayrı şifrelenir ve
-                güvenlik dosyasında o hesabın parola kaydında durur: hesabın parolasından Argon2id
-                ile türetilen anahtar onu tek başına açar; kurtarma anahtarının da kendi kaydı
-                vardır. Okul numarasıyla arama ve e-Okul eşleştirmesi, aynı anahtardan türetilen
-                HMAC-SHA256 kör indeksle numaranın tamamı üzerinden yapılır.
+                Öğretmen ve diğer personelin ad-soyadları, velilerin ad-soyadları, hesap
+                sahiplerinin ad-soyadları ve eklerin özgün dosya adları Fernet (AES-128-CBC +
+                HMAC-SHA256) ile şifrelenir. Velinin adı için ayrıca, kayıtların anahtarından HKDF
+                ile türetilen ayrı bir anahtarla HMAC-SHA256 kör indeksi tutulur; ad şifreli
+                kaldığından indeks aynı velinin bulunması için tutulur. Veli listesindeki öğrencinin
+                sınıfı şifrelenmez. Şifreleme anahtarı her hesap için ayrı şifrelenir ve güvenlik
+                dosyasında o hesabın parola kaydında durur: hesabın parolasından Argon2id ile
+                türetilen anahtar onu tek başına açar; kurtarma anahtarının da kendi kaydı vardır.
               </li>
               <li>
                 Denetim izinin her kaydı, bir önceki kaydın mührüyle birlikte HMAC-SHA256 ile

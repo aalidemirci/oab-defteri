@@ -4,19 +4,28 @@
 // AKTARIM KİMSEYİ AYIRMAZ VE SİLMEZ (aile iskeletinden gelen kullanıcı kararı): listede
 // bulunmayan aktif kişi Ayrılış Havuzu'na eklenir, durumu aktif kalır; dosyada
 // bulunan havuzdaki kişi havuzdan kendiliğinden çıkar. Karar Kişiler → Ayrılış
-// Havuzu'nda verilir. Önizleme "N öğrenci ayrılış havuzuna eklenecek, M öğrenci
-// havuzdan çıkacak" der; ayrılış olmadığı için aktarım ayrıca onay istemez.
+// Havuzu'nda verilir. Önizleme "N kişi ayrılış havuzuna eklenecek, M kişi havuzdan
+// çıkacak" der; ayrılış olmadığı için aktarım ayrıca onay istemez. Öğrenci aktarımı (şube
+// kapsamı, "Bu dosya okulun tam listesidir" onayı, şube bazında etki tablosu) F1b 5. adımda
+// öğrenci sicili ile söküldü (tasarım §5.1 ALMA); veli listesinin aktarımı ayrı paneldedir
+// (`VeliListesi`: yalnız dosya, yalnız sayılar, sınıf bazında yerine koyma).
 //
-// Öğrenci: panel bütün şubeleri içeren TEK dosyayı belirgin biçimde önerir.
-// Karşılaştırma varsayılan olarak YALNIZ dosyada bulunan şubelerle yapılır; "Bu dosya
-// okulun tam listesidir" onayı verilirse dosyada olmayan şubelerdeki öğrenciler de
-// havuza eklenir. Önizleme şube bazında etki tablosu ve havuza eklenecekleri gösterir.
+// Aydınlatma (KVKK md. 10/1; plan "F1b-5 uygulama kararları"): personelin aydınlatma metni
+// aktarımdan önce, dosya seçiminin üstünde görünür (`AydinlatmaMetni`). Aktarım DOSYAYLA
+// başarıyla bitince kaynak dosyanın silinmesi hatırlatılır (tasarım §4.3 tehdit 15;
+// `KaynakDosyaHatirlatmasi`); yapıştırılan metinde dosya yoktur, hatırlatma da yoktur.
 //
 // Personel: listede olmayanlar havuza eklenir (eski "ayrıldı sayılsın mı?" seçimi
 // kalktı); "olası aynı kişi" çiftleri gösterilir, aktarımdan sonra onaylı "Birleştir"
 // ile eski kayıt yeni kayda katılır (Ayrılış Havuzu'ndan da yapılabilir). Görev
-// sütunu yalnız üye türü için okunur; tanınmayan satırlar "Üye türünü denetleyin"
-// uyarısı alır.
+// sütunu yalnız görev türü için okunur; görev hücresi boş (ya da şablondaki görev türü
+// tanınmayan) satırlar ve yönetici ya da öğretmen görevine benzeyip tam tanınmayan görevler
+// ("Okul Müdürü", "Psikolojik Danışman"; yeni kayıtta tür yine kuralla verilir) "Görev türünü
+// denetleyin" uyarısı alır; bu satırlarda var olan kaydın türü değişmez (elle düzeltme korunur).
+//
+// Dosya biçimleri (genel tasarım §8.1 A4, TK18): e-Okul .xls, şablon .xlsx ve .csv; makro içeren
+// dosyayı sunucu okumadan reddeder (ileti sunucudan gelir). Seçim penceresinin süzgeci `accept`
+// listesidir (WebView'ın kendi penceresi; masaüstünde ayrı bir Aç penceresi yoktur).
 //
 // Rol (plan F1b-2): panelin kendisi `eokul_aktarimi` yeteneğinde çizilir (Kişiler verir);
 // "Birleştir" düğmeleri ayrıca `kisi_yazma`'ya bağlıdır (`birlestirebilir`; personel
@@ -47,7 +56,6 @@ import {
   importCounts,
   okulApi,
   PERSONNEL_TEMPLATE_FILENAME,
-  STUDENT_TEMPLATE_FILENAME,
 } from "../okul/api";
 import type {
   ImportInput,
@@ -55,37 +63,37 @@ import type {
   ImportReport,
   PersonnelImportReport,
   SimilarPair,
-  StudentImportReport,
 } from "../okul/api";
-import { ErrorBand, HAVUZ_ADRESI, hataOku } from "./ortak";
+import {
+  DAHA_ONCE_AKTARILMIS,
+  DOSYA_ALANI_ETIKETI,
+  DOSYAYI_KALDIR,
+  PERSONEL_AKTARIM_ACIKLAMASI,
+} from "./metinler";
+import { ErrorBand, HAVUZ_ADRESI, hataOku, KaynakDosyaHatirlatmasi } from "./ortak";
 import type { SayfaHatasi } from "./ortak";
+import AydinlatmaMetni from "./AydinlatmaMetni";
 
-export type ImportKind = "students" | "personnel";
+/** Aktarımın türü — bu panelde yalnız personel (veli listesinin paneli `VeliListesi`'dir). */
+export type ImportKind = "personnel";
 
 const IMPORT_LABEL: Record<ImportKind, { title: string; hint: string; template: string }> = {
-  students: {
-    title: "e-Okul Raporundan veya Şablondan Öğrenci Aktar",
-    hint: "e-Okul Öğrenci İşlemleri → Raporlar → OOG01001R020 — Sınıf/Şube Öğrenci Listesi raporunu Excel olarak indirip DEĞİŞTİRMEDEN yükleyin: şube blokları, sınıf başlıkları ve sayaç dipnotları otomatik çözülür. Alternatif olarak uygulama şablonu (sınıf, okul numarası, ad, soyad) doldurulabilir ya da tablo doğrudan panoya yapıştırılabilir. Cinsiyet ve pansiyon sütunları okunmaz.",
-    template: STUDENT_TEMPLATE_FILENAME,
-  },
   personnel: {
     title: "e-Okul Raporundan veya Şablondan Öğretmen ve Diğer Personeli Aktar",
-    hint: "e-Okul Kurum İşlemleri → Raporlar → OOK01001R1 — Personel Listesi raporunu Excel olarak indirip DEĞİŞTİRMEDEN yükleyin. Ad-soyad okunur; görev sütunu yalnız üye türünü (öğretmen ya da diğer personel) belirlemek için kullanılır ve saklanmaz, branş okunmaz; sayaç dipnotu atlanır. Alternatif olarak uygulama şablonu doldurulabilir ya da tablo panoya yapıştırılabilir.",
+    hint: PERSONEL_AKTARIM_ACIKLAMASI,
     template: PERSONNEL_TEMPLATE_FILENAME,
   },
 };
 
-/** Panelin belirgin önerisi: bütün şubeleri içeren tek dosya (Karar 1-8). */
-const TEK_DOSYA_ONERISI =
-  "Önerilen yol: okulun bütün şubelerini içeren listeyi tek dosyada yükleyin ve “Bu dosya okulun tam listesidir” kutusunu işaretleyin. Böylece şube değiştiren öğrencinin kaydı güncellenir ve kimse gereksiz yere ayrılış havuzuna düşmez.";
-
-/**
- * Şube şube yüklemenin bilinen sınırı: öğrenci yalnız BU dosyada aranır. Kayıtlı
- * olduğu şube dosyada olup kendisi başka şubeye geçtiği için dosyada olmayan
- * öğrenci de havuza eklenir; yeni şubesinin listesi gelince kendiliğinden çıkar.
- */
-const SUBE_DEGISIMI_UYARISI =
-  "Başka bir şubeye geçtiği için bu dosyada bulunmayan öğrenci de ayrılış havuzuna eklenir; yeni şubesinin listesi aktarılınca havuzdan kendiliğinden çıkar. Yıl başında ya da şube değişikliklerinden sonra okulun bütün şubelerini içeren listeyi tek dosyada yükleyin.";
+/** Dosya seçiminin süzgeci: e-Okul .xls, şablon .xlsx, .csv (tasarım §8.1 A4). */
+export const KABUL_EDILEN_DOSYALAR = [
+  ".xls",
+  ".xlsx",
+  ".csv",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/csv",
+].join(",");
 
 /** Havuzun ne olduğu — önizleme ve sonuçta aynı cümle. */
 const HAVUZ_ACIKLAMASI =
@@ -95,19 +103,12 @@ const HAVUZ_ACIKLAMASI =
 const ALAN_ADI: Record<string, string> = {
   header: "Başlık",
   leave_pool: "Ayrılış havuzu",
-  number: "Okul no",
-  class: "Sınıf/şube",
-  student_name: "Ad-soyad",
   full_name: "Ad-soyad",
-  member_kind: "Üye türü",
+  member_kind: "Görev türü",
 };
 
-function isStudentReport(report: ImportReport): report is StudentImportReport {
-  return "created_students" in report;
-}
-
 /** Sınırı aşan dosyanın iletisi; dosya sınırdaysa ya da sınır bilinmiyorsa null. */
-function boyHatasi(dosya: File | null, sinirMb: number | null): SayfaHatasi | null {
+export function boyHatasi(dosya: File | null, sinirMb: number | null): SayfaHatasi | null {
   if (dosya === null || sinirMb === null || dosya.size <= sinirMb * 1024 * 1024) return null;
   return { message: `Dosya çok büyük; en çok ${sinirMb} MB olabilir.`, parolaGerekli: false };
 }
@@ -125,7 +126,8 @@ export default function AktarimPaneli({
   const [file, setFile] = useState<File | null>(null);
   const [text, setText] = useState("");
   const [report, setReport] = useState<ImportReport | null>(null);
-  const [fullList, setFullList] = useState(false);
+  /** Aktarım dosyayla başarıyla bitti: kaynak dosyanın silinmesi hatırlatılır. */
+  const [dosyadanAktarildi, setDosyadanAktarildi] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<SayfaHatasi | null>(null);
   const snackbar = useSnackbar();
@@ -133,7 +135,6 @@ export default function AktarimPaneli({
   const sinirMb = useYuklemeSiniri();
   const fileId = useId();
   const textId = useId();
-  const fullListId = useId();
   // Seçimi geri almak için gerçek DOM alanına erişim şart: `value` sıfırlanmadan
   // aynı dosya yeniden seçilemez ve tarayıcı "dosya seçilmedi" durumuna dönmez.
   const fileRef = useRef<HTMLInputElement>(null);
@@ -144,9 +145,10 @@ export default function AktarimPaneli({
   // Aktarma yalnız önizlemeden sonra açılır (dry_run raporu görülmeden yazma yok).
   const canCommit = report !== null && report.dry_run;
 
-  /** Girdi ya da kapsam değişince eski önizleme geçersizdir. */
+  /** Girdi değişince eski önizleme geçersizdir. */
   const sifirla = () => {
     setReport(null);
+    setDosyadanAktarildi(false);
     setError(null);
   };
 
@@ -162,22 +164,15 @@ export default function AktarimPaneli({
     }
     setBusy(true);
     setError(null);
+    setDosyadanAktarildi(false);
     try {
-      let result: ImportReport;
-      if (kind === "students") {
-        const options = { fullList };
-        result =
-          mode === "preview"
-            ? await okulApi.previewStudentImport(input, options)
-            : await okulApi.commitStudentImport(input, options);
-      } else {
-        result =
-          mode === "preview"
-            ? await okulApi.previewPersonnelImport(input)
-            : await okulApi.commitPersonnelImport(input);
-      }
+      const result: ImportReport =
+        mode === "preview"
+          ? await okulApi.previewPersonnelImport(input)
+          : await okulApi.commitPersonnelImport(input);
       setReport(result);
       if (mode === "commit") {
+        setDosyadanAktarildi("file" in input);
         snackbar.success("İçe aktarma tamamlandı.");
         onImported();
       }
@@ -191,8 +186,7 @@ export default function AktarimPaneli({
   const downloadTemplate = async () => {
     setError(null);
     try {
-      const blob =
-        kind === "students" ? await okulApi.studentTemplate() : await okulApi.personnelTemplate();
+      const blob = await okulApi.personnelTemplate();
       if ((await saveBlob(blob, labels.template)) === "hata") {
         setError({ message: DOSYA_YAZILAMADI_ILETISI, parolaGerekli: false });
       }
@@ -202,7 +196,7 @@ export default function AktarimPaneli({
   };
 
   const birlestir = async (pair: SimilarPair) => {
-    if (pair.new_id === null || report === null || isStudentReport(report)) return;
+    if (pair.new_id === null || report === null) return;
     // Geri alınamaz işlem + yalnız ad benzerliğiyle bulunmuş aday (§13 D30):
     // gerekçe yazılır ve onay düğmesi doğrulama kutusuyla açılır.
     const ok = await confirm({
@@ -245,16 +239,11 @@ export default function AktarimPaneli({
         </Button>
       </div>
 
-      {kind === "students" && (
-        <p className="flex items-start gap-2 rounded-shape-sm bg-secondary-container px-4 py-3 text-body-medium text-on-secondary-container">
-          <Icon name="recommend" size="lg" className="mt-0.5 shrink-0" />
-          <span>{TEK_DOSYA_ONERISI}</span>
-        </p>
-      )}
+      <AydinlatmaMetni tur="personel" />
 
       <div>
         <label htmlFor={fileId} className="mb-1 block text-label-large text-on-surface-variant">
-          Dosya (e-Okul .xls veya şablon .xlsx)
+          {DOSYA_ALANI_ETIKETI}
         </label>
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -263,12 +252,14 @@ export default function AktarimPaneli({
             type="file"
             /* e-Okul ihraçları BÜYÜK harfli .XLS uzantısıyla iner; tarayıcı
                accept eşleşmesi büyük/küçük harfe duyarsızdır ama MIME tipini
-               tanımayan Windows kurulumları için uzantı listesi de verilir. */
-            accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+               tanımayan Windows kurulumları için uzantı listesi de verilir. Makrolu
+               biçimler (.xlsm…) listede yoktur; elle seçilirse sunucu reddeder. */
+            accept={KABUL_EDILEN_DOSYALAR}
             onChange={(e) => {
               const secilen = e.target.files?.[0] ?? null;
               setFile(secilen);
               setReport(null);
+              setDosyadanAktarildi(false);
               setError(boyHatasi(secilen, sinirMb));
             }}
             className="block min-h-[var(--od-field-height)] flex-1 rounded-shape-sm border border-outline bg-surface-container-lowest px-3 py-2 text-body-medium text-on-surface file:mr-3 file:rounded-shape-sm file:border-0 file:bg-secondary-container file:px-3 file:py-1.5 file:text-label-large file:text-on-secondary-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -283,7 +274,7 @@ export default function AktarimPaneli({
                 sifirla();
               }}
             >
-              Dosyayı kaldır
+              {DOSYAYI_KALDIR}
             </Button>
           )}
         </div>
@@ -307,34 +298,6 @@ export default function AktarimPaneli({
         />
       </div>
 
-      {kind === "students" && (
-        <div className="rounded-shape-sm bg-surface-container-low px-4 py-3">
-          <label htmlFor={fullListId} className="flex items-start gap-3 text-body-medium">
-            <input
-              id={fullListId}
-              type="checkbox"
-              checked={fullList}
-              onChange={(e) => {
-                setFullList(e.target.checked);
-                sifirla();
-              }}
-              className="mt-0.5 size-5 shrink-0 accent-primary"
-            />
-            <span>
-              <span className="block text-label-large text-on-surface">
-                Bu dosya okulun tam listesidir
-              </span>
-              <span className="block text-body-small text-on-surface-variant">
-                İşaretlemezseniz yalnız dosyada bulunan şubeler karşılaştırılır; diğer şubelere
-                dokunulmaz. İşaretlerseniz dosyada bulunmayan şubelerdeki öğrenciler de ayrılış
-                havuzuna eklenir. Kimse kendiliğinden ayrılmaz; karar Ayrılış Havuzu&apos;nda
-                verilir.
-              </span>
-            </span>
-          </label>
-        </div>
-      )}
-
       {error && <ErrorBand hata={error} />}
 
       <div className="flex flex-wrap justify-end gap-2">
@@ -345,6 +308,8 @@ export default function AktarimPaneli({
           Aktar
         </Button>
       </div>
+
+      {dosyadanAktarildi && <KaynakDosyaHatirlatmasi />}
 
       {report && (
         <ImportReportView
@@ -372,7 +337,6 @@ function ImportReportView({
   busy: boolean;
 }) {
   const counts = importCounts(report);
-  const ogrenci = isStudentReport(report);
   const cells: { label: string; value: number }[] = [
     { label: "Toplam satır", value: report.total_rows },
     { label: "İşlenen", value: report.processed },
@@ -392,9 +356,7 @@ function ImportReportView({
       {report.already_imported && (
         <div className="flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-4 py-3 text-body-medium text-on-tertiary-container">
           <Icon name="info" size="lg" />
-          <span>
-            Bu içerik daha önce aktarılmış. Güncelleme amaçlı yeniden aktarma engellenmez.
-          </span>
+          <span>{DAHA_ONCE_AKTARILMIS}</span>
         </div>
       )}
 
@@ -409,11 +371,7 @@ function ImportReportView({
 
       <HavuzOzeti report={report} poolAdded={counts.poolAdded} poolRemoved={counts.poolRemoved} />
 
-      {ogrenci ? (
-        <OgrenciMutabakati report={report} />
-      ) : (
-        <PersonelMutabakati report={report} onMerge={onMerge} busy={busy} />
-      )}
+      <PersonelMutabakati report={report} onMerge={onMerge} busy={busy} />
 
       <IssueTable
         title={`Uyarılar (${report.warnings.length})`}
@@ -439,7 +397,7 @@ function HavuzOzeti({
   poolAdded: number;
   poolRemoved: number;
 }) {
-  const birim = isStudentReport(report) ? "öğrenci" : "kişi";
+  const birim = "kişi";
   const cumle = report.dry_run
     ? `${formatNumber(poolAdded)} ${birim} ayrılış havuzuna eklenecek, ${formatNumber(poolRemoved)} ${birim} havuzdan çıkacak.`
     : `${formatNumber(poolAdded)} ${birim} ayrılış havuzuna eklendi, ${formatNumber(poolRemoved)} ${birim} havuzdan çıktı.`;
@@ -462,97 +420,6 @@ function HavuzOzeti({
   );
 }
 
-const TH = "p-2 text-left text-label-medium text-on-surface-variant";
-const TD = "p-2 text-on-surface";
-
-function OgrenciMutabakati({ report }: { report: StudentImportReport }) {
-  const kapsam = report.full_list
-    ? "Karşılaştırma okulun tamamıyla yapıldı (dosya okulun tam listesi)."
-    : "Karşılaştırma yalnız dosyada bulunan şubelerle yapıldı; diğer şubelere dokunulmadı.";
-  return (
-    <div className="space-y-3">
-      <p className="text-body-small text-on-surface-variant">{kapsam}</p>
-
-      {report.classes.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-body-small">
-            <caption className="mb-1 text-left text-label-large text-on-surface-variant">
-              Şube bazında etki
-            </caption>
-            <thead>
-              <tr className="border-b border-outline-variant">
-                <th className={TH}>Şube</th>
-                <th className={TH}>Yeni</th>
-                <th className={TH}>Güncellenen</th>
-                <th className={TH}>Değişmeyen</th>
-                <th className={TH}>{report.dry_run ? "Havuza eklenecek" : "Havuza eklenen"}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.classes.map((c) => (
-                <tr
-                  key={`${c.class_level ?? "-"}-${c.class_section}`}
-                  className="border-t border-outline-variant/50"
-                >
-                  <td className={TD}>{c.class_label || "Sınıfsız"}</td>
-                  <td className={TD}>{formatNumber(c.created)}</td>
-                  <td className={TD}>{formatNumber(c.updated)}</td>
-                  <td className={TD}>{formatNumber(c.unchanged)}</td>
-                  <td className={c.to_pool > 0 ? `${TD} font-semibold` : TD}>
-                    {formatNumber(c.to_pool)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {report.pool_added.length > 0 && (
-        <div>
-          <p className="text-label-large text-on-surface-variant">
-            {report.dry_run
-              ? `Ayrılış havuzuna eklenecek öğrenciler (${formatNumber(report.pool_added.length)})`
-              : `Ayrılış havuzuna eklenen öğrenciler (${formatNumber(report.pool_added.length)})`}
-          </p>
-          <p className="text-body-small text-on-surface-variant">
-            {report.full_list
-              ? "Okulun tam listesinde bulunmadıkları için ayrılış havuzuna eklenirler."
-              : "Kayıtlı oldukları şube dosyada var ama kendileri dosyada bulunmadığı için ayrılış havuzuna eklenirler."}{" "}
-            Durumları aktif kalır; ayrılıp ayrılmadıklarına havuzda karar verilir.
-          </p>
-          {!report.full_list && (
-            <p className="mt-1 flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-3 py-2 text-body-small text-on-tertiary-container">
-              <Icon name="warning" />
-              <span>{SUBE_DEGISIMI_UYARISI}</span>
-            </p>
-          )}
-          <div className="mt-2 overflow-x-auto">
-            <table className="w-full border-collapse text-body-small">
-              <thead>
-                <tr className="border-b border-outline-variant">
-                  <th className={TH}>Okul no</th>
-                  <th className={TH}>Ad soyad</th>
-                  <th className={TH}>Sınıf</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.pool_added.map((s) => (
-                  <tr key={s.id} className="border-t border-outline-variant/50">
-                    <td className={TD}>{s.student_number || "—"}</td>
-                    <td className={TD}>{s.full_name}</td>
-                    <td className={TD}>{s.class_label || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function PersonelMutabakati({
   report,
   onMerge,
@@ -571,9 +438,10 @@ function PersonelMutabakati({
         <div className="flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-4 py-3 text-body-medium text-on-tertiary-container">
           <Icon name="warning" size="lg" />
           <span>
-            {formatNumber(turUyarisi)} satırda üye türünü denetleyin: görev bilgisi tanınmadı. Yeni
-            kayıtlar öğretmen olarak açılır; gerekirse kişiyi düzenleyip “Diğer personel” seçin.
-            Satır numaraları aşağıdaki uyarılar tablosundadır.
+            {formatNumber(turUyarisi)} satırda görev türünü denetleyin: görev bilgisi boş ya da tam
+            tanınmadı. Nedeni ve satır numaraları aşağıdaki uyarılar tablosundadır. Bu satırlarda
+            mevcut kaydın görev türü değişmez, yeni kayıt kurala göre açılır; gerekirse kişiyi
+            düzenleyip doğru görev türünü seçin, seçiminiz sonraki aktarımlarda korunur.
           </span>
         </div>
       )}

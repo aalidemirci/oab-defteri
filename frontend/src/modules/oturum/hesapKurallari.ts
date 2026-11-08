@@ -13,7 +13,7 @@
 // 1. Tanıtıcıda T.C. kimlik numarasına benzeyen 11 ardışık rakam (orkestratör maddesi F-5; K9:
 //    kimlik numarası kilit ekranında hiç görünmemeli). Sayının sağlaması aranmaz.
 // 2. Tanıtıcı ad-soyaddaki üç harften uzun bir sözcüğü içeriyor. Karşılaştırma Türkçe harfleri
-//    ASCII'ye katlayarak yapılır ("Şükrü" ≡ "sukru"; backend `excel_ogrenci.normalize_header`):
+//    ASCII'ye katlayarak yapılır ("Şükrü" ≡ "sukru"; backend `excel_ortak.normalize_header`):
 //    `sukru.k` de ŞÜKRÜ adını açık eder. Üç harfli sözcük ("Ali", "Can") aranmaz; yoksa rolden
 //    türeyen tanıtıcılar da sık sık uyarı verirdi.
 // İkisi birden varsa kimlik numarasının uyarısı gelir. Ortak vaka tablosu backend
@@ -81,7 +81,7 @@ export function adSoyadSorunu(deger: string): string | null {
   return [...ad].length > AD_SOYAD_EN_COK ? AD_SOYAD_UZUN_ILETISI : null;
 }
 
-// Backend `excel_ogrenci._TR_MAP`: Türkçe harf → ASCII (büyük ve küçük aynı harfe).
+// Backend `excel_ortak._TR_MAP`: Türkçe harf → ASCII (büyük ve küçük aynı harfe).
 const TR_ASCII: Record<string, string> = {
   ş: "s",
   Ş: "s",

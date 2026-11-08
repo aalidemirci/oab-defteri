@@ -1,7 +1,7 @@
 """Yerel oturum belirteci testleri (tasarım §4.3 — KRİTİK).
 
 Program authsuz olduğundan, gömülü sunucu ayakta olduğu sürece aynı makinedeki
-BAŞKA bir işlem 127.0.0.1'e istek atıp öğrenci verisini okuyabilir. Belirteç bunu
+BAŞKA bir işlem 127.0.0.1'e istek atıp kişi verisini okuyabilir. Belirteç bunu
 engeller: yalnız pencerenin bildiği rastgele değeri taşıyan istekler geçer.
 """
 
@@ -54,7 +54,7 @@ def test_belirtec_yoksa_middleware_hic_yuklenmez(monkeypatch: pytest.MonkeyPatch
 
 
 def test_belirtecsiz_istek_reddedilir(guard: SessionTokenMiddleware) -> None:
-    yanit = guard(RequestFactory().get("/api/v1/students/"))
+    yanit = guard(RequestFactory().get("/api/v1/personnel/"))
 
     assert yanit.status_code == 403
     govde = json.loads(yanit.content)
@@ -71,7 +71,7 @@ def test_yanlis_belirtec_reddedilir(guard: SessionTokenMiddleware) -> None:
 
 
 def test_ret_yaniti_belirteci_sizdirmaz(guard: SessionTokenMiddleware) -> None:
-    yanit = guard(RequestFactory().get("/api/v1/students/"))
+    yanit = guard(RequestFactory().get("/api/v1/personnel/"))
 
     assert TOKEN.encode() not in yanit.content
 
@@ -80,7 +80,7 @@ def test_dogru_cerez_gecer(guard: SessionTokenMiddleware) -> None:
     istekci = RequestFactory()
     istekci.cookies[SESSION_COOKIE_NAME] = TOKEN
 
-    yanit = guard(istekci.get("/api/v1/students/"))
+    yanit = guard(istekci.get("/api/v1/personnel/"))
 
     assert yanit.status_code == 200
     assert yanit.content == b"tamam"
@@ -103,7 +103,7 @@ def test_baslik_adi_django_meta_bicimindedir() -> None:
 
 
 def test_baslik_ile_de_gecilebilir(guard: SessionTokenMiddleware) -> None:
-    yanit = guard(RequestFactory().get("/api/v1/students/", headers={"x-od-token": TOKEN}))
+    yanit = guard(RequestFactory().get("/api/v1/personnel/", headers={"x-od-token": TOKEN}))
 
     assert yanit.status_code == 200
     assert SESSION_COOKIE_NAME not in yanit.cookies

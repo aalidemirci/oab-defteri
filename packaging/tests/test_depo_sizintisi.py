@@ -74,6 +74,11 @@ def test_bicimsiz_degerler_elenir(deger: str) -> None:
         "docs/LISTE.XLS",  # e-Okul ihraçları BÜYÜK harfli iner
         "bir/yer/ogrenciler.xlsx",
         "bir/yer/kayit.csv",
+        # Veli listesi (T5): okulun doldurduğu liste, şablonun indirilmiş kopyası, metin kopyası.
+        "belgeler/Veli Listesi 9-A.xlsx",
+        "sablon-veli-listesi.xlsx",
+        "backend/apps/okul/tests/veri/veli_listesi.xlsx",
+        "veli-listesi.TSV",
         "yedek/okul.odbak",
         "evrak/karar-ornegi.docx",  # doldurulmuş evrak (D9)
         "evrak/CETVEL.ODS",
@@ -92,6 +97,14 @@ def test_sentetik_fixturelar_muaf() -> None:
     """Sentetik e-Okul örnekleri ADIYLA muaftır (joker kullanılmaz)."""
     for yol in depo_sizintisi.MUAF_YOLLAR:
         assert depo_sizintisi.yol_riskli_mi(yol) is False
+
+
+def test_muaf_ornekler_gitignoreda_adiyla_istisnadir() -> None:
+    """Kapının muafiyeti ile `.gitignore`'un istisnası aynı dosyalardır (adıyla; joker yok)."""
+    gitignore = Path(__file__).resolve().parents[2] / ".gitignore"
+    satirlar = set(gitignore.read_text(encoding="utf-8").splitlines())
+    assert {f"!{yol}" for yol in depo_sizintisi.MUAF_YOLLAR} <= satirlar
+    assert "backend/apps/okul/tests/veri/veli_listesi_ornegi.xlsx" in depo_sizintisi.MUAF_YOLLAR
 
 
 @pytest.mark.parametrize("yol", ["backend/apps/okul/models.py", "README.md", "data/ornek.md"])

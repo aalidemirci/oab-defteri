@@ -29,7 +29,7 @@ from apps.okul.models import (
     AccountRole,
     AccountStatus,
     AuditTrail,
-    Student,
+    Personnel,
 )
 from apps.okul.oturum import SISTEM, Yazar, yazar_olarak
 from apps.okul.services import hesaplar
@@ -59,7 +59,7 @@ def satir(an: datetime, **alanlar: Any) -> AccessLog:
         "account_id": TEST_HESAP_ID,
         "role": "yonetici",
         "kind": AccessKind.KISI_DOKUMU,
-        "model": "okul.Student",
+        "model": "okul.Personnel",
         "object_id": "7",
     }
     return AccessLog.objects.create(at=an, **{**varsayilan, **alanlar})
@@ -176,7 +176,7 @@ def test_satir_kisisizdir_hesap_rol_etiketi_ve_taniticiyla_anilir() -> None:
     dk = _dk()
     with yazar_olarak(Yazar(hesap_id=str(dk.id), rol="denetleme_kurulu")):
         erisim_gunlugu.yaz(
-            AccessKind.OZEL_NITELIKLI_ALAN, model=Student, object_id=7, field="first_name"
+            AccessKind.OZEL_NITELIKLI_ALAN, model=Personnel, object_id=7, field="first_name"
         )
     satir(
         yerel(2026, 10, 1),
@@ -206,7 +206,7 @@ def test_satir_kisisizdir_hesap_rol_etiketi_ve_taniticiyla_anilir() -> None:
         "OZEL_NITELIKLI_ALAN",
         "Özel nitelikli kişisel veri alanı",
     )
-    assert (yeni["model"], yeni["kayit"], yeni["alan"]) == ("okul.Student", "7", "first_name")
+    assert (yeni["model"], yeni["kayit"], yeni["alan"]) == ("okul.Personnel", "7", "first_name")
     assert (yeni["belge_ozeti"], yeni["satir_sayisi"]) == (None, None)
     assert eski["hesap"] == {
         "id": str(muhasip.id),

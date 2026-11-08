@@ -1,9 +1,8 @@
 """`okul` DRF serializer'ları — doğrulama + normalize burada, yazma serviste.
 
-Elle giriş, içe aktarmayla AYNI normalize edicilerden geçer (`apps.okul.normalize`):
-şube harfi Türkçe büyük harfe çevrilir (`tr_upper` — 'ş' → 'Ş', 'i' → 'İ'; ASCII'ye
-KATLANMAZ, 10/I ile 10/İ ayrı şubelerdir); seviye kümesi okul içi sabittir (1-12,
-hazırlık bayrağıyla 0). Hatalar Türkçedir (`{code, message, fields}` sözleşmesi).
+Elle giriş, içe aktarmayla AYNI normalize edicilerden geçer (`apps.okul.normalize`).
+Hatalar Türkçedir (`{code, message, fields}` sözleşmesi). Öğrenci ve şube serileştiricileri
+F1b 5. adımda öğrenci tarafıyla söküldü (tasarım §5.1 ALMA).
 """
 
 from __future__ import annotations
@@ -16,11 +15,11 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.fields import empty
 
-from apps.okul import normalize, selectors
+from apps.okul import selectors
 from apps.okul.models import (
+    DATA_CONTROLLER_TEXT_MAX,
     STUDENT_COUNT_MAX,
     CanteenMode,
-    ClassSection,
     Holiday,
     HolidayKind,
     MemberKind,
@@ -31,7 +30,6 @@ from apps.okul.models import (
     SchoolYear,
     SettlementType,
     StaffingMode,
-    Student,
 )
 from apps.okul.services import calendar as calendar_service
 from apps.okul.services import setup as setup_service
@@ -69,17 +67,6 @@ def servise_birakan_metin(*, kirp: bool = False, **secenekler: Any) -> serialize
     )
 
 
-def _validate_level(value: int) -> int:
-    """Seviyeyi okulun geçerli kümesine karşı doğrular (1-12; hazırlık açıksa 0)."""
-    levels = selectors.grade_level_values()
-    if value not in levels:
-        etiketler = ", ".join(
-            "Hazırlık" if lvl == normalize.PREP_LEVEL else str(lvl) for lvl in levels
-        )
-        raise serializers.ValidationError(f"Sınıf şu seviyelerden biri olmalıdır: {etiketler}.")
-    return value
-
-
 #: Okul kartının iletileri — ön yüzle BİREBİR aynıdır (`frontend/src/modules/okul/okulBilgileri.ts`).
 OKUL_ADI_ZORUNLU = "Okul adı zorunludur."
 IL_ZORUNLU = "İl zorunludur."
@@ -98,6 +85,7 @@ PERSONEL_ZORUNLU = "Personel çalıştırma biçimini seçin."
 SECENEK_GECERSIZ = "Geçerli bir seçenek seçin."
 TARIH_GECERSIZ = "Geçerli bir tarih girin."
 DEMIRBAS_ONAYI_ZORUNLU = "Program yalnız okul demirbaşı bilgisayara kurulur; onay zorunludur."
+VERI_SORUMLUSU_UZUN = f"Veri sorumlusu en çok {DATA_CONTROLLER_TEXT_MAX} karakter olabilir."
 
 
 class _Kademeler(serializers.Field):  # type: ignore[type-arg]  # değer listesi; Any davranışı
@@ -146,13 +134,14 @@ class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
     PUT gönderilmeyen alana dokunmaz (künyeyi silmez), gönderilen zorunlu alan ise
     boşaltılamaz (aile kuralı, tasarım §5.1). Aksi hâlde kurulum bittikten sonra Okul
     Bilgileri ekranından bir zorunlu alan sessizce geri alınabilirdi (tamamlanmış ama okul
-    adımı eksik kurulum). Müdür adı, kampüs işareti ve açılış tarihi isteğe bağlıdır; açılış
-    tarihi boşaltılabilir.
+    adımı eksik kurulum). Müdür adı, kampüs işareti, açılış tarihi ve veri sorumlusu isteğe
+    bağlıdır; açılış tarihi ve veri sorumlusu boşaltılabilir (veri sorumlusu boşken aktarım
+    ekranları uyarır, aktarımı engellemez; F1b 5. adım).
 
     Öğrenci mevcudu ile tarihi birlikte gönderilir (DB kısıtı da ikisini birlikte ister);
     biri gövdede öteki yoksa eksik olanın "zorunludur" iletisi döner. Mevcudun tarihi
     bugünden (Europe/Istanbul) sonra olamaz. Metin alanları kırpılarak kaydedilir. Kaldırılan
-    `has_prep_class`, `kademe` ve `kisa_ad` gövdede gelirse yok sayılır.
+    `has_prep_class` (F1b 5. adımda düştü), `kademe` ve `kisa_ad` gövdede gelirse yok sayılır.
 
     İletiler sihirbazın istemci denetimiyle BİREBİR aynıdır
     (`frontend/src/modules/okul/okulBilgileri.ts`).
@@ -191,6 +180,12 @@ class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
         allow_blank=True,
         error_messages={"max_length": "Bilgisayarın demirbaş no'su en çok 64 karakter olabilir."},
     )
+    data_controller_text = serializers.CharField(
+        max_length=DATA_CONTROLLER_TEXT_MAX,
+        required=False,
+        allow_blank=True,
+        error_messages={"max_length": VERI_SORUMLUSU_UZUN},
+    )
 
     class Meta:
         model = SchoolConfig
@@ -210,6 +205,7 @@ class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
             "opened_on",
             "demirbas_onayi",
             "demirbas_no",
+            "data_controller_text",
             "setup_completed",
         ]
         read_only_fields = ["setup_completed"]
@@ -469,9 +465,11 @@ class PersonnelSerializer(CorruptFieldsMixin, serializers.ModelSerializer[Person
     full_name = serializers.CharField(read_only=True)
     member_kind = serializers.ChoiceField(
         choices=MemberKind.choices,
-        default=MemberKind.TEACHER,
+        default=MemberKind.OGRETMEN,
         error_messages={
-            "invalid_choice": "Geçerli bir üye türü seçin (öğretmen ya da diğer personel)."
+            "invalid_choice": (
+                "Geçerli bir görev türü seçin (öğretmen, yönetici ya da diğer personel)."
+            )
         },
     )
 
@@ -490,127 +488,17 @@ class PersonnelSerializer(CorruptFieldsMixin, serializers.ModelSerializer[Person
         read_only_fields = ["is_active", "left_at", "leave_candidate_since"]
 
 
-class ClassSectionSerializer(serializers.ModelSerializer[ClassSection]):
-    school_year_name = serializers.CharField(source="school_year.name", read_only=True)
-    class_label = serializers.CharField(read_only=True)
-
-    class Meta:
-        model = ClassSection
-        validators: list[Any] = []
-        fields = [
-            "id",
-            "school_year",
-            "school_year_name",
-            "class_level",
-            "class_section",
-            "class_label",
-        ]
-
-    def validate_class_level(self, value: int) -> int:
-        return _validate_level(value)
-
-    def validate_class_section(self, value: str) -> str:
-        normalized = normalize.tr_upper(value.strip())
-        if not normalized:
-            raise serializers.ValidationError("Şube zorunludur.")
-        return normalized
-
-    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
-        instance = self.instance if isinstance(self.instance, ClassSection) else None
-        year = attrs.get("school_year", getattr(instance, "school_year", None))
-        level = attrs.get("class_level", getattr(instance, "class_level", None))
-        section = attrs.get("class_section", getattr(instance, "class_section", ""))
-        if year is not None and level is not None and section:
-            duplicate = ClassSection.objects.filter(
-                school_year=year,
-                class_level=level,
-                class_section=section,
-            )
-            if instance is not None:
-                duplicate = duplicate.exclude(pk=instance.pk)
-            if duplicate.exists():
-                raise serializers.ValidationError(
-                    {"class_section": "Bu ders yılı için şube zaten kayıtlı."}
-                )
-        return attrs
-
-
-class StudentSerializer(CorruptFieldsMixin, serializers.ModelSerializer[Student]):
-    """Öğrenci sicili.
-
-    Okul no şifreli + kör indekslidir (tasarım §5.3). Teklik kısıtı kör indekstedir;
-    Türkçe teklik iletisi SERVİSTEN gelir (`persons.ensure_student_number_free`).
-    Alan elle tanımlanır (`validators=[]`): DRF tek alanlı kısıttan otomatik
-    UniqueValidator türetmesin (DRF'nin bilinen tuzağı; şifreli sütunda zaten
-    çalışmazdı).
-
-    `status` ve `left_at` salt okunurdur: ayrılış `students/<pk>/leave/`
-    ayrılış yolundan ya da ayrılış havuzu kararından, yeniden aktifleşme e-Okul
-    aktarımından geçer. `leave_candidate_since` salt okunurdur: doluysa öğrenci
-    ayrılış havuzunda karar bekliyor demektir.
-    """
-
-    full_name = serializers.CharField(read_only=True)
-    class_label = serializers.CharField(read_only=True)
-    student_number = serializers.CharField(
-        max_length=16,
-        required=False,
-        allow_blank=True,
-        default="",
-        validators=[],
-        error_messages={"max_length": "Okul no en çok 16 karakter olabilir."},
-    )
-
-    class Meta:
-        model = Student
-        fields = [
-            "id",
-            "first_name",
-            "last_name",
-            "full_name",
-            "student_number",
-            "class_level",
-            "class_section",
-            "class_label",
-            "status",
-            "left_at",
-            "leave_candidate_since",
-        ]
-        read_only_fields = ["status", "left_at", "leave_candidate_since"]
-        validators: list[Any] = []
-
-    def validate_student_number(self, value: str) -> str:
-        return value.strip()
-
-    def validate_class_level(self, value: int | None) -> int | None:
-        if value is None:
-            return None
-        return _validate_level(value)
-
-    def validate_class_section(self, value: str) -> str:
-        # İçe aktarmayla aynı katlama: Türkçe büyük harf ('ş' → 'Ş', 'i' → 'İ').
-        if not value.strip():
-            return ""
-        return normalize.tr_upper(value.strip())
-
-
 class ImportRequestSerializer(serializers.Serializer[dict[str, Any]]):
-    """İçe aktarma girdisi: Excel dosyası (e-Okul .xls / şablon .xlsx) VEYA pano metni.
-
-    Mutabakat seçeneği (aile iskeletinden; önizleme ve uygulama AYNI kodu koşar,
-    ikisi de kabul eder):
-
-    - `full_list` (öğrenci): "Bu dosya okulun tam listesidir" onayı. Verilmezse
-      karşılaştırma YALNIZ dosyada bulunan şubelerle yapılır (aile deseni; tasarım §8.4).
+    """İçe aktarma girdisi: dosya (e-Okul .xls / şablon .xlsx / .csv) VEYA pano metni.
 
     Aktarım kimseyi ayırmaz: listede olmayanlar ayrılış havuzuna
     girer, karar `leave-pool/resolve/` ile verilir. Eski personel seçeneği
-    `mark_left_ids` KALDIRILDI; gönderilirse yok sayılır.
+    `mark_left_ids` ve öğrenci aktarımının `full_list` onayı ("Bu dosya okulun tam
+    listesidir"; öğrenci tarafıyla F1b 5. adımda söküldü) KALDIRILDI; gönderilirse yok sayılır.
     """
 
     file = serializers.FileField(required=False)
     text = serializers.CharField(required=False, allow_blank=True, trim_whitespace=False)
-    full_list = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         has_file = attrs.get("file") is not None
@@ -620,6 +508,23 @@ class ImportRequestSerializer(serializers.Serializer[dict[str, Any]]):
                 "Dosya (file) veya yapıştırılan metin (text) alanlarından tam olarak biri gerekli."
             )
         return attrs
+
+
+class ParentImportRequestSerializer(serializers.Serializer[dict[str, Any]]):
+    """Veli listesi aktarımının girdisi: YALNIZ dosya (.xlsx şablon, .xls, .csv; tasarım §8.4).
+
+    Pano yolu yoktur: veli listesi okulun doldurduğu şablondan gelir (T5); gövdede `text`
+    gelirse yok sayılır.
+    """
+
+    file = serializers.FileField(
+        error_messages={
+            "required": "Veli listesi dosyasını seçin.",
+            "null": "Veli listesi dosyasını seçin.",
+            "invalid": "Veli listesi dosyasını seçin.",
+            "empty": "Seçilen dosya boş.",
+        }
+    )
 
 
 class PersonnelMergeSerializer(serializers.Serializer[dict[str, Any]]):
@@ -639,7 +544,7 @@ class PersonnelMergeSerializer(serializers.Serializer[dict[str, Any]]):
 # ---------------------------------------------------------------------------
 
 
-def _pool_run(person: Student | Personnel) -> dict[str, Any] | None:
+def _pool_run(person: Personnel) -> dict[str, Any] | None:
     """Kişiyi havuza ekleyen aktarım: dosya adı (yapıştırılan listede boş) + gün."""
     run = selectors.leave_pool_run(person)
     if run is None:
@@ -650,29 +555,6 @@ def _pool_run(person: Student | Personnel) -> dict[str, Any] | None:
         "file_name": run.file_name,
         "date": timezone.localdate(zaman).isoformat(),
     }
-
-
-class LeavePoolStudentSerializer(CorruptFieldsMixin, serializers.ModelSerializer[Student]):
-    """Havuzdaki öğrenci: sınıf/şube, havuza giriş tarihi ve hangi aktarımla."""
-
-    full_name = serializers.CharField(read_only=True)
-    class_label = serializers.CharField(read_only=True)
-    run = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Student
-        fields = [
-            "id",
-            "full_name",
-            "student_number",
-            "class_label",
-            "leave_candidate_since",
-            "run",
-        ]
-        read_only_fields = fields
-
-    def get_run(self, obj: Student) -> dict[str, Any] | None:
-        return _pool_run(obj)
 
 
 class LeavePoolPersonnelSerializer(CorruptFieldsMixin, serializers.ModelSerializer[Personnel]):
@@ -742,11 +624,10 @@ class LeavePoolDecisionSerializer(serializers.Serializer[dict[str, Any]]):
 
 
 class LeavePoolResolveSerializer(serializers.Serializer[dict[str, Any]]):
-    """`POST leave-pool/resolve/` — `{students: {leave, keep}, personnel: {leave, keep}}`.
+    """`POST leave-pool/resolve/` — `{personnel: {leave, keep}}`.
 
     Çakışma (aynı kişi iki listede), boş karar ve havuzda olmayan kişi
     denetimleri serviste, TEK işlemdedir (`persons.resolve_leave_pool`).
     """
 
-    students = LeavePoolDecisionSerializer(required=False)
     personnel = LeavePoolDecisionSerializer(required=False)

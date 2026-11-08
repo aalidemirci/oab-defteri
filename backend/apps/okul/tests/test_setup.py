@@ -37,11 +37,10 @@ from rest_framework.test import APIClient
 from apps.okul.models import (
     Holiday,
     HolidayKind,
+    Personnel,
     SchoolConfig,
-    SchoolLevel,
     SchoolTerm,
     SchoolYear,
-    Student,
 )
 from apps.okul.oturum import OTURUM
 from apps.okul.serializers import (
@@ -78,9 +77,7 @@ DURUM_ALANLARI = {
     "has_active_school_year",
     "active_school_year",
     "missing_steps",
-    "student_count",
     "personnel_count",
-    "class_section_count",
     "school_break_count",
     "roadmap",
 }
@@ -201,18 +198,17 @@ class TestSetupStatus:
         assert client.get("/api/v1/setup/status/").json()["school_break_count"] == 1
 
     def test_durum_kisisel_veri_icermez(self, client: APIClient) -> None:
-        """Sağlık denetimi ucu da olduğu için yanıtta kişi adı ve okul no geçmez."""
-        Student.objects.create(
-            first_name="ZEYNEP",
-            last_name="KARADUMAN",
-            student_number="4817",
-            class_level=9,
-            class_section="A",
-        )
+        """Sağlık denetimi ucu da olduğu için yanıtta kişi adı geçmez; yalnız sayı."""
+        Personnel.objects.create(first_name="ZEYNEP", last_name="KARADUMAN")
         metin = client.get("/api/v1/setup/status/").content.decode("utf-8")
-        for parca in ("ZEYNEP", "KARADUMAN", "4817"):
+        for parca in ("ZEYNEP", "KARADUMAN"):
             assert parca not in metin
-        assert client.get("/api/v1/setup/status/").json()["student_count"] == 1
+        assert client.get("/api/v1/setup/status/").json()["personnel_count"] == 1
+
+    def test_ogrenci_ve_sube_sayilari_durumda_yoktur(self, client: APIClient) -> None:
+        """Öğrenci sicili ve şube kataloğu söküldü (F1b 5. adım); öğrenci mevcudu okul kartındadır."""
+        veri = client.get("/api/v1/setup/status/").json()
+        assert not {"student_count", "class_section_count"} & set(veri)
 
 
 @pytest.mark.django_db
@@ -403,6 +399,7 @@ class TestSchoolConfigApi:
             "opened_on": None,
             "demirbas_onayi": True,
             "demirbas_no": "BLG-2026-017",
+            "data_controller_text": "",
             "setup_completed": False,
         }
         assert setup_service.missing_school_fields(SchoolConfig.load()) == []
@@ -475,6 +472,43 @@ class TestSchoolConfigApi:
         assert yanit.json()["opened_on"] is None
         assert SchoolConfig.load().opened_on is None
 
+    def test_veri_sorumlusu_yazilir_kirpilir_ve_bosaltilabilir(self, client: APIClient) -> None:
+        """Veri sorumlusu isteğe bağlı serbest metindir (F1b 5. adım; E04, KVKK md. 10/1-a)."""
+        metin = "Örnek Anadolu Lisesi Müdürlüğü, Örnek Mah. Örnek Sok. No: 1, Örnek İlçe"
+        client.put(URL, okul_karti_govdesi(), format="json")
+        yanit = client.put(URL, {"data_controller_text": f"  {metin} "}, format="json")
+        assert yanit.status_code == 200, yanit.json()
+        assert yanit.json()["data_controller_text"] == metin
+        assert SchoolConfig.load().data_controller_text == metin
+        # Kurulumun zorunlu alanı değildir: boşaltılır, eksik alan sayılmaz.
+        yanit = client.put(URL, {"data_controller_text": ""}, format="json")
+        assert yanit.status_code == 200
+        assert SchoolConfig.load().data_controller_text == ""
+        assert setup_service.missing_school_fields(SchoolConfig.load()) == []
+
+    def test_veri_sorumlusu_ust_siniri(self, client: APIClient) -> None:
+        yanit = client.put(URL, {"data_controller_text": "x" * 501}, format="json")
+        assert yanit.status_code == 400
+        assert yanit.json()["fields"]["data_controller_text"] == [
+            "Veri sorumlusu en çok 500 karakter olabilir."
+        ]
+        assert (
+            client.put(URL, {"data_controller_text": "x" * 500}, format="json").status_code == 200
+        )
+
+    def test_veri_sorumlusu_izde_yalniz_adiyla_gorunur(self, client: APIClient) -> None:
+        """Serbest metin: denetim izine değeri girmez, alan adı ve içerik MAC'i girer."""
+        from apps.okul import denetim_izi
+        from apps.okul.models import AuditTrail
+
+        client.put(URL, {"data_controller_text": "Uydurma Veri Sorumlusu"}, format="json")
+        satir = AuditTrail.objects.filter(model="okul.SchoolConfig").order_by("-seq").first()
+        assert satir is not None
+        assert "data_controller_text" in satir.changed_fields
+        assert "data_controller_text" not in satir.values
+        assert "Uydurma Veri Sorumlusu" not in json.dumps(satir.values, ensure_ascii=False)
+        assert denetim_izi.kaydi_dogrula(SchoolConfig, SchoolConfig.SINGLETON_PK) is True
+
     def test_kademeler_tekrarsiz_ve_kanonik_sirayla_saklanir(self, client: APIClient) -> None:
         yanit = client.put(
             URL,
@@ -526,7 +560,7 @@ class TestSchoolConfigApi:
         assert not {"has_prep_class", "kademe", "kisa_ad"} & set(yanit.json())
         config = SchoolConfig.load()
         assert config.school_name == "Örnek Okul"
-        assert config.has_prep_class is False
+        assert not hasattr(config, "has_prep_class")
 
     def test_setup_completed_put_ile_degistirilemez(self, client: APIClient) -> None:
         """Kapı alanı yalnız `setup/complete/` ucuyla açılır (read-only)."""
@@ -545,7 +579,6 @@ class TestSchoolConfigApi:
 #: Kendiliğinden tespit edilen maddeleri tamamlayan `setup_status` alanları (test verisi).
 _DOLU_SAYIMLAR: dict[str, Any] = {
     "school_info_complete": True,
-    "student_count": 3,
     "personnel_count": 2,
     "school_break_count": 1,
 }
@@ -604,6 +637,11 @@ class TestYolHaritasi:
         assert SchoolConfig.load().yol_haritasi == {"isaretler": {}, "gizli": False}
 
     def test_kendiliginden_tespit_edilen_madde_elle_isaretlenemez(self, client: APIClient) -> None:
+        yanit = self._isaretle(client, "personel_aktarimi")
+        assert yanit.status_code == 400
+        assert yanit.json()["message"] == "Bu madde elle işaretlenemez."
+
+    def test_kaldirilan_ogrenci_aktarimi_maddesi_isaretlenemez(self, client: APIClient) -> None:
         yanit = self._isaretle(client, "ogrenci_aktarimi")
         assert yanit.status_code == 400
         assert yanit.json()["message"] == "Bu madde elle işaretlenemez."
@@ -614,17 +652,16 @@ class TestYolHaritasi:
             assert yanit.status_code == 400, govde
 
     def test_kendiliginden_tespit_edilen_maddeler(self) -> None:
-        """`okul_karti` ilk maddedir; öteki maddeler değişmez (plan F1b-4 kararları)."""
+        """`okul_karti` ilk maddedir (plan F1b-4 kararları); öğrenci aktarımı maddesi F1b 5.
+        adımda öğrenci tarafıyla kalktı, veli listesi dönemlik olduğu için madde olmaz."""
         assert setup_service.roadmap_auto_items(
             {
                 "school_info_complete": False,
-                "student_count": 0,
                 "personnel_count": 0,
                 "school_break_count": 0,
             }
         ) == {
             "okul_karti": False,
-            "ogrenci_aktarimi": False,
             "personel_aktarimi": False,
             "kapali_gunler": False,
         }
@@ -798,30 +835,6 @@ class TestYolHaritasi:
 
 
 @pytest.mark.django_db
-class TestGradeLevelsApi:
-    def test_seviyeler_okul_ici_sabitten_gelir(self, client: APIClient) -> None:
-        veri = client.get("/api/v1/grade-levels/").json()
-        assert [x["value"] for x in veri["levels"]] == list(range(1, 13))
-        assert veri["levels"][0] == {"value": 1, "label": "1"}
-        assert veri["prep_enabled"] is False
-
-    def test_hazirlik_acilinca_listeye_girer(self, client: APIClient) -> None:
-        # Bayrak okul kartından çıktı (5. adımda göçle düşer): test verisi ORM ile yazılır.
-        SchoolConfig.objects.update_or_create(
-            pk=SchoolConfig.SINGLETON_PK, defaults={"has_prep_class": True}
-        )
-        veri = client.get("/api/v1/grade-levels/").json()
-        assert veri["levels"][0] == {"value": 0, "label": "Hazırlık"}
-        assert veri["prep_enabled"] is True
-
-    def test_kademe_seviyeleri_kisitlamaz(self, client: APIClient) -> None:
-        """Kademeler (`levels`) sınıf seviyelerini kısıtlamaz (1-12 okul içi sabit kalır)."""
-        setup_service.update_school_config(fields={"levels": [SchoolLevel.ILKOKUL.value]})
-        veri = client.get("/api/v1/grade-levels/").json()
-        assert [x["value"] for x in veri["levels"]] == list(range(1, 13))
-
-
-@pytest.mark.django_db
 class TestSchoolYearTerms:
     def test_donem_yapilandirma(self, client: APIClient) -> None:
         yil = client.post(
@@ -870,13 +883,13 @@ def test_update_school_config_whitelist_disi_alan_yazmaz() -> None:
             "school_name": "X",
             "app_password_hash": "hack",
             "setup_completed": True,
-            "has_prep_class": True,  # okul kartından çıktı (5. adımda göçle düşer)
+            "has_prep_class": True,  # F1b 5. adımda göç 0014 ile düştü
         }
     )
     config = SchoolConfig.load()
     assert config.app_password_hash == parmak_izi != "hack"
     assert config.setup_completed is False
-    assert config.has_prep_class is False
+    assert not hasattr(config, "has_prep_class")
 
 
 @pytest.mark.django_db
