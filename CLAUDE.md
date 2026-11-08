@@ -68,8 +68,8 @@ siteyi ve evrakı kapsar.
    Henüz girilmemiş veri "eksik"tir, gerekçe istemez; gerekçe yalnız bilinçli sapmada.
 4. **Kayıt silinmez, ters kayıtla düzeltilir;** kapanan dönem kilitlenir; her değişiklik
    denetim izine yazılır.
-5. **KVKK.** T.C. kimlik numarası varsayılan kapalı (K9); veli verisi en aza (e-Okul'dan
-   yalnız veli adı ve öğrencinin sınıfı alınır, dönem kapanışında silinir; adlı cetveli
+5. **KVKK.** T.C. kimlik numarası varsayılan kapalı (K9); veli verisi en aza (veli listesinden
+   yalnız veli adı ve öğrencinin sınıfı alınır, dönem kapanışında ya da elle silinir; adlı cetveli
    yalnız yönetici basar, program saklamaz — T5); duyuru ve ilan çıktılarında kişi adı yok
    (tek istisna mevzuat gereği taşımacı listesi: ad/unvan, plaka, güzergâh — Servis U-E
    md. 10/3); gerçek veri, banka özeti, TEFBİS çıktısı, e-Okul
@@ -99,7 +99,7 @@ siteyi ve evrakı kapsar.
 | T2 | Evrak: **tek içerik, iki çizici** — Word python-docx, PDF ailenin WeasyPrint hattı; LibreOffice/Word gerekmez |
 | T3 | Birlik dönemi **genel kuruldan genel kurula**; ders yılı ve TEFBİS dönemiyle eşlem tablosu |
 | T4 | **Basit hesap planı** (banka, kasa, şartlı bağış alt hesabı), TEFBİS işlem tipine eşlemli; çift taraflı muhasebe değil |
-| T5 | e-Okul'dan **personel** (ad-soyad, görev) ve **veli listesi** (yalnız veli adı + öğrencinin sınıfı; katılım cetveli için) |
+| T5 | e-Okul'dan **personel** (ad-soyad, görev); **veli listesi** (yalnız veli adı + öğrencinin sınıfı; katılım cetveli için) okulun doldurduğu şablondan, çünkü e-Okul veli adı veren rapor sunmaz (kullanıcı 08.11.2026) |
 | T6 | Çarpı **programı kapatır**; tepsi yok |
 | — | Kantin arz bedeli vadesi: sözleşmedeki **ayın 10'u** (EK-2 md. 7) esas, Yönetmelikteki **20'si** (md. 17/1) üst sınır; iki tarih kural paketinde |
 
