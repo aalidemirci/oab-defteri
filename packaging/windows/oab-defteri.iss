@@ -135,6 +135,9 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename:
 [InstallDelete]
 ; Sürüm bazlı ad Windows ikon önbelleğini yeniler; eski sürüm ikonları temizlenir.
 Type: files; Name: "{app}\oab-defteri-*.ico"
+; Backend kaynak ağaç olarak paketlenir: eski kurulumun üstüne kurulumda bayat göç dosyası
+; kalırsa temiz veri dizininde göç ağacı kırılır. Dizin her kurulumda yeniden yazılır.
+Type: filesandordirs; Name: "{app}\_internal\backend\apps\okul\migrations"
 
 [Run]
 ; WebView2 yoksa önce onu kur (sessiz). Kurulamazsa kurulum yine tamamlanır;

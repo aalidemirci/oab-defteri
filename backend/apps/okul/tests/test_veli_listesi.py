@@ -100,6 +100,22 @@ def _kosu() -> ImportRun:
     return kosu
 
 
+# ============================================================ tablo
+
+
+def test_veli_listesi_tablosu_yalniz_ad_ve_sinif_tasir() -> None:
+    """Tasarım §14 F1b kapısı "veli listesi yalnız iki alan taşır": ad (ve kör indeksi) ile sınıf;
+    birlik dönemi ve katılım işaretleri F1c ve F2'de gelir."""
+    assert {alan.column for alan in ParentRoster._meta.fields} == {
+        "id",
+        "import_run_id",
+        "full_name",
+        "name_index",
+        "student_class",
+        "created_at",
+    }
+
+
 # ============================================================ kör indeks (model düzeyi)
 
 

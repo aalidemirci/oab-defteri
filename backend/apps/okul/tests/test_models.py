@@ -1,7 +1,7 @@
 """`okul` modelleri — kısıtlar, singleton, şifreli kişi alanları (aile iskeletinden alındı).
 
 Aile test kalıbından uyarlandı: TCKN/veli/tatil testleri kalktı. Öğrenci sicili, şube kataloğu
-ve hazırlık sınıfı bayrağı (seviye kümesi) F1b 5. adımda göç 0014 ile düştü (tasarım §5.1
+ve hazırlık sınıfı bayrağı (seviye kümesi) F1b 5. adımda düştü (tasarım §5.1
 ALMA); okul no kör indeksinin model sınamaları onlarla gitti, kör indeksin kendisi
 `test_kor_indeks.py`'de `shared.crypto` düzeyinde sınanır. Personelde unvan/branş yok, görev türü
 ve ayrılış tarihi var; ad-soyad DB'de token'dır.
@@ -114,7 +114,7 @@ class TestSchoolConfigKisitlari:
 
 
 class TestOgrenciTarafiYok:
-    """Tasarım §5.1 ALMA, T5: öğrenci sicili, şube kataloğu ve hazırlık bayrağı göç 0014 ile düştü."""
+    """Tasarım §5.1 ALMA, T5: öğrenci sicili, şube kataloğu ve hazırlık bayrağı F1b 5. adımda düştü."""
 
     def test_ogrenci_ve_sube_modelleri_yoktur(self) -> None:
         for ad in ("Student", "ClassSection"):

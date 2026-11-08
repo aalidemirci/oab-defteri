@@ -88,7 +88,7 @@ pytestmark = pytest.mark.django_db
 
 HESAP = "okul.Account"
 OKUL = "okul.SchoolConfig"
-#: Göç 0009'un tetikleyici adları.
+#: `0001_initial`'ın denetim izi tetikleyicileri.
 TETIKLEYICILER = ("okul_audittrail_no_delete", "okul_audittrail_no_update")
 
 

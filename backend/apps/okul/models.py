@@ -4,7 +4,7 @@ Aile iskeletinden alındı (iskelet bunu atalarının `apps/okul/models.py`
 kalıbından türetip sadeleştirmişti). OAB'deki yeri ve değişecek alanları OAB
 tasarımının §5.1 ve §12.B'sindedir (okul kartının OAB alanları F1b 4. adımda girdi,
 kütüphane saatleri ve kısa ad aynı adımda düştü; öğrenci sicili, şube kataloğu ve hazırlık
-sınıfı bayrağı F1b 5. adımda göç 0014 ile düştü — tasarım §5.1 ALMA, T5):
+sınıfı bayrağı F1b 5. adımda düştü — tasarım §5.1 ALMA, T5):
 
 - `SchoolConfig`: okul kartı — kurum künyesi, kademeler, öğrenci mevcudu, yerleşim türü,
   kantin ve personel çalıştırma biçimi, kampüs, açılış tarihi, demirbaş onayı (sınıf yorumu).
@@ -689,19 +689,8 @@ class ImportSourceType(models.TextChoices):
     """İçe aktarma kaynak türü (dosya ve pano yapıştırma AYNI türdedir; tasarım §5.1 `ImportRun`).
 
     Değerler tasarımın Türkçe büyük harf ASCII kuralına uyar (§5 O8; plan "F1b-5 uygulama
-    kararları"); eski `PERSONNEL` göç 0015'te `PERSONEL`'e çevrildi. `VELI` veli listesinin
-    aktarımıdır (`excel_veli`, `services.imports`; satırları `ParentRoster`).
-
-    ESKİ `STUDENTS` SATIRLARI (öğrenci aktarımı F1b 5. adımda söküldü) BİLEREK ÇEVRİLMEZ ve
-    silinmez: yeni kümede karşılıkları yoktur (veli listesi öğrenci aktarımı değildir); değer
-    kümede olmasa da sütunda veritabanı kısıtı olmadığı için satır geçerli kalır. `source_type`
-    satırın içerik MAC'indedir (`IZ_OZET_ALANLARI`): dokunulmayan satırın kaydı doğrulanmayı
-    sürdürür (`denetim_izi.kaydi_dogrula`), silinseydi iz satırları kaydı olmayan satıra dönerdi.
-    Satır yalnız sayı taşır (kişi adı yok, `imports.to_run_dict`); program onu okumaz. Göçle
-    `PERSONEL`'e çevrilen satırların içerik MAC'i ise çeviriden sonra tutmaz: 4. adımın okul
-    kartındaki kabulüyle aynıdır (plan "F1b-4 uygulama kararları": içerik MAC'ini bugün yalnız
-    testler doğrular; deneme kurulumları sahaya çıkmadan yeniden kurulur), koşu yeniden yazılınca
-    yeni MAC'li iz satırı düşer. Görev türü değerleri çevrilen personel satırları için de aynıdır.
+    kararları"). `VELI` veli listesinin aktarımıdır (`excel_veli`, `services.imports`; satırları
+    `ParentRoster`).
     """
 
     PERSONEL = "PERSONEL", "Personel"
@@ -1347,7 +1336,7 @@ class AuditTrail(models.Model):
 
     EKLEME-YALNIZ (yazma kuralı 2): var olan satırda `save()`, `delete()`, toplu
     `update()`/`delete()` `ImmutableRecord` yükseltir; ayrıca SQLite tetikleyicileri
-    (`BEFORE UPDATE`, `BEFORE DELETE` → `RAISE(ABORT)`, göç 0009) program içi kazayı
+    (`BEFORE UPDATE`, `BEFORE DELETE` → `RAISE(ABORT)`, `0001_initial`) program içi kazayı
     veritabanında keser. Program dışındaki değişikliği zincir yakalar. Tetikleyicileri
     kapatan bir üretim yolu YOKTUR; testlerin `flush`'ı kök `conftest.py`'dedir.
     """
@@ -1513,8 +1502,8 @@ class AccessLog(models.Model):
     * Model: var olan satırda `save()` ve `delete()`, queryset'te `bulk_create()`, `update()`,
       `bulk_update()` ve `delete()` `ImmutableRecord` yükseltir. Tek silme yolu queryset'in
       `_saklama_disini_sil`'idir; onu yalnız silme servisi çağırır.
-    * Veritabanı: `BEFORE UPDATE` tetikleyicisi (`RAISE(ABORT)`, göç 0010) model yöntemlerini
-      atlayan program içi güncellemeyi de (`_base_manager`, ham SQL) keser.
+    * Veritabanı: `BEFORE UPDATE` tetikleyicisi (`RAISE(ABORT)`, `0001_initial`) model
+      yöntemlerini atlayan program içi güncellemeyi de (`_base_manager`, ham SQL) keser.
     * DELETE için tetikleyici YOKTUR, bilerek: koşulsuz bir tetikleyici meşru silmeyi (saklama
       süresinin dolması) de keserdi; "yalnız süresi dolan satır" koşulunu tetikleyiciye yazmak
       saklama süresini ve gün sınırını (Europe/Istanbul, 29 Şubat) SQL'de ikinci kez
