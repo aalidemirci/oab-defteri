@@ -5,7 +5,9 @@
 // anahtarı (no'su ve üretim tarihiyle) iki grubu geri yazılarak doğrulanıp sunucuda
 // damgalanmadan devam edilmez (genel tasarım §4.4.5); anahtar ekranda değilken kâğıttan
 // doğrulama ve YENİ anahtar üretme yolları (kaybolan anahtar senaryosu uçtan uca); okul
-// adımının zorunlu alanları (kademe, kısa ad, demirbaş onayı); ders yılı
+// adımının (okul kartı: ortak alanlar `okul/OkulKartiAlanlari`) zorunlu alanları ve
+// gövdesi (kurum kodu, kademeler, öğrenci mevcudu ve tarihi, yerleşim türü, kantin ve
+// personel çalıştırma biçimi, demirbaş onayı); ders yılı
 // kaydedilince iki takvim yılının tatilleri eklenir; `setup/complete/` reddi
 // iletisiyle gösterilir; ve sihirbaz UÇTAN UCA çalışır.
 //
@@ -20,8 +22,10 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../lib/api";
+import { todayIso } from "../../lib/format";
 import { pencereIcerigi } from "../../lib/kilit";
 import { ILK_ACILIS_DURUMU } from "../../test/kurulumDurumu";
+import { BOS_OKUL_KARTI, ORNEK_OKUL_KARTI } from "../../test/okulKarti";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import type {
@@ -71,6 +75,11 @@ vi.mock("../takvim/KapaliGunlerPaneli", () => ({
 
 import { bekleyenKurtarmaAnahtariniYaz } from "../guvenlik/bekleyenAnahtar";
 import { kurtarmaAnahtariniNormallestir } from "../guvenlik/kurtarma";
+import {
+  DERS_YILI_ACIKLAMASI,
+  KANTIN_ISLETME_BILGISI,
+  OKUL_KARTI_ACIKLAMASI,
+} from "../okul/metinler";
 import KurulumPage from "./KurulumPage";
 
 const ANAHTAR = "TEST-KURT-ARMA-ANAH-TARI-ABCD-EFGH-JKLM";
@@ -93,23 +102,25 @@ interface Sunucu {
   tamam: boolean;
 }
 
-const BOS_OKUL: SchoolConfig = {
-  school_name: "",
-  province: "",
-  district: "",
-  principal_name: "",
-  has_prep_class: false,
-  kademe: "",
-  kisa_ad: "",
-  demirbas_onayi: false,
-  demirbas_no: "",
-  setup_completed: false,
-};
+const BOS_OKUL: SchoolConfig = BOS_OKUL_KARTI;
 
 let sunucu: Sunucu;
 
+/** Backend `missing_school_fields` ile aynı küme (biri eksikse okul adımı eksiktir). */
 function okulTamamMi(o: SchoolConfig): boolean {
-  return Boolean(o.school_name.trim() && o.kademe && o.kisa_ad.trim() && o.demirbas_onayi);
+  return Boolean(
+    o.school_name.trim() &&
+    o.province.trim() &&
+    o.district.trim() &&
+    /^\d{6}$/.test(o.institution_code) &&
+    o.levels.length > 0 &&
+    o.student_count !== null &&
+    o.student_count_as_of &&
+    o.settlement_type &&
+    o.canteen_mode &&
+    o.staffing_mode &&
+    o.demirbas_onayi,
+  );
 }
 
 /** Backend `setup_status` ile aynı kural (eksik adımlar sırasıyla). */
@@ -230,11 +241,9 @@ function sunucuyuKur(baslangic: Partial<Sunucu> = {}) {
 }
 
 const TAM_OKUL: SchoolConfig = {
-  ...BOS_OKUL,
+  ...ORNEK_OKUL_KARTI,
   school_name: "Deneme Anadolu Lisesi",
-  kademe: "ORTAOGRETIM",
-  kisa_ad: "Deneme AL",
-  demirbas_onayi: true,
+  setup_completed: false,
 };
 
 const AKTIF_YIL: SchoolYear = {
@@ -295,6 +304,20 @@ async function parolaAdiminiGec(user: ReturnType<typeof userEvent.setup>) {
   await hesapFormunuDoldurVeKur(user);
   expect(await screen.findByTestId("kurtarma-anahtari")).toHaveTextContent(ANAHTAR);
   await anahtariDogrulaVeDevamEt(user, ANAHTAR);
+}
+
+/** Okul adımının bütün zorunlu alanlarını doldurur (mevcudun tarihi varsayılan: bugün). */
+async function okulAdiminiDoldur(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText(/^Okul adı/), "Deneme Anadolu Lisesi");
+  await user.type(screen.getByLabelText(/^Kurum kodu/), "123456");
+  await user.type(screen.getByLabelText(/^İl \*$/), "Ankara");
+  await user.type(screen.getByLabelText(/^İlçe/), "Örnek İlçe");
+  await user.click(screen.getByRole("checkbox", { name: "Ortaöğretim (lise)" }));
+  await user.type(screen.getByLabelText(/^Öğrenci mevcudu/), "1.234");
+  await user.click(screen.getByRole("radio", { name: "Büyükşehir statüsündeki il" }));
+  await user.click(screen.getByRole("radio", { name: "Kiraya veriliyor" }));
+  await user.click(screen.getByRole("radio", { name: "Personel çalıştırmıyor" }));
+  await user.click(screen.getByRole("checkbox", { name: /Bu bilgisayar okul demirbaşıdır/ }));
 }
 
 beforeEach(() => {
@@ -656,37 +679,54 @@ describe("KurulumPage — 1. adım: anahtar ekranda değilken", () => {
 describe("KurulumPage — 2. adım: okul bilgileri", () => {
   beforeEach(() => sunucuyuKur({ parola: true }));
 
-  it("kademe, kısa ad ve demirbaş onayı olmadan kaydetmez; alan hataları gösterilir", async () => {
+  it("zorunlu alanlar olmadan kaydetmez; her alanın iletisi altında yazılır", async () => {
     const user = userEvent.setup();
     renderPage();
     expect(await screen.findByText("2. Okul Bilgileri")).toBeInTheDocument();
     await user.type(screen.getByLabelText(/Okul adı/), "Deneme Anadolu Lisesi");
+    await user.type(screen.getByLabelText(/^Kurum kodu/), "12345");
+    await user.type(screen.getByLabelText(/^Öğrenci mevcudu/), "12,5");
     await user.click(ileri("Kaydet ve devam et"));
 
-    expect(await screen.findByText("Kademe seçin.")).toBeInTheDocument();
-    expect(screen.getByText("Kısa ad zorunludur.")).toBeInTheDocument();
+    expect(await screen.findByText("Zorunlu alanları doldurun.")).toBeInTheDocument();
+    for (const ileti of [
+      "İl zorunludur.",
+      "İlçe zorunludur.",
+      "Kurum kodu altı haneli bir sayıdır.",
+      "En az bir kademe seçin.",
+      "Öğrenci mevcudu 0 ile 99999 arasında bir tam sayıdır.",
+      "Yerleşim türünü seçin.",
+      "Kantin işletme biçimini seçin.",
+      "Personel çalıştırma biçimini seçin.",
+    ]) {
+      expect(screen.getByText(ileti)).toBeInTheDocument();
+    }
     expect(screen.getByText(/onay zorunludur/)).toBeInTheDocument();
+    // Mevcudun tarihi varsayılan olarak bugündür: iletisi çıkmaz.
+    expect(screen.queryByText("Mevcudun tarihi zorunludur.")).toBeNull();
     expect(oapi.updateSchoolConfig).not.toHaveBeenCalled();
     expect(screen.getByText("2. Okul Bilgileri")).toBeInTheDocument();
   });
 
-  it("açıklamalar yalnız evrak antedini anar; etiket, üye kartı ve kitap bedeli yoktur", async () => {
+  it("açıklama okul kartının kullanıldığı yerleri söyler; kısa ad ve hazırlık sınıfı yoktur", async () => {
     renderPage();
     expect(await screen.findByText("2. Okul Bilgileri")).toBeInTheDocument();
-    expect(screen.getByText(/evrakın antedinde kullanılır/)).toBeInTheDocument();
-    expect(screen.getByText("En çok 24 karakter.")).toBeInTheDocument();
+    expect(screen.getByText(OKUL_KARTI_ACIKLAMASI)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Kısa ad/)).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Hazırlık|En çok 24 karakter/);
     expect(document.body.textContent).not.toMatch(/etiket|üye kart|kayıp ve hasar|son sınıf/i);
   });
 
-  it("tam gövdeyi gönderir ve 3. adıma geçer", async () => {
+  it("yeni alanlarla tam gövdeyi gönderir ve 3. adıma geçer", async () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("2. Okul Bilgileri");
-    await user.type(screen.getByLabelText(/Okul adı/), "Deneme Anadolu Lisesi");
-    await user.type(screen.getByLabelText(/Kısa ad/), "Deneme AL");
-    await user.selectOptions(screen.getByLabelText(/Kademe/), "ORTAOGRETIM");
-    await user.type(screen.getByLabelText("İl"), "Ankara");
-    await user.click(screen.getByRole("checkbox", { name: /Bu bilgisayar okul demirbaşıdır/ }));
+    await okulAdiminiDoldur(user);
+    await user.click(screen.getByRole("checkbox", { name: "Ortaokul" }));
+    await user.click(screen.getByRole("radio", { name: "Birlikçe işletiliyor" }));
+    expect(screen.getByText(KANTIN_ISLETME_BILGISI)).toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: /eğitim kampüsündedir/ }));
+    await user.type(screen.getByLabelText(/^Okulun açılış tarihi/), "2025-09-08");
     await user.type(screen.getByLabelText("Bilgisayarın demirbaş no'su"), "BLG-17");
     await user.click(ileri("Kaydet ve devam et"));
 
@@ -694,16 +734,39 @@ describe("KurulumPage — 2. adım: okul bilgileri", () => {
       expect(oapi.updateSchoolConfig).toHaveBeenCalledWith({
         school_name: "Deneme Anadolu Lisesi",
         province: "Ankara",
-        district: "",
+        district: "Örnek İlçe",
         principal_name: "",
-        has_prep_class: false,
-        kademe: "ORTAOGRETIM",
-        kisa_ad: "Deneme AL",
+        institution_code: "123456",
+        levels: ["ORTAOKUL", "ORTAOGRETIM"],
+        student_count: 1234,
+        student_count_as_of: todayIso(),
+        settlement_type: "BUYUKSEHIR",
+        canteen_mode: "BIRLIKCE_ISLETILIYOR",
+        staffing_mode: "CALISTIRMIYOR",
+        in_campus: true,
+        opened_on: "2025-09-08",
         demirbas_onayi: true,
         demirbas_no: "BLG-17",
       }),
     );
     expect(await screen.findByText("3. Ders Yılı")).toBeInTheDocument();
+    expect(sunucu.okul.levels).toEqual(["ORTAOKUL", "ORTAOGRETIM"]);
+  });
+
+  it("kayıtlı okul kartı forma dolar; mevcudun tarihi kayıttakidir", async () => {
+    const user = userEvent.setup();
+    sunucuyuKur({ parola: true, okul: { ...TAM_OKUL } });
+    sunucu.yillar = [AKTIF_YIL];
+    sunucu.donemli.add(AKTIF_YIL.id);
+    renderPage();
+    const ray = await screen.findByRole("list", { name: "Kurulum adımları" });
+    await user.click(within(ray).getByRole("button", { name: /Okul Bilgileri/ }));
+
+    expect(screen.getByLabelText(/^Kurum kodu/)).toHaveValue("123456");
+    expect(screen.getByRole("checkbox", { name: "Ortaöğretim (lise)" })).toBeChecked();
+    expect(screen.getByLabelText(/^Öğrenci mevcudu/)).toHaveValue("1234");
+    expect(screen.getByLabelText(/^Mevcudun tarihi/)).toHaveValue("2026-10-01");
+    expect(screen.getByRole("radio", { name: "Kiraya veriliyor" })).toBeChecked();
   });
 
   it("kayıt hatasında Türkçe hata bandı + alan hatası gösterilir, adım değişmez", async () => {
@@ -712,8 +775,8 @@ describe("KurulumPage — 2. adım: okul bilgileri", () => {
     sunucu.yillar = [AKTIF_YIL];
     sunucu.donemli.add(AKTIF_YIL.id);
     oapi.updateSchoolConfig.mockRejectedValue(
-      new ApiError(400, "validation_error", "Kısa ad en çok 24 karakter olabilir.", {
-        kisa_ad: ["Kısa ad en çok 24 karakter olabilir."],
+      new ApiError(400, "validation_error", "Mevcudun tarihi bugünden sonra olamaz.", {
+        student_count_as_of: ["Mevcudun tarihi bugünden sonra olamaz."],
       }),
     );
     renderPage();
@@ -722,7 +785,9 @@ describe("KurulumPage — 2. adım: okul bilgileri", () => {
     await user.click(within(ray).getByRole("button", { name: /Okul Bilgileri/ }));
     await user.click(ileri("Kaydet ve devam et"));
 
-    expect(await screen.findAllByText("Kısa ad en çok 24 karakter olabilir.")).not.toHaveLength(0);
+    expect(await screen.findAllByText("Mevcudun tarihi bugünden sonra olamaz.")).not.toHaveLength(
+      0,
+    );
     expect(screen.getByText("2. Okul Bilgileri")).toBeInTheDocument();
   });
 });
@@ -734,6 +799,8 @@ describe("KurulumPage — 3. adım: ders yılı ve kapalı günler", () => {
     const user = userEvent.setup();
     renderPage();
     expect(await screen.findByText("3. Ders Yılı")).toBeInTheDocument();
+    expect(screen.getByText(DERS_YILI_ACIKLAMASI, { exact: false })).toBeInTheDocument();
+    expect(screen.queryByText(/Şube kataloğu/)).toBeNull();
     expect(ileri("Kurulumu tamamla")).toBeDisabled();
     // Aktif yıl yokken kapalı gün paneli görünmez.
     expect(screen.queryByText(/KAPALI GÜNLER PANELİ/)).toBeNull();
@@ -816,10 +883,7 @@ describe("KurulumPage — uçtan uca", () => {
 
     // 2. adım
     expect(await screen.findByText("2. Okul Bilgileri")).toBeInTheDocument();
-    await user.type(screen.getByLabelText(/Okul adı/), "Deneme Anadolu Lisesi");
-    await user.type(screen.getByLabelText(/Kısa ad/), "Deneme AL");
-    await user.selectOptions(screen.getByLabelText(/Kademe/), "ORTAOGRETIM");
-    await user.click(screen.getByRole("checkbox", { name: /Bu bilgisayar okul demirbaşıdır/ }));
+    await okulAdiminiDoldur(user);
     await user.click(ileri("Kaydet ve devam et"));
 
     // 3. adım

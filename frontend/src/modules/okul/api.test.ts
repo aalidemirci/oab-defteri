@@ -1,4 +1,5 @@
-// `okul` API katmanı — kapalı gün, kişi ayrılışı/birleştirme ve aktarım uçları.
+// `okul` API katmanı — kapalı gün, kişi ayrılışı/birleştirme, aktarım ve okul kartı uçları;
+// okul kartının seçenek adları (`*_TR`, backend enum etiketleriyle birebir).
 // Backend `apps/okul/urls.py` ile yol ve gövde hizası burada pinlenir (sessiz 404 /
 // yanlış yıl süzgeci yakalanır).
 
@@ -19,7 +20,15 @@ vi.mock("../../lib/api", () => ({
   ApiError: class ApiError extends Error {},
 }));
 
-import { HOLIDAY_KIND_TR, MEMBER_KIND_TR, SCHOOL_LEVEL_TR, okulApi } from "./api";
+import {
+  CANTEEN_MODE_TR,
+  HOLIDAY_KIND_TR,
+  MEMBER_KIND_TR,
+  SCHOOL_LEVEL_TR,
+  SETTLEMENT_TYPE_TR,
+  STAFFING_MODE_TR,
+  okulApi,
+} from "./api";
 
 afterEach(() => vi.clearAllMocks());
 
@@ -127,16 +136,57 @@ describe("okulApi — kurulum ve başlangıç yol haritası", () => {
     expect(apiMock.post).toHaveBeenLastCalledWith("/setup/roadmap/", { hidden: true });
   });
 
+  it("updateSchoolConfig → PUT /setup/school-config/ okul kartının yeni alanlarıyla", async () => {
+    const govde = {
+      institution_code: "123456",
+      levels: ["ILKOKUL" as const, "ORTAOKUL" as const],
+      student_count: 480,
+      student_count_as_of: "2026-10-01",
+      settlement_type: "DIGER" as const,
+      canteen_mode: "KANTIN_YOK" as const,
+      staffing_mode: "HIZMET_ALIMI" as const,
+      in_campus: true,
+      opened_on: null,
+    };
+    await okulApi.updateSchoolConfig(govde);
+    expect(apiMock.put).toHaveBeenLastCalledWith("/setup/school-config/", govde);
+  });
+
   it("completeSetup → POST /setup/complete/", async () => {
     await okulApi.completeSetup();
     expect(apiMock.post).toHaveBeenLastCalledWith("/setup/complete/");
   });
 
-  it("kademe adları sözlüğe uyar", () => {
+  it("kademe adları sözlüğe uyar; sıra backend `SchoolLevel` sırasıdır", () => {
     expect(SCHOOL_LEVEL_TR).toEqual({
+      OKUL_ONCESI: "Okul öncesi",
       ILKOKUL: "İlkokul",
       ORTAOKUL: "Ortaokul",
       ORTAOGRETIM: "Ortaöğretim (lise)",
+    });
+    expect(Object.keys(SCHOOL_LEVEL_TR)).toEqual([
+      "OKUL_ONCESI",
+      "ILKOKUL",
+      "ORTAOKUL",
+      "ORTAOGRETIM",
+    ]);
+  });
+
+  it("yerleşim türü, kantin ve personel çalıştırma biçimi adları backend etiketleriyle birebir", () => {
+    expect(SETTLEMENT_TYPE_TR).toEqual({
+      BUYUKSEHIR: "Büyükşehir statüsündeki il",
+      IL_MERKEZI_BUYUKSEHIR_DEGIL: "Büyükşehir statüsünde olmayan il merkezi",
+      DIGER: "Büyükşehir statüsünde olmayan ilde, il merkezi dışında",
+    });
+    expect(CANTEEN_MODE_TR).toEqual({
+      KIRAYA_VERILIYOR: "Kiraya veriliyor",
+      BIRLIKCE_ISLETILIYOR: "Birlikçe işletiliyor",
+      KANTIN_YOK: "Kantin ve benzeri yer yok",
+    });
+    expect(STAFFING_MODE_TR).toEqual({
+      DOGRUDAN_ISVEREN: "Birlik doğrudan işveren",
+      HIZMET_ALIMI: "Hizmet alımıyla",
+      CALISTIRMIYOR: "Personel çalıştırmıyor",
     });
   });
 });

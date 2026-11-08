@@ -70,6 +70,7 @@ from apps.okul.tests.hesap_ortak import (
     sarmal,
 )
 from apps.okul.tests.iz_ortak import sahte_satir
+from apps.okul.tests.okul_karti_ortak import okul_karti
 from apps.okul.tests.oturum_ortak import SahteSaat, kurulum_durumunu_yaz, oturum_saatini_kur
 from conftest import (
     KURULUM_IZI,
@@ -425,14 +426,12 @@ def test_kvkk_silme_kumesinin_kisi_alanlari_icerik_macina_girmez(
 
 
 def test_degerlerde_serbest_metin_ve_kisi_adi_yok() -> None:
-    """Kaydın özeti (R1): okul adı, il, ilçe, kısa ad, müdür adı, tanıtıcı değer taşımaz."""
+    """Kaydın özeti (R1): okul adı, il, ilçe, müdür adı, tanıtıcı değer taşımaz."""
     assert not {
         "school_name",
         "province",
         "district",
-        "kisa_ad",
         "principal_name",
-        "kutuphane_saatleri",
         "app_password_hash",
         "yol_haritasi",
     } & set(SchoolConfig.IZ_DEGER_ALANLARI)
@@ -457,12 +456,44 @@ def test_okul_bilgilerinin_metni_yalniz_alan_adiyla_gorunur() -> None:
         fields={
             "school_name": "Uydurma Ortaokulu",
             "principal_name": "Örnek Müdür",
-            "kademe": "ORTAOKUL",
+            "levels": ["ORTAOKUL"],
         }
     )
     satir = son_satir()
-    assert {"school_name", "principal_name", "kademe"} <= set(satir.changed_fields)
-    assert satir.values == {"kademe": ["", "ORTAOKUL"]}
+    assert {"school_name", "principal_name", "levels"} <= set(satir.changed_fields)
+    assert satir.values == {"levels": [[], ["ORTAOKUL"]]}
+
+
+def test_okul_kartinin_kodlu_alanlari_degerleriyle_girer() -> None:
+    """Okul kartının OAB alanları (F1b 4. adım) kişisizdir: kademeler liste, tarihler ISO metni,
+    sayı ve kodlar değeriyle; okul adı, il, ilçe yalnız adıyla. İçerik MAC'i satırı tutar."""
+    setup_service.update_school_config(fields=okul_karti(opened_on=date(2026, 9, 1)))
+    satir = son_satir()
+    assert satir.values == {
+        "institution_code": ["", "999001"],
+        "levels": [[], ["ORTAOGRETIM"]],
+        "student_count": [None, 1234],
+        "student_count_as_of": [None, "2026-10-01"],
+        "settlement_type": ["", "BUYUKSEHIR"],
+        "canteen_mode": ["", "KIRAYA_VERILIYOR"],
+        "staffing_mode": ["", "HIZMET_ALIMI"],
+        "opened_on": [None, "2026-09-01"],
+        "demirbas_onayi": [False, True],
+        "demirbas_no": ["", "BLG-2026-017"],
+    }
+    assert {"school_name", "province", "district"} <= set(satir.changed_fields)
+    assert satir.record_mac == denetim_izi.kayit_mac_hesapla(SchoolConfig, 1)
+    assert denetim_izi.kaydi_dogrula(SchoolConfig, 1) is True
+
+    setup_service.update_school_config(
+        fields={"levels": ["ILKOKUL", "ORTAOKUL"], "in_campus": True}
+    )
+    satir = son_satir()
+    assert satir.values == {
+        "levels": [["ORTAOGRETIM"], ["ILKOKUL", "ORTAOKUL"]],
+        "in_campus": [False, True],
+    }
+    assert denetim_izi.kaydi_dogrula(SchoolConfig, 1) is True
 
 
 def test_program_disindan_degisiklik_icerik_macinda_gorunur() -> None:

@@ -8,6 +8,7 @@ hazırlık bayrağıyla 0). Hatalar Türkçedir (`{code, message, fields}` sözl
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from django.db.models import Model
@@ -17,6 +18,8 @@ from rest_framework.fields import empty
 
 from apps.okul import normalize, selectors
 from apps.okul.models import (
+    STUDENT_COUNT_MAX,
+    CanteenMode,
     ClassSection,
     Holiday,
     HolidayKind,
@@ -26,9 +29,12 @@ from apps.okul.models import (
     SchoolLevel,
     SchoolTerm,
     SchoolYear,
+    SettlementType,
+    StaffingMode,
     Student,
 )
 from apps.okul.services import calendar as calendar_service
+from apps.okul.services import setup as setup_service
 from shared import crypto
 
 
@@ -74,30 +80,110 @@ def _validate_level(value: int) -> int:
     return value
 
 
-class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
-    """Kurum künyesi — sihirbaz ve Okul Bilgileri ekranının ortak sözleşmesi.
+#: Okul kartının iletileri — ön yüzle BİREBİR aynıdır (`frontend/src/modules/okul/okulBilgileri.ts`).
+OKUL_ADI_ZORUNLU = "Okul adı zorunludur."
+IL_ZORUNLU = "İl zorunludur."
+ILCE_ZORUNLU = "İlçe zorunludur."
+KURUM_KODU_ZORUNLU = "Kurum kodu zorunludur."
+KURUM_KODU_GECERSIZ = "Kurum kodu altı haneli bir sayıdır."
+KADEME_ZORUNLU = "En az bir kademe seçin."
+KADEME_GECERSIZ = "Geçerli bir kademe seçin."
+MEVCUT_ZORUNLU = "Öğrenci mevcudu zorunludur."
+MEVCUT_GECERSIZ = "Öğrenci mevcudu 0 ile 99999 arasında bir tam sayıdır."
+MEVCUT_TARIHI_ZORUNLU = "Mevcudun tarihi zorunludur."
+MEVCUT_TARIHI_GELECEKTE = "Mevcudun tarihi bugünden sonra olamaz."
+YERLESIM_ZORUNLU = "Yerleşim türünü seçin."
+KANTIN_ZORUNLU = "Kantin işletme biçimini seçin."
+PERSONEL_ZORUNLU = "Personel çalıştırma biçimini seçin."
+SECENEK_GECERSIZ = "Geçerli bir seçenek seçin."
+TARIH_GECERSIZ = "Geçerli bir tarih girin."
+DEMIRBAS_ONAYI_ZORUNLU = "Program yalnız okul demirbaşı bilgisayara kurulur; onay zorunludur."
 
-    Okul adı, kademe, kısa ad ve demirbaş onayı kurulumun ikinci adımında
-    ZORUNLUDUR (`setup/complete/` kapısı: `services.setup.missing_school_fields`).
-    Aynı zorunluluk burada da uygulanır, ama yalnız alan gövdede VARSA: kısmi
-    PUT gönderilmeyen alana dokunmaz (künyeyi silmez), gönderilen zorunlu alan
-    ise boşaltılamaz. Aksi hâlde kurulum bittikten sonra Okul Bilgileri
-    ekranından kademe ya da demirbaş beyanı sessizce geri alınabilirdi
-    (tamamlanmış ama okul adımı eksik kurulum). İletiler sihirbazın istemci
-    denetimiyle aynıdır (`frontend/src/modules/okul/okulBilgileri.ts`).
+
+class _Kademeler(serializers.Field):  # type: ignore[type-arg]  # değer listesi; Any davranışı
+    """`levels`: `SchoolLevel` değerlerinin listesi — tekrarlar atılır, `SchoolLevel` sırasına dizilir.
+
+    Liste olmayan değer (null dahil) ya da tanınmayan eleman `KADEME_GECERSIZ`, boş liste
+    `KADEME_ZORUNLU` alır. Normalleştirme sessizdir (ön yüz de kanonik sırayla gönderir).
     """
 
-    kademe = serializers.ChoiceField(
-        choices=SchoolLevel.choices,
+    default_error_messages = {"invalid": KADEME_GECERSIZ, "empty": KADEME_ZORUNLU}
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("error_messages", {}).setdefault("null", KADEME_GECERSIZ)
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data: Any) -> list[str]:
+        if not isinstance(data, list) or any(
+            not isinstance(deger, str) or deger not in SchoolLevel.values for deger in data
+        ):
+            self.fail("invalid")
+        if not data:
+            self.fail("empty")
+        return setup_service.normalize_levels(data)
+
+    def to_representation(self, value: Any) -> list[str]:
+        return list(value) if isinstance(value, list) else []
+
+
+def _secenek(choices: Any, bos_iletisi: str) -> serializers.ChoiceField:
+    """Okul kartının enum alanı: boş ve null `bos_iletisi`, tanınmayan değer `SECENEK_GECERSIZ`."""
+    return serializers.ChoiceField(
+        choices=choices,
         required=False,
         allow_blank=True,
-        error_messages={"invalid_choice": "Geçerli bir kademe seçin."},
+        error_messages={"invalid_choice": SECENEK_GECERSIZ, "null": bos_iletisi},
     )
-    kisa_ad = serializers.CharField(
-        max_length=24,
+
+
+class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
+    """Okul kartı — sihirbazın 2. adımı ve Ayarlar → Okul Bilgileri'nin ortak sözleşmesi.
+
+    Okul adı, il, ilçe, kurum kodu, en az bir kademe, öğrenci mevcudu ve tarihi, yerleşim
+    türü, kantin ve personel çalıştırma biçimi ve demirbaş onayı kurulumun ikinci adımında
+    ZORUNLUDUR (`setup/complete/` kapısı: `services.setup.missing_school_fields`; plan F1b-4
+    kararları). Aynı zorunluluk burada da uygulanır, ama yalnız alan gövdede VARSA: kısmi
+    PUT gönderilmeyen alana dokunmaz (künyeyi silmez), gönderilen zorunlu alan ise
+    boşaltılamaz (aile kuralı, tasarım §5.1). Aksi hâlde kurulum bittikten sonra Okul
+    Bilgileri ekranından bir zorunlu alan sessizce geri alınabilirdi (tamamlanmış ama okul
+    adımı eksik kurulum). Müdür adı, kampüs işareti ve açılış tarihi isteğe bağlıdır; açılış
+    tarihi boşaltılabilir.
+
+    Öğrenci mevcudu ile tarihi birlikte gönderilir (DB kısıtı da ikisini birlikte ister);
+    biri gövdede öteki yoksa eksik olanın "zorunludur" iletisi döner. Mevcudun tarihi
+    bugünden (Europe/Istanbul) sonra olamaz. Metin alanları kırpılarak kaydedilir. Kaldırılan
+    `has_prep_class`, `kademe` ve `kisa_ad` gövdede gelirse yok sayılır.
+
+    İletiler sihirbazın istemci denetimiyle BİREBİR aynıdır
+    (`frontend/src/modules/okul/okulBilgileri.ts`).
+    """
+
+    institution_code = serializers.CharField(
         required=False,
         allow_blank=True,
-        error_messages={"max_length": "Kısa ad en çok 24 karakter olabilir."},
+        error_messages={"invalid": KURUM_KODU_GECERSIZ, "null": KURUM_KODU_ZORUNLU},
+    )
+    levels = _Kademeler(required=False)
+    student_count = serializers.IntegerField(
+        required=False,
+        min_value=0,
+        max_value=STUDENT_COUNT_MAX,
+        error_messages={
+            "invalid": MEVCUT_GECERSIZ,
+            "min_value": MEVCUT_GECERSIZ,
+            "max_value": MEVCUT_GECERSIZ,
+            "max_string_length": MEVCUT_GECERSIZ,
+            "null": MEVCUT_ZORUNLU,
+        },
+    )
+    student_count_as_of = serializers.DateField(
+        required=False, error_messages={"invalid": TARIH_GECERSIZ, "null": MEVCUT_TARIHI_ZORUNLU}
+    )
+    settlement_type = _secenek(SettlementType.choices, YERLESIM_ZORUNLU)
+    canteen_mode = _secenek(CanteenMode.choices, KANTIN_ZORUNLU)
+    staffing_mode = _secenek(StaffingMode.choices, PERSONEL_ZORUNLU)
+    opened_on = serializers.DateField(
+        required=False, allow_null=True, error_messages={"invalid": TARIH_GECERSIZ}
     )
     demirbas_no = serializers.CharField(
         max_length=64,
@@ -113,9 +199,15 @@ class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
             "province",
             "district",
             "principal_name",
-            "has_prep_class",
-            "kademe",
-            "kisa_ad",
+            "institution_code",
+            "levels",
+            "student_count",
+            "student_count_as_of",
+            "settlement_type",
+            "canteen_mode",
+            "staffing_mode",
+            "in_campus",
+            "opened_on",
             "demirbas_onayi",
             "demirbas_no",
             "setup_completed",
@@ -124,24 +216,58 @@ class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
 
     def validate_school_name(self, value: str) -> str:
         if not value.strip():
-            raise serializers.ValidationError("Okul adı zorunludur.")
+            raise serializers.ValidationError(OKUL_ADI_ZORUNLU)
         return value
 
-    def validate_kademe(self, value: str) -> str:
-        if not value:
-            raise serializers.ValidationError("Kademe seçin.")
-        return value
-
-    def validate_kisa_ad(self, value: str) -> str:
+    def validate_province(self, value: str) -> str:
         if not value.strip():
-            raise serializers.ValidationError("Kısa ad zorunludur.")
+            raise serializers.ValidationError(IL_ZORUNLU)
         return value
+
+    def validate_district(self, value: str) -> str:
+        if not value.strip():
+            raise serializers.ValidationError(ILCE_ZORUNLU)
+        return value
+
+    def validate_institution_code(self, value: str) -> str:
+        if not value:
+            raise serializers.ValidationError(KURUM_KODU_ZORUNLU)
+        if not setup_service.institution_code_valid(value):
+            raise serializers.ValidationError(KURUM_KODU_GECERSIZ)
+        return value
+
+    def validate_student_count_as_of(self, value: date) -> date:
+        if value > timezone.localdate():
+            raise serializers.ValidationError(MEVCUT_TARIHI_GELECEKTE)
+        return value
+
+    def validate_settlement_type(self, value: str) -> str:
+        if not value:
+            raise serializers.ValidationError(YERLESIM_ZORUNLU)
+        return value
+
+    def validate_canteen_mode(self, value: str) -> str:
+        if not value:
+            raise serializers.ValidationError(KANTIN_ZORUNLU)
+        return value
+
+    def validate_staffing_mode(self, value: str) -> str:
+        if not value:
+            raise serializers.ValidationError(PERSONEL_ZORUNLU)
+        return value
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        """Mevcut ile tarihi birlikte gelir: biri gövdedeyse öteki de olmalı (sınıf yorumu)."""
+        sayi_var, tarih_var = "student_count" in attrs, "student_count_as_of" in attrs
+        if sayi_var and not tarih_var:
+            raise serializers.ValidationError({"student_count_as_of": [MEVCUT_TARIHI_ZORUNLU]})
+        if tarih_var and not sayi_var:
+            raise serializers.ValidationError({"student_count": [MEVCUT_ZORUNLU]})
+        return attrs
 
     def validate_demirbas_onayi(self, value: bool) -> bool:
         if not value:
-            raise serializers.ValidationError(
-                "Program yalnız okul demirbaşı bilgisayara kurulur; onay zorunludur."
-            )
+            raise serializers.ValidationError(DEMIRBAS_ONAYI_ZORUNLU)
         return value
 
 

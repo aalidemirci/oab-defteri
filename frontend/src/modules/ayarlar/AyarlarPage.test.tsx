@@ -1,5 +1,5 @@
 // AyarlarPage testi: ders yılları + kapalı günler + şube kataloğu + okul bilgileri
-// (hazırlık sınıfı dahil) + güvenlik sekmesinin varlığı. Güvenlik ve kapalı gün
+// (okul kartı; alanların kendisi `okul/OkulKartiAlanlari.test`te) + güvenlik sekmesinin varlığı. Güvenlik ve kapalı gün
 // panellerinin kendi davranışı modules/guvenlik ve modules/takvim testlerinde;
 // burada yalnız sekme kablolaması doğrulanır.
 // Kaldırılan sekmeler (ders saatleri, zümreler, şube kümeleri) ve okul türü/
@@ -12,8 +12,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../lib/api";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
+import { ORNEK_OKUL_KARTI } from "../../test/okulKarti";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import type { ClassSection, SchoolTerm, SchoolYear } from "../okul/api";
+import { OKUL_KARTI_ACIKLAMASI } from "../okul/metinler";
 
 const oapi = vi.hoisted(() => ({
   getSetupStatus: vi.fn(),
@@ -105,18 +107,7 @@ beforeEach(() => {
     skipped: 0,
     religious_available: true,
   });
-  oapi.getSchoolConfig.mockResolvedValue({
-    school_name: "Örnek Anadolu Lisesi",
-    province: "İstanbul",
-    district: "Örnek",
-    principal_name: "",
-    has_prep_class: false,
-    kademe: "ORTAOGRETIM",
-    kisa_ad: "Örnek AL",
-    demirbas_onayi: true,
-    demirbas_no: "",
-    setup_completed: true,
-  });
+  oapi.getSchoolConfig.mockResolvedValue(ORNEK_OKUL_KARTI);
   oapi.getGradeLevels.mockResolvedValue({
     levels: [
       { value: 9, label: "9" },
@@ -314,31 +305,38 @@ describe("AyarlarPage — şubeler", () => {
 });
 
 describe("AyarlarPage — okul bilgileri", () => {
-  it("künyeyi yükler ve kaydedince künyeyi, hazırlık bayrağını, kademeyi ve demirbaşı gönderir", async () => {
+  it("okul kartını yükler ve kaydedince bütün alanları gövdeyle gönderir", async () => {
     oapi.updateSchoolConfig.mockResolvedValue({});
     const user = userEvent.setup();
     renderPage();
 
     await user.click(await screen.findByRole("tab", { name: /Okul Bilgileri/ }));
     expect(await screen.findByLabelText(/Okul adı/)).toHaveValue("Örnek Anadolu Lisesi");
-    // Kaldırılan alanlar formda yoktur (API sözleşmesi, F0 temizliği).
-    for (const etiket of [/Okul türü/, /ders saati/i, /ayrışma/i]) {
+    // Kaldırılan alanlar formda yoktur (API sözleşmesi, F0 temizliği, F1b 4. adım).
+    for (const etiket of [/Okul türü/, /ders saati/i, /ayrışma/i, /Kısa ad/, /Hazırlık/]) {
       expect(screen.queryByLabelText(etiket)).toBeNull();
     }
-    expect(screen.queryByText(/çizelge/i)).toBeNull();
+    expect(screen.queryByText(/çizelge|Hazırlık/i)).toBeNull();
 
-    await user.selectOptions(screen.getByLabelText("Hazırlık sınıfı"), "1");
+    await user.click(screen.getByRole("checkbox", { name: "Ortaokul" }));
+    await user.click(screen.getByRole("radio", { name: "Hizmet alımıyla" }));
     await user.click(screen.getByRole("button", { name: "Kaydet" }));
 
     await waitFor(() =>
       expect(oapi.updateSchoolConfig).toHaveBeenCalledWith({
         school_name: "Örnek Anadolu Lisesi",
         province: "İstanbul",
-        district: "Örnek",
+        district: "Örnek İlçe",
         principal_name: "",
-        has_prep_class: true,
-        kademe: "ORTAOGRETIM",
-        kisa_ad: "Örnek AL",
+        institution_code: "123456",
+        levels: ["ORTAOKUL", "ORTAOGRETIM"],
+        student_count: 1234,
+        student_count_as_of: "2026-10-01",
+        settlement_type: "BUYUKSEHIR",
+        canteen_mode: "KIRAYA_VERILIYOR",
+        staffing_mode: "HIZMET_ALIMI",
+        in_campus: false,
+        opened_on: null,
         demirbas_onayi: true,
         demirbas_no: "",
       }),
@@ -346,27 +344,28 @@ describe("AyarlarPage — okul bilgileri", () => {
     expect(await screen.findByText("Okul bilgileri kaydedildi.")).toBeInTheDocument();
   });
 
-  it("kademe, kısa ad ve bilgisayarın demirbaş no'su düzenlenir", async () => {
+  it("mevcut, kurum kodu ve bilgisayarın demirbaş no'su düzenlenir", async () => {
     oapi.updateSchoolConfig.mockResolvedValue({});
     const user = userEvent.setup();
     renderPage();
 
     await user.click(await screen.findByRole("tab", { name: /Okul Bilgileri/ }));
-    expect(await screen.findByLabelText(/^Kademe/)).toHaveValue("ORTAOGRETIM");
-    expect(screen.getByLabelText(/^Kısa ad/)).toHaveValue("Örnek AL");
+    expect(await screen.findByLabelText(/^Öğrenci mevcudu/)).toHaveValue("1234");
+    expect(screen.getByRole("checkbox", { name: "Ortaöğretim (lise)" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: /Bu bilgisayar okul demirbaşıdır/ })).toBeChecked();
 
-    await user.selectOptions(screen.getByLabelText(/^Kademe/), "ORTAOKUL");
-    await user.clear(screen.getByLabelText(/^Kısa ad/));
-    await user.type(screen.getByLabelText(/^Kısa ad/), "Örnek OO");
+    await user.clear(screen.getByLabelText(/^Öğrenci mevcudu/));
+    await user.type(screen.getByLabelText(/^Öğrenci mevcudu/), " 1.250 ");
+    await user.clear(screen.getByLabelText(/^Kurum kodu/));
+    await user.type(screen.getByLabelText(/^Kurum kodu/), "654321");
     await user.type(screen.getByLabelText("Bilgisayarın demirbaş no'su"), "BLG-17");
     await user.click(screen.getByRole("button", { name: "Kaydet" }));
 
     await waitFor(() =>
       expect(oapi.updateSchoolConfig).toHaveBeenCalledWith(
         expect.objectContaining({
-          kademe: "ORTAOKUL",
-          kisa_ad: "Örnek OO",
+          institution_code: "654321",
+          student_count: 1250,
           demirbas_onayi: true,
           demirbas_no: "BLG-17",
         }),
@@ -374,14 +373,13 @@ describe("AyarlarPage — okul bilgileri", () => {
     );
   });
 
-  it("okul bilgileri metni yalnız evrak antedini anar; etiket ve üye kartı yoktur", async () => {
+  it("açıklama okul kartının kullanıldığı yerleri söyler; etiket ve üye kartı yoktur", async () => {
     const user = userEvent.setup();
     renderPage();
 
     await user.click(await screen.findByRole("tab", { name: /Okul Bilgileri/ }));
-    await screen.findByLabelText(/^Kısa ad/);
-    expect(screen.getByText(/evrakın antedi bu bilgilerden üretilir/)).toBeInTheDocument();
-    expect(screen.getByText("En çok 24 karakter.")).toBeInTheDocument();
+    await screen.findByLabelText(/^Kurum kodu/);
+    expect(screen.getByText(OKUL_KARTI_ACIKLAMASI)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/etiket|üye kart/i);
   });
 
@@ -390,44 +388,45 @@ describe("AyarlarPage — okul bilgileri", () => {
     renderPage();
 
     await user.click(await screen.findByRole("tab", { name: /Okul Bilgileri/ }));
-    const kademe = await screen.findByLabelText(/^Kademe/);
-    // Kayıtlı kademe varken boş seçenek sunulmaz.
-    expect(within(kademe).queryByRole("option", { name: "Seçin" })).toBeNull();
-
-    await user.clear(screen.getByLabelText(/^Kısa ad/));
+    await user.clear(await screen.findByLabelText(/^Kurum kodu/));
+    await user.click(screen.getByRole("checkbox", { name: "Ortaöğretim (lise)" }));
+    await user.clear(screen.getByLabelText(/^Öğrenci mevcudu/));
     await user.click(screen.getByRole("checkbox", { name: /Bu bilgisayar okul demirbaşıdır/ }));
     await user.click(screen.getByRole("button", { name: "Kaydet" }));
 
     expect(await screen.findByText("Zorunlu alanları doldurun.")).toBeInTheDocument();
-    expect(screen.getByText("Kısa ad zorunludur.")).toBeInTheDocument();
+    expect(screen.getByText("Kurum kodu zorunludur.")).toBeInTheDocument();
+    expect(screen.getByText("En az bir kademe seçin.")).toBeInTheDocument();
+    expect(screen.getByText("Öğrenci mevcudu zorunludur.")).toBeInTheDocument();
     expect(
       screen.getByText("Program yalnız okul demirbaşı bilgisayara kurulur; onay zorunludur."),
     ).toBeInTheDocument();
     expect(oapi.updateSchoolConfig).not.toHaveBeenCalled();
   });
 
-  it("kademe hiç kaydedilmemişse seçici boş seçenekle açılır", async () => {
+  it("F1b 4. adımdan önce kurulmuş programda yeni alanlar boş gelir; seçilmeden kaydedilmez", async () => {
     oapi.getSchoolConfig.mockResolvedValue({
-      school_name: "Örnek Anadolu Lisesi",
-      province: "",
-      district: "",
-      principal_name: "",
-      has_prep_class: false,
-      kademe: "",
-      kisa_ad: "",
-      demirbas_onayi: false,
-      demirbas_no: "",
-      setup_completed: false,
+      ...ORNEK_OKUL_KARTI,
+      institution_code: "",
+      levels: [],
+      student_count: null,
+      student_count_as_of: null,
+      settlement_type: "",
+      canteen_mode: "",
+      staffing_mode: "",
     });
     const user = userEvent.setup();
     renderPage();
 
     await user.click(await screen.findByRole("tab", { name: /Okul Bilgileri/ }));
-    const kademe = await screen.findByLabelText(/^Kademe/);
-    expect(kademe).toHaveValue("");
-    expect(within(kademe).getByRole("option", { name: "Seçin" })).toBeInTheDocument();
+    const yerlesim = await screen.findByRole("group", { name: /^Yerleşim türü/ });
+    for (const radyo of within(yerlesim).getAllByRole("radio")) expect(radyo).not.toBeChecked();
+    // Mevcudun tarihi kayıtta yoksa form bugünü önerir.
+    expect(screen.getByLabelText(/^Mevcudun tarihi/)).not.toHaveValue("");
     await user.click(screen.getByRole("button", { name: "Kaydet" }));
-    expect(await screen.findByText("Kademe seçin.")).toBeInTheDocument();
+    expect(await screen.findByText("Yerleşim türünü seçin.")).toBeInTheDocument();
+    expect(screen.getByText("Kantin işletme biçimini seçin.")).toBeInTheDocument();
+    expect(screen.getByText("Personel çalıştırma biçimini seçin.")).toBeInTheDocument();
     expect(oapi.updateSchoolConfig).not.toHaveBeenCalled();
   });
 
@@ -445,20 +444,23 @@ describe("AyarlarPage — okul bilgileri", () => {
     expect(await screen.findByText("Kayıt yazılamadı.")).toBeInTheDocument();
   });
 
-  it("alan hatası ilgili alanın altına yazılır", async () => {
+  it("sunucunun alan hatası ilgili alanın altına yazılır", async () => {
     oapi.updateSchoolConfig.mockRejectedValue(
       new ApiError(400, "validation_error", "Girdiğiniz bilgileri kontrol edin.", {
-        school_name: ["Okul adı zorunludur."],
+        institution_code: ["Kurum kodu altı haneli bir sayıdır."],
       }),
     );
     const user = userEvent.setup();
     renderPage();
 
     await user.click(await screen.findByRole("tab", { name: /Okul Bilgileri/ }));
-    await user.clear(await screen.findByLabelText(/Okul adı/));
+    await screen.findByLabelText(/Okul adı/);
     await user.click(screen.getByRole("button", { name: "Kaydet" }));
 
-    expect(await screen.findByText("Okul adı zorunludur.")).toBeInTheDocument();
+    expect(await screen.findByText("Kurum kodu altı haneli bir sayıdır.")).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Kurum kodu/)).toHaveAccessibleDescription(
+      "Kurum kodu altı haneli bir sayıdır.",
+    );
   });
 });
 
@@ -618,9 +620,13 @@ describe("AyarlarPage — rol süzmesi (okul sekmeleri öteki rollerde salt okur
     expect(await screen.findByText("Örnek Anadolu Lisesi")).toBeInTheDocument();
     expect(screen.getByRole("note")).toHaveTextContent(SALT_OKUR);
     expect(screen.getByText("Ortaöğretim (lise)")).toBeInTheDocument();
-    expect(screen.getByText("Örnek AL")).toBeInTheDocument();
+    expect(screen.getByText("123456")).toBeInTheDocument();
+    expect(screen.getByText("1.234 · 01.10.2026 itibarıyla")).toBeInTheDocument();
+    expect(screen.getByText("Kiraya veriliyor")).toBeInTheDocument();
+    expect(screen.queryByText("Örnek AL")).toBeNull();
     expect(screen.getByText("Bu bilgisayar okul demirbaşıdır.")).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByRole("radio")).toBeNull();
     expect(screen.queryByRole("button", { name: "Kaydet" })).toBeNull();
     expect(oapi.updateSchoolConfig).not.toHaveBeenCalled();
   });

@@ -13,9 +13,13 @@
 //      Anahtar ekranda değilken (pencere kapandı, program çöktü, Kilitle'ye basıldı)
 //      adım iki yol sunar: kâğıttaki anahtarı yazıp doğrulamak ya da hesabın
 //      parolasıyla YENİ anahtar üretmek (eski anahtar geçersizleşir, kayıtlar değişmez).
-//   2. Okul bilgileri — okul adı, il, ilçe, müdür, hazırlık sınıfı, kademe, kısa
-//      ad, "bu bilgisayar okul demirbaşıdır" onayı (zorunlu) ve demirbaş no.
-//   3. Ders yılı, dönemler ve kapalı günler — ders yılı kaydedilip aktifleşince
+//   2. Okul bilgileri (okul kartı; F1b 4. adım) — okul adı, il, ilçe, müdür, kurum
+//      kodu, kademeler, öğrenci mevcudu ve tarihi, yerleşim türü, kantin ve personel
+//      çalıştırma biçimi, eğitim kampüsü, yeni okulun açılış tarihi, "bu bilgisayar
+//      okul demirbaşıdır" onayı ve demirbaş no. Alanlar Ayarlar → Okul Bilgileri ile
+//      ORTAKTIR (`okul/OkulKartiAlanlari`); zorunlu alan kuralı `okul/okulBilgileri`.
+//   3. Ders yılı, dönemler ve kapalı günler — dönemler dönemlik gelir-gider duyurusunun
+//      ve kantinde yarıyıl ayının takvimidir; ders yılı kaydedilip aktifleşince
 //      iki takvim yılının resmî ve dini tatilleri eklenir; ara tatil ve yarıyıl
 //      Kapalı Günler panelinden (Ayarlar'daki bileşenin aynısı) girilir.
 // Kişi aktarımı sihirbazda değildir: Genel Bakış'taki "Başlangıç Yol Haritası"
@@ -40,7 +44,6 @@ import { formatDate } from "../../lib/format";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import Icon from "../../ui/Icon";
-import Select from "../../ui/Select";
 import { SkeletonList } from "../../ui/Skeleton";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import Stepper from "../../ui/Stepper";
@@ -65,10 +68,17 @@ import {
   KURMA_UYARISI,
   YENILEME_METNI,
 } from "../guvenlik/metinler";
-import DemirbasAlanlari from "../okul/DemirbasAlanlari";
-import { KISA_AD_EN_COK, SCHOOL_LEVEL_TR, SETUP_STEPS, okulApi } from "../okul/api";
-import type { SchoolLevel, SchoolYear, SetupStatus, SetupStep } from "../okul/api";
-import { okulBilgileriHatalari } from "../okul/okulBilgileri";
+import OkulKartiAlanlari from "../okul/OkulKartiAlanlari";
+import { SETUP_STEPS, okulApi } from "../okul/api";
+import type { SchoolYear, SetupStatus, SetupStep } from "../okul/api";
+import { DERS_YILI_ACIKLAMASI, OKUL_KARTI_ACIKLAMASI } from "../okul/metinler";
+import {
+  bosOkulFormu,
+  formdanGovdeye,
+  kayittanForma,
+  okulBilgileriHatalari,
+} from "../okul/okulBilgileri";
+import type { OkulFormu } from "../okul/okulBilgileri";
 import YeniParolaAlanlari from "../oturum/YeniParolaAlanlari";
 import { ilkHesabiKur } from "../oturum/eylemler";
 import {
@@ -126,31 +136,6 @@ function ilkEksikAdim(s: SetupStatus): number {
   return ilk === -1 ? SON_ADIM : ilk;
 }
 
-/** Okul adımının form değerleri (sihirbaz kabuğunda tutulur: "Kaydet ve devam et" oradadır). */
-interface OkulFormu {
-  okulAdi: string;
-  il: string;
-  ilce: string;
-  mudur: string;
-  hazirlikVar: boolean;
-  kademe: SchoolLevel | "";
-  kisaAd: string;
-  demirbasOnayi: boolean;
-  demirbasNo: string;
-}
-
-const BOS_OKUL_FORMU: OkulFormu = {
-  okulAdi: "",
-  il: "",
-  ilce: "",
-  mudur: "",
-  hazirlikVar: false,
-  kademe: "",
-  kisaAd: "",
-  demirbasOnayi: false,
-  demirbasNo: "",
-};
-
 export default function KurulumPage() {
   const navigate = useNavigate();
   const snackbar = useSnackbar();
@@ -162,7 +147,8 @@ export default function KurulumPage() {
   const [adim, setAdim] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [okul, setOkul] = useState<OkulFormu>(BOS_OKUL_FORMU);
+  // Okul adımının form değerleri sihirbaz kabuğunda tutulur ("Kaydet ve devam et" oradadır).
+  const [okul, setOkul] = useState<OkulFormu>(bosOkulFormu);
 
   // Hesap kurulur kurulmaz (ya da anahtar yenilenince) gelen kurtarma anahtarı
   // YALNIZ bellekte, 1. adımda durur; kullanıcı doğrulayıp devam edince bırakılır
@@ -202,17 +188,7 @@ export default function KurulumPage() {
         // Hesap kurulu değilse bekleyen anahtarın karşılığı yoktur (ör. güvenlik
         // dosyası sıfırlandı); anahtar sunucuda doğrulandıysa bellekte tutulmaz.
         if (!s.password_set || s.recovery_key_confirmed) bekleyenKurtarmaAnahtariniYaz(null);
-        setOkul({
-          okulAdi: c.school_name,
-          il: c.province,
-          ilce: c.district,
-          mudur: c.principal_name,
-          hazirlikVar: c.has_prep_class,
-          kademe: c.kademe,
-          kisaAd: c.kisa_ad,
-          demirbasOnayi: c.demirbas_onayi,
-          demirbasNo: c.demirbas_no,
-        });
+        setOkul(kayittanForma(c));
         // Doğrulanmamış anahtar bekliyorsa sihirbaz 1. adımda, anahtarla açılır.
         setAdim(bekleyenKurtarmaAnahtari() !== null ? 0 : ilkEksikAdim(s));
         setLoadError(null);
@@ -316,17 +292,7 @@ export default function KurulumPage() {
     setBusy(true);
     setAdimHatasi(null);
     try {
-      await okulApi.updateSchoolConfig({
-        school_name: okul.okulAdi.trim(),
-        province: okul.il.trim(),
-        district: okul.ilce.trim(),
-        principal_name: okul.mudur.trim(),
-        has_prep_class: okul.hazirlikVar,
-        kademe: okul.kademe,
-        kisa_ad: okul.kisaAd.trim(),
-        demirbas_onayi: okul.demirbasOnayi,
-        demirbas_no: okul.demirbasNo.trim(),
-      });
+      await okulApi.updateSchoolConfig(formdanGovdeye(okul));
       snackbar.success("Okul bilgileri kaydedildi.");
       await durumTazele();
       setAdim(2);
@@ -686,7 +652,7 @@ function HesapAdimi({
 }
 
 // ---------------------------------------------------------------------------
-// 2. adım — Okul bilgileri (antet, hazırlık, kademe, kısa ad, demirbaş)
+// 2. adım — Okul bilgileri (okul kartı: antet, OAB alanları, demirbaş)
 // ---------------------------------------------------------------------------
 
 interface OkulBilgileriProps {
@@ -695,88 +661,14 @@ interface OkulBilgileriProps {
   onChange: (degisiklik: Partial<OkulFormu>) => void;
 }
 
-const KADEME_SECENEKLERI = (Object.keys(SCHOOL_LEVEL_TR) as SchoolLevel[]).map((k) => ({
-  value: k,
-  label: SCHOOL_LEVEL_TR[k],
-}));
-
 function OkulBilgileriAdimi({ form, errors, onChange }: OkulBilgileriProps) {
   return (
     <Card elevation={1} className="p-6">
       <p className="text-title-medium text-on-surface">2. Okul Bilgileri</p>
-      <p className="mt-1 text-body-medium text-on-surface-variant">
-        Bu bilgiler programın bastığı evrakın antedinde kullanılır. Hazırlık sınıfı varsa sınıf
-        düzeylerine Hazırlık eklenir.
-      </p>
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <TextField
-          className="sm:col-span-2"
-          label="Okul adı"
-          required
-          value={form.okulAdi}
-          onChange={(e) => onChange({ okulAdi: e.target.value })}
-          error={errors.school_name}
-          placeholder="Örn. Örnek Anadolu Lisesi"
-          helperText="Evrak antedinin ilk satırı."
-        />
-        <TextField
-          label="Kısa ad"
-          required
-          maxLength={KISA_AD_EN_COK}
-          value={form.kisaAd}
-          onChange={(e) => onChange({ kisaAd: e.target.value })}
-          error={errors.kisa_ad}
-          placeholder="Örn. Örnek AL"
-          helperText={`En çok ${KISA_AD_EN_COK} karakter.`}
-        />
-        <Select
-          label="Kademe"
-          required
-          value={form.kademe}
-          onChange={(e) => onChange({ kademe: e.target.value as SchoolLevel | "" })}
-          placeholder="Seçin"
-          options={KADEME_SECENEKLERI}
-          error={errors.kademe}
-        />
-        <TextField
-          label="İl"
-          value={form.il}
-          onChange={(e) => onChange({ il: e.target.value })}
-          error={errors.province}
-        />
-        <TextField
-          label="İlçe"
-          value={form.ilce}
-          onChange={(e) => onChange({ ilce: e.target.value })}
-          error={errors.district}
-        />
-        <TextField
-          label="Okul müdürü"
-          value={form.mudur}
-          onChange={(e) => onChange({ mudur: e.target.value })}
-          error={errors.principal_name}
-          helperText="Evrak imza bloğunda görünür; boş bırakılırsa şablon yer tutucu basar."
-        />
-        <Select
-          label="Hazırlık sınıfı"
-          value={form.hazirlikVar ? "1" : "0"}
-          onChange={(e) => onChange({ hazirlikVar: e.target.value === "1" })}
-          options={[
-            { value: "0", label: "Yok" },
-            { value: "1", label: "Var" },
-          ]}
-          error={errors.has_prep_class}
-          helperText="Varsa sınıf düzeylerine Hazırlık eklenir; yoksa program hazırlık satırı üretmez."
-        />
+      <p className="mt-1 text-body-medium text-on-surface-variant">{OKUL_KARTI_ACIKLAMASI}</p>
+      <div className="mt-4">
+        <OkulKartiAlanlari form={form} errors={errors} onChange={onChange} />
       </div>
-
-      <DemirbasAlanlari
-        onay={form.demirbasOnayi}
-        no={form.demirbasNo}
-        errors={errors}
-        onOnay={(v) => onChange({ demirbasOnayi: v })}
-        onNo={(v) => onChange({ demirbasNo: v })}
-      />
     </Card>
   );
 }
@@ -942,9 +834,8 @@ function DersYiliAdimi({
       <Card elevation={1} className="p-6">
         <p className="text-title-medium text-on-surface">3. Ders Yılı</p>
         <p className="mt-1 text-body-medium text-on-surface-variant">
-          Şube kataloğu ve e-Okul aktarımı aktif ders yılına bağlanır. Aynı anda yalnız bir yıl
-          aktif olabilir; kurulumun tamamlanması için aktif yılın iki döneminin tarihleri tanımlı
-          olmalıdır.
+          {DERS_YILI_ACIKLAMASI} Aynı anda yalnız bir yıl aktif olabilir; kurulumun tamamlanması
+          için aktif yılın iki döneminin tarihleri tanımlı olmalıdır.
         </p>
 
         {loading ? (

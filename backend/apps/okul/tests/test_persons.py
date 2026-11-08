@@ -32,9 +32,8 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.okul.models import MemberKind, Personnel, Student, StudentStatus
+from apps.okul.models import MemberKind, Personnel, SchoolConfig, Student, StudentStatus
 from apps.okul.services import persons
-from apps.okul.services import setup as setup_service
 
 pytestmark = pytest.mark.django_db
 
@@ -508,7 +507,10 @@ def test_api_ogrenci_seviyesi_okul_ici_sabite_karsi_dogrulanir(client: APIClient
 
     # Hazırlık kapalıyken 0 da geçersizdir; açılınca kabul edilir ve etiketi "Hz/…" olur.
     assert client.post(OGRENCI_URL, {**govde, "class_level": 0}, format="json").status_code == 400
-    setup_service.update_school_config(fields={"has_prep_class": True})
+    # Hazırlık bayrağı okul kartından çıktı (alan 5. adımda göçle düşer): test verisi ORM ile.
+    SchoolConfig.objects.update_or_create(
+        pk=SchoolConfig.SINGLETON_PK, defaults={"has_prep_class": True}
+    )
     hazirlik = client.post(OGRENCI_URL, {**govde, "class_level": 0}, format="json")
     assert hazirlik.status_code == 201
     assert hazirlik.json()["class_label"] == "Hz/A"

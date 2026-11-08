@@ -6,6 +6,8 @@ Kişi/şube doğrulamaları kendi test dosyalarındadır (`test_persons`,
 - Serializer alan kümeleri — ön yüz tiplerinin sözleşmesi (anlık görüntü; tipler elle, TK2).
   Aile iskeletinin atasından kaldırılan alanların (zil, vardiya, şube kümesi, zümre, cinsiyet, okul
   türü/çizelge) geri sızması burada yakalanır.
+- `SchoolConfigSerializer` — okul kartının ileti tablosu (F1b 4. adım; plan F1b-4 kararları):
+  her satır ayrı dal, iletiler ön yüzle BİREBİR aynıdır. Uçtan akışlar `test_setup.py`'dedir.
 - `SchoolYearSerializer` — tarih sırası ve ad tekliği.
 - `ImportRequestSerializer` — dosya ile pano metni BİRBİRİNİ DIŞLAR.
 
@@ -14,20 +16,39 @@ Kişisel veri yoktur.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.okul.models import ImportRun, SchoolConfig, SchoolYear
 from apps.okul.serializers import (
+    DEMIRBAS_ONAYI_ZORUNLU,
+    IL_ZORUNLU,
+    ILCE_ZORUNLU,
+    KADEME_GECERSIZ,
+    KADEME_ZORUNLU,
+    KANTIN_ZORUNLU,
+    KURUM_KODU_GECERSIZ,
+    KURUM_KODU_ZORUNLU,
+    MEVCUT_GECERSIZ,
+    MEVCUT_TARIHI_GELECEKTE,
+    MEVCUT_TARIHI_ZORUNLU,
+    MEVCUT_ZORUNLU,
+    OKUL_ADI_ZORUNLU,
+    PERSONEL_ZORUNLU,
+    SECENEK_GECERSIZ,
+    YERLESIM_ZORUNLU,
     ClassSectionSerializer,
     ImportRequestSerializer,
     PersonnelSerializer,
     SchoolConfigSerializer,
     StudentSerializer,
 )
+from apps.okul.tests.okul_karti_ortak import okul_karti_govdesi
 
 pytestmark = pytest.mark.django_db
 
@@ -55,9 +76,15 @@ def client() -> APIClient:
                 "province",
                 "district",
                 "principal_name",
-                "has_prep_class",
-                "kademe",
-                "kisa_ad",
+                "institution_code",
+                "levels",
+                "student_count",
+                "student_count_as_of",
+                "settlement_type",
+                "canteen_mode",
+                "staffing_mode",
+                "in_campus",
+                "opened_on",
                 "demirbas_onayi",
                 "demirbas_no",
                 "setup_completed",
@@ -126,7 +153,127 @@ def test_okul_ayarinda_kaldirilan_alanlar_yok_sayilir(client: APIClient) -> None
     assert yanit.status_code == 200
     assert set(yanit.json()) == set(SchoolConfigSerializer().fields)
     ayar = SchoolConfig.load()
-    assert (ayar.school_name, ayar.has_prep_class) == ("Örnek Okul", True)
+    # `has_prep_class` de okul kartından çıktı (F1b 4. adım): gövdede gelirse yazılmaz.
+    assert (ayar.school_name, ayar.has_prep_class) == ("Örnek Okul", False)
+
+
+# ---------------------------------------------------------------------------
+# Okul kartı: ileti tablosu (tablo satırı başına bir dal)
+# ---------------------------------------------------------------------------
+
+
+def _hatalar(govde: dict[str, Any]) -> dict[str, list[str]]:
+    serializer = SchoolConfigSerializer(data=govde)
+    assert not serializer.is_valid()
+    return {ad: [str(ileti) for ileti in iletiler] for ad, iletiler in serializer.errors.items()}
+
+
+def _yarin() -> str:
+    return (timezone.localdate() + timedelta(days=1)).isoformat()
+
+
+@pytest.mark.parametrize(
+    ("alan", "deger", "ileti"),
+    [
+        ("school_name", "", OKUL_ADI_ZORUNLU),
+        ("school_name", "   ", OKUL_ADI_ZORUNLU),
+        ("province", "", IL_ZORUNLU),
+        ("district", " ", ILCE_ZORUNLU),
+        ("institution_code", "", KURUM_KODU_ZORUNLU),
+        ("institution_code", None, KURUM_KODU_ZORUNLU),
+        ("institution_code", "12345", KURUM_KODU_GECERSIZ),
+        ("institution_code", "1234567", KURUM_KODU_GECERSIZ),
+        ("institution_code", "12a456", KURUM_KODU_GECERSIZ),
+        ("institution_code", "١٢٣٤٥٦", KURUM_KODU_GECERSIZ),
+        ("institution_code", ["999001"], KURUM_KODU_GECERSIZ),
+        ("levels", [], KADEME_ZORUNLU),
+        ("levels", ["UNIVERSITE"], KADEME_GECERSIZ),
+        ("levels", ["ILKOKUL", "KARMA"], KADEME_GECERSIZ),
+        ("levels", [1], KADEME_GECERSIZ),
+        ("levels", "ILKOKUL", KADEME_GECERSIZ),
+        ("levels", None, KADEME_GECERSIZ),
+        ("student_count", None, MEVCUT_ZORUNLU),
+        ("student_count", -1, MEVCUT_GECERSIZ),
+        ("student_count", 100000, MEVCUT_GECERSIZ),
+        ("student_count", 12.5, MEVCUT_GECERSIZ),
+        ("student_count", "çok", MEVCUT_GECERSIZ),
+        ("student_count", True, MEVCUT_GECERSIZ),
+        ("student_count_as_of", None, MEVCUT_TARIHI_ZORUNLU),
+        ("student_count_as_of", "yarın", MEVCUT_TARIHI_GELECEKTE),
+        ("settlement_type", "", YERLESIM_ZORUNLU),
+        ("settlement_type", None, YERLESIM_ZORUNLU),
+        ("settlement_type", "KOY", SECENEK_GECERSIZ),
+        ("canteen_mode", "", KANTIN_ZORUNLU),
+        ("canteen_mode", "KIRALIK", SECENEK_GECERSIZ),
+        ("staffing_mode", "", PERSONEL_ZORUNLU),
+        ("staffing_mode", "TASERON", SECENEK_GECERSIZ),
+        ("demirbas_onayi", False, DEMIRBAS_ONAYI_ZORUNLU),
+    ],
+)
+def test_okul_karti_iletileri(alan: str, deger: object, ileti: str) -> None:
+    """Sözleşmenin ileti tablosu: alan gövdede VARSA uygulanır, ileti yalnız o alandadır.
+
+    ASCII olmayan rakam (Arapça-Hint rakamları) kurum kodu sayılmaz; "yarın" bugünden
+    (Europe/Istanbul) bir gün sonrasının yer tutucusudur.
+    """
+    deger = _yarin() if deger == "yarın" else deger
+    assert _hatalar(okul_karti_govdesi(**{alan: deger})) == {alan: [ileti]}
+
+
+@pytest.mark.parametrize(
+    ("govde", "beklenen"),
+    [
+        ({"student_count": 10}, {"student_count_as_of": [MEVCUT_TARIHI_ZORUNLU]}),
+        ({"student_count_as_of": "2026-10-01"}, {"student_count": [MEVCUT_ZORUNLU]}),
+    ],
+    ids=["tarih_eksik", "mevcut_eksik"],
+)
+def test_mevcut_ve_tarihi_biri_gelirse_eksik_olan_zorunludur(
+    govde: dict[str, Any], beklenen: dict[str, list[str]]
+) -> None:
+    assert _hatalar(govde) == beklenen
+
+
+def test_bos_govde_gecerlidir_ve_hicbir_alan_yazilmaz() -> None:
+    """Kısmi PUT: gövdede olmayan alana dokunulmaz (bütün alanlar `required=False`)."""
+    serializer = SchoolConfigSerializer(data={})
+    assert serializer.is_valid(), serializer.errors
+    assert dict(serializer.validated_data) == {}
+
+
+def test_eksiksiz_kart_gecerlidir_istege_bagli_alanlar_bos_olabilir() -> None:
+    serializer = SchoolConfigSerializer(
+        data=okul_karti_govdesi(principal_name="", in_campus=False, opened_on=None)
+    )
+    assert serializer.is_valid(), serializer.errors
+    assert serializer.validated_data["opened_on"] is None
+
+
+def test_mevcudun_tarihi_bugun_olabilir() -> None:
+    bugun = timezone.localdate().isoformat()
+    serializer = SchoolConfigSerializer(data=okul_karti_govdesi(student_count_as_of=bugun))
+    assert serializer.is_valid(), serializer.errors
+
+
+@pytest.mark.parametrize("sayi", [0, 99999, "250"])
+def test_mevcut_sinirlari_ve_metin_sayi_kabul_edilir(sayi: object) -> None:
+    serializer = SchoolConfigSerializer(data=okul_karti_govdesi(student_count=sayi))
+    assert serializer.is_valid(), serializer.errors
+    assert serializer.validated_data["student_count"] == int(str(sayi))
+
+
+def test_kademeler_normallestirilir() -> None:
+    """Tekrarlar atılır, `SchoolLevel` sırasına dizilir (sessiz normalleştirme)."""
+    serializer = SchoolConfigSerializer(
+        data={"levels": ["ORTAOKUL", "OKUL_ONCESI", "ORTAOKUL", "ILKOKUL", "ORTAOGRETIM"]}
+    )
+    assert serializer.is_valid(), serializer.errors
+    assert serializer.validated_data["levels"] == [
+        "OKUL_ONCESI",
+        "ILKOKUL",
+        "ORTAOKUL",
+        "ORTAOGRETIM",
+    ]
 
 
 # ---------------------------------------------------------------------------

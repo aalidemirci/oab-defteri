@@ -18,8 +18,14 @@ yüzde aynıdır (`SETUP_STEPS`):
    (`app_password.confirm_recovery_key`). Anahtar sunucuda saklanmaz. Damgasız
    tamamlanmış bir kurulum kilitlenmez; yol haritası ve
    Güvenlik ekranı uyarı gösterir (`recovery_key_confirmed`).
-2. `school` — okul adı, kademe, kısa ad ve "bu bilgisayar okul demirbaşıdır"
-   onayı (Yönerge 11/8, 11/23). Demirbaş no isteğe bağlıdır.
+2. `school` — okul kartı (tasarım §5.1; plan F1b-4 kararları): okul adı, il, ilçe (resmî
+   yazı anteti), kurum kodu, en az bir kademe, öğrenci mevcudu ve tarihi (md. 9/2, 9/6,
+   21/3), yerleşim türü (md. 17/1-a-2), kantin işletme biçimi (md. 17/1-a-1, 17/1-b-1,
+   23/3), personel çalıştırma biçimi (K3) ve "bu bilgisayar okul demirbaşıdır" onayı
+   (Yönerge 11/8, 11/23). Müdür adı, kampüs işareti (md. 2/1, 13/7), açılış tarihi
+   (md. 9/1) ve demirbaş no isteğe bağlıdır. Eksik alanlar `missing_school_fields`'tadır;
+   kurulumu bu alanlar gelmeden tamamlanmış bir kurulumda kapı yeniden kapanmaz, yol
+   haritasının `okul_karti` maddesi eksiği gösterir.
 3. `calendar` — aktif ders yılı ve iki dönemi. Kapalı günler bu adımda girilir
    ama tamamlamanın koşulu değildir (yol haritasında ayrı maddedir).
 
@@ -38,8 +44,9 @@ DENETİM İZİ (tasarım §4.6.2, §5.1 "her değişiklik denetim izine düşer"
 commit c): her yazma servisi satırla AYNI işlemde iz satırı yazar (`_satiri_al` →
 yazım → `_izle`). Satır bu işlemde oluşturulduysa `OLUSTUR`, kurulumun tamamlanması
 `DURUM`, öteki yazımlar `GUNCELLE`. Değeri satıra giren alanlar modeldedir
-(`SchoolConfig.IZ_DEGER_ALANLARI`): okul adı, il, ilçe, kısa ad ve müdür adı yalnız
-adlarıyla görünür. Yazar istek başındaki bağlamdır (oturumdaki hesap).
+(`SchoolConfig.IZ_DEGER_ALANLARI`): okul adı, il, ilçe ve müdür adı yalnız adlarıyla
+görünür; okul kartının kod, sayı, tarih ve kademe alanları değerleriyle. Yazar istek
+başındaki bağlamdır (oturumdaki hesap).
 """
 
 from __future__ import annotations
@@ -53,9 +60,13 @@ from apps.okul import denetim_izi, rol_izinleri, selectors
 from apps.okul.models import (
     IDLE_LOCK_MINUTES_MAX,
     IDLE_LOCK_MINUTES_MIN,
+    INSTITUTION_CODE_LENGTH,
     AuditAction,
+    CanteenMode,
     SchoolConfig,
     SchoolLevel,
+    SettlementType,
+    StaffingMode,
 )
 from apps.okul.oturum import OTURUM, bosta_suresi_dk
 from apps.okul.services import app_password
@@ -66,9 +77,15 @@ UPDATABLE_FIELDS: tuple[str, ...] = (
     "province",
     "district",
     "principal_name",
-    "has_prep_class",
-    "kademe",
-    "kisa_ad",
+    "institution_code",
+    "levels",
+    "student_count",
+    "student_count_as_of",
+    "settlement_type",
+    "canteen_mode",
+    "staffing_mode",
+    "in_campus",
+    "opened_on",
     "demirbas_onayi",
     "demirbas_no",
 )
@@ -128,15 +145,57 @@ def update_school_config(*, fields: dict[str, Any]) -> SchoolConfig:
 # ---------------------------------------------------------------------------
 # Sihirbaz adımları
 # ---------------------------------------------------------------------------
+def institution_code_valid(code: object) -> bool:
+    """Kurum kodu altı ASCII rakam mı? (MEB kurum kodu; yazım denetimi, mevzuat hükmü değil)."""
+    return (
+        isinstance(code, str)
+        and len(code) == INSTITUTION_CODE_LENGTH
+        and code.isascii()
+        and code.isdigit()
+    )
+
+
+def levels_valid(levels: object) -> bool:
+    """Kademeler boş olmayan, yalnız `SchoolLevel` değerlerinden oluşan bir liste mi?"""
+    return (
+        isinstance(levels, list)
+        and bool(levels)
+        and all(isinstance(deger, str) and deger in SchoolLevel.values for deger in levels)
+    )
+
+
+def normalize_levels(levels: list[str]) -> list[str]:
+    """Kademelerin kanonik biçimi: tekrarsız, `SchoolLevel` sırasıyla (tanınmayan atılır)."""
+    secilen = set(levels)
+    return [deger for deger in SchoolLevel.values if deger in secilen]
+
+
 def missing_school_fields(config: SchoolConfig) -> list[str]:
-    """2. adımın eksik alanları — kullanıcı diliyle (sözlük), sırasıyla."""
+    """2. adımın eksik alanları — kullanıcı diliyle (sözlük), sırasıyla.
+
+    Okul kartının zorunlu alanları (plan F1b-4 kararları "Zorunluluk"): kurum kodu altı
+    rakam değilse, kademe listesi boş ya da tanınmayan değer taşıyorsa, mevcut ya da tarihi
+    boşsa eksik sayılır. Müdür adı, kampüs işareti ve açılış tarihi isteğe bağlıdır.
+    """
     eksik: list[str] = []
     if not config.school_name.strip():
         eksik.append("okul adı")
-    if config.kademe not in SchoolLevel.values:
+    if not config.province.strip():
+        eksik.append("il")
+    if not config.district.strip():
+        eksik.append("ilçe")
+    if not institution_code_valid(config.institution_code):
+        eksik.append("kurum kodu")
+    if not levels_valid(config.levels):
         eksik.append("kademe")
-    if not config.kisa_ad.strip():
-        eksik.append("kısa ad")
+    if config.student_count is None or config.student_count_as_of is None:
+        eksik.append("öğrenci mevcudu")
+    if config.settlement_type not in SettlementType.values:
+        eksik.append("yerleşim türü")
+    if config.canteen_mode not in CanteenMode.values:
+        eksik.append("kantin işletme biçimi")
+    if config.staffing_mode not in StaffingMode.values:
+        eksik.append("personel çalıştırma biçimi")
     if not config.demirbas_onayi:
         eksik.append("“Bu bilgisayar okul demirbaşıdır” onayı")
     return eksik
@@ -276,7 +335,10 @@ def _stored_roadmap(config: SchoolConfig) -> dict[str, Any]:
 
 
 def roadmap_state(
-    config: SchoolConfig, *, recovery_confirmed: bool | None = None
+    config: SchoolConfig,
+    *,
+    recovery_confirmed: bool | None = None,
+    school_info_complete: bool | None = None,
 ) -> dict[str, Any]:
     """Arayüzün gördüğü yol haritası durumu (saklanan işaretler + gizleme kapısı).
 
@@ -287,20 +349,35 @@ def roadmap_state(
     Bu, var olan "eksik madde varken kart gizli kalmaz" kuralının damgaya
     uygulanmasıdır; SAKLANAN tercih değişmez, damga gelince kart yine gizlenir.
 
-    `recovery_confirmed` verilmezse güvenlik dosyasından okunur; `setup_status`
-    zaten bildiği için geçirir (aynı dosya iki kez okunmasın).
+    Okul kartının zorunlu alanları eksikken de kart gizli kalamaz (aynı kural, `okul_karti`
+    maddesine): kurulumu okul kartının OAB alanlarından önce tamamlanmış ve kartı gizlemiş bir
+    kurulumda göç 0013'ten sonra bu alanlar boştur; kurulum kapısı yeniden kapanmadığı için
+    eksiği gösteren tek yer bu karttır (plan F1b-4 kararları; tasarım §7.10).
+
+    `recovery_confirmed` ve `school_info_complete` verilmezse burada okunur; `setup_status`
+    zaten bildiği için geçirir (aynı dosya ve hesap iki kez yapılmasın).
     """
     state = _stored_roadmap(config)
     dogrulandi = (
         app_password.recovery_key_confirmed() if recovery_confirmed is None else recovery_confirmed
     )
-    state["hidden"] = state["hidden"] and dogrulandi
+    okul_karti_tamam = (
+        not missing_school_fields(config) if school_info_complete is None else school_info_complete
+    )
+    state["hidden"] = state["hidden"] and dogrulandi and okul_karti_tamam
     return state
 
 
 def roadmap_auto_items(status: dict[str, Any]) -> dict[str, bool]:
-    """Kendiliğinden tespit edilen maddeler (`setup_status` sayılarından)."""
+    """Kendiliğinden tespit edilen maddeler (`setup_status` sayılarından).
+
+    `okul_karti`: okul kartının zorunlu alanları tamam mı (`school_info_complete`). Kurulumu
+    okul kartının OAB alanlarından önce tamamlanmış kurulumda bu alanlar boştur; kurulum
+    kapısı yeniden kapanmaz, eksik yol haritasında görünür ve kart gizlenemez (plan F1b-4
+    kararları; tasarım §7.10 "okul kartının eksik alanları").
+    """
     return {
+        "okul_karti": bool(status["school_info_complete"]),
         "ogrenci_aktarimi": int(status["student_count"]) > 0,
         "personel_aktarimi": int(status["personnel_count"]) > 0,
         "kapali_gunler": int(status["school_break_count"]) > 0,
@@ -423,13 +500,14 @@ def setup_status() -> dict[str, Any]:
     aktif_yil = _active_year_summary()
     parola_kurulu = app_password.is_password_set()
     anahtar_dogrulandi = parola_kurulu and app_password.recovery_key_confirmed()
+    okul_karti_tamam = not missing_school_fields(config)
     return {
         "setup_completed": config.setup_completed,
         "password_set": parola_kurulu,
         # Kurtarma anahtarının saklandığı doğrulandı mı? (1. adımın ikinci koşulu)
         "recovery_key_confirmed": anahtar_dogrulandi,
         "school_name": config.school_name,
-        "school_info_complete": not missing_school_fields(config),
+        "school_info_complete": okul_karti_tamam,
         "has_active_school_year": aktif_yil is not None,
         "active_school_year": aktif_yil,
         "missing_steps": missing_setup_steps(
@@ -445,7 +523,9 @@ def setup_status() -> dict[str, Any]:
             start=aktif_yil["start_date"] if aktif_yil else None,
             end=aktif_yil["end_date"] if aktif_yil else None,
         ),
-        "roadmap": roadmap_state(config, recovery_confirmed=anahtar_dogrulandi),
+        "roadmap": roadmap_state(
+            config, recovery_confirmed=anahtar_dogrulandi, school_info_complete=okul_karti_tamam
+        ),
     }
 
 

@@ -24,6 +24,7 @@ import type { SetupStatus } from "./modules/okul/api";
 import { YETENEK_ADLARI } from "./modules/oturum/api";
 import type { OturumOzeti } from "./modules/oturum/api";
 import { ILK_ACILIS_DURUMU } from "./test/kurulumDurumu";
+import { BOS_OKUL_KARTI } from "./test/okulKarti";
 import { ConfirmProvider } from "./ui/ConfirmProvider";
 import { SnackbarProvider } from "./ui/SnackbarProvider";
 
@@ -131,18 +132,7 @@ beforeEach(() => {
   hesapKurulu = false;
   anahtarDogrulandi = false;
   okulApiMock.getSetupStatus.mockImplementation(async () => kurulumDurumu());
-  okulApiMock.getSchoolConfig.mockResolvedValue({
-    school_name: "",
-    province: "",
-    district: "",
-    principal_name: "",
-    has_prep_class: false,
-    kademe: "",
-    kisa_ad: "",
-    demirbas_onayi: false,
-    demirbas_no: "",
-    setup_completed: false,
-  });
+  okulApiMock.getSchoolConfig.mockResolvedValue(BOS_OKUL_KARTI);
   okulApiMock.listSchoolYears.mockResolvedValue([]);
   oturumApiMock.ozet.mockImplementation(async () => oturumOzeti());
   oturumApiMock.kilitle.mockImplementation(async () => ({

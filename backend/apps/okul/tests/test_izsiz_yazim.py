@@ -107,6 +107,7 @@ from apps.okul.services import setup as setup_service
 from apps.okul.services import terms as term_service
 from apps.okul.services.templates import STUDENT_TEMPLATE_HEADERS
 from apps.okul.tests.hesap_ortak import GECICI_PAROLA, YENI_PAROLA, hesap_ac, muhurle
+from apps.okul.tests.okul_karti_ortak import okul_karti
 from conftest import (
     TEST_HESAP_ID,
     TEST_KURTARMA_ANAHTARI,
@@ -215,14 +216,7 @@ def _kurtarma_damgasi() -> None:
 
 def _kurulum(_: pytest.MonkeyPatch) -> Istek:
     _kurtarma_damgasi()
-    setup_service.update_school_config(
-        fields={
-            "school_name": "Uydurma Ortaokulu",
-            "kademe": "ORTAOKUL",
-            "kisa_ad": "Uydurma OO",
-            "demirbas_onayi": True,
-        }
-    )
+    setup_service.update_school_config(fields=okul_karti(school_name="Uydurma Ortaokulu"))
     term_service.configure_terms(_yil(), first_end=date(2027, 1, 22), second_start=date(2027, 2, 8))
     return Istek("/api/v1/setup/complete/", None, _turler("DURUM"))
 
@@ -1621,16 +1615,16 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
     """
     # Hesap (ad-soyad şifreli kişi verisi).
     hesap_ac(AccountRole.MUHASIP, ad=f"{UYDURMA_AD} {UYDURMA_SOYAD}")
-    # Okul kartı: okul adı, il, ilçe, kısa ad, müdür adı serbest metin / kişi adı.
+    # Okul kartı: okul adı, il, ilçe, müdür adı serbest metin / kişi adı; demirbaş no serbest
+    # kod (değeriyle girer, kişi verisi taşımaz). Kodlu alanlar (kademe, mevcut, türler) değerli.
     setup_service.update_school_config(
-        fields={
-            "school_name": UYDURMA_UZUN,
-            "province": UYDURMA_SOYAD,
-            "district": UYDURMA_AD,
-            "principal_name": f"{UYDURMA_AD} {UYDURMA_SOYAD}",
-            "kisa_ad": UYDURMA_TELEFON,
-            "kademe": "ORTAOKUL",
-        }
+        fields=okul_karti(
+            school_name=UYDURMA_UZUN,
+            province=UYDURMA_SOYAD,
+            district=UYDURMA_AD,
+            principal_name=f"{UYDURMA_AD} {UYDURMA_SOYAD}",
+            levels=["ORTAOKUL"],
+        )
     )
     # Ders yılı (ad elle yazılan metindir), dönemler, aktifleştirme.
     yil = school_year_service.create_school_year(

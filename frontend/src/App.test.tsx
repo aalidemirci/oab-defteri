@@ -34,6 +34,7 @@ import { OKUNAMADI as GUVENLIK_OKUNAMADI } from "./modules/guvenlik/GuvenlikKapi
 import type { SetupStatus } from "./modules/okul/api";
 import { gorunenMetin } from "./test/gorunenMetin";
 import { KURULU_DURUM } from "./test/kurulumDurumu";
+import { ORNEK_OKUL_KARTI } from "./test/okulKarti";
 
 const okulApiMock = vi.hoisted(() => ({
   getSetupStatus: vi.fn(),
@@ -182,18 +183,7 @@ function ustCubuk(): HTMLElement {
 beforeEach(() => {
   vi.clearAllMocks();
   okulApiMock.getSetupStatus.mockResolvedValue(KURULU);
-  okulApiMock.getSchoolConfig.mockResolvedValue({
-    school_name: "Örnek Anadolu Lisesi",
-    province: "İstanbul",
-    district: "Örnek",
-    principal_name: "",
-    has_prep_class: false,
-    kademe: "ORTAOGRETIM",
-    kisa_ad: "Örnek AL",
-    demirbas_onayi: true,
-    demirbas_no: "",
-    setup_completed: true,
-  });
+  okulApiMock.getSchoolConfig.mockResolvedValue(ORNEK_OKUL_KARTI);
   okulApiMock.getGradeLevels.mockResolvedValue({
     levels: [
       { value: 9, label: "9" },

@@ -2,7 +2,11 @@
 
 Aile iskeletinden alındı (iskelet bunu atalarının `apps/okul/models.py`
 kalıbından türetip sadeleştirmişti). OAB'deki yeri ve değişecek alanları OAB
-tasarımının §5.1 ve §12.B'sindedir (öğrenci ve kütüphane alanları F1b'de düşer):
+tasarımının §5.1 ve §12.B'sindedir (öğrenci alanları F1b'de düşer; okul kartının OAB
+alanları F1b 4. adımda girdi, kütüphane saatleri ve kısa ad aynı adımda düştü):
+
+- `SchoolConfig`: okul kartı — kurum künyesi, kademeler, öğrenci mevcudu, yerleşim türü,
+  kantin ve personel çalıştırma biçimi, kampüs, açılış tarihi, demirbaş onayı (sınıf yorumu).
 
 - `Student`: yalnız ad-soyad + okul no + sınıf/şube + durum + ayrılış tarihi.
   TCKN, veli ve cinsiyet alanları YOKTUR (en iyi KVKK önlemi veriyi hiç
@@ -69,17 +73,67 @@ def _class_label(class_level: int, class_section: str) -> str:
 
 
 class SchoolLevel(models.TextChoices):
-    """Okulun kademesi (tasarım §3.5, §5.1 `levels`).
+    """Okulun kademesi (tasarım §3.5, §5.1 `levels`) — `SchoolConfig.levels`'in değer kümesi.
 
-    OAB'de kademe kural paketinin koşuluna ve temsilci kurullarına girer
-    (tasarım §5.1); çok değerli `levels` alanına dönüşmesi F1b'nin okul kartı
-    adımındadır (plan §2.2 adım 4). Bugün kademe sınıf seviyelerini KISITLAMAZ
-    (1-12 okul içi sabit kalır).
+    OAB'de kademe kural paketinin koşuluna (kesişimle, tasarım §6.1), kursiyer türünün
+    görünürlüğüne (md. 4/1-ğ, 7/1) ve temsilci kurullarına girer (tasarım §5.1). Birden çok
+    kademeli kurum birden çok değer seçer; "karma" ayrı değer değildir, yaygın eğitim
+    seçeneği yoktur (tasarım §3.5). Sıra kanoniktir: `levels` bu sırayla saklanır. Kademe
+    sınıf seviyelerini KISITLAMAZ (1-12 okul içi sabit kalır).
     """
 
+    OKUL_ONCESI = "OKUL_ONCESI", "Okul öncesi"
     ILKOKUL = "ILKOKUL", "İlkokul"
     ORTAOKUL = "ORTAOKUL", "Ortaokul"
     ORTAOGRETIM = "ORTAOGRETIM", "Ortaöğretim (lise)"
+
+
+class SettlementType(models.TextChoices):
+    """Okulun bulunduğu yerleşimin türü (tasarım §5.1 `settlement_type`).
+
+    Kantin gelirinin pay dağılımı buna göre yapılır: büyükşehir statüsünde olmayan il
+    merkezinde ilçe payı yoktur, pay il millî eğitim müdürlüğüne gider (md. 17/1-a-2; oranlar
+    kural paketinde, F1c). Değer adları kural paketinin `okul.yerlesim_turu` koşuludur (tasarım §6.1).
+    """
+
+    BUYUKSEHIR = "BUYUKSEHIR", "Büyükşehir statüsündeki il"
+    IL_MERKEZI_BUYUKSEHIR_DEGIL = (
+        "IL_MERKEZI_BUYUKSEHIR_DEGIL",
+        "Büyükşehir statüsünde olmayan il merkezi",
+    )
+    DIGER = "DIGER", "Büyükşehir statüsünde olmayan ilde, il merkezi dışında"
+
+
+class CanteenMode(models.TextChoices):
+    """Kantin ve benzeri yerlerin işletme biçimi (tasarım §5.1 `canteen_mode`).
+
+    Arz bedeli kiraya verilen yerde kiracıdan (md. 17/1-a-1), birlikçe işletilen yerde
+    birlikten (md. 17/1-b-1) hesaplanır; birlikçe işletmede vergi mükellefiyeti doğarsa
+    Vergi Usul Kanunu hükümleri uygulanır (md. 23/3; okul kartında bilgi bandı).
+    """
+
+    KIRAYA_VERILIYOR = "KIRAYA_VERILIYOR", "Kiraya veriliyor"
+    BIRLIKCE_ISLETILIYOR = "BIRLIKCE_ISLETILIYOR", "Birlikçe işletiliyor"
+    KANTIN_YOK = "KANTIN_YOK", "Kantin ve benzeri yer yok"
+
+
+class StaffingMode(models.TextChoices):
+    """Birliğin personel çalıştırma biçimi (tasarım §5.1 `staffing_mode`; K3).
+
+    Personel modülü (sürüm 2) yalnız doğrudan işverende açılır; birliğin istihdam ettiği
+    personel için kıdem tazminatı karşılığı ayrılır (md. 6/1-d). Hizmet alımı harcama
+    zincirinden geçer (tasarım §7.4).
+    """
+
+    DOGRUDAN_ISVEREN = "DOGRUDAN_ISVEREN", "Birlik doğrudan işveren"
+    HIZMET_ALIMI = "HIZMET_ALIMI", "Hizmet alımıyla"
+    CALISTIRMIYOR = "CALISTIRMIYOR", "Personel çalıştırmıyor"
+
+
+#: Öğrenci mevcudunun üst sınırı (yazım denetimi; mevzuat hükmü değildir).
+STUDENT_COUNT_MAX = 99999
+#: Kurum kodunun hane sayısı (MEB kurum kodu; kullanıcı bilgisi, plan F1b-4 kararları).
+INSTITUTION_CODE_LENGTH = 6
 
 
 #: Boşta kilit süresi (dakika; tasarım TK14, §15 M-3): varsayılan 10, ayar 3-30. Alanın
@@ -102,11 +156,32 @@ class SchoolConfig(BaseModel):
     dosyasındadır; DB ile güvenlik dosyasının eşleşmesi bu damgayla denetlenir
     ve alan şifreleme geçişi bu alanla AYNI işlemde damgalanır.
 
-    Sihirbaz alanları (aile iskeletinden; OAB'deki karşılıkları tasarım §5.1):
-    `kademe`, `kisa_ad` (aile iskeletinde etiket ve kartlara basılırdı; OAB'deki
-    yeri okul kartı adımında belirlenir), `demirbas_onayi` + `demirbas_no`
-    (Bilgi ve Sistem Güvenliği Yönergesi 11/8, 11/23: program yalnız kurum
-    demirbaşı bilgisayara kurulur). Hiçbiri kişisel veri değildir, şifrelenmez.
+    OKUL KARTI (sihirbazın 2. adımı ve Ayarlar → Okul Bilgileri; tasarım §5.1 "`SchoolConfig`'e
+    eklenen OAB alanları", plan F1b-4 kararları). Hiçbiri kişisel veri değildir, şifrelenmez:
+
+    - `school_name`, `province`, `district` (resmî yazı anteti), `principal_name` (isteğe bağlı).
+    - `institution_code`: MEB kurum kodu, boş ya da altı rakam (yazım denetimi; mevzuat değil).
+    - `levels`: kademeler — `SchoolLevel` değerlerinin tekrarsız listesi, `SchoolLevel`
+      sırasıyla (serileştirici normalleştirir). SQLite'ta JSON listesine DB kısıtı yazılamaz:
+      doğrulama serileştiricide ve `services.setup.missing_school_fields`'tadır.
+    - `student_count` + `student_count_as_of`: öğrenci mevcudu ve sayının alındığı gün; genel
+      kurul yeter sayısı (md. 9/2, 9/6) ve kantin kirasının yeniden tespiti (md. 21/3). İkisi
+      birlikte dolu ya da birlikte boştur (DB kısıtı).
+    - `settlement_type`: yerleşim türü, pay dağılımı (md. 17/1-a-2).
+    - `canteen_mode`: kantin işletme biçimi, arz bedeli (md. 17/1-a-1, 17/1-b-1) ve md. 23/3.
+    - `staffing_mode`: personel çalıştırma biçimi (K3; kıdem karşılığı md. 6/1-d).
+    - `in_campus`: okul eğitim kampüsünde (md. 2/1; kampüs yönetimine temsilci md. 13/7).
+    - `opened_on`: yeni açılan okulun açılış tarihi; ilk genel kurul bundan sayılır (md. 9/1).
+      Çoğu okulda boştur, boşaltılabilir.
+    - `demirbas_onayi` + `demirbas_no` (Bilgi ve Sistem Güvenliği Yönergesi 11/8, 11/23:
+      program yalnız kurum demirbaşı bilgisayara kurulur).
+
+    Enum alanlarında boş değer "henüz seçilmedi"dir (kurulum tamamlanamaz). Bir kez girilen
+    zorunlu alan sonradan boşaltılamaz (serileştirici; aile kuralı, tasarım §5.1).
+
+    `has_prep_class`: aile iskeletinden kalan hazırlık sınıfı bayrağı. Okul kartından ve
+    serileştiriciden çıktı (OAB öğrenci listesi tutmaz, T5); öğrenci aktarımı `grade_levels`
+    ile okur, alan öğrenci tarafıyla F1b 5. adımda göçle düşer.
 
     `idle_lock_minutes`: oturumun boşta kilit süresi (dakika; tasarım TK14, plan F1b-1
     "Oturum"). Ayarlar → Güvenlik'te program yöneticisi değiştirir (uç
@@ -125,10 +200,10 @@ class SchoolConfig(BaseModel):
     DENETİM İZİ (tasarım §4.6.2, §5.1 "her değişiklik denetim izine düşer"): her yazma
     servisi (`services.setup`, ilk hesabın parmak izi `app_password.enable`) iz satırı
     yazar (`apps.okul.denetim_izi`). `IZ_DEGER_ALANLARI` önce/sonra değeri satıra giren
-    kişisiz alanlardır (sayı, kod, durum, numara, tarih); okul adı, il, ilçe, kısa ad ve
-    kütüphane saatleri serbest metindir, müdür adı kişi adıdır, parmak izi güvenlik
-    öğesidir, yol haritası JSON'dur: satıra yalnız adları girer. İçerik MAC'i kimlik
-    dışındaki bütün alanları kapsar (`IZ_OZET_ALANLARI`; KVKK silme kümesinde alan yok).
+    kişisiz alanlardır (sayı, kod, durum, numara, tarih; kademeler kod listesi); okul adı,
+    il ve ilçe serbest metindir, müdür adı kişi adıdır, parmak izi güvenlik öğesidir, yol
+    haritası JSON'dur: satıra yalnız adları girer. İçerik MAC'i kimlik dışındaki bütün
+    alanları kapsar (`IZ_OZET_ALANLARI`; KVKK silme kümesinde alan yok).
     """
 
     SINGLETON_PK = 1
@@ -136,7 +211,15 @@ class SchoolConfig(BaseModel):
     #: Denetim izinde önce/sonra değeri yazılabilen kişisiz alanlar (tasarım §4.6.2, §5 O4).
     IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = (
         "has_prep_class",
-        "kademe",
+        "institution_code",
+        "levels",
+        "student_count",
+        "student_count_as_of",
+        "settlement_type",
+        "canteen_mode",
+        "staffing_mode",
+        "in_campus",
+        "opened_on",
         "demirbas_onayi",
         "demirbas_no",
         "setup_completed",
@@ -156,12 +239,18 @@ class SchoolConfig(BaseModel):
         "district",
         "principal_name",
         "has_prep_class",
-        "kademe",
-        "kisa_ad",
+        "institution_code",
+        "levels",
+        "student_count",
+        "student_count_as_of",
+        "settlement_type",
+        "canteen_mode",
+        "staffing_mode",
+        "in_campus",
+        "opened_on",
         "demirbas_onayi",
         "demirbas_no",
         "yol_haritasi",
-        "kutuphane_saatleri",
         "setup_completed",
         "app_password_hash",
         "idle_lock_minutes",
@@ -172,20 +261,41 @@ class SchoolConfig(BaseModel):
     district = models.CharField("ilçe", max_length=64, blank=True, default="")
     principal_name = models.CharField("müdür adı", max_length=128, blank=True, default="")
     has_prep_class = models.BooleanField("hazırlık sınıfı var", default=False)
-    kademe = models.CharField(
-        "kademe", max_length=16, choices=SchoolLevel.choices, blank=True, default=""
+    institution_code = models.CharField(
+        "kurum kodu", max_length=INSTITUTION_CODE_LENGTH, blank=True, default=""
     )
-    kisa_ad = models.CharField("kısa okul adı", max_length=24, blank=True, default="")
+    levels = models.JSONField("kademeler", default=list, blank=True)
+    student_count = models.PositiveIntegerField(
+        "öğrenci mevcudu",
+        null=True,
+        blank=True,
+        validators=[MaxValueValidator(STUDENT_COUNT_MAX)],
+    )
+    student_count_as_of = models.DateField("mevcudun tarihi", null=True, blank=True)
+    settlement_type = models.CharField(
+        "yerleşim türü", max_length=32, choices=SettlementType.choices, blank=True, default=""
+    )
+    canteen_mode = models.CharField(
+        "kantin işletme biçimi",
+        max_length=32,
+        choices=CanteenMode.choices,
+        blank=True,
+        default="",
+    )
+    staffing_mode = models.CharField(
+        "personel çalıştırma biçimi",
+        max_length=32,
+        choices=StaffingMode.choices,
+        blank=True,
+        default="",
+    )
+    in_campus = models.BooleanField("eğitim kampüsünde", default=False)
+    opened_on = models.DateField("okulun açılış tarihi", null=True, blank=True)
     demirbas_onayi = models.BooleanField("bilgisayar okul demirbaşıdır", default=False)
     demirbas_no = models.CharField(
         "bilgisayarın demirbaş no'su", max_length=64, blank=True, default=""
     )
     yol_haritasi = models.JSONField("başlangıç yol haritası işaretleri", default=dict, blank=True)
-    # Aile iskeletinden kalan alan: okunduğu ağ kataloğu F1a-2'de söküldü; alan
-    # F1b'de göçle düşer (tasarım §12.B). Serbest metin; kişisel veri İÇERMEZ.
-    kutuphane_saatleri = models.TextField(
-        "kütüphane saatleri", max_length=500, blank=True, default=""
-    )
     setup_completed = models.BooleanField("kurulum tamamlandı", default=False)
     app_password_hash = models.CharField(
         "veri anahtarı parmak izi", max_length=255, blank=True, default=""
@@ -203,10 +313,41 @@ class SchoolConfig(BaseModel):
         verbose_name = "kurum yapılandırması"
         verbose_name_plural = "kurum yapılandırması"
         constraints = [
-            # Boş = sihirbazda henüz seçilmedi (kurulum tamamlanamaz).
+            # Enum alanlarında boş = sihirbazda henüz seçilmedi (kurulum tamamlanamaz).
             models.CheckConstraint(
-                condition=models.Q(kademe__in=[*SchoolLevel.values, ""]),
-                name="ck_schoolconfig_kademe",
+                condition=models.Q(settlement_type__in=[*SettlementType.values, ""]),
+                name="ck_schoolconfig_settlement_type",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(canteen_mode__in=[*CanteenMode.values, ""]),
+                name="ck_schoolconfig_canteen_mode",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(staffing_mode__in=[*StaffingMode.values, ""]),
+                name="ck_schoolconfig_staffing_mode",
+            ),
+            # Mevcut tarihsiz, tarih mevcutsuz anlamsızdır: ikisi birlikte dolu ya da boş.
+            models.CheckConstraint(
+                condition=(
+                    models.Q(student_count__isnull=True, student_count_as_of__isnull=True)
+                    | models.Q(student_count__isnull=False, student_count_as_of__isnull=False)
+                ),
+                name="ck_schoolconfig_student_count_pair",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(student_count__isnull=True)
+                    | models.Q(student_count__lte=STUDENT_COUNT_MAX)
+                ),
+                name="ck_schoolconfig_student_count_max",
+            ),
+            # Kurum kodu boş ya da altı hane (rakam denetimi serileştiricide).
+            models.CheckConstraint(
+                condition=(
+                    models.Q(institution_code="")
+                    | models.Q(Exact(Length("institution_code"), INSTITUTION_CODE_LENGTH))
+                ),
+                name="ck_schoolconfig_institution_code",
             ),
             # Aralık doğrulayıcılarla aynı; program dışından yazılan değer de reddedilir.
             models.CheckConstraint(
