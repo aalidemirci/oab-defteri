@@ -1,31 +1,30 @@
-"""İçe aktarma servisi — okul-no upsert, dry-run paritesi, idempotency, şube tohumu.
+"""İçe aktarma servisi — personel upsert, dry-run paritesi, idempotency, FAILED izi.
 
-Aile test kalıbından uyarlandı: TCKN/veli senaryoları kalktı; upsert
-anahtarı okul numarası, şube tohumu ClassSection'a yazar.
+Aile test kalıbından uyarlandı: TCKN/veli senaryoları kalktı. Öğrenci aktarımı (okul-no upsert,
+şube tohumu) F1b 5. adımda öğrenci sicili ve şube kataloğuyla söküldü (tasarım §5.1 ALMA);
+türden bağımsız sınamalar (önizleme paritesi, koşu yaşam döngüsü, uçlar) personel üzerinden
+yürür. Bütün adlar uydurmadır (KVKK).
 """
 
 from __future__ import annotations
 
-from datetime import date
 from pathlib import Path
 
 import pytest
+from django.urls import NoReverseMatch, reverse
+from rest_framework.test import APIClient
 
-from apps.okul import selectors
+from apps.okul.excel_ortak import ParserError
 from apps.okul.models import (
-    ClassSection,
     ImportRun,
+    ImportSourceType,
     ImportStatus,
     MemberKind,
     Personnel,
-    SchoolYear,
-    Student,
-    StudentStatus,
-    student_number_blind_index,
 )
 from apps.okul.services import imports as import_service
 
-BASLIK = "Sınıf\tOkul No\tAdı Soyadı"
+BASLIK = "Adı\tSoyadı\tGörevi"
 
 #: Sentetik e-Okul ihraç örnekleri (gerçek veri DEĞİL — bkz. tests/veri/).
 VERI = Path(__file__).resolve().parent / "veri"
@@ -36,158 +35,42 @@ def _metin(*satirlar: str) -> str:
     return "\n".join([BASLIK, *satirlar])
 
 
-def _indeks(numara: str) -> str:
-    """Okul no şifrelidir (tasarım §5.3): DB'de kör indeksle aranır, düz numarayla değil."""
-    return student_number_blind_index(numara)
-
-
-def _no(numara: str) -> Student:
-    ogrenci = selectors.find_student_by_number(numara)
-    assert ogrenci is not None, numara
-    return ogrenci
-
-
-@pytest.fixture
-def aktif_yil() -> SchoolYear:
-    yil: SchoolYear = SchoolYear.objects.create(
-        name="2026-2027",
-        start_date=date(2026, 9, 1),
-        end_date=date(2027, 6, 30),
-        is_active=True,
-    )
-    return yil
-
-
-@pytest.mark.django_db
-class TestStudentCommit:
-    def test_yeni_ogrenciler_olusur(self, aktif_yil: SchoolYear) -> None:
-        rapor = import_service.commit_students_text(
-            text=_metin("10/A\t101\tEMRE CAN YILMAZ", "10/B\t102\tZEYNEP KAYA")
-        )
-        assert rapor.created_students == 2
-        assert rapor.processed == 2
-        ogrenci = _no("101")
-        assert ogrenci.first_name == "EMRE CAN"
-        assert ogrenci.class_label == "10/A"
-
-    def test_ayni_numara_gunceller_yeni_satir_acmaz(self, aktif_yil: SchoolYear) -> None:
-        import_service.commit_students_text(text=_metin("10/A\t101\tEMRE CAN YILMAZ"))
-        rapor = import_service.commit_students_text(text=_metin("11/A\t101\tEMRE CAN YILMAZ"))
-        assert rapor.updated_students == 1
-        assert Student.objects.count() == 1
-        assert _no("101").class_level == 11
-
-    def test_degismeyen_satir_unchanged_sayilir(self, aktif_yil: SchoolYear) -> None:
-        import_service.commit_students_text(text=_metin("10/A\t101\tEMRE CAN YILMAZ"))
-        rapor = import_service.commit_students_text(text=_metin("10/A\t101\tEMRE CAN YILMAZ"))
-        assert rapor.unchanged_students == 1
-        assert rapor.already_imported is True  # aynı hash — uyarı, engel değil
-
-    def test_cinsiyet_sutunu_okunmaz(self, aktif_yil: SchoolYear) -> None:
-        """e-Okul listesindeki "Cinsiyeti" sütunu aktarımı bozmaz ama OKUNMAZ (§3.4)."""
-        rapor = import_service.commit_students_text(
-            text="\n".join(
-                [
-                    "Sınıf\tOkul No\tAdı Soyadı\tCinsiyeti",
-                    "10/A\t101\tEMRE CAN YILMAZ\tErkek",
-                    "10/B\t102\tZEYNEP KAYA\tKız",
-                ]
-            )
-        )
-        assert rapor.created_students == 2 and rapor.skipped == []
-        assert "gender" not in {alan.name for alan in Student._meta.get_fields()}
-
-    def test_numarasiz_satir_atlanir(self, aktif_yil: SchoolYear) -> None:
-        rapor = import_service.commit_students_text(text=_metin("10/A\t\tADSIZ ÖĞRENCİ"))
-        assert rapor.created_students == 0
-        assert rapor.skipped and rapor.skipped[0].field == "number"
-
-    def test_cozulmeyen_sinif_atlanir(self, aktif_yil: SchoolYear) -> None:
-        rapor = import_service.commit_students_text(text=_metin("13/A\t101\tALİ VELİ"))
-        assert rapor.skipped and rapor.skipped[0].field == "class"
-
-    def test_ilkokul_ve_ortaokul_seviyeleri_aktarilir(self, aktif_yil: SchoolYear) -> None:
-        """Seviye kümesi okul içi sabittir (1-12) — lise dışı okullar da aktarır."""
-        rapor = import_service.commit_students_text(
-            text=_metin("1/A\t101\tALİ VELİ", "5/B\t102\tAYŞE FATMA ÖZ")
-        )
-        assert rapor.created_students == 2 and rapor.skipped == []
-        assert sorted(s.class_label for s in ClassSection.objects.all()) == ["1/A", "5/B"]
-
-    def test_ayrilmis_ogrenci_ayni_numarayla_donerse_yeniden_aktiflesir(
-        self, aktif_yil: SchoolYear
-    ) -> None:
-        """Ayrılmış (canlı, saklanan) kayıt aynı numarayla dönerse yeni kayıt AÇILMAZ."""
-        eski = Student.objects.create(
-            first_name="ESKİ",
-            last_name="ÖĞRENCİ",
-            student_number="101",
-            status=StudentStatus.LEFT,
-            left_at=date(2026, 6, 20),
-        )
-        rapor = import_service.commit_students_text(text=_metin("9/A\t0101\tESKİ ÖĞRENCİ"))
-        assert (rapor.created_students, rapor.updated_students) == (0, 1)
-        assert rapor.reactivated_students == 1
-        assert Student.objects.filter(student_number_index=_indeks("101")).count() == 1
-        eski.refresh_from_db()
-        assert (eski.status, eski.left_at, eski.class_label) == (StudentStatus.ACTIVE, None, "9/A")
-
-    def test_sube_katalogu_tohumlanir(self, aktif_yil: SchoolYear) -> None:
-        import_service.commit_students_text(
-            text=_metin("10/A\t101\tEMRE CAN YILMAZ", "10/B\t102\tZEYNEP KAYA")
-        )
-        etiketler = sorted(s.class_label for s in ClassSection.objects.all())
-        assert etiketler == ["10/A", "10/B"]
-
-    def test_aktif_yil_yoksa_tohum_sessizce_atlanir(self) -> None:
-        rapor = import_service.commit_students_text(text=_metin("10/A\t101\tEMRE CAN YILMAZ"))
-        assert rapor.created_students == 1
-        assert ClassSection.objects.count() == 0
-
-    def test_hazirlik_sinifi_config_bayragina_bagli(self, aktif_yil: SchoolYear) -> None:
-        from apps.okul.models import SchoolConfig
-
-        SchoolConfig.objects.update_or_create(
-            pk=SchoolConfig.SINGLETON_PK, defaults={"has_prep_class": True}
-        )
-        rapor = import_service.commit_students_text(text=_metin("HAZIRLIK/A\t101\tALİ VELİ"))
-        assert rapor.created_students == 1
-        assert _no("101").class_level == 0
-
-
 @pytest.mark.django_db
 class TestPreview:
-    def test_dry_run_hicbir_sey_yazmaz_ama_rapor_paritesi_tam(self, aktif_yil: SchoolYear) -> None:
-        metin = _metin("10/A\t101\tEMRE CAN YILMAZ", "13/X\t103\tKUME DIŞI")
-        onizleme = import_service.preview_students_text(text=metin)
+    def test_dry_run_hicbir_sey_yazmaz_ama_rapor_paritesi_tam(self) -> None:
+        metin = _metin("EMRE CAN\tYILMAZ\tÖğretmen", "\t\tMemur")
+        onizleme = import_service.preview_personnel_text(text=metin)
         assert onizleme.dry_run is True
-        assert Student.objects.count() == 0
-        assert ClassSection.objects.count() == 0
+        assert Personnel.all_objects.count() == 0
 
-        gercek = import_service.commit_students_text(text=metin)
-        assert onizleme.created_students == gercek.created_students
+        gercek = import_service.commit_personnel_text(text=metin)
+        assert onizleme.created_personnel == gercek.created_personnel == 1
         assert [s.issue for s in onizleme.skipped] == [s.issue for s in gercek.skipped]
 
-    def test_onizleme_kalici_iz_birakir(self, aktif_yil: SchoolYear) -> None:
-        import_service.preview_students_text(text=_metin("10/A\t101\tEMRE CAN YILMAZ"))
-        assert ImportRun.objects.filter(status=ImportStatus.PREVIEWED).count() == 1
+    def test_onizleme_kalici_iz_birakir(self) -> None:
+        import_service.preview_personnel_text(text=_metin("EMRE CAN\tYILMAZ\tÖğretmen"))
+        kosu = ImportRun.objects.get(status=ImportStatus.PREVIEWED)
+        assert kosu.source_type == ImportSourceType.PERSONNEL
 
 
 @pytest.mark.django_db
 class TestImportRunLifecycle:
-    def test_ayni_hash_yeniden_commit_mevcut_satiri_gunceller(self, aktif_yil: SchoolYear) -> None:
-        metin = _metin("10/A\t101\tEMRE CAN YILMAZ")
-        import_service.commit_students_text(text=metin)
-        import_service.commit_students_text(text=metin)
+    def test_ayni_hash_yeniden_commit_mevcut_satiri_gunceller(self) -> None:
+        metin = _metin("EMRE CAN\tYILMAZ\tÖğretmen")
+        import_service.commit_personnel_text(text=metin)
+        import_service.commit_personnel_text(text=metin)
         assert ImportRun.objects.filter(status=ImportStatus.COMPLETED).count() == 1
 
-    def test_parser_hatasi_failed_izi_birakir(self, aktif_yil: SchoolYear) -> None:
-        from apps.okul.excel_ogrenci import ParserError
-
+    def test_parser_hatasi_failed_izi_birakir(self) -> None:
         with pytest.raises(ParserError):
-            import_service.commit_students_text(text="Alakasız\tBaşlıklar\n1\t2")
+            import_service.commit_personnel_text(text="Alakasız\tBaşlıklar\n1\t2")
         kayit = ImportRun.objects.get(status=ImportStatus.FAILED)
         assert "Zorunlu sütun" in kayit.report["error"]
+
+    def test_bozuk_excel_dosyasi_turkce_hata_ve_failed_izi(self) -> None:
+        with pytest.raises(ParserError, match="Excel olarak okunamadı"):
+            import_service.commit_personnel_file(file_bytes=b"PK\x03\x04 bozuk", file_name="x.xlsx")
+        assert ImportRun.objects.filter(status=ImportStatus.FAILED).count() == 1
 
     def test_satir_sonu_farki_ayni_hashe_iner(self) -> None:
         assert import_service.text_hash("a\tb\r\nc\td") == import_service.text_hash("a\tb\nc\td")
@@ -243,22 +126,34 @@ class TestEokulDosyasi:
 
 @pytest.mark.django_db
 class TestImportApi:
-    def test_onizleme_ve_aktarma_uclari(self, aktif_yil: SchoolYear) -> None:
-        from rest_framework.test import APIClient
-
+    def test_onizleme_ve_aktarma_uclari(self) -> None:
         client = APIClient()
-        metin = _metin("10/A\t101\tEMRE CAN YILMAZ")
-        on = client.post("/api/v1/imports/students/preview/", {"text": metin}, format="multipart")
+        metin = _metin("EMRE CAN\tYILMAZ\tÖğretmen")
+        on = client.post("/api/v1/imports/personnel/preview/", {"text": metin}, format="multipart")
         assert on.status_code == 200 and on.json()["dry_run"] is True
-        assert Student.objects.count() == 0
+        assert Personnel.all_objects.count() == 0
 
-        yanit = client.post("/api/v1/imports/students/commit/", {"text": metin}, format="multipart")
+        yanit = client.post(
+            "/api/v1/imports/personnel/commit/", {"text": metin}, format="multipart"
+        )
         assert yanit.status_code == 200
-        assert Student.objects.count() == 1
+        assert Personnel.objects.count() == 1
 
     def test_dosya_ve_metin_ayni_anda_reddedilir(self) -> None:
-        from rest_framework.test import APIClient
-
-        yanit = APIClient().post("/api/v1/imports/students/preview/", {}, format="multipart")
+        yanit = APIClient().post("/api/v1/imports/personnel/preview/", {}, format="multipart")
         assert yanit.status_code == 400
         assert yanit.json()["code"] == "validation_error"
+
+    def test_ogrenci_aktarim_uclari_yoktur(self) -> None:
+        """Öğrenci aktarımı F1b 5. adımda söküldü (tasarım §5.1 ALMA, T5).
+
+        Adsız yol açık oturumda rol kapısında kesilir (her role kapalı, 403); yol çözülseydi
+        yine de ad tablosunda olmazdı.
+        """
+        for ad in ("import-students-preview", "import-students-commit", "template-students"):
+            with pytest.raises(NoReverseMatch):
+                reverse(ad)
+        client = APIClient()
+        yanit = client.post("/api/v1/imports/students/preview/", {"text": "x"}, format="multipart")
+        assert yanit.status_code == 403
+        assert not ImportRun.objects.exists()

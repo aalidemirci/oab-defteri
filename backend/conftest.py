@@ -56,7 +56,7 @@ EK FİXTÜRLER (testin istemesi gerekir):
 
 * `parolasiz` — güvenlik dosyası ve `yedekleme.json` YOK, anahtar YOK: hesap hiç
   kurulmamış ilk açılış ("kurulum" durumu). Kişi yazan uçlar 409 döner,
-  `Student.save()` `KeyMissingError` yükseltir. Veritabanında hesap kurulmaz.
+  şifreli alanlı kaydın yazımı (`Personnel`) `KeyMissingError` yükseltir. Veritabanında hesap kurulmaz.
 * `kilitli` — güvenlik dosyası VAR, anahtar YOK (program kilitli). Açmak için
   `app_password.unlock(hesap_id=TEST_HESAP_ID, password=TEST_PAROLA)`.
 * `parmak_izi_yazili` — DB'ye `TEST_DEK`'in parmak izini yazar (DB gerekir);

@@ -33,17 +33,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.okul import selectors
-from apps.okul.excel_ogrenci import ParserError
-from apps.okul.models import (
-    ClassSection,
-    Personnel,
-    SchoolYear,
-    Student,
-)
+from apps.okul.excel_ortak import ParserError
+from apps.okul.models import Personnel, SchoolYear
 from apps.okul.oturum import OTURUM, yazar
 from apps.okul.permissions import RequiresAdminPassword
 from apps.okul.serializers import (
-    ClassSectionSerializer,
     ImportRequestSerializer,
     PersonnelMergeSerializer,
     PersonnelSerializer,
@@ -54,7 +48,6 @@ from apps.okul.serializers import (
     SchoolTermConfigurationSerializer,
     SchoolTermSerializer,
     SchoolYearSerializer,
-    StudentSerializer,
     servise_birakan_metin,
 )
 from apps.okul.services import app_password as app_password_service
@@ -64,7 +57,6 @@ from apps.okul.services import imports as import_service
 from apps.okul.services import live_restore as live_restore_service
 from apps.okul.services import persons as persons_service
 from apps.okul.services import school_year as school_year_service
-from apps.okul.services import sections as section_service
 from apps.okul.services import setup as setup_service
 from apps.okul.services import templates as template_service
 from apps.okul.services import terms as term_service
@@ -112,24 +104,6 @@ class SetupStatusView(APIView):
 
     def get(self, request: Request) -> Response:
         return Response(setup_service.setup_status())
-
-
-class GradeLevelsView(APIView):
-    """`GET /api/v1/grade-levels/` — UI seçicileri için geçerli öğrenim seviyeleri.
-
-    Liste okul içi sabitten gelir (`SchoolConfig.grade_levels`): 1-12, hazırlık
-    bayrağı açıksa başta 0 (Hazırlık). Kademeler (`SchoolConfig.levels`)
-    seviyeleri KISITLAMAZ.
-    """
-
-    def get(self, request: Request) -> Response:
-        config = setup_service.get_school_config()
-        return Response(
-            {
-                "levels": selectors.grade_levels(),
-                "prep_enabled": config.has_prep_class,
-            }
-        )
 
 
 class SchoolConfigView(APIView):
@@ -222,55 +196,8 @@ class SchoolYearActivateView(APIView):
 
 
 # ---------------------------------------------------------------------------
-# Öğrenciler / Personel / Şubeler
+# Personel (öğrenci sicili ve şube kataloğu F1b 5. adımda söküldü; tasarım §5.1 ALMA)
 # ---------------------------------------------------------------------------
-class StudentListCreateView(generics.ListCreateAPIView[Student]):
-    serializer_class = StudentSerializer
-    permission_classes = [RequiresAdminPassword]
-
-    def get_queryset(self) -> Any:
-        params = self.request.query_params
-        raw_level = params.get("class_level", "").strip()
-        class_level: int | None = None
-        if raw_level:
-            # isdigit() Unicode basamaklarda ('²') True dönüp int()'te patlar;
-            # sayısal olmayan değer de sessizce yutulmamalı — sözleşmeli 400.
-            try:
-                class_level = int(raw_level)
-            except ValueError as exc:
-                raise serializers.ValidationError(
-                    {"class_level": "Sınıf filtresi sayısal olmalıdır."}
-                ) from exc
-        return selectors.student_list(
-            class_level=class_level,
-            class_section=params.get("class_section", ""),
-            search=params.get("search", ""),
-            # Süzgeç OPT-IN: sicil ekranı ayrılmış öğrenciyi de görmeli; yalnız
-            # seçiciler (autocomplete) `only_active=true` gönderir.
-            only_active=params.get("only_active", "").strip().lower() in TRUE_VALUES,
-        )
-
-    def perform_create(self, serializer: serializers.BaseSerializer[Student]) -> None:
-        serializer.instance = persons_service.create_student(**dict(serializer.validated_data))
-
-
-class StudentDetailView(generics.RetrieveUpdateDestroyAPIView[Student]):
-    serializer_class = StudentSerializer
-    permission_classes = [RequiresAdminPassword]
-
-    def get_queryset(self) -> Any:
-        return selectors.students_all()
-
-    def perform_update(self, serializer: serializers.BaseSerializer[Student]) -> None:
-        assert serializer.instance is not None
-        serializer.instance = persons_service.update_student(
-            serializer.instance, **dict(serializer.validated_data)
-        )
-
-    def perform_destroy(self, instance: Student) -> None:
-        persons_service.delete_student(instance)
-
-
 class PersonnelListCreateView(generics.ListCreateAPIView[Personnel]):
     serializer_class = PersonnelSerializer
     permission_classes = [RequiresAdminPassword]
@@ -306,20 +233,6 @@ class PersonnelDetailView(generics.RetrieveUpdateDestroyAPIView[Personnel]):
 # ---------------------------------------------------------------------------
 # Ayrılış ve birleştirme (tasarım §5.1 `Personnel`, §13 D30)
 # ---------------------------------------------------------------------------
-class StudentLeaveView(APIView):
-    """`POST students/<pk>/leave/` — "Ayrıldı olarak işaretle" (ayrılış yolu).
-
-    Kayıt SİLİNMEZ: LEFT + `left_at`, havuzdaysa havuzdan çıkar.
-    Yanıt ayrılmış öğrenci kaydıdır. Toplu karar `leave-pool/resolve/`'dadır.
-    """
-
-    permission_classes = [RequiresAdminPassword]
-
-    def post(self, request: Request, pk: int) -> Response:
-        student = get_object_or_404(selectors.students_all(), pk=pk)
-        return Response(StudentSerializer(persons_service.leave_student(student)).data)
-
-
 class PersonnelLeaveView(APIView):
     """`POST personnel/<pk>/leave/` — "Ayrıldı olarak işaretle" (ayrılış yolu; kayıt kalır)."""
 
@@ -350,37 +263,6 @@ class PersonnelMergeView(APIView):
         return Response(PersonnelSerializer(merged).data)
 
 
-class ClassSectionListCreateView(generics.ListCreateAPIView[ClassSection]):
-    serializer_class = ClassSectionSerializer
-
-    def get_queryset(self) -> Any:
-        raw_year = self.request.query_params.get("school_year", "").strip()
-        school_year_id: int | None = None
-        if raw_year:
-            try:
-                school_year_id = int(raw_year)
-            except ValueError as exc:
-                raise serializers.ValidationError(
-                    {"school_year": "Ders yılı kimliği sayısal olmalıdır."}
-                ) from exc
-        return selectors.class_sections_sorted(school_year_id=school_year_id)
-
-    def perform_create(self, serializer: serializers.BaseSerializer[ClassSection]) -> None:
-        serializer.instance = section_service.create_class_section(
-            **dict(serializer.validated_data)
-        )
-
-
-class ClassSectionDetailView(generics.DestroyAPIView[ClassSection]):
-    serializer_class = ClassSectionSerializer
-
-    def get_queryset(self) -> Any:
-        return ClassSection.objects.select_related("school_year")
-
-    def perform_destroy(self, instance: ClassSection) -> None:
-        section_service.delete_class_section(instance)
-
-
 # ---------------------------------------------------------------------------
 # İçe aktarma (dosya VEYA pano metni — aynı boru hattı)
 # ---------------------------------------------------------------------------
@@ -396,43 +278,21 @@ class _BaseImportView(APIView):
     file_handler: str = ""  # import_service fonksiyon adı (dosya yolu)
     text_handler: str = ""  # import_service fonksiyon adı (metin yolu)
 
-    def options_for(self, validated: dict[str, Any]) -> dict[str, Any]:
-        """Mutabakat seçenekleri (öğrenci: `full_list`; personelde seçenek yok — karar havuzda)."""
-        return {}
-
     def post(self, request: Request) -> Response:
         serializer = ImportRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         validated = dict(serializer.validated_data)
         uploaded = validated.get("file")
-        secenekler = self.options_for(validated)
         try:
             if uploaded is not None:
                 handler = getattr(import_service, self.file_handler)
-                report = handler(
-                    file_bytes=uploaded.read(), file_name=uploaded.name or "", **secenekler
-                )
+                report = handler(file_bytes=uploaded.read(), file_name=uploaded.name or "")
             else:
                 handler = getattr(import_service, self.text_handler)
-                report = handler(text=validated["text"], **secenekler)
+                report = handler(text=validated["text"])
         except ParserError as exc:
             raise serializers.ValidationError(str(exc)) from exc
         return Response(report.to_dict())
-
-
-class _StudentImportView(_BaseImportView):
-    def options_for(self, validated: dict[str, Any]) -> dict[str, Any]:
-        return {"full_list": bool(validated.get("full_list", False))}
-
-
-class StudentImportPreviewView(_StudentImportView):
-    file_handler = "preview_students_file"
-    text_handler = "preview_students_text"
-
-
-class StudentImportCommitView(_StudentImportView):
-    file_handler = "commit_students_file"
-    text_handler = "commit_students_text"
 
 
 class PersonnelImportPreviewView(_BaseImportView):
@@ -448,16 +308,6 @@ class PersonnelImportCommitView(_BaseImportView):
 # ---------------------------------------------------------------------------
 # Şablon indirme
 # ---------------------------------------------------------------------------
-class StudentTemplateView(APIView):
-    def get(self, request: Request) -> FileResponse:
-        return FileResponse(
-            BytesIO(template_service.student_template_xlsx()),
-            as_attachment=True,
-            filename="sablon-ogrenci.xlsx",
-            content_type=XLSX_CONTENT_TYPE,
-        )
-
-
 class PersonnelTemplateView(APIView):
     def get(self, request: Request) -> FileResponse:
         return FileResponse(

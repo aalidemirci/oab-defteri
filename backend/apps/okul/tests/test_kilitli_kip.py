@@ -457,7 +457,7 @@ def gun_isi(request: pytest.FixtureRequest) -> Iterator[GunIsi]:
             account_id=TEST_HESAP_ID,
             role="yonetici",
             kind="KISI_DOKUMU",
-            model="okul.Student",
+            model="okul.Personnel",
             object_id="7",
         )
 

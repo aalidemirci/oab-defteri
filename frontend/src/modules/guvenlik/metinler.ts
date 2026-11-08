@@ -9,18 +9,14 @@
 
 /** Ayarlar ve kilit ekranında gösterilen kapsam açıklaması. */
 export const KAPSAM_METNI =
-  "Bu koruma, kayıtlardaki kişisel veri alanlarını (öğrenci, öğretmen ve diğer " +
-  "personelin ad-soyadları, öğrencilerin okul numaraları, hesap sahiplerinin " +
-  "ad-soyadları, eklerin özgün dosya adları) her hesabın kendi parolasıyla açılan bir " +
-  "anahtarla şifreler. TAM DİSK " +
+  "Bu koruma, kayıtlardaki kişisel veri alanlarını (öğretmen ve diğer personelin " +
+  "ad-soyadları, hesap sahiplerinin ad-soyadları, eklerin özgün dosya adları) her " +
+  "hesabın kendi parolasıyla açılan bir anahtarla şifreler. TAM DİSK " +
   "ŞİFRELEME DEĞİLDİR: bilgisayarın tamamını korumak için Windows'ta BitLocker, " +
   "Pardus/Linux'ta LUKS kullanın.";
 
 /** Şifrelenmeyen alanlar açıkça söylenir — sürpriz olmasın. */
-export const KAPSAM_DISI_METNI =
-  "Sınıf/şube, üye türü ve tarihler şifrelenmez (süzgeçler bunlara dayanır). " +
-  "Okul numarası şifrelidir; arama ve e-Okul eşleştirmesi numaranın tamamıyla " +
-  "yapılır, numaranın bir parçasıyla arama yapılamaz.";
+export const KAPSAM_DISI_METNI = "Üye türü ve tarihler şifrelenmez (süzgeçler bunlara dayanır).";
 
 /**
  * Dürüst sınır (tasarım §4.4.6-5, TK15): her hesabın parolası kayıtların anahtarını tek
@@ -96,8 +92,8 @@ export function dogrulamaMetni(birinci: number, ikinci: number): string {
  * müdürlüğünde kapalı zarfta durur (kullanıcı kararı D3; tasarım §4.4.3).
  */
 export const KURMA_UYARISI =
-  "Program yöneticisi hesabı zorunludur: hesap kurulmadan öğrenci, öğretmen ve diğer " +
-  "personel kaydı yapılamaz. Kurulduktan sonra kaldırılamaz; parolası değiştirilebilir. " +
+  "Program yöneticisi hesabı zorunludur: hesap kurulmadan öğretmen ve diğer personel " +
+  "kaydı yapılamaz. Kurulduktan sonra kaldırılamaz; parolası değiştirilebilir. " +
   "Parolayı kimseyle paylaşmayın; herkes programı kendi hesabıyla ve kendi parolasıyla " +
   "açar. Program yöneticisi parolasını unutursa kayıtlar kurtarma anahtarıyla açılır ve " +
   "yeni parola belirlenir; bu yüzden anahtar okul müdürlüğünde kapalı zarfta saklanır.";
@@ -201,8 +197,9 @@ export const DOSYA_KAYIP_SIFIRLA_METNI =
  *
  * Denetim izi (F1b 1. adım, alt commit c): okul çekirdeğinin bütün yazmaları oturumdaki
  * hesabın adına denetim izine yazılır; tek istisna plan gereği 5. adımda yeniden yazılacak
- * katı silme ve birleştirmedir (öğrenci ve personelin sicilden silinmesi, iki kişi kaydının
- * birleştirilmesi — backend `test_izsiz_yazim.py` `MUAF_ISLEVLER`). Bu istisna metinde açıkça
+ * katı silme ve birleştirmedir (personelin sicilden silinmesi, iki kişi kaydının
+ * birleştirilmesi — backend `test_izsiz_yazim.py` `MUAF_ISLEVLER`; öğrenci sicili F1b 5. adımda
+ * söküldü). Bu istisna metinde açıkça
  * yazar; istisna kalkınca cümle kısalır. Yedekten geri yükleme veritabanını değiştirdiği için
  * satırı ancak geri yüklemeden sonraki ilk girişte yazılır; uygulama içinden yapıldıysa satır
  * onu başlatan oturumun hesabını taşır (kurtarma anahtarı yolunda da; backend
@@ -232,7 +229,7 @@ export const DURUST_SINIRLAR: readonly { baslik: string; metin: string }[] = [
     baslik: "Açık oturum, sahibinin imzasıdır.",
     metin:
       "Oturum açıkken yapılan her iş o hesabın adına denetim izine yazılır (bugün tek " +
-      "istisna: öğrenci ve personelin sicilden silinmesi ile iki kişi kaydının " +
+      "istisna: personelin sicilden silinmesi ile iki kişi kaydının " +
       "birleştirilmesi). Yedekten geri yükleme, ardından yapılan ilk girişte, onu başlatan " +
       "hesapla birlikte yazılır. Bilgisayar başından kalkarken Kilitle'ye basın " +
       "(Ctrl+Shift+L); program boşta kalınca da kendiliğinden kilitlenir.",

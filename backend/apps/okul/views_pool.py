@@ -3,12 +3,14 @@
 Aile iskeletinin kullanıcı kararı (22.09.2026): e-Okul aktarımı kimseyi ayırmaz ve silmez;
 listede bulunmayan aktif kişi ayrılış havuzuna girer, karar burada verilir.
 
-- `GET leave-pool/` — havuzdaki öğrenciler ve personel AYRI listeler, TR
-  sıralı, adlarla (yönetim yüzeyi). `?summary=true` yalnız sayıları döner
-  (Genel Bakış kartı; kişisel veri yok). Kişi YAZMAZ.
-- `POST leave-pool/resolve/` — toplu karar: `{students: {leave, keep},
-  personnel: {leave, keep}}`. Kişi yazar → `RequiresAdminPassword` (parola
-  kurulmadan 409 `parola_gerekli`).
+- `GET leave-pool/` — havuzdaki öğretmen ve diğer personel, TR sıralı, adlarla
+  (yönetim yüzeyi). `?summary=true` yalnız sayıyı döner (Genel Bakış kartı; kişisel veri
+  yok). Kişi YAZMAZ.
+- `POST leave-pool/resolve/` — toplu karar: `{personnel: {leave, keep}}`. Kişi yazar →
+  `RequiresAdminPassword` (parola kurulmadan 409 `parola_gerekli`).
+
+Havuz yalnız personeli taşır: öğrenci sicili F1b 5. adımda söküldü (tasarım §5.1 ALMA);
+veli listesi havuz kullanmaz, sınıf bazında yerine konur (tasarım §8.4).
 
 Karar program yöneticisinin işidir: havuz (özet dahil) ve karar yalnız program
 yöneticisine açıktır (tasarım §8.1 A7; `rol_izinleri.KURALLAR`, plan F1b-2).
@@ -22,11 +24,7 @@ from rest_framework.views import APIView
 
 from apps.okul import selectors
 from apps.okul.permissions import RequiresAdminPassword
-from apps.okul.serializers import (
-    LeavePoolPersonnelSerializer,
-    LeavePoolResolveSerializer,
-    LeavePoolStudentSerializer,
-)
+from apps.okul.serializers import LeavePoolPersonnelSerializer, LeavePoolResolveSerializer
 from apps.okul.services import persons as persons_service
 
 _TRUE_VALUES = frozenset({"true", "1"})
@@ -38,14 +36,11 @@ class LeavePoolView(APIView):
     def get(self, request: Request) -> Response:
         if request.query_params.get("summary", "").strip().lower() in _TRUE_VALUES:
             return Response(selectors.leave_pool_counts())
-        ogrenciler = selectors.leave_pool_students()
         personel = selectors.leave_pool_personnel()
         benzerler = selectors.leave_pool_similar_personnel(personel)
         return Response(
             {
-                "student_count": len(ogrenciler),
                 "personnel_count": len(personel),
-                "students": LeavePoolStudentSerializer(ogrenciler, many=True).data,
                 "personnel": LeavePoolPersonnelSerializer(
                     personel, many=True, context={"similar": benzerler}
                 ).data,
@@ -65,12 +60,8 @@ class LeavePoolResolveView(APIView):
     def post(self, request: Request) -> Response:
         req = LeavePoolResolveSerializer(data=request.data)
         req.is_valid(raise_exception=True)
-        ogrenci = req.validated_data.get("students") or {}
         personel = req.validated_data.get("personnel") or {}
         sonuc = persons_service.resolve_leave_pool(
-            students=persons_service.PoolDecision(
-                leave=tuple(ogrenci.get("leave", ())), keep=tuple(ogrenci.get("keep", ()))
-            ),
             personnel=persons_service.PoolDecision(
                 leave=tuple(personel.get("leave", ())), keep=tuple(personel.get("keep", ()))
             ),

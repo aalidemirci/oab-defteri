@@ -1,16 +1,16 @@
-// Ayarlar sayfası (aile iskeleti kalıbı) — altı sekme: ders yılları (dönemlerle), kapalı
-// günler (resmî/dini tatil, öğrenciye kapalı gün), şubeler, okul bilgileri (okul kartı:
+// Ayarlar sayfası (aile iskeleti kalıbı) — beş sekme: ders yılları (dönemlerle), kapalı
+// günler (resmî/dini tatil, öğrenciye kapalı gün), okul bilgileri (okul kartı:
 // evrak antedi, kurum kodu, kademeler, öğrenci mevcudu ve tarihi, yerleşim türü, kantin ve
 // personel çalıştırma biçimi, eğitim kampüsü, açılış tarihi, demirbaş onayı ve no; alanlar
 // sihirbazın 2. adımıyla ORTAK — `okul/OkulKartiAlanlari`), güvenlik
 // (hesabın kendi parolası, boşta kilit süresi, şifreleme, kurtarma anahtarı ve belgesi,
 // yedek) ve güncelleme (yalnız elle denetim). Aile iskeletinin dört kütüphane paneli (Kütüphane Politikası, Bölümler,
-// Ağ Kataloğu, Saklama) F1a-2'de söküldü.
+// Ağ Kataloğu, Saklama) F1a-2'de, Şubeler sekmesi (şube kataloğu) F1b 5. adımda öğrenci
+// sicili ile söküldü (tasarım §5.1 ALMA).
 //
 // Rol süzmesi (plan F1b-2 "Ayarlar ve bant"; kaynak `oturum/yetki`, matris kopyalanmaz): okul
 // sekmeleri her role açıktır, yazma denetimleri yeteneğe bağlıdır — Ders Yılları
-// `ders_yili_yazma`, Kapalı Günler `kapali_gun_yazma`, Şubeler `sube_yazma`, Okul Bilgileri
-// `okul_karti_yazma`. Yeteneği olmayan rolde sekme salt okurdur: başında `SaltOkurNotu`, düğme ve
+// `ders_yili_yazma`, Kapalı Günler `kapali_gun_yazma`, Okul Bilgileri `okul_karti_yazma`. Yeteneği olmayan rolde sekme salt okurdur: başında `SaltOkurNotu`, düğme ve
 // form yoktur (Okul Bilgileri değerleri liste olarak yazar). Güncelleme sekmesi yalnız
 // `guncelleme`'de görünür (adresle gelinirse varsayılan sekme açılır); Güvenlik sekmesinin
 // kartları kendi yeteneklerine bakar (`GuvenlikAyarlari`). "Diğer Ayarlar"ın Kurulum Sihirbazı
@@ -24,14 +24,12 @@ import { useTabParam } from "../../hooks/useTabParam";
 import { ApiError } from "../../lib/api";
 import { formatDate } from "../../lib/format";
 import { parseApiFieldErrors } from "../../lib/formErrors";
-import { gradeLevelLabel } from "../../lib/gradeLevels";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import EmptyState from "../../ui/EmptyState";
 import HubFeatureCard from "../../ui/HubFeatureCard";
 import Icon from "../../ui/Icon";
-import Select from "../../ui/Select";
 import { SkeletonList } from "../../ui/Skeleton";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import Tabs, { tabPanelProps } from "../../ui/Tabs";
@@ -41,13 +39,7 @@ import UpdatePanel from "../guncelleme/UpdatePanel";
 import GuvenlikAyarlari from "../guvenlik/GuvenlikAyarlari";
 import OkulKartiAlanlari, { OkulKartiListesi } from "../okul/OkulKartiAlanlari";
 import { okulApi } from "../okul/api";
-import type {
-  ClassSection,
-  GradeLevelOption,
-  SchoolConfig,
-  SchoolTerm,
-  SchoolYear,
-} from "../okul/api";
+import type { SchoolConfig, SchoolTerm, SchoolYear } from "../okul/api";
 import { OKUL_KARTI_ACIKLAMASI } from "../okul/metinler";
 import {
   bosOkulFormu,
@@ -62,20 +54,12 @@ import KapaliGunlerPaneli from "../takvim/KapaliGunlerPaneli";
 import { eksikDiniBayramIletisi, tatilleriTohumla } from "../takvim/tatilTohumu";
 
 // TABS[0] varsayılan sekmedir (useTabParam fallback) — başa yeni anahtar EKLEME.
-const TABS = [
-  "ders-yillari",
-  "kapali-gunler",
-  "subeler",
-  "okul",
-  "guvenlik",
-  "guncelleme",
-] as const;
+const TABS = ["ders-yillari", "kapali-gunler", "okul", "guvenlik", "guncelleme"] as const;
 type TabKey = (typeof TABS)[number];
 
 const TAB_ITEMS: TabItem[] = [
   { key: "ders-yillari", label: "Ders Yılları", icon: "calendar_month" },
   { key: "kapali-gunler", label: "Kapalı Günler", icon: "event_busy" },
-  { key: "subeler", label: "Şubeler", icon: "meeting_room" },
   { key: "okul", label: "Okul Bilgileri", icon: "apartment" },
   { key: "guvenlik", label: "Güvenlik", icon: "lock" },
   { key: "guncelleme", label: "Güncelleme", icon: "system_update" },
@@ -83,20 +67,17 @@ const TAB_ITEMS: TabItem[] = [
 
 /** Sayfanın açıklaması: yazabilen rolde (program yöneticisi) ve salt okur rolde (sözlük §4.1). */
 export const AYARLAR_ACIKLAMASI =
-  "Ders yılı, kapalı günler, şube kataloğu, okul künyesi, parolanız, boşta kilit süresi, " +
+  "Ders yılı, kapalı günler, okul künyesi, parolanız, boşta kilit süresi, " +
   "kurtarma anahtarı, yedekler ve güncelleme burada yönetilir. Okul künyesi programın bastığı " +
   "evrakın antedinde kullanılır.";
 export const AYARLAR_SALT_OKUR_ACIKLAMASI =
-  "Ders yılı, kapalı günler, şube kataloğu ve okul künyesi burada görüntülenir; parolanızı " +
+  "Ders yılı, kapalı günler ve okul künyesi burada görüntülenir; parolanızı " +
   "Güvenlik sekmesinden değiştirirsiniz. Okul künyesi programın bastığı evrakın antedinde " +
   "kullanılır.";
 
 /** Salt okur sekmelerin metinleri (yazma denetimleri gizliyken; sözlük §1 "Rol süzmesi"). */
 export const DERS_YILI_YOK_SALT_OKUR = "Henüz ders yılı tanımlanmadı.";
 export const DONEMLER_YOK_SALT_OKUR = "Bu ders yılının dönemleri henüz girilmedi.";
-export const SUBE_ACIKLAMASI_SALT_OKUR =
-  "Öğrenci aktarımında görülen şubeler buraya kendiliğinden eklenir.";
-export const SUBE_YOK_SALT_OKUR = "Bu ders yılında kayıtlı şube yok.";
 
 /** Backend hatasını alan-bazlı haritaya VEYA genel hata bandına dağıtır. */
 function splitApiError(
@@ -132,8 +113,7 @@ export default function AyarlarPage() {
   const tamYazar =
     yetki.acik("okul_karti_yazma") && yetki.acik("guvenlik") && yetki.acik("guncelleme");
 
-  // Ders yılları SAYFA düzeyinde tutulur: hem "Ders Yılları" hem "Şubeler"
-  // sekmesi aynı listeden beslenir; aktivasyon sonrası ikisi birden tazelenir.
+  // Ders yılları SAYFA düzeyinde tutulur: sekme değişince liste yeniden yüklenmez.
   const [years, setYears] = useState<SchoolYear[]>([]);
   const [yearsLoading, setYearsLoading] = useState(true);
   const [yearsError, setYearsError] = useState<string | null>(null);
@@ -189,13 +169,6 @@ export default function AyarlarPage() {
             {tab === "kapali-gunler" && (
               <KapaliGunlerPaneli saltOkur={!yetki.acik("kapali_gun_yazma")} />
             )}
-            {tab === "subeler" && (
-              <SubelerPanel
-                years={years}
-                yearsLoading={yearsLoading}
-                yazabilir={yetki.acik("sube_yazma")}
-              />
-            )}
             {tab === "okul" && <OkulBilgileriPanel yazabilir={yetki.acik("okul_karti_yazma")} />}
             {tab === "guvenlik" && <GuvenlikAyarlari />}
             {tab === "guncelleme" && <UpdatePanel />}
@@ -248,8 +221,7 @@ function DersYillariPanel({
       <Card elevation={1} className="p-6">
         <p className="text-title-medium text-on-surface">Ders Yılları</p>
         <p className="mt-1 text-body-medium text-on-surface-variant">
-          Aynı anda yalnız BİR ders yılı aktif olabilir. Şube kataloğu ve e-Okul aktarımı aktif yıla
-          bağlanır.
+          Aynı anda yalnız BİR ders yılı aktif olabilir.
         </p>
 
         {loading ? (
@@ -298,7 +270,7 @@ function SchoolYearRow({
   const activate = async () => {
     const ok = await confirm({
       title: "Ders yılı aktifleştirilsin mi?",
-      message: `“${year.name}” aktif ders yılı olur; aynı anda yalnız bir yıl aktif olabildiğinden diğer yıllar pasife çekilir. Bundan sonraki e-Okul aktarımlarında görülen şubeler bu yılın kataloğuna eklenir.`,
+      message: `“${year.name}” aktif ders yılı olur; aynı anda yalnız bir yıl aktif olabildiğinden diğer yıllar pasife çekilir.`,
       confirmLabel: "Aktifleştir",
     });
     if (!ok) return;
@@ -595,196 +567,7 @@ function SchoolYearCreateCard({ onCreated }: { onCreated: () => void }) {
 }
 
 // ---------------------------------------------------------------------------
-// 2. Şubeler (şube kataloğu — ders yılı başına; aktarım kendiliğinden doldurur)
-// ---------------------------------------------------------------------------
-
-function SubelerPanel({
-  years,
-  yearsLoading,
-  yazabilir,
-}: {
-  years: SchoolYear[];
-  yearsLoading: boolean;
-  /** Şube ekleme ve kaldırma (`sube_yazma`). */
-  yazabilir: boolean;
-}) {
-  const [yearId, setYearId] = useState<number | null>(null);
-  const [rows, setRows] = useState<ClassSection[]>([]);
-  const [levels, setLevels] = useState<GradeLevelOption[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [level, setLevel] = useState("");
-  const [section, setSection] = useState("");
-  const [busy, setBusy] = useState(false);
-  const snackbar = useSnackbar();
-  const confirm = useConfirm();
-
-  useEffect(() => {
-    if (yearId === null && years.length > 0) {
-      setYearId((years.find((y) => y.is_active) ?? years[0]).id);
-    }
-  }, [years, yearId]);
-
-  useEffect(() => {
-    okulApi
-      .getGradeLevels()
-      .then((r) => {
-        setLevels(r.levels);
-        if (r.levels.length > 0) setLevel(String(r.levels[0].value));
-      })
-      .catch(() => setLevels([]));
-  }, []);
-
-  const load = useCallback(() => {
-    if (yearId === null) {
-      setRows([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    okulApi
-      .listClassSections(yearId)
-      .then((items) => {
-        setRows(items);
-        setError(null);
-      })
-      .catch((e: unknown) =>
-        setError(e instanceof ApiError ? e.message : "Şube kataloğu yüklenemedi."),
-      )
-      .finally(() => setLoading(false));
-  }, [yearId]);
-  useEffect(load, [load]);
-
-  const ekle = async () => {
-    if (yearId === null || !section.trim() || !level) return;
-    setBusy(true);
-    try {
-      await okulApi.createClassSection({
-        school_year: yearId,
-        class_level: Number(level),
-        class_section: section.trim(),
-      });
-      snackbar.success("Şube eklendi.");
-      setSection("");
-      load();
-    } catch (e) {
-      snackbar.error(e instanceof ApiError ? e.message : "Şube eklenemedi.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const sil = async (row: ClassSection) => {
-    const ok = await confirm({
-      title: "Şube katalogdan kaldırılsın mı?",
-      message: `${row.class_label} şubesi seçim listelerinden kalkar. Öğrenci kayıtları etkilenmez; içe aktarma bu şubeyi yeniden görürse şube tekrar eklenir.`,
-      confirmLabel: "Kaldır",
-    });
-    if (!ok) return;
-    try {
-      await okulApi.deleteClassSection(row.id);
-      snackbar.success(`${row.class_label} kaldırıldı.`);
-      load();
-    } catch (e) {
-      snackbar.error(e instanceof ApiError ? e.message : "Şube kaldırılamadı.");
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      {!yazabilir && <SaltOkurNotu />}
-      {error && <ErrorBanner message={error} />}
-
-      <Card elevation={1} className="p-6">
-        <p className="text-title-medium text-on-surface">Şube Kataloğu</p>
-        <p className="mt-1 text-body-medium text-on-surface-variant">
-          {yazabilir
-            ? "Öğrenci aktarımında görülen şubeler buraya kendiliğinden eklenir; eksik kalan şubeyi aşağıdan elle ekleyebilirsiniz."
-            : SUBE_ACIKLAMASI_SALT_OKUR}
-        </p>
-
-        <div className="mt-4 max-w-sm">
-          <Select
-            label="Ders yılı"
-            value={yearId === null ? "" : String(yearId)}
-            onChange={(e) => setYearId(Number(e.target.value))}
-            options={years.map((y) => ({
-              value: String(y.id),
-              label: `${y.name}${y.is_active ? " (aktif)" : ""}`,
-            }))}
-          />
-        </div>
-
-        {yearsLoading || loading ? (
-          <SkeletonList rows={3} className="mt-4" />
-        ) : rows.length === 0 ? (
-          <div className="mt-2">
-            <EmptyState
-              compact
-              icon="meeting_room"
-              title={
-                yazabilir
-                  ? "Bu ders yılında kayıtlı şube yok. Öğrenci listesi aktarınca şubeler kendiliğinden gelir; aşağıdan elle de ekleyebilirsiniz."
-                  : SUBE_YOK_SALT_OKUR
-              }
-            />
-          </div>
-        ) : (
-          <ul className="mt-4 flex flex-wrap gap-2">
-            {rows.map((row) => (
-              <li
-                key={row.id}
-                className="flex items-center gap-1 rounded-shape-sm bg-surface-container px-3 py-1.5 text-body-medium text-on-surface"
-              >
-                {row.class_label}
-                {yazabilir && (
-                  <button
-                    type="button"
-                    aria-label={`${row.class_label} şubesini kaldır`}
-                    onClick={() => void sil(row)}
-                    className="ml-1 flex h-6 w-6 items-center justify-center rounded-shape-xs text-on-surface-variant transition hover:bg-surface-container-high hover:text-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  >
-                    <Icon name="close" size="sm" />
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {yazabilir && (
-          <div className="mt-5 grid grid-cols-1 items-end gap-3 sm:grid-cols-[10rem_8rem_auto]">
-            <Select
-              label="Sınıf düzeyi"
-              value={level}
-              onChange={(e) => setLevel(e.target.value)}
-              options={levels.map((l) => ({
-                value: String(l.value),
-                label: gradeLevelLabel(l.value),
-              }))}
-            />
-            <TextField
-              label="Şube"
-              value={section}
-              onChange={(e) => setSection(e.target.value)}
-              placeholder="A"
-            />
-            <Button
-              icon="add"
-              onClick={() => void ekle()}
-              disabled={busy || yearId === null || !section.trim() || !level}
-            >
-              Şube ekle
-            </Button>
-          </div>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 3. Okul bilgileri (okul kartı — sihirbazın 2. adımıyla ortak alanlar)
+// 2. Okul bilgileri (okul kartı — sihirbazın 2. adımıyla ortak alanlar)
 // ---------------------------------------------------------------------------
 
 function OkulBilgileriPanel({ yazabilir }: { yazabilir: boolean }) {

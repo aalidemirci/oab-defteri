@@ -932,7 +932,7 @@ def test_eski_esigi_asan_yukleme_bellekte_kalir() -> None:
     Bu test yalnız Django katmanını görür; sunucu tamponu `desktop/tests/test_server.py`'dedir.
     """
     dosya = SimpleUploadedFile("liste.xlsx", b"x" * (3 * 1024 * 1024))
-    istek = RequestFactory().post("/api/v1/imports/students/preview/", {"file": dosya})
+    istek = RequestFactory().post("/api/v1/imports/personnel/preview/", {"file": dosya})
     assert isinstance(istek.FILES["file"], InMemoryUploadedFile)
 
 
@@ -941,7 +941,7 @@ def test_sinirdan_buyuk_yukleme_iletisiyle_reddedilir(settings: Any) -> None:
     settings.FILE_UPLOAD_MAX_MEMORY_SIZE = 1024
     settings.MAX_UPLOAD_SIZE_MB = 7
     yanit = APIClient().post(
-        "/api/v1/imports/students/preview/",
+        "/api/v1/imports/personnel/preview/",
         {"file": SimpleUploadedFile("liste.xlsx", b"x" * 2048)},
         format="multipart",
     )

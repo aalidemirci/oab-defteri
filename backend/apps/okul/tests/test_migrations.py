@@ -9,7 +9,8 @@ alanlarını taşıyordu). Buradaki testler iki
   `migrate` koşar; eksik göç kurulu programda şemayı sessizce eskide bırakır).
 - Ağaç tek yapraklıdır (iki dal aynı anda göç eklerse `migrate` çakışma verir).
 
-Veri dönüştüren göçlerin testleri de buradadır (0013: `kademe` → `levels`). Bu testler
+Veri dönüştüren ve tablo düşüren göçlerin testleri de buradadır (0013: `kademe` → `levels`;
+0014: öğrenci sicili, şube kataloğu ve hazırlık bayrağı düşer). Bu testler
 veritabanını eski göçe geri alıp yeniden ilerletir (`transaction=True`); sonunda en son göçe
 döner.
 """
@@ -123,3 +124,70 @@ def test_0013_geri_alininca_listenin_ilk_kademesi_kademe_olur() -> None:
 
     # Eski alanın kümesinde okul öncesi yoktu: tanıdığı ilk kademe yazılır.
     assert eski.objects.get(pk=1).kademe == "ORTAOKUL"
+
+
+# ---------------------------------------------------------------------------
+# 0014 — öğrenci sicili, şube kataloğu ve hazırlık sınıfı bayrağı düşer (F1b 5. adım; düz göç)
+# ---------------------------------------------------------------------------
+_ONCE_0014 = [("okul", "0013_okul_karti_oab_alanlari")]
+_SONRA_0014 = [("okul", "0014_ogrenci_ve_sube_sokumu")]
+
+
+def _tablolar() -> set[str]:
+    with connection.cursor() as cursor:
+        return set(connection.introspection.table_names(cursor))
+
+
+def _okul_karti_sutunlari() -> set[str]:
+    with connection.cursor() as cursor:
+        return {
+            s.name
+            for s in connection.introspection.get_table_description(cursor, "okul_schoolconfig")
+        }
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.hesapsiz
+@pytest.mark.usefixtures("goc_sonda_biter")
+def test_0014_ogrenci_ve_sube_tablolarini_ve_hazirlik_bayragini_dusurur() -> None:
+    eski = _goc(_ONCE_0014)
+    eski.get_model("okul", "SchoolConfig").objects.update_or_create(
+        pk=1, defaults={"school_name": "Örnek Ortaokulu", "has_prep_class": True}
+    )
+    yil = eski.get_model("okul", "SchoolYear").objects.create(
+        name="2026-2027", start_date="2026-09-07", end_date="2027-06-25"
+    )
+    eski.get_model("okul", "ClassSection").objects.create(
+        school_year=yil, class_level=9, class_section="A"
+    )
+    # Ad ve okul no boş: şifreli alan boş dizeyi şifrelemez (uydurma bile kişi verisi yazılmaz).
+    eski.get_model("okul", "Student").objects.create(class_level=9, class_section="A")
+    assert {"okul_student", "okul_classsection"} <= _tablolar()
+
+    yeni = _goc(_SONRA_0014)
+
+    assert not {"okul_student", "okul_classsection"} & _tablolar()
+    assert "has_prep_class" not in _okul_karti_sutunlari()
+    # Okul kartı ve ders yılı kalır; yalnız öğrenci tarafı düşer.
+    assert yeni.get_model("okul", "SchoolConfig").objects.get(pk=1).school_name == (
+        "Örnek Ortaokulu"
+    )
+    assert yeni.get_model("okul", "SchoolYear").objects.filter(name="2026-2027").exists()
+    for ad in ("Student", "ClassSection"):
+        with pytest.raises(LookupError):
+            yeni.get_model("okul", ad)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.hesapsiz
+@pytest.mark.usefixtures("goc_sonda_biter")
+def test_0014_geri_alininca_tablolar_bos_kurulur() -> None:
+    """Ters yön tabloları verisiz kurar: düşen satırlar geri gelmez (düz göç, kullanıcı kararı)."""
+    _goc(_SONRA_0014)
+
+    eski = _goc(_ONCE_0014)
+
+    assert {"okul_student", "okul_classsection"} <= _tablolar()
+    assert "has_prep_class" in _okul_karti_sutunlari()
+    assert not eski.get_model("okul", "Student").objects.exists()
+    assert not eski.get_model("okul", "ClassSection").objects.exists()

@@ -37,7 +37,6 @@ from apps.okul.models import (
     AuditActor,
     AuditKeyMode,
     AuditTrail,
-    ClassSection,
     Holiday,
     ImmutableRecord,
     ImportRun,
@@ -45,7 +44,6 @@ from apps.okul.models import (
     SchoolConfig,
     SchoolTerm,
     SchoolYear,
-    Student,
     SuspendReason,
 )
 from apps.okul.oturum import (
@@ -357,9 +355,7 @@ def test_listesiz_model_izlenmez() -> None:
         SchoolYear,
         SchoolTerm,
         Holiday,
-        Student,
         Personnel,
-        ClassSection,
         ImportRun,
         Attachment,
     ],
@@ -381,43 +377,21 @@ def test_izin_listeleri_modelin_alanlarini_eksiksiz_siniflar(model: Any) -> None
     if model is Attachment:
         assert mac_disi == {"original_name", "key_wrap"}
     elif mac_disi:
-        assert model in (Student, Personnel) and model.IZ_DEGER_ALANLARI == ()
+        assert model is Personnel and model.IZ_DEGER_ALANLARI == ()
     if mac_disi:
         assert sifreli <= mac_disi  # silinen kişi verisinin hiçbiri MAC'e girmez
 
 
-@pytest.mark.parametrize(
-    ("model", "kisi_alanlari"),
-    [
-        (Personnel, {"first_name": "Uydurgül", "last_name": "Masalcıoğlu"}),
-        (
-            Student,
-            {
-                "first_name": "Uydurgül",
-                "last_name": "Masalcıoğlu",
-                "student_number": "9090",
-            },
-        ),
-    ],
-    ids=["Personnel", "Student"],
-)
-def test_kvkk_silme_kumesinin_kisi_alanlari_icerik_macina_girmez(
-    model: Any, kisi_alanlari: dict[str, str]
-) -> None:
-    """Tasarım §5 O4: silinen kişinin adı, soyadı ve okul no'su içerik MAC'inden aday
-    sözlüğüyle geri bulunamaz — MAC bu alanlar değişince DEĞİŞMEZ; MAC'teki öteki alan
-    (ayrılış) değişince değişir. Kişi verisi UYDURMADIR."""
-    kayit: Personnel | Student
-    if model is Personnel:
-        kayit = persons.create_personnel(first_name="Uydurnur", last_name="Örnekkaya")
-    else:
-        kayit = persons.create_student(
-            first_name="Uydurcan", last_name="Örnekoğlu", student_number="501", class_level=9
-        )
+def test_kvkk_silme_kumesinin_kisi_alanlari_icerik_macina_girmez() -> None:
+    """Tasarım §5 O4: silinen kişinin adı ve soyadı içerik MAC'inden aday sözlüğüyle geri
+    bulunamaz — MAC bu alanlar değişince DEĞİŞMEZ; MAC'teki öteki alan (ayrılış) değişince
+    değişir. Kişi verisi UYDURMADIR. (Öğrenci sicili F1b 5. adımda söküldü; KVKK silme kümesinin
+    bugünkü tek modeli personeldir.)"""
+    model = Personnel
+    kayit = persons.create_personnel(first_name="Uydurnur", last_name="Örnekkaya")
     once = denetim_izi.kayit_mac_hesapla(model, kayit.pk)
-    ek = {"student_number_index": "0" * 64} if model is Student else {}
     # Program dışı yazım taklidi (şifreli değer geçerli token'dır; iz satırı yazılmaz).
-    model._base_manager.filter(pk=kayit.pk).update(**kisi_alanlari, **ek)
+    model._base_manager.filter(pk=kayit.pk).update(first_name="Uydurgül", last_name="Masalcıoğlu")
     assert model._base_manager.get(pk=kayit.pk).first_name == "Uydurgül"
     assert denetim_izi.kayit_mac_hesapla(model, kayit.pk) == once
     assert denetim_izi.kaydi_dogrula(model, kayit.pk) is True

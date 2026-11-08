@@ -41,12 +41,9 @@ const okulApiMock = vi.hoisted(() => ({
   getSchoolConfig: vi.fn(),
   updateSchoolConfig: vi.fn(),
   completeSetup: vi.fn(),
-  getGradeLevels: vi.fn(),
   listSchoolYears: vi.fn(),
   listSchoolTerms: vi.fn(),
-  listStudents: vi.fn(),
   listPersonnel: vi.fn(),
-  listClassSections: vi.fn(),
   listHolidays: vi.fn(),
   markRoadmapItem: vi.fn(),
   setRoadmapHidden: vi.fn(),
@@ -137,9 +134,7 @@ const ACIK_OTURUM: OturumOzeti = {
 
 const KURULU: SetupStatus = {
   ...KURULU_DURUM,
-  student_count: 482,
   personnel_count: 37,
-  class_section_count: 18,
 };
 
 // Parola kurulu ama okul ve takvim adımları eksik (kurulum tamamlanmamış).
@@ -151,7 +146,6 @@ const KURULMAMIS: SetupStatus = {
   has_active_school_year: false,
   active_school_year: null,
   missing_steps: ["school", "calendar"],
-  student_count: 0,
   personnel_count: 0,
 };
 
@@ -184,21 +178,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   okulApiMock.getSetupStatus.mockResolvedValue(KURULU);
   okulApiMock.getSchoolConfig.mockResolvedValue(ORNEK_OKUL_KARTI);
-  okulApiMock.getGradeLevels.mockResolvedValue({
-    levels: [
-      { value: 9, label: "9" },
-      { value: 10, label: "10" },
-    ],
-    prep_enabled: false,
-  });
   okulApiMock.listSchoolYears.mockResolvedValue([]);
   okulApiMock.listSchoolTerms.mockResolvedValue([]);
-  okulApiMock.listClassSections.mockResolvedValue([]);
   okulApiMock.listHolidays.mockResolvedValue([]);
   const bosSayfa = { count: 0, next: null, previous: null, results: [] };
-  okulApiMock.listStudents.mockResolvedValue(bosSayfa);
   okulApiMock.listPersonnel.mockResolvedValue(bosSayfa);
-  okulApiMock.getLeavePoolSummary.mockResolvedValue({ student_count: 0, personnel_count: 0 });
+  okulApiMock.getLeavePoolSummary.mockResolvedValue({ personnel_count: 0 });
   oturumApiMock.ozet.mockResolvedValue(ACIK_OTURUM);
   butunlukApiMock.durum.mockRejectedValue(new TypeError("çevrimdışı"));
   butunlukApiMock.parolaBildirimi.mockResolvedValue({ parola_yenilenme: null });

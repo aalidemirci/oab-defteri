@@ -48,10 +48,8 @@ export const YETENEK_ADLARI = [
   "kisi_yazma",
   "kullanicilar",
   "kurulum_tamamlama",
-  "ogrenciler",
   "okul_karti_yazma",
   "son_oturum_onay",
-  "sube_yazma",
   "yol_haritasi",
 ] as const;
 

@@ -37,14 +37,14 @@ def test_kisi_verisi_tasiyan_api_yaniti_onbellege_yazilmaz() -> None:
 
 @pytest.mark.parametrize("durum", [200, 201, 400, 403, 404, 409, 423, 503])
 def test_her_durum_kodunda_no_store(durum: int) -> None:
-    assert "no-store" in _direktifler(_sar(HttpResponse(status=durum), "/api/v1/students/"))
+    assert "no-store" in _direktifler(_sar(HttpResponse(status=durum), "/api/v1/personnel/"))
 
 
 def test_gorunumun_basligi_korunur_no_store_eklenir() -> None:
     yanit = HttpResponse()
     yanit["Cache-Control"] = "private, max-age=60"
 
-    assert set(_direktifler(_sar(yanit, "/api/v1/students/"))) == {
+    assert set(_direktifler(_sar(yanit, "/api/v1/personnel/"))) == {
         "private",
         "max-age=60",
         "no-store",
@@ -85,7 +85,7 @@ def test_gercek_zincirde_saglik_yolu_onbellege_yazilmaz() -> None:
 
 @pytest.mark.django_db
 def test_gercek_zincirde_kilit_kapisinin_yaniti_da_onbellege_yazilmaz(kilitli: Path) -> None:
-    yanit = Client().get("/api/v1/students/")
+    yanit = Client().get("/api/v1/personnel/")
 
     assert yanit.status_code == 423
     assert "no-store" in _direktifler(yanit)

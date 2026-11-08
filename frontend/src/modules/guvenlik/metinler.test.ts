@@ -60,7 +60,7 @@ describe("güvenlik metinleri", () => {
     const oturum = sinir("Açık oturum, sahibinin imzasıdır.");
     expect(oturum).toMatch(/her iş o hesabın adına denetim izine yazılır/);
     // Plan F1b-1: kişi silme ve birleştirme 5. adıma dek izsiz — metin bunu saklamaz.
-    expect(oturum).toMatch(/tek\s+istisna: öğrenci ve personelin sicilden silinmesi/);
+    expect(oturum).toMatch(/tek\s+istisna: personelin sicilden silinmesi/);
     // Geri yükleme ilk girişte, başlatan hesapla birlikte yazılır (kurtarma yolunda da).
     expect(oturum).toMatch(
       /Yedekten geri yükleme, ardından yapılan ilk girişte, onu başlatan\s+hesapla/,

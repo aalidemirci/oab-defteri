@@ -1,34 +1,25 @@
-"""`okul` modelleri — kurum künyesi, ders yılı/dönemler, kapalı günler, kişi sicilleri, şube kataloğu, içe aktarma.
+"""`okul` modelleri — kurum künyesi, ders yılı/dönemler, kapalı günler, personel sicili, içe aktarma.
 
 Aile iskeletinden alındı (iskelet bunu atalarının `apps/okul/models.py`
 kalıbından türetip sadeleştirmişti). OAB'deki yeri ve değişecek alanları OAB
-tasarımının §5.1 ve §12.B'sindedir (öğrenci alanları F1b'de düşer; okul kartının OAB
-alanları F1b 4. adımda girdi, kütüphane saatleri ve kısa ad aynı adımda düştü):
+tasarımının §5.1 ve §12.B'sindedir (okul kartının OAB alanları F1b 4. adımda girdi,
+kütüphane saatleri ve kısa ad aynı adımda düştü; öğrenci sicili, şube kataloğu ve hazırlık
+sınıfı bayrağı F1b 5. adımda göç 0014 ile düştü — tasarım §5.1 ALMA, T5):
 
 - `SchoolConfig`: okul kartı — kurum künyesi, kademeler, öğrenci mevcudu, yerleşim türü,
   kantin ve personel çalıştırma biçimi, kampüs, açılış tarihi, demirbaş onayı (sınıf yorumu).
 
-- `Student`: yalnız ad-soyad + okul no + sınıf/şube + durum + ayrılış tarihi.
-  TCKN, veli ve cinsiyet alanları YOKTUR (en iyi KVKK önlemi veriyi hiç
-  edinmemek). Ad-soyad VE okul no `EncryptedCharField`'dır (tasarım §5.3);
-  okul no'nun eşleştirmesi ve tekliği kör indeksledir, ad temelli arama
-  ve bütün sıralamalar Python katmanındadır (selectors).
 - `Personnel`: aile kalıbı + `is_active` + şifreli ad-soyad + `member_kind` +
   ayrılış tarihi. Unvan ve branş YOKTUR (tasarım §8.4; branş, küçük okulda
   öğretmeni kişiye bağlar).
-- AYRILIŞ HAVUZU (aile iskeletinin kararı; OAB'de tasarım §5.1 `Personnel`): `Student` ve
-  `Personnel` `leave_candidate_since` + `leave_candidate_run` taşır. e-Okul
+- AYRILIŞ HAVUZU (aile iskeletinin kararı; OAB'de tasarım §5.1 `Personnel`): `Personnel`
+  `leave_candidate_since` + `leave_candidate_run` taşır. e-Okul
   aktarımında listede bulunmayan AKTİF kişi havuza girer, durumu aktif kalır;
   karar yöneticinindir (`services.persons`). Havuzdaki kişi DB kısıtıyla
   aktiftir: ayrılış havuz alanlarını aynı kayıtta temizler.
-- `ClassSection`: şube kataloğu — ders yılı içinde görülen (seviye, şube)
-  çiftleri; içe aktarma sonrası tohumlanır.
 - `Holiday`: aile iskeletinden AYNEN (tasarım §5.1) — `SCHOOL_BREAK` türüyle
   ("öğrenciye kapalı gün"); kapalı gün aritmetiğinin veri kaynağıdır
   (`shared.working_days`; OAB'de iş günü hesabı, tasarım §5.1).
-- Sınıf seviyeleri OKUL İÇİ SABİTTİR (`normalize.GRADE_LEVELS`, 1-12); hazırlık
-  sınıfı aile iskeletindeki gibi 0 koduyla temsil edilir ve `SchoolConfig.has_prep_class`
-  açıkken geçerli kümeye girer.
 - Koşullu UniqueConstraint'ler SQLite partial index ile çalışır (ailede kanıtlı).
 - Güvenlik çekirdeği (tasarım §4.6, F1b-1): `Account`, `AuditKey`, `AuditTrail` ve
   `AccessLog` (erişim günlüğü; zincir dışı, değer tutmaz, 2 yıl saklanır).
@@ -48,28 +39,14 @@ from django.db.models.functions import Length
 from django.db.models.lookups import Exact
 from django.utils import timezone
 
-from apps.okul.normalize import GRADE_LEVELS, PREP_LEVEL, normalize_student_number
 from shared import kanonik
 from shared.crypto import (
     EncryptedCharField,
     EncryptedTextField,
     account_seal_key,
-    blind_index,
     is_corrupt,
 )
 from shared.models import BaseModel
-
-
-def grade_levels_for(*, has_prep_class: bool) -> tuple[int, ...]:
-    """Hazırlık bayrağından geçerli sınıf seviyeleri (artan sırada)."""
-    return (PREP_LEVEL, *GRADE_LEVELS) if has_prep_class else GRADE_LEVELS
-
-
-def _class_label(class_level: int, class_section: str) -> str:
-    """'10/A' ya da hazırlıkta 'Hz/A' — evrak ve arayüzün beklediği etiket."""
-    if class_level == PREP_LEVEL:
-        return f"Hz/{class_section}"
-    return f"{class_level}/{class_section}"
 
 
 class SchoolLevel(models.TextChoices):
@@ -179,10 +156,6 @@ class SchoolConfig(BaseModel):
     Enum alanlarında boş değer "henüz seçilmedi"dir (kurulum tamamlanamaz). Bir kez girilen
     zorunlu alan sonradan boşaltılamaz (serileştirici; aile kuralı, tasarım §5.1).
 
-    `has_prep_class`: aile iskeletinden kalan hazırlık sınıfı bayrağı. Okul kartından ve
-    serileştiriciden çıktı (OAB öğrenci listesi tutmaz, T5); öğrenci aktarımı `grade_levels`
-    ile okur, alan öğrenci tarafıyla F1b 5. adımda göçle düşer.
-
     `idle_lock_minutes`: oturumun boşta kilit süresi (dakika; tasarım TK14, plan F1b-1
     "Oturum"). Ayarlar → Güvenlik'te program yöneticisi değiştirir (uç
     `security/idle-lock/`, servis `services.setup.set_idle_lock_minutes`; her rol okur,
@@ -210,7 +183,6 @@ class SchoolConfig(BaseModel):
 
     #: Denetim izinde önce/sonra değeri yazılabilen kişisiz alanlar (tasarım §4.6.2, §5 O4).
     IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = (
-        "has_prep_class",
         "institution_code",
         "levels",
         "student_count",
@@ -238,7 +210,6 @@ class SchoolConfig(BaseModel):
         "province",
         "district",
         "principal_name",
-        "has_prep_class",
         "institution_code",
         "levels",
         "student_count",
@@ -260,7 +231,6 @@ class SchoolConfig(BaseModel):
     province = models.CharField("il", max_length=64, blank=True, default="")
     district = models.CharField("ilçe", max_length=64, blank=True, default="")
     principal_name = models.CharField("müdür adı", max_length=128, blank=True, default="")
-    has_prep_class = models.BooleanField("hazırlık sınıfı var", default=False)
     institution_code = models.CharField(
         "kurum kodu", max_length=INSTITUTION_CODE_LENGTH, blank=True, default=""
     )
@@ -367,11 +337,6 @@ class SchoolConfig(BaseModel):
         """Singleton satırı döndürür; yoksa KAYDEDİLMEMİŞ varsayılan (okuma yazmaz)."""
         instance: SchoolConfig | None = cls.objects.filter(pk=cls.SINGLETON_PK).first()
         return instance if instance is not None else cls(pk=None)
-
-    @property
-    def grade_levels(self) -> tuple[int, ...]:
-        """Bu okulda geçerli sınıf seviyeleri (0=Hazırlık dahil olabilir)."""
-        return grade_levels_for(has_prep_class=self.has_prep_class)
 
 
 class SchoolYear(BaseModel):
@@ -701,240 +666,13 @@ class Personnel(BaseModel):
         return self.full_name
 
 
-class ClassSection(BaseModel):
-    """Şube kataloğu — ders yılı içinde görülen (seviye, şube) çiftleri.
-
-    İçe aktarma sonrası tohumlanır (`imports._ensure_class_sections`), elle de
-    eklenebilir. Seçiciler ve şube bazlı listeler bu katalogdan beslenir.
-
-    DENETİM İZİ: oluşturma (elle ve tohumlama) ve yumuşak silme (`DURUM`) izlidir.
-    Şube adı ("A", "FEN") kısa bir koddur, değeriyle girer.
-    """
-
-    #: Denetim izinde önce/sonra değeri yazılabilen kişisiz alanlar (tasarım §4.6.2).
-    IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = (
-        "school_year",
-        "class_level",
-        "class_section",
-        "deleted_at",
-    )
-    #: İçerik MAC'ine giren alanlar (kimlik hariç bütün alanlar).
-    IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
-        "created_at",
-        "updated_at",
-        "deleted_at",
-        "school_year",
-        "class_level",
-        "class_section",
-    )
-    #: Durum alanları: değişimleri ayrı `DURUM` satırıdır (§4.6.2 kural 3).
-    IZ_DURUM_ALANLARI: ClassVar[tuple[str, ...]] = ("deleted_at",)
-
-    school_year = models.ForeignKey(
-        SchoolYear,
-        on_delete=models.PROTECT,
-        related_name="class_sections",
-        verbose_name="ders yılı",
-    )
-    class_level = models.PositiveSmallIntegerField("sınıf")
-    class_section = models.CharField("şube", max_length=8)
-
-    class Meta:
-        verbose_name = "şube"
-        verbose_name_plural = "şubeler"
-        ordering = ["school_year", "class_level", "class_section"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["school_year", "class_level", "class_section"],
-                condition=models.Q(deleted_at__isnull=True),
-                name="uq_class_section_alive",
-            )
-        ]
-        indexes = [
-            models.Index(
-                fields=["school_year", "class_level", "class_section"],
-                name="okul_class_section_lookup_idx",
-            )
-        ]
-
-    def __str__(self) -> str:
-        return f"{self.school_year.name} — {self.class_label}"
-
-    @property
-    def class_label(self) -> str:
-        return _class_label(self.class_level, self.class_section)
-
-
-class StudentStatus(models.TextChoices):
-    ACTIVE = "ACTIVE", "Aktif"
-    LEFT = "LEFT", "Ayrıldı"
-
-
-def student_number_blind_index(student_number: str) -> str:
-    """Okul numarasının kör indeksi (tasarım §5.3); boş numara → ''.
-
-    Yazmada (`Student.save`) ve aramada (`selectors`) AYNI yol kullanılır:
-    `normalize_student_number` ('0123' ≡ '123') + `crypto.blind_index`.
-    Anahtar bellekte değilse `KeyMissingError` (fail-closed).
-    """
-    return blind_index(normalize_student_number(student_number))
-
-
-class Student(BaseModel):
-    """Öğrenci — okul sicilinin kişi kaydı (aile iskeletinden; T5 gereği sökülür, tasarım §5.1).
-
-    Evrak sözleşmesi: `full_name`, `student_number`, `class_label` — basılı
-    belgeler ve anlık görüntüler (snapshot) bu üçünden beslenir.
-
-    ŞİFRELEME KAPSAMI (tasarım §5.3): ad, soyad ve OKUL NO şifrelidir;
-    sınıf/şube ve durum AÇIKTIR. Okul no şifreli olduğu için DB'de onunla
-    süzülemez ve sıralanamaz: kimlik eşleştirmesi (e-Okul, arama, teklik)
-    `student_number_index` kör indeksiyle TAM EŞLEŞMEDİR, okul no'ya göre
-    sıralama selector'da Python'dadır. TCKN, veli ve cinsiyet alanı YOKTUR.
-
-    KÖR İNDEKS YALNIZ `save()` İLE YAZILIR: `QuerySet.update(student_number=…)`,
-    `bulk_update` ve `bulk_create` `save()`'i atlar, indeks eski numarada (ya da
-    boş) kalır ve eşleştirme sessizce bozulur. Okul no toplu yazılmaz (koruma
-    testi: `test_models.py::test_okul_no_toplu_yazilmaz`).
-
-    AYRILIŞ HAVUZU (aile iskeletinden): e-Okul aktarımı kimseyi ayırmaz; dosyada
-    bulunmayan aktif öğrenci `leave_candidate_since` (+ hangi aktarımla)
-    damgasıyla havuza girer, durumu AKTİF kalır. Ayrılış (LEFT + `left_at`)
-    kaydı silmez.
-
-    DENETİM İZİ (tasarım §4.6.2): `Personnel` gibi KVKK silme kümesindedir (kullanıcının
-    katı silmesi; model T5 ile sökülür): `values` BOŞTUR, satıra yalnız değişen alanların
-    adları girer — okul no ve sınıf/şube dahil. Kişi alanları (ad, soyad, okul no ve onun
-    kör indeksi) içerik MAC'ine de GİRMEZ (`IZ_MAC_DISI_ALANLARI`; tasarım §5 O4, §4.6.2
-    "boşaltılan ya da silinen alanlar"): silinen öğrencinin iz satırları kalır, MAC'i İA'ya
-    erişen birine aday ad ve numara sözlüğüyle kişiyi geri buldururdu. İçerik MAC'i kalan
-    alanları kapsar. Dürüst sınır: bu sütunlara program dışından yazılan değer ya da başka
-    satırdan taşınmış token içerik MAC'inde görünmez. Ayrılış, durum ve havuz alanları durum
-    geçişidir (`DURUM`).
-    """
-
-    #: Denetim izinde değeri yazılabilen alan YOK (KVKK silme kümesi; tasarım §4.6.2).
-    IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = ()
-    #: İçerik MAC'ine giren alanlar: kimlik ve KVKK silme kümesindeki kişi alanları hariç.
-    IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
-        "created_at",
-        "updated_at",
-        "deleted_at",
-        "class_level",
-        "class_section",
-        "status",
-        "left_at",
-        "leave_candidate_since",
-        "leave_candidate_run",
-    )
-    #: İçerik MAC'inin DIŞINDAKİ alanlar: silinen kişi verisi (tasarım §5 O4; belge dizesi).
-    IZ_MAC_DISI_ALANLARI: ClassVar[tuple[str, ...]] = (
-        "first_name",
-        "last_name",
-        "student_number",
-        "student_number_index",
-    )
-    #: Durum alanları: ayrılış, yeniden aktifleşme ve ayrılış havuzu (§4.6.2 kural 3).
-    IZ_DURUM_ALANLARI: ClassVar[tuple[str, ...]] = (
-        "status",
-        "left_at",
-        "leave_candidate_since",
-        "leave_candidate_run",
-        "deleted_at",
-    )
-
-    first_name = EncryptedCharField("ad", max_length=100)
-    last_name = EncryptedCharField("soyad", max_length=100)
-    student_number = EncryptedCharField("okul no", max_length=16, blank=True, default="")
-    student_number_index = models.CharField(
-        "okul no kör indeksi", max_length=64, blank=True, default="", editable=False
-    )
-    class_level = models.PositiveSmallIntegerField("sınıf", null=True, blank=True)
-    class_section = models.CharField("şube", max_length=8, blank=True, default="")
-    status = models.CharField(
-        "durum", max_length=16, choices=StudentStatus.choices, default=StudentStatus.ACTIVE
-    )
-    left_at = models.DateField("ayrılış tarihi", null=True, blank=True)
-    leave_candidate_since = models.DateField("ayrılış havuzuna giriş tarihi", null=True, blank=True)
-    leave_candidate_run = models.ForeignKey(
-        "ImportRun",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-        verbose_name="havuza ekleyen aktarım",
-    )
-
-    class Meta:
-        verbose_name = "öğrenci"
-        verbose_name_plural = "öğrenciler"
-        # Ad ve okul no şifreli → DB'de onlara sıralanamaz. Kararlı bir DB sırası
-        # yeter; kullanıcıya gösterilen sıra (sınıf, şube TR, okul no doğal)
-        # `selectors.students_sorted` ile Python'da kurulur.
-        ordering = ["class_level", "class_section", "pk"]
-        indexes = [
-            models.Index(fields=["class_level", "class_section"], name="okul_student_class_idx"),
-            # Eşleştirme (e-Okul, arama, yeniden aktifleşme) indeks üzerinden yapılır.
-            models.Index(fields=["student_number_index"], name="okul_student_numidx_idx"),
-        ]
-        constraints = [
-            # Okul numaralı AKTİF canlı kayıt tekil — içe aktarma eşleştirme anahtarı.
-            # Teklik KÖR İNDEKSE konur (§5.3): şifreli sütunda token her yazımda
-            # değiştiği için teklik orada çalışmaz. Ayrılan öğrencinin numarası
-            # ileride başka öğrenciye verilebilir.
-            models.UniqueConstraint(
-                fields=["student_number_index"],
-                condition=(
-                    models.Q(deleted_at__isnull=True, status="ACTIVE")
-                    & ~models.Q(student_number_index="")
-                ),
-                name="uq_student_number_index_active_alive",
-            ),
-            # Ayrılış havuzunda yalnız AKTİF öğrenci bekler (ayrılış havuzu temizler).
-            models.CheckConstraint(
-                condition=models.Q(leave_candidate_since__isnull=True) | models.Q(status="ACTIVE"),
-                name="ck_student_leave_candidate_active",
-            ),
-        ]
-
-    def __str__(self) -> str:
-        return f"{self.full_name} ({self.class_label or 'sınıfsız'})"
-
-    def save(self, *args: Any, **kwargs: Any) -> None:
-        """Okul no'nun kör indeksini günceller, sonra kaydeder.
-
-        `update_fields` verilmişse ve okul no içinde yoksa indeks yeniden
-        hesaplanmaz (numara değişmedi; anahtar gerekmez). Okul no içindeyse
-        indeks alanı da `update_fields`'e eklenir — aksi hâlde yeni numara
-        yazılır, indeks eskide kalırdı.
-
-        Okul no çözülemiyorsa (`CorruptField`, tasarım §13 D48) indeks yeniden
-        HESAPLANMAZ: işaretin indeksi anlamsızdır ve eşleşmeye sahte bir değer
-        sokardı; kayıtlı indeks olduğu gibi kalır, ham değer de aynen geri yazılır.
-        """
-        update_fields = kwargs.get("update_fields")
-        if (update_fields is None or "student_number" in update_fields) and not is_corrupt(
-            self.student_number
-        ):
-            self.student_number_index = student_number_blind_index(self.student_number)
-            if update_fields is not None and "student_number_index" not in update_fields:
-                kwargs["update_fields"] = [*update_fields, "student_number_index"]
-        super().save(*args, **kwargs)
-
-    @property
-    def full_name(self) -> str:
-        return f"{self.first_name} {self.last_name}".strip()
-
-    @property
-    def class_label(self) -> str:
-        """'10/A' — evrak ve arayüzün beklediği sınıf etiketi; sınıfsız → ''."""
-        if self.class_level is None or not self.class_section:
-            return ""
-        return _class_label(self.class_level, self.class_section)
-
-
 class ImportSourceType(models.TextChoices):
-    """İçe aktarma kaynak türü (xlsx ve pano yapıştırma AYNI türdedir)."""
+    """İçe aktarma kaynak türü (xlsx ve pano yapıştırma AYNI türdedir).
+
+    `STUDENTS` öğrenci aktarımı söküldükten sonra (F1b 5. adım) yalnız eski geçmiş
+    satırlarını adlandırır; değerler tasarımın `PERSONEL` · `VELI` kümesine veli listesiyle
+    birlikte göçle çevrilir (plan "F1b-5 uygulama kararları", tasarım §5 O8).
+    """
 
     STUDENTS = "STUDENTS", "Öğrenci"
     PERSONNEL = "PERSONNEL", "Personel"
@@ -1627,7 +1365,7 @@ class AccessLog(models.Model):
       kendisi denetim izine `KVKK_SILME` satırı olarak düşer. Arşiv paketine girmez (§8.5).
     * **Şifresizdir ve değer tutmaz**: kişisel veri olarak yalnız okuyan hesabın bağı ve
       okunan kaydın kimliği (takma ad düzeyinde) durur; okunan değer, ad, serbest metin
-      hiçbir sütuna girmez. `model` uygulama etiketli model adı (`okul.Student`), `object_id`
+      hiçbir sütuna girmez. `model` uygulama etiketli model adı (`okul.Personnel`), `object_id`
       kimliğin metni, `field` modelin alan adıdır; çıktıda belgenin sha256'sı ve satır sayısı.
 
     KORUMA — SATIR DEĞİŞMEZ, YALNIZ SÜRESİ DOLUNCA SİLİNİR:

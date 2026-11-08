@@ -1,9 +1,9 @@
-// AyarlarPage testi: ders yılları + kapalı günler + şube kataloğu + okul bilgileri
+// AyarlarPage testi: ders yılları + kapalı günler + okul bilgileri
 // (okul kartı; alanların kendisi `okul/OkulKartiAlanlari.test`te) + güvenlik sekmesinin varlığı. Güvenlik ve kapalı gün
 // panellerinin kendi davranışı modules/guvenlik ve modules/takvim testlerinde;
 // burada yalnız sekme kablolaması doğrulanır.
-// Kaldırılan sekmeler (ders saatleri, zümreler, şube kümeleri) ve okul türü/
-// çizelge/ayrışma alanları geri gelmesin diye ayrıca sabitlenir.
+// Kaldırılan sekmeler (ders saatleri, zümreler, şube kümeleri; F1b 5. adımda şubeler) ve okul
+// türü/çizelge/ayrışma alanları geri gelmesin diye ayrıca sabitlenir.
 
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -14,22 +14,18 @@ import { ApiError } from "../../lib/api";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { ORNEK_OKUL_KARTI } from "../../test/okulKarti";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
-import type { ClassSection, SchoolTerm, SchoolYear } from "../okul/api";
+import type { SchoolTerm, SchoolYear } from "../okul/api";
 import { OKUL_KARTI_ACIKLAMASI } from "../okul/metinler";
 
 const oapi = vi.hoisted(() => ({
   getSetupStatus: vi.fn(),
   getSchoolConfig: vi.fn(),
   updateSchoolConfig: vi.fn(),
-  getGradeLevels: vi.fn(),
   listSchoolYears: vi.fn(),
   createSchoolYear: vi.fn(),
   activateSchoolYear: vi.fn(),
   listSchoolTerms: vi.fn(),
   configureSchoolTerms: vi.fn(),
-  listClassSections: vi.fn(),
-  createClassSection: vi.fn(),
-  deleteClassSection: vi.fn(),
   seedHolidays: vi.fn(),
 }));
 
@@ -75,15 +71,6 @@ const PASIF_YIL: SchoolYear = {
   is_active: false,
 };
 
-const SUBE: ClassSection = {
-  id: 11,
-  school_year: 3,
-  school_year_name: "2026-2027",
-  class_level: 10,
-  class_section: "A",
-  class_label: "10/A",
-};
-
 /** Varsayılan: program yöneticisinin bütün yetenekleri (süzme `oturum/yetki`'den gelir). */
 function renderPage(yol = "/ayarlar", yetenekler: readonly string[] = YETENEK_ADLARI) {
   return render(
@@ -108,15 +95,7 @@ beforeEach(() => {
     religious_available: true,
   });
   oapi.getSchoolConfig.mockResolvedValue(ORNEK_OKUL_KARTI);
-  oapi.getGradeLevels.mockResolvedValue({
-    levels: [
-      { value: 9, label: "9" },
-      { value: 10, label: "10" },
-    ],
-    prep_enabled: false,
-  });
   oapi.listSchoolTerms.mockResolvedValue([]);
-  oapi.listClassSections.mockResolvedValue([SUBE]);
 });
 
 afterEach(() => {
@@ -124,13 +103,12 @@ afterEach(() => {
 });
 
 describe("AyarlarPage — sekmeler", () => {
-  it("altı sekme vardır (bu sırayla); kaldırılan sekmeler geri gelmez", async () => {
+  it("beş sekme vardır (bu sırayla); kaldırılan sekmeler geri gelmez", async () => {
     renderPage();
     await screen.findByText("2026-2027");
     expect(screen.getAllByRole("tab").map((t) => t.textContent?.trim())).toEqual([
       expect.stringContaining("Ders Yılları"),
       expect.stringContaining("Kapalı Günler"),
-      expect.stringContaining("Şubeler"),
       expect.stringContaining("Okul Bilgileri"),
       expect.stringContaining("Güvenlik"),
       expect.stringContaining("Güncelleme"),
@@ -139,6 +117,8 @@ describe("AyarlarPage — sekmeler", () => {
       /Ders Saatleri/,
       /Zümreler/,
       /Şube Kümeleri/,
+      // Şube kataloğu öğrenci sicili ile F1b 5. adımda söküldü.
+      /Şubeler/,
       /Tatiller/,
       // Aile iskeletinin kütüphane panelleri (F1a-2'de söküldü).
       /Kütüphane Politikası/,
@@ -193,9 +173,9 @@ describe("AyarlarPage — ders yılları", () => {
 
     await user.click(screen.getByRole("button", { name: /Aktifleştir/ }));
     const onay = await screen.findByRole("dialog", { name: "Ders yılı aktifleştirilsin mi?" });
-    // Onay gövdesi sonucu söyler; kaldırılan modüllerden söz etmez.
-    expect(within(onay).getByText(/e-Okul aktarımlarında görülen şubeler/)).toBeInTheDocument();
-    expect(within(onay).queryByText(/sınav|ders havuzu/i)).toBeNull();
+    // Onay gövdesi sonucu söyler; kaldırılan modüllerden (şube kataloğu dahil) söz etmez.
+    expect(within(onay).getByText(/diğer yıllar pasife çekilir\.$/)).toBeInTheDocument();
+    expect(within(onay).queryByText(/sınav|ders havuzu|şube/i)).toBeNull();
     await user.click(within(onay).getByRole("button", { name: "Aktifleştir" }));
 
     await waitFor(() => expect(oapi.activateSchoolYear).toHaveBeenCalledWith(4));
@@ -261,46 +241,6 @@ describe("AyarlarPage — ders yılları", () => {
 
     expect(await screen.findByText("Ders yılı adı yazılmalıdır.")).toBeInTheDocument();
     expect(oapi.createSchoolYear).not.toHaveBeenCalled();
-  });
-});
-
-describe("AyarlarPage — şubeler", () => {
-  it("şube kataloğunu listeler ve yeni şube ekler", async () => {
-    oapi.createClassSection.mockResolvedValue({ ...SUBE, id: 12, class_section: "B" });
-    const user = userEvent.setup();
-    renderPage();
-
-    await user.click(await screen.findByRole("tab", { name: /Şubeler/ }));
-    expect(await screen.findByText("10/A")).toBeInTheDocument();
-    // Katalog tarifi kaldırılan salon/sınav özelliklerinden söz etmez.
-    expect(screen.getByText(/aktarımında görülen şubeler buraya/)).toBeInTheDocument();
-    expect(screen.queryByText(/[Ss]alon|sınav duyurusu/)).not.toBeInTheDocument();
-
-    await user.type(screen.getByLabelText("Şube"), "B");
-    await user.click(screen.getByRole("button", { name: "Şube ekle" }));
-
-    await waitFor(() =>
-      expect(oapi.createClassSection).toHaveBeenCalledWith({
-        school_year: 3,
-        class_level: 9,
-        class_section: "B",
-      }),
-    );
-  });
-
-  it("şube kaldırma onaydan geçer", async () => {
-    oapi.deleteClassSection.mockResolvedValue(undefined);
-    const user = userEvent.setup();
-    renderPage();
-
-    await user.click(await screen.findByRole("tab", { name: /Şubeler/ }));
-    await screen.findByText("10/A");
-
-    await user.click(screen.getByRole("button", { name: "10/A şubesini kaldır" }));
-    const onay = await screen.findByRole("dialog", { name: "Şube katalogdan kaldırılsın mı?" });
-    await user.click(within(onay).getByRole("button", { name: "Kaldır" }));
-
-    await waitFor(() => expect(oapi.deleteClassSection).toHaveBeenCalledWith(11));
   });
 });
 
@@ -516,7 +456,6 @@ describe("AyarlarPage — rol süzmesi (okul sekmeleri öteki rollerde salt okur
     expect(screen.getAllByRole("tab").map((t) => t.textContent?.trim())).toEqual([
       expect.stringContaining("Ders Yılları"),
       expect.stringContaining("Kapalı Günler"),
-      expect.stringContaining("Şubeler"),
       expect.stringContaining("Okul Bilgileri"),
       expect.stringContaining("Güvenlik"),
     ]);
@@ -599,19 +538,6 @@ describe("AyarlarPage — rol süzmesi (okul sekmeleri öteki rollerde salt okur
   it("kapalı günler paneli salt okur kipte açılır", async () => {
     renderPage("/ayarlar?tab=kapali-gunler", BASKAN);
     expect(await screen.findByText("KAPALI GÜNLER PANELİ (salt okur)")).toBeInTheDocument();
-  });
-
-  it("şubeler salt okur: liste kalır, ekleme ve kaldırma yok", async () => {
-    renderPage("/ayarlar?tab=subeler", BASKAN);
-
-    expect(await screen.findByText("10/A")).toBeInTheDocument();
-    expect(screen.getByRole("note")).toHaveTextContent(SALT_OKUR);
-    expect(screen.queryByRole("button", { name: /şubesini kaldır/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Şube ekle" })).toBeNull();
-    expect(screen.queryByLabelText("Şube")).toBeNull();
-    expect(
-      screen.getByText("Öğrenci aktarımında görülen şubeler buraya kendiliğinden eklenir."),
-    ).toBeInTheDocument();
   });
 
   it("okul bilgileri salt okur: form yerine değerler listelenir", async () => {

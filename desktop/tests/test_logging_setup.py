@@ -66,7 +66,7 @@ def test_erisim_logu_uretilmez(tmp_path: Path) -> None:
     for ad in ("waitress", "waitress.queue", "django.server"):
         assert logging.getLogger(ad).level >= logging.ERROR
 
-    logging.getLogger("django.server").info('"GET /api/v1/students/?search=Ayşe" 200')
+    logging.getLogger("django.server").info('"GET /api/v1/personnel/?search=Ayşe" 200')
     logging.shutdown()
 
     icerik = (tmp_path / LOG_FILE_NAME).read_text(encoding="utf-8")
@@ -77,12 +77,12 @@ def test_sorgu_dizesi_gunluge_yazilmaz(tmp_path: Path) -> None:
     """Sigorta: bir kütüphane yine de URL loglarsa sorgu dizesi kırpılır."""
     logger = configure_logging(tmp_path)
 
-    logger.warning("İstek başarısız: /api/v1/students/?search=Ayşe%20Yılmaz&limit=25")
+    logger.warning("İstek başarısız: /api/v1/personnel/?search=Ayşe%20Yılmaz&limit=25")
     logging.shutdown()
 
     icerik = (tmp_path / LOG_FILE_NAME).read_text(encoding="utf-8")
     assert "Ayşe" not in icerik
-    assert "/api/v1/students/" in icerik
+    assert "/api/v1/personnel/" in icerik
 
 
 # ---------------------------------------------------------------------------

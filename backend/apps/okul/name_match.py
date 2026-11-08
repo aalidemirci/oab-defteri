@@ -1,7 +1,7 @@
 """Ad-soyad eşleştirme yardımcıları — e-Okul aktarımı ve ayrılış havuzu ortak kullanır.
 
 Ad-soyad ŞİFRELİDİR (tasarım §5.3): eşleştirme DB'de değil, çözülmüş değerlerle Python'da
-yapılır. Anahtar `excel_ogrenci.normalize_header`'dır (Türkçe harfleri ASCII'ye
+yapılır. Anahtar `excel_ortak.normalize_header`'dır (Türkçe harfleri ASCII'ye
 katlar, küçük harf, tek boşluk) — aynı katlama iki tarafa da uygulanır.
 
 "Olası aynı kişi" (tasarım §13 D30, §8.4): ad aynı soyad farklı (soyadı değişimi)
@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from apps.okul.excel_ogrenci import normalize_header
+from apps.okul.excel_ortak import normalize_header
 
 #: "Olası aynı kişi" için normalize ad-soyad düzenleme uzaklığı üst sınırı.
 SIMILAR_NAME_MAX_DISTANCE = 2

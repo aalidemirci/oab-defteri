@@ -2,7 +2,7 @@
 
 Ailenin `excel_personel.py` dosyasından SADELEŞTİRİLEREK alındı: e-posta ve
 Rol/Kapsam çiftleri KALDIRILDI — programda personel hesabı yoktur. Fuzzy başlık
-eşleme kalıbı (excel_ogrenci deseni) aynen korunur.
+eşleme kalıbı aynen korunur; başlık bulma ve okuma ortak yardımcıdadır (`excel_ortak`).
 
 UNVAN VE BRANŞ SAKLANMAZ (tasarım §5.1 `Personnel`, §8.4): bir branşta çoğu
 zaman 1-3 öğretmen olduğundan branş, öğretmeni kişiye bağlar. Bu yüzden:
@@ -25,7 +25,15 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from apps.okul import normalize
-from apps.okul.excel_ogrenci import ParserError, normalize_header, read_sheet
+from apps.okul.excel_ortak import (
+    ParserError,
+    basligi_bul,
+    bos_satir,
+    hucre,
+    hucre_metni,
+    normalize_header,
+    read_sheet,
+)
 
 #: `models.MemberKind` değerleri (modül Django'suz kalsın diye düz metin; eşitliği
 #: `tests/test_excel_personel_parser.py` sabitler).
@@ -135,71 +143,22 @@ class ParsedPersonnelRow:
     member_kind_unrecognized: bool = False
 
 
-def _str(value: Any) -> str:
-    if value is None:
-        return ""
-    s = str(value).strip()
-    if s.endswith(".0") and s[:-2].isdigit():
-        s = s[:-2]
-    return s
-
-
-def _match_field_for_header(norm: str) -> str | None:
-    for fieldname, keywords in COLUMN_SYNONYMS.items():
-        for kw in keywords:
-            if kw == norm or kw in norm:
-                return fieldname
-    return None
-
-
-def _map_header_row(cells: list[Any]) -> tuple[dict[str, int], dict[str, str], list[str]]:
-    fields: dict[str, int] = {}
-    matched: dict[str, str] = {}
-    warnings: list[str] = []
-    for idx, cell in enumerate(cells):
-        norm = normalize_header(cell)
-        if not norm:
-            continue
-        fieldname = _match_field_for_header(norm)
-        if fieldname is None:
-            continue
-        if fieldname in fields:
-            warnings.append(
-                f"'{cell}' sütunu '{fieldname}' için yinelenen eşleşme; ilki kullanıldı."
-            )
-            continue
-        fields[fieldname] = idx
-        matched[fieldname] = str(cell).strip()
-    return fields, matched, warnings
+def _kullanilir_mi(fields: dict[str, int]) -> bool:
+    """Ad sütunu var mı (birleşik ad-soyad ya da ayrı ad ve soyad)?"""
+    return "full_name" in fields or ("first_name" in fields and "last_name" in fields)
 
 
 def detect_columns(rows: list[list[Any]], scan_limit: int = 10) -> PersonnelColumnMapping:
-    """İlk satırlar içinde en iyi başlık satırını bulur ve sütunları eşler."""
-    best: PersonnelColumnMapping | None = None
-    for r in range(min(scan_limit, len(rows))):
-        cells = rows[r]
-        if all(c is None or str(c).strip() == "" for c in cells):
-            continue
-        fields, matched, warnings = _map_header_row(cells)
-        if not fields:
-            continue
-        candidate = PersonnelColumnMapping(
-            header_row=r, fields=fields, matched_headers=matched, warnings=warnings
-        )
-        if best is None or (candidate.is_usable, len(candidate.fields)) > (
-            best.is_usable,
-            len(best.fields),
-        ):
-            best = candidate
-        if best.is_usable and best.header_row == r:
-            break
-    return best or PersonnelColumnMapping(header_row=0)
-
-
-def _cell(cells: list[Any], idx: int | None) -> Any:
-    if idx is None or idx >= len(cells):
-        return None
-    return cells[idx]
+    """İlk satırlar içinde en iyi başlık satırını bulur ve sütunları eşler (`excel_ortak`)."""
+    bulunan = basligi_bul(
+        rows, COLUMN_SYNONYMS, kullanilir_mi=_kullanilir_mi, scan_limit=scan_limit
+    )
+    return PersonnelColumnMapping(
+        header_row=bulunan.header_row,
+        fields=bulunan.fields,
+        matched_headers=bulunan.matched_headers,
+        warnings=bulunan.warnings,
+    )
 
 
 def parse_rows(rows: list[list[Any]], mapping: PersonnelColumnMapping) -> list[ParsedPersonnelRow]:
@@ -209,18 +168,18 @@ def parse_rows(rows: list[list[Any]], mapping: PersonnelColumnMapping) -> list[P
     parsed: list[ParsedPersonnelRow] = []
     for r in range(mapping.header_row + 1, len(rows)):
         cells = rows[r]
-        if all(c is None or str(c).strip() == "" for c in cells):
+        if bos_satir(cells):
             continue
 
-        raw_name = _str(_cell(cells, f.get("full_name")))
+        raw_name = hucre_metni(hucre(cells, f.get("full_name")))
         if raw_name:
             first, last = normalize.split_full_name(raw_name)
         else:
-            first = _str(_cell(cells, f.get("first_name")))
-            last = _str(_cell(cells, f.get("last_name")))
+            first = hucre_metni(hucre(cells, f.get("first_name")))
+            last = hucre_metni(hucre(cells, f.get("last_name")))
             raw_name = f"{first} {last}".strip()
         # Görev metni yalnız bu satırda, sınıflama için okunur; değişkene bile alınmaz.
-        kind = classify_member_kind(_cell(cells, f.get("role"))) if has_role else None
+        kind = classify_member_kind(hucre(cells, f.get("role"))) if has_role else None
         parsed.append(
             ParsedPersonnelRow(
                 row_number=r + 1,
@@ -244,7 +203,7 @@ def parse_workbook(file_bytes: bytes) -> tuple[PersonnelColumnMapping, list[Pars
     return mapping, parse_rows(grid, mapping)
 
 
-# read_sheet excel_ogrenci'den yeniden kullanılır (etkin sayfa, salt-okunur).
+# read_sheet `excel_ortak`'tan yeniden kullanılır (etkin sayfa, salt-okunur).
 __all__ = [
     "KIND_STAFF",
     "KIND_TEACHER",

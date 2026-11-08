@@ -41,8 +41,6 @@ urlpatterns = [
     path("setup/complete/", views.SetupCompleteView.as_view(), name="setup-complete"),
     # Genel Bakış "Başlangıç Yol Haritası" kartının kullanıcı işaretleri (kişisel veri yok)
     path("setup/roadmap/", views.SetupRoadmapView.as_view(), name="setup-roadmap"),
-    # Öğrenim seviyeleri (okul içi sabit 1-12 + hazırlık bayrağı)
-    path("grade-levels/", views.GradeLevelsView.as_view(), name="grade-levels"),
     # Ders yılları + dönemler
     path("school-years/", views.SchoolYearListCreateView.as_view(), name="school-year-list"),
     path(
@@ -63,11 +61,7 @@ urlpatterns = [
         views_calendar.HolidayDetailView.as_view(),
         name="holiday-detail",
     ),
-    # Öğrenciler / Personel / Şubeler
-    path("students/", views.StudentListCreateView.as_view(), name="student-list"),
-    path("students/<int:pk>/", views.StudentDetailView.as_view(), name="student-detail"),
-    # Ayrılış yolu ve "olası aynı kişi" birleştirmesi (tasarım §5.1, §13 D30)
-    path("students/<int:pk>/leave/", views.StudentLeaveView.as_view(), name="student-leave"),
+    # Personel; ayrılış yolu ve "olası aynı kişi" birleştirmesi (tasarım §5.1, §13 D30)
     path("personnel/", views.PersonnelListCreateView.as_view(), name="personnel-list"),
     path("personnel/<int:pk>/", views.PersonnelDetailView.as_view(), name="personnel-detail"),
     path(
@@ -87,23 +81,7 @@ urlpatterns = [
         views_pool.LeavePoolResolveView.as_view(),
         name="leave-pool-resolve",
     ),
-    path("class-sections/", views.ClassSectionListCreateView.as_view(), name="class-section-list"),
-    path(
-        "class-sections/<int:pk>/",
-        views.ClassSectionDetailView.as_view(),
-        name="class-section-detail",
-    ),
     # İçe aktarma (dosya veya pano metni)
-    path(
-        "imports/students/preview/",
-        views.StudentImportPreviewView.as_view(),
-        name="import-students-preview",
-    ),
-    path(
-        "imports/students/commit/",
-        views.StudentImportCommitView.as_view(),
-        name="import-students-commit",
-    ),
     path(
         "imports/personnel/preview/",
         views.PersonnelImportPreviewView.as_view(),
@@ -115,7 +93,6 @@ urlpatterns = [
         name="import-personnel-commit",
     ),
     # Şablon indirme
-    path("templates/students/", views.StudentTemplateView.as_view(), name="template-students"),
     path("templates/personnel/", views.PersonnelTemplateView.as_view(), name="template-personnel"),
     # Güvenlik durumu ve ilk hesap (tasarım §4.3, §4.4.4; parolayı kaldırma ucu yok)
     path("security/status/", views.SecurityStatusView.as_view(), name="security-status"),

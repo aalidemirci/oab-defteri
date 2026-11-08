@@ -9,7 +9,8 @@ son iz satırını tutar (izsiz bir güncelleme MAC'i bozar ve burada görünür
 
 Varsayılan ortam kök `conftest.py`'dedir (oturum program yöneticisiyle açık); modül `bos_zincir`
 işaretlidir: hesabın iz satırı yazılmaz, zincir boş başlar (yazıcının satırları sırayla sayılır).
-Kişi adları ve numaralar UYDURMADIR.
+Kişi kaydı örnekleri personeldir (öğrenci sicili ve şube kataloğu F1b 5. adımda söküldü; tasarım
+§5.1 ALMA). Kişi adları UYDURMADIR.
 """
 
 from __future__ import annotations
@@ -25,33 +26,29 @@ from django.core.management import call_command
 from django.db import transaction
 
 from apps.okul import denetim_izi, masaustu_kanca, oturum
-from apps.okul.excel_ogrenci import ParserError
+from apps.okul.excel_ortak import ParserError
 from apps.okul.models import (
     Account,
     AuditTrail,
-    ClassSection,
     Holiday,
     ImportRun,
     ImportStatus,
+    MemberKind,
     Personnel,
     SchoolTerm,
     SchoolYear,
-    Student,
-    StudentStatus,
-    student_number_blind_index,
 )
 from apps.okul.services import app_password, dis_yedek, persons
 from apps.okul.services import calendar as calendar_service
 from apps.okul.services import imports as import_service
 from apps.okul.services import school_year as school_year_service
-from apps.okul.services import sections as section_service
 from apps.okul.services import terms as term_service
 from apps.okul.tests.hesap_ortak import YENI_PAROLA
 from conftest import TEST_HESAP_ID, TEST_KURTARMA_ANAHTARI
 
 pytestmark = [pytest.mark.django_db, pytest.mark.bos_zincir]
 
-OGRENCI_BASLIGI = "Sınıf\tOkul No\tAdı Soyadı"
+PERSONEL_BASLIGI = "Adı Soyadı\tGörevi"
 
 
 def satirlar(**suz: Any) -> list[AuditTrail]:
@@ -79,15 +76,9 @@ def butun_kayitlar_dogrulanir() -> None:
             assert denetim_izi.kaydi_dogrula(model, kimlik) is True, (etiket, kimlik)
 
 
-def ogrenci(**alanlar: Any) -> Student:
-    varsayilan: dict[str, Any] = {
-        "first_name": "Uydurcan",
-        "last_name": "Örnekoğlu",
-        "student_number": "501",
-        "class_level": 9,
-        "class_section": "A",
-    }
-    return persons.create_student(**{**varsayilan, **alanlar})
+def personel(**alanlar: Any) -> Personnel:
+    varsayilan: dict[str, Any] = {"first_name": "Uydurcan", "last_name": "Örnekoğlu"}
+    return persons.create_personnel(**{**varsayilan, **alanlar})
 
 
 def yil(ad: str = "2026-2027", *, aktif: bool = True, kayma: int = 0) -> SchoolYear:
@@ -123,40 +114,42 @@ def test_yeni_kayit_olustur_satiridir_degerler_izin_listesinden() -> None:
 
 
 def test_yalniz_veri_alani_degisirse_tek_guncelle_satiri() -> None:
-    kayit = ogrenci()
+    kayit = personel()
     bas = son_seq()
-    persons.update_student(kayit, class_section="B")
+    persons.update_personnel(kayit, member_kind=MemberKind.STAFF)
     (satir,) = yeni_satirlar(bas)
     assert satir.action == "GUNCELLE"
-    assert satir.changed_fields == ["updated_at", "class_section"]
+    assert satir.changed_fields == ["updated_at", "member_kind"]
     assert satir.values == {}  # KVKK silme kümesi: değer yok
 
 
 def test_yalniz_durum_alani_degisirse_tek_durum_satiri() -> None:
-    kayit = ogrenci()
+    kayit = personel()
     bas = son_seq()
-    persons.leave_student(kayit)
+    persons.leave_personnel(kayit)
     (satir,) = yeni_satirlar(bas)
     assert satir.action == "DURUM"
-    assert satir.changed_fields == ["updated_at", "status", "left_at"]
+    assert satir.changed_fields == ["updated_at", "is_active", "left_at"]
 
 
 def test_veri_ve_durum_birlikte_degisirse_iki_satir_ayni_icerik_maci() -> None:
     """§4.6.2 kural 3: durum geçişi ayrı satırdır; iki satır aynı yazımın özetidir."""
-    kayit = ogrenci()
+    kayit = personel()
     onceki = denetim_izi.anlik(kayit)
     bas = son_seq()
     with transaction.atomic():
-        Student.objects.filter(pk=kayit.pk).update(
-            class_section="C", status=StudentStatus.LEFT, left_at=date(2026, 11, 1)
+        Personnel.objects.filter(pk=kayit.pk).update(
+            member_kind=MemberKind.STAFF, is_active=False, left_at=date(2026, 11, 1)
         )
         denetim_izi.degisiklik(kayit, onceki=onceki)
     guncelle, durum = yeni_satirlar(bas)
     assert (guncelle.action, durum.action) == ("GUNCELLE", "DURUM")
-    assert guncelle.changed_fields == ["class_section"]
-    assert durum.changed_fields == ["status", "left_at"]
+    assert guncelle.changed_fields == ["member_kind"]
+    assert durum.changed_fields == ["is_active", "left_at"]
     assert (
-        guncelle.record_mac == durum.record_mac == denetim_izi.kayit_mac_hesapla(Student, kayit.pk)
+        guncelle.record_mac
+        == durum.record_mac
+        == denetim_izi.kayit_mac_hesapla(Personnel, kayit.pk)
     )
 
 
@@ -217,18 +210,14 @@ def test_yumusak_silme_deleted_at_li_durum_satiridir() -> None:
         end_date=date(2026, 11, 20),
         kind="OTHER",
     )
-    sube = section_service.create_class_section(school_year=yil(), class_level=9, class_section="A")
     bas = son_seq()
     calendar_service.delete_holiday(gun)
-    section_service.delete_class_section(sube)
-    gun_satiri, sube_satiri = yeni_satirlar(bas)
-    for satir, model in ((gun_satiri, "okul.Holiday"), (sube_satiri, "okul.ClassSection")):
-        assert (satir.action, satir.model) == ("DURUM", model)
-        assert satir.changed_fields == ["updated_at", "deleted_at"]
-        assert satir.values["deleted_at"][0] is None
-        assert satir.values["deleted_at"][1].endswith("Z")  # UTC
+    (satir,) = yeni_satirlar(bas)
+    assert (satir.action, satir.model) == ("DURUM", "okul.Holiday")
+    assert satir.changed_fields == ["updated_at", "deleted_at"]
+    assert satir.values["deleted_at"][0] is None
+    assert satir.values["deleted_at"][1].endswith("Z")  # UTC
     assert denetim_izi.kaydi_dogrula(Holiday, gun.pk) is True
-    assert denetim_izi.kaydi_dogrula(ClassSection, sube.pk) is True
 
 
 def test_tohumlama_eklenen_her_kayit_icin_olustur_yazar() -> None:
@@ -240,25 +229,24 @@ def test_tohumlama_eklenen_her_kayit_icin_olustur_yazar() -> None:
 
 
 def test_havuz_giris_cikis_ve_karar_kisi_basina_durumdur() -> None:
-    birinci = ogrenci()
-    ikinci = ogrenci(student_number="502", first_name="Uydurmay")
-    personel = persons.create_personnel(first_name="Uydurnur", last_name="Örnekkaya")
-    for kisi in (birinci, ikinci, personel):
+    birinci = personel()
+    ikinci = personel(first_name="Uydurmay")
+    ucuncu = personel(first_name="Uydurnur", last_name="Örnekkaya")
+    for kisi in (birinci, ikinci, ucuncu):
         persons.add_to_leave_pool(kisi, run=None)
     bas = son_seq()
     persons.resolve_leave_pool(
-        students=persons.PoolDecision(leave=(birinci.pk,), keep=(ikinci.pk,)),
-        personnel=persons.PoolDecision(keep=(personel.pk,)),
+        personnel=persons.PoolDecision(leave=(birinci.pk,), keep=(ikinci.pk, ucuncu.pk)),
     )
     yeni = yeni_satirlar(bas)
     assert [(s.action, s.model, s.object_id) for s in yeni] == [
-        ("DURUM", "okul.Student", str(birinci.pk)),
-        ("DURUM", "okul.Student", str(ikinci.pk)),
-        ("DURUM", "okul.Personnel", str(personel.pk)),
+        ("DURUM", "okul.Personnel", str(birinci.pk)),
+        ("DURUM", "okul.Personnel", str(ikinci.pk)),
+        ("DURUM", "okul.Personnel", str(ucuncu.pk)),
     ]
     assert yeni[0].changed_fields == [
         "updated_at",
-        "status",
+        "is_active",
         "left_at",
         "leave_candidate_since",
     ]
@@ -266,9 +254,9 @@ def test_havuz_giris_cikis_ve_karar_kisi_basina_durumdur() -> None:
 
 
 def test_degismeyen_guncelleme_yazmaz_satir_da_yazmaz() -> None:
-    kayit = ogrenci()
+    kayit = personel()
     bas = son_seq()
-    persons.update_student(kayit, class_section="A", first_name="Uydurcan")
+    persons.update_personnel(kayit, member_kind=MemberKind.TEACHER, first_name="Uydurcan")
     assert yeni_satirlar(bas) == []
 
 
@@ -276,13 +264,12 @@ def test_degismeyen_guncelleme_yazmaz_satir_da_yazmaz() -> None:
 
 
 def _metin(*satirlar_: str) -> str:
-    return "\n".join([OGRENCI_BASLIGI, *satirlar_])
+    return "\n".join([PERSONEL_BASLIGI, *satirlar_])
 
 
 def test_aktarim_kayit_basina_satir_yazar_ve_kosuyu_izler() -> None:
-    yil()
-    import_service.commit_students_text(
-        text=_metin("9/A\t501\tUYDURCAN ÖRNEKOĞLU", "9/B\t502\tUYDURMAY ÖRNEKSOY")
+    import_service.commit_personnel_text(
+        text=_metin("UYDURCAN ÖRNEKOĞLU\tÖğretmen", "UYDURMAY ÖRNEKSOY\tMemur")
     )
     kosu = ImportRun.objects.get(status=ImportStatus.COMPLETED)
     kosu_satirlari = satirlar(model="okul.ImportRun")
@@ -290,49 +277,59 @@ def test_aktarim_kayit_basina_satir_yazar_ve_kosuyu_izler() -> None:
     assert kosu_satirlari[1].values["status"] == ["RUNNING", "COMPLETED"]
     assert "report" in kosu_satirlari[1].changed_fields
     assert "report" not in kosu_satirlari[1].values  # rapor yalnız adıyla
-    assert len(satirlar(model="okul.Student", action="OLUSTUR")) == 2
-    assert len(satirlar(model="okul.ClassSection", action="OLUSTUR")) == 2
+    assert len(satirlar(model="okul.Personnel", action="OLUSTUR")) == 2
     assert kosu_satirlari[0].object_id == str(kosu.pk)
     butun_kayitlar_dogrulanir()
 
 
-def test_sube_degisimi_ve_havuzdan_cikis_iki_satirdir_yeniden_aktiflesme_durumdur() -> None:
-    """9/A dosyası öğrenciyi havuza atar, 9/B dosyası bulur: şube `GUNCELLE`, havuz `DURUM`."""
-    yil()
-    import_service.commit_students_text(
-        text=_metin("9/A\t501\tUYDURCAN ÖRNEKOĞLU", "9/A\t502\tUYDURMAY ÖRNEKSOY")
+def test_tur_degisimi_ve_havuzdan_cikis_iki_satirdir_yeniden_aktiflesme_durumdur() -> None:
+    """Listede görülmeyen kişi havuza girer; yeni görevle dönünce tür `GUNCELLE`, havuz `DURUM`."""
+    import_service.commit_personnel_text(
+        text=_metin("UYDURCAN ÖRNEKOĞLU\tÖğretmen", "UYDURMAY ÖRNEKSOY\tÖğretmen")
     )
-    import_service.commit_students_text(text=_metin("9/A\t502\tUYDURMAY ÖRNEKSOY"))
-    tasinan = Student.objects.get(student_number_index=student_number_blind_index("501"))
+    import_service.commit_personnel_text(text=_metin("UYDURMAY ÖRNEKSOY\tÖğretmen"))
+    tasinan = next(p for p in Personnel.objects.all() if p.first_name == "UYDURCAN")
     assert tasinan.leave_candidate_since is not None
     bas = son_seq()
-    import_service.commit_students_text(text=_metin("9/B\t501\tUYDURCAN ÖRNEKOĞLU"))
-    ogrenci_satirlari = [s for s in yeni_satirlar(bas) if s.model == "okul.Student"]
-    assert [(s.action, s.changed_fields) for s in ogrenci_satirlari] == [
-        ("GUNCELLE", ["updated_at", "class_section"]),
+    import_service.commit_personnel_text(
+        text=_metin("UYDURCAN ÖRNEKOĞLU\tMemur", "UYDURMAY ÖRNEKSOY\tÖğretmen")
+    )
+    kisi_satirlari = [
+        s
+        for s in yeni_satirlar(bas)
+        if s.model == "okul.Personnel" and s.object_id == str(tasinan.pk)
+    ]
+    assert [(s.action, s.changed_fields) for s in kisi_satirlari] == [
+        ("GUNCELLE", ["updated_at", "member_kind"]),
         ("DURUM", ["leave_candidate_since", "leave_candidate_run"]),
     ]
-    # Ayrılmış öğrenci aynı numara ve adla dönerse yeniden aktifleşir: durum geçişi.
-    persons.leave_student(Student.objects.get(pk=tasinan.pk))
+    # Ayrılmış kişi listede yeniden görülürse yeniden aktifleşir: durum geçişi.
+    persons.leave_personnel(Personnel.objects.get(pk=tasinan.pk))
     bas = son_seq()
-    import_service.commit_students_text(text=_metin("9/B\t501\tUYDURCAN ÖRNEKOĞLU"))
-    (donus,) = [s for s in yeni_satirlar(bas) if s.model == "okul.Student"]
-    assert donus.action == "DURUM" and {"status", "left_at"} <= set(donus.changed_fields)
+    import_service.commit_personnel_text(
+        text=_metin("UYDURCAN ÖRNEKOĞLU\tMemur", "UYDURMAY ÖRNEKSOY\tÖğretmen")
+    )
+    (donus,) = [
+        s
+        for s in yeni_satirlar(bas)
+        if s.model == "okul.Personnel" and s.object_id == str(tasinan.pk)
+    ]
+    assert donus.action == "DURUM" and {"is_active", "left_at"} <= set(donus.changed_fields)
     butun_kayitlar_dogrulanir()
 
 
 def test_onizlemenin_kayit_satirlari_geri_sarilir_kalici_iz_previewed_kosusudur() -> None:
-    import_service.preview_students_text(text=_metin("9/A\t501\tUYDURCAN ÖRNEKOĞLU"))
+    import_service.preview_personnel_text(text=_metin("UYDURCAN ÖRNEKOĞLU\tÖğretmen"))
     (satir,) = satirlar()
     assert (satir.action, satir.model) == ("OLUSTUR", "okul.ImportRun")
     assert satir.values["status"] == [None, "PREVIEWED"]
-    assert not Student.objects.exists()
+    assert not Personnel.objects.exists()
     butun_kayitlar_dogrulanir()
 
 
 def test_ayristirilamayan_dosyanin_failed_kosusu_izlidir() -> None:
     with pytest.raises(ParserError):
-        import_service.commit_students_file(file_bytes=b"bozuk", file_name="uydurma.xlsx")
+        import_service.commit_personnel_file(file_bytes=b"bozuk", file_name="uydurma.xlsx")
     (satir,) = satirlar()
     assert (satir.action, satir.model) == ("OLUSTUR", "okul.ImportRun")
     assert satir.values["status"] == [None, "FAILED"]
@@ -340,14 +337,14 @@ def test_ayristirilamayan_dosyanin_failed_kosusu_izlidir() -> None:
 
 
 def test_ayni_dosyanin_yeniden_uygulanmasi_kosuyu_yeniden_acar() -> None:
-    metin = _metin("9/A\t501\tUYDURCAN ÖRNEKOĞLU")
-    import_service.commit_students_text(text=metin)
+    metin = _metin("UYDURCAN ÖRNEKOĞLU\tÖğretmen")
+    import_service.commit_personnel_text(text=metin)
     bas = son_seq()
-    import_service.commit_students_text(text=metin)
+    import_service.commit_personnel_text(text=metin)
     kosu = [s for s in yeni_satirlar(bas) if s.model == "okul.ImportRun"]
     assert [s.action for s in kosu] == ["DURUM", "DURUM"]
     assert kosu[0].values["status"] == ["COMPLETED", "RUNNING"]
-    assert not [s for s in yeni_satirlar(bas) if s.model == "okul.Student"]  # değişmedi
+    assert not [s for s in yeni_satirlar(bas) if s.model == "okul.Personnel"]  # değişmedi
     butun_kayitlar_dogrulanir()
 
 
@@ -360,12 +357,12 @@ def test_iz_yazilamazsa_kayit_ve_aktarim_geri_alinir(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(denetim_izi, "degisiklik", yazilamadi)
     with pytest.raises(denetim_izi.IzYazilamadi):
-        ogrenci()
+        personel()
     with pytest.raises(denetim_izi.IzYazilamadi):
-        import_service.commit_students_text(text=_metin("9/A\t501\tUYDURCAN ÖRNEKOĞLU"))
+        import_service.commit_personnel_text(text=_metin("UYDURCAN ÖRNEKOĞLU\tÖğretmen"))
     with pytest.raises(denetim_izi.IzYazilamadi):
         calendar_service.seed_holidays(2026)
-    assert not Student.objects.exists()
+    assert not Personnel.objects.exists()
     assert not ImportRun.objects.exists()
     assert not Holiday.objects.exists()
     assert AuditTrail.objects.count() == 0
@@ -496,6 +493,5 @@ def test_konsoldan_ilk_hesap_satirlari_o_hesabindir(parolasiz: Path) -> None:
 
 
 def test_kisi_modelleri_deger_listesi_bostur() -> None:
-    """KVKK silme kümesi (tasarım §4.6.2): `Student` ve `Personnel` satırları değer taşımaz."""
-    assert Student.IZ_DEGER_ALANLARI == ()
+    """KVKK silme kümesi (tasarım §4.6.2): `Personnel` satırları değer taşımaz."""
     assert Personnel.IZ_DEGER_ALANLARI == ()

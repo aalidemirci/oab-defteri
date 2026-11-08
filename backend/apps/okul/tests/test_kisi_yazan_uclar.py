@@ -15,6 +15,9 @@ BÜTÜN desenlerini dolaşır:
 
 Savunma derinliği: izin sınıfı unutulsa bile şifreli alan anahtarsız yazmaz
 (`KeyMissingError` → yine 409; `shared/tests/test_exceptions.py`).
+
+Öğrenci uçları F1b 5. adımda söküldü (tasarım §5.1 ALMA); kapı personel uçlarıyla sınanır,
+veli listesi uçları gelince bu listeye girer (plan "F1b-5 uygulama kararları").
 """
 
 from __future__ import annotations
@@ -27,22 +30,17 @@ import pytest
 from django.urls import URLPattern, URLResolver, get_resolver, reverse
 from rest_framework.test import APIClient
 
-from apps.okul.models import Student
+from apps.okul.models import Personnel
 from apps.okul.permissions import RequiresAdminPassword
 
-# Kişi (öğrenci/personel) yazan uçlar — izin sınıfını taşımalıdır.
+# Kişi (personel) yazan uçlar — izin sınıfını taşımalıdır.
 # Ayrılış, birleştirme ve ayrılış havuzu kararı da kişi yazar.
 KISI_YAZAN_UCLAR = frozenset(
     {
-        "student-list",
-        "student-detail",
-        "student-leave",
         "personnel-list",
         "personnel-detail",
         "personnel-leave",
         "personnel-merge",
-        "import-students-preview",
-        "import-students-commit",
         "import-personnel-preview",
         "import-personnel-commit",
         "leave-pool-resolve",
@@ -54,7 +52,7 @@ DIGER_UCLAR = frozenset(
     {
         # Erişim günlüğünün okuma ekranı (plan F1b-2): yalnız okur (GET), iz bırakmaz.
         "access-log",
-        # Kullanıcılar (plan F1b-2): hesap yazar, kişi sicili (öğrenci/personel) yazmaz. Açık
+        # Kullanıcılar (plan F1b-2): hesap yazar, kişi sicili (personel) yazmaz. Açık
         # oturumda rol kapısı ve servisin yetki kapısı keser; kurulumda yazar ve veri anahtarı
         # yoktur (servis reddeder).
         "account-close",
@@ -75,13 +73,10 @@ DIGER_UCLAR = frozenset(
         # Dış yedek hatırlatması (tasarım §16 R6) veri dizinindeki dosyaya (tarih ve
         # süre) yazar — kişi sicili yazmaz.
         "backup-external-reminder",
-        "class-section-detail",
-        "class-section-list",
         # Son oturum kartı (T15, §13 D4): kişisiz özet; POST yalnız süreç içi
         # "Kontrol ettim" onayıdır, hiçbir kayıt yazmaz.
         "dashboard-last-session",
         "encrypted-backup-download",
-        "grade-levels",
         "holiday-detail",
         "holiday-list",
         "holiday-seed",
@@ -122,7 +117,6 @@ DIGER_UCLAR = frozenset(
         "setup-school-config",
         "setup-status",
         "template-personnel",
-        "template-students",
         "update-installer",
         "update-latest",
     }
@@ -207,27 +201,27 @@ def test_parolasizken_kisi_yazan_her_uc_yazma_yontemiyle_409_doner(parolasiz: Pa
             assert yanit.status_code == 409, (ad, yontem, yanit.status_code)
             assert yanit.json() == PAROLA_GEREKLI_GOVDESI, (ad, yontem)
             denenen += 1
-    # 2 liste (POST) + 2 ayrıntı (PUT/PATCH/DELETE) + 4 içe aktarma (POST)
-    # + 2 ayrılış (POST) + 1 birleştirme (POST) + 1 havuz kararı (POST).
+    # 1 liste (POST) + 1 ayrıntı (PUT/PATCH/DELETE) + 2 içe aktarma (POST)
+    # + 1 ayrılış (POST) + 1 birleştirme (POST) + 1 havuz kararı (POST).
     # Aile iskeletinin kütüphane uçları (üyelik, kart basımı, dolaşım masası,
-    # teslim, saklama tetiği) F1a-2'de söküldü.
-    assert denenen == 2 + 2 * 3 + 4 + 2 + 1 + 1
-    assert not Student.all_objects.exists()
+    # teslim, saklama tetiği) F1a-2'de, öğrenci uçları F1b 5. adımda söküldü.
+    assert denenen == 1 + 1 * 3 + 2 + 1 + 1 + 1
+    assert not Personnel.all_objects.exists()
 
 
 @pytest.mark.django_db
 def test_parolasizken_okuma_acik(parolasiz: Path) -> None:
     client = APIClient()
-    assert client.get("/api/v1/students/").status_code == 200
     assert client.get("/api/v1/personnel/").status_code == 200
+    assert client.get("/api/v1/leave-pool/").status_code == 200
 
 
 @pytest.mark.django_db
 def test_parola_kuruluyken_kisi_yazilir() -> None:
     """Varsayılan ortam (parola kurulu + kilit açık): izin sınıfı geçirir."""
     yanit = APIClient().post(
-        "/api/v1/students/",
-        {"first_name": "DENEME", "last_name": "ÖĞRENCİ", "class_level": 9, "class_section": "A"},
+        "/api/v1/personnel/",
+        {"first_name": "DENEME", "last_name": "ÖĞRETMEN", "member_kind": "STAFF"},
         format="json",
     )
     assert yanit.status_code == 201, yanit.json()

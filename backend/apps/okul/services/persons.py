@@ -1,4 +1,4 @@
-"""Öğrenci/Personel kayıt işlemleri, ayrılış yolu, ayrılış havuzu ve unutma kancası.
+"""Personel kayıt işlemleri, ayrılış yolu, ayrılış havuzu ve unutma kancası.
 
 Tasarım §5.1, §5.4, §8.4. İnce servis katmanı — doğrulama/normalize
 serializer'da, yazma burada. View ORM çağırmaz (katman disiplini).
@@ -34,15 +34,16 @@ karar orada verilir; kayıt silinmez, yalnız aktiflik durumu değişir.
 - e-Okul aktarımı hiç kimseyi AYIRMAZ ve SİLMEZ. Listede bulunmayan aktif kişi
   havuza girer (`add_to_leave_pool`: giriş tarihi + hangi aktarımla); durumu
   AKTİF kalır. Dosyada yeniden görülen kişi havuzdan kendiliğinden çıkar
-  (`remove_from_leave_pool`; şube değişimi dahil).
+  (`remove_from_leave_pool`).
 - Karar yöneticinindir (`resolve_leave_pool`, tek tek ya da toplu): "Ayrıldı
   olarak işaretle" ayrılış yolundan geçirir, "Aktif kalsın" yalnız havuzdan
-  çıkarır. Yıl sonu mezunları bu yolla toplu ayrılır.
-- Havuzdaki kişi DB kısıtıyla aktiftir (`ck_*_leave_candidate_active`).
+  çıkarır.
+- Havuzdaki kişi DB kısıtıyla aktiftir (`ck_personnel_leave_candidate_active`).
+- Havuz yalnız personeli taşır: öğrenci sicili F1b 5. adımda söküldü (tasarım §5.1
+  ALMA); veli listesi havuz kullanmaz, sınıf bazında yerine konur (tasarım §8.4).
 
-AYRILIŞ YOLU (tasarım §5.1): `left_at = localdate()`, öğrencide durum LEFT,
-personelde `is_active=False`, havuz alanları temizlenir, sonra ayrılış
-kancaları. **Ayrılış kaydı SİLMEZ** — bağdan ve yükümlülükten bağımsız (ailenin
+AYRILIŞ YOLU (tasarım §5.1): `left_at = localdate()`, `is_active=False`, havuz alanları
+temizlenir, sonra ayrılış kancaları. **Ayrılış kaydı SİLMEZ** — bağdan ve yükümlülükten bağımsız (ailenin
 eski "bağsız ve yükümlülüksüz → katı sil" dalı aile iskeletinde kalkmıştı).
 Ayrılmış kişinin kaydının akıbeti saklama kuralındadır: ayrıldı işaretlenen ve
 hiçbir birlik kaydına bağı olmayan personel, ayrılışı izleyen dönem kapanışında
@@ -57,12 +58,12 @@ BİLİNÇLİDİR: yanlış girilmiş kaydın yumuşak silmesi kişi verisini sü
 tutardı.
 
 DENETİM İZİ (tasarım §4.6.2; plan F1b-1 alt commit c). Her yazım veriyle AYNI işlemde iz
-satırı yazar (`denetim_izi.degisiklik`): oluşturma `OLUSTUR`, ad/şube/üye türü değişikliği
-`GUNCELLE`, ayrılış ve havuza giriş-çıkış `DURUM` (durum alanları modeldedir). Öğrenci ve
-personel KVKK silme kümesindedir: satır yalnız alan ADLARINI taşır, değer taşımaz.
+satırı yazar (`denetim_izi.degisiklik`): oluşturma `OLUSTUR`, ad/üye türü değişikliği
+`GUNCELLE`, ayrılış ve havuza giriş-çıkış `DURUM` (durum alanları modeldedir). Personel
+KVKK silme kümesindedir: satır yalnız alan ADLARINI taşır, değer taşımaz.
 Önceki hâl yazmadan önce, aynı işlemde alınır. Toplu karar (`resolve_leave_pool`) kişi
 başına satır yazar. **İzsiz kalan iki yol** plan gereği adıyla muaftır (5. adımda yeniden
-yazılır): kullanıcının katı silmesi (`delete_student`, `delete_personnel`) ve personel
+yazılır): kullanıcının katı silmesi (`delete_personnel`) ve personel
 birleştirmesi (`merge_personnel`); muafiyet listesi `tests/test_izsiz_yazim.py`'dedir.
 """
 
@@ -78,19 +79,14 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.okul import denetim_izi
-from apps.okul.models import (
-    ImportRun,
-    MemberKind,
-    Personnel,
-    Student,
-    StudentStatus,
-    student_number_blind_index,
-)
+from apps.okul.models import ImportRun, MemberKind, Personnel
 from apps.okul.services import app_password
 
 logger = logging.getLogger("oab_defteri.okul")
 
-type Person = Student | Personnel
+#: Kayıt defterlerinin kişi türü. Bugün yalnız personel: öğrenci sicili F1b 5. adımda söküldü;
+#: veli listesi havuza girmez (tasarım §8.4: bir satır bir öğrenci, sınıf bazında yerine konur).
+type Person = Personnel
 
 type ObligationCheck = Callable[[Person], Iterable[str]]
 type MembershipCheck = Callable[[Person], bool]
@@ -104,12 +100,9 @@ _leave_hooks: list[LeaveHook] = []
 _merge_hooks: list[MergeHook] = []
 _deletion_blocks: list[DeletionBlock] = []
 
-#: Ayrılış havuzu alanları (öğrenci ve personelde aynı adlar).
+#: Ayrılış havuzu alanları.
 POOL_FIELDS: tuple[str, str] = ("leave_candidate_since", "leave_candidate_run")
 
-#: Teklik iletisi servisten gelir (DRF'nin otomatik UniqueValidator'ı yoktur:
-#: kısıt şifreli alanda değil kör indekstedir).
-DUPLICATE_NUMBER_MESSAGE = "Bu okul numarası başka bir aktif öğrencide kayıtlı."
 ALREADY_LEFT_MESSAGE = "Bu kişi zaten ayrıldı olarak işaretli."
 MEMBER_DELETE_MESSAGE = (
     "Bu kişi birlik kayıtlarına bağlı; kaydı silinemez. Okuldan ayrıldıysa "
@@ -188,8 +181,6 @@ def was_ever_member(person: Person) -> bool:
 # Ortak yollar
 # ---------------------------------------------------------------------------
 def _is_active(person: Person) -> bool:
-    if isinstance(person, Student):
-        return person.status == StudentStatus.ACTIVE
     return person.is_active
 
 
@@ -227,7 +218,7 @@ def add_to_leave_pool(person: Person, *, run: ImportRun | None) -> bool:
 
     Kişi zaten havuzdaysa dokunulmaz: ilk giriş tarihi ve onu ekleyen aktarım
     korunur (aynı dosyanın ikinci uygulaması değişiklik üretmez). Yalnız havuz
-    alanları yazılır — ad ve okul no'ya dokunulmaz, anahtar gerekmez.
+    alanları yazılır — ada dokunulmaz, anahtar gerekmez.
     """
     if not _is_active(person):
         raise ValidationError(ALREADY_LEFT_MESSAGE)
@@ -281,16 +272,15 @@ class PoolDecision:
         return {*self.leave, *self.keep}
 
 
-def _pool_members(model: type[Any], ids: Collection[int]) -> dict[int, Any]:
-    """Kimlikleri havuzdaki AKTİF canlı kayıtlara çözer; biri eksikse hiçbir şey yapılmaz."""
+def _pool_members(ids: Collection[int]) -> dict[int, Personnel]:
+    """Kimlikleri havuzdaki AKTİF canlı personele çözer; biri eksikse hiçbir şey yapılmaz."""
     if not ids:
         return {}
-    aktif: dict[str, Any] = (
-        {"status": StudentStatus.ACTIVE} if model is Student else {"is_active": True}
-    )
     bulunan = {
         kayit.pk: kayit
-        for kayit in model.objects.filter(pk__in=ids, leave_candidate_since__isnull=False, **aktif)
+        for kayit in Personnel.objects.filter(
+            pk__in=ids, leave_candidate_since__isnull=False, is_active=True
+        )
     }
     if len(bulunan) != len(set(ids)):
         raise ValidationError(POOL_STALE_MESSAGE)
@@ -298,140 +288,37 @@ def _pool_members(model: type[Any], ids: Collection[int]) -> dict[int, Any]:
 
 
 @transaction.atomic
-def resolve_leave_pool(
-    *, students: PoolDecision | None = None, personnel: PoolDecision | None = None
-) -> dict[str, int]:
+def resolve_leave_pool(*, personnel: PoolDecision | None = None) -> dict[str, int]:
     """Ayrılış havuzu kararı — tek tek ya da toplu; TEK işlem (ya hepsi ya hiçbiri).
 
-    `leave` → ayrılış yolu (LEFT / `is_active=False` + `left_at`, havuzdan çıkış,
+    `leave` → ayrılış yolu (`is_active=False` + `left_at`, havuzdan çıkış,
     ayrılış kancaları; kayıt SİLİNMEZ). `keep` → "Aktif kalsın": yalnız havuzdan
     çıkar. Seçilen kişi havuzda değilse (başka pencerede karar verilmiş, ayrılmış,
     silinmiş) bütün karar reddedilir. Günlüğe yalnız sayılar yazılır.
     """
     app_password.require_password_set()
-    students = students or PoolDecision()
     personnel = personnel or PoolDecision()
-    for karar in (students, personnel):
-        if set(karar.leave) & set(karar.keep):
-            raise ValidationError(POOL_CONFLICT_MESSAGE)
-    if not (students.ids() or personnel.ids()):
+    if set(personnel.leave) & set(personnel.keep):
+        raise ValidationError(POOL_CONFLICT_MESSAGE)
+    if not personnel.ids():
         raise ValidationError(POOL_EMPTY_MESSAGE)
 
-    ogrenciler = _pool_members(Student, students.ids())
-    personeller = _pool_members(Personnel, personnel.ids())
-    for pk in students.leave:
-        leave_student(ogrenciler[pk], log=False)
-    for pk in students.keep:
-        remove_from_leave_pool(ogrenciler[pk])
+    personeller = _pool_members(personnel.ids())
     for pk in personnel.leave:
         leave_personnel(personeller[pk], log=False)
     for pk in personnel.keep:
         remove_from_leave_pool(personeller[pk])
 
     sonuc = {
-        "students_left": len(students.leave),
-        "students_kept": len(students.keep),
         "personnel_left": len(personnel.leave),
         "personnel_kept": len(personnel.keep),
     }
     logger.info(
-        "Ayrılış havuzu kararı: %d öğrenci ayrıldı, %d öğrenci aktif kaldı; "
-        "%d personel ayrıldı, %d personel aktif kaldı.",
-        sonuc["students_left"],
-        sonuc["students_kept"],
+        "Ayrılış havuzu kararı: %d personel ayrıldı, %d personel aktif kaldı.",
         sonuc["personnel_left"],
         sonuc["personnel_kept"],
     )
     return sonuc
-
-
-# ---------------------------------------------------------------------------
-# Öğrenci
-# ---------------------------------------------------------------------------
-def ensure_student_number_free(student_number: str, *, exclude_pk: int | None = None) -> None:
-    """Okul no başka bir AKTİF canlı öğrencide mi? Kör indeksle tam eşleşme (§5.3).
-
-    DB kısıtı (`uq_student_number_index_active_alive`) son savunma hattıdır;
-    buradaki denetim çakışmayı 500 (IntegrityError) yerine Türkçe 400'e çevirir.
-    """
-    index = student_number_blind_index(student_number)
-    if not index:
-        return
-    qs = Student.objects.filter(student_number_index=index, status=StudentStatus.ACTIVE)
-    if exclude_pk is not None:
-        qs = qs.exclude(pk=exclude_pk)
-    if qs.exists():
-        raise ValidationError({"student_number": [DUPLICATE_NUMBER_MESSAGE]})
-
-
-@transaction.atomic
-def create_student(**fields: Any) -> Student:
-    app_password.require_password_set()
-    if fields.get("status", StudentStatus.ACTIVE) == StudentStatus.ACTIVE:
-        ensure_student_number_free(str(fields.get("student_number") or ""))
-    student: Student = Student.objects.create(**fields)
-    denetim_izi.degisiklik(student, onceki=None)
-    return student
-
-
-@transaction.atomic
-def update_student(student: Student, **fields: Any) -> Student:
-    """Yalnız DEĞİŞEN alanı yazar (bayat kopya başka alanı geri sarmaz).
-
-    Durum buradan değişmez: ayrılış `leave_student`, yeniden aktifleşme e-Okul
-    aktarımıyla olur (serializer `status`'u salt okunur sunar).
-    """
-    changed = _changed_fields(student, fields)
-    if "student_number" in changed and student.status == StudentStatus.ACTIVE:
-        ensure_student_number_free(str(fields["student_number"] or ""), exclude_pk=student.pk)
-    if changed:
-        onceki = denetim_izi.anlik(student)
-        for name in changed:
-            setattr(student, name, fields[name])
-        student.save(update_fields=[*changed, "updated_at"])
-        denetim_izi.degisiklik(student, onceki=onceki)
-    return student
-
-
-@transaction.atomic
-def leave_student(student: Student, *, log: bool = True) -> Student:
-    """Ayrılış yolu: LEFT + `left_at`, havuzdan çıkış, kancalar. Kayıt SİLİNMEZ.
-
-    `log=False`: toplu çağıran (havuz kararı) kişi başına günlük satırı
-    yazdırmaz; kendi sayısal özetini yazar.
-    """
-    if student.status == StudentStatus.LEFT:
-        raise ValidationError(ALREADY_LEFT_MESSAGE)
-    onceki = denetim_izi.anlik(student)
-    student.status = StudentStatus.LEFT
-    student.left_at = timezone.localdate()
-    remove_from_leave_pool(student, save=False)
-    student.save(update_fields=["status", "left_at", *POOL_FIELDS, "updated_at"])
-    denetim_izi.degisiklik(student, onceki=onceki)
-    _run_leave_hooks(student)
-    if log:
-        logger.info("Öğrenci ayrılışı işlendi; kayıt saklandı.")
-    return student
-
-
-def reactivate_student(student: Student) -> None:
-    """Ayrılmış (canlı) öğrenci aynı okul no ile döndü: AKTİF, `left_at` temizlenir.
-
-    Kaydı çağıran kaydeder (aktarım aynı `save`'de ad ve şube değişikliğini de yazar).
-    """
-    student.status = StudentStatus.ACTIVE
-    student.left_at = None
-
-
-@transaction.atomic
-def delete_student(student: Student) -> None:
-    """Kullanıcı silmesi: açık yükümlülük ve birlik bağı yoksa KATI silinir.
-
-    İZSİZDİR — plan F1b-1 gereği adıyla muaf (5. adımda yeniden yazılır; modül başlığı).
-    """
-    _ensure_deletable(student)
-    student.hard_delete()
-    logger.info("Öğrenci kaydı silindi.")
 
 
 # ---------------------------------------------------------------------------
@@ -463,8 +350,8 @@ def update_personnel(person: Personnel, **fields: Any) -> Personnel:
 def leave_personnel(person: Personnel, *, log: bool = True) -> Personnel:
     """Ayrılış yolu (tasarım §5.1): `is_active=False` + `left_at`, havuzdan çıkış, kancalar.
 
-    Kayıt SİLİNMEZ. `log=False`: toplu çağıran kişi başına günlük satırı
-    yazdırmaz (bkz. `leave_student`).
+    Kayıt SİLİNMEZ. `log=False`: toplu çağıran (havuz kararı) kişi başına günlük satırı
+    yazdırmaz; kendi sayısal özetini yazar.
     """
     if not person.is_active:
         raise ValidationError(ALREADY_LEFT_MESSAGE)

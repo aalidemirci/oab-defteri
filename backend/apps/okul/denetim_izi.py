@@ -43,13 +43,13 @@ KURALLAR (her biri bu modülde zorlanır):
   ve içerik MAC'i. İzin listesi dışındaki alanın değeri `values`'a giremez (yazıcı
   reddeder). `guvenlik.json`'daki bölümler (kurtarma anahtarı, hesap sarmalı), yedek
   dosyası ve dış yedek ayarı veritabanı modeli değildir; izinli alanları burada,
-  `DOSYA_NESNELERI`'ndedir. KVKK silme kümesindeki modellerin (`Student`, `Personnel`)
+  `DOSYA_NESNELERI`'ndedir. KVKK silme kümesindeki modellerin (bugün `Personnel`)
   izin listesi boştur.
 * **İçerik MAC'i** (`record_mac`) kaydın YAZMADAN SONRAKİ hâlinden, veritabanından taze
   okunarak hesaplanır: `HMAC(HKDF(İA, "od-kayit-ozeti/v1"), kanonik(model, object_id,
   özet alanlarının çözülmüş değerleri))` (`shared.kanonik.kayit_mac`; alanlar
-  `IZ_OZET_ALANLARI`, modelde). KVKK silme kümesindeki kişi alanları (öğrenci ve personelin
-  adı, soyadı, okul no'su) içerik MAC'ine GİRMEZ (`IZ_MAC_DISI_ALANLARI`; tasarım §5 O4):
+  `IZ_OZET_ALANLARI`, modelde). KVKK silme kümesindeki kişi alanları (personelin adı ve
+  soyadı) içerik MAC'ine GİRMEZ (`IZ_MAC_DISI_ALANLARI`; tasarım §5 O4):
   silinen kişiyi MAC'ten sözlükle geri bulmak mümkün olmasın. Çözülemeyen şifreli alan (`CorruptField`, D48) hata
   vermez, düz metne de çevrilmez: `kanonik.bozuk_alan` temsiliyle girer. Kilitli kip
   satırı içerik MAC'i taşımaz.

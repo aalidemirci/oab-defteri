@@ -134,7 +134,7 @@ describe("kilitlenme pencereyi yeniden yükler", () => {
     const dinleyici = vi.fn();
     window.addEventListener(KILIT_KAPISI_OLAYI, dinleyici);
     try {
-      await expect(api.get("/students/")).rejects.toMatchObject({ status: 423 });
+      await expect(api.get("/personnel/")).rejects.toMatchObject({ status: 423 });
     } finally {
       window.removeEventListener(KILIT_KAPISI_OLAYI, dinleyici);
     }
@@ -145,7 +145,7 @@ describe("kilitlenme pencereyi yeniden yükler", () => {
   it("güvenlik dosyası açık oturumda kaybolursa (423 guvenlik_dosyasi_kayip) da yükler", async () => {
     oturumAcikSan(true);
     fetchHep(423, { code: "guvenlik_dosyasi_kayip", message: "Güvenlik dosyası…", fields: {} });
-    await api.getBlob("/templates/students/").catch(() => undefined);
+    await api.getBlob("/templates/personnel/").catch(() => undefined);
     expect(yuklemeSayisi()).toBe(1);
   });
 });
@@ -196,8 +196,8 @@ describe("yüklemeyen anlar ve döngü koruması", () => {
     const dinleyici = vi.fn();
     window.addEventListener(KILIT_KAPISI_OLAYI, dinleyici);
     try {
-      await api.get("/students/").catch(() => undefined);
-      await api.get("/students/").catch(() => undefined);
+      await api.get("/personnel/").catch(() => undefined);
+      await api.get("/personnel/").catch(() => undefined);
     } finally {
       window.removeEventListener(KILIT_KAPISI_OLAYI, dinleyici);
     }
@@ -214,9 +214,9 @@ describe("yüklemeyen anlar ve döngü koruması", () => {
     window.addEventListener(KILIT_KAPISI_OLAYI, dinleyici);
     try {
       await Promise.all([
-        api.get("/students/").catch(() => undefined),
         api.get("/personnel/").catch(() => undefined),
-        api.get("/class-sections/").catch(() => undefined),
+        api.get("/holidays/").catch(() => undefined),
+        api.get("/setup/school-config/").catch(() => undefined),
       ]);
     } finally {
       window.removeEventListener(KILIT_KAPISI_OLAYI, dinleyici);
@@ -284,9 +284,9 @@ describe("yüklemeyen anlar ve döngü koruması", () => {
     window.addEventListener(KILIT_KAPISI_OLAYI, dinleyici);
     try {
       fetchHep(423, { code: "baska" });
-      await api.get("/students/").catch(() => undefined);
+      await api.get("/personnel/").catch(() => undefined);
       fetchHep(400, { code: "locked", message: "x" });
-      await api.get("/students/").catch(() => undefined);
+      await api.get("/personnel/").catch(() => undefined);
     } finally {
       window.removeEventListener(KILIT_KAPISI_OLAYI, dinleyici);
     }

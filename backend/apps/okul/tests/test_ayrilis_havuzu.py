@@ -3,9 +3,9 @@
 Aile iskeletinin kullanıcı kararı: e-Okul aktarımı kimseyi ayırmaz ve silmez;
 listede bulunmayan aktif kişi havuza girer, karar burada verilir:
 
-- `GET leave-pool/` öğrenci ve personeli AYRI listeler, TR sıralı; havuza giriş
-  tarihi ve hangi aktarımla; `?summary=true` yalnız sayılar (Genel Bakış).
-- `POST leave-pool/resolve/` toplu karar: "Ayrıldı olarak işaretle" (LEFT +
+- `GET leave-pool/` havuzdaki öğretmen ve diğer personeli TR sıralı listeler; havuza giriş
+  tarihi ve hangi aktarımla; `?summary=true` yalnız sayı (Genel Bakış).
+- `POST leave-pool/resolve/` toplu karar: "Ayrıldı olarak işaretle" (`is_active=False` +
   tarih, kancalar; KAYIT SİLİNMEZ) ve "Aktif kalsın" (yalnız havuzdan çıkar).
   Tek işlemdir: seçilenlerden biri havuzda değilse hiçbir karar uygulanmaz.
 - Karar ucu kişi yazar: parola kurulmadan 409 (rol izni `rol_izinleri.KURALLAR`'da).
@@ -13,13 +13,16 @@ listede bulunmayan aktif kişi havuza girer, karar burada verilir:
   §13 D30) ve havuzdan birleştirme.
 - Günlüğe ad yazılmaz.
 
-Bütün ad ve numaralar uydurmadır (KVKK).
+Havuz yalnız personeli taşır: öğrenci sicili F1b 5. adımda söküldü (tasarım §5.1 ALMA); yanıtta
+öğrenci alanı yoktur, eski `students` kararı yok sayılır.
+
+Bütün adlar uydurmadır (KVKK).
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -33,9 +36,6 @@ from apps.okul.models import (
     ImportRun,
     ImportStatus,
     Personnel,
-    SchoolYear,
-    Student,
-    StudentStatus,
 )
 from apps.okul.services import imports as import_service
 from apps.okul.services import persons
@@ -44,17 +44,8 @@ pytestmark = pytest.mark.django_db
 
 HAVUZ_URL = "/api/v1/leave-pool/"
 KARAR_URL = "/api/v1/leave-pool/resolve/"
-OGRENCI_BASLIK = "Sınıf\tOkul No\tAdı Soyadı"
 PERSONEL_BASLIK = "Adı\tSoyadı\tGörevi\tBranşı"
 SENTETIK_AD = "HAVUZSENTETİK"
-
-
-@pytest.fixture(autouse=True)
-def aktif_yil() -> SchoolYear:
-    yil: SchoolYear = SchoolYear.objects.create(
-        name="2026-2027", start_date=date(2026, 9, 1), end_date=date(2027, 6, 30), is_active=True
-    )
-    return yil
 
 
 @pytest.fixture(autouse=True)
@@ -74,23 +65,12 @@ def client() -> APIClient:
     return APIClient()
 
 
-def _ogrenci(numara: str, sinif: int, sube: str, ad: str = "DENEME") -> Student:
-    ogrenci: Student = Student.objects.create(
-        first_name=ad,
-        last_name="ÖĞRENCİ",
-        student_number=numara,
-        class_level=sinif,
-        class_section=sube,
-    )
-    return ogrenci
-
-
 def _personel(ad: str, soyad: str) -> Personnel:
     kisi: Personnel = Personnel.objects.create(first_name=ad, last_name=soyad)
     return kisi
 
 
-def _havuza(*kayitlar: Student | Personnel) -> None:
+def _havuza(*kayitlar: Personnel) -> None:
     for kayit in kayitlar:
         persons.add_to_leave_pool(kayit, run=None)
 
@@ -104,80 +84,58 @@ def _karar(client: APIClient, govde: dict[str, Any]) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def test_havuz_listesi_ogrenci_ve_personel_ayri_tr_sirali_giris_ve_aktarimla(
-    client: APIClient,
-) -> None:
-    for numara, sinif, sube in (("12", 10, "Ç"), ("9", 10, "Ç"), ("31", 10, "C"), ("40", 9, "A")):
-        _ogrenci(numara, sinif, sube)
+def test_havuz_listesi_tr_sirali_giris_ve_aktarimla(client: APIClient) -> None:
     for ad in ("ZEHRA", "ÇAĞLA", "CEM"):
         _personel(ad, "ÖRNEK")
-    import_service.commit_students_text(
-        text="\n".join([OGRENCI_BASLIK, "12/Z\t999\tYENİ ÖĞRENCİ"]), full_list=True
-    )
     import_service.commit_personnel_text(text="\n".join([PERSONEL_BASLIK, "ALİ\tYENİ\t\t"]))
-    ogrenci_kosusu = ImportRun.objects.get(status=ImportStatus.COMPLETED, source_type="STUDENTS")
+    kosu = ImportRun.objects.get(status=ImportStatus.COMPLETED, source_type="PERSONNEL")
 
     yanit = client.get(HAVUZ_URL)
 
     assert yanit.status_code == 200
     veri = yanit.json()
-    assert (veri["student_count"], veri["personnel_count"]) == (4, 3)
-    # Sınıf → şube (TR: C < Ç) → okul no (doğal: 9 < 12).
-    assert [(s["class_label"], s["student_number"]) for s in veri["students"]] == [
-        ("9/A", "40"),
-        ("10/C", "31"),
-        ("10/Ç", "9"),
-        ("10/Ç", "12"),
-    ]
+    assert set(veri) == {"personnel_count", "personnel"}
+    assert veri["personnel_count"] == 3
+    # Türk alfabesi: C < Ç.
     assert [p["full_name"] for p in veri["personnel"]] == [
         "CEM ÖRNEK",
         "ÇAĞLA ÖRNEK",
         "ZEHRA ÖRNEK",
     ]
     bugun = timezone.localdate().isoformat()
-    ilk = veri["students"][0]
+    ilk = veri["personnel"][0]
     assert ilk["leave_candidate_since"] == bugun
-    assert ilk["run"] == {"id": ogrenci_kosusu.pk, "file_name": "", "date": bugun}
+    assert ilk["run"] == {"id": kosu.pk, "file_name": "", "date": bugun}
     assert set(ilk) == {
-        "id",
-        "full_name",
-        "student_number",
-        "class_label",
-        "leave_candidate_since",
-        "run",
-        # Çözülemeyen şifreli alanların adları (tasarım §13 D48); değer taşımaz.
-        "bozuk_alanlar",
-    }
-    assert set(veri["personnel"][0]) == {
         "id",
         "full_name",
         "member_kind",
         "leave_candidate_since",
         "run",
         "similar",
+        # Çözülemeyen şifreli alanların adları (tasarım §13 D48); değer taşımaz.
         "bozuk_alanlar",
     }
 
 
 def test_havuz_ozeti_yalniz_sayilari_doner(client: APIClient) -> None:
-    ogrenci = _ogrenci("101", 10, "A", ad=SENTETIK_AD)
     kisi = _personel(SENTETIK_AD, "ÖRNEK")
-    _havuza(ogrenci, kisi)
-    _ogrenci("102", 10, "A")  # havuzda değil
+    _havuza(kisi)
+    _personel("AYŞE", "KAYA")  # havuzda değil
 
     yanit = client.get(HAVUZ_URL, {"summary": "true"})
 
     assert yanit.status_code == 200
-    assert yanit.json() == {"student_count": 1, "personnel_count": 1}
+    assert yanit.json() == {"personnel_count": 1}
     assert SENTETIK_AD not in yanit.content.decode()
 
 
 def test_havuz_bosken_bos_listeler(client: APIClient) -> None:
-    _ogrenci("101", 10, "A")
+    _personel("AYŞE", "KAYA")
 
     veri = client.get(HAVUZ_URL).json()
 
-    assert veri == {"student_count": 0, "personnel_count": 0, "students": [], "personnel": []}
+    assert veri == {"personnel_count": 0, "personnel": []}
 
 
 # ---------------------------------------------------------------------------
@@ -185,98 +143,91 @@ def test_havuz_bosken_bos_listeler(client: APIClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_toplu_karar_ayrilanlar_left_kalanlar_havuzdan_cikar_kayit_silinmez(
+def test_toplu_karar_ayrilanlar_ayrilir_kalanlar_havuzdan_cikar_kayit_silinmez(
     client: APIClient,
 ) -> None:
-    giden, kalan = _ogrenci("101", 12, "A"), _ogrenci("102", 12, "A")
-    giden_personel, kalan_personel = _personel("MEHMET", "DEMİR"), _personel("ZEHRA", "ÇELİK")
-    _havuza(giden, kalan, giden_personel, kalan_personel)
+    giden, kalan = _personel("MEHMET", "DEMİR"), _personel("ZEHRA", "ÇELİK")
+    _havuza(giden, kalan)
 
-    yanit = _karar(
-        client,
-        {
-            "students": {"leave": [giden.pk], "keep": [kalan.pk]},
-            "personnel": {"leave": [giden_personel.pk], "keep": [kalan_personel.pk]},
-        },
-    )
+    yanit = _karar(client, {"personnel": {"leave": [giden.pk], "keep": [kalan.pk]}})
 
     assert yanit.status_code == 200, yanit.json()
-    assert yanit.json() == {
-        "students_left": 1,
-        "students_kept": 1,
-        "personnel_left": 1,
-        "personnel_kept": 1,
-        "student_count": 0,
-        "personnel_count": 0,
-    }
+    assert yanit.json() == {"personnel_left": 1, "personnel_kept": 1, "personnel_count": 0}
     bugun = timezone.localdate()
-    for kayit in (giden, kalan, giden_personel, kalan_personel):
+    for kayit in (giden, kalan):
         kayit.refresh_from_db()
         assert kayit.deleted_at is None
         assert kayit.leave_candidate_since is None
-    assert (giden.status, giden.left_at) == (StudentStatus.LEFT, bugun)
-    assert (kalan.status, kalan.left_at) == (StudentStatus.ACTIVE, None)
-    assert (giden_personel.is_active, giden_personel.left_at) == (False, bugun)
-    assert (kalan_personel.is_active, kalan_personel.left_at) == (True, None)
-    assert Student.all_objects.count() == 2 and Personnel.all_objects.count() == 2
+    assert (giden.is_active, giden.left_at) == (False, bugun)
+    assert (kalan.is_active, kalan.left_at) == (True, None)
+    assert Personnel.all_objects.count() == 2
+
+
+def test_eski_ogrenci_karari_yok_sayilir(client: APIClient) -> None:
+    """Öğrenci havuzu söküldü: gövdedeki `students` alanı karar sayılmaz."""
+    kisi = _personel("MEHMET", "DEMİR")
+    _havuza(kisi)
+
+    bos = _karar(client, {"students": {"leave": [kisi.pk]}})
+    assert bos.status_code == 400
+    assert bos.json()["message"] == persons.POOL_EMPTY_MESSAGE
+    kisi.refresh_from_db()
+    assert (kisi.is_active, kisi.leave_candidate_since) == (True, timezone.localdate())
 
 
 def test_karar_ayrilis_kancasini_yalniz_ayrilanlar_icin_cagirir(client: APIClient) -> None:
     gelen: list[tuple[str, int]] = []
     persons.register_leave_hook(lambda kisi: gelen.append((type(kisi).__name__, kisi.pk)))
-    giden, kalan = _ogrenci("101", 12, "A"), _ogrenci("102", 12, "A")
+    giden, kalan = _personel("MEHMET", "DEMİR"), _personel("ZEHRA", "ÇELİK")
     _havuza(giden, kalan)
 
-    _karar(client, {"students": {"leave": [giden.pk], "keep": [kalan.pk]}})
+    _karar(client, {"personnel": {"leave": [giden.pk], "keep": [kalan.pk]}})
 
-    assert gelen == [("Student", giden.pk)]
+    assert gelen == [("Personnel", giden.pk)]
 
 
 def test_tek_kisilik_karar_ve_yinelenen_kimlik_tekillesir(client: APIClient) -> None:
-    ogrenci = _ogrenci("101", 12, "A")
-    _havuza(ogrenci)
+    kisi = _personel("MEHMET", "DEMİR")
+    _havuza(kisi)
 
-    yanit = _karar(client, {"students": {"leave": [ogrenci.pk, ogrenci.pk]}})
+    yanit = _karar(client, {"personnel": {"leave": [kisi.pk, kisi.pk]}})
 
     assert yanit.status_code == 200
-    assert yanit.json()["students_left"] == 1
+    assert yanit.json()["personnel_left"] == 1
 
 
 def test_ayni_kisi_iki_listede_reddedilir(client: APIClient) -> None:
-    ogrenci = _ogrenci("101", 12, "A")
-    _havuza(ogrenci)
+    kisi = _personel("MEHMET", "DEMİR")
+    _havuza(kisi)
 
-    yanit = _karar(client, {"students": {"leave": [ogrenci.pk], "keep": [ogrenci.pk]}})
+    yanit = _karar(client, {"personnel": {"leave": [kisi.pk], "keep": [kisi.pk]}})
 
     assert yanit.status_code == 400
     assert yanit.json()["message"] == persons.POOL_CONFLICT_MESSAGE
-    ogrenci.refresh_from_db()
-    assert (ogrenci.status, ogrenci.leave_candidate_since) == (
-        StudentStatus.ACTIVE,
-        timezone.localdate(),
-    )
+    kisi.refresh_from_db()
+    assert (kisi.is_active, kisi.leave_candidate_since) == (True, timezone.localdate())
 
 
 def test_havuzda_olmayan_kisi_varsa_hicbir_karar_uygulanmaz(client: APIClient) -> None:
     """Tek işlem: geçerli seçim de geri sarılır; kullanıcı listeyi yeniler."""
-    havuzdaki = _ogrenci("101", 12, "A")
-    havuzda_olmayan = _ogrenci("102", 12, "A")
+    havuzdaki = _personel("AYŞE", "KAYA")
+    havuzda_olmayan = _personel("ZEHRA", "ÇELİK")
     ayrilmis = _personel("MEHMET", "DEMİR")
     _havuza(havuzdaki)
     persons.leave_personnel(ayrilmis)
 
     for govde in (
-        {"students": {"leave": [havuzdaki.pk, havuzda_olmayan.pk]}},
-        {"students": {"leave": [havuzdaki.pk]}, "personnel": {"keep": [ayrilmis.pk]}},
-        {"students": {"leave": [havuzdaki.pk, 99999]}},
+        {"personnel": {"leave": [havuzdaki.pk, havuzda_olmayan.pk]}},
+        {"personnel": {"leave": [havuzdaki.pk], "keep": [ayrilmis.pk]}},
+        {"personnel": {"leave": [havuzdaki.pk, 99999]}},
     ):
         yanit = _karar(client, govde)
         assert yanit.status_code == 400, govde
         assert yanit.json()["message"] == persons.POOL_STALE_MESSAGE
 
     havuzdaki.refresh_from_db()
-    assert (havuzdaki.status, havuzdaki.leave_candidate_since) == (
-        StudentStatus.ACTIVE,
+    assert (havuzdaki.is_active, havuzdaki.leave_candidate_since) == (
+        True,
         timezone.localdate(),
     )
 
@@ -286,42 +237,38 @@ def test_bos_karar_ve_bozuk_govde_reddedilir(client: APIClient) -> None:
     assert bos.status_code == 400
     assert bos.json()["message"] == persons.POOL_EMPTY_MESSAGE
 
-    bozuk = _karar(client, {"students": {"leave": ["abc"]}})
+    bozuk = _karar(client, {"personnel": {"leave": ["abc"]}})
     assert bozuk.status_code == 400
     assert bozuk.json()["code"] == "validation_error"
 
 
 def test_havuzdaki_kisi_aktif_olmalidir_db_kisiti() -> None:
     """Son savunma: ayrılmış kişi havuzda bekleyemez (ayrılış yolu havuzu temizler)."""
-    ogrenci = _ogrenci("101", 12, "A")
     kisi = _personel("AYŞE", "KAYA")
-    persons.leave_student(ogrenci)
     persons.leave_personnel(kisi)
 
-    with pytest.raises(IntegrityError), transaction.atomic():
-        Student.objects.filter(pk=ogrenci.pk).update(leave_candidate_since=timezone.localdate())
     with pytest.raises(IntegrityError), transaction.atomic():
         Personnel.objects.filter(pk=kisi.pk).update(leave_candidate_since=timezone.localdate())
 
 
 def test_ayrilmis_kisi_servisle_havuza_eklenemez() -> None:
-    ogrenci = _ogrenci("101", 12, "A")
-    persons.leave_student(ogrenci)
+    kisi = _personel("AYŞE", "KAYA")
+    persons.leave_personnel(kisi)
 
     with pytest.raises(Exception, match="zaten ayrıldı"):
-        persons.add_to_leave_pool(ogrenci, run=None)
+        persons.add_to_leave_pool(kisi, run=None)
 
 
 def test_karar_gunlukte_ad_birakmaz(client: APIClient, caplog: pytest.LogCaptureFixture) -> None:
-    ogrenci = _ogrenci("98765", 12, "A", ad=SENTETIK_AD)
-    kisi = _personel(SENTETIK_AD, "ÖRNEK")
-    _havuza(ogrenci, kisi)
+    giden = _personel(SENTETIK_AD, "ÖRNEK")
+    kalan = _personel("AYŞE", "SENTETİKKALAN")
+    _havuza(giden, kalan)
 
     with caplog.at_level(logging.DEBUG):
-        _karar(client, {"students": {"leave": [ogrenci.pk]}, "personnel": {"keep": [kisi.pk]}})
+        _karar(client, {"personnel": {"leave": [giden.pk], "keep": [kalan.pk]}})
 
-    assert "Ayrılış havuzu kararı: 1 öğrenci ayrıldı" in caplog.text
-    for iz in (SENTETIK_AD, "98765"):
+    assert "Ayrılış havuzu kararı: 1 personel ayrıldı, 1 personel aktif kaldı." in caplog.text
+    for iz in (SENTETIK_AD, "SENTETİKKALAN"):
         assert iz not in caplog.text
 
 
@@ -331,7 +278,7 @@ def test_karar_gunlukte_ad_birakmaz(client: APIClient, caplog: pytest.LogCapture
 
 
 def test_parolasizken_karar_ucu_409_liste_acik(parolasiz: Path, client: APIClient) -> None:
-    yanit = _karar(client, {"students": {"leave": [1]}})
+    yanit = _karar(client, {"personnel": {"leave": [1]}})
 
     assert yanit.status_code == 409
     assert yanit.json()["code"] == "parola_gerekli"

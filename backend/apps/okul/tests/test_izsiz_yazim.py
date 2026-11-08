@@ -78,7 +78,7 @@ from openpyxl import Workbook
 from rest_framework.test import APIClient
 
 from apps.okul import denetim_izi, erisim_gunlugu, iz_durumu
-from apps.okul.excel_ogrenci import ParserError
+from apps.okul.excel_ortak import ParserError
 from apps.okul.models import (
     AccessKind,
     AccessLog,
@@ -88,24 +88,21 @@ from apps.okul.models import (
     Attachment,
     AttachmentSensitivity,
     AuditTrail,
-    ClassSection,
     Holiday,
     ImportRun,
     Personnel,
     SchoolConfig,
     SchoolTerm,
     SchoolYear,
-    Student,
     SuspendReason,
 )
 from apps.okul.services import app_password, dosya_deposu, encrypted_backup, persons
 from apps.okul.services import calendar as calendar_service
 from apps.okul.services import imports as import_service
 from apps.okul.services import school_year as school_year_service
-from apps.okul.services import sections as section_service
 from apps.okul.services import setup as setup_service
 from apps.okul.services import terms as term_service
-from apps.okul.services.templates import STUDENT_TEMPLATE_HEADERS
+from apps.okul.services.templates import PERSONNEL_TEMPLATE_HEADERS
 from apps.okul.tests.hesap_ortak import GECICI_PAROLA, YENI_PAROLA, hesap_ac, muhurle
 from apps.okul.tests.okul_karti_ortak import okul_karti
 from conftest import (
@@ -121,7 +118,6 @@ YAZMA_YONTEMLERI = ("post", "put", "patch", "delete")
 #: `backend/` kökü (kaynak taraması buradan göreli yol yazar).
 KOK = Path(__file__).resolve().parents[3]
 
-OGRENCI_BASLIGI = "Sınıf\tOkul No\tAdı Soyadı"
 PERSONEL_BASLIGI = "Adı\tSoyadı\tGörevi\tBranşı"
 
 
@@ -191,17 +187,6 @@ def _yil(ad: str = "2026-2027", *, aktif: bool = True, kayma: int = 0) -> School
     )
 
 
-def _ogrenci(**alanlar: Any) -> Student:
-    varsayilan: dict[str, Any] = {
-        "first_name": "Uydurcan",
-        "last_name": "Örnekoğlu",
-        "student_number": "501",
-        "class_level": 9,
-        "class_section": "A",
-    }
-    return persons.create_student(**{**varsayilan, **alanlar})
-
-
 def _personel() -> Personnel:
     return persons.create_personnel(first_name="Uydurnur", last_name="Örnekkaya")
 
@@ -246,22 +231,6 @@ def _kapali_gun_sil(_: pytest.MonkeyPatch) -> Istek:
     return Istek(f"/api/v1/holidays/{gun.pk}/", None, _turler("DURUM"))
 
 
-def _ogrenci_guncelle_tam(_: pytest.MonkeyPatch) -> Istek:
-    ogrenci = _ogrenci()
-    govde = {
-        "first_name": "Uydurcan",
-        "last_name": "Örnekoğlu",
-        "student_number": "501",
-        "class_level": 9,
-        "class_section": "B",
-    }
-    return Istek(f"/api/v1/students/{ogrenci.pk}/", govde, _turler("GUNCELLE"))
-
-
-def _ogrenci_guncelle(_: pytest.MonkeyPatch) -> Istek:
-    return Istek(f"/api/v1/students/{_ogrenci().pk}/", {"class_section": "B"}, _turler("GUNCELLE"))
-
-
 def _personel_guncelle_tam(_: pytest.MonkeyPatch) -> Istek:
     govde = {"first_name": "Uydurnur", "last_name": "Örnekkaya", "member_kind": "STAFF"}
     return Istek(f"/api/v1/personnel/{_personel().pk}/", govde, _turler("GUNCELLE"))
@@ -274,27 +243,11 @@ def _personel_guncelle(_: pytest.MonkeyPatch) -> Istek:
 
 
 def _havuz_karari(_: pytest.MonkeyPatch) -> Istek:
-    ogrenci = _ogrenci()
-    persons.add_to_leave_pool(ogrenci, run=None)
+    kisi = _personel()
+    persons.add_to_leave_pool(kisi, run=None)
     return Istek(
-        "/api/v1/leave-pool/resolve/", {"students": {"keep": [ogrenci.pk]}}, _turler("DURUM")
+        "/api/v1/leave-pool/resolve/", {"personnel": {"keep": [kisi.pk]}}, _turler("DURUM")
     )
-
-
-def _sube_ekle(_: pytest.MonkeyPatch) -> Istek:
-    govde = {"school_year": _yil().pk, "class_level": 9, "class_section": "A"}
-    return Istek("/api/v1/class-sections/", govde, _turler("OLUSTUR"))
-
-
-def _sube_sil(_: pytest.MonkeyPatch) -> Istek:
-    sube = section_service.create_class_section(
-        school_year=_yil(), class_level=9, class_section="A"
-    )
-    return Istek(f"/api/v1/class-sections/{sube.pk}/", None, _turler("DURUM"))
-
-
-def _ogrenci_listesi() -> dict[str, Any]:
-    return {"text": "\n".join([OGRENCI_BASLIGI, "9/A\t501\tUYDURCAN ÖRNEKOĞLU"])}
 
 
 def _personel_listesi() -> dict[str, Any]:
@@ -419,22 +372,6 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     ),
     ("holiday-seed", "POST"): _sabit("/api/v1/holidays/seed/", {"year": 2026}, "OLUSTUR"),
     ("holiday-detail", "DELETE"): Senaryo(_kapali_gun_sil),
-    ("student-list", "POST"): _sabit(
-        "/api/v1/students/",
-        {
-            "first_name": "Uydurcan",
-            "last_name": "Örnekoğlu",
-            "student_number": "501",
-            "class_level": 9,
-            "class_section": "A",
-        },
-        "OLUSTUR",
-    ),
-    ("student-detail", "PUT"): Senaryo(_ogrenci_guncelle_tam),
-    ("student-detail", "PATCH"): Senaryo(_ogrenci_guncelle),
-    ("student-leave", "POST"): _istek(
-        lambda: Istek(f"/api/v1/students/{_ogrenci().pk}/leave/", None, _turler("DURUM"))
-    ),
     ("personnel-list", "POST"): _sabit(
         "/api/v1/personnel/", {"first_name": "Uydurnur", "last_name": "Örnekkaya"}, "OLUSTUR"
     ),
@@ -444,17 +381,7 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
         lambda: Istek(f"/api/v1/personnel/{_personel().pk}/leave/", None, _turler("DURUM"))
     ),
     ("leave-pool-resolve", "POST"): Senaryo(_havuz_karari),
-    ("class-section-list", "POST"): Senaryo(_sube_ekle),
-    ("class-section-detail", "DELETE"): Senaryo(_sube_sil),
     # Önizlemenin kayıt yazımları geri sarılır; kalıcı olan yalnız PREVIEWED koşusudur.
-    ("import-students-preview", "POST"): _istek(
-        lambda: Istek("/api/v1/imports/students/preview/", _ogrenci_listesi(), _turler("OLUSTUR"))
-    ),
-    ("import-students-commit", "POST"): _istek(
-        lambda: Istek(
-            "/api/v1/imports/students/commit/", _ogrenci_listesi(), _turler("OLUSTUR", "DURUM")
-        )
-    ),
     ("import-personnel-preview", "POST"): _istek(
         lambda: Istek("/api/v1/imports/personnel/preview/", _personel_listesi(), _turler("OLUSTUR"))
     ),
@@ -548,7 +475,6 @@ PLAN_MUAFIYETI = (
 
 #: İz satırı YAZMAYAN yazma uçları ve gerekçeleri. Yeni bir uç buraya ancak gerekçesiyle girer.
 MUAF_UCLAR: dict[tuple[str, str], str] = {
-    ("student-detail", "DELETE"): PLAN_MUAFIYETI,
     ("personnel-detail", "DELETE"): PLAN_MUAFIYETI,
     ("personnel-merge", "POST"): PLAN_MUAFIYETI,
     ("app-quit", "POST"): (
@@ -797,7 +723,6 @@ ILKELLER: dict[tuple[str, str], str] = {
 
 #: İzsiz kalabilen işlevler (göreli dosya yolu, birim) → gerekçe. Başka muafiyet yoktur.
 MUAF_ISLEVLER: dict[tuple[str, str], str] = {
-    ("apps/okul/services/persons.py", "delete_student"): PLAN_MUAFIYETI,
     ("apps/okul/services/persons.py", "delete_personnel"): PLAN_MUAFIYETI,
     ("apps/okul/services/persons.py", "merge_personnel"): PLAN_MUAFIYETI,
     ("apps/okul/services/ozet_onarimi.py", "ozetleri_onar"): (
@@ -1596,7 +1521,7 @@ def _xlsx(satirlar: list[tuple[str, ...]]) -> bytes:
     kitap = Workbook()
     sayfa = kitap.active
     assert sayfa is not None
-    sayfa.append(list(STUDENT_TEMPLATE_HEADERS))
+    sayfa.append(list(PERSONNEL_TEMPLATE_HEADERS))
     for satir in satirlar:
         sayfa.append(list(satir))
     tampon = BytesIO()
@@ -1609,9 +1534,10 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
     """Tasarım §4.6.2 kural 6, §14 F1b kapısı (modül başlığı, madde 3).
 
     Her izli model (`Account`, `SchoolConfig`, `SchoolYear`, `SchoolTerm`, `Holiday`,
-    `Student`, `Personnel`, `ClassSection`, `ImportRun`, `Attachment`) uydurma kişi verisiyle
-    yazılır, güncellenir ve durumu değişir; iz satırlarının hiçbir sütununda bu değerler,
-    parçaları, büyük-küçük harf biçimleri ve şifreli token'ları geçmez. Arşiv dökümü henüz yoktur.
+    `Personnel`, `ImportRun`, `Attachment`) uydurma kişi verisiyle yazılır, güncellenir ve
+    durumu değişir; iz satırlarının hiçbir sütununda bu değerler, parçaları, büyük-küçük harf
+    biçimleri ve şifreli token'ları geçmez. Arşiv dökümü henüz yoktur. (Öğrenci sicili ve şube
+    kataloğu F1b 5. adımda söküldü; veli listesi gelince bu sınama ona da uygulanır.)
     """
     # Hesap (ad-soyad şifreli kişi verisi).
     hesap_ac(AccountRole.MUHASIP, ad=f"{UYDURMA_AD} {UYDURMA_SOYAD}")
@@ -1644,37 +1570,31 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
     )
     calendar_service.delete_holiday(gun)
     calendar_service.seed_holidays(2026)
-    # Öğrenci: ad, soyad, okul no; güncelleme, havuz, ayrılış.
-    ogrenci = persons.create_student(
-        first_name=UYDURMA_AD,
-        last_name=f"{UYDURMA_SOYAD} {UYDURMA_ADRES}",
-        student_number=UYDURMA_TCKN,
-        class_level=9,
-        class_section="A",
+    # Personel: ad, soyad; güncelleme, havuz, ayrılış.
+    personel = persons.create_personnel(
+        first_name=UYDURMA_AD, last_name=f"{UYDURMA_SOYAD} {UYDURMA_ADRES}"[:100]
     )
-    persons.update_student(
-        ogrenci, first_name=f"{UYDURMA_AD} {UYDURMA_METIN}", last_name=UYDURMA_TELEFON
+    persons.update_personnel(
+        personel, first_name=f"{UYDURMA_AD} {UYDURMA_METIN}"[:100], last_name=UYDURMA_TELEFON
     )
-    persons.add_to_leave_pool(ogrenci, run=None)
-    persons.leave_student(ogrenci)
-    # Personel: ad, soyad; güncelleme, ayrılış.
-    personel = persons.create_personnel(first_name=UYDURMA_AD, last_name=UYDURMA_UZUN[:100])
-    persons.update_personnel(personel, last_name=f"{UYDURMA_SOYAD} {UYDURMA_TELEFON}")
+    persons.add_to_leave_pool(personel, run=None)
     persons.leave_personnel(personel)
-    # Şube (elle ve aktarımla), aktarım koşusu (dosya adı serbest metin), önizleme.
-    section_service.create_class_section(school_year=yil, class_level=10, class_section="B")
-    dosya = _xlsx([("9/C", "777", f"{UYDURMA_AD} {UYDURMA_METIN}", UYDURMA_SOYAD)])
+    ikinci_personel = persons.create_personnel(first_name=UYDURMA_AD, last_name=UYDURMA_UZUN[:100])
+    persons.update_personnel(ikinci_personel, last_name=f"{UYDURMA_SOYAD} {UYDURMA_TELEFON}")
+    persons.leave_personnel(ikinci_personel)
+    # Aktarım koşusu (dosya adı serbest metin), önizleme; görev hücresi serbest metindir.
+    dosya = _xlsx([(f"{UYDURMA_AD} {UYDURMA_METIN}", UYDURMA_SOYAD, UYDURMA_ADRES)])
     dosya_adi = f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_TELEFON_ARALIKLI}.xlsx"
-    import_service.preview_students_file(file_bytes=dosya, file_name=dosya_adi)
-    import_service.commit_students_file(file_bytes=dosya, file_name=dosya_adi)
-    # Aynı öğrenci başka şubeyle ve yeni adla: aktarımın güncelleme yolu.
-    ikinci = _xlsx([("9/D", "777", f"{UYDURMA_SOYAD} {UYDURMA_ADRES}", UYDURMA_AD)])
-    import_service.commit_students_file(file_bytes=ikinci, file_name=f"{UYDURMA_METIN}.xlsx")
+    import_service.preview_personnel_file(file_bytes=dosya, file_name=dosya_adi)
+    import_service.commit_personnel_file(file_bytes=dosya, file_name=dosya_adi)
+    # Aynı kişi başka türle: aktarımın güncelleme yolu (üye türü), havuzdan çıkış.
+    ikinci = _xlsx([(f"{UYDURMA_AD} {UYDURMA_METIN}", UYDURMA_SOYAD, "Memur")])
+    import_service.commit_personnel_file(file_bytes=ikinci, file_name=f"{UYDURMA_METIN}.xlsx")
     import_service.commit_personnel_text(
         text="\n".join([PERSONEL_BASLIGI, f"{UYDURMA_AD}\t{UYDURMA_SOYAD}\tÖğretmen\t"])
     )
     with pytest.raises(ParserError):
-        import_service.commit_students_file(file_bytes=b"bozuk", file_name=dosya_adi)
+        import_service.commit_personnel_file(file_bytes=b"bozuk", file_name=dosya_adi)
     # Ek: özgün dosya adı kişi adı taşıyabilir, sarmal güvenlik öğesidir (plan F1b-3).
     monkeypatch.setattr(dosya_deposu, "_SAHIP_ETIKETLERI", {"okul.SchoolYear"})
     dosya_deposu.yaz(
@@ -1694,16 +1614,13 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
         "okul.SchoolYear",
         "okul.SchoolTerm",
         "okul.Holiday",
-        "okul.Student",
         "okul.Personnel",
-        "okul.ClassSection",
         "okul.ImportRun",
         "okul.Attachment",
     } <= modeller
     for parca in ARANACAKLAR:
         assert parca not in metin, parca
     tokenlar = [
-        *_ham_sutunlar("okul_student", ("first_name", "last_name", "student_number")),
         *_ham_sutunlar("okul_personnel", ("first_name", "last_name")),
         *_ham_sutunlar("okul_account", ("display_name",)),
         *_ham_sutunlar("okul_attachment", ("original_name", "key_wrap", "sha256")),
@@ -1725,15 +1642,13 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.django_db
-def test_kisi_satirlari_deger_tasimaz_okul_no_dahil() -> None:
-    """KVKK silme kümesindeki modellerin (`Student`, `Personnel`) satırları değer taşımaz."""
-    ogrenci = persons.create_student(
-        first_name="Uydurcan", last_name="Örnekoğlu", student_number="501", class_level=9
-    )
-    persons.leave_student(ogrenci)
+def test_kisi_satirlari_deger_tasimaz() -> None:
+    """KVKK silme kümesindeki modelin (`Personnel`) satırları değer taşımaz (üye türü dahil)."""
     personel = persons.create_personnel(first_name="Uydurnur", last_name="Örnekkaya")
+    persons.update_personnel(personel, member_kind="STAFF")
+    persons.add_to_leave_pool(personel, run=None)
     persons.leave_personnel(personel)
-    satirlar = AuditTrail.objects.filter(model__in=["okul.Student", "okul.Personnel"])
+    satirlar = AuditTrail.objects.filter(model="okul.Personnel")
     assert satirlar.count() == 4
     assert all(satir.values == {} for satir in satirlar)
 
@@ -1750,30 +1665,30 @@ AKTARIM_SINIRI_SN = 60.0
 def test_iki_bin_satirlik_aktarim_kayit_basina_iz_yazar_ve_makul_surer(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Toplu yazım kayıt başına satırdır; 2000 satırlık aktarım ve önizlemesi makul sürer."""
-    SchoolYear.objects.create(
-        name="2026-2027", start_date=date(2026, 9, 7), end_date=date(2027, 6, 25), is_active=True
-    )
+    """Toplu yazım kayıt başına satırdır; 2000 satırlık aktarım ve önizlemesi makul sürer.
+
+    Öğrenci aktarımı F1b 5. adımda söküldü; ölçüm personel aktarımıyla yapılır (ad eşleşmesi
+    Python'dadır, en ağır yol budur).
+    """
     satirlar = [
-        f"{9 + i % 4}/{'ABCD'[i % 4]}\t{1000 + i}\tUYDURMA{i} ÖRNEK{i}"
-        for i in range(AKTARIM_SATIRI)
+        f"UYDURMA{i}\tÖRNEK{i}\t{'Öğretmen' if i % 4 else 'Memur'}\t" for i in range(AKTARIM_SATIRI)
     ]
-    metin = "\n".join([OGRENCI_BASLIGI, *satirlar])
+    metin = "\n".join([PERSONEL_BASLIGI, *satirlar])
 
     basla = time.perf_counter()
-    import_service.preview_students_text(text=metin)
+    import_service.preview_personnel_text(text=metin)
     onizleme_sn = time.perf_counter() - basla
-    assert AuditTrail.objects.filter(model="okul.Student").count() == 0  # geri sarıldı
+    assert AuditTrail.objects.filter(model="okul.Personnel").count() == 0  # geri sarıldı
 
     basla = time.perf_counter()
-    rapor = import_service.commit_students_text(text=metin)
+    rapor = import_service.commit_personnel_text(text=metin)
     uygulama_sn = time.perf_counter() - basla
 
-    assert rapor.created_students == AKTARIM_SATIRI
+    assert rapor.created_personnel == AKTARIM_SATIRI
     assert (
-        AuditTrail.objects.filter(model="okul.Student", action="OLUSTUR").count() == AKTARIM_SATIRI
+        AuditTrail.objects.filter(model="okul.Personnel", action="OLUSTUR").count()
+        == AKTARIM_SATIRI
     )
-    assert AuditTrail.objects.filter(model="okul.ClassSection").count() == 4
     with capsys.disabled():
         print(
             f"\n[ölçüm] {AKTARIM_SATIRI} satır: önizleme {onizleme_sn:.1f} sn, "
@@ -1799,9 +1714,7 @@ IZLI_MODELLER = (
     SchoolYear,
     SchoolTerm,
     Holiday,
-    Student,
     Personnel,
-    ClassSection,
     ImportRun,
     Attachment,
 )

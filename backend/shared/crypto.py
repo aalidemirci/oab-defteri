@@ -95,7 +95,7 @@ hata mesajında yankılanmaz.
 
 ŞİFRELİ ALANDA DB ARAMASI YOKTUR (§5.3): Fernet her şifrelemede farklı token
 ürettiği için şifreli alan üzerinde DB tarafı filtre/LIKE/sıralama çalışmaz
-(`Student.objects.filter(first_name=…)` daima boş döner). Ad temelli arama,
+(`Personnel.objects.filter(first_name=…)` daima boş döner). Ad temelli arama,
 sıralama ve teklik selector katmanında Python ile; kimlik eşleştirmesi kör
 indeksle yapılır. Arama ve eşleme `CorruptField` taşıyan kaydı dışarıda bırakır
 (`has_corrupt`).
@@ -536,7 +536,8 @@ def blind_index(normalized: str) -> str:
 
     Belirlenimcidir: aynı DEK ve aynı değer daima aynı indeksi verir; bu yüzden
     tam eşleşme ve teklik kısıtı DB'de çalışır. Normalleştirme ÇAĞIRANIN
-    işidir (ör. okul no için `normalize_student_number`). Boş dize `""` döner
+    işidir. Öğrenci okul numarası F1b 5. adımda söküldü; bugün çağıran yoktur, veli listesinin
+    ad indeksi (`ParentRoster.name_index`, tasarım §5.1) sonraki alt adımda bağlanır. Boş dize `""` döner
     ("veri yok" hâli DB'de de boş görünür, kısmi teklik kısıtları buna
     dayanır). Anahtar bellekte değilse `KeyMissingError`.
     """

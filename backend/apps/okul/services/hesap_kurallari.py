@@ -36,7 +36,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-from apps.okul.excel_ogrenci import normalize_header
+from apps.okul.excel_ortak import normalize_header
 from apps.okul.models import AccountRole
 from shared.text import tr_lower
 

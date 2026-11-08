@@ -193,13 +193,11 @@ export default function HakkindaPage() {
                 çıkmaz.
               </li>
               <li>
-                Öğrenci, öğretmen ve diğer personelin ad-soyadları, öğrencilerin okul numaraları,
-                hesap sahiplerinin ad-soyadları ve eklerin özgün dosya adları Fernet (AES-128-CBC +
-                HMAC-SHA256) ile şifrelenir. Şifreleme anahtarı her hesap için ayrı şifrelenir ve
-                güvenlik dosyasında o hesabın parola kaydında durur: hesabın parolasından Argon2id
-                ile türetilen anahtar onu tek başına açar; kurtarma anahtarının da kendi kaydı
-                vardır. Okul numarasıyla arama ve e-Okul eşleştirmesi, aynı anahtardan türetilen
-                HMAC-SHA256 kör indeksle numaranın tamamı üzerinden yapılır.
+                Öğretmen ve diğer personelin ad-soyadları, hesap sahiplerinin ad-soyadları ve
+                eklerin özgün dosya adları Fernet (AES-128-CBC + HMAC-SHA256) ile şifrelenir.
+                Şifreleme anahtarı her hesap için ayrı şifrelenir ve güvenlik dosyasında o hesabın
+                parola kaydında durur: hesabın parolasından Argon2id ile türetilen anahtar onu tek
+                başına açar; kurtarma anahtarının da kendi kaydı vardır.
               </li>
               <li>
                 Denetim izinin her kaydı, bir önceki kaydın mührüyle birlikte HMAC-SHA256 ile

@@ -802,7 +802,7 @@ class TestYazar:
         katman = AppLockMiddleware(_yazari_yakala(gorulen))
 
         with yazar_olarak(None):
-            katman(RequestFactory().get("/api/v1/grade-levels/"))
+            katman(RequestFactory().get("/api/v1/school-years/"))
             assert yazar() is None  # bağlam istekten sızmaz
 
         assert gorulen == [Yazar(hesap_id=TEST_HESAP_ID, rol="yonetici")]
@@ -822,7 +822,7 @@ class TestYazar:
             sayilar.append(oturum_modulu.UCUSTA.sayi)
             return HttpResponse("tamam")
 
-        AppLockMiddleware(gorunum)(RequestFactory().get("/api/v1/grade-levels/"))
+        AppLockMiddleware(gorunum)(RequestFactory().get("/api/v1/school-years/"))
 
         assert sayilar == [1]
         assert oturum_modulu.UCUSTA.sayi == 0

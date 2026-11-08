@@ -407,7 +407,6 @@ from apps.okul.models import (
     Personnel,
     ResetKind,
     SchoolConfig,
-    Student,
 )
 from apps.okul.oturum import (
     IZ_KIP_KILIDI,
@@ -1568,10 +1567,13 @@ def _stored_fingerprint() -> str:
 
 
 def _persons_exist() -> bool:
-    """Kişi ya da hesap tablolarında (silinmişler dahil) satır var mı?"""
-    return bool(
-        Student.all_objects.exists() or Personnel.all_objects.exists() or Account.objects.exists()
-    )
+    """Kişi ya da hesap tablolarında (silinmişler dahil) satır var mı?
+
+    Öğrenci sicili F1b 5. adımda söküldü. VELİ LİSTESİ (`ParentRoster`, şifreli ad) gelince
+    buraya eklenir: veli listesi varken ilk hesap kurulamamalı (plan "F1b-5 uygulama
+    kararları"; sonraki alt adım).
+    """
+    return bool(Personnel.all_objects.exists() or Account.objects.exists())
 
 
 # ---------------------------------------------------------------------------
@@ -2129,7 +2131,7 @@ def _require_first_setup() -> None:
         )
     if _persons_exist():
         raise AppPasswordError(
-            "Kayıtlı öğrenci, öğretmen, diğer personel ya da hesap varken ilk program "
+            "Kayıtlı öğretmen, diğer personel ya da hesap varken ilk program "
             "yöneticisi hesabı kurulamaz. Hesap, kurulum sihirbazının ilk adımında, kişi "
             "kaydından önce kurulur."
         )

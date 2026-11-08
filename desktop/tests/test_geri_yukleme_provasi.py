@@ -112,7 +112,7 @@ def test_temiz_makinede_kurtarma_anahtariyla_acilir_ve_parola_yenilenir(
 
     kurtarma = betik("dogrula", "--data-dir", str(yeni), "--kurtarma", eski_bilgisayar["kurtarma"])
     assert kurtarma["ozet"] == eski_bilgisayar["beklenen"]
-    assert kurtarma["ozet"]["ogrenciler"], "kişi kayıtları taşınmadı"
+    assert kurtarma["ozet"]["personel"], "kişi kayıtları taşınmadı"
     assert kurtarma["durum"]["recovery_key_confirmed"] is True
     assert kurtarma["durum"]["locked"] is False
     # Kurtarma anahtarıyla açılış program yöneticisine yeni parola belirler; sonraki

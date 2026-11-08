@@ -32,10 +32,9 @@ function madde(metin: RegExp): HTMLElement {
 }
 
 describe("BaslangicYolHaritasi", () => {
-  it("maddeler bu sırayla durur; parola paylaşımı maddesi yoktur", () => {
+  it("maddeler bu sırayla durur; parola paylaşımı ve öğrenci aktarımı maddesi yoktur", () => {
     expect(YOL_HARITASI_MADDELERI.map((m) => m.anahtar)).toEqual([
       "okul_karti",
-      "ogrenci_aktarimi",
       "personel_aktarimi",
       "kapali_gunler",
       "kurtarma_zarfi",
@@ -51,15 +50,14 @@ describe("BaslangicYolHaritasi", () => {
   it("kendiliğinden tespit edilen maddeler sayılardan, diğerleri işaretten okunur", () => {
     const durum: SetupStatus = {
       ...KURULU_DURUM,
-      student_count: 3,
       personnel_count: 0,
       school_break_count: 1,
       roadmap: { marks: {}, hidden: false },
     };
     expect(maddeTamamMi("okul_karti", durum)).toBe(true);
     expect(maddeTamamMi("okul_karti", { ...durum, school_info_complete: false })).toBe(false);
-    expect(maddeTamamMi("ogrenci_aktarimi", durum)).toBe(true);
     expect(maddeTamamMi("personel_aktarimi", durum)).toBe(false);
+    expect(maddeTamamMi("personel_aktarimi", { ...durum, personnel_count: 2 })).toBe(true);
     expect(maddeTamamMi("kapali_gunler", durum)).toBe(true);
     expect(maddeTamamMi("kurtarma_zarfi", durum)).toBe(false);
     expect(
@@ -114,7 +112,6 @@ describe("BaslangicYolHaritasi", () => {
     bas();
     const bag = (metin: RegExp) => within(madde(metin)).getByRole("link");
     expect(bag(/Okul bilgilerini tamamlayın/)).toHaveAttribute("href", "/ayarlar?tab=okul");
-    expect(bag(/e-Okul öğrenci listesini aktarın/)).toHaveAttribute("href", "/kisiler");
     expect(bag(/Öğretmen ve diğer personel listesini aktarın/)).toHaveAttribute(
       "href",
       "/kisiler?tab=personel",
@@ -132,28 +129,29 @@ describe("BaslangicYolHaritasi", () => {
 
   it("kendiliğinden tespit edilen maddelerde işaret kutusu yoktur", () => {
     bas();
-    expect(within(madde(/e-Okul öğrenci listesini aktarın/)).queryByRole("checkbox")).toBeNull();
+    const personel = madde(/Öğretmen ve diğer personel listesini aktarın/);
+    expect(within(personel).queryByRole("checkbox")).toBeNull();
     expect(
-      within(madde(/e-Okul öğrenci listesini aktarın/)).getByText(
-        "Yapıldığında kendiliğinden işaretlenir.",
-      ),
+      within(personel).getByText("Yapıldığında kendiliğinden işaretlenir."),
     ).toBeInTheDocument();
     // Elle işaretlenen tek madde: kurtarma anahtarı zarfı.
     expect(screen.getAllByRole("checkbox")).toHaveLength(1);
   });
 
-  it("aktarımlar yapılınca maddeler tamamlandı olarak görünür", () => {
-    bas({ ...KURULU_DURUM, student_count: 480, personnel_count: 36 });
+  it("aktarım yapılınca madde tamamlandı olarak görünür", () => {
+    bas({ ...KURULU_DURUM, personnel_count: 36 });
     expect(
-      within(madde(/e-Okul öğrenci listesini aktarın/)).getByText(/tamamlandı/),
+      within(madde(/Öğretmen ve diğer personel listesini aktarın/)).getByText(/tamamlandı/),
     ).toBeInTheDocument();
-    // İki aktarım + okul kartı (KURULU_DURUM'da tamam).
-    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "3");
+    // Personel aktarımı + okul kartı (KURULU_DURUM'da tamam).
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "2");
   });
 
   it("iç kodlar kullanıcı metnine girmez; yerel araç dili korunur", () => {
     const { container } = bas();
     expect(container.textContent).not.toMatch(/\b(F1|U10|E14|T5|KM-|OPAC)\b/);
     expect(container.textContent).not.toMatch(/otomasyon sistemi/i);
+    // Öğrenci aktarımı maddesi kalktı (F1b 5. adım); öğrenciye kapalı gün maddesi kalır.
+    expect(container.textContent).not.toMatch(/öğrenci listesi/i);
   });
 });

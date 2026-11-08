@@ -57,7 +57,6 @@ import PanelPage from "./PanelPage";
 /** Bütün maddeler tamam: aktarımlar yapılmış, kapalı gün girilmiş, zarf işareti konmuş. */
 const HEPSI_TAMAM: SetupStatus = {
   ...KURULU_DURUM,
-  student_count: 480,
   personnel_count: 36,
   school_break_count: 2,
   roadmap: {
@@ -136,7 +135,7 @@ function yolHaritasi(): HTMLElement {
 
 beforeEach(() => {
   oapi.getSetupStatus.mockResolvedValue(KURULU_DURUM);
-  oapi.getLeavePoolSummary.mockResolvedValue({ student_count: 0, personnel_count: 0 });
+  oapi.getLeavePoolSummary.mockResolvedValue({ personnel_count: 0 });
   papi.sonOturum.mockResolvedValue({
     unexpected_shutdown: false,
     process_started_at: "2026-10-31T09:00:00+03:00",
@@ -159,9 +158,10 @@ describe("Genel Bakış", () => {
       "href",
       "/kisiler",
     );
-    expect(
-      screen.getByRole("link", { name: /Ders yılı, şubeler, okul bilgileri/ }),
-    ).toHaveAttribute("href", "/ayarlar");
+    expect(screen.getByRole("link", { name: /Ders yılı, okul bilgileri/ })).toHaveAttribute(
+      "href",
+      "/ayarlar",
+    );
   });
 
   it("çözülemeyen şifreli alan varsa “Okunamayan Kayıt Alanları” kartı çıkar (yalnız sayı)", async () => {
@@ -384,15 +384,11 @@ describe("Genel Bakış", () => {
   });
 
   it("ayrılış havuzu boş değilse “N kişi ayrılış kararı bekliyor” kartı havuza bağlanır", async () => {
-    oapi.getLeavePoolSummary.mockResolvedValue({ student_count: 3, personnel_count: 1 });
+    oapi.getLeavePoolSummary.mockResolvedValue({ personnel_count: 4 });
     bas();
 
     const kart = await screen.findByRole("region", { name: "Ayrılış Havuzu" });
-    expect(
-      within(kart).getByText(
-        "4 kişi ayrılış kararı bekliyor (3 öğrenci, 1 öğretmen ve diğer personel).",
-      ),
-    ).toBeInTheDocument();
+    expect(within(kart).getByText("4 kişi ayrılış kararı bekliyor.")).toBeInTheDocument();
     expect(within(kart).getByRole("link", { name: "Ayrılış Havuzu'nu aç" })).toHaveAttribute(
       "href",
       "/kisiler?tab=havuz",
@@ -413,16 +409,16 @@ describe("Genel Bakış", () => {
 });
 
 describe("Başlangıç Yol Haritası", () => {
-  it("yeni kurulumda okul kartı tamam, öteki dört madde yapılacak; ilerleme 1/5", async () => {
+  it("yeni kurulumda okul kartı tamam, öteki üç madde yapılacak; ilerleme 1/4", async () => {
     bas();
 
     expect(
       await screen.findByRole("heading", { name: "Başlangıç Yol Haritası" }),
     ).toBeInTheDocument();
     const kart = yolHaritasi();
-    expect(within(kart).getAllByRole("listitem")).toHaveLength(5);
+    expect(within(kart).getAllByRole("listitem")).toHaveLength(4);
     expect(within(kart).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "1");
-    expect(within(kart).getByText(/5 maddeden 1 tanesi tamamlandı/)).toBeInTheDocument();
+    expect(within(kart).getByText(/4 maddeden 1 tanesi tamamlandı/)).toBeInTheDocument();
     expect(within(kart).queryByRole("button", { name: "Kartı gizle" })).toBeNull();
   });
 
@@ -439,7 +435,7 @@ describe("Başlangıç Yol Haritası", () => {
       "href",
       "/ayarlar?tab=okul",
     );
-    expect(within(yolHaritasi()).getByText(/5 maddeden 0 tanesi tamamlandı/)).toBeInTheDocument();
+    expect(within(yolHaritasi()).getByText(/4 maddeden 0 tanesi tamamlandı/)).toBeInTheDocument();
   });
 
   it("gizlenmiş kart görünmez; durum okunamazsa da sayfa çalışır", async () => {
@@ -531,7 +527,7 @@ describe("Genel Bakış — rol süzmesi (kaynak oturum özetinin yetenekleri)",
 
   it("yol haritası, ayrılış havuzu ve dış yedek kartları yeteneksiz rolde çizilmez, uçları çağrılmaz", async () => {
     otapi.ozet.mockResolvedValue(BASKAN);
-    oapi.getLeavePoolSummary.mockResolvedValue({ student_count: 3, personnel_count: 1 });
+    oapi.getLeavePoolSummary.mockResolvedValue({ personnel_count: 4 });
     gapi.disYedek.mockResolvedValue({ ...DIS_YEDEK_OZETI, remind: true });
     bas();
 
@@ -580,7 +576,7 @@ describe("Genel Bakış — rol süzmesi (kaynak oturum özetinin yetenekleri)",
   });
 
   it("program yöneticisinde bütün kartlar ve tam açıklamalar durur", async () => {
-    oapi.getLeavePoolSummary.mockResolvedValue({ student_count: 3, personnel_count: 1 });
+    oapi.getLeavePoolSummary.mockResolvedValue({ personnel_count: 4 });
     gapi.disYedek.mockResolvedValue({ ...DIS_YEDEK_OZETI, remind: true });
     bas();
 

@@ -344,10 +344,6 @@ _DAYANAK_PERSONEL = (
     "F1b'de yalnız program yöneticisinin yazdığı kayıttır; M2'nin YK hücreleri OAB kişileriyle "
     "F1c'de bağlanır (plan F1b-2 'Bugünkü uçların eşlemi'; tasarımda bu daraltmanın satırı yok)."
 )
-_DAYANAK_OGRENCI = (
-    "Tasarım T5, §8.4: OAB öğrenci adı ve numarası tutmaz; öğrenci uçları F1b 5. adımda "
-    "sökülür, o güne dek yalnız program yöneticisine açıktır (plan F1b-2)."
-)
 _DAYANAK_HAVUZ = (
     "Plan F1b-2: ayrılış havuzu (özet dahil) yalnız program yöneticisinindir; karar e-Okul "
     "aktarımının parçasıdır (tasarım §8.1 A7). Parametre denetçisi değere bakmadığı için "
@@ -414,7 +410,6 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _yaz("setup-complete", "POST", Satir.M1),
     # Genel Bakış'ın "Başlangıç Yol Haritası" işaretleri (plan F1b-2: M1).
     _yaz("setup-roadmap", "POST", Satir.M1),
-    _oku("grade-levels", Satir.M1),
     _oku("school-year-list", Satir.M1),
     _yaz("school-year-list", "POST", Satir.M1),
     _oku("school-year-terms", Satir.M1),
@@ -424,10 +419,6 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _yaz("holiday-list", "POST", Satir.M1),
     _yaz("holiday-seed", "POST", Satir.M1),
     _yaz("holiday-detail", "DELETE", Satir.M1),
-    # Şubeler tasarımda satırsızdır (Ayarlar'ın sekmesi; T5 gereği 5. adımda gözden geçirilir).
-    _oku("class-section-list", Satir.M1),
-    _yaz("class-section-list", "POST", Satir.M1),
-    _yaz("class-section-detail", "DELETE", Satir.M1),
     # ------------------------------------------------ M2: personel (her rol okur)
     _oku("personnel-list", Satir.M2),
     _yaz("personnel-list", "POST", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_PERSONEL),
@@ -458,33 +449,6 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _oku("template-personnel", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_SABLON),
     _oku("leave-pool", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_HAVUZ),
     _yaz("leave-pool-resolve", "POST", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_HAVUZ),
-    # ------------------------------------------------ M2: öğrenci (5. adımda sökülür)
-    _oku("student-list", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_OGRENCI),
-    _yaz("student-list", "POST", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_OGRENCI),
-    _oku("student-detail", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_OGRENCI),
-    _yaz(
-        "student-detail",
-        ("PUT", "PATCH", "DELETE"),
-        Satir.M2,
-        yalniz=_YALNIZ_YONETICI,
-        dayanak=_DAYANAK_OGRENCI,
-    ),
-    _yaz("student-leave", "POST", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_OGRENCI),
-    _yaz(
-        "import-students-preview",
-        "POST",
-        Satir.M2,
-        yalniz=_YALNIZ_YONETICI,
-        dayanak=_DAYANAK_OGRENCI,
-    ),
-    _yaz(
-        "import-students-commit",
-        "POST",
-        Satir.M2,
-        yalniz=_YALNIZ_YONETICI,
-        dayanak=_DAYANAK_OGRENCI,
-    ),
-    _oku("template-students", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_OGRENCI),
     # ------------------------------------------------ M9: pano (son oturum kartı)
     _oku("dashboard-last-session", Satir.M9),
     # "Kontrol ettim": M9'un Y hücreleri (program yöneticisi ve YK); DK ve müdür görür.
@@ -731,11 +695,10 @@ YETENEKLER: Final[Mapping[str, frozenset[tuple[str, str]]]] = {
     "kapali_gun_yazma": _ciftler(
         ("holiday-list", "POST"), ("holiday-seed", "POST"), ("holiday-detail", "DELETE")
     ),
-    "sube_yazma": _ciftler(("class-section-list", "POST"), ("class-section-detail", "DELETE")),
     "kurulum_tamamlama": _ciftler(("setup-complete", "POST")),
     "yol_haritasi": _ciftler(("setup-roadmap", "POST")),
     "son_oturum_onay": _ciftler(("dashboard-last-session", "POST")),
-    # Kişiler: personel yazmaları, e-Okul aktarımı, ayrılış havuzu ve öğrenciler.
+    # Kişiler: personel yazmaları, e-Okul aktarımı ve ayrılış havuzu.
     "kisi_yazma": _ciftler(
         ("personnel-list", "POST"),
         ("personnel-detail", ("PUT", "PATCH", "DELETE")),
@@ -748,14 +711,6 @@ YETENEKLER: Final[Mapping[str, frozenset[tuple[str, str]]]] = {
         ("template-personnel", "GET"),
     ),
     "ayrilis_havuzu": _ciftler(("leave-pool", "GET"), ("leave-pool-resolve", "POST")),
-    "ogrenciler": _ciftler(
-        ("student-list", ("GET", "POST")),
-        ("student-detail", ("GET", "PUT", "PATCH", "DELETE")),
-        ("student-leave", "POST"),
-        ("import-students-preview", "POST"),
-        ("import-students-commit", "POST"),
-        ("template-students", "GET"),
-    ),
 }
 
 

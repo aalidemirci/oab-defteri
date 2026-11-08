@@ -14,7 +14,7 @@ import pytest
 from openpyxl import Workbook
 
 from apps.okul import excel_personel
-from apps.okul.excel_ogrenci import ParserError
+from apps.okul.excel_ortak import ParserError
 from apps.okul.models import MemberKind
 
 STANDARD_HEADER = ["Ad Soyad", "Unvan", "Branş"]

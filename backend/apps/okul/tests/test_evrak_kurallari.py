@@ -701,7 +701,7 @@ def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
     son_oturum = "Genel Bakış: son oturumun kontrolü (“Kontrol ettim”)"
     beklenen = {
         AccountRole.YONETICI: (
-            "Okul bilgileri, ders yılı ve dönemler, kapalı günler, şubeler",
+            "Okul bilgileri, ders yılı ve dönemler, kapalı günler",
             "Kişiler: öğretmen ve diğer personel kaydı, e-Okul aktarımı, ayrılış havuzu",
             son_oturum,
             "Kullanıcılar: hesap açma, kapama, askıdan çıkarma, parola sıfırlama, hesap teslim "

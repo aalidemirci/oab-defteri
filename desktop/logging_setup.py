@@ -1,6 +1,6 @@
 """Uygulama günlüğü — erişim logu KAPALI, PII yazılmaz.
 
-Aile iskeletinin denetim bulgusu: `?search=<öğrenci adı>` gibi sorgu dizeleri istek
+Aile iskeletinin denetim bulgusu: `?search=<kişi adı>` gibi sorgu dizeleri istek
 loglarına düşerse, kişisel veri düz metin olarak diske yazılır. Gömülü sunucuda
 erişim logu üretmenin hiçbir faydası yok (tek kullanıcı, tek makine), zararı var
 → waitress/Django istek günlükçüleri susturulur.

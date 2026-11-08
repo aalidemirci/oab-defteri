@@ -1,7 +1,7 @@
 """`okul` serializer doğrulamalarının başka dosyada sınanmayan dalları.
 
-Kişi/şube doğrulamaları kendi test dosyalarındadır (`test_persons`,
-`test_class_sections`). Burada kalanlar:
+Kişi doğrulamaları kendi test dosyasındadır (`test_persons`; öğrenci ve şube serileştiricileri
+F1b 5. adımda söküldü). Burada kalanlar:
 
 - Serializer alan kümeleri — ön yüz tiplerinin sözleşmesi (anlık görüntü; tipler elle, TK2).
   Aile iskeletinin atasından kaldırılan alanların (zil, vardiya, şube kümesi, zümre, cinsiyet, okul
@@ -42,11 +42,9 @@ from apps.okul.serializers import (
     PERSONEL_ZORUNLU,
     SECENEK_GECERSIZ,
     YERLESIM_ZORUNLU,
-    ClassSectionSerializer,
     ImportRequestSerializer,
     PersonnelSerializer,
     SchoolConfigSerializer,
-    StudentSerializer,
 )
 from apps.okul.tests.okul_karti_ortak import okul_karti_govdesi
 
@@ -91,22 +89,6 @@ def client() -> APIClient:
             },
         ),
         (
-            StudentSerializer,
-            {
-                "id",
-                "first_name",
-                "last_name",
-                "full_name",
-                "student_number",
-                "class_level",
-                "class_section",
-                "class_label",
-                "status",
-                "left_at",
-                "leave_candidate_since",
-            },
-        ),
-        (
             PersonnelSerializer,
             {
                 "id",
@@ -117,17 +99,6 @@ def client() -> APIClient:
                 "is_active",
                 "left_at",
                 "leave_candidate_since",
-            },
-        ),
-        (
-            ClassSectionSerializer,
-            {
-                "id",
-                "school_year",
-                "school_year_name",
-                "class_level",
-                "class_section",
-                "class_label",
             },
         ),
     ],
@@ -153,8 +124,17 @@ def test_okul_ayarinda_kaldirilan_alanlar_yok_sayilir(client: APIClient) -> None
     assert yanit.status_code == 200
     assert set(yanit.json()) == set(SchoolConfigSerializer().fields)
     ayar = SchoolConfig.load()
-    # `has_prep_class` de okul kartından çıktı (F1b 4. adım): gövdede gelirse yazılmaz.
-    assert (ayar.school_name, ayar.has_prep_class) == ("Örnek Okul", False)
+    # `has_prep_class` okul kartından çıktı (F1b 4. adım), alanı göç 0014 ile düştü (5. adım).
+    assert ayar.school_name == "Örnek Okul"
+    assert not hasattr(ayar, "has_prep_class")
+
+
+def test_ice_aktarma_girdisinde_eski_tam_liste_onayi_yoktur() -> None:
+    """Öğrenci aktarımının `full_list` onayı öğrenci tarafıyla söküldü; gelirse yok sayılır."""
+    serializer = ImportRequestSerializer(data={"text": "x", "full_list": True})
+    assert serializer.is_valid(), serializer.errors
+    assert "full_list" not in serializer.validated_data
+    assert "full_list" not in ImportRequestSerializer().fields
 
 
 # ---------------------------------------------------------------------------
@@ -341,8 +321,8 @@ def test_ice_aktarma_girdisi_dosya_ve_metni_birlikte_kabul_etmez(client: APIClie
     Ret ayrıştırmadan ÖNCEDİR: geçmişe FAILED/PREVIEWED izi de düşmez.
     """
     yanit = client.post(
-        "/api/v1/imports/students/preview/",
-        {"file": _dosya(), "text": "Sınıf\tOkul No\tAdı Soyadı\n9/A\t101\tDENEME ÖĞRENCİ"},
+        "/api/v1/imports/personnel/preview/",
+        {"file": _dosya(), "text": "Adı\tSoyadı\nDENEME\tÖĞRETMEN"},
         format="multipart",
     )
 
@@ -354,7 +334,7 @@ def test_ice_aktarma_girdisi_dosya_ve_metni_birlikte_kabul_etmez(client: APIClie
 
 def test_ice_aktarma_metni_bosluklari_kirpilmadan_tasinir() -> None:
     """Pano metninde baştaki sekme BOŞ HÜCREDİR; kırpılırsa sütunlar bir sola kayar."""
-    metin = "\tOkul No\tAdı Soyadı\n"
+    metin = "\tAdı\tSoyadı\n"
 
     serializer = ImportRequestSerializer(data={"text": metin})
 

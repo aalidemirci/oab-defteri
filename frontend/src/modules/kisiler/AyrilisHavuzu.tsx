@@ -1,12 +1,13 @@
 // Ayrılış Havuzu (Kişiler → `?tab=havuz`) — genel tasarım §5.1 `Personnel`, §8.4.
 //
 // Aile iskeletinden gelen kullanıcı kararı: e-Okul aktarımı kimseyi ayırmaz ve silmez. Listede
-// bulunmayan aktif öğrenci ve personel burada bekler; durumları aktif kalır. Karar
+// bulunmayan aktif öğretmen ve diğer personel burada bekler; durumları aktif kalır. Karar
 // yöneticinindir, tek tek ya da toplu:
 //   - "Ayrıldı olarak işaretle" (onay diyaloğu): okuldan ayrılmış sayılır, kaydı
 //     SİLİNMEZ (geçmişi izlenebilsin), "Ayrıldı · gg.aa.yyyy" rozetiyle kalır.
 //   - "Aktif kalsın": yalnız havuzdan çıkar; sonraki listede yine yoksa geri gelir.
-// Yıl sonu mezunları sınıf süzgeciyle seçilip toplu ayrılır. Personelde "olası aynı
+// Öğrenci bölümü (sınıf süzgeci, mezunların toplu ayrılışı) F1b 5. adımda öğrenci sicili ile
+// söküldü (tasarım §5.1 ALMA); veli listesi havuz kullanmaz. "Olası aynı
 // kişi" (ör. soyadı değişimi) adayları EŞLEŞME GEREKÇESİYLE gösterilir (§13 D30: aday ad
 // benzerliğiyle bulunur, adaş olabilir); "Birleştir" geri alınamadığı için onay
 // diyaloğu iki kaydı ayırt eden bilgiyi yazar ve ikinci bir doğrulama kutusu ister.
@@ -19,7 +20,7 @@
 // düğmeleri o yeteneğin ucudur. "Birleştir" ayrıca `kisi_yazma`'ya bağlıdır (`birlestirebilir`);
 // yoksa "Olası aynı kişi" sütunu adayları ve gerekçelerini düğmesiz gösterir.
 
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 
 import { formatDate, formatNumber } from "../../lib/format";
 import Button from "../../ui/Button";
@@ -27,27 +28,11 @@ import Card from "../../ui/Card";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import EmptyState from "../../ui/EmptyState";
 import Icon from "../../ui/Icon";
-import Select from "../../ui/Select";
 import { SkeletonList } from "../../ui/Skeleton";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import { MEMBER_KIND_TR, benzerlikGerekcesi, okulApi } from "../okul/api";
-import type {
-  LeavePool,
-  LeavePoolPersonnel,
-  LeavePoolRun,
-  LeavePoolSimilar,
-  LeavePoolStudent,
-} from "../okul/api";
-import {
-  ErrorBand,
-  KisiAdi,
-  OkunamadiIsareti,
-  hataOku,
-  kisiAdiMetni,
-  kisiKaydiniMetni,
-  kisiOznesi,
-  okunamadiMi,
-} from "./ortak";
+import type { LeavePool, LeavePoolPersonnel, LeavePoolRun, LeavePoolSimilar } from "../okul/api";
+import { ErrorBand, KisiAdi, hataOku, kisiAdiMetni, kisiKaydiniMetni, kisiOznesi } from "./ortak";
 import type { SayfaHatasi } from "./ortak";
 
 const TH = "p-2 text-left text-label-medium text-on-surface-variant";
@@ -57,11 +42,6 @@ const TD = "p-2 align-top text-on-surface";
 function aktarimAdi(run: LeavePoolRun | null): string {
   if (run === null) return "—";
   return run.file_name || "Yapıştırılan liste";
-}
-
-/** Sınıf süzgecinin seçeneği: sınıfsız öğrenciler tek başlık altında toplanır. */
-function sinifEtiketi(ogrenci: { class_label: string }): string {
-  return ogrenci.class_label || "Sınıfsız";
 }
 
 /** Seçim kümesinden yalnız hâlâ listede olanları bırakır (liste yenilenince). */
@@ -82,9 +62,7 @@ export default function AyrilisHavuzu({
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState<SayfaHatasi | null>(null);
   const [mesgul, setMesgul] = useState(false);
-  const [ogrenciSecimi, setOgrenciSecimi] = useState<Set<number>>(new Set());
   const [personelSecimi, setPersonelSecimi] = useState<Set<number>>(new Set());
-  const [sinif, setSinif] = useState("");
   const [yenile, setYenile] = useState(0);
   const snackbar = useSnackbar();
   const confirm = useConfirm();
@@ -97,17 +75,7 @@ export default function AyrilisHavuzu({
       .then((veri) => {
         if (iptal) return;
         setHavuz(veri);
-        // Süzgeç listeyle birlikte tazelenir: 12/A'yı toplu ayırınca o seçenek
-        // listeden düşer; süzgeç bayat kalsaydı tablo boş görünür, seçici ise
-        // eşleşen seçenek bulamadığı için "Tümü" yazardı (süzgeç görünmez olurdu).
-        const etiketler = veri.students.map(sinifEtiketi);
-        setSinif((s) => (s && !etiketler.includes(s) ? "" : s));
-        setOgrenciSecimi((s) =>
-          kesisim(
-            s,
-            veri.students.map((o) => o.id),
-          ),
-        );
+        // Seçim listeyle birlikte tazelenir: başka pencerede karar verilmiş kişi seçimde kalmaz.
         setPersonelSecimi((s) =>
           kesisim(
             s,
@@ -128,46 +96,19 @@ export default function AyrilisHavuzu({
 
   const tazele = useCallback(() => setYenile((k) => k + 1), []);
 
-  const siniflar = useMemo(() => {
-    const etiketler: string[] = [];
-    for (const o of havuz?.students ?? []) {
-      const etiket = sinifEtiketi(o);
-      if (!etiketler.includes(etiket)) etiketler.push(etiket);
-    }
-    return etiketler; // backend sırası: sınıf, şube (Türk alfabesi)
-  }, [havuz]);
-
-  const gorunenOgrenciler = useMemo(
-    () => (havuz?.students ?? []).filter((o) => !sinif || sinifEtiketi(o) === sinif),
-    [havuz, sinif],
-  );
-
   /** Kararı uygular; başarıda listeyi ve seçimi yeniler. */
-  const uygula = async (
-    tur: "students" | "personnel",
-    eylem: "leave" | "keep",
-    kimlikler: number[],
-  ) => {
+  const uygula = async (eylem: "leave" | "keep", kimlikler: number[]) => {
     setMesgul(true);
     setHata(null);
     try {
-      const sonuc = await okulApi.resolveLeavePool({ [tur]: { [eylem]: kimlikler } });
-      const sayi =
-        tur === "students"
-          ? eylem === "leave"
-            ? sonuc.students_left
-            : sonuc.students_kept
-          : eylem === "leave"
-            ? sonuc.personnel_left
-            : sonuc.personnel_kept;
-      const kisi = tur === "students" ? "öğrenci" : "kişi";
+      const sonuc = await okulApi.resolveLeavePool({ personnel: { [eylem]: kimlikler } });
+      const sayi = eylem === "leave" ? sonuc.personnel_left : sonuc.personnel_kept;
       snackbar.success(
         eylem === "leave"
-          ? `${formatNumber(sayi)} ${kisi} ayrıldı olarak işaretlendi.`
-          : `${formatNumber(sayi)} ${kisi} aktif kalacak; havuzdan çıkarıldı.`,
+          ? `${formatNumber(sayi)} kişi ayrıldı olarak işaretlendi.`
+          : `${formatNumber(sayi)} kişi aktif kalacak; havuzdan çıkarıldı.`,
       );
-      if (tur === "students") setOgrenciSecimi(new Set());
-      else setPersonelSecimi(new Set());
+      setPersonelSecimi(new Set());
       onDegisti?.();
     } catch (e) {
       setHata(hataOku(e, "Karar uygulanamadı."));
@@ -177,25 +118,23 @@ export default function AyrilisHavuzu({
     }
   };
 
-  const ayril = async (tur: "students" | "personnel") => {
-    const kimlikler = [...(tur === "students" ? ogrenciSecimi : personelSecimi)];
+  const ayril = async () => {
+    const kimlikler = [...personelSecimi];
     if (kimlikler.length === 0) return;
-    const ogrenci = tur === "students";
     const ok = await confirm({
-      title: ogrenci
-        ? `${formatNumber(kimlikler.length)} öğrenci ayrıldı olarak işaretlensin mi?`
-        : `${formatNumber(kimlikler.length)} kişi ayrıldı olarak işaretlensin mi?`,
-      message: `Seçilen ${ogrenci ? "öğrenciler" : "kişiler"} okuldan ayrılmış sayılır ve seçicilerden düşer. Kayıtları silinmez; sicilde “Ayrıldı · gg.aa.yyyy” rozetiyle kalır. Sonraki bir e-Okul listesinde yeniden görünen kişinin kaydı yeniden aktif olur.`,
+      title: `${formatNumber(kimlikler.length)} kişi ayrıldı olarak işaretlensin mi?`,
+      message:
+        "Seçilen kişiler okuldan ayrılmış sayılır ve seçicilerden düşer. Kayıtları silinmez; sicilde “Ayrıldı · gg.aa.yyyy” rozetiyle kalır. Sonraki bir e-Okul listesinde yeniden görünen kişinin kaydı yeniden aktif olur.",
       confirmLabel: "Ayrıldı olarak işaretle",
     });
     if (!ok) return;
-    await uygula(tur, "leave", kimlikler);
+    await uygula("leave", kimlikler);
   };
 
-  const kalsin = async (tur: "students" | "personnel") => {
-    const kimlikler = [...(tur === "students" ? ogrenciSecimi : personelSecimi)];
+  const kalsin = async () => {
+    const kimlikler = [...personelSecimi];
     if (kimlikler.length === 0) return;
-    await uygula(tur, "keep", kimlikler);
+    await uygula("keep", kimlikler);
   };
 
   // Birleştirme GERİ ALINAMAZ ve aday yalnız ad benzerliğiyle bulunur (§13 D30):
@@ -227,17 +166,17 @@ export default function AyrilisHavuzu({
     }
   };
 
-  const bos = havuz !== null && havuz.student_count === 0 && havuz.personnel_count === 0;
+  const bos = havuz !== null && havuz.personnel_count === 0;
 
   return (
     <div className="space-y-[var(--od-page-gap)]">
       <div>
         <h2 className="text-title-medium text-on-surface">Ayrılış Havuzu</h2>
         <p className="mt-0.5 max-w-3xl text-body-small text-on-surface-variant">
-          e-Okul aktarımı kimseyi ayırmaz ve kimsenin kaydını silmez. Listede bulunmayan öğrenci,
-          öğretmen ve diğer personel burada bekler; durumları aktif kalır. Okuldan ayrılanlar için
-          “Ayrıldı olarak işaretle”yi, okulda kalanlar için “Aktif kalsın”ı seçin. Ayrılan kişinin
-          kaydı silinmez.
+          e-Okul aktarımı kimseyi ayırmaz ve kimsenin kaydını silmez. Listede bulunmayan öğretmen ve
+          diğer personel burada bekler; durumları aktif kalır. Okuldan ayrılanlar için “Ayrıldı
+          olarak işaretle”yi, okulda kalanlar için “Aktif kalsın”ı seçin. Ayrılan kişinin kaydı
+          silinmez.
         </p>
       </div>
 
@@ -252,33 +191,15 @@ export default function AyrilisHavuzu({
           description="e-Okul aktarımında listede bulunmayan kişiler burada görünür."
         />
       ) : havuz !== null ? (
-        <>
-          {havuz.students.length > 0 && (
-            <OgrenciBolumu
-              ogrenciler={gorunenOgrenciler}
-              toplam={havuz.student_count}
-              siniflar={siniflar}
-              sinif={sinif}
-              onSinif={setSinif}
-              secim={ogrenciSecimi}
-              onSecim={setOgrenciSecimi}
-              mesgul={mesgul}
-              onAyril={() => void ayril("students")}
-              onKalsin={() => void kalsin("students")}
-            />
-          )}
-          {havuz.personnel.length > 0 && (
-            <PersonelBolumu
-              kisiler={havuz.personnel}
-              secim={personelSecimi}
-              onSecim={setPersonelSecimi}
-              mesgul={mesgul}
-              onAyril={() => void ayril("personnel")}
-              onKalsin={() => void kalsin("personnel")}
-              onBirlestir={birlestirebilir ? (kisi, aday) => void birlestir(kisi, aday) : undefined}
-            />
-          )}
-        </>
+        <PersonelBolumu
+          kisiler={havuz.personnel}
+          secim={personelSecimi}
+          onSecim={setPersonelSecimi}
+          mesgul={mesgul}
+          onAyril={() => void ayril()}
+          onKalsin={() => void kalsin()}
+          onBirlestir={birlestirebilir ? (kisi, aday) => void birlestir(kisi, aday) : undefined}
+        />
       ) : null}
     </div>
   );
@@ -361,114 +282,6 @@ function TumunuSec({
       }}
       className="size-5 accent-primary"
     />
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Öğrenciler
-// ---------------------------------------------------------------------------
-
-function OgrenciBolumu({
-  ogrenciler,
-  toplam,
-  siniflar,
-  sinif,
-  onSinif,
-  secim,
-  onSecim,
-  mesgul,
-  onAyril,
-  onKalsin,
-}: {
-  ogrenciler: LeavePoolStudent[];
-  toplam: number;
-  siniflar: string[];
-  sinif: string;
-  onSinif: (s: string) => void;
-  secim: Set<number>;
-  onSecim: (s: Set<number>) => void;
-  mesgul: boolean;
-  onAyril: () => void;
-  onKalsin: () => void;
-}) {
-  const baslikId = useId();
-  return (
-    <section aria-labelledby={baslikId}>
-      <Card elevation={0} className="space-y-3 p-[var(--od-panel-padding)]">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <h3 id={baslikId} className="text-title-small text-on-surface">
-            Öğrenciler ({formatNumber(toplam)})
-          </h3>
-          <Select
-            className="w-44"
-            label="Sınıf"
-            placeholder="Tümü"
-            value={sinif}
-            onChange={(e) => onSinif(e.target.value)}
-            options={siniflar.map((s) => ({ value: s, label: s }))}
-            helperText="Yıl sonunda mezun sınıfları seçip toplu ayırabilirsiniz."
-          />
-        </div>
-        <KararCubugu
-          seciliSayi={secim.size}
-          birim="öğrenci"
-          mesgul={mesgul}
-          onAyril={onAyril}
-          onKalsin={onKalsin}
-        />
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-body-small">
-            <caption className="sr-only">Ayrılış kararı bekleyen öğrenciler</caption>
-            <thead>
-              <tr className="border-b border-outline-variant">
-                <th className={TH}>
-                  <TumunuSec
-                    kimlikler={ogrenciler.map((o) => o.id)}
-                    secim={secim}
-                    onSecim={onSecim}
-                    etiket="Görünen öğrencilerin tümünü seç"
-                  />
-                </th>
-                <th className={TH}>Okul no</th>
-                <th className={TH}>Ad soyad</th>
-                <th className={TH}>Sınıf</th>
-                <th className={TH}>Havuza giriş</th>
-                <th className={TH}>Aktarım</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ogrenciler.map((o) => (
-                <tr key={o.id} className="border-t border-outline-variant/50">
-                  <td className={TD}>
-                    <input
-                      type="checkbox"
-                      aria-label={`${kisiAdiMetni(o)} seç`}
-                      checked={secim.has(o.id)}
-                      onChange={(e) => onSecim(degistir(secim, o.id, e.target.checked))}
-                      className="size-5 accent-primary"
-                    />
-                  </td>
-                  {/* Çözülemeyen şifreli alan boş hücre değil "okunamadı"dır (§13 D48). */}
-                  <td className={TD}>
-                    {okunamadiMi(o, "student_number") ? (
-                      <OkunamadiIsareti />
-                    ) : (
-                      o.student_number || "—"
-                    )}
-                  </td>
-                  <td className={TD}>
-                    <KisiAdi kayit={o} />
-                  </td>
-                  <td className={TD}>{o.class_label || "Sınıfsız"}</td>
-                  <td className={TD}>{formatDate(o.leave_candidate_since)}</td>
-                  <td className={TD}>{aktarimAdi(o.run)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </section>
   );
 }
 

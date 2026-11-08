@@ -16,6 +16,11 @@ Neden gerekli? e-Okul'un "Excel" ihraçları uygulama şablonuna BENZEMEZ:
 Bu modül SAFTIR (DB'siz, Django'suz) ve **satır sayısını korur**: gürültü
 satırları silinmez, BOŞALTILIR. Böylece rapordaki "satır 47 atlandı" uyarıları
 kullanıcının Excel'de gördüğü satır numarasıyla aynı kalır.
+
+F1b 5. adımda öğrenci aktarımı söküldü (tasarım §5.1 ALMA, T5): bugün üretimde yalnız
+personel yolu (`hazirla_personel_matrisi`) çağrılır. Sınıf listesi blok düzleştiricisi
+(`hazirla_ogrenci_matrisi`, `duzlestir_sinif_listesi`) tasarım §12.B gereği korunur; veli
+listesi alt adımında yeniden bağlanır ya da sökülür (açık kalan).
 """
 
 from __future__ import annotations
@@ -23,11 +28,11 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from apps.okul.excel_ogrenci import normalize_header
+from apps.okul.excel_ortak import normalize_header
 from apps.okul.normalize import _ascii_upper
 
-#: Düzleştirmede matrisin başına eklenen sentetik sütunun başlığı. Ayrıştırıcının
-#: `COLUMN_SYNONYMS["class"]` listesindeki 'sinif sube' ile eşleşir.
+#: Düzleştirmede matrisin başına eklenen sentetik sütunun başlığı ('sinif sube' diye
+#: katlanır; sökülen öğrenci ayrıştırıcısının sınıf eşanlamlısıydı).
 SINIF_SUTUN_BASLIGI = "Sınıf/Şube"
 
 #: Blok başlığı: '10. Sınıf / A Şubesi' (ASCII'ye katlanmış metinde aranır).

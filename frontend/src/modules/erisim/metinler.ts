@@ -1,7 +1,7 @@
 // Erişim Günlüğü ekranının metinleri — tek kaynak (sözlük §1 "Erişim günlüğü (F1b)", "Erişim
 // Günlüğü ekranı (F1b)", §4.1). Türlerin görünen adları ve süzgeçlerin ret iletileri SUNUCUNUNDUR
 // (`erisim_gunlugu.TUR_ADLARI`, `*_MESAJI`): ekran onları yanıttan olduğu gibi yazar. İç kodlar
-// (tür kodu, model ve alan kodu: `okul.Student`, `first_name`) yüzeye çıkmaz (sözlük §2).
+// (tür kodu, model ve alan kodu: `okul.Personnel`, `first_name`) yüzeye çıkmaz (sözlük §2).
 //
 // KİŞİSİZDİR: hesap rol etiketi, tanıtıcı ve açılış/kapanış günüyle anılır ("Muhasip · tanıtıcı
 // muhasip (açılış 01.11.2026, kapanış 03.11.2026)"; `butunluk/metinler.hesapEtiketiGunlu` ile
@@ -78,7 +78,7 @@ export function erisimHesabi(hesap: ErisimHesabi): string {
 }
 
 /**
- * Okunan kaydın anılışı: kayıt türünün adı, kimliği ve alanın adı ("Öğrenci · kimlik 7 · …");
+ * Okunan kaydın anılışı: kayıt türünün adı, kimliği ve alanın adı ("Personel · kimlik 7 · …");
  * model yoksa "—". Kod yazılmaz: eşlemde adı olmayan model ya da alan "bilinmeyen" diye yazılır.
  */
 export function okunanKayit(satir: Pick<ErisimSatiri, "model" | "kayit" | "alan">): string {

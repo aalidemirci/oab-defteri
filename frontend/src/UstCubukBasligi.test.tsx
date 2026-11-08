@@ -97,7 +97,7 @@ beforeEach(() => {
   guvenlikApiMock.durum.mockResolvedValue(ACIK);
   guvenlikApiMock.yedekler.mockResolvedValue({ backup_dir: "", backups: [] });
   okulApiMock.getSetupStatus.mockResolvedValue(KURULU_DURUM);
-  okulApiMock.getLeavePoolSummary.mockResolvedValue({ student_count: 0, personnel_count: 0 });
+  okulApiMock.getLeavePoolSummary.mockResolvedValue({ personnel_count: 0 });
   oturumApiMock.ozet.mockResolvedValue({
     durum: "acik",
     hesap: {

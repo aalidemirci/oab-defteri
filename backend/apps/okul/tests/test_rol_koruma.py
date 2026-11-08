@@ -189,7 +189,7 @@ def test_api_disi_yollar_kesilmez() -> None:
 
 def test_bilinmeyen_rol_hicbir_yere_giremez() -> None:
     """Rol değeri tanınmıyorsa hiçbir kural eşleşmez (fail-closed)."""
-    assert _rol_yetkisiz_mi(_yalniz_rol_kapisi("GET", "/api/v1/grade-levels/", "admin"))
+    assert _rol_yetkisiz_mi(_yalniz_rol_kapisi("GET", "/api/v1/school-years/", "admin"))
     assert _yalniz_rol_kapisi("GET", HEALTH_PATH, "admin").content == b"gecti"
 
 
@@ -206,7 +206,7 @@ def test_sistem_yazari_reddedilir() -> None:
     """Kilit kapısı istekte yalnız hesap ya da hiçbir şey kurar; `SISTEM` bir isteğin yazarı
     olamaz, rol kapısı onu geçirmez (kayıp kipinde de)."""
     for kayip in (False, True):
-        istek = RequestFactory().get("/api/v1/grade-levels/")
+        istek = RequestFactory().get("/api/v1/school-years/")
         istek.od_guvenlik_dosyasi_kayip = kayip  # type: ignore[attr-defined]
         with yazar_olarak(SISTEM):
             assert _rol_yetkisiz_mi(RolMiddleware(_gecti)(istek))
@@ -253,7 +253,7 @@ def test_kurulumda_rol_kapisi_devrede_degil(parolasiz: Path) -> None:
     yanit = APIClient().post("/api/v1/personnel/", {}, format="json")
     assert yanit.status_code == 409
     assert yanit.json()["code"] == "parola_gerekli"
-    assert APIClient().get("/api/v1/grade-levels/").status_code == 200
+    assert APIClient().get("/api/v1/school-years/").status_code == 200
 
 
 @pytest.mark.django_db
@@ -268,7 +268,7 @@ def test_kayip_kilidinde_rol_kapisi_kesmez(parmak_izi_yazili: str) -> None:
     geri_yukleme = client.post("/api/v1/backups/restore/", {}, format="json")
     # Gövde eksik: görünüm doğrulamayla reddeder — kapılardan geçtiğinin kanıtı.
     assert geri_yukleme.status_code == 400, geri_yukleme.content
-    veri = client.get("/api/v1/grade-levels/")
+    veri = client.get("/api/v1/school-years/")
     assert veri.status_code == 423
     assert veri.json()["code"] == "guvenlik_dosyasi_kayip"
 
@@ -339,14 +339,14 @@ def _oturum(rol: str, hesap_id: str = ORNEK_HESAP) -> APIClient:
 @pytest.mark.django_db
 def test_muhasip_okul_kartini_okur_yazamaz() -> None:
     client = _oturum("muhasip")
-    assert client.get("/api/v1/grade-levels/").status_code == 200
+    assert client.get("/api/v1/school-years/").status_code == 200
     assert client.get("/api/v1/setup/school-config/").status_code == 200
     yanit = client.put("/api/v1/setup/school-config/", {}, format="json")
     assert yanit.status_code == 403
     assert yanit.json() == RET_GOVDESI
-    # Kişiler: personeli her rol okur; öğrenci uçları ve yazmalar yalnız program yöneticisinin.
+    # Kişiler: personeli her rol okur; şablon, havuz ve yazmalar yalnız program yöneticisinin.
     assert client.get("/api/v1/personnel/").status_code == 200
-    assert client.get("/api/v1/students/").status_code == 403
+    assert client.get("/api/v1/templates/personnel/").status_code == 403
     assert client.post("/api/v1/personnel/", {}, format="json").status_code == 403
 
 
@@ -470,4 +470,4 @@ def test_yeni_uc_program_yoneticisi_icin_de_kapali(settings: Any) -> None:
         for yontem in YONTEMLER:
             assert _rol_yetkisiz_mi(_yalniz_rol_kapisi(yontem, "/api/v1/yeni-uc/", rol)), rol
     # Gerçek API aynı yapılandırmada açık kalır.
-    assert _yalniz_rol_kapisi("GET", "/api/v1/grade-levels/", "yonetici").content == b"gecti"
+    assert _yalniz_rol_kapisi("GET", "/api/v1/school-years/", "yonetici").content == b"gecti"

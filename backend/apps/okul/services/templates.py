@@ -1,7 +1,8 @@
 """İndirilebilir içe aktarma şablonları (aile iskeletinden; OAB'de tasarım §8.4).
 
 Başlıklar parser sinonimleriyle bire bir tanınır — ayrı bir "şablon kod yolu"
-YOKTUR; kullanıcı şablonu doldurup aynı import ucuna yükler.
+YOKTUR; kullanıcı şablonu doldurup aynı import ucuna yükler. Öğrenci şablonu F1b 5. adımda
+öğrenci tarafıyla söküldü (tasarım §5.1 ALMA).
 """
 
 from __future__ import annotations
@@ -10,13 +11,6 @@ from io import BytesIO
 
 from openpyxl import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
-
-STUDENT_TEMPLATE_HEADERS: tuple[str, ...] = (
-    "Sınıf",
-    "Okul Numarası",
-    "Öğrenci Adı",
-    "Öğrenci Soyadı",
-)
 
 #: Personel şablonunda unvan ve branş sütunu YOKTUR (tasarım §8.4). "Üye
 #: Türü" yalnız "Öğretmen" ya da "Diğer personel" değerini bekler; ayrıştırıcı onu
@@ -35,19 +29,6 @@ def _workbook_bytes(headers: tuple[str, ...], example: tuple[str, ...]) -> bytes
     bio = BytesIO()
     wb.save(bio)
     return bio.getvalue()
-
-
-def student_template_xlsx() -> bytes:
-    """Örnek satırlı öğrenci şablonu (örnek veriler sahtedir, silinip doldurulur)."""
-    return _workbook_bytes(
-        STUDENT_TEMPLATE_HEADERS,
-        (
-            "9/A",
-            "1001",
-            "ÖRNEK",
-            "ÖĞRENCİ",
-        ),
-    )
 
 
 def personnel_template_xlsx() -> bytes:

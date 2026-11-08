@@ -11,7 +11,8 @@ servisleri ve iki depo halleri `test_hesaplar.py`'dedir.
 söylerdi.
 
 F1 kod kapısının üç güvenlik maddesi burada AYRI testlerle kanıtlanır:
-* "kilitliyken `Student.save()` hata verir" → `TestFailClosed`,
+* "kilitliyken şifreli kişi kaydının `save()`'i hata verir" → `TestFailClosed` (öğrenci sicili
+  F1b 5. adımda söküldü; kişi kaydı personeldir),
 * "guvenlik.json silinince fail-closed" → `TestGuvenlikDosyasiKayip`,
 * "hesap yokken kişi yazan uç 409" → `test_kisi_yazan_uclar.py`.
 """
@@ -57,7 +58,6 @@ from apps.okul.models import (
     Personnel,
     ResetKind,
     SchoolConfig,
-    Student,
 )
 from apps.okul.oturum import OTURUM
 from apps.okul.services import app_password, hesap_kurallari
@@ -83,8 +83,8 @@ from conftest import (
 )
 from shared import crypto
 
-OGRENCI_AD = "EMRE CAN"
-OGRENCI_SOYAD = "YILMAZ"
+KISI_AD = "EMRE CAN"
+KISI_SOYAD = "YILMAZ"
 KURAN_AD = "Örnek Müdür Yardımcısı"
 
 #: Üretimdeki gecikme dizisi, kök `conftest`'in her testte yaptığı yamadan (`(0.0,)`)
@@ -97,24 +97,18 @@ class _SurecOldu(BaseException):
     """Sürecin işlem ortasında ölmesi: `except Exception` yakalamaz, geri alma koşmaz."""
 
 
-def ogrenci_olustur(**fazlasi: Any) -> Student:
-    veri: dict[str, Any] = {
-        "first_name": OGRENCI_AD,
-        "last_name": OGRENCI_SOYAD,
-        "student_number": "101",
-        "class_level": 10,
-        "class_section": "A",
-    }
+def kisi_olustur(**fazlasi: Any) -> Personnel:
+    veri: dict[str, Any] = {"first_name": KISI_AD, "last_name": KISI_SOYAD}
     veri.update(fazlasi)
-    return cast("Student", Student.objects.create(**veri))
+    return cast("Personnel", Personnel.objects.create(**veri))
 
 
-def ham_satir(student_id: int) -> tuple[str, str]:
+def ham_satir(kisi_id: int) -> tuple[str, str]:
     """ORM'i BYPASS ederek ad-soyad sütunlarını olduğu gibi okur (şifre çözülmez)."""
     with connection.cursor() as cursor:
         cursor.execute(
-            "SELECT first_name, last_name FROM okul_student WHERE id = %s",
-            [student_id],
+            "SELECT first_name, last_name FROM okul_personnel WHERE id = %s",
+            [kisi_id],
         )
         satir = cursor.fetchone()
     return (str(satir[0]), str(satir[1]))
@@ -221,13 +215,13 @@ class TestEnable:
 
     def test_kurulumdan_sonra_kisi_adi_sifreli_yazilir(self, parolasiz: Path) -> None:
         kur()
-        ogrenci = ogrenci_olustur()
+        kisi = kisi_olustur()
 
-        ad, soyad = ham_satir(ogrenci.pk)
-        assert OGRENCI_AD not in ad and OGRENCI_SOYAD not in soyad
+        ad, soyad = ham_satir(kisi.pk)
+        assert KISI_AD not in ad and KISI_SOYAD not in soyad
         assert ad.startswith("gAAAA")
-        tazelenmis = Student.objects.get(pk=ogrenci.pk)
-        assert tazelenmis.full_name == f"{OGRENCI_AD} {OGRENCI_SOYAD}"
+        tazelenmis = Personnel.objects.get(pk=kisi.pk)
+        assert tazelenmis.full_name == f"{KISI_AD} {KISI_SOYAD}"
 
     def test_personel_adi_da_sifrelenir(self) -> None:
         kisi = Personnel.objects.create(first_name="AYŞE", last_name="ÖĞRETMEN")
@@ -287,14 +281,6 @@ class TestEnable:
         assert app_password.read_state() is None
 
     @pytest.mark.hesapsiz  # kişi tabloları dolu ama hesap ve parmak izi yok
-    def test_ogrenci_varken_reddedilir(self) -> None:
-        ogrenci_olustur()
-        parolasiz_yap()
-        with pytest.raises(app_password.AppPasswordError, match="diğer personel ya da hesap"):
-            kur()
-        assert app_password.read_state() is None
-
-    @pytest.mark.hesapsiz  # kişi tabloları dolu ama hesap ve parmak izi yok
     def test_personel_varken_reddedilir(self) -> None:
         Personnel.objects.create(first_name="AYŞE", last_name="KAYA")
         parolasiz_yap()
@@ -302,10 +288,10 @@ class TestEnable:
             kur()
 
     @pytest.mark.hesapsiz  # kişi tabloları dolu ama hesap ve parmak izi yok
-    def test_silinmis_ogrenci_varken_de_reddedilir(self) -> None:
+    def test_silinmis_personel_varken_de_reddedilir(self) -> None:
         """Yumuşak silinmiş kişinin adı da kişisel veridir (`all_objects`)."""
-        ogrenci_olustur().delete()
-        assert not Student.objects.exists()
+        kisi_olustur().delete()
+        assert not Personnel.objects.exists()
         parolasiz_yap()
         with pytest.raises(app_password.AppPasswordError, match="diğer personel ya da hesap"):
             kur()
@@ -539,35 +525,35 @@ class TestYarimKurulum:
 
 
 # ---------------------------------------------------------------------------
-# Fail-closed yazma (F1 kod kapısı: kilitliyken Student.save() hata verir)
+# Fail-closed yazma (F1 kod kapısı: kilitliyken şifreli kişi kaydının save()'i hata verir)
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
 class TestFailClosed:
-    def test_kilitliyken_student_save_hata_verir(self, kilitli: Path) -> None:
+    def test_kilitliyken_kisi_save_hata_verir(self, kilitli: Path) -> None:
         with pytest.raises(crypto.KeyMissingError), transaction.atomic():
-            Student(first_name=OGRENCI_AD, last_name=OGRENCI_SOYAD).save()
-        assert not Student.all_objects.exists()
+            Personnel(first_name=KISI_AD, last_name=KISI_SOYAD).save()
+        assert not Personnel.all_objects.exists()
 
     def test_kilitliyken_mevcut_kaydi_kaydetmek_hata_verir(self, yonetici_hesabi: Account) -> None:
         """Kilitliyken okunan token düz metin gibi geri yazılamaz (anahtar yok)."""
-        ogrenci = ogrenci_olustur()
+        kisi = kisi_olustur()
         app_password.lock()
-        kilitli_okunan = Student.objects.get(pk=ogrenci.pk)
+        kilitli_okunan = Personnel.objects.get(pk=kisi.pk)
         assert kilitli_okunan.first_name.startswith("gAAAA")  # okuma patlamaz
         with pytest.raises(crypto.KeyMissingError), transaction.atomic():
             kilitli_okunan.save()
         ac()
-        assert Student.objects.get(pk=ogrenci.pk).first_name == OGRENCI_AD
+        assert Personnel.objects.get(pk=kisi.pk).first_name == KISI_AD
 
-    def test_hesapsizken_student_save_hata_verir(self, parolasiz: Path) -> None:
+    def test_hesapsizken_kisi_save_hata_verir(self, parolasiz: Path) -> None:
         with pytest.raises(crypto.KeyMissingError), transaction.atomic():
-            Student.objects.create(first_name=OGRENCI_AD, last_name=OGRENCI_SOYAD)
-        assert not Student.all_objects.exists()
+            Personnel.objects.create(first_name=KISI_AD, last_name=KISI_SOYAD)
+        assert not Personnel.all_objects.exists()
 
     def test_bos_ad_anahtarsiz_yazilabilir(self, kilitli: Path) -> None:
         """Boş dize şifrelenmez: "veri yok" hâli DB'de de boş görünür."""
-        ogrenci = Student.objects.create(first_name="", last_name="")
-        assert ham_satir(ogrenci.pk) == ("", "")
+        kisi = Personnel.objects.create(first_name="", last_name="")
+        assert ham_satir(kisi.pk) == ("", "")
 
 
 # ---------------------------------------------------------------------------
@@ -626,12 +612,12 @@ class TestPasswordSetState:
 @pytest.mark.django_db
 class TestUnlock:
     def test_dogru_parola_acar(self, yonetici_hesabi: Account) -> None:
-        ogrenci = ogrenci_olustur()
+        kisi = kisi_olustur()
         app_password.lock()
         assert app_password.is_locked() is True
         assert OTURUM.hesap_id() is None
         # Kilitliyken okuma çöp (token) döner — patlamaz.
-        assert Student.objects.get(pk=ogrenci.pk).first_name.startswith("gAAAA")
+        assert Personnel.objects.get(pk=kisi.pk).first_name.startswith("gAAAA")
 
         hesap = ac()
 
@@ -639,7 +625,7 @@ class TestUnlock:
         assert str(hesap.id) == TEST_HESAP_ID
         assert OTURUM.hesap_id() == TEST_HESAP_ID
         assert crypto.active_audit_key() == TEST_IA
-        assert Student.objects.get(pk=ogrenci.pk).first_name == OGRENCI_AD
+        assert Personnel.objects.get(pk=kisi.pk).first_name == KISI_AD
         assert Account.objects.get(pk=TEST_HESAP_ID).last_login_at is not None
 
     def test_yanlis_parola_reddedilir(self, yonetici_hesabi: Account, kilitli: Path) -> None:
@@ -1037,18 +1023,18 @@ class TestChangePassword:
         )
 
     def test_veri_yeniden_sifrelenmez_ama_okunur_kalir(self, yonetici_hesabi: Account) -> None:
-        ogrenci = ogrenci_olustur()
-        onceki_token, _ = ham_satir(ogrenci.pk)
+        kisi = kisi_olustur()
+        onceki_token, _ = ham_satir(kisi.pk)
         epoch = crypto.key_epoch()
 
         self.degistir()
 
-        sonraki_token, _ = ham_satir(ogrenci.pk)
+        sonraki_token, _ = ham_satir(kisi.pk)
         assert sonraki_token == onceki_token  # DEK değişmedi, satırlara dokunulmadı
         assert crypto.key_epoch() == epoch  # oturum değişmedi
         app_password.lock()
         ac(YENI_PAROLA)
-        assert Student.objects.get(pk=ogrenci.pk).first_name == OGRENCI_AD
+        assert Personnel.objects.get(pk=kisi.pk).first_name == KISI_AD
 
     def test_kor_indeks_parola_degisiminden_sonra_ayni_kalir(
         self, yonetici_hesabi: Account
@@ -1107,13 +1093,13 @@ def test_hatali_deneme_sayaci_arsivlenmez(yonetici_hesabi: Account, kilitli: Pat
 class TestLookupBehaviour:
     def test_ad_filtresi_orm_ile_CALISMAZ(self) -> None:
         """Şifreli alanda DB filtresi daima boş döner — yeni ad sorgusu ORM'e yazılmaz."""
-        ogrenci_olustur()
-        assert Student.objects.filter(first_name=OGRENCI_AD).first() is None
+        kisi_olustur()
+        assert Personnel.objects.filter(first_name=KISI_AD).first() is None
 
     def test_ad_aramasi_selector_uzerinden_bozulmaz(self) -> None:
-        ogrenci = ogrenci_olustur()
-        bulunan = selectors.student_list(search="yilmaz")
-        assert [o.pk for o in bulunan] == [ogrenci.pk]
+        kisi = kisi_olustur()
+        bulunan = selectors.personnel_list(search="yilmaz")
+        assert [o.pk for o in bulunan] == [kisi.pk]
 
     def test_personel_ad_siralamasi_python_tarafinda(self) -> None:
         Personnel.objects.create(first_name="ZEYNEP", last_name="ÇELİK")
@@ -1378,7 +1364,7 @@ class TestLockMiddleware:
     """Kilit kapısı (`apps.okul.lock_middleware`) — settings'te bağlı."""
 
     def test_kilitliyken_veri_uclari_423_doner(self, client: APIClient, kilitli: Path) -> None:
-        resp = client.get("/api/v1/students/")
+        resp = client.get("/api/v1/personnel/")
         assert resp.status_code == 423
         assert resp.json()["code"] == "locked"
         # Tasarım §12.B, §13 D50: her kullanıcı kendi hesabıyla açar.
@@ -1404,11 +1390,11 @@ class TestLockMiddleware:
         )
         assert resp.status_code == 200
         # Kilit açıldıktan sonra veri uçları normale döner.
-        assert client.get("/api/v1/students/").status_code == 200
+        assert client.get("/api/v1/personnel/").status_code == 200
 
     def test_hesapsiz_kipte_kapi_gecirir(self, client: APIClient, parolasiz: Path) -> None:
         """Kurulum durumunda okuma açıktır; kişi yazma izin sınıfıyla 409 alır."""
-        assert client.get("/api/v1/students/").status_code == 200
+        assert client.get("/api/v1/personnel/").status_code == 200
 
 
 def _kurtarma_baslikli_yedek(icerik_yolu: Path, baslik_kaynagi: Path) -> Path:
@@ -1434,7 +1420,7 @@ class TestGuvenlikDosyasiKayip:
     def test_guvenlik_json_silinince_fail_closed(self, client: APIClient, kayip: Path) -> None:
         """Kilitliyken dosya silinir: program kuruluma DÖNMEZ; veri uçları 423
         `guvenlik_dosyasi_kayip`, kişi yazma 423 (409 değil), yeni hesap kurulamaz."""
-        resp = client.get("/api/v1/students/")
+        resp = client.get("/api/v1/personnel/")
         assert resp.status_code == 423
         assert resp.json() == {
             "code": "guvenlik_dosyasi_kayip",
@@ -1446,7 +1432,7 @@ class TestGuvenlikDosyasiKayip:
             "fields": {},
         }
         yazma = client.post(
-            "/api/v1/students/", {"first_name": "A", "last_name": "B"}, format="json"
+            "/api/v1/personnel/", {"first_name": "A", "last_name": "B"}, format="json"
         )
         assert yazma.status_code == 423
         kurma = client.post(
@@ -1487,7 +1473,7 @@ class TestGuvenlikDosyasiKayip:
     ) -> None:
         app_password.state_path().unlink()
         assert crypto.is_unlocked() is True
-        resp = client.get("/api/v1/students/")
+        resp = client.get("/api/v1/personnel/")
         assert resp.status_code == 423
         assert resp.json()["code"] == "guvenlik_dosyasi_kayip"
 
@@ -1495,7 +1481,7 @@ class TestGuvenlikDosyasiKayip:
         self, client: APIClient, kayip: Path, yonetici_hesabi: Account
     ) -> None:
         app_password.state_path().write_bytes(kayip.read_bytes())
-        resp = client.get("/api/v1/students/")
+        resp = client.get("/api/v1/personnel/")
         assert resp.status_code == 423
         assert resp.json()["code"] == "locked"
         acma = client.post(
@@ -1504,7 +1490,7 @@ class TestGuvenlikDosyasiKayip:
             format="json",
         )
         assert acma.status_code == 200
-        assert client.get("/api/v1/students/").status_code == 200
+        assert client.get("/api/v1/personnel/").status_code == 200
 
     def test_yedekten_geri_yukleme_ile_kayip_kilitten_cikilir(
         self,
@@ -1615,7 +1601,7 @@ class TestKullanilamazGuvenlikDosyasi:
     def test_kayip_kilidi_uygulanir_cikis_yollari_acik(
         self, client: APIClient, bozuk: bytes
     ) -> None:
-        veri = client.get("/api/v1/students/")
+        veri = client.get("/api/v1/personnel/")
         assert veri.status_code == 423
         assert veri.json()["code"] == "guvenlik_dosyasi_kayip"
         kurma = client.post(
@@ -1634,7 +1620,7 @@ class TestKullanilamazGuvenlikDosyasi:
         app_password.state_path().write_bytes(bozuk)
 
         assert client.get("/api/v1/security/status/").json()["security_file_missing"] is False
-        assert client.get("/api/v1/students/").json()["code"] == "locked"
+        assert client.get("/api/v1/personnel/").json()["code"] == "locked"
 
     def test_yedekten_geri_yukleme_bozuk_dosyayi_arsivleyip_basligi_yazar(
         self,

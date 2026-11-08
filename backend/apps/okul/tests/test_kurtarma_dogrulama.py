@@ -128,8 +128,8 @@ class TestKurulumKapisi:
         config.setup_completed = True
         config.save()
 
-        assert client.get("/api/v1/grade-levels/").status_code == 200
-        assert client.get("/api/v1/students/").status_code == 200
+        assert client.get("/api/v1/school-years/").status_code == 200
+        assert client.get("/api/v1/personnel/").status_code == 200
         veri = client.get("/api/v1/setup/status/").json()
         assert veri["setup_completed"] is True
         assert veri["recovery_key_confirmed"] is False

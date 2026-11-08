@@ -43,8 +43,8 @@ SİLME (`suresi_dolanlari_sil`; gün işi `gun_isi`, kayıt `gun_isini_kaydet`):
 
 ENVANTER (02.11.2026). Bugün kodda tasarımın hassas okuma türlerinden birine AÇIKÇA uyan yol
 yoktur; yazıcı bu yüzden hiçbir uca bağlı değildir. Kişisel veriye dokunan bugünkü yollar:
-öğrenci ve personel listesi ve ayrıntısı, ayrılış havuzu (olağan okuma; tasarımın "okuma ≠
-hassas detay" ayrımında okuma), içe aktarma önizlemesi (kullanıcının yüklediği dosyanın
+personel listesi ve ayrıntısı (öğrenci sicili F1b 5. adımda söküldü), ayrılış havuzu
+(olağan okuma; tasarımın "okuma ≠ hassas detay" ayrımında okuma), içe aktarma önizlemesi (kullanıcının yüklediği dosyanın
 işlenmesi; programın verisinin çıktısı değildir), boş şablonlar ve kurtarma anahtarı belgesi
 (kişisel veri yok), şifreli yedeğin kaydedilmesi (bütün veritabanı, şifreli; tasarımda "Güvenlik"
 satırındadır, izi denetim izinde `YEDEK` satırıdır — erişim günlüğü türlerinde yoktur).

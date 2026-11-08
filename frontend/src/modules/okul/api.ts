@@ -1,18 +1,16 @@
 // `okul` modülü API istemcisi — kurum künyesi/kurulum, ders yılı + dönemler,
-// kapalı günler, kişi sicilleri (öğrenci + personel; ayrılış ve birleştirme), şube
-// kataloğu, toplu içe aktarma (e-Okul mutabakatı dahil) ve şablon indirme uçları.
-// Backend `apps/okul/{urls,views,serializers}.py` ile BİREBİR. Bugün TCKN, veli,
-// cinsiyet, fotoğraf, unvan ve branş alanları YOKTUR. OAB'nin işleme envanteri
-// genel tasarım §3.4'tedir (veli adı ve öğrencinin sınıfı T5 ile gelir; personelde
-// unvan ve branş alınmaz, §5.1).
+// kapalı günler, personel sicili (ayrılış ve birleştirme), toplu içe aktarma (e-Okul
+// mutabakatı dahil) ve şablon indirme uçları. Backend `apps/okul/{urls,views,serializers}.py`
+// ile BİREBİR. Bugün TCKN, veli, cinsiyet, fotoğraf, unvan ve branş alanları YOKTUR.
+// Öğrenci sicili, şube kataloğu ve öğrenim seviyeleri F1b 5. adımda söküldü (tasarım §5.1
+// ALMA). OAB'nin işleme envanteri genel tasarım §3.4'tedir (veli adı ve öğrencinin sınıfı
+// T5 ile okulun şablonundan gelir; personelde unvan ve branş alınmaz, §5.1).
 
 import { api } from "../../lib/api";
-import { getGradeLevels as fetchGradeLevels } from "../../lib/gradeLevels";
-import type { GradeLevelOption, GradeLevelsResponse } from "../../lib/gradeLevels";
 import { unwrap } from "../../lib/pagination";
 import type { Paginated } from "../../lib/pagination";
 
-export type { GradeLevelOption, GradeLevelsResponse, Paginated };
+export type { Paginated };
 
 // ---------------------------------------------------------------------------
 // Ders yılı
@@ -155,9 +153,8 @@ export interface SetupStatus {
   active_school_year: ActiveSchoolYearSummary | null;
   /** Eksik adımlar, sırasıyla (hepsi tamamsa boş) — backend kapısıyla aynı hesap. */
   missing_steps: SetupStep[];
-  student_count: number;
+  /** Personel sicilindeki kayıt sayısı (öğrenci mevcudu okul kartındadır, `SchoolConfig`). */
   personnel_count: number;
-  class_section_count: number;
   /** Aktif ders yılıyla kesişen "öğrenciye kapalı gün" kaydı sayısı. */
   school_break_count: number;
   roadmap: RoadmapState;
@@ -237,15 +234,8 @@ export interface SchoolConfig {
 export type SchoolConfigBody = Partial<Omit<SchoolConfig, "setup_completed">>;
 
 // ---------------------------------------------------------------------------
-// Kişi sicilleri
+// Personel sicili
 // ---------------------------------------------------------------------------
-
-export type StudentStatus = "ACTIVE" | "LEFT";
-
-export const STUDENT_STATUS_TR: Record<StudentStatus, string> = {
-  ACTIVE: "Aktif",
-  LEFT: "Ayrıldı",
-};
 
 /**
  * Çözülemeyen şifreli alanlar (tasarım §13 D48; backend `CorruptFieldsMixin`): kilit
@@ -255,38 +245,6 @@ export const STUDENT_STATUS_TR: Record<StudentStatus, string> = {
  */
 export interface BozukAlanlar {
   bozuk_alanlar?: string[];
-}
-
-/**
- * Öğrenci sicili — StudentSerializer ile birebir (`full_name`/`class_label` türetilmiş).
- * Okul no şifreli saklanır; arama ve eşleştirme numaranın tamamıyla yapılır.
- * `status`, `left_at` ve `leave_candidate_since` salt okunurdur: ayrılış `leaveStudent`
- * ya da Ayrılış Havuzu kararıyla yapılır; kayıt silinmez. Şifreli alanlar çözülemezse
- * `null`dır (`BozukAlanlar`).
- */
-export interface Student extends BozukAlanlar {
-  id: number;
-  first_name: string | null;
-  last_name: string | null;
-  full_name: string | null;
-  student_number: string | null;
-  class_level: number | null;
-  class_section: string;
-  class_label: string;
-  status: StudentStatus;
-  /** Ayrılış tarihi (ISO); aktif öğrencide null. */
-  left_at: string | null;
-  /** Ayrılış havuzuna giriş tarihi (ISO); doluysa ayrılış kararı bekliyor. */
-  leave_candidate_since: string | null;
-}
-
-/** Öğrenci yazma gövdesi — türetilmiş ve salt okunur alanlar gönderilmez. */
-export interface StudentWriteBody {
-  first_name: string;
-  last_name: string;
-  student_number?: string;
-  class_level?: number | null;
-  class_section?: string;
 }
 
 /** Üye türü — backend `MemberKind` ile birebir. */
@@ -336,17 +294,6 @@ export interface LeavePoolRun {
   date: string;
 }
 
-/** Havuzdaki öğrenci — LeavePoolStudentSerializer ile birebir (şifreli alan çözülemezse null). */
-export interface LeavePoolStudent extends BozukAlanlar {
-  id: number;
-  full_name: string | null;
-  student_number: string | null;
-  class_label: string;
-  /** Havuza giriş tarihi (ISO). */
-  leave_candidate_since: string;
-  run: LeavePoolRun | null;
-}
-
 /**
  * Eşleşme gerekçesi — backend `name_match.MatchReason` ile birebir (§13 D30).
  * "Adı aynı" adaşı da yakalar; kullanıcı bunu ancak gerekçeyi görürse anlar.
@@ -387,15 +334,13 @@ export interface LeavePoolPersonnel extends BozukAlanlar {
   similar: LeavePoolSimilar[];
 }
 
-/** `GET /leave-pool/?summary=true` — yalnız sayılar (Genel Bakış kartı). */
+/** `GET /leave-pool/?summary=true` — yalnız sayı (Genel Bakış kartı). */
 export interface LeavePoolSummary {
-  student_count: number;
   personnel_count: number;
 }
 
-/** `GET /leave-pool/` — ayrı listeler, TR sıralı. */
+/** `GET /leave-pool/` — havuzdaki öğretmen ve diğer personel, TR sıralı. */
 export interface LeavePool extends LeavePoolSummary {
-  students: LeavePoolStudent[];
   personnel: LeavePoolPersonnel[];
 }
 
@@ -406,41 +351,13 @@ export interface LeavePoolDecision {
 }
 
 export interface LeavePoolResolveBody {
-  students?: LeavePoolDecision;
   personnel?: LeavePoolDecision;
 }
 
-/** Karar sonucu: uygulanan sayılar + havuzda kalan sayılar. */
+/** Karar sonucu: uygulanan sayılar + havuzda kalan sayı. */
 export interface LeavePoolResolveResult extends LeavePoolSummary {
-  students_left: number;
-  students_kept: number;
   personnel_left: number;
   personnel_kept: number;
-}
-
-/** Şube kataloğu satırı — ClassSectionSerializer ile birebir. */
-export interface ClassSection {
-  id: number;
-  school_year: number;
-  school_year_name: string;
-  class_level: number;
-  class_section: string;
-  class_label: string;
-}
-
-export interface ClassSectionWriteBody {
-  school_year: number;
-  class_level: number;
-  class_section: string;
-}
-
-export interface StudentListParams {
-  search?: string;
-  classLevel?: number | null;
-  classSection?: string;
-  onlyActive?: boolean;
-  limit?: number;
-  offset?: number;
 }
 
 export interface PersonnelListParams {
@@ -473,46 +390,6 @@ interface ImportReportBase {
   dry_run: boolean;
   warnings: ImportIssue[];
   skipped: ImportIssue[];
-}
-
-/** Öğrenci aktarımının bir şubedeki etkisi (kişisiz sayılar). */
-export interface ClassImpact {
-  /** "10/A"; sınıfı olmayan öğrencilerde boş. */
-  class_label: string;
-  class_level: number | null;
-  class_section: string;
-  created: number;
-  updated: number;
-  unchanged: number;
-  /** Dosyada olmadığı için ayrılış havuzuna YENİ eklenen öğrenci sayısı. */
-  to_pool: number;
-}
-
-/** Havuza eklenecek öğrenci — ad yalnız bu yanıtta gelir, kalıcı rapora yazılmaz. */
-export interface PoolStudent {
-  id: number;
-  full_name: string;
-  student_number: string;
-  class_label: string;
-}
-
-/**
- * Aktarım kimseyi ayırmaz: dosyada olmayan aktif öğrenci ayrılış havuzuna girer
- * (`pool_added_students`, zaten havuzda olan sayılmaz), dosyada bulunan havuzdaki
- * öğrenci çıkar (`pool_removed_students`).
- */
-export interface StudentImportReport extends ImportReportBase {
-  created_students: number;
-  updated_students: number;
-  unchanged_students: number;
-  /** Güncellenenlerin içinde: ayrılmışken aynı numarayla dönenler. */
-  reactivated_students: number;
-  pool_added_students: number;
-  pool_removed_students: number;
-  /** "Bu dosya okulun tam listesidir" onayıyla mı çalıştı? */
-  full_list: boolean;
-  classes: ClassImpact[];
-  pool_added: PoolStudent[];
 }
 
 /** Havuza eklenecek (listede olmayan) aktif kişi — ad yalnız bu yanıtta gelir. */
@@ -549,20 +426,13 @@ export interface PersonnelImportReport extends ImportReportBase {
   similar_pairs: SimilarPair[];
 }
 
-export type ImportReport = StudentImportReport | PersonnelImportReport;
+/** Aktarım raporu — bugün yalnız personel (öğrenci aktarımı F1b 5. adımda söküldü). */
+export type ImportReport = PersonnelImportReport;
 
 /** İçe aktarma girdisi — dosya yolu (multipart) veya pano metni (JSON). */
 export type ImportInput = { file: File } | { text: string };
 
-/** Öğrenci mutabakatı seçeneği: dosya okulun tam listesi mi? (varsayılan hayır) */
-export interface StudentImportOptions {
-  fullList?: boolean;
-}
-
-/**
- * Öğrenci/personel raporlarının farklı adlandırılmış sayaçlarını (created_students
- * ↔ created_personnel) tek şekle indirger — rapor bileşeni türden bağımsız kalır.
- */
+/** Raporun sayaçlarını tek şekle indirger — rapor bileşeni türden bağımsız kalır. */
 export function importCounts(report: ImportReport): {
   created: number;
   updated: number;
@@ -570,15 +440,6 @@ export function importCounts(report: ImportReport): {
   poolAdded: number;
   poolRemoved: number;
 } {
-  if ("created_students" in report) {
-    return {
-      created: report.created_students,
-      updated: report.updated_students,
-      unchanged: report.unchanged_students,
-      poolAdded: report.pool_added_students,
-      poolRemoved: report.pool_removed_students,
-    };
-  }
   return {
     created: report.created_personnel,
     updated: report.updated_personnel,
@@ -588,8 +449,7 @@ export function importCounts(report: ImportReport): {
   };
 }
 
-/** Şablon dosya adları — kaydetme penceresinde önerilir (backend ile aynı). */
-export const STUDENT_TEMPLATE_FILENAME = "sablon-ogrenci.xlsx";
+/** Şablon dosya adı — kaydetme penceresinde önerilir (backend ile aynı). */
 export const PERSONNEL_TEMPLATE_FILENAME = "sablon-personel.xlsx";
 
 // ---------------------------------------------------------------------------
@@ -608,26 +468,18 @@ function asPage<T>(data: Paginated<T> | T[]): Paginated<T> {
     : data;
 }
 
-type ImportExtra = Record<string, boolean>;
-
 /**
  * Dosya yolu multipart (`file`), metin yolu JSON (`text`) — backend tam olarak birini
- * bekler. Mutabakat seçeneği (`full_list`) iki yolda da gider. Personelde seçenek
- * yoktur: listede olmayanlar Ayrılış Havuzu'na girer, karar orada verilir.
+ * bekler. Mutabakat seçeneği yoktur: listede olmayanlar Ayrılış Havuzu'na girer, karar
+ * orada verilir.
  */
-function importRequest<R>(path: string, input: ImportInput, extra: ImportExtra = {}): Promise<R> {
+function importRequest<R>(path: string, input: ImportInput): Promise<R> {
   if ("file" in input) {
     const form = new FormData();
     form.append("file", input.file);
-    for (const [key, value] of Object.entries(extra)) form.append(key, String(value));
     return api.postForm<R>(path, form);
   }
-  return api.post<R>(path, { text: input.text, ...extra });
-}
-
-/** Yalnız anlamlı seçenekler gönderilir (varsayılanlar backend'dedir). */
-function studentExtra(options: StudentImportOptions): ImportExtra {
-  return options.fullList ? { full_list: true } : {};
+  return api.post<R>(path, { text: input.text });
 }
 
 export const okulApi = {
@@ -652,9 +504,6 @@ export const okulApi = {
   /** Kartı gizler (yalnız bütün maddeler tamamken) ya da yeniden gösterir. */
   setRoadmapHidden: (hidden: boolean): Promise<RoadmapState> =>
     api.post<RoadmapState>("/setup/roadmap/", { hidden }),
-
-  /** Öğrenim seviyeleri — okul içi sabit 1-12, hazırlık açıksa başta 0. */
-  getGradeLevels: (): Promise<GradeLevelsResponse> => fetchGradeLevels(),
 
   // --- Ders yılları ---
 
@@ -695,38 +544,6 @@ export const okulApi = {
   seedHolidays: (year: number): Promise<HolidaySeedResult> =>
     api.post<HolidaySeedResult>("/holidays/seed/", { year }),
 
-  // --- Öğrenciler ---
-
-  listStudents: async (params: StudentListParams = {}): Promise<Paginated<Student>> => {
-    const parts: string[] = [];
-    if (params.search?.trim()) parts.push(`search=${encodeURIComponent(params.search.trim())}`);
-    if (params.classLevel !== undefined && params.classLevel !== null) {
-      parts.push(`class_level=${params.classLevel}`);
-    }
-    if (params.classSection?.trim()) {
-      parts.push(`class_section=${encodeURIComponent(params.classSection.trim())}`);
-    }
-    if (params.onlyActive) parts.push("only_active=true");
-    if (params.limit !== undefined) parts.push(`limit=${params.limit}`);
-    if (params.offset) parts.push(`offset=${params.offset}`);
-    const data = await api.get<Paginated<Student> | Student[]>(withQuery("/students/", parts));
-    return asPage(data);
-  },
-
-  getStudent: (id: number): Promise<Student> => api.get<Student>(`/students/${id}/`),
-
-  createStudent: (body: StudentWriteBody): Promise<Student> =>
-    api.post<Student>("/students/", body),
-
-  updateStudent: (id: number, body: Partial<StudentWriteBody>): Promise<Student> =>
-    api.patch<Student>(`/students/${id}/`, body),
-
-  /** Açık yükümlülüğü ve birlik kaydına bağı olmayan öğrencinin kaydını siler (varsa 400). */
-  deleteStudent: (id: number): Promise<void> => api.del<void>(`/students/${id}/`),
-
-  /** "Ayrıldı olarak işaretle" — ayrılış yolu; kayıt SİLİNMEZ, ayrılmış kayıt döner. */
-  leaveStudent: (id: number): Promise<Student> => api.post<Student>(`/students/${id}/leave/`),
-
   // --- Personel ---
 
   listPersonnel: async (params: PersonnelListParams = {}): Promise<Paginated<Personnel>> => {
@@ -759,10 +576,10 @@ export const okulApi = {
 
   // --- Ayrılış Havuzu ---
 
-  /** Ayrılış kararı bekleyen öğrenci ve personel (ayrı listeler, TR sıralı). */
+  /** Ayrılış kararı bekleyen öğretmen ve diğer personel (TR sıralı). */
   getLeavePool: (): Promise<LeavePool> => api.get<LeavePool>("/leave-pool/"),
 
-  /** Yalnız sayılar — Genel Bakış kartı (kişisel veri gelmez). */
+  /** Yalnız sayı — Genel Bakış kartı (kişisel veri gelmez). */
   getLeavePoolSummary: (): Promise<LeavePoolSummary> =>
     api.get<LeavePoolSummary>("/leave-pool/?summary=true"),
 
@@ -774,35 +591,7 @@ export const okulApi = {
   resolveLeavePool: (body: LeavePoolResolveBody): Promise<LeavePoolResolveResult> =>
     api.post<LeavePoolResolveResult>("/leave-pool/resolve/", body),
 
-  // --- Şube kataloğu ---
-
-  listClassSections: async (schoolYear?: number): Promise<ClassSection[]> => {
-    const path =
-      schoolYear === undefined
-        ? "/class-sections/?limit=500"
-        : `/class-sections/?school_year=${schoolYear}&limit=500`;
-    const data = await api.get<Paginated<ClassSection> | ClassSection[]>(path);
-    return unwrap(data);
-  },
-
-  createClassSection: (body: ClassSectionWriteBody): Promise<ClassSection> =>
-    api.post<ClassSection>("/class-sections/", body),
-
-  deleteClassSection: (id: number): Promise<void> => api.del<void>(`/class-sections/${id}/`),
-
   // --- İçe aktarma (önizleme hiçbir şey yazmaz; commit gerçek yazar) ---
-
-  previewStudentImport: (
-    input: ImportInput,
-    options: StudentImportOptions = {},
-  ): Promise<StudentImportReport> =>
-    importRequest<StudentImportReport>("/imports/students/preview/", input, studentExtra(options)),
-
-  commitStudentImport: (
-    input: ImportInput,
-    options: StudentImportOptions = {},
-  ): Promise<StudentImportReport> =>
-    importRequest<StudentImportReport>("/imports/students/commit/", input, studentExtra(options)),
 
   previewPersonnelImport: (input: ImportInput): Promise<PersonnelImportReport> =>
     importRequest<PersonnelImportReport>("/imports/personnel/preview/", input),
@@ -811,8 +600,6 @@ export const okulApi = {
     importRequest<PersonnelImportReport>("/imports/personnel/commit/", input),
 
   // --- Şablon indirme (xlsx blob) ---
-
-  studentTemplate: (): Promise<Blob> => api.getBlob("/templates/students/"),
 
   personnelTemplate: (): Promise<Blob> => api.getBlob("/templates/personnel/"),
 };

@@ -53,7 +53,7 @@ KILITLE_UCU = "/api/v1/security/lock/"
 KURTARMA_UCU = "/api/v1/security/recover/"
 PAROLA_UCU = "/api/v1/security/change-password/"
 BOSTA_KILIT_UCU = "/api/v1/security/idle-lock/"
-VERI_UCU = "/api/v1/grade-levels/"
+VERI_UCU = "/api/v1/school-years/"
 MUHASIP_ADI = "Örnek Muhasip"
 
 
@@ -116,10 +116,8 @@ def test_oturum_ozetinin_anahtarlari_sabittir(client: APIClient) -> None:
             "kisi_yazma",
             "kullanicilar",
             "kurulum_tamamlama",
-            "ogrenciler",
             "okul_karti_yazma",
             "son_oturum_onay",
-            "sube_yazma",
             "yol_haritasi",
         ],
     }

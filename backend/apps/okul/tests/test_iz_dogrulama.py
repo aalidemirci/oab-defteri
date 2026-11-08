@@ -1252,7 +1252,7 @@ def test_notta_bicimsiz_bekleyen_olay_atlanir_giris_acilir() -> None:
             "object_id": "x",
             "values": {"ad": [1, 2]},
         },
-        {"eylem": "YEDEK", "model": "okul.Student", "object_id": "1"},
+        {"eylem": "YEDEK", "model": "okul.Personnel", "object_id": "1"},
         {"eylem": "YEDEK", "model": denetim_izi.YEDEK_DOSYASI, "object_id": "Uydurma Kişi"},
         {
             "eylem": "GOC",

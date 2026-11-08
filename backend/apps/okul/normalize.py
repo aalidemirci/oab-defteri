@@ -1,15 +1,17 @@
-"""Öğrenci içe aktarımı için saf (DB'siz) normalize ediciler.
+"""Saf (DB'siz) normalize ediciler — sınıf metni, Türkçe büyük harf ve sıralama, ad bölme.
 
 Aile iskeletinden alındı (iskelet bunu atalarının `apps/okul/normalize.py`
 dosyasından sadeleştirmişti): TCKN/telefon/doğum tarihi/cinsiyet normalize
-edicileri YOKTUR — program bu verileri hiç toplamaz (tasarım §3.4). Sınıf/şube
-ayrıştırması seviye kümesiyle PARAMETRİKTİR; varsayılan küme okul içi sabittir (`GRADE_LEVELS`).
+edicileri YOKTUR — program bu verileri hiç toplamaz (tasarım §3.4). Öğrenci sicili
+ve okul numarasının kör indeks normalleştirmesi F1b 5. adımda öğrenci tarafıyla
+söküldü (tasarım §5.1 ALMA).
 
-Okul numarasının kör indeks normalleştirmesi (`normalize_student_number`) de
-buradadır: yazma (`Student.save`) ve arama (`selectors`) aynı kuralı kullanır.
+Sınıf metni ayrıştırması (`normalize_class_section`) KALDI: veli listesindeki
+öğrencinin sınıfı düz metindir ve yazımı normalleştirilir (plan "F1b-5 uygulama
+kararları"; tasarım §5.1 `ParentRoster`). Ayrıştırma seviye kümesiyle
+PARAMETRİKTİR; varsayılan küme okul içi sabittir (`GRADE_LEVELS`).
 
-Saf fonksiyonlardır — kolay test edilir (tests/test_normalize). DB eşleştirme
-ve yazma `services/imports.py`'dadır.
+Saf fonksiyonlardır — kolay test edilir (tests/test_normalize).
 """
 
 from __future__ import annotations
@@ -25,8 +27,8 @@ from shared.text import tr_upper as _tr_upper
 #: daraltma okul kartının `levels` alanıyla gelir (tasarım §5.1; plan §2.2 adım 4).
 GRADE_LEVELS: tuple[int, ...] = tuple(range(1, 13))
 
-#: Hazırlık sınıfının seviye kodu (aile temsili: etiket 'Hz/A'). Yalnız
-#: `SchoolConfig.has_prep_class` açıkken geçerli kümeye girer.
+#: Hazırlık sınıfının seviye kodu (aile temsili: etiket 'Hz/A'). Yalnız çağıran
+#: seviye kümesine koyduğunda tanınır (`normalize_class_section(valid_levels=…)`).
 PREP_LEVEL = 0
 
 # Türkçe karakter → ASCII büyük. YALNIZ anahtar kelime eşlemesi içindir
@@ -192,7 +194,7 @@ def normalize_class_section(
 ) -> tuple[int, str] | None:
     """'10/A', '10-A', '10 A' → (10, 'A'); küme dışı seviye veya çözümsüz → None.
 
-    `valid_levels` okul yapılandırmasından gelir (`SchoolConfig.grade_levels`).
+    `valid_levels` çağırandan gelir (varsayılan 1-12).
     0 (Hazırlık) kümede ise 'HAZIRLIK/A', 'HZ A' gibi metinler (0, 'A') çözülür.
     """
     if value is None:
@@ -223,34 +225,6 @@ def normalize_class_section(
         return None
     section = tr_upper(section_m2.group())
     return level, section
-
-
-#: Yalnız ASCII rakam ('²' gibi Unicode basamaklar `str.isdigit()`'i geçer ama
-#: okul numarası değildir).
-_ASCII_DIGITS_RE = re.compile(r"[0-9]+")
-
-
-def normalize_student_number(value: object) -> str:
-    """Okul numarasının kör indeks biçimi (tasarım §5.3): '0123' ≡ '123' ≡ ' 1 23 '.
-
-    Kör indeks tam eşleşmedir; bu yüzden aynı numaranın farklı yazımları AYNI
-    değere inmelidir. Kural bilinçli olarak dardır:
-
-    - bütün boşluklar atılır (Excel'den kopyalamada araya giren boşluk dahil);
-    - değer yalnız rakamsa baştaki sıfırlar atılır ('0123' → '123'; '000' → '0');
-    - harf içeren numara olduğu gibi kalır (e-Okul numaraları rakamdır; başka
-      biçimde tahmin yürütülmez).
-
-    Excel'in '123.0' biçimi burada ÇÖZÜLMEZ: ayrıştırıcı (`excel_ogrenci._str`)
-    onu zaten '123'e indirir; iki yerde çözmek iki ayrı kural doğururdu.
-    Yazmada (`Student.save`) ve aramada (`selectors`) aynı fonksiyon çağrılır.
-    """
-    if value is None:
-        return ""
-    sade = "".join(str(value).split())
-    if _ASCII_DIGITS_RE.fullmatch(sade):
-        return sade.lstrip("0") or "0"
-    return sade
 
 
 def split_full_name(value: object) -> tuple[str, str]:

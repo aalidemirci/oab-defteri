@@ -1,7 +1,8 @@
 """`apps.okul.normalize` — saf normalize ediciler (sınıf/şube + ad bölme; aile iskeletinden).
 
 TCKN/telefon/tarih/cinsiyet normalize edicileri yoktur — program o verileri
-toplamaz (tasarım §3.4).
+toplamaz (tasarım §3.4). Okul numarası normalleştirmesi öğrenci sicili ile F1b 5. adımda
+söküldü; sınıf metni ayrıştırması veli listesinin sınıf yazımı için kalır.
 """
 
 from __future__ import annotations
@@ -128,7 +129,7 @@ class TestClassSection:
         )
         assert normalize.normalize_class_section("HAZ B", valid_levels=(0, 9)) == (0, "B")
         assert normalize.normalize_class_section("Hz-C", valid_levels=(0, 9)) == (0, "C")
-        # Varsayılan kümede hazırlık yoktur (bayrak `SchoolConfig.has_prep_class`'ta).
+        # Varsayılan kümede hazırlık yoktur (çağıran kümeye koyar).
         assert normalize.normalize_class_section("HAZIRLIK/A") is None
 
     def test_bos_ve_cozumsuz_none(self) -> None:
@@ -151,36 +152,3 @@ class TestSplitFullName:
     def test_ham_birakilir_title_case_uygulanmaz(self) -> None:
         """TR büyük harf tuzağı: görüntü biçimi başka katmanda."""
         assert normalize.split_full_name("emre can yılmaz") == ("emre can", "yılmaz")
-
-
-class TestStudentNumber:
-    """Okul no'nun kör indeks normalleştirmesi (§5.3): aynı numara aynı değere iner."""
-
-    def test_bastaki_sifirlar_atilir(self) -> None:
-        assert normalize.normalize_student_number("0123") == "123"
-        assert normalize.normalize_student_number("00123") == "123"
-
-    def test_bosluklar_atilir(self) -> None:
-        assert normalize.normalize_student_number(" 1 23 ") == "123"
-        assert normalize.normalize_student_number("\t0 1 2 3\n") == "123"
-
-    def test_yalniz_sifir_sifira_iner(self) -> None:
-        assert normalize.normalize_student_number("000") == "0"
-
-    def test_bos_ve_none_bos_doner(self) -> None:
-        assert normalize.normalize_student_number("") == ""
-        assert normalize.normalize_student_number("   ") == ""
-        assert normalize.normalize_student_number(None) == ""
-
-    def test_harfli_numaraya_dokunulmaz(self) -> None:
-        """Rakam dışı numarada sıfır atılmaz, tahmin yürütülmez ('A0123' kalır)."""
-        assert normalize.normalize_student_number("A0123") == "A0123"
-        assert normalize.normalize_student_number(" A 01 ") == "A01"
-
-    def test_unicode_basamak_rakam_sayilmaz(self) -> None:
-        """'²' `str.isdigit()`'i geçer ama okul numarası rakamı değildir."""
-        assert normalize.normalize_student_number("0²") == "0²"
-
-    def test_excel_ondalik_bicimi_burada_cozulmez(self) -> None:
-        """'123.0' ayrıştırıcıda çözülür (`excel_ogrenci._str`); iki ayrı kural olmasın."""
-        assert normalize.normalize_student_number("123.0") == "123.0"
