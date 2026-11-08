@@ -88,7 +88,7 @@ def test_havuz_listesi_tr_sirali_giris_ve_aktarimla(client: APIClient) -> None:
     for ad in ("ZEHRA", "ÇAĞLA", "CEM"):
         _personel(ad, "ÖRNEK")
     import_service.commit_personnel_text(text="\n".join([PERSONEL_BASLIK, "ALİ\tYENİ\t\t"]))
-    kosu = ImportRun.objects.get(status=ImportStatus.COMPLETED, source_type="PERSONNEL")
+    kosu = ImportRun.objects.get(status=ImportStatus.COMPLETED, source_type="PERSONEL")
 
     yanit = client.get(HAVUZ_URL)
 
@@ -312,7 +312,7 @@ def test_havuzdaki_personel_icin_olasi_ayni_kisi_ve_havuzdan_birlestirme(
                 {
                     "id": yeni.pk,
                     "full_name": "AYŞE BEYAZ",
-                    "member_kind": "TEACHER",
+                    "member_kind": "OGRETMEN",
                     "created_on": timezone.localdate().isoformat(),
                     "reason": "ad_ayni_soyad_farkli",
                 }

@@ -8,9 +8,9 @@ Kod kapısının iki maddesi burada kanıtlanır:
   Anahtar bellekte değilse indeks hesaplanmaz (fail-closed).
 
   Kör indeksin tek kullanıcısı öğrenci okul numarasıydı; öğrenci sicili F1b 5. adımda
-  söküldü (tasarım §5.1 ALMA). Sınama bu yüzden şimdilik `shared.crypto.blind_index`
-  düzeyindedir; veli listesinin ad indeksi (`ParentRoster.name_index`, tasarım §5.1) gelince
-  model ve eşleşme sınamaları ona bağlanır (sonraki alt adım).
+  söküldü (tasarım §5.1 ALMA). Burada `shared.crypto.blind_index` düzeyi sınanır; veli
+  listesinin ad indeksinin (`ParentRoster.name_index`) model düzeyi ve eşleşmesi
+  `test_veli_listesi.py`'dedir.
 - **Şifreli kipte ad selector'ları:** ad araması ve kullanıcıya gösterilen
   bütün sıralamalar Python'dadır ve Türk alfabesine uyar (DB filtresi şifreli
   sütunda çalışmaz, BINARY sıra 'Ç/İ/Ş'yi 'Z'den sonraya atar).

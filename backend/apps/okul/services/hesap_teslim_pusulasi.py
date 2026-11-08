@@ -243,6 +243,17 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
     Satir.AYARLAR: BugunkuIs(
         (_parca("boşta kilit süresi", "security-idle-lock"),), baslik="Ayarlar"
     ),
+    Satir.KISISEL_VERI: BugunkuIs(
+        (
+            _parca(
+                "veli listesinin aktarımı ve silinmesi",
+                "import-parents-preview",
+                "import-parents-commit",
+                "parent-roster",
+            ),
+        ),
+        baslik="Kişiler",
+    ),
     Satir.GUNCELLEME: BugunkuIs(
         (_parca("Güncelleme denetimi", "update-latest", "update-installer"),)
     ),

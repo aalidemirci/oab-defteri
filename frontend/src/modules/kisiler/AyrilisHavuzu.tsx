@@ -32,6 +32,7 @@ import { SkeletonList } from "../../ui/Skeleton";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import { MEMBER_KIND_TR, benzerlikGerekcesi, okulApi } from "../okul/api";
 import type { LeavePool, LeavePoolPersonnel, LeavePoolRun, LeavePoolSimilar } from "../okul/api";
+import { GOREV_TURU_ETIKETI } from "./metinler";
 import { ErrorBand, KisiAdi, hataOku, kisiAdiMetni, kisiKaydiniMetni, kisiOznesi } from "./ortak";
 import type { SayfaHatasi } from "./ortak";
 
@@ -350,7 +351,7 @@ function PersonelBolumu({
                   />
                 </th>
                 <th className={TH}>Ad soyad</th>
-                <th className={TH}>Üye türü</th>
+                <th className={TH}>{GOREV_TURU_ETIKETI}</th>
                 <th className={TH}>Havuza giriş</th>
                 <th className={TH}>Aktarım</th>
                 <th className={TH}>Olası aynı kişi</th>

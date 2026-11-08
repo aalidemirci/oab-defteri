@@ -536,8 +536,8 @@ def blind_index(normalized: str) -> str:
 
     Belirlenimcidir: aynı DEK ve aynı değer daima aynı indeksi verir; bu yüzden
     tam eşleşme ve teklik kısıtı DB'de çalışır. Normalleştirme ÇAĞIRANIN
-    işidir. Öğrenci okul numarası F1b 5. adımda söküldü; bugün çağıran yoktur, veli listesinin
-    ad indeksi (`ParentRoster.name_index`, tasarım §5.1) sonraki alt adımda bağlanır. Boş dize `""` döner
+    işidir. Öğrenci okul numarası F1b 5. adımda söküldü; bugünkü çağıran veli listesinin ad
+    indeksidir (`ParentRoster.name_index`, tasarım §5.1). Boş dize `""` döner
     ("veri yok" hâli DB'de de boş görünür, kısmi teklik kısıtları buna
     dayanır). Anahtar bellekte değilse `KeyMissingError`.
     """

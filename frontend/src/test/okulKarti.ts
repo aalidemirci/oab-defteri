@@ -21,6 +21,7 @@ export const BOS_OKUL_KARTI: SchoolConfig = {
   opened_on: null,
   demirbas_onayi: false,
   demirbas_no: "",
+  data_controller_text: "",
   setup_completed: false,
 };
 

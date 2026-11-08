@@ -92,8 +92,21 @@ urlpatterns = [
         views.PersonnelImportCommitView.as_view(),
         name="import-personnel-commit",
     ),
+    # Veli listesi (T5; yalnız dosya): özet ve silme, önizleme ve aktarım, şablon
+    path("parent-roster/", views.ParentRosterView.as_view(), name="parent-roster"),
+    path(
+        "imports/parents/preview/",
+        views.ParentImportPreviewView.as_view(),
+        name="import-parents-preview",
+    ),
+    path(
+        "imports/parents/commit/",
+        views.ParentImportCommitView.as_view(),
+        name="import-parents-commit",
+    ),
     # Şablon indirme
     path("templates/personnel/", views.PersonnelTemplateView.as_view(), name="template-personnel"),
+    path("templates/parents/", views.ParentTemplateView.as_view(), name="template-parents"),
     # Güvenlik durumu ve ilk hesap (tasarım §4.3, §4.4.4; parolayı kaldırma ucu yok)
     path("security/status/", views.SecurityStatusView.as_view(), name="security-status"),
     path("security/enable/", views.SecurityEnableView.as_view(), name="security-enable"),

@@ -88,6 +88,7 @@ UPDATABLE_FIELDS: tuple[str, ...] = (
     "opened_on",
     "demirbas_onayi",
     "demirbas_no",
+    "data_controller_text",
 )
 
 # Sihirbaz adımları, sırasıyla (API ve ön yüz aynı anahtarları kullanır).
@@ -175,7 +176,9 @@ def missing_school_fields(config: SchoolConfig) -> list[str]:
 
     Okul kartının zorunlu alanları (plan F1b-4 kararları "Zorunluluk"): kurum kodu altı
     rakam değilse, kademe listesi boş ya da tanınmayan değer taşıyorsa, mevcut ya da tarihi
-    boşsa eksik sayılır. Müdür adı, kampüs işareti ve açılış tarihi isteğe bağlıdır.
+    boşsa eksik sayılır. Müdür adı, kampüs işareti, açılış tarihi ve veri sorumlusu isteğe
+    bağlıdır (veri sorumlusu boşken aktarım ekranları uyarır, kurulumu engellemez; plan "F1b-5
+    uygulama kararları").
     """
     eksik: list[str] = []
     if not config.school_name.strip():

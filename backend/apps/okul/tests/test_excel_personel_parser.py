@@ -1,9 +1,9 @@
 """apps.okul.excel_personel — SADELEŞMİŞ personel parser testleri.
 
 Aile şablonundan fark: e-posta ve Rol/Kapsam çiftleri YOK — personel hesabı yoktur.
-Unvan ve branş SAKLANMAZ (tasarım §8.4). Branş sütunu hiç
-eşlenmez; "Görevi/Unvan" (şablonda "Üye Türü") yalnız üye türüne (öğretmen /
-diğer personel) çevrilir, metni satır nesnesine girmez.
+Unvan ve branş SAKLANMAZ ve OKUNMAZ (tasarım §8.4). e-Okul'un "Görevi" sütunu ve şablonun
+"Görev Türü" sütunu yalnız görev türüne (öğretmen · yönetici · diğer personel; plan "F1b-5
+uygulama kararları") çevrilir, metni satır nesnesine girmez. Adlar uydurmadır.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from apps.okul import excel_personel
 from apps.okul.excel_ortak import ParserError
 from apps.okul.models import MemberKind
 
-STANDARD_HEADER = ["Ad Soyad", "Unvan", "Branş"]
+STANDARD_HEADER = ["Ad Soyad", "Görevi", "Branş"]
 
 
 def make_xlsx(
@@ -40,10 +40,12 @@ def make_xlsx(
 
 def test_tur_sabitleri_model_degerleriyle_ayni() -> None:
     """Modül Django'suz kalsın diye düz metin tutar; model değerleriyle eşit olmalı."""
-    assert (excel_personel.KIND_TEACHER, excel_personel.KIND_STAFF) == (
-        MemberKind.TEACHER.value,
-        MemberKind.STAFF.value,
-    )
+    assert (
+        excel_personel.KIND_OGRETMEN,
+        excel_personel.KIND_YONETICI,
+        excel_personel.KIND_DIGER,
+    ) == (MemberKind.OGRETMEN.value, MemberKind.YONETICI.value, MemberKind.DIGER.value)
+    assert set(MemberKind.values) == {"OGRETMEN", "YONETICI", "DIGER"}
 
 
 def test_standart_basliklar_eslenir_brans_eslenmez() -> None:
@@ -51,6 +53,15 @@ def test_standart_basliklar_eslenir_brans_eslenmez() -> None:
     mapping = excel_personel.detect_columns(grid)
     assert mapping.is_usable
     assert mapping.fields == {"full_name": 0, "role": 1}
+
+
+def test_unvan_sutunu_okunmaz() -> None:
+    """Tasarım §8.4 okunmayanlar: "Unvan" eşleme sözlüğünde yoktur, tür ondan çıkmaz."""
+    assert not any("unvan" in kw for kws in excel_personel.COLUMN_SYNONYMS.values() for kw in kws)
+    data = make_xlsx([["ALİ ÖRNEK", "Müdür", "Öğretmen"]], header=["Ad Soyad", "Unvanı", "Unvan"])
+    mapping, parsed = excel_personel.parse_workbook(data)
+    assert mapping.fields == {"full_name": 0}
+    assert (parsed[0].member_kind, parsed[0].member_kind_unrecognized) == (None, False)
 
 
 def test_fuzzy_baslik_varyasyonlari() -> None:
@@ -61,14 +72,44 @@ def test_fuzzy_baslik_varyasyonlari() -> None:
     assert mapping.fields == {"full_name": 0, "role": 1}
 
 
-def test_sablon_ayri_ad_soyad_ve_uye_turu_okunur() -> None:
+@pytest.mark.parametrize(
+    ("deger", "beklenen"),
+    [
+        ("Öğretmen", MemberKind.OGRETMEN),
+        ("ÖĞRETMEN", MemberKind.OGRETMEN),
+        ("Yönetici", MemberKind.YONETICI),
+        ("  YÖNETİCİ ", MemberKind.YONETICI),
+        ("Diğer personel", MemberKind.DIGER),
+        ("DİĞER  PERSONEL", MemberKind.DIGER),
+        ("Diğer", MemberKind.DIGER),
+    ],
+)
+def test_sablonun_gorev_turu_sutunu_uc_degeri_kabul_eder(deger: str, beklenen: str) -> None:
+    header: list[object] = ["Adı", "Soyadı", "Görev Türü"]
+    data = make_xlsx([["ALİ", "ÖRNEK", deger]], header=header)
+    mapping, parsed = excel_personel.parse_workbook(data)
+    assert mapping.fields == {"first_name": 0, "last_name": 1, "kind": 2}
+    assert (parsed[0].first_name, parsed[0].last_name) == ("ALİ", "ÖRNEK")
+    assert parsed[0].member_kind == beklenen
+    assert parsed[0].member_kind_unrecognized is False
+
+
+@pytest.mark.parametrize("deger", ["Müdür", "Memur", "öğretmenler", "", None])
+def test_sablonun_taninmayan_gorev_turu_tahmin_edilmez(deger: object) -> None:
+    """Şablon sütununda üç etiket dışındaki değer türe çevrilmez: denetim uyarısı düşer."""
+    header: list[object] = ["Adı", "Soyadı", "Görev Türü"]
+    data = make_xlsx([["ALİ", "ÖRNEK", deger]], header=header)
+    _mapping, parsed = excel_personel.parse_workbook(data)
+    assert (parsed[0].member_kind, parsed[0].member_kind_unrecognized) == (None, True)
+
+
+def test_eski_sablonun_uye_turu_basligi_da_okunur() -> None:
+    """5. adımdan önce indirilmiş şablonun "Üye Türü" başlığı görev türü sütunu sayılır."""
     header: list[object] = ["Adı", "Soyadı", "Üye Türü"]
     data = make_xlsx([["ALİ", "ÖRNEK", "Diğer personel"]], header=header)
     mapping, parsed = excel_personel.parse_workbook(data)
-    assert mapping.is_usable
-    assert (parsed[0].first_name, parsed[0].last_name) == ("ALİ", "ÖRNEK")
-    assert parsed[0].member_kind == MemberKind.STAFF
-    assert parsed[0].member_kind_unrecognized is False
+    assert "kind" in mapping.fields
+    assert parsed[0].member_kind == MemberKind.DIGER
 
 
 def test_satirda_gorev_ve_brans_metni_tutulmaz() -> None:
@@ -96,7 +137,7 @@ def test_yalniz_ad_soyad_da_yeterli_tur_bilgisi_yok() -> None:
 
 
 def test_ad_soyad_yoksa_parser_error() -> None:
-    data = make_xlsx([["Müdür", "Matematik"]], header=["Unvan", "Branş"])
+    data = make_xlsx([["Müdür", "Matematik"]], header=["Görevi", "Branş"])
     with pytest.raises(ParserError, match="full_name"):
         excel_personel.parse_workbook(data)
 
@@ -109,8 +150,8 @@ def test_satir_ayristirma() -> None:
     _mapping, parsed = excel_personel.parse_workbook(make_xlsx(rows))
     assert len(parsed) == 2
     assert (parsed[0].first_name, parsed[0].last_name) == ("ALİ", "ÖRNEK")
-    assert parsed[0].member_kind == MemberKind.TEACHER
-    # Görev sütunu VAR ama hücre boş: tanınmadı → önizlemede denetim uyarısı.
+    assert parsed[0].member_kind == MemberKind.YONETICI
+    # Görev sütunu VAR ama hücre boş: tür çıkarılamadı → önizlemede denetim uyarısı.
     assert (parsed[1].member_kind, parsed[1].member_kind_unrecognized) == (None, True)
 
 
@@ -134,31 +175,48 @@ def test_preamble_atlanir() -> None:
 @pytest.mark.parametrize(
     ("gorev", "beklenen"),
     [
-        ("Öğretmen", "TEACHER"),
-        ("Sözleşmeli Öğretmen(657 S.K. 4/B)", "TEACHER"),
-        ("Ücretli Öğretmen", "TEACHER"),
-        ("Müdür", "TEACHER"),
-        ("Müdür Yardımcısı", "TEACHER"),
-        ("Müdür Başyardımcısı", "TEACHER"),
-        ("Rehber Öğretmen", "TEACHER"),
-        ("Psikolojik Danışman", "TEACHER"),
-        ("Usta Öğretici", "TEACHER"),
-        ("MEMUR", "STAFF"),
-        ("Ambar Memuru", "STAFF"),
-        ("Hizmetli", "STAFF"),
-        ("Yardımcı Hizmetli", "STAFF"),
-        ("Teknisyen", "STAFF"),
-        ("Aşçı", "STAFF"),
-        ("Bekçi", "STAFF"),
-        ("Şef", "STAFF"),
-        ("Sekreter", "STAFF"),
-        ("Şoför", "STAFF"),
-        ("Sürekli İşçi", "STAFF"),
-        ("Veri Hazırlama ve Kontrol İşletmeni", "STAFF"),
-        ("Diğer personel", "STAFF"),
+        # Yönetici: üç görev, Türkçe katlanmış TAM eşleşme (büyük/küçük harf, boşluk önemsiz).
+        ("Müdür", "YONETICI"),
+        ("MÜDÜR", "YONETICI"),
+        ("müdür", "YONETICI"),
+        ("Müdür Yardımcısı", "YONETICI"),
+        ("MÜDÜR YARDIMCISI", "YONETICI"),
+        ("müdür yardımcısı", "YONETICI"),
+        ("  Müdür   Yardımcısı  ", "YONETICI"),
+        ("Müdür\tYardımcısı", "YONETICI"),
+        ("Müdür Başyardımcısı", "YONETICI"),
+        ("MÜDÜR BAŞYARDIMCISI", "YONETICI"),
+        # Tam eşleşme değil: içinde "öğretmen" yoksa diğer personel.
+        ("Müdür Yrd.", "DIGER"),
+        ("Okul Müdürü", "DIGER"),
+        ("Müdür Yardımcısı Vekili", "DIGER"),
+        # İçinde "öğretmen" geçen görev öğretmendir.
+        ("Öğretmen", "OGRETMEN"),
+        ("ÖĞRETMEN", "OGRETMEN"),
+        ("öğretmen", "OGRETMEN"),
+        ("Sözleşmeli Öğretmen(657 S.K. 4/B)", "OGRETMEN"),
+        ("Ücretli Öğretmen", "OGRETMEN"),
+        ("ÜCRETLİ ÖĞRETMEN", "OGRETMEN"),
+        ("Rehber Öğretmen", "OGRETMEN"),
+        ("Uzman Öğretmen", "OGRETMEN"),
+        ("Usta Öğreticiler Öğretmeni", "OGRETMEN"),
+        # Öteki her görev diğer personeldir.
+        ("Psikolojik Danışman", "DIGER"),
+        ("Usta Öğretici", "DIGER"),
+        ("MEMUR", "DIGER"),
+        ("Ambar Memuru", "DIGER"),
+        ("Hizmetli", "DIGER"),
+        ("Yardımcı Hizmetli", "DIGER"),
+        ("Teknisyen", "DIGER"),
+        ("Aşçı", "DIGER"),
+        ("Şoför", "DIGER"),
+        ("Sürekli İşçi", "DIGER"),
+        ("Veri Hazırlama ve Kontrol İşletmeni", "DIGER"),
+        ("Uzman Kaptan", "DIGER"),
+        # Boş hücre: tür çıkmaz (çağıran uyarır).
         ("", None),
+        ("   ", None),
         (None, None),
-        ("Uzman Kaptan", None),
     ],
 )
 def test_gorev_siniflamasi(gorev: object, beklenen: str | None) -> None:

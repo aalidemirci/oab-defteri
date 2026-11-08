@@ -116,7 +116,7 @@ def test_yeni_kayit_olustur_satiridir_degerler_izin_listesinden() -> None:
 def test_yalniz_veri_alani_degisirse_tek_guncelle_satiri() -> None:
     kayit = personel()
     bas = son_seq()
-    persons.update_personnel(kayit, member_kind=MemberKind.STAFF)
+    persons.update_personnel(kayit, member_kind=MemberKind.DIGER)
     (satir,) = yeni_satirlar(bas)
     assert satir.action == "GUNCELLE"
     assert satir.changed_fields == ["updated_at", "member_kind"]
@@ -139,7 +139,7 @@ def test_veri_ve_durum_birlikte_degisirse_iki_satir_ayni_icerik_maci() -> None:
     bas = son_seq()
     with transaction.atomic():
         Personnel.objects.filter(pk=kayit.pk).update(
-            member_kind=MemberKind.STAFF, is_active=False, left_at=date(2026, 11, 1)
+            member_kind=MemberKind.DIGER, is_active=False, left_at=date(2026, 11, 1)
         )
         denetim_izi.degisiklik(kayit, onceki=onceki)
     guncelle, durum = yeni_satirlar(bas)
@@ -256,7 +256,7 @@ def test_havuz_giris_cikis_ve_karar_kisi_basina_durumdur() -> None:
 def test_degismeyen_guncelleme_yazmaz_satir_da_yazmaz() -> None:
     kayit = personel()
     bas = son_seq()
-    persons.update_personnel(kayit, member_kind=MemberKind.TEACHER, first_name="Uydurcan")
+    persons.update_personnel(kayit, member_kind=MemberKind.OGRETMEN, first_name="Uydurcan")
     assert yeni_satirlar(bas) == []
 
 

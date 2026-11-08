@@ -85,6 +85,7 @@ def client() -> APIClient:
                 "opened_on",
                 "demirbas_onayi",
                 "demirbas_no",
+                "data_controller_text",
                 "setup_completed",
             },
         ),

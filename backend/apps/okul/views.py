@@ -39,6 +39,7 @@ from apps.okul.oturum import OTURUM, yazar
 from apps.okul.permissions import RequiresAdminPassword
 from apps.okul.serializers import (
     ImportRequestSerializer,
+    ParentImportRequestSerializer,
     PersonnelMergeSerializer,
     PersonnelSerializer,
     RecoveryKeyPdfRequestSerializer,
@@ -306,6 +307,59 @@ class PersonnelImportCommitView(_BaseImportView):
 
 
 # ---------------------------------------------------------------------------
+# Veli listesi (T5; tasarım §8.4) — yalnız program yöneticisi (rol: `rol_izinleri`)
+# ---------------------------------------------------------------------------
+class ParentRosterView(APIView):
+    """`GET parent-roster/` — sınıf başına SAYI (ad yok); `DELETE` — "Veli listesini sil".
+
+    Silme bütün listeyi katı siler; denetim izine kişisiz `KVKK_SILME` satırı düşer
+    (`services.imports.delete_parent_roster`). Yanıt silinen satır sayısıdır.
+    """
+
+    permission_classes = [RequiresAdminPassword]
+
+    def get(self, request: Request) -> Response:
+        return Response(selectors.parent_roster_summary())
+
+    def delete(self, request: Request) -> Response:
+        return Response({"deleted_rows": import_service.delete_parent_roster()})
+
+
+class _ParentImportView(APIView):
+    """Veli listesinin önizlemesi ve aktarımı — YALNIZ dosya (.xlsx, .xls, .csv; pano yolu yok).
+
+    Yanıt yalnız sayıları taşır (tasarım §8.4 (2)); parola kurulmadan 409 döner.
+    """
+
+    permission_classes = [RequiresAdminPassword]
+
+    preview: bool = True
+
+    def post(self, request: Request) -> Response:
+        serializer = ParentImportRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        uploaded = serializer.validated_data["file"]
+        handler = (
+            import_service.preview_parents_file
+            if self.preview
+            else import_service.commit_parents_file
+        )
+        try:
+            report = handler(file_bytes=uploaded.read(), file_name=uploaded.name or "")
+        except ParserError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+        return Response(report.to_dict())
+
+
+class ParentImportPreviewView(_ParentImportView):
+    preview = True
+
+
+class ParentImportCommitView(_ParentImportView):
+    preview = False
+
+
+# ---------------------------------------------------------------------------
 # Şablon indirme
 # ---------------------------------------------------------------------------
 class PersonnelTemplateView(APIView):
@@ -314,6 +368,16 @@ class PersonnelTemplateView(APIView):
             BytesIO(template_service.personnel_template_xlsx()),
             as_attachment=True,
             filename="sablon-personel.xlsx",
+            content_type=XLSX_CONTENT_TYPE,
+        )
+
+
+class ParentTemplateView(APIView):
+    def get(self, request: Request) -> FileResponse:
+        return FileResponse(
+            BytesIO(template_service.parent_template_xlsx()),
+            as_attachment=True,
+            filename="sablon-veli-listesi.xlsx",
             content_type=XLSX_CONTENT_TYPE,
         )
 

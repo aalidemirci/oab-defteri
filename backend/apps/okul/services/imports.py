@@ -1,9 +1,9 @@
-"""Personel toplu içe aktarma ve e-Okul MUTABAKATI — preview (dry-run) + commit.
+"""Personel toplu içe aktarma ve e-Okul MUTABAKATI, veli listesi aktarımı — preview + commit.
 
 Aile iskeletinden alındı (iskelet bunu atalarının `services/imports.py`
 kalıbından uyarlamış, mutabakatla genişletmişti; OAB'de tasarım §8.4). Öğrenci
 aktarımı F1b 5. adımda öğrenci sicili ve şube kataloğuyla birlikte söküldü (tasarım §5.1
-ALMA, T5); veli listesi aktarımı sonraki alt adımda bu modüle eklenir.
+ALMA, T5); yerine VELİ LİSTESİ aktarımı geldi (aşağıda "VELİ LİSTESİ" ve modülün son bölümü).
 
 - **AKTARIM HİÇ KİMSEYİ AYIRMAZ VE SİLMEZ (aile iskeletinin kullanıcı kararı
   22.09.2026).** Mutabakatta listede bulunmayan aktif kişi AYRILIŞ HAVUZUNA
@@ -26,10 +26,11 @@ ALMA, T5); veli listesi aktarımı sonraki alt adımda bu modüle eklenir.
   metni yazılmaz; hücrenin ham değeri (`raw_value`) yalnız API yanıtındadır,
   kalıcı rapordan silinir (kaymış sütunda kişi verisi taşıyabilir). Günlüğe
   yalnız sayılar düşer ve yalnız uygulamada yazılır (önizleme geri sarılır).
-- Excel (.xlsx ŞABLONU ve e-Okul'un .xls İHRACI) ile pano yapıştırması AYNI
-  boru hattı: her girişten önce `rows` matrisi üretilir (`read_sheet` /
-  `text_to_grid`), ardından `eokul.hazirla_personel_matrisi` e-Okul'a özgü
-  dipnotları düzler, gerisi ortak.
+- Dosya (.xlsx ŞABLONU, e-Okul'un .xls İHRACI ve .csv; tasarım §8.1 A4) ile pano
+  yapıştırması AYNI boru hattı: her girişten önce `rows` matrisi üretilir
+  (`excel_ortak.dosyayi_oku` / `text_to_grid`), ardından `eokul.hazirla_personel_matrisi`
+  e-Okul'a özgü dipnotları düzler, gerisi ortak. Makrolu dosya okunmadan reddedilir
+  (tasarım TK18; `excel_ortak.dosyayi_oku`) ve FAILED izi bırakır.
 - Idempotency UYARIDIR, ENGEL DEĞİL: aynı içerik (sha256) yeniden commit
   edilebilir — `already_imported=True` uyarısıyla MEVCUT COMPLETED `ImportRun`
   satırı güncellenir (koşullu unique bozulmaz). Aynı dosyanın ikinci uygulaması
@@ -41,35 +42,61 @@ ALMA, T5); veli listesi aktarımı sonraki alt adımda bu modüle eklenir.
 - Boş/çözülemeyen hücre mevcut veriyi SİLMEZ (import silmez ilkesi).
 - **Denetim izi** (tasarım §4.6.2; plan F1b-1 alt commit c): her kayıt yazımı aynı
   işlemde KAYIT BAŞINA iz satırı yazar (`denetim_izi.degisiklik`): yeni personel
-  `OLUSTUR`; üye türü değişikliği `GUNCELLE`; yeniden aktifleşme, havuza giriş ve havuzdan
+  `OLUSTUR`; görev türü değişikliği `GUNCELLE`; yeniden aktifleşme, havuza giriş ve havuzdan
   çıkış `DURUM` (ikisi birden değiştiyse iki satır); koşunun açılışı `OLUSTUR`, kapanışı
   `DURUM`. Değişmeyen kayıt yazılmaz, satırı da yoktur. Önizlemenin satırları veriyle
   birlikte geri sarılır; kalıcı PREVIEWED ve FAILED izleri kendi işlemlerinde `OLUSTUR`
   yazar. Kişi satırları değer taşımaz (KVKK silme kümesi); dosya adı ve rapor yalnız alan
   adıyla görünür.
+
+VELİ LİSTESİ (T5; tasarım §8.4, plan "F1b-5 uygulama kararları"): okulun doldurduğu iki sütunlu
+şablondan (`excel_veli`; .xlsx, .xls, .csv — pano yolu yoktur) `ParentRoster` satırları yazılır.
+
+- **Sınıf bazında yerine koyma** (tasarım §8.4 (1)): dosyadaki sınıflar önceki listenin AYNI
+  sınıflarının yerini alır; dosyada olmayan sınıflara dokunulmaz. Birlik dönemi F1c'de gelir; o
+  güne dek "önceki parti" bütün canlı listedir. Satırlar birleştirilmez: bir satır bir öğrencidir.
+- **Önizleme yalnız SAYI gösterir** (§8.4 (2)): satır ve sınıf sayısı, yerine geçecek her sınıfın
+  yeni ve eski satır sayısı, dokunulmayan sınıflar, aktarılamayan satırların numarası ve nedeni.
+  Raporda ad YOKTUR (API yanıtında da); hücre değeri de yoktur.
+- **Kaynak sıra tutulmaz** (§5.1 `ParentRoster`): satırlar sınıf ve çözülmüş ad sırasıyla yazılır.
+- **Denetim izi kişisiz parti satırıdır**: koşunun `OLUSTUR` ve `DURUM` satırları (tür `VELI`,
+  içerik özeti, durum); veli satırı başına iz yazılmaz (`models.ParentRoster`). Yerine geçen eski
+  satırların silinmesi aynı işlemde kişisiz `KVKK_SILME` satırıdır (tetik `AKTARIM`); "Veli
+  listesini sil" de öyledir (tetik `ELLE_SILME`). Erişim günlüğüne yazılmaz (karar).
 """
 
 from __future__ import annotations
 
 import hashlib
 import logging
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any
-from zipfile import BadZipFile
 
 from django.db import transaction
+from django.db.models import Max, QuerySet
 from django.utils import timezone
-from openpyxl.utils.exceptions import InvalidFileException
 
-from apps.okul import denetim_izi, eokul, excel_ortak, excel_personel, name_match, selectors
+from apps.okul import (
+    denetim_izi,
+    eokul,
+    excel_ortak,
+    excel_personel,
+    excel_veli,
+    name_match,
+    normalize,
+    selectors,
+)
 from apps.okul.excel_ortak import ParserError
 from apps.okul.excel_personel import ParsedPersonnelRow, PersonnelColumnMapping
+from apps.okul.excel_veli import ParentRowIssue, ParsedParentRow
 from apps.okul.models import (
     ImportRun,
     ImportSourceType,
     ImportStatus,
     MemberKind,
+    ParentRoster,
     Personnel,
 )
 from apps.okul.services import app_password, persons
@@ -77,10 +104,11 @@ from shared.crypto import has_corrupt
 
 logger = logging.getLogger("oab_defteri.okul")
 
-#: Önizlemede "üye türünü denetleyin" uyarısı (satır no ile; ad ve görev metni yok).
+#: Önizlemede "görev türünü denetleyin" uyarısı (satır no ile; ad ve görev metni yok): görev
+#: hücresi boş ya da şablonun görev türü tanınmadı.
 MEMBER_KIND_CHECK_MESSAGE = (
-    "Üye türünü denetleyin: görev bilgisi tanınmadı. Yeni kayıt öğretmen olarak "
-    "açılır; mevcut kaydın üye türü değişmez."
+    "Görev türünü denetleyin: görev bilgisi boş ya da tanınmadı. Yeni kayıt öğretmen olarak "
+    "açılır; mevcut kaydın görev türü değişmez."
 )
 #: Ad-soyadı boş personel satırı: kimlik anahtarı ad olduğu için havuza ekleme durur.
 PERSONNEL_UNIDENTIFIED_ROW_MESSAGE = (
@@ -219,15 +247,10 @@ def text_to_grid(text: str) -> list[list[Any]]:
     return [list(line.split("\t")) for line in normalized.split("\n")]
 
 
-def _grid_from_file(file_bytes: bytes) -> list[list[Any]]:
-    """Excel baytlarını matrise çevirir (.xlsx ve e-Okul'un .xls'i); okunamazsa ParserError."""
-    try:
-        return excel_ortak.read_sheet(file_bytes)
-    except (BadZipFile, InvalidFileException) as exc:
-        raise ParserError(
-            "Dosya Excel olarak okunamadı. Desteklenen biçimler: e-Okul ihracı (.xls) ve "
-            "uygulama şablonu (.xlsx). CSV ve PDF desteklenmez."
-        ) from exc
+def _grid_from_file(file_bytes: bytes, file_name: str = "") -> list[list[Any]]:
+    """Dosya baytlarını matrise çevirir (.xlsx, e-Okul'un .xls'i, .csv); makrolu ya da okunamayan
+    dosyada ParserError (`excel_ortak.dosyayi_oku`)."""
+    return excel_ortak.dosyayi_oku(file_bytes, file_name)
 
 
 def _parse_personnel_grid(
@@ -335,7 +358,7 @@ def _ingest_personnel(
     mapping, rows = _parse_personnel_grid(grid)
     report = PersonnelImportReport(file_hash=source_hash, file_name=file_name, total_rows=len(rows))
     run, already = _open_run(
-        source_type=ImportSourceType.PERSONNEL, source_hash=source_hash, file_name=file_name
+        source_type=ImportSourceType.PERSONEL, source_hash=source_hash, file_name=file_name
     )
     report.already_imported = already
     for header_warning in mapping.warnings:
@@ -424,7 +447,7 @@ def _process_personnel_row(row: ParsedPersonnelRow, kosu: _PersonnelRun) -> None
         person = Personnel.objects.create(
             first_name=row.first_name,
             last_name=row.last_name,
-            member_kind=row.member_kind or MemberKind.TEACHER,
+            member_kind=row.member_kind or MemberKind.OGRETMEN,
         )
         denetim_izi.degisiklik(person, onceki=None)
         kosu.created.append((row, person))
@@ -466,7 +489,10 @@ def _process_personnel_row(row: ParsedPersonnelRow, kosu: _PersonnelRun) -> None
 # ---------------------------------------------------------------------------
 def commit_personnel_file(*, file_bytes: bytes, file_name: str = "") -> PersonnelImportReport:
     return _personnel_entry(
-        lambda: _grid_from_file(file_bytes), file_hash(file_bytes), file_name, preview=False
+        lambda: _grid_from_file(file_bytes, file_name),
+        file_hash(file_bytes),
+        file_name,
+        preview=False,
     )
 
 
@@ -476,7 +502,10 @@ def commit_personnel_text(*, text: str) -> PersonnelImportReport:
 
 def preview_personnel_file(*, file_bytes: bytes, file_name: str = "") -> PersonnelImportReport:
     return _personnel_entry(
-        lambda: _grid_from_file(file_bytes), file_hash(file_bytes), file_name, preview=True
+        lambda: _grid_from_file(file_bytes, file_name),
+        file_hash(file_bytes),
+        file_name,
+        preview=True,
     )
 
 
@@ -503,7 +532,7 @@ def _personnel_entry(
             return _preview_personnel(grid=grid, source_hash=source_hash, file_name=file_name)
         report = _ingest_personnel(grid=grid, source_hash=source_hash, file_name=file_name)
     except ParserError as exc:
-        _record_failed(ImportSourceType.PERSONNEL, source_hash, file_name, exc)
+        _record_failed(ImportSourceType.PERSONEL, source_hash, file_name, exc)
         raise
     # Günlüğe yalnız sayılar (kişi adı yok — sözlük §5).
     logger.info(
@@ -529,7 +558,7 @@ def _preview_personnel(
     # Önizlemenin açtığı yeni kayıtlar geri alındı: kimlikleri anlamsızdır.
     for pair in report.similar_pairs:
         pair.new_id = None
-    _record_preview(ImportSourceType.PERSONNEL, report.file_hash, file_name, report.to_run_dict())
+    _record_preview(ImportSourceType.PERSONEL, report.file_hash, file_name, report.to_run_dict())
     return report
 
 
@@ -563,3 +592,192 @@ def _record_failed(source_type: str, source_hash: str, file_name: str, error: Ex
         report={"error": str(error)},
     )
     denetim_izi.degisiklik(run, onceki=None)
+
+
+# ---------------------------------------------------------------------------
+# Veli listesi (T5; tasarım §8.4) — sınıf bazında yerine koyma, önizlemede yalnız sayılar
+# ---------------------------------------------------------------------------
+@dataclass
+class ParentClassImpact:
+    """Dosyadaki bir sınıfın etkisi: yeni satır sayısı ve yerine geçen eski satır sayısı."""
+
+    student_class: str
+    rows: int
+    replaced_rows: int
+
+
+@dataclass
+class ParentImportReport:
+    """Veli listesi aktarımının raporu — YALNIZ SAYILAR (tasarım §8.4 (2)); ad ve hücre değeri yok.
+
+    API yanıtı ile kalıcı `ImportRun.report` aynıdır (`to_dict` = `to_run_dict`): sınıf adları
+    ("10-A") kişisel veri değildir, satır sorunları yalnız satır no ve neden taşır.
+    """
+
+    file_hash: str
+    file_name: str = ""
+    #: Dosyadaki dolu veri satırları (aktarılabilir + aktarılamayan).
+    total_rows: int = 0
+    #: Aktarılabilir (aktarılan) satırlar.
+    imported_rows: int = 0
+    #: Dosyadaki sınıf sayısı (yerine geçecek sınıflar).
+    class_count: int = 0
+    #: Dosyadaki sınıfların listeden silinen (silinecek) eski satırları.
+    replaced_rows: int = 0
+    #: Dosyada olmayan, dokunulmayan sınıflar ve satırları.
+    kept_class_count: int = 0
+    kept_rows: int = 0
+    already_imported: bool = False
+    dry_run: bool = False
+    classes: list[ParentClassImpact] = field(default_factory=list)
+    #: Aktarılamayan satırlar ve başlık uyarıları (satır no, alan kodu, neden).
+    issues: list[ParentRowIssue] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    def to_run_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def _veli_satirlarini_sil(silinecek: QuerySet[ParentRoster], *, tetik: str) -> int:
+    """Veli satırlarını katı siler ve aynı işlemde kişisiz `KVKK_SILME` satırını yazar.
+
+    Silinen sayı ve en yeni satırın günü (Europe/Istanbul) izdedir; ad ve sınıf yoktur (tasarım
+    §4.6.2 kural 4). Silinecek satır yoksa ne siler ne yazar. Çağıranın işlemindedir.
+    """
+    en_yeni = silinecek.aggregate(en_yeni=Max("created_at"))["en_yeni"]
+    if en_yeni is None:
+        return 0
+    adet, _ = silinecek.delete()
+    denetim_izi.kvkk_silme(
+        ParentRoster, adet=adet, en_yeni=timezone.localdate(en_yeni), tetik=tetik
+    )
+    return adet
+
+
+def delete_parent_roster() -> int:
+    """ "Veli listesini sil" (program yöneticisi; tasarım §5.4: genel kuruldan sonra elle de
+    silinebilir): BÜTÜN liste katı silinir, kişisiz `KVKK_SILME` satırı yazılır (tetik
+    `ELLE_SILME`; KVKK md. 4/2-ç, 7). Liste boşsa hiçbir şey yazılmaz. Dönem kapanışının silmesi
+    F4'tedir.
+
+    Silinen satır sayısını döndürür. Aktarım partilerinin `ImportRun` satırları kalır (yalnız
+    sayı taşırlar).
+    """
+    app_password.require_password_set()
+    with transaction.atomic():
+        adet = _veli_satirlarini_sil(
+            ParentRoster.objects.all(), tetik=denetim_izi.KVKK_TETIK_ELLE_SILME
+        )
+    # Günlüğe yalnız sayı (kişi adı yok — sözlük §5).
+    logger.info("Veli listesi silindi: %d satır.", adet)
+    return adet
+
+
+def _siniflari_yerine_koy(
+    run: ImportRun, sinifa_gore: dict[str, list[ParsedParentRow]]
+) -> dict[str, int]:
+    """Dosyadaki sınıfların eski satırlarını siler, yenilerini yazar → sınıf → eski satır sayısı.
+
+    Satırlar sınıf ve çözülmüş ad sırasıyla yazılır: kaynak dosyadaki sıra tutulmaz (tasarım
+    §5.1 `ParentRoster`). Kör indeks `save()`'te dolar: toplu yazım yoktur (`create`).
+    """
+    eski = ParentRoster.objects.filter(student_class__in=list(sinifa_gore))
+    eski_sayilari = Counter(eski.values_list("student_class", flat=True))
+    en_yeni = eski.aggregate(en_yeni=Max("created_at"))["en_yeni"]
+    if en_yeni is not None:
+        adet, _ = eski.delete()
+        denetim_izi.kvkk_silme(
+            ParentRoster,
+            adet=adet,
+            en_yeni=timezone.localdate(en_yeni),
+            tetik=denetim_izi.KVKK_TETIK_AKTARIM,
+        )
+    for sinif in sorted(sinifa_gore, key=excel_veli.sinif_sira_anahtari):
+        for row in sorted(sinifa_gore[sinif], key=lambda r: normalize.tr_sort_key(r.full_name)):
+            ParentRoster.objects.create(
+                import_run=run, full_name=row.full_name, student_class=sinif
+            )
+    return dict(eski_sayilari)
+
+
+@transaction.atomic
+def _ingest_parents(
+    *, grid: list[list[Any]], source_hash: str, file_name: str = ""
+) -> ParentImportReport:
+    """Veli listesini yazar: dosyadaki sınıflar yerine konur, ötekilere dokunulmaz (§8.4 (1)).
+
+    Denetim izi kişisiz parti satırıdır: koşunun açılışı (`OLUSTUR`) ve kapanışı (`DURUM`);
+    yerine geçen eski satırların silinmesi `KVKK_SILME` (tetik `AKTARIM`).
+    """
+    app_password.require_password_set()
+    mapping, rows, issues = excel_veli.parse_grid(grid)
+    report = ParentImportReport(file_hash=source_hash, file_name=file_name)
+    report.issues = [
+        *(ParentRowIssue(mapping.header_row + 1, "header", uyari) for uyari in mapping.warnings),
+        *issues,
+    ]
+    report.total_rows = len({r.row_number for r in rows} | {i.row_number for i in issues})
+    report.imported_rows = len(rows)
+    run, already = _open_run(
+        source_type=ImportSourceType.VELI, source_hash=source_hash, file_name=file_name
+    )
+    report.already_imported = already
+
+    sinifa_gore: dict[str, list[ParsedParentRow]] = {}
+    for row in rows:
+        sinifa_gore.setdefault(row.student_class, []).append(row)
+    eski_sayilari = _siniflari_yerine_koy(run, sinifa_gore)
+    report.classes = [
+        ParentClassImpact(sinif, len(sinifa_gore[sinif]), eski_sayilari.get(sinif, 0))
+        for sinif in sorted(sinifa_gore, key=excel_veli.sinif_sira_anahtari)
+    ]
+    report.class_count = len(report.classes)
+    report.replaced_rows = sum(eski_sayilari.values())
+    kalan = ParentRoster.objects.exclude(student_class__in=list(sinifa_gore))
+    report.kept_rows = kalan.count()
+    report.kept_class_count = kalan.values("student_class").distinct().count()
+
+    _close_run(run, report.to_run_dict())
+    return report
+
+
+def preview_parents_file(*, file_bytes: bytes, file_name: str = "") -> ParentImportReport:
+    return _parents_entry(file_bytes, file_name, preview=True)
+
+
+def commit_parents_file(*, file_bytes: bytes, file_name: str = "") -> ParentImportReport:
+    return _parents_entry(file_bytes, file_name, preview=False)
+
+
+def _parents_entry(file_bytes: bytes, file_name: str, *, preview: bool) -> ParentImportReport:
+    """Ortak giriş (personelinkiyle aynı sözleşme): ParserError'da kalıcı FAILED izi.
+
+    Önizleme gerçek yazımı atomic blokta koşar ve geri sarar (%100 parite), ardından kalıcı
+    PREVIEWED izini yazar (`_record_preview`).
+    """
+    source_hash = file_hash(file_bytes)
+    try:
+        grid = _grid_from_file(file_bytes, file_name)
+        if preview:
+            with transaction.atomic():
+                report = _ingest_parents(grid=grid, source_hash=source_hash, file_name=file_name)
+                transaction.set_rollback(True)
+            report.dry_run = True
+            _record_preview(ImportSourceType.VELI, source_hash, file_name, report.to_run_dict())
+            return report
+        report = _ingest_parents(grid=grid, source_hash=source_hash, file_name=file_name)
+    except ParserError as exc:
+        _record_failed(ImportSourceType.VELI, source_hash, file_name, exc)
+        raise
+    # Günlüğe yalnız sayılar (kişi adı yok — sözlük §5).
+    logger.info(
+        "Veli listesi aktarımı uygulandı: %d satır, %d sınıf; %d eski satırın yerine geçti, "
+        "%d satır aktarılamadı.",
+        report.imported_rows,
+        report.class_count,
+        report.replaced_rows,
+        report.total_rows - report.imported_rows,
+    )
+    return report

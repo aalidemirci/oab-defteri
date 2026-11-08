@@ -3,17 +3,20 @@
 // işaretle" (ayrılış yolu; kayıt silinmez) ve silme; altta e-Okul listesinden aktarım paneli
 // (önizle → mutabakat → aktar, AktarimPaneli). İkinci sekme "Ayrılış Havuzu" (genel tasarım
 // §5.1, §8.4): aktarım kimseyi ayırmaz, listede bulunmayan kişi orada karar bekler
-// (AyrilisHavuzu). KVKK: bugün TCKN, veli, cinsiyet, fotoğraf, unvan ve branş bu ekranda HİÇ
-// YOKTUR — sicil ad-soyad ve üye türüyle yürür. OAB'nin işleme envanteri genel tasarım
-// §3.4'tedir (veli adı ve öğrencinin sınıfı T5 ile okulun şablonundan gelir). Öğrenciler
-// sekmesi F1b 5. adımda öğrenci sicili ve aktarımıyla söküldü (tasarım §5.1 ALMA). Sekme
-// URL'de tutulur (`?tab=personel`, `?tab=havuz`): başka ekranlar doğrudan o sekmeye bağlanır.
+// (AyrilisHavuzu). Üçüncü sekme "Veli Listesi" (T5; genel tasarım §5.1 `ParentRoster`, §8.4):
+// okulun şablonundan aktarılan liste, ekranda yalnız sınıf başına sayı (VeliListesi). KVKK: TCKN,
+// cinsiyet, fotoğraf, unvan ve branş bu ekranda HİÇ YOKTUR — sicil ad-soyad ve görev türüyle,
+// veli listesi veli adı ve öğrencinin sınıfıyla yürür (işleme envanteri genel tasarım §3.4).
+// Öğrenciler sekmesi F1b 5. adımda öğrenci sicili ve aktarımıyla söküldü (tasarım §5.1 ALMA).
+// Sekme URL'de tutulur (`?tab=personel`, `?tab=havuz`, `?tab=veli`): başka ekranlar doğrudan o
+// sekmeye bağlanır.
 // Aile iskeletinin kütüphane üyelik sekmeleri ve "Bakanlık sistemi" hatırlatması
 // F1a-2'de söküldü.
 //
 // Rol süzmesi (plan F1b-2 "Bugünkü uçların eşlemi" → Kişiler; kaynak `oturum/yetki`): personeli
-// her rol okur. Ayrılış Havuzu sekmesi yalnız `ayrilis_havuzu`'nda görünür; adresle gelinirse
-// rolün ilk sekmesi açılır. Personel sekmesinde "Kişi ekle" ve satırdan
+// her rol okur. Ayrılış Havuzu sekmesi yalnız `ayrilis_havuzu`'nda, Veli Listesi sekmesi yalnız
+// `veli_listesi`'nde (kişisel veri satırı; program yöneticisi) görünür; adresle gelinirse rolün
+// ilk sekmesi açılır. Personel sekmesinde "Kişi ekle" ve satırdan
 // düzenleme (ayrılış, silme dahil) `kisi_yazma`'ya, e-Okul aktarım paneli (şablon dahil)
 // `eokul_aktarimi`'na, "Birleştir" düğmeleri (aktarım raporu ve havuz) `kisi_yazma`'ya bağlıdır.
 // Yazamayan rolde liste salt okurdur (başta `SaltOkurNotu`, satır tıklanmaz). Özet yüklenirken
@@ -48,6 +51,7 @@ import { useYetki } from "../oturum/yetki";
 import type { MemberKind, Personnel, PersonnelWriteBody } from "../okul/api";
 import AktarimPaneli from "./AktarimPaneli";
 import AyrilisHavuzu from "./AyrilisHavuzu";
+import { GOREV_TURU_ETIKETI, GOREV_TURU_YARDIMI, VELI_LISTESI_SEKMESI } from "./metinler";
 import {
   DurumRozeti,
   ErrorBand,
@@ -58,33 +62,37 @@ import {
   okunamadiMi,
 } from "./ortak";
 import type { SayfaHatasi } from "./ortak";
+import VeliListesi from "./VeliListesi";
 
 /** Sayfa başına kayıt (liste uçları limit/offset ile sayfalanır, varsayılan 25). */
 const PAGE_SIZE = 25;
 
 // TAB_KEYS[0] varsayılan sekmedir (useTabParam fallback) — başa yeni anahtar EKLEME.
-const TAB_KEYS = ["personel", "havuz"] as const;
+const TAB_KEYS = ["personel", "havuz", "veli"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
-// Sözlük: "personel" tek başına öğretmen anlamında kullanılmaz; üye türleri
-// "öğretmen" ve "diğer personel"dir. Sekme ikisini birden taşır.
+// Sözlük: "personel" tek başına öğretmen anlamında kullanılmaz; görev türleri
+// "öğretmen", "yönetici" ve "diğer personel"dir. Sekme hepsini taşır.
 const TABS: TabItem[] = [
   { key: "personel", label: "Öğretmenler ve Diğer Personel", icon: "badge" },
   { key: "havuz", label: "Ayrılış Havuzu", icon: "pending_actions" },
+  { key: "veli", label: VELI_LISTESI_SEKMESI, icon: "family_restroom" },
 ];
 
 /** Sekmenin yeteneği (verilmeyen sekme her role açık; dosya başı "Rol süzmesi"). */
 const SEKME_YETENEGI: Partial<Record<TabKey, YetenekAdi>> = {
   havuz: "ayrilis_havuzu",
+  veli: "veli_listesi",
 };
 
 /** Sayfanın açıklaması: yazabilen rolde ve salt okur rolde (sözlük §4.1). */
 export const KISILER_ACIKLAMASI =
-  "Öğretmen ve diğer personel sicili. Kayıtlar e-Okul listesinden toplu aktarılabilir " +
-  "ya da tek tek girilebilir. Aktarım kimseyi ayırmaz: listede bulunmayanlar Ayrılış Havuzu'nda " +
-  "karar bekler. TCKN, veli bilgisi, unvan ve branş bu programda tutulmaz.";
+  "Öğretmen ve diğer personel sicili ve veli listesi. Personel e-Okul listesinden toplu " +
+  "aktarılabilir ya da tek tek girilebilir. Aktarım kimseyi ayırmaz: listede bulunmayanlar " +
+  "Ayrılış Havuzu'nda karar bekler. Veliden yalnız adı-soyadı ve öğrencinin sınıfı alınır; " +
+  "TCKN, unvan ve branş bu programda tutulmaz.";
 export const KISILER_SALT_OKUR_ACIKLAMASI =
-  "Öğretmen ve diğer personel sicili. TCKN, veli bilgisi, unvan ve branş bu programda tutulmaz.";
+  "Öğretmen ve diğer personel sicili. TCKN, unvan ve branş bu programda tutulmaz.";
 
 /** Ayrılış onayının ortak sonucu cümlesi (ayrılış yolu kaydı silmez). */
 const AYRILIS_SONUCU = "Kaydı silinmez; sicilde “Ayrıldı · gg.aa.yyyy” rozetiyle kalır.";
@@ -137,6 +145,7 @@ export default function KisilerPage() {
               />
             )}
             {active === "havuz" && <AyrilisHavuzu birlestirebilir={birlestirebilir} />}
+            {active === "veli" && <VeliListesi />}
           </div>
         </>
       )}
@@ -200,7 +209,7 @@ function PersonelSekmesi({
 
   const columns: Column<Personnel>[] = [
     { header: "Ad soyad", cell: (p) => <KisiAdi kayit={p} /> },
-    { header: "Üye türü", cell: (p) => MEMBER_KIND_TR[p.member_kind] },
+    { header: GOREV_TURU_ETIKETI, cell: (p) => MEMBER_KIND_TR[p.member_kind] },
     {
       header: "Durum",
       cell: (p) => (
@@ -319,7 +328,7 @@ function PersonelFormDialog({
 }) {
   const [firstName, setFirstName] = useState(personnel?.first_name ?? "");
   const [lastName, setLastName] = useState(personnel?.last_name ?? "");
-  const [memberKind, setMemberKind] = useState<MemberKind>(personnel?.member_kind ?? "TEACHER");
+  const [memberKind, setMemberKind] = useState<MemberKind>(personnel?.member_kind ?? "OGRETMEN");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<SayfaHatasi | null>(null);
   const { errors, setFieldError, clearErrors, applyApiError } = useFormErrors();
@@ -450,12 +459,12 @@ function PersonelFormDialog({
           helperText={soyadBozuk ? OKUNAMAYAN_AD_YARDIMI : undefined}
         />
         <Select
-          label="Üye türü"
+          label={GOREV_TURU_ETIKETI}
           value={memberKind}
           onChange={(e) => setMemberKind(e.target.value as MemberKind)}
           options={MEMBER_KIND_OPTIONS}
           error={errors.member_kind}
-          helperText="Unvan ve branş tutulmaz."
+          helperText={GOREV_TURU_YARDIMI}
         />
       </div>
     </Dialog>

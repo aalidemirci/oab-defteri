@@ -16,8 +16,9 @@ BÜTÜN desenlerini dolaşır:
 Savunma derinliği: izin sınıfı unutulsa bile şifreli alan anahtarsız yazmaz
 (`KeyMissingError` → yine 409; `shared/tests/test_exceptions.py`).
 
-Öğrenci uçları F1b 5. adımda söküldü (tasarım §5.1 ALMA); kapı personel uçlarıyla sınanır,
-veli listesi uçları gelince bu listeye girer (plan "F1b-5 uygulama kararları").
+Öğrenci uçları F1b 5. adımda söküldü (tasarım §5.1 ALMA); kapı personel ve veli listesi
+uçlarıyla sınanır (plan "F1b-5 uygulama kararları": kapı testleri öğrenci yerine veli listesi ve
+personel üzerinden).
 """
 
 from __future__ import annotations
@@ -30,7 +31,7 @@ import pytest
 from django.urls import URLPattern, URLResolver, get_resolver, reverse
 from rest_framework.test import APIClient
 
-from apps.okul.models import Personnel
+from apps.okul.models import ParentRoster, Personnel
 from apps.okul.permissions import RequiresAdminPassword
 
 # Kişi (personel) yazan uçlar — izin sınıfını taşımalıdır.
@@ -44,6 +45,10 @@ KISI_YAZAN_UCLAR = frozenset(
         "import-personnel-preview",
         "import-personnel-commit",
         "leave-pool-resolve",
+        # Veli listesi (T5): aktarım (önizleme ve uygulama) ve "Veli listesini sil".
+        "parent-roster",
+        "import-parents-preview",
+        "import-parents-commit",
     }
 )
 
@@ -117,6 +122,8 @@ DIGER_UCLAR = frozenset(
         "setup-school-config",
         "setup-status",
         "template-personnel",
+        # Veli listesi şablonu: boş şablon dosyası, kişi okumaz ve yazmaz.
+        "template-parents",
         "update-installer",
         "update-latest",
     }
@@ -202,11 +209,13 @@ def test_parolasizken_kisi_yazan_her_uc_yazma_yontemiyle_409_doner(parolasiz: Pa
             assert yanit.json() == PAROLA_GEREKLI_GOVDESI, (ad, yontem)
             denenen += 1
     # 1 liste (POST) + 1 ayrıntı (PUT/PATCH/DELETE) + 2 içe aktarma (POST)
-    # + 1 ayrılış (POST) + 1 birleştirme (POST) + 1 havuz kararı (POST).
+    # + 1 ayrılış (POST) + 1 birleştirme (POST) + 1 havuz kararı (POST)
+    # + veli listesi: silme (DELETE) ve 2 aktarım (POST).
     # Aile iskeletinin kütüphane uçları (üyelik, kart basımı, dolaşım masası,
     # teslim, saklama tetiği) F1a-2'de, öğrenci uçları F1b 5. adımda söküldü.
-    assert denenen == 1 + 1 * 3 + 2 + 1 + 1 + 1
+    assert denenen == 1 + 1 * 3 + 2 + 1 + 1 + 1 + 1 + 2
     assert not Personnel.all_objects.exists()
+    assert not ParentRoster.objects.exists()
 
 
 @pytest.mark.django_db
@@ -214,6 +223,7 @@ def test_parolasizken_okuma_acik(parolasiz: Path) -> None:
     client = APIClient()
     assert client.get("/api/v1/personnel/").status_code == 200
     assert client.get("/api/v1/leave-pool/").status_code == 200
+    assert client.get("/api/v1/parent-roster/").status_code == 200
 
 
 @pytest.mark.django_db
@@ -221,7 +231,7 @@ def test_parola_kuruluyken_kisi_yazilir() -> None:
     """Varsayılan ortam (parola kurulu + kilit açık): izin sınıfı geçirir."""
     yanit = APIClient().post(
         "/api/v1/personnel/",
-        {"first_name": "DENEME", "last_name": "ÖĞRETMEN", "member_kind": "STAFF"},
+        {"first_name": "DENEME", "last_name": "ÖĞRETMEN", "member_kind": "DIGER"},
         format="json",
     )
     assert yanit.status_code == 201, yanit.json()

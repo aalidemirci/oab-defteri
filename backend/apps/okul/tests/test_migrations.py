@@ -10,7 +10,8 @@ alanlarını taşıyordu). Buradaki testler iki
 - Ağaç tek yapraklıdır (iki dal aynı anda göç eklerse `migrate` çakışma verir).
 
 Veri dönüştüren ve tablo düşüren göçlerin testleri de buradadır (0013: `kademe` → `levels`;
-0014: öğrenci sicili, şube kataloğu ve hazırlık bayrağı düşer). Bu testler
+0014: öğrenci sicili, şube kataloğu ve hazırlık bayrağı düşer; 0015: görev ve aktarım türlerinin
+değerleri çevrilir; 0016: veli listesi ve veri sorumlusu alanı kurulur). Bu testler
 veritabanını eski göçe geri alıp yeniden ilerletir (`transaction=True`); sonunda en son göçe
 döner.
 """
@@ -23,7 +24,7 @@ from typing import Any
 
 import pytest
 from django.core.management import call_command
-from django.db import connection
+from django.db import IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.loader import MigrationLoader
 
@@ -191,3 +192,121 @@ def test_0014_geri_alininca_tablolar_bos_kurulur() -> None:
     assert "has_prep_class" in _okul_karti_sutunlari()
     assert not eski.get_model("okul", "Student").objects.exists()
     assert not eski.get_model("okul", "ClassSection").objects.exists()
+
+
+# ---------------------------------------------------------------------------
+# 0015 — görev türü üçlü (OGRETMEN · YONETICI · DIGER), aktarım türü PERSONEL · VELI (F1b 5. adım)
+# ---------------------------------------------------------------------------
+_ONCE_0015 = [("okul", "0014_ogrenci_ve_sube_sokumu")]
+_SONRA_0015 = [("okul", "0015_gorev_turu_ve_aktarim_turu")]
+
+
+def _kosu(apps: Any, tur: str, ozet: str) -> Any:
+    return apps.get_model("okul", "ImportRun").objects.create(
+        source_type=tur, file_hash=ozet * 64, status="COMPLETED"
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.hesapsiz
+@pytest.mark.usefixtures("goc_sonda_biter")
+def test_0015_gorev_ve_aktarim_turlerini_cevirir_eski_ogrenci_kosusuna_dokunmaz() -> None:
+    eski = _goc(_ONCE_0015)
+    # Ad ve soyad boş: şifreli alan boş dizeyi şifrelemez (uydurma bile kişi verisi yazılmaz).
+    personel = eski.get_model("okul", "Personnel")
+    ogretmen = personel.objects.create(member_kind="TEACHER")
+    diger = personel.objects.create(member_kind="STAFF")
+    personel_kosusu = _kosu(eski, "PERSONNEL", "a")
+    ogrenci_kosusu = _kosu(eski, "STUDENTS", "b")
+
+    yeni = _goc(_SONRA_0015)
+
+    turler = dict(yeni.get_model("okul", "Personnel").objects.values_list("pk", "member_kind"))
+    assert turler == {ogretmen.pk: "OGRETMEN", diger.pk: "DIGER"}
+    kosular = dict(yeni.get_model("okul", "ImportRun").objects.values_list("pk", "source_type"))
+    # Eski öğrenci koşusu çevrilmez: içerik MAC'i değişmesin (models.ImportSourceType).
+    assert kosular == {personel_kosusu.pk: "PERSONEL", ogrenci_kosusu.pk: "STUDENTS"}
+    with pytest.raises(IntegrityError), transaction.atomic():
+        yeni.get_model("okul", "Personnel").objects.create(member_kind="TEACHER")
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.hesapsiz
+@pytest.mark.usefixtures("goc_sonda_biter")
+def test_0015_geri_alininca_yonetici_ogretmen_olur() -> None:
+    yeni = _goc(_SONRA_0015)
+    personel = yeni.get_model("okul", "Personnel")
+    kayitlar = {
+        tur: personel.objects.create(member_kind=tur).pk
+        for tur in ("OGRETMEN", "YONETICI", "DIGER")
+    }
+    personel_kosusu = _kosu(yeni, "PERSONEL", "c")
+    veli_kosusu = _kosu(yeni, "VELI", "d")
+
+    eski = _goc(_ONCE_0015)
+
+    turler = dict(eski.get_model("okul", "Personnel").objects.values_list("pk", "member_kind"))
+    assert turler == {
+        kayitlar["OGRETMEN"]: "TEACHER",
+        kayitlar["YONETICI"]: "TEACHER",  # eski kümede yönetici yoktu
+        kayitlar["DIGER"]: "STAFF",
+    }
+    kosular = dict(eski.get_model("okul", "ImportRun").objects.values_list("pk", "source_type"))
+    assert kosular == {personel_kosusu.pk: "PERSONNEL", veli_kosusu.pk: "VELI"}
+
+
+# ---------------------------------------------------------------------------
+# 0016 — veli listesi (`ParentRoster`) ve okul kartının veri sorumlusu alanı (F1b 5. adım)
+# ---------------------------------------------------------------------------
+_ONCE_0016 = [("okul", "0015_gorev_turu_ve_aktarim_turu")]
+_SONRA_0016 = [("okul", "0016_veli_listesi_ve_veri_sorumlusu")]
+
+
+def _veli_sutunlari() -> set[str]:
+    with connection.cursor() as cursor:
+        return {
+            s.name
+            for s in connection.introspection.get_table_description(cursor, "okul_parentroster")
+        }
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.hesapsiz
+@pytest.mark.usefixtures("goc_sonda_biter")
+def test_0016_veli_listesini_iki_veri_alaniyla_kurar_ve_veri_sorumlusu_bos_baslar() -> None:
+    eski = _goc(_ONCE_0016)
+    eski.get_model("okul", "SchoolConfig").objects.update_or_create(
+        pk=1, defaults={"school_name": "Örnek Ortaokulu"}
+    )
+    assert "okul_parentroster" not in _tablolar()
+
+    yeni = _goc(_SONRA_0016)
+
+    assert "okul_parentroster" in _tablolar()
+    # Tasarım §14 F1b kapısı "veli listesi yalnız iki alan taşır": ad (ve kör indeksi) ile sınıf;
+    # birlik dönemi ve katılım işaretleri F1c ve F2'de gelir.
+    assert _veli_sutunlari() == {
+        "id",
+        "import_run_id",
+        "full_name",
+        "name_index",
+        "student_class",
+        "created_at",
+    }
+    assert "data_controller_text" in _okul_karti_sutunlari()
+    assert yeni.get_model("okul", "SchoolConfig").objects.get(pk=1).data_controller_text == ""
+    kosu = _kosu(yeni, "VELI", "e")
+    with pytest.raises(IntegrityError), transaction.atomic():
+        yeni.get_model("okul", "ParentRoster").objects.create(import_run=kosu, student_class="")
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.hesapsiz
+@pytest.mark.usefixtures("goc_sonda_biter")
+def test_0016_geri_alininca_tablo_ve_sutun_duser() -> None:
+    _goc(_SONRA_0016)
+
+    _goc(_ONCE_0016)
+
+    assert "okul_parentroster" not in _tablolar()
+    assert "data_controller_text" not in _okul_karti_sutunlari()

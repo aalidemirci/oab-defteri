@@ -42,6 +42,8 @@ export interface OkulFormu {
   acilis: string;
   demirbasOnayi: boolean;
   demirbasNo: string;
+  /** Veri sorumlusu (isteğe bağlı serbest metin; aydınlatma metninde görünür). */
+  veriSorumlusu: string;
 }
 
 /** Kademeler `SchoolLevel` sırasıyla (backend sırası); tekrar ve tanınmayan değer atılır. */
@@ -69,6 +71,7 @@ export function bosOkulFormu(): OkulFormu {
     acilis: "",
     demirbasOnayi: false,
     demirbasNo: "",
+    veriSorumlusu: "",
   };
 }
 
@@ -90,6 +93,7 @@ export function kayittanForma(c: SchoolConfig): OkulFormu {
     acilis: c.opened_on ?? "",
     demirbasOnayi: c.demirbas_onayi,
     demirbasNo: c.demirbas_no,
+    veriSorumlusu: c.data_controller_text,
   };
 }
 
@@ -125,6 +129,7 @@ export function formdanGovdeye(f: OkulFormu): SchoolConfigBody {
     opened_on: f.acilis || null,
     demirbas_onayi: f.demirbasOnayi,
     demirbas_no: f.demirbasNo.trim(),
+    data_controller_text: f.veriSorumlusu.trim(),
   };
 }
 

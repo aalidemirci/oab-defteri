@@ -15,18 +15,22 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-from django.db.models import QuerySet
+from django.db.models import Count, Max, QuerySet
 from django.utils import timezone
 
-from apps.okul import name_match, normalize
+from apps.okul import excel_veli, name_match, normalize
 from apps.okul.excel_ortak import normalize_header
 from apps.okul.models import (
     Holiday,
     HolidayKind,
     ImportRun,
+    ImportSourceType,
+    ImportStatus,
+    ParentRoster,
     Personnel,
     SchoolTerm,
     SchoolYear,
+    parent_name_blind_index,
 )
 from shared.crypto import has_corrupt
 
@@ -228,3 +232,51 @@ def school_break_count(*, start: date | str | None, end: date | str | None) -> i
     return Holiday.objects.filter(
         kind=HolidayKind.SCHOOL_BREAK, start_date__lte=bitis, end_date__gte=baslangic
     ).count()
+
+
+# ---------------------------------------------------------------------------
+# Veli listesi (T5; tasarım §5.1 `ParentRoster`, §8.4) — ekranda yalnız SAYI
+# ---------------------------------------------------------------------------
+def parent_roster_summary() -> dict[str, Any]:
+    """Veli listesinin özeti: sınıf başına satır sayısı, toplamlar, son aktarımın anı.
+
+    AD YOKTUR (tasarım §8.4 (2); veli adı taşıyan çıktılar F2'de, yalnız program yöneticisi):
+    sayım sınıf sütunundan yapılır, şifreli ad çözülmez (kilitliyken de anahtar gerekmez).
+    """
+    sayilar = dict(
+        ParentRoster.objects.order_by()
+        .values("student_class")
+        .annotate(adet=Count("pk"))
+        .values_list("student_class", "adet")
+    )
+    son = (
+        ImportRun.objects.filter(
+            source_type=ImportSourceType.VELI, status=ImportStatus.COMPLETED
+        ).aggregate(son=Max("finished_at"))["son"]
+        if sayilar
+        else None
+    )
+    return {
+        "total_rows": sum(sayilar.values()),
+        "class_count": len(sayilar),
+        "last_import_at": son,
+        "classes": [
+            {"student_class": sinif, "rows": sayilar[sinif]}
+            for sinif in sorted(sayilar, key=excel_veli.sinif_sira_anahtari)
+        ],
+    }
+
+
+def parent_roster_by_name(full_name: str) -> QuerySet[ParentRoster]:
+    """Adı verilen velinin satırları — KÖR İNDEKSLE tam eşleşme (tasarım §5.3).
+
+    Ad şifreli olduğu için DB filtresi ad sütununda çalışmaz; yazımdaki katlamayla aynı yoldan
+    (`models.parent_name_blind_index`) hesaplanan indeks aranır: büyük-küçük harf, Türkçe harf ve
+    fazla boşluk farkı eşleşmeyi bozmaz. Boş ad hiçbir satır bulmaz. Adaydan kişi kaydına geçiş
+    ve yeniden aktarımda aynı velinin bulunması bunu kullanır (F1c). Anahtar bellekte değilse
+    `KeyMissingError`.
+    """
+    indeks = parent_name_blind_index(full_name)
+    if not indeks:
+        return ParentRoster.objects.none()
+    return ParentRoster.objects.filter(name_index=indeks)

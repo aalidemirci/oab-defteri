@@ -7,13 +7,21 @@
 // Havuzu'nda verilir. Önizleme "N kişi ayrılış havuzuna eklenecek, M kişi havuzdan
 // çıkacak" der; ayrılış olmadığı için aktarım ayrıca onay istemez. Öğrenci aktarımı (şube
 // kapsamı, "Bu dosya okulun tam listesidir" onayı, şube bazında etki tablosu) F1b 5. adımda
-// öğrenci sicili ile söküldü (tasarım §5.1 ALMA); veli listesi sonraki alt adımda gelir.
+// öğrenci sicili ile söküldü (tasarım §5.1 ALMA); veli listesinin aktarımı ayrı paneldedir
+// (`VeliListesi`: yalnız dosya, yalnız sayılar, sınıf bazında yerine koyma).
+//
+// Aydınlatma (KVKK md. 10/1; plan "F1b-5 uygulama kararları"): personelin aydınlatma metni
+// aktarımdan önce, dosya seçiminin üstünde görünür (`AydinlatmaMetni`).
 //
 // Personel: listede olmayanlar havuza eklenir (eski "ayrıldı sayılsın mı?" seçimi
 // kalktı); "olası aynı kişi" çiftleri gösterilir, aktarımdan sonra onaylı "Birleştir"
 // ile eski kayıt yeni kayda katılır (Ayrılış Havuzu'ndan da yapılabilir). Görev
-// sütunu yalnız üye türü için okunur; tanınmayan satırlar "Üye türünü denetleyin"
-// uyarısı alır.
+// sütunu yalnız görev türü için okunur; görev hücresi boş (ya da şablondaki görev türü
+// tanınmayan) satırlar "Görev türünü denetleyin" uyarısı alır.
+//
+// Dosya biçimleri (genel tasarım §8.1 A4, TK18): e-Okul .xls, şablon .xlsx ve .csv; makro içeren
+// dosyayı sunucu okumadan reddeder (ileti sunucudan gelir). Seçim penceresinin süzgeci `accept`
+// listesidir (WebView'ın kendi penceresi; masaüstünde ayrı bir Aç penceresi yoktur).
 //
 // Rol (plan F1b-2): panelin kendisi `eokul_aktarimi` yeteneğinde çizilir (Kişiler verir);
 // "Birleştir" düğmeleri ayrıca `kisi_yazma`'ya bağlıdır (`birlestirebilir`; personel
@@ -52,19 +60,31 @@ import type {
   PersonnelImportReport,
   SimilarPair,
 } from "../okul/api";
+import { DOSYA_ALANI_ETIKETI, PERSONEL_AKTARIM_ACIKLAMASI } from "./metinler";
 import { ErrorBand, HAVUZ_ADRESI, hataOku } from "./ortak";
 import type { SayfaHatasi } from "./ortak";
+import AydinlatmaMetni from "./AydinlatmaMetni";
 
-/** Aktarımın türü — bugün yalnız personel (veli listesi sonraki alt adımda eklenir). */
+/** Aktarımın türü — bu panelde yalnız personel (veli listesinin paneli `VeliListesi`'dir). */
 export type ImportKind = "personnel";
 
 const IMPORT_LABEL: Record<ImportKind, { title: string; hint: string; template: string }> = {
   personnel: {
     title: "e-Okul Raporundan veya Şablondan Öğretmen ve Diğer Personeli Aktar",
-    hint: "e-Okul Kurum İşlemleri → Raporlar → OOK01001R1 — Personel Listesi raporunu Excel olarak indirip DEĞİŞTİRMEDEN yükleyin. Ad-soyad okunur; görev sütunu yalnız üye türünü (öğretmen ya da diğer personel) belirlemek için kullanılır ve saklanmaz, branş okunmaz; sayaç dipnotu atlanır. Alternatif olarak uygulama şablonu doldurulabilir ya da tablo panoya yapıştırılabilir.",
+    hint: PERSONEL_AKTARIM_ACIKLAMASI,
     template: PERSONNEL_TEMPLATE_FILENAME,
   },
 };
+
+/** Dosya seçiminin süzgeci: e-Okul .xls, şablon .xlsx, .csv (tasarım §8.1 A4). */
+export const KABUL_EDILEN_DOSYALAR = [
+  ".xls",
+  ".xlsx",
+  ".csv",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/csv",
+].join(",");
 
 /** Havuzun ne olduğu — önizleme ve sonuçta aynı cümle. */
 const HAVUZ_ACIKLAMASI =
@@ -75,11 +95,11 @@ const ALAN_ADI: Record<string, string> = {
   header: "Başlık",
   leave_pool: "Ayrılış havuzu",
   full_name: "Ad-soyad",
-  member_kind: "Üye türü",
+  member_kind: "Görev türü",
 };
 
 /** Sınırı aşan dosyanın iletisi; dosya sınırdaysa ya da sınır bilinmiyorsa null. */
-function boyHatasi(dosya: File | null, sinirMb: number | null): SayfaHatasi | null {
+export function boyHatasi(dosya: File | null, sinirMb: number | null): SayfaHatasi | null {
   if (dosya === null || sinirMb === null || dosya.size <= sinirMb * 1024 * 1024) return null;
   return { message: `Dosya çok büyük; en çok ${sinirMb} MB olabilir.`, parolaGerekli: false };
 }
@@ -205,9 +225,11 @@ export default function AktarimPaneli({
         </Button>
       </div>
 
+      <AydinlatmaMetni tur="personel" />
+
       <div>
         <label htmlFor={fileId} className="mb-1 block text-label-large text-on-surface-variant">
-          Dosya (e-Okul .xls veya şablon .xlsx)
+          {DOSYA_ALANI_ETIKETI}
         </label>
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -216,8 +238,9 @@ export default function AktarimPaneli({
             type="file"
             /* e-Okul ihraçları BÜYÜK harfli .XLS uzantısıyla iner; tarayıcı
                accept eşleşmesi büyük/küçük harfe duyarsızdır ama MIME tipini
-               tanımayan Windows kurulumları için uzantı listesi de verilir. */
-            accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+               tanımayan Windows kurulumları için uzantı listesi de verilir. Makrolu
+               biçimler (.xlsm…) listede yoktur; elle seçilirse sunucu reddeder. */
+            accept={KABUL_EDILEN_DOSYALAR}
             onChange={(e) => {
               const secilen = e.target.files?.[0] ?? null;
               setFile(secilen);
@@ -400,9 +423,9 @@ function PersonelMutabakati({
         <div className="flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-4 py-3 text-body-medium text-on-tertiary-container">
           <Icon name="warning" size="lg" />
           <span>
-            {formatNumber(turUyarisi)} satırda üye türünü denetleyin: görev bilgisi tanınmadı. Yeni
-            kayıtlar öğretmen olarak açılır; gerekirse kişiyi düzenleyip “Diğer personel” seçin.
-            Satır numaraları aşağıdaki uyarılar tablosundadır.
+            {formatNumber(turUyarisi)} satırda görev türünü denetleyin: görev bilgisi boş ya da
+            tanınmadı. Yeni kayıtlar öğretmen olarak açılır; gerekirse kişiyi düzenleyip doğru görev
+            türünü seçin. Satır numaraları aşağıdaki uyarılar tablosundadır.
           </span>
         </div>
       )}

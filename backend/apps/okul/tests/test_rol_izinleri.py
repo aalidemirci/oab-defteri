@@ -375,6 +375,9 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     "import-personnel-preview": {"POST": "Y"},
     "leave-pool": {"GET": "Y", "HEAD": "Y"},
     "leave-pool-resolve": {"POST": "Y"},
+    "import-parents-commit": {"POST": "Y"},
+    "import-parents-preview": {"POST": "Y"},
+    "parent-roster": {"DELETE": "Y", "GET": "Y", "HEAD": "Y"},
     "personnel-detail": {"DELETE": "Y", "GET": "H", "HEAD": "H", "PATCH": "Y", "PUT": "Y"},
     "personnel-leave": {"POST": "Y"},
     "personnel-list": {"GET": "H", "HEAD": "H", "POST": "Y"},
@@ -404,6 +407,7 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     "setup-roadmap": {"POST": "Y"},
     "setup-school-config": {"GET": "H", "HEAD": "H", "PUT": "Y"},
     "setup-status": {"GET": "H", "HEAD": "H"},
+    "template-parents": {"GET": "Y", "HEAD": "Y"},
     "template-personnel": {"GET": "Y", "HEAD": "Y"},
     "update-installer": {"GET": "Y", "HEAD": "Y"},
     "update-latest": {"GET": "Y", "HEAD": "Y"},
@@ -433,7 +437,6 @@ BEKLEYEN_HUCRE_GORUNTUSU: dict[str, dict[str, set[str]]] = {
     "F2": {
         "M3": {*Y_YK, "mudur"},
         "M10": set(Y_YK),
-        "KISISEL_VERI": {"yonetici"},
     },
     "F3": {"M4": set(Y_YK), "M5": {"muhasip"}},
     "F4": {
@@ -490,6 +493,7 @@ def test_etkin_hucreler_bekleyende_olmayan_y_hucreleridir() -> None:
         "KULLANICILAR",
         "GUVENLIK",
         "AYARLAR",
+        "KISISEL_VERI",
         "GUNCELLEME",
         "KENDI",
     ]
@@ -700,6 +704,7 @@ def test_yetenek_adlari_ve_rollerin_yetenekleri_anlik_goruntusu() -> None:
         "kurulum_tamamlama",
         "okul_karti_yazma",
         "son_oturum_onay",
+        "veli_listesi",
         "yol_haritasi",
     ]
     # "Gördüm" yalnız Denetleme Kurulunundur; program yöneticisi kartı görür, kaldıramaz.

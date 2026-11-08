@@ -399,6 +399,7 @@ class TestSchoolConfigApi:
             "opened_on": None,
             "demirbas_onayi": True,
             "demirbas_no": "BLG-2026-017",
+            "data_controller_text": "",
             "setup_completed": False,
         }
         assert setup_service.missing_school_fields(SchoolConfig.load()) == []
@@ -470,6 +471,43 @@ class TestSchoolConfigApi:
         assert yanit.status_code == 200
         assert yanit.json()["opened_on"] is None
         assert SchoolConfig.load().opened_on is None
+
+    def test_veri_sorumlusu_yazilir_kirpilir_ve_bosaltilabilir(self, client: APIClient) -> None:
+        """Veri sorumlusu isteğe bağlı serbest metindir (F1b 5. adım; E04, KVKK md. 10/1-a)."""
+        metin = "Örnek Anadolu Lisesi Müdürlüğü, Örnek Mah. Örnek Sok. No: 1, Örnek İlçe"
+        client.put(URL, okul_karti_govdesi(), format="json")
+        yanit = client.put(URL, {"data_controller_text": f"  {metin} "}, format="json")
+        assert yanit.status_code == 200, yanit.json()
+        assert yanit.json()["data_controller_text"] == metin
+        assert SchoolConfig.load().data_controller_text == metin
+        # Kurulumun zorunlu alanı değildir: boşaltılır, eksik alan sayılmaz.
+        yanit = client.put(URL, {"data_controller_text": ""}, format="json")
+        assert yanit.status_code == 200
+        assert SchoolConfig.load().data_controller_text == ""
+        assert setup_service.missing_school_fields(SchoolConfig.load()) == []
+
+    def test_veri_sorumlusu_ust_siniri(self, client: APIClient) -> None:
+        yanit = client.put(URL, {"data_controller_text": "x" * 501}, format="json")
+        assert yanit.status_code == 400
+        assert yanit.json()["fields"]["data_controller_text"] == [
+            "Veri sorumlusu en çok 500 karakter olabilir."
+        ]
+        assert (
+            client.put(URL, {"data_controller_text": "x" * 500}, format="json").status_code == 200
+        )
+
+    def test_veri_sorumlusu_izde_yalniz_adiyla_gorunur(self, client: APIClient) -> None:
+        """Serbest metin: denetim izine değeri girmez, alan adı ve içerik MAC'i girer."""
+        from apps.okul import denetim_izi
+        from apps.okul.models import AuditTrail
+
+        client.put(URL, {"data_controller_text": "Uydurma Veri Sorumlusu"}, format="json")
+        satir = AuditTrail.objects.filter(model="okul.SchoolConfig").order_by("-seq").first()
+        assert satir is not None
+        assert "data_controller_text" in satir.changed_fields
+        assert "data_controller_text" not in satir.values
+        assert "Uydurma Veri Sorumlusu" not in json.dumps(satir.values, ensure_ascii=False)
+        assert denetim_izi.kaydi_dogrula(SchoolConfig, SchoolConfig.SINGLETON_PK) is True
 
     def test_kademeler_tekrarsiz_ve_kanonik_sirayla_saklanir(self, client: APIClient) -> None:
         yanit = client.put(

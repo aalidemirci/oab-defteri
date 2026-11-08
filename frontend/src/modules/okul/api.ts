@@ -1,10 +1,10 @@
 // `okul` modülü API istemcisi — kurum künyesi/kurulum, ders yılı + dönemler,
 // kapalı günler, personel sicili (ayrılış ve birleştirme), toplu içe aktarma (e-Okul
-// mutabakatı dahil) ve şablon indirme uçları. Backend `apps/okul/{urls,views,serializers}.py`
-// ile BİREBİR. Bugün TCKN, veli, cinsiyet, fotoğraf, unvan ve branş alanları YOKTUR.
-// Öğrenci sicili, şube kataloğu ve öğrenim seviyeleri F1b 5. adımda söküldü (tasarım §5.1
-// ALMA). OAB'nin işleme envanteri genel tasarım §3.4'tedir (veli adı ve öğrencinin sınıfı
-// T5 ile okulun şablonundan gelir; personelde unvan ve branş alınmaz, §5.1).
+// mutabakatı dahil), veli listesi (yalnız sayılar) ve şablon indirme uçları. Backend
+// `apps/okul/{urls,views,serializers}.py` ile BİREBİR. TCKN, cinsiyet, fotoğraf, unvan ve branş
+// alanları YOKTUR; veliden yalnız adı-soyadı ve öğrencinin sınıfı alınır (T5), ekrana adı
+// gelmez, sınıf başına sayı gelir. Öğrenci sicili, şube kataloğu ve öğrenim seviyeleri F1b 5.
+// adımda söküldü (tasarım §5.1 ALMA). OAB'nin işleme envanteri genel tasarım §3.4'tedir.
 
 import { api } from "../../lib/api";
 import { unwrap } from "../../lib/pagination";
@@ -227,6 +227,11 @@ export interface SchoolConfig {
   demirbas_onayi: boolean;
   /** Bilgisayarın demirbaş no'su (isteğe bağlı). */
   demirbas_no: string;
+  /**
+   * Veri sorumlusu ve iletişim bilgisi (serbest metin, isteğe bağlı; KVKK md. 10/1-a, E04).
+   * Personel ve veli listesi aktarım ekranlarının aydınlatma metni buradan dolar.
+   */
+  data_controller_text: string;
   setup_completed: boolean;
 }
 
@@ -247,13 +252,17 @@ export interface BozukAlanlar {
   bozuk_alanlar?: string[];
 }
 
-/** Üye türü — backend `MemberKind` ile birebir. */
-export type MemberKind = "TEACHER" | "STAFF";
+/** Görev türü — backend `MemberKind` ile birebir (tasarım §5.1; ekran adı "Görev türü"). */
+export type MemberKind = "OGRETMEN" | "YONETICI" | "DIGER";
 
-/** Sözlük: "öğretmen" / "diğer personel" ("personel" tek başına öğretmen anlamında kullanılmaz). */
+/**
+ * Sözlük "Personelin türü": "öğretmen" · "yönetici" · "diğer personel" ("personel" tek başına
+ * öğretmen anlamında kullanılmaz; "üye" denmez, diğer personel birliğin üyesi değildir).
+ */
 export const MEMBER_KIND_TR: Record<MemberKind, string> = {
-  TEACHER: "Öğretmen",
-  STAFF: "Diğer personel",
+  OGRETMEN: "Öğretmen",
+  YONETICI: "Yönetici",
+  DIGER: "Diğer personel",
 };
 
 /**
@@ -322,7 +331,7 @@ export interface LeavePoolSimilar {
   reason: SimilarReason;
 }
 
-/** Havuzdaki öğretmen / diğer personel — LeavePoolPersonnelSerializer ile birebir. */
+/** Havuzdaki personel — LeavePoolPersonnelSerializer ile birebir. */
 export interface LeavePoolPersonnel extends BozukAlanlar {
   id: number;
   /** Şifreli addan türer; çözülemezse null (`BozukAlanlar`). */
@@ -451,6 +460,63 @@ export function importCounts(report: ImportReport): {
 
 /** Şablon dosya adı — kaydetme penceresinde önerilir (backend ile aynı). */
 export const PERSONNEL_TEMPLATE_FILENAME = "sablon-personel.xlsx";
+export const PARENT_TEMPLATE_FILENAME = "sablon-veli-listesi.xlsx";
+
+// ---------------------------------------------------------------------------
+// Veli listesi (T5; genel tasarım §5.1 `ParentRoster`, §8.4) — yanıtlar YALNIZ SAYI taşır
+// ---------------------------------------------------------------------------
+
+/** Bir sınıfın satır sayısı (veli listesinin özeti). */
+export interface ParentRosterClass {
+  student_class: string;
+  rows: number;
+}
+
+/** `GET parent-roster/`: sınıf başına sayı; ad yoktur. */
+export interface ParentRosterSummary {
+  total_rows: number;
+  class_count: number;
+  /** Son uygulanan aktarımın anı (ISO); liste boşsa null. */
+  last_import_at: string | null;
+  classes: ParentRosterClass[];
+}
+
+/** Aktarımda bir sınıfın etkisi: dosyadaki satır ve yerine geçen eski satır sayısı. */
+export interface ParentClassImpact {
+  student_class: string;
+  rows: number;
+  replaced_rows: number;
+}
+
+/** Aktarılamayan satır: satır no, alan kodu, neden — hücrenin değeri yoktur. */
+export interface ParentRowIssue {
+  row_number: number;
+  field: string;
+  issue: string;
+}
+
+/** Veli listesi aktarımının raporu (önizleme ve uygulama aynı biçim). */
+export interface ParentImportReport {
+  file_hash: string;
+  file_name: string;
+  total_rows: number;
+  imported_rows: number;
+  class_count: number;
+  replaced_rows: number;
+  kept_class_count: number;
+  kept_rows: number;
+  already_imported: boolean;
+  dry_run: boolean;
+  classes: ParentClassImpact[];
+  issues: ParentRowIssue[];
+}
+
+/** Veli listesi yalnız dosyayla aktarılır (pano yolu yoktur). */
+function parentImportRequest(path: string, file: File): Promise<ParentImportReport> {
+  const form = new FormData();
+  form.append("file", file);
+  return api.postForm<ParentImportReport>(path, form);
+}
 
 // ---------------------------------------------------------------------------
 // Yardımcılar
@@ -602,4 +668,21 @@ export const okulApi = {
   // --- Şablon indirme (xlsx blob) ---
 
   personnelTemplate: (): Promise<Blob> => api.getBlob("/templates/personnel/"),
+
+  // --- Veli listesi (yalnız program yöneticisi) ---
+
+  getParentRoster: (): Promise<ParentRosterSummary> =>
+    api.get<ParentRosterSummary>("/parent-roster/"),
+
+  /** "Veli listesini sil": bütün liste silinir; yanıt silinen satır sayısıdır. */
+  deleteParentRoster: (): Promise<{ deleted_rows: number }> =>
+    api.del<{ deleted_rows: number }>("/parent-roster/"),
+
+  previewParentImport: (file: File): Promise<ParentImportReport> =>
+    parentImportRequest("/imports/parents/preview/", file),
+
+  commitParentImport: (file: File): Promise<ParentImportReport> =>
+    parentImportRequest("/imports/parents/commit/", file),
+
+  parentTemplate: (): Promise<Blob> => api.getBlob("/templates/parents/"),
 };

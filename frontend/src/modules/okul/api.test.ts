@@ -112,8 +112,12 @@ describe("okulApi — kişi ayrılışı, birleştirme ve aktarım", () => {
     expect(apiMock.post).toHaveBeenLastCalledWith("/leave-pool/resolve/", govde);
   });
 
-  it("üye türü adları sözlüğe uyar: öğretmen / diğer personel", () => {
-    expect(MEMBER_KIND_TR).toEqual({ TEACHER: "Öğretmen", STAFF: "Diğer personel" });
+  it("görev türü adları sözlüğe uyar: öğretmen / yönetici / diğer personel", () => {
+    expect(MEMBER_KIND_TR).toEqual({
+      OGRETMEN: "Öğretmen",
+      YONETICI: "Yönetici",
+      DIGER: "Diğer personel",
+    });
   });
 });
 
@@ -183,5 +187,26 @@ describe("okulApi — kurulum ve başlangıç yol haritası", () => {
       HIZMET_ALIMI: "Hizmet alımıyla",
       CALISTIRMIYOR: "Personel çalıştırmıyor",
     });
+  });
+});
+
+describe("okulApi — veli listesi (T5)", () => {
+  it("özet, silme, şablon ve dosyayla aktarım uçları", async () => {
+    await okulApi.getParentRoster();
+    expect(apiMock.get).toHaveBeenLastCalledWith("/parent-roster/");
+    await okulApi.deleteParentRoster();
+    expect(apiMock.del).toHaveBeenLastCalledWith("/parent-roster/");
+    await okulApi.parentTemplate();
+    expect(apiMock.getBlob).toHaveBeenLastCalledWith("/templates/parents/");
+
+    const dosya = new File(["x"], "veli.xlsx");
+    await okulApi.previewParentImport(dosya);
+    let [yol, form] = apiMock.postForm.mock.calls.at(-1) as unknown as [string, FormData];
+    expect(yol).toBe("/imports/parents/preview/");
+    expect(form.get("file")).toBe(dosya);
+    await okulApi.commitParentImport(dosya);
+    [yol, form] = apiMock.postForm.mock.calls.at(-1) as unknown as [string, FormData];
+    expect(yol).toBe("/imports/parents/commit/");
+    expect([...form.keys()]).toEqual(["file"]);
   });
 });

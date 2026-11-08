@@ -8,13 +8,14 @@ UNVAN VE BRANŞ SAKLANMAZ (tasarım §5.1 `Personnel`, §8.4): bir branşta ço�
 zaman 1-3 öğretmen olduğundan branş, öğretmeni kişiye bağlar. Bu yüzden:
 
 - **Branş sütunu hiç okunmaz** — eşleme sözlüğünde karşılığı yoktur.
-- **"Görevi/Unvan" sütunu** (ya da şablondaki "Üye Türü") YALNIZ üye türünü
-  (öğretmen / diğer personel) seçmek için satır ayrıştırılırken geçici okunur.
+- **"Unvan" sütunu hiç okunmaz** (tasarım §8.4 okunmayanlar).
+- **e-Okul'un "Görevi" sütunu** (ya da şablondaki "Görev Türü") YALNIZ görev türünü
+  (öğretmen · yönetici · diğer personel) seçmek için satır ayrıştırılırken geçici okunur.
   Metin `ParsedPersonnelRow`'a GİRMEZ; yalnız sınıflama sonucu girer, dolayısıyla
   rapora, `ImportRun.report`'a ve günlüğe de ulaşamaz (tasarım §8.4: "Görevi"
   yalnız tür için geçici okunur).
 
-Şablon: | Adı | Soyadı | Üye Türü |. e-Okul OOK01001R1: | ADI SOYADI | GÖREVİ | … |.
+Şablon: | Adı | Soyadı | Görev Türü |. e-Okul OOK01001R1: | ADI SOYADI | GÖREVİ | … |.
 Eski birleşik ``Ad Soyad`` biçimi de geriye uyum için kabul edilir.
 DB yazımı `services/imports.py`'dadır (saf modül — DB'siz, test edilebilir).
 """
@@ -37,74 +38,69 @@ from apps.okul.excel_ortak import (
 
 #: `models.MemberKind` değerleri (modül Django'suz kalsın diye düz metin; eşitliği
 #: `tests/test_excel_personel_parser.py` sabitler).
-KIND_TEACHER = "TEACHER"
-KIND_STAFF = "STAFF"
+KIND_OGRETMEN = "OGRETMEN"
+KIND_YONETICI = "YONETICI"
+KIND_DIGER = "DIGER"
 
-# Mantıksal alan → normalize edilmiş başlık anahtar kelimeleri (ilk eşleşen kazanır).
-# "role" sütununun METNİ saklanmaz; yalnız `classify_member_kind` sonucuna dönüşür.
+# Mantıksal alan → normalize edilmiş başlık anahtar kelimeleri (ilk eşleşen kazanır; eşleşme
+# başlığın İÇİNDE aranır, bu yüzden "gorev turu" "gorev"den ÖNCE gelir). "kind" okulun
+# şablonundaki "Görev Türü" sütunudur ("Üye Türü": 5. adımdan önce indirilmiş şablon);
+# "role" e-Okul'un "Görevi" sütunudur. İkisinin de METNİ saklanmaz, yalnız türe dönüşür.
+# "Unvan" sütunu OKUNMAZ (tasarım §8.4 okunmayanlar): eşleme sözlüğünde karşılığı yoktur.
 COLUMN_SYNONYMS: dict[str, list[str]] = {
     "full_name": ["ad soyad", "adi soyadi", "ad ve soyad", "adsoyad", "ad soyadi", "isim"],
     "last_name": ["personel soyadi", "soyadi"],
     "first_name": ["personel adi", "adi"],
-    "role": ["uye turu", "unvan", "gorev", "gorevi"],
+    "kind": ["gorev turu", "uye turu"],
+    "role": ["gorevi", "gorev"],
 }
 
-#: Öğretmen sayılan görevler (kelime başı eşleşmesi; ASCII'ye katlanmış metinde).
-#: Okul yöneticileri (müdür, müdür yardımcısı) öğretmen kökenlidir; rehberlik
-#: servisi (rehber öğretmen, psikolojik danışman) ve usta öğretici de öğretmendir.
-_TEACHER_KEYWORDS: tuple[str, ...] = (
-    "ogretmen",
-    "ogretici",
-    "mudur",
-    "rehber",
-    "danisman",
+#: e-Okul'un "Görevi" sütununda yönetici sayılan görevler — Türkçe katlanmış TAM eşleşme
+#: (plan "F1b-5 uygulama kararları": Müdür, Müdür Başyardımcısı, Müdür Yardımcısı).
+_YONETICI_GOREVLERI: frozenset[str] = frozenset(
+    {"mudur", "mudur basyardimcisi", "mudur yardimcisi"}
 )
+#: İçinde geçtiğinde görevi öğretmen yapan sözcük (katlanmış; "Ücretli Öğretmen", "Rehber
+#: Öğretmen", "Sözleşmeli Öğretmen(657 S.K. 4/B)").
+_OGRETMEN_SOZCUGU = "ogretmen"
 
-#: Diğer personel sayılan görevler.
-_STAFF_KEYWORDS: tuple[str, ...] = (
-    "memur",
-    "hizmetli",
-    "teknisyen",
-    "tekniker",
-    "asci",
-    "bekci",
-    "sef",
-    "sekreter",
-    "sofor",
-    "isci",
-    "kalorifer",
-    "temizlik",
-    "guvenlik",
-    "muhasebe",
-    "ambar",
-    "laborant",
-    "isletmen",
-    "personel",
-    "diger",
-)
+#: Şablonun "Görev Türü" sütununun kabul ettiği değerler (katlanmış tam eşleşme; arayüz
+#: etiketleri, sözlük "Personelin türü"). "Diğer" kısa yazımı da kabul edilir.
+_SABLON_TURLERI: dict[str, str] = {
+    "ogretmen": KIND_OGRETMEN,
+    "yonetici": KIND_YONETICI,
+    "diger personel": KIND_DIGER,
+    "diger": KIND_DIGER,
+}
 
 
 def classify_member_kind(value: Any) -> str | None:
-    """Görev metninden üye türü: `KIND_TEACHER`, `KIND_STAFF` ya da tanınmadıysa None.
+    """e-Okul "Görevi" metninden görev türü; hücre boşsa None.
 
-    Anahtar kelimeler kelime BAŞINDAN eşleşir ("müdürü", "memuru" de tanınır).
-    Öğretmen anahtarı önceliklidir ("Rehber Öğretmen", "Müdür Yardımcısı").
-    Boş ya da tanınmayan metin None döner — çağıran öğretmen varsayar ve
-    önizlemede "Üye türünü denetleyin" uyarısı verir. Metnin kendisi hiçbir yere
-    yazılmaz.
+    Sınıflama (plan "F1b-5 uygulama kararları"; metin Türkçe katlanır, büyük/küçük harf ve
+    fazla boşluk önemsizdir): Müdür, Müdür Başyardımcısı ve Müdür Yardımcısı (tam eşleşme)
+    yönetici; içinde "öğretmen" geçen görev öğretmen; öteki her görev diğer personel. Boş
+    hücre None döner — çağıran öğretmen varsayar ve önizlemede "Görev türünü denetleyin"
+    uyarısı verir. Metnin kendisi hiçbir yere yazılmaz.
     """
-    kelimeler = normalize_header(value).split()
-    if not kelimeler:
+    katlanmis = normalize_header(value)
+    if not katlanmis:
         return None
+    if katlanmis in _YONETICI_GOREVLERI:
+        return KIND_YONETICI
+    if _OGRETMEN_SOZCUGU in katlanmis:
+        return KIND_OGRETMEN
+    return KIND_DIGER
 
-    def _var(anahtarlar: tuple[str, ...]) -> bool:
-        return any(k.startswith(a) for k in kelimeler for a in anahtarlar)
 
-    if _var(_TEACHER_KEYWORDS):
-        return KIND_TEACHER
-    if _var(_STAFF_KEYWORDS):
-        return KIND_STAFF
-    return None
+def template_member_kind(value: Any) -> str | None:
+    """Şablonun "Görev Türü" hücresinden görev türü; boş ya da tanınmayan değerde None.
+
+    Yalnız üç etiket kabul edilir (öğretmen, yönetici, diğer personel); tanınmayan değer
+    tahmin edilmez (yazım hatası "diğer personel"e düşmesin): None döner ve önizlemede
+    "Görev türünü denetleyin" uyarısı verilir.
+    """
+    return _SABLON_TURLERI.get(normalize_header(value))
 
 
 @dataclass
@@ -137,9 +133,10 @@ class ParsedPersonnelRow:
     raw_full_name: str = ""
     first_name: str = ""
     last_name: str = ""
-    #: Görev sütunundan çıkarılan üye türü; sütun yoksa ya da tanınmadıysa None.
+    #: Görev ya da görev türü sütunundan çıkarılan görev türü; sütun yoksa, hücre boşsa ya da
+    #: şablon değeri tanınmadıysa None.
     member_kind: str | None = None
-    #: Görev sütunu VAR ama bu satırın görevi tanınmadı (boş hücre dahil).
+    #: Görev (türü) sütunu VAR ama bu satırın türü çıkarılamadı (boş hücre dahil).
     member_kind_unrecognized: bool = False
 
 
@@ -164,7 +161,9 @@ def detect_columns(rows: list[list[Any]], scan_limit: int = 10) -> PersonnelColu
 def parse_rows(rows: list[list[Any]], mapping: PersonnelColumnMapping) -> list[ParsedPersonnelRow]:
     """Başlık satırından sonraki veri satırlarını çözümler (boş satırlar atlanır)."""
     f = mapping.fields
-    has_role = "role" in f
+    # Şablonun "Görev Türü" sütunu varsa o esastır; yoksa e-Okul'un "Görevi" sütunu.
+    has_kind = "kind" in f
+    has_role = has_kind or "role" in f
     parsed: list[ParsedPersonnelRow] = []
     for r in range(mapping.header_row + 1, len(rows)):
         cells = rows[r]
@@ -179,7 +178,12 @@ def parse_rows(rows: list[list[Any]], mapping: PersonnelColumnMapping) -> list[P
             last = hucre_metni(hucre(cells, f.get("last_name")))
             raw_name = f"{first} {last}".strip()
         # Görev metni yalnız bu satırda, sınıflama için okunur; değişkene bile alınmaz.
-        kind = classify_member_kind(hucre(cells, f.get("role"))) if has_role else None
+        if has_kind:
+            kind = template_member_kind(hucre(cells, f.get("kind")))
+        elif has_role:
+            kind = classify_member_kind(hucre(cells, f.get("role")))
+        else:
+            kind = None
         parsed.append(
             ParsedPersonnelRow(
                 row_number=r + 1,
@@ -205,8 +209,9 @@ def parse_workbook(file_bytes: bytes) -> tuple[PersonnelColumnMapping, list[Pars
 
 # read_sheet `excel_ortak`'tan yeniden kullanılır (etkin sayfa, salt-okunur).
 __all__ = [
-    "KIND_STAFF",
-    "KIND_TEACHER",
+    "KIND_DIGER",
+    "KIND_OGRETMEN",
+    "KIND_YONETICI",
     "ParsedPersonnelRow",
     "PersonnelColumnMapping",
     "classify_member_kind",
@@ -214,4 +219,5 @@ __all__ = [
     "parse_rows",
     "parse_workbook",
     "read_sheet",
+    "template_member_kind",
 ]

@@ -3,7 +3,7 @@
 Aile test kalıbından uyarlandı: TCKN/veli/tatil testleri kalktı. Öğrenci sicili, şube kataloğu
 ve hazırlık sınıfı bayrağı (seviye kümesi) F1b 5. adımda göç 0014 ile düştü (tasarım §5.1
 ALMA); okul no kör indeksinin model sınamaları onlarla gitti, kör indeksin kendisi
-`test_kor_indeks.py`'de `shared.crypto` düzeyinde sınanır. Personelde unvan/branş yok, üye türü
+`test_kor_indeks.py`'de `shared.crypto` düzeyinde sınanır. Personelde unvan/branş yok, görev türü
 ve ayrılış tarihi var; ad-soyad DB'de token'dır.
 """
 
@@ -175,8 +175,8 @@ class TestPersonnel:
 
     def test_uye_turu_varsayilan_ogretmendir(self) -> None:
         kisi = Personnel.objects.create(first_name="A", last_name="B")
-        assert kisi.member_kind == MemberKind.TEACHER
-        assert MemberKind.STAFF.label == "diğer personel"
+        assert kisi.member_kind == MemberKind.OGRETMEN
+        assert MemberKind.DIGER.label == "diğer personel"
 
     def test_gecersiz_uye_turu_db_kisitina_takilir(self) -> None:
         with pytest.raises(IntegrityError):

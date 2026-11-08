@@ -17,6 +17,7 @@ from rest_framework.fields import empty
 
 from apps.okul import selectors
 from apps.okul.models import (
+    DATA_CONTROLLER_TEXT_MAX,
     STUDENT_COUNT_MAX,
     CanteenMode,
     Holiday,
@@ -84,6 +85,7 @@ PERSONEL_ZORUNLU = "Personel çalıştırma biçimini seçin."
 SECENEK_GECERSIZ = "Geçerli bir seçenek seçin."
 TARIH_GECERSIZ = "Geçerli bir tarih girin."
 DEMIRBAS_ONAYI_ZORUNLU = "Program yalnız okul demirbaşı bilgisayara kurulur; onay zorunludur."
+VERI_SORUMLUSU_UZUN = f"Veri sorumlusu en çok {DATA_CONTROLLER_TEXT_MAX} karakter olabilir."
 
 
 class _Kademeler(serializers.Field):  # type: ignore[type-arg]  # değer listesi; Any davranışı
@@ -132,8 +134,9 @@ class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
     PUT gönderilmeyen alana dokunmaz (künyeyi silmez), gönderilen zorunlu alan ise
     boşaltılamaz (aile kuralı, tasarım §5.1). Aksi hâlde kurulum bittikten sonra Okul
     Bilgileri ekranından bir zorunlu alan sessizce geri alınabilirdi (tamamlanmış ama okul
-    adımı eksik kurulum). Müdür adı, kampüs işareti ve açılış tarihi isteğe bağlıdır; açılış
-    tarihi boşaltılabilir.
+    adımı eksik kurulum). Müdür adı, kampüs işareti, açılış tarihi ve veri sorumlusu isteğe
+    bağlıdır; açılış tarihi ve veri sorumlusu boşaltılabilir (veri sorumlusu boşken aktarım
+    ekranları uyarır, aktarımı engellemez; F1b 5. adım).
 
     Öğrenci mevcudu ile tarihi birlikte gönderilir (DB kısıtı da ikisini birlikte ister);
     biri gövdede öteki yoksa eksik olanın "zorunludur" iletisi döner. Mevcudun tarihi
@@ -177,6 +180,12 @@ class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
         allow_blank=True,
         error_messages={"max_length": "Bilgisayarın demirbaş no'su en çok 64 karakter olabilir."},
     )
+    data_controller_text = serializers.CharField(
+        max_length=DATA_CONTROLLER_TEXT_MAX,
+        required=False,
+        allow_blank=True,
+        error_messages={"max_length": VERI_SORUMLUSU_UZUN},
+    )
 
     class Meta:
         model = SchoolConfig
@@ -196,6 +205,7 @@ class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
             "opened_on",
             "demirbas_onayi",
             "demirbas_no",
+            "data_controller_text",
             "setup_completed",
         ]
         read_only_fields = ["setup_completed"]
@@ -455,9 +465,11 @@ class PersonnelSerializer(CorruptFieldsMixin, serializers.ModelSerializer[Person
     full_name = serializers.CharField(read_only=True)
     member_kind = serializers.ChoiceField(
         choices=MemberKind.choices,
-        default=MemberKind.TEACHER,
+        default=MemberKind.OGRETMEN,
         error_messages={
-            "invalid_choice": "Geçerli bir üye türü seçin (öğretmen ya da diğer personel)."
+            "invalid_choice": (
+                "Geçerli bir görev türü seçin (öğretmen, yönetici ya da diğer personel)."
+            )
         },
     )
 
@@ -477,7 +489,7 @@ class PersonnelSerializer(CorruptFieldsMixin, serializers.ModelSerializer[Person
 
 
 class ImportRequestSerializer(serializers.Serializer[dict[str, Any]]):
-    """İçe aktarma girdisi: Excel dosyası (e-Okul .xls / şablon .xlsx) VEYA pano metni.
+    """İçe aktarma girdisi: dosya (e-Okul .xls / şablon .xlsx / .csv) VEYA pano metni.
 
     Aktarım kimseyi ayırmaz: listede olmayanlar ayrılış havuzuna
     girer, karar `leave-pool/resolve/` ile verilir. Eski personel seçeneği
@@ -496,6 +508,23 @@ class ImportRequestSerializer(serializers.Serializer[dict[str, Any]]):
                 "Dosya (file) veya yapıştırılan metin (text) alanlarından tam olarak biri gerekli."
             )
         return attrs
+
+
+class ParentImportRequestSerializer(serializers.Serializer[dict[str, Any]]):
+    """Veli listesi aktarımının girdisi: YALNIZ dosya (.xlsx şablon, .xls, .csv; tasarım §8.4).
+
+    Pano yolu yoktur: veli listesi okulun doldurduğu şablondan gelir (T5); gövdede `text`
+    gelirse yok sayılır.
+    """
+
+    file = serializers.FileField(
+        error_messages={
+            "required": "Veli listesi dosyasını seçin.",
+            "null": "Veli listesi dosyasını seçin.",
+            "invalid": "Veli listesi dosyasını seçin.",
+            "empty": "Seçilen dosya boş.",
+        }
+    )
 
 
 class PersonnelMergeSerializer(serializers.Serializer[dict[str, Any]]):

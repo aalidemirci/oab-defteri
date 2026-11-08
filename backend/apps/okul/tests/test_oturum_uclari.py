@@ -118,6 +118,7 @@ def test_oturum_ozetinin_anahtarlari_sabittir(client: APIClient) -> None:
             "kurulum_tamamlama",
             "okul_karti_yazma",
             "son_oturum_onay",
+            "veli_listesi",
             "yol_haritasi",
         ],
     }

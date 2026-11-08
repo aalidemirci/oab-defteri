@@ -279,6 +279,7 @@ describe("AyarlarPage — okul bilgileri", () => {
         opened_on: null,
         demirbas_onayi: true,
         demirbas_no: "",
+        data_controller_text: "",
       }),
     );
     expect(await screen.findByText("Okul bilgileri kaydedildi.")).toBeInTheDocument();

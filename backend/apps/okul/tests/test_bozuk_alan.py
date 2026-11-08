@@ -72,7 +72,7 @@ def test_baska_dekin_tokeni_okunmaz() -> None:
 
 
 def test_kaydedilince_ham_deger_aynen_kalir(bozuk_personel: Personnel) -> None:
-    bozuk_personel.member_kind = "STAFF"
+    bozuk_personel.member_kind = "DIGER"
     bozuk_personel.save()  # update_fields'siz tam kayıt
     assert _ham_oku("okul_personnel", bozuk_personel.pk, "first_name") == "AYŞE"
     bozuk_personel.full_clean()  # temizleme işareti "" yapmaz

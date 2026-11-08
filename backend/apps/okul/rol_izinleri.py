@@ -350,6 +350,11 @@ _DAYANAK_HAVUZ = (
     "`?summary=true` ayrı açılamaz."
 )
 _DAYANAK_SABLON = "Plan F1b-2: şablonlar e-Okul aktarımının parçasıdır (tasarım §8.1 A7)."
+_DAYANAK_VELI = (
+    "Tasarım §8.4 (4) ve §4.4.2: veli listesini aktarmak kişisel veri içeren dışa aktarım "
+    "yetkisidir (¹⁰, yalnız program yöneticisi); §5.4: liste genel kuruldan sonra elle de "
+    "silinebilir (plan 'F1b-5 uygulama kararları')."
+)
 _DAYANAK_DENETIM_KARTLARI = (
     "Tasarım §4.6.3 (bütünlük kartı program yöneticisi ve DK panosuna), §4.6.1 kural 1 "
     "(mührü tutmayan hesap kartı), §4.4.4 (geri yükleme kartı DK 'gördüm' diyene dek); "
@@ -449,6 +454,13 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _oku("template-personnel", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_SABLON),
     _oku("leave-pool", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_HAVUZ),
     _yaz("leave-pool-resolve", "POST", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_HAVUZ),
+    # ------------------------------------------------ Kişisel veri: veli listesi (T5; ¹⁰)
+    # Özet (sınıf başına sayı) ve şablon okumadır; satırın tek okuru program yöneticisidir.
+    _oku("parent-roster", Satir.KISISEL_VERI),
+    _yaz("parent-roster", "DELETE", Satir.KISISEL_VERI, dipnot=10, dayanak=_DAYANAK_VELI),
+    _yaz("import-parents-preview", "POST", Satir.KISISEL_VERI, dipnot=10, dayanak=_DAYANAK_VELI),
+    _yaz("import-parents-commit", "POST", Satir.KISISEL_VERI, dipnot=10, dayanak=_DAYANAK_VELI),
+    _oku("template-parents", Satir.KISISEL_VERI),
     # ------------------------------------------------ M9: pano (son oturum kartı)
     _oku("dashboard-last-session", Satir.M9),
     # "Kontrol ettim": M9'un Y hücreleri (program yöneticisi ve YK); DK ve müdür görür.
@@ -599,8 +611,8 @@ BEKLEYEN_HUCRELER: Final[Mapping[tuple[Satir, str], str]] = {
     **_bekleyen(Satir.M13_M14, (YONETICI, *sorted(YK_ROLLERI)), "F5"),
     # Personel modülü (doğrudan işveren okullar; K3) sürüm 2.
     **_bekleyen(Satir.M15, (YONETICI, *sorted(YK_ROLLERI)), "F8+"),
-    # Kişisel veri içeren çıktı: veli listesi çıktısı (5. adım) ya da adlı E07/E08.
-    **_bekleyen(Satir.KISISEL_VERI, (YONETICI,), "F2"),
+    # Kişisel veri: program yöneticisinin hücresi veli listesinin uçlarıyla bağlandı (F1b 5.
+    # adım); adlı E07/E08 çıktısının kapısı ¹⁰ dipnotunun eylemidir (`BEKLEYEN_DIPNOTLAR`, F2).
     # F1b'de bekleyen kalmadı: Kullanıcılar (program yöneticisi) uçlarıyla, Denetleme Kurulunun
     # M8 hücresi geri yükleme kartının "Gördüm"üyle bağlandı (F1b-2 (c)). DK
     # modülünün öteki işleri (görev bölümü, denetim planı, rapor, md. 14/5 çağrısı) F4'tedir; M8
@@ -711,6 +723,14 @@ YETENEKLER: Final[Mapping[str, frozenset[tuple[str, str]]]] = {
         ("template-personnel", "GET"),
     ),
     "ayrilis_havuzu": _ciftler(("leave-pool", "GET"), ("leave-pool-resolve", "POST")),
+    # Kişiler → Veli Listesi: özet, aktarım (önizleme ve uygulama), şablon ve silme (hepsi
+    # birlikte; kişisel veri satırı, yalnız program yöneticisi).
+    "veli_listesi": _ciftler(
+        ("parent-roster", ("GET", "DELETE")),
+        ("import-parents-preview", "POST"),
+        ("import-parents-commit", "POST"),
+        ("template-parents", "GET"),
+    ),
 }
 
 

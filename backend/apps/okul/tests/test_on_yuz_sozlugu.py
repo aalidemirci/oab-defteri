@@ -5,7 +5,8 @@ görünen her metin sözlüğe uyar").
 `/repo`'da görür; `test_kurtarma_anahtari_pdf._depo_dosyasi` kalıbı). Kapsam: F1b 2. adımın
 metin modülleri (Kullanıcılar, Erişim Günlüğü, rol kapısı ve yetki, denetim izi kartları) ve
 güvenlik metinleri (F1b 3. adımın ekranları `guvenlik/metinler.ts`'ten okur), kapanış pencereleri
-ve okul kartının metinleri (F1b 4. adım, `okul/metinler.ts`).
+ve okul kartının metinleri (F1b 4. adım, `okul/metinler.ts`), Kişiler'in görev türü ve aktarım
+metinleri, aydınlatma metinleri ve Veli Listesi (F1b 5. adım, `kisiler/metinler.ts`).
 Her dosyadaki düz `export const AD(: tip)? = "…" (+ "…")*;` dizesi, boşluklar tekleştirilip
 tırnaklar (“ ” → ") eşitlenerek sözlükte aranır. Hesaplanan ya da şablon dizesi kapsam dışıdır
 (işlevlerin metinleri sözlükte kalıp olarak yazılıdır, ör. "Parola sıfırlandı · gg.aa.yyyy …").
@@ -28,7 +29,8 @@ from desktop.window import (
     TUR_SUZGECLERI,
 )
 
-from apps.okul.services import encrypted_backup, live_restore
+from apps.okul import excel_ortak, excel_veli, serializers
+from apps.okul.services import encrypted_backup, imports, live_restore
 
 #: Kapsanan ön yüz dosyaları (depo köküne göre).
 DOSYALAR = (
@@ -41,6 +43,7 @@ DOSYALAR = (
     "frontend/src/modules/cikis/metinler.ts",
     "frontend/src/lib/metinler.ts",
     "frontend/src/modules/okul/metinler.ts",
+    "frontend/src/modules/kisiler/metinler.ts",
 )
 
 #: Kullanıcıya görünmeyen düz dize sabitleri (dosya, ad) → gerekçe.
@@ -151,6 +154,19 @@ def test_ekranin_boy_iletisi_sunucununkiyle_aynidir() -> None:
     assert ekran.groups() == sunucu.groups()
 
 
+def test_aktarimin_dosya_ve_gorev_turu_iletileri_sozlukte_yazilidir() -> None:
+    """Aktarım ekranında görünen sunucu iletileri (tasarım §8.1 A4, TK18; plan "F1b-5 uygulama
+    kararları"): makrolu dosya, okunamayan biçim, düz metin olmayan CSV, görev türü uyarısı."""
+    sozluk = _sade(_depo_dosyasi("docs/sozluk.md"))
+    for metin in (
+        excel_ortak.MAKROLU_DOSYA_ILETISI,
+        excel_ortak.DESTEKLENMEYEN_DOSYA_ILETISI,
+        excel_ortak.CSV_METIN_DEGIL_ILETISI,
+        imports.MEMBER_KIND_CHECK_MESSAGE,
+    ):
+        assert f'**"{_sade(metin)}"**' in sozluk, metin
+
+
 def test_kapanis_olayi_masaustundekiyle_birebirdir() -> None:
     """Pencere ön yüzün dinlediği olayı yollar (plan F1b-3 "Uzun iş, çarpı, temiz kapanış")."""
     kaynak = _depo_dosyasi("frontend/src/modules/cikis/KapanisPenceresi.tsx")
@@ -167,3 +183,19 @@ def test_sabit_okuyucu_birlesik_ve_tipli_dizeyi_okur() -> None:
         "export const C = `beş ${x}`;\n"
     )
     assert _sabitler(kaynak) == {"A": "bir iki", "B": 'üç "dört"'}
+
+
+def test_veli_listesinin_ve_veri_sorumlusunun_sunucu_iletileri_sozlukte_yazilidir() -> None:
+    """Veli listesi ekranında görünen sunucu iletileri ve okul kartının veri sorumlusu iletisi
+    (plan "F1b-5 uygulama kararları"; sözlük §4.3 "Veli Listesi", §4.4 okul kartı)."""
+    sozluk = _sade(_depo_dosyasi("docs/sozluk.md"))
+    for metin in (
+        excel_veli.VELI_ADI_BOS,
+        excel_veli.VELI_ADI_UZUN,
+        excel_veli.SINIF_BOS,
+        excel_veli.SINIF_TANINMADI,
+        excel_veli.SUTUN_EKSIK,
+        serializers.VERI_SORUMLUSU_UZUN,
+        str(serializers.ParentImportRequestSerializer().fields["file"].error_messages["required"]),
+    ):
+        assert f'**"{_sade(metin)}"**' in sozluk, metin

@@ -50,6 +50,16 @@ export const KAMPUS_YARDIMI =
   "Kampüsteki okulda, ihtiyaç hâlinde kampüs yönetimine birliği temsilen başkan ya da yönetim " +
   "kurulu üyelerinden biri görevlendirilir (md. 13/7).";
 
+/**
+ * Veri sorumlusu alanı (F1b 5. adım; KVKK md. 10/1-a, E04). Örnek uydurmadır; aydınlatma metni
+ * personel ve veli listesi aktarım ekranlarındadır (`kisiler/metinler.ts`).
+ */
+export const VERI_SORUMLUSU_ETIKETI = "Veri sorumlusu";
+export const VERI_SORUMLUSU_YARDIMI =
+  "Okul müdürlüğünce belirlenir; personel ve veli listesi aktarım ekranlarındaki aydınlatma " +
+  "metninde görünür. Örnek: Örnek Anadolu Lisesi Müdürlüğü, Örnek Mah. Örnek Sok. No: 1, " +
+  "Örnek İlçe.";
+
 /** md. 9/1: yeni açılan okulda ilk genel kurulun süresi açılış tarihinden sayılır. */
 export const ACILIS_YARDIMI =
   "Yalnız yeni açılan okulda doldurun; ilk genel kurulun süresi bu tarihten sayılır (md. 9/1).";

@@ -153,13 +153,13 @@ def hazirla(args: argparse.Namespace) -> dict[str, Any]:
     # Kişi kayıtları personeldir (öğrenci sicili F1b 5. adımda söküldü); Türkçe harfli
     # şifreli adlar yedekten aynen dönmelidir.
     Personnel.objects.create(
-        first_name="Deneme Çağla", last_name="Işıklı", member_kind=MemberKind.TEACHER
+        first_name="Deneme Çağla", last_name="Işıklı", member_kind=MemberKind.OGRETMEN
     )
     Personnel.objects.create(
-        first_name="Deneme İlkay", last_name="Şahinoğlu", member_kind=MemberKind.STAFF
+        first_name="Deneme İlkay", last_name="Şahinoğlu", member_kind=MemberKind.DIGER
     )
     Personnel.objects.create(
-        first_name="Deneme Şükrü", last_name="Öğretmenoğlu", member_kind=MemberKind.TEACHER
+        first_name="Deneme Şükrü", last_name="Öğretmenoğlu", member_kind=MemberKind.OGRETMEN
     )
 
     # Dış yedek: kullanıcının Ayarlar → Güvenlik'ten USB belleğe kaydettiği şifreli yedek.

@@ -55,6 +55,8 @@ from apps.okul.models import (
     AccountRole,
     AccountStatus,
     AuditKey,
+    ImportRun,
+    ParentRoster,
     Personnel,
     ResetKind,
     SchoolConfig,
@@ -284,7 +286,9 @@ class TestEnable:
     def test_personel_varken_reddedilir(self) -> None:
         Personnel.objects.create(first_name="AYŞE", last_name="KAYA")
         parolasiz_yap()
-        with pytest.raises(app_password.AppPasswordError, match="diğer personel ya da hesap"):
+        with pytest.raises(
+            app_password.AppPasswordError, match="Kayıtlı personel, veli listesi ya da hesap"
+        ):
             kur()
 
     @pytest.mark.hesapsiz  # kişi tabloları dolu ama hesap ve parmak izi yok
@@ -293,7 +297,20 @@ class TestEnable:
         kisi_olustur().delete()
         assert not Personnel.objects.exists()
         parolasiz_yap()
-        with pytest.raises(app_password.AppPasswordError, match="diğer personel ya da hesap"):
+        with pytest.raises(
+            app_password.AppPasswordError, match="Kayıtlı personel, veli listesi ya da hesap"
+        ):
+            kur()
+
+    @pytest.mark.hesapsiz  # veli listesi dolu ama hesap ve parmak izi yok
+    def test_veli_listesi_varken_reddedilir(self) -> None:
+        """Veli listesi şifreli kişi verisidir (plan "F1b-5 uygulama kararları")."""
+        kosu = ImportRun.objects.create(source_type="VELI", file_hash="0" * 64)
+        ParentRoster.objects.create(import_run=kosu, full_name="ÖRNEK VELİ", student_class="9-A")
+        parolasiz_yap()
+        with pytest.raises(
+            app_password.AppPasswordError, match="Kayıtlı personel, veli listesi ya da hesap"
+        ):
             kur()
 
     def test_guvenlik_dosyasi_kayipken_reddedilir(self, kayip: Path) -> None:

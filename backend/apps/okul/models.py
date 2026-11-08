@@ -9,6 +9,8 @@ sınıfı bayrağı F1b 5. adımda göç 0014 ile düştü — tasarım §5.1 AL
 - `SchoolConfig`: okul kartı — kurum künyesi, kademeler, öğrenci mevcudu, yerleşim türü,
   kantin ve personel çalıştırma biçimi, kampüs, açılış tarihi, demirbaş onayı (sınıf yorumu).
 
+- `ParentRoster`: veli listesi (T5; F1b 5. adım) — bir satır bir öğrenci: şifreli veli adı,
+  adın kör indeksi, öğrencinin sınıfı (düz metin), aktarım partisi (sınıf yorumu).
 - `Personnel`: aile kalıbı + `is_active` + şifreli ad-soyad + `member_kind` +
   ayrılış tarihi. Unvan ve branş YOKTUR (tasarım §8.4; branş, küçük okulda
   öğretmeni kişiye bağlar).
@@ -39,11 +41,13 @@ from django.db.models.functions import Length
 from django.db.models.lookups import Exact
 from django.utils import timezone
 
+from apps.okul.name_match import name_key
 from shared import kanonik
 from shared.crypto import (
     EncryptedCharField,
     EncryptedTextField,
     account_seal_key,
+    blind_index,
     is_corrupt,
 )
 from shared.models import BaseModel
@@ -111,6 +115,9 @@ class StaffingMode(models.TextChoices):
 STUDENT_COUNT_MAX = 99999
 #: Kurum kodunun hane sayısı (MEB kurum kodu; kullanıcı bilgisi, plan F1b-4 kararları).
 INSTITUTION_CODE_LENGTH = 6
+#: Veri sorumlusu metninin üst sınırı (karakter; ad, adres ve iletişim bir paragrafa sığar —
+#: yazım denetimi, mevzuat hükmü değildir).
+DATA_CONTROLLER_TEXT_MAX = 500
 
 
 #: Boşta kilit süresi (dakika; tasarım TK14, §15 M-3): varsayılan 10, ayar 3-30. Alanın
@@ -152,6 +159,11 @@ class SchoolConfig(BaseModel):
       Çoğu okulda boştur, boşaltılabilir.
     - `demirbas_onayi` + `demirbas_no` (Bilgi ve Sistem Güvenliği Yönergesi 11/8, 11/23:
       program yalnız kurum demirbaşı bilgisayara kurulur).
+    - `data_controller_text`: veri sorumlusu ve iletişim bilgisi (serbest metin, isteğe bağlı;
+      tasarım §5.1, E04; KVKK md. 10/1-a "veri sorumlusunun kimliği"). Personel ve veli listesi
+      aktarım ekranlarının aydınlatma metni buradan dolar; boşken ekran uyarır, aktarımı
+      engellemez (plan "F1b-5 uygulama kararları"). Kurulumun zorunlu alanı DEĞİLDİR
+      (`services.setup.missing_school_fields`).
 
     Enum alanlarında boş değer "henüz seçilmedi"dir (kurulum tamamlanamaz). Bir kez girilen
     zorunlu alan sonradan boşaltılamaz (serileştirici; aile kuralı, tasarım §5.1).
@@ -174,8 +186,8 @@ class SchoolConfig(BaseModel):
     servisi (`services.setup`, ilk hesabın parmak izi `app_password.enable`) iz satırı
     yazar (`apps.okul.denetim_izi`). `IZ_DEGER_ALANLARI` önce/sonra değeri satıra giren
     kişisiz alanlardır (sayı, kod, durum, numara, tarih; kademeler kod listesi); okul adı,
-    il ve ilçe serbest metindir, müdür adı kişi adıdır, parmak izi güvenlik öğesidir, yol
-    haritası JSON'dur: satıra yalnız adları girer. İçerik MAC'i kimlik dışındaki bütün
+    il, ilçe ve veri sorumlusu serbest metindir, müdür adı kişi adıdır, parmak izi güvenlik
+    öğesidir, yol haritası JSON'dur: satıra yalnız adları girer. İçerik MAC'i kimlik dışındaki bütün
     alanları kapsar (`IZ_OZET_ALANLARI`; KVKK silme kümesinde alan yok).
     """
 
@@ -221,6 +233,7 @@ class SchoolConfig(BaseModel):
         "opened_on",
         "demirbas_onayi",
         "demirbas_no",
+        "data_controller_text",
         "yol_haritasi",
         "setup_completed",
         "app_password_hash",
@@ -264,6 +277,9 @@ class SchoolConfig(BaseModel):
     demirbas_onayi = models.BooleanField("bilgisayar okul demirbaşıdır", default=False)
     demirbas_no = models.CharField(
         "bilgisayarın demirbaş no'su", max_length=64, blank=True, default=""
+    )
+    data_controller_text = models.CharField(
+        "veri sorumlusu", max_length=DATA_CONTROLLER_TEXT_MAX, blank=True, default=""
     )
     yol_haritasi = models.JSONField("başlangıç yol haritası işaretleri", default=dict, blank=True)
     setup_completed = models.BooleanField("kurulum tamamlandı", default=False)
@@ -560,16 +576,19 @@ class Holiday(BaseModel):
 
 
 class MemberKind(models.TextChoices):
-    """Personelin üye türü (sözlük: "öğretmen" / "diğer personel").
+    """Personelin görev türü (sözlük: ekran adı "Görev türü"; "öğretmen" · "yönetici" ·
+    "diğer personel").
 
-    OAB'de personelin türünü ayırır; tasarımda değer kümesi "öğretmen, yönetici,
-    diğer" olur (tasarım §5.1; e-Okul aktarımıyla F1b'de). Şifrelenmez (tasarım
-    §5.3). Unvanın yerini ALMAZ: e-Okul'daki görev metni yalnız bu değerlerden
+    Tasarım §5.1 `Personnel.member_kind` (öğretmen · yönetici · diğer); değerler tasarımın
+    Türkçe büyük harf ASCII kuralına uyar (§5 O8; plan "F1b-5 uygulama kararları"). Ekranda
+    "üye türü" denmez: diğer personel birliğin üyesi değildir (OAB Yön. md. 4/1-e). Şifrelenmez
+    (tasarım §5.3). Unvanın yerini ALMAZ: e-Okul'daki "Görevi" metni yalnız bu değerlerden
     birini seçmek için aktarım sırasında geçici okunur, saklanmaz (tasarım §8.4).
     """
 
-    TEACHER = "TEACHER", "öğretmen"
-    STAFF = "STAFF", "diğer personel"
+    OGRETMEN = "OGRETMEN", "öğretmen"
+    YONETICI = "YONETICI", "yönetici"
+    DIGER = "DIGER", "diğer personel"
 
 
 class Personnel(BaseModel):
@@ -588,7 +607,7 @@ class Personnel(BaseModel):
     kümesindeki kişi alanları (ad, soyad) içerik MAC'ine de GİRMEZ (`IZ_MAC_DISI_ALANLARI`;
     tasarım §5 O4, §4.6.2 "KVKK gereği boşaltılan ya da silinen alanlar"): satır silindikten
     sonra iz satırları kalır, İA'ya erişen biri bilinen öteki alanlarla (zaman damgaları
-    satırın anına yakındır, üye türü ve durum dar bir uzaydır) aday ad-soyad sözlüğünü
+    satırın anına yakındır, görev türü ve durum dar bir uzaydır) aday ad-soyad sözlüğünü
     deneyerek silinen kişiyi geri bulabilirdi — silme anlamsızlaşırdı. İçerik MAC'i kalan
     alanları kapsar. Dürüst sınır: ad-soyad sütununa program dışından yazılan değer ya da
     başka satırdan taşınmış şifreli token içerik MAC'inde görünmez. Ayrılış ve havuz alanları
@@ -622,7 +641,7 @@ class Personnel(BaseModel):
     first_name = EncryptedCharField("ad", max_length=100)
     last_name = EncryptedCharField("soyad", max_length=100)
     member_kind = models.CharField(
-        "üye türü", max_length=16, choices=MemberKind.choices, default=MemberKind.TEACHER
+        "görev türü", max_length=16, choices=MemberKind.choices, default=MemberKind.OGRETMEN
     )
     is_active = models.BooleanField("aktif", default=True)
     left_at = models.DateField("ayrılış tarihi", null=True, blank=True)
@@ -667,15 +686,26 @@ class Personnel(BaseModel):
 
 
 class ImportSourceType(models.TextChoices):
-    """İçe aktarma kaynak türü (xlsx ve pano yapıştırma AYNI türdedir).
+    """İçe aktarma kaynak türü (dosya ve pano yapıştırma AYNI türdedir; tasarım §5.1 `ImportRun`).
 
-    `STUDENTS` öğrenci aktarımı söküldükten sonra (F1b 5. adım) yalnız eski geçmiş
-    satırlarını adlandırır; değerler tasarımın `PERSONEL` · `VELI` kümesine veli listesiyle
-    birlikte göçle çevrilir (plan "F1b-5 uygulama kararları", tasarım §5 O8).
+    Değerler tasarımın Türkçe büyük harf ASCII kuralına uyar (§5 O8; plan "F1b-5 uygulama
+    kararları"); eski `PERSONNEL` göç 0015'te `PERSONEL`'e çevrildi. `VELI` veli listesinin
+    aktarımıdır (`excel_veli`, `services.imports`; satırları `ParentRoster`).
+
+    ESKİ `STUDENTS` SATIRLARI (öğrenci aktarımı F1b 5. adımda söküldü) BİLEREK ÇEVRİLMEZ ve
+    silinmez: yeni kümede karşılıkları yoktur (veli listesi öğrenci aktarımı değildir); değer
+    kümede olmasa da sütunda veritabanı kısıtı olmadığı için satır geçerli kalır. `source_type`
+    satırın içerik MAC'indedir (`IZ_OZET_ALANLARI`): dokunulmayan satırın kaydı doğrulanmayı
+    sürdürür (`denetim_izi.kaydi_dogrula`), silinseydi iz satırları kaydı olmayan satıra dönerdi.
+    Satır yalnız sayı taşır (kişi adı yok, `imports.to_run_dict`); program onu okumaz. Göçle
+    `PERSONEL`'e çevrilen satırların içerik MAC'i ise çeviriden sonra tutmaz: 4. adımın okul
+    kartındaki kabulüyle aynıdır (plan "F1b-4 uygulama kararları": içerik MAC'ini bugün yalnız
+    testler doğrular; deneme kurulumları sahaya çıkmadan yeniden kurulur), koşu yeniden yazılınca
+    yeni MAC'li iz satırı düşer. Görev türü değerleri çevrilen personel satırları için de aynıdır.
     """
 
-    STUDENTS = "STUDENTS", "Öğrenci"
-    PERSONNEL = "PERSONNEL", "Personel"
+    PERSONEL = "PERSONEL", "Personel"
+    VELI = "VELI", "Veli listesi"
 
 
 class ImportStatus(models.TextChoices):
@@ -758,6 +788,111 @@ class ImportRun(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.get_source_type_display()} — {self.file_name or self.file_hash[:12]}"
+
+
+# ---------------------------------------------------------------------------
+# Veli listesi (T5; tasarım §5.1 `ParentRoster`, §8.4)
+# ---------------------------------------------------------------------------
+#: Veli adı-soyadının üst sınırı (karakter; şifreli sütunun düz metni).
+PARENT_NAME_MAX = 200
+#: Öğrencinin sınıfının üst sınırı (normalleştirilmiş yazım: "10-A", "Hazırlık-B").
+STUDENT_CLASS_MAX = 16
+
+
+def parent_name_blind_index(full_name: object) -> str:
+    """Velinin adının kör indeksi (tasarım §5.1 `name_index`, §5.3); boş ad → ''.
+
+    Yazımda (`ParentRoster.save`) ve aramada (`selectors.parent_roster_by_name`) AYNI yol:
+    `name_match.name_key` katlaması (Türkçe harf ASCII'ye, küçük harf, tek boşluk) +
+    `crypto.blind_index`. Metin olmayan değer (çözülemeyen alan işareti) boş anahtar verir.
+    Anahtar bellekte değilse `KeyMissingError` (fail-closed).
+    """
+    return blind_index(name_key(full_name) if isinstance(full_name, str) else "")
+
+
+class ParentRoster(models.Model):
+    """Veli listesinin bir satırı — bir satır BİR ÖĞRENCİDİR (tasarım §5.1, §8.4; T5).
+
+    İki çocuklu veli iki satırdır (TKB Tablo 1 "velisi katılan öğrenci sayısı"); satırlar
+    birleştirilmez. Yalnız iki veri alanı vardır: velinin adı-soyadı (ŞİFRELİ) ve öğrencinin
+    sınıfı (DÜZ METİN, yazımı `excel_veli.sinif_metni` ile normalleştirilir: "10-A"). Öğrencinin
+    adı, numarası, T.C. kimlik no, telefon ve adres alınmaz. Kaynak dosyadaki satır sırası
+    tutulmaz: satırlar sınıf ve çözülmüş ad sırasıyla yazılır (`services.imports`).
+
+    F1b'DE OLMAYAN ALANLAR (plan "F1b-5 uygulama kararları"; hedef modeli olmayan alan
+    uydurulmaz): birlik dönemi bağı (`term` → `OabTerm`) F1c'de, katılım işaretleri
+    (`attended_assembly` → `GeneralAssembly`, `attended_meeting`) F2'de göçle eklenir. O güne
+    dek "dönem içindeki önceki parti" kuralı (tasarım §8.4 (1)) bütün canlı liste üzerinde
+    çalışır. Başka hiçbir model buna yabancı anahtar vermez (silinebilirlik).
+
+    KÖR İNDEKS (`name_index`) YALNIZ `save()` İLE YAZILIR: `QuerySet.update(full_name=…)`,
+    `bulk_update` ve `bulk_create` `save()`'i atlar, indeks boş ya da eski adda kalır. Veli
+    listesi toplu yazılmaz (koruma testi: `test_models.py::test_veli_adi_toplu_yazilmaz`).
+    İndeksin işi adaydan kişi kaydına geçiş ve yeniden aktarımda aynı velinin bulunmasıdır
+    (tasarım §5.3; F1c).
+
+    SİLME KVKK silmesidir (tasarım §5.4: dönem kapanışında, genel kuruldan sonra elle de):
+    satır katı silinir, yumuşak silme yoktur. Aktarımda dosyadaki sınıfların eski satırları
+    yerine geçerken ve "Veli listesini sil"de silinir; ikisi de denetim izine kişisiz
+    `KVKK_SILME` satırıdır (`services.imports`, `services.veli_listesi`).
+
+    DENETİM İZİ: satır başına iz YAZILMAZ ve model izin listesi TAŞIMAZ (`denetim_izi`
+    yazıcısı onu yazamaz): tasarım §4.6.2 "veli listesinin hiçbir alanı ne açık ne şifreli
+    olarak satıra girmez", "veli listesi modelinin tamamı MAC'e girmez". Aktarım kişisiz parti
+    satırıyla yazılır — koşunun (`ImportRun`) `OLUSTUR` ve `DURUM` satırları; satırlar
+    `import_run` ile o partiye bağlıdır (plan "F1b-5 uygulama kararları": erişim günlüğüne
+    yazılmaz). Dürüst sınır: satırın içerik MAC'i olmadığı için program dışından yapılan
+    değişiklik kayıt bütünlüğü denetiminde görünmez.
+    """
+
+    import_run = models.ForeignKey(
+        ImportRun,
+        on_delete=models.PROTECT,
+        related_name="+",
+        verbose_name="aktarım partisi",
+    )
+    full_name = EncryptedCharField("veli adı-soyadı", max_length=PARENT_NAME_MAX)
+    name_index = models.CharField(
+        "veli adı kör indeksi", max_length=64, blank=True, default="", editable=False
+    )
+    student_class = models.CharField("öğrencinin sınıfı", max_length=STUDENT_CLASS_MAX)
+    created_at = models.DateTimeField("oluşturulma", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "veli listesi satırı"
+        verbose_name_plural = "veli listesi"
+        # Ad şifreli → DB'de ona sıralanamaz; kullanıcıya gösterilen sıra Python'dadır.
+        ordering = ["student_class", "pk"]
+        indexes = [
+            models.Index(fields=["student_class"], name="okul_parentroster_class_idx"),
+            models.Index(fields=["name_index"], name="okul_parentroster_name_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(student_class=""),
+                name="ck_parentroster_student_class",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Veli listesi satırı ({self.student_class})"
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Adın kör indeksini günceller, sonra kaydeder.
+
+        `update_fields` verilmişse ve ad içinde yoksa indeks yeniden hesaplanmaz (anahtar
+        gerekmez). Ad içindeyse indeks alanı da `update_fields`'e eklenir. Ad çözülemiyorsa
+        (`CorruptField`, tasarım §13 D48) indeks yeniden HESAPLANMAZ: işaretin indeksi
+        anlamsızdır ve eşleşmeye sahte bir değer sokardı; kayıtlı indeks olduğu gibi kalır.
+        """
+        update_fields = kwargs.get("update_fields")
+        if (update_fields is None or "full_name" in update_fields) and not is_corrupt(
+            self.full_name
+        ):
+            self.name_index = parent_name_blind_index(self.full_name)
+            if update_fields is not None and "name_index" not in update_fields:
+                kwargs["update_fields"] = [*update_fields, "name_index"]
+        super().save(*args, **kwargs)
 
 
 # ---------------------------------------------------------------------------

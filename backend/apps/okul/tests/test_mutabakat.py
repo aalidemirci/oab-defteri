@@ -13,7 +13,7 @@ değiştirmez, kalıcı raporda ve günlükte ad yok) personel üzerinden sınan
 
 Personel mutabakatı: listede olmayanlar havuza girer (eski `mark_left_ids`
 seçimi kalktı, gönderilse de yok sayılır), "olası aynı kişi" çiftleri, görev
-metninden üye türü sınıflaması.
+metninden görev türü sınıflaması.
 
 KİŞİSEL VERİ: havuza eklenecek kişilerin adları yalnız API yanıtındadır;
 `ImportRun.report`'ta ve günlükte ad ve görev metni bulunmaz
@@ -190,7 +190,8 @@ class TestPersonelHavuzu:
 
     def test_kalici_raporda_ham_hucre_degeri_yok(self) -> None:
         """Satır sorununun ham hücre değeri yalnız API yanıtında kalır; kalıcı raporda alanı yok."""
-        metin = _personel_metni("AYŞE\tKAYA\tUzman Kaptan\t")
+        # Görev hücresi boş: görev türü denetim uyarısı (satır sorunu); branş hiç okunmaz.
+        metin = _personel_metni("AYŞE\tKAYA\t\tUzman Kaptan")
 
         onizleme = import_service.preview_personnel_text(text=metin)
         import_service.commit_personnel_text(text=metin)
@@ -443,11 +444,11 @@ class TestPersonelImportSilmezIlkesi:
 
 
 # ---------------------------------------------------------------------------
-# Görev metninden üye türü — metin hiçbir yerde saklanmaz
+# Görev metninden görev türü — metin hiçbir yerde saklanmaz
 # ---------------------------------------------------------------------------
 
 
-class TestUyeTuruSiniflamasi:
+class TestGorevTuruSiniflamasi:
     GOREVLI_LISTE = _personel_metni(
         "ALİ\tBİR\tMüdür Yardımcısı\tTarih",
         "AYŞE\tİKİ\tSözleşmeli Öğretmen(657 S.K. 4/B)\tİngilizce",
@@ -457,26 +458,26 @@ class TestUyeTuruSiniflamasi:
         "FATİH\tALTI\t\t",
     )
 
-    def test_gorev_uye_turune_cevrilir_taninmayan_ogretmen_ve_uyari(self) -> None:
+    def test_gorev_turune_cevrilir_bos_gorev_ogretmen_ve_uyari(self) -> None:
         rapor = import_service.commit_personnel_text(text=self.GOREVLI_LISTE)
 
         turler = {p.first_name: p.member_kind for p in Personnel.objects.all()}
         assert turler == {
-            "ALİ": MemberKind.TEACHER,
-            "AYŞE": MemberKind.TEACHER,
-            "CEM": MemberKind.STAFF,
-            "DENİZ": MemberKind.STAFF,
-            "EMEL": MemberKind.TEACHER,  # tanınmadı → öğretmen + uyarı
-            "FATİH": MemberKind.TEACHER,  # boş görev → öğretmen + uyarı
+            "ALİ": MemberKind.YONETICI,
+            "AYŞE": MemberKind.OGRETMEN,
+            "CEM": MemberKind.DIGER,
+            "DENİZ": MemberKind.DIGER,
+            "EMEL": MemberKind.DIGER,  # öğretmen ve yönetici değil → diğer personel
+            "FATİH": MemberKind.OGRETMEN,  # boş görev → öğretmen + uyarı
         }
         uyarilar = [(u.row_number, u.field, u.raw_value) for u in rapor.warnings]
-        assert uyarilar == [(6, "member_kind", ""), (7, "member_kind", "")]
-        assert all("Üye türünü denetleyin" in u.issue for u in rapor.warnings)
+        assert uyarilar == [(7, "member_kind", "")]
+        assert all("Görev türünü denetleyin" in u.issue for u in rapor.warnings)
 
     def test_gorev_sutunu_yoksa_ogretmen_uyarisiz(self) -> None:
         rapor = import_service.commit_personnel_text(text="Adı\tSoyadı\nALİ\tBİR")
 
-        assert Personnel.objects.get().member_kind == MemberKind.TEACHER
+        assert Personnel.objects.get().member_kind == MemberKind.OGRETMEN
         assert rapor.warnings == []
 
     def test_gorev_ve_brans_metni_hicbir_yerde_saklanmaz(

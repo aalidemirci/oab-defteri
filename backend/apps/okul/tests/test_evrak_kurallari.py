@@ -693,7 +693,7 @@ def test_e63_guvenlik_dosyasi_sifirlamasi_is_diye_yazilmaz() -> None:
 
 
 def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
-    """Orkestratör maddesi F-4, rol rol: program yöneticisi sekiz iş; yönetim kurulu rolleri
+    """Orkestratör maddesi F-4, rol rol: program yöneticisi dokuz iş (veli listesi F1b 5. adımda); yönetim kurulu rolleri
     Genel Bakış'ta son oturumun kontrolü ve kendi parolası; Denetleme Kurulu geri yükleme kartının
     "Gördüm"ü ve kendi parolası; okul müdürü yalnız kendi parolası (müdür yazıları F2/F4'tedir).
     Sonraki fazların işleri hiçbir pusulada yoktur."""
@@ -709,6 +709,7 @@ def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
             "Güvenlik: kurtarma anahtarı, şifreli yedek, yedekten geri yükleme, yedek raporu, "
             "Genel Bakış'ta güvenlik dosyasında kalan eski parola kayıtlarının silinmesi",
             "Ayarlar: boşta kilit süresi",
+            "Kişiler: veli listesinin aktarımı ve silinmesi",
             "Güncelleme denetimi",
             kendi,
         ),

@@ -11,9 +11,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from django.db import transaction
 from django.urls import NoReverseMatch, reverse
 from rest_framework.test import APIClient
 
+from apps.okul import denetim_izi
 from apps.okul.excel_ortak import ParserError
 from apps.okul.models import (
     ImportRun,
@@ -50,7 +52,7 @@ class TestPreview:
     def test_onizleme_kalici_iz_birakir(self) -> None:
         import_service.preview_personnel_text(text=_metin("EMRE CAN\tYILMAZ\tÖğretmen"))
         kosu = ImportRun.objects.get(status=ImportStatus.PREVIEWED)
-        assert kosu.source_type == ImportSourceType.PERSONNEL
+        assert kosu.source_type == ImportSourceType.PERSONEL
 
 
 @pytest.mark.django_db
@@ -68,7 +70,7 @@ class TestImportRunLifecycle:
         assert "Zorunlu sütun" in kayit.report["error"]
 
     def test_bozuk_excel_dosyasi_turkce_hata_ve_failed_izi(self) -> None:
-        with pytest.raises(ParserError, match="Excel olarak okunamadı"):
+        with pytest.raises(ParserError, match="Dosya okunamadı. Desteklenen biçimler"):
             import_service.commit_personnel_file(file_bytes=b"PK\x03\x04 bozuk", file_name="x.xlsx")
         assert ImportRun.objects.filter(status=ImportStatus.FAILED).count() == 1
 
@@ -90,14 +92,14 @@ class TestPersonnelImport:
         assert rapor2.updated_personnel == 1
         assert Personnel.objects.count() == 1
         kisi = Personnel.objects.first()
-        assert kisi is not None and kisi.member_kind == MemberKind.STAFF
+        assert kisi is not None and kisi.member_kind == MemberKind.DIGER
 
     def test_bos_hucre_mevcut_veriyi_silmez(self) -> None:
-        """Görev hücresi boşsa üye türü değişmez (tanınmayan görev mevcut veriyi silmez)."""
+        """Görev hücresi boşsa görev türü değişmez (tanınmayan görev mevcut veriyi silmez)."""
         import_service.commit_personnel_text(text="Adı\tSoyadı\tGörevi\nAYŞE\tÖĞRETMEN\tHizmetli")
         rapor = import_service.commit_personnel_text(text="Adı\tSoyadı\tGörevi\nAYŞE\tÖĞRETMEN\t")
         kisi = Personnel.objects.first()
-        assert kisi is not None and kisi.member_kind == MemberKind.STAFF
+        assert kisi is not None and kisi.member_kind == MemberKind.DIGER
         assert rapor.unchanged_personnel == 1
         assert [u.field for u in rapor.warnings] == ["member_kind"]
 
@@ -157,3 +159,20 @@ class TestImportApi:
         yanit = client.post("/api/v1/imports/students/preview/", {"text": "x"}, format="multipart")
         assert yanit.status_code == 403
         assert not ImportRun.objects.exists()
+
+
+@pytest.mark.django_db
+def test_aktarim_turleri_tasarimin_adlarini_tasir_eski_ogrenci_kosusu_dogrulanir() -> None:
+    """Tasarım §5.1 `ImportRun`: türler PERSONEL ve VELI. Öğrenci aktarımından kalan `STUDENTS`
+    koşusu çevrilmez (göç 0015): değeri kümede olmasa da kaydı doğrulanmayı sürdürür."""
+    assert ImportSourceType.values == ["PERSONEL", "VELI"]
+    with transaction.atomic():
+        kosu = ImportRun.objects.create(
+            source_type="STUDENTS", file_hash="e" * 64, status=ImportStatus.COMPLETED
+        )
+        denetim_izi.degisiklik(kosu, onceki=None)
+
+    kosu.refresh_from_db()
+    assert kosu.source_type == "STUDENTS"
+    assert denetim_izi.kaydi_dogrula(ImportRun, kosu.pk) is True
+    assert denetim_izi.zinciri_dogrula() == []

@@ -34,14 +34,14 @@ const HAVUZ: LeavePool = {
     {
       id: 11,
       full_name: "AYŞE KARA",
-      member_kind: "TEACHER",
+      member_kind: "OGRETMEN",
       leave_candidate_since: "2026-09-22",
       run: null,
       similar: [
         {
           id: 21,
           full_name: "AYŞE BEYAZ",
-          member_kind: "TEACHER",
+          member_kind: "OGRETMEN",
           created_on: "2026-09-22",
           reason: "ad_ayni_soyad_farkli",
         },
@@ -50,7 +50,7 @@ const HAVUZ: LeavePool = {
     {
       id: 12,
       full_name: "MEHMET DEMİR",
-      member_kind: "STAFF",
+      member_kind: "DIGER",
       leave_candidate_since: "2026-09-22",
       run: { id: 6, file_name: "", date: "2026-09-22" },
       similar: [],
@@ -58,7 +58,7 @@ const HAVUZ: LeavePool = {
     {
       id: 13,
       full_name: "ZEHRA EMEKLİ",
-      member_kind: "TEACHER",
+      member_kind: "OGRETMEN",
       leave_candidate_since: "2026-06-20",
       run: { id: 5, file_name: "OOK01001R1.XLS", date: "2026-06-20" },
       similar: [],

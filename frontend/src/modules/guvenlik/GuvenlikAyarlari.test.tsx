@@ -152,7 +152,11 @@ describe("GuvenlikAyarlari", () => {
     // Şifrelenen kişi alanları ve şifrelenmeyen alanlar açıkça söylenir; öğrenci sicili
     // söküldüğü için okul numarası ve sınıf/şube metinde geçmez.
     expect(screen.getByText(/öğretmen ve diğer personelin ad-soyadları/)).toBeInTheDocument();
-    expect(screen.getByText(/Üye türü ve tarihler şifrelenmez/)).toBeInTheDocument();
+    // Veli listesi (F1b 5. adım): ad şifreli, öğrencinin sınıfı düz metin.
+    expect(screen.getByText(/velilerin ad-soyadları/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Görev türü, veli listesindeki öğrencinin sınıfı ve tarihler şifrelenmez/),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/okul numara/i)).toBeNull();
     expect(screen.queryByText(/Sınıf\/şube/)).toBeNull();
     // Fotoğraf ve sınav belgeleri bu programda yoktur; metin onlardan söz etmez.

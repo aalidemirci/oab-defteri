@@ -55,16 +55,22 @@ silme engeli varsa gerekçeyle reddedilir; kişi birlik kayıtlarına bağlıysa
 silinmez, ayrılış yoluna yönlendirilir (`MEMBER_DELETE_MESSAGE`; birlik kaydı
 silinmez — CLAUDE.md §2 altın kural 4); bağı yoksa katı silinir. Katı silme
 BİLİNÇLİDİR: yanlış girilmiş kaydın yumuşak silmesi kişi verisini süresiz
-tutardı.
+tutardı. Bugün personele bağlanan bir birlik kaydı YOKTUR: hiçbir model personele
+yabancı anahtar taşımaz (hesap kendi ad-soyadını taşır, kişiye bağlanmaz; ekin genel sahip
+kümesi F1b'de boştur, `services.dosya_deposu`); bağlar F1c'den itibaren kayıt defterleriyle
+gelir (organ üyeliği, imza bloğu…) ve silmeyi o gün keser.
 
 DENETİM İZİ (tasarım §4.6.2; plan F1b-1 alt commit c). Her yazım veriyle AYNI işlemde iz
-satırı yazar (`denetim_izi.degisiklik`): oluşturma `OLUSTUR`, ad/üye türü değişikliği
+satırı yazar (`denetim_izi.degisiklik`): oluşturma `OLUSTUR`, ad/görev türü değişikliği
 `GUNCELLE`, ayrılış ve havuza giriş-çıkış `DURUM` (durum alanları modeldedir). Personel
 KVKK silme kümesindedir: satır yalnız alan ADLARINI taşır, değer taşımaz.
 Önceki hâl yazmadan önce, aynı işlemde alınır. Toplu karar (`resolve_leave_pool`) kişi
-başına satır yazar. **İzsiz kalan iki yol** plan gereği adıyla muaftır (5. adımda yeniden
-yazılır): kullanıcının katı silmesi (`delete_personnel`) ve personel
-birleştirmesi (`merge_personnel`); muafiyet listesi `tests/test_izsiz_yazim.py`'dedir.
+başına satır yazar. Kayıt silinmez kuralının KVKK istisnası olan iki katı silme de izlidir
+(plan "F1b-5 uygulama kararları"; tasarım §4.6.2 kural 4, §5 O1): kullanıcının silmesi
+(`delete_personnel`, tetik `ELLE_SILME`) ve birleştirmede kaynağın silinmesi
+(`merge_personnel`, tetik `BIRLESTIRME`) silmeyle AYNI işlemde kişisiz bir `KVKK_SILME`
+satırı yazar (`denetim_izi.kvkk_silme`: model, alan adları, adet, kaydın günü, tetik; kimlik
+ve değer yok).
 """
 
 from __future__ import annotations
@@ -72,6 +78,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from django.core.exceptions import ValidationError
@@ -327,7 +334,7 @@ def resolve_leave_pool(*, personnel: PoolDecision | None = None) -> dict[str, in
 @transaction.atomic
 def create_personnel(**fields: Any) -> Personnel:
     app_password.require_password_set()
-    fields.setdefault("member_kind", MemberKind.TEACHER)
+    fields.setdefault("member_kind", MemberKind.OGRETMEN)
     person: Personnel = Personnel.objects.create(**fields)
     denetim_izi.degisiklik(person, onceki=None)
     return person
@@ -373,14 +380,24 @@ def reactivate_personnel(person: Personnel) -> None:
     person.left_at = None
 
 
+def _kaydin_gunu(person: Personnel) -> date:
+    """`KVKK_SILME` satırının "en yeni" günü: silinen tek kaydın oluşturulduğu gün (§4.6.4)."""
+    return timezone.localdate(person.created_at)
+
+
 @transaction.atomic
 def delete_personnel(person: Personnel) -> None:
-    """Kullanıcı silmesi: açık yükümlülük ve birlik bağı yoksa KATI silinir.
+    """Kullanıcı silmesi: açık yükümlülük, silme engeli ve birlik bağı yoksa KATI silinir.
 
-    İZSİZDİR — plan F1b-1 gereği adıyla muaf (5. adımda yeniden yazılır; modül başlığı).
+    Denetim izine `KVKK_SILME` satırı düşer (tetik `ELLE_SILME`; modül başlığı).
     """
+    app_password.require_password_set()
     _ensure_deletable(person)
     person.hard_delete()
+    # Bütün satır silinir (`alanlar=None`); kimlik ve değer satıra girmez (modül başlığı).
+    denetim_izi.kvkk_silme(
+        Personnel, adet=1, en_yeni=_kaydin_gunu(person), tetik=denetim_izi.KVKK_TETIK_ELLE_SILME
+    )
     logger.info("Personel kaydı silindi.")
 
 
@@ -395,8 +412,10 @@ def merge_personnel(source: Personnel, target: Personnel) -> Personnel:
     kişi olamaz. Taşıma birleştirme kancalarıyla yapılır (OAB modelleri F1c'den
     itibaren kaydeder); bugün kayıtlı kanca yoktur.
 
-    İZSİZDİR — plan F1b-1 gereği adıyla muaf (5. adımda yeniden yazılır; modül başlığı).
+    Kaynağın silinmesi denetim izine `KVKK_SILME` satırıyla düşer (tetik `BIRLESTIRME`; modül
+    başlığı); hedef kayıt değişmez. Kancaların taşıdığı bağların izini kancalar yazar.
     """
+    app_password.require_password_set()
     if source.pk == target.pk:
         raise ValidationError(SELF_MERGE_MESSAGE)
     if source.deleted_at is not None or target.deleted_at is not None:
@@ -404,5 +423,8 @@ def merge_personnel(source: Personnel, target: Personnel) -> Personnel:
     for hook in _merge_hooks:
         hook(source, target)
     source.hard_delete()
+    denetim_izi.kvkk_silme(
+        Personnel, adet=1, en_yeni=_kaydin_gunu(source), tetik=denetim_izi.KVKK_TETIK_BIRLESTIRME
+    )
     logger.info("Personel kayıtları birleştirildi.")
     return target

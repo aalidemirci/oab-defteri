@@ -111,7 +111,7 @@ def test_python_docx_varsayilan_sablonu_yalniz_tam_yoluyla_muaf(tmp_path: Path) 
 
 
 def test_csv_db_ve_xlsm_reddedilir(tmp_path: Path) -> None:
-    for ad in ("ogrenciler.csv", "eski.db", "liste.XLSM"):
+    for ad in ("ogrenciler.csv", "eski.db", "liste.XLSM", "veli-listesi.tsv"):
         dosya = tmp_path / "_internal" / "backend" / "apps" / "okul" / ad
         dosya.parent.mkdir(parents=True, exist_ok=True)
         dosya.touch()
@@ -120,6 +120,7 @@ def test_csv_db_ve_xlsm_reddedilir(tmp_path: Path) -> None:
         "ogrenciler.csv",
         "eski.db",
         "liste.XLSM",
+        "veli-listesi.tsv",
     }
 
 

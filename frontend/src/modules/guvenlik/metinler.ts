@@ -10,13 +10,16 @@
 /** Ayarlar ve kilit ekranında gösterilen kapsam açıklaması. */
 export const KAPSAM_METNI =
   "Bu koruma, kayıtlardaki kişisel veri alanlarını (öğretmen ve diğer personelin " +
-  "ad-soyadları, hesap sahiplerinin ad-soyadları, eklerin özgün dosya adları) her " +
+  "ad-soyadları, velilerin ad-soyadları, hesap sahiplerinin ad-soyadları, eklerin özgün " +
+  "dosya adları) her " +
   "hesabın kendi parolasıyla açılan bir anahtarla şifreler. TAM DİSK " +
   "ŞİFRELEME DEĞİLDİR: bilgisayarın tamamını korumak için Windows'ta BitLocker, " +
   "Pardus/Linux'ta LUKS kullanın.";
 
 /** Şifrelenmeyen alanlar açıkça söylenir — sürpriz olmasın. */
-export const KAPSAM_DISI_METNI = "Üye türü ve tarihler şifrelenmez (süzgeçler bunlara dayanır).";
+export const KAPSAM_DISI_METNI =
+  "Görev türü, veli listesindeki öğrencinin sınıfı ve tarihler şifrelenmez (süzgeçler ve " +
+  "sayımlar bunlara dayanır).";
 
 /**
  * Dürüst sınır (tasarım §4.4.6-5, TK15): her hesabın parolası kayıtların anahtarını tek
@@ -196,11 +199,10 @@ export const DOSYA_KAYIP_SIFIRLA_METNI =
  * imha eden kolu ve ihlal dökümü sonraki fazlardadır, burada vaat edilmez).
  *
  * Denetim izi (F1b 1. adım, alt commit c): okul çekirdeğinin bütün yazmaları oturumdaki
- * hesabın adına denetim izine yazılır; tek istisna plan gereği 5. adımda yeniden yazılacak
- * katı silme ve birleştirmedir (personelin sicilden silinmesi, iki kişi kaydının
- * birleştirilmesi — backend `test_izsiz_yazim.py` `MUAF_ISLEVLER`; öğrenci sicili F1b 5. adımda
- * söküldü). Bu istisna metinde açıkça
- * yazar; istisna kalkınca cümle kısalır. Yedekten geri yükleme veritabanını değiştirdiği için
+ * hesabın adına denetim izine yazılır. F1b 5. adımdan beri istisna yoktur: personelin sicilden
+ * silinmesi ve birleştirmede kaynağın silinmesi de kişisiz bir KVKK silme satırıyla yazılır
+ * (backend `services.persons`; `test_izsiz_yazim.py` `IZLI_UCLAR`), metindeki "tek istisna"
+ * cümlesi kalktı. Yedekten geri yükleme veritabanını değiştirdiği için
  * satırı ancak geri yüklemeden sonraki ilk girişte yazılır; uygulama içinden yapıldıysa satır
  * onu başlatan oturumun hesabını taşır (kurtarma anahtarı yolunda da; backend
  * `iz_dogrulama._geri_yukleme_satiri`), metin bunu da söyler. "Denetim izi değişikliği gösterir, önlemez" maddesi
@@ -228,9 +230,8 @@ export const DURUST_SINIRLAR: readonly { baslik: string; metin: string }[] = [
   {
     baslik: "Açık oturum, sahibinin imzasıdır.",
     metin:
-      "Oturum açıkken yapılan her iş o hesabın adına denetim izine yazılır (bugün tek " +
-      "istisna: personelin sicilden silinmesi ile iki kişi kaydının " +
-      "birleştirilmesi). Yedekten geri yükleme, ardından yapılan ilk girişte, onu başlatan " +
+      "Oturum açıkken yapılan her iş o hesabın adına denetim izine yazılır. Yedekten " +
+      "geri yükleme, ardından yapılan ilk girişte, onu başlatan " +
       "hesapla birlikte yazılır. Bilgisayar başından kalkarken Kilitle'ye basın " +
       "(Ctrl+Shift+L); program boşta kalınca da kendiliğinden kilitlenir.",
   },
