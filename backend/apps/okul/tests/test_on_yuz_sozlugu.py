@@ -6,7 +6,8 @@ görünen her metin sözlüğe uyar").
 metin modülleri (Kullanıcılar, Erişim Günlüğü, rol kapısı ve yetki, denetim izi kartları) ve
 güvenlik metinleri (F1b 3. adımın ekranları `guvenlik/metinler.ts`'ten okur), kapanış pencereleri
 ve okul kartının metinleri (F1b 4. adım, `okul/metinler.ts`), Kişiler'in görev türü ve aktarım
-metinleri, aydınlatma metinleri ve Veli Listesi (F1b 5. adım, `kisiler/metinler.ts`).
+metinleri, aydınlatma metinleri ve Veli Listesi (F1b 5. adım, `kisiler/metinler.ts`), düz dize
+sabiti olan öteki ekran dosyaları ve Kılavuz'un bölüm sabitleri (F1b 6. adım).
 Her dosyadaki düz `export const AD(: tip)? = "…" (+ "…")*;` dizesi, boşluklar tekleştirilip
 tırnaklar (“ ” → ") eşitlenerek sözlükte aranır. Hesaplanan ya da şablon dizesi kapsam dışıdır
 (işlevlerin metinleri sözlükte kalıp olarak yazılıdır, ör. "Parola sıfırlandı · gg.aa.yyyy …").
@@ -44,6 +45,30 @@ DOSYALAR = (
     "frontend/src/lib/metinler.ts",
     "frontend/src/modules/okul/metinler.ts",
     "frontend/src/modules/kisiler/metinler.ts",
+    # F1b 6. adım (plan "F1b-6 uygulama kararları"): metni sözlükte olan öteki ekran dosyaları.
+    "frontend/src/modules/ayarlar/AyarlarPage.tsx",
+    "frontend/src/modules/butunluk/IkiDepoKarti.tsx",
+    "frontend/src/modules/guncelleme/UpdatePanel.tsx",
+    "frontend/src/modules/guvenlik/BostaKilitSuresiKarti.tsx",
+    "frontend/src/modules/guvenlik/DisYedekKarti.tsx",
+    "frontend/src/modules/guvenlik/GuvenlikAyarlari.tsx",
+    "frontend/src/modules/guvenlik/KilitEkrani.tsx",
+    "frontend/src/modules/guvenlik/KurtarmaIleAcma.tsx",
+    "frontend/src/modules/guvenlik/YenidenBaslatEkrani.tsx",
+    "frontend/src/modules/guvenlik/kurtarma.ts",
+    "frontend/src/modules/kilavuz/KilavuzPage.tsx",
+    "frontend/src/modules/kilavuz/bolumler/PrograminKonumu.tsx",
+    "frontend/src/modules/kisiler/KisilerPage.tsx",
+    "frontend/src/modules/kisiler/ortak.tsx",
+    "frontend/src/modules/kullanicilar/pusula.ts",
+    "frontend/src/modules/oturum/hesapKurallari.ts",
+    "frontend/src/modules/oturum/parolaPolitikasi.ts",
+    "frontend/src/modules/oturum/useKilitle.ts",
+    "frontend/src/modules/panel/OkunamayanAlanlarKarti.tsx",
+    "frontend/src/modules/panel/PanelPage.tsx",
+    "frontend/src/modules/panel/SonOturumKarti.tsx",
+    "frontend/src/lib/api.ts",
+    "frontend/src/lib/mevzuat.ts",
 )
 
 #: Kullanıcıya görünmeyen düz dize sabitleri (dosya, ad) → gerekçe.
@@ -52,6 +77,22 @@ ISTISNALAR: dict[tuple[str, str], str] = {
         "Yalnız köprünün olmadığı geliştirme kipinin yükleme kutusunda çıkar; programın penceresinde "
         'yedek yüklenmez (kullanıcı kararı 06.11.2026 "Yedek dosyası yüklenmez, programın Aç '
         'penceresiyle seçilir").'
+    ),
+    ("frontend/src/modules/guncelleme/UpdatePanel.tsx", "INDIRME_SAYFASI"): (
+        "Bağlantının adresi; görünen adı `INDIRME_SAYFASI_ADI` sözlüktedir."
+    ),
+    ("frontend/src/modules/guvenlik/DisYedekKarti.tsx", "GUVENLIK_ADRESI"): "Rota adresi.",
+    ("frontend/src/modules/kisiler/ortak.tsx", "HAVUZ_ADRESI"): "Rota adresi.",
+    ("frontend/src/modules/oturum/useKilitle.ts", "KILITLE_KISAYOLU_ARIA"): (
+        "`aria-keyshortcuts` değeri (standart tuş adları); görünen kısayol sözlükte yazılıdır."
+    ),
+    ("frontend/src/lib/api.ts", "ROL_YETKISIZ_OLAYI"): "Pencere olayının adı.",
+    ("frontend/src/lib/api.ts", "ETKINLIK_BASLIGI"): "HTTP üstbilgisinin adı.",
+    ("frontend/src/modules/guvenlik/kurtarma.ts", "KURTARMA_BELGESI_DOSYA_KOKU"): (
+        "Dosya adının kökü; sözlükte kaydedilen dosyanın tireli kalıbıyla yazılıdır (§2, §3)."
+    ),
+    ("frontend/src/modules/kullanicilar/pusula.ts", "PUSULA_DOSYA_KOKU"): (
+        "Dosya adının kökü; sözlükte kaydedilen dosyanın tireli kalıbıyla yazılıdır (§1, §2)."
     ),
 }
 
@@ -98,7 +139,7 @@ def test_on_yuz_metinleri_sozlukte_yazilidir() -> None:
                 eksik.append(f"{goreli}: {ad} = {deger!r}")
     assert not eksik, "Sözlükte yazılı olmayan ön yüz metinleri:\n" + "\n".join(eksik)
     # Kapsam boşalmasın (ör. dosya taşındı, kalıp artık eşleşmiyor).
-    assert sayi >= 100, sayi
+    assert sayi >= 150, sayi
 
 
 def test_pencere_basliklari_ve_secilen_dosyanin_iletisi_sozlukte_yazilidir() -> None:

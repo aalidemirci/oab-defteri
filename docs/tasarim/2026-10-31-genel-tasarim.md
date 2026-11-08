@@ -537,7 +537,7 @@ gösterilir ve basılır, erişim günlüğüne düşmez (denetim EK-13). Ödeme
 Windows hesabını kullanan kurul üyesi, dönemi biten kurul üyesi, bilgisayara erişimi olan personel, yedeği bulan kişi;
 uzak saldırganın tek yüzeyi güncelleme kanalıdır. **Sınır:** program bir izlenebilirlik ve kaza önleme aracıdır; **asıl
 güvenlik sınırı Windows hesabı ve disk şifrelemesidir** (BitLocker; Pardus'ta LUKS). Bu cümle kılavuza ve Hakkında'ya
-girer ([KVKK md. 12/1](../mevzuat/6698-kvkk.md#madde-12) idari tedbirler okulundur).
+girer ([KVKK md. 12/1](../mevzuat/6698-kvkk.md#madde-12) idari tedbirler veri sorumlusunundur; veri sorumlusunun kim olduğu F0-e (b)).
 
 | # | Tehdit | Katman | Kalan risk |
 |---|---|---|---|
@@ -941,7 +941,7 @@ Hesap olaylarının **tek kaynağı** bu tablodur; §5 ve §7 buraya gönderir (
    her hesap sarmalı veri anahtarını tek başına verir. Tam koruma disk şifrelemesidir (BitLocker; Pardus'ta LUKS).
 6. **Kayıp ya da çalınmada bildirim okulundur.** Bilgisayar, disk, USB yedeği ya da arşiv paketi kaybolur ya da
    çalınırsa [KVKK md. 12/5](../mevzuat/6698-kvkk.md#madde-12) bildirimi (ilgilisine ve Kurula, en kısa sürede) veri
-   sorumlusunun, yani okulun işidir. Program yalnız yardım eder: "ihlal dökümü" seçilen tarihte programda bulunan veri
+   sorumlusunun işidir (kim olduğu F0-e (b)). Program yalnız yardım eder: "ihlal dökümü" seçilen tarihte programda bulunan veri
    kategorilerini ve kişi sayılarını kişisiz verir (§8.6). Kılavuz kontrol listesini yazar (denetim KM-18).
 7. **Parola değişimi eski parolayı program içinde geçersiz kılar, program dışında kılmaz.** Parola değiştikten ya da
    sıfırlandıktan sonra eski parola kaydı (arşiv kopyası dahil) programda giriş açmaz; istisnaları yazımın yarıda

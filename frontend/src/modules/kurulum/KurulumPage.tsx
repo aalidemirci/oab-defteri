@@ -540,8 +540,8 @@ function HesapAdimi({
           </div>
           <p className="mt-2 text-body-medium text-on-surface-variant">
             Hesap kurulu, kurtarma anahtarının saklandığı doğrulandı. Anahtarı müdürlükte kapalı
-            zarfta saklayın. Parolanızı Ayarlar → Güvenlik bölümünden değiştirebilirsiniz; hesap
-            kaldırılamaz. Anahtar kaybolursa aynı bölümden yenisini üretebilirsiniz.
+            zarfta saklayın. Parolanızı Ayarlar → Güvenlik bölümünden değiştirebilirsiniz; hesabın
+            kaydı silinmez. Anahtar kaybolursa aynı bölümden yenisini üretebilirsiniz.
           </p>
         </Card>
         <KurtarmaCiktisiKarti />

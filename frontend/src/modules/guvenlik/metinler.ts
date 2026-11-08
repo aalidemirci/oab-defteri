@@ -96,7 +96,7 @@ export function dogrulamaMetni(birinci: number, ikinci: number): string {
  */
 export const KURMA_UYARISI =
   "Program yöneticisi hesabı zorunludur: hesap kurulmadan öğretmen ve diğer personel " +
-  "kaydı yapılamaz. Kurulduktan sonra kaldırılamaz; parolası değiştirilebilir. " +
+  "kaydı yapılamaz. Hesabın kaydı silinmez; açık başka bir program yöneticisi hesabı yokken kapatılamaz; parolası değiştirilebilir. " +
   "Parolayı kimseyle paylaşmayın; herkes programı kendi hesabıyla ve kendi parolasıyla " +
   "açar. Program yöneticisi parolasını unutursa kayıtlar kurtarma anahtarıyla açılır ve " +
   "yeni parola belirlenir; bu yüzden anahtar okul müdürlüğünde kapalı zarfta saklanır.";

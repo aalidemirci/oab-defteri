@@ -10,6 +10,15 @@ import { Link, useLocation } from "react-router-dom";
 
 import Card from "../../ui/Card";
 import Icon from "../../ui/Icon";
+import type { YetenekAdi } from "../oturum/api";
+import { useYetki } from "../oturum/yetki";
+
+/** Bölüm dosyasının `KilavuzPage`'den aldığı tek girdi: çapa, başlık ve ikon orada yazılıdır. */
+export interface BolumProps {
+  id: string;
+  baslik: string;
+  ikon: string;
+}
 
 /**
  * Kılavuz bölümü — ikon rozeti + başlık + içerik. `scroll-mt-24`: "Bu kılavuzda"
@@ -20,10 +29,7 @@ export function KilavuzBolumu({
   baslik,
   ikon,
   children,
-}: {
-  id: string;
-  baslik: string;
-  ikon: string;
+}: BolumProps & {
   children: ReactNode;
 }) {
   return (
@@ -80,6 +86,24 @@ export function Ekran({ to, children }: { to: string; children: ReactNode }) {
       {children}
     </Link>
   );
+}
+
+/**
+ * Yalnız bazı rollere açık ekranın bağlantısı (sözlük §1 "Rol süzmesi"). Yetenek açık değilse
+ * ad düz metin kalır: rota o rolü kapalı ekrana götürürdü. Cümle "…'nı açın" gibi bağlantıya
+ * yaslanıyorsa `useYetki().acik(…)` ile iki ayrı cümle yazılır (emsal: `PrograminKonumu`).
+ */
+export function KapiliEkran({
+  to,
+  yetenek,
+  children,
+}: {
+  to: string;
+  yetenek: YetenekAdi;
+  children: ReactNode;
+}) {
+  const yetki = useYetki();
+  return yetki.acik(yetenek) ? <Ekran to={to}>{children}</Ekran> : <>{children}</>;
 }
 
 /** Klavye kısayolu. */

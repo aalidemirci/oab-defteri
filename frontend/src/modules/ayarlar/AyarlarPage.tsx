@@ -57,7 +57,7 @@ import { eksikDiniBayramIletisi, tatilleriTohumla } from "../takvim/tatilTohumu"
 const TABS = ["ders-yillari", "kapali-gunler", "okul", "guvenlik", "guncelleme"] as const;
 type TabKey = (typeof TABS)[number];
 
-const TAB_ITEMS: TabItem[] = [
+export const TAB_ITEMS: TabItem[] = [
   { key: "ders-yillari", label: "Ders Yılları", icon: "calendar_month" },
   { key: "kapali-gunler", label: "Kapalı Günler", icon: "event_busy" },
   { key: "okul", label: "Okul Bilgileri", icon: "apartment" },
@@ -411,10 +411,10 @@ function SchoolTermEditor({ year, yazabilir }: { year: SchoolYear; yazabilir: bo
   return (
     <div className="rounded-shape-sm bg-surface-container-low p-4">
       <p className="text-body-small text-on-surface-variant">
-        1. dönem ders yılı başlangıcında, 2. dönem ders yılı bitişinde sonlanır. Aradaki boşluk
-        yarıyıl tatilidir; yarıyıla bağlı hesaplar (ör. kantinde yarıyıl ayının kirası) bu tarihlere
-        dayanır. Yarıyılı Kapalı Günler sekmesinde öğrenciye kapalı gün olarak da ekleyin; iş
-        günüyle verilen süreler o takvime bakar.
+        1. dönem ders yılı başlangıcında başlar, 2. dönem ders yılı bitişinde sonlanır. Aradaki
+        boşluk yarıyıl tatilidir; yarıyıla bağlı hesaplar (ör. kantinde yarıyıl ayının kirası) bu
+        tarihlere dayanır. Yarıyılı Kapalı Günler sekmesinde öğrenciye kapalı gün olarak da ekleyin;
+        iş günüyle verilen süreler o takvime bakar.
       </p>
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <TextField

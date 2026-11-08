@@ -79,7 +79,7 @@ type TabKey = (typeof TAB_KEYS)[number];
 
 // Sözlük: "personel" tek başına öğretmen anlamında kullanılmaz; görev türleri
 // "öğretmen", "yönetici" ve "diğer personel"dir. Sekme hepsini taşır.
-const TABS: TabItem[] = [
+export const TABS: TabItem[] = [
   { key: "personel", label: "Öğretmenler ve Diğer Personel", icon: "badge" },
   { key: "havuz", label: "Ayrılış Havuzu", icon: "pending_actions" },
   { key: "veli", label: VELI_LISTESI_SEKMESI, icon: "family_restroom" },

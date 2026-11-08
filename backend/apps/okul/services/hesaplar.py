@@ -1413,7 +1413,13 @@ def _kullanici_satiri(hesap: Account, gorunum: _Gorunum) -> dict[str, Any]:
         # Çözülemeyen ad (D48) boştur; ön yüz "okunamadı" yazar (sözlük §1 "Şifreleme").
         "ad_soyad": ad if isinstance(ad, str) else None,
         "durum": hesap.status,
-        "durum_etiketi": _durum_etiketi(hesap.status),
+        # Hatalı deneme askısı `status`'u değiştirmez (güvenlik dosyasındadır); ekrandaki durum yine
+        # "Askıda" yazar (sözlük §1). `durum` kodu değişmez: eylem denetimleri ona bakar.
+        "durum_etiketi": (
+            str(AccountStatus.ASKIDA.label)
+            if askida_nedeni is not None
+            else _durum_etiketi(hesap.status)
+        ),
         "askida_nedeni": askida_nedeni,
         "askida_nedeni_etiketi": _ASKI_ETIKETLERI.get(askida_nedeni or ""),
         "kayit_tutuyor": kayit is None,

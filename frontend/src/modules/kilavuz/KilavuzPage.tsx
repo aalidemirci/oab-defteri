@@ -1,22 +1,62 @@
-// Kullanım Kılavuzu — statik içerik, çevrimdışı. Kabuk bileşenleri `KilavuzKabugu`'ndadır.
-// Aile iskeletinin kütüphane kılavuzu F1a-2'de silindi; OAB'nin bölümleri her fazın
-// özellikleriyle birlikte yazılır (tasarım §14). Bugün yalnız programın konumunu
-// anlatan bölüm vardır (CLAUDE.md §1: konum cümlesi kılavuzda da yer alır).
+// Kullanım Kılavuzu — statik içerik, çevrimdışı. Kabuk bileşenleri `KilavuzKabugu`'ndadır, her
+// bölüm `bolumler/` altında kendi dosyasındadır. Aile iskeletinin kütüphane kılavuzu F1a-2'de
+// silindi; OAB'nin bölümleri her fazın özellikleriyle birlikte yazılır (tasarım §14).
+//
+// Bölüm eklemek: `bolumler/` altına dosyayı koy, `BOLUMLER`'e satırını ekle. Çapa, başlık, ikon
+// ve sıra YALNIZ buradadır; bölüm dosyası bunları `BolumProps` olarak alır.
 
 import Card from "../../ui/Card";
-import { useYetki } from "../oturum/yetki";
-import { Ekran, KilavuzBolumu, useCapayaKaydir } from "./KilavuzKabugu";
+import { VELI_LISTESI_SEKMESI } from "../kisiler/metinler";
+import { KULLANICILAR_BASLIGI } from "../kullanicilar/metinler";
+import CikisVeKapanis from "./bolumler/CikisVeKapanis";
+import DersYiliKapaliGunler from "./bolumler/DersYiliKapaliGunler";
+import GenelBakis from "./bolumler/GenelBakis";
+import Guncelleme from "./bolumler/Guncelleme";
+import GuvenlikVeKisiselVeriler from "./bolumler/GuvenlikVeKisiselVeriler";
+import HesaplarVeOturum from "./bolumler/HesaplarVeOturum";
+import IlkKurulum from "./bolumler/IlkKurulum";
+import Kisiler from "./bolumler/Kisiler";
+import Kullanicilar from "./bolumler/Kullanicilar";
+import OkulKarti from "./bolumler/OkulKarti";
+import PrograminKonumu from "./bolumler/PrograminKonumu";
+import VeliListesi from "./bolumler/VeliListesi";
+import YedekVeGeriYukleme from "./bolumler/YedekVeGeriYukleme";
+import { useCapayaKaydir } from "./KilavuzKabugu";
 
 /**
- * Sihirbazı açamayan rolde konum bölümünün son cümlesi (sözlük §1 "Rol süzmesi"; kullanıcı
- * kararı 04.11.2026).
+ * Bölümler (çapa → başlık + ikon + içerik), sayfadaki sırasıyla: kullanıcının iş sırası.
+ * Başlıklar Başlık Düzenindedir ve ekrandaki adı taşır ("okul kartı" ekranda geçmez: sözlük §1).
  */
-export const KILAVUZ_SIHIRBAZ_KAPALI_METNI =
-  "İlk kurulum adımları Kurulum Sihirbazı'ndadır; girilen bilgiler Ayarlar'da görünür.";
-
-/** Bölümler (çapa → başlık + ikon), sayfadaki sırasıyla. Başlıklar Başlık Düzenindedir. */
 const BOLUMLER = {
-  "programin-konumu": { baslik: "Programın Konumu", ikon: "info" },
+  "programin-konumu": { baslik: "Programın Konumu", ikon: "info", Bolum: PrograminKonumu },
+  "ilk-kurulum": { baslik: "İlk Kurulum", ikon: "flag", Bolum: IlkKurulum },
+  "genel-bakis": { baslik: "Genel Bakış", ikon: "space_dashboard", Bolum: GenelBakis },
+  "hesaplar-ve-oturum": { baslik: "Hesaplar ve Oturum", ikon: "key", Bolum: HesaplarVeOturum },
+  kullanicilar: { baslik: KULLANICILAR_BASLIGI, ikon: "manage_accounts", Bolum: Kullanicilar },
+  "okul-karti": { baslik: "Okul Bilgileri", ikon: "apartment", Bolum: OkulKarti },
+  "ders-yili-kapali-gunler": {
+    baslik: "Ders Yılları ve Kapalı Günler",
+    ikon: "calendar_month",
+    Bolum: DersYiliKapaliGunler,
+  },
+  kisiler: { baslik: "Kişiler", ikon: "group", Bolum: Kisiler },
+  "veli-listesi": { baslik: VELI_LISTESI_SEKMESI, ikon: "family_restroom", Bolum: VeliListesi },
+  "yedek-ve-geri-yukleme": {
+    baslik: "Yedek ve Geri Yükleme",
+    ikon: "backup",
+    Bolum: YedekVeGeriYukleme,
+  },
+  "guvenlik-ve-kvkk": {
+    baslik: "Güvenlik ve Kişisel Veriler",
+    ikon: "shield",
+    Bolum: GuvenlikVeKisiselVeriler,
+  },
+  guncelleme: { baslik: "Güncelleme", ikon: "system_update", Bolum: Guncelleme },
+  "cikis-ve-kapanis": {
+    baslik: "Çıkış ve Kapanış",
+    ikon: "power_settings_new",
+    Bolum: CikisVeKapanis,
+  },
 } as const;
 
 type BolumId = keyof typeof BOLUMLER;
@@ -28,7 +68,6 @@ export const KILAVUZ_BOLUMLERI: ReadonlyArray<{ id: BolumId; baslik: string }> =
 
 export default function KilavuzPage() {
   useCapayaKaydir();
-  const yetki = useYetki();
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <header>
@@ -38,8 +77,8 @@ export default function KilavuzPage() {
         </h1>
         <p className="mt-2 text-body-medium text-on-surface-variant">
           OAB Defteri, okul-aile birliğinin işlerini okulun bilgisayarında yürüten çevrimdışı bir
-          programdır; veriler yalnız bu bilgisayarda durur. Kılavuz, programa yeni özellikler
-          geldikçe genişler.
+          masaüstü programıdır; veriler yalnız bu bilgisayarda durur. Kılavuz, programda bugün
+          bulunan ekranları anlatır.
         </p>
       </header>
 
@@ -61,23 +100,10 @@ export default function KilavuzPage() {
         </nav>
       </Card>
 
-      <KilavuzBolumu id="programin-konumu" {...BOLUMLER["programin-konumu"]}>
-        <p>
-          Program <strong>karar defterinin ve TEFBİS&apos;in yerine geçmez.</strong> Karar defterine
-          kararlar el ile yazılır ve defter noter tasdiklidir; birliğin gelir-gider kayıtlarını
-          TEFBİS&apos;e okul idaresi girer. Program bunlara girilecek metni ve listeyi hazırlar,
-          tutarlılığı denetler.
-        </p>
-        {/* Sihirbaz yalnız kurulumu tamamlayabilen hesaba açıktır (kullanıcı kararı 04.11.2026);
-            öteki rollerde adı bağlantı değildir, rotası onları kapalı ekrana götürürdü. */}
-        {yetki.acik("kurulum_tamamlama") ? (
-          <p>
-            İlk kurulum adımları için <Ekran to="/kurulum">Kurulum Sihirbazı</Ekran>&apos;nı açın.
-          </p>
-        ) : (
-          <p>{KILAVUZ_SIHIRBAZ_KAPALI_METNI}</p>
-        )}
-      </KilavuzBolumu>
+      {KILAVUZ_BOLUMLERI.map(({ id }) => {
+        const { Bolum, baslik, ikon } = BOLUMLER[id];
+        return <Bolum key={id} id={id} baslik={baslik} ikon={ikon} />;
+      })}
     </div>
   );
 }
