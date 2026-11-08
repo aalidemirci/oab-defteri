@@ -11,13 +11,17 @@
 // (`VeliListesi`: yalnız dosya, yalnız sayılar, sınıf bazında yerine koyma).
 //
 // Aydınlatma (KVKK md. 10/1; plan "F1b-5 uygulama kararları"): personelin aydınlatma metni
-// aktarımdan önce, dosya seçiminin üstünde görünür (`AydinlatmaMetni`).
+// aktarımdan önce, dosya seçiminin üstünde görünür (`AydinlatmaMetni`). Aktarım DOSYAYLA
+// başarıyla bitince kaynak dosyanın silinmesi hatırlatılır (tasarım §4.3 tehdit 15;
+// `KaynakDosyaHatirlatmasi`); yapıştırılan metinde dosya yoktur, hatırlatma da yoktur.
 //
 // Personel: listede olmayanlar havuza eklenir (eski "ayrıldı sayılsın mı?" seçimi
 // kalktı); "olası aynı kişi" çiftleri gösterilir, aktarımdan sonra onaylı "Birleştir"
 // ile eski kayıt yeni kayda katılır (Ayrılış Havuzu'ndan da yapılabilir). Görev
 // sütunu yalnız görev türü için okunur; görev hücresi boş (ya da şablondaki görev türü
-// tanınmayan) satırlar "Görev türünü denetleyin" uyarısı alır.
+// tanınmayan) satırlar ve yönetici ya da öğretmen görevine benzeyip tam tanınmayan görevler
+// ("Okul Müdürü", "Psikolojik Danışman"; tür yine kuralla verilir) "Görev türünü denetleyin"
+// uyarısı alır.
 //
 // Dosya biçimleri (genel tasarım §8.1 A4, TK18): e-Okul .xls, şablon .xlsx ve .csv; makro içeren
 // dosyayı sunucu okumadan reddeder (ileti sunucudan gelir). Seçim penceresinin süzgeci `accept`
@@ -60,8 +64,13 @@ import type {
   PersonnelImportReport,
   SimilarPair,
 } from "../okul/api";
-import { DOSYA_ALANI_ETIKETI, PERSONEL_AKTARIM_ACIKLAMASI } from "./metinler";
-import { ErrorBand, HAVUZ_ADRESI, hataOku } from "./ortak";
+import {
+  DAHA_ONCE_AKTARILMIS,
+  DOSYA_ALANI_ETIKETI,
+  DOSYAYI_KALDIR,
+  PERSONEL_AKTARIM_ACIKLAMASI,
+} from "./metinler";
+import { ErrorBand, HAVUZ_ADRESI, hataOku, KaynakDosyaHatirlatmasi } from "./ortak";
 import type { SayfaHatasi } from "./ortak";
 import AydinlatmaMetni from "./AydinlatmaMetni";
 
@@ -117,6 +126,8 @@ export default function AktarimPaneli({
   const [file, setFile] = useState<File | null>(null);
   const [text, setText] = useState("");
   const [report, setReport] = useState<ImportReport | null>(null);
+  /** Aktarım dosyayla başarıyla bitti: kaynak dosyanın silinmesi hatırlatılır. */
+  const [dosyadanAktarildi, setDosyadanAktarildi] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<SayfaHatasi | null>(null);
   const snackbar = useSnackbar();
@@ -137,6 +148,7 @@ export default function AktarimPaneli({
   /** Girdi değişince eski önizleme geçersizdir. */
   const sifirla = () => {
     setReport(null);
+    setDosyadanAktarildi(false);
     setError(null);
   };
 
@@ -152,6 +164,7 @@ export default function AktarimPaneli({
     }
     setBusy(true);
     setError(null);
+    setDosyadanAktarildi(false);
     try {
       const result: ImportReport =
         mode === "preview"
@@ -159,6 +172,7 @@ export default function AktarimPaneli({
           : await okulApi.commitPersonnelImport(input);
       setReport(result);
       if (mode === "commit") {
+        setDosyadanAktarildi("file" in input);
         snackbar.success("İçe aktarma tamamlandı.");
         onImported();
       }
@@ -245,6 +259,7 @@ export default function AktarimPaneli({
               const secilen = e.target.files?.[0] ?? null;
               setFile(secilen);
               setReport(null);
+              setDosyadanAktarildi(false);
               setError(boyHatasi(secilen, sinirMb));
             }}
             className="block min-h-[var(--od-field-height)] flex-1 rounded-shape-sm border border-outline bg-surface-container-lowest px-3 py-2 text-body-medium text-on-surface file:mr-3 file:rounded-shape-sm file:border-0 file:bg-secondary-container file:px-3 file:py-1.5 file:text-label-large file:text-on-secondary-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -259,7 +274,7 @@ export default function AktarimPaneli({
                 sifirla();
               }}
             >
-              Dosyayı kaldır
+              {DOSYAYI_KALDIR}
             </Button>
           )}
         </div>
@@ -293,6 +308,8 @@ export default function AktarimPaneli({
           Aktar
         </Button>
       </div>
+
+      {dosyadanAktarildi && <KaynakDosyaHatirlatmasi />}
 
       {report && (
         <ImportReportView
@@ -339,9 +356,7 @@ function ImportReportView({
       {report.already_imported && (
         <div className="flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-4 py-3 text-body-medium text-on-tertiary-container">
           <Icon name="info" size="lg" />
-          <span>
-            Bu içerik daha önce aktarılmış. Güncelleme amaçlı yeniden aktarma engellenmez.
-          </span>
+          <span>{DAHA_ONCE_AKTARILMIS}</span>
         </div>
       )}
 
@@ -423,9 +438,9 @@ function PersonelMutabakati({
         <div className="flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-4 py-3 text-body-medium text-on-tertiary-container">
           <Icon name="warning" size="lg" />
           <span>
-            {formatNumber(turUyarisi)} satırda görev türünü denetleyin: görev bilgisi boş ya da
-            tanınmadı. Yeni kayıtlar öğretmen olarak açılır; gerekirse kişiyi düzenleyip doğru görev
-            türünü seçin. Satır numaraları aşağıdaki uyarılar tablosundadır.
+            {formatNumber(turUyarisi)} satırda görev türünü denetleyin: görev bilgisi boş ya da tam
+            tanınmadı. Nedeni ve satır numaraları aşağıdaki uyarılar tablosundadır; gerekirse kişiyi
+            düzenleyip doğru görev türünü seçin.
           </span>
         </div>
       )}

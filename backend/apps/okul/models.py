@@ -827,14 +827,15 @@ class ParentRoster(models.Model):
 
     KÖR İNDEKS (`name_index`) YALNIZ `save()` İLE YAZILIR: `QuerySet.update(full_name=…)`,
     `bulk_update` ve `bulk_create` `save()`'i atlar, indeks boş ya da eski adda kalır. Veli
-    listesi toplu yazılmaz (koruma testi: `test_models.py::test_veli_adi_toplu_yazilmaz`).
+    listesi toplu yazılmaz (koruma testi: `test_veli_listesi.py::test_veli_adi_toplu_yazilmaz`;
+    denetçinin kendi sınaması `test_toplu_yazim_denetcisi_ihlali_yakalar`).
     İndeksin işi adaydan kişi kaydına geçiş ve yeniden aktarımda aynı velinin bulunmasıdır
     (tasarım §5.3; F1c).
 
     SİLME KVKK silmesidir (tasarım §5.4: dönem kapanışında, genel kuruldan sonra elle de):
     satır katı silinir, yumuşak silme yoktur. Aktarımda dosyadaki sınıfların eski satırları
     yerine geçerken ve "Veli listesini sil"de silinir; ikisi de denetim izine kişisiz
-    `KVKK_SILME` satırıdır (`services.imports`, `services.veli_listesi`).
+    `KVKK_SILME` satırıdır (`services.imports`; elle silme `services.imports.delete_parent_roster`).
 
     DENETİM İZİ: satır başına iz YAZILMAZ ve model izin listesi TAŞIMAZ (`denetim_izi`
     yazıcısı onu yazamaz): tasarım §4.6.2 "veli listesinin hiçbir alanı ne açık ne şifreli

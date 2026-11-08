@@ -74,7 +74,13 @@ def _xlsx(
 
 
 def _aktar(satirlar: list[tuple[Any, ...]], *, onizle: bool = False) -> Any:
-    dosya = _xlsx(satirlar)
+    """Satırları yeni bir xlsx'le aktarır. Her çağrı dosyayı YENİDEN üretir: xlsx'in `core.xml`
+    zaman damgası saniye sınırında değişebilir, iki çağrının özeti aynı olmayabilir. Aynı
+    dosyanın (aynı özetin) iki kez aktarıldığı testler baytları bir kez üretir (`_aktar_bayt`)."""
+    return _aktar_bayt(_xlsx(satirlar), onizle=onizle)
+
+
+def _aktar_bayt(dosya: bytes, *, onizle: bool = False) -> Any:
     if onizle:
         return import_service.preview_parents_file(file_bytes=dosya, file_name="liste.xlsx")
     return import_service.commit_parents_file(file_bytes=dosya, file_name="liste.xlsx")
@@ -82,6 +88,11 @@ def _aktar(satirlar: list[tuple[Any, ...]], *, onizle: bool = False) -> Any:
 
 def _sayilar() -> dict[str, int]:
     return {s["student_class"]: s["rows"] for s in selectors.parent_roster_summary()["classes"]}
+
+
+def _kosular() -> list[tuple[int, str]]:
+    """Bütün aktarım koşuları (kimlik, durum): bir işlemin koşu bırakıp bırakmadığını sınar."""
+    return list(ImportRun.objects.order_by("pk").values_list("pk", "status"))
 
 
 def _kosu() -> ImportRun:
@@ -298,9 +309,11 @@ class TestAktarim:
     def test_onizleme_uygulamayla_ayni_sayilari_verir_ve_yazmaz(self) -> None:
         """Önizleme paritesi (tasarım §8.4; personel aktarımının deseni)."""
         _aktar([("A VELİ", "9-A"), ("B VELİ", "10-B")])
-        satirlar = [("C VELİ", "9-A"), ("D VELİ", "9-A"), ("E VELİ", "11-C"), ("", "x")]
+        # Önizleme ve uygulama AYNI baytları alır: rapor dosya özetini taşır (zamana bağlı
+        # kalmasın diye dosya bir kez üretilir).
+        dosya = _xlsx([("C VELİ", "9-A"), ("D VELİ", "9-A"), ("E VELİ", "11-C"), ("", "x")])
         iz_once = AuditTrail.objects.count()
-        onizleme = _aktar(satirlar, onizle=True)
+        onizleme = _aktar_bayt(dosya, onizle=True)
         assert onizleme.dry_run is True
         assert _sayilar() == {"9-A": 1, "10-B": 1}  # hiçbir satır değişmedi
         # Kalıcı olan yalnız PREVIEWED koşusu ve onun OLUSTUR satırı.
@@ -308,15 +321,18 @@ class TestAktarim:
         assert AuditTrail.objects.count() == iz_once + 1
         assert not AuditTrail.objects.filter(action="KVKK_SILME").exists()
 
-        uygulama = _aktar(satirlar)
+        uygulama = _aktar_bayt(dosya)
         once, sonra = onizleme.to_dict(), uygulama.to_dict()
         for anahtar in ("dry_run", "already_imported"):
             once.pop(anahtar), sonra.pop(anahtar)
         assert once == sonra
 
     def test_ayni_dosya_yeniden_aktarilir_uyariyla(self) -> None:
-        _aktar([("ÖRNEK VELİ", "9-A")])
-        rapor = _aktar([("ÖRNEK VELİ", "9-A")])
+        # Dosya bir kez üretilir: iki ayrı üretimin `core.xml` zaman damgası saniye sınırında
+        # farklılaşır, özet değişir ve test zamana bağlı düşerdi.
+        dosya = _xlsx([("ÖRNEK VELİ", "9-A")])
+        _aktar_bayt(dosya)
+        rapor = _aktar_bayt(dosya)
         assert rapor.already_imported is True and rapor.replaced_rows == 1
         assert ParentRoster.objects.count() == 1
         assert ImportRun.objects.filter(source_type="VELI", status="COMPLETED").count() == 1
@@ -331,9 +347,27 @@ class TestAktarim:
         assert kosu is not None and kosu.status == ImportStatus.FAILED
         assert kosu.report == {"error": MAKROLU_DOSYA_ILETISI}
 
+    def test_yinelenen_baslik_uyarisi_turkce_alan_adiyla_raporda(self) -> None:
+        """Başlık satırının uyarısı alanı Türkçe adıyla anar; iç anahtar (`student_class`) sızmaz."""
+        csv = "Velinin Adı Soyadı;Öğrencinin Sınıfı;Sınıf\nÖRNEK VELİ;9-A;9-B\n".encode()
+        rapor = import_service.commit_parents_file(file_bytes=csv, file_name="veli.csv")
+        assert rapor.imported_rows == 1
+        assert [(s.row_number, s.field, s.issue) for s in rapor.issues] == [
+            (
+                1,
+                "header",
+                "“Sınıf” sütunu da “Öğrencinin sınıfı” alanına uyuyor; ilk uyan sütun kullanıldı, "
+                "bu sütun okunmadı.",
+            )
+        ]
+        kalici = json.dumps(ImportRun.objects.get(status="COMPLETED").report, ensure_ascii=False)
+        for anahtar in ("'student_class'", "'full_name'"):
+            assert anahtar not in kalici
+
     def test_kilitliyken_yazim_hata_verir_ve_hicbir_sey_yazilmaz(self) -> None:
         _aktar([("ÖRNEK VELİ", "9-A")])
         iz_once = AuditTrail.objects.count()
+        kosular_once = _kosular()
         crypto.unload_key()
         try:
             with pytest.raises(crypto.KeyMissingError):
@@ -341,6 +375,48 @@ class TestAktarim:
         finally:
             crypto.load_key(TEST_DEK)
         assert [s.full_name for s in ParentRoster.objects.all()] == ["ÖRNEK VELİ"]
+        assert AuditTrail.objects.count() == iz_once
+        # Açılan RUNNING koşusu da geri sarılır (`_ingest_parents` atomiktir).
+        assert _kosular() == kosular_once
+
+    def test_yazim_yarida_kalirsa_aktarim_butunuyle_geri_alinir(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Eski sınıf satırları silinip yeni satırların yazımı patlarsa hiçbir şey değişmez:
+        eski satırlar, koşular ve denetim izi aynen kalır (`_ingest_parents` atomiktir; atomiklik
+        kaldırılırsa bu test düşer)."""
+        _aktar([("A VELİ", "9-A"), ("B VELİ", "10-B")])
+        satirlar_once = sorted(
+            ParentRoster.objects.values_list("pk", "import_run_id", "student_class", "name_index")
+        )
+        kosular_once = _kosular()
+        iz_once = AuditTrail.objects.count()
+        gercek_create = ParentRoster.objects.create
+        yazilan: list[int] = []
+
+        def patlayan_create(**alanlar: Any) -> ParentRoster:
+            # İlk satır yazılır, ikincisi patlar: silme ve kısmi yazım geri sarılmalı.
+            if yazilan:
+                raise RuntimeError("uydurma yazım hatası")
+            satir: ParentRoster = gercek_create(**alanlar)
+            yazilan.append(satir.pk)
+            return satir
+
+        with monkeypatch.context() as yama:
+            yama.setattr(ParentRoster.objects, "create", patlayan_create)
+            with pytest.raises(RuntimeError, match="uydurma yazım hatası"):
+                _aktar([("C VELİ", "9-A"), ("D VELİ", "9-A")])
+
+        assert yazilan, "sınama yazımın ortasında patlamadı"
+        assert (
+            sorted(
+                ParentRoster.objects.values_list(
+                    "pk", "import_run_id", "student_class", "name_index"
+                )
+            )
+            == satirlar_once
+        )
+        assert _kosular() == kosular_once
         assert AuditTrail.objects.count() == iz_once
 
 

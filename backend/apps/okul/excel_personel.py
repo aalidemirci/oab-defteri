@@ -55,6 +55,17 @@ COLUMN_SYNONYMS: dict[str, list[str]] = {
     "role": ["gorevi", "gorev"],
 }
 
+#: Alanların kullanıcıya görünen adları (yinelenen başlık uyarısı; `excel_ortak.basligi_bul`).
+ALAN_ADLARI: dict[str, str] = {
+    "full_name": "Ad-soyad",
+    "last_name": "Soyadı",
+    "first_name": "Adı",
+    "kind": "Görev türü",
+    "role": "Görevi",
+}
+#: Ad sütunu bulunamadığında (ParserError; iç alan anahtarı kullanıcıya gösterilmez).
+AD_SUTUNU_EKSIK = "“Adı Soyadı” (ya da ayrı “Adı” ve “Soyadı”)"
+
 #: e-Okul'un "Görevi" sütununda yönetici sayılan görevler — Türkçe katlanmış TAM eşleşme
 #: (plan "F1b-5 uygulama kararları": Müdür, Müdür Başyardımcısı, Müdür Yardımcısı).
 _YONETICI_GOREVLERI: frozenset[str] = frozenset(
@@ -63,6 +74,11 @@ _YONETICI_GOREVLERI: frozenset[str] = frozenset(
 #: İçinde geçtiğinde görevi öğretmen yapan sözcük (katlanmış; "Ücretli Öğretmen", "Rehber
 #: Öğretmen", "Sözleşmeli Öğretmen(657 S.K. 4/B)").
 _OGRETMEN_SOZCUGU = "ogretmen"
+#: Yönetici ya da öğretmen görevine benzeyip yukarıdaki tam eşleşmelere uymayan görevlerin
+#: sözcükleri (katlanmış; "Okul Müdürü", "Müdür Yrd.", "Müdür Yardımcısı Vekili", "Psikolojik
+#: Danışman", "Usta Öğretici"). Sınıflamayı DEĞİŞTİRMEZ (kullanıcı kararı harfiyen uygulanır);
+#: yalnız önizlemede "Görev türünü denetleyin" uyarısı verdirir (`gorev_denetlenmeli`).
+_DENETLENECEK_SOZCUKLER: tuple[str, ...] = ("mudur", "danisman", "ogretici")
 
 #: Şablonun "Görev Türü" sütununun kabul ettiği değerler (katlanmış tam eşleşme; arayüz
 #: etiketleri, sözlük "Personelin türü"). "Diğer" kısa yazımı da kabul edilir.
@@ -93,6 +109,20 @@ def classify_member_kind(value: Any) -> str | None:
     return KIND_DIGER
 
 
+def gorev_denetlenmeli(value: Any) -> bool:
+    """e-Okul "Görevi" metni yönetici ya da öğretmen görevine benziyor ama tam tanınmadı mı?
+
+    Katlanmış metin "mudur", "danisman" ya da "ogretici" içerip yöneticinin tam eşleşmelerinden
+    biri değilse True (ör. "Okul Müdürü" ve "Müdür Yardımcısı Vekili" diğer personel, "Rehber
+    Öğretmen (Psikolojik Danışman)" öğretmen sayılır, ama türleri denetlenmeli). Sınıflama
+    `classify_member_kind`'dadır ve bundan etkilenmez; metin hiçbir yere yazılmaz.
+    """
+    katlanmis = normalize_header(value)
+    if not katlanmis or katlanmis in _YONETICI_GOREVLERI:
+        return False
+    return any(sozcuk in katlanmis for sozcuk in _DENETLENECEK_SOZCUKLER)
+
+
 def template_member_kind(value: Any) -> str | None:
     """Şablonun "Görev Türü" hücresinden görev türü; boş ya da tanınmayan değerde None.
 
@@ -116,9 +146,7 @@ class PersonnelColumnMapping:
     def missing_critical(self) -> list[str]:
         has_combined_name = "full_name" in self.fields
         has_split_name = "first_name" in self.fields and "last_name" in self.fields
-        return (
-            [] if has_combined_name or has_split_name else ["full_name veya first_name+last_name"]
-        )
+        return [] if has_combined_name or has_split_name else [AD_SUTUNU_EKSIK]
 
     @property
     def is_usable(self) -> bool:
@@ -138,6 +166,9 @@ class ParsedPersonnelRow:
     member_kind: str | None = None
     #: Görev (türü) sütunu VAR ama bu satırın türü çıkarılamadı (boş hücre dahil).
     member_kind_unrecognized: bool = False
+    #: e-Okul "Görevi" metninden tür çıkarıldı ama görev yönetici ya da öğretmen görevine benzeyip
+    #: tam tanınmadı (`gorev_denetlenmeli`); tür sınıflamanın verdiğidir, uyarı ayrıdır.
+    member_kind_uncertain: bool = False
 
 
 def _kullanilir_mi(fields: dict[str, int]) -> bool:
@@ -148,7 +179,11 @@ def _kullanilir_mi(fields: dict[str, int]) -> bool:
 def detect_columns(rows: list[list[Any]], scan_limit: int = 10) -> PersonnelColumnMapping:
     """İlk satırlar içinde en iyi başlık satırını bulur ve sütunları eşler (`excel_ortak`)."""
     bulunan = basligi_bul(
-        rows, COLUMN_SYNONYMS, kullanilir_mi=_kullanilir_mi, scan_limit=scan_limit
+        rows,
+        COLUMN_SYNONYMS,
+        kullanilir_mi=_kullanilir_mi,
+        alan_adlari=ALAN_ADLARI,
+        scan_limit=scan_limit,
     )
     return PersonnelColumnMapping(
         header_row=bulunan.header_row,
@@ -178,10 +213,12 @@ def parse_rows(rows: list[list[Any]], mapping: PersonnelColumnMapping) -> list[P
             last = hucre_metni(hucre(cells, f.get("last_name")))
             raw_name = f"{first} {last}".strip()
         # Görev metni yalnız bu satırda, sınıflama için okunur; değişkene bile alınmaz.
+        supheli = False
         if has_kind:
             kind = template_member_kind(hucre(cells, f.get("kind")))
         elif has_role:
             kind = classify_member_kind(hucre(cells, f.get("role")))
+            supheli = gorev_denetlenmeli(hucre(cells, f.get("role")))
         else:
             kind = None
         parsed.append(
@@ -192,6 +229,7 @@ def parse_rows(rows: list[list[Any]], mapping: PersonnelColumnMapping) -> list[P
                 last_name=last,
                 member_kind=kind,
                 member_kind_unrecognized=has_role and kind is None,
+                member_kind_uncertain=supheli and kind is not None,
             )
         )
     return parsed
@@ -203,12 +241,13 @@ def parse_workbook(file_bytes: bytes) -> tuple[PersonnelColumnMapping, list[Pars
     mapping = detect_columns(grid)
     if not mapping.is_usable:
         eksik = ", ".join(mapping.missing_critical)
-        raise ParserError(f"Zorunlu sütun(lar) bulunamadı: {eksik}.")
+        raise ParserError(f"Zorunlu sütun bulunamadı: {eksik}.")
     return mapping, parse_rows(grid, mapping)
 
 
 # read_sheet `excel_ortak`'tan yeniden kullanılır (etkin sayfa, salt-okunur).
 __all__ = [
+    "ALAN_ADLARI",
     "KIND_DIGER",
     "KIND_OGRETMEN",
     "KIND_YONETICI",
@@ -216,6 +255,7 @@ __all__ = [
     "PersonnelColumnMapping",
     "classify_member_kind",
     "detect_columns",
+    "gorev_denetlenmeli",
     "parse_rows",
     "parse_workbook",
     "read_sheet",

@@ -110,6 +110,14 @@ MEMBER_KIND_CHECK_MESSAGE = (
     "Görev türünü denetleyin: görev bilgisi boş ya da tanınmadı. Yeni kayıt öğretmen olarak "
     "açılır; mevcut kaydın görev türü değişmez."
 )
+#: Görev metni yönetici ya da öğretmen görevine benziyor ama tam tanınmadı ("Okul Müdürü",
+#: "Müdür Yrd.", "Psikolojik Danışman", "Usta Öğretici"; `excel_personel.gorev_denetlenmeli`).
+#: Tür sınıflamanın verdiğidir (plan "F1b-5 uygulama kararları"; harfiyen uygulanır).
+MEMBER_KIND_UNCERTAIN_MESSAGE = (
+    "Görev türünü denetleyin: görev yönetici ya da öğretmen görevine benziyor ama tam tanınmadı. "
+    "Görev türü kurala göre verilir: yalnız Müdür, Müdür Başyardımcısı ve Müdür Yardımcısı "
+    "yönetici, içinde “öğretmen” geçen görev öğretmen, öteki görevler diğer personel sayılır."
+)
 #: Ad-soyadı boş personel satırı: kimlik anahtarı ad olduğu için havuza ekleme durur.
 PERSONNEL_UNIDENTIFIED_ROW_MESSAGE = (
     "Ad-soyad boş; satır atlandı. Bu satırdaki kişi tanınamadığı için hiçbir kişi ayrılış "
@@ -260,7 +268,7 @@ def _parse_personnel_grid(
     mapping = excel_personel.detect_columns(grid)
     if not mapping.is_usable:
         missing = ", ".join(mapping.missing_critical)
-        raise ParserError(f"Zorunlu sütun(lar) bulunamadı: {missing}.")
+        raise ParserError(f"Zorunlu sütun bulunamadı: {missing}.")
     mapping.warnings = [*notes, *mapping.warnings]
     return mapping, excel_personel.parse_rows(grid, mapping)
 
@@ -437,6 +445,8 @@ def _process_personnel_row(row: ParsedPersonnelRow, kosu: _PersonnelRun) -> None
         return
     if row.member_kind_unrecognized:
         report.add_warning(row.row_number, "member_kind", MEMBER_KIND_CHECK_MESSAGE)
+    elif row.member_kind_uncertain:
+        report.add_warning(row.row_number, "member_kind", MEMBER_KIND_UNCERTAIN_MESSAGE)
 
     adaylar = [
         p
@@ -680,20 +690,14 @@ def _siniflari_yerine_koy(
 ) -> dict[str, int]:
     """Dosyadaki sınıfların eski satırlarını siler, yenilerini yazar → sınıf → eski satır sayısı.
 
+    Silme "Veli listesini sil"le aynı yoldan geçer (`_veli_satirlarini_sil`, tetik `AKTARIM`).
+
     Satırlar sınıf ve çözülmüş ad sırasıyla yazılır: kaynak dosyadaki sıra tutulmaz (tasarım
     §5.1 `ParentRoster`). Kör indeks `save()`'te dolar: toplu yazım yoktur (`create`).
     """
     eski = ParentRoster.objects.filter(student_class__in=list(sinifa_gore))
     eski_sayilari = Counter(eski.values_list("student_class", flat=True))
-    en_yeni = eski.aggregate(en_yeni=Max("created_at"))["en_yeni"]
-    if en_yeni is not None:
-        adet, _ = eski.delete()
-        denetim_izi.kvkk_silme(
-            ParentRoster,
-            adet=adet,
-            en_yeni=timezone.localdate(en_yeni),
-            tetik=denetim_izi.KVKK_TETIK_AKTARIM,
-        )
+    _veli_satirlarini_sil(eski, tetik=denetim_izi.KVKK_TETIK_AKTARIM)
     for sinif in sorted(sinifa_gore, key=excel_veli.sinif_sira_anahtari):
         for row in sorted(sinifa_gore[sinif], key=lambda r: normalize.tr_sort_key(r.full_name)):
             ParentRoster.objects.create(

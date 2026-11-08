@@ -29,7 +29,7 @@ from desktop.window import (
     TUR_SUZGECLERI,
 )
 
-from apps.okul import excel_ortak, excel_veli, serializers
+from apps.okul import excel_ortak, excel_personel, excel_veli, serializers
 from apps.okul.services import encrypted_backup, imports, live_restore
 
 #: Kapsanan ön yüz dosyaları (depo köküne göre).
@@ -156,13 +156,19 @@ def test_ekranin_boy_iletisi_sunucununkiyle_aynidir() -> None:
 
 def test_aktarimin_dosya_ve_gorev_turu_iletileri_sozlukte_yazilidir() -> None:
     """Aktarım ekranında görünen sunucu iletileri (tasarım §8.1 A4, TK18; plan "F1b-5 uygulama
-    kararları"): makrolu dosya, okunamayan biçim, düz metin olmayan CSV, görev türü uyarısı."""
+    kararları"): makrolu dosya, okunamayan biçim, düz metin olmayan CSV, satır tavanı, görev türü
+    uyarısı."""
     sozluk = _sade(_depo_dosyasi("docs/sozluk.md"))
     for metin in (
         excel_ortak.MAKROLU_DOSYA_ILETISI,
         excel_ortak.DESTEKLENMEYEN_DOSYA_ILETISI,
         excel_ortak.CSV_METIN_DEGIL_ILETISI,
+        excel_ortak.SATIR_SINIRI_ILETISI,
         imports.MEMBER_KIND_CHECK_MESSAGE,
+        imports.MEMBER_KIND_UNCERTAIN_MESSAGE,
+        # Kalıp: sözlükte yer tutucular "Sütun" ve "Alan" adıyla yazılıdır.
+        excel_ortak.YINELENEN_BASLIK_ILETISI.format(sutun="Sütun", alan="Alan"),
+        f"Zorunlu sütun bulunamadı: {excel_personel.AD_SUTUNU_EKSIK}.",
     ):
         assert f'**"{_sade(metin)}"**' in sozluk, metin
 

@@ -123,6 +123,7 @@ def test_satirda_gorev_ve_brans_metni_tutulmaz() -> None:
         "last_name",
         "member_kind",
         "member_kind_unrecognized",
+        "member_kind_uncertain",
     }
     assert "Müdür" not in repr(parsed[0]) and "Matematik" not in repr(parsed[0])
 
@@ -138,8 +139,13 @@ def test_yalniz_ad_soyad_da_yeterli_tur_bilgisi_yok() -> None:
 
 def test_ad_soyad_yoksa_parser_error() -> None:
     data = make_xlsx([["Müdür", "Matematik"]], header=["Görevi", "Branş"])
-    with pytest.raises(ParserError, match="full_name"):
+    with pytest.raises(ParserError) as hata:
         excel_personel.parse_workbook(data)
+    # İleti Türkçe sütun adlarını anar; iç alan anahtarı (`full_name`) sızmaz.
+    assert str(hata.value) == (
+        "Zorunlu sütun bulunamadı: “Adı Soyadı” (ya da ayrı “Adı” ve “Soyadı”)."
+    )
+    assert "full_name" not in str(hata.value)
 
 
 def test_satir_ayristirma() -> None:
@@ -221,3 +227,80 @@ def test_preamble_atlanir() -> None:
 )
 def test_gorev_siniflamasi(gorev: object, beklenen: str | None) -> None:
     assert excel_personel.classify_member_kind(gorev) == beklenen
+
+
+@pytest.mark.parametrize(
+    ("gorev", "tur"),
+    [
+        # Yönetici ya da öğretmen görevine benzeyip tam eşleşmeye uymayanlar: sınıflama aynı kalır
+        # (kullanıcı kararı harfiyen), yalnız denetim uyarısı verilir.
+        ("Okul Müdürü", "DIGER"),
+        ("Müdür Yrd.", "DIGER"),
+        ("MÜDÜR YRD.", "DIGER"),
+        ("Müdür Yardımcısı Vekili", "DIGER"),
+        ("Müdür Vekili", "DIGER"),
+        ("Psikolojik Danışman", "DIGER"),
+        ("Usta Öğretici", "DIGER"),
+        ("Rehber Öğretmen (Psikolojik Danışman)", "OGRETMEN"),
+        ("Usta Öğreticiler Öğretmeni", "OGRETMEN"),
+    ],
+)
+def test_supheli_gorev_siniflamayi_degistirmeden_denetim_ister(gorev: str, tur: str) -> None:
+    assert excel_personel.classify_member_kind(gorev) == tur
+    assert excel_personel.gorev_denetlenmeli(gorev) is True
+
+
+@pytest.mark.parametrize(
+    "gorev",
+    [
+        "Müdür",
+        "MÜDÜR",
+        "Müdür Yardımcısı",
+        "  müdür   yardımcısı ",
+        "Müdür Başyardımcısı",
+        "Öğretmen",
+        "Ücretli Öğretmen",
+        "Rehber Öğretmen",
+        "Memur",
+        "Hizmetli",
+        "Teknisyen",
+        "",
+        None,
+    ],
+)
+def test_tam_taninan_ya_da_benzemeyen_gorev_denetim_istemez(gorev: object) -> None:
+    assert excel_personel.gorev_denetlenmeli(gorev) is False
+
+
+def test_supheli_gorev_satirda_uyari_bayragi_tasir_tur_yine_verilir() -> None:
+    rows: list[list[object]] = [
+        ["ALİ ÖRNEK", "Okul Müdürü", ""],
+        ["AYŞE ÖRNEK", "Müdür", ""],
+        ["CEM ÖRNEK", "", ""],
+    ]
+    _mapping, parsed = excel_personel.parse_workbook(make_xlsx(rows))
+    assert [
+        (p.member_kind, p.member_kind_unrecognized, p.member_kind_uncertain) for p in parsed
+    ] == [
+        (MemberKind.DIGER, False, True),
+        (MemberKind.YONETICI, False, False),
+        (None, True, False),
+    ]
+    assert "Okul Müdürü" not in repr(parsed[0])
+
+
+def test_sablonun_gorev_turu_sutunu_denetim_bayragi_vermez() -> None:
+    """Şüpheli görev denetimi yalnız e-Okul'un "Görevi" metnindedir; şablonun üç etiketi kesindir."""
+    data = make_xlsx([["ALİ", "ÖRNEK", "Yönetici"]], header=["Adı", "Soyadı", "Görev Türü"])
+    _mapping, parsed = excel_personel.parse_workbook(data)
+    assert (parsed[0].member_kind, parsed[0].member_kind_uncertain) == (MemberKind.YONETICI, False)
+
+
+def test_yinelenen_baslik_uyarisi_turkce_alan_adiyla_yazilir() -> None:
+    grid = excel_personel.read_sheet(
+        make_xlsx([["ALİ ÖRNEK", "Müdür", "Öğretmen"]], header=["Ad Soyad", "Görevi", "Görev"])
+    )
+    mapping = excel_personel.detect_columns(grid)
+    assert mapping.warnings == [
+        "“Görev” sütunu da “Görevi” alanına uyuyor; ilk uyan sütun kullanıldı, bu sütun okunmadı."
+    ]

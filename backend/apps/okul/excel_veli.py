@@ -69,6 +69,15 @@ COLUMN_SYNONYMS: Final[dict[str, list[str]]] = {
     ],
 }
 
+#: Alanların kullanıcıya görünen adları (yinelenen başlık uyarısı; `excel_ortak.basligi_bul`).
+#: Ekranın satır sorunu tablosundaki "Alan" adlarıyla aynıdır (`VeliListesi`).
+ALAN_ADLARI: Final[dict[str, str]] = {
+    "full_name": "Velinin adı-soyadı",
+    "first_name": "Velinin adı",
+    "last_name": "Velinin soyadı",
+    "student_class": "Öğrencinin sınıfı",
+}
+
 #: Satır sorunlarının iletileri (sözlük §1 "Veli listesi"; değer yazılmaz).
 VELI_ADI_BOS: Final = "Velinin adı-soyadı boş; satır aktarılmadı."
 VELI_ADI_UZUN: Final = f"Velinin adı-soyadı {AD_EN_COK} karakterden uzun; satır aktarılmadı."
@@ -166,6 +175,7 @@ def detect_columns(rows: list[list[Any]], scan_limit: int = 10) -> ParentColumnM
         rows,
         COLUMN_SYNONYMS,
         kullanilir_mi=_kullanilir_mi,
+        alan_adlari=ALAN_ADLARI,
         scan_limit=scan_limit,
         tam_eslesme=True,
     )
@@ -227,6 +237,7 @@ def parse_grid(
 
 __all__ = [
     "AD_EN_COK",
+    "ALAN_ADLARI",
     "COLUMN_SYNONYMS",
     "HAZIRLIK",
     "ParentColumnMapping",

@@ -35,6 +35,7 @@ from rest_framework.test import APIClient
 
 from apps.okul import selectors
 from apps.okul.models import (
+    AuditTrail,
     ImportRun,
     ImportStatus,
     MemberKind,
@@ -175,6 +176,50 @@ class TestPersonelHavuzu:
         assert onizleme.dry_run is True
         assert onizleme.pool_added_personnel == 2
         assert (onizleme.updated_personnel, onizleme.created_personnel) == (1, 1)
+
+    def test_yazim_yarida_kalirsa_aktarim_butunuyle_geri_alinir(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Güncelleme ve yeni kayıt yazıldıktan sonra havuza ekleme patlarsa hiçbir şey değişmez:
+        kişiler, koşular ve denetim izi aynen kalır (`_ingest_personnel` atomiktir; atomiklik
+        kaldırılırsa bu test düşer — veli listesinin eşi `test_veli_listesi.py`'de)."""
+        _personel("AYŞE", "KAYA")
+        _personel("MEHMET", "DEMİR")
+        import_service.commit_personnel_text(
+            text=_personel_metni("AYŞE\tKAYA\tÖğretmen\t", "MEHMET\tDEMİR\tÖğretmen\t")
+        )
+
+        def durum() -> list[Any]:
+            return sorted(
+                Personnel.all_objects.values_list(
+                    "pk",
+                    "is_active",
+                    "member_kind",
+                    "updated_at",
+                    "leave_candidate_since",
+                    "leave_candidate_run",
+                )
+            )
+
+        def kosular() -> list[Any]:
+            return list(ImportRun.objects.order_by("pk").values_list("pk", "status", "report"))
+
+        oncesi, kosular_once, iz_once = durum(), kosular(), AuditTrail.objects.count()
+
+        def patlayan_havuz(*_a: object, **_k: object) -> bool:
+            raise RuntimeError("uydurma yazım hatası")
+
+        with monkeypatch.context() as yama:
+            yama.setattr(persons, "add_to_leave_pool", patlayan_havuz)
+            with pytest.raises(RuntimeError, match="uydurma yazım hatası"):
+                # AYŞE güncellenir, CEM açılır, MEHMET havuza girerken yazım patlar.
+                import_service.commit_personnel_text(
+                    text=_personel_metni("AYŞE\tKAYA\tMemur\t", "CEM\tYENİ\tÖğretmen\t")
+                )
+
+        assert durum() == oncesi
+        assert kosular() == kosular_once
+        assert AuditTrail.objects.count() == iz_once
 
     def test_gunlukte_ad_yok(self, caplog: pytest.LogCaptureFixture) -> None:
         _personel(SENTETIK_AD, SENTETIK_SOYAD)
@@ -473,6 +518,38 @@ class TestGorevTuruSiniflamasi:
         uyarilar = [(u.row_number, u.field, u.raw_value) for u in rapor.warnings]
         assert uyarilar == [(7, "member_kind", "")]
         assert all("Görev türünü denetleyin" in u.issue for u in rapor.warnings)
+
+    def test_supheli_gorev_turu_degismez_ama_denetim_uyarisi_alir(self) -> None:
+        """Kullanıcı kararı harfiyen: "Okul Müdürü" diğer personel, "Rehber Öğretmen (Psikolojik
+        Danışman)" öğretmen sayılır; ikisi de "Görev türünü denetleyin" uyarısı alır (görev metni
+        yazılmaz)."""
+        rapor = import_service.commit_personnel_text(
+            text=_personel_metni(
+                "GÜL\tYEDİ\tOkul Müdürü\t",
+                "HAKAN\tSEKİZ\tRehber Öğretmen (Psikolojik Danışman)\t",
+                "İPEK\tDOKUZ\tMüdür\t",
+                "KAAN\tON\tUsta Öğretici\t",
+            )
+        )
+
+        turler = {p.first_name: p.member_kind for p in Personnel.objects.all()}
+        assert turler == {
+            "GÜL": MemberKind.DIGER,
+            "HAKAN": MemberKind.OGRETMEN,
+            "İPEK": MemberKind.YONETICI,
+            "KAAN": MemberKind.DIGER,
+        }
+        uyarilar = [(u.row_number, u.field, u.issue, u.raw_value) for u in rapor.warnings]
+        mesaj = import_service.MEMBER_KIND_UNCERTAIN_MESSAGE
+        assert uyarilar == [
+            (2, "member_kind", mesaj, ""),
+            (3, "member_kind", mesaj, ""),
+            (5, "member_kind", mesaj, ""),
+        ]
+        assert mesaj.startswith("Görev türünü denetleyin")
+        kalici = json.dumps([r.report for r in ImportRun.objects.all()], ensure_ascii=False)
+        for gorev in ("Okul Müdürü", "Psikolojik", "Usta Öğretici"):
+            assert gorev not in kalici
 
     def test_gorev_sutunu_yoksa_ogretmen_uyarisiz(self) -> None:
         rapor = import_service.commit_personnel_text(text="Adı\tSoyadı\nALİ\tBİR")

@@ -14,10 +14,14 @@ kuralı (`services.hesap_kurallari`) ve seçiciler bunu kullanır; veli listesi 
   Windows-1254 (ISO-8859-9'un Türkçe harfleri aynı yerdedir; 1254'te tanımsız baytta 8859-9);
   ayırıcı `;` (Türkçe Excel'in yazdığı), `,` ya da sekme, ilk satırlardan sezilir.
 - `dosyayi_oku`: yüklenen dosyanın tek giriş noktası. Makrolu dosyayı reddeder (tasarım TK18:
-  `.xlsm`/`.xltm`/`.xlam` uzantısı, içinde `vbaProject.bin` bulunan zip kabı, VBA bölümü taşıyan
-  `.xls`), türü imza baytından seçer, imzasız `.csv`'yi CSV okur. Boyut tavanı yüklemenin
-  ortak sınırıdır (`OD_MAX_UPLOAD_SIZE_MB`, `shared.yukleme`): biçimden bağımsızdır; ayrıca
-  satır sınırı yoktur.
+  `.xlsm`/`.xltm`/`.xlam` uzantısı; içinde `vbaProject.bin` ya da Excel 4.0 makro sayfası
+  (`xl/macrosheets/`, `xl/intlMacrosheets/`) bulunan zip kabı; VBA bölümü ya da makro sayfası
+  taşıyan `.xls`), türü imza baytından seçer, imzasız `.csv`'yi CSV okur. Boyut tavanı yüklemenin
+  ortak sınırıdır (`OD_MAX_UPLOAD_SIZE_MB`, `shared.yukleme`): biçimden bağımsızdır. Okunan
+  matrisin de tavanı vardır (üç biçimde aynı): en çok `_AZAMI_SATIR` satır (aşılırsa
+  `SATIR_SINIRI_ILETISI`), satır başına en çok `_AZAMI_SUTUN` sütun (ötesi okunmaz). Küçük bir
+  dosya da büyük matris beyan edebilir (xlsx'in `<dimension>`'ı, uzaktaki tek hücre, tek
+  hücrelik `.xls`): sınır dosya boyuna değil matrise konur.
 - `ParserError`: girdi ayrıştırılamadı (kullanıcıya Türkçe açıklama).
 
 Modül SAFTIR (DB'siz, Django'suz): ayrıştırıcılar DB'siz test edilir.
@@ -28,15 +32,16 @@ from __future__ import annotations
 import csv
 import io
 import re
+import struct
 import zipfile
-from collections.abc import Callable, Mapping, Sequence
+from collections import Counter
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import PurePath
 from typing import Any, Final
 
 from openpyxl import load_workbook
-from openpyxl.utils.exceptions import InvalidFileException
 
 # Türkçe karakter → ASCII (başlık eşlemesi için; küçük harfe indirgenir).
 _TR_MAP = str.maketrans(
@@ -94,6 +99,14 @@ def bos_satir(cells: Sequence[Any]) -> bool:
     return all(c is None or str(c).strip() == "" for c in cells)
 
 
+#: Aynı alana ikinci kez uyan başlık sütununun uyarısı (sözlük §1 "Veli listesi"). Alan,
+#: ayrıştırıcının Türkçe alan adıdır (`alan_adlari`); iç alan anahtarı (`full_name`…)
+#: kullanıcıya gösterilmez.
+YINELENEN_BASLIK_ILETISI: Final = (
+    "“{sutun}” sütunu da “{alan}” alanına uyuyor; ilk uyan sütun kullanıldı, bu sütun okunmadı."
+)
+
+
 @dataclass
 class BaslikEslemesi:
     """Bulunan başlık satırı ve alan → sütun indeksi eşlemesi."""
@@ -121,11 +134,17 @@ def _alan_bul(
 
 
 def basliklari_esle(
-    cells: Sequence[Any], synonyms: Mapping[str, Sequence[str]], *, tam_eslesme: bool = False
+    cells: Sequence[Any],
+    synonyms: Mapping[str, Sequence[str]],
+    *,
+    alan_adlari: Mapping[str, str],
+    tam_eslesme: bool = False,
 ) -> tuple[dict[str, int], dict[str, str], list[str]]:
     """Bir satırın hücrelerini alanlara eşler → (alan→indeks, alan→başlık, uyarılar).
 
-    Aynı alana ikinci kez eşlenen sütun yok sayılır ve uyarıya yazılır (ilki kullanılır).
+    Aynı alana ikinci kez eşlenen sütun yok sayılır ve uyarıya yazılır (ilki kullanılır). Uyarı
+    alanı `alan_adlari`ndaki Türkçe adıyla anar (`YINELENEN_BASLIK_ILETISI`); iç alan anahtarı
+    kullanıcıya sızmaz (adı verilmemiş alan yazılırsa `KeyError` — ayrıştırıcının kusurudur).
     """
     fields: dict[str, int] = {}
     matched: dict[str, str] = {}
@@ -139,7 +158,9 @@ def basliklari_esle(
             continue
         if fieldname in fields:
             warnings.append(
-                f"'{cell}' sütunu '{fieldname}' için yinelenen eşleşme; ilki kullanıldı."
+                YINELENEN_BASLIK_ILETISI.format(
+                    sutun=str(cell).strip(), alan=alan_adlari[fieldname]
+                )
             )
             continue
         fields[fieldname] = idx
@@ -152,6 +173,7 @@ def basligi_bul(
     synonyms: Mapping[str, Sequence[str]],
     *,
     kullanilir_mi: Callable[[dict[str, int]], bool],
+    alan_adlari: Mapping[str, str],
     scan_limit: int = 10,
     tam_eslesme: bool = False,
 ) -> BaslikEslemesi:
@@ -160,6 +182,7 @@ def basligi_bul(
     "En iyi": önce kullanılabilir olan (`kullanilir_mi`: zorunlu alanlar var), sonra en çok
     alan eşleyen. Kullanılabilir bir satır bulununca tarama durur. Hiç alan eşlenmezse
     0. satırla boş eşleme döner; çağıran zorunlu alan denetimini kendi iletisiyle yapar.
+    `alan_adlari` alanların kullanıcıya görünen Türkçe adlarıdır (yinelenen başlık uyarısı).
     """
     best: BaslikEslemesi | None = None
     best_usable = False
@@ -167,7 +190,9 @@ def basligi_bul(
         cells = rows[r]
         if bos_satir(cells):
             continue
-        fields, matched, warnings = basliklari_esle(cells, synonyms, tam_eslesme=tam_eslesme)
+        fields, matched, warnings = basliklari_esle(
+            cells, synonyms, alan_adlari=alan_adlari, tam_eslesme=tam_eslesme
+        )
         if not fields:
             continue
         usable = kullanilir_mi(fields)
@@ -192,13 +217,62 @@ def is_legacy_xls(file_bytes: bytes) -> bool:
     return file_bytes[:8] == _OLE2_MAGIC
 
 
+#: Okunan matrisin satır tavanı (üç biçimde aynı; boş satırlar da sayılır). Okulun personel
+#: listesi yüzlerce, veli listesi birkaç bin satırdır; tavan bunun çok üstündedir.
+_AZAMI_SATIR: Final = 20_000
+#: Satır başına okunan sütun tavanı (ötesi okunmaz). e-Okul ihracı 15, şablonlar 2-3 sütundur.
+_AZAMI_SUTUN: Final = 64
+
+#: Satır tavanı aşıldı (sözlük §4.3, sunucunun dosya iletileri; sayı `_AZAMI_SATIR`'dır,
+#: test ikisinin eşitliğini sınar).
+SATIR_SINIRI_ILETISI: Final = (
+    "Dosya okunamadı: 20.000'den çok satır var. Dosyada yalnız aktarılacak liste bulunsun; "
+    "listenin altındaki fazla satırları (boş görünenler dahil) silip yeniden kaydedin."
+)
+
+
+def _sinirli_matris(satirlar: Iterable[Sequence[Any]]) -> list[list[Any]]:
+    """Satırları tavanlarla matrise çevirir: `_AZAMI_SATIR`'ı aşan dosyada ParserError
+    (`SATIR_SINIRI_ILETISI`), her satırın yalnız ilk `_AZAMI_SUTUN` hücresi.
+
+    Satırlar AKARKEN sayılır: tavan aşılınca okuma durur, şişkin matris hiç kurulmaz.
+    """
+    matris: list[list[Any]] = []
+    for satir in satirlar:
+        if len(matris) >= _AZAMI_SATIR:
+            raise ParserError(SATIR_SINIRI_ILETISI)
+        matris.append(list(satir[:_AZAMI_SUTUN]))
+    return matris
+
+
 def _read_xlsx(file_bytes: bytes, sheet_name: str | None = None) -> list[list[Any]]:
+    """`.xlsx` baytlarını matrise çevirir (salt okur, formül yerine son hesaplanan değer).
+
+    Sayfanın `<dimension>` beyanına GÜVENİLMEZ (`reset_dimensions`): salt okur sayfa satırları
+    beyan edilen genişliğe dek None ile doldurur; 5 KB'lık bir dosya "A1:XFD2000" beyanıyla
+    2000 × 16384'lük bir matrise dönüşürdü. Sütunlar `_AZAMI_SUTUN`'da kesilir, satırlar
+    `_AZAMI_SATIR`'da durdurulur; sonra matris dolu hücrelerin genişliğine iner (satırlar eşit
+    boyda kalır, dolu son sütundan sonrası atılır).
+    """
     wb = load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
     try:
         ws = wb[sheet_name] if sheet_name and sheet_name in wb.sheetnames else wb.active
-        return [list(row) for row in ws.iter_rows(values_only=True)]
+        # Salt okur sayfada vardır (`ReadOnlyWorksheet`); grafik sayfasında yoktur, o da
+        # `iter_rows`'ta düşer ve `dosyayi_oku` onu Türkçe iletiye çevirir.
+        sifirla = getattr(ws, "reset_dimensions", None)
+        if sifirla is not None:
+            sifirla()
+        # `max_row` tavanın bir fazlası: aşan dosyada okuma orada durur ve hata verir.
+        matris = _sinirli_matris(
+            ws.iter_rows(values_only=True, max_col=_AZAMI_SUTUN, max_row=_AZAMI_SATIR + 1)
+        )
     finally:
         wb.close()
+    genislik = max(
+        (max((i + 1 for i, h in enumerate(satir) if h is not None), default=0) for satir in matris),
+        default=0,
+    )
+    return [satir[:genislik] for satir in matris]
 
 
 def _read_xls(file_bytes: bytes, sheet_name: str | None = None) -> list[list[Any]]:
@@ -211,7 +285,9 @@ def _read_xls(file_bytes: bytes, sheet_name: str | None = None) -> list[list[Any
     import xlrd  # yerel import: xlsx yolunda gereksiz yük olmasın
 
     try:
-        wb = xlrd.open_workbook(file_contents=file_bytes)
+        # `ragged_rows`: satırlar en geniş satırın boyuna doldurulmaz (uzaktaki tek hücre
+        # 65.536 × 256'lık bir dolgu kurdurmasın; tavan aşağıda).
+        wb = xlrd.open_workbook(file_contents=file_bytes, ragged_rows=True)
     except ParserError:
         raise
     except Exception as exc:  # noqa: BLE001 — gerekçe aşağıda
@@ -221,7 +297,7 @@ def _read_xls(file_bytes: bytes, sheet_name: str | None = None) -> list[list[Any
         # yükselir. Bunlar ParserError'a dönmezse istek 500 ile düşer —
         # kullanıcı Türkçe açıklamayı GÖRMEZ ve İçe Aktarma Geçmişi'ne FAILED
         # izi de yazılmaz (`imports._personnel_entry` yalnız ParserError'da iz bırakır).
-        # xlsx yolu aynı sözleşmeyi zaten sağlıyor (BadZipFile/InvalidFile).
+        # xlsx yolu aynı sözleşmeyi `dosyayi_oku`'nun geniş yakalamasıyla sağlar.
         raise ParserError(
             "Excel 97-2003 (.xls) dosyası okunamadı; dosya eksik inmiş ya da bozuk olabilir. "
             "e-Okul'dan yeniden indirip deneyin."
@@ -232,7 +308,16 @@ def _read_xls(file_bytes: bytes, sheet_name: str | None = None) -> list[list[Any
         # Adlı sayfa istendiyse o sayfa alınır; yoksa ilk sayfaya düşülür.
         sayfalar = wb.sheet_names()
         sh = wb.sheet_by_name(sheet_name) if sheet_name in sayfalar else wb.sheet_by_index(0)
-        return [[sh.cell_value(r, c) for c in range(sh.ncols)] for r in range(sh.nrows)]
+        # Tavanlar xlsx'inkiyle aynı: uzaktaki tek hücre de `nrows`/`ncols`'u büyütür. Satırlar
+        # açılışta doldurulmaz (`ragged_rows`); kısa satır burada boş hücreyle ('') tamamlanır.
+        if sh.nrows > _AZAMI_SATIR:
+            raise ParserError(SATIR_SINIRI_ILETISI)
+        sutun = min(sh.ncols, _AZAMI_SUTUN)
+        matris: list[list[Any]] = []
+        for r in range(sh.nrows):
+            satir = list(sh.row_values(r, 0, sutun))
+            matris.append(satir + [""] * (sutun - len(satir)))
+        return matris
     except ParserError:
         raise
     except Exception as exc:  # noqa: BLE001 — açılış dalıyla aynı gerekçe
@@ -292,17 +377,22 @@ def _csv_coz(file_bytes: bytes) -> str:
 
 
 def _ayiriciyi_sez(satirlar: Sequence[str]) -> str:
-    """İlk dolu satırlarda en çok alan üreten ayırıcı; eşitlikte `CSV_AYIRICILARI` sırası.
+    """İlk dolu satırlarda tablo kuran ayırıcı; eşitlikte `CSV_AYIRICILARI` sırası (`;` önce).
 
-    Ölçü satır başına en çok alan sayısıdır: başlıktan önceki tek hücrelik rapor adı satırı
-    sezgiyi bozmaz; tırnak içindeki ayırıcı (`"Yılmaz, Ali"`) alan saymaz.
+    Ölçü TUTARLILIKTIR: her ayırıcı için birden çok alana bölünen satırların en sık alan sayısı
+    (mod) bulunur, o sayıda alana bölünen satır sayısı ayırıcının puanıdır. En büyük alan sayısı
+    ölçü olamaz: `;` ayırıcılı dosyada tırnaksız virgül taşıyan tek satır ("Ayşe, Fatma Kaya,
+    Yılmaz;10-A") virgülü kazandırırdı. Tek alanlı satır sayılmaz: başlıktan önceki tek hücrelik
+    rapor adı satırı sezgiyi bozmaz; tırnak içindeki ayırıcı (`"Yılmaz, Ali"`) alan saymaz.
+    Hiçbir ayırıcı satır bölmezse `;` döner (tek sütunlu dosya). `csv.Error` çağırana geçer.
     """
     ornek = [satir for satir in satirlar if satir.strip()][:_SEZGI_SATIRI]
     en_iyi, en_cok = CSV_AYIRICILARI[0], 0
     for ayirici in CSV_AYIRICILARI:
-        alanlar = max((len(r) for r in csv.reader(ornek, delimiter=ayirici)), default=0)
-        if alanlar > en_cok:
-            en_iyi, en_cok = ayirici, alanlar
+        sayilar = Counter(n for r in csv.reader(ornek, delimiter=ayirici) if (n := len(r)) > 1)
+        puan = sayilar.most_common(1)[0][1] if sayilar else 0
+        if puan > en_cok:
+            en_iyi, en_cok = ayirici, puan
     return en_iyi
 
 
@@ -310,13 +400,15 @@ def read_csv(file_bytes: bytes) -> list[list[Any]]:
     """CSV baytlarını satır-listesine çevirir (tasarım §8.1 A4); metin değilse ParserError.
 
     Hücreler metindir (`read_sheet`'in ürettiği matrisle aynı biçim; boş hücre boş dize).
+    Ayırıcı sezgisi de okuma da `csv.Error`'ı (ör. alan boyu sınırını aşan hücre) Türkçe iletiye
+    çevirir. Matrisin tavanları xlsx'inkiyle aynıdır (`_sinirli_matris`).
     """
     if b"\x00" in file_bytes:
         raise ParserError(CSV_METIN_DEGIL_ILETISI)
     metin = _csv_coz(file_bytes)
-    ayirici = _ayiriciyi_sez(metin.splitlines())
     try:
-        return [list(satir) for satir in csv.reader(io.StringIO(metin), delimiter=ayirici)]
+        ayirici = _ayiriciyi_sez(metin.splitlines())
+        return _sinirli_matris(csv.reader(io.StringIO(metin), delimiter=ayirici))
     except csv.Error as exc:
         raise ParserError(CSV_METIN_DEGIL_ILETISI) from exc
 
@@ -328,8 +420,19 @@ def read_csv(file_bytes: bytes) -> list[list[Any]]:
 MAKROLU_UZANTILAR: Final = frozenset({".xlsm", ".xltm", ".xlam"})
 #: OOXML kabında VBA projesinin parçası (`xl/vbaProject.bin`); ad büyük/küçük harfe duyarsız.
 _VBA_PARCASI: Final = "vbaproject.bin"
+#: OOXML kabında Excel 4.0 (XLM) makro sayfalarının dizinleri (küçük harf): VBA projesi
+#: olmadan da makro taşırlar (`xl/macrosheets/sheet1.xml`, `xl/intlMacrosheets/…`).
+_ZIP_MAKRO_SAYFASI_DIZINLERI: Final = ("xl/macrosheets/", "xl/intlmacrosheets/")
 #: Excel 97-2003 kabında VBA projesinin bölümleri (OLE2 dizin girdileri; küçük harf).
 _OLE2_VBA_BOLUMLERI: Final = frozenset({"_vba_project_cur", "_vba_project", "vba"})
+#: BIFF kitap akışının adları (BIFF8 "Workbook", BIFF5 "Book").
+_BIFF_AKISLARI: Final = ("Workbook", "Book")
+#: BIFF kayıt türleri: sayfa tanımı (BOUNDSHEET) ve bölüm sonu (EOF).
+_BIFF_BOUNDSHEET: Final = 0x0085
+_BIFF_EOF: Final = 0x000A
+#: BOUNDSHEET'in sayfa türü baytı (`dt`, verinin 6. baytı): 0x01 Excel 4.0 makro sayfası, 0x06
+#: VBA modül sayfası (Excel 5/95). Çalışma sayfası 0x00, grafik 0x02'dir.
+_BIFF_MAKRO_SAYFA_TURLERI: Final = frozenset({0x01, 0x06})
 
 MAKROLU_DOSYA_ILETISI: Final = (
     "Makro içeren dosya kabul edilmez. Dosyayı Excel'de “Excel Çalışma Kitabı (*.xlsx)” "
@@ -346,19 +449,43 @@ def _uzanti(file_name: str) -> str:
 
 
 def _zip_makrolu_mu(file_bytes: bytes) -> bool:
-    """Zip kabında VBA projesi var mı? Kap açılamazsa False (okuma kendi iletisiyle düşer)."""
+    """Zip kabında VBA projesi ya da Excel 4.0 makro sayfası var mı? Kap açılamazsa False
+    (okuma kendi iletisiyle düşer)."""
     try:
         with zipfile.ZipFile(BytesIO(file_bytes)) as kap:
-            return any(ad.lower().endswith(_VBA_PARCASI) for ad in kap.namelist())
+            adlar = [ad.lower().lstrip("/") for ad in kap.namelist()]
     except (zipfile.BadZipFile, OSError, ValueError):
         return False
+    return any(
+        ad.endswith(_VBA_PARCASI) or ad.startswith(_ZIP_MAKRO_SAYFASI_DIZINLERI) for ad in adlar
+    )
+
+
+def _biff_makro_sayfasi_var_mi(akis: bytes) -> bool:
+    """BIFF kitap akışının genel bölümünde makro sayfası tanımı (BOUNDSHEET `dt`) var mı?
+
+    Kayıtlar (tür 2 bayt, uzunluk 2 bayt, veri) ilk EOF kaydına dek yürünür: sayfa tanımları
+    kitabın genel bölümündedir. BOUNDSHEET verisi: sayfa konumu (4), görünürlük (1), sayfa
+    türü (1), ad.
+    """
+    konum = 0
+    while konum + 4 <= len(akis):
+        tur, uzunluk = struct.unpack_from("<HH", akis, konum)
+        if tur == _BIFF_EOF:
+            return False
+        veri = akis[konum + 4 : konum + 4 + uzunluk]
+        if tur == _BIFF_BOUNDSHEET and len(veri) >= 6 and veri[5] in _BIFF_MAKRO_SAYFA_TURLERI:
+            return True
+        konum += 4 + uzunluk
+    return False
 
 
 def _ole2_makrolu_mu(file_bytes: bytes) -> bool:
-    """Excel 97-2003 kabının dizininde VBA bölümü var mı? Dizin okunamazsa False.
+    """Excel 97-2003 kabı makro taşıyor mu? Dizinde VBA bölümü ya da kitap akışında Excel 4.0
+    makro sayfası (`_biff_makro_sayfasi_var_mi`). Kap okunamazsa False.
 
-    Dizin xlrd'nin kap okuyucusuyla okunur (`xlrd.compdoc`; `.xls` okuması da ondan geçer).
-    Okunamayan kap `_read_xls`'in Türkçe iletisiyle düşer.
+    Kap xlrd'nin okuyucusuyla okunur (`xlrd.compdoc`; `.xls` okuması da ondan geçer). Okunamayan
+    kap ya da akış `_read_xls`'in Türkçe iletisiyle düşer.
     """
     from xlrd import compdoc  # yerel import: xlsx ve CSV yolunda gereksiz yük olmasın
 
@@ -366,9 +493,22 @@ def _ole2_makrolu_mu(file_bytes: bytes) -> bool:
         kap = compdoc.CompDoc(file_bytes, logfile=io.StringIO())
     except Exception:  # noqa: BLE001 — bozuk kap okumada kendi Türkçe iletisiyle düşer
         return False
-    return any(
-        str(getattr(girdi, "name", "")).lower() in _OLE2_VBA_BOLUMLERI for girdi in kap.dirlist
-    )
+    if any(str(getattr(girdi, "name", "")).lower() in _OLE2_VBA_BOLUMLERI for girdi in kap.dirlist):
+        return True
+    for ad in _BIFF_AKISLARI:
+        akis = _ole2_akisi(kap, ad)
+        if akis:
+            return _biff_makro_sayfasi_var_mi(akis)
+    return False
+
+
+def _ole2_akisi(kap: Any, ad: str) -> bytes | None:
+    """Kabın adlı akışı; yoksa ya da okunamazsa None (`_read_xls` kendi iletisiyle düşer)."""
+    try:
+        akis = kap.get_named_stream(ad)
+    except Exception:  # noqa: BLE001 — bozuk akış okumada kendi Türkçe iletisiyle düşer
+        return None
+    return bytes(akis) if akis else None
 
 
 def makrolu_mu(file_bytes: bytes, file_name: str = "") -> bool:
@@ -394,7 +534,14 @@ def dosyayi_oku(file_bytes: bytes, file_name: str = "") -> list[list[Any]]:
     if is_legacy_xls(file_bytes) or file_bytes[:4] == _ZIP_MAGIC:
         try:
             return read_sheet(file_bytes)
-        except (zipfile.BadZipFile, InvalidFileException, KeyError, OSError) as exc:
+        except ParserError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — gerekçe aşağıda
+            # GENİŞ yakalama BİLİNÇLİDİR (`_read_xls`'teki desen): bozuk xlsx kabı yalnız
+            # BadZipFile/InvalidFileException/KeyError atmaz; bozuk sayfa XML'i
+            # `ElementTree.ParseError`, grafik sayfası `AttributeError`, eksik parça başka
+            # hatalar yükseltir. Bunlar ParserError'a dönmezse istek 500 ile düşer, kullanıcı
+            # Türkçe açıklamayı görmez ve İçe Aktarma Geçmişi'ne FAILED izi yazılmaz.
             raise ParserError(DESTEKLENMEYEN_DOSYA_ILETISI) from exc
     if _uzanti(file_name) == ".csv":
         return read_csv(file_bytes)

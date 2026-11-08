@@ -15,6 +15,7 @@
 
 import { formatDate } from "../../lib/format";
 import Icon from "../../ui/Icon";
+import { KAYNAK_DOSYA_HATIRLATMASI } from "./metinler";
 
 export { default as ErrorBand, hataOku, PAROLA_GEREKLI_KODU } from "../../ui/ErrorBand";
 export type { SayfaHatasi } from "../../ui/ErrorBand";
@@ -111,5 +112,22 @@ export function DurumRozeti({
       <Icon name="logout" size="sm" />
       {leftAt ? `Ayrıldı · ${formatDate(leftAt)}` : "Ayrıldı"}
     </span>
+  );
+}
+
+/**
+ * Aktarım dosyayla başarıyla bitince kaynak dosyanın silinmesini hatırlatır (genel tasarım §4.3
+ * tehdit 15: içe aktarılan liste diskte kalır; program kalanını koruyamaz). Personel ve veli
+ * listesi aktarım panelleri gösterir.
+ */
+export function KaynakDosyaHatirlatmasi() {
+  return (
+    <div
+      role="note"
+      className="flex items-start gap-2 rounded-shape-sm bg-secondary-container px-4 py-3 text-body-medium text-on-secondary-container"
+    >
+      <Icon name="delete_sweep" size="lg" className="mt-0.5 shrink-0" />
+      <span>{KAYNAK_DOSYA_HATIRLATMASI}</span>
+    </div>
   );
 }

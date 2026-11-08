@@ -778,7 +778,7 @@ YAZICI_GIRISLERI = frozenset(
 _ORNEK_YAZIMLARI = frozenset({"save", "hard_delete", "restore"})
 #: Yönetici, queryset ve ilişki yöneticisi yazımı: alıcısı NE OLURSA OLSUN yazım sayılır —
 #: `qs = X.objects.filter(..); qs.update(..)`, `yil.terms.update_or_create(..)`,
-#: `selectors.active_students().update(..)` de. `delete` yalnız konumsal argümansızken
+#: `selectors.personnel_all().update(..)` de. `delete` yalnız konumsal argümansızken
 #: (örnek ya da queryset silmesi; `cache.delete(anahtar)` ORM dışıdır). Aynı adlı ORM dışı
 #: çağrılar (`set.update`, `hashlib…update`) `ORM_DISI_CAGRILAR`'da ADIYLA ve gerekçesiyle.
 _TOPLU_YAZIMLAR = frozenset(
@@ -1270,11 +1270,11 @@ def izsiz_queryset_degiskeni():
 
 def izsiz_iliski_yoneticisi(yil):
     yil.terms.update_or_create(term_no=1)
-    yil.class_sections.create(class_level=9, class_section="A")
+    yil.terms.create(sequence=2, start_date=None, end_date=None)
 
 
 def izsiz_secici(_):
-    selectors.active_students().update(class_section="B")
+    selectors.personnel_all().update(member_kind="DIGER")
 
 
 def sistem_olayiyla_izlenmis_sanilan(gun):

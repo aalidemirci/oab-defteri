@@ -22,6 +22,7 @@ import { DOSYA_YAZILAMADI_ILETISI } from "../../lib/metinler";
 import {
   AYDINLATMA_BASLIGI,
   DOSYA_ALANI_ETIKETI,
+  KAYNAK_DOSYA_HATIRLATMASI,
   PERSONEL_AKTARIM_ACIKLAMASI,
   PERSONEL_AYDINLATMA_GIRISI,
   VELI_AYDINLATMA_GIRISI,
@@ -228,6 +229,33 @@ describe("AktarimPaneli — ortak davranış (aktarım kimseyi ayırmaz)", () =>
       "/kisiler?tab=havuz",
     );
     expect(onImported).toHaveBeenCalledTimes(1);
+    // Yapıştırılan metinde kaynak dosya yoktur: hatırlatma da yoktur.
+    expect(screen.queryByText(KAYNAK_DOSYA_HATIRLATMASI)).toBeNull();
+  });
+
+  it("dosyayla aktarım bitince kaynak dosyanın silinmesi hatırlatılır (tasarım §4.3 tehdit 15)", async () => {
+    okulApiMock.previewPersonnelImport.mockResolvedValue(PERSONEL_ONIZLEME);
+    okulApiMock.commitPersonnelImport.mockResolvedValue({ ...PERSONEL_ONIZLEME, dry_run: false });
+    const user = userEvent.setup();
+    kur("personnel");
+    const secilen = dosya(MB, "personel.xls");
+
+    await user.upload(screen.getByLabelText(DOSYA_ALANI_ETIKETI), secilen);
+    await user.click(screen.getByRole("button", { name: "Önizle" }));
+    await screen.findByText("Önizleme — hiçbir kayıt yazılmadı");
+    // Önizlemede hatırlatma yoktur: dosya henüz aktarılmadı.
+    expect(screen.queryByText(KAYNAK_DOSYA_HATIRLATMASI)).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Aktar" }));
+    await waitFor(() =>
+      expect(okulApiMock.commitPersonnelImport).toHaveBeenCalledWith({ file: secilen }),
+    );
+    expect(await screen.findByText(KAYNAK_DOSYA_HATIRLATMASI)).toBeVisible();
+    expect(screen.getByRole("note")).toHaveTextContent(KAYNAK_DOSYA_HATIRLATMASI);
+
+    // Dosya kaldırılınca hatırlatma da kalkar.
+    await user.click(screen.getByRole("button", { name: "Dosyayı kaldır" }));
+    expect(screen.queryByText(KAYNAK_DOSYA_HATIRLATMASI)).toBeNull();
   });
 
   it("girdi değişince eski önizleme düşer", async () => {
@@ -610,7 +638,7 @@ describe("AktarimPaneli — personel mutabakatı ve ayrılış havuzu", () => {
 
     expect(
       await screen.findByText(
-        /1 satırda görev türünü denetleyin: görev bilgisi boş ya da tanınmadı/,
+        /1 satırda görev türünü denetleyin: görev bilgisi boş ya da tam tanınmadı/,
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Görev türü" })).toBeInTheDocument();

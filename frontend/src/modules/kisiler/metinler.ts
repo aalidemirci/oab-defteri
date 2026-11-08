@@ -139,3 +139,117 @@ export const VELI_SILME_ONAY_BASLIGI = "Veli listesi silinsin mi?";
 export const VELI_SILME_ONAY_METNI =
   "Listedeki bütün satırlar kalıcı olarak silinir, geri alınamaz. Denetim izine yalnız silinen " +
   "satır sayısı yazılır; adlar yazılmaz. Gerekirse liste şablondan yeniden aktarılır.";
+
+/** Veli listesi özetinin tablosu (ekran okuyucu başlığı ve sütunlar). */
+export const VELI_OZET_TABLO_BASLIGI = "Veli listesinin sınıf başına satır sayısı";
+
+export const VELI_SINIF_SUTUNU = "Sınıf";
+
+export const VELI_SATIR_SUTUNU = "Satır (öğrenci)";
+
+/** Özet satırı: "N satır · M sınıf · son aktarım gg.aa.yyyy SS:dd" (sayılar biçimlenmiş gelir). */
+export function veliOzetSatiri(satir: string, sinif: string, sonAktarim: string | null): string {
+  const bas = `${satir} satır · ${sinif} sınıf`;
+  return sonAktarim === null ? bas : `${bas} · son aktarım ${sonAktarim}`;
+}
+
+/** "Veli listesini sil"in sonucu: "Veli listesi silindi (N satır)." */
+export function veliSilindi(satir: string): string {
+  return `Veli listesi silindi (${satir} satır).`;
+}
+
+export const VELI_SILINEMEDI = "Veli listesi silinemedi.";
+
+// Veli listesi aktarım paneli: düğmeler, iletiler, rapor (yalnız sayı; ad ve hücre değeri yok).
+
+export const SABLON_INDIR = "Şablon indir";
+
+export const SABLON_INDIRILEMEDI = "Şablon indirilemedi.";
+
+export const DOSYAYI_KALDIR = "Dosyayı kaldır";
+
+export const ONIZLE = "Önizle";
+
+export const AKTAR = "Aktar";
+
+export const CALISIYOR = "Çalışıyor…";
+
+export const VELI_DOSYA_SECIN = "Önce bir dosya seçin.";
+
+export const ONIZLEME_YAPILAMADI = "Önizleme yapılamadı.";
+
+export const VELI_AKTARILDI = "Veli listesi aktarıldı.";
+
+export const VELI_AKTARILAMADI = "Veli listesi aktarılamadı.";
+
+export const ONIZLEME_BASLIGI = "Önizleme — hiçbir kayıt yazılmadı";
+
+export const VELI_AKTARIM_SONUCU = "Aktarım sonucu";
+
+/** Aynı içerik daha önce aktarıldıysa (personel ve veli raporu). */
+export const DAHA_ONCE_AKTARILMIS =
+  "Bu içerik daha önce aktarılmış. Güncelleme amaçlı yeniden aktarma engellenmez.";
+
+/** Rapor kutularının etiketleri. */
+export const RAPOR_DOSYADAKI_SATIR = "Dosyadaki satır";
+
+export const RAPOR_AKTARILACAK = "Aktarılacak";
+
+export const RAPOR_AKTARILAN = "Aktarılan";
+
+export const RAPOR_AKTARILAMAYAN = "Aktarılamayan";
+
+export const RAPOR_SINIF = "Sınıf";
+
+export const RAPOR_SILINECEK_ESKI_SATIR = "Silinecek eski satır";
+
+export const RAPOR_SILINEN_ESKI_SATIR = "Silinen eski satır";
+
+export const RAPOR_DOKUNULMAYAN_SINIF = "Dokunulmayan sınıf";
+
+export const VELI_YERINE_KOYMA_ONIZLEME =
+  "Dosyadaki sınıfların listedeki eski satırları silinir, yerine dosyadakiler yazılır; dosyada " +
+  "olmayan sınıflara dokunulmaz.";
+
+export const VELI_YERINE_KOYMA_SONUC =
+  "Dosyadaki sınıfların eski satırları silindi, yerine dosyadakiler yazıldı; dosyada olmayan " +
+  "sınıflara dokunulmadı.";
+
+/** Raporun sınıf tablosu (ekran okuyucu başlığı). */
+export const DOSYADAKI_SINIFLAR = "Dosyadaki sınıflar";
+
+/** "Aktarılamayan satırlar (N)": N satır sayısıdır (bir satırın birden çok sorunu olabilir). */
+export function aktarilamayanSatirlar(satir: string): string {
+  return `Aktarılamayan satırlar (${satir})`;
+}
+
+export const AKTARILAMAYAN_SATIR_YOK = "Aktarılamayan satır yok.";
+
+/** Başlık satırının uyarıları (ör. aynı alana uyan ikinci sütun); satır sayısına girmez. */
+export function baslikUyarilari(sayi: string): string {
+  return `Başlık uyarıları (${sayi})`;
+}
+
+/** Sorun tablolarının sütunları. */
+export const SORUN_SATIR_SUTUNU = "Satır";
+
+export const SORUN_ALAN_SUTUNU = "Alan";
+
+export const SORUN_SORUN_SUTUNU = "Sorun";
+
+/** Veli raporundaki alan kodlarının adları (sunucunun `excel_veli.ALAN_ADLARI`'yla aynı). */
+export const VELI_ALAN_BASLIK = "Başlık";
+
+export const VELI_ALAN_AD = "Velinin adı-soyadı";
+
+export const VELI_ALAN_SINIF = "Öğrencinin sınıfı";
+
+// ---------------------------------------------------------------------------
+// Kaynak dosya hatırlatması (genel tasarım §4.3 tehdit modeli 15. satır: içe aktarılan liste
+// diskte kalır; program kendi açık kopyasını bırakmaz, kalanını koruyamaz — "kaynak dosyayı
+// silin" hatırlatması). Personel ve veli listesi aktarımı dosyayla başarıyla bitince görünür.
+// ---------------------------------------------------------------------------
+
+export const KAYNAK_DOSYA_HATIRLATMASI =
+  "Aktarılan dosya bilgisayarda şifresiz durur: artık gerekmiyorsa silin, Geri Dönüşüm " +
+  "Kutusu'ndan (Pardus'ta Çöp'ten) de kaldırın.";

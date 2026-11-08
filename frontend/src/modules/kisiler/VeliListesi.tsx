@@ -13,6 +13,11 @@
 //
 // "Veli listesini sil" bütün listeyi siler (onay penceresi; §5.4: genel kuruldan sonra elle de
 // silinebilir); denetim izine kişisiz bir satır düşer.
+//
+// Raporun "Aktarılamayan satırlar (N)" başlığı ve "Aktarılamayan" kutusu aynı sayıyı (satır)
+// gösterir; başlık satırının uyarıları (aynı alana uyan ikinci sütun) satır değildir, ayrı
+// "Başlık uyarıları" tablosundadır. Aktarım dosyayla bitince kaynak dosyanın silinmesi
+// hatırlatılır (tasarım §4.3 tehdit 15; `KaynakDosyaHatirlatmasi`). Metinler `metinler.ts`'tedir.
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
@@ -28,30 +33,72 @@ import { SkeletonList } from "../../ui/Skeleton";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import { useYuklemeSiniri } from "../oturum/useOturum";
 import { okulApi, PARENT_TEMPLATE_FILENAME } from "../okul/api";
-import type { ParentImportReport, ParentRosterSummary } from "../okul/api";
+import type { ParentImportReport, ParentRosterSummary, ParentRowIssue } from "../okul/api";
 import { boyHatasi, KABUL_EDILEN_DOSYALAR } from "./AktarimPaneli";
 import AydinlatmaMetni from "./AydinlatmaMetni";
 import {
+  AKTAR,
+  AKTARILAMAYAN_SATIR_YOK,
+  aktarilamayanSatirlar,
+  baslikUyarilari,
+  CALISIYOR,
+  DAHA_ONCE_AKTARILMIS,
+  DOSYADAKI_SINIFLAR,
+  DOSYAYI_KALDIR,
+  ONIZLE,
+  ONIZLEME_BASLIGI,
+  ONIZLEME_YAPILAMADI,
+  RAPOR_AKTARILACAK,
+  RAPOR_AKTARILAMAYAN,
+  RAPOR_AKTARILAN,
+  RAPOR_DOKUNULMAYAN_SINIF,
+  RAPOR_DOSYADAKI_SATIR,
+  RAPOR_SILINECEK_ESKI_SATIR,
+  RAPOR_SILINEN_ESKI_SATIR,
+  RAPOR_SINIF,
+  SABLON_INDIR,
+  SABLON_INDIRILEMEDI,
+  SORUN_ALAN_SUTUNU,
+  SORUN_SATIR_SUTUNU,
+  SORUN_SORUN_SUTUNU,
+  VELI_AKTARILAMADI,
+  VELI_AKTARILDI,
   VELI_AKTARIM_ACIKLAMASI,
   VELI_AKTARIM_BASLIGI,
+  VELI_AKTARIM_SONUCU,
+  VELI_ALAN_AD,
+  VELI_ALAN_BASLIK,
+  VELI_ALAN_SINIF,
   VELI_DOSYA_ALANI_ETIKETI,
+  VELI_DOSYA_SECIN,
   VELI_LISTESI_ACIKLAMASI,
   VELI_LISTESI_BOS,
   VELI_LISTESI_OKUNAMADI,
   VELI_LISTESI_SEKMESI,
   VELI_LISTESINI_SIL,
+  VELI_OZET_TABLO_BASLIGI,
+  VELI_SATIR_SUTUNU,
+  VELI_SILINEMEDI,
   VELI_SILME_ONAY_BASLIGI,
   VELI_SILME_ONAY_METNI,
+  VELI_SINIF_SUTUNU,
+  VELI_YERINE_KOYMA_ONIZLEME,
+  VELI_YERINE_KOYMA_SONUC,
+  veliOzetSatiri,
+  veliSilindi,
 } from "./metinler";
-import { ErrorBand, hataOku } from "./ortak";
+import { ErrorBand, hataOku, KaynakDosyaHatirlatmasi } from "./ortak";
 import type { SayfaHatasi } from "./ortak";
 
 /** Satır sorunlarındaki alan kodlarının kullanıcı adları. */
 const ALAN_ADI: Record<string, string> = {
-  header: "Başlık",
-  full_name: "Velinin adı-soyadı",
-  student_class: "Öğrencinin sınıfı",
+  header: VELI_ALAN_BASLIK,
+  full_name: VELI_ALAN_AD,
+  student_class: VELI_ALAN_SINIF,
 };
+
+/** Başlık satırının uyarılarının alan kodu (sunucu `imports._ingest_parents`). */
+const BASLIK_ALANI = "header";
 
 const TABLO_SINIFI = "w-full border-collapse text-body-small";
 const BASLIK_SATIRI =
@@ -100,10 +147,10 @@ export default function VeliListesi() {
     setHata(null);
     try {
       const sonuc = await okulApi.deleteParentRoster();
-      snackbar.success(`Veli listesi silindi (${formatNumber(sonuc.deleted_rows)} satır).`);
+      snackbar.success(veliSilindi(formatNumber(sonuc.deleted_rows)));
       tazele();
     } catch (e) {
-      setHata(hataOku(e, "Veli listesi silinemedi."));
+      setHata(hataOku(e, VELI_SILINEMEDI));
     } finally {
       setSiliniyor(false);
     }
@@ -147,19 +194,22 @@ function OzetTablosu({ ozet }: { ozet: ParentRosterSummary }) {
   return (
     <Card elevation={0} className="space-y-2 p-[var(--od-panel-padding)]">
       <p className="text-body-small text-on-surface-variant">
-        {formatNumber(ozet.total_rows)} satır · {formatNumber(ozet.class_count)} sınıf
-        {ozet.last_import_at && ` · son aktarım ${formatDateTime(ozet.last_import_at)}`}
+        {veliOzetSatiri(
+          formatNumber(ozet.total_rows),
+          formatNumber(ozet.class_count),
+          ozet.last_import_at ? formatDateTime(ozet.last_import_at) : null,
+        )}
       </p>
       <div className="overflow-x-auto">
         <table className={TABLO_SINIFI}>
-          <caption className="sr-only">Veli listesinin sınıf başına satır sayısı</caption>
+          <caption className="sr-only">{VELI_OZET_TABLO_BASLIGI}</caption>
           <thead>
             <tr className={BASLIK_SATIRI}>
               <th scope="col" className="p-2">
-                Sınıf
+                {VELI_SINIF_SUTUNU}
               </th>
               <th scope="col" className="p-2 text-right">
-                Satır (öğrenci)
+                {VELI_SATIR_SUTUNU}
               </th>
             </tr>
           </thead>
@@ -184,6 +234,8 @@ function OzetTablosu({ ozet }: { ozet: ParentRosterSummary }) {
 function VeliAktarimPaneli({ onAktarildi }: { onAktarildi: () => void }) {
   const [dosya, setDosya] = useState<File | null>(null);
   const [rapor, setRapor] = useState<ParentImportReport | null>(null);
+  /** Aktarım dosyayla başarıyla bitti: kaynak dosyanın silinmesi hatırlatılır. */
+  const [aktarildi, setAktarildi] = useState(false);
   const [mesgul, setMesgul] = useState(false);
   const [hata, setHata] = useState<SayfaHatasi | null>(null);
   const snackbar = useSnackbar();
@@ -194,7 +246,7 @@ function VeliAktarimPaneli({ onAktarildi }: { onAktarildi: () => void }) {
 
   const calistir = async (kip: "onizle" | "aktar") => {
     if (!dosya) {
-      setHata({ message: "Önce bir dosya seçin.", parolaGerekli: false });
+      setHata({ message: VELI_DOSYA_SECIN, parolaGerekli: false });
       return;
     }
     const buyuk = boyHatasi(dosya, sinirMb);
@@ -204,6 +256,7 @@ function VeliAktarimPaneli({ onAktarildi }: { onAktarildi: () => void }) {
     }
     setMesgul(true);
     setHata(null);
+    setAktarildi(false);
     try {
       const sonuc =
         kip === "onizle"
@@ -211,11 +264,12 @@ function VeliAktarimPaneli({ onAktarildi }: { onAktarildi: () => void }) {
           : await okulApi.commitParentImport(dosya);
       setRapor(sonuc);
       if (kip === "aktar") {
-        snackbar.success("Veli listesi aktarıldı.");
+        setAktarildi(true);
+        snackbar.success(VELI_AKTARILDI);
         onAktarildi();
       }
     } catch (e) {
-      setHata(hataOku(e, kip === "onizle" ? "Önizleme yapılamadı." : "Veli listesi aktarılamadı."));
+      setHata(hataOku(e, kip === "onizle" ? ONIZLEME_YAPILAMADI : VELI_AKTARILAMADI));
     } finally {
       setMesgul(false);
     }
@@ -229,7 +283,7 @@ function VeliAktarimPaneli({ onAktarildi }: { onAktarildi: () => void }) {
         setHata({ message: DOSYA_YAZILAMADI_ILETISI, parolaGerekli: false });
       }
     } catch (e) {
-      setHata(hataOku(e, "Şablon indirilemedi."));
+      setHata(hataOku(e, SABLON_INDIRILEMEDI));
     }
   };
 
@@ -243,7 +297,7 @@ function VeliAktarimPaneli({ onAktarildi }: { onAktarildi: () => void }) {
           </p>
         </div>
         <Button variant="outlined" icon="download" onClick={sablonIndir}>
-          Şablon indir
+          {SABLON_INDIR}
         </Button>
       </div>
 
@@ -263,6 +317,7 @@ function VeliAktarimPaneli({ onAktarildi }: { onAktarildi: () => void }) {
               const secilen = e.target.files?.[0] ?? null;
               setDosya(secilen);
               setRapor(null);
+              setAktarildi(false);
               setHata(boyHatasi(secilen, sinirMb));
             }}
             className="block min-h-[var(--od-field-height)] min-w-0 flex-1 rounded-shape-sm border border-outline bg-surface-container-lowest px-3 py-2 text-body-medium text-on-surface file:mr-3 file:rounded-shape-sm file:border-0 file:bg-secondary-container file:px-3 file:py-1.5 file:text-label-large file:text-on-secondary-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -275,10 +330,11 @@ function VeliAktarimPaneli({ onAktarildi }: { onAktarildi: () => void }) {
                 if (dosyaRef.current) dosyaRef.current.value = "";
                 setDosya(null);
                 setRapor(null);
+                setAktarildi(false);
                 setHata(null);
               }}
             >
-              Dosyayı kaldır
+              {DOSYAYI_KALDIR}
             </Button>
           )}
         </div>
@@ -293,12 +349,14 @@ function VeliAktarimPaneli({ onAktarildi }: { onAktarildi: () => void }) {
           onClick={() => calistir("onizle")}
           disabled={mesgul}
         >
-          {mesgul ? "Çalışıyor…" : "Önizle"}
+          {mesgul ? CALISIYOR : ONIZLE}
         </Button>
         <Button icon="upload" onClick={() => calistir("aktar")} disabled={mesgul || !aktarilabilir}>
-          Aktar
+          {AKTAR}
         </Button>
       </div>
+
+      {aktarildi && <KaynakDosyaHatirlatmasi />}
 
       {rapor && <VeliRaporu rapor={rapor} />}
     </Card>
@@ -308,30 +366,31 @@ function VeliAktarimPaneli({ onAktarildi }: { onAktarildi: () => void }) {
 /** Önizleme ya da sonuç: yalnız sayılar, sınıf etkisi ve aktarılamayan satırlar (ad yok). */
 function VeliRaporu({ rapor }: { rapor: ParentImportReport }) {
   const onizleme = rapor.dry_run;
+  const aktarilamayan = rapor.total_rows - rapor.imported_rows;
+  const baslikSorunlari = rapor.issues.filter((s) => s.field === BASLIK_ALANI);
+  const satirSorunlari = rapor.issues.filter((s) => s.field !== BASLIK_ALANI);
   const hucreler: { label: string; value: number }[] = [
-    { label: "Dosyadaki satır", value: rapor.total_rows },
-    { label: onizleme ? "Aktarılacak" : "Aktarılan", value: rapor.imported_rows },
-    { label: "Aktarılamayan", value: rapor.total_rows - rapor.imported_rows },
-    { label: "Sınıf", value: rapor.class_count },
+    { label: RAPOR_DOSYADAKI_SATIR, value: rapor.total_rows },
+    { label: onizleme ? RAPOR_AKTARILACAK : RAPOR_AKTARILAN, value: rapor.imported_rows },
+    { label: RAPOR_AKTARILAMAYAN, value: aktarilamayan },
+    { label: RAPOR_SINIF, value: rapor.class_count },
     {
-      label: onizleme ? "Silinecek eski satır" : "Silinen eski satır",
+      label: onizleme ? RAPOR_SILINECEK_ESKI_SATIR : RAPOR_SILINEN_ESKI_SATIR,
       value: rapor.replaced_rows,
     },
-    { label: "Dokunulmayan sınıf", value: rapor.kept_class_count },
+    { label: RAPOR_DOKUNULMAYAN_SINIF, value: rapor.kept_class_count },
   ];
 
   return (
     <div className="space-y-3 rounded-shape-md bg-surface-container-low p-4">
       <p className="text-title-small text-on-surface">
-        {onizleme ? "Önizleme — hiçbir kayıt yazılmadı" : "Aktarım sonucu"}
+        {onizleme ? ONIZLEME_BASLIGI : VELI_AKTARIM_SONUCU}
       </p>
 
       {rapor.already_imported && (
         <div className="flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-4 py-3 text-body-medium text-on-tertiary-container">
           <Icon name="info" size="lg" />
-          <span>
-            Bu içerik daha önce aktarılmış. Güncelleme amaçlı yeniden aktarma engellenmez.
-          </span>
+          <span>{DAHA_ONCE_AKTARILMIS}</span>
         </div>
       )}
 
@@ -345,27 +404,23 @@ function VeliRaporu({ rapor }: { rapor: ParentImportReport }) {
       </dl>
 
       <p className="text-body-small text-on-surface-variant">
-        {onizleme
-          ? "Dosyadaki sınıfların listedeki eski satırları silinir, yerine dosyadakiler yazılır; " +
-            "dosyada olmayan sınıflara dokunulmaz."
-          : "Dosyadaki sınıfların eski satırları silindi, yerine dosyadakiler yazıldı; dosyada " +
-            "olmayan sınıflara dokunulmadı."}
+        {onizleme ? VELI_YERINE_KOYMA_ONIZLEME : VELI_YERINE_KOYMA_SONUC}
       </p>
 
       {rapor.classes.length > 0 && (
         <div className="overflow-x-auto">
           <table className={TABLO_SINIFI}>
-            <caption className="sr-only">Dosyadaki sınıflar</caption>
+            <caption className="sr-only">{DOSYADAKI_SINIFLAR}</caption>
             <thead>
               <tr className={BASLIK_SATIRI}>
                 <th scope="col" className="p-2">
-                  Sınıf
+                  {RAPOR_SINIF}
                 </th>
                 <th scope="col" className="p-2 text-right">
-                  Dosyadaki satır
+                  {RAPOR_DOSYADAKI_SATIR}
                 </th>
                 <th scope="col" className="p-2 text-right">
-                  {onizleme ? "Silinecek eski satır" : "Silinen eski satır"}
+                  {onizleme ? RAPOR_SILINECEK_ESKI_SATIR : RAPOR_SILINEN_ESKI_SATIR}
                 </th>
               </tr>
             </thead>
@@ -384,40 +439,56 @@ function VeliRaporu({ rapor }: { rapor: ParentImportReport }) {
         </div>
       )}
 
+      {baslikSorunlari.length > 0 && (
+        <div>
+          <p className="text-label-large text-on-surface-variant">
+            {baslikUyarilari(formatNumber(baslikSorunlari.length))}
+          </p>
+          <SorunTablosu sorunlar={baslikSorunlari} />
+        </div>
+      )}
+
       <div>
         <p className="text-label-large text-on-surface-variant">
-          Aktarılamayan satırlar ({formatNumber(rapor.issues.length)})
+          {aktarilamayanSatirlar(formatNumber(aktarilamayan))}
         </p>
-        {rapor.issues.length === 0 ? (
-          <EmptyState compact title="Aktarılamayan satır yok." icon="check_circle" />
+        {satirSorunlari.length === 0 ? (
+          <EmptyState compact title={AKTARILAMAYAN_SATIR_YOK} icon="check_circle" />
         ) : (
-          <div className="mt-2 overflow-x-auto">
-            <table className={TABLO_SINIFI}>
-              <thead>
-                <tr className={BASLIK_SATIRI}>
-                  <th className="p-2">Satır</th>
-                  <th className="p-2">Alan</th>
-                  <th className="p-2">Sorun</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rapor.issues.map((sorun, i) => (
-                  <tr
-                    key={`${sorun.row_number}-${sorun.field}-${i}`}
-                    className="border-t border-outline-variant/50"
-                  >
-                    <td className="p-2 text-on-surface-variant">{sorun.row_number}</td>
-                    <td className="p-2 text-on-surface-variant">
-                      {ALAN_ADI[sorun.field] ?? (sorun.field || "—")}
-                    </td>
-                    <td className="p-2 text-on-surface">{sorun.issue}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <SorunTablosu sorunlar={satirSorunlari} />
         )}
       </div>
+    </div>
+  );
+}
+
+/** Satır sorunlarının tablosu: satır no, alan, neden — hücrenin değeri yazılmaz. */
+function SorunTablosu({ sorunlar }: { sorunlar: ParentRowIssue[] }) {
+  return (
+    <div className="mt-2 overflow-x-auto">
+      <table className={TABLO_SINIFI}>
+        <thead>
+          <tr className={BASLIK_SATIRI}>
+            <th className="p-2">{SORUN_SATIR_SUTUNU}</th>
+            <th className="p-2">{SORUN_ALAN_SUTUNU}</th>
+            <th className="p-2">{SORUN_SORUN_SUTUNU}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorunlar.map((sorun, i) => (
+            <tr
+              key={`${sorun.row_number}-${sorun.field}-${i}`}
+              className="border-t border-outline-variant/50"
+            >
+              <td className="p-2 text-on-surface-variant">{sorun.row_number}</td>
+              <td className="p-2 text-on-surface-variant">
+                {ALAN_ADI[sorun.field] ?? (sorun.field || "—")}
+              </td>
+              <td className="p-2 text-on-surface">{sorun.issue}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
