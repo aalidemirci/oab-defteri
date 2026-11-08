@@ -116,7 +116,7 @@ export const VELI_LISTESI_ACIKLAMASI =
   "bir öğrencidir; iki çocuklu veli iki satırdır. Ekranda adlar listelenmez, yalnız sınıf başına " +
   "satır sayısı görünür.";
 
-export const VELI_LISTESI_BOS = "Veli listesi henüz aktarılmadı.";
+export const VELI_LISTESI_BOS = "Veli listesinde satır yok.";
 
 export const VELI_LISTESI_OKUNAMADI = "Veli listesi okunamadı.";
 
@@ -125,9 +125,9 @@ export const VELI_AKTARIM_BASLIGI = "Okulun Şablonundan Veli Listesi Aktar";
 
 export const VELI_AKTARIM_ACIKLAMASI =
   "Veli listesi şablonunu indirip her öğrenci için bir satır doldurun: velinin adı-soyadı ve " +
-  "öğrencinin sınıfı (9-A, 10/B ya da Hazırlık-A). Başka sütun okunmaz. Dosyadaki sınıflar " +
-  "listedeki aynı sınıfların yerini alır; dosyada olmayan sınıflara dokunulmaz. Şablon Excel " +
-  "ya da CSV olarak kaydedilebilir; makro içeren dosya kabul edilmez.";
+  "öğrencinin sınıfı (9-A, 10/B, Hazırlık-A, Anasınıfı-A ya da 5 Yaş-A). Başka sütun okunmaz. " +
+  "Dosyadaki sınıflar listedeki aynı sınıfların yerini alır; dosyada olmayan sınıflara " +
+  "dokunulmaz. Şablon Excel ya da CSV olarak kaydedilebilir; makro içeren dosya kabul edilmez.";
 
 export const VELI_DOSYA_ALANI_ETIKETI = "Dosya (şablon .xlsx, .xls ya da .csv)";
 

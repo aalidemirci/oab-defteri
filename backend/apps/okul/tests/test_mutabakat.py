@@ -520,9 +520,9 @@ class TestGorevTuruSiniflamasi:
         assert all("Görev türünü denetleyin" in u.issue for u in rapor.warnings)
 
     def test_supheli_gorev_turu_degismez_ama_denetim_uyarisi_alir(self) -> None:
-        """Kullanıcı kararı harfiyen: "Okul Müdürü" diğer personel, "Rehber Öğretmen (Psikolojik
-        Danışman)" öğretmen sayılır; ikisi de "Görev türünü denetleyin" uyarısı alır (görev metni
-        yazılmaz)."""
+        """Kullanıcı kararı harfiyen: "Okul Müdürü" ve "Usta Öğretici" diğer personel sayılır ve
+        "Görev türünü denetleyin" uyarısı alır; "Rehber Öğretmen (Psikolojik Danışman)" içinde
+        "öğretmen" geçtiği için kesin öğretmendir, uyarı almaz (görev metni yazılmaz)."""
         rapor = import_service.commit_personnel_text(
             text=_personel_metni(
                 "GÜL\tYEDİ\tOkul Müdürü\t",
@@ -543,13 +543,69 @@ class TestGorevTuruSiniflamasi:
         mesaj = import_service.MEMBER_KIND_UNCERTAIN_MESSAGE
         assert uyarilar == [
             (2, "member_kind", mesaj, ""),
-            (3, "member_kind", mesaj, ""),
             (5, "member_kind", mesaj, ""),
         ]
         assert mesaj.startswith("Görev türünü denetleyin")
         kalici = json.dumps([r.report for r in ImportRun.objects.all()], ensure_ascii=False)
         for gorev in ("Okul Müdürü", "Psikolojik", "Usta Öğretici"):
             assert gorev not in kalici
+
+    def test_supheli_gorevde_var_olan_kaydin_turu_korunur(self) -> None:
+        """Elle düzeltilen tür sonraki aktarımda ezilmez: "Okul Müdürü" yönetici yapılmışsa
+        belirsiz görev onu diğer personele geri çevirmez; uyarı yine düşer. İçinde "öğretmen" geçen
+        görev kesindir: diğer personel kaydı öğretmene güncellenir, uyarı yoktur. Önizleme ve
+        uygulama aynı sonucu verir (parite)."""
+        mudur = _personel("GÜL", "YEDİ", member_kind=MemberKind.YONETICI)
+        danisman = _personel("HAKAN", "SEKİZ", member_kind=MemberKind.DIGER)
+        metin = _personel_metni(
+            "GÜL\tYEDİ\tOkul Müdürü\t",
+            "HAKAN\tSEKİZ\tRehber Öğretmen (Psikolojik Danışman)\t",
+        )
+
+        onizleme = import_service.preview_personnel_text(text=metin)
+        rapor = import_service.commit_personnel_text(text=metin)
+
+        for r in (onizleme, rapor):
+            assert (r.updated_personnel, r.unchanged_personnel, r.created_personnel) == (1, 1, 0)
+            assert [(u.row_number, u.issue) for u in r.warnings] == [
+                (2, import_service.MEMBER_KIND_UNCERTAIN_MESSAGE),
+            ]
+        mudur.refresh_from_db()
+        danisman.refresh_from_db()
+        assert mudur.member_kind == MemberKind.YONETICI
+        assert danisman.member_kind == MemberKind.OGRETMEN
+        # Mesaj bunu doğru söyler.
+        assert "Mevcut kaydın görev türü değişmez." in import_service.MEMBER_KIND_UNCERTAIN_MESSAGE
+
+    def test_supheli_gorevde_yeni_kayit_kurala_gore_acilir(self) -> None:
+        rapor = import_service.commit_personnel_text(
+            text=_personel_metni("GÜL\tYEDİ\tOkul Müdürü\t")
+        )
+
+        assert rapor.created_personnel == 1
+        assert Personnel.objects.get().member_kind == MemberKind.DIGER
+
+    def test_kesin_gorevde_var_olan_kaydin_turu_guncellenir(self) -> None:
+        """Tam eşleşen yönetici görevi ve "öğretmen" geçen görev bugünkü gibi türü günceller."""
+        ali = _personel("ALİ", "BİR", member_kind=MemberKind.OGRETMEN)
+        ayse = _personel("AYŞE", "İKİ", member_kind=MemberKind.DIGER)
+        metin = _personel_metni(
+            "ALİ\tBİR\tMüdür Yardımcısı\t",
+            "AYŞE\tİKİ\tSözleşmeli Öğretmen(657 S.K. 4/B)\t",
+        )
+
+        onizleme = import_service.preview_personnel_text(text=metin)
+        ali.refresh_from_db()
+        assert ali.member_kind == MemberKind.OGRETMEN  # önizleme yazmaz
+        rapor = import_service.commit_personnel_text(text=metin)
+
+        for r in (onizleme, rapor):
+            assert (r.updated_personnel, r.unchanged_personnel) == (2, 0)
+            assert r.warnings == []
+        ali.refresh_from_db()
+        ayse.refresh_from_db()
+        assert ali.member_kind == MemberKind.YONETICI
+        assert ayse.member_kind == MemberKind.OGRETMEN
 
     def test_gorev_sutunu_yoksa_ogretmen_uyarisiz(self) -> None:
         rapor = import_service.commit_personnel_text(text="Adı\tSoyadı\nALİ\tBİR")

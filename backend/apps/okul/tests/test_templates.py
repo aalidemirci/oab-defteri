@@ -21,7 +21,7 @@ from django.http import StreamingHttpResponse
 from openpyxl import load_workbook
 from rest_framework.test import APIClient
 
-from apps.okul import excel_ortak
+from apps.okul import excel_ortak, excel_veli
 from apps.okul.models import MemberKind, Personnel
 from apps.okul.services import imports as import_service
 from apps.okul.services import templates as template_service
@@ -152,3 +152,17 @@ def test_veli_sablonu_ice_aktarma_ucundan_oldugu_gibi_gecer() -> None:
 
     assert rapor.issues == []
     assert (rapor.total_rows, rapor.imported_rows, rapor.class_count) == (1, 1, 1)
+
+
+def test_veli_sablonunun_sinif_iletisi_taninan_yazimlari_gosterir() -> None:
+    """Girdi iletisindeki her örnek yazım ayrıştırıcıda tanınır (okul öncesi dahil); Excel'in
+    girdi iletisi 255 karakteri aşamaz."""
+    kitap = load_workbook(BytesIO(template_service.parent_template_xlsx()))
+    dogrulamalar = kitap.active.data_validations.dataValidation
+    assert [d.prompt for d in dogrulamalar] == [template_service.PARENT_CLASS_PROMPT]
+    assert len(template_service.PARENT_CLASS_PROMPT) <= 255
+    ornekler = template_service.PARENT_CLASS_PROMPT.split(" biçiminde")[0]
+    yazimlar = [y.strip() for y in ornekler.replace(" ya da ", ", ").split(",")]
+    assert yazimlar == ["9-A", "10/B", "Hazırlık-A", "Anasınıfı-A", "5 Yaş-A"]
+    for yazim in yazimlar:
+        assert excel_veli.sinif_metni(yazim) is not None, yazim

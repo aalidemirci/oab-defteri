@@ -352,8 +352,8 @@ _DAYANAK_HAVUZ = (
 _DAYANAK_SABLON = "Plan F1b-2: şablonlar e-Okul aktarımının parçasıdır (tasarım §8.1 A7)."
 _DAYANAK_VELI = (
     "Tasarım §8.4 (4) ve §4.4.2: veli listesini aktarmak kişisel veri içeren dışa aktarım "
-    "yetkisidir (¹⁰, yalnız program yöneticisi); §5.4: liste genel kuruldan sonra elle de "
-    "silinebilir (plan 'F1b-5 uygulama kararları')."
+    "yetkisidir (¹⁰, yalnız program yöneticisi); §5.4: program yöneticisi listeyi onayla elle "
+    "siler (plan 'F1b-5 uygulama kararları')."
 )
 _DAYANAK_DENETIM_KARTLARI = (
     "Tasarım §4.6.3 (bütünlük kartı program yöneticisi ve DK panosuna), §4.6.1 kural 1 "

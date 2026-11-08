@@ -24,6 +24,11 @@ GOREV_TURU_DEGERLERI: tuple[str, ...] = ("Öğretmen", "Yönetici", "Diğer pers
 #: Veli listesi şablonunda YALNIZ iki sütun vardır (tasarım §8.4; T5): velinin adı-soyadı ve
 #: öğrencinin sınıfı. Ayrıştırıcı başlıkları birebir tanır (`excel_veli.COLUMN_SYNONYMS`).
 PARENT_TEMPLATE_HEADERS: tuple[str, ...] = ("Velinin Adı Soyadı", "Öğrencinin Sınıfı")
+#: "Öğrencinin Sınıfı" sütununun girdi iletisi (Excel; sözlük §4.3 "Veli Listesi"). Örnek
+#: yazımlar ayrıştırıcının tanıdıklarıdır (`excel_veli.sinif_metni`); okul öncesi dahil.
+PARENT_CLASS_PROMPT = (
+    "9-A, 10/B, Hazırlık-A, Anasınıfı-A ya da 5 Yaş-A biçiminde. Bir satır bir öğrencidir."
+)
 #: Doğrulama listesinin kapsadığı son satır (örnek satırla birlikte).
 _DOGRULAMA_SON_SATIR = 1000
 
@@ -91,7 +96,7 @@ def parent_template_xlsx() -> bytes:
         allow_blank=True,
         showInputMessage=True,
         promptTitle="Öğrencinin sınıfı",
-        prompt="9-A, 10/B ya da Hazırlık-A biçiminde. Bir satır bir öğrencidir.",
+        prompt=PARENT_CLASS_PROMPT,
     )
     sinif.add(f"B2:B{_DOGRULAMA_SON_SATIR}")
     return _workbook_bytes(PARENT_TEMPLATE_HEADERS, ("ÖRNEK VELİ", "9-A"), (sinif,))

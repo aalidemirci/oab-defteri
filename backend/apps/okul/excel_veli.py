@@ -15,7 +15,10 @@ başka bir sütuna kaymaz; tanınmayan başlıkta aktarım ParserError'la durur.
 Satır sorunları (ad boş, sınıf boş ya da tanınmadı) satır numarası ve nedenle döner; hücrenin
 DEĞERİ hiçbir yere yazılmaz (önizleme yalnız sayı gösterir, tasarım §8.4 (2)). Sınıf yazımı
 `normalize.normalize_class_section` ile normalleşir ve "10-A" biçiminde saklanır (hazırlık
-sınıfı "Hazırlık-A"); normalleşmeyen değer satır sorunudur.
+sınıfı "Hazırlık-A"); okul öncesi grupları `normalize.normalize_preschool_group` ile ayrı
+çözülür ve "Anasınıfı-A" ya da "5 Yaş-A" (şubesizse "Anasınıfı", "5 Yaş") biçiminde saklanır —
+anasınıfı velileri de birlik üyesidir, okul kartında okul öncesi kademesi vardır. Normalleşmeyen
+değer satır sorunudur.
 
 Modül SAFTIR (DB'siz, Django'suz): ayrıştırıcı DB'siz test edilir. DB yazımı
 `services/imports.py`'dadır.
@@ -43,6 +46,10 @@ AD_EN_COK: Final = 200
 _SUBE_EN_COK: Final = 4
 #: Hazırlık sınıfının saklanan adı ("Hazırlık-A").
 HAZIRLIK: Final = "Hazırlık"
+#: Yaşı belirtilmeyen okul öncesi grubunun saklanan adı ("Anasınıfı-A", şubesiz "Anasınıfı").
+ANASINIFI: Final = "Anasınıfı"
+#: Okul öncesi yaş grubunun saklanan adının eki ("5 Yaş-A", şubesiz "5 Yaş").
+YAS: Final = "Yaş"
 
 # Mantıksal alan → normalize edilmiş başlıklar (BİREBİR eşleşme; `excel_ortak.normalize_header`).
 # Şablonun başlıkları "Velinin Adı Soyadı" ve "Öğrencinin Sınıfı"dır (`services.templates`).
@@ -83,7 +90,8 @@ VELI_ADI_BOS: Final = "Velinin adı-soyadı boş; satır aktarılmadı."
 VELI_ADI_UZUN: Final = f"Velinin adı-soyadı {AD_EN_COK} karakterden uzun; satır aktarılmadı."
 SINIF_BOS: Final = "Öğrencinin sınıfı boş; satır aktarılmadı."
 SINIF_TANINMADI: Final = (
-    "Öğrencinin sınıfı tanınmadı (9-A, 10/B ya da Hazırlık-A biçiminde yazın); satır aktarılmadı."
+    "Öğrencinin sınıfı tanınmadı (9-A, 10/B, Hazırlık-A, Anasınıfı-A ya da 5 Yaş-A biçiminde "
+    "yazın); satır aktarılmadı."
 )
 #: Zorunlu sütun eksik (ParserError; aktarım durur).
 SUTUN_EKSIK: Final = (
@@ -105,10 +113,17 @@ def sinif_metni(value: Any) -> str | None:
     '10/A', '10-A', '10 A', '10A', '10. Sınıf / A Şubesi' → '10-A'; 'Hazırlık/B', 'HZ B' →
     'Hazırlık-B'. Şube harfi Türkçe büyük harfle yazılır ('10/i' → '10-İ'; I ve İ iki ayrı
     şubedir, `normalize.tr_upper`). Seviye 1-12 ya da hazırlıktır.
+
+    Okul öncesi grupları ayrı tutulur (`normalize.normalize_preschool_group`): 'Anasınıfı A',
+    'Ana Sınıfı-A', 'anasınıfı/a' → 'Anasınıfı-A'; '5 yaş A', '5 Yaş-A', '5 YAŞ / A' → '5 Yaş-A'
+    (yaş 3-6); şubesiz 'Anasınıfı' ve '5 Yaş' de gruptur. Okul öncesi izi taşıyan metin
+    çözülmezse satır sorunudur, hiçbir zaman ilkokul ya da ortaokul seviyesine düşmez.
     """
     metin = hucre_metni(value)
     if not metin:
         return None
+    if normalize.is_preschool_text(metin):
+        return _okul_oncesi_metni(metin)
     sade = _SOZCUK.sub(
         lambda m: " " if _ascii_upper(m.group()) in _DOLGU_SOZCUKLERI else m.group(),
         metin,
@@ -126,11 +141,41 @@ def sinif_metni(value: Any) -> str | None:
     return f"{on}-{sube}"
 
 
+def _okul_oncesi_metni(metin: str) -> str | None:
+    """Okul öncesi grubunun saklanan yazımı ("Anasınıfı-A", "5 Yaş-A", "5 Yaş"); çözümsüz → None."""
+    cozulen = normalize.normalize_preschool_group(metin)
+    if cozulen is None:
+        return None
+    yas, sube = cozulen
+    if len(sube) > _SUBE_EN_COK:
+        return None
+    on = ANASINIFI if yas is None else f"{yas} {YAS}"
+    return f"{on}-{sube}" if sube else on
+
+
+#: Okul öncesi gruplarının sıra değerleri: yaş grupları yaşa göre ("3 Yaş" … "6 Yaş"), ardından
+#: yaşı belirtilmeyen "Anasınıfı" (ilkokula en yakın grup); hepsi hazırlıktan ve 1. sınıftan önce.
+_ANASINIFI_SIRASI: Final = normalize.PREP_LEVEL - 1
+_YAS_SIRASI_TABANI: Final = _ANASINIFI_SIRASI - 1 - max(normalize.PRESCHOOL_AGES)
+
+
+def _sira_degeri(on: str) -> int:
+    """Sınıf adının ön parçasının sıra değeri (okul öncesi < hazırlık < 1 … 12 < tanınmayan)."""
+    if on == ANASINIFI:
+        return _ANASINIFI_SIRASI
+    yas, bosluk, ek = on.partition(" ")
+    if bosluk and ek == YAS and yas.isdigit():
+        return _YAS_SIRASI_TABANI + int(yas)
+    if on == HAZIRLIK:
+        return normalize.PREP_LEVEL
+    return int(on) if on.isdigit() else 99
+
+
 def sinif_sira_anahtari(sinif: str) -> tuple[int, tuple[tuple[int, int], ...]]:
-    """Sınıfların gösterim sırası: hazırlık, 1, 2, … 12; şube Türk alfabesiyle."""
+    """Sınıfların gösterim sırası: okul öncesi (3 Yaş … 6 Yaş, Anasınıfı), hazırlık, 1, 2, … 12;
+    şube Türk alfabesiyle (şubesiz grup aynı grubun şubelerinden önce)."""
     on, _, sube = sinif.partition("-")
-    seviye = normalize.PREP_LEVEL if on == HAZIRLIK else int(on) if on.isdigit() else 99
-    return seviye, normalize.tr_sort_key(sube)
+    return _sira_degeri(on), normalize.tr_sort_key(sube)
 
 
 @dataclass
@@ -238,8 +283,10 @@ def parse_grid(
 __all__ = [
     "AD_EN_COK",
     "ALAN_ADLARI",
+    "ANASINIFI",
     "COLUMN_SYNONYMS",
     "HAZIRLIK",
+    "YAS",
     "ParentColumnMapping",
     "ParentRowIssue",
     "ParsedParentRow",

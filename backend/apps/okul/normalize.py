@@ -9,7 +9,9 @@ söküldü (tasarım §5.1 ALMA).
 Sınıf metni ayrıştırması (`normalize_class_section`) KALDI: veli listesindeki
 öğrencinin sınıfı düz metindir ve yazımı normalleştirilir (plan "F1b-5 uygulama
 kararları"; tasarım §5.1 `ParentRoster`). Ayrıştırma seviye kümesiyle
-PARAMETRİKTİR; varsayılan küme okul içi sabittir (`GRADE_LEVELS`).
+PARAMETRİKTİR; varsayılan küme okul içi sabittir (`GRADE_LEVELS`). Okul öncesi grupları
+("Anasınıfı-A", "5 Yaş-A") seviye DEĞİLDİR ve ayrı çözülür (`normalize_preschool_group`);
+okul öncesi izi taşıyan metin seviyeye hiç düşmez.
 
 Saf fonksiyonlardır — kolay test edilir (tests/test_normalize).
 """
@@ -189,6 +191,81 @@ def tr_sort_key(value: object) -> tuple[tuple[int, int], ...]:
     )
 
 
+#: Okul öncesi yaş gruplarının kabul edilen yaşları ("3 Yaş" … "6 Yaş"). Sınıf seviyesi
+#: DEĞİLDİR: "5 Yaş-A" ilkokulun 5-A'sı olamaz (`normalize_preschool_group`).
+PRESCHOOL_AGES: tuple[int, ...] = (3, 4, 5, 6)
+
+#: Metinde okul öncesi izi ('YAŞ' ya da 'ANASINIF' ile başlayan sözcük; ASCII'ye katlanmış
+#: metinde). İz varsa metin sınıf seviyesi olarak HİÇ çözülmez (`normalize_class_section`):
+#: "5 yaş A" bir zamanlar 5. sınıfın "YAŞ" şubesi sayılıyordu.
+_OKUL_ONCESI_IZI = re.compile(r"(?<![A-Z])(YAS|ANA[\s.\-]*SINIF)")
+#: "Anasınıfı" sözcüğü ("ANASINIFI", "ANA SINIFI", "ANA-SINIF"; katlanmış metinde).
+_ANASINIFI_RE = re.compile(r"(?<![A-Z])ANA[\s.\-]*SINIFI?(?![A-Z])")
+#: Yaş grubu: hemen önünde yaşı olan 'YAŞ' sözcüğü ("5 YAS", "5YAS", "5-YAS", "5. YAS").
+_YAS_GRUBU_RE = re.compile(r"(?<!\d)(\d{1,2})[\s.\-]*YAS(?![A-Z])")
+#: Yalnız 'YAŞ' sözcüğü (önünde yaş olmasa da sayılır: "Yaş A" çözülmez).
+_YAS_SOZCUGU_RE = re.compile(r"(?<![A-Z])YAS(?![A-Z])")
+#: Okul öncesi metnindeki dolgu sözcükleri ("5 Yaş Grubu A Şubesi"; katlanmış).
+_OKUL_ONCESI_DOLGU = frozenset({"GRUBU", "GRUP", "SINIF", "SINIFI", "SUBE", "SUBESI"})
+
+
+def is_preschool_text(value: object) -> bool:
+    """Metin okul öncesi grubu mu anlatıyor ('Anasınıfı', 'yaş' sözcüğü)? Çözülüp çözülmediği
+    ayrıdır (`normalize_preschool_group`); iz taşıyan metin sınıf seviyesine hiç düşmez."""
+    if value is None:
+        return False
+    return _OKUL_ONCESI_IZI.search(_ascii_upper(str(value))) is not None
+
+
+def normalize_preschool_group(value: object) -> tuple[int | None, str] | None:
+    """Okul öncesi grubu → (yaş, şube); yaş None ise grup "Anasınıfı"dır. Çözümsüz → None.
+
+    KURAL (tek ve belgeli; sözlük "Veli"): grubun kimliği YAŞ GRUBU ile ŞUBENİN birlikteliğidir.
+    - 'yaş' sözcüğünün hemen önünde 3-6 arası bir yaş varsa grup o yaştır: '5 yaş A', '5 Yaş-A',
+      '5 YAŞ / A', '5yaş a' → (5, 'A'). 'Anasınıfı' sözcüğü de varsa dolgu sayılır
+      ('Anasınıfı 5 Yaş A' → (5, 'A')): yaş daha belirleyicidir.
+    - Yaş yoksa 'Anasınıfı' (ya da 'Ana Sınıfı', 'anasınıf') grubu: 'Anasınıfı A' → (None, 'A').
+    - Şube en çok BİR harf dizisidir ve Türkçe büyük harfle yazılır (`tr_upper`); şubesiz grup
+      geçerlidir: 'Anasınıfı' → (None, ''), '5 Yaş' → (5, '').
+    - Çözülmez (None): yaş 3-6 dışında ('2 yaş A', '7 yaş A'), önünde yaş olmayan 'yaş' ('Yaş A'),
+      yaşın dışında rakam ('Anasınıfı 1', '5 yaş 2'), birden çok şube dizisi, iki yaş sözcüğü.
+    "Grubu", "Sınıfı", "Şubesi" dolgudur. Okul öncesi değilse de None (`is_preschool_text`).
+    """
+    if value is None:
+        return None
+    s = str(value).strip()
+    folded = _ascii_upper(s)
+    if not s or _OKUL_ONCESI_IZI.search(folded) is None:
+        return None
+    if len(_YAS_SOZCUGU_RE.findall(folded)) > 1 or len(_ANASINIFI_RE.findall(folded)) > 1:
+        return None
+    yas_m = _YAS_GRUBU_RE.search(folded)
+    yas: int | None = None
+    if yas_m is not None:
+        yas = int(yas_m.group(1))
+        if yas not in PRESCHOOL_AGES:
+            return None
+    elif _YAS_SOZCUGU_RE.search(folded) is not None:
+        return None  # 'yaş' var ama önünde yaş yok
+    elif _ANASINIFI_RE.search(folded) is None:
+        return None  # yalnız iz ('5YAŞA', 'Anasınıflar'): tanınmaz
+    # Anahtar sözcükler KATLANMIŞ metinde bulunur, şube HAM metinden alınır ('İ' 'I'ya çökmesin;
+    # `tr_upper` gerekçesi). Katlama uzunluğu değiştirdiyse (savunma dalı) katlanmış metne düşülür.
+    kaynak = s if len(folded) == len(s) else folded
+    kalan = list(kaynak)
+    for desen in (_YAS_GRUBU_RE, _ANASINIFI_RE):
+        for m in desen.finditer(folded):
+            kalan[m.start() : m.end()] = " " * (m.end() - m.start())
+    parcalar = [
+        p
+        for p in re.findall(rf"\d+|[{_SECTION_CHARS}]+", "".join(kalan))
+        if _ascii_upper(p) not in _OKUL_ONCESI_DOLGU
+    ]
+    if any(p.isdigit() for p in parcalar) or len(parcalar) > 1:
+        return None
+    return yas, tr_upper(parcalar[0]) if parcalar else ""
+
+
 def normalize_class_section(
     value: object, *, valid_levels: Collection[int] = GRADE_LEVELS
 ) -> tuple[int, str] | None:
@@ -196,6 +273,8 @@ def normalize_class_section(
 
     `valid_levels` çağırandan gelir (varsayılan 1-12).
     0 (Hazırlık) kümede ise 'HAZIRLIK/A', 'HZ A' gibi metinler (0, 'A') çözülür.
+    Okul öncesi izi taşıyan metin ('5 yaş A', 'Anasınıfı A') HİÇBİR ZAMAN seviyeye çözülmez
+    (None): okul öncesi grubu `normalize_preschool_group` ile ayrı çözülür.
     """
     if value is None:
         return None
@@ -204,6 +283,8 @@ def normalize_class_section(
         return None
     levels = frozenset(int(v) for v in valid_levels)
     folded = _ascii_upper(s)
+    if _OKUL_ONCESI_IZI.search(folded) is not None:
+        return None
     prep = _PREP_RE.search(folded) if PREP_LEVEL in levels else None
     if prep is not None:
         # Anahtar kelime KATLANMIŞ metinde bulunur, şube harfi HAM metinden

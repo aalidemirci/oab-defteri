@@ -112,11 +112,14 @@ MEMBER_KIND_CHECK_MESSAGE = (
 )
 #: Görev metni yönetici ya da öğretmen görevine benziyor ama tam tanınmadı ("Okul Müdürü",
 #: "Müdür Yrd.", "Psikolojik Danışman", "Usta Öğretici"; `excel_personel.gorev_denetlenmeli`).
-#: Tür sınıflamanın verdiğidir (plan "F1b-5 uygulama kararları"; harfiyen uygulanır).
+#: YENİ kaydın türü sınıflamanın verdiğidir (plan "F1b-5 uygulama kararları"; harfiyen
+#: uygulanır); VAR OLAN kaydın türü boş hücredeki gibi DEĞİŞMEZ — elle yapılan düzeltme
+#: (ör. "Okul Müdürü"nü yönetici yapmak) sonraki e-Okul aktarımında ezilmesin.
 MEMBER_KIND_UNCERTAIN_MESSAGE = (
     "Görev türünü denetleyin: görev yönetici ya da öğretmen görevine benziyor ama tam tanınmadı. "
-    "Görev türü kurala göre verilir: yalnız Müdür, Müdür Başyardımcısı ve Müdür Yardımcısı "
-    "yönetici, içinde “öğretmen” geçen görev öğretmen, öteki görevler diğer personel sayılır."
+    "Yeni kayıt kurala göre açılır: yalnız Müdür, Müdür Başyardımcısı ve Müdür Yardımcısı "
+    "yönetici, içinde “öğretmen” geçen görev öğretmen, öteki görevler diğer personel sayılır. "
+    "Mevcut kaydın görev türü değişmez."
 )
 #: Ad-soyadı boş personel satırı: kimlik anahtarı ad olduğu için havuza ekleme durur.
 PERSONNEL_UNIDENTIFIED_ROW_MESSAGE = (
@@ -434,6 +437,10 @@ def _reconcile_personnel(kosu: _PersonnelRun, listede_yok: list[Personnel], run:
 def _process_personnel_row(row: ParsedPersonnelRow, kosu: _PersonnelRun) -> None:
     """Tek personel satırı: ada göre bul/oluştur; boş hücre mevcut veriyi silmez.
 
+    Görev türü: kesin görevde (tam eşleşme ya da "öğretmen" geçen görev, şablonun türü) var olan
+    kaydın türü güncellenir; boş, tanınmayan ya da belirsiz görevde (`member_kind_uncertain`)
+    var olan kaydın türü değişmez, yeni kayıt kuralın verdiği (boşta öğretmen) türle açılır.
+
     Bulunan aktif kişi ayrılış havuzundaysa havuzdan çıkar. Ad-soyadı boş satır
     atlanır ve havuza eklemeyi durdurur: kişi tanınamadığı için listede olmayan
     herhangi biri olabilir (`_reconcile_personnel`).
@@ -472,7 +479,9 @@ def _process_personnel_row(row: ParsedPersonnelRow, kosu: _PersonnelRun) -> None
     if reactivated:
         persons.reactivate_personnel(person)
         changed += ["is_active", "left_at"]
-    if row.member_kind and person.member_kind != row.member_kind:
+    # Belirsiz görevde (boş hücredeki gibi) var olan kaydın türüne dokunulmaz: tür yalnız yeni
+    # kayıtta kuraldan gelir; elle düzeltilen tür her aktarımda geri çevrilmez.
+    if row.member_kind and not row.member_kind_uncertain and person.member_kind != row.member_kind:
         person.member_kind = row.member_kind
         changed.append("member_kind")
     havuzdan = persons.remove_from_leave_pool(person, save=False)
@@ -667,10 +676,14 @@ def _veli_satirlarini_sil(silinecek: QuerySet[ParentRoster], *, tetik: str) -> i
 
 
 def delete_parent_roster() -> int:
-    """ "Veli listesini sil" (program yöneticisi; tasarım §5.4: genel kuruldan sonra elle de
-    silinebilir): BÜTÜN liste katı silinir, kişisiz `KVKK_SILME` satırı yazılır (tetik
-    `ELLE_SILME`; KVKK md. 4/2-ç, 7). Liste boşsa hiçbir şey yazılmaz. Dönem kapanışının silmesi
-    F4'tedir.
+    """ "Veli listesini sil" (program yöneticisi onayla elle siler; tasarım §5.4, §8.4): BÜTÜN
+    liste katı silinir, kişisiz `KVKK_SILME` satırı yazılır (tetik `ELLE_SILME`; KVKK md. 4/2-ç,
+    7). Liste boşsa hiçbir şey yazılmaz. Dönem kapanışının silmesi F4'tedir.
+
+    Program elle silmeyi zamana bağlamaz: her an çağrılabilir, genel kurulun yapılıp yapılmadığı
+    denetlenmez (yetki ve onay ön yüzde ve rol kapısındadır). Onaylı aydınlatma metnindeki
+    "genel kuruldan sonra daha önce de silinebilir" cümlesi okulun SAKLAMA BEYANIDIR, programın
+    koyduğu bir kısıt değildir.
 
     Silinen satır sayısını döndürür. Aktarım partilerinin `ImportRun` satırları kalır (yalnız
     sayı taşırlar).

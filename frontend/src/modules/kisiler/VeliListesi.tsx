@@ -11,8 +11,8 @@
 // dosya seçiminin üstündedir (`AydinlatmaMetni`). Boy denetimi personel paneliyle aynıdır
 // (`AktarimPaneli.boyHatasi`; kullanıcı kararı 05.11.2026).
 //
-// "Veli listesini sil" bütün listeyi siler (onay penceresi; §5.4: genel kuruldan sonra elle de
-// silinebilir); denetim izine kişisiz bir satır düşer.
+// "Veli listesini sil" bütün listeyi siler (onay penceresi; §5.4: program yöneticisi onayla elle
+// siler, program zamanı denetlemez); denetim izine kişisiz bir satır düşer.
 //
 // Raporun "Aktarılamayan satırlar (N)" başlığı ve "Aktarılamayan" kutusu aynı sayıyı (satır)
 // gösterir; başlık satırının uyarıları (aynı alana uyan ikinci sütun) satır değildir, ayrı

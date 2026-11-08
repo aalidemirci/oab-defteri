@@ -291,6 +291,48 @@ class TestAktarim:
             ("10-A", "ZEHRA VELİ"),
         ]
 
+    def test_okul_oncesi_gruplari_ayri_kalir_ve_basa_dizilir(self) -> None:
+        """Eski kusur: "5 yaş A" ile "5 yaş B" aynı uydurma "5-YAŞ" sınıfında birleşiyor, yeniden
+        aktarımda birbirinin yerine geçiyordu. Gruplar ayrı tutulur, sıralamada başta durur."""
+        _aktar(
+            [
+                ("A VELİ", "5-A"),
+                ("B VELİ", "5 yaş A"),
+                ("C VELİ", "5 Yaş-B"),
+                ("D VELİ", "anasınıfı/a"),
+                ("E VELİ", "4 yaş B"),
+            ]
+        )
+        assert list(_sayilar().items()) == [
+            ("4 Yaş-B", 1),
+            ("5 Yaş-A", 1),
+            ("5 Yaş-B", 1),
+            ("Anasınıfı-A", 1),
+            ("5-A", 1),
+        ]
+        yazilan = [s.student_class for s in ParentRoster.objects.order_by("pk")]
+        assert yazilan == ["4 Yaş-B", "5 Yaş-A", "5 Yaş-B", "Anasınıfı-A", "5-A"]
+
+        rapor = _aktar([("F VELİ", "5 YAŞ / A"), ("G VELİ", "7 yaş A"), ("H VELİ", "0-A")])
+        assert [(c.student_class, c.rows, c.replaced_rows) for c in rapor.classes] == [
+            ("5 Yaş-A", 1, 1),
+        ]
+        assert [(i.row_number, i.field) for i in rapor.issues] == [
+            (3, "student_class"),
+            (4, "student_class"),
+        ]
+        assert _sayilar() == {
+            "4 Yaş-B": 1,
+            "5 Yaş-A": 1,
+            "5 Yaş-B": 1,
+            "Anasınıfı-A": 1,
+            "5-A": 1,
+        }
+        assert {s.full_name for s in ParentRoster.objects.filter(student_class="5 Yaş-B")} == {
+            "C VELİ"
+        }
+        assert {s.full_name for s in ParentRoster.objects.filter(student_class="5-A")} == {"A VELİ"}
+
     def test_sorunlu_satir_aktarilmaz_ve_numarasiyla_bildirilir(self) -> None:
         rapor = _aktar([("ÖRNEK VELİ", "9-A"), ("", "9-A"), (UYDURMA_VELI, "sınıfsız")])
         assert (rapor.total_rows, rapor.imported_rows) == (3, 1)

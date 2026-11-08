@@ -152,3 +152,27 @@ class TestSplitFullName:
     def test_ham_birakilir_title_case_uygulanmaz(self) -> None:
         """TR büyük harf tuzağı: görüntü biçimi başka katmanda."""
         assert normalize.split_full_name("emre can yılmaz") == ("emre can", "yılmaz")
+
+
+class TestOkulOncesi:
+    """Okul öncesi grupları seviye değildir (F1b-5 düzeltmesi: "5 yaş A" → "5-YAŞ" kusuru)."""
+
+    def test_yas_yazimi_seviyeye_hic_dusmez(self) -> None:
+        for metin in ("5 yaş A", "4 yaş B", "7 yaş A", "Anasınıfı A", "5YAŞA"):
+            assert normalize.normalize_class_section(metin) is None
+            assert normalize.is_preschool_text(metin)
+        assert normalize.normalize_class_section("5-A") == (5, "A")
+        assert not normalize.is_preschool_text("5-A")
+        assert not normalize.is_preschool_text(None)
+
+    def test_grup_yas_ve_sube_birlikte(self) -> None:
+        assert normalize.normalize_preschool_group("5 yaş A") == (5, "A")
+        assert normalize.normalize_preschool_group("4 Yaş-B") == (4, "B")
+        assert normalize.normalize_preschool_group("Ana Sınıfı-A") == (None, "A")
+        assert normalize.normalize_preschool_group("Anasınıfı") == (None, "")
+        assert normalize.normalize_preschool_group("6 YAŞ") == (6, "")
+
+    def test_sinir_yaslar_ve_cozumsuz(self) -> None:
+        assert normalize.PRESCHOOL_AGES == (3, 4, 5, 6)
+        for metin in ("2 yaş A", "7 yaş A", "Yaş A", "5 yaş 5 yaş", "Anasınıfı 1", None, "", "5-A"):
+            assert normalize.normalize_preschool_group(metin) is None

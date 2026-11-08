@@ -76,8 +76,9 @@ _YONETICI_GOREVLERI: frozenset[str] = frozenset(
 _OGRETMEN_SOZCUGU = "ogretmen"
 #: Yönetici ya da öğretmen görevine benzeyip yukarıdaki tam eşleşmelere uymayan görevlerin
 #: sözcükleri (katlanmış; "Okul Müdürü", "Müdür Yrd.", "Müdür Yardımcısı Vekili", "Psikolojik
-#: Danışman", "Usta Öğretici"). Sınıflamayı DEĞİŞTİRMEZ (kullanıcı kararı harfiyen uygulanır);
-#: yalnız önizlemede "Görev türünü denetleyin" uyarısı verdirir (`gorev_denetlenmeli`).
+#: Danışman", "Usta Öğretici"). Sınıflamayı DEĞİŞTİRMEZ (kullanıcı kararı harfiyen uygulanır;
+#: yeni kayıt o türle açılır); "Görev türünü denetleyin" uyarısı verdirir (`gorev_denetlenmeli`)
+#: ve var olan kaydın türünü korur (`services.imports`).
 _DENETLENECEK_SOZCUKLER: tuple[str, ...] = ("mudur", "danisman", "ogretici")
 
 #: Şablonun "Görev Türü" sütununun kabul ettiği değerler (katlanmış tam eşleşme; arayüz
@@ -113,12 +114,14 @@ def gorev_denetlenmeli(value: Any) -> bool:
     """e-Okul "Görevi" metni yönetici ya da öğretmen görevine benziyor ama tam tanınmadı mı?
 
     Katlanmış metin "mudur", "danisman" ya da "ogretici" içerip yöneticinin tam eşleşmelerinden
-    biri değilse True (ör. "Okul Müdürü" ve "Müdür Yardımcısı Vekili" diğer personel, "Rehber
-    Öğretmen (Psikolojik Danışman)" öğretmen sayılır, ama türleri denetlenmeli). Sınıflama
-    `classify_member_kind`'dadır ve bundan etkilenmez; metin hiçbir yere yazılmaz.
+    biri değilse True (ör. "Okul Müdürü" ve "Müdür Yardımcısı Vekili" diğer personel sayılır, ama
+    türleri denetlenmeli). İçinde "öğretmen" geçen görev kesindir (kullanıcı kararı: öğretmen
+    sayılır), denetim istemez: "Rehber Öğretmen (Psikolojik Danışman)" öğretmendir ve var olan
+    kaydın türü güncellenir. Sınıflama `classify_member_kind`'dadır ve bundan etkilenmez; metin
+    hiçbir yere yazılmaz.
     """
     katlanmis = normalize_header(value)
-    if not katlanmis or katlanmis in _YONETICI_GOREVLERI:
+    if not katlanmis or katlanmis in _YONETICI_GOREVLERI or "ogretmen" in katlanmis:
         return False
     return any(sozcuk in katlanmis for sozcuk in _DENETLENECEK_SOZCUKLER)
 
@@ -167,7 +170,8 @@ class ParsedPersonnelRow:
     #: Görev (türü) sütunu VAR ama bu satırın türü çıkarılamadı (boş hücre dahil).
     member_kind_unrecognized: bool = False
     #: e-Okul "Görevi" metninden tür çıkarıldı ama görev yönetici ya da öğretmen görevine benzeyip
-    #: tam tanınmadı (`gorev_denetlenmeli`); tür sınıflamanın verdiğidir, uyarı ayrıdır.
+    #: tam tanınmadı (`gorev_denetlenmeli`); tür sınıflamanın verdiğidir, uyarı ayrıdır. Bu tür
+    #: yalnız YENİ kayıtta kullanılır; var olan kaydın türü değişmez (`services.imports`).
     member_kind_uncertain: bool = False
 
 

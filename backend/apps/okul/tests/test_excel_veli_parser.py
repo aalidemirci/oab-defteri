@@ -44,13 +44,68 @@ class TestSinifMetni:
     def test_yazim_normallesir(self, girdi: Any, beklenen: str | None) -> None:
         assert excel_veli.sinif_metni(girdi) == beklenen
 
-    @pytest.mark.parametrize("girdi", ["", None, "A", "13-A", "0-A", "Anasınıfı", "9-ABCDE"])
+    @pytest.mark.parametrize("girdi", ["", None, "A", "13-A", "0-A", "0/B", "9-ABCDE"])
     def test_taninmayan_yazim_none(self, girdi: Any) -> None:
         assert excel_veli.sinif_metni(girdi) is None
+
+    @pytest.mark.parametrize(
+        ("girdi", "beklenen"),
+        [
+            ("Anasınıfı A", "Anasınıfı-A"),
+            ("Ana Sınıfı-A", "Anasınıfı-A"),
+            ("anasınıfı/a", "Anasınıfı-A"),
+            ("ANASINIFI B", "Anasınıfı-B"),
+            ("Anasınıfı", "Anasınıfı"),  # şubesiz grup
+            ("5 yaş A", "5 Yaş-A"),
+            ("5 Yaş-A", "5 Yaş-A"),
+            ("5 YAŞ / A", "5 Yaş-A"),
+            ("5yaş a", "5 Yaş-A"),
+            ("5 Yaş Grubu A Şubesi", "5 Yaş-A"),
+            ("4 yaş B", "4 Yaş-B"),
+            ("3 yaş C", "3 Yaş-C"),
+            ("6 Yaş", "6 Yaş"),  # şubesiz grup
+            ("Anasınıfı 5 Yaş A", "5 Yaş-A"),  # yaş esastır
+            ("5 yaş i", "5 Yaş-İ"),  # Türkçe büyük harf
+        ],
+    )
+    def test_okul_oncesi_gruplari_ayri_tutulur(self, girdi: str, beklenen: str) -> None:
+        assert excel_veli.sinif_metni(girdi) == beklenen
+
+    @pytest.mark.parametrize(
+        "girdi",
+        [
+            "2 yaş A",  # yaş 3-6 dışında
+            "7 yaş A",
+            "Yaş A",  # önünde yaş yok
+            "5YAŞA",  # yaş sözcüğü ayrılmamış
+            "Anasınıfı 1",  # yaşın dışında rakam
+            "5 yaş 2",
+            "Anasınıfı A B",  # iki şube
+            "5 yaş ABCDE",  # şube dört harften uzun
+            "Hazırlık 5 yaş A",
+        ],
+    )
+    def test_cozulmeyen_okul_oncesi_satir_sorunudur(self, girdi: str) -> None:
+        assert excel_veli.sinif_metni(girdi) is None
+
+    def test_yas_yazimi_ilkokul_seviyesine_dusmez(self) -> None:
+        """Eski kusur: "5 yaş A" 5. sınıfın "YAŞ" şubesi ("5-YAŞ") sayılıyordu; A ve B şubeleri
+        aynı uydurma sınıfta birleşiyordu. İlkokulun 5-A'sı etkilenmez."""
+        assert excel_veli.sinif_metni("5 yaş A") != excel_veli.sinif_metni("5 yaş B")
+        for girdi in ("5 yaş A", "4 yaş B", "7 yaş A", "2 yaş A"):
+            sonuc = excel_veli.sinif_metni(girdi)
+            assert sonuc is None or "Yaş" in sonuc
+            assert sonuc not in {"5-YAŞ", "4-YAŞ", "7-YAŞ", "2-YAŞ"}
+        assert excel_veli.sinif_metni("5-A") == "5-A"
+        assert excel_veli.sinif_metni("5/A") == "5-A"
+        assert excel_veli.sinif_metni("5 A") == "5-A"
+        assert excel_veli.sinif_metni("5-A") != excel_veli.sinif_metni("5 yaş A")
 
     def test_saklanan_yazim_alana_sigar(self) -> None:
         assert len("Hazırlık-ABCD") <= STUDENT_CLASS_MAX
         assert excel_veli.sinif_metni("Hazırlık ABCD") == "Hazırlık-ABCD"
+        assert len("Anasınıfı-ABCD") <= STUDENT_CLASS_MAX
+        assert excel_veli.sinif_metni("Anasınıfı ABCD") == "Anasınıfı-ABCD"
 
     def test_sira_hazirlik_seviye_ve_turk_alfabesi(self) -> None:
         siniflar = ["10-B", "9-Ç", "Hazırlık-A", "9-C", "12-A", "10-A", "9-D"]
@@ -62,6 +117,34 @@ class TestSinifMetni:
             "10-A",
             "10-B",
             "12-A",
+        ]
+
+    def test_sira_okul_oncesi_basta(self) -> None:
+        siniflar = [
+            "1-A",
+            "Anasınıfı-B",
+            "5-A",
+            "5 Yaş-B",
+            "Hazırlık-A",
+            "Anasınıfı",
+            "4 Yaş-A",
+            "5 Yaş-A",
+            "Anasınıfı-A",
+            "3 Yaş",
+            "6 Yaş-A",
+        ]
+        assert sorted(siniflar, key=excel_veli.sinif_sira_anahtari) == [
+            "3 Yaş",
+            "4 Yaş-A",
+            "5 Yaş-A",
+            "5 Yaş-B",
+            "6 Yaş-A",
+            "Anasınıfı",
+            "Anasınıfı-A",
+            "Anasınıfı-B",
+            "Hazırlık-A",
+            "1-A",
+            "5-A",
         ]
 
 

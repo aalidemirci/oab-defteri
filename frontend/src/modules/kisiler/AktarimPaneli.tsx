@@ -20,8 +20,8 @@
 // ile eski kayıt yeni kayda katılır (Ayrılış Havuzu'ndan da yapılabilir). Görev
 // sütunu yalnız görev türü için okunur; görev hücresi boş (ya da şablondaki görev türü
 // tanınmayan) satırlar ve yönetici ya da öğretmen görevine benzeyip tam tanınmayan görevler
-// ("Okul Müdürü", "Psikolojik Danışman"; tür yine kuralla verilir) "Görev türünü denetleyin"
-// uyarısı alır.
+// ("Okul Müdürü", "Psikolojik Danışman"; yeni kayıtta tür yine kuralla verilir) "Görev türünü
+// denetleyin" uyarısı alır; bu satırlarda var olan kaydın türü değişmez (elle düzeltme korunur).
 //
 // Dosya biçimleri (genel tasarım §8.1 A4, TK18): e-Okul .xls, şablon .xlsx ve .csv; makro içeren
 // dosyayı sunucu okumadan reddeder (ileti sunucudan gelir). Seçim penceresinin süzgeci `accept`
@@ -439,8 +439,9 @@ function PersonelMutabakati({
           <Icon name="warning" size="lg" />
           <span>
             {formatNumber(turUyarisi)} satırda görev türünü denetleyin: görev bilgisi boş ya da tam
-            tanınmadı. Nedeni ve satır numaraları aşağıdaki uyarılar tablosundadır; gerekirse kişiyi
-            düzenleyip doğru görev türünü seçin.
+            tanınmadı. Nedeni ve satır numaraları aşağıdaki uyarılar tablosundadır. Bu satırlarda
+            mevcut kaydın görev türü değişmez, yeni kayıt kurala göre açılır; gerekirse kişiyi
+            düzenleyip doğru görev türünü seçin, seçiminiz sonraki aktarımlarda korunur.
           </span>
         </div>
       )}

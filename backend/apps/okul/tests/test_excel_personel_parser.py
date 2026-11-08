@@ -241,8 +241,6 @@ def test_gorev_siniflamasi(gorev: object, beklenen: str | None) -> None:
         ("Müdür Vekili", "DIGER"),
         ("Psikolojik Danışman", "DIGER"),
         ("Usta Öğretici", "DIGER"),
-        ("Rehber Öğretmen (Psikolojik Danışman)", "OGRETMEN"),
-        ("Usta Öğreticiler Öğretmeni", "OGRETMEN"),
     ],
 )
 def test_supheli_gorev_siniflamayi_degistirmeden_denetim_ister(gorev: str, tur: str) -> None:
@@ -261,6 +259,9 @@ def test_supheli_gorev_siniflamayi_degistirmeden_denetim_ister(gorev: str, tur: 
         "Öğretmen",
         "Ücretli Öğretmen",
         "Rehber Öğretmen",
+        # İçinde "öğretmen" geçen görev kesindir (kullanıcı kararı); "danışman" geçse de denetim istemez.
+        "Rehber Öğretmen (Psikolojik Danışman)",
+        "Usta Öğreticiler Öğretmeni",
         "Memur",
         "Hizmetli",
         "Teknisyen",

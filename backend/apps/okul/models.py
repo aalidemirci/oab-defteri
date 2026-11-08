@@ -795,7 +795,8 @@ class ImportRun(BaseModel):
 # ---------------------------------------------------------------------------
 #: Veli adı-soyadının üst sınırı (karakter; şifreli sütunun düz metni).
 PARENT_NAME_MAX = 200
-#: Öğrencinin sınıfının üst sınırı (normalleştirilmiş yazım: "10-A", "Hazırlık-B").
+#: Öğrencinin sınıfının üst sınırı (normalleştirilmiş yazım: "10-A", "Hazırlık-B", "Anasınıfı-A",
+#: "5 Yaş-A"; en uzunu "Anasınıfı-ABCD", 14 karakter).
 STUDENT_CLASS_MAX = 16
 
 
@@ -815,7 +816,8 @@ class ParentRoster(models.Model):
 
     İki çocuklu veli iki satırdır (TKB Tablo 1 "velisi katılan öğrenci sayısı"); satırlar
     birleştirilmez. Yalnız iki veri alanı vardır: velinin adı-soyadı (ŞİFRELİ) ve öğrencinin
-    sınıfı (DÜZ METİN, yazımı `excel_veli.sinif_metni` ile normalleştirilir: "10-A"). Öğrencinin
+    sınıfı (DÜZ METİN, yazımı `excel_veli.sinif_metni` ile normalleştirilir: "10-A", okul öncesi
+    "Anasınıfı-A" ya da "5 Yaş-A"). Öğrencinin
     adı, numarası, T.C. kimlik no, telefon ve adres alınmaz. Kaynak dosyadaki satır sırası
     tutulmaz: satırlar sınıf ve çözülmüş ad sırasıyla yazılır (`services.imports`).
 
@@ -832,8 +834,10 @@ class ParentRoster(models.Model):
     İndeksin işi adaydan kişi kaydına geçiş ve yeniden aktarımda aynı velinin bulunmasıdır
     (tasarım §5.3; F1c).
 
-    SİLME KVKK silmesidir (tasarım §5.4: dönem kapanışında, genel kuruldan sonra elle de):
-    satır katı silinir, yumuşak silme yoktur. Aktarımda dosyadaki sınıfların eski satırları
+    SİLME KVKK silmesidir (tasarım §5.4, §8.4: dönem kapanışında; program yöneticisi onayla elle
+    de siler): satır katı silinir, yumuşak silme yoktur. Program elle silmeyi zamana bağlamaz
+    (genel kurulun yapılıp yapılmadığı denetlenmez); aydınlatma metnindeki "genel kuruldan sonra
+    daha önce de silinebilir" cümlesi okulun saklama beyanıdır, programın kısıtı değildir. Aktarımda dosyadaki sınıfların eski satırları
     yerine geçerken ve "Veli listesini sil"de silinir; ikisi de denetim izine kişisiz
     `KVKK_SILME` satırıdır (`services.imports`; elle silme `services.imports.delete_parent_roster`).
 
