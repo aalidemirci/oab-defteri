@@ -168,7 +168,7 @@ def test_kararli_surum_yokken_on_surum_listeden_secilir(monkeypatch: pytest.Monk
 
     def sahte_read_url(url: str, *, max_bytes: int) -> bytes:
         if url == updates.LATEST_RELEASE_URL:
-            raise updates.ReleaseNotFoundError("GitHub'da henüz yayımlanmış bir sürüm bulunmuyor.")
+            raise updates.ReleaseNotFoundError("Henüz yayımlanmış bir sürüm bulunmuyor.")
         assert url == updates.RELEASE_LIST_URL
         return json.dumps(
             [
@@ -223,7 +223,7 @@ def test_kurucu_ozeti_tutmazsa_dosya_yazilmaz(
     monkeypatch.setattr(updates, "_read_url", lambda *_args, **_kwargs: b"farkli")
     monkeypatch.setattr(updates, "update_directory", lambda: tmp_path / "updates")
 
-    with pytest.raises(updates.UpdateError, match="SHA-256"):
+    with pytest.raises(updates.UpdateError, match="İndirilen kurulum dosyası doğrulanamadı"):
         updates.download_latest_installer()
 
     assert not (tmp_path / "updates").exists()
@@ -353,9 +353,9 @@ def test_ag_yokken_baglanti_mesaji_verilir(
 ) -> None:
     """Çevrimdışı okul olağan durumdur: ham soket hatası değil, anlaşılır Türkçe mesaj.
 
-    Metin aile iskeletinin kullanıcı kararıyla (27.09.2026) birebirdir: MEB ağında GitHub
-    engellenebilir, yeni sürüm indir.okulapp.org'dan elle denetlenir (program o adrese
-    istek atmaz).
+    Metin aile iskeletinin kullanıcı kararındandır (27.09.2026); hizmetin adı iletide geçmez
+    (sözlük §1 "Sürüm", §4.7): MEB ağında güncelleme sunucusu engellenebilir, yeni sürüm
+    indir.okulapp.org'dan elle denetlenir (program o adrese istek atmaz).
     """
 
     def patla(*_a: object, **_k: object) -> _SahteYanit:
@@ -366,7 +366,7 @@ def test_ag_yokken_baglanti_mesaji_verilir(
     with pytest.raises(updates.UpdateError) as yakalanan:
         updates._read_url(updates.LATEST_RELEASE_URL, max_bytes=1024)  # noqa: SLF001
     assert str(yakalanan.value) == (
-        "GitHub'a ulaşılamadı; okul ağında engellenmiş olabilir. Yeni sürümü "
+        "Güncelleme sunucusuna ulaşılamadı; okul ağında engellenmiş olabilir. Yeni sürümü "
         "indir.okulapp.org'dan elle denetleyebilirsiniz."
     )
 
@@ -796,7 +796,7 @@ def test_sha256sums_kurucuyu_icermiyorsa_indirilmez(
         {sums.download_url: f"{'0' * 64}  baska-dosya.exe\n".encode()},
     )
 
-    with pytest.raises(updates.UpdateError, match="SHA256SUMS.txt içinde"):
+    with pytest.raises(updates.UpdateError, match="Doğrulama özetleri arasında"):
         updates.download_latest_installer()
 
     assert istenen == [sums.download_url]  # kurucunun kendisi istenmedi
@@ -1144,7 +1144,7 @@ def test_indirme_ucu_beta_kanalinda_listeden_secer(
     monkeypatch.setattr(updates, "get_app_version", lambda: "2026.10.0-beta.1")
     monkeypatch.setattr(updates, "_expected_digest", lambda _r: "0" * 64)
     monkeypatch.setattr(updates, "_read_url", lambda *_a, **_k: b"farkli")
-    with pytest.raises(updates.UpdateError, match="SHA-256"):
+    with pytest.raises(updates.UpdateError, match="İndirilen kurulum dosyası doğrulanamadı"):
         updates.download_latest_installer()
     assert [c["prereleases"] for c in cagrilar] == [False, True]
 

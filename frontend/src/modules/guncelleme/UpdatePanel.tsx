@@ -10,7 +10,7 @@
 // sunucunun iletisi bunu söyler ve yeni sürümün indir.okulapp.org'dan elle
 // denetlenebileceğini yazar (program o adrese istek atmaz). Sunucuya hiç
 // ulaşılamazsa aynı ileti burada da gösterilir (`ULASILAMADI_METNI`). Hizmetin adı
-// açıklama metninde geçmez (sözlük "Sürüm"); yalnız bu iletide ve Hakkında'dadır.
+// iletilerde ve açıklama metninde geçmez (sözlük "Sürüm"); yalnız Hakkında'dadır.
 // Denetim düşünce iletinin altında elle denetleme bağlantısı durur (`INDIRME_SAYFASI`):
 // `target="_blank"` — masaüstü penceresi onu dış tarayıcıda açar.
 
@@ -30,9 +30,9 @@ import { updateApi } from "./api";
 import type { UpdateStatus } from "./api";
 import { denetimSonucunuYayinla } from "./denetimOlayi";
 
-/** Denetim GitHub'a ulaşamadığında (backend `updates.ULASILAMADI_MESAJI` ile birebir). */
+/** Denetim sunucuya ulaşamadığında (backend `updates.ULASILAMADI_MESAJI` ile birebir). */
 export const ULASILAMADI_METNI =
-  "GitHub'a ulaşılamadı; okul ağında engellenmiş olabilir. Yeni sürümü " +
+  "Güncelleme sunucusuna ulaşılamadı; okul ağında engellenmiş olabilir. Yeni sürümü " +
   "indir.okulapp.org'dan elle denetleyebilirsiniz.";
 
 /**

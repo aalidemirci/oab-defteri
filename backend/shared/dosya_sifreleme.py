@@ -29,21 +29,21 @@ kodlayıcı bayt dizisini reddettiği için metin). Kap ve sarmal biçimi altın
 donmuştur.
 
 DEPO ADI (`stored_name`; tasarım §2.3.2, §5.2.8): `uuid4().hex`, yani 32 küçük onaltılık hane,
-uzantısız (OYS `file_storage.generate_uuid_filename` UYARLA: uuid adı AYNEN, uzantı kalkar). Her
+uzantısız (`generate_uuid_filename` UYARLA, tasarım §12.A: uuid adı AYNEN, uzantı kalkar). Her
 yol birleştirmesinden ve AAD'den önce `^[0-9a-f]{32}$` denetlenir (`fullmatch`; `$` sondaki satır
 sonunu da kabul ederdi): program dışından değiştirilmiş bir veritabanındaki `../guvenlik.json`
 gibi bir ad yol geçişi yapamaz; tireli, büyük harfli, başka uzunlukta ya da ASCII dışı rakamlı
 yazım reddedilir. ORM ile ham SQL aynı metni görür, çeviri gerekmez (UUIDField SQLite'ta tiresiz,
 Python'da tireli metin verir; plan F1b-2'nin konsol geri yüklemesi maddesi).
 
-TÜR (tasarım §5.2.8): imza baytından, libmagic'siz (OYS'nin python-magic'i ve yalnız-PDF kuralı
+TÜR (tasarım §5.2.8): imza baytından, libmagic'siz (tasarım §12.A: python-magic ve yalnız-PDF kuralı
 kalkar). F1b'de kabul edilen türler PDF, JPEG ve PNG'dir. Uzantıya bakılmaz; bu modül dosyanın
 adını hiç görmez. Üretilen evrakın türleri (DOCX, XLSX, HTML) F1c'de `GeneratedDocument`'la
 eklenir (plan F1b-3 "Dosya deposu"); tür tablosu (`DosyaTuru`) buna açıktır, kabul kümesi
 (`KABUL_EDILEN_TURLER`) F1b'de üç türdür.
 
 ÖZET VE BOY (plan F1b-3 "Kap ve manifesto"): `sha256` ve `size` AÇIK içeriğin özeti ve boyudur
-(OYS `compute_sha256` AYNEN); manifesto onları satırın açık sütunlarından anahtarsız alır.
+(`compute_sha256` AYNEN, tasarım §12.A); manifesto onları satırın açık sütunlarından anahtarsız alır.
 
 ATOMİK YAZIM (plan F1b-3 "Dosya deposu"; tasarım §4.5 "Dosya izinleri"): hedef dizinde
 `<ad>.tmp` `O_EXCL` ve 0600 ile açılır, yazılır, `fsync` edilir, `os.replace` ile asıl adına
@@ -274,7 +274,7 @@ def sifreli_boy(acik_boy: int) -> int:
 
 
 def acik_ozet(acik: bytes) -> str:
-    """Açık içeriğin SHA-256 özeti (64 küçük onaltılık hane; OYS `compute_sha256` AYNEN)."""
+    """Açık içeriğin SHA-256 özeti (64 küçük onaltılık hane; tasarım §12.A AYNEN)."""
     return hashlib.sha256(acik).hexdigest()
 
 
@@ -420,8 +420,8 @@ class HazirDosya:
 def dosya_hazirla(acik: bytes, *, sarmal_anahtari: bytes) -> HazirDosya:
     """Türü imzadan belirler, yeni ad ve anahtarla şifreler, anahtarı sarar; diske yazmaz.
 
-    Reddedilen dosya için hiçbir şey üretilmez (OYS `validate_upload` ilkesi: reddedilen dosya
-    diske yazılmaz).
+    Reddedilen dosya için hiçbir şey üretilmez (tasarım §12.A `validate_upload` ilkesi:
+    reddedilen dosya diske yazılmaz).
     """
     _anahtar_denetle(sarmal_anahtari, "Sarmal anahtarı")
     mime = tur_belirle(acik)

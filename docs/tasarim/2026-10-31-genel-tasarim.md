@@ -3822,7 +3822,7 @@ bölümde değil §12.A'da kesilir.*
 | B12 | typing_extensions | aile kümesinde var (pywebview zinciri) | **Doğrudan pinlenir** | python-docx modül düzeyinde içe aktarır (`docx/blkcntnr.py`; `Requires-Dist: typing_extensions>=4.9.0`); "gelebilir" değil kesin gelir. Yeni olan backend çalışma zamanının ona doğrudan bağlanmasıdır: `requirements.txt` pini, eşleme ve `RUNTIME_MODULES`. python-docx'in öteki geçişlileri F1a-3'te çözülmüş kurulumdan çıkarılır | F1a-3 |
 | B13 | python-magic (libmagic) | — | **EKLENMEZ** | OYS `file_storage`'ın MIME denetimi; Windows'ta ayrı DLL ister (S-26). İmza baytı denetimi yeter (TK18) | — |
 | B14 | Celery, drf-spectacular, JWT altyapısı | — | **EKLENMEZ** | OYS bağları; karşılıkları gün değişimi kapısı ve oturum belirteci (§12.A) | — |
-| B15 | defusedxml | — | **ADAY** | openpyxl belgesinin XML saldırıları için önerdiği paket (doğrulanmadı); içe aktarım tasarımıyla karar | F1b |
+| B15 | defusedxml | — | **EKLENMEZ** (karar 08.11.2026) | openpyxl 3.1.5 parça okumada `lxml` + `resolve_entities=False`, sayfa ve ortak dize okumada stdlib `iterparse` kullanır, dış varlık açmaz; varlık bombasını expat keser, `excel_ortak.dosyayi_oku` Türkçe iletiyle reddeder, aktarım FAILED izi bırakır (`test_dosya_bicimleri.py`) | — |
 | B20 | pyzipper | — | **ADAY** | Yıl sonu arşiv paketinin AES-256 şifreli ZIP'i (§8.5, §15 B-10). Geçişli bağımlılığı (pycryptodomex olduğu biliniyor; tam liste ve lisansları doğrulanmadı) F4 başında çözülmüş kurulumdan çıkarılıp pinlenir; dört halka ve lisans kapısı aynı değişiklikte. Uygun lisans çıkmazsa seçenek F4 planında yeniden tartılır | F4 |
 
 *B20 numarası, B16-B19'un §11.2'de kullanıldığı için verildi.*

@@ -2,7 +2,7 @@
 
 Program aile iskeletinden türedi: doğrudan atası Kütüphane iskeletidir (kısa adı
 ve önekleri aşağıdaki kalıplarda), onun atası KS, KS'nin atası DD'dir; ön yüzde
-OYS'den kalan bir saklama anahtarı da vardı. Eski kimliğin (program adı, ortam
+okulapp'tan kalan bir saklama anahtarı da vardı. Eski kimliğin (program adı, ortam
 değişkeni öneki, oturum başlığı, yedek uzantısı, tarayıcı deposu anahtarı)
 kaynakta, evrak şablonlarında ya da ön yüz metninde kalmasına sıfır tolerans
 vardır: başka programın veri dizinine yazan bir sabit ya da ekranda başka
@@ -60,8 +60,10 @@ KALIPLAR: tuple[re.Pattern[str], ...] = tuple(
         r"disiplin[d]efteri",
         r"x-d[d]-",
         r"d[d]bak",
-        # OYS'den kalan saklama anahtarı öneki (§13 D13).
-        r"(?<![^\W_])o[y]s-",
+        # okulapp'ın kısa adı, yalın ya da önek olarak (saklama anahtarı öneki §13 D13; yalın ad
+        # F1b 6. adım). Köken atfı "tasarım §12.A" diye yazılır. Sağda da kelime sınırı ŞART:
+        # "oysa" eşleşmez. KS ve DD'nin yalın hâli taranmaz (YYYY-MM-DD gibi yanlış pozitifler).
+        r"(?<![^\W_])o[y]s(?![^\W_])",
     )
 )
 
@@ -90,7 +92,7 @@ ATLANAN_YOLLAR: dict[str, str] = {
 MUAF_DOSYALAR: dict[str, str] = {
     "CLAUDE.md": (
         "ajan brifingi; projenin kökenini anlatır ve aile projelerini (Kütüphane "
-        "iskeleti, KS, OYS) meşru olarak adıyla anar (§1 Köken)"
+        "iskeleti, KS, okulapp) meşru olarak adıyla anar (§1 Köken)"
     ),
     "AGENTS.md": "CLAUDE.md'ye işaret eden brifing girişi; aynı köken gerekçesi",
 }
@@ -237,6 +239,9 @@ def test_kelime_siniri_yanlis_pozitif_vermez() -> None:
         # OAB'nin kendi kimliği kalıplara takılmaz.
         "OD_DATA_DIR, X-OD-Token, od:kilit-kapisi, --od-renk, yedek.odbak, ODBAK",
         "OAB Defteri · oab-defteri · oab_defteri · OABDefteri.Kapat · oab-defteri-theme",
+        # Yalın ad kelime sınırıyla aranır; sıradan sözcükler ve tarih kalıbı eşleşmez.
+        "oysa bunu koysun, soysuz değil",
+        "tarih = 'YYYY-MM-DD'",
     ):
         assert _satir_bulgulari("ornek:1", satir) == [], satir
 
@@ -260,8 +265,11 @@ def test_kaliplar_kalintiyi_yakalar() -> None:
         _ornek("MAGIC = b'K|DBAK\\x02'"),
         # Alt çizgiden sonra da yakalar: iş kodunda kısa ad bu yüzden yoktur (UY-20).
         _ornek("konum_k|d_metni"),
-        # OYS kalıntısı (§13 D13).
+        # okulapp kalıntısı (§13 D13) ve yalın ad.
         _ornek("localStorage.getItem('o|ys-theme')"),
+        _ornek("# O|YS `file_storage` AYNEN"),
+        _ornek("(O|YS'nin ayrımı)"),
+        _ornek("o|ys_modulu = 1"),
         # KS ve DD (aynen).
         _ornek("KS|_DATA_DIR = os.environ.get('KS|_DATA_DIR')"),
         _ornek("x_k|s_token = 1"),  # alt çizgi ayırıcı sayılır

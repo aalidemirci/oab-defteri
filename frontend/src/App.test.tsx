@@ -255,7 +255,7 @@ describe("App — oturum", () => {
       }),
     );
     expect(await screen.findByText(/OAB Defteri 2026\.10\.0 hazır\./)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Güncellemeyi indir" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Doğrula ve indir" })).toBeInTheDocument();
   });
 
   it("parola yenilenme bildirimi Genel Bakış dışındaki sayfada da pencere olarak çıkar", async () => {
@@ -750,7 +750,7 @@ describe("App — rol süzmesi", () => {
 
     act(() => denetimSonucunuYayinla(GUNCELLEME_VAR));
     expect(screen.queryByText(/OAB Defteri 2026\.10\.0 hazır\./)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Güncellemeyi indir" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Doğrula ve indir" })).not.toBeInTheDocument();
   });
 
   it("Kurulum Sihirbazı'nın rotası yeteneği olmayan rolde kendi iletisini verir", async () => {

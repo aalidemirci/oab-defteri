@@ -12,7 +12,8 @@ listesinin CSV ve makro sınaması `test_veli_listesi.py`'dedir):
 - Matrisin tavanları (üç biçimde aynı): xlsx'in `<dimension>` beyanı matrisi şişirmez, sütunlar
   `_AZAMI_SUTUN`'da kesilir, `_AZAMI_SATIR`'ı aşan dosya Türkçe iletiyle reddedilir.
 - Bozuk girdi 500 değil Türkçe iletili 400'dür ve FAILED izi bırakır: bozuk sayfa XML'i, alan
-  boyu sınırını aşan CSV hücresi.
+  boyu sınırını aşan CSV hücresi, varlık bombası taşıyan sayfa (tasarım §11 B15: defusedxml
+  eklenmedi, koruma bu testle sabitlenir).
 
 Sentetik dosyalar testin içinde üretilir (VBA projesinin ve makro sayfasının İÇERİĞİ yoktur;
 yalnız kabın adı, dizin girdisi ya da sayfa tanımı). Adlar uydurmadır (KVKK).
@@ -23,11 +24,13 @@ from __future__ import annotations
 import csv
 import re
 import struct
+import time
 import zipfile
 from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
 from typing import Final
+from xml.etree.ElementTree import ParseError  # noqa: S405 — yalnız hata türü, ayrıştırma yok
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -102,6 +105,26 @@ def _uzak_satir_ekle(satir_no: int) -> Callable[[str], str]:
     """Sayfanın sonuna `satir_no`'da tek hücrelik satır ekler (arada satır yok)."""
     ek = f'<row r="{satir_no}"><c r="A{satir_no}" t="inlineStr"><is><t>uzak</t></is></c></row>'
     return lambda xml: xml.replace("</sheetData>", ek + "</sheetData>")
+
+
+def _varlik_bombasi_ekle(xml: str) -> str:
+    """Sayfaya iç içe varlık tanımları ve onları açan tek hücre ekler (açılımı 100 MB).
+
+    Boy, ayrıştırıcının korumasının başladığı 8 MiB'in üstünde, bellek boğmayacak kadar küçüktür:
+    koruma bir gün kalkarsa test makineyi düşürmez, `pytest.raises` "düşmedi" diye kırılır.
+    """
+    tanimlar = ['<!ENTITY v0 "xxxxxxxxxx">']
+    for duzey in range(1, 8):
+        onceki = f"&v{duzey - 1};"
+        tanimlar.append(f'<!ENTITY v{duzey} "{onceki * 10}">')
+    hucre = '<row r="5"><c r="A5" t="inlineStr"><is><t>&v7;</t></is></c></row>'
+    baslik = f"<!DOCTYPE worksheet [{''.join(tanimlar)}]><worksheet"
+    return xml.replace("<worksheet", baslik, 1).replace("</sheetData>", hucre + "</sheetData>")
+
+
+_VARLIK_BOMBALI_XLSX: Final = _sayfayi_degistir(_xlsx(), _varlik_bombasi_ekle)
+#: Bomba sonuçta açılmadan kesilir (saniyenin altında); sınır yavaş CI'a paydır.
+_BOMBA_SURE_SINIRI_SN: Final = 30
 
 
 # ---------------------------------------------------------------------------
@@ -399,6 +422,19 @@ def test_bozuk_sayfa_xmli_turkce_iletiyle_reddedilir() -> None:
     assert hata.value.__cause__ is not None  # özgün hata zincirde kalır
 
 
+def test_varlik_bombali_xlsx_makul_surede_turkce_iletiyle_reddedilir() -> None:
+    """Tasarım §11 B15: defusedxml eklenmedi. Sayfayı okuyan expat bombayı açmadan keser."""
+    baslangic = time.monotonic()
+    with pytest.raises(ParserError) as hata:
+        excel_ortak.dosyayi_oku(_VARLIK_BOMBALI_XLSX, "liste.xlsx")
+
+    assert time.monotonic() - baslangic < _BOMBA_SURE_SINIRI_SN
+    assert str(hata.value) == excel_ortak.DESTEKLENMEYEN_DOSYA_ILETISI
+    # Reddi ayrıştırıcının bomba koruması yapar; sentetik dosyanın yazım hatası değil.
+    assert isinstance(hata.value.__cause__, ParseError)
+    assert "amplification" in str(hata.value.__cause__)
+
+
 def test_alan_siniri_asan_csv_turkce_iletiyle_reddedilir() -> None:
     """Ayırıcı sezgisi de `csv.Error` verir: o da Türkçe iletiye döner (bağımsız denetim)."""
     with pytest.raises(csv.Error):
@@ -561,6 +597,7 @@ def test_api_csv_yuklenir_makrolu_dosya_400() -> None:
     ("baytlar", "ad", "ileti"),
     [
         (_BOZUK_SAYFALI_XLSX, "liste.xlsx", excel_ortak.DESTEKLENMEYEN_DOSYA_ILETISI),
+        (_VARLIK_BOMBALI_XLSX, "liste.xlsx", excel_ortak.DESTEKLENMEYEN_DOSYA_ILETISI),
         (_UZUN_ALANLI_CSV, "liste.csv", excel_ortak.CSV_METIN_DEGIL_ILETISI),
         (
             _sayfayi_degistir(_xlsx(), _uzak_satir_ekle(1_048_576)),
@@ -568,7 +605,7 @@ def test_api_csv_yuklenir_makrolu_dosya_400() -> None:
             excel_ortak.SATIR_SINIRI_ILETISI,
         ),
     ],
-    ids=["bozuk_sayfa_xml", "uzun_alanli_csv", "satir_tavani"],
+    ids=["bozuk_sayfa_xml", "varlik_bombasi", "uzun_alanli_csv", "satir_tavani"],
 )
 @pytest.mark.parametrize(
     ("uc", "kaynak"),

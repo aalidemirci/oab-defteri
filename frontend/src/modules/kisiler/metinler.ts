@@ -140,6 +140,14 @@ export const VELI_SILME_ONAY_METNI =
   "Listedeki bütün satırlar kalıcı olarak silinir, geri alınamaz. Denetim izine yalnız silinen " +
   "satır sayısı yazılır; adlar yazılmaz. Gerekirse liste şablondan yeniden aktarılır.";
 
+/** Personelin sicilden silinme onayı; gövdenin başına kişinin adı gelir (`kisiOznesi`). */
+export const KISI_SILME_ONAY_BASLIGI = "Kişi sicilden silinsin mi?";
+
+export const KISI_SILME_ONAY_METNI =
+  "kalıcı olarak silinir, geri alınamaz. Denetim izine yalnız bir kaydın silindiği yazılır; " +
+  "kişinin adı yazılmaz. Yanlış girilmiş kayıtlar içindir; okuldan ayrılan kişi için " +
+  "“Ayrıldı olarak işaretle”yi kullanın.";
+
 /** Veli listesi özetinin tablosu (ekran okuyucu başlığı ve sütunlar). */
 export const VELI_OZET_TABLO_BASLIGI = "Veli listesinin sınıf başına satır sayısı";
 

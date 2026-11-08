@@ -1,6 +1,6 @@
 """Dosya deposu servisi: ekin yazımı ve okunması (tasarım TK22, §4.4.7, §5.2.8; plan F1b-3).
 
-OYS `file_storage.py` UYARLA (tasarım §12.A): sha256, uuid adı ve boyut sınırı AYNEN; libmagic ve
+`file_storage.py` UYARLA (tasarım §12.A): sha256, uuid adı ve boyut sınırı AYNEN; libmagic ve
 yalnız-PDF kalkar, dosya şifrelenir. Kap, sarmal, ad, tür denetimi ve atomik yazım saf katmandadır
 (`shared.dosya_sifreleme`); burası `Attachment` satırını, yazım sırasını, yükleme sınırını ve
 kurallarını tutar. F1b'de ek ucu ve ekranı YOKTUR; bu servisi çağıran ilk sahip F1c'de
@@ -9,11 +9,11 @@ F1b-3 "Sapma").
 
 YAZMA (`yaz`). Sıra (plan F1b-3 "Dosya deposu"; §4.4.7):
 
-1. Reddedilen dosya için hiçbir şey yazılmaz (OYS `validate_upload` ilkesi): veli adı taşıyan belge
-   (`kisi_listesi`; E07, adlı E08 depoya hiç yazılmaz, R9), geçersiz ad, kayıtlı olmayan sahip,
-   sınırı aşan ya da kabul edilmeyen tür. `kisi_listesi`'nin varsayılanı YOKTUR: bayrağı unutan
-   çağıran veli adlı belgeyi saklamasın, kararını yazsın. Tür imza baytındandır; `mime` verilirse
-   ona uymalıdır.
+1. Reddedilen dosya için hiçbir şey yazılmaz (`validate_upload` ilkesi, tasarım §12.A): veli adı
+   taşıyan belge (`kisi_listesi`; E07, adlı E08 depoya hiç yazılmaz, R9), geçersiz ad, kayıtlı
+   olmayan sahip, sınırı aşan ya da kabul edilmeyen tür. `kisi_listesi`'nin varsayılanı YOKTUR:
+   bayrağı unutan çağıran veli adlı belgeyi saklamasın, kararını yazsın. Tür imza baytındandır;
+   `mime` verilirse ona uymalıdır.
 2. DEK bellekte değilse `crypto.KeyMissingError` (fail-closed; uç 409 `parola_gerekli`).
 3. Önce dosya: `dosyalar/<stored_name>`, atomik yazıcıyla (0600, fsync, `os.replace`; var olan adın
    üzerine yazılmaz). Dizin yoksa 0700 kurulur, kip çekilir (yazıcılar umask'a güvenmez; §4.5).

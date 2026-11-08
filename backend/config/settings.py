@@ -212,7 +212,7 @@ WHITENOISE_INDEX_FILE = True
 # düz dosya yazar; depo onları kullanmaz.
 DOSYA_DEPOSU_DIR = DATA_DIR / "dosyalar"
 
-# Yükleme sınırı (MB) — aile iskeletinden gelen varsayılan (OYS `file_storage` AYNEN; tasarım TK18).
+# Yükleme sınırı (MB) — aile iskeletinden gelen varsayılan (tasarım §12.A AYNEN; tasarım TK18).
 MAX_UPLOAD_SIZE_MB = int(os.environ.get("OD_MAX_UPLOAD_SIZE_MB", "20"))
 DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 # Açık kopya kuralı (§4.4.7): yüklenen dosya sınıra kadar diske yazılmadan bellekte okunur; gömülü

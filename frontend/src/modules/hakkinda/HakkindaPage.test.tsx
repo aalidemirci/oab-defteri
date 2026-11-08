@@ -143,6 +143,9 @@ describe("HakkindaPage", () => {
     expect(metin).toMatch(/Word, PDF ya da Excel/);
     expect(metin).toContain("KVKK md. 12/5");
     expect(metin).toMatch(/BitLocker.*LUKS/);
+    expect(metin).toContain(
+      "Parola değişimi eski parolayı program içinde geçersiz kılar, program dışında kılmaz.",
+    );
     // İç kodlar ve teknik adlar yüzeye çıkmaz (sözlük §2).
     expect(metin).not.toMatch(/\bDEK\b|TK\d|§|Argon2id|Fernet/);
     expect(container.querySelectorAll("li").length).toBeGreaterThanOrEqual(6);

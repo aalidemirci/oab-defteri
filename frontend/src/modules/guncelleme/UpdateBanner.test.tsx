@@ -72,7 +72,9 @@ describe("UpdateBanner", () => {
     yayinla(STATUS);
 
     expect(screen.getByText(/OAB Defteri 2026.10.0 hazır/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /güncellemeyi indir/i }));
+    // Sözlük §1 "Sürüm": kurulu sürüm ve "Doğrula ve indir".
+    expect(screen.getByRole("status")).toHaveTextContent("Kurulu sürüm: 2026.9.0.");
+    await user.click(screen.getByRole("button", { name: /doğrula ve indir/i }));
     await waitFor(() => expect(mocks.downloadInstaller).toHaveBeenCalledTimes(1));
     expect(mocks.saveBlob).toHaveBeenCalledWith(blob, STATUS.installer_name);
     expect(await screen.findByText(/Güncelleme indirildi/)).toBeInTheDocument();
@@ -87,7 +89,7 @@ describe("UpdateBanner", () => {
     renderBanner();
 
     yayinla(STATUS);
-    await user.click(screen.getByRole("button", { name: /güncellemeyi indir/i }));
+    await user.click(screen.getByRole("button", { name: /doğrula ve indir/i }));
 
     expect(await screen.findByText(/Güncelleme indirildi/)).toBeInTheDocument();
   });
@@ -99,10 +101,10 @@ describe("UpdateBanner", () => {
     renderBanner();
 
     yayinla(STATUS);
-    await user.click(screen.getByRole("button", { name: /güncellemeyi indir/i }));
+    await user.click(screen.getByRole("button", { name: /doğrula ve indir/i }));
 
     await waitFor(() => expect(mocks.saveBlob).toHaveBeenCalledTimes(1));
-    expect(await screen.findByRole("button", { name: /güncellemeyi indir/i })).toBeEnabled();
+    expect(await screen.findByRole("button", { name: /doğrula ve indir/i })).toBeEnabled();
     expect(screen.queryByText(/Güncelleme indirildi/)).not.toBeInTheDocument();
     expect(screen.queryByText(DOSYA_YAZILAMADI_ILETISI)).not.toBeInTheDocument();
   });
@@ -114,7 +116,7 @@ describe("UpdateBanner", () => {
     renderBanner();
 
     yayinla(STATUS);
-    await user.click(screen.getByRole("button", { name: /güncellemeyi indir/i }));
+    await user.click(screen.getByRole("button", { name: /doğrula ve indir/i }));
 
     expect(await screen.findByText(DOSYA_YAZILAMADI_ILETISI)).toBeInTheDocument();
     expect(screen.queryByText(/Güncelleme indirildi/)).not.toBeInTheDocument();
@@ -126,7 +128,7 @@ describe("UpdateBanner", () => {
     renderBanner();
     yayinla(STATUS);
 
-    await user.click(screen.getByRole("button", { name: /güncellemeyi indir/i }));
+    await user.click(screen.getByRole("button", { name: /doğrula ve indir/i }));
 
     expect(await screen.findByText(/Ayarlar → Güncelleme bölümünden/)).toBeInTheDocument();
   });
@@ -160,6 +162,6 @@ describe("UpdateBanner", () => {
     renderBanner();
     yayinla({ ...STATUS, platform: "linux", can_download: false });
     expect(screen.getByText(/Yeni paketi indirme sayfasından alıp kurun/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /güncellemeyi indir/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /doğrula ve indir/i })).toBeNull();
   });
 });

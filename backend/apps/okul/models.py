@@ -1486,7 +1486,7 @@ class _AccessLogQuerySet(models.QuerySet):  # type: ignore[type-arg]  # Any davr
 class AccessLog(models.Model):
     """Erişim günlüğü — hassas okumanın ve kişisel veri içeren çıktının kaydı (tasarım §4.6.4).
 
-    KVKK md. 12 güvenlik tedbiridir (OYS'nin "okuma ≠ yönetme ≠ hassas detay" ayrımı). Tek
+    KVKK md. 12 güvenlik tedbiridir ("okuma ≠ yönetme ≠ hassas detay" ayrımı; tasarım §12.A). Tek
     yazarı `apps.okul.erisim_gunlugu.yaz`'dır; okuyan hesap ve rol yazar bağlamından gelir.
 
     * **Zincir dışıdır**: denetim izine bağlı değildir, satır mühürlenmez; süresi dolunca
@@ -1607,10 +1607,10 @@ class Attachment(models.Model):
     * `original_name`: kullanıcının verdiği dosya adı; kişi adı taşıyabilir, şifrelidir (§5.3).
     * `key_wrap`: dosya anahtarının sarmalı, base64(nonce 12 ‖ şifreli anahtar 32 ‖ etiket 16) =
       80 karakterlik metin. DEK yenilemesi (TK12, F4) dosyaya dokunmadan bunu yeniler.
-    * `sha256`, `size`: AÇIK içeriğin özeti ve boyu (OYS `file_storage.py` AYNEN); manifesto onları
-      bu açık sütunlardan DEK'siz alır (plan F1b-3 "Kap ve manifesto").
-    * `mime`: imza baytından belirlenen tür (kullanıcının sözü değil). Boyu OYS'deki gibi 100'dür:
-      F1c'nin DOCX ve XLSX adları 64'e sığmaz.
+    * `sha256`, `size`: AÇIK içeriğin özeti ve boyu (`file_storage.py` AYNEN, tasarım §12.A);
+      manifesto onları bu açık sütunlardan DEK'siz alır (plan F1b-3 "Kap ve manifesto").
+    * `mime`: imza baytından belirlenen tür (kullanıcının sözü değil). Boyu kaynaktaki gibi 100'dür
+      (tasarım §12.A): F1c'nin DOCX ve XLSX adları 64'e sığmaz.
     * `owner_type`, `owner_id`: genel bağ (§5.2.10). `owner_type` kayıtlı bir model etiketidir
       (`okul.SchoolYear` biçimi; küme `services.dosya_deposu`'nda, F1b'de boş); `contenttypes`
       kimlikleri kurulumdan kuruluma değişeceği için kullanılmaz. `owner_id`

@@ -211,6 +211,8 @@ export const DOSYA_KAYIP_SIFIRLA_METNI =
  * yeniden hesaplayabilir (tehdit 6); son katman kâğıda inen "Kayıt no · Zincir" satırıdır.
  * Kâğıt bugün kullanıcının elle not ettiğidir (Genel Bakış → Son Girişler); aylık bildirim
  * ve devir tutanağı gibi belgelere basılması sonraki fazlardadır, burada vaat edilmez.
+ * Parola değişimi maddesi tasarım §4.4.6'nın 7. maddesidir; yenilemeden sonraki veriyi koruyan
+ * anahtar yenilemesi sonraki fazlardadır, burada vaat edilmez.
  */
 export const DURUST_SINIRLAR: readonly { baslik: string; metin: string }[] = [
   {
@@ -264,6 +266,14 @@ export const DURUST_SINIRLAR: readonly { baslik: string; metin: string }[] = [
       "verilerin başkalarının eline geçmesini ilgililere ve Kişisel Verileri Koruma Kuruluna " +
       "en kısa sürede bildirmek veri sorumlusunun işidir (KVKK md. 12/5). Program bu " +
       "bildirimi yapmaz; durumu okul müdürlüğüne hemen iletin.",
+  },
+  {
+    baslik: "Parola değişimi eski parolayı program içinde geçersiz kılar, program dışında kılmaz.",
+    metin:
+      "Parola değiştikten ya da sıfırlandıktan sonra eski parola kaydı, arşivdeki kopyası dahil, " +
+      "programda giriş açmaz. İstisnaları, yazımın yarıda kaldığı ve kayıtların program dışından " +
+      "değiştirildiği hâllerdir. Eski parola kaydı kayıtların anahtarını taşır; eski parolayı " +
+      "bilen biri bu kayıtla anahtarı programın dışında yine açabilir.",
   },
 ];
 

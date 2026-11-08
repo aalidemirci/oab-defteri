@@ -222,14 +222,14 @@ describe("UpdatePanel", () => {
 
     // Tasarım TK4: ulaşılamazsa ileti dürüsttür ve elle indirme alanını önerir.
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "GitHub'a ulaşılamadı; okul ağında engellenmiş olabilir. Yeni sürümü " +
+      "Güncelleme sunucusuna ulaşılamadı; okul ağında engellenmiş olabilir. Yeni sürümü " +
         "indir.okulapp.org'dan elle denetleyebilirsiniz.",
     );
   });
 
   it("denetim düşünce elle denetleme bağlantısı dış tarayıcıda açılır; sunucu iletisi aynen", async () => {
     const ileti =
-      "GitHub güncelleme denetimi geçici olarak sınırlandı ya da okul ağında engellendi. " +
+      "Güncelleme denetimi geçici olarak sınırlandı ya da okul ağında engellendi. " +
       "Daha sonra yeniden deneyin ya da yeni sürümü indir.okulapp.org'dan elle denetleyin.";
     mocks.check.mockRejectedValue(new ApiError(502, "update_error", ileti));
     renderPanel();
