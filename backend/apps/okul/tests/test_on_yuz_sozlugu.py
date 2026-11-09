@@ -32,6 +32,7 @@ from desktop.window import (
 
 from apps.okul import excel_ortak, excel_personel, excel_veli, serializers
 from apps.okul.services import encrypted_backup, imports, live_restore
+from apps.okul.services import hesap_teslim_pusulasi as e63
 
 #: Kapsanan ön yüz dosyaları (depo köküne göre).
 DOSYALAR = (
@@ -140,6 +141,47 @@ def test_on_yuz_metinleri_sozlukte_yazilidir() -> None:
     assert not eksik, "Sözlükte yazılı olmayan ön yüz metinleri:\n" + "\n".join(eksik)
     # Kapsam boşalmasın (ör. dosya taşındı, kalıp artık eşleşmiyor).
     assert sayi >= 150, sayi
+
+
+#: Program kullanıcısının aydınlatma metni (kullanıcı onayı 09.11.2026, BİREBİR; plan "F1b-6 uygulama
+#: kararları"). Metni değiştiren önce kullanıcı onayı alır; bu liste ondan sonra değişir.
+ONAYLI_HESAP_AYDINLATMASI = (
+    "Amaç: Programı kullanan hesabın açılması, role göre yetkilendirme ve yapılan işlemlerin kayda "
+    "geçmesi. Hesabın ad-soyadı, tanıtıcısı ve rolü, giriş ve parola işlemleri, kişisel veri "
+    "içeren kayıtların hangi hesapla okunduğu tutulur.",
+    "Aktarım: Kişisel veriler kimseye aktarılmaz; program okulun bilgisayarında çalışır, dışarıya "
+    "veri göndermez.",
+    "Toplama yöntemi ve hukuki sebep: Ad-soyad, hesabı açan program yöneticisince girilir; "
+    "işlemler program tarafından elektronik ortamda kaydedilir. Hukuki sebep: veri sorumlusunun "
+    "hukuki yükümlülüğünü yerine getirmesi (KVKK md. 5/2-ç), güvenlik tedbiri (KVKK md. 12/1).",
+    "Saklama: Hesap kapatılsa da hesap kaydı ve işlem izi silinmez; kişisel veri okuma günlüğünün "
+    "satırları iki yıl sonra silinir.",
+    "Haklarınız: KVKK md. 11'deki haklarınızı veri sorumlusuna başvurarak kullanabilirsiniz.",
+)
+ONAYLI_VERI_SORUMLUSU_ETIKETI = "Veri sorumlusu:"
+ONAYLI_VERI_SORUMLUSU_YERI = "Okul Bilgileri'nde girilir"
+ONAYLI_NOT = "Hukuki sebep öneridir; veri sorumlusu ve hukuki sebep okul müdürlüğünce teyit edilir."
+
+
+def test_hesap_aydinlatmasi_onayli_metindir() -> None:
+    """Sihirbazın ve pusulanın metni onaylı metnin kendisidir (iki yazım ayrışamaz)."""
+    assert e63.AYDINLATMA_SATIRLARI == ONAYLI_HESAP_AYDINLATMASI
+    assert e63.AYDINLATMA_VERI_SORUMLUSU_ETIKETI == ONAYLI_VERI_SORUMLUSU_ETIKETI
+    assert e63.AYDINLATMA_VERI_SORUMLUSU_YERI == ONAYLI_VERI_SORUMLUSU_YERI
+    assert e63.AYDINLATMA_NOTU == ONAYLI_NOT
+
+    on_yuz = _sabitler(_depo_dosyasi("frontend/src/modules/kisiler/metinler.ts"))
+    assert (
+        on_yuz["HESAP_AYDINLATMA_AMACI"],
+        on_yuz["AYDINLATMA_AKTARIM"],
+        on_yuz["HESAP_AYDINLATMA_TOPLAMA"],
+        on_yuz["HESAP_AYDINLATMA_SAKLAMA"],
+        on_yuz["HESAP_AYDINLATMA_HAKLARINIZ"],
+    ) == ONAYLI_HESAP_AYDINLATMASI
+    assert on_yuz["AYDINLATMA_VERI_SORUMLUSU_ETIKETI"] == ONAYLI_VERI_SORUMLUSU_ETIKETI
+    assert on_yuz["HESAP_VERI_SORUMLUSU_YERI"] == ONAYLI_VERI_SORUMLUSU_YERI
+    assert on_yuz["AYDINLATMA_EKRAN_NOTU"] == ONAYLI_NOT
+    assert on_yuz["AYDINLATMA_BASLIGI"] == e63.AYDINLATMA_BASLIGI
 
 
 def test_pencere_basliklari_ve_secilen_dosyanin_iletisi_sozlukte_yazilidir() -> None:

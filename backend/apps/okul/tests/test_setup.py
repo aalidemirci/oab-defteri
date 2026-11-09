@@ -490,10 +490,10 @@ class TestSchoolConfigApi:
         yanit = client.put(URL, {"data_controller_text": "x" * 501}, format="json")
         assert yanit.status_code == 400
         assert yanit.json()["fields"]["data_controller_text"] == [
-            "Veri sorumlusu en çok 500 karakter olabilir."
+            "Veri sorumlusu en çok 250 karakter olabilir."
         ]
         assert (
-            client.put(URL, {"data_controller_text": "x" * 500}, format="json").status_code == 200
+            client.put(URL, {"data_controller_text": "x" * 250}, format="json").status_code == 200
         )
 
     def test_veri_sorumlusu_izde_yalniz_adiyla_gorunur(self, client: APIClient) -> None:

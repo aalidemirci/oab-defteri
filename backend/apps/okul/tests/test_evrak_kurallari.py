@@ -45,6 +45,7 @@ from rest_framework.test import APIClient
 
 from apps.okul import denetim_izi, rol_izinleri
 from apps.okul.models import (
+    DATA_CONTROLLER_TEXT_MAX,
     AccessLog,
     Account,
     AccountRole,
@@ -283,16 +284,16 @@ def test_katalog_kabul(kod: str, yakalanan: list[evrak.Belge]) -> None:
     assert _duz(e63.KILITLE) in duz and _duz(e63.ARTAN_BEKLEME) in duz
     assert _duz(e63.HATALI_DENEME_ASKISI) in duz
     assert _duz(ZARF_CUMLESI) in duz
-    # İmza blokları elle; konum cümlesi ve RYUE unsurları yok; tek dipnot (kişisel veri) sonda.
+    # İmza blokları elle; konum cümlesi ve RYUE unsurları yok; kişisel veri dipnotu sonda.
     imza = next(b for b in belge.bloklar if isinstance(b, evrak.Imza))
     assert [(s.ad, s.gorev) for s in imza.sahipler] == [e63.TESLIM_EDEN, e63.TESLIM_ALAN]
     assert imza.tarih == ""
     assert not any(isinstance(b, evrak.KonumCumlesi) for b in belge.bloklar)
     for yok in ("Sayı:", "Konu:", "Sayın", "karar defteri", "TEFBİS"):
         assert yok not in metin
-    assert [b for b in belge.bloklar if isinstance(b, evrak.Dipnot)] == [
-        evrak.Dipnot(evrak.KISISEL_VERI_DIPNOTU)
-    ]
+    dipnotlar = [b.metin for b in belge.bloklar if isinstance(b, evrak.Dipnot)]
+    assert dipnotlar[0] == e63.AYDINLATMA_BASLIGI
+    assert dipnotlar.count(evrak.KISISEL_VERI_DIPNOTU) == 1
     assert belge.bloklar[-1] == evrak.Dipnot(evrak.KISISEL_VERI_DIPNOTU)
     assert "Uydurma Muhasip" not in metin and "Uydurma Muhasip" not in evrak.kanonik_json(belge)
 
@@ -313,9 +314,52 @@ def test_sayfa_butcesi(kod: str) -> None:
             okul_adi=UZUN_OKUL,
             ilce=UZUN_ILCE,
             bosta_dakika=30,
+            # Alanın üst sınırı, sözcüklü: tek parça metin PDF'te bölünmez, tek satır kalır ve sınamaz.
+            veri_sorumlusu=("Örnek Anadolu Lisesi Müdürlüğü " * 9)[:DATA_CONTROLLER_TEXT_MAX],
         )
         sayfa = len(PdfReader(io.BytesIO(evrak.pdf_ciz(belge))).pages)
         assert 1 <= sayfa <= sinir, (rol, sayfa)
+
+
+@pytest.mark.parametrize(
+    ("kart", "beklenen"),
+    [
+        (
+            "Örnek Ortaokulu Müdürlüğü, Örnek Mah. No: 1",
+            "Örnek Ortaokulu Müdürlüğü, Örnek Mah. No: 1",
+        ),
+        ("", e63.AYDINLATMA_VERI_SORUMLUSU_YERI),
+        ("   ", e63.AYDINLATMA_VERI_SORUMLUSU_YERI),
+    ],
+)
+def test_e63_aydinlatma_bolumu(kart: str, beklenen: str, yakalanan: list[evrak.Belge]) -> None:
+    """Program kullanıcısının aydınlatma metni (tasarım §3.4; plan "F1b-6 uygulama kararları"):
+    imza bloklarından hemen sonra dipnot olarak, onaylı sırayla; veri sorumlusu okul kartındandır,
+    boşsa yerini söyler; ekran notu etiketsiz son satırdır; pusula kişisiz kalır."""
+    _okul(data_controller_text=kart)
+    hesap = hesap_ac(AccountRole.MUHASIP, ad="Uydurma Muhasip")
+
+    pdf = _pdf(_bas(hesap.id))
+
+    (belge,) = yakalanan
+    bloklar = list(belge.bloklar)
+    bas = bloklar.index(evrak.Dipnot(e63.AYDINLATMA_BASLIGI))
+    beklenen_metinler = [
+        e63.AYDINLATMA_BASLIGI,
+        f"Veri sorumlusu: {beklenen}",
+        *e63.AYDINLATMA_SATIRLARI,
+        e63.AYDINLATMA_NOTU,
+    ]
+    son = bas + len(beklenen_metinler)
+    assert bloklar[bas:son] == [evrak.Dipnot(metin) for metin in beklenen_metinler]
+    assert isinstance(bloklar[bas - 1], evrak.Imza)
+    assert bloklar[son:] == [evrak.Dipnot(evrak.KISISEL_VERI_DIPNOTU)]
+    metin = _metin(pdf)
+    duz = _duz(metin)
+    for parca in beklenen_metinler:
+        assert _duz(parca) in duz, parca
+    assert "Ekran notu" not in metin
+    assert "Uydurma Muhasip" not in metin
 
 
 @pytest.mark.parametrize("belge_adi", ["E63", "kurtarma_anahtari_belgesi"])
@@ -371,6 +415,7 @@ def test_e63_ad_soyad_basilmaz(yakalanan: list[evrak.Belge]) -> None:
         "okul_adi",
         "ilce",
         "bosta_dakika",
+        "veri_sorumlusu",
     }
 
 
@@ -615,6 +660,7 @@ def test_e63_kilitleme_rolune_gore() -> None:
             okul_adi=OKUL_ADI,
             ilce=None,
             bosta_dakika=10,
+            veri_sorumlusu="",
         )
         akis = " ".join(evrak.metin_akisi(belge))
         yonetici = rol == AccountRole.YONETICI
@@ -744,6 +790,7 @@ def test_e63_yazi_tipi_evrak_hattinin() -> None:
         okul_adi=OKUL_ADI,
         ilce=None,
         bosta_dakika=10,
+        veri_sorumlusu="",
     )
     okuyucu = PdfReader(io.BytesIO(evrak.pdf_ciz(belge)))
     yazi_tipleri: set[str] = set()
@@ -848,6 +895,7 @@ def test_e63_kisaltma_ilk_geciste_acilir() -> None:
             okul_adi=OKUL_ADI,
             ilce=None,
             bosta_dakika=10,
+            veri_sorumlusu="",
         )
         akis = " ".join(evrak.metin_akisi(belge))
         ilk = akis.index("BSG Yön.")
@@ -869,6 +917,10 @@ def _e63_metinleri() -> Iterator[str]:
     yield e63.BOSTA_KILIT.format(dakika="N")
     yield from (e63.KILITLE, e63.ARTAN_BEKLEME, e63.HATALI_DENEME_ASKISI, e63.YONETICI_ASKI_YOK)
     yield e63.KAPALI_ZARF
+    yield from (e63.AYDINLATMA_BASLIGI, e63.AYDINLATMA_VERI_SORUMLUSU_ETIKETI)
+    yield e63.AYDINLATMA_VERI_SORUMLUSU_YERI
+    yield from e63.AYDINLATMA_SATIRLARI
+    yield e63.AYDINLATMA_NOTU
     yield from (*e63.TESLIM_EDEN, *e63.TESLIM_ALAN)
     yield evrak.KISISEL_VERI_DIPNOTU
     yield hesaplar._OWN_SLIP_MESSAGE

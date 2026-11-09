@@ -4,7 +4,8 @@
 //      §4.4.5; plan F1b-1). Tanıtıcı (varsayılan `yonetici`), ad-soyad (şifreli
 //      saklanır, kilit ekranında görünmez) ve parola + tekrarı girilir; parola
 //      politikası ve tanıtıcı kuralı gönderimden ÖNCE burada da denetlenir, tanıtıcı
-//      ad-soyadı içeriyorsa uyarı (engel değil) yazar. Hesap kurulunca anahtar
+//      ad-soyadı içeriyorsa uyarı (engel değil) yazar. Formun üstünde program
+//      kullanıcısının aydınlatma metni durur (tasarım §3.4). Hesap kurulunca anahtar
 //      (no'su ve üretim tarihiyle) bir kez gösterilir (yazdır / PDF olarak kaydet / elle
 //      yaz); devam için sakladığı kopyadan iki grup geri yazılır, sonra TAM anahtar
 //      sunucuda doğrulanıp güvenlik dosyasına damgalanır (anahtarın saklandığı
@@ -68,6 +69,7 @@ import {
   KURMA_UYARISI,
   YENILEME_METNI,
 } from "../guvenlik/metinler";
+import { HesapAydinlatmaMetni } from "../kisiler/AydinlatmaMetni";
 import OkulKartiAlanlari from "../okul/OkulKartiAlanlari";
 import { SETUP_STEPS, okulApi } from "../okul/api";
 import type { SchoolYear, SetupStatus, SetupStep } from "../okul/api";
@@ -595,6 +597,9 @@ function HesapAdimi({
         Hesap kurulunca bir kurtarma anahtarı gösterilir. Parolanızı unutursanız kayıtlara erişmenin
         tek yolu odur; bir sonraki ekranda onu saklamanız istenecek.
       </p>
+      <div className="mt-4">
+        <HesapAydinlatmaMetni />
+      </div>
       <form onSubmit={kur} noValidate className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <TextField
           label="Tanıtıcı"

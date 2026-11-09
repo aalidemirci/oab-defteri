@@ -76,6 +76,17 @@ vi.mock("../takvim/KapaliGunlerPaneli", () => ({
 import { bekleyenKurtarmaAnahtariniYaz } from "../guvenlik/bekleyenAnahtar";
 import { kurtarmaAnahtariniNormallestir } from "../guvenlik/kurtarma";
 import {
+  AYDINLATMA_AKTARIM,
+  AYDINLATMA_BASLIGI,
+  AYDINLATMA_EKRAN_NOTU,
+  AYDINLATMA_VERI_SORUMLUSU_ETIKETI,
+  HESAP_AYDINLATMA_AMACI,
+  HESAP_AYDINLATMA_HAKLARINIZ,
+  HESAP_AYDINLATMA_SAKLAMA,
+  HESAP_AYDINLATMA_TOPLAMA,
+  HESAP_VERI_SORUMLUSU_YERI,
+} from "../kisiler/metinler";
+import {
   DERS_YILI_ACIKLAMASI,
   KANTIN_ISLETME_BILGISI,
   OKUL_KARTI_ACIKLAMASI,
@@ -480,6 +491,31 @@ describe("KurulumPage — 1. adım: program yöneticisi hesabı (atlanamaz)", ()
         expect.objectContaining({ tanitici: "yonetici-12345678901" }),
       ),
     );
+  });
+
+  it("aydınlatma metni hesap formundadır, kurtarma anahtarı ekranında tekrar etmez", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const kutu = await screen.findByRole("region", { name: AYDINLATMA_BASLIGI });
+    // Sırasıyla: veri sorumlusu (okul kartı henüz yok), metnin satırları, ekran notu ("Ekran notu"
+    // etiketi yazılmaz).
+    expect(Array.from(kutu.querySelectorAll("p"), (p) => p.textContent)).toEqual([
+      `${AYDINLATMA_VERI_SORUMLUSU_ETIKETI} ${HESAP_VERI_SORUMLUSU_YERI}`,
+      HESAP_AYDINLATMA_AMACI,
+      AYDINLATMA_AKTARIM,
+      HESAP_AYDINLATMA_TOPLAMA,
+      HESAP_AYDINLATMA_SAKLAMA,
+      HESAP_AYDINLATMA_HAKLARINIZ,
+      AYDINLATMA_EKRAN_NOTU,
+    ]);
+    expect(kutu.compareDocumentPosition(screen.getByLabelText(/^Tanıtıcı/))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+
+    await hesapFormunuDoldurVeKur(user);
+    expect(await screen.findByTestId("kurtarma-anahtari")).toHaveTextContent(ANAHTAR);
+    expect(screen.queryByRole("region", { name: AYDINLATMA_BASLIGI })).toBeNull();
   });
 
   it("sunucunun döndürdüğü tanıtıcı uyarısı hesap kurulduktan sonra anahtarın üstünde kalır", async () => {

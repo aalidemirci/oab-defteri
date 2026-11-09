@@ -105,6 +105,35 @@ export const VERI_SORUMLUSU_BAGLANTISI = "Ayarlar → Okul Bilgileri'ni aç";
 export const VERI_SORUMLUSU_OKUNAMADI = "Okul Bilgileri'ndeki veri sorumlusu bilgisi okunamadı.";
 
 // ---------------------------------------------------------------------------
+// Program kullanıcısının aydınlatma metni (KVKK md. 10/1; tasarım §3.4; plan "F1b-6 uygulama
+// kararları"). Metin kullanıcının 09.11.2026'da onayladığı biçimdedir ve BİREBİR kullanılır: tek
+// harf değiştirilmez. Kurulum Sihirbazı'nın hesap formunda durur (`HesapAydinlatmaMetni`); aynı
+// metin hesap teslim pusulasındadır (`hesap_teslim_pusulasi.AYDINLATMA_*`). "Aktarım:" satırı ve
+// ekran notu aktarım ekranlarının metniyle aynıdır (`AYDINLATMA_AKTARIM`, `AYDINLATMA_EKRAN_NOTU`).
+// Birebirliği `test_on_yuz_sozlugu.test_hesap_aydinlatmasi_onayli_metindir` sınar.
+// ---------------------------------------------------------------------------
+
+/** "Veri sorumlusu:" satırının sihirbazdaki değeri: okul kartı o sırada henüz girilmemiştir. */
+export const HESAP_VERI_SORUMLUSU_YERI = "Okul Bilgileri'nde girilir";
+
+export const HESAP_AYDINLATMA_AMACI =
+  "Amaç: Programı kullanan hesabın açılması, role göre yetkilendirme ve yapılan işlemlerin " +
+  "kayda geçmesi. Hesabın ad-soyadı, tanıtıcısı ve rolü, giriş ve parola işlemleri, kişisel " +
+  "veri içeren kayıtların hangi hesapla okunduğu tutulur.";
+
+export const HESAP_AYDINLATMA_TOPLAMA =
+  "Toplama yöntemi ve hukuki sebep: Ad-soyad, hesabı açan program yöneticisince girilir; " +
+  "işlemler program tarafından elektronik ortamda kaydedilir. Hukuki sebep: veri sorumlusunun " +
+  "hukuki yükümlülüğünü yerine getirmesi (KVKK md. 5/2-ç), güvenlik tedbiri (KVKK md. 12/1).";
+
+export const HESAP_AYDINLATMA_SAKLAMA =
+  "Saklama: Hesap kapatılsa da hesap kaydı ve işlem izi silinmez; kişisel veri okuma günlüğünün " +
+  "satırları iki yıl sonra silinir.";
+
+export const HESAP_AYDINLATMA_HAKLARINIZ =
+  "Haklarınız: KVKK md. 11'deki haklarınızı veri sorumlusuna başvurarak kullanabilirsiniz.";
+
+// ---------------------------------------------------------------------------
 // Veli listesi (T5; genel tasarım §5.1 `ParentRoster`, §8.4) — ekranda yalnız SAYI
 // ---------------------------------------------------------------------------
 

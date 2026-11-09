@@ -1,8 +1,10 @@
 """Paketleme her PR'da koşar; zorunlu paket kontrolleri atlanamaz (01.10.2026).
 
-`main`in dal korumasında "Linux paketi (.deb + .tar.gz)" ve "Windows paketi
-(setup.exe + portable.zip)" ZORUNLU kontroldür (GitHub ayarıdır, depoda durmaz).
-`paketleme.yml`'de iki değişiklik bu kontrolleri bozar:
+`main`in dal korumasında "Arayüz derlemesi", "Linux paketi (.deb + .tar.gz)" ve
+"Windows paketi (setup.exe + portable.zip)" ZORUNLU kontroldür (GitHub ayarıdır,
+depoda durmaz). Arayüz derlemesi de zorunludur: iki paket işi `needs` ile ona
+bağlıdır, o düşerse paket işleri atlanır ve atlanan iş zorunlu kontrolde BAŞARILI
+sayılır. `paketleme.yml`'de iki değişiklik bu kontrolleri bozar:
 
 * `pull_request` tetiğine yol süzgeci (`paths`, `paths-ignore`, `branches`):
   süzgeç dışında kalan PR'da iş akışı hiç başlamaz, kontrol hiç raporlanmaz ve
@@ -25,6 +27,7 @@ IS_AKISI = (REPO / ".github" / "workflows" / "paketleme.yml").read_text(encoding
 
 # İş anahtarı → dal korumasındaki zorunlu kontrol adı (işin `name:` alanı).
 ZORUNLU_ISLER = {
+    "arayuz": "Arayüz derlemesi",
     "linux": "Linux paketi (.deb + .tar.gz)",
     "windows": "Windows paketi (setup.exe + portable.zip)",
 }

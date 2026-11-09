@@ -29,13 +29,15 @@ on:
   push:
     tags:
       - "v*"
-  # Her PR'da, YOL SÜZGECİ OLMADAN koşar (aile iskeletinin 01.10.2026 kararı). "Linux paketi" ve "Windows
-  # paketi" main'in ZORUNLU kontrolleridir: süzgeç iş akışını başlatmazsa kontrol
+  # Her PR'da, YOL SÜZGECİ OLMADAN koşar (aile iskeletinin 01.10.2026 kararı). "Arayüz derlemesi",
+  # "Linux paketi" ve "Windows paketi" main'in ZORUNLU kontrolleridir: süzgeç iş akışını başlatmazsa kontrol
   # hiç raporlanmaz ve PR birleşemez (ailede yalnız frontend/ değiştiren PR böyle takıldı;
   # süzgeçte frontend/ yoktu, oysa arayüz pakete girer). Süzgecin yerine iş
   # düzeyinde "atla" koşulu da KONMAZ: atlanan iş zorunlu kontrolde başarılı
-  # sayılır, paket derlenmeden birleştirme açılırdı. Bedel: belge ya da betik
-  # değiştiren PR da paketleri derler. Sınayan: packaging/tests/test_paketleme_tetigi.py.
+  # sayılır, paket derlenmeden birleştirme açılırdı. Arayüz derlemesi aynı nedenle
+  # zorunludur: iki paket işi `needs: arayuz` zincirindedir, o düşerse paket işleri
+  # atlanır ve atlanan iş başarılı sayılırdı. Bedel: belge ya da betik değiştiren PR da
+  # paketleri derler. Sınayan: packaging/tests/test_paketleme_tetigi.py.
   pull_request:
   workflow_dispatch:
 

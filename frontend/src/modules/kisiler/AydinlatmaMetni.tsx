@@ -6,9 +6,11 @@
 // satırların başlığı ("Amaç:", "Aktarım:" …) kalın yazılır, metin değişmez. "Veri sorumlusu:"
 // satırının değeri Okul Bilgileri'ndeki veri sorumlusu bilgisidir (`data_controller_text`): boşken
 // yerine uyarı ve Ayarlar → Okul Bilgileri bağlantısı çıkar, AKTARIM ENGELLENMEZ (yalnız bilgi);
-// okunamazsa bunu söyler. Ekran notu metnin altında not olarak durur.
+// okunamazsa bunu söyler. Ekran notu metnin altında not olarak durur. `HesapAydinlatmaMetni`
+// program kullanıcısının metnidir (Kurulum Sihirbazı'nın hesap formu).
 
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import Icon from "../../ui/Icon";
@@ -19,6 +21,11 @@ import {
   AYDINLATMA_EKRAN_NOTU,
   AYDINLATMA_HAKLARINIZ,
   AYDINLATMA_VERI_SORUMLUSU_ETIKETI,
+  HESAP_AYDINLATMA_AMACI,
+  HESAP_AYDINLATMA_HAKLARINIZ,
+  HESAP_AYDINLATMA_SAKLAMA,
+  HESAP_AYDINLATMA_TOPLAMA,
+  HESAP_VERI_SORUMLUSU_YERI,
   PERSONEL_AYDINLATMA_AMACI,
   PERSONEL_AYDINLATMA_GIRISI,
   PERSONEL_AYDINLATMA_SAKLAMA,
@@ -122,6 +129,40 @@ export default function AydinlatmaMetni({ tur }: { tur: AydinlatmaTuru }) {
   }, []);
 
   return (
+    <AydinlatmaKutusu>
+      <Satir metin={metin.giris} />
+      <VeriSorumlusuSatiri deger={veriSorumlusu} />
+      <Satir metin={metin.amac} />
+      <Satir metin={AYDINLATMA_AKTARIM} />
+      <Satir metin={metin.toplama} />
+      <Satir metin={metin.saklama} />
+      <Satir metin={AYDINLATMA_HAKLARINIZ} />
+      <EkranNotu />
+    </AydinlatmaKutusu>
+  );
+}
+
+/**
+ * Program kullanıcısının aydınlatma metni (tasarım §3.4; plan "F1b-6 uygulama kararları"): Kurulum
+ * Sihirbazı'nın hesap formunda durur. Okul kartı o sırada henüz girilmediği için "Veri sorumlusu:"
+ * satırının değeri okunmaz, yerini söyler; sonraki hesaplar metni teslim pusulasında alır.
+ */
+export function HesapAydinlatmaMetni() {
+  return (
+    <AydinlatmaKutusu>
+      <Satir metin={`${AYDINLATMA_VERI_SORUMLUSU_ETIKETI} ${HESAP_VERI_SORUMLUSU_YERI}`} />
+      <Satir metin={HESAP_AYDINLATMA_AMACI} />
+      <Satir metin={AYDINLATMA_AKTARIM} />
+      <Satir metin={HESAP_AYDINLATMA_TOPLAMA} />
+      <Satir metin={HESAP_AYDINLATMA_SAKLAMA} />
+      <Satir metin={HESAP_AYDINLATMA_HAKLARINIZ} />
+      <EkranNotu />
+    </AydinlatmaKutusu>
+  );
+}
+
+function AydinlatmaKutusu({ children }: { children: ReactNode }) {
+  return (
     <section
       aria-label={AYDINLATMA_BASLIGI}
       className="space-y-2 rounded-shape-md border border-outline-variant bg-surface-container-lowest p-4 text-body-small text-on-surface"
@@ -130,14 +171,11 @@ export default function AydinlatmaMetni({ tur }: { tur: AydinlatmaTuru }) {
         <Icon name="policy" size="lg" className="shrink-0" />
         {AYDINLATMA_BASLIGI}
       </h3>
-      <Satir metin={metin.giris} />
-      <VeriSorumlusuSatiri deger={veriSorumlusu} />
-      <Satir metin={metin.amac} />
-      <Satir metin={AYDINLATMA_AKTARIM} />
-      <Satir metin={metin.toplama} />
-      <Satir metin={metin.saklama} />
-      <Satir metin={AYDINLATMA_HAKLARINIZ} />
-      <p className="text-on-surface-variant italic">{AYDINLATMA_EKRAN_NOTU}</p>
+      {children}
     </section>
   );
+}
+
+function EkranNotu() {
+  return <p className="text-on-surface-variant italic">{AYDINLATMA_EKRAN_NOTU}</p>;
 }

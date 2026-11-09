@@ -158,10 +158,13 @@ export default function GuvenlikVeKisiselVeriler(bolum: BolumProps) {
 
       <AltBaslik>Programı kullananların verileri</AltBaslik>
       <p>
-        Bu bölüm yalnız programı kullananları bilgilendirir. Hesap açılan kişinin adı-soyadı, rolü,
-        hesap olayları ve kişisel veri okumaları; hesap, denetim izi ve erişim günlüğü için tutulur,
-        dışarıya aktarılmaz. Personel ve veliler için aydınlatma ayrı bir iştir (KVKK md. 10/1);
-        metni aktarım ekranlarındadır (<Ekran to="/kilavuz#kisiler">Kişiler</Ekran>,{" "}
+        Hesap açılan kişinin adı-soyadı, rolü, hesap olayları ve kişisel veri okumaları; hesap,
+        denetim izi ve erişim günlüğü için tutulur, dışarıya aktarılmaz. Programı kullananların
+        aydınlatma metni, ilk program yöneticisi için Kurulum Sihirbazı&apos;nın ilk adımında (
+        <Ekran to="/kilavuz#ilk-kurulum">İlk Kurulum</Ekran>), öteki hesaplar için hesap teslim
+        pusulasındadır (<Ekran to="/kilavuz#kullanicilar">Kullanıcılar</Ekran>). Personel ve veliler
+        için aydınlatma ayrı bir iştir (KVKK md. 10/1); metni aktarım ekranlarındadır (
+        <Ekran to="/kilavuz#kisiler">Kişiler</Ekran>,{" "}
         <Ekran to="/kilavuz#veli-listesi">Veli Listesi</Ekran>).
       </p>
 

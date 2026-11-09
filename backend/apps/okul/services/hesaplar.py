@@ -712,7 +712,8 @@ def teslim_pusulasi(*, by_hesap_id: object, hesap_id: object) -> TeslimPusulasi:
     `Eylem.HESAP_YONETIMI`) → kendi hesabı değil → işlem gören (var, kapalı değil, mührü ve izi
     tutuyor; tutmuyorsa 409 `hesap_muhru_tutmadi` ve `BUTUNLUK` satırı — alan mühürde `seal`,
     satırın izinde `kayit_mac`, izdeki boşlukta `iz_boslugu`). İçerik yalnız tanıtıcıdan, rolden,
-    açılış tarihinden, okul kartının antedinden ve boşta kilit süresinden kurulur
+    açılış tarihinden, okul kartının antedinden, boşta kilit süresinden ve veri sorumlusu
+    bilgisinden kurulur
     (`hesap_teslim_pusulasi.pusula_belgesi`; ad-soyad okunmaz). PDF bellekte çizilir; sonra AYNI
     işlemde hesabın hâlâ kapalı olmadığı sorulur ve `BASIM` satırı (kod ve PDF'in sha256'sı)
     yazılır. Satır yazılamazsa PDF verilmez (iz yazılamazsa yazma yapılmaz; 409 `iz_yazilamadi`).
@@ -731,6 +732,7 @@ def teslim_pusulasi(*, by_hesap_id: object, hesap_id: object) -> TeslimPusulasi:
         okul_adi=okul.school_name,
         ilce=okul.district,
         bosta_dakika=okul.idle_lock_minutes,
+        veri_sorumlusu=okul.data_controller_text,
     )
     pdf = evrak.pdf_ciz(belge)
     with transaction.atomic():

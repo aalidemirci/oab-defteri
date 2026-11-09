@@ -276,7 +276,7 @@ class Migration(migrations.Migration):
                 ('opened_on', models.DateField(blank=True, null=True, verbose_name='okulun açılış tarihi')),
                 ('demirbas_onayi', models.BooleanField(default=False, verbose_name='bilgisayar okul demirbaşıdır')),
                 ('demirbas_no', models.CharField(blank=True, default='', max_length=64, verbose_name="bilgisayarın demirbaş no'su")),
-                ('data_controller_text', models.CharField(blank=True, default='', max_length=500, verbose_name='veri sorumlusu')),
+                ('data_controller_text', models.CharField(blank=True, default='', max_length=250, verbose_name='veri sorumlusu')),
                 ('yol_haritasi', models.JSONField(blank=True, default=dict, verbose_name='başlangıç yol haritası işaretleri')),
                 ('setup_completed', models.BooleanField(default=False, verbose_name='kurulum tamamlandı')),
                 ('app_password_hash', models.CharField(blank=True, default='', max_length=255, verbose_name='veri anahtarı parmak izi')),

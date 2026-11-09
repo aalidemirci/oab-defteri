@@ -114,7 +114,7 @@ export default function OkulKarti(bolum: BolumProps) {
 
       <AltBaslik>Veri sorumlusu</AltBaslik>
       <p>
-        {VERI_SORUMLUSU_YARDIMI} Alan isteğe bağlıdır ve en çok 500 karakter alır. Boş bırakılırsa
+        {VERI_SORUMLUSU_YARDIMI} Alan isteğe bağlıdır ve en çok 250 karakter alır. Boş bırakılırsa
         aydınlatma metninin “Veri sorumlusu:” satırında uyarı çıkar; aktarım yine de yapılabilir.
         Metni duyurmadan önce bu alanı doldurun.
       </p>

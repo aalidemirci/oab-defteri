@@ -117,7 +117,7 @@ STUDENT_COUNT_MAX = 99999
 INSTITUTION_CODE_LENGTH = 6
 #: Veri sorumlusu metninin üst sınırı (karakter; ad, adres ve iletişim bir paragrafa sığar —
 #: yazım denetimi, mevzuat hükmü değildir).
-DATA_CONTROLLER_TEXT_MAX = 500
+DATA_CONTROLLER_TEXT_MAX = 250
 
 
 #: Boşta kilit süresi (dakika; tasarım TK14, §15 M-3): varsayılan 10, ayar 3-30. Alanın

@@ -21,7 +21,9 @@ BASILANLAR (planın lafzı):
   hatada askı, askıyı program yöneticisi kaldırır (md. 7/3, 9/2-c; programa kıyasen). Program
   yöneticisi hesabı askıya alınmaz (`app_password` "HATALI DENEME"): onun pusulası bunu söyler;
 * "İlk parolanız ayrı kapalı zarftadır…" cümlesi (md. 9/2-e, 10/1);
-* dipnot (`shared.evrak.Dipnot`): kişisel veri dipnotu (tasarım §9.1-5).
+* dipnotlar (`shared.evrak.Dipnot`), imza bloklarından sonra: program kullanıcısının aydınlatma
+  metni (KVKK md. 10/1; tasarım §3.4; plan "F1b-6 uygulama kararları"; veri sorumlusu okul kartındaki
+  bilgidir, `data_controller_text`, boşsa yerini söyler) ve kişisel veri dipnotu (tasarım §9.1-5).
 
 ATIFLARIN DOĞRULAMASI (altın kural 1; `docs/mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md`):
 9/2-a "en az 8 karakter", 9/2-b "küçük harf, büyük harf, rakam ve simgelerin kullanıldığı karışık
@@ -34,7 +36,7 @@ kılmasını düzenler: dördü programa KIYASEN anılır. "Artan bekleme", 180 
 baştaki/sondaki boşluk yasağı programın kendi kurallarıdır, atıf almaz.
 
 BASILMAYANLAR: ad-soyad (hesap sahibinin de basanın da; veri kaynağı yalnız tanıtıcı, rol, açılış
-tarihi ve okul kartının anteti ile boşta kilit süresidir); parola alanı (ne değer ne boş satır);
+tarihi ve okul kartının anteti, boşta kilit süresi ve veri sorumlusu bilgisidir); parola alanı (ne değer ne boş satır);
 RYUE unsurları (sayı, konu, muhatap) ve konum cümlesi. "Teslim eden" ve "Teslim alan" imza blokları
 elle doldurulur. Antet okulundur (birlik satırı yoktur).
 
@@ -123,6 +125,33 @@ KAPALI_ZARF: Final = (
 #: tarih)"); ad-soyad basılmaz, elle yazılır.
 TESLIM_EDEN: Final = ("Teslim eden", "Program yöneticisi (ad-soyad, imza, tarih)")
 TESLIM_ALAN: Final = ("Teslim alan", "Hesap sahibi (ad-soyad, imza, tarih)")
+
+# Program kullanıcısının aydınlatma metni (KVKK md. 10/1; tasarım §3.4; plan "F1b-6 uygulama
+# kararları"). Kullanıcının 09.11.2026'da onayladığı metindir, BİREBİR: tek harf değiştirilmez. Ön
+# yüzdeki karşılığı `kisiler/metinler.ts`'tedir; birebirliği
+# `test_on_yuz_sozlugu.test_hesap_aydinlatmasi_onayli_metindir` sınar.
+AYDINLATMA_BASLIGI: Final = "Kişisel veri aydınlatma metni"
+AYDINLATMA_VERI_SORUMLUSU_ETIKETI: Final = "Veri sorumlusu:"
+#: Okul kartındaki veri sorumlusu bilgisi boşken "Veri sorumlusu:" satırının değeri (sihirbazdaki gibi).
+AYDINLATMA_VERI_SORUMLUSU_YERI: Final = "Okul Bilgileri'nde girilir"
+#: "Veri sorumlusu:" satırından sonraki satırlar, sırasıyla.
+AYDINLATMA_SATIRLARI: Final = (
+    "Amaç: Programı kullanan hesabın açılması, role göre yetkilendirme ve yapılan işlemlerin kayda "
+    "geçmesi. Hesabın ad-soyadı, tanıtıcısı ve rolü, giriş ve parola işlemleri, kişisel veri içeren "
+    "kayıtların hangi hesapla okunduğu tutulur.",
+    "Aktarım: Kişisel veriler kimseye aktarılmaz; program okulun bilgisayarında çalışır, dışarıya "
+    "veri göndermez.",
+    "Toplama yöntemi ve hukuki sebep: Ad-soyad, hesabı açan program yöneticisince girilir; işlemler "
+    "program tarafından elektronik ortamda kaydedilir. Hukuki sebep: veri sorumlusunun hukuki "
+    "yükümlülüğünü yerine getirmesi (KVKK md. 5/2-ç), güvenlik tedbiri (KVKK md. 12/1).",
+    "Saklama: Hesap kapatılsa da hesap kaydı ve işlem izi silinmez; kişisel veri okuma günlüğünün "
+    "satırları iki yıl sonra silinir.",
+    "Haklarınız: KVKK md. 11'deki haklarınızı veri sorumlusuna başvurarak kullanabilirsiniz.",
+)
+#: Onaylı metnin ekran notu; etiketsiz, metnin son paragrafı olarak basılır.
+AYDINLATMA_NOTU: Final = (
+    "Hukuki sebep öneridir; veri sorumlusu ve hukuki sebep okul müdürlüğünce teyit edilir."
+)
 
 
 @dataclass(frozen=True)
@@ -302,6 +331,23 @@ def _bolum(baslik: str, cumleler: tuple[str, ...] | list[str]) -> str:
     return f"{baslik}: " + " ".join(cumleler)
 
 
+def _aydinlatma(veri_sorumlusu: str) -> tuple[evrak.Dipnot, ...]:
+    """Aydınlatma bölümü; `veri_sorumlusu` okul kartındaki bilgidir (`data_controller_text`).
+
+    Dipnot puntosuyla, imza bloklarından sonra durur: gövde puntosunda tek sayfa bütçesini aşar.
+    """
+    deger = veri_sorumlusu.strip() or AYDINLATMA_VERI_SORUMLUSU_YERI
+    return tuple(
+        evrak.Dipnot(metin)
+        for metin in (
+            AYDINLATMA_BASLIGI,
+            f"{AYDINLATMA_VERI_SORUMLUSU_ETIKETI} {deger}",
+            *AYDINLATMA_SATIRLARI,
+            AYDINLATMA_NOTU,
+        )
+    )
+
+
 def pusula_belgesi(
     *,
     tanitici: str,
@@ -310,6 +356,7 @@ def pusula_belgesi(
     okul_adi: str,
     ilce: str | None,
     bosta_dakika: int,
+    veri_sorumlusu: str,
 ) -> evrak.Belge:
     """Pusulanın içerik modeli (modül başlığı). Girdiler kişisizdir: ad-soyad parametresi YOKTUR."""
     kilitleme = [BOSTA_KILIT.format(dakika=bosta_dakika), KILITLE, ARTAN_BEKLEME]
@@ -336,6 +383,7 @@ def pusula_belgesi(
             evrak.Imza(
                 sahipler=(evrak.ImzaSahibi(*TESLIM_EDEN), evrak.ImzaSahibi(*TESLIM_ALAN)),
             ),
+            *_aydinlatma(veri_sorumlusu),
             evrak.Dipnot(evrak.KISISEL_VERI_DIPNOTU),
         ),
     )
