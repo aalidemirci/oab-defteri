@@ -1,0 +1,10 @@
+{
+  "surum": 1,
+  "sema_sha256": "a290835857b56837b97753a7e4b9258ef39711e5bd7c555e769d154d8b601cd4",
+  "paketler": [
+    {
+      "dosya": "OAB-2023.12.r1.json",
+      "sha256": "678dd9b53de53b54cda845d8868a0001e7f2c0943731106d5b1a5bea3a57b7f6"
+    }
+  ]
+}

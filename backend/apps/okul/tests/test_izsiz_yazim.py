@@ -12,7 +12,7 @@ az biri düşer:
    bağlamı istek başında kurulur) sürülür; başarılı yanıttan sonra en az bir yeni iz
    satırı, beklenen türlerle, beklenen hesabın adına düşmüş olmalı; satırların içerik
    MAC'i kaydın bugünkü değerini tutmalı ve zincir bütün olmalıdır. Üstelik uçtan önce ve
-   sonra okul tablolarının bütün satırları karşılaştırılır: değişen, eklenen ya da silinen
+   sonra `okul` ve `oab` tablolarının bütün satırları karşılaştırılır: değişen, eklenen ya da silinen
    HER kaydın bu istekte yazılmış bir iz satırı olmalı ve kayıt bütünlüğü (`kaydi_dogrula`)
    tutmalıdır — iki kayıt yazıp birini izleyen uç düşer. KVKK silmesinin satırı kimlik
    taşımaz (`denetim_izi.kvkk_silme`): bir modelin SİLİNEN kayıtlarını, o modelin bu istekte
@@ -114,6 +114,7 @@ from apps.okul.services import setup as setup_service
 from apps.okul.services import terms as term_service
 from apps.okul.services.templates import PARENT_TEMPLATE_HEADERS, PERSONNEL_TEMPLATE_HEADERS
 from apps.okul.tests.hesap_ortak import GECICI_PAROLA, YENI_PAROLA, hesap_ac, muhurle
+from apps.okul.tests.iz_ortak import bekci_modelleri, izlenen_modeller, kor_indeks_alanlari
 from apps.okul.tests.okul_karti_ortak import okul_karti
 from conftest import (
     TEST_HESAP_ID,
@@ -579,7 +580,7 @@ def _parametreler() -> list[Any]:
     ]
 
 
-#: Tablo karşılaştırmasının dışında kalan okul modelleri: izin kendisi ve iz anahtarı
+#: Tablo karşılaştırmasının dışında kalan modeller: izin kendisi ve iz anahtarı
 #: (`LISTESIZ_MODELLER`; anahtar ilk hesapla aynı işlemde yazılır).
 _KARSILASTIRMA_DISI = frozenset({"AuditTrail", "AuditKey"})
 #: Satırı iz satırı DOĞURMAYAN, yalnız eklenen modeller: zincir dışı erişim günlüğü (tasarım
@@ -589,13 +590,13 @@ _YALNIZ_EKLENEN = frozenset({"okul.AccessLog"})
 
 
 def _tablolar() -> dict[str, dict[str, tuple[Any, ...]]]:
-    """Okul modellerinin BÜTÜN satırları, ham SQL ile: model etiketi → {kimlik metni: satır}.
+    """`okul` ve `oab` modellerinin BÜTÜN satırları, ham SQL ile: etiket → {kimlik metni: satır}.
 
     Ham okunur: şifreli sütun token'ıyla karşılaştırılır (kilitliyken de okunur, çözülmez).
     Kimlik `denetim_izi.kimlik_metni` biçimindedir (iz satırının `object_id`'siyle aynı).
     """
     sonuc: dict[str, dict[str, tuple[Any, ...]]] = {}
-    for model in django_apps.get_app_config("okul").get_models():
+    for model in bekci_modelleri():
         if model.__name__ in _KARSILASTIRMA_DISI:
             continue
         pk = model._meta.pk
@@ -1625,6 +1626,21 @@ def _ham_sutunlar(tablo: str, sutunlar: tuple[str, ...]) -> list[str]:
         return [str(deger) for satir in cursor.fetchall() for deger in satir if deger]
 
 
+def _sifreli_tokenlar() -> list[str]:
+    """`okul` ve `oab`'de şifreli ya da kör indeks sütunu taşıyan her tablonun ham değerleri."""
+    tokenlar: list[str] = []
+    for model in bekci_modelleri():
+        kor_indeksler = kor_indeks_alanlari(model)
+        alanlar = (
+            *crypto.encrypted_fields_of(model),
+            *(alan for alan in model._meta.fields if alan.name in kor_indeksler),
+        )
+        sutunlar = tuple(str(alan.column) for alan in alanlar)
+        if sutunlar:
+            tokenlar += _ham_sutunlar(model._meta.db_table, sutunlar)
+    return tokenlar
+
+
 def _veli_xlsx(satirlar: list[tuple[str, ...]]) -> bytes:
     kitap = Workbook()
     sayfa = kitap.active
@@ -1653,10 +1669,11 @@ def _xlsx(satirlar: list[tuple[str, ...]]) -> bytes:
 def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch) -> None:
     """Tasarım §4.6.2 kural 6, §14 F1b kapısı (modül başlığı, madde 3).
 
-    Her izli model (`Account`, `SchoolConfig`, `SchoolYear`, `SchoolTerm`, `Holiday`,
-    `Personnel`, `ImportRun`, `Attachment`) uydurma kişi verisiyle yazılır, güncellenir ve
+    `okul` ve `oab`'nin her izli modeli (bugün `Account`, `SchoolConfig`, `SchoolYear`, `SchoolTerm`,
+    `Holiday`, `Personnel`, `ImportRun`, `Attachment`) uydurma kişi verisiyle yazılır, güncellenir ve
     durumu değişir; iz satırlarının hiçbir sütununda bu değerler, parçaları, büyük-küçük harf
-    biçimleri ve şifreli token'ları geçmez. Arşiv dökümü henüz yoktur. Veli listesi (T5)
+    biçimleri ve şifreli token'ları geçmez. Senaryosu yazılmamış izli model testi düşürür. Arşiv
+    dökümü henüz yoktur. Veli listesi (T5)
     uydurma veli adıyla aktarılır, sınıfı yerine konur ve elle silinir: ne adı ne token'ı izde
     geçer. (Öğrenci sicili ve şube kataloğu F1b 5. adımda söküldü.)
     """
@@ -1748,22 +1765,12 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
 
     metin = _iz_metni()
     modeller = set(AuditTrail.objects.values_list("model", flat=True))
-    assert {
-        "okul.Account",
-        "okul.SchoolConfig",
-        "okul.SchoolYear",
-        "okul.SchoolTerm",
-        "okul.Holiday",
-        "okul.Personnel",
-        "okul.ImportRun",
-        "okul.Attachment",
-    } <= modeller
+    assert {denetim_izi.model_etiketi(model) for model in izlenen_modeller()} <= modeller
     for parca in ARANACAKLAR:
         assert parca not in metin, parca
     tokenlar = [
-        *_ham_sutunlar("okul_personnel", ("first_name", "last_name")),
-        *_ham_sutunlar("okul_account", ("display_name",)),
-        *_ham_sutunlar("okul_attachment", ("original_name", "key_wrap", "sha256")),
+        *_sifreli_tokenlar(),
+        *_ham_sutunlar("okul_attachment", ("key_wrap", "sha256")),
         *veli_tokenlari,
     ]
     assert tokenlar
@@ -1854,6 +1861,7 @@ LISTESIZ_MODELLER = {
         "`KVKK_SILME` (plan 'F1b-5 uygulama kararları')."
     ),
 }
+#: Elle yazılı karşılaştırma listesi: `oab`'nin modelleri geldikçe buraya da adıyla girer.
 IZLI_MODELLER = (
     Account,
     SchoolConfig,
@@ -1866,17 +1874,14 @@ IZLI_MODELLER = (
 )
 
 
-def test_okul_modellerinin_hepsi_izli_ya_da_gerekceli_listesizdir() -> None:
-    """Yeni bir okul modeli izin listeleri olmadan eklenemez (yazıcı onu yazmaz)."""
-    modeller = {model.__name__ for model in django_apps.get_app_config("okul").get_models()}
-    listesiz = {
-        ad for ad in modeller if not hasattr(django_apps.get_model("okul", ad), "IZ_DEGER_ALANLARI")
-    }
-    assert listesiz == set(LISTESIZ_MODELLER)
-    assert modeller - listesiz == {model.__name__ for model in IZLI_MODELLER}
+def test_okul_ve_oab_modellerinin_hepsi_izli_ya_da_gerekceli_listesizdir() -> None:
+    """Yeni bir okul ya da birlik modeli izin listeleri olmadan eklenemez (yazıcı onu yazmaz)."""
+    izliler = set(izlenen_modeller())
+    assert {m.__name__ for m in bekci_modelleri() if m not in izliler} == set(LISTESIZ_MODELLER)
+    assert izliler == set(IZLI_MODELLER)
 
 
-@pytest.mark.parametrize("model", IZLI_MODELLER, ids=lambda m: m.__name__)
+@pytest.mark.parametrize("model", izlenen_modeller(), ids=lambda m: m.__name__)
 def test_durum_alanlari_modelin_alanlaridir(model: Any) -> None:
     alanlar = {a.name for a in model._meta.concrete_fields if not a.primary_key}
     durum = set(getattr(model, "IZ_DURUM_ALANLARI", ()))

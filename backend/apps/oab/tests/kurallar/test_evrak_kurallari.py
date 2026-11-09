@@ -1,6 +1,6 @@
 """Evrak kuralları — F1b'de hesap teslim pusulası (E63; plan F1b-2 "E63 hesap teslim pusulası").
 
-Tasarım §10.5'in `ev::` testlerinden bu fazın payı; dosya F1c'de §10.1 dizinine taşınır (plan):
+Tasarım §10.5'in `ev::` testlerinden bugünkü pay; dosya F1c'nin 1. adımında §10.1 dizinine taşındı (plan):
 
 * `test_e63_pusulada_parola_alani_yok` — içerik modelinde ve PDF'te parola alanı, parola değeri ya
   da parola için boş satır yok; giriş adı, rol, iş özeti, BSG Yön. md. 9/2 kuralları, kilitleme ve
@@ -11,6 +11,8 @@ Tasarım §10.5'in `ev::` testlerinden bu fazın payı; dosya F1c'de §10.1 dizi
   kararı 04.11.2026; program yöneticisinin iş listesi fazlarla en çok uzayandır).
 * `test_tckn_hicbir_belgede_yok` — programın bugün ürettiği belgelerde 11 haneli kimlik deseni yok
   (K9 ayarının kolları bağış kaydıyla F3'te gelir).
+* `test_katalogdaki_her_kodun_testi_var` — tasarım §9.5 ile §9.6 aynı 79 kodu taşır; fazı gelen her
+  kodun kabul testi ve ad satırı vardır (faz süzmesi `faz_ortak`; plan F1b-6 kararları).
 
 Ayrıca: ad-soyad basılmaz (hesap sahibinin de basanın da); kendi hesabına, kapalı hesaba ve kaydı ya
 da izi tutmayan hesaba basılmaz (satırın `pusula` eylemi aynı nedeni söyler; mühür reddi de `BUTUNLUK`
@@ -43,6 +45,7 @@ from django.utils import timezone
 from pypdf import PdfReader
 from rest_framework.test import APIClient
 
+from apps.oab.tests.kurallar import faz_ortak
 from apps.okul import denetim_izi, rol_izinleri
 from apps.okul.models import (
     DATA_CONTROLLER_TEXT_MAX,
@@ -237,7 +240,11 @@ def test_e63_pusulada_parola_alani_yok(rol: str, yakalanan: list[evrak.Belge]) -
     assert _dosyalar() == once, "pusulanın dosyası saklanmamalı"
 
 
-@pytest.mark.parametrize("kod", ["E63"])
+#: `test_katalog_kabul`'un parametreleri; `test_katalogdaki_her_kodun_testi_var` kataloğa karşı sınar.
+KATALOG_KABUL_KODLARI = ("E63",)
+
+
+@pytest.mark.parametrize("kod", KATALOG_KABUL_KODLARI)
 def test_katalog_kabul(kod: str, yakalanan: list[evrak.Belge]) -> None:
     """Tasarım §9.6 E63 "Kabul örneği": tanıtıcı, rol ve "bu programda sizin işiniz" matristen; ilk
     giriş adımları (geçici parolayla giriş → parolayı değiştirme); parola kuralları (BSG 9/2-a, b,
@@ -806,7 +813,7 @@ def test_e63_yazi_tipi_evrak_hattinin() -> None:
 
 def _depo_dosyasi(goreli: str) -> str:
     """Depo kökündeki dosya (yerelde depo kökü, konteynerde `/repo`)."""
-    for kok in (Path(__file__).resolve().parents[4], Path("/repo")):
+    for kok in (Path(__file__).resolve().parents[5], Path("/repo")):
         yol = kok / goreli
         if yol.is_file():
             return yol.read_text(encoding="utf-8")
@@ -937,3 +944,70 @@ def test_e63_metinleri_sozlukte_yazilidir() -> None:
         ornek = hesap_teslim_pusulasi.dosya_adi(rol, date(2026, 11, 3))
         assert f"`{ornek}`" in sozluk, ornek
     assert "Hesap-Teslim-Pusulası_gg.aa.yyyy.pdf" not in sozluk
+
+
+# ============================================================ katalog (tasarım §9.5-§9.7)
+
+TASARIM = "docs/tasarim/2026-10-31-genel-tasarim.md"
+#: Fazı gelen kodların adı (ad → kod listesi, tasarım §10.5); kaynakla karşılaştırılmak için ELLE.
+KATALOG_ADLARI = {"E63": "Hesap teslim pusulası"}
+#: Katalog dışı program belgeleri (tasarım §9.7): E-kodu almazlar.
+PROGRAM_BELGELERI = (
+    "Kurtarma anahtarı belgesi",
+    "Kurtarma anahtarı zarfı imha tutanağı",
+    "Yedek Raporu",
+)
+_KATALOG_SATIRI = re.compile(r"^\| (E\d{2}) \|(.*)\|$", re.MULTILINE)
+
+
+def _bolum(baslangic: str, bitis: str) -> str:
+    metin = _depo_dosyasi(TASARIM)
+    bas = metin.index(f"\n{baslangic}")
+    return metin[bas : metin.index(f"\n{bitis}", bas)]
+
+
+def _katalog_95() -> list[tuple[str, str, str]]:
+    """Tasarım §9.5'in satırları: (kod, belge adı, faz). Faz sütununun ilk sözcüğü alınır."""
+    satirlar: list[tuple[str, str, str]] = []
+    for kod, kalan in _KATALOG_SATIRI.findall(_bolum("### 9.5 ", "### 9.6 ")):
+        sutunlar = kalan.split("|")
+        satirlar.append((kod, sutunlar[0].strip(), sutunlar[-1].split()[0]))
+    return satirlar
+
+
+def test_katalogdaki_her_kodun_testi_var() -> None:
+    """Tasarım §10.5. Faz süzmeli: fazı henüz gelmeyen kodun testi istenmez (plan F1b-6 kararları)."""
+    satirlar = _katalog_95()
+    kodlar = [kod for kod, _, _ in satirlar]
+    # §9.5 ile §9.6 aynı 79 kodu, birer kez taşır.
+    beklenen = [f"E{no:02d}" for no in range(1, 80)]
+    assert sorted(kodlar) == beklenen
+    kodlar_96 = [kod for kod, _ in _KATALOG_SATIRI.findall(_bolum("### 9.6 ", "### 9.7 "))]
+    assert sorted(kodlar_96) == beklenen
+    # Fazı gelen her kodun kabul testi ve ad satırı var; katalog dışı parametre yazım hatasıdır.
+    gelenler = faz_ortak.fazi_gelenler({kod: faz for kod, _, faz in satirlar})
+    assert gelenler <= set(KATALOG_KABUL_KODLARI) <= set(kodlar)
+    assert gelenler <= set(KATALOG_ADLARI)
+    adlar = {kod: ad for kod, ad, _ in satirlar}
+    for kod, ad in KATALOG_ADLARI.items():
+        assert adlar[kod] == ad
+    # §7'nin andığı her belge kataloğun kodudur.
+    atiflar = set(re.findall(r"\bE\d{2}\b", _bolum("## 7. ", "## 8. ")))
+    assert atiflar and atiflar <= set(kodlar), sorted(atiflar - set(kodlar))
+    # Program belgeleri kod almaz.
+    program_bolumu = _bolum("### 9.7 ", "## 10. ")
+    assert _KATALOG_SATIRI.findall(program_bolumu) == []
+    for belge in PROGRAM_BELGELERI:
+        assert belge in program_bolumu, belge
+        assert belge not in adlar.values(), belge
+
+
+@pytest.mark.parametrize(
+    ("gecerli", "beklenen"),
+    [("F1b", {"E63"}), ("F1c", {"E01", "E02", "E03", "E63"})],
+)
+def test_katalog_faz_suzmesi(gecerli: str, beklenen: set[str]) -> None:
+    """Süzme gerçek katalogda: "F2 (metni F1b içe aktarma ekranında)" gibi notlu satır da okunur."""
+    fazlar = {kod: faz for kod, _, faz in _katalog_95()}
+    assert faz_ortak.fazi_gelenler(fazlar, gecerli=gecerli) == beklenen
+    assert fazlar["E04"] == "F2"

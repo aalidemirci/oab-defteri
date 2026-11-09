@@ -117,6 +117,7 @@ DIGER_UCLAR = frozenset(
         "security-state-reset",
         "security-status",
         "security-unlock",
+        "oab-okul-karti-bilgileri",
         "setup-complete",
         "setup-roadmap",
         "setup-school-config",

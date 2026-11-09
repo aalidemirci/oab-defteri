@@ -412,6 +412,8 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     # ------------------------------------------------ M1: okul kartı, ders yılı, kapalı günler
     _oku("setup-school-config", Satir.M1),
     _yaz("setup-school-config", "PUT", Satir.M1),
+    # Okul kartının kural paketinden gelen bilgisi (md. 23/3; okul kartını okuyan her rol).
+    _oku("oab-okul-karti-bilgileri", Satir.M1),
     _yaz("setup-complete", "POST", Satir.M1),
     # Genel Bakış'ın "Başlangıç Yol Haritası" işaretleri (plan F1b-2: M1).
     _yaz("setup-roadmap", "POST", Satir.M1),

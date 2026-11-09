@@ -31,14 +31,6 @@ export const YERLESIM_YARDIMI = "Kantin gelirinin pay dağılımı buna göre ya
 export const KANTIN_YARDIMI =
   "Kantin ve benzeri yerlerin arz bedeli buna göre hesaplanır (md. 17/1).";
 
-/**
- * Kantin birlikçe işletiliyorsa seçimin altında görünen bilgi (md. 23/3; tasarım §6.4.8
- * `kantin.isletmede_vergi_uyarisi`). Uyarıdır, engel değildir.
- */
-export const KANTIN_ISLETME_BILGISI =
-  "Kantin ve benzeri yerler birlikçe işletilir ve vergi mükellefiyeti doğarsa birlik hakkında " +
-  "213 sayılı Vergi Usul Kanunu hükümleri uygulanır (md. 23/3).";
-
 /** K3 ve md. 6/1-d: personel modülü yalnız doğrudan işverende açılır. */
 export const PERSONEL_YARDIMI =
   "Birliğin istihdam ettiği personel için kıdem tazminatı karşılığı ayrılır (md. 6/1-d).";

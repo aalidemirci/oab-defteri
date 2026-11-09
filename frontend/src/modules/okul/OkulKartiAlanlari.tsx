@@ -26,7 +26,6 @@ import {
   KADEME_YARDIMI,
   KAMPUS_ETIKETI,
   KAMPUS_YARDIMI,
-  KANTIN_ISLETME_BILGISI,
   KANTIN_YARDIMI,
   KURUM_KODU_YARDIMI,
   MEVCUT_TARIHI_YARDIMI,
@@ -37,6 +36,7 @@ import {
   VERI_SORUMLUSU_YARDIMI,
   YERLESIM_YARDIMI,
 } from "./metinler";
+import { useKantinIsletmeBilgisi } from "./kuralBilgileri";
 import { kademeleriSirala } from "./okulBilgileri";
 import type { OkulFormu } from "./okulBilgileri";
 
@@ -53,15 +53,16 @@ const PERSONELLER = secenekler(STAFFING_MODE_TR);
 const ETIKET_SINIFI = "mb-1.5 block text-label-medium font-semibold text-on-surface-variant";
 
 /**
- * Kantin birlikçe işletiliyorsa görünen md. 23/3 bilgisi (uyarı tonunda; engel değil). Kendisi
- * canlı bölge değildir: formda her zaman DOM'da duran `role="status"` kabının içine girer
- * (içeriğiyle birlikte doğan canlı bölgeyi ekran okuyucular çoğu zaman duyurmaz).
+ * Kantin birlikçe işletiliyorsa görünen md. 23/3 bilgisi (uyarı tonunda; engel değil). Metin kural
+ * paketindendir (`kuralBilgileri`). Kendisi canlı bölge değildir: formda her zaman DOM'da duran
+ * `role="status"` kabının içine girer (içeriğiyle birlikte doğan canlı bölgeyi ekran okuyucular
+ * çoğu zaman duyurmaz).
  */
-export function KantinIsletmeBilgisi() {
+export function KantinIsletmeBilgisi({ metin }: { metin: string }) {
   return (
     <div className="flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-4 py-3 text-body-medium text-on-tertiary-container">
       <Icon name="info" size="lg" className="shrink-0" />
-      <span className="min-w-0">{KANTIN_ISLETME_BILGISI}</span>
+      <span className="min-w-0">{metin}</span>
     </div>
   );
 }
@@ -199,6 +200,7 @@ export default function OkulKartiAlanlari({
 }: OkulKartiAlanlariProps) {
   const kademeAd = useId();
   const bugun = todayIso();
+  const kantinBilgisi = useKantinIsletmeBilgisi();
 
   const kademeDegistir = (kademe: SchoolLevel, secili: boolean) => {
     const kalan = form.kademeler.filter((k) => k !== kademe);
@@ -320,7 +322,9 @@ export default function OkulKartiAlanlari({
       />
       {/* Canlı bölge her zaman DOM'dadır; bilgi seçimle içine girer (duyurulsun diye). */}
       <div role="status" className="empty:hidden sm:col-span-2">
-        {form.kantin === "BIRLIKCE_ISLETILIYOR" && <KantinIsletmeBilgisi />}
+        {form.kantin && kantinBilgisi?.modlar.includes(form.kantin) && (
+          <KantinIsletmeBilgisi metin={kantinBilgisi.metin} />
+        )}
       </div>
       <RadyoGrubu<StaffingMode>
         etiket="Personel çalıştırma biçimi"
@@ -401,6 +405,7 @@ export function mevcutYazimi(sayi: number | null, tarih: string | null): string 
  * görünür.
  */
 export function OkulKartiListesi({ kayit }: { kayit: SchoolConfig }) {
+  const kantinBilgisi = useKantinIsletmeBilgisi();
   const satirlar: Array<[etiket: string, deger: string]> = [
     ["Okul adı", kayit.school_name],
     ["İl", kayit.province],
@@ -435,9 +440,9 @@ export function OkulKartiListesi({ kayit }: { kayit: SchoolConfig }) {
           </div>
         ))}
       </dl>
-      {kayit.canteen_mode === "BIRLIKCE_ISLETILIYOR" && (
+      {kayit.canteen_mode && kantinBilgisi?.modlar.includes(kayit.canteen_mode) && (
         <div className="mt-4">
-          <KantinIsletmeBilgisi />
+          <KantinIsletmeBilgisi metin={kantinBilgisi.metin} />
         </div>
       )}
       {kayit.demirbas_onayi && (

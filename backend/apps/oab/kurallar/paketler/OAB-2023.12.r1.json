@@ -1,0 +1,1713 @@
+{
+  "paket": "OAB-2023.12",
+  "rev": 1,
+  "sema_surumu": 1,
+  "baslik": "MEB Okul-Aile Birliği Yönetmeliği (son değişiklik RG 01.12.2023/32386) ve bağlı metinler",
+  "korpus_teyit": "09.11.2026",
+  "degisiklik_notu": "F1c: yeter sayı, organ bileşimleri, seçilme sınırları, temsilciler, F1c listesindeki süre ve oranlar.",
+  "degisiklikler": [
+    {
+      "id": "genel_kurul.olagan_son_ay",
+      "tur": "ekleme"
+    },
+    {
+      "id": "genel_kurul.ilan_en_az_gun",
+      "tur": "ekleme"
+    },
+    {
+      "id": "genel_kurul.yeter_sayi_taban",
+      "tur": "ekleme"
+    },
+    {
+      "id": "genel_kurul.yeter_sayi_carpan",
+      "tur": "ekleme"
+    },
+    {
+      "id": "genel_kurul.kucuk_okul_carpan",
+      "tur": "ekleme"
+    },
+    {
+      "id": "genel_kurul.kucuk_okul_esik",
+      "tur": "ekleme"
+    },
+    {
+      "id": "genel_kurul.ikinci_toplanti_en_gec_gun",
+      "tur": "ekleme"
+    },
+    {
+      "id": "genel_kurul.ikinci_toplanti_cogunluk_aranmaz",
+      "tur": "ekleme"
+    },
+    {
+      "id": "genel_kurul.divan_uye_turleri",
+      "tur": "ekleme"
+    },
+    {
+      "id": "yonetim_kurulu.asil_uye",
+      "tur": "ekleme"
+    },
+    {
+      "id": "yonetim_kurulu.yedek_uye",
+      "tur": "ekleme"
+    },
+    {
+      "id": "yonetim_kurulu.uye_turleri",
+      "tur": "ekleme"
+    },
+    {
+      "id": "yonetim_kurulu.okul_muduru_uye_olamaz",
+      "tur": "ekleme"
+    },
+    {
+      "id": "yonetim_kurulu.gorev_suresi_yil",
+      "tur": "ekleme"
+    },
+    {
+      "id": "yonetim_kurulu.gorev_bolumu_gun",
+      "tur": "ekleme"
+    },
+    {
+      "id": "yonetim_kurulu.gorevler",
+      "tur": "ekleme"
+    },
+    {
+      "id": "yonetim_kurulu.secilme_siniri",
+      "tur": "ekleme"
+    },
+    {
+      "id": "yonetim_kurulu.tek_birlik",
+      "tur": "ekleme"
+    },
+    {
+      "id": "uyelik.suc_engeli",
+      "tur": "ekleme"
+    },
+    {
+      "id": "uyelik.ayrilan_veli_devam",
+      "tur": "ekleme"
+    },
+    {
+      "id": "yonetim_kurulu.yedek_cagirma",
+      "tur": "ekleme"
+    },
+    {
+      "id": "yonetim_kurulu.toplanti_yeter_sayi",
+      "tur": "ekleme"
+    },
+    {
+      "id": "yonetim_kurulu.karar_yeter_sayi",
+      "tur": "ekleme"
+    },
+    {
+      "id": "yonetim_kurulu.devamsizlik_siniri",
+      "tur": "ekleme"
+    },
+    {
+      "id": "denetleme_kurulu.asil_uye",
+      "tur": "ekleme"
+    },
+    {
+      "id": "denetleme_kurulu.yedek_uye",
+      "tur": "ekleme"
+    },
+    {
+      "id": "denetleme_kurulu.koltuklar",
+      "tur": "ekleme"
+    },
+    {
+      "id": "denetleme_kurulu.gorev_bolumu_gun",
+      "tur": "ekleme"
+    },
+    {
+      "id": "denetleme_kurulu.gorev_suresi_yil",
+      "tur": "ekleme"
+    },
+    {
+      "id": "denetleme_kurulu.baskan_secilme_siniri",
+      "tur": "ekleme"
+    },
+    {
+      "id": "denetleme_kurulu.yk_uyesi_olamaz",
+      "tur": "ekleme"
+    },
+    {
+      "id": "denetleme_kurulu.ogretmen_gorevlendirme_ay",
+      "tur": "ekleme"
+    },
+    {
+      "id": "temsilci.odul_disiplin_kurulu",
+      "tur": "ekleme"
+    },
+    {
+      "id": "temsilci.davranis_degerlendirme_kurulu",
+      "tur": "ekleme"
+    },
+    {
+      "id": "temsilci.sosyal_etkinlikler_kurulu",
+      "tur": "ekleme"
+    },
+    {
+      "id": "temsilci.kontenjan_komisyonu",
+      "tur": "ekleme"
+    },
+    {
+      "id": "temsilci.rpd_yurutme_komisyonu",
+      "tur": "ekleme"
+    },
+    {
+      "id": "temsilci.tasimaci_tespit_komisyonu",
+      "tur": "ekleme"
+    },
+    {
+      "id": "temsilci.muhammen_bedel_komisyonu",
+      "tur": "ekleme"
+    },
+    {
+      "id": "temsilci.kiralama_ihale_komisyonu",
+      "tur": "ekleme"
+    },
+    {
+      "id": "temsilci.pay_dagitim_komisyonu",
+      "tur": "ekleme"
+    },
+    {
+      "id": "temsilci.kantin_denetim_komisyonu",
+      "tur": "ekleme"
+    },
+    {
+      "id": "bagis.elden_yatirma_is_gunu",
+      "tur": "ekleme"
+    },
+    {
+      "id": "makbuz.cilt_yaprak",
+      "tur": "ekleme"
+    },
+    {
+      "id": "harcama.alim_komisyonu_en_az",
+      "tur": "ekleme"
+    },
+    {
+      "id": "harcama.alim_komisyonu_uyeleri",
+      "tur": "ekleme"
+    },
+    {
+      "id": "arz_bedeli.kira_oran",
+      "tur": "ekleme"
+    },
+    {
+      "id": "arz_bedeli.isletme_oran",
+      "tur": "ekleme"
+    },
+    {
+      "id": "arz_bedeli.sozlesme_vade_gunu",
+      "tur": "ekleme"
+    },
+    {
+      "id": "arz_bedeli.yonetmelik_vade_gunu",
+      "tur": "ekleme"
+    },
+    {
+      "id": "pay_dagitimi.genel",
+      "tur": "ekleme"
+    },
+    {
+      "id": "pay_dagitimi.il_merkezi",
+      "tur": "ekleme"
+    },
+    {
+      "id": "kantin.isletmede_vergi_uyarisi",
+      "tur": "ekleme"
+    },
+    {
+      "id": "personel.sgk_saklama_yil",
+      "tur": "ekleme"
+    }
+  ],
+  "kurallar": [
+    {
+      "id": "genel_kurul.olagan_son_ay",
+      "deger": 10,
+      "birim": "takvim_ayi",
+      "karsilastirma": "en_cok",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-9",
+        "fikra": "1"
+      },
+      "aciklama": "Genel kurul her yıl en geç Ekim ayının sonuna kadar toplanır.",
+      "uyari_metni": "Olağan genel kurul her yıl en geç Ekim ayının sonuna kadar toplanır; toplantı günü bu tarihi geçiyor.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F2",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "genel_kurul.ilan_en_az_gun",
+      "deger": 15,
+      "birim": "gun",
+      "karsilastirma": "en_az",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-9",
+        "fikra": "3"
+      },
+      "ek_madde": [
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-9",
+          "fikra": "6"
+        }
+      ],
+      "aciklama": "Toplantının yeri, zamanı ve gündemi en az on beş gün önceden bildirilir ve duyurulur.",
+      "uyari_metni": "Duyuru ile toplantı arasında {fark} gün var; en az {deger} gün olmalı.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F2",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "genel_kurul.yeter_sayi_taban",
+      "deger": 16,
+      "birim": "kisi",
+      "karsilastirma": "parametre",
+      "tur": "sert",
+      "sert_gerekcesi": "hesap_butunlugu",
+      "dayanak_turu": "yorum",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-9",
+        "fikra": "2"
+      },
+      "ek_madde": [
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-12",
+          "fikra": "1"
+        },
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-14",
+          "fikra": "1"
+        }
+      ],
+      "aciklama": "Toplantı yeter sayısının tabanı yönetim ve denetleme kurullarının asıl ve yedek üye sayısıdır.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "yorum": "\"Asıl ve yedek üye sayısı\" kadrodur (5+5+3+3); dönemdeki fiilî üye sayısı değildir.",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "genel_kurul.yeter_sayi_carpan",
+      "deger": 4,
+      "birim": "adet",
+      "karsilastirma": "carpan",
+      "tur": "sert",
+      "sert_gerekcesi": "hesap_butunlugu",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-9",
+        "fikra": "2"
+      },
+      "ek_madde": [
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-9",
+          "fikra": "6"
+        }
+      ],
+      "aciklama": "Toplantı yeter sayısı, kurulların asıl ve yedek üye sayısının dört katından az olamaz.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "genel_kurul.kucuk_okul_carpan",
+      "deger": 2,
+      "birim": "adet",
+      "karsilastirma": "carpan",
+      "tur": "sert",
+      "sert_gerekcesi": "hesap_butunlugu",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-9",
+        "fikra": "2"
+      },
+      "ek_madde": [
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-9",
+          "fikra": "6"
+        }
+      ],
+      "aciklama": "Öğrenci mevcudu yüzün altındaki okullarda toplantı yeter sayısı, kurulların asıl ve yedek üye sayısının iki katından az olamaz.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "genel_kurul.kucuk_okul_esik",
+      "deger": 100,
+      "birim": "ogrenci",
+      "karsilastirma": "kucuktur",
+      "tur": "sert",
+      "sert_gerekcesi": "hesap_butunlugu",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-9",
+        "fikra": "2"
+      },
+      "ek_madde": [
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-9",
+          "fikra": "6"
+        }
+      ],
+      "aciklama": "Küçük okul sayımı öğrenci mevcudu yüzün altında olan okullara uygulanır.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "genel_kurul.ikinci_toplanti_en_gec_gun",
+      "deger": 30,
+      "birim": "gun",
+      "karsilastirma": "en_cok",
+      "tur": "uyari",
+      "dayanak_turu": "yorum",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-9",
+        "fikra": "2"
+      },
+      "aciklama": "Genel kurulun toplanamaması durumunda en geç otuz gün içinde toplantı yapılır.",
+      "uyari_metni": "İkinci toplantı birinci toplantı gününden {fark} gün sonra; en geç {deger} gün içinde yapılmalı.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F2",
+      "yorum": "Süre birinci toplantı gününden başlar (\"toplanamaması durumunda, en geç otuz gün içinde\").",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "genel_kurul.ikinci_toplanti_cogunluk_aranmaz",
+      "deger": true,
+      "birim": "mantiksal",
+      "karsilastirma": "esit",
+      "tur": "sert",
+      "sert_gerekcesi": "hesap_butunlugu",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-9",
+        "fikra": "2"
+      },
+      "aciklama": "İkinci toplantı çoğunluk aranmaksızın yapılır, kararlar katılanların çoğunluğu ile alınır.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F2",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "genel_kurul.divan_uye_turleri",
+      "deger": [
+        "VELI",
+        "KURSIYER"
+      ],
+      "birim": "liste",
+      "karsilastirma": "liste_icinde",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-10",
+        "fikra": "1",
+        "bent": "c"
+      },
+      "aciklama": "Divan başkanı ve kâtip veliler ve on sekiz yaşını doldurmuş kursiyerler arasından açık oyla seçilir.",
+      "uyari_metni": "Divan başkanı ve kâtip veliler ya da on sekiz yaşını doldurmuş kursiyerler arasından seçilir.",
+      "yururluk": {
+        "baslangic": "01.12.2023",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F2",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "yonetim_kurulu.asil_uye",
+      "deger": 5,
+      "birim": "kisi",
+      "karsilastirma": "esit",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-12",
+        "fikra": "1"
+      },
+      "ek_madde": [
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-11",
+          "fikra": "1",
+          "bent": "a"
+        }
+      ],
+      "aciklama": "Yönetim kurulu beş asıl üyeden oluşur.",
+      "uyari_metni": "Yönetim kurulunda {fark} asıl üye var; {deger} asıl üye olmalı.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "yonetim_kurulu.yedek_uye",
+      "deger": 5,
+      "birim": "kisi",
+      "karsilastirma": "esit",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-12",
+        "fikra": "1"
+      },
+      "ek_madde": [
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-11",
+          "fikra": "1",
+          "bent": "a"
+        }
+      ],
+      "aciklama": "Yönetim kurulunda beş yedek üye bulunur.",
+      "uyari_metni": "Yönetim kurulunda {fark} yedek üye var; {deger} yedek üye olmalı.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "yonetim_kurulu.uye_turleri",
+      "deger": [
+        "VELI",
+        "KURSIYER",
+        "HAYIRSEVER"
+      ],
+      "birim": "liste",
+      "karsilastirma": "liste_icinde",
+      "tur": "sert",
+      "sert_gerekcesi": "hukuki_gecersizlik",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-12",
+        "fikra": "1"
+      },
+      "aciklama": "Yönetim kurulu veliler, on sekiz yaşını doldurmuş kursiyerler ile istemeleri hâlinde okul yaptırarak Bakanlığa bağışta bulunan hayırseverler arasından seçilir.",
+      "yururluk": {
+        "baslangic": "01.12.2023",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "yonetim_kurulu.okul_muduru_uye_olamaz",
+      "deger": true,
+      "birim": "mantiksal",
+      "karsilastirma": "esit",
+      "tur": "sert",
+      "sert_gerekcesi": "kullanici_karari",
+      "dayanak_turu": "kullanici_karari",
+      "karar": {
+        "kimlik": "KE-15",
+        "tarih": "31.10.2026"
+      },
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-12",
+        "fikra": "1"
+      },
+      "ek_madde": [
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-27",
+          "fikra": "2"
+        },
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-27",
+          "fikra": "3"
+        }
+      ],
+      "aciklama": "Okul müdürü, veli olsa da yönetim kurulunda bulunamaz.",
+      "yururluk": {
+        "baslangic": "01.12.2023",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "yonetim_kurulu.gorev_suresi_yil",
+      "deger": 1,
+      "birim": "yil",
+      "karsilastirma": "esit",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-12",
+        "fikra": "2"
+      },
+      "aciklama": "Yönetim kurulunun görev süresi bir yıldır.",
+      "uyari_metni": "Yönetim kurulunun görev süresi {deger} yıldır; son genel kuruldan bu yana bu süre geçti.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "yonetim_kurulu.gorev_bolumu_gun",
+      "deger": 7,
+      "birim": "gun",
+      "karsilastirma": "en_cok",
+      "tur": "uyari",
+      "dayanak_turu": "yorum",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-12",
+        "fikra": "3"
+      },
+      "aciklama": "Yönetim kurulu seçimden sonraki ilk hafta içinde, yedeklerin çağrılmasıyla oluşan yeni kurul bir hafta içinde görev bölümü yapar.",
+      "uyari_metni": "Görev bölümü {fark} gün sonra yapıldı; en geç {deger} gün içinde yapılmalı.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "yorum": "\"İlk hafta\" ve \"bir hafta içinde\", izleyen 7 takvim günü sayıldı (KE-12).",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "yonetim_kurulu.gorevler",
+      "deger": {
+        "BASKAN": 1,
+        "BASKAN_YARDIMCISI": 1,
+        "MUHASIP": 1,
+        "SEKRETER": 1
+      },
+      "birim": "tablo",
+      "karsilastirma": "tablo",
+      "tur": "sert",
+      "sert_gerekcesi": "hesap_butunlugu",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-12",
+        "fikra": "3"
+      },
+      "aciklama": "Yönetim kurulu üyeleri arasından bir başkan, bir başkan yardımcısı, bir muhasip ve bir sekreter seçilir.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "yonetim_kurulu.secilme_siniri",
+      "deger": 4,
+      "birim": "adet",
+      "karsilastirma": "en_cok",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-12",
+        "fikra": "4"
+      },
+      "aciklama": "Yönetim kurulu başkan ve üyeleri en fazla dört defa seçilebilir.",
+      "uyari_metni": "Bu kişi yönetim kuruluna {fark} defa seçilmiş görünüyor; en fazla {deger} defa seçilebilir.",
+      "yururluk": {
+        "baslangic": "01.12.2023",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "yonetim_kurulu.tek_birlik",
+      "deger": true,
+      "birim": "mantiksal",
+      "karsilastirma": "esit",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-12",
+        "fikra": "4"
+      },
+      "aciklama": "Başkan ve yönetim kurulu üyeleri aynı anda birden fazla birlik yönetiminde görev alamaz.",
+      "uyari_metni": "Başkan ve yönetim kurulu üyeleri aynı anda birden fazla birlik yönetiminde görev alamaz.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "uyelik.suc_engeli",
+      "deger": true,
+      "birim": "mantiksal",
+      "karsilastirma": "esit",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-12",
+        "fikra": "5"
+      },
+      "ek_madde": [
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-14",
+          "fikra": "7"
+        }
+      ],
+      "aciklama": "Yönetmelikte sayılan engeli taşıyanlar yönetim kurulunda, harcama komisyonlarında ve denetleme kurulunda görev alamaz; sonradan anlaşılırsa görevi tespit tarihinde sona erer.",
+      "uyari_metni": "Bu kişi için görev almaya engel durum işaretlendi.",
+      "yururluk": {
+        "baslangic": "01.12.2023",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "uyelik.ayrilan_veli_devam",
+      "deger": true,
+      "birim": "mantiksal",
+      "karsilastirma": "esit",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-7",
+        "fikra": "2"
+      },
+      "aciklama": "Yönetim kurulu üye sayısı toplantı yeter sayısının altına düşerse kuruldaki velilerin ve on sekiz yaşını doldurmuş kursiyerlerin üyeliği olağanüstü genel kurula kadar devam eder.",
+      "uyari_metni": "Yönetim kurulu üye sayısı toplantı yeter sayısının altına düşüyor; bu üyelik olağanüstü genel kurula kadar devam eder.",
+      "yururluk": {
+        "baslangic": "01.12.2023",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "yonetim_kurulu.yedek_cagirma",
+      "deger": [
+        "OY_SIRASI"
+      ],
+      "birim": "liste",
+      "karsilastirma": "parametre",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-13",
+        "fikra": "6"
+      },
+      "aciklama": "Yedek üyeler aldıkları oy sırasına göre asıl üye olarak göreve çağrılır.",
+      "uyari_metni": "Yedek üyeler aldıkları oy sırasına göre çağrılır; bu çağrı sıra dışıdır.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "yonetim_kurulu.toplanti_yeter_sayi",
+      "deger": 4,
+      "birim": "kisi",
+      "karsilastirma": "en_az",
+      "tur": "sert",
+      "sert_gerekcesi": "hesap_butunlugu",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-13",
+        "fikra": "3"
+      },
+      "aciklama": "Yönetim kurulu en az dört üyenin katılımıyla toplanır.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F3",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "yonetim_kurulu.karar_yeter_sayi",
+      "deger": 3,
+      "birim": "kisi",
+      "karsilastirma": "en_az",
+      "tur": "sert",
+      "sert_gerekcesi": "hesap_butunlugu",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-13",
+        "fikra": "3"
+      },
+      "aciklama": "Yönetim kurulunun karar yeter sayısı üçtür.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F3",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "yonetim_kurulu.devamsizlik_siniri",
+      "deger": 3,
+      "birim": "adet",
+      "karsilastirma": "kucuktur",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-13",
+        "fikra": "6"
+      },
+      "aciklama": "Özürsüz olarak üst üste üç toplantıya katılmayan yönetim kurulu üyesinin görevi sona erer.",
+      "uyari_metni": "Üye özürsüz olarak üst üste {fark} toplantıya katılmadı; üst üste {deger} toplantıya katılmayan üyenin görevi sona erer.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F3",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "denetleme_kurulu.asil_uye",
+      "deger": 3,
+      "birim": "kisi",
+      "karsilastirma": "esit",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-14",
+        "fikra": "1"
+      },
+      "ek_madde": [
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-11",
+          "fikra": "1",
+          "bent": "b"
+        }
+      ],
+      "aciklama": "Denetleme kurulu üç asıl üyeden oluşur.",
+      "uyari_metni": "Denetleme kurulunda {fark} asıl üye var; {deger} asıl üye olmalı.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "denetleme_kurulu.yedek_uye",
+      "deger": 3,
+      "birim": "kisi",
+      "karsilastirma": "esit",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-14",
+        "fikra": "1"
+      },
+      "ek_madde": [
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-11",
+          "fikra": "1",
+          "bent": "b"
+        }
+      ],
+      "aciklama": "Denetleme kurulunda üç yedek üye bulunur.",
+      "uyari_metni": "Denetleme kurulunda {fark} yedek üye var; {deger} yedek üye olmalı.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "denetleme_kurulu.koltuklar",
+      "deger": {
+        "VELI": {
+          "ASIL": 1,
+          "YEDEK": 1
+        },
+        "OGRETMEN": {
+          "ASIL": 2,
+          "YEDEK": 2
+        }
+      },
+      "birim": "tablo",
+      "karsilastirma": "tablo",
+      "tur": "sert",
+      "sert_gerekcesi": "hukuki_gecersizlik",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-14",
+        "fikra": "1"
+      },
+      "ek_madde": [
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-11",
+          "fikra": "1",
+          "bent": "b"
+        }
+      ],
+      "aciklama": "Denetleme kurulu genel kurulca seçilen bir veli ya da on sekiz yaşını doldurmuş bir kursiyer ile öğretmenler kurulunca seçilen iki öğretmenden oluşur.",
+      "yururluk": {
+        "baslangic": "01.12.2023",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "denetleme_kurulu.gorev_bolumu_gun",
+      "deger": 7,
+      "birim": "gun",
+      "karsilastirma": "en_cok",
+      "tur": "uyari",
+      "dayanak_turu": "yorum",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-14",
+        "fikra": "1"
+      },
+      "aciklama": "Asıl üyeler genel kuruldan sonraki ilk hafta içinde toplanır ve aralarından bir başkan seçer.",
+      "uyari_metni": "Görev bölümü {fark} gün sonra yapıldı; en geç {deger} gün içinde yapılmalı.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "yorum": "\"İlk hafta\", izleyen 7 takvim günü sayıldı (KE-12).",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "denetleme_kurulu.gorev_suresi_yil",
+      "deger": 1,
+      "birim": "yil",
+      "karsilastirma": "esit",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-14",
+        "fikra": "2"
+      },
+      "aciklama": "Denetleme kurulunun görev süresi bir yıldır.",
+      "uyari_metni": "Denetleme kurulunun görev süresi {deger} yıldır; son genel kuruldan bu yana bu süre geçti.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "denetleme_kurulu.baskan_secilme_siniri",
+      "deger": 3,
+      "birim": "adet",
+      "karsilastirma": "en_cok",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-14",
+        "fikra": "3"
+      },
+      "aciklama": "Denetleme kurulu başkanı en fazla üç defa seçilebilir.",
+      "uyari_metni": "Bu kişi denetleme kurulu başkanlığına {fark} defa seçilmiş görünüyor; en fazla {deger} defa seçilebilir.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "denetleme_kurulu.yk_uyesi_olamaz",
+      "deger": true,
+      "birim": "mantiksal",
+      "karsilastirma": "esit",
+      "tur": "sert",
+      "sert_gerekcesi": "kullanici_karari",
+      "dayanak_turu": "kullanici_karari",
+      "karar": {
+        "kimlik": "A-2",
+        "tarih": "31.10.2026"
+      },
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-14",
+        "fikra": "4"
+      },
+      "aciklama": "Aynı kişi aynı dönemde yönetim kurulunda ve denetleme kurulunda bulunamaz.",
+      "yururluk": {
+        "baslangic": "01.12.2023",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "denetleme_kurulu.ogretmen_gorevlendirme_ay",
+      "deger": 4,
+      "birim": "ay",
+      "karsilastirma": "en_cok",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-14",
+        "fikra": "6"
+      },
+      "aciklama": "Denetleme kurulu üyesi öğretmenin başka kurumda dört aydan fazla süreli görevlendirilmesinde yerine yedeği çağrılır.",
+      "uyari_metni": "Başka kurumdaki görevlendirme {deger} aydan uzun; yerine yedeği çağrılır.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "temsilci.odul_disiplin_kurulu",
+      "deger": {
+        "ASIL": 1,
+        "YEDEK": 1
+      },
+      "birim": "kisi",
+      "karsilastirma": "esit",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "ortaogretim-kurumlari-yonetmeligi.md#madde-185",
+        "fikra": "1",
+        "bent": "ç"
+      },
+      "ek_madde": [
+        {
+          "capa": "ortaogretim-kurumlari-yonetmeligi.md#madde-186",
+          "fikra": "1"
+        }
+      ],
+      "aciklama": "Okul öğrenci ödül ve disiplin kurulunda birliğin kendi üyeleri arasından seçeceği bir öğrenci velisi ve birlik üyeleri arasından bir yedek üye bulunur.",
+      "uyari_metni": "Okul öğrenci ödül ve disiplin kurulunda birliğin kendi üyeleri arasından seçeceği bir öğrenci velisi ve birlik üyeleri arasından bir yedek üye bulunur.",
+      "kosul": {
+        "okul.kademe": [
+          "ORTAOGRETIM"
+        ]
+      },
+      "yururluk": {
+        "baslangic": "07.09.2013",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "temsilci.davranis_degerlendirme_kurulu",
+      "deger": 1,
+      "birim": "kisi",
+      "karsilastirma": "esit",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-oncesi-egitim-ve-ilkogretim-kurumlari-yonetmeligi.md#madde-57",
+        "fikra": "2",
+        "bent": "c"
+      },
+      "aciklama": "Öğrenci davranışlarını değerlendirme kurulunda birliğin kendi üyeleri arasından seçeceği bir öğrenci velisi bulunur.",
+      "uyari_metni": "Öğrenci davranışlarını değerlendirme kurulunda birliği temsilen {deger} veli bulunur; {fark} temsilci kayıtlı.",
+      "kosul": {
+        "okul.kademe": [
+          "ORTAOKUL"
+        ]
+      },
+      "yururluk": {
+        "baslangic": "26.07.2014",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "temsilci.sosyal_etkinlikler_kurulu",
+      "deger": 1,
+      "birim": "kisi",
+      "karsilastirma": "esit",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-egitim-kurumlari-sosyal-etkinlikler-yonetmeligi.md#madde-6",
+        "fikra": "1"
+      },
+      "aciklama": "Sosyal etkinlikler kurulunda birlikçe belirlenen bir veli bulunur.",
+      "uyari_metni": "Sosyal etkinlikler kurulunda birliği temsilen {deger} veli bulunur; {fark} temsilci kayıtlı.",
+      "yururluk": {
+        "baslangic": "08.06.2017",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "temsilci.kontenjan_komisyonu",
+      "deger": 1,
+      "birim": "kisi",
+      "karsilastirma": "esit",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "ortaogretim-kurumlari-yonetmeligi.md#madde-25",
+        "fikra": "1",
+        "bent": "a"
+      },
+      "aciklama": "Kontenjan belirleme komisyonuna birliği temsilen bir veli katılır.",
+      "uyari_metni": "Kontenjan belirleme komisyonunda birliği temsilen {deger} veli bulunur; {fark} temsilci kayıtlı.",
+      "kosul": {
+        "okul.kademe": [
+          "ORTAOGRETIM"
+        ]
+      },
+      "yururluk": {
+        "baslangic": "13.09.2014",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "temsilci.rpd_yurutme_komisyonu",
+      "deger": 1,
+      "birim": "kisi",
+      "karsilastirma": "esit",
+      "tur": "uyari",
+      "dayanak_turu": "yorum",
+      "madde": {
+        "capa": "meb-rehberlik-ve-psikolojik-danisma-hizmetleri-yonetmeligi.md#madde-16",
+        "fikra": "2",
+        "bent": "e"
+      },
+      "ek_madde": [
+        {
+          "capa": "meb-rehberlik-ve-psikolojik-danisma-hizmetleri-yonetmeligi.md#madde-16",
+          "fikra": "5"
+        }
+      ],
+      "aciklama": "Rehberlik ve psikolojik danışma hizmetleri yürütme komisyonunda birliğin bir temsilcisi bulunur.",
+      "uyari_metni": "Rehberlik ve psikolojik danışma hizmetleri yürütme komisyonunda birliğin {deger} temsilcisi bulunur; {fark} temsilci kayıtlı.",
+      "yururluk": {
+        "baslangic": "14.08.2020",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "yorum": "Komisyonun diğer üyelerini öğretmenler kurulu belirler (16/5); yönetim kurulu kararı bu satırda öneri ve bilgi niteliğindedir.",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "temsilci.tasimaci_tespit_komisyonu",
+      "deger": [
+        "BASKAN"
+      ],
+      "birim": "liste",
+      "karsilastirma": "liste_icinde",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "okul-servis-araclari-yonetmeligi.md#madde-3",
+        "fikra": "1",
+        "bent": "m"
+      },
+      "ek_madde": [
+        {
+          "capa": "okul-servisi-calistirma-usul-esaslari.md#madde-3",
+          "fikra": "1",
+          "bent": "e"
+        }
+      ],
+      "aciklama": "Taşımacıyı tespit komisyonunda okul-aile birliği başkanı bulunur.",
+      "uyari_metni": "Taşımacıyı tespit komisyonunda birliği birlik başkanı temsil eder.",
+      "yururluk": {
+        "baslangic": "25.10.2017",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "temsilci.muhammen_bedel_komisyonu",
+      "deger": [
+        "BASKAN"
+      ],
+      "birim": "liste",
+      "karsilastirma": "liste_icinde",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-19",
+        "fikra": "1"
+      },
+      "aciklama": "Muhammen bedel tespit komisyonunda birlik başkanı bulunur.",
+      "uyari_metni": "Muhammen bedel tespit komisyonunda birliği birlik başkanı temsil eder.",
+      "yururluk": {
+        "baslangic": "01.12.2023",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "temsilci.kiralama_ihale_komisyonu",
+      "deger": [
+        "BASKAN"
+      ],
+      "birim": "liste",
+      "karsilastirma": "liste_icinde",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-20",
+        "fikra": "3"
+      },
+      "aciklama": "Kiralama işlemlerini yapan ihale komisyonunda ilgili birlik başkanı bulunur.",
+      "uyari_metni": "Kiralama ihale komisyonunda birliği birlik başkanı temsil eder.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "temsilci.pay_dagitim_komisyonu",
+      "deger": 2,
+      "birim": "kisi",
+      "karsilastirma": "parametre",
+      "tur": "uyari",
+      "dayanak_turu": "yorum",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-17",
+        "fikra": "1",
+        "bent": "b",
+        "alt_bent": "3"
+      },
+      "aciklama": "İl ve ilçe millî eğitim müdürlüğü hesaplarına yatan payları dağıtan komisyonda iki birlik başkanı bulunur.",
+      "uyari_metni": "Pay dağıtım komisyonunda {deger} birlik başkanı bulunur.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "yorum": "Hüküm (b) bendi altındadır; il ve ilçe hesabına yatan bütün paylar için uygulanır.",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "temsilci.kantin_denetim_komisyonu",
+      "deger": 1,
+      "birim": "kisi",
+      "karsilastirma": "esit",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "okul-kantinlerinde-gida-ve-hijyen-denetimi-genelgesi-2020-8.md#bolum-a-1-a",
+        "fikra_bicimi": "paragraf"
+      },
+      "ek_madde": [
+        {
+          "capa": "okul-kantinlerinde-gida-ve-hijyen-denetimi-genelgesi-2020-8.md#bolum-a-1-b",
+          "fikra_bicimi": "paragraf"
+        }
+      ],
+      "aciklama": "Okulun gıda işletmesi denetim komisyonuna okul-aile birliği yönetiminden bir veli katılır.",
+      "uyari_metni": "Kantin denetim komisyonunda birlik yönetiminden {deger} veli bulunur; {fark} temsilci kayıtlı.",
+      "kosul": {
+        "okul.kantin": [
+          "KIRAYA_VERILIYOR",
+          "BIRLIKCE_ISLETILIYOR"
+        ]
+      },
+      "yururluk": {
+        "baslangic": "10.11.2020",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "bagis.elden_yatirma_is_gunu",
+      "deger": 5,
+      "birim": "is_gunu",
+      "karsilastirma": "en_cok",
+      "tur": "uyari",
+      "dayanak_turu": "yorum",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-16",
+        "fikra": "3"
+      },
+      "aciklama": "Belge karşılığı elden alınan bağışlar en geç beş iş günü içinde birliğin banka hesabına yatırılır.",
+      "uyari_metni": "Elden alınan bağış {fark} iş gününde yatırıldı; en geç {deger} iş günü içinde yatırılmalı.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F3",
+      "yorum": "Süre kabulü izleyen iş gününden başlar.",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "makbuz.cilt_yaprak",
+      "deger": {
+        "asil": 50,
+        "kocan": 50
+      },
+      "birim": "adet",
+      "karsilastirma": "esit",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-16",
+        "fikra": "5"
+      },
+      "aciklama": "Ciltli makbuz elli asıl ve elli koçan yaprağından meydana gelir.",
+      "uyari_metni": "Cildin sıra aralığı elli asıl ve elli koçan yaprağından farklı.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F3",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "harcama.alim_komisyonu_en_az",
+      "deger": 3,
+      "birim": "kisi",
+      "karsilastirma": "en_az",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-18",
+        "fikra": "1"
+      },
+      "aciklama": "Mal ve hizmet alımları en az üç kişilik bir komisyon marifetiyle yapılır.",
+      "uyari_metni": "Komisyonda {fark} kişi var; en az {deger} kişi olmalı.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "harcama.alim_komisyonu_uyeleri",
+      "deger": [
+        "YK_UYESI",
+        "BIRLIK_UYESI"
+      ],
+      "birim": "liste",
+      "karsilastirma": "liste_icinde",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-18",
+        "fikra": "1"
+      },
+      "aciklama": "Alım komisyonu yönetim kurulu üyelerinden, uzmanlık gerektiren işlerde okul-aile birliği üyelerinden oluşur.",
+      "uyari_metni": "Komisyon üyeleri yönetim kurulu üyelerinden, uzmanlık gerektiren işlerde birlik üyelerinden oluşur.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F4",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "arz_bedeli.kira_oran",
+      "deger": "0.03",
+      "birim": "oran",
+      "karsilastirma": "parametre",
+      "tur": "sert",
+      "sert_gerekcesi": "hesaplanan_deger",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-17",
+        "fikra": "1",
+        "bent": "a",
+        "alt_bent": "1"
+      },
+      "ek_madde": [
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi-ek-2-kantin-kiralama-sozlesmesi.md#genel-sartlar-madde-7",
+          "fikra": "1",
+          "fikra_bicimi": "paragraf"
+        }
+      ],
+      "aciklama": "Kiraya verilen yerin gayri safi gelirinin yüzde üçü arz bedeli olarak kiracı tarafından ödenir.",
+      "kosul": {
+        "okul.kantin": [
+          "KIRAYA_VERILIYOR"
+        ]
+      },
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F3",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "arz_bedeli.isletme_oran",
+      "deger": "0.01",
+      "birim": "oran",
+      "karsilastirma": "parametre",
+      "tur": "sert",
+      "sert_gerekcesi": "hesaplanan_deger",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-17",
+        "fikra": "1",
+        "bent": "b",
+        "alt_bent": "1"
+      },
+      "aciklama": "Birlikçe işletilen yerin gayri safi hâsılatının yüzde biri arz bedeli olarak birlikçe ödenir.",
+      "kosul": {
+        "okul.kantin": [
+          "BIRLIKCE_ISLETILIYOR"
+        ]
+      },
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F5",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "arz_bedeli.sozlesme_vade_gunu",
+      "deger": 10,
+      "birim": "ayin_gunu",
+      "karsilastirma": "en_cok",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi-ek-2-kantin-kiralama-sozlesmesi.md#genel-sartlar-madde-7",
+        "fikra": "1",
+        "fikra_bicimi": "paragraf"
+      },
+      "aciklama": "Kiracı arz bedelini üçer aylık dönemler itibarıyla dönemi takip eden ayın onuncu günü sonuna kadar öder.",
+      "uyari_metni": "Arz bedeli ayın {fark}. günü ödendi; sözleşme vadesi ayın {deger}. günüdür.",
+      "kosul": {
+        "okul.kantin": [
+          "KIRAYA_VERILIYOR"
+        ]
+      },
+      "yururluk": {
+        "baslangic": "01.12.2023",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F3",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "arz_bedeli.yonetmelik_vade_gunu",
+      "deger": 20,
+      "birim": "ayin_gunu",
+      "karsilastirma": "en_cok",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-17",
+        "fikra": "1",
+        "bent": "a",
+        "alt_bent": "1"
+      },
+      "ek_madde": [
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-17",
+          "fikra": "1",
+          "bent": "b",
+          "alt_bent": "1"
+        }
+      ],
+      "aciklama": "Arz bedeli üçer aylık dönemler hâlinde takip eden ayın yirmisine kadar ödenir.",
+      "uyari_metni": "Arz bedeli ayın {fark}. günü ödendi; Yönetmelik süresi ayın {deger}. günüdür.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F3",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "pay_dagitimi.genel",
+      "deger": {
+        "birlik": "0.80",
+        "ilce": "0.10",
+        "il": "0.10"
+      },
+      "birim": "oran",
+      "karsilastirma": "tablo",
+      "tur": "sert",
+      "sert_gerekcesi": "hesaplanan_deger",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-17",
+        "fikra": "1",
+        "bent": "a",
+        "alt_bent": "2"
+      },
+      "ek_madde": [
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-17",
+          "fikra": "1",
+          "bent": "b",
+          "alt_bent": "2"
+        },
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi-ek-2-kantin-kiralama-sozlesmesi.md#genel-sartlar-madde-7",
+          "fikra": "2",
+          "fikra_bicimi": "paragraf"
+        }
+      ],
+      "aciklama": "Arz bedeli düşüldükten sonra kalan net tutarın yüzde sekseni birliğin, yüzde onu ilçe, yüzde onu il millî eğitim müdürlüğünün hesabına aktarılır.",
+      "kosul": {
+        "okul.yerlesim_turu": [
+          "BUYUKSEHIR",
+          "DIGER"
+        ]
+      },
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F3",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "pay_dagitimi.il_merkezi",
+      "deger": {
+        "birlik": "0.80",
+        "ilce": "0.00",
+        "il": "0.20"
+      },
+      "birim": "oran",
+      "karsilastirma": "tablo",
+      "tur": "sert",
+      "sert_gerekcesi": "hesaplanan_deger",
+      "dayanak_turu": "yorum",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-17",
+        "fikra": "1",
+        "bent": "a",
+        "alt_bent": "2"
+      },
+      "ek_madde": [
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-17",
+          "fikra": "1",
+          "bent": "b",
+          "alt_bent": "2"
+        }
+      ],
+      "aciklama": "Büyükşehir statüsünde olmayan il merkezlerindeki birliklerde ilçe payı ayrılmaz, yüzde yirmi il millî eğitim müdürlüğü hesabına yatırılır.",
+      "kosul": {
+        "okul.yerlesim_turu": [
+          "IL_MERKEZI_BUYUKSEHIR_DEGIL"
+        ]
+      },
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F3",
+      "yorum": "Yönetmelik \"gelirin % 20'si\" der; taban net tutar kabul edildi, birlik payı yüzde seksen ile toplam yüzde yüzdür (KE-13).",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "kantin.isletmede_vergi_uyarisi",
+      "deger": true,
+      "birim": "mantiksal",
+      "karsilastirma": "esit",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-23",
+        "fikra": "3"
+      },
+      "aciklama": "Kantin ve benzeri yerlerin birliklerce işletilmesi ve vergi mükellefiyeti doğması hâlinde birlikler hakkında Vergi Usul Kanunu hükümleri uygulanır.",
+      "uyari_metni": "Kantin ve benzeri yerler birlikçe işletilir ve vergi mükellefiyeti doğarsa birlik hakkında 213 sayılı Vergi Usul Kanunu hükümleri uygulanır.",
+      "kosul": {
+        "okul.kantin": [
+          "BIRLIKCE_ISLETILIYOR"
+        ]
+      },
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "personel.sgk_saklama_yil",
+      "deger": 10,
+      "birim": "yil",
+      "karsilastirma": "parametre",
+      "tur": "sert",
+      "sert_gerekcesi": "hesaplanan_deger",
+      "dayanak_turu": "yorum",
+      "madde": {
+        "capa": "5510-sosyal-sigortalar-ve-genel-saglik-sigortasi-kanunu.md#madde-86",
+        "fikra": "2",
+        "fikra_bicimi": "paragraf"
+      },
+      "ek_madde": [
+        {
+          "capa": "5510-sosyal-sigortalar-ve-genel-saglik-sigortasi-kanunu.md#madde-12",
+          "fikra": "1",
+          "fikra_bicimi": "paragraf"
+        },
+        {
+          "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-5",
+          "fikra": "1"
+        }
+      ],
+      "aciklama": "İşveren işyeri defter, kayıt ve belgelerini ilgili olduğu yılı takip eden yıl başından başlamak üzere on yıl saklar.",
+      "kosul": {
+        "okul.personel": [
+          "DOGRUDAN_ISVEREN"
+        ]
+      },
+      "yururluk": {
+        "baslangic": "16.06.2006",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F8",
+      "yorum": "Birlik tüzel kişiliği olmayan işverendir (5510 md. 12, OAB Yön. md. 5/1); \"kamu idareleri otuz yıl\" hükmüne girmez.",
+      "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    }
+  ]
+}

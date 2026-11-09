@@ -25,7 +25,7 @@ import { ApiError } from "../../lib/api";
 import { todayIso } from "../../lib/format";
 import { pencereIcerigi } from "../../lib/kilit";
 import { ILK_ACILIS_DURUMU } from "../../test/kurulumDurumu";
-import { BOS_OKUL_KARTI, ORNEK_OKUL_KARTI } from "../../test/okulKarti";
+import { BOS_OKUL_KARTI, KANTIN_ISLETME_BILGISI, ORNEK_OKUL_KARTI } from "../../test/okulKarti";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import type {
@@ -59,6 +59,10 @@ vi.mock("../okul/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../okul/api")>();
   return { ...actual, okulApi: oapi };
 });
+vi.mock("../okul/kuralBilgileri", async () => {
+  const { ORNEK_KANTIN_BILGISI } = await import("../../test/okulKarti");
+  return { useKantinIsletmeBilgisi: () => ORNEK_KANTIN_BILGISI };
+});
 vi.mock("../guvenlik/api", () => ({ guvenlikApi: gapi }));
 vi.mock("../../lib/download", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../lib/download")>()),
@@ -86,11 +90,7 @@ import {
   HESAP_AYDINLATMA_TOPLAMA,
   HESAP_VERI_SORUMLUSU_YERI,
 } from "../kisiler/metinler";
-import {
-  DERS_YILI_ACIKLAMASI,
-  KANTIN_ISLETME_BILGISI,
-  OKUL_KARTI_ACIKLAMASI,
-} from "../okul/metinler";
+import { DERS_YILI_ACIKLAMASI, OKUL_KARTI_ACIKLAMASI } from "../okul/metinler";
 import KurulumPage from "./KurulumPage";
 
 const ANAHTAR = "TEST-KURT-ARMA-ANAH-TARI-ABCD-EFGH-JKLM";

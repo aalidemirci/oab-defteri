@@ -37,13 +37,9 @@ from apps.okul.models import (
     AuditActor,
     AuditKeyMode,
     AuditTrail,
-    Holiday,
     ImmutableRecord,
-    ImportRun,
     Personnel,
     SchoolConfig,
-    SchoolTerm,
-    SchoolYear,
     SuspendReason,
 )
 from apps.okul.oturum import (
@@ -67,7 +63,7 @@ from apps.okul.tests.hesap_ortak import (
     muhurle,
     sarmal,
 )
-from apps.okul.tests.iz_ortak import sahte_satir
+from apps.okul.tests.iz_ortak import izlenen_modeller, kor_indeks_alanlari, sahte_satir
 from apps.okul.tests.okul_karti_ortak import okul_karti
 from apps.okul.tests.oturum_ortak import SahteSaat, kurulum_durumunu_yaz, oturum_saatini_kur
 from conftest import (
@@ -347,20 +343,12 @@ def test_listesiz_model_izlenmez() -> None:
         denetim_izi.kayit(AuditAction.GUNCELLE, AuditKey(pk=1), onceki=None)
 
 
-@pytest.mark.parametrize(
-    "model",
-    [
-        Account,
-        SchoolConfig,
-        SchoolYear,
-        SchoolTerm,
-        Holiday,
-        Personnel,
-        ImportRun,
-        Attachment,
-    ],
-    ids=lambda m: m.__name__,
-)
+#: KVKK silme kümesindeki modeller (tasarım §5.4, §4.6.2): satırı silinir; iz satırı değer taşımaz,
+#: kişi alanları içerik MAC'ine girmez. Yeni model buraya ADIYLA girer.
+KVKK_SILME_KUMESI = frozenset({"okul.Personnel"})
+
+
+@pytest.mark.parametrize("model", izlenen_modeller(), ids=lambda m: m.__name__)
 def test_izin_listeleri_modelin_alanlarini_eksiksiz_siniflar(model: Any) -> None:
     """Kimlik dışındaki her alan ya içerik MAC'indedir ya MAC dışıdır (§4.6.2'nin MAC dışı
     alanları: KVKK gereği boşaltılan ya da SİLİNEN alanlar — tasarım §5 O4; veli listesi
@@ -374,10 +362,16 @@ def test_izin_listeleri_modelin_alanlarini_eksiksiz_siniflar(model: Any) -> None
     assert set(model.IZ_DEGER_ALANLARI) <= ozet
     sifreli = {a.name for a in crypto.encrypted_fields_of(model)}
     assert not sifreli & set(model.IZ_DEGER_ALANLARI)
+    # Kör indeks aday sözlüğüyle kişiyi ele verir: izde değer olamaz (O4); silinecek kişinin
+    # kör indeksi de içerik MAC'ine girmez, yoksa MAC aday sözlüğüyle kişiyi geri verir.
+    kor_indeksler = kor_indeks_alanlari(model)
+    assert not kor_indeksler & set(model.IZ_DEGER_ALANLARI)
+    if model._meta.label in KVKK_SILME_KUMESI:
+        assert kor_indeksler <= mac_disi
     if model is Attachment:
         assert mac_disi == {"original_name", "key_wrap"}
     elif mac_disi:
-        assert model is Personnel and model.IZ_DEGER_ALANLARI == ()
+        assert model._meta.label in KVKK_SILME_KUMESI and model.IZ_DEGER_ALANLARI == ()
     if mac_disi:
         assert sifreli <= mac_disi  # silinen kişi verisinin hiçbiri MAC'e girmez
 

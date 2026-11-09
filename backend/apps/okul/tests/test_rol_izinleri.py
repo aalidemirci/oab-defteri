@@ -405,6 +405,7 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     "security-unlock": {"POST": "H"},
     "setup-complete": {"POST": "Y"},
     "setup-roadmap": {"POST": "Y"},
+    "oab-okul-karti-bilgileri": {"GET": "H", "HEAD": "H"},
     "setup-school-config": {"GET": "H", "HEAD": "H", "PUT": "Y"},
     "setup-status": {"GET": "H", "HEAD": "H"},
     "template-parents": {"GET": "Y", "HEAD": "Y"},
