@@ -54,10 +54,7 @@ export default function Guncelleme(bolum: BolumProps) {
           </p>
         </>
       ) : (
-        <p>
-          Yeni sürümü program yöneticisi denetler ve kurar; güncelleme için program yöneticisine
-          başvurun.
-        </p>
+        <p>Güncelleme için program yöneticisine başvurun.</p>
       )}
 
       <AltBaslik>Güncellemeden sonraki ilk açılış</AltBaslik>

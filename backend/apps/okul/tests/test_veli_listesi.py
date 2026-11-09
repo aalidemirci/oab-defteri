@@ -30,7 +30,7 @@ from typing import Any, cast
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import connection
+from django.db import IntegrityError, connection
 from django.http import StreamingHttpResponse
 from openpyxl import Workbook, load_workbook
 from rest_framework.test import APIClient
@@ -114,6 +114,14 @@ def test_veli_listesi_tablosu_yalniz_ad_ve_sinif_tasir() -> None:
         "student_class",
         "created_at",
     }
+
+
+def test_bos_sinif_db_kisitina_takilir() -> None:
+    """Boş sınıflı veli satırını veritabanı reddeder (`ck_parentroster_student_class`); göçler
+    tek `0001_initial`e inince kaybolan eski `test_0016` kısıt kolunun karşılığıdır."""
+    kosu = _kosu()
+    with pytest.raises(IntegrityError, match="ck_parentroster_student_class"):
+        ParentRoster.objects.create(import_run=kosu, full_name="ÖRNEK VELİ", student_class="")
 
 
 # ============================================================ kör indeks (model düzeyi)

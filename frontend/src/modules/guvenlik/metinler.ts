@@ -88,8 +88,8 @@ export function dogrulamaMetni(birinci: number, ikinci: number): string {
 }
 
 /**
- * Kurulum sihirbazının ilk adımı: program yöneticisi hesabı (yalnız ilk kurulumda;
- * kaldırılamaz). Parola paylaşılmaz (MEB Bilgi ve Sistem Güvenliği Yönergesi md. 7/2,
+ * Kurulum sihirbazının ilk adımı: program yöneticisi hesabı (yalnız ilk kurulumda; kaydı
+ * silinmez, açık başka program yöneticisi yokken kapatılamaz). Parola paylaşılmaz (MEB Bilgi ve Sistem Güvenliği Yönergesi md. 7/2,
  * programa kıyasen — tasarım TK9; kullanıcı kararı T1): herkes programı kendi hesabıyla
  * açar. Program yöneticisi parolasını unutursa yol kurtarma anahtarıdır; anahtar okul
  * müdürlüğünde kapalı zarfta durur (kullanıcı kararı D3; tasarım §4.4.3).

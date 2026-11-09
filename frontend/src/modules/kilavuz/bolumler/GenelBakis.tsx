@@ -65,8 +65,8 @@ export default function GenelBakis(bolum: BolumProps) {
         </>
       ) : (
         <p>
-          Başlangıç Yol Haritası programın kurulum işlerini sıralar ve yalnız program yöneticisinin
-          ekranında görünür. Hesabınızla yapacağınız iş için program yöneticisine başvurun.
+          Başlangıç Yol Haritası programın kurulum işlerini sıralar; bu kart hesabınızda görünmez.
+          Hesabınızla yapacağınız iş için program yöneticisine başvurun.
         </p>
       )}
 
@@ -128,7 +128,7 @@ export default function GenelBakis(bolum: BolumProps) {
           <KapiliEkran to="/kisiler?tab=havuz" yetenek="ayrilis_havuzu">
             Kişiler → Ayrılış Havuzu
           </KapiliEkran>{" "}
-          sekmesinde program yöneticisi verir.
+          sekmesinde verilir.
         </li>
         <li>
           <strong>{DIS_YEDEK_KARTI_BASLIGI}:</strong> son şifreli yedeğin üzerinden hatırlatma
