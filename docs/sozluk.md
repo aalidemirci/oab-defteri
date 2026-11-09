@@ -243,7 +243,7 @@ yer almaz, adresi "Bu ekran hesabınızın rolüne açık değil." der. Kurulum 
 her denetimi bir yazma olduğu için adresi yalnız kurulumu tamamlayabilen rolde (program yöneticisi) açılır; öteki
 rollerde Ayarlar'daki kartı da yoktur, adresi kendi iletisini verir ve Kılavuz'daki adı bağlantı değildir (§1 "Rol
 süzmesi"; kullanıcı kararı 04.11.2026). Planlanan ekranlar: Okul Bilgileri Ayarlar'ın sekmesidir (OAB alanları §4.4); Birlik Dönemi,
-Kişiler (OAB'nin kişi türleriyle), Organlar, Temsilciler ve Pano (yol haritası) F1c'dedir (plan §2.3). Adları ekran
+Kişiler (OAB'nin kişi türleriyle), Organlar, Temsilciler ve Genel Bakış'ın pano kalemleri F1c'dedir (plan §2.3). Adları ekran
 gelince buraya işlenir.
 
 ### 4.2 Program durumu ekranları
