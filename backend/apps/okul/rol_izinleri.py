@@ -338,6 +338,7 @@ def _yaz(
 
 _YALNIZ_YONETICI: Final = frozenset({YONETICI})
 _YONETICI_VE_DK: Final = frozenset({YONETICI, DENETLEME_KURULU})
+_YONETICI_VE_YK: Final = YK_ROLLERI | {YONETICI}
 
 _DAYANAK_PERSONEL = (
     "Tasarım §8.1 A7 ('e-Okul: yonetici'): okul çekirdeğinin e-Okul kaynaklı personel sicili "
@@ -349,6 +350,13 @@ _DAYANAK_VELI_KOPYASI = (
     "Tasarım §8.4 (3) ve §4.4.2: veli listesi kişisel veri satırıdır, okuru yalnız program "
     "yöneticisidir (¹⁰); listeden birlik kişisine ad kopyalamak listeyi kör indeksle sorgular, "
     "bu yüzden yalnız program yöneticisine açılır (plan F1c-4; tasarımda bu daraltmanın satırı yok)."
+)
+_DAYANAK_ENGEL_DAYANAGI = (
+    "Tasarım §5.2.2 ve §4.6.4: görev alma engelinin dayanağı özel nitelikli kişisel veridir (KVKK "
+    "md. 6/1); kadro okumasına girmez, ayrı uçtan okunur ve okuması erişim günlüğüne yazılır. Okuru "
+    "üyeliği yazan roller (program yöneticisi ve yönetim kurulu rolleri) ile sınırlıdır; Denetleme "
+    "Kurulu ve müdür engelin var ya da yok olduğunu kadroda görür (tasarım §4.4.2 ¹¹; plan F1c 5. "
+    "adım notları, kullanıcı kararı 10.11.2026)."
 )
 _DAYANAK_HAVUZ = (
     "Plan F1b-2: ayrılış havuzu (özet dahil) yalnız program yöneticisinindir; karar e-Okul "
@@ -480,6 +488,20 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
         yalniz=_YALNIZ_YONETICI,
         dayanak=_DAYANAK_VELI_KOPYASI,
     ),
+    # ------------------------------------------------ M2: organ üyelikleri (F1c 5. adım)
+    # Program yöneticisi ve yönetim kurulu rolleri yazar, Denetleme Kurulu ve müdür okur; görev alma
+    # engelinin dayanağı (özel nitelikli) yalnız yazanlara açıktır ve okuması erişim günlüğüne düşer.
+    _oku("oab-membership-list", Satir.M2),
+    _yaz("oab-membership-list", "POST", Satir.M2),
+    _oku("oab-membership-detail", Satir.M2),
+    _yaz("oab-membership-detail", "PATCH", Satir.M2),
+    _oku(
+        "oab-membership-eligibility-basis",
+        Satir.M2,
+        yalniz=_YONETICI_VE_YK,
+        dayanak=_DAYANAK_ENGEL_DAYANAGI,
+    ),
+    _oku("oab-organ-roster", Satir.M2),
     # ------------------------------------------------ Kişisel veri: veli listesi (T5; ¹⁰)
     # Özet (sınıf başına sayı) ve şablon okumadır; satırın tek okuru program yöneticisidir.
     _oku("parent-roster", Satir.KISISEL_VERI),

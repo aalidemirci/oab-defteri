@@ -5,10 +5,19 @@ from __future__ import annotations
 from apps.oab.models._base import (
     AssemblyKind,
     AssemblyStatus,
+    BookCertifier,
+    BookKind,
+    BookStatus,
     ComplianceKind,
     ComplianceObligation,
+    DecisionKind,
+    DecisionStatus,
     DropKind,
     ElectedBy,
+    EligibilityBar,
+    EligibilityBarBasis,
+    MeetingKind,
+    MeetingStatus,
     MembershipRole,
     MembershipSource,
     MembershipStatus,
@@ -24,25 +33,46 @@ from apps.oab.models._base import (
 from apps.oab.models.donem import OabTerm, RulePackage
 from apps.oab.models.genel_kurul import GeneralAssembly
 from apps.oab.models.kisi import OabPerson, kisi_adi_kor_indeksi
+from apps.oab.models.kurul import (
+    BoardDecision,
+    BoardMeeting,
+    BoardMeetingAttendance,
+    OfficialBook,
+)
+from apps.oab.models.uyelik import OrganMembership, UyelikDurumuGecersiz
 from apps.oab.models.uyum import ComplianceItem, ComplianceJustification, DraftText
 
 __all__ = [
     "AssemblyKind",
     "AssemblyStatus",
+    "BoardDecision",
+    "BoardMeeting",
+    "BoardMeetingAttendance",
+    "BookCertifier",
+    "BookKind",
+    "BookStatus",
     "ComplianceItem",
     "ComplianceJustification",
     "ComplianceKind",
     "ComplianceObligation",
+    "DecisionKind",
+    "DecisionStatus",
     "DraftText",
     "DropKind",
     "ElectedBy",
+    "EligibilityBar",
+    "EligibilityBarBasis",
     "GeneralAssembly",
+    "MeetingKind",
+    "MeetingStatus",
     "MembershipRole",
     "MembershipSource",
     "MembershipStatus",
     "OabBaseModel",
     "OabPerson",
     "OabTerm",
+    "OfficialBook",
+    "OrganMembership",
     "OrganType",
     "PersonKind",
     "PersonStatus",
@@ -51,5 +81,6 @@ __all__ = [
     "SeatGroup",
     "SeatType",
     "TermStatus",
+    "UyelikDurumuGecersiz",
     "kisi_adi_kor_indeksi",
 ]

@@ -326,6 +326,14 @@ ADSIZ_UCLAR: Final[Mapping[str, str]] = {
         "Birlik döneminin ekranı F1c'nin 11. adımındadır; pusula yalnız bugün programda yapılabilen "
         "işleri yazar, ekran gelince bu kayıt `BUGUNKU_ISLER`'e geçer."
     ),
+    "oab-membership-list": (
+        "Organlar ekranı F1c'nin 11. adımındadır; pusula yalnız bugün programda yapılabilen işleri "
+        "yazar, ekran gelince organ üyelikleri `BUGUNKU_ISLER`'e geçer."
+    ),
+    "oab-membership-detail": (
+        "Organlar ekranı F1c'nin 11. adımındadır; pusula yalnız bugün programda yapılabilen işleri "
+        "yazar, ekran gelince organ üyelikleri `BUGUNKU_ISLER`'e geçer."
+    ),
     "setup-complete": (
         "Kurulum Sihirbazı'nın son adımı; pusula kurulumdan sonra basılır, hesap sahibinin işi değildir."
     ),

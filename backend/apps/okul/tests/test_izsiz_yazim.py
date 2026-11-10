@@ -88,15 +88,22 @@ from rest_framework.test import APIClient
 
 from apps.oab.models import (
     AssemblyKind,
+    BoardDecision,
+    BoardMeeting,
+    BoardMeetingAttendance,
     ComplianceItem,
     ComplianceJustification,
+    DecisionKind,
     GeneralAssembly,
+    MeetingKind,
     OabPerson,
     OabTerm,
+    OfficialBook,
+    OrganMembership,
     PersonStatus,
     RulePackage,
 )
-from apps.oab.services import donemler, kisiler, uyum
+from apps.oab.services import donemler, kisiler, kurullar, uyelikler, uyum
 from apps.oab.services import genel_kurul as genel_kurul_servisi
 from apps.okul import denetim_izi, erisim_gunlugu, iz_durumu
 from apps.okul.excel_ortak import ParserError
@@ -321,6 +328,43 @@ def _birlik_kisisi() -> OabPerson:
     return kisiler.create_person(kind="VELI", first_name="Uydurnur", last_name="Örnekkaya")
 
 
+def _dk_ogretmeni() -> OrganMembership:
+    """Denetleme Kurulunun öğretmen koltuğu: öğretmenler kurulunca seçilir, kayıt `SECILDI` açılır."""
+    donem = donemler.create_term(
+        name="2026-2027 birlik dönemi", school_year=_yil(), start_date=date(2026, 10, 10)
+    )
+    kisi = kisiler.create_person(kind="OGRETMEN", first_name="Uydurnur", last_name="Örnekkaya")
+    return uyelikler.assign_membership(
+        term=donem,
+        person=kisi,
+        organ="DK",
+        seat_type="ASIL",
+        seat_group="OGRETMEN",
+        elected_by="OGRETMENLER_KURULU",
+        start_date=date(2026, 10, 12),
+    )
+
+
+def _uyelik_ac() -> Istek:
+    donem = donemler.create_term(
+        name="2026-2027 birlik dönemi", school_year=_yil(), start_date=date(2026, 10, 10)
+    )
+    kisi = kisiler.create_person(kind="OGRETMEN", first_name="Uydurnur", last_name="Örnekkaya")
+    return Istek(
+        "/api/v1/oab/memberships/",
+        {
+            "term": donem.pk,
+            "person": kisi.pk,
+            "organ": "DK",
+            "seat_type": "ASIL",
+            "seat_group": "OGRETMEN",
+            "elected_by": "OGRETMENLER_KURULU",
+            "start_date": "2026-10-12",
+        },
+        _turler("OLUSTUR"),
+    )
+
+
 def _veliden_birlik_kisisi() -> Istek:
     """Önce bir veli listesi aktarılır; uç listedeki velinin adını birlik kişisine kopyalar."""
     ad, baytlar = _veli_listesi_dosyasi()
@@ -507,6 +551,13 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
         )
     ),
     ("oab-person-from-parent", "POST"): Senaryo(lambda _m: _veliden_birlik_kisisi()),
+    # Organ üyelikleri (F1c 5. adım): öğretmen koltuğu genel kurul dışı kanaldır, kayıt seçilmiş açılır.
+    ("oab-membership-list", "POST"): _istek(_uyelik_ac),
+    ("oab-membership-detail", "PATCH"): _istek(
+        lambda: Istek(
+            f"/api/v1/oab/memberships/{_dk_ogretmeni().pk}/", {"votes": 12}, _turler("GUNCELLE")
+        )
+    ),
     # İlk hesap: satırlar yeni hesabındır (plan F1b-1); okul kartı parmak iziyle oluşur.
     ("security-enable", "POST"): _istek(
         lambda: Istek(
@@ -1858,6 +1909,52 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
     kisiler.copy_from_parent(f"{UYDURMA_AD} {UYDURMA_SOYAD}", ayni_kisi_degil=True)
     kurul = genel_kurul_servisi.genel_kurul_olustur(donem=donem, kind=AssemblyKind.OLAGAN)
     genel_kurul_servisi.yeter_sayiyi_dondur(kurul, tarih=date(2026, 10, 1))
+    # Organ üyeliği (F1c 5. adım): dayanak notu serbest metin; durum geçişi; düşme gerekçesi ve görev
+    # alma engelinin dayanağı KVKK boşaltma kümesindedir (değer listesine ve içerik MAC'ine girmez).
+    ogretmen = kisiler.create_person(
+        kind="OGRETMEN", first_name=UYDURMA_AD, last_name=f"{UYDURMA_SOYAD} {UYDURMA_TCKN}"
+    )
+    uyelik = uyelikler.assign_membership(
+        term=donem,
+        person=ogretmen,
+        organ="DK",
+        seat_type="ASIL",
+        seat_group="OGRETMEN",
+        elected_by="OGRETMENLER_KURULU",
+        start_date=date(2026, 10, 12),
+        evidence_note=f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_METIN}",
+    )
+    uyelikler.update_membership(uyelik, evidence_note=UYDURMA_UZUN, votes=9)
+    uyelik.eligibility_bar_basis = "SUC_12_5_14_7"
+    uyelik.status, uyelik.drop_kind = "DUSTU", "DIGER"
+    uyelik.dropped_reason = f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_ADRES}"
+    onceki = denetim_izi.anlik(uyelik)
+    uyelik.save()
+    denetim_izi.degisiklik(uyelik, onceki=onceki)
+    # Karar defteri, toplantı, katılım ve karar taslağı: gündem, karar metni serbest metin.
+    kurullar.karar_defteri_olustur(certification_no="Uydurma-1", page_count=100)
+    toplanti = kurullar.toplanti_olustur(
+        donem=donem,
+        organ="DK",
+        kind=MeetingKind.GOREV_BOLUMU,
+        place=UYDURMA_ADRES[:128],
+        agenda=f"{UYDURMA_AD} {UYDURMA_METIN}",
+    )
+    ikinci_ogretmen = uyelikler.assign_membership(
+        term=donem,
+        person=kisiler.create_person(
+            kind="OGRETMEN", first_name=UYDURMA_SOYAD, last_name=UYDURMA_AD
+        ),
+        organ="DK",
+        seat_type="ASIL",
+        seat_group="OGRETMEN",
+        elected_by="OGRETMENLER_KURULU",
+        start_date=date(2026, 10, 12),
+    )
+    kurullar.katilim_yaz(toplanti, ikinci_ogretmen, present=False, excused=True)
+    kurullar.karar_taslagi_olustur(
+        toplanti, kind=DecisionKind.GOREV_BOLUMU, text=f"{UYDURMA_AD} {UYDURMA_SOYAD} başkan"
+    )
     uyum.denetle(
         "genel_kurul.ilan_en_az_gun",
         3,
@@ -1986,6 +2083,11 @@ IZLI_MODELLER = (
     ComplianceItem,
     ComplianceJustification,
     OabPerson,
+    OrganMembership,
+    OfficialBook,
+    BoardMeeting,
+    BoardMeetingAttendance,
+    BoardDecision,
 )
 
 

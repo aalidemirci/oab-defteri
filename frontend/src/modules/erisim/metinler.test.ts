@@ -66,9 +66,12 @@ describe("okunan kayıt", () => {
     );
   });
 
-  it("bugün ad eşlemleri boştur: günlüğe yazan okuma o adlarla birlikte gelir", () => {
-    expect(MODEL_ADLARI).toEqual({});
-    expect(ALAN_ADLARI).toEqual({});
+  it("ad eşlemleri günlüğe yazan okumalarla gelir: organ üyeliğindeki engel dayanağı (F1c)", () => {
+    expect(MODEL_ADLARI).toEqual({ "oab.OrganMembership": "Organ üyeliği" });
+    expect(ALAN_ADLARI).toEqual({ eligibility_bar_basis: "görev alma engelinin dayanağı" });
+    expect(
+      okunanKayit({ model: "oab.OrganMembership", kayit: "7", alan: "eligibility_bar_basis" }),
+    ).toBe("Organ üyeliği · kimlik 7 · görev alma engelinin dayanağı");
   });
 
   it("çıktının satır sayısı Türkçe biçimlenir; çıktı değilse “—”", () => {

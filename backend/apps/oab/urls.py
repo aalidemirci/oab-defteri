@@ -30,4 +30,20 @@ urlpatterns: list[URLPattern | URLResolver] = [
         name="oab-person-from-parent",
     ),
     path("persons/<int:pk>/", views.PersonDetailView.as_view(), name="oab-person-detail"),
+    path(
+        "terms/<int:pk>/roster/<str:organ>/",
+        views.OrganRosterView.as_view(),
+        name="oab-organ-roster",
+    ),
+    path("memberships/", views.MembershipListCreateView.as_view(), name="oab-membership-list"),
+    path(
+        "memberships/<int:pk>/",
+        views.MembershipDetailView.as_view(),
+        name="oab-membership-detail",
+    ),
+    path(
+        "memberships/<int:pk>/eligibility-basis/",
+        views.MembershipEligibilityBasisView.as_view(),
+        name="oab-membership-eligibility-basis",
+    ),
 ]

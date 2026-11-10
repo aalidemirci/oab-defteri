@@ -534,9 +534,22 @@ class _Yazim:
 
 
 def _donem_kimligi(nesne: models.Model) -> Any:
-    """Kaydın iz satırına girecek dönem kimliği (`IZ_DONEM_ALANI`; `okul` `oab`'yi tanımaz)."""
+    """Kaydın iz satırına girecek dönem kimliği (`IZ_DONEM_ALANI`; `okul` `oab`'yi tanımaz).
+
+    Alan adı ilişki yoluyla da verilebilir (`meeting__term`: dönemi toplantısından gelen kayıt);
+    yoldaki bağ boşsa dönem yoktur.
+    """
     alan = getattr(type(nesne), "IZ_DONEM_ALANI", None)
-    return None if alan is None else nesne.serializable_value(alan)
+    if alan is None:
+        return None
+    *yol, son = str(alan).split("__")
+    hedef: models.Model | None = nesne
+    for parca in yol:
+        hedef = getattr(hedef, parca)
+        if hedef is None:
+            return None
+    assert hedef is not None  # tür daraltması: yol boşsa kaydın kendisidir
+    return hedef.serializable_value(son)
 
 
 def _yazim(nesne: models.Model, *, onceki: Anlik | None, anahtar: AcikAnahtar | None) -> _Yazim:

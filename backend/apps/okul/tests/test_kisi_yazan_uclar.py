@@ -31,7 +31,7 @@ import pytest
 from django.urls import URLPattern, URLResolver, get_resolver, reverse
 from rest_framework.test import APIClient
 
-from apps.oab.models import OabPerson
+from apps.oab.models import OabPerson, OrganMembership
 from apps.okul.models import ParentRoster, Personnel
 from apps.okul.permissions import RequiresAdminPassword
 
@@ -55,6 +55,9 @@ KISI_YAZAN_UCLAR = frozenset(
         "oab-person-detail",
         "oab-person-from-personnel",
         "oab-person-from-parent",
+        # Organ üyelikleri (F1c 5. adım): kişi kaydına bağlı üyelik ve şifreli dayanak notu.
+        "oab-membership-list",
+        "oab-membership-detail",
     }
 )
 
@@ -124,6 +127,10 @@ DIGER_UCLAR = frozenset(
         "security-status",
         "security-unlock",
         "oab-okul-karti-bilgileri",
+        # Kadro okuması ve görev alma engelinin dayanağı (F1c 5. adım): yalnız okur (GET); dayanağın
+        # okuması erişim günlüğüne yazılır, kişi sicili yazmaz.
+        "oab-organ-roster",
+        "oab-membership-eligibility-basis",
         # Birlik dönemi (F1c-3): kişi verisi yazmaz, kapı `Eylem.BIRLIK_DONEMI_YAZMA`.
         "oab-term-detail",
         "oab-term-list",
@@ -221,13 +228,15 @@ def test_parolasizken_kisi_yazan_her_uc_yazma_yontemiyle_409_doner(parolasiz: Pa
     # 1 liste (POST) + 1 ayrıntı (PUT/PATCH/DELETE) + 2 içe aktarma (POST)
     # + 1 ayrılış (POST) + 1 birleştirme (POST) + 1 havuz kararı (POST)
     # + veli listesi: silme (DELETE) ve 2 aktarım (POST)
-    # + birlik kişileri: liste (POST), ayrıntı (PATCH), 2 kopya (POST).
+    # + birlik kişileri: liste (POST), ayrıntı (PATCH), 2 kopya (POST)
+    # + organ üyelikleri: liste (POST), ayrıntı (PATCH).
     # Aile iskeletinin kütüphane uçları (üyelik, kart basımı, dolaşım masası,
     # teslim, saklama tetiği) F1a-2'de, öğrenci uçları F1b 5. adımda söküldü.
-    assert denenen == 1 + 1 * 3 + 2 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 2
+    assert denenen == 1 + 1 * 3 + 2 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 1
     assert not Personnel.all_objects.exists()
     assert not ParentRoster.objects.exists()
     assert not OabPerson.objects.exists()
+    assert not OrganMembership.objects.exists()
 
 
 @pytest.mark.django_db

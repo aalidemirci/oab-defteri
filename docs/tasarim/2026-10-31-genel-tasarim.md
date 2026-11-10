@@ -79,7 +79,7 @@ kararları gösterir.
 | T5 | e-Okul verisi | **Personel** (ad-soyad, görev) e-Okul'dan **+ veli listesi** okulun doldurduğu iki sütunlu şablondan (e-Okul veli adı veren rapor sunmaz — kullanıcı 08.11.2026, plan F1b-5 kararları) — veliden yalnız ad-soyad ve öğrencinin sınıfı; telefon, adres, T.C. kimlik no, öğrenci no alınmaz; liste dönem kapanışında ya da elle silinir | **evet** (öneri yalnız personeldi) |
 | T6 | Pencere | Çarpı **programı kapatır**; tepsi ve otomatik başlatma yok | — |
 | F0-a | Kantin arz bedeli vadesi | Sözleşmedeki **izleyen ayın 10'u** ([EK-2 md. 7](../mevzuat/meb-okul-aile-birligi-yonetmeligi-ek-2-kantin-kiralama-sozlesmesi.md#genel-sartlar-madde-7)) esas, Yönetmelikteki **20'si** ([md. 17/1-a-1](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-17)) üst sınır; iki tarih kural paketinde ayrı kural | — |
-| F0-b | Sert engeller | Sert engel yalnız dört gerekçede (D1 ve D4 ile güncel hâli; §6.1): **hesap bütünlüğü** (toplamlar, numara tekilliği, kapanmış dönem, yeter sayı ve karar hesabı; YK görev tekilliği, plan F1c kararları); **programın kendi hesapladığı değerde** yasal oran ve yöntem (D1: gerçekte olan tutar yine kaydedilir, fark uyarıdır; kullanıcının belgeden girdiği değer uyarıdır); **mevzuatın hukuken geçersiz saydığı işlem** (kantin isteklisinde suç ve hısımlık engeli; serviste mülki amir onayı (OLUR) olmadan kesinleştirme — kantinde uyarı, D4; organda mevzuatın saymadığı kişi türü: YK'ye veli olmayan, DK bileşimi); **kullanıcının sert dediği karar** (A-2, KE-15; iz boşluğu §4.6.3; hesapsız yedek §4.4.4). Eksik belge, taksit sayısı, puan sınırı uyarı + gerekçe; liste genişlemez (CLAUDE.md altın kural 3) | — |
+| F0-b | Sert engeller | Sert engel yalnız dört gerekçede (D1 ve D4 ile güncel hâli; §6.1): **hesap bütünlüğü** (toplamlar, numara tekilliği, kapanmış dönem, yeter sayı ve karar hesabı; YK görev tekilliği ve bir kişinin aynı dönemde aynı kurulda tek koltuğu, plan F1c kararları); **programın kendi hesapladığı değerde** yasal oran ve yöntem (D1: gerçekte olan tutar yine kaydedilir, fark uyarıdır; kullanıcının belgeden girdiği değer uyarıdır); **mevzuatın hukuken geçersiz saydığı işlem** (kantin isteklisinde suç ve hısımlık engeli; serviste mülki amir onayı (OLUR) olmadan kesinleştirme — kantinde uyarı, D4; organda mevzuatın saymadığı kişi türü: YK'ye veli olmayan, DK bileşimi); **kullanıcının sert dediği karar** (A-2, KE-15; iz boşluğu §4.6.3; hesapsız yedek §4.4.4). Eksik belge, taksit sayısı, puan sınırı uyarı + gerekçe; liste genişlemez (CLAUDE.md altın kural 3) | — |
 | F0-c | TEFBİS ve banka örnekleri | Sonra gelecek; tasarım varsayılan şemayla (§8), örnek gelince "F1 eki" | — |
 | F0-d | Saha | Yalnız pilot okul; gönüllü okul aranmaz. Pilot okul görüşmesi yapıldı ([saha.md](../kesif/saha.md)) | **evet** (öneri 2-4 gönüllü okuldu) |
 | F0-e | İl/ilçe MEM'e sorular | Sorulmaz; varsayılanlar: (a) program tasdikli deftere geçirilecek baskı üretir, (b) veri sorumlusu sorusu kılavuzda okul müdürlüğüne bırakılır, (c) internet bankacılığında üçüncü onay okul ayarıdır, (d) okul kendi TEFBİS işlem tipi listesini girer | — |
@@ -622,7 +622,7 @@ detay" ayrımı korunur.
 | Alan | `yonetici` | `baskan` | `baskan_yardimcisi` | `muhasip` | `sekreter` | `denetleme_kurulu` | `mudur` |
 |---|---|---|---|---|---|---|---|
 | Okul kartı, ders yılı, kapalı günler, birlik dönemi açma ve kapama (M1) | Y | O | O | O | O | O | O |
-| Kişiler, organlar, temsilciler, YK görev bölümü, yedek üye çağrısı (YK ve DK; md. 13/6, 14/6) (M2) | Y | Y | Y | Y | Y | O | O |
+| Kişiler, organlar, temsilciler, YK görev bölümü, yedek üye çağrısı (YK ve DK; md. 13/6, 14/6) (M2)¹¹ | Y | Y | Y | Y | Y | O | O |
 | Genel kurul (M3) | Y | Y | Y | Y | Y | O | Y¹ |
 | YK toplantı, katılım, karar taslağı (M4) | Y | Y | Y | Y | Y | O | O |
 | Gelir-gider kaydı, banka eşleme, makbuz koçanı ve yaprağı, kasa (M5) | O² | O | O | Y | O | O | O |
@@ -671,6 +671,10 @@ müdür kâğıtta imzalar (§15 KE-19). Kira, arz ve pay tahsilatının kaydı 
 veliye ait kişisel bilginin paylaşımını sınırlar, §15 M-13). Adlı E07 ve E08'in dosyası saklanmaz: yalnız tür, tarih,
 satır sayısı ve sha256 kalır, arşiv paketine girmez. Her biri erişim günlüğüne düşer. Davetin kişisiz mektubu, boş
 satırlı katılım cetveli ve sayılar M3'tedir.
+¹¹ Görev alma engelinin dayanağını (`eligibility_bar_basis`, özel nitelikli; §5.2.2, §4.6.4) yalnız `yonetici`
+ve YK rolleri okur; `denetleme_kurulu` ve `mudur` kadroda yalnız engelin var ya da yok işaretini görür (veri en aza;
+plan F1c 5. adım notları, kullanıcı kararı 10.11.2026). Dipnot okumayı daraltır, yazma vermez; uç katmanında dayanaklı
+daraltmadır (`oab-membership-eligibility-basis`), okuması erişim günlüğüne düşer.
 
 **Uygulama — iki katman** (TK13; denetim GA-18).
 
@@ -1489,7 +1493,8 @@ paketindedir (§6.4.4).
 | Divan başkanı ve kâtip | veli (`is_parent`; veli olan öğretmen ve idareci dâhil) · `KURSIYER` (`adult_declared`) | uyarı | [md. 10/1-c](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-10) |
 | Alım komisyonu | YK üyeleri; uzmanlık gereken işte birlik üyeleri (`expertise_required` işaretiyle); en az üç kişi | uyarı | [md. 18/1](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-18), [md. 12/5](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-12) |
 | Sayılar (YK 5+5, DK 3+3) | Eksik bileşim | uyarı; genel kurul yeter sayısının tabanını etkilemez (sabit 16, §5.2.3) | [md. 12/1](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-12), [md. 14/1](../mevzuat/meb-okul-aile-birligi-yonetmeligi.md#madde-14) |
-| Aynı kişi aynı dönemde YK'de ve DK'de | — | **sert** — kullanıcı kararı (31.10.2026): denetleyen ile denetlenen ayrılığı | `denetleme_kurulu.yk_uyesi_olamaz`; §15 A-2 |
+| Aynı kişi aynı dönemde YK'de ve DK'de | — | **sert** — kullanıcı kararı (31.10.2026): denetleyen ile denetlenen ayrılığı; öteki kurulda seçilmiş üyelik de, seçilip düşmüş üyelik de engeldir ("aynı dönem" lafzı, iki yönde; kullanıcı kararı 10.11.2026), aday ve iptal kaydı engel değildir | `denetleme_kurulu.yk_uyesi_olamaz`; §15 A-2; plan F1c 5. adım notları |
+| Aynı kişi aynı dönemde aynı kurulda ikinci koltukta (YK asıl ve yedek; DK veli ve öğretmen) | — | **sert** — hesap bütünlüğü (kadro ve yeter sayı kişiyi bir sayar); koltuk seçilmiş kayıttır, denetim kayıt seçilmiş açılırken ve aday seçilirken koşar. Aday kaydı koltuk değildir (dönemin başka genel kurulunda yeniden aday olunabilir, md. 13/8); düşmüş kayıt koltuk değildir (olağanüstü genel kurul aynı dönemde eski üyeyi yeniden seçebilir, §7.1; görevdeki eski üyelik seçilenin kaydından önce düşürülür); iptal kaydı hiç olmamıştır. Temsilcide uygulanmaz (temsil türleri ayrı koltuktur) | kullanıcı kararı (10.11.2026), plan F1c 5. adım notları; atıfsız, kural paketinde değil |
 
 #### 5.2.3 Genel kurul
 
@@ -1850,7 +1855,8 @@ kararları).
   alanında adıyla yazılır, liste kapalıdır ve genişletilmesi kullanıcı kararı ister (B-13'ün gerekçesi bu
   kapalılıktır). Bu liste CLAUDE.md altın kural 3 ve §2.1 F0-b ile aynı metin olur (EK-6):
   1. **`hesap_butunlugu`** — toplamlar, numara tekilliği, kapanmış dönem, yeter sayı ve karar hesabı (oylardan
-     hesaplanan sonuç), YK görev tekilliği (plan F1c kararları), alt hesabın eksiye düşmemesi.
+     hesaplanan sonuç), YK görev tekilliği ve bir kişinin aynı dönemde aynı kurulda tek koltuğu (plan F1c kararları),
+     alt hesabın eksiye düşmemesi.
   2. **`hesaplanan_deger`** — programın **kendi hesapladığı** tutar ve sürede kullandığı yasal oran, çarpan, taban ve
      sayım yöntemi (kullanıcı kararı D1, §15.1b). Hesap paketteki değerle yapılır; kullanıcı oranı ya da çarpanı
      değiştiremez. Bu sertlik gerçekte olanın kaydını **engellemez**: ödenen, tahsil edilen ya da belgede yazan tutar

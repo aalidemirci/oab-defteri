@@ -645,6 +645,10 @@ YAZMA_SERVISLERI = frozenset(
         "kural_bagi.revizyon_gecisi",
         "uyum.denetle",
         "uyum.kapanis_gecisi",
+        "uyelikler.assign_membership",
+        "uyelikler.dk_baskanlik_denetimi",
+        "uyelikler.elect_membership",
+        "uyelikler.update_membership",
     }
 )
 #: `@transaction.atomic` taşıyıp kural okumayan servisler ve gerekçesi.
@@ -652,8 +656,18 @@ _KISI_KURALSIZ = (
     "Birlik kişisi kaydı kural paketi değeri ya da denetimi kullanmaz (koltuk uygunluğu ve seçilme "
     "sayacı organ üyeliğindedir, F1c 5. adım); dönemsiz kayıttır, kilidi kendi durumudur (O2)."
 )
+_KURUL_KURALSIZ = (
+    "Toplantı, katılım ve karar taslağı kural okumaz: toplantı ve karar yeter sayısı F3'tedir (F1c "
+    "5. adım); dönemli kayıt dönem kilidinden geçer."
+)
 KURALSIZ = {
     "uyum.eksik_kapat": "Yalnız satırı kapatır: kural okumaz; dönem kilidi yine denetlenir.",
+    "kurullar.karar_defteri_olustur": (
+        "Karar defteri dönemsizdir, kural okumaz; tasdik uyarısı geçiş kurulumundadır (8. adım)."
+    ),
+    "kurullar.toplanti_olustur": _KURUL_KURALSIZ,
+    "kurullar.katilim_yaz": _KURUL_KURALSIZ,
+    "kurullar.karar_taslagi_olustur": _KURUL_KURALSIZ,
     "kisiler.create_person": _KISI_KURALSIZ,
     "kisiler.update_person": _KISI_KURALSIZ,
     "kisiler.copy_from_personnel": _KISI_KURALSIZ,

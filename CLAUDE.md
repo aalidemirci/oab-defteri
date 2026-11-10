@@ -55,7 +55,7 @@ siteyi ve evrakı kapsar.
 3. **Uyarı + gerekçe, sert engel değil** (OYS kullanıcı kararı 4): program doğrusunu
    gösterir, sapma gerekçesiyle kayda geçer. Sert engel yalnız şu hâllerdedir (kullanıcı
    kararları 31.10.2026): **hesap bütünlüğü** (toplamlar, numara tekilliği, kapanmış dönem,
-   yeter sayı hesabı; YK görev tekilliği; programın **kendi hesapladığı** tutarda mevzuat oranı — arz bedeli,
+   yeter sayı hesabı; YK görev tekilliği; bir kişinin aynı dönemde aynı kurulda tek koltuğu; programın **kendi hesapladığı** tutarda mevzuat oranı — arz bedeli,
    pay dağılımı, KDV yok); **hukuken geçersiz işlem** (kantin isteklisinde suç ya da
    hısımlık engeli; servis tespitinin mülki amir onayı olmadan kesinleşmesi; organda mevzuatın saymadığı kişi türü); **kullanıcı
    kararıyla** (aynı kişi aynı dönemde YK'de ve DK'de olamaz; okul müdürü YK'ye giremez;

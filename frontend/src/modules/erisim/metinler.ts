@@ -56,10 +56,15 @@ export const HESAP_KAYDI_BULUNAMADI = "hesap kaydı bulunamadı";
 
 /**
  * Model ve alan kodlarının ekrandaki adları (sözlük §1 "Erişim günlüğü (F1b)": o okumaları getiren
- * fazda eklenir). Bugün günlüğe yazan okuma yoktur; eşlem boştur. Eşlemde olmayan kod yazılmaz.
+ * fazda eklenir). F1c: organ üyeliğindeki görev alma engelinin dayanağı (özel nitelikli alan).
+ * Eşlemde olmayan kod yazılmaz.
  */
-export const MODEL_ADLARI: Readonly<Record<string, string>> = {};
-export const ALAN_ADLARI: Readonly<Record<string, string>> = {};
+export const MODEL_ADLARI: Readonly<Record<string, string>> = {
+  "oab.OrganMembership": "Organ üyeliği",
+};
+export const ALAN_ADLARI: Readonly<Record<string, string>> = {
+  eligibility_bar_basis: "görev alma engelinin dayanağı",
+};
 /** Eşlemde adı olmayan model ya da alan (kod ekrana çıkmaz). */
 export const BILINMEYEN_KAYIT_TURU = "Bilinmeyen kayıt türü";
 export const BILINMEYEN_ALAN = "bilinmeyen alan";

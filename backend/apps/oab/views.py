@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 from apps.oab import models as oab_modelleri
 from apps.oab import selectors
 from apps.oab.kurallar import KuralPaketiKullanilamaz, atifli_metin, bilgi_notu
+from apps.oab.models import OrganType
 from apps.oab.serializers import (
     OabPersonCreateSerializer,
     OabPersonFromParentSerializer,
@@ -23,8 +24,11 @@ from apps.oab.serializers import (
     OabPersonUpdateSerializer,
     OabTermAcilisSerializer,
     OabTermSerializer,
+    OrganMembershipCreateSerializer,
+    OrganMembershipSerializer,
+    OrganMembershipUpdateSerializer,
 )
-from apps.oab.services import donemler, kisiler
+from apps.oab.services import donemler, kisiler, uyelikler, uyum
 from apps.okul.models import CanteenMode
 from apps.okul.permissions import RequiresAdminPassword
 
@@ -172,3 +176,117 @@ class PersonFromParentView(APIView):
                 ayni_kisi_degil=govde.validated_data["ayni_kisi_degil"],
             )
         return Response(OabPersonSerializer(kisi).data, status=status.HTTP_201_CREATED)
+
+
+# ---------------------------------------------------------------------------
+# Organ üyelikleri (M2; tasarım §5.2.2; plan F1c-5). Yazan uçlar ilk hesap kapısını taşır (üyelik kişi
+# kaydına bağlıdır, dayanak notu şifrelidir). Ekranı F1c'nin 11. adımındadır.
+# ---------------------------------------------------------------------------
+#: Kadro ve liste okumasının organları (bu adımda yazılanlar).
+_KADRO_ORGANLARI = frozenset({OrganType.YONETIM_KURULU.value, OrganType.DENETLEME_KURULU.value})
+ORGAN_GECERSIZ = "Organ yönetim kurulu ya da Denetleme Kurulu olmalıdır."
+DONEM_GEREKLI = "Birlik dönemi seçilmelidir."
+
+
+def _gerekce(veri: dict[str, Any]) -> uyum.Gerekce | None:
+    metin = str(veri.pop("gerekce", "")).strip()
+    kok = str(veri.pop("kok_neden", "")).strip()
+    return uyum.Gerekce(metin=metin, kok_neden=kok) if metin or kok else None
+
+
+def _organ(deger: str) -> str:
+    if deger not in _KADRO_ORGANLARI:
+        raise serializers.ValidationError({"organ": [ORGAN_GECERSIZ]})
+    return deger
+
+
+def _donem_parametresi(request: Request) -> Any:
+    ham = request.query_params.get("term", "").strip()
+    if not ham.isdigit():
+        raise serializers.ValidationError({"term": [DONEM_GEREKLI]})
+    return get_object_or_404(_donemler(), pk=int(ham))
+
+
+class MembershipListCreateView(APIView):
+    """Bir dönem ve organın üyelikleri (`?term=&organ=`; sıra Python'da) ve üyelik kaydı."""
+
+    permission_classes = [RequiresAdminPassword]
+
+    def get(self, request: Request) -> Response:
+        donem = _donem_parametresi(request)
+        organ = _organ(request.query_params.get("organ", "").strip())
+        uyeler = selectors.membership_list(donem, organ)
+        return Response(OrganMembershipSerializer(uyeler, many=True).data)
+
+    def post(self, request: Request) -> Response:
+        govde = OrganMembershipCreateSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        veri = dict(govde.validated_data)
+        gerekce = _gerekce(veri)
+        with _hizmet_hatalari():
+            uyelik = uyelikler.assign_membership(**veri, gerekce=gerekce)
+        return Response(OrganMembershipSerializer(uyelik).data, status=status.HTTP_201_CREATED)
+
+
+class MembershipDetailView(APIView):
+    """Üyeliğin ayrıntısı ve kişisiz ayrıntılarının güncellemesi (PATCH; silme yoktur)."""
+
+    permission_classes = [RequiresAdminPassword]
+
+    def get(self, request: Request, pk: int) -> Response:
+        uyelik = get_object_or_404(selectors.membership_all(), pk=pk)
+        return Response(OrganMembershipSerializer(uyelik).data)
+
+    def patch(self, request: Request, pk: int) -> Response:
+        uyelik = get_object_or_404(selectors.membership_all(), pk=pk)
+        govde = OrganMembershipUpdateSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        with _hizmet_hatalari():
+            uyelik = uyelikler.update_membership(uyelik, **dict(govde.validated_data))
+        return Response(OrganMembershipSerializer(selectors.membership_all().get(pk=pk)).data)
+
+
+class MembershipEligibilityBasisView(APIView):
+    """Görev alma engelinin dayanağı: özel nitelikli alan, okuması erişim günlüğüne yazılır."""
+
+    def get(self, request: Request, pk: int) -> Response:
+        uyelik = get_object_or_404(selectors.membership_all(), pk=pk)
+        dayanak = uyelikler.engel_dayanagini_oku(uyelik)
+        return Response(
+            {
+                "eligibility_bar": uyelik.eligibility_bar,
+                "eligibility_bar_basis": dayanak,
+                "eligibility_bar_found_on": uyelik.eligibility_bar_found_on,
+            }
+        )
+
+
+def _kadro_satiri(sonuc: Any) -> dict[str, Any]:
+    return {"metin": atifli_metin(sonuc), "atif": sonuc["atif"], "durum": sonuc["durum"]}
+
+
+class OrganRosterView(APIView):
+    """Görevdeki kadro: görevdeki asıllar, çağrılmamış yedekler, kadro sayıları ve uyarıları.
+
+    Sayılan yalnız seçilmiş kayıttır; uyarı yazmaz, gerekçe istemez (sayılar uyarıdır).
+    """
+
+    def get(self, request: Request, pk: int, organ: str) -> Response:
+        donem = get_object_or_404(_donemler(), pk=pk)
+        organ = _organ(organ)
+        sayilar = selectors.kadro_sayilari(donem, organ)
+        return Response(
+            {
+                "organ": organ,
+                "gorevdeki_asillar": OrganMembershipSerializer(
+                    selectors.gorevdeki_asillar(donem, organ), many=True
+                ).data,
+                "bekleyen_yedekler": OrganMembershipSerializer(
+                    selectors.bekleyen_yedekler(donem, organ), many=True
+                ).data,
+                "kadro": {"asil": sayilar["ASIL"], "yedek": sayilar["YEDEK"]},
+                "kadro_uyarilari": [
+                    _kadro_satiri(sonuc) for sonuc in uyelikler.kadro_uyarilari(donem, organ)
+                ],
+            }
+        )

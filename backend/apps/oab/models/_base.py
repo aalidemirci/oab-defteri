@@ -211,3 +211,84 @@ class ComplianceObligation(models.TextChoices):
     TEFBIS_BANKA_BILGISI = "TEFBIS_BANKA_BILGISI", "TEFBİS banka bilgisi"
     TEFBIS_BUTCE_GIRISI = "TEFBIS_BUTCE_GIRISI", "TEFBİS bütçe girişi"
     DIGER = "DIGER", "Diğer"
+
+
+class EligibilityBar(models.TextChoices):
+    """Görev alma engeli tespit edildi mi (hüküm alanı; md. 12/4-5, 14/7)."""
+
+    YOK = "YOK", "Yok"
+    VAR = "VAR", "Var"
+
+
+class EligibilityBarBasis(models.TextChoices):
+    """Görev alma engelinin dayanağı (şifreli alanın değerleri; özel nitelikli, KVKK md. 6/1)."""
+
+    SUC_12_5_14_7 = "SUC_12_5_14_7", "Suç engeli (md. 12/5, 14/7)"
+    TEK_BIRLIK_12_4 = "TEK_BIRLIK_12_4", "Başka birlik yönetiminde görev (md. 12/4)"
+
+
+class BookKind(models.TextChoices):
+    """Resmî defterin türü (tasarım §5.2.8; F1c'de yalnız karar defteri kullanılır)."""
+
+    KARAR_DEFTERI = "KARAR_DEFTERI", "Karar defteri"
+    GELIR_GIDER_DEFTERI = "GELIR_GIDER_DEFTERI", "Gelir-gider defteri"
+    GELEN_GIDEN_EVRAK_DEFTERI = "GELEN_GIDEN_EVRAK_DEFTERI", "Gelen-giden evrak defteri"
+    DIGER = "DIGER", "Diğer"
+
+
+class BookCertifier(models.TextChoices):
+    """Defteri tasdik eden makam (md. 23/2)."""
+
+    NOTER = "NOTER", "Noter"
+    IL_ILCE_MEM = "IL_ILCE_MEM", "İl/ilçe millî eğitim müdürlüğü"
+
+
+class BookStatus(models.TextChoices):
+    """Defterin durumu."""
+
+    KULLANIMDA = "KULLANIMDA", "Kullanımda"
+    DOLDU = "DOLDU", "Doldu"
+    ARSIVDE = "ARSIVDE", "Arşivde"
+
+
+class MeetingKind(models.TextChoices):
+    """Kurul toplantısının türü (tasarım §5.2.4)."""
+
+    AYLIK = "AYLIK", "Aylık"
+    OLAGANUSTU = "OLAGANUSTU", "Olağanüstü"
+    GOREV_BOLUMU = "GOREV_BOLUMU", "Görev bölümü"
+
+
+class MeetingStatus(models.TextChoices):
+    """Kurul toplantısının durumu: `PLANLANDI` → `YAPILDI` · `YETER_SAYI_YOK` · `IPTAL`."""
+
+    PLANLANDI = "PLANLANDI", "Planlandı"
+    YAPILDI = "YAPILDI", "Yapıldı"
+    YETER_SAYI_YOK = "YETER_SAYI_YOK", "Yeter sayı yok"
+    IPTAL = "IPTAL", "İptal"
+
+
+class DecisionKind(models.TextChoices):
+    """Kurul kararının türü (tasarım §5.2.4)."""
+
+    OLAGAN = "OLAGAN", "Olağan"
+    GENEL_KARAR = "GENEL_KARAR", "Genel karar"
+    HARCAMA = "HARCAMA", "Harcama"
+    GOREV_BOLUMU = "GOREV_BOLUMU", "Görev bölümü"
+    YEDEK_CAGIRMA = "YEDEK_CAGIRMA", "Yedek çağırma"
+    KOCAN_KAYIT = "KOCAN_KAYIT", "Koçan kaydı"
+    GK_CAGRISI = "GK_CAGRISI", "Genel kurul çağrısı"
+    BUTCE = "BUTCE", "Bütçe"
+    DIGER = "DIGER", "Diğer"
+
+
+class DecisionStatus(models.TextChoices):
+    """Kararın durumu: `TASLAK` → `KABUL_EDILDI` · `REDDEDILDI`; `KABUL_EDILDI` → `DEFTERE_ISLENDI`;
+    `TASLAK` → `IPTAL`; defterde fiilen yazılı geçersiz karar `DEFTERDE_SAKAT`."""
+
+    TASLAK = "TASLAK", "Taslak"
+    KABUL_EDILDI = "KABUL_EDILDI", "Kabul edildi"
+    REDDEDILDI = "REDDEDILDI", "Reddedildi"
+    DEFTERE_ISLENDI = "DEFTERE_ISLENDI", "Deftere işlendi"
+    IPTAL = "IPTAL", "İptal"
+    DEFTERDE_SAKAT = "DEFTERDE_SAKAT", "Defterde sakat"

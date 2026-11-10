@@ -6,11 +6,25 @@ from typing import Any
 
 from rest_framework import serializers
 
-from apps.oab.models import OabPerson, OabTerm, PersonKind, PersonStatus
+from apps.oab.models import (
+    ElectedBy,
+    GeneralAssembly,
+    MembershipRole,
+    OabPerson,
+    OabTerm,
+    OrganMembership,
+    OrganType,
+    PersonKind,
+    PersonStatus,
+    SeatGroup,
+    SeatType,
+)
 from apps.oab.models.kisi import KISI_ADI_MAX
+from apps.oab.models.uyelik import MEM_ONAY_NO_MAX
 from apps.oab.services import donem_kilidi
 from apps.okul.models import PARENT_NAME_MAX, Personnel, SchoolYear
 from apps.okul.serializers import CorruptFieldsMixin
+from shared.crypto import has_corrupt
 
 
 class OabTermSerializer(serializers.ModelSerializer[OabTerm]):
@@ -139,3 +153,133 @@ class OabPersonFromParentSerializer(_AyniKisiDegilMixin):
     """Veli listesinden kopya: velinin adı (kör indeksle aranır; liste dökülmez)."""
 
     full_name = serializers.CharField(max_length=PARENT_NAME_MAX, trim_whitespace=True)
+
+
+# ---------------------------------------------------------------------------
+# Organ üyelikleri (tasarım §5.2.2; plan F1c-5)
+# ---------------------------------------------------------------------------
+#: Bu adımda kaydı yazılan organlar (`services.uyelikler.YAZILAN_ORGANLAR`).
+_YAZILAN_ORGANLAR = [
+    (OrganType.YONETIM_KURULU.value, OrganType.YONETIM_KURULU.label),
+    (OrganType.DENETLEME_KURULU.value, OrganType.DENETLEME_KURULU.label),
+]
+#: Yedek sırasının üst sınırı (alan `PositiveSmallIntegerField`).
+_SIRA_UST = 32767
+#: Serbest metinlerin üst sınırı (dayanak notu ve gerekçe; şifreli sütun TEXT'tir).
+_NOT_UST = 1000
+#: Kök neden alanının sınırı (`ComplianceJustification.root_cause`).
+_KOK_NEDEN_UST = 64
+
+
+class OrganMembershipSerializer(CorruptFieldsMixin, serializers.ModelSerializer[OrganMembership]):
+    """Organ üyeliği (kadro okuması). Kişi adı çözülmüş gelir (bozuksa `null`).
+
+    Kadroya GİRMEZ (plan F1c-5): görev alma engelinin dayanağı (özel nitelikli; okuması ayrı uçtadır ve
+    erişim günlüğüne yazılır), düşme gerekçesi (KVKK boşaltma kümesi) ve uyarı özeti (uyarılar uyum
+    satırlarındadır).
+    """
+
+    person_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrganMembership
+        fields = [
+            "id",
+            "term",
+            "person",
+            "person_name",
+            "organ",
+            "assembly",
+            "role",
+            "seat_type",
+            "seat_group",
+            "votes",
+            "seat_order",
+            "elected_by",
+            "source",
+            "evidence_note",
+            "representation",
+            "representative_decision",
+            "mem_approval_no",
+            "external_assignment_start",
+            "external_assignment_end",
+            "status",
+            "start_date",
+            "end_date",
+            "promoted_on",
+            "promoted_by_decision",
+            "drop_kind",
+            "eligibility_declared_on",
+            "single_birlik_declared_on",
+            "expertise_required",
+            "eligibility_bar",
+            "eligibility_bar_found_on",
+            "retained_until_assembly",
+        ]
+        read_only_fields = fields
+
+    def get_person_name(self, uyelik: OrganMembership) -> str | None:
+        kisi = uyelik.person
+        return None if has_corrupt(kisi) else kisi.full_name
+
+
+def _istege_bagli_gun() -> serializers.DateField:
+    return serializers.DateField(required=False, allow_null=True)
+
+
+class _GerekceMixin(serializers.Serializer[dict[str, Any]]):
+    """Uyarı gerektiren kaydın gerekçesi (altın kural 3); kök neden toplu gerekçeyi bağlar."""
+
+    gerekce = serializers.CharField(
+        max_length=_NOT_UST, required=False, allow_blank=True, default=""
+    )
+    kok_neden = serializers.CharField(
+        max_length=_KOK_NEDEN_UST, required=False, allow_blank=True, default=""
+    )
+
+
+class OrganMembershipCreateSerializer(_GerekceMixin):
+    """Üyelik kaydı: genel kurul seçiminde aday (genel kurul bağıyla), öteki kanallarda seçilmiş."""
+
+    term = serializers.PrimaryKeyRelatedField(queryset=OabTerm.objects.all())
+    person = serializers.PrimaryKeyRelatedField(queryset=OabPerson.objects.all())
+    organ = serializers.ChoiceField(choices=_YAZILAN_ORGANLAR)
+    seat_type = serializers.ChoiceField(choices=SeatType.choices)
+    seat_group = serializers.ChoiceField(
+        choices=SeatGroup.choices, required=False, allow_blank=True, default=""
+    )
+    role = serializers.ChoiceField(
+        choices=MembershipRole.choices, required=False, default=MembershipRole.UYE
+    )
+    elected_by = serializers.ChoiceField(choices=ElectedBy.choices)
+    assembly = serializers.PrimaryKeyRelatedField(
+        queryset=GeneralAssembly.objects.all(), required=False, allow_null=True, default=None
+    )
+    start_date = _istege_bagli_gun()
+    votes = serializers.IntegerField(min_value=0, required=False, allow_null=True)
+    seat_order = serializers.IntegerField(
+        min_value=1, max_value=_SIRA_UST, required=False, allow_null=True
+    )
+    evidence_note = serializers.CharField(
+        max_length=_NOT_UST, required=False, allow_blank=True, default=""
+    )
+    mem_approval_no = serializers.CharField(
+        max_length=MEM_ONAY_NO_MAX, required=False, allow_blank=True, default=""
+    )
+    eligibility_declared_on = _istege_bagli_gun()
+    single_birlik_declared_on = _istege_bagli_gun()
+
+
+class OrganMembershipUpdateSerializer(serializers.Serializer[dict[str, Any]]):
+    """Üyelik güncellemesi (PATCH): kişisiz ayrıntılar; görev, durum ve koltuk ayrı akışlardadır."""
+
+    votes = serializers.IntegerField(min_value=0, required=False, allow_null=True)
+    seat_order = serializers.IntegerField(
+        min_value=1, max_value=_SIRA_UST, required=False, allow_null=True
+    )
+    evidence_note = serializers.CharField(max_length=_NOT_UST, required=False, allow_blank=True)
+    mem_approval_no = serializers.CharField(
+        max_length=MEM_ONAY_NO_MAX, required=False, allow_blank=True
+    )
+    eligibility_declared_on = _istege_bagli_gun()
+    single_birlik_declared_on = _istege_bagli_gun()
