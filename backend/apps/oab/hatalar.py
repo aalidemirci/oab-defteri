@@ -69,3 +69,26 @@ class YeterSayiDonduruldu(APIException):
     status_code = status.HTTP_409_CONFLICT
     default_code = "yeter_sayi_donduruldu"
     default_detail = "Bu genel kurulun yeter sayısı dondurulmuştur; değiştirilemez."
+
+
+class OlasiAyniKisi(APIException):
+    """Aynı ad kör indeksiyle başka birlik kişisi var: "olası aynı kişi" (tasarım §13 D30).
+
+    Engel değil, soru: kullanıcı aynı kişi olmadığını onaylayınca (`ayni_kisi_degil`) kayıt yazılır.
+    İleti adı yankılamaz.
+    """
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "olasi_ayni_kisi"
+    default_detail = (
+        "Bu adla kayıtlı bir birlik kişisi var; aynı kişi olabilir. Aynı kişi değilse "
+        "onaylayarak yeniden kaydedin."
+    )
+
+
+class KisiPasif(APIException):
+    """Pasif kişi kaydının alanları değişmez; yalnız yeniden etkinleştirilir (tasarım §5 O2)."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "kisi_pasif"
+    default_detail = "Pasif kişi kaydı değiştirilemez; önce kaydı etkinleştirin."

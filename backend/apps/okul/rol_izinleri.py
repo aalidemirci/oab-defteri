@@ -341,8 +341,14 @@ _YONETICI_VE_DK: Final = frozenset({YONETICI, DENETLEME_KURULU})
 
 _DAYANAK_PERSONEL = (
     "Tasarım §8.1 A7 ('e-Okul: yonetici'): okul çekirdeğinin e-Okul kaynaklı personel sicili "
-    "F1b'de yalnız program yöneticisinin yazdığı kayıttır; M2'nin YK hücreleri OAB kişileriyle "
-    "F1c'de bağlanır (plan F1b-2 'Bugünkü uçların eşlemi'; tasarımda bu daraltmanın satırı yok)."
+    "yalnız program yöneticisinin yazdığı kayıttır; M2'nin YK hücreleri birlik kişilerinin "
+    "uçlarıyla bağlandı (F1c 4. adım; plan F1b-2 'Bugünkü uçların eşlemi'; tasarımda bu "
+    "daraltmanın satırı yok)."
+)
+_DAYANAK_VELI_KOPYASI = (
+    "Tasarım §8.4 (3) ve §4.4.2: veli listesi kişisel veri satırıdır, okuru yalnız program "
+    "yöneticisidir (¹⁰); listeden birlik kişisine ad kopyalamak listeyi kör indeksle sorgular, "
+    "bu yüzden yalnız program yöneticisine açılır (plan F1c-4; tasarımda bu daraltmanın satırı yok)."
 )
 _DAYANAK_HAVUZ = (
     "Plan F1b-2: ayrılış havuzu (özet dahil) yalnız program yöneticisinindir; karar e-Okul "
@@ -460,6 +466,20 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _oku("template-personnel", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_SABLON),
     _oku("leave-pool", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_HAVUZ),
     _yaz("leave-pool-resolve", "POST", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_HAVUZ),
+    # ------------------------------------------------ M2: birlik kişileri (F1c 4. adım)
+    # Program yöneticisi ve yönetim kurulu rolleri yazar, Denetleme Kurulu ve müdür okur.
+    _oku("oab-person-list", Satir.M2),
+    _yaz("oab-person-list", "POST", Satir.M2),
+    _oku("oab-person-detail", Satir.M2),
+    _yaz("oab-person-detail", "PATCH", Satir.M2),
+    _yaz("oab-person-from-personnel", "POST", Satir.M2),
+    _yaz(
+        "oab-person-from-parent",
+        "POST",
+        Satir.M2,
+        yalniz=_YALNIZ_YONETICI,
+        dayanak=_DAYANAK_VELI_KOPYASI,
+    ),
     # ------------------------------------------------ Kişisel veri: veli listesi (T5; ¹⁰)
     # Özet (sınıf başına sayı) ve şablon okumadır; satırın tek okuru program yöneticisidir.
     _oku("parent-roster", Satir.KISISEL_VERI),
@@ -597,9 +617,10 @@ def _bekleyen(satir: Satir, roller: Iterable[str], faz: str) -> dict[tuple[Satir
 #: Ucu ya da servisi henüz olmayan Y hücreleri → bağlanacakları faz (tasarım §14 faz
 #: ataması). Yalnız küçülebilir; testte anlık görüntüdür.
 BEKLEYEN_HUCRELER: Final[Mapping[tuple[Satir, str], str]] = {
-    # Kişiler ve organlar: YK rollerinin kişi yazımı OAB kişileriyle (personel e-Okul
-    # kaydı yalnız program yöneticisinin; `_DAYANAK_PERSONEL`).
-    **_bekleyen(Satir.M2, sorted(YK_ROLLERI), "F1c"),
+    # Kişiler ve organlar (M2): YK rollerinin hücresi birlik kişilerinin uçlarıyla bağlandı (F1c 4.
+    # adım; personel e-Okul kaydı yalnız program yöneticisinin, `_DAYANAK_PERSONEL`). Satır düzeyidir:
+    # organ, temsilci, görev bölümü ve yedek çağrısı uçları F1c'nin sonraki adımlarında aynı satıra
+    # eklenir.
     # Genel kurul (müdürün ¹ yazıları dahil).
     **_bekleyen(Satir.M3, (YONETICI, *sorted(YK_ROLLERI), MUDUR), "F2"),
     # YK toplantı ve karar; gelir-gider (mali kayıtları yalnız muhasip girer).
@@ -653,6 +674,19 @@ def etkin_hucreler(rol: str) -> tuple[Satir, ...]:
         satir
         for satir, hucreler in MATRIS.items()
         if rol in hucreler and hucreler[rol][0] == YAZAR and (satir, rol) not in BEKLEYEN_HUCRELER
+    )
+
+
+def yazabildigi_uclar(rol: str) -> frozenset[str]:
+    """Rolün en az bir yazma kuralıyla yazabildiği uçların adları (kurallardan türer).
+
+    Hesap teslim pusulası bir satırın iş parçalarını role göre bununla süzer (aynı satırda program
+    yöneticisine daraltılmış uçlar ile bütün yazanlara açık uçlar birlikte durabilir; M2).
+    """
+    return frozenset(
+        kural.uc
+        for kural in KURALLAR
+        if kural.tur is KuralTuru.YAZMA and rol in kural_rolleri(kural)
     )
 
 

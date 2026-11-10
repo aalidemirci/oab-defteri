@@ -16,7 +16,17 @@ class OabConfig(AppConfig):
     verbose_name = "Okul-aile birliği"
 
     def ready(self) -> None:
-        """Açılış denetimleri (tasarım §6.3 D1, D2, D5, D7): hata yükseltmez, program açılır."""
+        """Açılış denetimleri (tasarım §6.3 D1, D2, D5, D7) ve `okul` kayıt defterleri.
+
+        Denetimler hata yükseltmez, program açılır. Kancalar (plan F1c-4): birlik kişisine bağlı
+        personel silinmez, birleştirmede bağ taşınır (`services.persons`); veli listesi aktarımı açık
+        birlik dönemini buradan öğrenir (`services.imports`). Kayıtlar idempotenttir.
+        """
         from apps.oab.kurallar import yukleyici
+        from apps.oab.services import donemler, kisiler
+        from apps.okul.services import imports, persons
 
         yukleyici.ac()
+        persons.register_membership_check(kisiler.personnel_linked)
+        persons.register_merge_hook(kisiler.personnel_merged)
+        imports.register_roster_term_provider(donemler.acik_donem_kimligi)

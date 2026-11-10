@@ -31,6 +31,7 @@ import pytest
 from django.urls import URLPattern, URLResolver, get_resolver, reverse
 from rest_framework.test import APIClient
 
+from apps.oab.models import OabPerson
 from apps.okul.models import ParentRoster, Personnel
 from apps.okul.permissions import RequiresAdminPassword
 
@@ -49,6 +50,11 @@ KISI_YAZAN_UCLAR = frozenset(
         "parent-roster",
         "import-parents-preview",
         "import-parents-commit",
+        # Birlik kişileri (F1c 4. adım): elle kayıt, güncelleme, personelden ve veli listesinden kopya.
+        "oab-person-list",
+        "oab-person-detail",
+        "oab-person-from-personnel",
+        "oab-person-from-parent",
     }
 )
 
@@ -214,12 +220,14 @@ def test_parolasizken_kisi_yazan_her_uc_yazma_yontemiyle_409_doner(parolasiz: Pa
             denenen += 1
     # 1 liste (POST) + 1 ayrıntı (PUT/PATCH/DELETE) + 2 içe aktarma (POST)
     # + 1 ayrılış (POST) + 1 birleştirme (POST) + 1 havuz kararı (POST)
-    # + veli listesi: silme (DELETE) ve 2 aktarım (POST).
+    # + veli listesi: silme (DELETE) ve 2 aktarım (POST)
+    # + birlik kişileri: liste (POST), ayrıntı (PATCH), 2 kopya (POST).
     # Aile iskeletinin kütüphane uçları (üyelik, kart basımı, dolaşım masası,
     # teslim, saklama tetiği) F1a-2'de, öğrenci uçları F1b 5. adımda söküldü.
-    assert denenen == 1 + 1 * 3 + 2 + 1 + 1 + 1 + 1 + 2
+    assert denenen == 1 + 1 * 3 + 2 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 2
     assert not Personnel.all_objects.exists()
     assert not ParentRoster.objects.exists()
+    assert not OabPerson.objects.exists()
 
 
 @pytest.mark.django_db

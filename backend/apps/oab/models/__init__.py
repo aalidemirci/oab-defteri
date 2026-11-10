@@ -23,6 +23,7 @@ from apps.oab.models._base import (
 )
 from apps.oab.models.donem import OabTerm, RulePackage
 from apps.oab.models.genel_kurul import GeneralAssembly
+from apps.oab.models.kisi import OabPerson, kisi_adi_kor_indeksi
 from apps.oab.models.uyum import ComplianceItem, ComplianceJustification, DraftText
 
 __all__ = [
@@ -40,6 +41,7 @@ __all__ = [
     "MembershipSource",
     "MembershipStatus",
     "OabBaseModel",
+    "OabPerson",
     "OabTerm",
     "OrganType",
     "PersonKind",
@@ -49,4 +51,5 @@ __all__ = [
     "SeatGroup",
     "SeatType",
     "TermStatus",
+    "kisi_adi_kor_indeksi",
 ]

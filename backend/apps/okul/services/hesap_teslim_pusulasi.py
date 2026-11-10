@@ -57,7 +57,7 @@ from django.utils import timezone
 
 from apps.okul.models import AccountRole
 from apps.okul.oturum import rol_etiketi
-from apps.okul.rol_izinleri import Satir, etkin_hucreler
+from apps.okul.rol_izinleri import Satir, etkin_hucreler, yazabildigi_uclar
 from shared import evrak
 from shared.letterhead import letterhead_authority, letterhead_unit
 from shared.text import tr_upper
@@ -176,16 +176,30 @@ class BugunkuIs:
     """Bir matris satırının BUGÜN programda yapılabilen işi (orkestratör maddesi F-4).
 
     Ad `baslik` + ": " + parçalardır (başlık yoksa yalnız parçalar); iki noktadan sonrası liste
-    olduğu için küçük harfle sürer.
+    olduğu için küçük harfle sürer. Pusulada rolün adı yalnız o rolün yazabildiği parçaları taşır
+    (`rol_parcalari`; F1c 4. adım: M2'de personel işleri yalnız program yöneticisinin, birlik
+    kişileri yönetim kurulu rollerinin de işidir). `ad` bütün parçalardır.
     """
 
     parcalar: tuple[IsParcasi, ...]
     baslik: str = ""
 
+    def _ad(self, parcalar: tuple[IsParcasi, ...]) -> str:
+        govde = ", ".join(parca.ad for parca in parcalar)
+        return f"{self.baslik}: {govde}" if self.baslik else govde
+
     @property
     def ad(self) -> str:
-        govde = ", ".join(parca.ad for parca in self.parcalar)
-        return f"{self.baslik}: {govde}" if self.baslik else govde
+        return self._ad(self.parcalar)
+
+    def rol_parcalari(self, rol: str) -> tuple[IsParcasi, ...]:
+        """Rolün bütün uçlarını yazabildiği parçalar (kurallardan türer; ikinci bir matris doğmaz)."""
+        yazilabilir = yazabildigi_uclar(rol)
+        return tuple(parca for parca in self.parcalar if parca.uclar <= yazilabilir)
+
+    def rol_adi(self, rol: str) -> str:
+        """Rolün pusulasındaki ad: yalnız o rolün parçalarıyla."""
+        return self._ad(self.rol_parcalari(rol))
 
 
 #: Rolün bugün yazabildiği matris satırlarının pusuladaki işleri (orkestratör maddesi F-4): YALNIZ
@@ -223,6 +237,16 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
             ),
             _parca("e-Okul aktarımı", "import-personnel-preview", "import-personnel-commit"),
             _parca("ayrılış havuzu", "leave-pool-resolve"),
+            # Birlik kişileri (F1c 4. adım): program yöneticisi ve yönetim kurulu rolleri. Ekranı
+            # Kişiler'in "Birlik Kişileri" sekmesidir (F1c 11. adım).
+            _parca(
+                "birlik kişileri",
+                "oab-person-list",
+                "oab-person-detail",
+                "oab-person-from-personnel",
+            ),
+            # Veli listesinden kopya yalnız program yöneticisinindir (`rol_izinleri`).
+            _parca("veli listesinden birlik kişisi ekleme", "oab-person-from-parent"),
         ),
         baslik="Kişiler",
     ),
@@ -321,8 +345,9 @@ ADSIZ_UCLAR: Final[Mapping[str, str]] = {
 
 def isler(rol: str) -> tuple[str, ...]:
     """Rolün "bu programda sizin işiniz" satırları: `etkin_hucreler` sırasıyla, bugünkü adlarıyla
-    (`BUGUNKU_ISLER`). Etkin satırın adı yoksa `KeyError` (test her etkin satırın adını sınar)."""
-    return tuple(BUGUNKU_ISLER[satir].ad for satir in etkin_hucreler(rol))
+    (`BUGUNKU_ISLER`; yalnız rolün parçaları). Etkin satırın adı yoksa `KeyError` (test her etkin
+    satırın adını sınar)."""
+    return tuple(BUGUNKU_ISLER[satir].rol_adi(rol) for satir in etkin_hucreler(rol))
 
 
 def _gun(an: datetime) -> str:

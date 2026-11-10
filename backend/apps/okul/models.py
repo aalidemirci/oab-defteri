@@ -810,11 +810,14 @@ class ParentRoster(models.Model):
     adı, numarası, T.C. kimlik no, telefon ve adres alınmaz. Kaynak dosyadaki satır sırası
     tutulmaz: satırlar sınıf ve çözülmüş ad sırasıyla yazılır (`services.imports`).
 
-    F1b'DE OLMAYAN ALANLAR (plan "F1b-5 uygulama kararları"; hedef modeli olmayan alan
-    uydurulmaz): birlik dönemi bağı (`term` → `OabTerm`) F1c'de, katılım işaretleri
-    (`attended_assembly` → `GeneralAssembly`, `attended_meeting`) F2'de göçle eklenir. O güne
-    dek "dönem içindeki önceki parti" kuralı (tasarım §8.4 (1)) bütün canlı liste üzerinde
-    çalışır. Başka hiçbir model buna yabancı anahtar vermez (silinebilirlik).
+    BİRLİK DÖNEMİ (`term` → `oab.OabTerm`; F1c 4. adımda göçle eklendi): satır aktarıldığı anın
+    açık birlik dönemine bağlanır; açık dönem yoksa boş kalır ve ilk dönem açılırken o döneme
+    bağlanır (`apps.oab.services.donemler`). "Dönem içindeki önceki parti" kuralı (tasarım §8.4
+    (1)) satırın dönemiyle çalışır (`services.imports`). Yabancı anahtar dizeyle verilir: `okul`
+    `oab`'yi içe aktarmaz; açık dönemi `oab` kayıt defterinden bildirir
+    (`services.imports.register_roster_term_provider`). Katılım işaretleri (`attended_assembly` →
+    `GeneralAssembly`, `attended_meeting`) F2'de göçle eklenir. Başka hiçbir model buna yabancı
+    anahtar vermez (silinebilirlik).
 
     KÖR İNDEKS (`name_index`) YALNIZ `save()` İLE YAZILIR: `QuerySet.update(full_name=…)`,
     `bulk_update` ve `bulk_create` `save()`'i atlar, indeks boş ya da eski adda kalır. Veli
@@ -850,6 +853,14 @@ class ParentRoster(models.Model):
         "veli adı kör indeksi", max_length=64, blank=True, default="", editable=False
     )
     student_class = models.CharField("öğrencinin sınıfı", max_length=STUDENT_CLASS_MAX)
+    term = models.ForeignKey(
+        "oab.OabTerm",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="birlik dönemi",
+    )
     created_at = models.DateTimeField("oluşturulma", auto_now_add=True)
 
     class Meta:

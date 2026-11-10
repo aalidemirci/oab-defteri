@@ -91,10 +91,12 @@ from apps.oab.models import (
     ComplianceItem,
     ComplianceJustification,
     GeneralAssembly,
+    OabPerson,
     OabTerm,
+    PersonStatus,
     RulePackage,
 )
-from apps.oab.services import donemler, uyum
+from apps.oab.services import donemler, kisiler, uyum
 from apps.oab.services import genel_kurul as genel_kurul_servisi
 from apps.okul import denetim_izi, erisim_gunlugu, iz_durumu
 from apps.okul.excel_ortak import ParserError
@@ -315,6 +317,19 @@ def _veli_listesini_sil() -> Istek:
     return Istek("/api/v1/parent-roster/", None, _turler("KVKK_SILME"))
 
 
+def _birlik_kisisi() -> OabPerson:
+    return kisiler.create_person(kind="VELI", first_name="Uydurnur", last_name="Örnekkaya")
+
+
+def _veliden_birlik_kisisi() -> Istek:
+    """Önce bir veli listesi aktarılır; uç listedeki velinin adını birlik kişisine kopyalar."""
+    ad, baytlar = _veli_listesi_dosyasi()
+    import_service.commit_parents_file(file_bytes=baytlar, file_name=ad)
+    return Istek(
+        "/api/v1/oab/persons/from-parent/", {"full_name": "Uydurma Veli"}, _turler("OLUSTUR")
+    )
+
+
 def _personel_listesi() -> dict[str, Any]:
     return {"text": "\n".join([PERSONEL_BASLIGI, "UYDURNUR\tÖRNEKKAYA\tÖğretmen\t"])}
 
@@ -473,6 +488,25 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     ),
     ("import-parents-commit", "POST"): Senaryo(lambda _m: _veli_listesi_yerine_koy()),
     ("parent-roster", "DELETE"): Senaryo(lambda _m: _veli_listesini_sil()),
+    # Birlik kişileri (F1c 4. adım): kişi KVKK silme kümesindedir, satır değer taşımaz.
+    ("oab-person-list", "POST"): _sabit(
+        "/api/v1/oab/persons/",
+        {"kind": "VELI", "first_name": "Uydurnur", "last_name": "Örnekkaya"},
+        "OLUSTUR",
+    ),
+    ("oab-person-detail", "PATCH"): _istek(
+        lambda: Istek(
+            f"/api/v1/oab/persons/{_birlik_kisisi().pk}/", {"is_parent": False}, _turler("GUNCELLE")
+        )
+    ),
+    ("oab-person-from-personnel", "POST"): _istek(
+        lambda: Istek(
+            "/api/v1/oab/persons/from-personnel/",
+            {"personnel": _personel().pk},
+            _turler("OLUSTUR"),
+        )
+    ),
+    ("oab-person-from-parent", "POST"): Senaryo(lambda _m: _veliden_birlik_kisisi()),
     # İlk hesap: satırlar yeni hesabındır (plan F1b-1); okul kartı parmak iziyle oluşur.
     ("security-enable", "POST"): _istek(
         lambda: Istek(
@@ -1706,7 +1740,8 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
     """Tasarım §4.6.2 kural 6, §14 F1b kapısı (modül başlığı, madde 3).
 
     `okul` ve `oab`'nin her izli modeli (bugün `Account`, `SchoolConfig`, `SchoolYear`, `SchoolTerm`,
-    `Holiday`, `Personnel`, `ImportRun`, `Attachment`) uydurma kişi verisiyle yazılır, güncellenir ve
+    `Holiday`, `Personnel`, `ImportRun`, `Attachment`, birlik dönemi ve kural kopyası, genel kurul,
+    uyum satırı ve gerekçesi, birlik kişisi) uydurma kişi verisiyle yazılır, güncellenir ve
     durumu değişir; iz satırlarının hiçbir sütununda bu değerler, parçaları, büyük-küçük harf
     biçimleri ve şifreli token'ları geçmez. Senaryosu yazılmamış izli model testi düşürür. Arşiv
     dökümü henüz yoktur. Veli listesi (T5)
@@ -1798,10 +1833,29 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
         yazar=varsayilan_yazar(),
         kisi_listesi=False,
     )
+    # Dönemsiz aktarılan veli listesi ilk dönem açılırken o döneme bağlanır (kişisiz olay satırı).
+    import_service.commit_parents_file(
+        file_bytes=_veli_xlsx([(f"{UYDURMA_AD} {UYDURMA_SOYAD}", "9-A")]), file_name=dosya_adi
+    )
+    veli_tokenlari += _ham_sutunlar("okul_parentroster", ("full_name", "name_index"))
     # Birlik dönemi, kural kopyası, genel kurul, uyum satırı ve gerekçe: ad ve gerekçe serbest metin.
     donem = donemler.create_term(
         name=UYDURMA_UZUN[:40], school_year=yil, start_date=date(2026, 10, 10)
     )
+    assert ParentRoster.objects.filter(term=donem).count() == 1
+    # Birlik kişisi (F1c 4. adım): ad ve soyad şifreli, kör indeks; elle, personelden ve veli
+    # listesinden; güncelleme ve durum (`PASIF`). Satırlar değer taşımaz (KVKK silme kümesi).
+    kisi = kisiler.create_person(
+        kind="KURSIYER", first_name=UYDURMA_AD, last_name=f"{UYDURMA_SOYAD} {UYDURMA_TCKN}"
+    )
+    kisiler.update_person(
+        kisi, first_name=f"{UYDURMA_AD} {UYDURMA_METIN}"[:100], last_name=UYDURMA_TELEFON
+    )
+    kisiler.update_person(kisi, status=PersonStatus.PASIF)
+    kisiler.copy_from_personnel(
+        persons.create_personnel(first_name=UYDURMA_AD, last_name=UYDURMA_ADRES[:100])
+    )
+    kisiler.copy_from_parent(f"{UYDURMA_AD} {UYDURMA_SOYAD}", ayni_kisi_degil=True)
     kurul = genel_kurul_servisi.genel_kurul_olustur(donem=donem, kind=AssemblyKind.OLAGAN)
     genel_kurul_servisi.yeter_sayiyi_dondur(kurul, tarih=date(2026, 10, 1))
     uyum.denetle(
@@ -1931,6 +1985,7 @@ IZLI_MODELLER = (
     GeneralAssembly,
     ComplianceItem,
     ComplianceJustification,
+    OabPerson,
 )
 
 

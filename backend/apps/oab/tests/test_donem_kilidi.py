@@ -648,8 +648,16 @@ YAZMA_SERVISLERI = frozenset(
     }
 )
 #: `@transaction.atomic` taşıyıp kural okumayan servisler ve gerekçesi.
+_KISI_KURALSIZ = (
+    "Birlik kişisi kaydı kural paketi değeri ya da denetimi kullanmaz (koltuk uygunluğu ve seçilme "
+    "sayacı organ üyeliğindedir, F1c 5. adım); dönemsiz kayıttır, kilidi kendi durumudur (O2)."
+)
 KURALSIZ = {
     "uyum.eksik_kapat": "Yalnız satırı kapatır: kural okumaz; dönem kilidi yine denetlenir.",
+    "kisiler.create_person": _KISI_KURALSIZ,
+    "kisiler.update_person": _KISI_KURALSIZ,
+    "kisiler.copy_from_personnel": _KISI_KURALSIZ,
+    "kisiler.copy_from_parent": _KISI_KURALSIZ,
 }
 SERVISLER = Path(__file__).resolve().parents[1] / "services"
 

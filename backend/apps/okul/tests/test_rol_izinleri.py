@@ -406,6 +406,10 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     "setup-complete": {"POST": "Y"},
     "setup-roadmap": {"POST": "Y"},
     "oab-okul-karti-bilgileri": {"GET": "H", "HEAD": "H"},
+    "oab-person-detail": {"GET": "H", "HEAD": "H", "PATCH": "Y+YK"},
+    "oab-person-from-parent": {"POST": "Y"},
+    "oab-person-from-personnel": {"POST": "Y+YK"},
+    "oab-person-list": {"GET": "H", "HEAD": "H", "POST": "Y+YK"},
     "oab-term-detail": {"GET": "H", "HEAD": "H"},
     "oab-term-list": {"GET": "H", "HEAD": "H", "POST": "Y"},
     "setup-school-config": {"GET": "H", "HEAD": "H", "PUT": "Y"},
@@ -436,7 +440,7 @@ def test_rol_tablosu_anlik_goruntusu() -> None:
 #: KÜÇÜLEBİLİR; "F1b" fazlısı kalmadı (Kullanıcılar c1'de, DK'nin M8 hücresi c3'te "Gördüm"le
 #: bağlandı; `test_f1b_fazli_bekleyen_kalmadi`).
 BEKLEYEN_HUCRE_GORUNTUSU: dict[str, dict[str, set[str]]] = {
-    "F1c": {"M2": set(YK_ROLLERI)},
+    # "F1c": M2 × YK rolleri birlik kişilerinin uçlarıyla bağlandı (F1c 4. adım).
     "F2": {
         "M3": {*Y_YK, "mudur"},
         "M10": set(Y_YK),
@@ -500,8 +504,9 @@ def test_etkin_hucreler_bekleyende_olmayan_y_hucreleridir() -> None:
         "GUNCELLEME",
         "KENDI",
     ]
+    # YK rollerinin M2 hücresi birlik kişilerinin uçlarıyla bağlandı (F1c 4. adım).
     for rol in YK_ROLLERI:
-        assert [s.value for s in etkin_hucreler(rol)] == ["M9", "KENDI"]
+        assert [s.value for s in etkin_hucreler(rol)] == ["M2", "M9", "KENDI"]
     # DK'nin M8 hücresi geri yükleme kartının "Gördüm"üyle bağlandı (F1b-2 (c)).
     assert [s.value for s in etkin_hucreler("denetleme_kurulu")] == ["M8", "KENDI"]
     assert [s.value for s in etkin_hucreler("mudur")] == ["KENDI"]

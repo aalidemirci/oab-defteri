@@ -277,9 +277,11 @@ def test_katalog_kabul(kod: str, yakalanan: list[evrak.Belge]) -> None:
     # "Bu programda sizin işiniz" matristen (etkin hücreler, sırasıyla; bugünkü adlarıyla).
     isler = _tablo(belge, e63.IS_BASLIGI)
     assert [s[0] for s in isler.satirlar] == [
-        e63.BUGUNKU_ISLER[satir].ad for satir in etkin_hucreler(AccountRole.MUHASIP)
+        e63.BUGUNKU_ISLER[satir].rol_adi(AccountRole.MUHASIP)
+        for satir in etkin_hucreler(AccountRole.MUHASIP)
     ]
     assert [s[0] for s in isler.satirlar] == [
+        "Kişiler: birlik kişileri",
         "Genel Bakış: son oturumun kontrolü (“Kontrol ettim”)",
         "Kendi parolanızı değiştirme, Kilitle, Çık",
     ]
@@ -701,7 +703,12 @@ def test_e63_bugunku_isler_yalniz_etkin_satirlardadir() -> None:
         assert is_.parcalar and all(parca.ad.strip() for parca in is_.parcalar), is_
         assert not re.search(r"\b(YK|DK|DEK|M\d+|E\d{2})\b", is_.ad), is_.ad
     for rol in ROLLER:
-        assert e63.isler(rol) == tuple(e63.BUGUNKU_ISLER[s].ad for s in etkin_hucreler(rol))
+        assert e63.isler(rol) == tuple(
+            e63.BUGUNKU_ISLER[s].rol_adi(rol) for s in etkin_hucreler(rol)
+        )
+        # Etkin satırın, rolün pusulasında en az bir parçası vardır (boş ad basılmaz).
+        for satir in etkin_hucreler(rol):
+            assert e63.BUGUNKU_ISLER[satir].rol_parcalari(rol), (rol, satir)
 
 
 def test_e63_is_parcalari_var_olan_uclara_karsilik_gelir() -> None:
@@ -710,11 +717,15 @@ def test_e63_is_parcalari_var_olan_uclara_karsilik_gelir() -> None:
     açılması" bugün yazılamaz). Ters yönde, etkin satırın her yazma ucu bir parçada adlanır ya da
     `ADSIZ_UCLAR`'da gerekçesiyle durur: bir faz yeni bir uç getirince ad da büyür."""
     adsiz_kullanilan: set[str] = set()
+    kullanilan_parcalar: set[tuple[Satir, str]] = set()
     for rol in ROLLER:
         for satir in etkin_hucreler(rol):
             uclar = _yazma_uclari(satir, rol)
             adli: set[str] = set()
-            for parca in e63.BUGUNKU_ISLER[satir].parcalar:
+            # Pusula rolün parçalarını basar (`rol_parcalari`, F1c 4. adım: M2'de personel işleri
+            # yalnız program yöneticisinin, birlik kişileri yönetim kurulu rollerinin de işidir).
+            for parca in e63.BUGUNKU_ISLER[satir].rol_parcalari(rol):
+                kullanilan_parcalar.add((satir, parca.ad))
                 assert parca.uclar, (rol, satir, parca.ad)
                 assert parca.uclar <= uclar, (rol, satir, parca.ad, parca.uclar - uclar)
                 adli |= parca.uclar
@@ -724,6 +735,10 @@ def test_e63_is_parcalari_var_olan_uclara_karsilik_gelir() -> None:
     # Adsız listesi bayatlamaz: her biri gerçekten adsız kalan bir yazma ucudur, gerekçesi vardır.
     assert adsiz_kullanilan == set(e63.ADSIZ_UCLAR)
     assert all(gerekce.strip() for gerekce in e63.ADSIZ_UCLAR.values())
+    # Her parça en az bir rolün pusulasına girer (hiçbir role açılmayan parça bayattır).
+    assert kullanilan_parcalar == {
+        (satir, parca.ad) for satir, is_ in e63.BUGUNKU_ISLER.items() for parca in is_.parcalar
+    }
 
 
 def test_e63_guvenlik_dosyasi_sifirlamasi_is_diye_yazilmaz() -> None:
@@ -746,16 +761,20 @@ def test_e63_guvenlik_dosyasi_sifirlamasi_is_diye_yazilmaz() -> None:
 
 
 def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
-    """Orkestratör maddesi F-4, rol rol: program yöneticisi dokuz iş (veli listesi F1b 5. adımda); yönetim kurulu rolleri
-    Genel Bakış'ta son oturumun kontrolü ve kendi parolası; Denetleme Kurulu geri yükleme kartının
+    """Orkestratör maddesi F-4, rol rol: program yöneticisi dokuz iş (veli listesi F1b 5. adımda;
+    birlik kişileri ve veli listesinden birlik kişisi ekleme F1c 4. adımda Kişiler işine girdi);
+    yönetim kurulu rolleri birlik kişileri (F1c 4. adım), Genel Bakış'ta son oturumun kontrolü ve
+    kendi parolası; Denetleme Kurulu geri yükleme kartının
     "Gördüm"ü ve kendi parolası; okul müdürü yalnız kendi parolası (müdür yazıları F2/F4'tedir).
     Sonraki fazların işleri hiçbir pusulada yoktur."""
     kendi = "Kendi parolanızı değiştirme, Kilitle, Çık"
     son_oturum = "Genel Bakış: son oturumun kontrolü (“Kontrol ettim”)"
+    birlik_kisileri = "Kişiler: birlik kişileri"
     beklenen = {
         AccountRole.YONETICI: (
             "Okul bilgileri, ders yılı ve dönemler, kapalı günler",
-            "Kişiler: öğretmen ve diğer personel kaydı, e-Okul aktarımı, ayrılış havuzu",
+            "Kişiler: öğretmen ve diğer personel kaydı, e-Okul aktarımı, ayrılış havuzu, birlik "
+            "kişileri, veli listesinden birlik kişisi ekleme",
             son_oturum,
             "Kullanıcılar: hesap açma, kapama, askıdan çıkarma, parola sıfırlama, hesap teslim "
             "pusulası",
@@ -766,10 +785,10 @@ def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
             "Güncelleme denetimi",
             kendi,
         ),
-        AccountRole.BASKAN: (son_oturum, kendi),
-        AccountRole.BASKAN_YARDIMCISI: (son_oturum, kendi),
-        AccountRole.MUHASIP: (son_oturum, kendi),
-        AccountRole.SEKRETER: (son_oturum, kendi),
+        AccountRole.BASKAN: (birlik_kisileri, son_oturum, kendi),
+        AccountRole.BASKAN_YARDIMCISI: (birlik_kisileri, son_oturum, kendi),
+        AccountRole.MUHASIP: (birlik_kisileri, son_oturum, kendi),
+        AccountRole.SEKRETER: (birlik_kisileri, son_oturum, kendi),
         AccountRole.DENETLEME_KURULU: (
             "Genel Bakış: yedekten geri yükleme kartını görüldü olarak işaretleme (“Gördüm”)",
             kendi,
@@ -916,6 +935,10 @@ def _e63_metinleri() -> Iterator[str]:
     yield from e63.KUNYE_BASLIKLARI
     yield e63.IS_BASLIGI
     yield from (is_.ad for is_ in e63.BUGUNKU_ISLER.values())
+    # Rolün pusulasındaki ad yalnız o rolün parçalarıdır (M2'de yönetim kurulu rolleri).
+    yield from (
+        e63.BUGUNKU_ISLER[satir].rol_adi(rol) for rol in ROLLER for satir in etkin_hucreler(rol)
+    )
     yield e63.ILK_GIRIS_BASLIGI
     yield from (adim.format(tanitici="<tanıtıcı>") for adim in e63.ILK_GIRIS_ADIMLARI)
     yield e63.PAROLA_BASLIGI

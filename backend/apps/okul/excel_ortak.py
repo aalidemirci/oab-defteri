@@ -33,6 +33,7 @@ import csv
 import io
 import re
 import struct
+import unicodedata
 import zipfile
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -43,9 +44,16 @@ from typing import Any, Final
 
 from openpyxl import load_workbook
 
-# Türkçe karakter → ASCII (başlık eşlemesi için; küçük harfe indirgenir).
+# Türkçe karakter → ASCII (başlık eşlemesi için; küçük harfe indirgenir). Düzeltme işaretli
+# (şapkalı) â, î, û da düz harfe katlanır: "Hâle" ile "Hale" aynı anahtarı verir.
 _TR_MAP = str.maketrans(
     {
+        "â": "a",
+        "Â": "a",
+        "î": "i",
+        "Î": "i",
+        "û": "u",
+        "Û": "u",
         "ş": "s",
         "Ş": "s",
         "ı": "i",
@@ -65,10 +73,14 @@ _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 
 
 def normalize_header(text: Any) -> str:
-    """Başlık hücresini eşleme için normalleştirir ('Adı Soyadı' → 'adi soyadi')."""
+    """Başlık hücresini eşleme için normalleştirir ('Adı Soyadı' → 'adi soyadi').
+
+    Önce NFC birleştirmesi: ayrışık yazılmış harf (a + U+0302, I + U+0307) tek harfe döner ve
+    birleşik yazılışla aynı anahtarı verir. NFKD kullanılmaz; İ'nin katlaması tek harften yürür.
+    """
     if text is None:
         return ""
-    s = str(text).translate(_TR_MAP).lower()
+    s = unicodedata.normalize("NFC", str(text)).translate(_TR_MAP).lower()
     s = _NON_ALNUM.sub(" ", s)
     return s.strip()
 

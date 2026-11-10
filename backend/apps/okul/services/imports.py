@@ -52,9 +52,14 @@ ALMA, T5); yerine VELİ LİSTESİ aktarımı geldi (aşağıda "VELİ LİSTESİ"
 VELİ LİSTESİ (T5; tasarım §8.4, plan "F1b-5 uygulama kararları"): okulun doldurduğu iki sütunlu
 şablondan (`excel_veli`; .xlsx, .xls, .csv — pano yolu yoktur) `ParentRoster` satırları yazılır.
 
-- **Sınıf bazında yerine koyma** (tasarım §8.4 (1)): dosyadaki sınıflar önceki listenin AYNI
-  sınıflarının yerini alır; dosyada olmayan sınıflara dokunulmaz. Birlik dönemi F1c'de gelir; o
-  güne dek "önceki parti" bütün canlı listedir. Satırlar birleştirilmez: bir satır bir öğrencidir.
+- **Sınıf bazında yerine koyma** (tasarım §8.4 (1)): dosyadaki sınıflar dönem içindeki önceki
+  partinin AYNI sınıflarının yerini alır; dosyada olmayan sınıflara ve başka dönemin satırlarına
+  dokunulmaz. Dönem aktarım anının açık birlik dönemidir (`current_roster_term_id`); açık dönem
+  yoksa dönemsiz (boş) satırlar bir dönem sayılır ve ilk birlik dönemi açılınca o döneme bağlanır
+  (plan F1c-4). Satırlar birleştirilmez: bir satır bir öğrencidir.
+- **Dönemin kaynağı kayıt defteridir:** `okul` `oab`'yi içe aktarmaz; açık birlik dönemini `oab`
+  `AppConfig.ready` içinde `register_roster_term_provider` ile bildirir (`services.persons`'un kayıt
+  defterleri gibi). Sağlayıcı yoksa ya da açık dönem yoksa dönem boştur.
 - **Önizleme yalnız SAYI gösterir** (§8.4 (2)): satır ve sınıf sayısı, yerine geçecek her sınıfın
   yeni ve eski satır sayısı, dokunulmayan sınıflar, aktarılamayan satırların numarası ve nedeni.
   Raporda ad YOKTUR (API yanıtında da); hücre değeri de yoktur.
@@ -616,6 +621,34 @@ def _record_failed(source_type: str, source_hash: str, file_name: str, error: Ex
 # ---------------------------------------------------------------------------
 # Veli listesi (T5; tasarım §8.4) — sınıf bazında yerine koyma, önizlemede yalnız sayılar
 # ---------------------------------------------------------------------------
+#: Açık birlik döneminin kimliğini veren sağlayıcı (`oab` kaydeder; modül başlığı "VELİ LİSTESİ").
+type RosterTermProvider = Callable[[], int | None]
+
+_roster_term_providers: list[RosterTermProvider] = []
+
+
+def register_roster_term_provider(fn: RosterTermProvider) -> None:
+    """Açık birlik döneminin sağlayıcısı (idempotent; `AppConfig.ready` iki kez koşsa da bir kez)."""
+    if fn not in _roster_term_providers:
+        _roster_term_providers.append(fn)
+
+
+def current_roster_term_id() -> int | None:
+    """Veli satırlarının bağlanacağı birlik dönemi: açık dönem; yoksa None (dönemsiz satırlar)."""
+    for fn in _roster_term_providers:
+        kimlik = fn()
+        if kimlik is not None:
+            return kimlik
+    return None
+
+
+def roster_term_rows(term_id: int | None) -> QuerySet[ParentRoster]:
+    """Bir birlik döneminin veli satırları; `None` dönemsiz satırlardır (§8.4 (1) "dönem içinde")."""
+    if term_id is None:
+        return ParentRoster.objects.filter(term__isnull=True)
+    return ParentRoster.objects.filter(term_id=term_id)
+
+
 @dataclass
 class ParentClassImpact:
     """Dosyadaki bir sınıfın etkisi: yeni satır sayısı ve yerine geçen eski satır sayısı."""
@@ -699,22 +732,23 @@ def delete_parent_roster() -> int:
 
 
 def _siniflari_yerine_koy(
-    run: ImportRun, sinifa_gore: dict[str, list[ParsedParentRow]]
+    run: ImportRun, sinifa_gore: dict[str, list[ParsedParentRow]], *, term_id: int | None
 ) -> dict[str, int]:
-    """Dosyadaki sınıfların eski satırlarını siler, yenilerini yazar → sınıf → eski satır sayısı.
+    """Dosyadaki sınıfların dönem içindeki eski satırlarını siler, yenilerini o döneme yazar →
+    sınıf → eski satır sayısı.
 
     Silme "Veli listesini sil"le aynı yoldan geçer (`_veli_satirlarini_sil`, tetik `AKTARIM`).
 
     Satırlar sınıf ve çözülmüş ad sırasıyla yazılır: kaynak dosyadaki sıra tutulmaz (tasarım
     §5.1 `ParentRoster`). Kör indeks `save()`'te dolar: toplu yazım yoktur (`create`).
     """
-    eski = ParentRoster.objects.filter(student_class__in=list(sinifa_gore))
+    eski = roster_term_rows(term_id).filter(student_class__in=list(sinifa_gore))
     eski_sayilari = Counter(eski.values_list("student_class", flat=True))
     _veli_satirlarini_sil(eski, tetik=denetim_izi.KVKK_TETIK_AKTARIM)
     for sinif in sorted(sinifa_gore, key=excel_veli.sinif_sira_anahtari):
         for row in sorted(sinifa_gore[sinif], key=lambda r: normalize.tr_sort_key(r.full_name)):
             ParentRoster.objects.create(
-                import_run=run, full_name=row.full_name, student_class=sinif
+                import_run=run, full_name=row.full_name, student_class=sinif, term_id=term_id
             )
     return dict(eski_sayilari)
 
@@ -723,7 +757,8 @@ def _siniflari_yerine_koy(
 def _ingest_parents(
     *, grid: list[list[Any]], source_hash: str, file_name: str = ""
 ) -> ParentImportReport:
-    """Veli listesini yazar: dosyadaki sınıflar yerine konur, ötekilere dokunulmaz (§8.4 (1)).
+    """Veli listesini yazar: dosyadaki sınıflar dönem içinde yerine konur, ötekilere dokunulmaz
+    (§8.4 (1)); "dokunulmayan" sayıları da yalnız aynı dönemin satırlarıdır.
 
     Denetim izi kişisiz parti satırıdır: koşunun açılışı (`OLUSTUR`) ve kapanışı (`DURUM`);
     yerine geçen eski satırların silinmesi `KVKK_SILME` (tetik `AKTARIM`).
@@ -745,14 +780,15 @@ def _ingest_parents(
     sinifa_gore: dict[str, list[ParsedParentRow]] = {}
     for row in rows:
         sinifa_gore.setdefault(row.student_class, []).append(row)
-    eski_sayilari = _siniflari_yerine_koy(run, sinifa_gore)
+    term_id = current_roster_term_id()
+    eski_sayilari = _siniflari_yerine_koy(run, sinifa_gore, term_id=term_id)
     report.classes = [
         ParentClassImpact(sinif, len(sinifa_gore[sinif]), eski_sayilari.get(sinif, 0))
         for sinif in sorted(sinifa_gore, key=excel_veli.sinif_sira_anahtari)
     ]
     report.class_count = len(report.classes)
     report.replaced_rows = sum(eski_sayilari.values())
-    kalan = ParentRoster.objects.exclude(student_class__in=list(sinifa_gore))
+    kalan = roster_term_rows(term_id).exclude(student_class__in=list(sinifa_gore))
     report.kept_rows = kalan.count()
     report.kept_class_count = kalan.values("student_class").distinct().count()
 

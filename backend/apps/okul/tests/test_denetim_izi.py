@@ -345,7 +345,7 @@ def test_listesiz_model_izlenmez() -> None:
 
 #: KVKK silme kümesindeki modeller (tasarım §5.4, §4.6.2): satırı silinir; iz satırı değer taşımaz,
 #: kişi alanları içerik MAC'ine girmez. Yeni model buraya ADIYLA girer.
-KVKK_SILME_KUMESI = frozenset({"okul.Personnel"})
+KVKK_SILME_KUMESI = frozenset({"okul.Personnel", "oab.OabPerson"})
 
 
 @pytest.mark.parametrize("model", izlenen_modeller(), ids=lambda m: m.__name__)
