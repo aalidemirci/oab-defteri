@@ -13,9 +13,16 @@ YAZMA YOLLARI (hepsi `yazma_kapisi()` ile başlar, kural denetimini `uyum.denetl
   seçilen yalnız aynı kaydın `ADAY` → `SECILDI` geçişiyle olur (tek kaynak — sert; tasarım §5.2.2).
   Genel kurul dışı kanalda (öğretmenler kurulu, il/ilçe MEM görevlendirmesi) ve geçiş kurulumunda
   devralınan (`DEVRALINAN`) üyelik doğrudan `SECILDI` açılır; devralınanda aday şartı aranmaz.
+  Devralınan üyelik geçiş kaydıdır: yalnız geçişe açık döneme, "Geçiş kurulumu tamamlandı" işaretinden
+  önce yazılır (`donem_kilidi.gecis_yazma_denetimi`), iz satırları `GECIS` etiketlidir (plan F1c-8).
 * `elect_membership`: `ADAY` → `SECILDI` (genel kurulun seçim sonucu; ekranı F2'nin sihirbazındadır).
 * `update_membership`: kişisiz ayrıntılar (oy, yedek sırası, dayanak notu, MEM onay no, beyan günleri,
   DK öğretmeninin başka kurumdaki görevlendirme günleri, alım komisyonunda uzmanlık işareti).
+  Devralınan kayıtta geçişte girilen alanların (`GECIS_ALANLARI`: oy, yedek sırası, kanıt notu, MEM
+  onay no) dolu değeri değişmez: yanlışsa kayıt iptal edilip yeniden girilir, bu yol "Geçiş kurulumu
+  tamamlandı" işaretine kadar açıktır (tasarım §7.9 giriş ve "Senaryolar"; plan F1c 8. adımın
+  kararı); işaretten sonra ret `GecisKapali`'dır (409). Boş alanın doldurulması eksiğin
+  tamamlanmasıdır (altın kural 3; ör. yedek sırası, MEM onay no): geçiş açıkken `GECIS` etiketlidir.
 * `dk_baskanlik_denetimi`: Denetleme Kurulu başkanlık sayacı; görev bölümünde koşar (aşağıda "Seçilme
   sayacı"), uyarı özeti değişirse izini yazar.
 
@@ -60,7 +67,8 @@ KOLTUK UYGUNLUĞU (tasarım §5.2.2 tablosu; CLAUDE.md altın kural 3):
 SEÇİLME SAYACI (md. 12/4 "en fazla dört defa seçilebilir", md. 14/3 "üç defa"; §15 B-12; D33):
 yönetim kurulunda başkan ve üyeler TEK sayaçtır, asıl ve yedek her seçilme sayılır; Denetleme
 Kurulunda yalnız başkanlık sayılır. Sayaç = programın kayıtları (`SECILDI` ve `DUSTU`; `ADAY` ve
-`IPTAL` hariç; `source = PROGRAM`) + kişinin `external_*` beyanı. `DEVRALINAN` kayıt sayaç dışıdır:
+`IPTAL` hariç; `source = PROGRAM`; iptal edilmiş dönemin kayıtları hariç: iptal edilen dönem hiç
+olmamıştır) + kişinin `external_*` beyanı. `DEVRALINAN` kayıt sayaç dışıdır:
 beyan görevdeki seçimi içerir (plan F1c kararları). Beyan "bilinmiyor"sa (`None`) sayaç EKSİK'tir,
 engel değildir (R5); bilinen kayıtlar sınırı zaten aşıyorsa uyarıdır. Sınırın üstündeki seçim uyarı +
 gerekçedir. Yönetim kurulunda denetim programda yapılan seçilmede koşar (`SECILDI` + `PROGRAM`).
@@ -80,6 +88,7 @@ toplantısının yerel günü, o da yoksa bugünün yerel günü (`timezone.loca
 from __future__ import annotations
 
 from collections.abc import Mapping
+from contextlib import nullcontext
 from datetime import date
 from typing import Any, Final
 
@@ -94,6 +103,7 @@ from apps.oab.kurallar.erisim import denetle as paket_denetle
 from apps.oab.models import (
     AssemblyKind,
     AssemblyStatus,
+    ComplianceItem,
     ElectedBy,
     EligibilityBar,
     EligibilityBarBasis,
@@ -109,11 +119,12 @@ from apps.oab.models import (
     PersonStatus,
     SeatGroup,
     SeatType,
+    TermStatus,
     UyelikDurumuGecersiz,
 )
 from apps.oab.services import donem_kilidi, iz, takvim, uyum
 from apps.okul import denetim_izi, erisim_gunlugu
-from apps.okul.models import AccessKind
+from apps.okul.models import AccessKind, AuditLabel
 from apps.okul.services import app_password
 from shared.crypto import is_corrupt
 
@@ -145,6 +156,7 @@ SECIM_KANALLARI: Final[dict[tuple[str, str], frozenset[str]]] = {
     ),
 }
 
+
 #: Seçilme sayacına giren durumlar (§15 B-12): seçilmiş ve sonradan düşmüş kayıt sayılır.
 SAYAC_DURUMLARI: Final = (MembershipStatus.SECILDI, MembershipStatus.DUSTU)
 
@@ -171,6 +183,12 @@ GUNCELLENEBILIR: Final = frozenset(
         "expertise_required",
     }
 )
+
+
+#: Devralınan kayıtta geçişte girilen alanlar (tasarım §7.9 adım 2: koltuk, seçim kanalı, kanıt): dolu
+#: değer değişmez, düzeltme iptal + yeni kayıttır (modül başlığı, `update_membership`). Öteki alanlar
+#: görevdeki üyenin sonraki beyanlarıdır (beyan ve görevlendirme günleri, uzmanlık işareti).
+GECIS_ALANLARI: Final = frozenset({"votes", "seat_order", "evidence_note", "mem_approval_no"})
 
 
 #: Uyarı özetine giren denetim sonuçları (O3 `rule_warnings`).
@@ -216,6 +234,10 @@ GOREVLENDIRME_YALNIZ_DK_OGRETMENINDE = (
 )
 GOREVLENDIRME_SIRASI = "Görevlendirmenin bitişi başlangıcından önce olamaz."
 UZMANLIK_YALNIZ_ALIM_KOMISYONUNDA = "Uzmanlık işareti yalnız alım komisyonu üyeliğinde verilir."
+GECIS_ALANI_DEGISMEZ = (
+    "Devralınan üyeliğin geçişte girilen bilgisi değişmez; yanlışsa üyelik iptal edilip yeniden "
+    "girilir."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -254,9 +276,11 @@ def dk_koltuguna_uygun(kisi: OabPerson, seat_group: str) -> bool:
 # Seçilme sayacı (§15 B-12)
 # ---------------------------------------------------------------------------
 def _sayilan(kisi: OabPerson) -> QuerySet[OrganMembership]:
+    """Sayaca giren program kayıtları; iptal edilmiş dönemin kayıtları sayılmaz (dönem hiç olmamıştır;
+    düşmüş kayıt iptal edilemediğinden sayaçtan dönemiyle düşer)."""
     return OrganMembership.objects.filter(
         person=kisi, status__in=SAYAC_DURUMLARI, source=MembershipSource.PROGRAM
-    )
+    ).exclude(term__status=TermStatus.IPTAL)
 
 
 def yk_secilme_sayisi(kisi: OabPerson) -> int:
@@ -501,23 +525,72 @@ def _secilme_siniri(d: _Denetim) -> None:
     Denetleme Kurulunda seçim sayaca girmez: sayılan başkanlıktır, başkanı görev bölümü belirler
     (`_dk_baskanlik_siniri`).
     """
-    uyelik, kisi = d.uyelik, d.uyelik.person
+    uyelik = d.uyelik
     if uyelik.status != MembershipStatus.SECILDI or uyelik.source != MembershipSource.PROGRAM:
         return
     if uyelik.organ == OrganType.YONETIM_KURULU:
-        program, beyan = yk_secilme_sayisi(kisi), kisi.external_yk_terms
-        on = paket_denetle("yonetim_kurulu.secilme_siniri", program, tarih=d.tarih, donem=d.donem)
-        d.kaydet(
-            "yonetim_kurulu.secilme_siniri",
-            uyum.denetle(
-                "yonetim_kurulu.secilme_siniri", _sayac_gozlenen(on, program, beyan), **d.ortak()
-            ),
-        )
+        _yk_sayac_denetimi(d)
+
+
+def _yk_sayac_denetimi(d: _Denetim) -> None:
+    kisi = d.uyelik.person
+    program, beyan = yk_secilme_sayisi(kisi), kisi.external_yk_terms
+    on = paket_denetle("yonetim_kurulu.secilme_siniri", program, tarih=d.tarih, donem=d.donem)
+    d.kaydet(
+        "yonetim_kurulu.secilme_siniri",
+        uyum.denetle(
+            "yonetim_kurulu.secilme_siniri", _sayac_gozlenen(on, program, beyan), **d.ortak()
+        ),
+    )
+
+
+def _dk_sayac_denetimi(d: _Denetim) -> None:
+    kisi = d.uyelik.person
+    program, beyan = dk_baskanlik_sayisi(kisi), kisi.external_dk_chair_terms
+    on = paket_denetle(
+        "denetleme_kurulu.baskan_secilme_siniri", program, tarih=d.tarih, donem=d.donem
+    )
+    d.kaydet(
+        "denetleme_kurulu.baskan_secilme_siniri",
+        uyum.denetle(
+            "denetleme_kurulu.baskan_secilme_siniri",
+            _sayac_gozlenen(on, program, beyan),
+            **d.ortak(),
+        ),
+    )
+
+
+def _acik_satiri_var(uyelik: OrganMembership, kural_id: str) -> bool:
+    return ComplianceItem.objects.filter(
+        term_id=uyelik.term_id,
+        subject_type=denetim_izi.model_etiketi(OrganMembership),
+        subject_id=denetim_izi.kimlik_metni(OrganMembership, uyelik.pk),
+        rule_id=kural_id,
+        resolved_at__isnull=True,
+    ).exists()
+
+
+def _dusmus_sayaci(d: _Denetim) -> None:
+    """Düşmüş program kaydının açık sayaç satırı yeniden denetlenir (yalnız beyan yolu,
+    `sayaci_yeniden_denetle`): seçilme düşmeyle silinmez (sayaç `SECILDI` ve `DUSTU` sayar), seçimde
+    açılan eksik satırı beyan gelince kapanmalıdır (tasarım §5 O3). Yalnız açık satırı olan kural koşar:
+    düşmüş kayıtta yeni satır açılmaz."""
+    uyelik = d.uyelik
+    if uyelik.status != MembershipStatus.DUSTU or uyelik.source != MembershipSource.PROGRAM:
+        return
+    if uyelik.organ == OrganType.YONETIM_KURULU and _acik_satiri_var(
+        uyelik, "yonetim_kurulu.secilme_siniri"
+    ):
+        _yk_sayac_denetimi(d)
+    if uyelik.organ == OrganType.DENETLEME_KURULU and _acik_satiri_var(
+        uyelik, "denetleme_kurulu.baskan_secilme_siniri"
+    ):
+        _dk_sayac_denetimi(d)
 
 
 def _dk_baskanlik_siniri(d: _Denetim) -> None:
     """Denetleme Kurulu başkanlık sayacı (md. 14/3): programda görev bölümünde başkan olan asıl."""
-    uyelik, kisi = d.uyelik, d.uyelik.person
+    uyelik = d.uyelik
     if (
         uyelik.organ == OrganType.DENETLEME_KURULU
         and uyelik.role == MembershipRole.BASKAN
@@ -525,18 +598,7 @@ def _dk_baskanlik_siniri(d: _Denetim) -> None:
         and uyelik.source == MembershipSource.PROGRAM
         and selectors.gorevdeki_asil_mi(uyelik)
     ):
-        program, beyan = dk_baskanlik_sayisi(kisi), kisi.external_dk_chair_terms
-        on = paket_denetle(
-            "denetleme_kurulu.baskan_secilme_siniri", program, tarih=d.tarih, donem=d.donem
-        )
-        d.kaydet(
-            "denetleme_kurulu.baskan_secilme_siniri",
-            uyum.denetle(
-                "denetleme_kurulu.baskan_secilme_siniri",
-                _sayac_gozlenen(on, program, beyan),
-                **d.ortak(),
-            ),
-        )
+        _dk_sayac_denetimi(d)
 
 
 #: Görev alma engelinin hüküm olduğu organlar (dayanak → organlar): suç engeli yönetim kurulu, alım
@@ -642,6 +704,34 @@ def dk_baskanlik_denetimi(uyelik: OrganMembership, *, gerekce: uyum.Gerekce | No
         guncel.rule_warnings = ozet
         guncel.save(update_fields=["rule_warnings", "updated_at"])
         denetim_izi.degisiklik(guncel, onceki=onceki)  # özet değişmediyse boş iz satırı yazılmaz
+
+
+@transaction.atomic
+def sayaci_yeniden_denetle(
+    uyelik: OrganMembership, *, gerekce: uyum.Gerekce | None = None
+) -> dict[str, DenetimSonucu]:
+    """Programdan önceki seçilme sayısı beyan edilince üyeliğin sayaç denetimini yeniden koşar
+    (geçiş kurulumunun 3. adımı, tasarım §7.9; `gecis.sayac_beyani`).
+
+    Yönetim kurulunda programda yapılan seçilme, Denetleme Kurulunda görevdeki program başkanı
+    denetlenir (`_secilme_siniri`, `_dk_baskanlik_siniri`; devralınan kayıt sayaç dışıdır); düşmüş
+    program kaydında yalnız açık sayaç satırı yeniden denetlenir (`_dusmus_sayaci`). Uygunsa
+    açık eksik satırı kapanır, uyarıysa gerekçe ister; sonuçlar döner (beyan hâlâ "bilinmiyor"sa
+    `eksik`, çağıran toplu gerekçeyi bağlar). Özet değişirse iz satırı yazılır.
+    """
+    yazma_kapisi()
+    guncel = _guncel(uyelik)
+    onceki = denetim_izi.anlik(guncel)
+    d = _Denetim(guncel, guncel.term, gerekce=gerekce)
+    _secilme_siniri(d)
+    _dk_baskanlik_siniri(d)
+    _dusmus_sayaci(d)
+    ozet = d.ozet(list(guncel.rule_warnings or []))
+    if ozet != (guncel.rule_warnings or []):
+        guncel.rule_warnings = ozet
+        guncel.save(update_fields=["rule_warnings", "updated_at"])
+        denetim_izi.degisiklik(guncel, onceki=onceki)
+    return d.sonuclar
 
 
 # ---------------------------------------------------------------------------
@@ -763,31 +853,49 @@ def assign_membership(
     )
     _genel_kurul_bagi(donem=donem, assembly=assembly, kanal=elected_by, source=source)
     donem_kilidi.yazma_denetimi(donem, hazirlik_yazimi=elected_by == ElectedBy.GENEL_KURUL)
+    devralinan = source == MembershipSource.DEVRALINAN
+    if devralinan:
+        # Devralınan üyelik geçiş kaydıdır: yalnız geçişe açık döneme, işaretten önce (§7.9).
+        donem_kilidi.gecis_yazma_denetimi(donem)
     kisi = _kisi_aktif(person)
     if _ayni_uyelik_var(donem=donem, kisi=kisi, organ=organ, assembly=assembly):
         raise ValueError(AYNI_UYELIK_VAR)
     aday = source == MembershipSource.PROGRAM and elected_by == ElectedBy.GENEL_KURUL
+    etiket = denetim_izi.etiketle(AuditLabel.GECIS) if devralinan else nullcontext()
+    with etiket:
+        return _uyelik_olustur(
+            donem,
+            kisi,
+            organ=organ,
+            assembly=assembly,
+            role=role,
+            seat_type=seat_type,
+            seat_group=seat_group,
+            votes=votes,
+            seat_order=seat_order,
+            elected_by=elected_by,
+            source=source,
+            evidence_note=evidence_note,
+            mem_approval_no=mem_approval_no,
+            status=MembershipStatus.ADAY if aday else MembershipStatus.SECILDI,
+            start_date=None if aday else (start_date or timezone.localdate()),
+            eligibility_declared_on=eligibility_declared_on,
+            single_birlik_declared_on=single_birlik_declared_on,
+            gerekce=gerekce,
+        )
+
+
+def _uyelik_olustur(
+    donem: OabTerm,
+    kisi: OabPerson,
+    *,
+    gerekce: uyum.Gerekce | None,
+    **alanlar: Any,
+) -> OrganMembership:
+    """`assign_membership`'in kaydı: satır, denetimler ve izi (aynı işlemde)."""
     hesap = iz.yazar_hesabi()
     uyelik = OrganMembership.objects.create(
-        term=donem,
-        person=kisi,
-        organ=organ,
-        assembly=assembly,
-        role=role,
-        seat_type=seat_type,
-        seat_group=seat_group,
-        votes=votes,
-        seat_order=seat_order,
-        elected_by=elected_by,
-        source=source,
-        evidence_note=evidence_note,
-        mem_approval_no=mem_approval_no,
-        status=MembershipStatus.ADAY if aday else MembershipStatus.SECILDI,
-        start_date=None if aday else (start_date or timezone.localdate()),
-        eligibility_declared_on=eligibility_declared_on,
-        single_birlik_declared_on=single_birlik_declared_on,
-        created_by_id=hesap,
-        updated_by_id=hesap,
+        term=donem, person=kisi, created_by_id=hesap, updated_by_id=hesap, **alanlar
     )
     _denetle_ve_ozetle(_Denetim(uyelik, donem, gerekce=gerekce))
     denetim_izi.degisiklik(uyelik, onceki=None)
@@ -877,6 +985,7 @@ def update_membership(uyelik: OrganMembership, **alanlar: Any) -> OrganMembershi
     donem_kilidi.yazma_denetimi(
         guncel.term, hazirlik_yazimi=guncel.elected_by == ElectedBy.GENEL_KURUL
     )
+    gecis_yazimi = _gecis_alani_denetimi(guncel, degisen)
     if "seat_order" in degisen and alanlar["seat_order"] is not None:
         if guncel.seat_type != SeatType.YEDEK:
             raise ValueError(YEDEK_SIRASI_YALNIZ_YEDEKTE)
@@ -887,20 +996,38 @@ def update_membership(uyelik: OrganMembership, **alanlar: Any) -> OrganMembershi
     if "expertise_required" in degisen and alanlar["expertise_required"]:
         if guncel.organ != OrganType.ALIM_KOMISYONU:
             raise ValueError(UZMANLIK_YALNIZ_ALIM_KOMISYONUNDA)
-    onceki = denetim_izi.anlik(guncel)
-    for ad in degisen:
-        setattr(guncel, ad, alanlar[ad])
-    guncel.updated_by_id = iz.yazar_hesabi()
-    guncel.save(update_fields=[*degisen, "updated_at", "updated_by"])
-    if "mem_approval_no" in degisen and guncel.organ == OrganType.DENETLEME_KURULU:
-        d = _Denetim(guncel, guncel.term, gerekce=None)
-        _dk_koltuk_denetimi(d)
-        ozet = d.ozet(list(guncel.rule_warnings or []))
-        if ozet != (guncel.rule_warnings or []):
-            guncel.rule_warnings = ozet
-            guncel.save(update_fields=["rule_warnings", "updated_at"])
-    denetim_izi.degisiklik(guncel, onceki=onceki)
+    with denetim_izi.etiketle(AuditLabel.GECIS) if gecis_yazimi else nullcontext():
+        onceki = denetim_izi.anlik(guncel)
+        for ad in degisen:
+            setattr(guncel, ad, alanlar[ad])
+        guncel.updated_by_id = iz.yazar_hesabi()
+        guncel.save(update_fields=[*degisen, "updated_at", "updated_by"])
+        if "mem_approval_no" in degisen and guncel.organ == OrganType.DENETLEME_KURULU:
+            d = _Denetim(guncel, guncel.term, gerekce=None)
+            _dk_koltuk_denetimi(d)
+            ozet = d.ozet(list(guncel.rule_warnings or []))
+            if ozet != (guncel.rule_warnings or []):
+                guncel.rule_warnings = ozet
+                guncel.save(update_fields=["rule_warnings", "updated_at"])
+        denetim_izi.degisiklik(guncel, onceki=onceki)
     return guncel
+
+
+def _gecis_alani_denetimi(guncel: OrganMembership, degisen: list[str]) -> bool:
+    """Devralınan kaydın geçişte girilen alanı (`GECIS_ALANLARI`; modül başlığı `update_membership`).
+
+    Dolu değer değişmez: işaretten sonra `GecisKapali` (409), önce iptal + yeni kayıt yolu gösterilir
+    (400). Boş alan doldurulur (eksik tamamlanır); yazım geçiş açıkken `GECIS` etiketlidir (`True`).
+    """
+    if guncel.source != MembershipSource.DEVRALINAN:
+        return False
+    gecis_alanlari = [ad for ad in degisen if ad in GECIS_ALANLARI]
+    if not gecis_alanlari:
+        return False
+    if any(getattr(guncel, ad) not in (None, "") for ad in gecis_alanlari):
+        donem_kilidi.gecis_yazma_denetimi(guncel.term)
+        raise ValueError(GECIS_ALANI_DEGISMEZ)
+    return donem_kilidi.gecis_acik_mi(guncel.term)
 
 
 # ---------------------------------------------------------------------------

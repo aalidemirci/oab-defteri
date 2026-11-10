@@ -464,7 +464,9 @@ def test_pasif_kisinin_alanlari_degismez_yeniden_etkinlesir() -> None:
 
 @pytest.mark.django_db
 def test_sayac_beyani_bos_bilinmiyordur_eksi_olamaz() -> None:
-    """Programdan önceki seçilme sayıları: beyan ya da "bilinmiyor" (boş; tasarım §5.2.2)."""
+    """Programdan önceki seçilme sayıları: beyan ya da "bilinmiyor" (boş; tasarım §5.2.2). Verilmiş
+    beyan kişi kaydından değişmez: yalnız geçiş kurulumunun sayaç beyanıyla, gerekçeyle düzeltilir
+    (plan F1c 8. adımın kararı; `test_gecis.py`)."""
     kisi = _kisi()
     assert (kisi.external_yk_terms, kisi.external_dk_chair_terms) == (None, None)
     yanit = _istemci().patch(
@@ -475,7 +477,9 @@ def test_sayac_beyani_bos_bilinmiyordur_eksi_olamaz() -> None:
     yanit = _istemci().patch(f"{UC}{kisi.pk}/", {"external_yk_terms": -1}, format="json")
     assert yanit.status_code == 400
     yanit = _istemci().patch(f"{UC}{kisi.pk}/", {"external_yk_terms": None}, format="json")
-    assert yanit.status_code == 200 and yanit.json()["external_yk_terms"] is None
+    assert yanit.status_code == 400
+    assert "yalnız geçiş kurulumunda" in str(yanit.json())
+    assert OabPerson.objects.get(pk=kisi.pk).external_yk_terms == 2
 
 
 # ============================================================ personelden kopya

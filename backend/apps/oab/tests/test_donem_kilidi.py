@@ -655,6 +655,15 @@ YAZMA_SERVISLERI = frozenset(
         "uyelik_gecisleri.yedek_cagir",
         "uyelik_gecisleri.uyeligi_dusur",
         "temsilciler.temsilci_ekle",
+        # F1c 8. adım: geçiş kurulumu (tasarım §7.9).
+        "gecis.ilk_donemi_ac",
+        "gecis.devralinan_ekle",
+        "gecis.devralinan_temsilci_ekle",
+        "gecis.sayac_beyani",
+        "gecis.karar_defteri_kaydet",
+        "uyum.bilinmeyen_beyan_sapmasi",
+        "uyum.duzeltme_kaydi",
+        "uyelikler.sayaci_yeniden_denetle",
     }
 )
 #: `@transaction.atomic` taşıyıp kural okumayan servisler ve gerekçesi.
@@ -665,6 +674,10 @@ _KISI_KURALSIZ = (
 _KURUL_KURALSIZ = (
     "Toplantı, katılım ve karar taslağı kural okumaz: toplantı ve karar yeter sayısı F3'tedir (F1c "
     "5. adım); dönemli kayıt dönem kilidinden geçer."
+)
+_GECIS_KURALSIZ = (
+    "Geçiş kaydının iptali ve tamamlandı işareti kural okumaz (iptal gerekçesi O1, kilit geçiş "
+    "kurulumunun işaretidir; F1c 8. adım); dönem kilidi yine denetlenir."
 )
 KURALSIZ = {
     "uyum.eksik_kapat": "Yalnız satırı kapatır: kural okumaz; dönem kilidi yine denetlenir.",
@@ -691,6 +704,13 @@ KURALSIZ = {
     "kisiler.update_person": _KISI_KURALSIZ,
     "kisiler.copy_from_personnel": _KISI_KURALSIZ,
     "kisiler.copy_from_parent": _KISI_KURALSIZ,
+    # F1c 8. adım: geçiş kaydının iptal yolları ve tamamlandı işareti kural okumaz (gerekçe
+    # zorunluluğu O1, kilit `donem_kilidi.gecis_yazma_denetimi`).
+    "gecis.donemi_iptal_et": _GECIS_KURALSIZ,
+    "gecis.devralinan_iptal_et": _GECIS_KURALSIZ,
+    "gecis.karar_defterini_iptal_et": _GECIS_KURALSIZ,
+    "gecis.gecisi_tamamla": _GECIS_KURALSIZ,
+    "uyum.acik_satiri_kapat": "Yalnız açık satırı kapatır: kural okumaz; dönem kilidi yine denetlenir.",
 }
 SERVISLER = Path(__file__).resolve().parents[1] / "services"
 

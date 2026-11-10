@@ -83,7 +83,6 @@ class RulePackage(models.Model):
         raise ImmutableRecord("Kural paketi kopyası silinemez (tasarım §6.2-4).")
 
 
-_TARIHSIZ_DURUMLAR = (TermStatus.HAZIRLIK, TermStatus.IPTAL)
 _BASLAMIS_DURUMLAR = (TermStatus.ACIK, TermStatus.KAPANISTA, TermStatus.KAPANDI)
 _BITMIS_DURUMLAR = (TermStatus.KAPANISTA, TermStatus.KAPANDI)
 
@@ -106,6 +105,7 @@ class OabTerm(OabBaseModel):
         "program_start_date",
         "pre_program_income",
         "pre_program_expense",
+        "transition_completed_on",
         "closed_at",
         "closed_by",
     )
@@ -127,6 +127,8 @@ class OabTerm(OabBaseModel):
         "pre_program_evidence",
         "yk_meeting_day_rule",
         "dk_audit_plan_dates",
+        "transition_completed_on",
+        "cancel_reason",
         "closed_at",
         "closed_by",
     )
@@ -172,6 +174,15 @@ class OabTerm(OabBaseModel):
         "yönetim kurulu toplantı günü kuralı", max_length=64, blank=True, default=""
     )
     dk_audit_plan_dates = models.JSONField("denetim planı tarihleri", default=list, blank=True)
+    #: "Geçiş kurulumu tamamlandı" işaretinin günü (tasarım §7.9 "Senaryolar"; alan tasarımda yok,
+    #: en dar çözüm olarak dönemdedir — plan F1c 8. adımın kararı). Yalnız genel kurulsuz açılan
+    #: dönemde konur; konunca geçiş kayıtları (dönem, devralınan üyelik, sayaç beyanı, karar defteri)
+    #: kilitlenir, iptal yolu kapanır.
+    transition_completed_on = models.DateField(
+        "geçiş kurulumunun tamamlandığı gün", null=True, blank=True
+    )
+    #: `ACIK` → `IPTAL`'de zorunlu: yanlış geçiş kaydının gerekçesi (şifreli; kim `updated_by` ve iz).
+    cancel_reason = EncryptedTextField("iptal gerekçesi", blank=True, default="")
     closed_at = models.DateTimeField("kapanış", null=True, blank=True)
     closed_by = models.ForeignKey(
         "okul.Account",
@@ -201,9 +212,16 @@ class OabTerm(OabBaseModel):
                 name="uq_oabterm_tek_hazirlik",
             ),
             models.CheckConstraint(
-                condition=Q(status__in=_TARIHSIZ_DURUMLAR, start_date__isnull=True)
+                # İptal: hazırlıktan (tarihsiz) ya da geçiş döneminden (tarihli) gelir.
+                condition=Q(status=TermStatus.HAZIRLIK, start_date__isnull=True)
+                | Q(status=TermStatus.IPTAL)
                 | Q(status__in=_BASLAMIS_DURUMLAR, start_date__isnull=False),
                 name="ck_oabterm_baslangic",
+            ),
+            models.CheckConstraint(
+                condition=Q(transition_completed_on__isnull=True)
+                | Q(opened_by_assembly__isnull=True),
+                name="ck_oabterm_gecis_isareti",
             ),
             models.CheckConstraint(
                 condition=Q(status__in=_BITMIS_DURUMLAR, end_date__isnull=False)

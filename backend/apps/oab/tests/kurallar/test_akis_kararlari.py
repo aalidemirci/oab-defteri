@@ -16,7 +16,11 @@ from typing import Any
 import pytest
 from django.db import IntegrityError, transaction
 
+from apps.oab.hatalar import GecisKapali, GerekceGerekli, KuralSert
 from apps.oab.models import (
+    ComplianceItem,
+    ComplianceJustification,
+    ComplianceKind,
     DropKind,
     ElectedBy,
     MembershipSource,
@@ -25,7 +29,7 @@ from apps.oab.models import (
     Representation,
     SeatGroup,
 )
-from apps.oab.services import uyelikler
+from apps.oab.services import gecis, kisiler, uyelikler
 from apps.oab.tests import uyelik_ortak as o
 
 pytestmark = pytest.mark.django_db
@@ -206,3 +210,89 @@ def test_tek_koltuk_temsilcide_uygulanmaz() -> None:
     _ham(term=donem, person=kisi, assembly=o.olaganustu_genel_kurul(donem))
     yk = _ham(term=donem, person=kisi, assembly=o.olaganustu_genel_kurul(donem))
     assert uyelikler._ikinci_koltuk(yk)
+
+
+# ============================================================ geçiş kurulumu (F1c 8. adım; tasarım §7.9)
+# Devralınan kurul aday şartı olmadan seçilmiş açılır, koltuk uygunluğu yine serttir (adım 2);
+# programdan önceki seçilme sayılarının "bilinmiyor" beyanı tek gerekçeyle kapanır (adım 3, R5).
+
+SAYAC = "yonetim_kurulu.secilme_siniri"
+
+
+def test_devralinan_uyelik_koltuk_uygunlugu_yine_serttir() -> None:
+    """§7.9 adım 2 [S]: kişi türü, müdür yasağı, aynı kişi iki kurulda, görev tekilliği."""
+    donem = o.donem()
+    with pytest.raises(KuralSert):
+        gecis.devralinan_ekle(person=o.ogretmen(), organ="YK")  # veli değil
+    mudur = kisiler.update_person(o.kisi(), is_principal=True)
+    with pytest.raises(KuralSert):
+        gecis.devralinan_ekle(person=mudur, organ="YK")
+    hayirsever = o.kisi(kind="HAYIRSEVER", is_parent=False)
+    with pytest.raises(KuralSert):
+        gecis.devralinan_ekle(person=hayirsever, organ="DK", seat_group=SeatGroup.VELI)
+    ikili = o.kisi()
+    gecis.devralinan_ekle(person=ikili, organ="YK", role="BASKAN")
+    with pytest.raises(KuralSert):
+        gecis.devralinan_ekle(person=ikili, organ="DK", seat_group=SeatGroup.VELI)
+    with pytest.raises(KuralSert):
+        gecis.devralinan_ekle(person=o.kisi(), organ="YK", role="BASKAN")  # görev tekil
+    assert list(OrganMembership.objects.values_list("person_id", "organ")) == [(ikili.pk, "YK")]
+    assert OrganMembership.objects.get().term_id == donem.pk
+
+
+def test_devralinan_uyelik_gecis_tamamlaninca_acilmaz() -> None:
+    """Devralınan üyelik geçiş kaydıdır: "Geçiş kurulumu tamamlandı" işaretinden sonra açılmaz."""
+    donem = o.donem()
+    o.devralinan(donem, o.kisi())
+    gecis.gecisi_tamamla(donem)
+    kisi = o.kisi()
+    with pytest.raises(GecisKapali):
+        o.devralinan(donem, kisi)
+    assert OrganMembership.objects.count() == 1
+
+
+def test_gecis_toplu_sayac_beyani_tek_gerekce() -> None:
+    """§7.9 adım 3 [U], §5 O3 "toplu gerekçe": "bilinmiyor" denen bütün kişiler için seçilme sınırı
+    satırı bir kez, tek gerekçeyle kapanır; sonraki beyanda yeniden sorulmaz. Programdaki seçimin açık
+    sayaç eksiği de aynı gerekçeye bağlanır, sayı beyan edilince kapanır."""
+    donem = o.donem()
+    gorevdekiler = [o.kisi() for _ in range(3)]
+    for kisi in gorevdekiler:
+        gecis.devralinan_ekle(person=kisi, organ="YK")
+    beyan = [gecis.SayacBeyani(kisi=kisi, yk=None) for kisi in gorevdekiler]
+    with pytest.raises(GerekceGerekli):
+        gecis.sayac_beyani(beyan)
+    assert not ComplianceItem.objects.exists()
+    sonuc = gecis.sayac_beyani(beyan, gerekce="Uydurma: eski karar defteri elde değil.")
+    assert len(sonuc.bilinmeyenler) == 3
+    assert {(s.kind, s.subject_type, s.rule_id) for s in sonuc.bilinmeyenler} == {
+        (ComplianceKind.SAPMA, "oab.OabPerson", SAYAC)
+    }
+    tek = ComplianceJustification.objects.get(rule_id=SAYAC)
+    assert tek.root_cause == gecis.sayac_kok_nedeni(donem)
+    assert {s.justification_group_id for s in sonuc.bilinmeyenler} == {tek.pk}
+    # Sonra eklenen kişi de aynı gerekçeye bağlanır: aday başına yeniden sorulmaz.
+    sonraki = gecis.sayac_beyani([gecis.SayacBeyani(kisi=o.kisi(), yk=None)])
+    assert sonraki.bilinmeyenler[0].justification_group_id == tek.pk
+    # Aynı beyan yinelenirse yeni satır açılmaz.
+    assert gecis.sayac_beyani(beyan).bilinmeyenler == sonuc.bilinmeyenler
+    # Programdaki seçimin sayaç eksiği: "bilinmiyor"da toplu gerekçeye bağlanır, sayıda kapanır.
+    kurul = o.olaganustu_genel_kurul(donem)
+    a, b = o.kisi(), o.kisi()
+    ua = uyelikler.elect_membership(o.yk_adayi(donem, a, kurul), start_date=o.SECIM_GUNU)
+    ub = uyelikler.elect_membership(o.yk_adayi(donem, b, kurul), start_date=o.SECIM_GUNU)
+
+    def satir(uyelik: OrganMembership) -> ComplianceItem:
+        return ComplianceItem.objects.get(
+            subject_type="oab.OrganMembership", subject_id=str(uyelik.pk), rule_id=SAYAC
+        )
+
+    assert {satir(ua).kind, satir(ub).kind} == {ComplianceKind.EKSIK}
+    gecis.sayac_beyani([gecis.SayacBeyani(kisi=a, yk=None), gecis.SayacBeyani(kisi=b, yk=0)])
+    assert (satir(ua).kind, satir(ua).justification_group_id, satir(ua).resolved_at) == (
+        ComplianceKind.SAPMA,
+        tek.pk,
+        None,
+    )
+    assert satir(ub).resolved_at is not None
+    assert ComplianceJustification.objects.filter(rule_id=SAYAC).count() == 1

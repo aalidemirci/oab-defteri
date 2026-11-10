@@ -38,7 +38,7 @@ from apps.oab.models import (
     SeatType,
     TermStatus,
 )
-from apps.oab.services import hesap_baglari, uyelik_gecisleri
+from apps.oab.services import hesap_baglari, uyelik_gecisleri, uyelikler
 from apps.oab.tests import uyelik_ortak as o
 from apps.okul import denetim_izi
 from apps.okul.models import Account, AccountRole, AccountStatus, AuditAction, AuditTrail
@@ -633,9 +633,17 @@ def test_oturumdaki_hesap_kendi_askisini_yazinca_oturum_kilitlenir(
 ) -> None:
     """Tasarım §4.4.5 "giriş kapanır": sekreter kendi görevini değiştiren görev bölümünü ya da kendi
     düşmesini, başkan kendi iptalini yazarsa askıya alınan oturumdaki hesaptır; işlem commit edilince
-    bekleyen kilit kurulur, sonraki istek 423 alır (`KILIT` satırı `SISTEM`'in)."""
+    bekleyen kilit kurulur, sonraki istek 423 alır (`KILIT` satırı `SISTEM`'in). İptalde kurul
+    programda seçilmiştir: devralınan kaydı yalnız program yöneticisi iptal eder (tasarım §7.9 adım 2)."""
     donem = o.donem()
-    uyeler = o.yk_kurulu(donem)
+    if gecis == "iptal":
+        kurul = o.olaganustu_genel_kurul(donem)
+        uyeler = [
+            uyelikler.elect_membership(o.yk_adayi(donem, o.kisi(), kurul), start_date=o.SECIM_GUNU)
+            for _ in range(5)
+        ]
+    else:
+        uyeler = o.yk_kurulu(donem)
     o.yk_gorev_bolumu(
         donem,
         {MembershipRole.SEKRETER: uyeler[0], MembershipRole.BASKAN: uyeler[1]},

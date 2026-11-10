@@ -125,6 +125,7 @@ class B:
     davranis_fazi: str = "F1c"
     kosul: dict[str, list[str]] | None = None
     karar: str | None = None
+    eksik_veri: str = "tamamlanacak"
 
 
 HB, HD, HG, KK = "hesap_butunlugu", "hesaplanan_deger", "hukuki_gecersizlik", "kullanici_karari"
@@ -148,7 +149,7 @@ DEGER_TABLOSU: dict[str, B] = {
     "genel_kurul.ikinci_toplanti_en_gec_gun": B(30, "gun", "en_cok", None, "yorum", ("Y 9/2",), _2012, "F2"),
     "genel_kurul.ikinci_toplanti_cogunluk_aranmaz": B(True, "mantiksal", "esit", HB, "lafiz", ("Y 9/2",), _2012, "F2"),
     "genel_kurul.divan_uye_turleri": B(["VELI", "KURSIYER"], "liste", "liste_icinde", None, "lafiz", ("Y 10/1-c",), _2023, "F2"),
-    # §6.4.2 Yönetim kurulu ve ortak üyelik (Y:113-116, 186-210)
+    # §6.4.2 Yönetim kurulu ve ortak üyelik (Y:113-116, 186-210, 396)
     "yonetim_kurulu.asil_uye": B(5, "kisi", "esit", None, "lafiz", _YK_KOLTUK, _2012),
     "yonetim_kurulu.yedek_uye": B(5, "kisi", "esit", None, "lafiz", _YK_KOLTUK, _2012),
     "yonetim_kurulu.uye_turleri": B(["VELI", "KURSIYER", "HAYIRSEVER"], "liste", "liste_icinde", HG, "lafiz", ("Y 12/1",), _2023),
@@ -164,6 +165,7 @@ DEGER_TABLOSU: dict[str, B] = {
     "yonetim_kurulu.toplanti_yeter_sayi": B(4, "kisi", "en_az", HB, "lafiz", ("Y 13/3",), _2012, "F3"),
     "yonetim_kurulu.karar_yeter_sayi": B(3, "kisi", "en_az", HB, "lafiz", ("Y 13/3",), _2012, "F3"),
     "yonetim_kurulu.devamsizlik_siniri": B(3, "adet", "kucuktur", None, "lafiz", ("Y 13/6",), _2012, "F3"),
+    "yonetim_kurulu.karar_defteri_noter_tasdiki": B(["NOTER"], "liste", "liste_icinde", None, "lafiz", ("Y 23/2",), _2012, eksik_veri="sapma"),
     # §6.4.3 Denetleme Kurulu (Y:224-237)
     "denetleme_kurulu.asil_uye": B(3, "kisi", "esit", None, "lafiz", _DK_KOLTUK, _2012),
     "denetleme_kurulu.yedek_uye": B(3, "kisi", "esit", None, "lafiz", _DK_KOLTUK, _2012),
@@ -249,12 +251,12 @@ def _paket_dizini(hedef: Path, *icerikler: dict[str, Any], sema: Any = None) -> 
 
 
 def test_r1_kural_sayimi() -> None:
-    """Tasarım §6.4.11: r1 = 54 kural; 17 sert, 37 uyarı; 36 davranışı F1c, 18'i sonra."""
+    """Tasarım §6.4.11: r1 = 55 kural; 17 sert, 38 uyarı; 37 davranışı F1c, 18'i sonra."""
     kurallar = R1["kurallar"]
-    assert len(kurallar) == 54 == len(KURALLAR)
+    assert len(kurallar) == 55 == len(KURALLAR)
     assert sum(k["tur"] == "sert" for k in kurallar) == 17
-    assert sum(k["tur"] == "uyari" for k in kurallar) == 37
-    assert sum(k["davranis_fazi"] == "F1c" for k in kurallar) == 36
+    assert sum(k["tur"] == "uyari" for k in kurallar) == 38
+    assert sum(k["davranis_fazi"] == "F1c" for k in kurallar) == 37
     fazlar = [k["davranis_fazi"] for k in kurallar if k["davranis_fazi"] != "F1c"]
     assert {f: fazlar.count(f) for f in set(fazlar)} == {
         "F2": 5,
@@ -288,7 +290,7 @@ def test_deger_tablosu(kid: str) -> None:
     assert (k["giris"], k["davranis_fazi"]) == ("F1c", b.davranis_fazi)
     assert k.get("kosul") == b.kosul
     assert (k.get("karar") or {}).get("kimlik") == b.karar
-    assert k["eksik_veri"] == "tamamlanacak" and k["toplu_gerekce"] is True
+    assert k["eksik_veri"] == b.eksik_veri and k["toplu_gerekce"] is True
 
 
 # ======================================================================= D1
@@ -870,10 +872,11 @@ def test_gecerli_faz_sirada_tanimlidir() -> None:
 def test_f1c_kurallarinin_davranis_testi_tamam() -> None:
     """F1c'nin 6. adımının "Bitti" ölçütü (plan F1c-6): geçerli faz F1c olunca istenen 36 kuralın
     hepsinin davranış testi vardır. `GECERLI_FAZ` evrakla birlikte 10. adımda F1c olur; o gün
-    `test_davranis_fazi_gelen_kuralin_davranis_testi_var` bu kümeyi kendiliğinden ister."""
+    `test_davranis_fazi_gelen_kuralin_davranis_testi_var` bu kümeyi kendiliğinden ister. 8. adımda
+    karar defterinin noter tasdiki kurala bağlandı (36 → 37; plan F1c 8. adım notları)."""
     fazlar = {k["id"]: k["davranis_fazi"] for k in R1["kurallar"]}
     gelenler = faz_ortak.fazi_gelenler(fazlar, gecerli="F1c")
-    assert len(gelenler) == 36
+    assert len(gelenler) == 37
     assert gelenler - _kural_isaretleri()["kural_davranis"] == set()
 
 

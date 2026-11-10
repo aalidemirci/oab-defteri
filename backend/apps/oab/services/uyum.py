@@ -369,6 +369,96 @@ def akis_sapmasi(
 
 
 @transaction.atomic
+def bilinmeyen_beyan_sapmasi(
+    kural_id: str,
+    *,
+    donem: OabTerm,
+    konu: models.Model,
+    mesaj: str,
+    gerekce: Gerekce | None,
+    tarih: date | None = None,
+) -> ComplianceItem | None:
+    """Kullanıcının "bilinmiyor" beyanı: kuralın denetleyeceği bilgi sonra da gelmeyecek (tasarım §7.9
+    adım 3, §5 O3 "toplu gerekçe"). Eksik değildir, uyarı + gerekçedir: satır `SAPMA` olur.
+
+    Açık `EKSIK` satırı varsa `SAPMA`'ya döner; aynı iletili açık `SAPMA` varsa yeniden sorulmaz;
+    yoksa yeni `SAPMA` açılır. Gerekçe toplu gerekçe kuralına uyar (`kok_neden`; `_gerekce_bagla`):
+    aynı kök nedenli gerekçe varsa ona bağlanır, metin yeniden istenmez. Kuralın olay günündeki metni
+    yoksa ya da kural bu okulda uygulanmıyorsa satır açılmaz (`None`).
+    """
+    yazma_kapisi()
+    donem = OabTerm.objects.select_related("rule_package").get(pk=donem.pk)
+    donem_kilidi.yazma_denetimi(donem)
+    sonuc = paket_denetle(kural_id, VERI_YOK, tarih=tarih, donem=donem)
+    if sonuc["durum"] in ("denetlenmedi", "uygun"):
+        return None
+    sonuc = DenetimSonucu(**{**sonuc, "durum": "uyari", "mesaj": mesaj})
+    acik = _acik_satir(donem, konu, kural_id)
+    if acik is not None and acik.kind == ComplianceKind.SAPMA and acik.message == mesaj:
+        return acik
+    toplu = _toplu_acik(kural_id, donem=donem, tarih=tarih, olaylar=None)
+    bagli = _gerekce_bagla(kural_id, gerekce, toplu_acik=toplu, uyari=atifli_metin(sonuc))
+    if acik is not None:
+        _sapmaya_cevir(acik, bagli, sonuc=sonuc)
+        return acik
+    return _satir_yaz(donem, konu, kural_id, sonuc, tur=ComplianceKind.SAPMA, gerekce=bagli)
+
+
+@transaction.atomic
+def acik_satiri_kapat(kural_id: str, *, donem: OabTerm, konu: models.Model) -> bool:
+    """Kaydın bu kuraldaki açık `EKSIK` ya da `SAPMA` satırını kapatır (bilgi girildi, uyarı kalktı;
+    O3 "Sapma, kayıt düzeltilip uyarı kalkınca `resolved_at` alır"). Kapanan satır varsa `True`."""
+    guncel = OabTerm.objects.select_related("rule_package").get(pk=donem.pk)
+    donem_kilidi.yazma_denetimi(guncel)
+    acik = _acik_satir(guncel, konu, kural_id)
+    if acik is None:
+        return False
+    _kapat(acik)
+    return True
+
+
+@transaction.atomic
+def duzeltme_kaydi(
+    akis_id: str,
+    mesaj: str,
+    *,
+    donem: OabTerm,
+    konu: models.Model,
+    gerekce: Gerekce | None,
+) -> ComplianceItem:
+    """Geçiş kaydının gerekçeli düzeltmesinin kaydı (plan F1c 8. adımın kararı: "yeni beyanla gerekçeli
+    düzeltilir"): akış satırı (`akis.` önekli, atıfsız) `SAPMA` olarak yazılır ve AYNI anda kapanır;
+    düzeltmenin gerekçesi, kimi ve zamanı satırda ve gerekçede kalır, açık sapma listesine düşmez.
+
+    Her düzeltme yeni satırdır (açık satır tekilliği kapanmış satırı saymaz); gerekçe toplu gerekçe
+    kuralına uyar (aynı kök nedenli düzeltmeler bir gerekçeye bağlanır). Gerekçesiz geçmez.
+    """
+    yazma_kapisi()
+    if not akis_id.startswith(AKIS_ONEKI):
+        raise ValueError("Akış satırının kimliği akış önekiyle başlar.")
+    donem = OabTerm.objects.select_related("rule_package").get(pk=donem.pk)
+    donem_kilidi.yazma_denetimi(donem)
+    bagli = _gerekce_bagla(akis_id, gerekce, toplu_acik=True, uyari=mesaj)
+    hesap = iz.yazar_hesabi()
+    satir = ComplianceItem.objects.create(
+        term=donem,
+        kind=ComplianceKind.SAPMA,
+        subject_type=denetim_izi.model_etiketi(type(konu)),
+        subject_id=denetim_izi.kimlik_metni(type(konu), konu.pk),
+        rule_id=akis_id,
+        rule_package="",
+        rev=None,
+        message=mesaj,
+        justification_group=bagli,
+        resolved_at=timezone.now(),
+        created_by_id=hesap,
+        updated_by_id=hesap,
+    )
+    denetim_izi.degisiklik(satir, onceki=None, compliance_item=satir.pk)
+    return satir
+
+
+@transaction.atomic
 def kapanis_gecisi(
     donem: OabTerm,
     *,

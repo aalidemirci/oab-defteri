@@ -37,6 +37,18 @@ class DonemSaltOkur(APIException):
     )
 
 
+class GecisKapali(APIException):
+    """Geçiş kurulumunun kaydı yazılamaz: "Geçiş kurulumu tamamlandı" işareti konmuş ya da geçiş
+    dönemi açık değil (tasarım §7.9 "Senaryolar"; plan F1c 8. adımın kararı)."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "gecis_kapali"
+    default_detail = (
+        "Geçiş kurulumu tamamlandı; geçiş kayıtları artık eklenemez, düzeltilemez ve iptal "
+        "edilemez."
+    )
+
+
 class GerekceGerekli(APIException):
     """Uyarı gerektiren kayıt gerekçesiz geçmez (altın kural 3): 400 `gerekce_gerekli`."""
 

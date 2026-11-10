@@ -38,7 +38,7 @@ from apps.oab.serializers import (
     YkYedekCagrisiSerializer,
 )
 from apps.oab.services import (
-    donemler,
+    gecis,
     gorev_bolumu,
     kisiler,
     temsilciler,
@@ -101,7 +101,8 @@ def _donemler() -> Any:
 
 
 class TermListCreateView(APIView):
-    """Birlik dönemleri: liste ve ilk dönemin açılışı (M1; tasarım §4.4.2, §7.9 adım 1)."""
+    """Birlik dönemleri: liste ve ilk dönemin açılışı (M1; tasarım §4.4.2, §7.9 adım 1: geçiş
+    kurulumu, `gecis.ilk_donemi_ac`; programa başlama günü verilmezse bugündür)."""
 
     def get(self, request: Request) -> Response:
         return Response(OabTermSerializer(_donemler(), many=True).data)
@@ -110,7 +111,7 @@ class TermListCreateView(APIView):
         govde = OabTermAcilisSerializer(data=request.data)
         govde.is_valid(raise_exception=True)
         with _hizmet_hatalari():
-            donem = donemler.create_term(**dict(govde.validated_data))
+            donem = gecis.ilk_donemi_ac(**dict(govde.validated_data)).donem
         return Response(OabTermSerializer(donem).data, status=status.HTTP_201_CREATED)
 
 

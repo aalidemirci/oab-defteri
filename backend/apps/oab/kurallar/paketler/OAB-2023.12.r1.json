@@ -3,8 +3,8 @@
   "rev": 1,
   "sema_surumu": 1,
   "baslik": "MEB Okul-Aile Birliği Yönetmeliği (son değişiklik RG 01.12.2023/32386) ve bağlı metinler",
-  "korpus_teyit": "09.11.2026",
-  "degisiklik_notu": "F1c: yeter sayı, organ bileşimleri, seçilme sınırları, temsilciler, F1c listesindeki süre ve oranlar.",
+  "korpus_teyit": "10.11.2026",
+  "degisiklik_notu": "F1c: yeter sayı, organ bileşimleri, seçilme sınırları, temsilciler, karar defterinin noter tasdiki, F1c listesindeki süre ve oranlar.",
   "degisiklikler": [
     {
       "id": "genel_kurul.olagan_son_ay",
@@ -100,6 +100,10 @@
     },
     {
       "id": "yonetim_kurulu.devamsizlik_siniri",
+      "tur": "ekleme"
+    },
+    {
+      "id": "yonetim_kurulu.karar_defteri_noter_tasdiki",
       "tur": "ekleme"
     },
     {
@@ -836,6 +840,30 @@
       "giris": "F1c",
       "davranis_fazi": "F3",
       "eksik_veri": "tamamlanacak",
+      "toplu_gerekce": true
+    },
+    {
+      "id": "yonetim_kurulu.karar_defteri_noter_tasdiki",
+      "deger": [
+        "NOTER"
+      ],
+      "birim": "liste",
+      "karsilastirma": "liste_icinde",
+      "tur": "uyari",
+      "dayanak_turu": "lafiz",
+      "madde": {
+        "capa": "meb-okul-aile-birligi-yonetmeligi.md#madde-23",
+        "fikra": "2"
+      },
+      "aciklama": "Yönetim kurulu karar defteri noterce, öteki defter ve belgeler il/ilçe millî eğitim müdürlüğünce tasdik edilir.",
+      "uyari_metni": "Yönetim kurulu karar defterinin noterce tasdik edilmesi zorunludur; programa defterin noter tasdiki ve tasdik günü girilmedi.",
+      "yururluk": {
+        "baslangic": "09.02.2012",
+        "bitis": null
+      },
+      "giris": "F1c",
+      "davranis_fazi": "F1c",
+      "eksik_veri": "sapma",
       "toplu_gerekce": true
     },
     {

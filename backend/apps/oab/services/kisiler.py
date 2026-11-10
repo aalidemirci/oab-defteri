@@ -43,9 +43,11 @@ from django.db.models import QuerySet
 
 from apps.oab.hatalar import KisiPasif, OlasiAyniKisi
 from apps.oab.models import (
+    ComplianceItem,
     OabPerson,
     PersonKind,
     PersonStatus,
+    TermStatus,
     kisi_adi_kor_indeksi,
 )
 from apps.oab.models.kisi import KISI_ADI_MAX
@@ -83,6 +85,16 @@ GUNCELLENEBILIR: Final = frozenset(
     }
 )
 
+#: Programdan önceki seçilme sayısı alanı → denetlediği kural (md. 12/4, 14/3; geçiş kurulumunun 3.
+#: adımı, tasarım §7.9; `gecis.sayac_beyani`).
+SAYAC_KURALLARI: Final[dict[str, str]] = {
+    "external_yk_terms": "yonetim_kurulu.secilme_siniri",
+    "external_dk_chair_terms": "denetleme_kurulu.baskan_secilme_siniri",
+}
+
+SAYAC_BEYANI_GECISTE = (
+    "Programdan önceki seçilme sayısının beyanı yalnız geçiş kurulumunda, gerekçeyle düzeltilir."
+)
 PERSONEL_ZATEN_BAGLI = "Bu personelin birlik kişi kaydı zaten var."
 PERSONEL_ADI_OKUNAMADI = "Personel kaydının adı okunamadı (kayıt bozuk); kişiyi elle ekleyin."
 VELI_LISTESINDE_YOK = "Veli listesinde bu adla satır bulunamadı."
@@ -112,6 +124,25 @@ def olasi_ayni_kisi_sorusu(
         return
     if _olasi_ayni_kisiler(kisi_adi_kor_indeksi(first_name, last_name), haric=haric).exists():
         raise OlasiAyniKisi
+
+
+def _beyan_verilmis(kisi: OabPerson, alan: str) -> bool:
+    """Sayaç alanında beyan var mı: sayı girilmiş ya da geçiş kurulumunda "bilinmiyor" beyan edilmiş
+    (kişinin o kuralda açık uyum satırı). Beyan verilmişse değişikliği düzeltmedir: yalnız geçiş
+    kurulumunun sayaç beyanıyla, gerekçeyle yazılır (plan F1c 8. adımın kararı). İlk beyan (boş →
+    sayı) kişi kaydından da girilir (sonradan eklenen aday)."""
+    if getattr(kisi, alan) is not None:
+        return True
+    return (
+        ComplianceItem.objects.filter(
+            subject_type=denetim_izi.model_etiketi(OabPerson),
+            subject_id=denetim_izi.kimlik_metni(OabPerson, kisi.pk),
+            rule_id=SAYAC_KURALLARI[alan],
+            resolved_at__isnull=True,
+        )
+        .exclude(term__status=TermStatus.IPTAL)
+        .exists()
+    )
 
 
 def okul_muduru_mu(first_name: object, last_name: object) -> bool:
@@ -174,6 +205,8 @@ def update_person(kisi: OabPerson, *, ayni_kisi_degil: bool = False, **alanlar: 
         return guncel
     if guncel.status == PersonStatus.PASIF and set(degisen) - {"status"}:
         raise KisiPasif
+    if any(_beyan_verilmis(guncel, ad) for ad in degisen if ad in SAYAC_KURALLARI):
+        raise ValueError(SAYAC_BEYANI_GECISTE)
     if {"first_name", "last_name"} & set(degisen):
         olasi_ayni_kisi_sorusu(
             alanlar.get("first_name", guncel.first_name),

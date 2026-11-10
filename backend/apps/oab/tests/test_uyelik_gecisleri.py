@@ -102,9 +102,11 @@ def test_engel_yazimi_dayanagi_disari_vermez() -> None:
 
 def test_dusme_ve_iptal_uclarinin_rolleri() -> None:
     """Düşmeyi program yöneticisi ve sekreter yazar (tasarım §7.2 "Öğrencisi ayrılan veli"); iptal
-    satırın bütün yazanlarınadır; Denetleme Kurulu ikisini de yazamaz."""
+    satırın bütün yazanlarınadır; Denetleme Kurulu ikisini de yazamaz. İptal edilen kayıt programda
+    açılmış kayıttır: devralınan kaydı yalnız program yöneticisi iptal eder (`test_gecis`)."""
     donem = o.donem()
-    birinci, ikinci, ucuncu = (o.secilmis(donem) for _ in range(3))
+    birinci, ucuncu = (o.secilmis(donem) for _ in range(2))
+    ikinci = o.dk_ogretmeni(donem, o.ogretmen())
     govde = {"drop_kind": "ISTIFA", "end_date": "2026-11-02"}
     with o.rol_olarak(AccountRole.BASKAN):
         assert APIClient().post(f"{UC}{birinci.pk}/drop/", govde, format="json").status_code == 403

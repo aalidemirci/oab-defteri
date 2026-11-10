@@ -12,6 +12,10 @@ süresi, yedek çağrısı (oy sırası, sıra dışı ve kararsız çağrı uya
 md. 7/2 istisnası), suç ve tek birlik engelleri (seçimde uyarı + gerekçe, görevdeki üyede düşürme
 önerisi, beyan okul uygulaması), alım komisyonunun en az üç kişisi (organ ekranı). Kişi adları
 UYDURMADIR.
+
+8. adım (dosyanın en sonu): karar defterinin noter tasdiki (md. 23/2; plan F1c 8. adım notları):
+noter tasdiki ve günü girilmişse uyarısız, tasdik bilgisi eksikse ya da il/ilçe millî eğitim
+müdürlüğü tasdiki girilmişse uyarı + gerekçe; konu defter, gerekçe defter başına bir.
 """
 
 from __future__ import annotations
@@ -24,10 +28,14 @@ from rest_framework.test import APIClient
 
 from apps.oab import selectors
 from apps.oab.hatalar import GerekceGerekli, KuralSert
+from apps.oab.kurallar import VERI_YOK
+from apps.oab.kurallar.erisim import denetle as paket_denetle
 from apps.oab.models import (
     BoardDecision,
     BoardMeeting,
+    BookCertifier,
     ComplianceItem,
+    ComplianceJustification,
     ComplianceKind,
     DecisionKind,
     DecisionStatus,
@@ -35,6 +43,7 @@ from apps.oab.models import (
     GeneralAssembly,
     MeetingKind,
     MembershipStatus,
+    OfficialBook,
     OrganMembership,
     PersonKind,
     SeatType,
@@ -1208,3 +1217,103 @@ def test_uc_kisilik_alim_komisyonu_uyarisiz() -> None:
     assert kisi is not None
     with pytest.raises(ValueError, match="zaten var"):
         temsilciler.alim_komisyonu_uyesi_ekle(term=donem, person=kisi.person)
+
+
+# ============================================================ karar defterinin noter tasdiki (md. 23/2)
+
+TASDIK = f"{YK}.karar_defteri_noter_tasdiki"
+#: Kuralın ekran metni (paketten gelir; burada elle yazıldı). Atıf `madde`den eklenir.
+TASDIK_METNI = (
+    "Yönetim kurulu karar defterinin noterce tasdik edilmesi zorunludur; programa defterin noter "
+    "tasdiki ve tasdik günü girilmedi."
+)
+TASDIK_GUNU = date(2024, 9, 2)
+
+
+def _defter(makam: str = "", gun: date | None = None) -> OfficialBook:
+    """Karar defteri kaydı (dönemsiz); tasdik bilgisi verilen makam ve gündür. Değerler uydurmadır."""
+    return kurullar.karar_defteri_olustur(
+        certified_by=makam, certified_on=gun, last_no_before_program=7, last_page_before_program=3
+    )
+
+
+def _tasdik_satirlari(defter: OfficialBook) -> list[ComplianceItem]:
+    return list(
+        ComplianceItem.objects.filter(
+            subject_type="oab.OfficialBook", subject_id=str(defter.pk), rule_id=TASDIK
+        ).order_by("pk")
+    )
+
+
+@pytest.mark.kural_davranis(TASDIK)
+def test_noter_tasdiki_ve_gunu_girilmis_karar_defteri_uyarisiz() -> None:
+    """Sapma yokken uyarısız: noter tasdiki ve günü girilmiş defter `uygun`dur, satır açılmaz."""
+    donem = o.donem()
+    defter = _defter(BookCertifier.NOTER, TASDIK_GUNU)
+    sonuc = kurullar.tasdik_denetimi(defter, donem=donem)
+    assert sonuc.sonuc["durum"] == "uygun" and sonuc.satir is None
+    assert _tasdik_satirlari(defter) == []
+
+
+@pytest.mark.kural_davranis(TASDIK)
+@pytest.mark.parametrize(
+    ("makam", "gun"),
+    [
+        pytest.param("", None, id="tasdik-bilgisi-yok"),
+        pytest.param(BookCertifier.NOTER, None, id="tasdik-gunu-yok"),
+        pytest.param(BookCertifier.IL_ILCE_MEM, TASDIK_GUNU, id="il-ilce-mem-tasdiki"),
+    ],
+)
+def test_noter_tasdiki_yoksa_gerekcesiz_reddedilir(makam: str, gun: date | None) -> None:
+    """Eksik tasdik bilgisi de sapmadır (`eksik_veri: sapma`); il/ilçe millî eğitim müdürlüğü tasdiki
+    öteki defterlerindir, karar defterine yetmez (md. 23/2). Gerekçesiz geçmez; ileti atıflıdır."""
+    donem = o.donem()
+    defter = _defter(makam, gun)
+    with pytest.raises(GerekceGerekli) as hata:
+        kurullar.tasdik_denetimi(defter, donem=donem)
+    assert f"{TASDIK_METNI.rstrip('.')} (md. 23/2)." in str(hata.value.detail)
+    assert "Yönetmelik gereği" not in str(hata.value.detail)
+    assert _tasdik_satirlari(defter) == []
+
+
+@pytest.mark.kural_davranis(TASDIK)
+def test_noter_tasdiki_sapmasi_gerekceyle_kaydedilir_defter_basina_bir_gerekce() -> None:
+    """Gerekçeyle kaydedilir; satır kural kimliği, paket ve revizyonla izde durur. Konu defterdir,
+    gerekçe defter başına birdir (O3): aynı defter yeniden denetlenince (F3'ün "deftere işlendi"
+    işareti) gerekçe yeniden sorulmaz; başka defter kendi gerekçesini ister."""
+    donem = o.donem()
+    defter = _defter(BookCertifier.IL_ILCE_MEM, TASDIK_GUNU)
+    sonuc = kurullar.tasdik_denetimi(defter, donem=donem, gerekce="Uydurma gerekçe metni.")
+    (satir,) = _tasdik_satirlari(defter)
+    assert sonuc.satir is not None and sonuc.satir.pk == satir.pk
+    assert (satir.kind, satir.rule_package, satir.rev, satir.message) == (
+        ComplianceKind.SAPMA,
+        "OAB-2023.12",
+        1,
+        TASDIK_METNI,
+    )
+    assert satir.justification_group is not None
+    assert satir.justification_group.root_cause == kurullar.tasdik_kok_nedeni(defter)
+    iz = AuditTrail.objects.filter(model="oab.ComplianceItem", object_id=str(satir.pk)).first()
+    assert iz is not None and iz.values["rule_id"][1] == TASDIK and iz.values["rev"][1] == 1
+    tekrar = kurullar.tasdik_denetimi(defter, donem=donem)
+    assert tekrar.satir is not None and tekrar.satir.pk == satir.pk
+    assert ComplianceJustification.objects.filter(rule_id=TASDIK).count() == 1
+    with pytest.raises(GerekceGerekli):
+        kurullar.tasdik_denetimi(_defter(), donem=donem)
+
+
+@pytest.mark.kural_davranis(TASDIK)
+def test_noter_tasdiki_kural_paketindedir_akis_satiri_degil() -> None:
+    """Kimlik paketteki kuraldır (altın kural 1 ve 2): atıf md. 23/2, kimlik akış önekli değildir."""
+    assert kurullar.TASDIK_KURALI == TASDIK
+    assert not TASDIK.startswith(uyum.AKIS_ONEKI)
+    sonuc = paket_denetle(TASDIK, BookCertifier.NOTER.value, tarih=TASDIK_GUNU)
+    assert sonuc["durum"] == "uygun"
+    for gozlenen in (BookCertifier.IL_ILCE_MEM.value, VERI_YOK):
+        sonuc = paket_denetle(TASDIK, gozlenen, tarih=TASDIK_GUNU)
+        assert (sonuc["durum"], sonuc["mesaj"], sonuc["atif"]) == (
+            "uyari",
+            TASDIK_METNI,
+            "md. 23/2",
+        )

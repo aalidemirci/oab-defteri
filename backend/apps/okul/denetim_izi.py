@@ -105,6 +105,13 @@ mühürsüz ya da kilitli kip anahtarıyla yazılmış bir satır yalnız kapal�
 İz yazılamazsa yazma yapılamaz (hesap bütünlüğü; plan F1b-1): yazıcının her reddi
 istisnadır ve çağıranın işlemini geri sardırır. Anahtar bellekte değilse (oturum istek
 ortasında kilitlendi) ret `KeyMissingError` ailesindendir: uç 409 döner.
+
+ETİKET BAĞLAMI (`etiketle`; tasarım §4.6.2 `label`): bir akışın bütün satırları aynı etiketi
+taşıyacaksa (geçiş kurulumunun yazmaları `GECIS`, §7.9; plan F1c 8. adım) akış yazımlarını
+`with etiketle(AuditLabel.GECIS):` içine alır; etiketi açıkça verilmemiş (`label=""`) açık kip
+satırları bağlamın etiketini alır, açıkça verilen etiket (`KAPALI_DONEM`) bağlamı ezer. Kilitli
+kip satırları etiketsiz kalır. Bağlam `ContextVar`'dır: iç içe bağlamda en içteki geçerlidir,
+çıkışta önceki değer döner.
 """
 
 from __future__ import annotations
@@ -116,6 +123,8 @@ import re
 import threading
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, Final
@@ -147,6 +156,25 @@ logger = logging.getLogger("oab_defteri.okul")
 
 #: İz anahtarının uzunluğu (bayt); DEK'ten türemez, kurulumda ayrı üretilir (§4.6.3).
 IZ_ANAHTARI_BAYT: Final = 32
+
+#: Akışın etiket bağlamı (modül başlığı "Etiket bağlamı"); boş dize bağlamsızdır.
+_akis_etiketi: ContextVar[str] = ContextVar("od_iz_etiketi", default="")
+
+
+@contextmanager
+def etiketle(label: str) -> Iterator[None]:
+    """Bağlamdaki açık kip satırlarına etiket verir (modül başlığı "Etiket bağlamı").
+
+    Bilinmeyen etiket bağlam kurulurken reddedilir (`IzYazilamadi`); satır yazılırken de denetlenir.
+    """
+    if label not in AuditLabel.values:
+        raise IzYazilamadi(f"Bilinmeyen iz satırı etiketi: {label}")
+    belirtec = _akis_etiketi.set(label)
+    try:
+        yield
+    finally:
+        _akis_etiketi.reset(belirtec)
+
 
 #: Veritabanı modeli olmayan izli nesneler ve izinli kişisiz alanları:
 #:
@@ -911,6 +939,8 @@ def _ekle(
     else:
         key_mode, key_ref = AuditKeyMode.ACIK, str(anahtar.kayit_id)
         zincir_anahtari = crypto.audit_chain_key(anahtar.ia)
+        # Etiket bağlamı yalnız açık kipte, yalnız etiketi verilmemiş satıra (modül başlığı).
+        label = label or _akis_etiketi.get()
     hesap_id = None if kim.hesap_id is None else str(uuid.UUID(str(kim.hesap_id)))
     son = _zincir_basi_satiri(yazici=True)
     seq = 1 if son is None else son[0] + 1

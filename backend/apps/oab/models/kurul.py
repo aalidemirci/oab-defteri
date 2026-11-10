@@ -89,6 +89,7 @@ class OfficialBook(OabBaseModel):
         "updated_at",
         "updated_by",
         *IZ_DEGER_ALANLARI,
+        "cancel_reason",
     )
     IZ_DURUM_ALANLARI: ClassVar[tuple[str, ...]] = ("status",)
 
@@ -115,6 +116,9 @@ class OfficialBook(OabBaseModel):
     status = models.CharField(
         "durum", max_length=12, choices=BookStatus.choices, default=BookStatus.KULLANIMDA
     )
+    #: `IPTAL`'de zorunlu: yanlış geçiş kaydının gerekçesi (şifreli; kim `updated_by` ve iz satırıdır;
+    #: `OrganMembership.cancel_reason` gibi; plan F1c 8. adımın kararı).
+    cancel_reason = EncryptedTextField("iptal gerekçesi", blank=True, default="")
 
     class Meta:
         verbose_name = "resmî defter"

@@ -37,6 +37,7 @@ kişi organ ekranının kadro uyarısıdır (`uyelikler.kadro_uyarilari`), harca
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Final
@@ -54,6 +55,7 @@ from apps.oab.models import (
     DropKind,
     ElectedBy,
     MembershipRole,
+    MembershipSource,
     MembershipStatus,
     OabPerson,
     OabTerm,
@@ -64,7 +66,7 @@ from apps.oab.models import (
 )
 from apps.oab.services import donem_kilidi, iz, uyelikler, uyum
 from apps.okul import denetim_izi
-from apps.okul.models import SchoolConfig
+from apps.okul.models import AuditLabel, SchoolConfig
 from apps.okul.services import app_password
 
 #: Temsil türünün kuralı (tasarım §6.4.4); kampüs yönetimi ve "diğer" kuralsızdır.
@@ -97,6 +99,7 @@ KENDILIGINDEN_TEMSILLER: Final = frozenset(BASKANIN_KOMISYONLARI)
 
 TEMSIL_TURU_GEREKLI = "Temsil türü seçilmelidir."
 KOLTUK_GECERSIZ = "Koltuk asıl ya da yedek olmalıdır."
+KAYNAK_GECERSIZ = "Temsilci kaydının kaynağı program ya da devralınan olmalıdır."
 AYNI_TEMSIL_VAR = "Bu kişinin bu dönemde bu kurul ya da komisyonda temsilci kaydı zaten var."
 KARAR_YK_DEGIL = (
     "Temsilci görevlendirme kararı bu dönemin yönetim kurulu toplantısının kararı olmalıdır."
@@ -304,6 +307,8 @@ def _olustur(
     start_date: date,
     representative_decision: BoardDecision | None = None,
     expertise_required: bool = False,
+    source: str = MembershipSource.PROGRAM,
+    evidence_note: str = "",
 ) -> OrganMembership:
     hesap = iz.yazar_hesabi()
     uyelik = OrganMembership.objects.create(
@@ -315,6 +320,8 @@ def _olustur(
         representation=representation,
         representative_decision=representative_decision,
         elected_by=elected_by,
+        source=source,
+        evidence_note=evidence_note,
         status=MembershipStatus.SECILDI,
         start_date=start_date,
         expertise_required=expertise_required,
@@ -356,10 +363,21 @@ def temsilci_ekle(
     start_date: date | None = None,
     representative_decision: BoardDecision | None = None,
     gerekce: uyum.Gerekce | None = None,
+    source: str = MembershipSource.PROGRAM,
+    evidence_note: str = "",
 ) -> OrganMembership:
-    """Temsilci kaydı (`OLUSTUR`): seçilmiş açılır; kuralı uyarı + gerekçedir (modül başlığı)."""
+    """Temsilci kaydı (`OLUSTUR`): seçilmiş açılır; kuralı uyarı + gerekçedir (modül başlığı).
+
+    `source = DEVRALINAN`: geçiş kurulumunda programdan önce görevlendirilmiş temsilci (tasarım §7.9
+    adım 2); yalnız geçişe açık döneme yazılır, satırları `GECIS` etiketlidir (`gecis`).
+    """
     yazma_kapisi()
     donem = _baslangic(term)
+    if source not in MembershipSource.values:
+        raise ValueError(KAYNAK_GECERSIZ)
+    devralinan = source == MembershipSource.DEVRALINAN
+    if devralinan:
+        donem_kilidi.gecis_yazma_denetimi(donem)
     if representation not in Representation.values:
         raise ValueError(TEMSIL_TURU_GEREKLI)
     if seat_type not in SeatType.values:
@@ -368,18 +386,21 @@ def temsilci_ekle(
     karar = _karar_dogrula(donem, representative_decision)
     if _ayni_satir_var(donem, kisi, OrganType.TEMSILCI, representation):
         raise ValueError(AYNI_TEMSIL_VAR)
-    uyelik = _olustur(
-        donem,
-        kisi,
-        organ=OrganType.TEMSILCI,
-        representation=representation,
-        seat_type=seat_type,
-        elected_by=_kanal(representation),
-        start_date=start_date or timezone.localdate(),
-        representative_decision=karar,
-    )
-    _temsil_denetimi(uyelik, donem, gerekce=gerekce)
-    denetim_izi.degisiklik(uyelik, onceki=None)
+    with denetim_izi.etiketle(AuditLabel.GECIS) if devralinan else nullcontext():
+        uyelik = _olustur(
+            donem,
+            kisi,
+            organ=OrganType.TEMSILCI,
+            representation=representation,
+            seat_type=seat_type,
+            elected_by=_kanal(representation),
+            start_date=start_date or timezone.localdate(),
+            representative_decision=karar,
+            source=source,
+            evidence_note=evidence_note,
+        )
+        _temsil_denetimi(uyelik, donem, gerekce=gerekce)
+        denetim_izi.degisiklik(uyelik, onceki=None)
     return uyelik
 
 

@@ -80,6 +80,7 @@ DURUM_ALANLARI = {
     "personnel_count",
     "school_break_count",
     "roadmap",
+    "transition_setup",
 }
 
 URL = "/api/v1/setup/school-config/"
@@ -581,6 +582,7 @@ _DOLU_SAYIMLAR: dict[str, Any] = {
     "school_info_complete": True,
     "personnel_count": 2,
     "school_break_count": 1,
+    "transition_setup": {"state": "TAMAMLANDI", "open_steps": []},
 }
 
 
@@ -664,6 +666,7 @@ class TestYolHaritasi:
             "okul_karti": False,
             "personel_aktarimi": False,
             "kapali_gunler": False,
+            "gecis_kurulumu": False,
         }
         assert all(setup_service.roadmap_auto_items(_DOLU_SAYIMLAR).values())
         assert next(iter(setup_service.roadmap_auto_items(_DOLU_SAYIMLAR))) == "okul_karti"

@@ -8,6 +8,11 @@ Kural kullanmazlar (`yazma_kapisi()` çağrılmaz): toplantı ve karar yeter say
 toplanti_yeter_sayi`, `karar_yeter_sayi`), deftere işleme ve sakat karar F3'tedir. Dönemli kayıt
 dönem kilidinden geçer (O2); her yazım veriyle aynı işlemde iz satırı yazar.
 
+Tek istisna karar defterinin noter tasdikidir (`tasdik_denetimi`, `yonetim_kurulu.karar_defteri_noter_
+tasdiki`, md. 23/2; plan F1c 8. adım notları): kayıt yazmaz, defterin uyum satırını `uyum.denetle` ile
+yazar (o da `yazma_kapisi()`'ndan geçer). Konu defterdir, gerekçe defter başına birdir (O3): geçiş
+kurulumu (8. adım) ve F3'ün "deftere işlendi" işareti aynı kimlik ve kök nedenle denetler.
+
 F1c'de yalnız karar defteri açılır ve yalnız iki karar türü yazılır: görev bölümü ve yedek çağırma.
 Yedek çağırma kararı yalnız yönetim kurulu toplantısına yazılır: Denetleme Kurulunun yedeği karar
 olmadan, program yöneticisinin üyelik kaydıyla çağrılır (md. 14/6; tasarım E65). Katılım yalnız
@@ -29,12 +34,14 @@ taslağın iptali yazılır (`TASLAK → IPTAL`); kabul ve ret toplantı ve kara
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Final
+from typing import Any, Final
 
 from django.db import transaction
 from django.db.models import Max
+from django.utils import timezone
 
 from apps.oab import selectors
+from apps.oab.kurallar import VERI_YOK
 from apps.oab.models import (
     BoardDecision,
     BoardMeeting,
@@ -53,7 +60,7 @@ from apps.oab.models import (
     OrganType,
 )
 from apps.oab.models.kurul import KURUL_ORGANLARI
-from apps.oab.services import donem_kilidi, iz
+from apps.oab.services import donem_kilidi, iz, uyum
 from apps.okul import denetim_izi
 
 #: F1c'de yazılan karar türleri (plan F1c kararları); öteki türler kendi fazlarının akışıyla gelir.
@@ -114,6 +121,41 @@ def karar_defteri_olustur(
     )
     denetim_izi.degisiklik(defter, onceki=None)
     return defter
+
+
+#: Karar defterinin noter tasdiki (md. 23/2; modül başlığı). Düz atama: D6'nın statik taraması
+#: `uyum.denetle(TASDIK_KURALI, …)` çağrısının kimliğini bu satırdan okur.
+TASDIK_KURALI = "yonetim_kurulu.karar_defteri_noter_tasdiki"
+
+
+def tasdik_kok_nedeni(defter: OfficialBook) -> str:
+    """Karar defterinin tasdik sapmasının kök nedeni: defter başına bir gerekçe (§5 O3)."""
+    return f"karar_defteri:{defter.pk}"
+
+
+def tasdik_gozlenen(defter: OfficialBook) -> Any:
+    """Kuralın gözlenen değeri: tasdik eden makam. Makam ya da tasdik günü girilmemişse `VERI_YOK`;
+    kural `eksik_veri: sapma`dır, eksik tasdik bilgisi de uyarı + gerekçedir."""
+    if not defter.certified_by or defter.certified_on is None:
+        return VERI_YOK
+    return defter.certified_by
+
+
+def tasdik_denetimi(
+    defter: OfficialBook, *, donem: OabTerm, gerekce: str = "", tarih: date | None = None
+) -> uyum.UyumSonucu:
+    """Karar defterinin noter tasdiki (md. 23/2): noter tasdiki ve günü girilmişse uygun (açık satır
+    kapanır); tasdik bilgisi eksikse ya da il/ilçe millî eğitim müdürlüğü tasdiki girilmişse uyarı +
+    gerekçe. Konu defterdir; gerekçe defterin kök nedenine bağlanır, aynı defterde yeniden sorulmaz.
+    `tarih` olay günüdür (defterin kullanıldığı gün; verilmezse bugün)."""
+    return uyum.denetle(
+        TASDIK_KURALI,
+        tasdik_gozlenen(defter),
+        donem=donem,
+        konu=defter,
+        tarih=tarih if tarih is not None else timezone.localdate(),
+        gerekce=uyum.Gerekce(metin=gerekce, kok_neden=tasdik_kok_nedeni(defter)),
+    )
 
 
 @transaction.atomic

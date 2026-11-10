@@ -27,7 +27,8 @@ hesabı askıya alınmaz. İptal edilen (yanlış kayıt) seçilmiş üyeliğin 
 alınır: bağ artık geçerli bir koltuğa dayanmaz.
 
 İPTAL (`uyeligi_iptal_et`): yanlış kayıt `IPTAL` olur (aday ya da seçilmiş); gerekçe zorunludur (sert,
-O1), kim `updated_by` ve iz satırıdır. İptal kaydı hiç olmamış sayılır (tekil kısıt, sayaç, tek koltuk).
+O1), kim `updated_by` ve iz satırıdır. Devralınan kaydı yalnız program yöneticisi iptal eder (geçiş
+kaydı; tasarım §7.9 adım 2), uç hangisi olursa olsun. İptal kaydı hiç olmamış sayılır (tekil kısıt, sayaç, tek koltuk).
 
 GÖREV ALMA ENGELİ (`engel_yaz`): `eligibility_bar` hüküm alanıdır; `VAR`'da dayanak (şifreli, özel
 nitelikli) ve tespit günü zorunludur. Engel işaretli adayın seçimi uyarı + gerekçedir
@@ -38,6 +39,7 @@ nitelikli) ve tespit günü zorunludur. Engel işaretli adayın seçimi uyarı +
 from __future__ import annotations
 
 from collections.abc import Mapping
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Final
@@ -57,6 +59,7 @@ from apps.oab.models import (
     EligibilityBar,
     EligibilityBarBasis,
     MembershipRole,
+    MembershipSource,
     MembershipStatus,
     OrganMembership,
     OrganType,
@@ -74,7 +77,8 @@ from apps.oab.services import (
     uyelikler,
     uyum,
 )
-from apps.okul import denetim_izi
+from apps.okul import denetim_izi, rol_izinleri
+from apps.okul.models import AuditLabel
 from apps.okul.services import app_password
 
 #: Yedeği çağrılan kurullar (md. 13/6, 14/6).
@@ -348,18 +352,27 @@ def uyeligi_iptal_et(uyelik: OrganMembership, *, cancel_reason: str) -> OrganMem
     guncel = _baslangic(uyelik)
     if guncel.status not in (MembershipStatus.ADAY, MembershipStatus.SECILDI):
         raise UyelikDurumuGecersiz(YALNIZ_ADAY_YA_DA_SECILMIS_IPTAL)
-    onceki = denetim_izi.anlik(guncel)
-    baskan = _yk_baskani_mi(guncel)
-    guncel.status = MembershipStatus.IPTAL
-    guncel.cancel_reason = metin
-    guncel.updated_by_id = iz.yazar_hesabi()
-    guncel.save(update_fields=["status", "cancel_reason", "updated_at", "updated_by"])
-    denetim_izi.degisiklik(guncel, onceki=onceki)
-    hesap_baglari.hesaplari_esitle(guncel)
-    if baskan:
-        temsilciler.baskan_satirlarini_kapat(
-            guncel.term, guncel.person_id, gun=timezone.localdate(), iptal=True
-        )
+    devralinan = guncel.source == MembershipSource.DEVRALINAN
+    if devralinan:
+        # Devralınan üyelik geçiş kaydıdır: kaydı yalnız program yöneticisi yazar ve iptal eder (tasarım
+        # §7.9 adım 2 "Kim: yonetici"; `gecis.devralinan_iptal_et` ile aynı kapı, genel iptal ucu da
+        # bu kapıdan geçer); iptal yolu "Geçiş kurulumu tamamlandı" işaretine kadar açıktır, iz
+        # satırları `GECIS` etiketlidir (plan F1c 8. adımın kararı).
+        rol_izinleri.yetki_oturum(rol_izinleri.Eylem.BIRLIK_DONEMI_YAZMA)
+        donem_kilidi.gecis_yazma_denetimi(guncel.term)
+    with denetim_izi.etiketle(AuditLabel.GECIS) if devralinan else nullcontext():
+        onceki = denetim_izi.anlik(guncel)
+        baskan = _yk_baskani_mi(guncel)
+        guncel.status = MembershipStatus.IPTAL
+        guncel.cancel_reason = metin
+        guncel.updated_by_id = iz.yazar_hesabi()
+        guncel.save(update_fields=["status", "cancel_reason", "updated_at", "updated_by"])
+        denetim_izi.degisiklik(guncel, onceki=onceki)
+        hesap_baglari.hesaplari_esitle(guncel)
+        if baskan:
+            temsilciler.baskan_satirlarini_kapat(
+                guncel.term, guncel.person_id, gun=timezone.localdate(), iptal=True
+            )
     return guncel
 
 

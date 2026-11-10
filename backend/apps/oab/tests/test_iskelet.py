@@ -139,7 +139,8 @@ BEKLENEN_DEGERLER: list[tuple[type[models.TextChoices], tuple[str, ...]]] = [
     (EligibilityBarBasis, ("SUC_12_5_14_7", "TEK_BIRLIK_12_4")),
     (BookKind, ("KARAR_DEFTERI", "GELIR_GIDER_DEFTERI", "GELEN_GIDEN_EVRAK_DEFTERI", "DIGER")),
     (BookCertifier, ("NOTER", "IL_ILCE_MEM")),
-    (BookStatus, ("KULLANIMDA", "DOLDU", "ARSIVDE")),
+    # `IPTAL` tasarımın listesinde yok: geçiş kaydının iptal yolu (plan F1c 8. adımın kararı).
+    (BookStatus, ("KULLANIMDA", "DOLDU", "ARSIVDE", "IPTAL")),
     (MeetingKind, ("AYLIK", "OLAGANUSTU", "GOREV_BOLUMU")),
     (MeetingStatus, ("PLANLANDI", "YAPILDI", "YETER_SAYI_YOK", "IPTAL")),
     (

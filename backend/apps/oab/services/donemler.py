@@ -19,7 +19,7 @@ from apps.oab.kurallar import yazma_kapisi
 from apps.oab.models import OabTerm, TermStatus
 from apps.oab.services import iz, kural_bagi
 from apps.okul import denetim_izi, rol_izinleri
-from apps.okul.models import AuditAction, ParentRoster, SchoolYear
+from apps.okul.models import AuditAction, AuditLabel, ParentRoster, SchoolYear
 
 ILK_DONEM_ZATEN_ACIK = "Birlik dönemi zaten açılmış; sonraki dönemler genel kurulla açılır."
 PROGRAM_BASLANGICI_ONCE = "Programa başlama günü dönem başından önce olamaz."
@@ -33,7 +33,11 @@ def create_term(
     start_date: date,
     program_start_date: date | None = None,
 ) -> OabTerm:
-    """İlk birlik dönemini `ACIK` açar. Kural kullanan yazma: paket yoksa kapalı (D1)."""
+    """İlk birlik dönemini `ACIK` açar. Kural kullanan yazma: paket yoksa kapalı (D1).
+
+    Geçiş kurulumunun 1. adımıdır (§7.9): satırları `GECIS` etiketlidir (tasarım §4.6.2). Varsayılanlar
+    (ders yılı, ad, programa başlama günü) `gecis.ilk_donemi_ac`'tadır.
+    """
     yazma_kapisi()
     rol_izinleri.yetki_oturum(rol_izinleri.Eylem.BIRLIK_DONEMI_YAZMA)
     if program_start_date is not None and program_start_date < start_date:
@@ -41,18 +45,19 @@ def create_term(
     if OabTerm.objects.exclude(status=TermStatus.IPTAL).exists():
         raise ValueError(ILK_DONEM_ZATEN_ACIK)
     hesap = iz.yazar_hesabi()
-    donem = OabTerm.objects.create(
-        name=name,
-        school_year=school_year,
-        start_date=start_date,
-        program_start_date=program_start_date,
-        rule_package=kural_bagi.en_yeni_kopya(),
-        status=TermStatus.ACIK,
-        created_by_id=hesap,
-        updated_by_id=hesap,
-    )
-    denetim_izi.degisiklik(donem, onceki=None)
-    _veli_listesini_bagla(donem)
+    with denetim_izi.etiketle(AuditLabel.GECIS):
+        donem = OabTerm.objects.create(
+            name=name,
+            school_year=school_year,
+            start_date=start_date,
+            program_start_date=program_start_date,
+            rule_package=kural_bagi.en_yeni_kopya(),
+            status=TermStatus.ACIK,
+            created_by_id=hesap,
+            updated_by_id=hesap,
+        )
+        denetim_izi.degisiklik(donem, onceki=None)
+        _veli_listesini_bagla(donem)
     return donem
 
 
@@ -71,6 +76,21 @@ def _veli_listesini_bagla(donem: OabTerm) -> int:
     (veli listesinin hiçbir alanı satıra girmez, tasarım §4.6.2).
     """
     adet = ParentRoster.objects.filter(term__isnull=True).update(term=donem)
+    if adet:
+        denetim_izi.olay(
+            AuditAction.DURUM,
+            model=denetim_izi.model_etiketi(ParentRoster),
+            object_id="",
+            changed_fields=["term"],
+            term=donem.pk,
+        )
+    return adet
+
+
+def veli_listesini_coz(donem: OabTerm) -> int:
+    """İptal edilen dönemin veli satırlarını dönemsiz bırakır (sonraki ilk dönem açılışı onları bağlar);
+    satır varsa kişisiz `DURUM` olayı yazar (`_veli_listesini_bagla`'nın tersi, aynı biçim)."""
+    adet = ParentRoster.objects.filter(term=donem).update(term=None)
     if adet:
         denetim_izi.olay(
             AuditAction.DURUM,

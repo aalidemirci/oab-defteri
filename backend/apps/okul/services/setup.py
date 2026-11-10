@@ -51,6 +51,7 @@ başındaki bağlamdır (oturumdaki hesap).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from django.db import transaction
@@ -96,6 +97,37 @@ STEP_PASSWORD = "password"  # noqa: S105 — adım anahtarı, parola değil
 STEP_SCHOOL = "school"
 STEP_CALENDAR = "calendar"
 SETUP_STEPS: tuple[str, ...] = (STEP_PASSWORD, STEP_SCHOOL, STEP_CALENDAR)
+#: 4. adım: ilk birlik dönemi — geçiş kurulumunun organ kısmı (tasarım §7.9; plan F1c-8). ATLANABİLİR:
+#: kurulumun tamamlanma koşulu değildir (`missing_setup_steps` saymaz); eksik adım Genel Bakış yol
+#: haritasının `gecis_kurulumu` maddesinde kalır. Ekranı F1c'nin 11. adımındadır.
+STEP_BIRLIK_DONEMI = "birlik_donemi"
+#: Atlanabilir sihirbaz adımları.
+SKIPPABLE_SETUP_STEPS: tuple[str, ...] = (STEP_BIRLIK_DONEMI,)
+#: Sihirbazın bütün adımları, sırasıyla (zorunlular ve atlanabilirler; ön yüzün adım sırası).
+WIZARD_STEPS: tuple[str, ...] = (*SETUP_STEPS, *SKIPPABLE_SETUP_STEPS)
+
+#: Geçiş kurulumunun durumunu veren sağlayıcı (`okul` `oab`'yi içe aktarmaz; `oab` `AppConfig.ready`
+#: içinde kaydeder, `imports.register_roster_term_provider` emsali). Dönüş kişisizdir: `state`
+#: (`BASLAMADI` · `SURUYOR` · `TAMAMLANDI` · `GEREKMIYOR`) ve `open_steps` (adım anahtarları).
+type TransitionStatusProvider = Callable[[], dict[str, Any]]
+
+_transition_status_providers: list[TransitionStatusProvider] = []
+
+#: Yol haritasında geçiş maddesini tamam sayan durumlar.
+TRANSITION_DONE_STATES: frozenset[str] = frozenset({"TAMAMLANDI", "GEREKMIYOR"})
+
+
+def register_transition_status(fn: TransitionStatusProvider) -> None:
+    """Geçiş kurulumunun durum sağlayıcısı (idempotent; `AppConfig.ready` iki kez koşsa da bir kez)."""
+    if fn not in _transition_status_providers:
+        _transition_status_providers.append(fn)
+
+
+def transition_status() -> dict[str, Any] | None:
+    """Geçiş kurulumunun durumu (kişisiz); sağlayıcı kayıtlı değilse `None`."""
+    for fn in _transition_status_providers:
+        return fn()
+    return None
 
 
 class SetupIncomplete(ValueError):
@@ -379,10 +411,14 @@ def roadmap_auto_items(status: dict[str, Any]) -> dict[str, bool]:
     kapısı yeniden kapanmaz, eksik yol haritasında görünür ve kart gizlenemez (plan F1b-4
     kararları; tasarım §7.10 "okul kartının eksik alanları").
     """
+    gecis = status.get("transition_setup")
     return {
         "okul_karti": bool(status["school_info_complete"]),
         "personel_aktarimi": int(status["personnel_count"]) > 0,
         "kapali_gunler": int(status["school_break_count"]) > 0,
+        # Geçiş kurulumu (4. adım, atlanabilir; tasarım §7.9, §7.10): işaret konmuşsa ya da dönem
+        # genel kurulla açılmışsa tamam; atlanmışsa ya da sürüyorsa açık madde olarak kalır.
+        "gecis_kurulumu": isinstance(gecis, dict) and gecis.get("state") in TRANSITION_DONE_STATES,
     }
 
 
@@ -526,6 +562,8 @@ def setup_status() -> dict[str, Any]:
         "roadmap": roadmap_state(
             config, recovery_confirmed=anahtar_dogrulandi, school_info_complete=okul_karti_tamam
         ),
+        # Geçiş kurulumunun durumu ve açık adımları (kişisiz; 4. adım ve yol haritası maddesi).
+        "transition_setup": transition_status(),
     }
 
 

@@ -44,7 +44,11 @@ class OabBaseModel(models.Model):
 
 
 class TermStatus(models.TextChoices):
-    """Birlik döneminin durumu: `HAZIRLIK` → `ACIK` → `KAPANISTA` → `KAPANDI`; `HAZIRLIK` → `IPTAL`."""
+    """Birlik döneminin durumu: `HAZIRLIK` → `ACIK` → `KAPANISTA` → `KAPANDI`; `HAZIRLIK` → `IPTAL`.
+
+    Geçiş kurulumunun dönemi (genel kurulsuz açılan ilk dönem) "Geçiş kurulumu tamamlandı" işaretinden
+    önce `ACIK` → `IPTAL` olabilir: yanlış girilmiş geçiş kaydının iptal yolu (plan F1c 8. adımın kararı).
+    """
 
     HAZIRLIK = "HAZIRLIK", "Hazırlık"
     ACIK = "ACIK", "Açık"
@@ -250,11 +254,13 @@ class BookCertifier(models.TextChoices):
 
 
 class BookStatus(models.TextChoices):
-    """Defterin durumu."""
+    """Defterin durumu. `IPTAL`: yanlış girilmiş geçiş kaydı; yalnız `KULLANIMDA` → `IPTAL`, geçiş
+    kurulumu tamamlanmadan (plan F1c 8. adımın kararı). Öteki geçişler F3'ün defter ekranındadır."""
 
     KULLANIMDA = "KULLANIMDA", "Kullanımda"
     DOLDU = "DOLDU", "Doldu"
     ARSIVDE = "ARSIVDE", "Arşivde"
+    IPTAL = "IPTAL", "İptal"
 
 
 class MeetingKind(models.TextChoices):
