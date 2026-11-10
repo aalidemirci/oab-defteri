@@ -128,6 +128,8 @@ BEKLENEN_DEGERLER: list[tuple[type[models.TextChoices], tuple[str, ...]]] = [
             "TASIMACI_TESPIT_KOMISYONU",
             "MUHAMMEN_BEDEL_KOMISYONU",
             "KIRALAMA_IHALE_KOMISYONU",
+            # Tasarımın temsil türleri listesinde yok; §6.4.4 ve E03 kaydı ister (F1c 6. adım).
+            "PAY_DAGITIM_KOMISYONU",
             "KAMPUS_YONETIMI",
             "KANTIN_DENETIM_KOMISYONU",
             "DIGER",

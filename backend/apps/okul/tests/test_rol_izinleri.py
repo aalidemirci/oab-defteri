@@ -59,7 +59,17 @@ Y = frozenset({"yonetici"})
 Y_YK = YK_ROLLERI | Y
 Y_DK = frozenset({"yonetici", "denetleme_kurulu"})
 DK = frozenset({"denetleme_kurulu"})
-_KISALTMA = {"H": HER, "Y": Y, "Y+YK": Y_YK, "Y+DK": Y_DK, "DK": DK}
+SEK = frozenset({"sekreter"})
+Y_SEK = frozenset({"yonetici", "sekreter"})
+_KISALTMA = {
+    "H": HER,
+    "Y": Y,
+    "Y+YK": Y_YK,
+    "Y+DK": Y_DK,
+    "DK": DK,
+    "SEK": SEK,
+    "Y+SEK": Y_SEK,
+}
 
 
 def _depo_koku() -> Path:
@@ -349,7 +359,7 @@ def test_okur_hucresine_yalniz_iki_numarali_dipnot_yazma_verir() -> None:
 
 #: Türetilmiş rol tablosu: uç → yöntem → roller (H: her rol; Y: program yöneticisi; Y+YK:
 #: program yöneticisi ve yönetim kurulu rolleri; Y+DK: program yöneticisi ve Denetleme Kurulu; DK:
-#: yalnız Denetleme Kurulu).
+#: yalnız Denetleme Kurulu; SEK: yalnız sekreter; Y+SEK: program yöneticisi ve sekreter).
 #: Listede olmayan (uç, yöntem) her rolde kapalıdır (OPTIONS dahil).
 ROL_TABLOSU: dict[str, dict[str, str]] = {
     "access-log": {"GET": "Y+DK", "HEAD": "Y+DK"},
@@ -406,8 +416,18 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     "setup-complete": {"POST": "Y"},
     "setup-roadmap": {"POST": "Y"},
     "oab-membership-detail": {"GET": "H", "HEAD": "H", "PATCH": "Y+YK"},
-    "oab-membership-eligibility-basis": {"GET": "Y+YK", "HEAD": "Y+YK"},
+    "oab-membership-eligibility-basis": {"GET": "Y+YK", "HEAD": "Y+YK", "PUT": "Y+YK"},
     "oab-membership-list": {"GET": "H", "HEAD": "H", "POST": "Y+YK"},
+    # F1c 6. adım: tasarım §7.2'nin "Kim" sütunu (görev bölümü ve YK yedeği sekreter, DK yedeği
+    # program yöneticisi, düşme ikisi); DK görev bölümü M8 ⁵.
+    "oab-yk-duty-assignment": {"POST": "SEK"},
+    "oab-dk-duty-assignment": {"POST": "DK"},
+    "oab-membership-substitute-call-yk": {"POST": "SEK"},
+    "oab-membership-substitute-call-dk": {"POST": "Y"},
+    "oab-membership-drop": {"POST": "Y+SEK"},
+    "oab-membership-cancel": {"POST": "Y+YK"},
+    "oab-representative-list": {"GET": "H", "HEAD": "H", "POST": "Y+YK"},
+    "oab-purchase-committee-list": {"POST": "Y+YK"},
     "oab-okul-karti-bilgileri": {"GET": "H", "HEAD": "H"},
     "oab-organ-roster": {"GET": "H", "HEAD": "H"},
     "oab-person-detail": {"GET": "H", "HEAD": "H", "PATCH": "Y+YK"},
@@ -555,16 +575,28 @@ def test_f1b_fazli_bekleyen_kalmadi() -> None:
     assert Eylem.GERI_YUKLEME_GORDUM not in BAGLANMAMIS_EYLEMLER
 
 
-def test_gordum_m8_hucresinin_tek_yazma_ucudur_ve_yalniz_dk_ya_aciktir() -> None:
-    """M8'in bugünkü tek yazma kuralı "Gördüm"dür; ⁵ dipnotunu adıyla anar, yalnız Denetleme
-    Kuruluna açılır (YK rolleri DK modülüne yazamaz, program yöneticisi de; tasarım §4.4.2 ⁵)."""
-    (kural,) = [k for k in KURALLAR if k.satir is Satir.M8 and k.tur is KuralTuru.YAZMA]
-    assert (kural.uc, kural.yontemler, kural.dipnot) == (
-        "security-integrity-restore-seen",
-        frozenset({"POST"}),
-        5,
-    )
-    assert kural_rolleri(kural) == frozenset({"denetleme_kurulu"})
+def test_f1c_fazli_bekleyen_kalmadi() -> None:
+    """F1c'nin 6. adımının "Bitti" ölçütü (plan F1c-6): üç bekleyen listesinde faz değeri "F1c" olan
+    kalem yoktur. `DENETIM_YAZMA` bölündü: görev bölümü ve denetim planı yeni eylemle bağlandı,
+    kalanın fazı F2'dir (md. 14/5 çağrısı; tasarım §4.4.2 "Testler")."""
+    assert "F1c" not in set(BEKLEYEN_HUCRELER.values())
+    assert "F1c" not in set(BEKLEYEN_DIPNOTLAR.values())
+    assert "F1c" not in set(BAGLANMAMIS_EYLEMLER.values())
+    assert Eylem.DK_GOREV_BOLUMU_YAZMA not in BAGLANMAMIS_EYLEMLER
+    assert BAGLANMAMIS_EYLEMLER[Eylem.DENETIM_YAZMA] == "F2"
+
+
+def test_m8_yazma_uclari_gordum_ve_dk_gorev_bolumudur_ve_yalniz_dk_ya_aciktir() -> None:
+    """M8'in bugünkü yazma kuralları "Gördüm" ve DK görev bölümüdür (F1c 6. adım); ikisi de ⁵
+    dipnotunu adıyla anar, yalnız Denetleme Kuruluna açılır (YK rolleri DK modülüne yazamaz, program
+    yöneticisi de; tasarım §4.4.2 ⁵)."""
+    kurallar = [k for k in KURALLAR if k.satir is Satir.M8 and k.tur is KuralTuru.YAZMA]
+    assert sorted((k.uc, tuple(sorted(k.yontemler)), k.dipnot) for k in kurallar) == [
+        ("oab-dk-duty-assignment", ("POST",), 5),
+        ("security-integrity-restore-seen", ("POST",), 5),
+    ]
+    for kural in kurallar:
+        assert kural_rolleri(kural) == frozenset({"denetleme_kurulu"})
     erisim = [k for k in KURALLAR if k.satir is Satir.ERISIM_GUNLUGU]
     assert [(k.uc, k.tur) for k in erisim] == [("access-log", KuralTuru.OKUMA)]
     assert kural_rolleri(erisim[0]) == okuyabilen_roller(Satir.ERISIM_GUNLUGU) == Y_DK
@@ -659,6 +691,7 @@ def test_eylem_baglama_anlik_goruntusu() -> None:
         Eylem.BIRLIK_DONEMI_YAZMA,
         Eylem.KURAL_SURUMU_SECIMI,
         Eylem.GERI_YUKLEME_GORDUM,
+        Eylem.DK_GOREV_BOLUMU_YAZMA,
     }
 
 

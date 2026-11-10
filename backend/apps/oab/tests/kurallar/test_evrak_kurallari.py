@@ -40,11 +40,20 @@ from urllib.parse import quote, unquote
 
 import pytest
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from pypdf import PdfReader
 from rest_framework.test import APIClient
 
+from apps.oab.models import (
+    BoardDecision,
+    DecisionKind,
+    DecisionStatus,
+    KararDurumuGecersiz,
+    MeetingKind,
+)
+from apps.oab.services import kurullar
+from apps.oab.tests import uyelik_ortak as o
 from apps.oab.tests.kurallar import faz_ortak
 from apps.okul import denetim_izi, rol_izinleri
 from apps.okul.models import (
@@ -1034,3 +1043,44 @@ def test_katalog_faz_suzmesi(gecerli: str, beklenen: set[str]) -> None:
     fazlar = {kod: faz for kod, _, faz in _katalog_95()}
     assert faz_ortak.fazi_gelenler(fazlar, gecerli=gecerli) == beklenen
     assert fazlar["E04"] == "F2"
+
+
+# ============================================================ karar taslağı (F1c 6. adım)
+
+
+@pytest.mark.django_db
+def test_karar_taslagi_varsayilan() -> None:
+    """OYS AYNEN (tasarım §10.5): karar "taslak" doğar (görev bölümü kaydının ürettiği karar da;
+    program karar defterinin yerine geçmez, md. 13/5); "deftere işlendi" işareti yalnız kabul
+    edilmiş karardan ve defter, sıra no ve sayfayla konur. Durum servisi F1c'de yalnız taslağı
+    iptal eder; kabul, ret ve deftere işleme F3'ün karar defteri akışındadır."""
+    donem = o.donem()
+    uyeler = o.yk_kurulu(donem)
+    karar = o.yk_gorev_bolumu(donem, {"SEKRETER": uyeler[0]}, gun=date(2026, 10, 20)).karar
+    assert (karar.status, karar.kind) == (DecisionStatus.TASLAK, DecisionKind.GOREV_BOLUMU)
+    assert (karar.book_id, karar.decision_no, karar.page_no) == (None, None, None)
+    with pytest.raises(KararDurumuGecersiz):
+        karar.status = DecisionStatus.DEFTERE_ISLENDI
+        karar.save()
+    BoardDecision.objects.filter(pk=karar.pk).update(status=DecisionStatus.KABUL_EDILDI)
+    karar.refresh_from_db()
+    karar.status = DecisionStatus.DEFTERE_ISLENDI
+    with pytest.raises(IntegrityError), transaction.atomic():
+        karar.save()
+    defter = kurullar.karar_defteri_olustur(last_no_before_program=41, last_page_before_program=12)
+    karar.book, karar.decision_no, karar.page_no = defter, 42, 13
+    karar.save()
+    assert BoardDecision.objects.get(pk=karar.pk).status == DecisionStatus.DEFTERE_ISLENDI
+    toplanti = kurullar.toplanti_olustur(donem=donem, organ="YK", kind=MeetingKind.AYLIK)
+    yeni = kurullar.karar_taslagi_olustur(toplanti, kind=DecisionKind.YEDEK_CAGIRMA)
+    with pytest.raises(KararDurumuGecersiz, match="karar defteri ekranıyla"):
+        kurullar.karar_durumu_yaz(yeni, DecisionStatus.KABUL_EDILDI)
+    iptal = kurullar.karar_durumu_yaz(yeni, DecisionStatus.IPTAL)
+    assert iptal.status == DecisionStatus.IPTAL
+    with pytest.raises(KararDurumuGecersiz):
+        iptal.status = DecisionStatus.TASLAK
+        iptal.save()
+    with pytest.raises(KararDurumuGecersiz):
+        BoardDecision.objects.create(
+            meeting=toplanti, kind=DecisionKind.YEDEK_CAGIRMA, status=DecisionStatus.KABUL_EDILDI
+        )

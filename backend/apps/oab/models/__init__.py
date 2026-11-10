@@ -37,6 +37,7 @@ from apps.oab.models.kurul import (
     BoardDecision,
     BoardMeeting,
     BoardMeetingAttendance,
+    KararDurumuGecersiz,
     OfficialBook,
 )
 from apps.oab.models.uyelik import OrganMembership, UyelikDurumuGecersiz
@@ -63,6 +64,7 @@ __all__ = [
     "EligibilityBar",
     "EligibilityBarBasis",
     "GeneralAssembly",
+    "KararDurumuGecersiz",
     "MeetingKind",
     "MeetingStatus",
     "MembershipRole",

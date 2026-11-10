@@ -46,4 +46,45 @@ urlpatterns: list[URLPattern | URLResolver] = [
         views.MembershipEligibilityBasisView.as_view(),
         name="oab-membership-eligibility-basis",
     ),
+    # Görev bölümü, yedek çağrısı, düşme, iptal, temsilciler, alım komisyonu (F1c 6. adım).
+    path(
+        "terms/<int:pk>/duty-assignment/yk/",
+        views.YkDutyAssignmentView.as_view(),
+        name="oab-yk-duty-assignment",
+    ),
+    path(
+        "terms/<int:pk>/duty-assignment/dk/",
+        views.DkDutyAssignmentView.as_view(),
+        name="oab-dk-duty-assignment",
+    ),
+    path(
+        "memberships/<int:pk>/substitute-call/yk/",
+        views.MembershipSubstituteCallYkView.as_view(),
+        name="oab-membership-substitute-call-yk",
+    ),
+    path(
+        "memberships/<int:pk>/substitute-call/dk/",
+        views.MembershipSubstituteCallDkView.as_view(),
+        name="oab-membership-substitute-call-dk",
+    ),
+    path(
+        "memberships/<int:pk>/drop/",
+        views.MembershipDropView.as_view(),
+        name="oab-membership-drop",
+    ),
+    path(
+        "memberships/<int:pk>/cancel/",
+        views.MembershipCancelView.as_view(),
+        name="oab-membership-cancel",
+    ),
+    path(
+        "representatives/",
+        views.RepresentativeListCreateView.as_view(),
+        name="oab-representative-list",
+    ),
+    path(
+        "purchase-committee/",
+        views.PurchaseCommitteeCreateView.as_view(),
+        name="oab-purchase-committee-list",
+    ),
 ]

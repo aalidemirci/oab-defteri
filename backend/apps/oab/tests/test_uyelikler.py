@@ -43,7 +43,7 @@ from apps.oab.models import (
     UyelikDurumuGecersiz,
 )
 from apps.oab.services import genel_kurul as genel_kurul_servisi
-from apps.oab.services import kisiler, kurullar, uyelikler
+from apps.oab.services import kisiler, kurullar, uyelik_gecisleri, uyelikler, uyum
 from apps.oab.tests import uyelik_ortak as o
 from apps.okul.models import AccessKind, AccessLog, AccountRole, AccountStatus, AuditTrail
 from apps.okul.tests.hesap_ortak import hesap_ac, muhurle
@@ -64,7 +64,9 @@ def _rol_oturumu(rol: AccountRole) -> None:
 
 
 def test_alanlar_tasarimin_lafzidir() -> None:
-    """Tasarım §5.2.2, §5.3: üç şifreli alan; OYS'nin beyan notu ve uyarı alanları yoktur (D41)."""
+    """Tasarım §5.2.2, §5.3: üç şifreli alan ve iptal gerekçesi (6. adım: tasarım "IPTAL, gerekçe ve
+    kim" der, alan adı vermez; `ReceiptLeaf.cancel_reason` gibi şifreli); OYS'nin beyan notu ve uyarı
+    alanları yoktur (D41)."""
     alanlar = {alan.name for alan in OrganMembership._meta.get_fields()}
     assert (
         not {
@@ -82,6 +84,7 @@ def test_alanlar_tasarimin_lafzidir() -> None:
         "evidence_note",
         "dropped_reason",
         "eligibility_bar_basis",
+        "cancel_reason",
     }
     assert OrganMembership._meta.get_field("representation").null is False
 
@@ -294,8 +297,12 @@ def test_kadro_ucu_sayilar_ve_uyarilar() -> None:
     o.devralinan(donem, o.kisi())
     govde = APIClient().get(f"/api/v1/oab/terms/{donem.pk}/roster/YK/").json()
     assert govde["kadro"] == {"asil": 1, "yedek": 0}
-    assert len(govde["kadro_uyarilari"]) == 2
-    assert all(u["metin"].endswith("(md. 12/1).") for u in govde["kadro_uyarilari"])
+    uyarilar = [u for u in govde["kadro_uyarilari"] if u["durum"] == "uyari"]
+    assert len(uyarilar) == 2
+    assert all(u["metin"].endswith("(md. 12/1).") for u in uyarilar)
+    # Görevdeki asıl başkansız: eksik satırı (md. 12/3; gerekçe istemez).
+    (eksik,) = [u for u in govde["kadro_uyarilari"] if u["durum"] == "eksik"]
+    assert eksik["atif"] == "md. 12/3"
     assert APIClient().get(f"/api/v1/oab/terms/{donem.pk}/roster/DIVAN/").status_code == 400
     assert APIClient().get(UC, {"organ": "YK"}).status_code == 400
 
@@ -457,8 +464,10 @@ def test_katilim_yalniz_gorevdeki_asila() -> None:
     with pytest.raises(ValueError, match="çağrılmamış yedeğe"):
         kurullar.katilim_yaz(toplanti, yedek, present=True)
     assert not BoardMeetingAttendance.objects.exists()
-    yedek.promoted_on = date(2026, 11, 2)  # çağrı servisi 6. adımda
-    yedek.save(update_fields=["promoted_on"])
+    # Yedek çağrısı (6. adım): karar bağı F3'e dek yoksa uyarı + gerekçedir.
+    yedek = uyelik_gecisleri.yedek_cagir(
+        yedek, organ="YK", promoted_on=date(2026, 11, 2), gerekce=uyum.Gerekce(metin="Uydurma.")
+    )
     satir = kurullar.katilim_yaz(toplanti, yedek, present=True)
     assert satir.membership_id == yedek.pk
     assert [u.pk for u in selectors.gorevdeki_asillar(donem, "YK")] == [yedek.pk]

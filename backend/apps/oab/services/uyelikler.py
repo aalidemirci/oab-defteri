@@ -2,8 +2,10 @@
 §6.4.3; OYS `assign_membership`, `promote_membership`, `validate_membership_composition`,
 `count_prior_baskan_terms` UYARLA; plan F1c-5).
 
-F1c'nin 5. adımı yönetim kurulu ve Denetleme Kurulu üyeliğini yazar. Görev bölümü, yedek çağrısı,
-düşme, iptal, temsilciler ve alım komisyonu 6. adımda; divan ve genel kurul akışı F2'de gelir.
+F1c'nin 5. adımı yönetim kurulu ve Denetleme Kurulu üyeliğini yazar. Görev bölümü (`gorev_bolumu`),
+yedek çağrısı, düşme, iptal ve görev alma engeli (`uyelik_gecisleri`), temsilciler ve alım komisyonu
+(`temsilciler`) 6. adımdadır ve buradaki denetimleri ortak yardımcılarla kullanır; divan ve genel
+kurul akışı F2'de gelir.
 
 YAZMA YOLLARI (hepsi `yazma_kapisi()` ile başlar, kural denetimini `uyum.denetle` ile yapar):
 
@@ -12,7 +14,8 @@ YAZMA YOLLARI (hepsi `yazma_kapisi()` ile başlar, kural denetimini `uyum.denetl
   Genel kurul dışı kanalda (öğretmenler kurulu, il/ilçe MEM görevlendirmesi) ve geçiş kurulumunda
   devralınan (`DEVRALINAN`) üyelik doğrudan `SECILDI` açılır; devralınanda aday şartı aranmaz.
 * `elect_membership`: `ADAY` → `SECILDI` (genel kurulun seçim sonucu; ekranı F2'nin sihirbazındadır).
-* `update_membership`: kişisiz ayrıntılar (oy, yedek sırası, dayanak notu, MEM onay no, beyan günleri).
+* `update_membership`: kişisiz ayrıntılar (oy, yedek sırası, dayanak notu, MEM onay no, beyan günleri,
+  DK öğretmeninin başka kurumdaki görevlendirme günleri, alım komisyonunda uzmanlık işareti).
 * `dk_baskanlik_denetimi`: Denetleme Kurulu başkanlık sayacı; görev bölümünde koşar (aşağıda "Seçilme
   sayacı"), uyarı özeti değişirse izini yazar.
 
@@ -50,7 +53,9 @@ KOLTUK UYGUNLUĞU (tasarım §5.2.2 tablosu; CLAUDE.md altın kural 3):
 * Yönetim kurulunda başkan, başkan yardımcısı, muhasip ve sekreter görevleri tekildir
   (`yonetim_kurulu.gorevler`, SERT — hesap bütünlüğü; görevdeki seçilmiş asıllar arasında sayılır).
 * Kadro SAYILARI (5+5, 3+3) yazımı engellemez: kadro okumasında uyarıdır (`kadro_uyarilari`); genel
-  kurul yeter sayısının tabanını etkilemez (sabit 16, tasarım §5.2.3).
+  kurul yeter sayısının tabanını etkilemez (sabit 16, tasarım §5.2.3). Görevdeki asıllar arasında
+  başkan yoksa (görev bölümü başkansız yapılmış, henüz yapılmamış ya da başkan düşmüş) kadro okumasında
+  eksiktir (`kadro_uyarilari`; gerekçe istemez, yazım engellenmez; plan F1c 6. adım notları).
 
 SEÇİLME SAYACI (md. 12/4 "en fazla dört defa seçilebilir", md. 14/3 "üç defa"; §15 B-12; D33):
 yönetim kurulunda başkan ve üyeler TEK sayaçtır, asıl ve yedek her seçilme sayılır; Denetleme
@@ -61,6 +66,12 @@ engel değildir (R5); bilinen kayıtlar sınırı zaten aşıyorsa uyarıdır. S
 gerekçedir. Yönetim kurulunda denetim programda yapılan seçilmede koşar (`SECILDI` + `PROGRAM`).
 Denetleme Kurulu başkanını seçim değil görev bölümü belirler (md. 14/1): başkanlık sayacı seçim anında
 koşmaz, görev bölümünde koşar (`dk_baskanlik_denetimi`; çağıran yol 6. adımın DK görev bölümüdür, M8).
+Her görev bölümündeki başkan seçimi bir seçilmedir (kullanıcı kararı 10.11.2026; `dk_baskanlik_sayisi`).
+
+GÖREV ALMA ENGELİ (md. 12/4-5, 14/7; tasarım §5.2.2): engel işaretli (`eligibility_bar = VAR`) adayın
+seçimi uyarı + gerekçedir: dayanak suçsa `uyelik.suc_engeli`, başka birlik yönetimiyse
+`yonetim_kurulu.tek_birlik` (yalnız yönetim kurulunda). Görevdeki üyede engel düşürme önerisidir
+(`uyelik_gecisleri.oneriler`). Okulun beyan uygulaması işaretlenmediyse mevzuat uyarısı yoktur.
 
 Olay günü (kuralın yürürlüğü) seçilme günüdür (`start_date`); adayda genel kurulun birinci
 toplantısının yerel günü, o da yoksa bugünün yerel günü (`timezone.localdate()`).
@@ -68,6 +79,7 @@ toplantısının yerel günü, o da yoksa bugünün yerel günü (`timezone.loca
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date
 from typing import Any, Final
 
@@ -83,6 +95,8 @@ from apps.oab.models import (
     AssemblyKind,
     AssemblyStatus,
     ElectedBy,
+    EligibilityBar,
+    EligibilityBarBasis,
     GeneralAssembly,
     MembershipRole,
     MembershipSource,
@@ -97,7 +111,7 @@ from apps.oab.models import (
     SeatType,
     UyelikDurumuGecersiz,
 )
-from apps.oab.services import donem_kilidi, iz, uyum
+from apps.oab.services import donem_kilidi, iz, takvim, uyum
 from apps.okul import denetim_izi, erisim_gunlugu
 from apps.okul.models import AccessKind
 from apps.okul.services import app_password
@@ -142,7 +156,8 @@ KURULDA_BULUNMUS: Final = (MembershipStatus.SECILDI, MembershipStatus.DUSTU)
 #: bütünlüğü). Temsilcide farklı temsil türleri ayrı koltuktur; kural yalnız bu iki kurulda uygulanır.
 TEK_KOLTUKLU_KURULLAR: Final = frozenset({OrganType.YONETIM_KURULU, OrganType.DENETLEME_KURULU})
 
-#: Güncellemeyle değişebilen kişisiz alanlar; görev bölümü, yedek çağrısı, düşme ve iptal ayrı yoldur.
+#: Güncellemeyle değişebilen kişisiz alanlar; görev bölümü, yedek çağrısı, düşme, iptal ve görev alma
+#: engeli ayrı yoldur (6. adım).
 GUNCELLENEBILIR: Final = frozenset(
     {
         "votes",
@@ -151,8 +166,12 @@ GUNCELLENEBILIR: Final = frozenset(
         "mem_approval_no",
         "eligibility_declared_on",
         "single_birlik_declared_on",
+        "external_assignment_start",
+        "external_assignment_end",
+        "expertise_required",
     }
 )
+
 
 #: Uyarı özetine giren denetim sonuçları (O3 `rule_warnings`).
 _OZETLENEN: Final = frozenset({"eksik", "uyari"})
@@ -192,6 +211,11 @@ TEK_KOLTUK = (
 )
 YALNIZ_ADAY_SECILIR = "Yalnız aday kaydı seçilmiş olarak işaretlenir."
 DEGISMEZ_UYELIK = "Düşmüş ya da iptal edilmiş üyelik kaydı değiştirilemez."
+GOREVLENDIRME_YALNIZ_DK_OGRETMENINDE = (
+    "Başka kurumda görevlendirme günleri yalnız Denetleme Kurulunun öğretmen koltuğunda verilir."
+)
+GOREVLENDIRME_SIRASI = "Görevlendirmenin bitişi başlangıcından önce olamaz."
+UZMANLIK_YALNIZ_ALIM_KOMISYONUNDA = "Uzmanlık işareti yalnız alım komisyonu üyeliğinde verilir."
 
 
 # ---------------------------------------------------------------------------
@@ -241,10 +265,21 @@ def yk_secilme_sayisi(kisi: OabPerson) -> int:
 
 
 def dk_baskanlik_sayisi(kisi: OabPerson) -> int:
-    """Programdaki Denetleme Kurulu başkanlıkları (yalnız başkanlık sayılır; md. 14/3)."""
-    return (
-        _sayilan(kisi).filter(organ=OrganType.DENETLEME_KURULU, role=MembershipRole.BASKAN).count()
-    )
+    """Programdaki Denetleme Kurulu başkan seçilmeleri (yalnız başkanlık sayılır; md. 14/3).
+
+    Sayılan seçilmedir, dönem sonundaki görev değil: her görev bölümündeki başkan seçimi bir seçilmedir
+    (kullanıcı kararı 10.11.2026; aynı dönemde A → B → A dönüşünde A iki kez sayılır); görevdeki
+    başkanın yeniden başkan seçilmesi (A → A) yeni seçilme değildir. Seçilmeleri
+    üyeliğin `chair_elections` sayısı tutar; dönem içi görev değişimi onu azaltmaz. Görevi `BASKAN`
+    olup sayısı sıfır olan program kaydı (görev bölümünden geçmemiş eski kayıt) bir seçilme sayılır."""
+    toplam = 0
+    for role, sayi in (
+        _sayilan(kisi)
+        .filter(organ=OrganType.DENETLEME_KURULU)
+        .values_list("role", "chair_elections")
+    ):
+        toplam += max(sayi, 1 if role == MembershipRole.BASKAN else 0)
+    return toplam
 
 
 def secilme_sayaci(kisi: OabPerson, organ: str) -> int | None:
@@ -504,16 +539,88 @@ def _dk_baskanlik_siniri(d: _Denetim) -> None:
         )
 
 
-def _denetle_ve_ozetle(d: _Denetim) -> None:
+#: Görev alma engelinin hüküm olduğu organlar (dayanak → organlar): suç engeli yönetim kurulu, alım
+#: (harcama) komisyonu (md. 12/5) ve Denetleme Kurulu (md. 14/7); başka birlik yönetimi engeli yalnız
+#: yönetim kurulu (md. 12/4 2. cümle).
+ENGEL_ORGANLARI: Final[dict[str, frozenset[str]]] = {
+    EligibilityBarBasis.SUC_12_5_14_7: frozenset(
+        {OrganType.YONETIM_KURULU, OrganType.DENETLEME_KURULU, OrganType.ALIM_KOMISYONU}
+    ),
+    EligibilityBarBasis.TEK_BIRLIK_12_4: frozenset({OrganType.YONETIM_KURULU}),
+}
+
+
+def engel_hukum_mu(uyelik: OrganMembership) -> bool:
+    """İşaretli görev alma engeli bu üyeliğin organında hüküm mü? (`ENGEL_ORGANLARI`). Seçim uyarısı
+    (`_engel_denetimi`) ve düşürme önerisi (`uyelik_gecisleri.oneriler`) aynı ölçüyü kullanır.
+
+    Dayanak programın kendi okumasıdır (kullanıcıya gösterilmez, erişim günlüğüne yazılmaz)."""
+    if uyelik.eligibility_bar != EligibilityBar.VAR:
+        return False
+    return str(uyelik.organ) in ENGEL_ORGANLARI.get(str(uyelik.eligibility_bar_basis), frozenset())
+
+
+def _engel_denetimi(d: _Denetim) -> None:
+    """Görev alma engeli işaretli kaydın seçimi uyarı + gerekçedir (modül başlığı "Görev alma engeli").
+
+    Engel organda hüküm değilse (`engel_hukum_mu`) satır açılmaz.
+    """
+    uyelik = d.uyelik
+    if not engel_hukum_mu(uyelik):
+        return
+    dayanak = str(uyelik.eligibility_bar_basis)
+    if dayanak == EligibilityBarBasis.SUC_12_5_14_7:
+        d.kaydet("uyelik.suc_engeli", uyum.denetle("uyelik.suc_engeli", False, **d.ortak()))
+    elif dayanak == EligibilityBarBasis.TEK_BIRLIK_12_4:
+        d.kaydet(
+            "yonetim_kurulu.tek_birlik",
+            uyum.denetle("yonetim_kurulu.tek_birlik", False, **d.ortak()),
+        )
+
+
+def _denetle_ve_ozetle(d: _Denetim, *, secim: bool = False) -> None:
     """Bütün denetimler; sert ihlal ve gerekçesiz uyarı işlemi geri alır (APIException)."""
     _koltuk_denetimleri(d)
     _gorev_tekilligi(d)
     _secilme_siniri(d)
+    if secim:
+        _engel_denetimi(d)
     uyelik = d.uyelik
     ozet = d.ozet(list(uyelik.rule_warnings or []))
     if ozet != (uyelik.rule_warnings or []):
         uyelik.rule_warnings = ozet
         uyelik.save(update_fields=["rule_warnings", "updated_at"])
+
+
+def ozet_hesapla(
+    uyelik: OrganMembership, sonuclar: Mapping[str, DenetimSonucu]
+) -> list[dict[str, Any]]:
+    """Başka akışın denetim sonuçlarıyla kaydın yeni uyarı özeti (O3); YAZMAZ.
+
+    Kaydı ve izini çağıran akış yazar (görev bölümü, yedek çağrısı, düşme, temsilci; 6. adım): iz
+    satırı kaydın son hâlini mühürler.
+    """
+    d = _Denetim(uyelik, uyelik.term, gerekce=None)
+    d.sonuclar = {**d.sonuclar, **sonuclar}
+    return d.ozet(list(uyelik.rule_warnings or []))
+
+
+def gorev_tekilligini_denetle(uyelik: OrganMembership) -> dict[str, DenetimSonucu]:
+    """Görev bölümünün yazdığı görevin tekilliği (sert, hesap bütünlüğü; `_gorev_tekilligi`); özete
+    işlenecek sonuçları döner (`ozet_hesapla`)."""
+    d = _Denetim(_guncel(uyelik), uyelik.term, gerekce=None)
+    _gorev_tekilligi(d)
+    return d.sonuclar
+
+
+def koltugu_denetle(
+    uyelik: OrganMembership, *, gerekce: uyum.Gerekce | None = None
+) -> dict[str, DenetimSonucu]:
+    """Koltuk uygunluğunu yeniden denetler (yedekten çağrılan Denetleme Kurulu üyesi asıl hücresine
+    oturur: hücre doluysa sert; 6. adımın yedek çağrısı); özete işlenecek sonuçları döner."""
+    d = _Denetim(_guncel(uyelik), uyelik.term, gerekce=gerekce)
+    _koltuk_denetimleri(d)
+    return d.sonuclar
 
 
 @transaction.atomic
@@ -591,11 +698,15 @@ def _yapiyi_dogrula(
         raise ValueError(MEM_ONAYI_YALNIZ_OGRETMEN_KOLTUGUNDA)
 
 
-def _kisi_aktif(kisi: OabPerson) -> OabPerson:
+def kisi_aktif(kisi: OabPerson) -> OabPerson:
+    """Kişinin güncel kaydı; pasif kişi organa eklenemez (temsilci ve alım komisyonu da)."""
     guncel = OabPerson.objects.get(pk=kisi.pk)
     if guncel.status != PersonStatus.AKTIF:
         raise ValueError(KISI_PASIF)
     return guncel
+
+
+_kisi_aktif = kisi_aktif
 
 
 def _ayni_uyelik_var(
@@ -689,6 +800,10 @@ def _guncel(uyelik: OrganMembership) -> OrganMembership:
     )
 
 
+#: Üyeliğin güncel kaydı (dönemi, kural kopyası ve kişisiyle); 6. adımın akışları da okur.
+guncel_kayit = _guncel
+
+
 @transaction.atomic
 def elect_membership(
     uyelik: OrganMembership,
@@ -721,9 +836,28 @@ def elect_membership(
         guncel.seat_order = seat_order
     guncel.updated_by_id = iz.yazar_hesabi()
     guncel.save()
-    _denetle_ve_ozetle(_Denetim(guncel, guncel.term, gerekce=gerekce))
+    _denetle_ve_ozetle(_Denetim(guncel, guncel.term, gerekce=gerekce), secim=True)
     denetim_izi.degisiklik(guncel, onceki=onceki)
     return guncel
+
+
+def _gorevlendirme_dogrula(
+    guncel: OrganMembership, alanlar: Mapping[str, Any], degisen: list[str]
+) -> None:
+    """Başka kurumdaki görevlendirme günleri yalnız DK öğretmen koltuğunda; bitiş başlangıçtan önce
+    olamaz (md. 14/6; dört ay önerisi `uyelik_gecisleri.oneriler`'dedir, kayıt engellenmez)."""
+    adlar = {"external_assignment_start", "external_assignment_end"}
+    if not adlar & set(degisen):
+        return
+    baslangic = alanlar.get("external_assignment_start", guncel.external_assignment_start)
+    bitis = alanlar.get("external_assignment_end", guncel.external_assignment_end)
+    if (baslangic or bitis) and (guncel.organ, guncel.seat_group) != (
+        OrganType.DENETLEME_KURULU,
+        SeatGroup.OGRETMEN,
+    ):
+        raise ValueError(GOREVLENDIRME_YALNIZ_DK_OGRETMENINDE)
+    if baslangic and bitis and bitis < baslangic:
+        raise ValueError(GOREVLENDIRME_SIRASI)
 
 
 @transaction.atomic
@@ -749,6 +883,10 @@ def update_membership(uyelik: OrganMembership, **alanlar: Any) -> OrganMembershi
     if "mem_approval_no" in degisen and alanlar["mem_approval_no"]:
         if (guncel.organ, guncel.seat_group) != (OrganType.DENETLEME_KURULU, SeatGroup.OGRETMEN):
             raise ValueError(MEM_ONAYI_YALNIZ_OGRETMEN_KOLTUGUNDA)
+    _gorevlendirme_dogrula(guncel, alanlar, degisen)
+    if "expertise_required" in degisen and alanlar["expertise_required"]:
+        if guncel.organ != OrganType.ALIM_KOMISYONU:
+            raise ValueError(UZMANLIK_YALNIZ_ALIM_KOMISYONUNDA)
     onceki = denetim_izi.anlik(guncel)
     for ad in degisen:
         setattr(guncel, ad, alanlar[ad])
@@ -768,37 +906,87 @@ def update_membership(uyelik: OrganMembership, **alanlar: Any) -> OrganMembershi
 # ---------------------------------------------------------------------------
 # Kadro (okuma)
 # ---------------------------------------------------------------------------
+#: Kadrosu okunan organlar (organ ekranının sekmeleri; tasarım §5.2.2 "Sayılar", §6.4.6).
+KADRO_ORGANLARI: Final = frozenset(
+    {OrganType.YONETIM_KURULU, OrganType.DENETLEME_KURULU, OrganType.ALIM_KOMISYONU}
+)
+
+
+def gorev_suresi_gozlenen(donem: OabTerm, gun: date) -> Any:
+    """Görev süresi (md. 12/2, 14/2; "Dönem bitişi takvimde"): son genel kuruldan (dönemin başlangıcı)
+    bu yana başlamış yıl sayısı. Süre başlangıçtan bir önceki güne kadar sayılır: yıl dönümünde süre
+    dolmuştur. Dönem başlangıcı yoksa (hazırlık) eksik."""
+    if donem.start_date is None:
+        return VERI_YOK
+    return takvim.baslamis_yil(donem.start_date, gun)
+
+
+#: Başkan görevini koyan kural (atıf ve olay günündeki metin): yönetim kurulunda md. 12/3 (dört görev),
+#: Denetleme Kurulunda md. 14/1 ("aralarından bir başkan seçerek" görev bölümü).
+_BASKAN_KURALI: Final[dict[str, str]] = {
+    OrganType.YONETIM_KURULU: "yonetim_kurulu.gorevler",
+    OrganType.DENETLEME_KURULU: "denetleme_kurulu.gorev_bolumu_gun",
+}
+BASKAN_YOK: Final[dict[str, str]] = {
+    OrganType.YONETIM_KURULU: (
+        "Yönetim kurulunun görevdeki asıl üyeleri arasında başkan yok; görev bölümünde başkan "
+        "seçilmelidir."
+    ),
+    OrganType.DENETLEME_KURULU: (
+        "Denetleme Kurulunun görevdeki asıl üyeleri arasında başkan yok; görev bölümünde başkan "
+        "seçilmelidir."
+    ),
+}
+
+
+def _baskan_eksigi(donem: OabTerm, organ: str, gun: date) -> DenetimSonucu | None:
+    """Görevdeki asıllar varken aralarında başkan yoksa eksik (modül başlığı "Koltuk uygunluğu"):
+    başkansız görev bölümü yazılabilir, kadro okumasında tamamlanacaktır; gerekçe istemez. Atıf görevi
+    koyan maddedir; metin olay gününde yoksa satır çıkmaz."""
+    asillar = selectors.gorevdeki_asillar(donem, organ)
+    if not asillar or any(u.role == MembershipRole.BASKAN for u in asillar):
+        return None
+    sonuc = paket_denetle(_BASKAN_KURALI[organ], VERI_YOK, tarih=gun, donem=donem)
+    if sonuc["durum"] == "denetlenmedi":
+        return None
+    return DenetimSonucu(**{**sonuc, "durum": "eksik", "mesaj": BASKAN_YOK[organ]})
+
+
 def kadro_uyarilari(
     donem: OabTerm, organ: str, *, tarih: date | None = None
 ) -> list[DenetimSonucu]:
-    """Kadro sayılarının uyarıları (5+5, 3+3): yazmaz, gerekçe istemez (tasarım §5.2.2 "Sayılar").
+    """Kadro okumasının uyarıları ve eksikleri: yazmaz, gerekçe istemez (tasarım §5.2.2 "Sayılar").
 
-    Sayılan yalnız seçilmiş (`SECILDI`) kayıttır; aday sayılmaz, düşen koltuk sayıma girmez. Asıl
-    sayısı görevdeki asıllardır (yedekten çağrılan dahil), yedek sayısı çağrılmamış yedeklerdir.
+    Yönetim kurulu ve Denetleme Kurulunda kadro sayıları (5+5, 3+3) ve görev süresi (md. 12/2, 14/2;
+    "bitiminde uyarı"); alım komisyonunda en az üç kişi (md. 18/1; organ ekranı, harcama dosyasındaki
+    karşılığı F4). Sayılan yalnız seçilmiş (`SECILDI`) kayıttır; aday sayılmaz, düşen koltuk sayıma
+    girmez. Asıl sayısı görevdeki asıllardır (yedekten çağrılan dahil), yedek sayısı çağrılmamış
+    yedeklerdir. İki kurulda görevdeki asıllar arasında başkan yoksa eksik satırı da döner
+    (`_baskan_eksigi`; durumu `eksik`).
     """
     gun = tarih or timezone.localdate()
     sayilar = selectors.kadro_sayilari(donem, organ)
-    if organ == OrganType.YONETIM_KURULU:
+    eksikler: list[DenetimSonucu] = []
+    if organ in (OrganType.YONETIM_KURULU, OrganType.DENETLEME_KURULU):
+        onek = "yonetim_kurulu" if organ == OrganType.YONETIM_KURULU else "denetleme_kurulu"
+        sure = f"{onek}.gorev_suresi_yil"
         sonuclar = [
-            paket_denetle(
-                "yonetim_kurulu.asil_uye", sayilar[SeatType.ASIL], tarih=gun, donem=donem
-            ),
-            paket_denetle(
-                "yonetim_kurulu.yedek_uye", sayilar[SeatType.YEDEK], tarih=gun, donem=donem
-            ),
+            paket_denetle(f"{onek}.asil_uye", sayilar[SeatType.ASIL], tarih=gun, donem=donem),
+            paket_denetle(f"{onek}.yedek_uye", sayilar[SeatType.YEDEK], tarih=gun, donem=donem),
+            paket_denetle(sure, gorev_suresi_gozlenen(donem, gun), tarih=gun, donem=donem),
         ]
-    elif organ == OrganType.DENETLEME_KURULU:
+        baskan = _baskan_eksigi(donem, organ, gun)
+        if baskan is not None:
+            eksikler.append(baskan)
+    elif organ == OrganType.ALIM_KOMISYONU:
         sonuclar = [
             paket_denetle(
-                "denetleme_kurulu.asil_uye", sayilar[SeatType.ASIL], tarih=gun, donem=donem
-            ),
-            paket_denetle(
-                "denetleme_kurulu.yedek_uye", sayilar[SeatType.YEDEK], tarih=gun, donem=donem
-            ),
+                "harcama.alim_komisyonu_en_az", sayilar[SeatType.ASIL], tarih=gun, donem=donem
+            )
         ]
     else:
         raise ValueError(ORGAN_BU_YOLDAN_YAZILMAZ)
-    return [sonuc for sonuc in sonuclar if sonuc["durum"] == "uyari"]
+    return [*(sonuc for sonuc in sonuclar if sonuc["durum"] == "uyari"), *eksikler]
 
 
 # ---------------------------------------------------------------------------

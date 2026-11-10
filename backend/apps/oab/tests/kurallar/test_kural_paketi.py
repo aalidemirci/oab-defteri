@@ -867,11 +867,22 @@ def test_gecerli_faz_sirada_tanimlidir() -> None:
     assert len(set(faz_ortak.FAZ_SIRASI)) == len(faz_ortak.FAZ_SIRASI)
 
 
-def test_davranis_kolu_fazi_gelince_dislidir() -> None:
-    """Geçerli faz F1c olunca, davranış testi eksik kural kırmızıya döner (adım 10'un provası)."""
+def test_f1c_kurallarinin_davranis_testi_tamam() -> None:
+    """F1c'nin 6. adımının "Bitti" ölçütü (plan F1c-6): geçerli faz F1c olunca istenen 36 kuralın
+    hepsinin davranış testi vardır. `GECERLI_FAZ` evrakla birlikte 10. adımda F1c olur; o gün
+    `test_davranis_fazi_gelen_kuralin_davranis_testi_var` bu kümeyi kendiliğinden ister."""
     fazlar = {k["id"]: k["davranis_fazi"] for k in R1["kurallar"]}
     gelenler = faz_ortak.fazi_gelenler(fazlar, gecerli="F1c")
-    assert len(gelenler) == 36 and gelenler - _kural_isaretleri()["kural_davranis"]
+    assert len(gelenler) == 36
+    assert gelenler - _kural_isaretleri()["kural_davranis"] == set()
+
+
+def test_davranis_kolu_eksik_isarette_dislidir() -> None:
+    """Davranış kolu dişlidir: işareti olmayan bir F1c kuralı kümeden düşünce eksik görünür."""
+    fazlar = {k["id"]: k["davranis_fazi"] for k in R1["kurallar"]}
+    gelenler = faz_ortak.fazi_gelenler(fazlar, gecerli="F1c")
+    isaretli = _kural_isaretleri()["kural_davranis"] - {"temsilci.pay_dagitim_komisyonu"}
+    assert gelenler - isaretli == {"temsilci.pay_dagitim_komisyonu"}
 
 
 def _sahte_modul() -> ModuleType:

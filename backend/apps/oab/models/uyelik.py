@@ -21,9 +21,14 @@ DURUM MAKİNESİ (OYS kusurunun düzeltmesi): kayıt `ADAY` ya da `SECILDI` aç�
 düşürülmez. Koruma `save()`'dedir: hangi servis yazarsa yazsın geçiş veritabanındaki durumla denetlenir.
 `seat_type` seçildiği koltuktur, değişmez; yedekten çağrıyı `promoted_on` gösterir.
 
+İPTAL (tasarım §5 O1, §5.2.2 "`IPTAL`, yanlış kayıt, gerekçe ve kim"): tasarım alan adı vermez; gerekçe
+şifreli `cancel_reason`'dadır (`ReceiptLeaf.cancel_reason` gibi; plan F1c 6. adım), kim ise `updated_by`
+ve iz satırının hesabıdır (`IPTAL` son durumdur, kayıt sonra değişmez). Gerekçe birlik kaydıdır: KVKK
+boşaltma kümesinde değildir, içerik MAC'indedir.
+
 DENETİM İZİ (tasarım §4.6.2, §5 O4): değer listesi kişisiz alanlardır (organ, görev, koltuk, oy, durum,
-kaynak, tarihler, engel var/yok, MEM onay no, karar bağları). Kişi bağı ve şifreli `evidence_note`
-yalnız içerik MAC'indedir. KVKK boşaltma kümesindeki iki alan (`dropped_reason`,
+kaynak, tarihler, engel var/yok, MEM onay no, karar bağları, Denetleme Kurulunda başkan seçilme işareti). Kişi bağı, şifreli `evidence_note` ve
+`cancel_reason` yalnız içerik MAC'indedir. KVKK boşaltma kümesindeki iki alan (`dropped_reason`,
 `eligibility_bar_basis`; §5.4, dönem kapanışında boşaltılır) ne değer listesine ne içerik MAC'ine girer.
 """
 
@@ -103,6 +108,7 @@ class OrganMembership(OabBaseModel):
         "eligibility_bar",
         "eligibility_bar_found_on",
         "retained_until_assembly",
+        "chair_elections",
     )
     IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
         "created_at",
@@ -138,6 +144,8 @@ class OrganMembership(OabBaseModel):
         "eligibility_bar",
         "eligibility_bar_found_on",
         "retained_until_assembly",
+        "chair_elections",
+        "cancel_reason",
         "rule_warnings",
     )
     #: KVKK boşaltma kümesi (tasarım §5.4): dönem kapanışında boşaltılır; MAC'e girmez (O4).
@@ -248,6 +256,14 @@ class OrganMembership(OabBaseModel):
     eligibility_bar_found_on = models.DateField("engelin tespit günü", null=True, blank=True)
     #: md. 7/2 istisnası: öğrencisi ayrılan velinin üyeliği olağanüstü genel kurula kadar sürer.
     retained_until_assembly = models.BooleanField("olağanüstü genel kurula kadar", default=False)
+    #: Denetleme Kurulunda bu üyelikle görev bölümlerinde başkan seçilme sayısı (md. 14/3 sayacı;
+    #: kullanıcı kararı 10.11.2026: her görev bölümündeki başkan seçimi bir seçilmedir, aynı dönemde
+    #: A → B → A dönüşünde A iki kez sayılır; görevdeki başkanın yeniden seçilmesi sayılmaz).
+    #: Azalmaz: dönem içi görev değişimi seçilmeyi silmez
+    #: (`uyelikler.dk_baskanlik_sayisi`).
+    chair_elections = models.PositiveSmallIntegerField("başkan seçilme sayısı", default=0)
+    #: Yanlış kaydın iptal gerekçesi (O1; modül başlığı "İptal"): `IPTAL`'de zorunludur (servis).
+    cancel_reason = EncryptedTextField("iptal gerekçesi", blank=True, default="")
     #: Kaydın güncel uyarı özeti (O3): kural kimliği, atıf, ileti, durum, paket ve revizyon.
     rule_warnings = models.JSONField("kural uyarıları", default=list, blank=True)
 
@@ -301,6 +317,11 @@ class OrganMembership(OabBaseModel):
                 condition=Q(organ=OrganType.TEMSILCI, representation__in=Representation.values)
                 | (~Q(organ=OrganType.TEMSILCI) & Q(representation="")),
                 name="ck_organmembership_representation",
+            ),
+            # Başkan seçilme sayısı yalnız Denetleme Kurulunda (md. 14/3 sayacı).
+            models.CheckConstraint(
+                condition=Q(chair_elections=0) | Q(organ=OrganType.DENETLEME_KURULU),
+                name="ck_organmembership_chair_elections",
             ),
             # Divan genel kurulun organıdır: genel kurul bağı zorunlu.
             models.CheckConstraint(

@@ -16,6 +16,14 @@ görevdeki asıla yazılır (seçilmiş asıl ya da yedekten çağrılan; `selec
 (md. 12/1, 12/3, 13/6).
 Kararın varsayılanı `TASLAK`'tır: program karar defterinin yerine geçmez, karar defterine el ile
 yazılır (md. 13/5).
+
+TOPLANTININ YAPILDI GEÇİŞİ (tasarım §7.2 "`PLANLANDI → YAPILDI`"): görevdeki her asıl üyenin katılım
+satırı girilmeden geçiş yoktur (sert; devamsızlık sayımı). Toplantı yeter sayısı (`yonetim_kurulu.
+toplanti_yeter_sayi`) F3'tedir. F1c'de bu geçişi yalnız görev bölümü kaydı yapar (6. adım).
+
+KARARIN DURUM SERVİSİ (6. adım): durum makinesi modeldedir (`BoardDecision.save`). F1c'de yalnız
+taslağın iptali yazılır (`TASLAK → IPTAL`); kabul ve ret toplantı ve karar yeter sayısıyla (md. 13/3),
+"deftere işlendi" işareti (`Eylem.ISARET_KARAR_DEFTERE_ISLENDI`) ve sakat karar F3'tedir.
 """
 
 from __future__ import annotations
@@ -34,6 +42,8 @@ from apps.oab.models import (
     BookCertifier,
     BookKind,
     DecisionKind,
+    DecisionStatus,
+    KararDurumuGecersiz,
     MeetingKind,
     MeetingStatus,
     MembershipStatus,
@@ -61,6 +71,18 @@ OZURLU_KATILIM = "Katılan üye özürlü sayılmaz."
 KARAR_TURU_GECERSIZ = "Bu karar türü bu sürümde yazılmaz."
 YEDEK_CAGIRMA_YALNIZ_YK = "Yedek çağırma kararı yalnız yönetim kurulu toplantısına yazılır."
 TASDIK_MAKAMI_GECERSIZ = "Tasdik eden makam geçersiz."
+TOPLANTI_PLANLANMIS_DEGIL = "Yalnız planlanmış toplantı yapıldı olarak kaydedilir."
+KATILIM_EKSIK = (
+    "Görevdeki her asıl üyenin katılım satırı (katıldı, özürlü ya da özürsüz) girilmeden toplantı "
+    "yapıldı olarak kaydedilmez."
+)
+KARAR_GECISI_F3 = (
+    "Kararın kabulü, reddi ve deftere işlenmesi karar defteri ekranıyla yapılır; bu sürümde yalnız "
+    "taslak iptal edilir."
+)
+
+#: F1c'de durum servisinin yazdığı geçişler (modül başlığı "Kararın durum servisi").
+F1C_KARAR_GECISLERI: Final = frozenset({DecisionStatus.IPTAL})
 
 
 @transaction.atomic
@@ -126,6 +148,25 @@ def toplanti_olustur(
     )
     denetim_izi.degisiklik(toplanti, onceki=None)
     return toplanti
+
+
+@transaction.atomic
+def toplanti_yapildi(toplanti: BoardMeeting, *, held_at: datetime) -> BoardMeeting:
+    """`PLANLANDI → YAPILDI` (`DURUM`): görevdeki her asılın katılım satırı olmalıdır (sert)."""
+    guncel = _yazilabilir_toplanti(toplanti)
+    if guncel.status != MeetingStatus.PLANLANDI:
+        raise ValueError(TOPLANTI_PLANLANMIS_DEGIL)
+    gorevdekiler = {u.pk for u in selectors.gorevdeki_asillar(guncel.term, guncel.organ)}
+    yazilan = set(guncel.attendances.values_list("membership_id", flat=True))
+    if not gorevdekiler <= yazilan:
+        raise ValueError(KATILIM_EKSIK)
+    onceki = denetim_izi.anlik(guncel)
+    guncel.held_at = held_at
+    guncel.status = MeetingStatus.YAPILDI
+    guncel.updated_by_id = iz.yazar_hesabi()
+    guncel.save(update_fields=["held_at", "status", "updated_at", "updated_by"])
+    denetim_izi.degisiklik(guncel, onceki=onceki)
+    return guncel
 
 
 def _yazilabilir_toplanti(toplanti: BoardMeeting) -> BoardMeeting:
@@ -199,3 +240,24 @@ def karar_taslagi_olustur(
     )
     denetim_izi.degisiklik(karar, onceki=None)
     return karar
+
+
+@transaction.atomic
+def karar_durumu_yaz(karar: BoardDecision, hedef: str) -> BoardDecision:
+    """Kararın durum geçişi (`DURUM`; modül başlığı "Kararın durum servisi").
+
+    Geçiş modelin durum makinesine uymalıdır (`KararDurumuGecersiz`); F1c'de yalnız taslağın iptali
+    yazılır, öteki geçişler F3'ün karar defteri akışındadır.
+    """
+    guncel = BoardDecision.objects.select_related("meeting__term__rule_package").get(pk=karar.pk)
+    if hedef not in F1C_KARAR_GECISLERI:
+        raise KararDurumuGecersiz(KARAR_GECISI_F3)
+    donem_kilidi.yazma_denetimi(guncel.meeting.term)
+    if guncel.status == hedef:
+        return guncel
+    onceki = denetim_izi.anlik(guncel)
+    guncel.status = hedef
+    guncel.updated_by_id = iz.yazar_hesabi()
+    guncel.save(update_fields=["status", "updated_at", "updated_by"])
+    denetim_izi.degisiklik(guncel, onceki=onceki)
+    return guncel

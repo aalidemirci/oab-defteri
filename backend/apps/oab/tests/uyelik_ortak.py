@@ -1,4 +1,4 @@
-"""Organ üyeliği testlerinin ortak kurulumu (F1c 5. adım; `yk`, `dk`, `ak` ve üyelik testleri).
+"""Organ üyeliği testlerinin ortak kurulumu (F1c 5-6. adım; `yk`, `dk`, `tm`, `ak` ve üyelik testleri).
 
 OYS fabrikalarının (`OabPersonFactory`, `OrganMembershipFactory`) karşılığıdır, AYNEN alınmadı:
 kişi VARSAYILAN olarak velidir (`is_parent=True`), genel kurul dışı kanaldaki ya da devralınan üyelik
@@ -9,6 +9,8 @@ doğrudan yazılır (geçmiş dönem kapanmıştır, servis yazmaz). Kişi adlar
 from __future__ import annotations
 
 import itertools
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -26,9 +28,12 @@ from apps.oab.models import (
     SeatType,
     TermStatus,
 )
-from apps.oab.services import donemler, kisiler, uyelikler
+from apps.oab.services import donemler, gorev_bolumu, kisiler, uyelikler, uyum
 from apps.oab.services import genel_kurul as genel_kurul_servisi
-from apps.okul.models import SchoolYear
+from apps.okul.models import Account, AccountRole, AccountStatus, SchoolYear
+from apps.okul.oturum import Yazar, yazar_olarak
+from apps.okul.tests.hesap_ortak import hesap_ac, muhurle
+from conftest import oturumu_ac_test
 
 #: Dönemin açıldığı gün ve organ seçilmelerinin günü.
 GUN = date(2026, 10, 10)
@@ -185,3 +190,122 @@ def gecmis_secilmeler(
             )
         )
     return kayitlar
+
+
+# ---------------------------------------------------------------------------
+# 6. adım: rol oturumu, kurul kurulumu, görev bölümü
+# ---------------------------------------------------------------------------
+@contextmanager
+def rol_olarak(rol: AccountRole) -> Iterator[Account]:
+    """Uydurma hesapla rolün oturumu ve yazar bağlamı (servis ve uç aynı rolü görür). Rolün açık
+    hesabı varsa o kullanılır (tanıtıcı tekildir); çıkışta varsayılan oturum geri gelir."""
+    hesap = Account.objects.filter(role=rol, status=AccountStatus.ACIK).first()
+    if hesap is None:
+        hesap = muhurle(hesap_ac(rol, ad="Uydurma Hesap"), status=AccountStatus.ACIK)
+    oturumu_ac_test(str(hesap.id), tanitici=hesap.login_name, rol=rol.value)
+    try:
+        with yazar_olarak(Yazar(hesap_id=str(hesap.id), rol=rol.value)):
+            yield hesap
+    finally:
+        oturumu_ac_test()
+
+
+def secilmis(
+    donem_: OabTerm,
+    kisi_: OabPerson | None = None,
+    *,
+    organ: str = "YK",
+    seat_type: str = SeatType.ASIL,
+    seat_group: str = "",
+    seat_order: int | None = None,
+    start_date: date = SECIM_GUNU,
+) -> OrganMembership:
+    """Programdan önce seçilmiş görevdeki üye (devralınan; seçilme günü `SECIM_GUNU`)."""
+    if kisi_ is None:
+        kisi_ = ogretmen() if seat_group == SeatGroup.OGRETMEN else kisi()
+    return uyelikler.assign_membership(
+        term=donem_,
+        person=kisi_,
+        organ=organ,
+        seat_type=seat_type,
+        seat_group=seat_group,
+        elected_by=(
+            ElectedBy.OGRETMENLER_KURULU
+            if seat_group == SeatGroup.OGRETMEN
+            else ElectedBy.GENEL_KURUL
+        ),
+        source=MembershipSource.DEVRALINAN,
+        seat_order=seat_order,
+        start_date=start_date,
+    )
+
+
+def yk_kurulu(donem_: OabTerm, *, asil: int = 5, yedek: int = 0) -> list[OrganMembership]:
+    """Yönetim kurulu: `asil` asıl, `yedek` yedek (oy sırası 1, 2, …). Önce asıllar."""
+    asillar = [secilmis(donem_) for _ in range(asil)]
+    yedekler = [secilmis(donem_, seat_type=SeatType.YEDEK, seat_order=i + 1) for i in range(yedek)]
+    return [*asillar, *yedekler]
+
+
+def dk_kurulu(donem_: OabTerm) -> list[OrganMembership]:
+    """Denetleme Kurulu asılları: bir veli, iki öğretmen (md. 14/1)."""
+    return [
+        secilmis(donem_, organ="DK", seat_group=SeatGroup.VELI),
+        secilmis(donem_, organ="DK", seat_group=SeatGroup.OGRETMEN),
+        secilmis(donem_, organ="DK", seat_group=SeatGroup.OGRETMEN),
+    ]
+
+
+def saat(gun: date) -> datetime:
+    """Görev bölümünün saati: yerel öğleden sonra (UTC 12:00 = 15:00 Europe/Istanbul)."""
+    return datetime(gun.year, gun.month, gun.day, 12, 0, tzinfo=UTC)
+
+
+def _katilim(donem_: OabTerm, organ: str) -> list[gorev_bolumu.KatilimSatiri]:
+    from apps.oab import selectors
+
+    return [
+        gorev_bolumu.KatilimSatiri(uyelik=u, present=True)
+        for u in selectors.gorevdeki_asillar(donem_, organ)
+    ]
+
+
+def _gerekce(metin: str) -> uyum.Gerekce | None:
+    return uyum.Gerekce(metin=metin) if metin else None
+
+
+def yk_gorev_bolumu(
+    donem_: OabTerm,
+    gorevler: Mapping[str, OrganMembership],
+    *,
+    gun: date,
+    gerekce: str = "",
+) -> gorev_bolumu.GorevBolumu:
+    """Yönetim kurulunun görev bölümü: görevdeki her asıl katıldı."""
+    return gorev_bolumu.yk_gorev_bolumu(
+        term=donem_,
+        held_at=saat(gun),
+        gorevler=gorevler,
+        katilim=_katilim(donem_, "YK"),
+        gerekce=_gerekce(gerekce),
+    )
+
+
+def dk_gorev_bolumu(
+    donem_: OabTerm,
+    baskan: OrganMembership,
+    *,
+    gun: date,
+    gerekce: str = "",
+    plan: list[date] | None = None,
+) -> gorev_bolumu.GorevBolumu:
+    """Denetleme Kurulunun görev bölümü, Denetleme Kurulu hesabıyla (M8 ⁵)."""
+    with rol_olarak(AccountRole.DENETLEME_KURULU):
+        return gorev_bolumu.dk_gorev_bolumu(
+            term=donem_,
+            held_at=saat(gun),
+            baskan=baskan,
+            katilim=_katilim(donem_, "DK"),
+            denetim_plani=plan,
+            gerekce=_gerekce(gerekce),
+        )

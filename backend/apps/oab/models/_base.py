@@ -145,7 +145,12 @@ class DropKind(models.TextChoices):
 
 
 class Representation(models.TextChoices):
-    """Birlik temsilcisinin görev aldığı kurul ya da komisyon (tasarım "Temsil türleri")."""
+    """Birlik temsilcisinin görev aldığı kurul ya da komisyon (tasarım "Temsil türleri").
+
+    `PAY_DAGITIM_KOMISYONU` tasarımın temsil türleri listesinde yoktur; §6.4.4 (`temsilci.pay_dagitim_
+    komisyonu`, md. 17/1-b-3: "başkan bu komisyona seçildiyse temsilci satırı") ve E03'ün "pay dağıtım
+    komisyonu satırı yalnız başkan seçildiyse" hükmü kaydı ister (plan F1c 6. adım).
+    """
 
     ODUL_DISIPLIN_KURULU = "ODUL_DISIPLIN_KURULU", "Okul öğrenci ödül ve disiplin kurulu"
     DAVRANIS_DEGERLENDIRME_KURULU = (
@@ -161,6 +166,7 @@ class Representation(models.TextChoices):
     TASIMACI_TESPIT_KOMISYONU = "TASIMACI_TESPIT_KOMISYONU", "Taşımacıyı tespit komisyonu"
     MUHAMMEN_BEDEL_KOMISYONU = "MUHAMMEN_BEDEL_KOMISYONU", "Muhammen bedel tespit komisyonu"
     KIRALAMA_IHALE_KOMISYONU = "KIRALAMA_IHALE_KOMISYONU", "Kiralama ihale komisyonu"
+    PAY_DAGITIM_KOMISYONU = "PAY_DAGITIM_KOMISYONU", "Pay dağıtım komisyonu"
     KAMPUS_YONETIMI = "KAMPUS_YONETIMI", "Kampüs yönetimi"
     KANTIN_DENETIM_KOMISYONU = "KANTIN_DENETIM_KOMISYONU", "Kantin denetim komisyonu"
     DIGER = "DIGER", "Diğer"

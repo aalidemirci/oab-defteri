@@ -58,6 +58,18 @@ KISI_YAZAN_UCLAR = frozenset(
         # Organ üyelikleri (F1c 5. adım): kişi kaydına bağlı üyelik ve şifreli dayanak notu.
         "oab-membership-list",
         "oab-membership-detail",
+        # F1c 6. adım: görev bölümü (görev ve şifreli gündem/karar metni), yedek çağrısı, düşme
+        # (şifreli gerekçe), iptal (şifreli gerekçe), görev alma engeli (özel nitelikli dayanak),
+        # temsilci ve alım komisyonu üyeliği.
+        "oab-yk-duty-assignment",
+        "oab-dk-duty-assignment",
+        "oab-membership-substitute-call-yk",
+        "oab-membership-substitute-call-dk",
+        "oab-membership-drop",
+        "oab-membership-cancel",
+        "oab-membership-eligibility-basis",
+        "oab-representative-list",
+        "oab-purchase-committee-list",
     }
 )
 
@@ -127,10 +139,9 @@ DIGER_UCLAR = frozenset(
         "security-status",
         "security-unlock",
         "oab-okul-karti-bilgileri",
-        # Kadro okuması ve görev alma engelinin dayanağı (F1c 5. adım): yalnız okur (GET); dayanağın
-        # okuması erişim günlüğüne yazılır, kişi sicili yazmaz.
+        # Kadro okuması (F1c 5. adım): yalnız okur (GET). Görev alma engelinin ucu 6. adımda yazma
+        # (PUT) aldı, kişi yazan listesindedir.
         "oab-organ-roster",
-        "oab-membership-eligibility-basis",
         # Birlik dönemi (F1c-3): kişi verisi yazmaz, kapı `Eylem.BIRLIK_DONEMI_YAZMA`.
         "oab-term-detail",
         "oab-term-list",
@@ -229,10 +240,12 @@ def test_parolasizken_kisi_yazan_her_uc_yazma_yontemiyle_409_doner(parolasiz: Pa
     # + 1 ayrılış (POST) + 1 birleştirme (POST) + 1 havuz kararı (POST)
     # + veli listesi: silme (DELETE) ve 2 aktarım (POST)
     # + birlik kişileri: liste (POST), ayrıntı (PATCH), 2 kopya (POST)
-    # + organ üyelikleri: liste (POST), ayrıntı (PATCH).
+    # + organ üyelikleri: liste (POST), ayrıntı (PATCH)
+    # + F1c 6. adım: iki görev bölümü, iki yedek çağrısı, düşme, iptal (POST), engel (PUT),
+    # temsilci ve alım komisyonu (POST).
     # Aile iskeletinin kütüphane uçları (üyelik, kart basımı, dolaşım masası,
     # teslim, saklama tetiği) F1a-2'de, öğrenci uçları F1b 5. adımda söküldü.
-    assert denenen == 1 + 1 * 3 + 2 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 1
+    assert denenen == 1 + 1 * 3 + 2 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 2 + 2 + 1 + 1 + 1 + 2
     assert not Personnel.all_objects.exists()
     assert not ParentRoster.objects.exists()
     assert not OabPerson.objects.exists()

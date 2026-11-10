@@ -13,6 +13,17 @@ D6'nın statik taraması kimliği böyle görür (paket erişimi `paket_denetle`
 
 Toplu gerekçe: aynı kural ve kök neden için tek `ComplianceJustification` birden çok satıra bağlanır;
 `toplu_gerekce: false` olan kuralda kök neden yok sayılır, her kayıt kendi gerekçesini ister.
+
+Akış satırı (`akis_sapmasi`): tasarımın bir akışa bağladığı, Yönetmelik maddesine ve kural paketine
+dayanmayan uyarı + gerekçe (yönetim kurulu kararı bağlanmamış yedek çağrısı, tasarım §7.2; plan F1c
+kararları). Hiçbir maddenin satırına yazılmaz (atıf basılmaz): kimliği `akis.` önekli, paketi ve
+revizyonu boş `SAPMA` satırıdır; gerekçe öteki sapmalar gibi şifreli `ComplianceJustification`'dadır.
+
+Rol görünümü (`uyum_satiri_gorunumu`): görev alma engeli satırının kural kimliği (`uyelik.suc_engeli`,
+`yonetim_kurulu.tek_birlik`) satırda ve denetim izinde kalır; onu yalnız program yöneticisi ve yönetim
+kurulu rolleri görür, Denetleme Kurulu ve müdür "görev alma engeli" genel adını görür (kullanıcı kararı
+10.11.2026: engelin dayanağını yalnız bu roller okur; tasarım §4.4.2 ¹¹). F1c'nin 6. adımında uyum
+satırını ya da uyarı özetini kullanıcıya döndüren uç yoktur; pano (12. adım) bu görünümü kullanır.
 """
 
 from __future__ import annotations
@@ -21,7 +32,7 @@ from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any
+from typing import Any, Final
 
 from django.db import models, transaction
 from django.utils import timezone
@@ -45,9 +56,11 @@ from apps.oab.models import (
     RulePackage,
 )
 from apps.oab.services import donem_kilidi, iz, kural_bagi
-from apps.okul import denetim_izi
+from apps.okul import denetim_izi, rol_izinleri
 
 _ACIK_TURLER = (ComplianceKind.SAPMA, ComplianceKind.EKSIK)
+#: Akış satırı kimliklerinin öneki (kural paketinin kimlikleri bu önekle başlamaz).
+AKIS_ONEKI = "akis."
 
 
 @dataclass(frozen=True)
@@ -248,6 +261,111 @@ def denetle(
     return UyumSonucu(
         sonuc, _satir_yaz(donem, konu, kural_id, sonuc, tur=ComplianceKind.SAPMA, gerekce=bagli)
     )
+
+
+# ---------------------------------------------------------------------------
+# Uyum satırının role göre görünümü (görev alma engeli; tasarım §4.4.2 ¹¹)
+# ---------------------------------------------------------------------------
+#: Dayanağı ele veren görev alma engeli kuralları: kimlik ve atıf suç engelini (md. 12/5, 14/7) başka
+#: birlik yönetiminden (md. 12/4) ayırır, bu yüzden dayanağın kendisi gibi okunur.
+ENGEL_KURALLARI: Final = frozenset({"uyelik.suc_engeli", "yonetim_kurulu.tek_birlik"})
+#: Dayanağı okumayan rolün gördüğü genel ad ve metin (kimlik kural paketinin kimliği değildir).
+ENGEL_GENEL_KIMLIGI: Final = "gorev_alma_engeli"
+ENGEL_GENEL_ADI: Final = "Görev alma engeli"
+ENGEL_GENEL_METNI: Final = "Bu kişi için görev almaya engel durum işaretlendi."
+
+
+def engel_dayanagini_okur_mu(rol: str | None) -> bool:
+    """Görev alma engelinin dayanağını (ve onu ele veren kural kimliğini) okuyan rol mü? Yalnız program
+    yöneticisi ve yönetim kurulu rolleri (kullanıcı kararı 10.11.2026; tasarım §4.4.2 ¹¹). Rol yoksa ya
+    da bilinmiyorsa okumaz (fail-closed)."""
+    return rol is not None and (rol == rol_izinleri.YONETICI or rol in rol_izinleri.YK_ROLLERI)
+
+
+def uyum_satiri_gorunumu(
+    satir: ComplianceItem | Mapping[str, Any], rol: str | None
+) -> dict[str, Any]:
+    """Uyum satırının (`ComplianceItem`) ya da üyeliğin uyarı özeti satırının (`rule_warnings`) role göre
+    gösterilecek hâli (yazmaz; pano ve kadro ekranları kullanır, plan F1c 6. adım notları).
+
+    Görev alma engeli satırının kural kimliği ve atfı dayanağı ele verir (`ENGEL_KURALLARI`): program
+    yöneticisi ve yönetim kurulu rolleri satırı olduğu gibi görür; Denetleme Kurulu, müdür ve rolü
+    bilinmeyen oturum yalnız genel adı görür (kimlik `ENGEL_GENEL_KIMLIGI`, atıfsız genel metin). Satırın
+    kendisi (uyum satırında ve denetim izinde kural kimliği) değişmez. Gerekçe metni hiçbir rolde
+    görünüme girmez (şifreli; okuması ayrı yoldadır).
+    """
+    if isinstance(satir, ComplianceItem):
+        gorunum: dict[str, Any] = {
+            "id": satir.pk,
+            "kind": satir.kind,
+            "subject_type": satir.subject_type,
+            "subject_id": satir.subject_id,
+            "rule_id": satir.rule_id,
+            "rule_package": satir.rule_package,
+            "rev": satir.rev,
+            "message": satir.message,
+            "resolved_at": satir.resolved_at,
+        }
+        kimlik_alani, metin_alani, atif_alani = "rule_id", "message", None
+    else:
+        gorunum = dict(satir)
+        kimlik_alani, metin_alani, atif_alani = "kural", "mesaj", "atif"
+    if gorunum.get(kimlik_alani) not in ENGEL_KURALLARI or engel_dayanagini_okur_mu(rol):
+        return gorunum
+    gorunum[kimlik_alani] = ENGEL_GENEL_KIMLIGI
+    gorunum[metin_alani] = ENGEL_GENEL_METNI
+    gorunum["ad"] = ENGEL_GENEL_ADI
+    if atif_alani is not None:
+        gorunum[atif_alani] = ""
+    return gorunum
+
+
+@transaction.atomic
+def akis_sapmasi(
+    akis_id: str,
+    mesaj: str,
+    *,
+    donem: OabTerm,
+    konu: models.Model,
+    gerekce: Gerekce | None = None,
+) -> ComplianceItem:
+    """Akış satırı (modül başlığı): gerekçesiz geçmez; aynı iletili açık satır varsa yeniden sorulmaz."""
+    yazma_kapisi()
+    if not akis_id.startswith(AKIS_ONEKI):
+        raise ValueError("Akış satırının kimliği akış önekiyle başlar.")
+    donem = OabTerm.objects.select_related("rule_package").get(pk=donem.pk)
+    donem_kilidi.yazma_denetimi(donem)
+    acik = _acik_satir(donem, konu, akis_id)
+    if acik is not None and acik.kind == ComplianceKind.SAPMA and acik.message == mesaj:
+        return acik
+    bagli = _gerekce_bagla(akis_id, gerekce, toplu_acik=True, uyari=mesaj)
+    if acik is not None:  # ileti değişmiş açık akış satırı: yeni gerekçeyle güncellenir
+        onceki = denetim_izi.anlik(acik)
+        acik.kind = ComplianceKind.SAPMA
+        acik.justification_group = bagli
+        acik.message = mesaj
+        acik.updated_by_id = iz.yazar_hesabi()
+        acik.save(
+            update_fields=["kind", "justification_group", "message", "updated_at", "updated_by"]
+        )
+        denetim_izi.degisiklik(acik, onceki=onceki, compliance_item=acik.pk)
+        return acik
+    hesap = iz.yazar_hesabi()
+    satir = ComplianceItem.objects.create(
+        term=donem,
+        kind=ComplianceKind.SAPMA,
+        subject_type=denetim_izi.model_etiketi(type(konu)),
+        subject_id=denetim_izi.kimlik_metni(type(konu), konu.pk),
+        rule_id=akis_id,
+        rule_package="",
+        rev=None,
+        message=mesaj,
+        justification_group=bagli,
+        created_by_id=hesap,
+        updated_by_id=hesap,
+    )
+    denetim_izi.degisiklik(satir, onceki=None, compliance_item=satir.pk)
+    return satir
 
 
 @transaction.atomic

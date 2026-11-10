@@ -9,6 +9,12 @@ Program karar defterinin yerine geçmez (CLAUDE.md "Konum"): karar defterine kar
 defter noter tasdiklidir (md. 13/5, 23/2). `BoardDecision` defterdeki kararın programdaki karşılığıdır;
 kararın varsayılanı `TASLAK`'tır.
 
+KARARIN DURUM MAKİNESİ (tasarım §7.2; plan F1c 6. adım): karar `TASLAK` doğar (defterde fiilen yazılı
+sakat karar `DEFTERDE_SAKAT` girilir, F3); geçişler `TASLAK` → `KABUL_EDILDI` · `REDDEDILDI` · `IPTAL`,
+`KABUL_EDILDI` → `DEFTERE_ISLENDI`'dir; öteki durumlar son durumdur. Koruma `save()`'dedir (üyelikteki
+gibi): hangi servis yazarsa yazsın geçiş veritabanındaki durumla denetlenir. Deftere işlenen kararın
+defter, sıra no ve sayfası veritabanı kısıtıdır.
+
 Şifreli alanlar serbest metindir (tasarım §5.3): toplantı gündemi, karar metni ve muhalefet şerhi.
 Hiçbiri KVKK boşaltma kümesinde değildir (birlik kaydıdır, §5.4); içerik MAC'indedir, değer listesine
 girmez. Toplantı katılımında özrün nedeni tutulmaz (sağlık verisi olabilir).
@@ -16,7 +22,7 @@ girmez. Toplantı katılımında özrün nedeni tutulmaz (sağlık verisi olabil
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import Any, ClassVar, Final
 
 from django.db import models
 from django.db.models import Q
@@ -41,6 +47,24 @@ KURUL_ORGANLARI = (OrganType.YONETIM_KURULU, OrganType.DENETLEME_KURULU)
 #: Sertifika no ve yer adlarının üst sınırı (karakter).
 KISA_METIN_MAX = 64
 YER_MAX = 128
+
+#: Kararın açılabildiği durumlar (modül başlığı "Kararın durum makinesi").
+KARAR_ACILIS_DURUMLARI: Final = frozenset({DecisionStatus.TASLAK, DecisionStatus.DEFTERDE_SAKAT})
+
+#: Kararın izinli durum geçişleri (tasarım §7.2); listede olmayan durum son durumdur.
+KARAR_GECISLERI: Final[dict[str, frozenset[str]]] = {
+    DecisionStatus.TASLAK: frozenset(
+        {DecisionStatus.KABUL_EDILDI, DecisionStatus.REDDEDILDI, DecisionStatus.IPTAL}
+    ),
+    DecisionStatus.KABUL_EDILDI: frozenset({DecisionStatus.DEFTERE_ISLENDI}),
+}
+
+KARAR_ACILIS_DURUMU_GECERSIZ = "Karar yalnız taslak olarak açılır."
+KARAR_DURUM_GECISI_GECERSIZ = "Karar bu duruma geçirilemez."
+
+
+class KararDurumuGecersiz(ValueError):
+    """İzinli olmayan karar durumu geçişi (modül başlığı "Kararın durum makinesi")."""
 
 
 class OfficialBook(OabBaseModel):
@@ -371,3 +395,25 @@ class BoardDecision(OabBaseModel):
 
     def __str__(self) -> str:
         return f"{self.get_kind_display()} kararı"
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Durum makinesini veritabanındaki duruma karşı denetler, sonra kaydeder (modül başlığı)."""
+        if self._state.adding:
+            if self.status not in KARAR_ACILIS_DURUMLARI:
+                raise KararDurumuGecersiz(KARAR_ACILIS_DURUMU_GECERSIZ)
+        else:
+            update_fields = kwargs.get("update_fields")
+            if update_fields is None or "status" in update_fields:
+                eski = (
+                    type(self)
+                    ._base_manager.filter(pk=self.pk)
+                    .values_list("status", flat=True)
+                    .first()
+                )
+                if (
+                    eski is not None
+                    and eski != self.status
+                    and self.status not in KARAR_GECISLERI.get(str(eski), frozenset())
+                ):
+                    raise KararDurumuGecersiz(KARAR_DURUM_GECISI_GECERSIZ)
+        super().save(*args, **kwargs)

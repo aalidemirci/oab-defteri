@@ -365,6 +365,173 @@ def _uyelik_ac() -> Istek:
     )
 
 
+def _kurul_uyesi(donem: OabTerm, ad: str, **alanlar: Any) -> OrganMembership:
+    """Devralınan (geçişte görevdeki) seçilmiş üye; kişi adları uydurmadır, adaşlık sorusu çıkmaz."""
+    kisi = kisiler.create_person(
+        kind=alanlar.pop("kind", "VELI"),
+        first_name=f"Uydurnur {ad}",
+        last_name="Örnekkaya",
+        ayni_kisi_degil=True,
+    )
+    varsayilan: dict[str, Any] = {
+        "organ": "YK",
+        "seat_type": "ASIL",
+        "elected_by": "GENEL_KURUL",
+        "source": "DEVRALINAN",
+        "start_date": date(2026, 10, 12),
+    }
+    return uyelikler.assign_membership(term=donem, person=kisi, **{**varsayilan, **alanlar})
+
+
+def _f1c6_donemi() -> OabTerm:
+    return donemler.create_term(
+        name="2026-2027 birlik dönemi", school_year=_yil(), start_date=date(2026, 10, 10)
+    )
+
+
+def _rol_oturumu(rol: AccountRole) -> str:
+    """Uydurma hesapla rol oturumu (iz satırları bu hesabındır)."""
+    hesap = muhurle(hesap_ac(rol, ad="Uydurma Hesap"), status=AccountStatus.ACIK)
+    oturumu_ac_test(str(hesap.id), tanitici=hesap.login_name, rol=rol.value)
+    return str(hesap.id)
+
+
+def _yk_gorev_bolumu(_: pytest.MonkeyPatch) -> Istek:
+    """Yönetim kurulu görev bölümü (sekreter): toplantı ve katılım (`OLUSTUR`), toplantının
+    `YAPILDI` geçişi (`DURUM`), görev (`GUNCELLE`), `TASLAK` karar (`OLUSTUR`)."""
+    donem = _f1c6_donemi()
+    uyeler = [_kurul_uyesi(donem, ad) for ad in ("A", "B", "C", "D", "E")]
+    hesap = _rol_oturumu(AccountRole.SEKRETER)
+    return Istek(
+        f"/api/v1/oab/terms/{donem.pk}/duty-assignment/yk/",
+        {
+            "held_at": "2026-10-15T15:00:00+03:00",
+            "sekreter": uyeler[0].pk,
+            "katilim": [{"membership": u.pk, "present": True} for u in uyeler],
+        },
+        _turler("OLUSTUR", "DURUM", "GUNCELLE"),
+        hesap=hesap,
+    )
+
+
+def _dk_gorev_bolumu(_: pytest.MonkeyPatch) -> Istek:
+    """Denetleme Kurulu görev bölümü ve denetim planı (Denetleme Kurulu hesabı). Devralınan başkan
+    sayaç dışıdır (uyum satırı yok); plan tarihleri dönem ayarıdır (`GUNCELLE`)."""
+    donem = _f1c6_donemi()
+    veli = _kurul_uyesi(donem, "V", organ="DK", seat_group="VELI")
+    ogretmenler = [
+        _kurul_uyesi(
+            donem,
+            ad,
+            kind="OGRETMEN",
+            organ="DK",
+            seat_group="OGRETMEN",
+            elected_by="OGRETMENLER_KURULU",
+        )
+        for ad in ("Ö", "P")
+    ]
+    hesap = _rol_oturumu(AccountRole.DENETLEME_KURULU)
+    return Istek(
+        f"/api/v1/oab/terms/{donem.pk}/duty-assignment/dk/",
+        {
+            "held_at": "2026-10-15T15:00:00+03:00",
+            "baskan": veli.pk,
+            "katilim": [{"membership": u.pk, "present": True} for u in [veli, *ogretmenler]],
+            "denetim_plani": ["2027-01-15", "2027-05-15"],
+        },
+        _turler("OLUSTUR", "DURUM", "GUNCELLE"),
+        hesap=hesap,
+    )
+
+
+def _yk_yedek_cagrisi(_: pytest.MonkeyPatch) -> Istek:
+    """Yönetim kurulu yedeği (sekreter): karar bağı yok, uyarı + gerekçe (uyum satırı ve gerekçe
+    `OLUSTUR`), çağrı `GUNCELLE`."""
+    donem = _f1c6_donemi()
+    yedek = _kurul_uyesi(donem, "Y", seat_type="YEDEK", seat_order=1)
+    hesap = _rol_oturumu(AccountRole.SEKRETER)
+    return Istek(
+        f"/api/v1/oab/memberships/{yedek.pk}/substitute-call/yk/",
+        {"promoted_on": "2026-11-02", "gerekce": "Karar defteri ekranı henüz yok."},
+        _turler("OLUSTUR", "GUNCELLE"),
+        hesap=hesap,
+    )
+
+
+def _dk_yedek_cagrisi(_: pytest.MonkeyPatch) -> Istek:
+    """Denetleme Kurulu yedeği (program yöneticisi; karar bağı yok, öğretmen asıl hücresi boş)."""
+    donem = _f1c6_donemi()
+    yedek = _kurul_uyesi(
+        donem,
+        "Y",
+        kind="OGRETMEN",
+        organ="DK",
+        seat_type="YEDEK",
+        seat_group="OGRETMEN",
+        elected_by="OGRETMENLER_KURULU",
+    )
+    return Istek(
+        f"/api/v1/oab/memberships/{yedek.pk}/substitute-call/dk/",
+        {"promoted_on": "2026-11-02"},
+        _turler("GUNCELLE"),
+    )
+
+
+def _uyelik_dusur(_: pytest.MonkeyPatch) -> Istek:
+    uye = _kurul_uyesi(_f1c6_donemi(), "D")
+    return Istek(
+        f"/api/v1/oab/memberships/{uye.pk}/drop/",
+        {"drop_kind": "ISTIFA", "end_date": "2026-11-02"},
+        _turler("DURUM", "GUNCELLE"),  # durum ve düşme alanları (tür, gün)
+    )
+
+
+def _uyelik_iptal(_: pytest.MonkeyPatch) -> Istek:
+    uye = _kurul_uyesi(_f1c6_donemi(), "İ")
+    return Istek(
+        f"/api/v1/oab/memberships/{uye.pk}/cancel/",
+        {"cancel_reason": "Uydurma yanlış kayıt."},
+        _turler("DURUM", "GUNCELLE"),  # durum ve şifreli gerekçe
+    )
+
+
+def _engel_yaz(_: pytest.MonkeyPatch) -> Istek:
+    uye = _kurul_uyesi(_f1c6_donemi(), "E")
+    return Istek(
+        f"/api/v1/oab/memberships/{uye.pk}/eligibility-basis/",
+        {
+            "eligibility_bar": "VAR",
+            "eligibility_bar_basis": "TEK_BIRLIK_12_4",
+            "eligibility_bar_found_on": "2026-11-02",
+        },
+        _turler("GUNCELLE"),
+    )
+
+
+def _temsilci_ekle(_: pytest.MonkeyPatch) -> Istek:
+    """Sosyal etkinlikler kurulu temsilcisi (tek kişi: kural uygun, uyum satırı yok)."""
+    donem = _f1c6_donemi()
+    return Istek(
+        "/api/v1/oab/representatives/",
+        {
+            "term": donem.pk,
+            "person": _birlik_kisisi().pk,
+            "representation": "SOSYAL_ETKINLIKLER_KURULU",
+            "start_date": "2026-10-20",
+        },
+        _turler("OLUSTUR"),
+    )
+
+
+def _alim_komisyonu(_: pytest.MonkeyPatch) -> Istek:
+    donem = _f1c6_donemi()
+    return Istek(
+        "/api/v1/oab/purchase-committee/",
+        {"term": donem.pk, "person": _birlik_kisisi().pk, "start_date": "2026-10-20"},
+        _turler("OLUSTUR"),
+    )
+
+
 def _veliden_birlik_kisisi() -> Istek:
     """Önce bir veli listesi aktarılır; uç listedeki velinin adını birlik kişisine kopyalar."""
     ad, baytlar = _veli_listesi_dosyasi()
@@ -558,6 +725,17 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
             f"/api/v1/oab/memberships/{_dk_ogretmeni().pk}/", {"votes": 12}, _turler("GUNCELLE")
         )
     ),
+    # F1c 6. adım: görev bölümü, yedek çağrısı, düşme, iptal, görev alma engeli, temsilci, alım
+    # komisyonu. Rol daraltmalı uçların senaryosu o rolün oturumundadır.
+    ("oab-yk-duty-assignment", "POST"): Senaryo(_yk_gorev_bolumu),
+    ("oab-dk-duty-assignment", "POST"): Senaryo(_dk_gorev_bolumu),
+    ("oab-membership-substitute-call-yk", "POST"): Senaryo(_yk_yedek_cagrisi),
+    ("oab-membership-substitute-call-dk", "POST"): Senaryo(_dk_yedek_cagrisi),
+    ("oab-membership-drop", "POST"): Senaryo(_uyelik_dusur),
+    ("oab-membership-cancel", "POST"): Senaryo(_uyelik_iptal),
+    ("oab-membership-eligibility-basis", "PUT"): Senaryo(_engel_yaz),
+    ("oab-representative-list", "POST"): Senaryo(_temsilci_ekle),
+    ("oab-purchase-committee-list", "POST"): Senaryo(_alim_komisyonu),
     # İlk hesap: satırlar yeni hesabındır (plan F1b-1); okul kartı parmak iziyle oluşur.
     ("security-enable", "POST"): _istek(
         lambda: Istek(

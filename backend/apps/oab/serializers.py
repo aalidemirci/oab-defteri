@@ -7,7 +7,11 @@ from typing import Any
 from rest_framework import serializers
 
 from apps.oab.models import (
+    BoardDecision,
+    DropKind,
     ElectedBy,
+    EligibilityBar,
+    EligibilityBarBasis,
     GeneralAssembly,
     MembershipRole,
     OabPerson,
@@ -16,6 +20,7 @@ from apps.oab.models import (
     OrganType,
     PersonKind,
     PersonStatus,
+    Representation,
     SeatGroup,
     SeatType,
 )
@@ -283,3 +288,123 @@ class OrganMembershipUpdateSerializer(serializers.Serializer[dict[str, Any]]):
     )
     eligibility_declared_on = _istege_bagli_gun()
     single_birlik_declared_on = _istege_bagli_gun()
+    #: Denetleme Kurulu öğretmeninin başka kurumdaki görevlendirmesi (md. 14/6; F1c 6. adım).
+    external_assignment_start = _istege_bagli_gun()
+    external_assignment_end = _istege_bagli_gun()
+    #: Alım komisyonunda YK üyesi olmayan üye için "uzmanlık gerektiren iş" (md. 18/1).
+    expertise_required = serializers.BooleanField(required=False)
+
+
+# ---------------------------------------------------------------------------
+# Görev bölümü, yedek çağrısı, düşme, iptal, engel, temsilciler (plan F1c 6. adım)
+# ---------------------------------------------------------------------------
+#: Karar metninin üst sınırı (şifreli sütun TEXT'tir; taslak metni evrak hattında üretilir).
+_KARAR_METNI_UST = 4000
+#: Toplantı yerinin üst sınırı (`BoardMeeting.place`).
+_YER_UST = 128
+
+
+def _uyelik_alani(**kwargs: Any) -> serializers.PrimaryKeyRelatedField[OrganMembership]:
+    return serializers.PrimaryKeyRelatedField(queryset=OrganMembership.objects.all(), **kwargs)
+
+
+class KatilimSerializer(serializers.Serializer[dict[str, Any]]):
+    """Görev bölümü toplantısında bir üyenin katılımı (katıldı · özürlü · özürsüz; neden tutulmaz)."""
+
+    membership = _uyelik_alani()
+    present = serializers.BooleanField()
+    excused = serializers.BooleanField(required=False, default=False)
+
+
+class _GorevBolumuMixin(_GerekceMixin):
+    held_at = serializers.DateTimeField()
+    place = serializers.CharField(max_length=_YER_UST, required=False, allow_blank=True, default="")
+    text = serializers.CharField(
+        max_length=_KARAR_METNI_UST, required=False, allow_blank=True, default=""
+    )
+    katilim = KatilimSerializer(many=True)
+
+
+class YkGorevBolumuSerializer(_GorevBolumuMixin):
+    """Yönetim kurulunun görev bölümü (md. 12/3): verilen görevler; en az biri."""
+
+    baskan = _uyelik_alani(required=False, allow_null=True, default=None)
+    baskan_yardimcisi = _uyelik_alani(required=False, allow_null=True, default=None)
+    muhasip = _uyelik_alani(required=False, allow_null=True, default=None)
+    sekreter = _uyelik_alani(required=False, allow_null=True, default=None)
+
+
+class DkGorevBolumuSerializer(_GorevBolumuMixin):
+    """Denetleme Kurulunun görev bölümü (md. 14/1) ve denetim planı tarihleri (dönem ayarı)."""
+
+    baskan = _uyelik_alani()
+    denetim_plani = serializers.ListField(
+        child=serializers.DateField(), required=False, allow_null=True, default=None
+    )
+
+
+class YkYedekCagrisiSerializer(_GerekceMixin):
+    """Yönetim kurulu yedeğinin çağrısı (md. 13/6): çağrı günü ve yedek çağırma kararı bağı."""
+
+    promoted_on = _istege_bagli_gun()
+    promoted_by_decision = serializers.PrimaryKeyRelatedField(
+        queryset=BoardDecision.objects.all(), required=False, allow_null=True, default=None
+    )
+
+
+class DkYedekCagrisiSerializer(serializers.Serializer[dict[str, Any]]):
+    """Denetleme Kurulu yedeğinin çağrısı (md. 14/6): yalnız çağrı günü (karar bağı yoktur)."""
+
+    promoted_on = _istege_bagli_gun()
+
+
+class DusmeSerializer(_GerekceMixin):
+    """Üyeliğin düşmesi: tür zorunlu; serbest gerekçe isteğe bağlı (şifreli; KVKK boşaltma)."""
+
+    drop_kind = serializers.ChoiceField(choices=DropKind.choices)
+    end_date = _istege_bagli_gun()
+    dropped_reason = serializers.CharField(
+        max_length=_NOT_UST, required=False, allow_blank=True, default=""
+    )
+    #: md. 7/2: düşürme yerine olağanüstü genel kurula kadar erteleme.
+    ertele = serializers.BooleanField(required=False, default=False)
+
+
+class IptalSerializer(serializers.Serializer[dict[str, Any]]):
+    """Yanlış üyelik kaydının iptali: gerekçe zorunlu (O1)."""
+
+    cancel_reason = serializers.CharField(max_length=_NOT_UST, trim_whitespace=True)
+
+
+class EngelSerializer(serializers.Serializer[dict[str, Any]]):
+    """Görev alma engeli (hüküm alanı) ve dayanağı (özel nitelikli, şifreli) ile tespit günü."""
+
+    eligibility_bar = serializers.ChoiceField(choices=EligibilityBar.choices)
+    eligibility_bar_basis = serializers.ChoiceField(
+        choices=EligibilityBarBasis.choices, required=False, allow_blank=True, default=""
+    )
+    eligibility_bar_found_on = _istege_bagli_gun()
+
+
+class TemsilciCreateSerializer(_GerekceMixin):
+    """Temsilci kaydı (tasarım "Temsil türleri"); karar bağı E03'ün karar no'sudur."""
+
+    term = serializers.PrimaryKeyRelatedField(queryset=OabTerm.objects.all())
+    person = serializers.PrimaryKeyRelatedField(queryset=OabPerson.objects.all())
+    representation = serializers.ChoiceField(choices=Representation.choices)
+    seat_type = serializers.ChoiceField(
+        choices=SeatType.choices, required=False, default=SeatType.ASIL
+    )
+    start_date = _istege_bagli_gun()
+    representative_decision = serializers.PrimaryKeyRelatedField(
+        queryset=BoardDecision.objects.all(), required=False, allow_null=True, default=None
+    )
+
+
+class AlimKomisyonuCreateSerializer(serializers.Serializer[dict[str, Any]]):
+    """Alım komisyonu üyesi (md. 18/1); uzmanlık işareti YK üyesi olmayan üye içindir."""
+
+    term = serializers.PrimaryKeyRelatedField(queryset=OabTerm.objects.all())
+    person = serializers.PrimaryKeyRelatedField(queryset=OabPerson.objects.all())
+    expertise_required = serializers.BooleanField(required=False, default=False)
+    start_date = _istege_bagli_gun()

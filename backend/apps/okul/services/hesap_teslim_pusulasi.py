@@ -334,6 +334,41 @@ ADSIZ_UCLAR: Final[Mapping[str, str]] = {
         "Organlar ekranı F1c'nin 11. adımındadır; pusula yalnız bugün programda yapılabilen işleri "
         "yazar, ekran gelince organ üyelikleri `BUGUNKU_ISLER`'e geçer."
     ),
+    # F1c 6. adım: görev bölümü, yedek çağrısı, düşme, iptal, görev alma engeli, temsilciler ve alım
+    # komisyonu uçları ekransızdır (Organlar ve Temsilciler ekranları 11. adımda).
+    "oab-yk-duty-assignment": (
+        "Yönetim kurulunun görev bölümü Organlar ekranındadır (F1c 11. adım); ekran gelince "
+        "`BUGUNKU_ISLER`'e geçer."
+    ),
+    "oab-dk-duty-assignment": (
+        "Denetleme Kurulunun görev bölümü Organlar → Denetleme Kurulu'ndadır (F1c 11. adım); ekran "
+        "gelince `BUGUNKU_ISLER`'e geçer."
+    ),
+    "oab-membership-substitute-call-yk": (
+        "Yedek çağrısı Organlar ekranındadır (F1c 11. adım); ekran gelince `BUGUNKU_ISLER`'e geçer."
+    ),
+    "oab-membership-substitute-call-dk": (
+        "Yedek çağrısı Organlar ekranındadır (F1c 11. adım); ekran gelince `BUGUNKU_ISLER`'e geçer."
+    ),
+    "oab-membership-drop": (
+        "Üyeliğin düşmesi Organlar ekranındadır (F1c 11. adım); ekran gelince `BUGUNKU_ISLER`'e "
+        "geçer."
+    ),
+    "oab-membership-cancel": (
+        "Yanlış üyelik kaydının iptali Organlar ekranındadır (F1c 11. adım); ekran gelince "
+        "`BUGUNKU_ISLER`'e geçer."
+    ),
+    "oab-membership-eligibility-basis": (
+        "Görev alma engeli Organlar ekranındadır (F1c 11. adım); ekran gelince `BUGUNKU_ISLER`'e "
+        "geçer."
+    ),
+    "oab-representative-list": (
+        "Temsilciler ekranı F1c'nin 11. adımındadır; ekran gelince `BUGUNKU_ISLER`'e geçer."
+    ),
+    "oab-purchase-committee-list": (
+        "Alım komisyonu Organlar ekranının sekmesidir (F1c 11. adım); ekran gelince "
+        "`BUGUNKU_ISLER`'e geçer."
+    ),
     "setup-complete": (
         "Kurulum Sihirbazı'nın son adımı; pusula kurulumdan sonra basılır, hesap sahibinin işi değildir."
     ),

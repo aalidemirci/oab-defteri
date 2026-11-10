@@ -15,8 +15,14 @@ from rest_framework.views import APIView
 from apps.oab import models as oab_modelleri
 from apps.oab import selectors
 from apps.oab.kurallar import KuralPaketiKullanilamaz, atifli_metin, bilgi_notu
-from apps.oab.models import OrganType
+from apps.oab.models import MembershipRole, OrganType
 from apps.oab.serializers import (
+    AlimKomisyonuCreateSerializer,
+    DkGorevBolumuSerializer,
+    DkYedekCagrisiSerializer,
+    DusmeSerializer,
+    EngelSerializer,
+    IptalSerializer,
     OabPersonCreateSerializer,
     OabPersonFromParentSerializer,
     OabPersonFromPersonnelSerializer,
@@ -27,8 +33,19 @@ from apps.oab.serializers import (
     OrganMembershipCreateSerializer,
     OrganMembershipSerializer,
     OrganMembershipUpdateSerializer,
+    TemsilciCreateSerializer,
+    YkGorevBolumuSerializer,
+    YkYedekCagrisiSerializer,
 )
-from apps.oab.services import donemler, kisiler, uyelikler, uyum
+from apps.oab.services import (
+    donemler,
+    gorev_bolumu,
+    kisiler,
+    temsilciler,
+    uyelik_gecisleri,
+    uyelikler,
+    uyum,
+)
 from apps.okul.models import CanteenMode
 from apps.okul.permissions import RequiresAdminPassword
 
@@ -182,9 +199,11 @@ class PersonFromParentView(APIView):
 # Organ üyelikleri (M2; tasarım §5.2.2; plan F1c-5). Yazan uçlar ilk hesap kapısını taşır (üyelik kişi
 # kaydına bağlıdır, dayanak notu şifrelidir). Ekranı F1c'nin 11. adımındadır.
 # ---------------------------------------------------------------------------
-#: Kadro ve liste okumasının organları (bu adımda yazılanlar).
-_KADRO_ORGANLARI = frozenset({OrganType.YONETIM_KURULU.value, OrganType.DENETLEME_KURULU.value})
-ORGAN_GECERSIZ = "Organ yönetim kurulu ya da Denetleme Kurulu olmalıdır."
+#: Kadro okumasının organları (organ ekranının sekmeleri: yönetim kurulu, Denetleme Kurulu, alım
+#: komisyonu); liste okumasında temsilciler de (6. adım).
+_KADRO_ORGANLARI = frozenset(o.value for o in uyelikler.KADRO_ORGANLARI)
+_LISTE_ORGANLARI = _KADRO_ORGANLARI | {OrganType.TEMSILCI.value}
+ORGAN_GECERSIZ = "Organ yönetim kurulu, Denetleme Kurulu, alım komisyonu ya da temsilci olmalıdır."
 DONEM_GEREKLI = "Birlik dönemi seçilmelidir."
 
 
@@ -194,8 +213,8 @@ def _gerekce(veri: dict[str, Any]) -> uyum.Gerekce | None:
     return uyum.Gerekce(metin=metin, kok_neden=kok) if metin or kok else None
 
 
-def _organ(deger: str) -> str:
-    if deger not in _KADRO_ORGANLARI:
+def _organ(deger: str, izinli: frozenset[str] = _KADRO_ORGANLARI) -> str:
+    if deger not in izinli:
         raise serializers.ValidationError({"organ": [ORGAN_GECERSIZ]})
     return deger
 
@@ -214,7 +233,7 @@ class MembershipListCreateView(APIView):
 
     def get(self, request: Request) -> Response:
         donem = _donem_parametresi(request)
-        organ = _organ(request.query_params.get("organ", "").strip())
+        organ = _organ(request.query_params.get("organ", "").strip(), _LISTE_ORGANLARI)
         uyeler = selectors.membership_list(donem, organ)
         return Response(OrganMembershipSerializer(uyeler, many=True).data)
 
@@ -247,7 +266,25 @@ class MembershipDetailView(APIView):
 
 
 class MembershipEligibilityBasisView(APIView):
-    """Görev alma engelinin dayanağı: özel nitelikli alan, okuması erişim günlüğüne yazılır."""
+    """Görev alma engelinin dayanağı: özel nitelikli alan, okuması erişim günlüğüne yazılır.
+
+    PUT engeli yazar (6. adım); yanıt dayanağı geri okumaz (okuma ayrı ve günlüklüdür).
+    """
+
+    permission_classes = [RequiresAdminPassword]
+
+    def put(self, request: Request, pk: int) -> Response:
+        uyelik = get_object_or_404(selectors.membership_all(), pk=pk)
+        govde = EngelSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        with _hizmet_hatalari():
+            uyelik = uyelik_gecisleri.engel_yaz(uyelik, **dict(govde.validated_data))
+        return Response(
+            {
+                "eligibility_bar": uyelik.eligibility_bar,
+                "eligibility_bar_found_on": uyelik.eligibility_bar_found_on,
+            }
+        )
 
     def get(self, request: Request, pk: int) -> Response:
         uyelik = get_object_or_404(selectors.membership_all(), pk=pk)
@@ -265,6 +302,25 @@ def _kadro_satiri(sonuc: Any) -> dict[str, Any]:
     return {"metin": atifli_metin(sonuc), "atif": sonuc["atif"], "durum": sonuc["durum"]}
 
 
+def _oneriler(uyeler: list[Any]) -> list[dict[str, Any]]:
+    """Görevdeki üyelerin önerileri ve hatırlatmaları (kişisiz metin; saklanmaz). Paket
+    yüklenemezse okuma açık kalır: öneri çıkmaz, kadro çalışır."""
+    try:
+        return [
+            {
+                "uyelik": uyelik.pk,
+                "tur": oneri.tur,
+                "metin": oneri.metin,
+                "gun": oneri.gun,
+                "drop_kind": oneri.drop_kind,
+            }
+            for uyelik in uyeler
+            for oneri in uyelik_gecisleri.oneriler(uyelik)
+        ]
+    except KuralPaketiKullanilamaz:
+        return []
+
+
 class OrganRosterView(APIView):
     """Görevdeki kadro: görevdeki asıllar, çağrılmamış yedekler, kadro sayıları ve uyarıları.
 
@@ -275,12 +331,11 @@ class OrganRosterView(APIView):
         donem = get_object_or_404(_donemler(), pk=pk)
         organ = _organ(organ)
         sayilar = selectors.kadro_sayilari(donem, organ)
+        asillar = selectors.gorevdeki_asillar(donem, organ)
         return Response(
             {
                 "organ": organ,
-                "gorevdeki_asillar": OrganMembershipSerializer(
-                    selectors.gorevdeki_asillar(donem, organ), many=True
-                ).data,
+                "gorevdeki_asillar": OrganMembershipSerializer(asillar, many=True).data,
                 "bekleyen_yedekler": OrganMembershipSerializer(
                     selectors.bekleyen_yedekler(donem, organ), many=True
                 ).data,
@@ -288,5 +343,216 @@ class OrganRosterView(APIView):
                 "kadro_uyarilari": [
                     _kadro_satiri(sonuc) for sonuc in uyelikler.kadro_uyarilari(donem, organ)
                 ],
+                "oneriler": _oneriler(asillar),
             }
+        )
+
+
+# ---------------------------------------------------------------------------
+# Görev bölümü, yedek çağrısı, düşme, iptal, temsilciler, alım komisyonu (F1c 6. adım; ekranları 11.
+# adımda). Rol daraltmaları uç kuralındadır (`rol_izinleri`; tasarım §7.2 "Kim").
+# ---------------------------------------------------------------------------
+_YK_GOREV_ALANLARI: dict[str, str] = {
+    "baskan": MembershipRole.BASKAN,
+    "baskan_yardimcisi": MembershipRole.BASKAN_YARDIMCISI,
+    "muhasip": MembershipRole.MUHASIP,
+    "sekreter": MembershipRole.SEKRETER,
+}
+
+
+def _katilim(satirlar: list[dict[str, Any]]) -> list[gorev_bolumu.KatilimSatiri]:
+    return [
+        gorev_bolumu.KatilimSatiri(
+            uyelik=satir["membership"], present=satir["present"], excused=satir["excused"]
+        )
+        for satir in satirlar
+    ]
+
+
+def _gorev_bolumu_yaniti(sonuc: gorev_bolumu.GorevBolumu) -> dict[str, Any]:
+    return {
+        "toplanti": sonuc.toplanti.pk,
+        "karar": sonuc.karar.pk,
+        "karar_durumu": sonuc.karar.status,
+        "uyelikler": OrganMembershipSerializer(
+            [selectors.membership_all().get(pk=u.pk) for u in sonuc.uyelikler], many=True
+        ).data,
+    }
+
+
+class YkDutyAssignmentView(APIView):
+    """Yönetim kurulunun görev bölümü (md. 12/3): toplantı, katılım, görevler, `TASLAK` karar."""
+
+    permission_classes = [RequiresAdminPassword]
+
+    def post(self, request: Request, pk: int) -> Response:
+        donem = get_object_or_404(_donemler(), pk=pk)
+        govde = YkGorevBolumuSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        veri = dict(govde.validated_data)
+        gerekce = _gerekce(veri)
+        gorevler = {
+            role: veri.pop(alan) for alan, role in _YK_GOREV_ALANLARI.items() if veri.get(alan)
+        }
+        with _hizmet_hatalari():
+            sonuc = gorev_bolumu.yk_gorev_bolumu(
+                term=donem,
+                held_at=veri["held_at"],
+                gorevler=gorevler,
+                katilim=_katilim(veri["katilim"]),
+                place=veri["place"],
+                text=veri["text"],
+                gerekce=gerekce,
+            )
+        return Response(_gorev_bolumu_yaniti(sonuc), status=status.HTTP_201_CREATED)
+
+
+class DkDutyAssignmentView(APIView):
+    """Denetleme Kurulunun görev bölümü ve denetim planı (md. 14/1; yalnız Denetleme Kurulu, M8)."""
+
+    permission_classes = [RequiresAdminPassword]
+
+    def post(self, request: Request, pk: int) -> Response:
+        donem = get_object_or_404(_donemler(), pk=pk)
+        govde = DkGorevBolumuSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        veri = dict(govde.validated_data)
+        gerekce = _gerekce(veri)
+        with _hizmet_hatalari():
+            sonuc = gorev_bolumu.dk_gorev_bolumu(
+                term=donem,
+                held_at=veri["held_at"],
+                baskan=veri["baskan"],
+                katilim=_katilim(veri["katilim"]),
+                denetim_plani=veri["denetim_plani"],
+                place=veri["place"],
+                text=veri["text"],
+                gerekce=gerekce,
+            )
+        return Response(_gorev_bolumu_yaniti(sonuc), status=status.HTTP_201_CREATED)
+
+
+class MembershipSubstituteCallYkView(APIView):
+    """Yönetim kurulu yedeğinin asıl üyeliğe çağrısı (md. 13/6; sekreter, YK kararıyla)."""
+
+    permission_classes = [RequiresAdminPassword]
+
+    def post(self, request: Request, pk: int) -> Response:
+        uyelik = get_object_or_404(selectors.membership_all(), pk=pk)
+        govde = YkYedekCagrisiSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        veri = dict(govde.validated_data)
+        gerekce = _gerekce(veri)
+        with _hizmet_hatalari():
+            uyelik_gecisleri.yedek_cagir(
+                uyelik,
+                organ=OrganType.YONETIM_KURULU,
+                promoted_on=veri["promoted_on"],
+                karar=veri["promoted_by_decision"],
+                gerekce=gerekce,
+            )
+        return Response(OrganMembershipSerializer(selectors.membership_all().get(pk=pk)).data)
+
+
+class MembershipSubstituteCallDkView(APIView):
+    """Denetleme Kurulu yedeğinin asıl üyeliğe çağrısı (md. 14/6; program yöneticisi, karar yok)."""
+
+    permission_classes = [RequiresAdminPassword]
+
+    def post(self, request: Request, pk: int) -> Response:
+        uyelik = get_object_or_404(selectors.membership_all(), pk=pk)
+        govde = DkYedekCagrisiSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        with _hizmet_hatalari():
+            uyelik_gecisleri.yedek_cagir(
+                uyelik,
+                organ=OrganType.DENETLEME_KURULU,
+                promoted_on=govde.validated_data["promoted_on"],
+            )
+        return Response(OrganMembershipSerializer(selectors.membership_all().get(pk=pk)).data)
+
+
+class MembershipDropView(APIView):
+    """Üyeliğin düşmesi (tür zorunlu) ya da md. 7/2'de olağanüstü genel kurula ertelenmesi."""
+
+    permission_classes = [RequiresAdminPassword]
+
+    def post(self, request: Request, pk: int) -> Response:
+        uyelik = get_object_or_404(selectors.membership_all(), pk=pk)
+        govde = DusmeSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        veri = dict(govde.validated_data)
+        gerekce = _gerekce(veri)
+        with _hizmet_hatalari():
+            uyelik_gecisleri.uyeligi_dusur(uyelik, **veri, gerekce=gerekce)
+        return Response(OrganMembershipSerializer(selectors.membership_all().get(pk=pk)).data)
+
+
+class MembershipCancelView(APIView):
+    """Yanlış üyelik kaydının iptali (gerekçe zorunlu; kim iz satırındadır)."""
+
+    permission_classes = [RequiresAdminPassword]
+
+    def post(self, request: Request, pk: int) -> Response:
+        uyelik = get_object_or_404(selectors.membership_all(), pk=pk)
+        govde = IptalSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        with _hizmet_hatalari():
+            uyelik_gecisleri.uyeligi_iptal_et(
+                uyelik, cancel_reason=govde.validated_data["cancel_reason"]
+            )
+        return Response(OrganMembershipSerializer(selectors.membership_all().get(pk=pk)).data)
+
+
+def _cizelge_satiri(satir: temsilciler.TemsilciSatiri) -> dict[str, Any]:
+    return {
+        "representation": satir.representation,
+        "ad": satir.ad,
+        "kural": satir.kural,
+        "durum": satir.durum,
+        "metin": satir.metin,
+        "notlar": satir.notlar,
+        "uyeler": OrganMembershipSerializer(satir.uyeler, many=True).data,
+    }
+
+
+class RepresentativeListCreateView(APIView):
+    """Temsilciler çizelgesi (`?term=`; tasarım §6.4.4, E03'ün kaynağı) ve temsilci kaydı."""
+
+    permission_classes = [RequiresAdminPassword]
+
+    def get(self, request: Request) -> Response:
+        donem = _donem_parametresi(request)
+        try:
+            satirlar = temsilciler.temsilci_cizelgesi(donem)
+        except KuralPaketiKullanilamaz:
+            satirlar = []
+        return Response([_cizelge_satiri(satir) for satir in satirlar])
+
+    def post(self, request: Request) -> Response:
+        govde = TemsilciCreateSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        veri = dict(govde.validated_data)
+        gerekce = _gerekce(veri)
+        with _hizmet_hatalari():
+            uyelik = temsilciler.temsilci_ekle(**veri, gerekce=gerekce)
+        return Response(
+            OrganMembershipSerializer(selectors.membership_all().get(pk=uyelik.pk)).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PurchaseCommitteeCreateView(APIView):
+    """Alım komisyonu üyesi (md. 18/1); kadrosu organ kadrosu ucundadır (`ALIM_KOMISYONU`)."""
+
+    permission_classes = [RequiresAdminPassword]
+
+    def post(self, request: Request) -> Response:
+        govde = AlimKomisyonuCreateSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        with _hizmet_hatalari():
+            uyelik = temsilciler.alim_komisyonu_uyesi_ekle(**dict(govde.validated_data))
+        return Response(
+            OrganMembershipSerializer(selectors.membership_all().get(pk=uyelik.pk)).data,
+            status=status.HTTP_201_CREATED,
         )

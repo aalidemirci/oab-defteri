@@ -645,10 +645,17 @@ YAZMA_SERVISLERI = frozenset(
         "kural_bagi.revizyon_gecisi",
         "uyum.denetle",
         "uyum.kapanis_gecisi",
+        "uyum.akis_sapmasi",
         "uyelikler.assign_membership",
         "uyelikler.dk_baskanlik_denetimi",
         "uyelikler.elect_membership",
         "uyelikler.update_membership",
+        # F1c 6. adım: görev bölümü, yedek çağrısı, düşme ve temsilci kuralları.
+        "gorev_bolumu.yk_gorev_bolumu",
+        "gorev_bolumu.dk_gorev_bolumu",
+        "uyelik_gecisleri.yedek_cagir",
+        "uyelik_gecisleri.uyeligi_dusur",
+        "temsilciler.temsilci_ekle",
     }
 )
 #: `@transaction.atomic` taşıyıp kural okumayan servisler ve gerekçesi.
@@ -668,6 +675,19 @@ KURALSIZ = {
     "kurullar.toplanti_olustur": _KURUL_KURALSIZ,
     "kurullar.katilim_yaz": _KURUL_KURALSIZ,
     "kurullar.karar_taslagi_olustur": _KURUL_KURALSIZ,
+    "kurullar.toplanti_yapildi": _KURUL_KURALSIZ,
+    "kurullar.karar_durumu_yaz": _KURUL_KURALSIZ,
+    "uyelik_gecisleri.uyeligi_iptal_et": (
+        "Yanlış kaydın iptali kural okumaz (gerekçe zorunluluğu O1'dir); dönem kilidi yine denetlenir."
+    ),
+    "uyelik_gecisleri.engel_yaz": (
+        "Görev alma engelinin yazımı kural okumaz: seçimdeki uyarı seçimde, görevdeki üyedeki öneri "
+        "okumada hesaplanır (F1c 6. adım); dönem kilidi yine denetlenir."
+    ),
+    "temsilciler.alim_komisyonu_uyesi_ekle": (
+        "Alım komisyonu üyeliğinin yazımı kural okumaz: en az üç kişi kadro okumasının uyarısıdır "
+        "(F1c 6. adım); dönem kilidi yine denetlenir."
+    ),
     "kisiler.create_person": _KISI_KURALSIZ,
     "kisiler.update_person": _KISI_KURALSIZ,
     "kisiler.copy_from_personnel": _KISI_KURALSIZ,
