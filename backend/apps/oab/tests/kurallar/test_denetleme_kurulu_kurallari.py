@@ -134,7 +134,7 @@ def test_veli_ogretmen_ayrimi() -> None:
 
 @pytest.mark.kural_davranis(f"{DK}.koltuklar")
 def test_veli_koltuguna_hayirsever_giremez() -> None:
-    """OYS hayırseveri sayıyordu (envanter S-8); Denetleme Kurulunda hayırsever koltuğu yoktur."""
+    """Kaynak modül hayırseveri sayıyordu (§12.A, envanter S-8); DK'de hayırsever koltuğu yoktur."""
     donem = o.donem()
     with pytest.raises(KuralSert):
         _dk_velisi(donem, o.kisi(kind=PersonKind.HAYIRSEVER, is_parent=False))
@@ -202,7 +202,7 @@ def test_baska_okul_ogretmeni_onay_no_ister() -> None:
 
 @pytest.mark.kural_davranis(f"{DK}.baskan_secilme_siniri")
 def test_dk_baskan_siniri_farkli_organi_etkilemez() -> None:
-    """OYS AYNEN: yönetim kurulu başkanlığı Denetleme Kurulu başkanlık sayacına girmez."""
+    """AYNEN (§12.A): yönetim kurulu başkanlığı Denetleme Kurulu başkanlık sayacına girmez."""
     donem = o.donem()
     kisi = o.ogretmen(external_yk_terms=0, external_dk_chair_terms=0)
     o.gecmis_secilmeler(kisi, role="BASKAN", adet=4)

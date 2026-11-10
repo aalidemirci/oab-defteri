@@ -21,7 +21,10 @@ gerekçe isteğe bağlı ve şifrelidir. Öğrencisi ayrılan velinin (ya da eğ
 yönetim kurulu üyeliği, kurulun görevdeki asıl sayısı toplantı yeter sayısının altına düşecekse
 olağanüstü genel kurula kadar sürer (md. 7/2; `uyelik.ayrilan_veli_devam`): düşürme önerilmez, ertelenir
 (`ertele=True` → `retained_until_assembly`); ertelemeden düşürmek uyarı + gerekçedir. Devamsızlıkla
-düşmenin önerisi F3'tedir. Hesabın askısı hesap ↔ üyelik bağıyla gelir (F1c 7. adım).
+düşmenin önerisi F3'tedir. Düşen üyeliğe bağlı hesap aynı işlemde askıya alınır (`UYELIK_DUSTU`;
+`hesap_baglari.hesaplari_esitle`, tasarım §4.4.5; F1c 7. adım); ertelenen üyelik seçilmiş kalır,
+hesabı askıya alınmaz. İptal edilen (yanlış kayıt) seçilmiş üyeliğin hesabı da aynı nedenle askıya
+alınır: bağ artık geçerli bir koltuğa dayanmaz.
 
 İPTAL (`uyeligi_iptal_et`): yanlış kayıt `IPTAL` olur (aday ya da seçilmiş); gerekçe zorunludur (sert,
 O1), kim `updated_by` ve iz satırıdır. İptal kaydı hiç olmamış sayılır (tekil kısıt, sayaç, tek koltuk).
@@ -62,7 +65,15 @@ from apps.oab.models import (
     SeatType,
     UyelikDurumuGecersiz,
 )
-from apps.oab.services import donem_kilidi, iz, takvim, temsilciler, uyelikler, uyum
+from apps.oab.services import (
+    donem_kilidi,
+    hesap_baglari,
+    iz,
+    takvim,
+    temsilciler,
+    uyelikler,
+    uyum,
+)
 from apps.okul import denetim_izi
 from apps.okul.services import app_password
 
@@ -318,6 +329,8 @@ def uyeligi_dusur(
     if sonuclar:
         _ozeti_isle(guncel, sonuclar)
     denetim_izi.degisiklik(guncel, onceki=onceki)
+    if not ertele:
+        hesap_baglari.hesaplari_esitle(guncel)
     if not ertele and _yk_baskani_mi(guncel):
         temsilciler.baskan_satirlarini_kapat(guncel.term, guncel.person_id, gun=gun)
     return guncel
@@ -342,6 +355,7 @@ def uyeligi_iptal_et(uyelik: OrganMembership, *, cancel_reason: str) -> OrganMem
     guncel.updated_by_id = iz.yazar_hesabi()
     guncel.save(update_fields=["status", "cancel_reason", "updated_at", "updated_by"])
     denetim_izi.degisiklik(guncel, onceki=onceki)
+    hesap_baglari.hesaplari_esitle(guncel)
     if baskan:
         temsilciler.baskan_satirlarini_kapat(
             guncel.term, guncel.person_id, gun=timezone.localdate(), iptal=True

@@ -1,14 +1,14 @@
-"""Organ üyeliği (tasarım §5.2.2 `OrganMembership`; OYS `OrganMembership` UYARLA; plan F1c-5).
+"""Organ üyeliği (tasarım §5.2.2 `OrganMembership`; §12.A `OrganMembership` UYARLA; plan F1c-5).
 
 Bir kişinin bir birlik döneminde bir organdaki koltuğu: yönetim kurulu, Denetleme Kurulu, divan, alım
 komisyonu ya da birlik temsilciliği. Koltuk uygunluğu, kadro sayımı ve seçilme sayacı
 `services.uyelikler`'dedir; kurul bileşimleri ve sayılar kural paketindedir (altın kural 2).
 
-OYS'den çıkanlar: şifreli beyan notu ve uygunluk beyanı bayrağı (yalnız tarih kalır, envanter S-20;
-D41), model başına `compliance_warnings` / `compliance_justification` (uyum satırına taşındı, O3;
-kaydın güncel uyarı özeti `rule_warnings`), `kvkk_special_category`, `status_changed_at` (seçilme günü
-`start_date`, bitiş `end_date`, yedekten çağrı `promoted_on`), iki harfli `organ` sınırı ve yumuşak
-silmeli tek tekil kısıt.
+Kaynak modülden (tasarım §12.A) çıkanlar: şifreli beyan notu ve uygunluk beyanı bayrağı (yalnız
+tarih kalır, envanter S-20; D41), model başına `compliance_warnings` / `compliance_justification`
+(uyum satırına taşındı, O3; kaydın güncel uyarı özeti `rule_warnings`), `kvkk_special_category`,
+`status_changed_at` (seçilme günü `start_date`, bitiş `end_date`, yedekten çağrı `promoted_on`), iki
+harfli `organ` sınırı ve yumuşak silmeli tek tekil kısıt.
 
 İKİ KISMİ TEKİL KISIT (tasarım §5.2.2; plan F1c kararları), ikisi de `IPTAL` OLMAYAN kayıtlarda:
 genel kurul bağı doluyken (dönem, organ, kişi, genel kurul); boşken (dönem, organ, kişi, temsil türü).
@@ -16,10 +16,11 @@ SQLite tekil dizinde NULL'ları ayrı saydığından tek kısıt genel kurul dı
 (denetim UY-10). Temsil türü öteki organlarda boş dizedir, `NULL` değildir: aynı veli iki kurulda
 temsilci olabilir, başkan kendiliğinden üye olduğu komisyonlarda ayrı satır alır.
 
-DURUM MAKİNESİ (OYS kusurunun düzeltmesi): kayıt `ADAY` ya da `SECILDI` açılır; geçişler `ADAY` →
-`SECILDI` · `IPTAL`, `SECILDI` → `DUSTU` · `IPTAL`'dir. `DUSTU` ve `IPTAL` geri dönmez, `ADAY`
-düşürülmez. Koruma `save()`'dedir: hangi servis yazarsa yazsın geçiş veritabanındaki durumla denetlenir.
-`seat_type` seçildiği koltuktur, değişmez; yedekten çağrıyı `promoted_on` gösterir.
+DURUM MAKİNESİ (kaynak modülün kusurunun düzeltmesi, tasarım §12.A): kayıt `ADAY` ya da `SECILDI`
+açılır; geçişler `ADAY` → `SECILDI` · `IPTAL`, `SECILDI` → `DUSTU` · `IPTAL`'dir. `DUSTU` ve `IPTAL`
+geri dönmez, `ADAY` düşürülmez. Koruma `save()`'dedir: hangi servis yazarsa yazsın geçiş
+veritabanındaki durumla denetlenir. `seat_type` seçildiği koltuktur, değişmez; yedekten çağrıyı
+`promoted_on` gösterir.
 
 İPTAL (tasarım §5 O1, §5.2.2 "`IPTAL`, yanlış kayıt, gerekçe ve kim"): tasarım alan adı vermez; gerekçe
 şifreli `cancel_reason`'dadır (`ReceiptLeaf.cancel_reason` gibi; plan F1c 6. adım), kim ise `updated_by`

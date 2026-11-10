@@ -37,7 +37,6 @@ from apps.oab.services import iz as iz_yazari
 from apps.okul import denetim_izi
 from apps.okul.models import (
     AccountRole,
-    AccountStatus,
     AuditLabel,
     AuditTrail,
     ImmutableRecord,
@@ -45,7 +44,7 @@ from apps.okul.models import (
 )
 from apps.okul.oturum import Yazar, yazar_olarak
 from apps.okul.services import satir_izi
-from apps.okul.tests.hesap_ortak import hesap_ac, muhurle
+from apps.okul.tests.hesap_ortak import rol_hesabi
 from conftest import oturumu_ac_test
 from shared import crypto
 from shared.exceptions import RolYetkisiz
@@ -157,7 +156,7 @@ def test_hazirlik_donemi_tarihsizdir_ve_en_cok_bir_tanedir() -> None:
 
 @pytest.mark.django_db
 def test_donem_adi_iptal_olmayanlarda_tekildir() -> None:
-    """OYS `uq_oabterm_name_alive`'ın karşılığı (O1): iptal edilen dönemin adı yeniden kullanılır."""
+    """`uq_oabterm_name_alive`'ın karşılığı (§12.A, O1): iptal edilen dönemin adı yeniden kullanılır."""
     donem = _donem()
     ortak = {
         "name": donem.name,
@@ -617,7 +616,7 @@ def test_birlik_donemi_ucu_acilis_liste_ve_ayrinti() -> None:
 def test_birlik_donemi_yazmasi_yalniz_program_yoneticisine_acik() -> None:
     """Matris M1: başkan okur, yazamaz."""
     yil = _yil()
-    baskan = muhurle(hesap_ac(AccountRole.BASKAN), status=AccountStatus.ACIK)
+    baskan = rol_hesabi(AccountRole.BASKAN)
     oturumu_ac_test(str(baskan.id), tanitici=baskan.login_name, rol=AccountRole.BASKAN.value)
     yanit = _istemci().post(
         UC, {"name": "d", "school_year": yil.pk, "start_date": "2026-10-10"}, format="json"

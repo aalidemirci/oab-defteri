@@ -1050,7 +1050,7 @@ def test_katalog_faz_suzmesi(gecerli: str, beklenen: set[str]) -> None:
 
 @pytest.mark.django_db
 def test_karar_taslagi_varsayilan() -> None:
-    """OYS AYNEN (tasarım §10.5): karar "taslak" doğar (görev bölümü kaydının ürettiği karar da;
+    """AYNEN (tasarım §12.A, §10.5): karar "taslak" doğar (görev bölümü kaydının ürettiği karar da;
     program karar defterinin yerine geçmez, md. 13/5); "deftere işlendi" işareti yalnız kabul
     edilmiş karardan ve defter, sıra no ve sayfayla konur. Durum servisi F1c'de yalnız taslağı
     iptal eder; kabul, ret ve deftere işleme F3'ün karar defteri akışındadır."""

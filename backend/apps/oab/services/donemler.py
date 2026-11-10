@@ -1,4 +1,4 @@
-"""Birlik döneminin açılışı (tasarım §5.2.1, §7.9 adım 1; OYS `create_term` UYARLA).
+"""Birlik döneminin açılışı (tasarım §5.2.1, §7.9 adım 1; `create_term` UYARLA, tasarım §12.A).
 
 F1c'de gerçek yol yalnız ilk dönemin doğrudan `ACIK` açılmasıdır: `opened_by_assembly` boştur, dönem
 programla gelen en yeni revizyona bağlanır (§6.2-4). Sonraki dönemler genel kurulla açılır (F2).

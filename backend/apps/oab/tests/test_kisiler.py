@@ -42,7 +42,6 @@ from apps.oab.services import donemler, kisiler
 from apps.okul import denetim_izi, rol_izinleri
 from apps.okul.models import (
     AccountRole,
-    AccountStatus,
     AuditTrail,
     MemberKind,
     ParentRoster,
@@ -54,7 +53,7 @@ from apps.okul.services import imports as import_service
 from apps.okul.services import persons
 from apps.okul.services import setup as setup_service
 from apps.okul.services.templates import PARENT_TEMPLATE_HEADERS
-from apps.okul.tests.hesap_ortak import hesap_ac, muhurle
+from apps.okul.tests.hesap_ortak import rol_hesabi
 from apps.okul.tests.okul_karti_ortak import okul_karti
 from conftest import TEST_DEK, TEST_IA, oturumu_ac_test
 from shared import crypto
@@ -108,7 +107,7 @@ def _veli_aktar(satirlar: list[tuple[str, str]], ad: str = "veli-listesi.xlsx") 
 
 
 def _rol_oturumu(rol: AccountRole) -> None:
-    hesap = muhurle(hesap_ac(rol, ad="Uydurma Hesap"), status=AccountStatus.ACIK)
+    hesap = rol_hesabi(rol)
     oturumu_ac_test(str(hesap.id), tanitici=hesap.login_name, rol=rol.value)
 
 

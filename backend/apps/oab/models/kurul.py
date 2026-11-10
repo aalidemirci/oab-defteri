@@ -221,7 +221,7 @@ class BoardMeeting(OabBaseModel):
 
 
 class BoardMeetingAttendance(OabBaseModel):
-    """Bir üyenin bir toplantıdaki katılımı (tasarım §5.2.4; OYS AYNEN). Özrün nedeni tutulmaz."""
+    """Bir üyenin bir toplantıdaki katılımı (tasarım §5.2.4; §12.A AYNEN). Özrün nedeni tutulmaz."""
 
     IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = ("meeting", "membership", "present", "excused")
     IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
@@ -273,7 +273,7 @@ class BoardMeetingAttendance(OabBaseModel):
 
 
 class BoardDecision(OabBaseModel):
-    """Kurul kararının programdaki karşılığı (tasarım §5.2.4; OYS `is_draft` → `status`)."""
+    """Kurul kararının programdaki karşılığı (tasarım §5.2.4; §12.A `is_draft` → `status`)."""
 
     IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = (
         "meeting",

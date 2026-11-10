@@ -1,10 +1,10 @@
 """`oab` salt okunur sorguları — görünümler ORM'e buradan erişir (katman disiplini).
 
 Kişi adı ŞİFRELİDİR (tasarım §5.3): ada dokunan her arama ve kullanıcıya gösterilen her sıralama
-Python'dadır (OYS `list_persons`'ın `icontains` ve `order_by`'ı şifreli adda çalışmaz; UYARLA).
-Tür ve durum düz alanlardır, süzgeçleri veritabanındadır.
+Python'dadır (kaynak modülün `list_persons` işlevindeki `icontains` ve `order_by` şifreli adda
+çalışmaz; UYARLA, tasarım §12.A). Tür ve durum düz alanlardır, süzgeçleri veritabanındadır.
 
-Organ üyeliklerinin TEK KAYNAK listeleri (tasarım §5 O6; OYS `organ_members`, `elected_roster`,
+Organ üyeliklerinin TEK KAYNAK listeleri (tasarım §5 O6, §12.A `organ_members`, `elected_roster`,
 `candidate_roster`, `list_memberships` UYARLA): aday listesi, seçilenler, görev bölümü ve evrak aynı
 seçiciden okur. Sıra yine Python'dadır: asıl önce, yedek sırası (boş önce), sonra çözülmüş ad.
 "Görevdeki asıl" tek seçicidir: seçilmiş asıl ile yedekten çağrılan (`promoted_on`) yedek; `seat_type`
@@ -65,7 +65,7 @@ _KOLTUK_SIRASI = {SeatType.ASIL: 0, SeatType.YEDEK: 1}
 
 
 def _uyelik_sira_anahtari(uyelik: OrganMembership) -> tuple[Any, ...]:
-    """Asıl önce; yedek sırası (boş önce, OYS `nulls_first`); çözülmüş ad; eşitlikte kayıt sırası."""
+    """Asıl önce; yedek sırası (boş önce, `nulls_first`, §12.A); çözülmüş ad; eşitlikte kayıt sırası."""
     sira = uyelik.seat_order
     return (
         _KOLTUK_SIRASI.get(SeatType(uyelik.seat_type), len(_KOLTUK_SIRASI)),

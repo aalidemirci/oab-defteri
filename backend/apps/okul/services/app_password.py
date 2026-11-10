@@ -230,8 +230,9 @@ satırların bu alanlardaki değerini değiştiren her değişiklik (F4'ün DEK 
 olanlar DAHİL BÜTÜN hesap satırlarının izini aynı işlemde yeniden kurmalıdır — her satırı önce eski
 hâliyle son kaydına karşı doğrulayıp yalnız tutanlara (`satir_izi.HESAP_OZET_ALANLARI` yorumu);
 yoksa açık satırların girişi reddedilir, `KAPALI` satırlar iki depo kartında yanlış alarm verir ve
-sarmallarının temizliği durur. Bu adımın bugün yeri yoktur (kullanıcı kararı bekler; `denetim_izi`
-modül başlığı "ÖZET ALANLARI VE ŞEMA DEĞİŞİMİ"). Eşzamanlı meşru yazım da alarm doğurmaz:
+sarmallarının temizliği durur. Bu adımın yeri F4'tür (DEK yenilemesi; `denetim_izi` modül başlığı
+"ÖZET ALANLARI VE ŞEMA DEĞİŞİMİ"); F1c 7. adımın hesap bağları için yazılmadı (plan "F1c uygulama
+kararları"). Eşzamanlı meşru yazım da alarm doğurmaz:
 denetimin okumaları tek anlık görüntüdedir ve ayıklama yazıcılarla sıralı işlemde yinelenir
 ("SATIRIN İZİ").
 

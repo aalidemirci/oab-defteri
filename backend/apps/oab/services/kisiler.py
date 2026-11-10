@@ -1,5 +1,5 @@
-"""Birlik kişileri (tasarım §5.2.2 `OabPerson`, §13 D30; OYS `create_person`, `update_person` UYARLA;
-plan F1c-4).
+"""Birlik kişileri (tasarım §5.2.2 `OabPerson`, §13 D30; §12.A `create_person`, `update_person`
+UYARLA; plan F1c-4).
 
 Üç yoldan kişi kaydı açılır, üçü de `create_person`'dan geçer:
 

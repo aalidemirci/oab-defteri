@@ -1,8 +1,8 @@
 """Genel kurul kuralları (`gk`, tasarım §10.3): yeter sayının hesabı ve anlık görüntüsü.
 
 Yeter sayı 16 × 4 (mevcut ≥ 100) ya da 16 × 2 (mevcut < 100); taban kurul bileşiminden gelir, üyelik
-kaydı sayılmaz; olağanüstü genel kurulda da aynıdır (OYS S-1, S-2 düzeltmeleri). Değerler `DEGER_TABLOSU`
-ile elle karşılaştırılmıştır.
+kaydı sayılmaz; olağanüstü genel kurulda da aynıdır (tasarım §12.A S-1, S-2 düzeltmeleri). Değerler
+`DEGER_TABLOSU` ile elle karşılaştırılmıştır.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def _okul_mevcudu(mevcut: int) -> None:
 
 @pytest.mark.kural_davranis("genel_kurul.yeter_sayi_taban")
 def test_taban_uyelik_kayitlarindan_bagimsiz_16() -> None:
-    """Hesabın girdisinde üyelik yoktur: eksik kadroda da 64/32 (OYS S-1 düzeltmesi)."""
+    """Hesabın girdisinde üyelik yoktur: eksik kadroda da 64/32 (tasarım §12.A S-1 düzeltmesi)."""
     buyuk = genel_kurul.genel_kurul_yeter_sayisi(100, tarih=GUN)
     kucuk = genel_kurul.genel_kurul_yeter_sayisi(99, tarih=GUN)
     assert (buyuk.taban, buyuk.gerekli) == (16, 64)
@@ -57,7 +57,7 @@ def test_yeter_sayi_mevcut_100_ve_ustu_64() -> None:
 @pytest.mark.django_db
 @pytest.mark.kural_davranis("genel_kurul.yeter_sayi_carpan")
 def test_olaganustu_gk_yeter_sayi_64() -> None:
-    """Olağanüstü genel kurulda da aynı çarpan (md. 9/6; OYS S-2 düzeltmesi)."""
+    """Olağanüstü genel kurulda da aynı çarpan (md. 9/6; tasarım §12.A S-2 düzeltmesi)."""
     _okul_mevcudu(150)
     kurul = genel_kurul_servisi.genel_kurul_olustur(donem=_donem(), kind=AssemblyKind.OLAGANUSTU)
     donmus = genel_kurul_servisi.yeter_sayiyi_dondur(kurul, tarih=GUN)

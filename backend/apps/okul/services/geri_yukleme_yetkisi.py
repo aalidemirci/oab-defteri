@@ -63,11 +63,14 @@ Satır, Django'nun SQLite'a yazdığı biçimden mühür sözleşmesinin biçimi
 (`satirdan_muhur_alanlari`; `Account.seal_fields()` ile aynı sözlük): kimlik tiresiz 32 hane
 → tireli UUID metni; zaman saat dilimsiz UTC metni (`2026-11-02 07:30:00[.ffffff]`; ayarlarda
 veritabanı saat dilimi verilmediği için bağlantı saat dilimi UTC'dir) → saat dilimli UTC
-`datetime`; `person`, `membership`, `term` F1c'ye dek `None`dır; sarmal özetleri metindir (`NULL`
-ya da metin olmayan değer mühür tutmamış sayılır). Çevrilmezse her mühür tutmuyor
-görünürdü; biçim eşitliği ORM'in yazdığı satırla testte sabitlenir. **F1c'de bu üç sütun
-gelince okuyucu da onları okumalıdır** (eski şemalı görüntüde sütun yoksa `None`); aksi hâlde
-mühürler tutmaz ve konsol geri yüklemesi kapanır (fail-closed).
+`datetime`; hesap bağları (`person_id`, `membership_id`, `term_id`; F1c 7. adım, `okul.0004`)
+SQLite tamsayısı → kimliğin ondalık metni (`str(pk)`, ORM'in mühür biçimi), boşsa `None`;
+sarmal özetleri metindir (`NULL` ya da metin olmayan değer mühür tutmamış sayılır). Çevrilmezse
+her mühür tutmuyor görünürdü; biçim eşitliği ORM'in yazdığı satırla testte sabitlenir. Bağ
+sütunları olmayan eski görüntüde üçü de `None` okunur (`satir_izi.hesap_bag_sutunlari_var`):
+o görüntünün mühürleri bağları `None` olarak taşır, mühür kolu çalışır; satırın izi ise eski
+içerik MAC'i kümesiyle yazıldığı için tutmaz (fail-closed; F1b deneme kurulumları açılmaz, plan
+"F1c uygulama kararları").
 
 GÜNCEL VERİTABANI OKUNAMIYORSA aynı denetim yedeğin görüntüsünde yapılır. Okunamıyor sayılan
 hâller YALNIZ şunlardır:
@@ -386,15 +389,28 @@ def satirdan_muhur_alanlari(satir: Sequence[Any]) -> dict[str, Any]:
     Sonuç `Account.seal_fields()` ile aynı sözlüktür (modül başlığı). Biçimsiz kimlik ya da
     zaman `ValueError`, beklenmeyen tür `TypeError` yükseltir (çağıran "mühür tutmadı" sayar).
     """
-    kimlik, tanitici, rol, durum, acilis, kapanis, ozet, bekleyen, _muhur = satir
+    (
+        kimlik,
+        tanitici,
+        rol,
+        durum,
+        kisi,
+        uyelik,
+        donem,
+        acilis,
+        kapanis,
+        ozet,
+        bekleyen,
+        _muhur,
+    ) = satir
     return {
         "id": _kimlik(kimlik),
         "login_name": tanitici,
         "role": rol,
         "status": durum,
-        "person": None,
-        "membership": None,
-        "term": None,
+        "person": _bag(kisi),
+        "membership": _bag(uyelik),
+        "term": _bag(donem),
         "opened_at": _zaman(acilis),
         "closed_at": _zaman(kapanis),
         "wrap_digest": ozet,
@@ -408,6 +424,9 @@ HESAP_SATIRI_SUTUNLARI: Final = (
     "login_name",
     "role",
     "status",
+    "person_id",
+    "membership_id",
+    "term_id",
     "opened_at",
     "closed_at",
     "wrap_digest",
@@ -418,20 +437,30 @@ HESAP_SATIRI_SUTUNLARI: Final = (
 SIRA_KIMLIK: Final = 0
 _SIRA_ROL: Final = 2
 _SIRA_DURUM: Final = 3
-SIRA_OZET: Final = 6
-SIRA_BEKLEYEN: Final = 7
-SIRA_MUHUR: Final = 8
+SIRA_OZET: Final = 9
+SIRA_BEKLEYEN: Final = 10
+SIRA_MUHUR: Final = 11
+
+#: Hesap bağı sütunları (F1c 7. adım); eski görüntüde yoksa NULL okunur (modül başlığı).
+_BAG_SECIMI: Final = "person_id, membership_id, term_id"
+_BAGSIZ_SECIM: Final = "NULL, NULL, NULL"
+
+
+def _bag_secimi(baglanti: sqlite3.Connection) -> str:
+    return _BAG_SECIMI if satir_izi.hesap_bag_sutunlari_var(baglanti) else _BAGSIZ_SECIM
 
 
 def hesap_satiri(baglanti: sqlite3.Connection, anahtar: str) -> Any:
     """Hesabın mühre giren sütunları, sarmal özetleri ve mührü (`HESAP_SATIRI_SUTUNLARI`).
 
     `anahtar` SQLite'taki kimliktir (tiresiz 32 hane); satır yoksa None. Sorgu kaynakta sabit
-    bir `SELECT`'tir (izsiz yazım taraması salt okuma sayar).
+    metinlerden kurulan bir `SELECT`'tir (izsiz yazım taraması salt okuma sayar); bağ sütunları
+    olmayan eski görüntüde üçü NULL okunur (modül başlığı).
     """
     return baglanti.execute(
-        "SELECT id, login_name, role, status, opened_at, closed_at, wrap_digest, "
-        "wrap_digest_pending, seal FROM okul_account WHERE id = ?",
+        f"SELECT id, login_name, role, status, {_bag_secimi(baglanti)}, "  # noqa: S608 — sabit metinler
+        "opened_at, closed_at, wrap_digest, wrap_digest_pending, seal FROM okul_account "
+        "WHERE id = ?",
         (anahtar,),
     ).fetchone()
 
@@ -439,8 +468,8 @@ def hesap_satiri(baglanti: sqlite3.Connection, anahtar: str) -> Any:
 def hesap_satirlari(baglanti: sqlite3.Connection) -> list[Any]:
     """Bütün hesap satırları, `hesap_satiri` sırasıyla (geri yüklemenin özet onarımı okur)."""
     return baglanti.execute(
-        "SELECT id, login_name, role, status, opened_at, closed_at, wrap_digest, "
-        "wrap_digest_pending, seal FROM okul_account"
+        f"SELECT id, login_name, role, status, {_bag_secimi(baglanti)}, "  # noqa: S608 — sabit metinler
+        "opened_at, closed_at, wrap_digest, wrap_digest_pending, seal FROM okul_account"
     ).fetchall()
 
 
@@ -490,6 +519,19 @@ def _kimlik(deger: object) -> str:
     if not isinstance(deger, str):
         raise TypeError("Hesap kimliği metin değil.")
     return str(uuid.UUID(deger))
+
+
+def _bag(deger: object) -> str | None:
+    """Hesap bağı sütunu (SQLite tamsayısı) → kimliğin metni (`str(pk)`); boşsa None.
+
+    Tamsayı yakınlığı olan sütuna program dışından yazılmış metin, kesirli sayı ya da bayt dizisi
+    ORM'in mühür biçimine çevrilmez: `TypeError` (çağıran "mühür tutmadı" sayar; `bool` da kimlik
+    değildir)."""
+    if deger is None:
+        return None
+    if isinstance(deger, bool) or not isinstance(deger, int):
+        raise TypeError("Hesap bağı sütunu tamsayı değil.")
+    return str(deger)
 
 
 def _zaman(deger: object) -> datetime | None:

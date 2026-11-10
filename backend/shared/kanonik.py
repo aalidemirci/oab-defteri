@@ -165,9 +165,9 @@ def esit(a: object, b: object) -> bool:
 # ---------------------------------------------------------------------------
 # Hesap mührü (tasarım §4.6.1)
 # ---------------------------------------------------------------------------
-#: Mühre giren `Account` alanları. `person`, `membership` ve `term`in hedef
-#: modelleri F1c'de gelir; alanlar bugün de anahtar olarak (değeri `null`)
-#: mühürdedir: alanlar eklenince var olan mühürler değişmez. `last_login_at`,
+#: Mühre giren `Account` alanları. `person`, `membership` ve `term` F1c 7. adımda
+#: geldi; öncesinde de anahtar olarak (değeri `null`) mühürdeydiler: bağsız hesabın
+#: mührü alanların gelişiyle değişmedi, bağlı hesapta değer kimliğin metnidir. `last_login_at`,
 #: `password_changed_at`, sıfırlama alanları ve `display_name` mührün dışındadır
 #: (oturum ve bildirim izleri; ad şifrelidir ve DEK yenilemesinde yeniden yazılır).
 #: `wrap_digest` ve `wrap_digest_pending` hesabın `guvenlik.json`'daki parola kaydının (sarmalın)

@@ -278,14 +278,18 @@ HESAP_MODELI: Final = "okul.Account"
 #: kümesi, eski anahtar) son içerik MAC'li kaydını tutuyorsa; tutmayana dokunulmaz (doğrulamasız
 #: yeniden kurma geri sarılmış satırı aklardı). Yoksa açık satırların girişi reddedilir, `KAPALI`
 #: satırlar "kaydı ya da denetim izi program dışından değiştirilmiş görünen hesaplar" listesine
-#: (`seal_mismatch`) düşer ve sarmallarının temizliği durur. Bu yolun bugün yeri YOKTUR: satırın
-#: izi kilit açılışında, DEK belleğe alınmadan ve her veri göçünden ÖNCE denetlenir; şema göçü
-#: kilitliyken iz yazamaz. Kümeyi değiştiren değişiklik bu adım tasarlanmadan yapılmaz (kullanıcı kararı
-#: bekler; `denetim_izi` modül başlığı "ÖZET ALANLARI VE ŞEMA DEĞİŞİMİ").
+#: (`seal_mismatch`) düşer ve sarmallarının temizliği durur. Bu yolun yeri F4'tür (DEK yenilemesi):
+#: satırın izi kilit açılışında, DEK belleğe alınmadan ve her veri göçünden ÖNCE denetlenir; şema
+#: göçü kilitliyken iz yazamaz (`denetim_izi` modül başlığı "ÖZET ALANLARI VE ŞEMA DEĞİŞİMİ").
+#: F1c 7. adımda küme hesap bağlarıyla (`person`, `membership`, `term`) genişledi, yeniden kurma
+#: yazılmadı (plan "F1c uygulama kararları": F1b deneme kurulumları F1c sürümüyle açılmaz).
 HESAP_OZET_ALANLARI: Final[tuple[str, ...]] = (
     "login_name",
     "role",
     "display_name",
+    "person",
+    "membership",
+    "term",
     "status",
     "suspend_reason",
     "opened_at",
@@ -308,6 +312,8 @@ _ZAMANLAR: Final = frozenset(
     {"opened_at", "closed_at", "password_changed_at", "reset_at", "last_login_at"}
 )
 _YABANCI_ANAHTARLAR: Final = frozenset({"opened_by", "closed_by", "reset_by"})
+#: Hesap bağları (`oab` modellerinin tamsayı kimlikleri; F1c 7. adım): değer kimliğin ondalık metni.
+_TAMSAYI_ANAHTARLAR: Final = frozenset({"person", "membership", "term"})
 _MANTIKSALLAR: Final = frozenset({"reset_notice_pending"})
 
 #: Onarımın iz satırının sabitleri (`AuditActor.SISTEM`, `AuditAction.HESAP`,
@@ -466,6 +472,25 @@ def _kimlik_metni(ham: object) -> str | None:
         raise _Bicimsiz from exc
 
 
+def _tamsayi_kimlik_metni(ham: object) -> str | None:
+    """Ham tamsayı kimlik (`CAST(… AS BLOB)`: ondalık rakamlar) → kimliğin metni; boşsa None.
+
+    ORM'in yabancı anahtar değeri `str(pk)`'dir (`denetim_izi._alan_degeri`): baştaki sıfır, işaret
+    ya da rakam dışı karakter taşıyan bayt (program dışından metin ya da BLOB yazılmış) o metne
+    eşit olamaz, `_Bicimsiz`'dir (fail-closed)."""
+    if ham is None:
+        return None
+    metin = _metin(ham)
+    if (
+        not metin.isascii()
+        or not metin.isdigit()
+        or len(metin) > AZAMI_HANE
+        or str(int(metin)) != metin
+    ):
+        raise _Bicimsiz
+    return metin
+
+
 def _mantiksal(ham: object) -> bool:
     if ham == b"1":
         return True
@@ -511,6 +536,8 @@ def hesap_ozet_alanlari(ham: Sequence[Any], dek: bytes) -> dict[str, Any]:
             alanlar[alan] = _zaman(deger)
         elif alan in _YABANCI_ANAHTARLAR:
             alanlar[alan] = _kimlik_metni(deger)
+        elif alan in _TAMSAYI_ANAHTARLAR:
+            alanlar[alan] = _tamsayi_kimlik_metni(deger)
         elif alan in _MANTIKSALLAR:
             alanlar[alan] = _mantiksal(deger)
         else:
@@ -518,12 +545,40 @@ def hesap_ozet_alanlari(ham: Sequence[Any], dek: bytes) -> dict[str, Any]:
     return alanlar
 
 
+#: Hesap bağı sütunları F1c 7. adımda geldi (`okul.0004`); sütunları olmayan eski görüntüde NULL
+#: okunur (`hesap_bag_sutunlari_var`).
+HESAP_BAG_SUTUNLARI: Final = ("person_id", "membership_id", "term_id")
+_HESAP_BAG_SECIMI: Final = (
+    "CAST(person_id AS BLOB), CAST(membership_id AS BLOB), CAST(term_id AS BLOB), "
+)
+_HESAP_BAGSIZ_SECIM: Final = "NULL, NULL, NULL, "
+
+
+def hesap_bag_sutunlari_var(baglanti: Baglanti) -> bool:
+    """`okul_account` hesap bağı sütunlarını taşıyor mu? (`okul.0004`'ten önceki görüntüde yoktur.)
+
+    Üçü birlikte gelir: biri eksikse görüntü biçimsizdir, bağ sütunları yok sayılmaz — sorgu eksik
+    sütunda `sqlite3` hatası verir (çağıranın okunamama hâli)."""
+    (adet,) = baglanti.execute(
+        "SELECT COUNT(*) FROM pragma_table_info('okul_account') "
+        "WHERE name IN ('person_id', 'membership_id', 'term_id')"
+    ).fetchone()
+    return bool(adet)
+
+
 def _hesap_satiri(baglanti: Baglanti, kimlik: str) -> Sequence[Any] | None:
     """Hesabın ham satırı (`HESAP_OZET_ALANLARI` sırası, `CAST(… AS BLOB)`); yoksa ya da birden
-    çoksa None. Sorgu kaynakta sabit bir `SELECT`'tir (izsiz yazım taraması salt okuma sayar);
-    sütun sırasını `test_satir_izi.py` `HESAP_OZET_ALANLARI`'yla karşılaştırır."""
+    çoksa None. Sorgu kaynakta sabit metinlerden kurulan bir `SELECT`'tir (izsiz yazım taraması
+    salt okuma sayar); sütun sırasını `test_satir_izi.py` `HESAP_OZET_ALANLARI`'yla karşılaştırır.
+
+    Geri yüklenecek görüntü `okul.0004`'ten önce üretilmiş olabilir (plan F1c 7. adım): bağ
+    sütunları yoksa NULL okunur. O görüntünün satırları bağsızdır; içerik MAC'leri eski kümeyle
+    yazıldığı için satırın izi tutmaz (fail-closed; F1b deneme kurulumları açılmaz, plan "F1c
+    uygulama kararları")."""
+    bag = _HESAP_BAG_SECIMI if hesap_bag_sutunlari_var(baglanti) else _HESAP_BAGSIZ_SECIM
     satirlar = baglanti.execute(
-        "SELECT CAST(login_name AS BLOB), CAST(role AS BLOB), CAST(display_name AS BLOB), "
+        "SELECT CAST(login_name AS BLOB), CAST(role AS BLOB), CAST(display_name AS BLOB), "  # noqa: S608 — sabit metinler
+        f"{bag}"
         "CAST(status AS BLOB), CAST(suspend_reason AS BLOB), CAST(opened_at AS BLOB), "
         "CAST(opened_by_id AS BLOB), CAST(closed_at AS BLOB), CAST(closed_by_id AS BLOB), "
         "CAST(password_changed_at AS BLOB), CAST(reset_at AS BLOB), CAST(reset_by_id AS BLOB), "

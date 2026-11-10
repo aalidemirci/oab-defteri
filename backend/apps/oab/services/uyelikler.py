@@ -1,5 +1,5 @@
 """Organ üyeliği: kayıt, seçilme, koltuk uygunluğu, kadro ve seçilme sayacı (tasarım §5.2.2, §6.4.2,
-§6.4.3; OYS `assign_membership`, `promote_membership`, `validate_membership_composition`,
+§6.4.3; §12.A `assign_membership`, `promote_membership`, `validate_membership_composition`,
 `count_prior_baskan_terms` UYARLA; plan F1c-5).
 
 F1c'nin 5. adımı yönetim kurulu ve Denetleme Kurulu üyeliğini yazar. Görev bölümü (`gorev_bolumu`),
@@ -242,7 +242,7 @@ def yk_uye_turu(kisi: OabPerson) -> str:
 
 def dk_koltuguna_uygun(kisi: OabPerson, seat_group: str) -> bool:
     """Denetleme Kurulu koltuk grubuna uygun mu? Veli koltuğu veli ya da 18 yaşını doldurmuş
-    kursiyer (hayırsever değil; OYS S-8 düzeltmesi), öğretmen koltuğu öğretmen (md. 14/1)."""
+    kursiyer (hayırsever değil; §12.A S-8 düzeltmesi), öğretmen koltuğu öğretmen (md. 14/1)."""
     if seat_group == SeatGroup.VELI:
         return bool(kisi.is_parent) or _kursiyer_yetiskin(kisi)
     if seat_group == SeatGroup.OGRETMEN:

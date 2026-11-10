@@ -3,7 +3,7 @@
 Kural testleri `kurallar/`'dadır (`yk`, `dk`, `ak`). Burada kuralsız davranış sınanır:
 
 * **Durum makinesi:** kayıt aday ya da seçilmiş açılır; `DUSTU` ve `IPTAL` geri dönmez, aday
-  düşürülmez (OYS kusuru); düşmede `drop_kind` zorunlu (veritabanı kısıtı).
+  düşürülmez (kaynak modülün kusuru, §12.A); düşmede `drop_kind` zorunlu (veritabanı kısıtı).
 * **Yapı:** pasif kişi organa eklenemez; seçim kanalı, koltuk grubu, genel kurul bağı; dönem kilidi.
 * **Tek kaynak seçicileri:** sıra Python'da, çözülmüş adla; görevdeki asıl yedekten çağrılanı içerir.
 * **Uçlar:** kadro serileştiricisinde dayanak, düşme gerekçesi ve uyarı özeti yoktur; dayanak ayrı
@@ -45,8 +45,8 @@ from apps.oab.models import (
 from apps.oab.services import genel_kurul as genel_kurul_servisi
 from apps.oab.services import kisiler, kurullar, uyelik_gecisleri, uyelikler, uyum
 from apps.oab.tests import uyelik_ortak as o
-from apps.okul.models import AccessKind, AccessLog, AccountRole, AccountStatus, AuditTrail
-from apps.okul.tests.hesap_ortak import hesap_ac, muhurle
+from apps.okul.models import AccessKind, AccessLog, AccountRole, AuditTrail
+from apps.okul.tests.hesap_ortak import rol_hesabi
 from conftest import oturumu_ac_test
 from shared import crypto
 
@@ -56,7 +56,7 @@ UC = "/api/v1/oab/memberships/"
 
 
 def _rol_oturumu(rol: AccountRole) -> None:
-    hesap = muhurle(hesap_ac(rol, ad="Uydurma Hesap"), status=AccountStatus.ACIK)
+    hesap = rol_hesabi(rol)
     oturumu_ac_test(str(hesap.id), tanitici=hesap.login_name, rol=rol.value)
 
 
@@ -65,8 +65,8 @@ def _rol_oturumu(rol: AccountRole) -> None:
 
 def test_alanlar_tasarimin_lafzidir() -> None:
     """Tasarım §5.2.2, §5.3: üç şifreli alan ve iptal gerekçesi (6. adım: tasarım "IPTAL, gerekçe ve
-    kim" der, alan adı vermez; `ReceiptLeaf.cancel_reason` gibi şifreli); OYS'nin beyan notu ve uyarı
-    alanları yoktur (D41)."""
+    kim" der, alan adı vermez; `ReceiptLeaf.cancel_reason` gibi şifreli); kaynak modülün (§12.A)
+    beyan notu ve uyarı alanları yoktur (D41)."""
     alanlar = {alan.name for alan in OrganMembership._meta.get_fields()}
     assert (
         not {

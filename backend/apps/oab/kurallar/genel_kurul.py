@@ -1,4 +1,4 @@
-"""Genel kurul yeter sayısının saf hesabı (tasarım §5.2.3, §6.4.1; OYS S-1, S-2 düzeltmeleri).
+"""Genel kurul yeter sayısının saf hesabı (tasarım §5.2.3, §6.4.1; §12.A S-1, S-2 düzeltmeleri).
 
 Taban kurul bileşiminden gelir, üyelik kaydı sayılmaz: eksik kadroyla da yeter sayı aynıdır. Olağanüstü
 genel kurulda da aynı hesap uygulanır (md. 9/2, 9/6). Değerler dönemin kural kopyasından, dönem

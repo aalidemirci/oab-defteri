@@ -30,8 +30,10 @@ YÖNETİM KURULU: kaydı ve karar taslağını sekreter yazar (uç kuralı; tasa
 başkanın kendiliğinden üye olduğu üç komisyonun temsilci satırları açılır; başkanlığı bırakan önceki
 başkanın satırları düşer, başka bir göreve geçmiş olsa da (`temsilciler.baskan_temsilciliklerini_esitle`;
 E03). Başkanlığı düşmeyle ya da iptalle biten kişinin satırları o geçişte düşer
-(`uyelik_gecisleri.uyeligi_dusur`, `uyeligi_iptal_et`). Görev değişiminde önceki görev sahibinin
-hesabının askısı hesap ↔ üyelik bağıyla gelir (F1c 7. adım).
+(`uyelik_gecisleri.uyeligi_dusur`, `uyeligi_iptal_et`). Görevi değişen her üyenin (önceki görev
+sahibi `UYE` olur, başka göreve geçen üye) hesabı aynı işlemde askıya alınır (`GOREV_BOLUMU`;
+`hesap_baglari.hesaplari_esitle`, tasarım §4.4.5; F1c 7. adım). Denetleme Kurulu hesabı göreve
+bağlı değildir: kurulda görev değişimi hesabı askıya almaz.
 
 DENETLEME KURULU: başkan seçimi, görev bölümü tutanağı ve denetim planı yalnız Denetleme Kurulunundur
 (`Eylem.DK_GOREV_BOLUMU_YAZMA`, M8 ⁵; YK rolleri ve program yöneticisi yazmaz). Başkanlık sayacı burada
@@ -70,7 +72,15 @@ from apps.oab.models import (
     OrganType,
     SeatGroup,
 )
-from apps.oab.services import donem_kilidi, iz, kurullar, temsilciler, uyelikler, uyum
+from apps.oab.services import (
+    donem_kilidi,
+    hesap_baglari,
+    iz,
+    kurullar,
+    temsilciler,
+    uyelikler,
+    uyum,
+)
 from apps.okul import denetim_izi, rol_izinleri
 from apps.okul.services import app_password
 
@@ -295,7 +305,10 @@ def _gorevleri_dagit(
             guncel.rule_warnings = ozet
             guncel.save(update_fields=["rule_warnings", "updated_at"])
     for _, (uyelik, onceki) in sorted(izler.items()):
-        denetim_izi.degisiklik(uyelikler.guncel_kayit(uyelik), onceki=onceki)
+        guncel = uyelikler.guncel_kayit(uyelik)
+        denetim_izi.degisiklik(guncel, onceki=onceki)
+        # Görevi değişen üyenin hesabı aynı işlemde askıya alınır (tasarım §4.4.5; F1c 7. adım).
+        hesap_baglari.hesaplari_esitle(guncel)
     return [uyelikler.guncel_kayit(u) for u in yazilanlar]
 
 

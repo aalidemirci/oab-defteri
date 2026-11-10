@@ -1,9 +1,10 @@
-"""Birlik kişisi (tasarım §5.2.2 `OabPerson`; OYS `OabPerson` UYARLA; plan F1c-4).
+"""Birlik kişisi (tasarım §5.2.2 `OabPerson`; §12.A `OabPerson` UYARLA; plan F1c-4).
 
-OYS'den çıkanlar: T.C. kimlik no ve kör indeksi, TCKN tekil kısıtı, telefon ve kör indeksi,
-`linked_user_id`, ada göre `Meta.ordering` (ad şifrelidir, veritabanında sıralanamaz; sıra seçicide
-Python'dadır). Eklenenler: şifreli ad ve soyad, adın kör indeksi (`name_index`), veli, yaş ve müdür
-işaretleri, personel bağı, programdan önceki seçilme sayıları ve durum (`AKTIF` · `PASIF`).
+Kaynak modülden (tasarım §12.A) çıkanlar: T.C. kimlik no ve kör indeksi, TCKN tekil kısıtı, telefon
+ve kör indeksi, `linked_user_id`, ada göre `Meta.ordering` (ad şifrelidir, veritabanında
+sıralanamaz; sıra seçicide Python'dadır). Eklenenler: şifreli ad ve soyad, adın kör indeksi
+(`name_index`), veli, yaş ve müdür işaretleri, personel bağı, programdan önceki seçilme sayıları ve
+durum (`AKTIF` · `PASIF`).
 
 KÖR İNDEKS (`name_index`) YALNIZ `save()` İLE YAZILIR (emsal `okul.ParentRoster`): ad ve soyad
 `name_match.name_key` ile katlanıp `crypto.blind_index`'ten geçer; veli listesinin indeksiyle aynı

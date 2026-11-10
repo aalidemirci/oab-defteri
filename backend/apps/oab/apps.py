@@ -20,13 +20,15 @@ class OabConfig(AppConfig):
 
         Denetimler hata yükseltmez, program açılır. Kancalar (plan F1c-4): birlik kişisine bağlı
         personel silinmez, birleştirmede bağ taşınır (`services.persons`); veli listesi aktarımı açık
-        birlik dönemini buradan öğrenir (`services.imports`). Kayıtlar idempotenttir.
+        birlik dönemini buradan öğrenir (`services.imports`); organ rollerinin hesabı üyeliğe bu
+        kurallarla bağlanır (`services.hesaplar`, plan F1c 7. adım). Kayıtlar idempotenttir.
         """
         from apps.oab.kurallar import yukleyici
-        from apps.oab.services import donemler, kisiler
-        from apps.okul.services import imports, persons
+        from apps.oab.services import donemler, hesap_baglari, kisiler
+        from apps.okul.services import hesaplar, imports, persons
 
         yukleyici.ac()
         persons.register_membership_check(kisiler.personnel_linked)
         persons.register_merge_hook(kisiler.personnel_merged)
         imports.register_roster_term_provider(donemler.acik_donem_kimligi)
+        hesaplar.register_account_bond_rules(hesap_baglari.KURALLAR)

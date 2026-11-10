@@ -1,9 +1,10 @@
 """Organ üyeliği testlerinin ortak kurulumu (F1c 5-6. adım; `yk`, `dk`, `tm`, `ak` ve üyelik testleri).
 
-OYS fabrikalarının (`OabPersonFactory`, `OrganMembershipFactory`) karşılığıdır, AYNEN alınmadı:
-kişi VARSAYILAN olarak velidir (`is_parent=True`), genel kurul dışı kanaldaki ya da devralınan üyelik
-seçilmiş (`SECILDI`) açılır. Programdan önceki dönemler ve seçilmeler sayaç testleri için ORM'le
-doğrudan yazılır (geçmiş dönem kapanmıştır, servis yazmaz). Kişi adları UYDURMADIR.
+Kaynak modülün fabrikalarının (`OabPersonFactory`, `OrganMembershipFactory`; tasarım §12.A)
+karşılığıdır, AYNEN alınmadı: kişi VARSAYILAN olarak velidir (`is_parent=True`), genel kurul dışı
+kanaldaki ya da devralınan üyelik seçilmiş (`SECILDI`) açılır. Programdan önceki dönemler ve
+seçilmeler sayaç testleri için ORM'le doğrudan yazılır (geçmiş dönem kapanmıştır, servis yazmaz).
+Kişi adları UYDURMADIR.
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ from apps.oab.services import donemler, gorev_bolumu, kisiler, uyelikler, uyum
 from apps.oab.services import genel_kurul as genel_kurul_servisi
 from apps.okul.models import Account, AccountRole, AccountStatus, SchoolYear
 from apps.okul.oturum import Yazar, yazar_olarak
-from apps.okul.tests.hesap_ortak import hesap_ac, muhurle
+from apps.okul.tests.hesap_ortak import rol_hesabi
 from conftest import oturumu_ac_test
 
 #: Dönemin açıldığı gün ve organ seçilmelerinin günü.
@@ -60,6 +61,11 @@ def yil() -> SchoolYear:
 
 
 def donem() -> OabTerm:
+    """Açık dönem: organ hesabını açan fabrika (`hesap_ortak.fabrika_donemi`, aynı değerler) önce
+    açtıysa o; yoksa yeni dönem."""
+    acik = OabTerm.objects.filter(status=TermStatus.ACIK).first()
+    if acik is not None:
+        return acik
     return donemler.create_term(name="2026-2027 birlik dönemi", school_year=yil(), start_date=GUN)
 
 
@@ -198,10 +204,11 @@ def gecmis_secilmeler(
 @contextmanager
 def rol_olarak(rol: AccountRole) -> Iterator[Account]:
     """Uydurma hesapla rolün oturumu ve yazar bağlamı (servis ve uç aynı rolü görür). Rolün açık
-    hesabı varsa o kullanılır (tanıtıcı tekildir); çıkışta varsayılan oturum geri gelir."""
+    hesabı varsa o kullanılır (tanıtıcı tekildir), yoksa bağsız rol hesabı (`hesap_ortak.rol_hesabi`:
+    kurula görevli eklenmez); çıkışta varsayılan oturum geri gelir."""
     hesap = Account.objects.filter(role=rol, status=AccountStatus.ACIK).first()
     if hesap is None:
-        hesap = muhurle(hesap_ac(rol, ad="Uydurma Hesap"), status=AccountStatus.ACIK)
+        hesap = rol_hesabi(rol)
     oturumu_ac_test(str(hesap.id), tanitici=hesap.login_name, rol=rol.value)
     try:
         with yazar_olarak(Yazar(hesap_id=str(hesap.id), rol=rol.value)):

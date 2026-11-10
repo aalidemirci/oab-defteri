@@ -132,7 +132,14 @@ from apps.okul.services import school_year as school_year_service
 from apps.okul.services import setup as setup_service
 from apps.okul.services import terms as term_service
 from apps.okul.services.templates import PARENT_TEMPLATE_HEADERS, PERSONNEL_TEMPLATE_HEADERS
-from apps.okul.tests.hesap_ortak import GECICI_PAROLA, YENI_PAROLA, hesap_ac, muhurle
+from apps.okul.tests.hesap_ortak import (
+    GECICI_PAROLA,
+    YENI_PAROLA,
+    hesap_ac,
+    hesap_uyeligi,
+    muhurle,
+    rol_hesabi,
+)
 from apps.okul.tests.iz_ortak import bekci_modelleri, izlenen_modeller, kor_indeks_alanlari
 from apps.okul.tests.okul_karti_ortak import okul_karti
 from conftest import (
@@ -391,7 +398,7 @@ def _f1c6_donemi() -> OabTerm:
 
 def _rol_oturumu(rol: AccountRole) -> str:
     """Uydurma hesapla rol oturumu (iz satırları bu hesabındır)."""
-    hesap = muhurle(hesap_ac(rol, ad="Uydurma Hesap"), status=AccountStatus.ACIK)
+    hesap = rol_hesabi(rol)
     oturumu_ac_test(str(hesap.id), tanitici=hesap.login_name, rol=rol.value)
     return str(hesap.id)
 
@@ -576,6 +583,19 @@ def _parola_bildirimi(_: pytest.MonkeyPatch) -> Istek:
         recovery_key=TEST_KURTARMA_ANAHTARI, hesap_id=TEST_HESAP_ID, new_password=YENI_PAROLA
     )
     return Istek("/api/v1/security/integrity/reset-notice/", None, _turler("GUNCELLE"))
+
+
+def _hesap_ac(_: pytest.MonkeyPatch) -> Istek:
+    """Kullanıcılar: muhasibin hesabı görevli üyeliğe bağlı açılır (`HESAP`; plan F1c 7. adım).
+    Üyelik hazırlıkta kurulur, izi sayımdan öncedir."""
+    govde = {
+        "rol": "muhasip",
+        "tanitici": "muhasip",
+        "ad_soyad": "Uydurma Muhasip",
+        "gecici_parola": GECICI_PAROLA,
+        "uyelik": hesap_uyeligi(AccountRole.MUHASIP),
+    }
+    return Istek("/api/v1/accounts/", govde, _turler("HESAP"))
 
 
 def _hesabi_kapat(_: pytest.MonkeyPatch) -> Istek:
@@ -794,16 +814,7 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     ),
     # Kullanıcılar (plan F1b-2): hesap açma, kapama, askıdan çıkarma, parola sıfırlama, hesap
     # teslim pusulası.
-    ("account-list", "POST"): _sabit(
-        "/api/v1/accounts/",
-        {
-            "rol": "muhasip",
-            "tanitici": "muhasip",
-            "ad_soyad": "Uydurma Muhasip",
-            "gecici_parola": GECICI_PAROLA,
-        },
-        "HESAP",
-    ),
+    ("account-list", "POST"): Senaryo(_hesap_ac),
     ("account-close", "POST"): Senaryo(_hesabi_kapat),
     ("account-unsuspend", "POST"): Senaryo(_askidan_cikar),
     ("account-reset-password", "POST"): Senaryo(_parolayi_sifirla),
@@ -1164,6 +1175,18 @@ ORM_DISI_CAGRILAR: dict[tuple[str, str, str], str] = {
     ),
     ("apps/okul/services/geri_yukleme_notu.py", "dosya_ozeti", "ozet.update"): (
         "`hashlib.sha256().update`: kenara alınan dosyanın özeti."
+    ),
+    ("apps/okul/services/geri_yukleme_yetkisi.py", "hesap_satiri", "baglanti.execute"): (
+        "Salt okuma: hesap satırının mühre giren sütunlarını okur; metni hesap bağı sütunları "
+        "olmayan eski görüntü için sabitlerden kurulur (plan F1c 7. adım)."
+    ),
+    ("apps/okul/services/geri_yukleme_yetkisi.py", "hesap_satirlari", "baglanti.execute"): (
+        "Salt okuma: bütün hesap satırlarının mühre giren sütunlarını okur; metni hesap bağı "
+        "sütunları olmayan eski görüntü için sabitlerden kurulur (plan F1c 7. adım)."
+    ),
+    ("apps/okul/services/satir_izi.py", "_hesap_satiri", "baglanti.execute"): (
+        "Salt okuma: hesap satırının içerik MAC'ine giren sütunlarını okur; metni hesap bağı "
+        "sütunları olmayan eski görüntü için sabitlerden kurulur (plan F1c 7. adım)."
     ),
     ("apps/okul/services/satir_izi.py", "_iz_satirlari", "baglanti.execute"): (
         "Salt okuma: denetim izi satırlarını okur (bu modülün iki sabit `WHERE` koşulu); metni "
@@ -1977,8 +2000,9 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
     uydurma veli adıyla aktarılır, sınıfı yerine konur ve elle silinir: ne adı ne token'ı izde
     geçer. (Öğrenci sicili ve şube kataloğu F1b 5. adımda söküldü.)
     """
-    # Hesap (ad-soyad şifreli kişi verisi).
-    hesap_ac(AccountRole.MUHASIP, ad=f"{UYDURMA_AD} {UYDURMA_SOYAD}")
+    # Hesap (ad-soyad şifreli kişi verisi). Program yöneticisi: organ rolündeki hesap üyeliğe bağlı
+    # açılır ve dönemi açardı (plan F1c 7. adım); dönem aşağıda veli listesinden sonra açılır.
+    hesap_ac(AccountRole.YONETICI, ad=f"{UYDURMA_AD} {UYDURMA_SOYAD}")
     # Okul kartı: okul adı, il, ilçe, müdür adı serbest metin / kişi adı; demirbaş no serbest
     # kod (değeriyle girer, kişi verisi taşımaz). Kodlu alanlar (kademe, mevcut, türler) değerli.
     setup_service.update_school_config(

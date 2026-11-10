@@ -119,7 +119,7 @@ def test_yk_tam_kadro_uyarisiz() -> None:
 
 @pytest.mark.kural_davranis(f"{YK}.asil_uye")
 def test_dusen_koltuk_sayima_girmez() -> None:
-    """OYS AYNEN: düşen koltuk sayılmaz; aday da sayılmaz (kadro sayımı yalnız `SECILDI`)."""
+    """AYNEN (§12.A): düşen koltuk sayılmaz; aday da sayılmaz (kadro sayımı yalnız `SECILDI`)."""
     donem = o.donem()
     asillar = [o.devralinan(donem, o.kisi()) for _ in range(5)]
     dusen = asillar[0]
@@ -461,7 +461,7 @@ def test_donem_siniri_ucu_gerekce() -> None:
 
 
 def test_aday_ve_secilen_ayni_kayit() -> None:
-    """Genel kurulda seçilen, aynı genel kurulun aday kaydının kendisidir (OYS ilkesi AYNEN)."""
+    """Genel kurulda seçilen, aynı genel kurulun aday kaydının kendisidir (§12.A ilkesi AYNEN)."""
     donem = o.donem()
     kurul = o.olaganustu_genel_kurul(donem)
     kisi = o.kisi(external_yk_terms=0)
@@ -1040,8 +1040,8 @@ def test_yk_4_altina_duserse_ayrilan_uye_devam_onerisi(tur: str) -> None:
 
 @pytest.mark.kural_davranis("uyelik.ayrilan_veli_devam")
 def test_dusurme_gerekcesiz_reddedilir() -> None:
-    """OYS UYARLA: düşmede zorunlu olan türdür (`drop_kind`), serbest gerekçe isteğe bağlıdır; türsüz
-    düşme servis ve uçta reddedilir, aday düşürülmez."""
+    """UYARLA (tasarım §12.A): düşmede zorunlu olan türdür (`drop_kind`), serbest gerekçe isteğe
+    bağlıdır; türsüz düşme servis ve uçta reddedilir, aday düşürülmez."""
     donem = o.donem()
     uyelik = o.secilmis(donem)
     with pytest.raises(ValueError, match="Düşme türü"):

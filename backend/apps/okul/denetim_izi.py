@@ -75,10 +75,10 @@ yazımı dahil) `KAPALI` olanlar DAHİL BÜTÜN hesap satırlarının izini ayn�
 iz satırı), ama YALNIZ satırı önce ESKİ alan kümesiyle ve eski anahtarla son içerik MAC'li kaydına
 karşı doğrulayıp tutanlara (doğrulamasız yeniden kurma geri sarılmış satırı aklar). Yoksa açık
 satırların girişi reddedilir, `KAPALI` satırlar iki depo kartında "kaydı program dışından
-değiştirilmiş görünen hesaplar" listesine düşer ve sarmallarının temizliği durur. Böyle bir adım
-tasarlanmadan küme değiştirilmez (kullanıcı kararı bekler; F1c'nin `person`/`membership`/`term`
-alanları buna girer). Program sahaya çıkana dek deneme kurulumları silinip yeniden kurulur
-(plan F1b-1 "Eski veri").
+değiştirilmiş görünen hesaplar" listesine düşer ve sarmallarının temizliği durur. Bu adım F4'te
+(DEK yenilemesi) yazılır. F1c 7. adımda küme `person`, `membership` ve `term` ile genişledi, adım
+yazılmadı (plan "F1c uygulama kararları": F1b deneme kurulumları F1c sürümüyle açılmaz). Program
+sahaya çıkana dek deneme kurulumları silinip yeniden kurulur (plan F1b-1 "Eski veri").
 
 TEK YAZARIN ORM'SİZ EŞİ: geri yüklemenin özet onarımı (`services.ozet_onarimi`) takastan önce,
 oturumu olmayan `.tmp` veritabanında yazar; değiştirdiği hesap satırlarının iz satırını

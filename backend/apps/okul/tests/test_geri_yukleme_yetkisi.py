@@ -53,6 +53,7 @@ from django.core.management.base import CommandError
 from django.db import connection, connections, transaction
 from rest_framework.test import APIClient
 
+from apps.oab.models import OrganMembership
 from apps.okul import denetim_izi, restart_gate
 from apps.okul.models import Account, AccountRole, AccountStatus, AuditAction
 from apps.okul.oturum import OTURUM, Yazar, yazar_olarak
@@ -91,7 +92,7 @@ from apps.okul.tests.geri_yukleme_ortak import (
 from apps.okul.tests.geri_yukleme_ortak import (
     goruntu as orm_goruntusu,
 )
-from apps.okul.tests.hesap_ortak import bagsiz_sarmal, durum_yaz
+from apps.okul.tests.hesap_ortak import bagsiz_sarmal, durum_yaz, hesap_uyeligi
 from conftest import (
     TEST_DEK,
     TEST_HESAP_ID,
@@ -1738,14 +1739,19 @@ def test_deserialize_yokken_gecici_dizin_kullanilir_ve_silinir(
 @pytest.mark.parametrize("mikrosaniye", [0, 123456])
 def test_orm_siz_okuyucu_orm_muhruyle_ayni(mikrosaniye: int) -> None:
     """ORM'in yazıp commit ettiği satır, test veritabanı DOSYASINDAN ORM'siz okunur: biçim
-    (tiresiz kimlik, saat dilimsiz UTC metni; mikrosaniye sıfırsa kesirsiz) ve mühür ORM'inkiyle
-    aynıdır. Satır Europe/Istanbul saatiyle verilir: UTC'ye çevrim de sınanır."""
+    (tiresiz kimlik, saat dilimsiz UTC metni; mikrosaniye sıfırsa kesirsiz; hesap bağları tamsayı →
+    kimliğin metni) ve mühür ORM'inkiyle aynıdır. Satır Europe/Istanbul saatiyle verilir: UTC'ye
+    çevrim de sınanır. Hesap Denetleme Kurulu üyeliğine bağlıdır (plan F1c 7. adım)."""
     an = datetime(2026, 10, 31, 10, 15, 30, mikrosaniye, tzinfo=ZoneInfo("Europe/Istanbul"))
+    uyelik = OrganMembership.objects.get(pk=hesap_uyeligi(AccountRole.DENETLEME_KURULU))
     hesap = Account(
         id=uuid.UUID("3d9e8f70-1a2b-4c3d-8e9f-a0b1c2d3e4f5"),
         login_name="dk-1",
         role=AccountRole.DENETLEME_KURULU,
         display_name="Örnek Üye",
+        person_id=uyelik.person_id,
+        membership_id=uyelik.pk,
+        term_id=uyelik.term_id,
         status=AccountStatus.KAPALI,
         opened_at=an,
         closed_at=an + timedelta(days=3),
@@ -1766,13 +1772,25 @@ def test_orm_siz_okuyucu_orm_muhruyle_ayni(mikrosaniye: int) -> None:
         satir = geri_yukleme_yetkisi.hesap_satiri(baglanti, hesap.id.hex)
 
     kesir = f".{mikrosaniye:06d}" if mikrosaniye else ""
+    sutunlar = geri_yukleme_yetkisi.HESAP_SATIRI_SUTUNLARI
     assert satir[0] == hesap.id.hex
-    assert satir[4] == f"2026-10-31 07:15:30{kesir}"  # saat dilimsiz UTC
+    # saat dilimsiz UTC
+    assert satir[sutunlar.index("opened_at")] == f"2026-10-31 07:15:30{kesir}"
+    assert satir[sutunlar.index("person_id") : sutunlar.index("term_id") + 1] == (
+        uyelik.person_id,
+        uyelik.pk,
+        uyelik.term_id,
+    )
     assert (satir[geri_yukleme_yetkisi.SIRA_OZET], satir[geri_yukleme_yetkisi.SIRA_BEKLEYEN]) == (
         "ab" * 32,
         "cd" * 32,
     )
     alanlar = geri_yukleme_yetkisi.satirdan_muhur_alanlari(satir)
+    assert (alanlar["person"], alanlar["membership"], alanlar["term"]) == (
+        str(uyelik.person_id),
+        str(uyelik.pk),
+        str(uyelik.term_id),
+    )
     assert kanonik.kodla(alanlar) == kanonik.kodla(hesap.seal_fields())
     assert kanonik.hesap_muhru(crypto.account_seal_key(TEST_DEK), alanlar) == hesap.seal
     # Uçtan uca: aynı dosyada ORM'in yazdığı program yöneticisi kabul, DK rolle reddedilir.
@@ -1780,6 +1798,98 @@ def test_orm_siz_okuyucu_orm_muhruyle_ayni(mikrosaniye: int) -> None:
     with pytest.raises(YetkiReddi) as ret:
         _dogrula(db, hesap_id=str(hesap.id))
     assert ret.value.kod == "rol"
+
+
+# ============================================================ hesap bağı sütunları (plan F1c 7. adım)
+
+#: Bağlı Denetleme Kurulu satırı (uydurma kimlik ve `oab` kimlikleri).
+_BAGLI_DK = HesapSatiri(
+    "3d9e8f70-1a2b-4c3d-8e9f-a0b1c2d3e4f5",
+    "dk-1",
+    role="denetleme_kurulu",
+    person=7,
+    membership=8,
+    term=9,
+)
+
+
+@pytest.mark.parametrize("bag_sutunlari", [True, False], ids=["yeni_sutunlarla", "eski_goruntu"])
+def test_parola_yolu_bag_sutunlu_ve_sutunsuz_goruntuyle_calisir(
+    tmp_path: Path, bag_sutunlari: bool
+) -> None:
+    """Konsol geri yüklemesinin ORM'siz okuyucusu `okul.0004`'ün bağ sütunlarıyla ve onlarsız eski
+    görüntüyle çalışır: program yöneticisi güncel veritabanında da yedeğin görüntüsünde de kabul,
+    bağlı Denetleme Kurulu satırının mührü ve izi tutar (rolle reddedilir)."""
+    satirlar = [HesapSatiri(TEST_HESAP_ID, TEST_TANITICI)]
+    if bag_sutunlari:
+        satirlar.append(_BAGLI_DK)
+    db = tmp_path / "db.sqlite3"
+    goruntu = yetkili_sqlite(db, dek=TEST_DEK, hesaplar=satirlar, bag_sutunlari=bag_sutunlari)
+    assert _dogrula(db) == KAYNAK_GUNCEL
+    assert _dogrula(tmp_path / "yok.sqlite3", goruntu=goruntu) == KAYNAK_GORUNTU
+    with closing(sqlite3.connect(db)) as baglanti:
+        assert satir_izi.hesap_bag_sutunlari_var(baglanti) is bag_sutunlari
+        yonetici = geri_yukleme_yetkisi.hesap_satiri(baglanti, uuid.UUID(TEST_HESAP_ID).hex)
+        assert yonetici[4:7] == (None, None, None)
+        if bag_sutunlari:
+            dk = geri_yukleme_yetkisi.hesap_satiri(baglanti, uuid.UUID(_BAGLI_DK.id).hex)
+            assert dk[4:7] == (7, 8, 9)
+            assert geri_yukleme_yetkisi.muhurlu_satir_mi(dk, TEST_DEK)
+            assert satir_izi.hesap_izi_tutuyor(baglanti, _BAGLI_DK.id, TEST_DEK)
+    if bag_sutunlari:
+        with pytest.raises(YetkiReddi) as ret:
+            _dogrula(db, hesap_id=_BAGLI_DK.id)
+        assert ret.value.kod == "rol"
+
+
+@pytest.mark.parametrize("sutun", ["person_id", "membership_id", "term_id"])
+def test_orm_siz_okuyucu_program_disindan_degisen_bagi_yakalar(tmp_path: Path, sutun: str) -> None:
+    """Tehdit 19: bağ mühürde ve içerik MAC'indedir. Görüntüde bağı program dışından değiştirilen
+    satırın mührü de satırın izi de tutmaz."""
+    db = tmp_path / "db.sqlite3"
+    yetkili_sqlite(
+        db,
+        dek=TEST_DEK,
+        hesaplar=[HesapSatiri(TEST_HESAP_ID, TEST_TANITICI), _BAGLI_DK],
+        bag_sutunlari=True,
+        wal=False,
+    )
+    with closing(sqlite3.connect(db)) as baglanti:
+        baglanti.execute(
+            f"UPDATE okul_account SET {sutun} = 99 WHERE id = ?",  # noqa: S608 — test, sabit adlar
+            (uuid.UUID(_BAGLI_DK.id).hex,),
+        )
+        baglanti.commit()
+        dk = geri_yukleme_yetkisi.hesap_satiri(baglanti, uuid.UUID(_BAGLI_DK.id).hex)
+        assert not geri_yukleme_yetkisi.muhurlu_satir_mi(dk, TEST_DEK)
+        assert not satir_izi.hesap_izi_tutuyor(baglanti, _BAGLI_DK.id, TEST_DEK)
+
+
+def test_eski_icerik_mac_kumesiyle_yazilmis_satir_tutmaz(tmp_path: Path) -> None:
+    """Plan "F1c uygulama kararları": F1b deneme kurulumları F1c sürümüyle açılmaz, `Account`'un
+    içerik MAC'i kümesinin değişimi için veri göçü yoktur (F4). Bağ sütunları olmayan görüntünün
+    mührü tutar (bağlar `None`), ama satır izi eski kümeyle (bağ anahtarları olmadan) yazılmışsa
+    tutmaz: parola yolu reddeder (fail-closed), çıkış kurtarma anahtarıdır."""
+    db = tmp_path / "db.sqlite3"
+    yetkili_sqlite(
+        db,
+        dek=TEST_DEK,
+        hesaplar=[replace(HesapSatiri(TEST_HESAP_ID, TEST_TANITICI), iz=False)],
+    )
+    satir = ozetli(TEST_DEK, HesapSatiri(TEST_HESAP_ID, TEST_TANITICI))
+    eski = {
+        ad: deger
+        for ad, deger in ozet_alanlari(TEST_DEK, satir, muhur(TEST_DEK, satir)).items()
+        if ad not in ("person", "membership", "term")
+    }
+    with closing(sqlite3.connect(db)) as baglanti:
+        iz_satiri_ekle(baglanti, hesap_id=TEST_HESAP_ID, alanlar=eski)
+        baglanti.commit()
+        yonetici = geri_yukleme_yetkisi.hesap_satiri(baglanti, uuid.UUID(TEST_HESAP_ID).hex)
+        assert geri_yukleme_yetkisi.muhurlu_satir_mi(yonetici, TEST_DEK)
+    with pytest.raises(YetkiReddi) as ret:
+        _dogrula(db)
+    assert ret.value.kod == geri_yukleme_yetkisi.RET_KAYIT_IZI
 
 
 # ============================================================ modülün sözleşmesi

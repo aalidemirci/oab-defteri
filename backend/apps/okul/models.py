@@ -903,6 +903,11 @@ class ParentRoster(models.Model):
 # ---------------------------------------------------------------------------
 # Hesaplar ve iz anahtarı (tasarım §4.6; F1b-1)
 # ---------------------------------------------------------------------------
+def _kimlik_metni(pk: object) -> str | None:
+    """Yabancı anahtarın mühürdeki biçimi: kimliğin metni ya da `None` (`kanonik.hesap_muhru`)."""
+    return None if pk is None else str(pk)
+
+
 class DeletionNotAllowed(RuntimeError):
     """Satırı silinmeyen modelde silme denendi (altın kural 4; tasarım §4.6)."""
 
@@ -978,9 +983,16 @@ class Account(models.Model):
     wrap_digest_pending))` (`shared.kanonik.hesap_muhru`). Kilit açılışında seçilen
     hesabın mührü DEK belleğe alınmadan doğrulanır; tutmazsa giriş reddedilir ve satıra
     DOKUNULMAZ (yeniden mühürlemek program dışından değiştirilmiş rolü meşrulaştırırdı;
-    §4.3 tehdit 19). `person`, `membership` ve `term` alanları hedef modelleriyle F1c'de
-    gelir; mühür onları bugünden `null` olarak taşır, alanlar eklenince var olan
-    mühürler değişmez.
+    §4.3 tehdit 19). `person`, `membership` ve `term` F1c 7. adımda geldi (`okul.0004`):
+    mühre kimliğin METNİYLE (`str(pk)`) girer, bağsız hesapta `null`dır; bağsız hesabın
+    mührü bu yüzden alanların gelişiyle değişmedi.
+
+    HESAP ↔ ÜYELİK BAĞI (tasarım §4.4.1, §4.4.5; plan F1c 7. adım): organ rollerinde (dört YK
+    görevi ve Denetleme Kurulu) hesap bir organ üyeliğine bağlanır; `person` ve `term` üyeliğin
+    kişisi ve dönemidir (`membership`'ten türer, ayrıca seçilmez). Program yöneticisi ve okul
+    müdürü hesabında üçü de boştur. Yabancı anahtarlar DİZEYLE verilir: `okul` `oab`'yi içe
+    aktarmaz; bağın kuralı `oab`'nin kayıt defterinden gelir (`services.hesaplar` modül başlığı
+    "HESAP ↔ ÜYELİK BAĞI").
 
     SARMAL ÖZETİ (kullanıcı kararı 03.11.2026 "tazelik kapatılır"; `app_password` modül
     başlığı "SARMALIN TAZELİĞİ"): `wrap_digest` hesabın `guvenlik.json`'daki GÜNCEL parola
@@ -997,13 +1009,15 @@ class Account(models.Model):
     da var olan satırların bu alanlardaki değerini değiştiren her değişiklik (F4'ün DEK yenilemesi
     dahil) `KAPALI` olanlar DAHİL BÜTÜN satırların izini aynı işlemde yeniden kurmalıdır — her
     satırı önce eski hâliyle son kaydına karşı doğrulayıp yalnız tutanlara; yoksa açık satırların
-    girişi reddedilir, `KAPALI` satırlar iki depo kartında yanlış alarm verir. Bu adımın bugün yeri
-    yoktur, küme o tasarlanmadan değişmez (`satir_izi.HESAP_OZET_ALANLARI` yorumu; kullanıcı kararı
-    bekler).
+    girişi reddedilir, `KAPALI` satırlar iki depo kartında yanlış alarm verir. Bu adımın yeri F4'tür
+    (DEK yenilemesi; `satir_izi.HESAP_OZET_ALANLARI` yorumu). F1c 7. adımda küme `person`,
+    `membership` ve `term` ile genişledi, yeniden kurma yazılmadı (plan "F1c uygulama kararları":
+    F1b deneme kurulumları F1c sürümüyle açılmaz, veri göçü F4'tedir).
 
     KISITLAR (sert; sistem bütünlüğü): açık (`KAPALI` olmayan) hesaplar arasında
     `login_name` tekil · başkan, başkan yardımcısı, muhasip, sekreter ve okul müdürü
-    için tek açık hesap (DB kısıtı) · Denetleme Kurulu için en çok üç ve en az bir
+    için tek açık hesap (DB kısıtı) · aynı üyeliğe bağlı tek açık hesap (DB kısıtı;
+    tasarım §4.6.1) · Denetleme Kurulu için en çok üç ve en az bir
     açık program yöneticisi (servis katmanı, `services.hesaplar`). SATIR SİLİNMEZ:
     `delete()` ve toplu silme `DeletionNotAllowed` yükseltir (TK11; altın kural 4).
     `BaseModel`'den türemez: yumuşak silme ve `updated_at` bu modele uymaz.
@@ -1014,8 +1028,9 @@ class Account(models.Model):
     ve tarihlerdir (`IZ_DEGER_ALANLARI`): ad-soyad şifreli kişi verisidir, tanıtıcı
     kişinin adını içerebilir (program yalnız uyarır), mühür ve hesap bağları değer
     taşımaz — satıra yalnız adları girer. İçerik MAC'i kimlik dışındaki bütün alanları
-    çözülmüş değerleriyle kapsar (`IZ_OZET_ALANLARI`): şifreli sütuna yazılmış düz metin
-    ya da başka satırdan taşınmış ad token'ı burada görünür (denetim GA-9).
+    çözülmüş değerleriyle kapsar (`IZ_OZET_ALANLARI`; hesap bağları dahil, plan "F1c uygulama
+    kararları"): şifreli sütuna yazılmış düz metin, başka satırdan taşınmış ad token'ı ya da
+    program dışından değiştirilmiş üyelik bağı burada görünür (denetim GA-9).
     """
 
     #: Denetim izinde önce/sonra değeri yazılabilen kişisiz alanlar (tasarım §4.6.2).
@@ -1036,6 +1051,9 @@ class Account(models.Model):
         "login_name",
         "role",
         "display_name",
+        "person",
+        "membership",
+        "term",
         "status",
         "suspend_reason",
         "opened_at",
@@ -1057,6 +1075,31 @@ class Account(models.Model):
     login_name = models.CharField("tanıtıcı", max_length=32)
     role = models.CharField("rol", max_length=24, choices=AccountRole.choices)
     display_name = EncryptedCharField("hesap sahibinin adı-soyadı", max_length=150)
+    #: Hesap ↔ üyelik bağı (sınıf belge dizesi): organ rollerinde dolu, öteki rollerde boş.
+    person = models.ForeignKey(
+        "oab.OabPerson",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="birlik kişisi",
+    )
+    membership = models.ForeignKey(
+        "oab.OrganMembership",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="organ üyeliği",
+    )
+    term = models.ForeignKey(
+        "oab.OabTerm",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="birlik dönemi",
+    )
     status = models.CharField(
         "durum",
         max_length=24,
@@ -1122,6 +1165,12 @@ class Account(models.Model):
                 condition=models.Q(role__in=SINGLE_ACCOUNT_ROLES) & ~models.Q(status="KAPALI"),
                 name="uq_account_single_role_open",
             ),
+            # Aynı üyeliğe bağlı tek açık hesap (tasarım §4.6.1 kısıtları).
+            models.UniqueConstraint(
+                fields=["membership"],
+                condition=models.Q(membership__isnull=False) & ~models.Q(status="KAPALI"),
+                name="uq_account_membership_open",
+            ),
             models.CheckConstraint(
                 condition=models.Q(role__in=AccountRole.values), name="ck_account_role"
             ),
@@ -1159,16 +1208,17 @@ class Account(models.Model):
     def seal_fields(self) -> dict[str, Any]:
         """Mühre giren alanlar (`shared.kanonik.HESAP_MUHRU_ALANLARI`).
 
-        `person`, `membership` ve `term` F1c'ye dek `None`dır (sınıf belge dizesi).
+        Hesap bağları kimliğin METNİDİR (`str(pk)`; tehdit 19: mühür üyelik bağının program
+        dışından değiştirilmesini de yakalar), bağsız hesapta `None` (sınıf belge dizesi).
         """
         return {
             "id": self.id,
             "login_name": self.login_name,
             "role": self.role,
             "status": self.status,
-            "person": None,
-            "membership": None,
-            "term": None,
+            "person": _kimlik_metni(self.person_id),
+            "membership": _kimlik_metni(self.membership_id),
+            "term": _kimlik_metni(self.term_id),
             "opened_at": self.opened_at,
             "closed_at": self.closed_at,
             "wrap_digest": self.wrap_digest,
