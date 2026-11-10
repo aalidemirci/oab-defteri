@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
+from rest_framework import serializers, status
+from rest_framework.generics import get_object_or_404
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.oab import models as oab_modelleri
 from apps.oab.kurallar import KuralPaketiKullanilamaz, atifli_metin, bilgi_notu
+from apps.oab.serializers import OabTermAcilisSerializer, OabTermSerializer
+from apps.oab.services import donemler
 from apps.okul.models import CanteenMode
 
 KANTIN_VERGI_KURALI = "kantin.isletmede_vergi_uyarisi"
@@ -44,3 +51,37 @@ class OkulKartiBilgileriView(APIView):
 
     def get(self, request: Request) -> Response:
         return Response({"kantin_isletme_bilgisi": _kantin_isletme_bilgisi()})
+
+
+@contextmanager
+def _hizmet_hatalari() -> Iterator[None]:
+    """Servis `ValueError`'larını sözleşmeli 400'e çevirir (Türkçe ileti korunur)."""
+    try:
+        yield
+    except ValueError as exc:
+        raise serializers.ValidationError(str(exc)) from exc
+
+
+def _donemler() -> Any:
+    return oab_modelleri.OabTerm.objects.select_related("rule_package")
+
+
+class TermListCreateView(APIView):
+    """Birlik dönemleri: liste ve ilk dönemin açılışı (M1; tasarım §4.4.2, §7.9 adım 1)."""
+
+    def get(self, request: Request) -> Response:
+        return Response(OabTermSerializer(_donemler(), many=True).data)
+
+    def post(self, request: Request) -> Response:
+        govde = OabTermAcilisSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        with _hizmet_hatalari():
+            donem = donemler.create_term(**dict(govde.validated_data))
+        return Response(OabTermSerializer(donem).data, status=status.HTTP_201_CREATED)
+
+
+class TermDetailView(APIView):
+    """Birlik döneminin ayrıntısı; kural sürümü salt okunur satırıyla."""
+
+    def get(self, request: Request, pk: int) -> Response:
+        return Response(OabTermSerializer(get_object_or_404(_donemler(), pk=pk)).data)

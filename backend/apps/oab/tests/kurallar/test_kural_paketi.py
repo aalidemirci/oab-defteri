@@ -1,8 +1,8 @@
 """Kural paketi testleri (`kp`, tasarım §10.1 ve §10.2): D1-D8, atıf kilidi, değer tablosu, erişim.
 
 Değer tablosu (`DEGER_TABLOSU`) korpustan ve tasarım §6.4'ten **elle** yazılmıştır, pakete bakmaz:
-paketle karşılaştırılan ikinci kayıttır. Dönem bağı ve sapma-gerekçe testleri modellerle birlikte
-F1c'nin 3. adımındadır.
+paketle karşılaştırılan ikinci kayıttır. Dönem bağı ve sapma-gerekçe testleri dosyanın sonundadır
+(F1c'nin 3. adımı); kapanış testleri sentetik dönemle kurulur, gerçek kapanış F4'tedir.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import json
 import re
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from string import Formatter
@@ -21,7 +21,14 @@ from typing import Any
 
 import jsonschema
 import pytest
+from django.db import connection
 
+from apps.oab.hatalar import (
+    DonemKapali,
+    GerekceGerekli,
+    KuralSert,
+    RevizyonOnayiGerekli,
+)
 from apps.oab.kurallar import (
     BilinmeyenKural,
     KuralPaketiKullanilamaz,
@@ -34,10 +41,32 @@ from apps.oab.kurallar import (
     kural,
     yazma_kapisi,
 )
+from apps.oab.kurallar import genel_kurul as genel_kurul_hesabi
 from apps.oab.kurallar import yukleyici as yk
 from apps.oab.kurallar.dogrulayici import SemaHatasi, sema_hatalari
+from apps.oab.models import (
+    AssemblyKind,
+    ComplianceItem,
+    ComplianceJustification,
+    ComplianceKind,
+    GeneralAssembly,
+    OabTerm,
+    RulePackage,
+    TermStatus,
+)
+from apps.oab.services import donem_kilidi, donemler, genel_kurul, kural_bagi, uyum
 from apps.oab.tests.kurallar import atif_ortak, faz_ortak, isaret_ortak
-from apps.okul.models import CanteenMode, SchoolLevel, SettlementType, StaffingMode
+from apps.okul import denetim_izi
+from apps.okul.models import (
+    AuditAction,
+    AuditTrail,
+    CanteenMode,
+    SchoolConfig,
+    SchoolLevel,
+    SchoolYear,
+    SettlementType,
+    StaffingMode,
+)
 
 DOSYA = "OAB-2023.12.r1.json"
 SEMA: dict[str, Any] = json.loads((yk.PAKETLER_DIZINI / yk.SEMA_ADI).read_text(encoding="utf-8"))
@@ -1387,3 +1416,873 @@ def test_metnin_kendi_atfi_yonetmelik_maddesinin_sozudur() -> None:
 )
 def test_ekran_metni_taramasi_yakalar(metin: str) -> None:
     assert _ekran_metni_bulgulari(metin)
+
+
+# ============================================================ dönem bağı (§6.2; sentetik r2, r3)
+
+GUN = date(2026, 10, 1)
+IZIN_KURALI = "genel_kurul.ilan_en_az_gun"
+CARPAN_KURALI = "genel_kurul.yeter_sayi_carpan"
+ESIK_KURALI = "genel_kurul.kucuk_okul_esik"
+YENI_KURAL = "genel_kurul.yeni_bilgi"
+PAKET = "OAB-2023.12"
+
+
+def _dagit(monkeypatch: pytest.MonkeyPatch, *icerikler: dict[str, Any]) -> None:
+    """Sentetik revizyonları programla gelmiş gibi gösterir (`monkeypatch` geri alır)."""
+    monkeypatch.setattr(
+        yk._Onbellek,
+        "durum",
+        yk.PaketDurumu(paketler=tuple(yk.Paket.sozlukten(icerik) for icerik in icerikler)),
+    )
+
+
+def _rev(rev: int, *degisiklikler: tuple[str, str]) -> dict[str, Any]:
+    kopya = deepcopy(R1)
+    kopya["rev"] = rev
+    kopya["degisiklikler"] = [{"id": kid, "tur": tur} for kid, tur in degisiklikler]
+    return kopya
+
+
+def _kayit_al(icerik: dict[str, Any], kid: str) -> dict[str, Any]:
+    return next(k for k in icerik["kurallar"] if k["id"] == kid)
+
+
+def _ekleme_revizyonu(rev: int = 2) -> dict[str, Any]:
+    kopya = _rev(rev, ("genel_kurul.yeni_bilgi", "ekleme"))
+    yeni = deepcopy(_kayit_al(kopya, IZIN_KURALI))
+    yeni["id"] = "genel_kurul.yeni_bilgi"
+    kopya["kurallar"].append(yeni)
+    return kopya
+
+
+def _duzeltme_revizyonu(rev: int = 2, *, carpan: int = 3, gun: int = 14) -> dict[str, Any]:
+    """Değeri baştan yanlış yazılmış kurallar: aynı yürürlük aralığı, yeni değer (§6.2-3a)."""
+    kopya = _rev(rev, (CARPAN_KURALI, "duzeltme"), (IZIN_KURALI, "duzeltme"))
+    _kayit_al(kopya, CARPAN_KURALI)["deger"] = carpan
+    _kayit_al(kopya, IZIN_KURALI)["deger"] = gun
+    return kopya
+
+
+def _deger_degisikligi_revizyonu(
+    rev: int = 2, *, kid: str = IZIN_KURALI, deger: int = 20
+) -> dict[str, Any]:
+    """Değer 01.01.2027'de değişir: eski kaydın bitişi dolar, yeni kayıt eklenir (§6.2-3)."""
+    kopya = _rev(rev, (kid, "deger_degisikligi"))
+    eski = _kayit_al(kopya, kid)
+    yeni = deepcopy(eski)
+    eski["yururluk"]["bitis"] = "31.12.2026"
+    yeni["deger"] = deger
+    yeni["yururluk"] = {"baslangic": "01.01.2027", "bitis": None}
+    kopya["kurallar"].append(yeni)
+    return kopya
+
+
+def _ilk_donem() -> OabTerm:
+    yil = SchoolYear.objects.create(
+        name="2026-2027",
+        start_date=date(2026, 9, 7),
+        end_date=date(2027, 6, 25),
+        is_active=True,
+    )
+    return donemler.create_term(name="2026-2027 birlik dönemi", school_year=yil, start_date=GUN)
+
+
+def _kapat(donem: OabTerm) -> OabTerm:
+    """Sentetik kapanış: gerçek kapanış F4'tedir (plan F1c-3 "Testler")."""
+    OabTerm.objects.filter(pk=donem.pk).update(
+        status=TermStatus.KAPANDI, end_date=date(2027, 10, 1)
+    )
+    return OabTerm.objects.get(pk=donem.pk)
+
+
+def _kurul(donem: OabTerm, mevcut: int = 120) -> GeneralAssembly:
+    SchoolConfig.objects.update_or_create(
+        pk=SchoolConfig.SINGLETON_PK,
+        defaults={"student_count": mevcut, "student_count_as_of": GUN},
+    )
+    return genel_kurul.genel_kurul_olustur(donem=donem, kind=AssemblyKind.OLAGAN)
+
+
+def _bag(donem: OabTerm) -> tuple[str, int]:
+    donem = OabTerm.objects.select_related("rule_package").get(pk=donem.pk)
+    return str(donem.rule_package.package), int(donem.rule_package.rev)
+
+
+def test_sentetik_revizyonlar_d2_den_gecer() -> None:
+    assert denetimler.d2_kimlik(_ekleme_revizyonu(), R1) == []
+    assert denetimler.d2_kimlik(_duzeltme_revizyonu(), R1) == []
+    assert denetimler.d2_kimlik(_deger_degisikligi_revizyonu(), R1) == []
+
+
+@pytest.mark.django_db
+def test_kapanmis_donem_yeni_revizyonla_ayni_sonuc(monkeypatch: pytest.MonkeyPatch) -> None:
+    donem = _kapat(_ilk_donem())
+    _dagit(monkeypatch, R1, _duzeltme_revizyonu())
+    assert kural(CARPAN_KURALI, tarih=GUN) == 3  # program yeni revizyonu taşıyor
+    assert kural(CARPAN_KURALI, tarih=GUN, donem=donem) == 4
+    assert genel_kurul_hesabi.genel_kurul_yeter_sayisi(120, tarih=GUN, donem=donem).gerekli == 64
+
+
+@pytest.mark.django_db
+def test_kapanmis_donemde_revizyon_gecisi_sert(monkeypatch: pytest.MonkeyPatch) -> None:
+    donem = _kapat(_ilk_donem())
+    _dagit(monkeypatch, R1, _ekleme_revizyonu())
+    with pytest.raises(DonemKapali):
+        kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=2)
+    assert _bag(donem) == ("OAB-2023.12", 1)
+
+
+@pytest.mark.django_db
+def test_acik_donem_gecisi_fark_listesi_ve_denetim_izi(monkeypatch: pytest.MonkeyPatch) -> None:
+    donem = _ilk_donem()
+    r2 = _ekleme_revizyonu()
+    _dagit(monkeypatch, R1, r2)
+    fark = kural_bagi.revizyon_farki(donem, paket="OAB-2023.12", rev=2)
+    assert fark.eklenen == ("genel_kurul.yeni_bilgi",)
+    assert (fark.biten, fark.deger_degisen, fark.duzeltilen, fark.cikarilan) == ((), (), (), ())
+    assert fark.kayitlar == ()
+    assert _bag(donem) == ("OAB-2023.12", 1)  # fark kayıt yazmaz
+
+    kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=2)
+    assert _bag(donem) == ("OAB-2023.12", 2)
+    guncelleme = AuditTrail.objects.get(model="oab.OabTerm", action=AuditAction.GUNCELLE)
+    assert guncelleme.term_id == donem.pk
+    assert guncelleme.account_id is not None
+    assert "rule_package" in guncelleme.changed_fields
+    olay = AuditTrail.objects.get(model="kural.revizyon_gecisi", object_id=str(donem.pk))
+    assert olay.values == {"paket": ["OAB-2023.12", "OAB-2023.12"], "rev": [1, 2]}
+    assert olay.term_id == donem.pk
+
+
+@pytest.mark.django_db
+def test_acik_donem_gecisi_geri_alinir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Geçiş dönem kapanana kadar geri alınabilir (§6.2-5)."""
+    donem = _ilk_donem()
+    _dagit(monkeypatch, R1, _ekleme_revizyonu())
+    kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=2)
+    fark = kural_bagi.revizyon_farki(donem, paket="OAB-2023.12", rev=1)
+    assert fark.cikarilan == ("genel_kurul.yeni_bilgi",)
+    kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=1)
+    assert _bag(donem) == ("OAB-2023.12", 1)
+    with pytest.raises(ValueError, match="zaten"):
+        kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=1)
+
+
+@pytest.mark.django_db
+def test_olmayan_revizyona_gecilmez() -> None:
+    donem = _ilk_donem()
+    with pytest.raises(ValueError, match="programda yok"):
+        kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=7)
+
+
+@pytest.mark.django_db
+def test_eski_degerli_olay_eski_degerle_hesaplanir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Değer değişince değişiklikten önceki olaylar eski değerle kalır (§6.2-3)."""
+    donem = _ilk_donem()
+    r2 = _deger_degisikligi_revizyonu()
+    _dagit(monkeypatch, R1, r2)
+    kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=2)
+    donem = OabTerm.objects.get(pk=donem.pk)
+    assert kural(IZIN_KURALI, tarih=date(2026, 12, 31), donem=donem) == 15
+    assert kural(IZIN_KURALI, tarih=date(2027, 1, 1), donem=donem) == 20
+
+
+@pytest.mark.django_db
+def test_ekleme_revizyonu_hesap_degistirmez(monkeypatch: pytest.MonkeyPatch) -> None:
+    donem = _ilk_donem()
+    kurul = genel_kurul.yeter_sayiyi_dondur(_kurul(donem), tarih=GUN)
+    _dagit(monkeypatch, R1, _ekleme_revizyonu())
+    fark = kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=2)
+    assert fark.kayitlar == ()
+    assert (
+        genel_kurul_hesabi.genel_kurul_yeter_sayisi(
+            120, tarih=GUN, donem=OabTerm.objects.get(pk=donem.pk)
+        ).gerekli
+        == 64
+    )
+    assert GeneralAssembly.objects.get(pk=kurul.pk).quorum_required == 64
+
+
+@pytest.mark.django_db
+def test_duzeltme_revizyonunda_hesabi_degisecek_kayitlar_listelenir(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    donem = _ilk_donem()
+    kurul = _kurul(donem)
+    GeneralAssembly.objects.filter(pk=kurul.pk).update(
+        first_meeting_at=datetime(2026, 10, 20, tzinfo=UTC)
+    )
+    genel_kurul.yeter_sayiyi_dondur(kurul, tarih=GUN)
+    satir = uyum.denetle(
+        IZIN_KURALI,
+        3,
+        donem=donem,
+        konu=kurul,
+        tarih=GUN,
+        gerekce=uyum.Gerekce(metin="Uydurma gerekçe"),
+    ).satir
+    assert satir is not None
+    _dagit(monkeypatch, R1, _duzeltme_revizyonu())
+    fark = kural_bagi.revizyon_farki(donem, paket="OAB-2023.12", rev=2)
+    assert fark.duzeltilen == (IZIN_KURALI, CARPAN_KURALI)
+    assert {(k.model, k.kayit_id, k.kural_id) for k in fark.kayitlar} == {
+        ("oab.ComplianceItem", str(satir.pk), IZIN_KURALI),
+        ("oab.GeneralAssembly", str(kurul.pk), CARPAN_KURALI),
+    }
+    with pytest.raises(RevizyonOnayiGerekli):
+        kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=2)
+    assert _bag(donem) == ("OAB-2023.12", 1)
+    kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=2, onay=True)
+    assert _bag(donem) == ("OAB-2023.12", 2)
+
+
+def _atlamali_revizyonlar() -> tuple[dict[str, Any], dict[str, Any]]:
+    """r2 kuralı bitirir, r3 aynı aralıkta değeri düzeltir; ikisi de ardışık olarak D2'den geçer."""
+    r2 = _rev(2, (IZIN_KURALI, "bitis"))
+    _kayit_al(r2, IZIN_KURALI)["yururluk"]["bitis"] = "31.12.2026"
+    r3 = deepcopy(r2)
+    r3["rev"] = 3
+    r3["degisiklikler"] = [{"id": IZIN_KURALI, "tur": "duzeltme"}]
+    _kayit_al(r3, IZIN_KURALI)["deger"] = 14
+    return r2, r3
+
+
+@pytest.mark.django_db
+def test_atlamali_geciste_duzeltme_bitis_sayilmaz(monkeypatch: pytest.MonkeyPatch) -> None:
+    r2, r3 = _atlamali_revizyonlar()
+    assert denetimler.d2_kimlik(r2, R1) == []
+    assert denetimler.d2_kimlik(r3, r2) == []
+    donem = _ilk_donem()
+    satir = uyum.denetle(
+        IZIN_KURALI,
+        3,
+        donem=donem,
+        konu=_kurul(donem),
+        tarih=GUN,
+        gerekce=uyum.Gerekce(metin="Uydurma gerekçe"),
+    ).satir
+    assert satir is not None
+    _dagit(monkeypatch, R1, r2, r3)
+    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=3)
+    assert (fark.deger_degisen, fark.biten) == ((IZIN_KURALI,), ())
+    assert [(k.model, k.kayit_id) for k in fark.kayitlar] == [("oab.ComplianceItem", str(satir.pk))]
+    with pytest.raises(RevizyonOnayiGerekli):
+        kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=3)
+    assert _bag(donem) == (PAKET, 1)
+
+
+def test_tek_revizyonda_bitis_kiliginda_deger_degisikligi_yakalanir() -> None:
+    r2 = _rev(2, (IZIN_KURALI, "bitis"))
+    _kayit_al(r2, IZIN_KURALI)["yururluk"]["bitis"] = "31.12.2026"
+    _kayit_al(r2, IZIN_KURALI)["deger"] = 14
+    assert any("beyanı tutmuyor" in s for s in denetimler.d2_kimlik(r2, R1))
+
+
+def _dondurulmus_kurul(donem: OabTerm, ilk_toplanti: datetime | None) -> GeneralAssembly:
+    kurul = _kurul(donem)
+    GeneralAssembly.objects.filter(pk=kurul.pk).update(first_meeting_at=ilk_toplanti)
+    return genel_kurul.yeter_sayiyi_dondur(kurul, tarih=GUN)
+
+
+@pytest.mark.django_db
+def test_tarihsiz_dondurulmus_kurul_duzeltmede_listelenir(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    donem = _ilk_donem()
+    kurul = _dondurulmus_kurul(donem, None)
+    _dagit(monkeypatch, R1, _duzeltme_revizyonu())
+    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=2)
+    assert [(k.model, k.kayit_id, k.kural_id) for k in fark.kayitlar] == [
+        ("oab.GeneralAssembly", str(kurul.pk), CARPAN_KURALI)
+    ]
+    with pytest.raises(RevizyonOnayiGerekli):
+        kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=2)
+
+
+@pytest.mark.django_db
+def test_hedefte_yururlukte_deger_yoksa_kurul_listelenir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Eşik düzeltilir, çarpan toplantıdan önce biter: fark çökmez, kurul onaya düşer (§6.1)."""
+    r2 = _rev(2, (ESIK_KURALI, "duzeltme"), (CARPAN_KURALI, "bitis"))
+    _kayit_al(r2, ESIK_KURALI)["deger"] = 90
+    _kayit_al(r2, CARPAN_KURALI)["yururluk"]["bitis"] = "31.12.2026"
+    donem = _ilk_donem()
+    kurul = _dondurulmus_kurul(donem, datetime(2027, 3, 1, 9, 0, tzinfo=UTC))
+    _dagit(monkeypatch, R1, r2)
+    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=2)
+    assert [(k.model, k.kayit_id, k.kural_id) for k in fark.kayitlar] == [
+        ("oab.GeneralAssembly", str(kurul.pk), ESIK_KURALI)
+    ]
+
+
+@pytest.mark.django_db
+def test_deger_degisikliginde_acik_satir_listelenir_onay_ister(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    donem = _ilk_donem()
+    satir = uyum.denetle(IZIN_KURALI, donem=donem, konu=_kurul(donem), tarih=GUN).satir
+    assert satir is not None
+    _dagit(monkeypatch, R1, _deger_degisikligi_revizyonu())
+    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=2)
+    assert fark.deger_degisen == (IZIN_KURALI,)
+    assert [(k.model, k.kayit_id) for k in fark.kayitlar] == [("oab.ComplianceItem", str(satir.pk))]
+    with pytest.raises(RevizyonOnayiGerekli):
+        kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=2)
+    assert _bag(donem) == (PAKET, 1)
+
+
+def _r2de_acik_eksik(
+    monkeypatch: pytest.MonkeyPatch, r2: dict[str, Any] | None = None, kurul_sayisi: int = 1
+) -> tuple[OabTerm, list[ComplianceItem]]:
+    """Dönem r2'ye geçer, r1'de olmayan kural için açık `EKSIK` satırları yazılır."""
+    donem = _ilk_donem()
+    kurullar = [_kurul(donem) for _ in range(kurul_sayisi)]
+    _dagit(monkeypatch, R1, r2 or _ekleme_revizyonu())
+    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=2)
+    satirlar = [
+        uyum.denetle(YENI_KURAL, donem=donem, konu=kurul, tarih=GUN).satir for kurul in kurullar
+    ]
+    return donem, [s for s in satirlar if s is not None]
+
+
+@pytest.mark.django_db
+def test_geri_almada_cikarilan_kuralin_satiri_listelenir(monkeypatch: pytest.MonkeyPatch) -> None:
+    donem, (satir,) = _r2de_acik_eksik(monkeypatch)
+    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=1)
+    assert fark.cikarilan == (YENI_KURAL,)
+    assert [(k.model, k.kayit_id) for k in fark.kayitlar] == [("oab.ComplianceItem", str(satir.pk))]
+    with pytest.raises(RevizyonOnayiGerekli):
+        kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=1)
+    assert _bag(donem) == (PAKET, 2)
+
+
+@pytest.mark.django_db
+def test_geri_alinan_revizyonun_eksigi_kapanista_sapmaya_doner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """§6.2-5, O3: kural bağlı revizyonda yoksa bayrak satırın yazıldığı revizyondan okunur."""
+    donem, (satir,) = _r2de_acik_eksik(monkeypatch)
+    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=1, onay=True)
+    uyum.kapanis_gecisi(
+        donem, gerekceler={YENI_KURAL: uyum.Gerekce(metin="Uydurma gerekçe")}, tarih=GUN
+    )
+    satir.refresh_from_db()
+    assert (satir.kind, satir.rev) == (ComplianceKind.SAPMA, 2)
+    assert satir.justification_group is not None
+
+
+@pytest.mark.django_db
+def test_geri_alinan_kuralin_kapali_toplu_bayragi_satirin_revizyonundan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r2 = _ekleme_revizyonu()
+    _kayit_al(r2, YENI_KURAL)["toplu_gerekce"] = False
+    donem, satirlar = _r2de_acik_eksik(monkeypatch, r2, kurul_sayisi=2)
+    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=1, onay=True)
+    with pytest.raises(GerekceGerekli):
+        uyum.kapanis_gecisi(donem, gerekceler={YENI_KURAL: uyum.Gerekce(metin="Tek")}, tarih=GUN)
+    assert {ComplianceItem.objects.get(pk=s.pk).kind for s in satirlar} == {ComplianceKind.EKSIK}
+
+
+@pytest.mark.django_db
+def test_fark_listesi_yalniz_kendi_donemine_bakar(monkeypatch: pytest.MonkeyPatch) -> None:
+    eski = _ilk_donem()
+    kurul = _dondurulmus_kurul(eski, datetime(2026, 10, 20, tzinfo=UTC))
+    uyum.denetle(IZIN_KURALI, donem=eski, konu=kurul, tarih=GUN)
+    OabTerm.objects.filter(pk=eski.pk).update(status=TermStatus.IPTAL, start_date=None)
+    yeni = donemler.create_term(name="ikinci", school_year=eski.school_year, start_date=GUN)
+    _dagit(monkeypatch, R1, _duzeltme_revizyonu())
+    fark = kural_bagi.revizyon_farki(yeni, paket=PAKET, rev=2)
+    assert fark.duzeltilen == (IZIN_KURALI, CARPAN_KURALI)
+    assert fark.kayitlar == ()
+
+
+@pytest.mark.django_db
+def test_etkilenen_kurulun_gunu_istanbul_gunudur(monkeypatch: pytest.MonkeyPatch) -> None:
+    """31.12.2026 21:30 UTC, İstanbul'da 01.01.2027 00:30'dur: yeni değerle hesaplanır."""
+    donem = _ilk_donem()
+    kurul = _dondurulmus_kurul(donem, datetime(2026, 12, 31, 21, 30, tzinfo=UTC))
+    assert kurul.quorum_required == 64
+    _dagit(monkeypatch, R1, _deger_degisikligi_revizyonu(kid=CARPAN_KURALI, deger=3))
+    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=2)
+    assert [(k.model, k.kayit_id, k.kural_id) for k in fark.kayitlar] == [
+        ("oab.GeneralAssembly", str(kurul.pk), CARPAN_KURALI)
+    ]
+
+
+@pytest.mark.django_db
+def test_geri_alma_dagitimda_olmayan_revizyonu_kopyadan_okur(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    donem = _ilk_donem()
+    r2 = _ekleme_revizyonu()
+    _dagit(monkeypatch, R1, r2)
+    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=2)
+    _dagit(monkeypatch, r2)
+    assert kural_bagi.revizyon_farki(donem, paket=PAKET, rev=1).cikarilan == (YENI_KURAL,)
+    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=1)
+    assert _bag(donem) == (PAKET, 1)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "UPDATE oab_rulepackage SET content = json_set(content, '$.kurallar[0].deger', 11) "
+        "WHERE id = %s",
+        "UPDATE oab_rulepackage SET content = json_set(content, '$.bozuk', 1.5) WHERE id = %s",
+    ],
+    ids=["deger", "kayan-nokta"],
+)
+def test_bozuk_kopyaya_gecilmez_donem_saglam_kopyasinda_kalir(
+    monkeypatch: pytest.MonkeyPatch, sql: str
+) -> None:
+    """D7, §6.2-5: bozukluk geçiş anında bilinir; dönem salt okura düşmez."""
+    donem = _ilk_donem()
+    r2 = _ekleme_revizyonu()
+    _dagit(monkeypatch, R1, r2)
+    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=2)
+    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=1)
+    hedef = RulePackage.objects.get(package=PAKET, rev=2)
+    with connection.cursor() as cursor:
+        cursor.execute(sql, [hedef.pk])
+    izler = AuditTrail.objects.filter(model="kural.revizyon_gecisi").count()
+    with pytest.raises(ValueError, match="bozuk"):
+        kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=2)
+    with pytest.raises(ValueError, match="bozuk"):
+        kural_bagi.revizyon_farki(donem, paket=PAKET, rev=2)
+    with pytest.raises(ValueError, match="tutmuyor"):
+        kural_bagi.kopya_dondur(yk.Paket.sozlukten(r2))
+    assert _bag(donem) == (PAKET, 1)
+    assert AuditTrail.objects.filter(model="kural.revizyon_gecisi").count() == izler
+    donem_kilidi.yazma_denetimi(OabTerm.objects.get(pk=donem.pk))
+
+
+@pytest.mark.django_db
+def test_donem_kopyasi_ozeti() -> None:
+    """D7 dönem kolu: dondurulmuş kopyanın kanonik özeti."""
+    donem = _ilk_donem()
+    kopya = donem.rule_package
+    assert kopya.content_sha256 == yk.icerik_ozeti(kopya.content) == yk.icerik_ozeti(R1)
+    assert donem_kilidi.kural_kopyasi_tutuyor(donem)
+    bozuk = deepcopy(R1)
+    bozuk["kurallar"][0]["deger"] = 11
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "UPDATE oab_rulepackage SET content = %s WHERE id = %s",
+            [json.dumps(bozuk, ensure_ascii=False), kopya.pk],
+        )
+    assert not donem_kilidi.kural_kopyasi_tutuyor(OabTerm.objects.get(pk=donem.pk))
+
+
+# ============================================================ uyum hattı (§5 O3, §6.1)
+
+
+@pytest.mark.django_db
+def test_hesaplanan_degerde_fiili_fark_kaydedilir_uyari() -> None:
+    """D1, KE-23: hesaplanan değer serttir, gerçek değer kaydedilir, fark uyarı + gerekçe olur."""
+    donem = _ilk_donem()
+    ozellik = {"okul.kantin": "KIRAYA_VERILIYOR"}
+    with pytest.raises(KuralSert):
+        uyum.denetle(
+            "arz_bedeli.kira_oran",
+            Decimal("0.05"),
+            donem=donem,
+            konu=donem,
+            tarih=GUN,
+            okul=ozellik,
+        )
+    with pytest.raises(GerekceGerekli):
+        uyum.denetle(
+            "arz_bedeli.kira_oran",
+            Decimal("0.05"),
+            donem=donem,
+            konu=donem,
+            tarih=GUN,
+            okul=ozellik,
+            fiili_kayit=True,
+        )
+    sonuc = uyum.denetle(
+        "arz_bedeli.kira_oran",
+        Decimal("0.05"),
+        donem=donem,
+        konu=donem,
+        tarih=GUN,
+        okul=ozellik,
+        fiili_kayit=True,
+        gerekce=uyum.Gerekce(metin="Uydurma gerekçe"),
+    )
+    assert sonuc.sonuc["durum"] == "uyari"
+    assert sonuc.satir is not None and sonuc.satir.kind == ComplianceKind.SAPMA
+    assert sonuc.satir.rule_id == "arz_bedeli.kira_oran"
+
+
+@pytest.mark.django_db
+def test_hesaplanan_olmayan_sert_kural_fiili_kayitla_gecmez() -> None:
+    donem = _ilk_donem()
+    with pytest.raises(KuralSert):
+        uyum.denetle(
+            "denetleme_kurulu.yk_uyesi_olamaz",
+            False,
+            donem=donem,
+            konu=donem,
+            tarih=GUN,
+            fiili_kayit=True,
+            gerekce=uyum.Gerekce(metin="Uydurma gerekçe"),
+        )
+
+
+@pytest.mark.django_db
+def test_uyari_gerekcesiz_reddedilir_gerekceyle_kaydedilir() -> None:
+    donem = _ilk_donem()
+    kurul = _kurul(donem)
+    with pytest.raises(GerekceGerekli):
+        uyum.denetle(IZIN_KURALI, 3, donem=donem, konu=kurul, tarih=GUN)
+    assert not ComplianceItem.objects.exists()
+    sonuc = uyum.denetle(
+        IZIN_KURALI, 3, donem=donem, konu=kurul, tarih=GUN, gerekce=uyum.Gerekce(metin="Uydurma")
+    )
+    assert sonuc.satir is not None
+    satir = sonuc.satir
+    assert (satir.kind, satir.rule_package, satir.rev) == (ComplianceKind.SAPMA, "OAB-2023.12", 1)
+    assert satir.justification_group is not None
+    iz = AuditTrail.objects.get(model="oab.ComplianceItem", object_id=str(satir.pk))
+    assert iz.compliance_item_id == satir.pk
+    assert iz.term_id == donem.pk
+    assert iz.values["rule_id"] == [None, IZIN_KURALI]
+    assert iz.values["rev"] == [None, 1]
+    assert denetim_izi.kaydi_dogrula(ComplianceItem, satir.pk) is True
+
+
+@pytest.mark.django_db
+def test_gerekce_alinmis_sapma_ayni_degerle_yeniden_sorulmaz() -> None:
+    donem = _ilk_donem()
+    kurul = _kurul(donem)
+    uyum.denetle(
+        IZIN_KURALI, 3, donem=donem, konu=kurul, tarih=GUN, gerekce=uyum.Gerekce(metin="Uydurma")
+    )
+    izler = AuditTrail.objects.count()
+    sonuc = uyum.denetle(IZIN_KURALI, 3, donem=donem, konu=kurul, tarih=GUN)
+    assert sonuc.satir is not None
+    assert ComplianceItem.objects.count() == 1
+    assert AuditTrail.objects.count() == izler
+
+
+@pytest.mark.django_db
+def test_sapan_deger_degisince_yeni_gerekce_istenir_ileti_ve_iz_guncellenir() -> None:
+    """O3, O4: açık sapmanın değeri başka sapan değere dönerse yeni sapma gerekçesiz geçmez."""
+    donem = _ilk_donem()
+    kurul = _kurul(donem)
+    satir = uyum.denetle(
+        IZIN_KURALI, 3, donem=donem, konu=kurul, tarih=GUN, gerekce=uyum.Gerekce(metin="Birinci")
+    ).satir
+    assert satir is not None
+    with pytest.raises(GerekceGerekli):
+        uyum.denetle(IZIN_KURALI, 4, donem=donem, konu=kurul, tarih=GUN)
+    satir.refresh_from_db()
+    assert "3 gün" in satir.message
+    izler = AuditTrail.objects.filter(model="oab.ComplianceItem", object_id=str(satir.pk)).count()
+    uyum.denetle(
+        IZIN_KURALI, 4, donem=donem, konu=kurul, tarih=GUN, gerekce=uyum.Gerekce(metin="İkinci")
+    )
+    satir.refresh_from_db()
+    assert ComplianceItem.objects.count() == 1
+    assert "4 gün" in satir.message
+    assert satir.justification_group is not None and satir.justification_group.text == "İkinci"
+    assert (
+        AuditTrail.objects.filter(model="oab.ComplianceItem", object_id=str(satir.pk)).count()
+        == izler + 1
+    )
+    assert denetim_izi.kaydi_dogrula(ComplianceItem, satir.pk) is True
+
+
+@pytest.mark.django_db
+def test_kayit_duzeltilince_sapma_kapanir() -> None:
+    donem = _ilk_donem()
+    kurul = _kurul(donem)
+    uyum.denetle(
+        IZIN_KURALI, 3, donem=donem, konu=kurul, tarih=GUN, gerekce=uyum.Gerekce(metin="Uydurma")
+    )
+    uyum.denetle(IZIN_KURALI, 15, donem=donem, konu=kurul, tarih=GUN)
+    satir = ComplianceItem.objects.get()
+    assert satir.kind == ComplianceKind.SAPMA
+    assert satir.resolved_at is not None
+
+
+@pytest.mark.django_db
+def test_eksik_veri_gerekce_istemez() -> None:
+    """R5: eksik gerekçesiz yazılır; bilgi girilince kapanır."""
+    donem = _ilk_donem()
+    kurul = _kurul(donem)
+    sonuc = uyum.denetle(IZIN_KURALI, donem=donem, konu=kurul, tarih=GUN)
+    assert sonuc.sonuc["durum"] == "eksik"
+    assert sonuc.satir is not None
+    assert (sonuc.satir.kind, sonuc.satir.justification_group) == (ComplianceKind.EKSIK, None)
+    # İkinci denetim yeni satır açmaz; bilgi girilince kapanır, satır silinmez.
+    uyum.denetle(IZIN_KURALI, donem=donem, konu=kurul, tarih=GUN)
+    assert ComplianceItem.objects.count() == 1
+    uyum.denetle(IZIN_KURALI, 15, donem=donem, konu=kurul, tarih=GUN)
+    assert ComplianceItem.objects.get().resolved_at is not None
+
+
+@pytest.mark.django_db
+def test_eksik_bilgi_sapan_degerle_gelince_sapmaya_doner() -> None:
+    donem = _ilk_donem()
+    kurul = _kurul(donem)
+    uyum.denetle(IZIN_KURALI, donem=donem, konu=kurul, tarih=GUN)
+    with pytest.raises(GerekceGerekli):
+        uyum.denetle(IZIN_KURALI, 3, donem=donem, konu=kurul, tarih=GUN)
+    assert ComplianceItem.objects.get().kind == ComplianceKind.EKSIK
+    uyum.denetle(
+        IZIN_KURALI, 3, donem=donem, konu=kurul, tarih=GUN, gerekce=uyum.Gerekce(metin="Uydurma")
+    )
+    satir = ComplianceItem.objects.get()
+    assert satir.kind == ComplianceKind.SAPMA
+    assert satir.justification_group is not None
+
+
+@pytest.mark.django_db
+def test_eksik_veri_sapma_olan_kuralda_eksiklik_bastan_sapmadir(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r2 = _rev(2, (IZIN_KURALI, "duzeltme"))
+    _kayit_al(r2, IZIN_KURALI)["eksik_veri"] = "sapma"
+    _dagit(monkeypatch, r2)
+    donem = _ilk_donem()
+    kurul = _kurul(donem)
+    with pytest.raises(GerekceGerekli):
+        uyum.denetle(IZIN_KURALI, donem=donem, konu=kurul, tarih=GUN)
+
+
+@pytest.mark.django_db
+def test_denetlenmedi_satir_acmaz_bilgi_notu_doner() -> None:
+    donem = _ilk_donem()
+    kurul = _kurul(donem)
+    sonuc = uyum.denetle(
+        "genel_kurul.ilan_en_az_gun", 3, donem=donem, konu=kurul, tarih=date(2000, 1, 1)
+    )
+    assert sonuc.sonuc["durum"] == "denetlenmedi"
+    assert sonuc.satir is None
+    assert not ComplianceItem.objects.exists()
+
+
+@pytest.mark.django_db
+def test_kapanis_gecisinde_eksik_sapmaya_doner() -> None:
+    donem = _ilk_donem()
+    kurul = _kurul(donem)
+    uyum.denetle(IZIN_KURALI, donem=donem, konu=kurul, tarih=GUN)
+    with pytest.raises(GerekceGerekli):
+        uyum.kapanis_gecisi(donem, konu=kurul, gerekceler={}, tarih=GUN)
+    assert ComplianceItem.objects.get().kind == ComplianceKind.EKSIK
+    cevrilen = uyum.kapanis_gecisi(
+        donem,
+        konu=kurul,
+        gerekceler={IZIN_KURALI: uyum.Gerekce(metin="Uydurma gerekçe")},
+        tarih=GUN,
+    )
+    assert [s.pk for s in cevrilen] == [ComplianceItem.objects.get().pk]
+    satir = ComplianceItem.objects.get()
+    assert satir.kind == ComplianceKind.SAPMA
+    assert satir.justification_group is not None
+    durum = AuditTrail.objects.filter(
+        model="oab.ComplianceItem", object_id=str(satir.pk), action=AuditAction.DURUM
+    )
+    assert durum.count() == 1
+    assert durum.get().compliance_item_id == satir.pk
+    assert durum.get().values["kind"] == ["EKSIK", "SAPMA"]
+
+
+@pytest.mark.django_db
+def test_toplu_gerekce_bir_gerekce_cok_kayit() -> None:
+    """Aynı kural ve kök neden için tek gerekçe; bağlanan her satır denetim izine yazılır."""
+    donem = _ilk_donem()
+    birinci, ikinci = _kurul(donem), _kurul(donem)
+    for kurul, metin in ((birinci, "Uydurma toplu gerekçe"), (ikinci, "")):
+        uyum.denetle(
+            IZIN_KURALI,
+            3,
+            donem=donem,
+            konu=kurul,
+            tarih=GUN,
+            gerekce=uyum.Gerekce(metin=metin, kok_neden="ilan-kaniti:1"),
+        )
+    gerekce = ComplianceJustification.objects.get()
+    assert gerekce.root_cause == "ilan-kaniti:1"
+    assert gerekce.text == "Uydurma toplu gerekçe"
+    assert gerekce.items.count() == 2
+    assert AuditTrail.objects.filter(model="oab.ComplianceItem").count() == 2
+    assert AuditTrail.objects.filter(model="oab.ComplianceJustification").count() == 1
+
+
+@pytest.mark.django_db
+def test_toplu_gerekce_kapali_kuralda_tek_tek(monkeypatch: pytest.MonkeyPatch) -> None:
+    r2 = _rev(2, (IZIN_KURALI, "duzeltme"))
+    _kayit_al(r2, IZIN_KURALI)["toplu_gerekce"] = False
+    _dagit(monkeypatch, r2)
+    donem = _ilk_donem()
+    birinci, ikinci = _kurul(donem), _kurul(donem)
+    uyum.denetle(
+        IZIN_KURALI,
+        3,
+        donem=donem,
+        konu=birinci,
+        tarih=GUN,
+        gerekce=uyum.Gerekce(metin="Birinci", kok_neden="ilan-kaniti:1"),
+    )
+    with pytest.raises(GerekceGerekli):
+        uyum.denetle(
+            IZIN_KURALI,
+            3,
+            donem=donem,
+            konu=ikinci,
+            tarih=GUN,
+            gerekce=uyum.Gerekce(metin="", kok_neden="ilan-kaniti:1"),
+        )
+    uyum.denetle(
+        IZIN_KURALI,
+        3,
+        donem=donem,
+        konu=ikinci,
+        tarih=GUN,
+        gerekce=uyum.Gerekce(metin="İkinci", kok_neden="ilan-kaniti:1"),
+    )
+    assert ComplianceJustification.objects.count() == 2
+    assert set(ComplianceJustification.objects.values_list("root_cause", flat=True)) == {""}
+
+
+@pytest.mark.django_db
+def test_toplu_gerekce_kapali_kuralda_kapanis_tek_tek(monkeypatch: pytest.MonkeyPatch) -> None:
+    """O3: tek metin her satıra çoğaltılmaz; kök neden yok sayılır, her kayıt kendi metnini alır."""
+    r2 = _rev(2, (IZIN_KURALI, "duzeltme"))
+    _kayit_al(r2, IZIN_KURALI)["toplu_gerekce"] = False
+    _dagit(monkeypatch, r2)
+    donem = _ilk_donem()
+    kurullar = (_kurul(donem), _kurul(donem))
+    for kurul in kurullar:
+        uyum.denetle(IZIN_KURALI, donem=donem, konu=kurul, tarih=GUN)
+    with pytest.raises(GerekceGerekli, match="kendi gerekçesini"):
+        uyum.kapanis_gecisi(
+            donem,
+            gerekceler={IZIN_KURALI: uyum.Gerekce(metin="Tek", kok_neden="ilan-kaniti:1")},
+            tarih=GUN,
+        )
+    assert set(ComplianceItem.objects.values_list("kind", flat=True)) == {ComplianceKind.EKSIK}
+    assert not ComplianceJustification.objects.exists()
+    for kurul, metin in zip(kurullar, ("Birinci", "İkinci"), strict=True):
+        uyum.kapanis_gecisi(
+            donem,
+            konu=kurul,
+            gerekceler={IZIN_KURALI: uyum.Gerekce(metin=metin, kok_neden="ilan-kaniti:1")},
+            tarih=GUN,
+        )
+    assert set(ComplianceItem.objects.values_list("kind", flat=True)) == {ComplianceKind.SAPMA}
+    assert {g.text for g in ComplianceJustification.objects.all()} == {"Birinci", "İkinci"}
+    assert set(ComplianceJustification.objects.values_list("root_cause", flat=True)) == {""}
+
+
+@pytest.mark.django_db
+def test_toplu_gerekce_acik_kuralda_kapanis_tek_gerekceyle_gecer() -> None:
+    donem = _ilk_donem()
+    for kurul in (_kurul(donem), _kurul(donem)):
+        uyum.denetle(IZIN_KURALI, donem=donem, konu=kurul, tarih=GUN)
+    cevrilen = uyum.kapanis_gecisi(
+        donem,
+        gerekceler={IZIN_KURALI: uyum.Gerekce(metin="Uydurma", kok_neden="ilan-kaniti:1")},
+        tarih=GUN,
+    )
+    assert len(cevrilen) == 2
+    assert ComplianceJustification.objects.get().items.count() == 2
+
+
+@pytest.mark.django_db
+def test_kapanis_gecisi_yalniz_verilen_kaydin_eksigini_cevirir() -> None:
+    donem = _ilk_donem()
+    birinci, ikinci = _kurul(donem), _kurul(donem)
+    satir_a = uyum.denetle(IZIN_KURALI, donem=donem, konu=birinci, tarih=GUN).satir
+    satir_b = uyum.denetle(IZIN_KURALI, donem=donem, konu=ikinci, tarih=GUN).satir
+    assert satir_a is not None and satir_b is not None
+    uyum.kapanis_gecisi(
+        donem, konu=birinci, gerekceler={IZIN_KURALI: uyum.Gerekce(metin="Uydurma")}, tarih=GUN
+    )
+    satir_a.refresh_from_db()
+    satir_b.refresh_from_db()
+    assert (satir_a.kind, satir_b.kind) == (ComplianceKind.SAPMA, ComplianceKind.EKSIK)
+
+
+@pytest.mark.django_db
+def test_kapanmis_eksik_kapanista_yeniden_cevrilmez() -> None:
+    donem = _ilk_donem()
+    kurul = _kurul(donem)
+    uyum.denetle(IZIN_KURALI, donem=donem, konu=kurul, tarih=GUN)
+    uyum.denetle(IZIN_KURALI, 15, donem=donem, konu=kurul, tarih=GUN)
+    assert uyum.kapanis_gecisi(donem, gerekceler={}, tarih=GUN) == []
+    assert ComplianceItem.objects.get().kind == ComplianceKind.EKSIK
+
+
+@pytest.mark.django_db
+def test_kapanan_sapmadan_sonra_yeni_sapma_yeni_satir_acar() -> None:
+    donem = _ilk_donem()
+    kurul = _kurul(donem)
+    gerekce = uyum.Gerekce(metin="Uydurma")
+    uyum.denetle(IZIN_KURALI, 3, donem=donem, konu=kurul, tarih=GUN, gerekce=gerekce)
+    uyum.denetle(IZIN_KURALI, 15, donem=donem, konu=kurul, tarih=GUN)
+    uyum.denetle(IZIN_KURALI, 3, donem=donem, konu=kurul, tarih=GUN, gerekce=gerekce)
+    assert ComplianceItem.objects.count() == 2
+    assert ComplianceItem.objects.filter(resolved_at__isnull=True).count() == 1
+
+
+@pytest.mark.django_db
+def test_denetlenmedi_acik_satira_dokunmaz() -> None:
+    donem = _ilk_donem()
+    kurul = _kurul(donem)
+    uyum.denetle(IZIN_KURALI, donem=donem, konu=kurul, tarih=GUN)
+    sonuc = uyum.denetle(IZIN_KURALI, 3, donem=donem, konu=kurul, tarih=date(2000, 1, 1))
+    assert sonuc.sonuc["durum"] == "denetlenmedi"
+    satir = ComplianceItem.objects.get()
+    assert (satir.kind, satir.resolved_at) == (ComplianceKind.EKSIK, None)
+
+
+@pytest.mark.django_db
+def test_kok_neden_baska_kuralin_gerekcesine_baglanmaz() -> None:
+    donem = _ilk_donem()
+    kurul = _kurul(donem)
+    uyum.denetle(
+        IZIN_KURALI,
+        3,
+        donem=donem,
+        konu=kurul,
+        tarih=GUN,
+        gerekce=uyum.Gerekce(metin="Uydurma", kok_neden="ortak"),
+    )
+    with pytest.raises(GerekceGerekli):
+        uyum.denetle(
+            "genel_kurul.olagan_son_ay",
+            11,
+            donem=donem,
+            konu=kurul,
+            tarih=GUN,
+            gerekce=uyum.Gerekce(metin="", kok_neden="ortak"),
+        )
+    assert ComplianceItem.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_eksikten_donen_sapma_ileti_paket_ve_revizyonu_gunceller(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    donem = _ilk_donem()
+    kurul = _kurul(donem)
+    satir = uyum.denetle(IZIN_KURALI, donem=donem, konu=kurul, tarih=GUN).satir
+    assert satir is not None
+    assert (satir.message, satir.rule_package, satir.rev) == (erisim.EKSIK_NOTU, PAKET, 1)
+    r2 = _rev(2)
+    r2["paket"] = "OAB-2099.01"
+    _dagit(monkeypatch, R1, r2)
+    kural_bagi.revizyon_gecisi(donem, paket="OAB-2099.01", rev=2)
+    uyum.denetle(
+        IZIN_KURALI, 3, donem=donem, konu=kurul, tarih=GUN, gerekce=uyum.Gerekce(metin="Uydurma")
+    )
+    satir.refresh_from_db()
+    assert satir.kind == ComplianceKind.SAPMA
+    assert "3 gün" in satir.message
+    assert (satir.rule_package, satir.rev) == ("OAB-2099.01", 2)

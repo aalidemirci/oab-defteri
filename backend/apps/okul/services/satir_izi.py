@@ -549,12 +549,45 @@ class _IzSatiri:
     mac: str
 
 
+#: `_iz_satirlari`'nın sütunları (`_iz_satiri`'nın sırası; baştaki sütun "sıra tamsayı mı?").
+_IZ_SUTUNLARI: Final = (
+    "typeof(seq) = 'integer', "
+    'CAST(seq AS BLOB), CAST("at" AS BLOB), CAST(actor AS BLOB), '
+    "CAST(account_id AS BLOB), CAST(role AS BLOB), CAST(action AS BLOB), "
+    "CAST(model AS BLOB), CAST(object_id AS BLOB), CAST(changed_fields AS BLOB), "
+    'CAST("values" AS BLOB), CAST(record_mac AS BLOB), CAST(label AS BLOB), '
+    "CAST(key_mode AS BLOB), CAST(key_ref AS BLOB), CAST(prev_mac AS BLOB), CAST(mac AS BLOB)"
+)
+#: Dönem ve uyum bağı sütunları F1c-3'te geldi (`okul.0002`); yoksa NULL okunur.
+_IZ_BAG_SUTUNLARI: Final = ", CAST(term_id AS BLOB), CAST(compliance_item_id AS BLOB)"
+_IZ_BAGSIZ_SUTUNLAR: Final = ", NULL, NULL"
+
+
+def _iz_satirlari(baglanti: Baglanti, kosul: str, degerler: Sequence[Any]) -> Any:
+    """Denetim izi satırları, en yeniden geriye (`_iz_satiri`'nın okuduğu biçim; salt okuma).
+
+    `kosul` bu modüldeki iki sabittir. Geri yüklenecek görüntü `okul.0002`'den önce üretilmiş
+    olabilir (plan F1c-7): sütunları o yüzden önce sorulur.
+    """
+    (bag_sutunu,) = baglanti.execute(
+        "SELECT COUNT(*) FROM pragma_table_info('okul_audittrail') "
+        "WHERE name IN ('term_id', 'compliance_item_id')"
+    ).fetchone()
+    bag = _IZ_BAG_SUTUNLARI if bag_sutunu == 2 else _IZ_BAGSIZ_SUTUNLAR
+    return baglanti.execute(
+        f"SELECT {_IZ_SUTUNLARI}{bag} FROM okul_audittrail "  # noqa: S608 — sabit metinler
+        f"WHERE {kosul} ORDER BY seq DESC",
+        degerler,
+    )
+
+
 def _iz_satiri(ham: Sequence[Any]) -> _IzSatiri:
     """`hesap_izi_sirasi`'nın iz sorgusunun satırı (tür sütunu hariç) → zincir MAC'inin alanları
     (`denetim_izi.satir_alanlari` ile aynı).
 
-    `term` ve `compliance_item` F1c'ye dek None'dır; `denetim_izi.satir_alanlari` ile birlikte
-    değişir (sütunlar gelince ham sorguya da eklenir).
+    `term` ve `compliance_item` F1c-3'te geldi: sorgunun son iki sütunudur (`_iz_satirlari`);
+    sütunları olmayan eski görüntüde ikisi de None'dır. `denetim_izi.satir_alanlari` ile birlikte
+    değişir.
     """
     (
         seq_ham,
@@ -573,6 +606,8 @@ def _iz_satiri(ham: Sequence[Any]) -> _IzSatiri:
         key_ref,
         prev_mac,
         mac,
+        donem,
+        uyum_satiri,
     ) = ham
     seq = _tamsayi(seq_ham)
     an = _zaman(an_ham)
@@ -592,11 +627,11 @@ def _iz_satiri(ham: Sequence[Any]) -> _IzSatiri:
         "action": _metin(tur),
         "model": _metin(model),
         "object_id": _metin(kimlik),
-        "term": None,
+        "term": _metin_ya_da_none(donem),
         "changed_fields": degisen_alanlar,
         "values": deger_sozlugu,
         "record_mac": _metin(record_mac),
-        "compliance_item": None,
+        "compliance_item": _metin_ya_da_none(uyum_satiri),
         "label": _metin(etiket),
         "key_mode": _metin(kip),
         "key_ref": _metin(key_ref),
@@ -795,17 +830,7 @@ def _karar(baglanti: Baglanti, kimlik: str, dek: bytes, beklenen_muhur: str | No
     anahtarlar = _IzAnahtarlari(baglanti, dek)
     if anahtarlar.bozuk:
         return _SATIR_TUTMUYOR
-    imlec = baglanti.execute(
-        "SELECT typeof(seq) = 'integer', "
-        'CAST(seq AS BLOB), CAST("at" AS BLOB), CAST(actor AS BLOB), '
-        "CAST(account_id AS BLOB), CAST(role AS BLOB), CAST(action AS BLOB), "
-        "CAST(model AS BLOB), CAST(object_id AS BLOB), CAST(changed_fields AS BLOB), "
-        'CAST("values" AS BLOB), CAST(record_mac AS BLOB), CAST(label AS BLOB), '
-        "CAST(key_mode AS BLOB), CAST(key_ref AS BLOB), CAST(prev_mac AS BLOB), "
-        "CAST(mac AS BLOB) FROM okul_audittrail WHERE model = ? AND object_id = ? "
-        "ORDER BY seq DESC",
-        (HESAP_MODELI, kimlik),
-    )
+    imlec = _iz_satirlari(baglanti, "model = ? AND object_id = ?", (HESAP_MODELI, kimlik))
     eslesen: int
     try:
         while True:
@@ -907,16 +932,7 @@ def _dayanak_kaymis(baglanti: Baglanti, anahtarlar: _IzAnahtarlari, sira: int) -
     hiçbir sırada tutmuyorsa kayma işareti YOKTUR (fail-closed değildir: bozuk satır girişi
     kapatmaz).
     """
-    imlec = baglanti.execute(
-        "SELECT typeof(seq) = 'integer', "
-        'CAST(seq AS BLOB), CAST("at" AS BLOB), CAST(actor AS BLOB), '
-        "CAST(account_id AS BLOB), CAST(role AS BLOB), CAST(action AS BLOB), "
-        "CAST(model AS BLOB), CAST(object_id AS BLOB), CAST(changed_fields AS BLOB), "
-        'CAST("values" AS BLOB), CAST(record_mac AS BLOB), CAST(label AS BLOB), '
-        "CAST(key_mode AS BLOB), CAST(key_ref AS BLOB), CAST(prev_mac AS BLOB), "
-        "CAST(mac AS BLOB) FROM okul_audittrail WHERE seq > ? ORDER BY seq DESC",
-        (sira,),
-    )
+    imlec = _iz_satirlari(baglanti, "seq > ?", (sira,))
     acik = KIP_ACIK.encode("ascii")
     butunluk = TUR_BUTUNLUK.encode("ascii")
     dayanak_ham: Sequence[Any] | None = None

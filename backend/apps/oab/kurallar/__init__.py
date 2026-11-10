@@ -12,6 +12,7 @@ from apps.oab.kurallar.erisim import (
     bilgi_notu,
     denetle,
     kural,
+    kural_kaydi,
     yazma_kapisi,
 )
 from apps.oab.kurallar.hatalar import (
@@ -31,5 +32,6 @@ __all__ = [
     "bilgi_notu",
     "denetle",
     "kural",
+    "kural_kaydi",
     "yazma_kapisi",
 ]

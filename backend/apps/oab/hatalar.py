@@ -1,0 +1,71 @@
+"""`oab` servislerinin ret türleri: `{code, message, fields}` gövdesiyle dönerler.
+
+`APIException` oldukları için servis zincirinden görünüme kadar yutulmaz; DRF işlemi geri alır.
+İleti Türkçedir, iç ayrıntı (kural kimliği, model adı) taşımaz; atıf kullanıcıya gösterilir.
+"""
+
+from __future__ import annotations
+
+from rest_framework import status
+from rest_framework.exceptions import APIException
+
+
+class DonemKapali(APIException):
+    """Kapanmış dönemin kaydına beyaz liste dışı yazma (sert; tasarım §5 O2)."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "donem_kapali"
+    default_detail = "Bu birlik dönemi kapanmıştır; kayıt yazılamaz."
+
+
+class DonemYazilamaz(APIException):
+    """Dönem bu yazmaya açık değil: hazırlıktaki döneme genel kurul hazırlığı dışında yazma."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "donem_yazilamaz"
+    default_detail = "Bu birlik dönemine bu kayıt yazılamaz."
+
+
+class DonemSaltOkur(APIException):
+    """Dönemin kural kopyası özetini tutmuyor (D7): dönem salt okur açılır."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "donem_salt_okur"
+    default_detail = (
+        "Bu birlik döneminin kural kopyası doğrulanamadığı için dönem salt okunur açıldı. "
+        "Yedekten geri yükleme için program yöneticisine başvurun."
+    )
+
+
+class GerekceGerekli(APIException):
+    """Uyarı gerektiren kayıt gerekçesiz geçmez (altın kural 3): 400 `gerekce_gerekli`."""
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_code = "gerekce_gerekli"
+    default_detail = "Bu kayıt için gerekçe yazılmalıdır."
+
+
+class KuralSert(APIException):
+    """Sert kural: kural dışı değer ya da işlem kaydedilmez (altın kural 3)."""
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_code = "kural_sert"
+    default_detail = "Bu kayıt kurala aykırı olduğu için yapılmadı."
+
+
+class RevizyonOnayiGerekli(APIException):
+    """Geçiş kayıtların hesabını ya da uyarısını değiştiriyor: liste görülüp onaylanmalı (§6.2-3a)."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "revizyon_onayi_gerekli"
+    default_detail = (
+        "Bu kural sürümü bazı kayıtların hesabını ya da uyarısını değiştiriyor; onay gerekli."
+    )
+
+
+class YeterSayiDonduruldu(APIException):
+    """Yeter sayı ilan anında dondurulur, elle değiştirilemez (sert; tasarım §5.2.3)."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "yeter_sayi_donduruldu"
+    default_detail = "Bu genel kurulun yeter sayısı dondurulmuştur; değiştirilemez."

@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from copy import deepcopy
 from datetime import date
 from decimal import Decimal
-from typing import Any, Final, Literal, Protocol, TypedDict
+from typing import Any, Final, Literal, TypedDict
 
 from django.utils import timezone
 
@@ -46,14 +46,9 @@ _KISA_ADLAR: Final[Mapping[str, str]] = {
 }
 
 
-class _KuralBagi(Protocol):
-    content: Mapping[str, Any]
-
-
-class DonemBagi(Protocol):
-    """Birlik döneminin kural bağı (`OabTerm.rule_package`, F1c-3)."""
-
-    rule_package: _KuralBagi
+#: Birlik dönemi (`OabTerm`) ya da içeriği taşıyan eşdeğeri: `.rule_package.content` okunur. Protokol
+#: değildir: django-stubs yabancı anahtarı tanımlayıcı olarak gördüğü için `OabTerm` ona uymaz.
+type DonemBagi = Any
 
 
 class DenetimSonucu(TypedDict):
@@ -147,6 +142,21 @@ def kural(
     return deepcopy(
         _kayit(paket, kural_id, _olay_gunu(paket, kural_id, tarih, donem, olaylar))["deger"]
     )
+
+
+def kural_kaydi(
+    kural_id: str,
+    *,
+    tarih: date | None = None,
+    donem: DonemBagi | None = None,
+    olaylar: Mapping[str, date] | None = None,
+) -> Mapping[str, Any]:
+    """Kuralın olay günündeki kaydı (`toplu_gerekce`, `sert_gerekcesi` gibi şema alanları için).
+
+    `kural` değeri, bu kayıt tümünü verir. Olay gününde yürürlükte kayıt yoksa `YururlukteDegerYok`.
+    """
+    paket = _paket(donem)
+    return _kayit(paket, kural_id, _olay_gunu(paket, kural_id, tarih, donem, olaylar))
 
 
 def _madde_ad(madde: Mapping[str, Any]) -> str:

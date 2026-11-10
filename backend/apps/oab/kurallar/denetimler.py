@@ -108,7 +108,7 @@ def _aralik_hatalari(kid: str, kayitlar: list[dict[str, Any]]) -> list[str]:
     return hatalar
 
 
-def _beklenen_tur(once: list[dict[str, Any]], simdi: list[dict[str, Any]]) -> str | None:
+def degisim_turu(once: list[dict[str, Any]], simdi: list[dict[str, Any]]) -> str | None:
     """Önceki revizyondan bu revizyona kimliğin değişiminin türü; değişmediyse `None`."""
     if once == simdi:
         return None
@@ -116,10 +116,13 @@ def _beklenen_tur(once: list[dict[str, Any]], simdi: list[dict[str, Any]]) -> st
         return "duzeltme"  # aynı aralığın yerini alır (tasarım §6.2-3a)
     if len(simdi) == len(once) + 1:
         return "deger_degisikligi"
-    if len(simdi) == len(once) and [k["yururluk"]["baslangic"] for k in once] == [
-        k["yururluk"]["baslangic"] for k in simdi
-    ]:
-        return "bitis"
+    if (
+        len(simdi) == len(once)
+        and [k["yururluk"]["baslangic"] for k in once]
+        == [k["yururluk"]["baslangic"] for k in simdi]
+        and [{**k, "yururluk": None} for k in once] == [{**k, "yururluk": None} for k in simdi]
+    ):
+        return "bitis"  # yalnız yürürlük bitişi değişti; değer de değiştiyse bitiş sayılmaz
     return "tanimsiz"
 
 
@@ -152,7 +155,7 @@ def d2_kimlik(icerik: Mapping[str, Any], onceki: Mapping[str, Any] | None = None
     hatalar += [f"{kid}: pakette olmayan kimlik beyan edilmiş" for kid in beyan.keys() - gruplar]
     for kid, kayitlar in gruplar.items():
         once = once_gruplar.get(kid)
-        tur = "ekleme" if once is None else _beklenen_tur(once, kayitlar)
+        tur = "ekleme" if once is None else degisim_turu(once, kayitlar)
         beklenen = [] if tur is None else [tur]
         if beyan.get(kid, []) != beklenen:
             hatalar.append(f"{kid}: degisiklikler beyanı tutmuyor (beklenen: {beklenen or 'yok'})")

@@ -298,6 +298,10 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
 #: Etkin satırlarda bilerek ADLANMAYAN yazma uçları ve gerekçeleri (orkestratör maddesi F-4; test
 #: bunları satırın kapsamından düşer). Liste yalnız gerekçeyle büyür.
 ADSIZ_UCLAR: Final[Mapping[str, str]] = {
+    "oab-term-list": (
+        "Birlik döneminin ekranı F1c'nin 11. adımındadır; pusula yalnız bugün programda yapılabilen "
+        "işleri yazar, ekran gelince bu kayıt `BUGUNKU_ISLER`'e geçer."
+    ),
     "setup-complete": (
         "Kurulum Sihirbazı'nın son adımı; pusula kurulumdan sonra basılır, hesap sahibinin işi değildir."
     ),

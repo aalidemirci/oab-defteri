@@ -406,6 +406,8 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     "setup-complete": {"POST": "Y"},
     "setup-roadmap": {"POST": "Y"},
     "oab-okul-karti-bilgileri": {"GET": "H", "HEAD": "H"},
+    "oab-term-detail": {"GET": "H", "HEAD": "H"},
+    "oab-term-list": {"GET": "H", "HEAD": "H", "POST": "Y"},
     "setup-school-config": {"GET": "H", "HEAD": "H", "PUT": "Y"},
     "setup-status": {"GET": "H", "HEAD": "H"},
     "template-parents": {"GET": "Y", "HEAD": "Y"},
@@ -645,6 +647,8 @@ def test_eylem_baglama_anlik_goruntusu() -> None:
         Eylem.GERI_YUKLEME,
         Eylem.YEDEK_INDIRME,
         Eylem.BOSTA_SURE_YAZMA,
+        Eylem.BIRLIK_DONEMI_YAZMA,
+        Eylem.KURAL_SURUMU_SECIMI,
         Eylem.GERI_YUKLEME_GORDUM,
     }
 

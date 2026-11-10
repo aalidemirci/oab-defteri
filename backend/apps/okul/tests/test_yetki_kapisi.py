@@ -157,6 +157,8 @@ def test_her_dipnotun_eylemi_var_ve_kume_kapali() -> None:
         Eylem.GERI_YUKLEME,
         Eylem.YEDEK_INDIRME,
         Eylem.BOSTA_SURE_YAZMA,
+        Eylem.BIRLIK_DONEMI_YAZMA,
+        Eylem.KURAL_SURUMU_SECIMI,
     }
     for eylem in dipnotsuz:
         assert _gecen_roller(eylem) == {"yonetici"}, eylem

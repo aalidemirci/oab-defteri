@@ -16,4 +16,6 @@ urlpatterns: list[URLPattern | URLResolver] = [
         views.OkulKartiBilgileriView.as_view(),
         name="oab-okul-karti-bilgileri",
     ),
+    path("terms/", views.TermListCreateView.as_view(), name="oab-term-list"),
+    path("terms/<int:pk>/", views.TermDetailView.as_view(), name="oab-term-detail"),
 ]

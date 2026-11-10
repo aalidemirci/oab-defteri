@@ -22,6 +22,10 @@ from django.test.utils import isolate_apps
 from django.urls import get_resolver
 
 from apps.oab.models import (
+    AssemblyKind,
+    AssemblyStatus,
+    ComplianceKind,
+    ComplianceObligation,
     DropKind,
     ElectedBy,
     MembershipRole,
@@ -42,6 +46,37 @@ KOK = Path(__file__).resolve().parents[3]
 
 #: Tasarım §5.2'nin lafzı: seçenek kümesi → değerleri, tasarımdaki sırayla.
 BEKLENEN_DEGERLER: list[tuple[type[models.TextChoices], tuple[str, ...]]] = [
+    (AssemblyKind, ("OLAGAN", "OLAGANUSTU")),
+    (
+        AssemblyStatus,
+        (
+            "PLANLANDI",
+            "CAGRILDI",
+            "ILAN_EDILDI",
+            "YETER_SAYI_YOK",
+            "YAPILDI",
+            "TUTANAK_TAMAM",
+            "IPTAL",
+        ),
+    ),
+    (ComplianceKind, ("SAPMA", "EKSIK", "TAKVIM")),
+    (
+        ComplianceObligation,
+        (
+            "DEFTER_TASDIK",
+            "DK_INCELEME",
+            "MEM_DENETIMI",
+            "KANTIN_FAALIYET_BELGESI",
+            "KANTIN_CALISAN_BELGE_YENILEME",
+            "TUFE_BILDIRIMI",
+            "MILLI_EMLAK_BILDIRIMI",
+            "IBRA_EDILMEDI_BILDIRIMI",
+            "TEFBIS_YONETIM_BILGISI",
+            "TEFBIS_BANKA_BILGISI",
+            "TEFBIS_BUTCE_GIRISI",
+            "DIGER",
+        ),
+    ),
     (TermStatus, ("HAZIRLIK", "ACIK", "KAPANISTA", "KAPANDI", "IPTAL")),
     (PersonKind, ("VELI", "OGRETMEN", "IDARECI", "HAYIRSEVER", "KURSIYER", "DIGER")),
     (PersonStatus, ("AKTIF", "PASIF")),

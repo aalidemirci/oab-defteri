@@ -186,6 +186,9 @@ GUN_ISI_ERTELEME: Final = "gun_isi.erteleme"
 IZ_DOGRULAMASI: Final = "denetim_izi.dogrulama"
 GERI_YUKLEME_KAYDI: Final = "yedek.geri_yukleme"
 DOSYA_DEPOSU: Final = "dosya.deposu"
+#: Birlik döneminin kural revizyonu geçişi (tasarım §6.2-5): kimliği dönemin kimliği, değerleri
+#: paket ve revizyonun `[eski, yeni]` çifti. Aynı işlemde dönem satırının kendi `GUNCELLE` izi de yazılır.
+KURAL_REVIZYON_GECISI: Final = "kural.revizyon_gecisi"
 #: Yedek Raporu'nun basımı (`basim`); satırı `BASIM_DEGERLERI`'ni taşır, bu listeye girmez.
 YEDEK_RAPORU: Final = "yedek.rapor"
 DOSYA_NESNELERI: Final[Mapping[str, tuple[str, ...]]] = {
@@ -205,6 +208,7 @@ DOSYA_NESNELERI: Final[Mapping[str, tuple[str, ...]]] = {
         "zaman",
     ),
     DOSYA_DEPOSU: ("tasinan", "tasinamayan", "zaman"),
+    KURAL_REVIZYON_GECISI: ("paket", "rev"),
     GERI_YUKLEME_KAYDI: (
         # Geri yüklemenin anı (nottan; satırın kendi anı ilk kilit açılışınındır).
         "zaman",
@@ -525,6 +529,14 @@ class _Yazim:
     degerler: dict[str, list[Any]]
     record_mac: str
     anahtar: AcikAnahtar
+    #: Kaydın birlik dönemi (`AuditTrail.term`; modelde `IZ_DONEM_ALANI`); yoksa None.
+    term: Any = None
+
+
+def _donem_kimligi(nesne: models.Model) -> Any:
+    """Kaydın iz satırına girecek dönem kimliği (`IZ_DONEM_ALANI`; `okul` `oab`'yi tanımaz)."""
+    alan = getattr(type(nesne), "IZ_DONEM_ALANI", None)
+    return None if alan is None else nesne.serializable_value(alan)
 
 
 def _yazim(nesne: models.Model, *, onceki: Anlik | None, anahtar: AcikAnahtar | None) -> _Yazim:
@@ -558,10 +570,17 @@ def _yazim(nesne: models.Model, *, onceki: Anlik | None, anahtar: AcikAnahtar | 
             {ad: sonra[ad] for ad in ozet_alanlari},
         ),
         anahtar=acik,
+        term=_donem_kimligi(nesne),
     )
 
 
-def _yazim_satiri(eylem: str, yazim: _Yazim, alanlar: Sequence[str], label: str) -> AuditTrail:
+def _yazim_satiri(
+    eylem: str,
+    yazim: _Yazim,
+    alanlar: Sequence[str],
+    label: str,
+    compliance_item: Any = None,
+) -> AuditTrail:
     """Yazımın bir satırı: yalnız `alanlar`ın adları ve (izinliyse) değerleri."""
     return _ekle(
         eylem,
@@ -572,6 +591,8 @@ def _yazim_satiri(eylem: str, yazim: _Yazim, alanlar: Sequence[str], label: str)
         record_mac=yazim.record_mac,
         label=label,
         anahtar=yazim.anahtar,
+        term=yazim.term,
+        compliance_item=compliance_item,
     )
 
 
@@ -582,6 +603,7 @@ def kayit(
     onceki: Anlik | None,
     label: str = "",
     anahtar: AcikAnahtar | None = None,
+    compliance_item: Any = None,
 ) -> AuditTrail:
     """Bir kaydın yazımını izler: değişen alanlar, izinli değerler, içerik MAC'i (açık kip).
 
@@ -594,7 +616,7 @@ def kayit(
     `degisiklik`'i kullanır.
     """
     yazim = _yazim(nesne, onceki=onceki, anahtar=anahtar)
-    return _yazim_satiri(eylem, yazim, yazim.degisen, label)
+    return _yazim_satiri(eylem, yazim, yazim.degisen, label, compliance_item)
 
 
 def degisiklik(
@@ -603,6 +625,7 @@ def degisiklik(
     onceki: Anlik | None,
     label: str = "",
     anahtar: AcikAnahtar | None = None,
+    compliance_item: Any = None,
 ) -> list[AuditTrail]:
     """Okul çekirdeğinin kayıt yazımını izler; türü modelin durum alanlarından seçer.
 
@@ -614,19 +637,24 @@ def degisiklik(
       `updated_at` ilk satıra girer; yalnız o değiştiyse tek `GUNCELLE` satırıdır.
 
     İki satır aynı yazımın iki yüzüdür: içerik MAC'leri aynıdır (yazmadan sonraki hâl).
-    Yumuşak silme böylece `deleted_at`'li bir `DURUM` satırıdır.
+    Yumuşak silme böylece `deleted_at`'li bir `DURUM` satırıdır. `compliance_item` gerekçe
+    bağıdır (tasarım §5 O4: "gerekçe varsa `ComplianceItem` bağı"); bütün satırlara girer.
     """
     durum_alanlari = _durum_alanlari(type(nesne))
     yazim = _yazim(nesne, onceki=onceki, anahtar=anahtar)
+
+    def satir(eylem: str, alanlar: Sequence[str]) -> AuditTrail:
+        return _yazim_satiri(eylem, yazim, alanlar, label, compliance_item)
+
     if onceki is None:
-        return [_yazim_satiri(AuditAction.OLUSTUR, yazim, yazim.degisen, label)]
+        return [satir(AuditAction.OLUSTUR, yazim.degisen)]
     durum = [ad for ad in yazim.degisen if ad in durum_alanlari]
     veri = [ad for ad in yazim.degisen if ad not in durum_alanlari]
     if durum and all(ad == _GUNCELLENME_ALANI for ad in veri):
-        return [_yazim_satiri(AuditAction.DURUM, yazim, yazim.degisen, label)]
-    satirlar = [_yazim_satiri(AuditAction.GUNCELLE, yazim, veri, label)]
+        return [satir(AuditAction.DURUM, yazim.degisen)]
+    satirlar = [satir(AuditAction.GUNCELLE, veri)]
     if durum:
-        satirlar.append(_yazim_satiri(AuditAction.DURUM, yazim, durum, label))
+        satirlar.append(satir(AuditAction.DURUM, durum))
     return satirlar
 
 
@@ -639,9 +667,10 @@ def olay(
     values: Mapping[str, Sequence[Any]] | None = None,
     label: str = "",
     anahtar: AcikAnahtar | None = None,
+    term: Any = None,
 ) -> AuditTrail:
     """Kayıt yazımı olmayan olay (açık kip): kilit, mühür bulgusu, `guvenlik.json` bölümü,
-    yedek dosyası, dosyadaki ayar (`DOSYA_NESNELERI`).
+    yedek dosyası, dosyadaki ayar, kural revizyonu geçişi (`DOSYA_NESNELERI`).
 
     İçerik MAC'i taşımaz. `values` yalnız `model`'in izinli alanlarını taşıyabilir
     (veritabanı modelinde `IZ_DEGER_ALANLARI`, dosya nesnesinde `DOSYA_NESNELERI`);
@@ -658,6 +687,7 @@ def olay(
         record_mac="",
         label=label,
         anahtar=acik,
+        term=term,
     )
 
 
@@ -840,6 +870,8 @@ def _ekle(
     record_mac: str,
     label: str,
     anahtar: AcikAnahtar | KilitliMuhur,
+    term: Any = None,
+    compliance_item: Any = None,
 ) -> AuditTrail:
     """Çekirdek: yazar ve işlem denetimi, zincirin sonu, `seq`, MAC, ekleme (iki kip)."""
     if eylem not in AuditAction.values:
@@ -879,9 +911,11 @@ def _ekle(
         action=eylem,
         model=model,
         object_id=object_id,
+        term_id=term,
         changed_fields=list(changed_fields),
         values=values,
         record_mac=record_mac,
+        compliance_item_id=compliance_item,
         label=label,
         key_mode=key_mode,
         key_ref=key_ref,
@@ -898,8 +932,8 @@ def _ekle(
 def satir_alanlari(satir: AuditTrail) -> dict[str, Any]:
     """Satırın zincir MAC'inin kapsadığı alanlar (`kanonik.IZ_SATIRI_ALANLARI`).
 
-    Yazımda ve doğrulamada aynı işlev kullanılır. `term` ve `compliance_item` F1c'ye dek
-    `None`dır (sütunları yoktur; `AuditTrail` belge dizesi).
+    Yazımda ve doğrulamada aynı işlev kullanılır; ORM'siz eşi `services.satir_izi._iz_satiri`.
+    `term` ve `compliance_item` kimliğin METNİ ya da `None`dır (`kanonik.IZ_SATIRI_YABANCI_ANAHTARLARI`).
     """
     return {
         "seq": satir.seq,
@@ -910,15 +944,20 @@ def satir_alanlari(satir: AuditTrail) -> dict[str, Any]:
         "action": satir.action,
         "model": satir.model,
         "object_id": satir.object_id,
-        "term": None,
+        "term": _bag_metni(satir.term_id),
         "changed_fields": satir.changed_fields,
         "values": satir.values,
         "record_mac": satir.record_mac,
-        "compliance_item": None,
+        "compliance_item": _bag_metni(satir.compliance_item_id),
         "label": satir.label,
         "key_mode": satir.key_mode,
         "key_ref": satir.key_ref,
     }
+
+
+def _bag_metni(deger: object) -> str | None:
+    """Dönem ya da uyum satırı bağının kanonik metni (`None` boştur)."""
+    return None if deger is None else str(deger)
 
 
 def _hesap_metni(deger: object) -> str | None:

@@ -1323,9 +1323,9 @@ class AuditTrail(models.Model):
       satırdan +1 olarak verilir (MAC `seq`'i kapsar; önce bilinmelidir). Geri alınan
       işlemin satırı kalmaz, sıra boşluk bırakmaz.
     * `at` UTC saklanır (USE_TZ); kanonik biçim UTC `Z`'dir, ekranlar Europe/Istanbul gösterir.
-    * `term` (→ OabTerm) ve `compliance_item` (→ ComplianceItem) sütunları hedef
-      modelleriyle F1c'de gelir; kanonik biçim onları bugünden `null` olarak taşır
-      (`shared.kanonik.IZ_SATIRI_ALANLARI`): sütunlar eklenince var olan MAC'ler değişmez.
+    * `term` (→ OabTerm) ve `compliance_item` (→ ComplianceItem) F1c-3'te geldi; `okul` `oab`'yi
+      içe aktarmaz, yabancı anahtar dizeyle verilir. Boşken kanonik biçimde `null`dır
+      (`shared.kanonik.IZ_SATIRI_ALANLARI`): sütunlar eklenince var olan MAC'ler değişmedi.
     * `values` yalnız modelin izinli kişisiz alanlarının `[önce, sonra]` değerlerini,
       kanonik ilkel biçimde (`kanonik.duz`) taşır; `changed_fields` yalnız alan adlarıdır.
     * `key_ref` metindir: açık kipte `AuditKey` kimliği, kilitli kipte `"<çapa seq>:<adım>"`;
@@ -1356,9 +1356,25 @@ class AuditTrail(models.Model):
     action = models.CharField("tür", max_length=16, choices=AuditAction.choices)
     model = models.CharField("model", max_length=64)
     object_id = models.CharField("kayıt kimliği", max_length=64)
+    term = models.ForeignKey(
+        "oab.OabTerm",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="birlik dönemi",
+    )
     changed_fields = models.JSONField("değişen alanlar", default=list, blank=True)
     values = models.JSONField("değerler", default=dict, blank=True)
     record_mac = models.CharField("içerik MAC'i", max_length=64, blank=True, default="")
+    compliance_item = models.ForeignKey(
+        "oab.ComplianceItem",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="uyum satırı",
+    )
     label = models.CharField(
         "etiket", max_length=16, choices=AuditLabel.choices, blank=True, default=""
     )

@@ -86,6 +86,16 @@ from django.utils import timezone
 from openpyxl import Workbook
 from rest_framework.test import APIClient
 
+from apps.oab.models import (
+    AssemblyKind,
+    ComplianceItem,
+    ComplianceJustification,
+    GeneralAssembly,
+    OabTerm,
+    RulePackage,
+)
+from apps.oab.services import donemler, uyum
+from apps.oab.services import genel_kurul as genel_kurul_servisi
 from apps.okul import denetim_izi, erisim_gunlugu, iz_durumu
 from apps.okul.excel_ortak import ParserError
 from apps.okul.models import (
@@ -232,6 +242,18 @@ def _aktiflestir(_: pytest.MonkeyPatch) -> Istek:
     _yil()
     ikinci = _yil("2027-2028", aktif=False, kayma=1)
     return Istek(f"/api/v1/school-years/{ikinci.pk}/activate/", None, _turler("DURUM"))
+
+
+def _birlik_donemi_ac(_: pytest.MonkeyPatch) -> Istek:
+    return Istek(
+        "/api/v1/oab/terms/",
+        {
+            "name": "2026-2027 birlik dönemi",
+            "school_year": _yil().pk,
+            "start_date": "2026-10-10",
+        },
+        _turler("OLUSTUR", "OLUSTUR"),
+    )
 
 
 def _kapali_gun_sil(_: pytest.MonkeyPatch) -> Istek:
@@ -403,6 +425,8 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     ),
     ("school-year-terms", "PUT"): Senaryo(_donemler),
     ("school-year-activate", "POST"): Senaryo(_aktiflestir),
+    # Birlik dönemi: ilk açılışta kural kopyası da dondurulur (`RulePackage`, `OabTerm`).
+    ("oab-term-list", "POST"): Senaryo(_birlik_donemi_ac),
     ("holiday-list", "POST"): _sabit(
         "/api/v1/holidays/",
         {
@@ -834,6 +858,14 @@ ILKELLER: dict[tuple[str, str], str] = {
 
 #: İzsiz kalabilen işlevler (göreli dosya yolu, birim) → gerekçe. Başka muafiyet yoktur.
 MUAF_ISLEVLER: dict[tuple[str, str], str] = {
+    ("apps/oab/services/yarim_metin.py", "kaydet"): (
+        "Gerekçe kutusunun kısa süreli taslağı: kısa aralıklarla yazılır, kayıt değildir (tasarım §7 "
+        "'Yarım kalan metin'); `DraftText` modeli izsizdir (`LISTESIZ_MODELLER`)."
+    ),
+    ("apps/oab/services/yarim_metin.py", "temizle"): (
+        "Yarım metnin silinmesi: kaydedilen gerekçenin izi `services.uyum`'dadır, taslağın izi yoktur "
+        "(`LISTESIZ_MODELLER`)."
+    ),
     ("apps/okul/services/ozet_onarimi.py", "ozetleri_onar"): (
         "Geri yüklemenin parola kaydı özeti onarımı (kullanıcı kararı 03.11.2026): ORM'siz, "
         "takastan ÖNCE geri yüklenecek `.tmp` dosyasında; o veritabanında oturum yoktur, "
@@ -869,6 +901,10 @@ ORM_DISI_CAGRILAR: dict[tuple[str, str, str], str] = {
     ),
     ("apps/okul/services/geri_yukleme_notu.py", "dosya_ozeti", "ozet.update"): (
         "`hashlib.sha256().update`: kenara alınan dosyanın özeti."
+    ),
+    ("apps/okul/services/satir_izi.py", "_iz_satirlari", "baglanti.execute"): (
+        "Salt okuma: denetim izi satırlarını okur (bu modülün iki sabit `WHERE` koşulu); metni "
+        "sütunları olmayan eski görüntü için sabitlerden kurulur."
     ),
     ("apps/okul/services/satir_izi.py", "okuma_islemi", "baglanti.execute"): (
         "Okuma işleminin sınırları (`BEGIN`, `COMMIT`, hata yolunda `ROLLBACK`): kayıt yazmaz; "
@@ -1762,6 +1798,20 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
         yazar=varsayilan_yazar(),
         kisi_listesi=False,
     )
+    # Birlik dönemi, kural kopyası, genel kurul, uyum satırı ve gerekçe: ad ve gerekçe serbest metin.
+    donem = donemler.create_term(
+        name=UYDURMA_UZUN[:40], school_year=yil, start_date=date(2026, 10, 10)
+    )
+    kurul = genel_kurul_servisi.genel_kurul_olustur(donem=donem, kind=AssemblyKind.OLAGAN)
+    genel_kurul_servisi.yeter_sayiyi_dondur(kurul, tarih=date(2026, 10, 1))
+    uyum.denetle(
+        "genel_kurul.ilan_en_az_gun",
+        3,
+        donem=donem,
+        konu=kurul,
+        tarih=date(2026, 10, 1),
+        gerekce=uyum.Gerekce(metin=f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_METIN}"),
+    )
 
     metin = _iz_metni()
     modeller = set(AuditTrail.objects.values_list("model", flat=True))
@@ -1855,6 +1905,11 @@ LISTESIZ_MODELLER = {
     "AccessLog": (
         "Erişim günlüğü: zincir dışı, değer tutmaz (tasarım §4.6.4); silmesi `KVKK_SILME`."
     ),
+    "DraftText": (
+        "Yarım metin: gerekçe kutusu kısa aralıklarla kaydeder, kısa süreli şifreli taslaktır "
+        "(tasarım §7 'Yarım kalan metin'); kayıt değildir, metin kaydedilince ya da vazgeçilince "
+        "silinir. Denetim izi taslağa değil, kaydedilen gerekçeye yazılır."
+    ),
     "ParentRoster": (
         "Veli listesi: satır başına iz yazılmaz, hiçbir alanı satıra ve içerik MAC'ine girmez "
         "(tasarım §4.6.2); aktarım kişisiz parti satırıdır (koşunun `ImportRun` izi), silmesi "
@@ -1871,6 +1926,11 @@ IZLI_MODELLER = (
     Personnel,
     ImportRun,
     Attachment,
+    RulePackage,
+    OabTerm,
+    GeneralAssembly,
+    ComplianceItem,
+    ComplianceJustification,
 )
 
 

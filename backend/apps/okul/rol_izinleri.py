@@ -414,6 +414,10 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _yaz("setup-school-config", "PUT", Satir.M1),
     # Okul kartının kural paketinden gelen bilgisi (md. 23/3; okul kartını okuyan her rol).
     _oku("oab-okul-karti-bilgileri", Satir.M1),
+    # Birlik dönemi: liste, ayrıntı (kural sürümü salt okunur satırıyla) ve ilk dönemin açılışı.
+    _oku("oab-term-list", Satir.M1),
+    _yaz("oab-term-list", "POST", Satir.M1),
+    _oku("oab-term-detail", Satir.M1),
     _yaz("setup-complete", "POST", Satir.M1),
     # Genel Bakış'ın "Başlangıç Yol Haritası" işaretleri (plan F1b-2: M1).
     _yaz("setup-roadmap", "POST", Satir.M1),
@@ -769,6 +773,9 @@ class Eylem(StrEnum):
     GERI_YUKLEME = "GERI_YUKLEME"
     YEDEK_INDIRME = "YEDEK_INDIRME"
     BOSTA_SURE_YAZMA = "BOSTA_SURE_YAZMA"
+    # Birlik dönemi (M1) ve kural sürümü seçimi (Ayarlar).
+    BIRLIK_DONEMI_YAZMA = "BIRLIK_DONEMI_YAZMA"
+    KURAL_SURUMU_SECIMI = "KURAL_SURUMU_SECIMI"
     # ¹ genel kurul
     GENEL_KURUL_YAZMA = "GENEL_KURUL_YAZMA"
     GENEL_KURUL_YENI_OKUL_DAVETI = "GENEL_KURUL_YENI_OKUL_DAVETI"
@@ -855,6 +862,12 @@ EYLEM_KURALLARI: Final[Mapping[Eylem, EylemKurali]] = {
     ),
     Eylem.BOSTA_SURE_YAZMA: _ek(
         Satir.AYARLAR, (YONETICI,), dayanak="Tasarım §4.4.2 Ayarlar satırı (boşta süre)"
+    ),
+    Eylem.BIRLIK_DONEMI_YAZMA: _ek(
+        Satir.M1, (YONETICI,), dayanak="Tasarım §4.4.2 M1 (birlik dönemi açma ve kapama), §7.9"
+    ),
+    Eylem.KURAL_SURUMU_SECIMI: _ek(
+        Satir.AYARLAR, (YONETICI,), dayanak="Tasarım §4.4.2 Ayarlar (kural sürümü seçimi), §6.2-5"
     ),
     Eylem.GENEL_KURUL_YAZMA: _ek(
         Satir.M3, _YK_VE_YONETICI, dipnot=1, dayanak="¹ müdür genel kurulun öteki işlerinde okur"

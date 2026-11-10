@@ -118,6 +118,9 @@ DIGER_UCLAR = frozenset(
         "security-status",
         "security-unlock",
         "oab-okul-karti-bilgileri",
+        # Birlik dönemi (F1c-3): kişi verisi yazmaz, kapı `Eylem.BIRLIK_DONEMI_YAZMA`.
+        "oab-term-detail",
+        "oab-term-list",
         "setup-complete",
         "setup-roadmap",
         "setup-school-config",

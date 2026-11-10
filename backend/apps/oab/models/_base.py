@@ -164,3 +164,50 @@ class Representation(models.TextChoices):
     KAMPUS_YONETIMI = "KAMPUS_YONETIMI", "Kampüs yönetimi"
     KANTIN_DENETIM_KOMISYONU = "KANTIN_DENETIM_KOMISYONU", "Kantin denetim komisyonu"
     DIGER = "DIGER", "Diğer"
+
+
+class AssemblyKind(models.TextChoices):
+    """Genel kurulun türü."""
+
+    OLAGAN = "OLAGAN", "Olağan"
+    OLAGANUSTU = "OLAGANUSTU", "Olağanüstü"
+
+
+class AssemblyStatus(models.TextChoices):
+    """Genel kurulun durumu (tasarım §7.1)."""
+
+    PLANLANDI = "PLANLANDI", "Planlandı"
+    CAGRILDI = "CAGRILDI", "Çağrıldı"
+    ILAN_EDILDI = "ILAN_EDILDI", "İlan edildi"
+    YETER_SAYI_YOK = "YETER_SAYI_YOK", "Yeter sayı yok"
+    YAPILDI = "YAPILDI", "Yapıldı"
+    TUTANAK_TAMAM = "TUTANAK_TAMAM", "Tutanak tamam"
+    IPTAL = "IPTAL", "İptal"
+
+
+class ComplianceKind(models.TextChoices):
+    """Uyum satırının türü (tasarım §5 O3)."""
+
+    SAPMA = "SAPMA", "Sapma"
+    EKSIK = "EKSIK", "Eksik"
+    TAKVIM = "TAKVIM", "Takvim"
+
+
+class ComplianceObligation(models.TextChoices):
+    """Takvim satırının yükümlülüğü (tasarım §5.2.7)."""
+
+    DEFTER_TASDIK = "DEFTER_TASDIK", "Defter tasdiki"
+    DK_INCELEME = "DK_INCELEME", "Denetleme Kurulu incelemesi"
+    MEM_DENETIMI = "MEM_DENETIMI", "İl/ilçe millî eğitim müdürlüğü denetimi"
+    KANTIN_FAALIYET_BELGESI = "KANTIN_FAALIYET_BELGESI", "Kantin faaliyet belgesi"
+    KANTIN_CALISAN_BELGE_YENILEME = (
+        "KANTIN_CALISAN_BELGE_YENILEME",
+        "Kantin çalışanı belge yenileme",
+    )
+    TUFE_BILDIRIMI = "TUFE_BILDIRIMI", "TÜFE bildirimi"
+    MILLI_EMLAK_BILDIRIMI = "MILLI_EMLAK_BILDIRIMI", "Millî Emlak bildirimi"
+    IBRA_EDILMEDI_BILDIRIMI = "IBRA_EDILMEDI_BILDIRIMI", "İbra edilmedi bildirimi"
+    TEFBIS_YONETIM_BILGISI = "TEFBIS_YONETIM_BILGISI", "TEFBİS yönetim bilgisi"
+    TEFBIS_BANKA_BILGISI = "TEFBIS_BANKA_BILGISI", "TEFBİS banka bilgisi"
+    TEFBIS_BUTCE_GIRISI = "TEFBIS_BUTCE_GIRISI", "TEFBİS bütçe girişi"
+    DIGER = "DIGER", "Diğer"
