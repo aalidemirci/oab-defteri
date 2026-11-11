@@ -711,6 +711,11 @@ KURALSIZ = {
     "gecis.karar_defterini_iptal_et": _GECIS_KURALSIZ,
     "gecis.gecisi_tamamla": _GECIS_KURALSIZ,
     "uyum.acik_satiri_kapat": "Yalnız açık satırı kapatır: kural okumaz; dönem kilidi yine denetlenir.",
+    "evrak.kaydet": (
+        "Evrak kaydı kural okumaz: içerik çizilmiş modeldir, kural paketi dönemin bağlı kopyasından "
+        "kaydedilir; dönemsiz evrak (E63) paket yüklenemese de basılır (F1c 9. adım). Dönemli "
+        "evrakta dönem kilidi yine denetlenir (beyaz liste)."
+    ),
 }
 SERVISLER = Path(__file__).resolve().parents[1] / "services"
 

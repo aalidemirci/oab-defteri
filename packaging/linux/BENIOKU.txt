@@ -65,9 +65,11 @@ Taşınabilir sürüm, dağıtımın kendi yazı tipi ve metin dizme kütüphane
 kullanır. Eksikse PDF üretimi çalışmaz. Yönetici yetkisiyle:
 
     sudo apt install libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
-                     libfontconfig1 libglib2.0-0 fonts-dejavu-core
+                     libfontconfig1 libglib2.0-0 fonts-dejavu-core \
+                     fonts-liberation2
 
-Pardus 21 ve Pardus 23'te bu paketler kurulu gelir.
+Pardus 21 ve Pardus 23'te ilk altısı kurulu gelir; fonts-liberation2 kurulu
+değilse bu komut onu da kurar. Evrakın yazı tipleri programın içinde gelir.
 
 Program penceresi de dağıtımın birkaç sistem kütüphanesine dayanır. Pencere
 açılmıyorsa ya da boş beyaz kalıyorsa:

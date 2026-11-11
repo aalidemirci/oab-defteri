@@ -12,6 +12,8 @@ from apps.oab.models._base import (
     ComplianceObligation,
     DecisionKind,
     DecisionStatus,
+    DocumentFormat,
+    DocumentStatus,
     DropKind,
     ElectedBy,
     EligibilityBar,
@@ -31,6 +33,7 @@ from apps.oab.models._base import (
     TermStatus,
 )
 from apps.oab.models.donem import OabTerm, RulePackage
+from apps.oab.models.evrak import EvrakKaydiGecersiz, GeneratedDocument
 from apps.oab.models.genel_kurul import GeneralAssembly
 from apps.oab.models.kisi import OabPerson, kisi_adi_kor_indeksi
 from apps.oab.models.kurul import (
@@ -58,12 +61,16 @@ __all__ = [
     "ComplianceObligation",
     "DecisionKind",
     "DecisionStatus",
+    "DocumentFormat",
+    "DocumentStatus",
     "DraftText",
     "DropKind",
     "ElectedBy",
     "EligibilityBar",
     "EligibilityBarBasis",
+    "EvrakKaydiGecersiz",
     "GeneralAssembly",
+    "GeneratedDocument",
     "KararDurumuGecersiz",
     "MeetingKind",
     "MeetingStatus",

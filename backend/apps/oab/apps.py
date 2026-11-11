@@ -22,11 +22,21 @@ class OabConfig(AppConfig):
         personel silinmez, birleştirmede bağ taşınır (`services.persons`); veli listesi aktarımı açık
         birlik dönemini buradan öğrenir (`services.imports`); organ rollerinin hesabı üyeliğe bu
         kurallarla bağlanır (`services.hesaplar`, plan F1c 7. adım); kurulum durumu ve yol haritası geçiş
-        kurulumunun durumunu buradan okur (`services.setup`, plan F1c 8. adım). Kayıtlar idempotenttir.
+        kurulumunun durumunu buradan okur (`services.setup`, plan F1c 8. adım); üretilen evrak dosya
+        deposunun sahibidir (PDF ve DOCX) ve okul çekirdeğinin evrakı (E63) buradan kaydedilir
+        (`services.dosya_deposu`, `services.evrak_kaydi`; plan F1c 9. adım). Kayıtlar idempotenttir.
         """
         from apps.oab.kurallar import yukleyici
-        from apps.oab.services import donemler, gecis, hesap_baglari, kisiler
-        from apps.okul.services import hesaplar, imports, persons, setup
+        from apps.oab.models import GeneratedDocument
+        from apps.oab.services import donemler, evrak, gecis, hesap_baglari, kisiler
+        from apps.okul.services import (
+            dosya_deposu,
+            evrak_kaydi,
+            hesaplar,
+            imports,
+            persons,
+            setup,
+        )
 
         yukleyici.ac()
         persons.register_membership_check(kisiler.personnel_linked)
@@ -34,3 +44,5 @@ class OabConfig(AppConfig):
         imports.register_roster_term_provider(donemler.acik_donem_kimligi)
         hesaplar.register_account_bond_rules(hesap_baglari.KURALLAR)
         setup.register_transition_status(gecis.yol_haritasi_durumu)
+        dosya_deposu.sahip_kaydet(GeneratedDocument, uretilen_evrak=True)
+        evrak_kaydi.register_document_recorder(evrak.okul_evraki_kaydet)

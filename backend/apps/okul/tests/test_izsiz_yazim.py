@@ -95,6 +95,7 @@ from apps.oab.models import (
     ComplianceJustification,
     DecisionKind,
     GeneralAssembly,
+    GeneratedDocument,
     MeetingKind,
     OabPerson,
     OabTerm,
@@ -104,6 +105,7 @@ from apps.oab.models import (
     RulePackage,
 )
 from apps.oab.services import donemler, kisiler, kurullar, uyelikler, uyum
+from apps.oab.services import evrak as evrak_servisi
 from apps.oab.services import genel_kurul as genel_kurul_servisi
 from apps.okul import denetim_izi, erisim_gunlugu, iz_durumu
 from apps.okul.excel_ortak import ParserError
@@ -149,7 +151,7 @@ from conftest import (
     oturumu_ac_test,
     varsayilan_yazar,
 )
-from shared import crypto
+from shared import crypto, evrak
 
 YAZMA_YONTEMLERI = ("post", "put", "patch", "delete")
 #: `backend/` kökü (kaynak taraması buradan göreli yol yazar).
@@ -621,9 +623,12 @@ def _parolayi_sifirla(_: pytest.MonkeyPatch) -> Istek:
 
 
 def _teslim_pusulasi(_: pytest.MonkeyPatch) -> Istek:
-    """Kullanıcılar: uydurma muhasibin hesap teslim pusulası (E63) — tek izi `BASIM` satırıdır
-    (dosya saklanmaz; hesap satırı değişmez)."""
-    return Istek(f"/api/v1/accounts/{hesap_ac().id}/handover-slip/", None, _turler("BASIM"))
+    """Kullanıcılar: uydurma muhasibin hesap teslim pusulası (E63) — evrak kaydı (`OLUSTUR`,
+    `oab.GeneratedDocument`; plan F1c 9. adım) ve dosyanın izi `BASIM` satırı (dosya saklanmaz;
+    hesap satırı değişmez)."""
+    return Istek(
+        f"/api/v1/accounts/{hesap_ac().id}/handover-slip/", None, _turler("OLUSTUR", "BASIM")
+    )
 
 
 def _geri_yuklemeyi_gordum(_: pytest.MonkeyPatch) -> Istek:
@@ -2157,6 +2162,15 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
     kurullar.karar_taslagi_olustur(
         toplanti, kind=DecisionKind.GOREV_BOLUMU, text=f"{UYDURMA_AD} {UYDURMA_SOYAD} başkan"
     )
+    # Üretilen evrak (F1c 9. adım): içerik JSON'u kişi adı taşır, şifrelidir; yeniden üretim
+    # öncekinin yerini alır (`DURUM`). İzde yalnız kod, sürüm, biçim ve özet görünür.
+    uydurma_belge = evrak.Belge(
+        kod="E01",
+        antet=evrak.birlik_anteti(okul_adi=UYDURMA_UZUN, ilce=UYDURMA_AD),
+        bloklar=(evrak.Paragraf(f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_ADRES}"),),
+    )
+    for bicimler in (("DOCX", "PDF"), ("PDF",)):
+        evrak_servisi.kaydet(uydurma_belge, konu=toplanti, bicimler=bicimler, donem=donem)
     uyum.denetle(
         "genel_kurul.ilan_en_az_gun",
         3,
@@ -2290,6 +2304,7 @@ IZLI_MODELLER = (
     BoardMeeting,
     BoardMeetingAttendance,
     BoardDecision,
+    GeneratedDocument,
 )
 
 

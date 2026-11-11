@@ -4,8 +4,8 @@
 # Hat aile iskeletinden devralındı (tasarım §12.B) ve orada uçtan uca yeşildi.
 # OAB Defteri adıyla F1a'da yeşil geçti (plan §2.1 "F1a durumu"): Linux .deb +
 # .tar.gz, debian:11/12/13 kurulum provası, Windows setup.exe + portable.zip;
-# iki platformda `--bagimlilik-duman`, `--pdf-duman` (gömülü DejaVu ile Türkçe
-# PDF), `--evrak-duman`, `--autotest`. Elle doğrulama çek-listesi
+# iki platformda `--bagimlilik-duman`, `--pdf-duman` (gömülü DejaVu Sans ve evrakın
+# Liberation Serif'iyle Türkçe PDF), `--evrak-duman`, `--autotest`. Elle doğrulama çek-listesi
 # packaging/windows/NOTLAR.md'de.
 #
 # Akış:

@@ -18,7 +18,8 @@ adları, adet, tetik; değer yok — erişim günlüğünün saklama süresi dol
 elle silinmesi, birleştirmede kaynağın silinmesi, veli listesinin silinmesi ve aktarımda yerine
 geçen satırları),
 `basim` (evrak basımı: `BASIM`, yalnız evrak kodu ve dosyanın sha256'sı — bugün saklanmayan
-hesap teslim pusulası; plan F1b-2 "E63").
+hesap teslim pusulasının dosyası; plan F1b-2 "E63". Üretimin kaydı ayrıca `oab.GeneratedDocument`
+satırıdır, izi `degisiklik`'ten; plan F1c 9. adım).
 
 KURALLAR (her biri bu modülde zorlanır):
 
@@ -743,7 +744,10 @@ _SHA256_OZETI: Final = re.compile(r"[0-9a-f]{64}")
 
 
 def basim(*, model: str, object_id: str, kod: str, sha256: str) -> AuditTrail:
-    """Evrak basımı (`BASIM`; açık kip, içerik MAC'siz): saklanmayan belgenin TEK izi.
+    """Evrak basımı (`BASIM`; açık kip, içerik MAC'siz): saklanmayan DOSYANIN izi.
+
+    Üretimin kendisi `oab.GeneratedDocument` satırıdır (içerik JSON'u ve özeti; kendi `OLUSTUR` satırı,
+    aynı işlemde; plan F1c 9. adım): bu satır o kaydı değil, verilen dosyanın baytını izler.
 
     Kaydın kimliği belgenin konusudur (hesap teslim pusulasında hesap: `okul.Account` ve hesabın
     kimliği; plan F1b-2 "E63": "izi `BASIM` satırıdır (kod ve PDF'in sha256'sı)"). `values`

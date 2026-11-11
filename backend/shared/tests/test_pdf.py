@@ -10,6 +10,8 @@ tetiklemez (tasarım §4.1, §13 D47).
 
 from __future__ import annotations
 
+import io
+import os
 import re
 import socket
 import threading
@@ -33,6 +35,54 @@ def test_gercek_pdf_uretir_ve_yazi_tipi_yapilandirmasini_paylasir() -> None:
     assert ilk.startswith(b"%PDF-") and ikinci.startswith(b"%PDF-")
     assert yapilandirma is not None
     assert pdf._font_config is yapilandirma, "her belgede yeni FontConfiguration kuruldu"
+
+
+def _pdf_fontlari(icerik: bytes) -> set[str]:
+    from pypdf import PdfReader
+
+    adlar: set[str] = set()
+    for sayfa in PdfReader(io.BytesIO(icerik)).pages:
+        for font in (sayfa.get("/Resources") or {}).get("/Font", {}).values():
+            adlar.add(str(font.get_object().get("/BaseFont")))
+    return adlar
+
+
+def _sistem_dejavu() -> Path:
+    yol = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+    if not yol.is_file():
+        pytest.skip("DejaVu Sans sistem kopyası yok (Docker imajında fonts-dejavu-core var)")
+    return yol
+
+
+def test_paketli_evrak_font_yapilandirmasi_sistem_dizinini_taramaz(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Linux paketinde kanca (`rthook_od.py`) paketli yazı tipi dizinini gösteren yapılandırmayı
+    `OD_EVRAK_FONTCONFIG` ile bildirir; evrakın yazı tipi yapılandırması YALNIZ ondan kurulur, sistem
+    yazı tipi dizini taranmaz (tasarım §9.1-8 "iki sistem aynı çıktıyı verir"). Sınamada dizinde
+    yalnız DejaVu Sans vardır: sistemde kurulu Liberation Serif istense de kullanılmamalıdır.
+    Süreç geneli `FONTCONFIG_FILE` değişmeden kalır (pencere yazı tipleri sistemden)."""
+    dizin = tmp_path / "fonts"
+    dizin.mkdir()
+    (dizin / "DejaVuSans.ttf").write_bytes(_sistem_dejavu().read_bytes())
+    conf = tmp_path / "fonts.conf"
+    conf.write_text(
+        f"<?xml version='1.0'?><fontconfig><dir>{dizin}</dir>"
+        f"<cachedir>{tmp_path / 'onbellek'}</cachedir></fontconfig>",
+        encoding="utf-8",
+    )
+    html = "<p style=\"font-family: 'Liberation Serif'\">Türkçe metin: ĞÜŞİÖÇ</p>"
+
+    monkeypatch.delenv(pdf.ENV_EVRAK_FONTCONFIG, raising=False)
+    monkeypatch.setattr(pdf, "_font_config", None)
+    assert any("Liberation" in ad for ad in _pdf_fontlari(pdf.html_to_pdf(html)))
+
+    monkeypatch.setenv(pdf.ENV_EVRAK_FONTCONFIG, str(conf))
+    monkeypatch.setenv("FONTCONFIG_FILE", "/surec-geneli/degismez.conf")
+    monkeypatch.setattr(pdf, "_font_config", None)
+    fontlar = _pdf_fontlari(pdf.html_to_pdf(html))
+    assert fontlar and all("DejaVu" in ad for ad in fontlar), fontlar
+    assert os.environ["FONTCONFIG_FILE"] == "/surec-geneli/degismez.conf"
 
 
 def test_ayni_anda_en_fazla_bir_basim(monkeypatch: pytest.MonkeyPatch) -> None:

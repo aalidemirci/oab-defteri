@@ -5,7 +5,8 @@ sızıntı) · yazım (diskteki kap, sıra, yetim, kipler) · red (R9, tür, sı
 okuma (özet, "dosya yok", erişim günlüğü) · DEK yokken · tek yazar (kaynak taraması) · ayarlar
 (bellek işleyicisi, yollar). Saf katmanın testleri `shared/tests/test_dosya_sifreleme.py`'de,
 gömülü sunucunun tamponu `desktop/tests/test_server.py`'dedir. Kişi adları ve içerikler UYDURMADIR.
-F1b'de sahip kümesi boştur; testler geçici sahip kaydeder (`sahip` fikstürü).
+Sahip kümesinin bugünkü tek üyesi üretilen evraktır (`oab.GeneratedDocument`, F1c 9. adım); testler
+geçici sahip kaydeder (`sahip` fikstürü).
 """
 
 from __future__ import annotations
@@ -528,8 +529,87 @@ def test_yukleme_siniri_ayarla_bicim_sinirinin_kucugudur(settings: Any) -> None:
     assert dosya_deposu.yukleme_siniri() == ds.AZAMI_ACIK_BOY
 
 
-def test_f1bde_sahip_kumesi_bostur() -> None:
-    assert dosya_deposu._SAHIP_ETIKETLERI == set()
+def test_sahip_kumesinde_yalniz_uretilen_evrak_vardir() -> None:
+    """İlk ve bugünkü tek sahip `oab.GeneratedDocument`'tır ve üretilen evrak sahibidir (PDF, DOCX;
+    plan F1c 9. adım); kullanıcı eki sahibi henüz yoktur."""
+    assert dosya_deposu._SAHIP_ETIKETLERI == {"oab.GeneratedDocument"}
+    assert dosya_deposu._URETILEN_EVRAK_SAHIPLERI == {"oab.GeneratedDocument"}
+    assert dosya_deposu.kabul_turleri(SchoolYear) == ds.KABUL_EDILEN_TURLER
+
+
+DOCX_KAPI = "Bu dosya türü eklenemez; yalnız PDF, JPEG ve PNG dosyaları kabul edilir."
+
+
+def _docx() -> bytes:
+    from shared import evrak
+
+    return evrak.docx_ciz(evrak.ornek_belge())
+
+
+def test_kullanici_eki_sahibine_docx_yazilmaz(sahip: SchoolYear) -> None:
+    """DOCX türü yalnız üretilen evrak sahibinindir; kullanıcı eki kümesi PDF, JPEG, PNG kalır."""
+    onceki = _depodaki_adlar()
+    with pytest.raises(ds.TurHatasi, match=re.escape(DOCX_KAPI)):
+        _yaz(sahip, _docx())
+    assert _depodaki_adlar() == onceki and not Attachment.objects.exists()
+
+
+def test_uretilen_evrak_sahibi_docx_ve_pdf_alir_jpeg_almaz(sahip: SchoolYear) -> None:
+    dosya_deposu.sahip_kaydet(SchoolYear, uretilen_evrak=True)
+    try:
+        assert _yaz(sahip, _docx()).mime == ds.DOCX.mime
+        assert _yaz(sahip, PDF).mime == "application/pdf"
+        with pytest.raises(ds.TurHatasi, match="yalnız PDF ya da Word"):
+            _yaz(sahip, JPEG)
+        # DOCX imzası (ZIP) tek başına yetmez: Word girdileri olmayan ZIP reddedilir.
+        with pytest.raises(ds.TurHatasi):
+            _yaz(sahip, b"PK\x03\x04" + bytes(64))
+    finally:
+        dosya_deposu.sahip_kaydet(SchoolYear)
+    assert dosya_deposu.kabul_turleri(SchoolYear) == ds.KABUL_EDILEN_TURLER
+
+
+def test_silinmis_sahibin_bayat_ornegine_ek_yazilmaz(sahip: SchoolYear) -> None:
+    """`pk`'sı dolu ama satırı artık olmayan sahip (`_sahip_bagi`'nin bayat örnek boşluğu; plan F1b-3
+    ekleri): reddedilir, diske bir şey yazılmaz."""
+    bayat = SchoolYear(pk=sahip.pk + 1000, name="2030-2031")
+    bayat._state.adding = False
+    onceki = _depodaki_adlar()
+    with pytest.raises(dosya_deposu.EkSahibiHatasi, match="kaydedilmiş bir kayda"):
+        _yaz(bayat)
+    assert _depodaki_adlar() == onceki
+
+
+def test_bakim_kapisi_kapaliyken_ek_yazilmaz(sahip: SchoolYear) -> None:
+    """Canlı geri yükleme depoyu takas ederken yazım başlamaz (plan F1b-3 ekleri, F1c 9. adım):
+    `DepoBakimda`, diske ve veritabanına bir şey yazılmaz; kapı açılınca yazım yürür."""
+    onceki = _depodaki_adlar()
+    assert bakim.KAPI.bakima_al(bekleme_sn=0.1)
+    try:
+        with pytest.raises(dosya_deposu.DepoBakimda, match="Geri yükleme sürüyor"):
+            _yaz(sahip)
+    finally:
+        bakim.KAPI.bakimdan_cik()
+    assert _depodaki_adlar() == onceki and not Attachment.objects.exists()
+    assert bakim.KAPI.ucusta == 0
+    _yaz(sahip)
+    assert bakim.KAPI.ucusta == 0
+
+
+def test_yazim_suren_is_olarak_bakim_kapisindan_gecer(
+    sahip: SchoolYear, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Yazım sürerken kapının uçuştaki iş sayacı birdir: geri yükleme onu bekler."""
+    gorulen: list[int] = []
+    asil = ds.depoya_yaz
+
+    def say(*args: Any, **kwargs: Any) -> Any:
+        gorulen.append(bakim.KAPI.ucusta)
+        return asil(*args, **kwargs)
+
+    monkeypatch.setattr(ds, "depoya_yaz", say)
+    _yaz(sahip)
+    assert gorulen == [1] and bakim.KAPI.ucusta == 0
 
 
 def test_kayitli_olmayan_model_eke_sahip_olamaz() -> None:

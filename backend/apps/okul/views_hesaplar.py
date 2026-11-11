@@ -35,9 +35,11 @@ Hepsi yalnız program yöneticisine açıktır: rol kapısı (`rol_izinleri.KURA
 * `POST accounts/<id>/handover-slip/` → hesap teslim pusulası (E63; plan F1b-2 "E63 hesap teslim
   pusulası"): yalnız PDF, ek olarak indirilir (`Cache-Control: no-store`); dosya adı rol etiketini
   taşır (`Hesap-Teslim-Pusulası_Muhasip_03.11.2026.pdf`; tanıtıcı ve ad girmez); dosya SAKLANMAZ,
-  bellekten verilir; izi `BASIM` satırıdır (kod ve PDF'in sha256'sı; `hesaplar.teslim_pusulasi`),
-  erişim günlüğüne girmez. Kendi hesabına, kapalı hesaba ve kaydı ya da izi tutmayan hesaba basılmaz
-  (satırın `pusula` eylemi aynı nedenleri söyler). İz satırı yazacağı için yöntem POST'tur.
+  bellekten verilir; üretimin kaydı `GeneratedDocument` satırıdır (içerik JSON'u şifreli, dosyası
+  yok; `OLUSTUR`, önceki pusulanın kaydı `YERINI_ALDI`; plan F1c 9. adım), dosyanın izi `BASIM`
+  satırıdır (kod ve PDF'in sha256'sı); ikisi aynı işlemde (`hesaplar.teslim_pusulasi`), erişim
+  günlüğüne girmez. Kendi hesabına, kapalı hesaba ve kaydı ya da izi tutmayan hesaba basılmaz
+  (satırın `pusula` eylemi aynı nedenleri söyler). Kayıt ve iz satırı yazacağı için yöntem POST'tur.
 
 GEÇİCİ PAROLA (plan F1b-2 "Geçici parola"): istemci önerir; sunucu yalnız politikayı denetler
 (`hesap_kurallari.validate_password`) ve parolayı sarmala koyar. Parola HİÇBİR yanıtta, günlükte,

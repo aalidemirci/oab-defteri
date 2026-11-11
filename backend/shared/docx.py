@@ -15,9 +15,14 @@ Sabitlenen biçim kararları (tasarım §9.1-4, §9.1-8; iskelet envanteri §7.2
 - **Yazı tipi adı verilir, gömülmez:** "Times New Roman" 12 punto (RYUE md. 7).
   Dosya açıldığı sistemin yazı tipini kullanır; Pardus'ta eşdeğeri yerine geçer.
 - **Sayfa A4**, kenar boşlukları PDF taban şablonuyla (`documents/base.html`) aynı.
+- **Tablo** puntosu ve sütun genişlikleri içerik modelinden gelir (`shared.evrak.tablo_punto`,
+  `sutun_yuzdeleri`; tasarım §9.1-8: 5-7 sütunda 10 punto): genişlikler yazı alanının (A4 eksi iki
+  kenar) yüzdesidir, tablo sabit düzenlidir (Word içeriğe göre yeniden boyutlamaz).
 - **Altlık** yalnız "OAB Defteri · <kod> · Sayfa n/m"dir (§9). Sayfa numarası
   Word alanıdır (`PAGE`, `NUMPAGES`): python-docx değerini hesaplamaz, bu yüzden
-  altlık içerik eşdeğerliği karşılaştırmasına girmez (UY-18).
+  altlık içerik eşdeğerliği karşılaştırmasına girmez (UY-18). Altlık 12 punto (`ALTLIK_PUNTO`).
+- **Punto alt sınırı** (RYUE md. 7/1; kullanıcı kararı 11.11.2026): yazı alanında 9 puntodan
+  küçük metin yoktur (`EN_KUCUK_PUNTO`); dipnot ve konum cümlesi 9 punto.
 
 python-docx tembel içe aktarılır: modül içe aktarılınca lxml yüklenmesin.
 """
@@ -36,12 +41,26 @@ DIL = "tr-TR"
 #: Gövde yazı tipi ve boyutu (RYUE md. 7: Times New Roman 12 punto).
 YAZI_TIPI = "Times New Roman"
 GOVDE_PUNTO = 12
+#: Yazı alanındaki metnin en küçük boyutu (RYUE md. 7/1: "gerekli hâllerde yazı alanında harf
+#: büyüklüğü 9 puntoya ... kadar düşürülebilir"; kullanıcı kararı 11.11.2026). Dipnot, aydınlatma
+#: metni ve konum cümlesi dahil yazı alanında bundan küçük punto yoktur; iki çizicide sınanır
+#: (`shared/tests/test_evrak.py::test_punto_alt_siniri_*`).
+EN_KUCUK_PUNTO = 9
 #: Konum cümlesinin boyutu (tasarım §9.2: 9 punto).
 KONUM_PUNTO = 9
-#: Dipnotun boyutu (`shared.evrak.Dipnot`; PDF şablonunun `.dipnot`'u 8 punto).
-DIPNOT_PUNTO = 8
+#: Dipnotun boyutu (`shared.evrak.Dipnot`; PDF şablonunun `.dipnot`'u da 9 punto).
+DIPNOT_PUNTO = 9
+#: Altlığın boyutu. Altlık sayfa numarasının satırıdır (RYUE md. 27); yazı alanında da iletişim
+#: bilgileri kısmında da değildir, md. 7/1 onun için puntonun düşürülmesine yer vermez: esas olan
+#: 12 punto (PDF şablonunun `@bottom-center`'ı da 12 punto).
+ALTLIK_PUNTO = 12
+#: Altlığın sayfanın alt kenarına uzaklığı (cm): 12 puntoluk satır 1,5 cm'lik alt boşluğun içinde
+#: kalır, Word gövdeyi yukarı itmez (PDF'te altlık alt boşluğun ortasındadır).
+ALTLIK_UZAKLIGI_CM = 0.5
 #: Kenar boşlukları (cm) — PDF taban şablonunun `@page` boşluklarıyla aynı.
 KENAR_CM = {"top": 1.4, "right": 1.8, "bottom": 1.5, "left": 1.8}
+#: Yazı alanının genişliği (cm): A4 genişliği eksi iki kenar; tablo sütun yüzdeleri buna uygulanır.
+YAZI_ALANI_CM = 21.0 - KENAR_CM["left"] - KENAR_CM["right"]
 
 
 def yeni_belge() -> DocxDocument:
@@ -103,17 +122,19 @@ def _dil_ve_yazi_tipi(belge: DocxDocument, pt: Any) -> None:
 
 
 def altlik_yaz(belge: DocxDocument, kod: str) -> None:
-    """Her sayfanın altlığına "OAB Defteri · <kod> · Sayfa n/m" yazar (alanlarla)."""
+    """Her sayfanın altlığına "OAB Defteri · <kod> · Sayfa n/m" yazar (alanlarla; `ALTLIK_PUNTO`)."""
     from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.shared import Pt
+    from docx.shared import Cm, Pt
 
+    boyut = Pt(ALTLIK_PUNTO)
     for bolum in belge.sections:
+        bolum.footer_distance = Cm(ALTLIK_UZAKLIGI_CM)
         paragraf = bolum.footer.paragraphs[0]
         paragraf.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        _calistir(paragraf, f"OAB Defteri · {kod} · Sayfa ", Pt(8))
-        _alan(paragraf, "PAGE", Pt(8))
-        _calistir(paragraf, "/", Pt(8))
-        _alan(paragraf, "NUMPAGES", Pt(8))
+        _calistir(paragraf, f"OAB Defteri · {kod} · Sayfa ", boyut)
+        _alan(paragraf, "PAGE", boyut)
+        _calistir(paragraf, "/", boyut)
+        _alan(paragraf, "NUMPAGES", boyut)
 
 
 def _calistir(paragraf: Any, metin: str, boyut: Any = None, *, kalin: bool = False) -> Any:
@@ -151,18 +172,50 @@ def paragraf(belge: DocxDocument, metin: str, *, punto: int | None = None) -> No
     _calistir(p, metin, Pt(punto) if punto else None)
 
 
-def tablo(belge: DocxDocument, basliklar: Sequence[str], satirlar: Sequence[Sequence[str]]) -> None:
-    """Çerçeveli veri tablosu; başlık satırı kalın."""
-    from docx.enum.table import WD_TABLE_ALIGNMENT
+def alt_baslik(belge: DocxDocument, metin: str) -> None:
+    """Bölüm başlığı (`shared.evrak.AltBaslik`): sola yaslı, kalın, sonraki paragrafla aynı sayfada."""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
 
+    p = belge.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    p.paragraph_format.keep_with_next = True
+    _calistir(p, metin, kalin=True)
+
+
+def tablo(
+    belge: DocxDocument,
+    basliklar: Sequence[str],
+    satirlar: Sequence[Sequence[str]],
+    *,
+    punto: int,
+    yuzdeler: Sequence[float],
+) -> None:
+    """Çerçeveli veri tablosu; başlık satırı kalın. Punto ve sütun yüzdeleri modelden gelir.
+
+    Word sütun genişliğini hücreden okur: her hücreye ve ızgara sütununa (`w:gridCol`) aynı genişlik
+    yazılır, düzen sabittir (`autofit` kapalı: `w:tblLayout fixed`). Punto gövdeninkinden farklıysa
+    her çalıştırmaya yazılır.
+    """
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+    from docx.shared import Cm, Pt
+
+    if len(yuzdeler) != len(basliklar):
+        raise ValueError("Tablonun sütun yüzdesi her sütun için bir değer taşımalı.")
+    genislikler = [Cm(YAZI_ALANI_CM * yuzde / 100) for yuzde in yuzdeler]
+    boyut = Pt(punto) if punto != GOVDE_PUNTO else None
     t = belge.add_table(rows=1, cols=len(basliklar))
     t.style = "Table Grid"
     t.alignment = WD_TABLE_ALIGNMENT.CENTER
-    for hucre, metin in zip(t.rows[0].cells, basliklar, strict=True):
-        _calistir(hucre.paragraphs[0], metin, kalin=True)
+    t.autofit = False  # python-docx `w:tblLayout w:type="fixed"`'i şemadaki yerine yazar
+    for sutun, genislik in zip(t.columns, genislikler, strict=True):
+        sutun.width = genislik
+    for hucre, metin, genislik in zip(t.rows[0].cells, basliklar, genislikler, strict=True):
+        hucre.width = genislik
+        _calistir(hucre.paragraphs[0], metin, boyut, kalin=True)
     for satir in satirlar:
-        for hucre, metin in zip(t.add_row().cells, satir, strict=True):
-            _calistir(hucre.paragraphs[0], metin)
+        for hucre, metin, genislik in zip(t.add_row().cells, satir, genislikler, strict=True):
+            hucre.width = genislik
+            _calistir(hucre.paragraphs[0], metin, boyut)
 
 
 def imza(belge: DocxDocument, tarih: str, sahipler: Sequence[tuple[str, str]]) -> None:
@@ -186,7 +239,7 @@ def imza(belge: DocxDocument, tarih: str, sahipler: Sequence[tuple[str, str]]) -
 
 
 def dipnot(belge: DocxDocument, metin: str) -> None:
-    """Belgenin sonundaki dipnot (`shared.evrak.Dipnot`): sola yaslı, küçük punto.
+    """Belgenin sonundaki dipnot (`shared.evrak.Dipnot`): sola yaslı, `DIPNOT_PUNTO` (9).
 
     Word'ün dipnot nesnesi değildir: gövdenin son paragrafıdır, böylece metin akışına PDF'teki
     gibi girer (içerik eşdeğerliği).

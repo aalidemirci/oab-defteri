@@ -5,7 +5,7 @@
 # kaynağı olan sunucu uygulamasının imajını referans alır. Ancak WeasyPrint 63, cairo/
 # gdk-pixbuf KULLANMAZ (53. sürümden itibaren saf-Python render motoruna geçti);
 # bu yüzden o imajın libpangocairo-1.0-0 / libgdk-pixbuf-2.0-0 mirası BURAYA
-# TAŞINMADI — yalnız pango metin dizilimi + harfbuzz + fontconfig + DejaVu.
+# TAŞINMADI — yalnız pango metin dizilimi + harfbuzz + fontconfig + DejaVu + Liberation Serif.
 # =============================================================================
 
 FROM python:3.12-slim
@@ -20,7 +20,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 #  - libpango-1.0-0 + libpangoft2-1.0-0: metin dizilimi + font motoru
 #  - libharfbuzz0b + libharfbuzz-subset0: harf şekillendirme
 #  - libfontconfig1 + libglib2.0-0: font keşfi / temel glib
-#  - fonts-dejavu-core: Türkçe karakterler (ç/ş/ğ/ü/ö) tam kapsama
+#  - fonts-dejavu-core: Türkçe karakterler (ç/ş/ğ/ü/ö) tam kapsama; evrakta eksik glif yedeği
+#  - fonts-liberation2: evrak hattının yazı tipi Liberation Serif 2.x (SIL OFL 1.1; ölçüleri
+#    Times New Roman'la aynı; tasarım §9.1-8, plan F1c kararları "Evrak biçimi"). Paket adı
+#    .deb bağımlılığıyla aynıdır: Debian 11-12'de asıl paket, 13'te `fonts-liberation`
+#    (2.1.5) için geçiş paketidir; `fonts-liberation` 11-12'de eski 1.07 sürümünü verir.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpango-1.0-0 \
         libpangoft2-1.0-0 \
@@ -29,6 +33,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libfontconfig1 \
         libglib2.0-0 \
         fonts-dejavu-core \
+        fonts-liberation2 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

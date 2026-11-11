@@ -304,3 +304,19 @@ class DecisionStatus(models.TextChoices):
     DEFTERE_ISLENDI = "DEFTERE_ISLENDI", "Deftere işlendi"
     IPTAL = "IPTAL", "İptal"
     DEFTERDE_SAKAT = "DEFTERDE_SAKAT", "Defterde sakat"
+
+
+class DocumentFormat(models.TextChoices):
+    """Üretilen evrakın biçimi (tasarım §5.2.8 `GeneratedDocument.formats`)."""
+
+    DOCX = "DOCX", "Word"
+    PDF = "PDF", "PDF"
+    XLSX = "XLSX", "Excel"
+    HTML = "HTML", "HTML"
+
+
+class DocumentStatus(models.TextChoices):
+    """Üretilen evrak kaydının durumu: `GECERLI` → `YERINI_ALDI` (yeniden üretim; tasarım §5.2.8)."""
+
+    GECERLI = "GECERLI", "Geçerli"
+    YERINI_ALDI = "YERINI_ALDI", "Yerini aldı"

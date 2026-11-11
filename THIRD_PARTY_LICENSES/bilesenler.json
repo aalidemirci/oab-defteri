@@ -912,6 +912,21 @@
       "aciklama": "Evrakta gömülü yazı tipi (4 kesim)"
     },
     {
+      "ad": "Liberation Serif",
+      "surum": "2.1.5",
+      "tur": "yazi-tipi",
+      "platformlar": [
+        "linux",
+        "windows"
+      ],
+      "lisans": "OFL-1.1",
+      "dosyalar": [
+        "Liberation-LISANS.txt"
+      ],
+      "kaynak": "https://github.com/liberationfonts/liberation-fonts",
+      "aciklama": "Evrakın gömülü yazı tipi (4 kesim; ölçüleri Times New Roman'la aynı)"
+    },
+    {
       "ad": "ICU (International Components for Unicode)",
       "surum": "73.2",
       "tur": "ikili",

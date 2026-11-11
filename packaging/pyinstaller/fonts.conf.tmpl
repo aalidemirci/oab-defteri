@@ -7,7 +7,8 @@
   üretiliyor ama Verdana ile diziliyordu. DOCTYPE zorunlu değildir.
 -->
 <!--
-  OAB Defteri — Windows fontconfig yapılandırma ŞABLONU.
+  OAB Defteri — fontconfig yapılandırma ŞABLONU (Windows: süreç geneli
+  `FONTCONFIG_FILE`; Linux: yalnız evrak yolu, `OD_EVRAK_FONTCONFIG`).
 
   Yer tutucular çalışma anında `packaging/pyinstaller/rthook_od.py` tarafından
   doldurulur ve sonuç YAZILABİLİR bir dizine yazılır:
@@ -15,19 +16,23 @@
     @CACHE_DIR@  → kullanıcı önbellek dizini (fontconfig buraya yazar)
 
   "fontconfig tuzağı": Windows'ta SİSTEM FONTLARINA GÜVENİLMEZ.
-  Okul bilgisayarında DejaVu kurulu olmayabilir, kurulu olan sürüm Türkçe
-  kesmelerde farklı davranabilir. Bu yüzden burada YALNIZ paketle gelen DejaVu
-  dizini taranır; `WINDOWSFONTDIR` bilinçli olarak EKLENMEZ.
+  Okul bilgisayarında DejaVu ya da Liberation Serif kurulu olmayabilir, kurulu
+  olan sürüm Türkçe kesmelerde farklı davranabilir. Bu yüzden burada YALNIZ
+  paketle gelen yazı tipi dizini taranır; `WINDOWSFONTDIR` bilinçli olarak
+  EKLENMEZ. Evrakın yazı tipi Liberation Serif'tir (ölçüleri Times New Roman'la
+  aynı; tasarım §9.1-8), DejaVu Sans program belgelerinin yazı tipi ve eksik
+  glif yedeğidir.
 -->
 <fontconfig>
 
-  <!-- Taranacak TEK font dizini: paketin içindeki DejaVu kesimleri. -->
+  <!-- Taranacak TEK font dizini: paketin içindeki DejaVu Sans ve Liberation Serif kesimleri. -->
   <dir>@FONT_DIR@</dir>
 
   <!-- Önbellek kurulum dizinine değil, kullanıcı veri dizinine yazılır. -->
   <cachedir>@CACHE_DIR@</cachedir>
 
-  <!-- Genel aileler gömülü DejaVu kesimlerine bağlanır. -->
+  <!-- Genel aileler gömülü kesimlere bağlanır: serif evrakın yazı tipi Liberation Serif'e
+       (tasarım §9.1-8), öteki aileler DejaVu Sans'a (DejaVu Serif ve Mono pakette yok). -->
   <match target="pattern">
     <test qual="any" name="family"><string>sans-serif</string></test>
     <edit name="family" mode="prepend" binding="same"><string>DejaVu Sans</string></edit>
@@ -38,14 +43,15 @@
   </match>
   <match target="pattern">
     <test qual="any" name="family"><string>serif</string></test>
-    <edit name="family" mode="prepend" binding="same"><string>DejaVu Serif</string></edit>
+    <edit name="family" mode="prepend" binding="same"><string>Liberation Serif</string></edit>
   </match>
   <match target="pattern">
     <test qual="any" name="family"><string>monospace</string></test>
     <edit name="family" mode="prepend" binding="same"><string>DejaVu Sans Mono</string></edit>
   </match>
 
-  <!-- Eşleşmeyen her istek de DejaVu Sans'a düşer (boş sayfa yerine metin). -->
+  <!-- Eşleşmeyen her istek de DejaVu Sans'a düşer (boş sayfa yerine metin); evrakta Liberation
+       Serif'te bulunmayan glif de buradan gelir ("DejaVu glif yedeği", plan F1c kararları). -->
   <match target="pattern">
     <edit name="family" mode="append_last"><string>DejaVu Sans</string></edit>
   </match>

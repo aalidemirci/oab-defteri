@@ -104,3 +104,25 @@ class KisiPasif(APIException):
     status_code = status.HTTP_409_CONFLICT
     default_code = "kisi_pasif"
     default_detail = "Pasif kişi kaydı değiştirilemez; önce kaydı etkinleştirin."
+
+
+class EvrakIcerigiSaklanmaz(APIException):
+    """Veli adı taşıyan belge (R9) yeniden basılmaz: içeriği ve dosyası saklanmaz (tasarım §9.1-2)."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "evrak_icerigi_saklanmaz"
+    default_detail = (
+        "Bu belge veli adı taşıdığı için program içeriğini saklamaz; yeniden basılamaz, yeniden "
+        "üretilir."
+    )
+
+
+class EvrakIcerigiTutmuyor(APIException):
+    """Kayıtlı içerik JSON'u çözülemedi ya da kayıtlı özeti tutmuyor: belge basılmaz (§6.2-6)."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "evrak_icerigi_tutmuyor"
+    default_detail = (
+        "Kayıtlı evrak içeriği doğrulanamadı; belge yeniden basılmadı. Kayıt program dışından "
+        "değiştirilmiş olabilir; Denetleme Kuruluna bildirin."
+    )

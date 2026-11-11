@@ -829,15 +829,39 @@ def test_elle_bilesenler_listede() -> None:
     assert {
         "Python (CPython)",
         "DejaVu Sans",
+        "Liberation Serif",
         "Microsoft Edge WebView2 SDK",
         "Microsoft Edge WebView2 Evergreen önyükleyicisi",
         "material-symbols",
         "tailwindcss",
     } <= adlar
-    dejavu = next(b for b in BILESENLER if b.ad == "DejaVu Sans")
-    assert (LISANSLAR / dejavu.dosyalar[0]).read_text(encoding="utf-8") == (
-        REPO / "packaging" / "fontlar" / "DejaVu-LISANS.txt"
-    ).read_text(encoding="utf-8")
+    for ad, dosya in (
+        ("DejaVu Sans", "DejaVu-LISANS.txt"),
+        ("Liberation Serif", "Liberation-LISANS.txt"),
+    ):
+        font = next(b for b in BILESENLER if b.ad == ad)
+        assert font.dosyalar == [dosya]
+        assert (LISANSLAR / dosya).read_text(encoding="utf-8") == (
+            REPO / "packaging" / "fontlar" / dosya
+        ).read_text(encoding="utf-8")
+
+
+def test_paketteki_her_yazi_tipinin_lisansi_listede() -> None:
+    """`packaging/fontlar/`'daki her kesim lisans listesindeki bir yazı tipi bileşenine aittir ve
+    spec yazı tipi lisanslarının ikisini de pakete koyar (tasarım §11; plan F1c kararları "Evrak
+    biçimi": Liberation Serif SIL OFL 1.1). Evrakın kesimleri dört: düz, kalın, eğik, kalın eğik."""
+    kesimler = {p.name for p in (REPO / "packaging" / "fontlar").glob("*.ttf")}
+    assert {k for k in kesimler if k.startswith("LiberationSerif-")} == {
+        f"LiberationSerif-{k}.ttf" for k in ("Regular", "Bold", "Italic", "BoldItalic")
+    }
+    assert all(k.startswith(("DejaVuSans", "LiberationSerif-")) for k in kesimler), kesimler
+    liberation = next(b for b in BILESENLER if b.ad == "Liberation Serif")
+    assert (liberation.tur, liberation.lisans) == ("yazi-tipi", "OFL-1.1")
+    assert "SIL OPEN FONT LICENSE Version 1.1" in (LISANSLAR / "Liberation-LISANS.txt").read_text(
+        encoding="utf-8"
+    )
+    spec = (REPO / "packaging" / "pyinstaller" / "oab_defteri.spec").read_text(encoding="utf-8")
+    assert '"DejaVu-LISANS.txt", "Liberation-LISANS.txt"' in spec
 
 
 def test_lisans_betigi_derleme_ortaminda_yalniz_standart_kitaplik_ister() -> None:

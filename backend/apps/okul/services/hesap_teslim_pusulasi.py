@@ -3,9 +3,9 @@
 Tasarım §4.4.5 (hesap açma), §9.1 (tek içerik, iki çizici; "Parola hiçbir belgede yoktur"), §9.5
 (E63: dayanak BSG Yön. md. 9/2, 10/1-2; biçim yalnız PDF; F1b) ve §9.6 (E63: veri kaynağı, imza
 bloğu, kabul örneği). Bu modül YALNIZ içeriği kurar (`shared.evrak.Belge`); ayrı şablon yoktur,
-PDF evrak hattının tek kapısından çizilir (`shared.evrak.pdf_ciz`; yazı tipi bugünkü hattınki,
-DejaVu Sans). Yetki, kayıt denetimi, basım izi ve dosyanın verilişi `hesaplar.teslim_pusulasi` ve
-`views_hesaplar`'dadır.
+PDF evrak hattının tek kapısından çizilir (`shared.evrak.pdf_ciz`; yazı tipi ve punto hattınkidir:
+Liberation Serif, gövde 12; plan F1c kararları "Evrak biçimi", 9. adım). Yetki, kayıt denetimi,
+basım izi, evrak kaydı ve dosyanın verilişi `hesaplar.teslim_pusulasi` ve `views_hesaplar`'dadır.
 
 BASILANLAR (planın lafzı):
 
@@ -59,7 +59,6 @@ from apps.okul.models import AccountRole
 from apps.okul.oturum import rol_etiketi
 from apps.okul.rol_izinleri import Satir, etkin_hucreler, yazabildigi_uclar
 from shared import evrak
-from shared.letterhead import letterhead_authority, letterhead_unit
 from shared.text import tr_upper
 
 #: Evrak kataloğu kodu (tasarım §9.5). Yalnız altlıkta görünür (sözlük §2 istisna 1).
@@ -73,7 +72,7 @@ KUNYE_BASLIKLARI: Final = ("Tanıtıcı", "Rol", "Açılış tarihi")
 IS_BASLIGI: Final = "Bu programda sizin işiniz"
 
 # Bölüm paragrafları: "<başlık>: " + cümleler (iki noktadan sonra cümle büyük harfle başlar). Sayfa
-# bütçesi (program yöneticisinde en çok iki, öteki rollerde bir sayfa; kullanıcı kararı 04.11.2026;
+# bütçesi (her rolde en çok iki sayfa; kullanıcı kararı 11.11.2026, program yöneticisinde 04.11.2026;
 # `test_evrak_kurallari.py`) bölümlerin tablo yerine paragraf olmasını ister.
 ILK_GIRIS_BASLIGI: Final = "İlk girişte"
 #: İlk giriş adımları (kilit ekranının metinleriyle: "Parola", "Aç", "Yeni parola", "Parola
@@ -406,7 +405,8 @@ def _bolum(baslik: str, cumleler: tuple[str, ...] | list[str]) -> str:
 def _aydinlatma(veri_sorumlusu: str) -> tuple[evrak.Dipnot, ...]:
     """Aydınlatma bölümü; `veri_sorumlusu` okul kartındaki bilgidir (`data_controller_text`).
 
-    Dipnot puntosuyla, imza bloklarından sonra durur: gövde puntosunda tek sayfa bütçesini aşar.
+    Dipnot puntosuyla (9; RYUE md. 7/1'in yazı alanı alt sınırı, kullanıcı kararı 11.11.2026), imza
+    bloklarından sonra durur; gerekirse ikinci yaprağa geçer (sayfa bütçesi her rolde en çok iki).
     """
     deger = veri_sorumlusu.strip() or AYDINLATMA_VERI_SORUMLUSU_YERI
     return tuple(
@@ -436,11 +436,7 @@ def pusula_belgesi(
     adimlar = [adim.format(tanitici=tanitici) for adim in ILK_GIRIS_ADIMLARI]
     return evrak.Belge(
         kod=KOD,
-        antet=evrak.Antet(
-            tc="T.C.",
-            authority=letterhead_authority(ilce),
-            unit_line=letterhead_unit(okul_adi),
-        ),
+        antet=evrak.okul_anteti(okul_adi=okul_adi, ilce=ilce),
         bloklar=(
             evrak.Baslik(BELGE_ADI),
             evrak.Tablo(

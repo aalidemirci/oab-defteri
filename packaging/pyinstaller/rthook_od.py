@@ -4,7 +4,7 @@ BU DOSYADAKİ WINDOWS YOLU BU ORTAMDA DOĞRULANMADI — ilk Windows koşusunda
 sınanacak. Linux yolu (`OD_FRONTEND_DIR`) debian:11 + debian:12 kurulum
 provalarında koşturuldu.
 
-Kanca, giriş betiğinden (`giris.py`) ÖNCE çalışır; yaptığı üç iş de "ilk
+Kanca, giriş betiğinden (`giris.py`) ÖNCE çalışır; yaptığı işler "ilk
 import'tan önce ortam değişkeni set etmek" gerektirdiği için başka bir yere
 konulamaz:
 
@@ -15,13 +15,19 @@ konulamaz:
    ≥60 `WEASYPRINT_DLL_DIRECTORIES` değişkenini resmen destekler ve bu değişken
    `weasyprint` import edilmeden ÖNCE dolu olmalıdır.
 
-2. **Fontconfig yapılandırması (yalnız Windows).** Windows'ta sistem fontconfig
-   yapılandırması yoktur; ayrıca sistem fontlarına güvenilmez ("fontconfig tuzağı":
-   yalnız gömülü DejaVu). Paketteki `fonts.conf.tmpl` şablonu, YAZILABİLİR bir
-   önbellek dizini (`%LOCALAPPDATA%\\OABDefteri\\cache\\fontconfig`) ve
-   gömülü font dizini işlenerek kullanıcı veri dizinine yazılır;
-   `FONTCONFIG_FILE` oraya bakar. Kurulum dizini salt-okunur olabileceği için
-   şablon paketin içinde İŞLENMEZ.
+2. **Fontconfig yapılandırması (iki sistem).** Evrak iki sistemde de paketli yazı
+   tipleriyle dizilir, sistem yazı tipi dizini taranmaz (tasarım §9.1-8; "fontconfig
+   tuzağı": yalnız gömülü DejaVu Sans ve evrakın Liberation Serif'i). Paketteki
+   `fonts.conf.tmpl` şablonu, YAZILABİLİR bir önbellek dizini (Windows'ta
+   `%LOCALAPPDATA%\\OABDefteri\\cache\\fontconfig`) ve gömülü font dizini işlenerek
+   kullanıcının önbellek dizinine yazılır. Kurulum dizini salt-okunur olabileceği
+   için şablon paketin içinde İŞLENMEZ.
+   - Windows: `FONTCONFIG_FILE` oraya bakar (mingw DLL'i değişkeni görmediği için asıl
+     güvence paket içi `etc/fonts/fonts.conf`'tur; bkz. `fonts.paket.conf`).
+   - Linux: süreç geneli `FONTCONFIG_FILE` KURULMAZ (Qt pencere yazı tipleri sistem
+     yapılandırmasında kalır); yol `OD_EVRAK_FONTCONFIG` ile bildirilir ve yalnız
+     evrakın WeasyPrint yazı tipi yapılandırması ondan kurulur
+     (`shared.pdf.font_yapilandirmasi`).
 
 3. **Frontend dizini (her platform).** Derlenmiş SPA paket içinde
    `frontend/dist` altındadır; Django tarafı bu yolu `OD_FRONTEND_DIR`
@@ -45,6 +51,8 @@ from xml.sax.saxutils import escape
 ENV_WARNING = "OD_RTHOOK_UYARI"
 ENV_FRONTEND_DIR = "OD_FRONTEND_DIR"
 ENV_WEASYPRINT_DLL = "WEASYPRINT_DLL_DIRECTORIES"
+#: `shared.pdf.ENV_EVRAK_FONTCONFIG` ile aynı ad (kanca backend'i içe aktarmaz).
+ENV_EVRAK_FONTCONFIG = "OD_EVRAK_FONTCONFIG"
 
 _FONTS_CONF_TEMPLATE = "fonts.conf.tmpl"
 _FONTS_CONF = "fonts.conf"
@@ -90,8 +98,8 @@ def announce_weasyprint_dll_dirs(root: Path) -> None:
         os.environ.setdefault(ENV_WEASYPRINT_DLL, os.pathsep.join(existing))
 
 
-def setup_fontconfig(root: Path, cache_root: Path) -> Path | None:
-    """Gömülü fontları gösteren `fonts.conf`'u yazılabilir dizine üretir (Windows).
+def write_fontconfig(root: Path, cache_root: Path) -> Path | None:
+    """Gömülü fontları gösteren `fonts.conf`'u yazılabilir dizine üretir; yazılamazsa `None`.
 
     Şablondaki `@FONT_DIR@` ve `@CACHE_DIR@` yer tutucuları doldurulur. Dosya
     her açılışta yeniden yazılır: kurulum dizini değişmiş (taşınabilir zip başka
@@ -114,9 +122,27 @@ def setup_fontconfig(root: Path, cache_root: Path) -> Path | None:
     except OSError as error:
         _warn(f"Font yapılandırması yazılamadı: {error}")
         return None
+    return target
 
-    os.environ["FONTCONFIG_FILE"] = str(target)
-    os.environ["FONTCONFIG_PATH"] = str(target.parent)
+
+def setup_fontconfig(root: Path, cache_root: Path) -> Path | None:
+    """Windows: üretilen `fonts.conf`'u süreç geneli `FONTCONFIG_FILE` yapar."""
+    target = write_fontconfig(root, cache_root)
+    if target is not None:
+        os.environ["FONTCONFIG_FILE"] = str(target)
+        os.environ["FONTCONFIG_PATH"] = str(target.parent)
+    return target
+
+
+def announce_evrak_fontconfig(root: Path, cache_root: Path) -> Path | None:
+    """Linux: üretilen `fonts.conf`'u yalnız evrakın yazı tipi yapılandırmasına bildirir.
+
+    Süreç geneli `FONTCONFIG_FILE` değişmez; `shared.pdf.font_yapilandirmasi` WeasyPrint'in
+    yapılandırmasını bu dosyayla kurar (sistem yazı tipi dizini taranmaz, tasarım §9.1-8).
+    """
+    target = write_fontconfig(root, cache_root)
+    if target is not None:
+        os.environ[ENV_EVRAK_FONTCONFIG] = str(target)
     return target
 
 
@@ -127,6 +153,8 @@ def setup() -> None:
     if sys.platform.startswith("win"):
         announce_weasyprint_dll_dirs(root)
         setup_fontconfig(root, _cache_root())
+    else:
+        announce_evrak_fontconfig(root, _cache_root())
 
 
 setup()

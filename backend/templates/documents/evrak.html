@@ -3,37 +3,66 @@ Evrak hattının PDF çizicisi (T2; tasarım §9.1, TK17). İçerik `shared/evra
 modelden gelir; bu şablon yalnız düzeni çizer. Harf dönüşümü YOKTUR (başlık modelde
 `tr_upper` ile büyütülür). Altlık yalnız "OAB Defteri · <kod> · Sayfa n/m"dir (§9);
 içerik eşdeğerliği karşılaştırmasına girmez (UY-18). Dipnot (`Dipnot`) altlık DEĞİLDİR:
-gövdenin sonunda küçük puntoyla durur, ilki ince bir çizgiyle ayrılır; metin akışına girer.
-Dipnotun satır aralığı ve boşlukları F1c 4. adımda sıkıldı (1.3 → 1.2, 2pt → 1pt, ilk dipnotta
-12pt → 8pt): yönetim kurulu rollerinin pusulasına "Kişiler: birlik kişileri" satırı girince
-öteki rollerin bir sayfa bütçesi (kullanıcı kararı 04.11.2026) korunsun diye; punto 8 kalır.
-Evrak hattının yazı tipi ve puntosu F1c 9. adımda yeniden kurulur, bütçe orada yeniden sınanır.
+gövdenin sonunda gövdeden küçük puntoyla durur, ilki ince bir çizgiyle ayrılır; metin akışına girer.
+Biçim (tasarım §9.1-8; plan F1c kararları "Evrak biçimi", 9. adım): yazı tipi paketli Liberation
+Serif (ölçüleri Times New Roman'la aynı; Word çıktısı adı "Times New Roman" yazar), DejaVu yalnız
+eksik glif yedeği; gövde, antet, başlık ve imza 12 punto (Word'deki gibi); tablo puntosu ve sütun
+yüzdeleri modelden gelir (`tablo_punto`: 1-4 sütun 12, 5-7 sütun 10; `sutun_yuzdeleri`, sabit
+düzen); başlığın alt satırı (`Baslik.alt`) 10, konum cümlesi ve dipnot 9 punto. Antedin birlik satırı taban şablonun antet
+bloğundadır.
+PUNTO ALT SINIRI (RYUE md. 7/1; kullanıcı kararı 11.11.2026): yazı alanındaki hiçbir metin 9
+puntodan küçük olmaz (dipnot, aydınlatma metni, konum cümlesi dahil). Altlık sayfa numarasının
+satırıdır (RYUE md. 27: iletişim bilgilerinin altında, sayfanın ortasında); yazı alanında da
+iletişim bilgileri kısmında da değildir, md. 7/1 onun için puntonun düşürülmesine yer vermez:
+esas olan 12 punto yazılır (Word'de `shared.docx.ALTLIK_PUNTO`). Sınaması
+`shared/tests/test_evrak.py::test_punto_alt_siniri_*` (PDF'teki yazı boyutları geri okunur).
+Dipnotun F1c 4. adımda sıkılan aralığı (satır 1.2, ara 1pt, ilk dipnotta 8pt) 9. adımda yeni
+yazı tipiyle yeniden sınandı ve gerekmediği için kaldırıldı (önceki değerler: 1.3, 2pt, 12pt).
+Hesap teslim pusulasının sayfa bütçesi her rolde en çok 2 sayfadır (kullanıcı kararı 11.11.2026;
+`test_evrak_kurallari.test_sayfa_butcesi`).
 {% endcomment %}
 {% block extra_style %}<style>
   @page {
     @bottom-center {
       content: "OAB Defteri · {{ belge.kod }} · Sayfa " counter(page) "/" counter(pages);
-      font-family: "DejaVu Sans"; font-size: 7.5pt; color: #64748b;
+      font-family: "Liberation Serif", "DejaVu Sans"; font-size: 12pt; color: #64748b;
     }
   }
-  .letterhead .alt-birim { font-size: 10pt; margin-top: 1pt; }
-  .konum { margin: 10pt 0 0; font-size: 9pt; text-align: justify; line-height: 1.35; }
-  .sig-date { text-align: right; margin-top: 14pt; font-size: 9.5pt; color: var(--pr-label); }
-  .dipnot { margin: 1pt 0 0; font-size: 8pt; line-height: 1.2; color: var(--pr-secondary); }
-  .dipnot-ilk { margin-top: 8pt; padding-top: 3pt; border-top: 0.5pt solid var(--pr-faint); }
+  body { font-family: "Liberation Serif", "DejaVu Sans", serif; font-size: 12pt; line-height: 1.2; }
+  .letterhead .tc { font-size: 12pt; letter-spacing: 0; }
+  .letterhead .authority, .letterhead .school { font-size: 12pt; margin-top: 0; }
+  .letterhead .alt-birim { font-size: 12pt; margin-top: 0; }
+  .doc-title { font-size: 12pt; margin: 10pt 0 2pt; }
+  .doc-subtitle { font-size: 10pt; }
+  .alt-baslik { margin: 8pt 0 2pt; font-size: 12pt; font-weight: bold; color: var(--pr-ink);
+                break-after: avoid; page-break-after: avoid; }
+  .para { font-size: 12pt; line-height: 1.25; margin: 6pt 0; }
+  .doc-table { table-layout: fixed; margin: 6pt 0; }
+  .doc-table th, .doc-table td { padding: 3pt 5pt; overflow-wrap: break-word; }
+  .doc-table.punto-12 th, .doc-table.punto-12 td { font-size: 12pt; }
+  .doc-table.punto-10 th, .doc-table.punto-10 td { font-size: 10pt; }
+  .konum { margin: 10pt 0 0; font-size: 9pt; text-align: justify; line-height: 1.3; }
+  .sig-date { text-align: right; margin-top: 12pt; font-size: 12pt; color: var(--pr-label); }
+  .sig-grid { margin-top: 16pt; }
+  .sig-grid td { font-size: 12pt; }
+  .sig-grid .role { font-size: 12pt; }
+  .dipnot { margin: 2pt 0 0; font-size: 9pt; line-height: 1.3; color: var(--pr-secondary); }
+  .dipnot-ilk { margin-top: 12pt; padding-top: 3pt; border-top: 0.5pt solid var(--pr-faint); }
 </style>{% endblock %}
 {% block content %}
-  {% if belge.antet.alt_birim %}<div class="letterhead"><div class="alt-birim">{{ belge.antet.alt_birim }}</div></div>{% endif %}
   {% for oge in bloklar %}
     {% if oge.tur == "baslik" %}
       <div class="doc-title">{{ oge.blok.metin }}</div>
       {% if oge.blok.alt %}<div class="doc-subtitle">{{ oge.blok.alt }}</div>{% endif %}
+    {% elif oge.tur == "alt_baslik" %}
+      <p class="alt-baslik">{{ oge.blok.metin }}</p>
     {% elif oge.tur == "paragraf" %}
       <p class="para">{{ oge.blok.metin }}</p>
     {% elif oge.tur == "konum" %}
       <p class="konum keep-with-next">{{ oge.blok.metin }}</p>
     {% elif oge.tur == "tablo" %}
-      <table class="doc-table">
+      <table class="doc-table punto-{{ oge.punto }}">
+        <colgroup>{% for genislik in oge.genislikler %}<col style="width: {{ genislik }}">{% endfor %}</colgroup>
         <thead><tr>{% for baslik in oge.blok.basliklar %}<th>{{ baslik }}</th>{% endfor %}</tr></thead>
         <tbody>{% for satir in oge.blok.satirlar %}<tr>{% for hucre in satir %}<td>{{ hucre }}</td>{% endfor %}</tr>{% endfor %}</tbody>
       </table>

@@ -29,10 +29,10 @@ packaging/
 │   ├── giris.py                 paket giriş noktası + teşhis kipleri
 │   │                            (`--pdf-duman`, `--evrak-duman`, `--bagimlilik-duman`)
 │   ├── rthook_od.py             çalışma-zamanı kancası (DLL/fontconfig/SPA yolu)
-│   ├── fonts.conf.tmpl          Windows fontconfig şablonu (gömülü DejaVu)
+│   ├── fonts.conf.tmpl          Windows fontconfig şablonu (gömülü yazı tipleri)
 │   └── fonts.paket.conf         paket içi fontconfig — spec bunu (Windows)
 │                                `_internal/etc/fonts/fonts.conf` adıyla koyar
-├── fontlar/                     DejaVu Sans 4 kesim + lisans (pakete gömülür)
+├── fontlar/                     DejaVu Sans ve Liberation Serif, 4'er kesim + lisansları (pakete gömülür)
 ├── ikonlar/                     program simgesi ("Okul çatısı ve aile", 31.10.2026) — çıktılar
 │   │                            depodadır, derleme ikon üretmez
 │   ├── logo_uret.py             ana çizim (1024) + elle çizilmiş 16/24/32 kesimleri
@@ -113,7 +113,7 @@ Paketlenmiş ikili her derlemede üç teşhis kipiyle sınanır (`giris.py`):
 * `--pdf-duman [dosya.pdf]` — evrakın taban şablonundan
   (`backend/templates/documents/base.html`) küçük bir Türkçe örnek belge
   üretir; şablon ağacının pakette olduğunu, WeasyPrint zincirini, Türkçe
-  harfleri ve gömülü DejaVu fontunu doğrular.
+  harfleri ve gömülü iki yazı tipini (DejaVu Sans, evrakın Liberation Serif'i) doğrular.
 * `--evrak-duman [dosya.docx]` — evrak hattının Word çizicisini sınar (T2):
   python-docx'in varsayılan şablonuyla boş belge açar, backend'in örnek
   belgesini (`shared/evrak.py`) Word'e çizer, geri okur ve gövdenin metin
@@ -311,7 +311,7 @@ dosyaları. Dizin **elle yazılmaz**, `packaging/lisanslar/uret.sh` üretir:
    platform için (`sys_platform` işaretleriyle) çözer; lisans dosyaları kurulu
    dağıtımdan, yoksa PyPI'daki tekerlekten ya da kaynak arşivinden okunur.
    PySide6 tekerlekleri lisans metni taşımaz: ortak LGPL-3.0/GPL-3.0 metni
-   verilir. Python çalışma zamanı, DejaVu, WebView2 SDK (NuGet'teki lisans),
+   verilir. Python çalışma zamanı, DejaVu, Liberation Serif, WebView2 SDK (NuGet'teki lisans),
    Evergreen önyükleyicisi notu, Qt ile ayrı kitaplık olarak gelen ICU 73.2
    (lisans metni ICU'nun etiketinden) ve Qt kitaplıklarına derlenmiş üçüncü taraf
    kodun (Chromium dahil) bildirim adresleri elle tanımlı bileşenlerdir. Ön

@@ -36,7 +36,7 @@
 | W1 | MSYS2 `mingw-w64-x86_64-ntldd-git` paket adı doğru | CI iş akışı, `dll_kapanisi.py` | pacman "target not found"; `objdump` yedeğine düşülür (betik bunu zaten yapar) |
 | W2 | WeasyPrint'in aradığı DLL adları `libpango-1.0-0.dll`, `libpangoft2-1.0-0.dll`, `libharfbuzz-0.dll`, `libgobject-2.0-0.dll`, `libfontconfig-1.dll` desenlerine uyuyor | `dll_kapanisi.py::SEED_PATTERNS` | `--pdf-duman` "cannot load library" ile çöker |
 | W3 | `WEASYPRINT_DLL_DIRECTORIES` paket kökünü göstermek yeterli (WeasyPrint ≥60) | `rthook_od.py` | aynı hata; alternatif `os.add_dll_directory()` |
-| W4 | fontconfig `<dir>` mutlak yol + `<cachedir>` yazılabilir dizin kabul ediyor | `fonts.conf.tmpl` | PDF üretilir ama font DejaVu değildir → `--pdf-duman` "gömülü DejaVu ile dizilmemiş" hatası verir (duman testi bunu YAKALAR) |
+| W4 | fontconfig `<dir>` mutlak yol + `<cachedir>` yazılabilir dizin kabul ediyor | `fonts.conf.tmpl` | PDF üretilir ama font gömülü DejaVu Sans ya da Liberation Serif değildir → `--pdf-duman` "gömülü yazı tipleriyle dizilmemiş" hatası verir (duman testi bunu YAKALAR) |
 | W5 | WebView2 Evergreen bootstrapper bağlantısı `https://go.microsoft.com/fwlink/p/?LinkId=2124703` | CI iş akışı | indirme 404; elle indirilip `packaging/windows/` altına konur |
 | W6 | Inno Setup 6.3+ `ArchitecturesAllowed=x64compatible` destekliyor | `oab-defteri.iss` | derleme hatası → `x64` yazılır (6.2 ve öncesi) |
 | W7 | `compiler:Languages\Turkish.isl` Inno kurulumunda mevcut | `oab-defteri.iss` | derleme hatası → dosya Inno deposundan indirilip eklenir |

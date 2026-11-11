@@ -100,15 +100,18 @@ datas: list[tuple[str, str]] = [
 ]
 
 # ---------------------------------------------------------------------------
-# Fontlar + Windows font yapılandırması
+# Fontlar + font yapılandırması (iki sistem)
 # ---------------------------------------------------------------------------
-# "fontconfig tuzağı": Windows'ta YALNIZ gömülü DejaVu kullanılır. Linux'ta sistem
-# fontu (.deb bağımlılığı `fonts-dejavu-core`) kullanılır; yine de fontlar
-# pakete konur ki taşınabilir `.tar.gz` kurulumunda font eksikse metin
-# bozulmasın — Linux'ta `FONTCONFIG_FILE` AYARLANMAZ, bu kopya atıl durur.
+# "fontconfig tuzağı": PDF iki sistemde YALNIZ gömülü yazı tipleriyle dizilir: DejaVu Sans
+# (program belgeleri, eksik glif yedeği) ve evrakın Liberation Serif'i (tasarım §9.1-8; sistem
+# yazı tipi dizini taranmaz). Windows'ta paket içi `etc/fonts/fonts.conf`; Linux'ta kanca
+# (`rthook_od.py`) `fonts.conf.tmpl`'i işleyip yolunu `OD_EVRAK_FONTCONFIG` ile yalnız evrak
+# yoluna bildirir (`shared.pdf.font_yapilandirmasi`); süreç geneli `FONTCONFIG_FILE` Linux'ta
+# kurulmaz, Qt pencere yazı tipleri sistemden kalır.
 for ttf in sorted((REPO / "packaging" / "fontlar").glob("*.ttf")):
     datas.append((str(ttf), "fonts"))
-datas.append((str(REPO / "packaging" / "fontlar" / "DejaVu-LISANS.txt"), "fonts"))
+for _lisans in ("DejaVu-LISANS.txt", "Liberation-LISANS.txt"):
+    datas.append((str(REPO / "packaging" / "fontlar" / _lisans), "fonts"))
 datas.append((str(REPO / "packaging" / "pyinstaller" / "fonts.conf.tmpl"), "."))
 
 # ---------------------------------------------------------------------------
@@ -398,7 +401,8 @@ if _ucrt_ayiklanan or _ucrt_veri:
 # TOC'ta yapılır: önceden build.ps1 dosyayı lisans denetiminden SONRA eziyordu ve
 # `paket-icerigi.txt` pakette olmayan MSYS2 dosyasını anlatıyordu. conf.d pakete girmez:
 # projenin fonts.conf'u `<include>` taşımadığı için hiç yüklenmiyordu. `lisanslar.py paket`
-# diskte yalnız bu dosyayı kabul eder; `--pdf-duman` PDF'in DejaVu ile dizildiğini sınar.
+# diskte yalnız bu dosyayı kabul eder; `--pdf-duman` PDF'in gömülü DejaVu Sans ve
+# Liberation Serif ile dizildiğini sınar.
 if WINDOWS:
     a.datas, _fontconfig_ayiklanan = _lisanslar.fontconfig_yerlestir(a.datas)
     _lisanslar.yaz(

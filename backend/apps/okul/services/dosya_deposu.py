@@ -4,15 +4,19 @@
 yalnız-PDF kalkar, dosya şifrelenir. Kap, sarmal, ad, tür denetimi ve atomik yazım saf katmandadır
 (`shared.dosya_sifreleme`); burası `Attachment` satırını, yazım sırasını, yükleme sınırını ve
 kurallarını tutar. F1b'de ek ucu ve ekranı YOKTUR; bu servisi çağıran ilk sahip F1c'de
-`GeneratedDocument`'tır (plan F1b-3 "Dosya deposu"). `Attachment` F1b'de `apps/okul`'dadır (plan
-F1b-3 "Sapma").
+`GeneratedDocument`'tır (plan F1b-3 "Dosya deposu"; `apps.oab` kaydeder, plan F1c 9. adım).
+`Attachment` `apps/okul`'dadır (plan F1b-3 "Sapma").
 
 YAZMA (`yaz`). Sıra (plan F1b-3 "Dosya deposu"; §4.4.7):
 
 1. Reddedilen dosya için hiçbir şey yazılmaz (`validate_upload` ilkesi, tasarım §12.A): veli adı
    taşıyan belge (`kisi_listesi`; E07, adlı E08 depoya hiç yazılmaz, R9), geçersiz ad, kayıtlı
    olmayan sahip, sınırı aşan ya da kabul edilmeyen tür. `kisi_listesi`'nin varsayılanı YOKTUR:
-   bayrağı unutan çağıran veli adlı belgeyi saklamasın, kararını yazsın. Tür imza baytındandır;
+   bayrağı unutan çağıran veli adlı belgeyi saklamasın, kararını yazsın. Sahibin kendi işareti de
+   okunur (`personal_list` alanı olan sahipte veritabanındaki değer; `GeneratedDocument`): bayrak
+   `False` verilse de işaretli sahibe ek yazılmaz. Sahip kaydedilmiş ve hâlâ var olan bir satır
+   olmalıdır (silinmiş ama `pk`'sı dolu bayat örnek de reddedilir). Tür imza baytındandır; kabul
+   kümesi sahibindir (`sahip_kaydet`: kullanıcı eki PDF, JPEG, PNG; üretilen evrak PDF ve DOCX).
    `mime` verilirse ona uymalıdır.
 2. DEK bellekte değilse `crypto.KeyMissingError` (fail-closed; uç 409 `parola_gerekli`).
 3. Önce dosya: `dosyalar/<stored_name>`, atomik yazıcıyla (0600, fsync, `os.replace`; var olan adın
@@ -23,12 +27,17 @@ YAZMA (`yaz`). Sıra (plan F1b-3 "Dosya deposu"; §4.4.7):
    bırakırdı.
 
 Yazımın tamamı uzun iştir (`shared.bakim.UZUN_ISLER`): oturum işin ortasında kilitlenmez, DEK
-bellekten düşmez (§4.2 "Uçuştaki iş"). Yazar `yazar`'dır; iz satırı da aynı yazarla yazılır,
-`uploaded_by` `SISTEM`'de boştur.
+bellekten düşmez (§4.2 "Uçuştaki iş"). Yazım ayrıca bakım kapısından geçer (`shared.bakim.KAPI`;
+plan F1b-3 ekleri: "ilk çağıran gelince canlı geri yüklemenin depo takasıyla çakışmasına bakılır",
+F1c 9. adım): canlı geri yükleme dosya deposunu takas ederken (`live_restore`) yazım başlamaz
+(`DepoBakimda`), başlamış yazım bitmeden takas yapılmaz (geri yükleme uçuştaki işi bekler). Başarılı
+geri yüklemeden sonra kapı program yeniden açılana dek kapalı kalır, yazım da reddedilir. Yazar
+`yazar`'dır; iz satırı da aynı yazarla yazılır, `uploaded_by` `SISTEM`'de boştur.
 
 OKUMA (`oku`). Baytlar bellekte çözülür, açık kopya diske yazılmaz (§4.4.7 "Açık kopya kuralı");
-yanıtın başlıkları ucun işidir (F1c). Ucun yanıtı `FileResponse(BytesIO(...))`'tir, `HttpResponse`
-değildir: `wsgi.file_wrapper` yolu gömülü sunucunun yanıt tamponuna girmez (`desktop/server.py`).
+yanıt `indirme_yaniti`'dır (uçlar onu verir; ilk uç E01-E03 ile, F1c 10. adım): `FileResponse(BytesIO(
+...))`, `HttpResponse` değildir — `wsgi.file_wrapper` yolu gömülü sunucunun yanıt tamponuna girmez
+(`desktop/server.py`); ek olarak verilir, önbelleğe alınmaz (`no-store`), türü satırın `mime`'ıdır.
 Sıra: DEK, imha, dosya, GCM, özet. İmha edilmiş satır ve diskte bulunmayan dosya `EkDosyasiYok`'tur
 ("dosya yok"; §4.4.7). Açılan içeriğin özeti satırdakini tutmazsa `EkOzetiTutmuyor`: kap sağlam olsa
 da içerik başka bir ekindir ya da satır değiştirilmiştir. Özel nitelikli ekin okunması erişim
@@ -41,19 +50,23 @@ kayıt canlı okunur, Genel Bakış'taki Eksik Ekler kartı buradan beslenir. Pl
 ekler kişisiz bilgiyle listelenir": asıl dosya adı yalnız bu kartta ve kaydın kendisinde görünür,
 kilit açıkken çözülür. Yanıt yalnız program yöneticisine ve Denetleme Kuruluna gider.
 
-SAHİP KÜMESİ: `owner_type` kayıtlı model etiketlerinden gelir (`sahip_kaydet`); F1b'de küme BOŞTUR,
-ilk kaydı F1c'de sahibiyle birlikte gelir. Testler geçici sahip kaydeder (plan F1b-3).
+SAHİP KÜMESİ: `owner_type` kayıtlı model etiketlerinden gelir (`sahip_kaydet`); ilk ve bugünkü tek
+sahip `oab.GeneratedDocument`'tır (`apps.oab.apps`; üretilen evrak: PDF ve DOCX). Sahibin
+`verbose_name`'i Türkçedir: eksik ve bozuk ek listelerinin "kayıt türü" oradan okunur
+(`geri_yukleme_ekleri.tur_adi`). Testler geçici sahip kaydeder (plan F1b-3).
 
 Bu modül kişi adı içerebilen özgün adı günlüğe, iletiye ve iz satırına koymaz (R1; §4.6.2).
 """
 
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Final
 
 from django.conf import settings
 from django.db import models, transaction
+from django.http import FileResponse
 from django.utils import timezone
 
 from apps.okul import denetim_izi, erisim_gunlugu
@@ -62,13 +75,17 @@ from apps.okul.oturum import Yazar, yazar_olarak
 from apps.okul.services.geri_yukleme_ekleri import tur_adi
 from shared import crypto
 from shared import dosya_sifreleme as ds
-from shared.bakim import UZUN_ISLER
+from shared.bakim import KAPI, UZUN_ISLER
 
 #: `original_name`'in üst sınırı (karakter); şifreli sütun TEXT'tir, sınırı burası zorlar.
 OZGUN_AD_UZUNLUGU: Final = 255
 
 #: Eke sahip olabilen modellerin etiketleri (modül başlığı "SAHİP KÜMESİ").
 _SAHIP_ETIKETLERI: set[str] = set()
+#: Bunlardan üretilen evrak sahibi olanlar: kabul kümeleri `ds.URETILEN_EVRAK_TURLERI`'dir.
+_URETILEN_EVRAK_SAHIPLERI: set[str] = set()
+#: Sahibin veli adı taşıyan belge işaretinin alanı (R9; `GeneratedDocument.personal_list`).
+KISI_LISTESI_ALANI: Final = "personal_list"
 
 
 class DosyaDeposuHatasi(ValueError):
@@ -84,6 +101,13 @@ class KisiListesiSaklanmaz(DosyaDeposuHatasi):
 
 class EkSahibiHatasi(DosyaDeposuHatasi):
     """`owner` kayıtlı bir sahip modelin kaydedilmiş satırı değil."""
+
+
+class DepoBakimda(DosyaDeposuHatasi):
+    """Bakım kapısı kapalı (geri yükleme sürüyor ya da yapıldı): ek yazılmadı."""
+
+    def __init__(self) -> None:
+        super().__init__("Geri yükleme sürüyor; dosya yazılmadı. Biraz sonra yeniden deneyin.")
 
 
 class EkDosyasiYok(DosyaDeposuHatasi):
@@ -108,9 +132,25 @@ class EkOzetiTutmuyor(ds.DogrulamaHatasi):
         super().__init__("Ek dosyası doğrulanamadı: içeriği kaydındaki özeti tutmuyor; açılmadı.")
 
 
-def sahip_kaydet(model: type[models.Model]) -> None:
-    """Modeli ek sahipleri kümesine ekler (modül başlığı "SAHİP KÜMESİ")."""
-    _SAHIP_ETIKETLERI.add(denetim_izi.model_etiketi(model))
+def sahip_kaydet(model: type[models.Model], *, uretilen_evrak: bool = False) -> None:
+    """Modeli ek sahipleri kümesine ekler (modül başlığı "SAHİP KÜMESİ"); idempotenttir.
+
+    `uretilen_evrak`: sahibin ekleri programın ürettiği evraktır, kabul kümesi PDF ve DOCX'tir
+    (`ds.URETILEN_EVRAK_TURLERI`); öteki sahiplerde kullanıcı eki kümesi (PDF, JPEG, PNG).
+    """
+    etiket = denetim_izi.model_etiketi(model)
+    _SAHIP_ETIKETLERI.add(etiket)
+    if uretilen_evrak:
+        _URETILEN_EVRAK_SAHIPLERI.add(etiket)
+    else:
+        _URETILEN_EVRAK_SAHIPLERI.discard(etiket)
+
+
+def kabul_turleri(model: type[models.Model]) -> tuple[ds.DosyaTuru, ...]:
+    """Sahibin kabul ettiği dosya türleri (modül başlığı "YAZMA" 1)."""
+    if denetim_izi.model_etiketi(model) in _URETILEN_EVRAK_SAHIPLERI:
+        return ds.URETILEN_EVRAK_TURLERI
+    return ds.KABUL_EDILEN_TURLER
 
 
 def depo_dizini() -> Path:
@@ -141,7 +181,9 @@ def _ozgun_ad(ad: object) -> str:
 
 
 def _sahip_bagi(owner: models.Model) -> tuple[str, str]:
-    """`owner`'dan (`owner_type`, `owner_id`); kayıtlı değilse ya da kaydedilmemişse ret."""
+    """`owner`'dan (`owner_type`, `owner_id`); kayıtlı değilse, kaydedilmemişse ya da satırı artık
+    yoksa ret. Sahip veli adı taşıyan belgeyse (`KISI_LISTESI_ALANI` veritabanında doğru)
+    `KisiListesiSaklanmaz`."""
     model = type(owner)
     etiket = denetim_izi.model_etiketi(model)
     if etiket not in _SAHIP_ETIKETLERI:
@@ -149,6 +191,13 @@ def _sahip_bagi(owner: models.Model) -> tuple[str, str]:
     # Silinen örnekte `pk` boşalır, `adding` değişmez; `owner_id` "None" metni olurdu.
     if owner._state.adding or owner.pk is None:
         raise EkSahibiHatasi("Ek yalnız kaydedilmiş bir kayda bağlanır.")
+    # Bayat örnek: `pk`'sı dolu ama satırı silinmiş (ya da hiç yazılmamış) sahip.
+    satir = model._base_manager.filter(pk=owner.pk)
+    if not satir.exists():
+        raise EkSahibiHatasi("Ek yalnız kaydedilmiş bir kayda bağlanır.")
+    alanlar = {alan.name for alan in model._meta.get_fields()}
+    if KISI_LISTESI_ALANI in alanlar and satir.filter(**{KISI_LISTESI_ALANI: True}).exists():
+        raise KisiListesiSaklanmaz()
     return etiket, denetim_izi.kimlik_metni(model, owner.pk)
 
 
@@ -204,14 +253,17 @@ def yaz(
     if sensitivity not in AttachmentSensitivity.values:
         raise DosyaDeposuHatasi("Ekin hassasiyeti geçersiz.")
     sahip_turu, sahip_kimligi = _sahip_bagi(owner)
+    turler = kabul_turleri(type(owner))
     sinir = yukleme_siniri()
     if len(icerik) > sinir:
         raise ds.BoyutSiniriHatasi(f"Dosya çok büyük; en çok {sinir // (1024 * 1024)} MB olabilir.")
-    if mime is not None and mime != ds.tur_belirle(icerik):
+    if mime is not None and mime != ds.tur_belirle(icerik, turler):
         raise ds.TurHatasi("Dosyanın içeriği bildirilen türle uyuşmuyor.")
-    with UZUN_ISLER.is_():
+    with UZUN_ISLER.is_(), KAPI.is_() as izin:
+        if not izin:
+            raise DepoBakimda()
         sarmal_anahtari = crypto.file_wrap_key(_veri_anahtari())
-        hazir = ds.dosya_hazirla(icerik, sarmal_anahtari=sarmal_anahtari)
+        hazir = ds.dosya_hazirla(icerik, sarmal_anahtari=sarmal_anahtari, turler=turler)
         ds.depoya_yaz(ds.dizin_kur(depo_dizini()), hazir.stored_name, hazir.kap)
         with yazar_olarak(yazar), transaction.atomic():
             ek = Attachment.objects.create(
@@ -252,3 +304,14 @@ def oku(ek: Attachment, dek: bytes | None = None) -> bytes:
     if ek.sensitivity == AttachmentSensitivity.OZEL_NITELIKLI:
         erisim_gunlugu.yaz(AccessKind.OZEL_NITELIKLI_EK, model=Attachment, object_id=ek.pk)
     return acik
+
+
+def indirme_yaniti(ek: Attachment, *, dosya_adi: str) -> FileResponse:
+    """Ekin indirme yanıtı (modül başlığı "OKUMA"): açık baytlar bellekte (`oku`), yanıt
+    `FileResponse(BytesIO(...))`, ek olarak ve önbelleğe alınmadan. Dosya adı çağıranındır (sözlük §3
+    "Kaydedilen dosya adı"); özgün ad kullanılmaz, kişi adı taşıyabilir."""
+    yanit = FileResponse(
+        BytesIO(oku(ek)), as_attachment=True, filename=dosya_adi, content_type=ek.mime
+    )
+    yanit["Cache-Control"] = "no-store"
+    return yanit

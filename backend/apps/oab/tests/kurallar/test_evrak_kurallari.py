@@ -6,9 +6,12 @@ Tasarım §10.5'in `ev::` testlerinden bugünkü pay; dosya F1c'nin 1. adımınd
   da parola için boş satır yok; giriş adı, rol, iş özeti, BSG Yön. md. 9/2 kuralları, kilitleme ve
   "kapalı zarf" cümlesi var; dosyası saklanmaz.
 * `test_katalog_kabul[E63]` — tasarım §9.6 "Kabul örneği" sütunu.
-* `test_sayfa_butcesi[E63]` — gerçek uzunlukta uydurma veriyle (en uzun tanıtıcı, uzun okul ve ilçe
-  adı, her rol): program yöneticisinin pusulası en çok iki, öteki rollerinki bir sayfa (kullanıcı
-  kararı 04.11.2026; program yöneticisinin iş listesi fazlarla en çok uzayandır).
+* `test_sayfa_butcesi[E63]` — en uzun uydurma veriyle (alanların üst sınırında tanıtıcı, okul adı,
+  ilçe ve veri sorumlusu; en uzun boşta kilit süresi; her rol): her rolün pusulası en çok iki sayfa
+  (kullanıcı kararı 11.11.2026: RYUE md. 7/1 gereği dipnot ve aydınlatma metni 9 punto olunca
+  04.11.2026'nın "öteki rollerde bir sayfa" sınırı gevşedi; program yöneticisininki zaten ikiydi).
+* `test_e63_punto_alt_siniri` — aynı veriyle, her rolde PDF'teki yazı boyutları geri okunur: yazı
+  alanında 9 puntodan küçük metin yok (aydınlatma metni ve kişisel veri dipnotu 9), altlık 12.
 * `test_tckn_hicbir_belgede_yok` — programın bugün ürettiği belgelerde 11 haneli kimlik deseni yok
   (K9 ayarının kolları bağış kaydıyla F3'te gelir).
 * `test_katalogdaki_her_kodun_testi_var` — tasarım §9.5 ile §9.6 aynı 79 kodu taşır; fazı gelen her
@@ -16,8 +19,10 @@ Tasarım §10.5'in `ev::` testlerinden bugünkü pay; dosya F1c'nin 1. adımınd
 
 Ayrıca: ad-soyad basılmaz (hesap sahibinin de basanın da); kendi hesabına, kapalı hesaba ve kaydı ya
 da izi tutmayan hesaba basılmaz (satırın `pusula` eylemi aynı nedeni söyler; mühür reddi de `BUTUNLUK`
-satırı yazar, orkestratör maddesi F-1); izi `BASIM` satırıdır (kod ve PDF'in sha256'sı), erişim
-günlüğüne girmez, hesabın satır izini değiştirmez; yanıt `no-store`, yalnız PDF; dosya adı rol
+satırı yazar, orkestratör maddesi F-1); üretimi `GeneratedDocument` kaydıdır (içerik JSON'u, dosyası
+yok; yeniden üretim yeni sürüm, yeniden çizim aynı özet; plan F1c 9. adım), dosyanın izi `BASIM`
+satırıdır (kod ve PDF'in sha256'sı), erişim günlüğüne girmez, hesabın satır izini değiştirmez; yazı
+tipi evrak hattının Liberation Serif'idir; yanıt `no-store`, yalnız PDF; dosya adı rol
 etiketini taşır, tanıtıcıyı taşımaz (F-2); iz yazılamazsa PDF verilmez; çizim sürerken kapatılan
 hesaba basılmaz; "bu programda sizin işiniz" yalnız bugün programda yapılabilen işlerdir, her parça var
 olan bir uca bağlıdır (F-4); atıflar korpusla doğrulanır; metinler sözlükte; içerik model sabitlerine
@@ -49,15 +54,19 @@ from apps.oab.models import (
     BoardDecision,
     DecisionKind,
     DecisionStatus,
+    DocumentStatus,
+    GeneratedDocument,
     KararDurumuGecersiz,
     MeetingKind,
 )
+from apps.oab.services import evrak as evrak_servisi
 from apps.oab.services import kurullar
 from apps.oab.tests import uyelik_ortak as o
 from apps.oab.tests.kurallar import faz_ortak
 from apps.okul import denetim_izi, rol_izinleri
 from apps.okul.models import (
     DATA_CONTROLLER_TEXT_MAX,
+    IDLE_LOCK_MINUTES_MAX,
     AccessLog,
     Account,
     AccountRole,
@@ -100,10 +109,23 @@ GIZLI_GECICI = "Zarf-Icindeki-Gecici-9!"
 UYDURMA_AD = "Pelinsu"
 UYDURMA_SOYAD = "Uydurmakaya"
 OKUL_ADI = "Örnek Ortaokulu"
-#: Gerçek uzunlukta uydurma künye (sayfa bütçesi).
-UZUN_OKUL = "Örnek Şehit Öğretmen Ayşe Örnekoğlu Mesleki ve Teknik Anadolu Lisesi"
-UZUN_ILCE = "Örnekşehirköyübeldesi"
 EN_UZUN_TANITICI = "a" * hesap_kurallari.MAX_LOGIN_NAME_LENGTH
+
+
+def _alan_ust_siniri(ornek: str, alan: str) -> str:
+    """Okul kartı alanının üst sınırında, sözcüklü uydurma metin (tek parça metin PDF'te bölünmez,
+    tek satır kalır ve sınamaz)."""
+    sinir = getattr(SchoolConfig._meta.get_field(alan), "max_length", None)
+    assert isinstance(sinir, int)
+    return ((ornek + " ") * (sinir // len(ornek) + 1))[:sinir].rstrip().ljust(sinir, "a")
+
+
+#: En uzun uydurma künye (sayfa bütçesi ve punto alt sınırı): alanların üst sınırında.
+EN_UZUN_OKUL = _alan_ust_siniri(
+    "Örnek Şehit Öğretmen Ayşe Örnekoğlu Mesleki ve Teknik Anadolu Lisesi", "school_name"
+)
+EN_UZUN_ILCE = _alan_ust_siniri("Örnekşehirköyübeldesi", "district")
+EN_UZUN_VERI_SORUMLUSU = _alan_ust_siniri("Örnek Anadolu Lisesi Müdürlüğü", "data_controller_text")
 #: Parola için alan ya da boş satır kalıpları (etiket + iki nokta; doldurma çizgisi).
 _PAROLA_ETIKETI = re.compile(r"(?i)(geçici\s+)?(parola|şifre)\s*[:：]")
 _DOLDURMA = re.compile(r"_{3,}|\.{4,}|…{2,}|-{4,}")
@@ -316,27 +338,55 @@ def test_katalog_kabul(kod: str, yakalanan: list[evrak.Belge]) -> None:
     assert "Uydurma Muhasip" not in metin and "Uydurma Muhasip" not in evrak.kanonik_json(belge)
 
 
+#: Pusulanın en çok sayfası, her rolde (kullanıcı kararı 11.11.2026; program yöneticisininki
+#: 04.11.2026'dan beri 2).
+E63_SAYFA_SINIRI = 2
+
+
+def _en_uzun_pusula(rol: str) -> evrak.Belge:
+    """Rolün pusulası, en uzun uydurma veriyle: alanların üst sınırında tanıtıcı, okul adı, ilçe ve
+    veri sorumlusu; en uzun boşta kilit süresi."""
+    assert len(EN_UZUN_VERI_SORUMLUSU) == DATA_CONTROLLER_TEXT_MAX
+    return e63.pusula_belgesi(
+        tanitici=EN_UZUN_TANITICI,
+        rol=rol,
+        acilis=datetime(2026, 11, 3, 9, 0, tzinfo=UTC),
+        okul_adi=EN_UZUN_OKUL,
+        ilce=EN_UZUN_ILCE,
+        bosta_dakika=IDLE_LOCK_MINUTES_MAX,
+        veri_sorumlusu=EN_UZUN_VERI_SORUMLUSU,
+    )
+
+
 @pytest.mark.parametrize("kod", ["E63"])
 def test_sayfa_butcesi(kod: str) -> None:
-    """Gerçek uzunlukta uydurma veriyle sayfa bütçesi: her rol, en uzun tanıtıcı, uzun okul ve ilçe
-    adı, iki haneli boşta kilit süresi. Program yöneticisinin pusulası en çok iki, öteki rollerinki bir
-    sayfadır (kullanıcı kararı 04.11.2026): program yöneticisi en çok "iş" satırını taşır ve listesi
-    sonraki fazların ekranlarıyla uzar."""
+    """En uzun uydurma veriyle sayfa bütçesi (`_en_uzun_pusula`): her rolün pusulası en çok iki
+    sayfadır. Kullanıcı kararı 11.11.2026: RYUE md. 7/1 gereği yazı alanında 9 puntodan küçük metin
+    olmaz (dipnot ve aydınlatma metni 9); yönetim kurulu ve öteki rollerin 04.11.2026'daki bir sayfa
+    sınırı gevşedi, aydınlatma metni gerekirse ikinci yaprağa geçer. Program yöneticisi en çok "iş"
+    satırını taşır ve listesi sonraki fazların ekranlarıyla uzar; sınırı zaten ikiydi."""
     assert kod == e63.KOD
     for rol in ROLLER:
-        sinir = 2 if rol == AccountRole.YONETICI else 1
-        belge = e63.pusula_belgesi(
-            tanitici=EN_UZUN_TANITICI,
-            rol=rol,
-            acilis=datetime(2026, 11, 3, 9, 0, tzinfo=UTC),
-            okul_adi=UZUN_OKUL,
-            ilce=UZUN_ILCE,
-            bosta_dakika=30,
-            # Alanın üst sınırı, sözcüklü: tek parça metin PDF'te bölünmez, tek satır kalır ve sınamaz.
-            veri_sorumlusu=("Örnek Anadolu Lisesi Müdürlüğü " * 9)[:DATA_CONTROLLER_TEXT_MAX],
-        )
-        sayfa = len(PdfReader(io.BytesIO(evrak.pdf_ciz(belge))).pages)
-        assert 1 <= sayfa <= sinir, (rol, sayfa)
+        sayfa = len(PdfReader(io.BytesIO(evrak.pdf_ciz(_en_uzun_pusula(rol)))).pages)
+        assert 1 <= sayfa <= E63_SAYFA_SINIRI, (rol, sayfa)
+
+
+def test_e63_punto_alt_siniri() -> None:
+    """En uzun uydurma veriyle her rolün pusulasında PDF'teki yazı boyutları geri okunur (RYUE md.
+    7/1; kullanıcı kararı 11.11.2026): yazı alanında 9 puntodan küçük metin yoktur; aydınlatma
+    metninin başlığı ve kişisel veri dipnotu 9 punto, altlık 12 punto (md. 7/1 esası; md. 27)."""
+    from shared import docx as cizici
+    from shared.tests.test_evrak import pdf_yazi_boyutlari
+
+    for rol in ROLLER:
+        parcalar = pdf_yazi_boyutlari(evrak.pdf_ciz(_en_uzun_pusula(rol)))
+        kucukler = [(m, b) for _s, m, b in parcalar if b < cizici.EN_KUCUK_PUNTO]
+        assert parcalar and kucukler == [], (rol, kucukler)
+        boyutlar = {m: b for _s, m, b in parcalar}
+        assert boyutlar[e63.AYDINLATMA_BASLIGI] == cizici.DIPNOT_PUNTO, rol
+        assert boyutlar[evrak.KISISEL_VERI_DIPNOTU] == cizici.DIPNOT_PUNTO, rol
+        altlik = {b for _s, m, b in parcalar if m.startswith("OAB Defteri ·")}
+        assert altlik == {float(cizici.ALTLIK_PUNTO)}, (rol, altlik)
 
 
 @pytest.mark.parametrize(
@@ -501,16 +551,22 @@ def test_e63_satirda_basilabilir_ve_askidaki_hesaba_basilir() -> None:
 
 
 def test_e63_izi_basim_satiridir_erisim_gunlugune_girmez() -> None:
-    """Tek izi `BASIM` satırıdır: program yöneticisinin adına, model `okul.Account`, kimlik hesap;
-    değerler yalnız kod ve PDF'in sha256'sı, içerik MAC'i yok. Hesabın satır izi ve kaydın bütünlüğü
-    değişmez (pusula hesabı aklamaz, eski kaydını örtmez); zincir bütün; erişim günlüğüne girmez."""
+    """Dosyanın izi `BASIM` satırıdır: program yöneticisinin adına, model `okul.Account`, kimlik
+    hesap; değerler yalnız kod ve PDF'in sha256'sı, içerik MAC'i yok. Üretimin kaydı ayrıca
+    `GeneratedDocument` satırıdır (`OLUSTUR`, aynı işlemde; plan F1c 9. adım). Hesabın satır izi ve
+    kaydın bütünlüğü değişmez (pusula hesabı aklamaz, eski kaydını örtmez); zincir bütün; erişim
+    günlüğüne girmez."""
     _okul()
     hesap = hesap_ac(AccountRole.DENETLEME_KURULU, ad="Uydurma Denetçi")
     son, erisim = _son_seq(), AccessLog.objects.count()
 
     pdf = _pdf(_bas(hesap.id))
 
-    (satir,) = AuditTrail.objects.filter(seq__gt=son)
+    kayit_satiri, satir = AuditTrail.objects.filter(seq__gt=son).order_by("seq")
+    assert (kayit_satiri.action, kayit_satiri.model) == (
+        AuditAction.OLUSTUR,
+        "oab.GeneratedDocument",
+    )
     assert (satir.action, satir.actor, str(satir.account_id), satir.role) == (
         AuditAction.BASIM,
         "HESAP",
@@ -531,6 +587,7 @@ def test_e63_izi_basim_satiridir_erisim_gunlugune_girmez() -> None:
     # İkinci basım ikinci satırdır (yeniden üretim; dosya yine saklanmaz).
     _bas(hesap.id)
     assert AuditTrail.objects.filter(seq__gt=son, action=AuditAction.BASIM).count() == 2
+    assert denetim_izi.zinciri_dogrula() == []
 
 
 def test_denetim_izi_basim_bicimsiz_degeri_reddeder() -> None:
@@ -817,7 +874,9 @@ def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
 
 
 def test_e63_yazi_tipi_evrak_hattinin() -> None:
-    """Yazı tipi bugünkü evrak hattınınki (DejaVu Sans; plan F1b-2 "Yazı tipi")."""
+    """Yazı tipi evrak hattınınki: Liberation Serif, düz ve kalın (plan F1c kararları "Evrak biçimi";
+    tasarım §9.1-8: E63 de bu hatta geçer). Pusulada Liberation Serif'te bulunmayan glif yoktur,
+    DejaVu yedeği gömülmez."""
     belge = e63.pusula_belgesi(
         tanitici="muhasip",
         rol=AccountRole.MUHASIP,
@@ -833,7 +892,67 @@ def test_e63_yazi_tipi_evrak_hattinin() -> None:
         kaynaklar: Any = sayfa["/Resources"]
         for tip in kaynaklar["/Font"].values():
             yazi_tipleri.add(str(tip.get_object()["/BaseFont"]).split("+", 1)[-1])
-    assert yazi_tipleri and all(ad.startswith("DejaVu") for ad in yazi_tipleri), yazi_tipleri
+    assert yazi_tipleri == {"Liberation-Serif", "Liberation-Serif-Bold"}, yazi_tipleri
+
+
+def test_e63_uretimi_evrak_kaydidir_dosyasi_saklanmaz() -> None:
+    """E63 öteki evrak gibi `GeneratedDocument` kaydı alır (plan F1b-2 ekleri 04.11.2026 (3); F1c 9.
+    adım): konu hesap, dönemsiz, kural paketsiz, biçim PDF, içerik JSON'u şifreli, dosyası yok;
+    üreten program yöneticisi. Yeniden üretim yeni sürüm satırıdır, önceki `YERINI_ALDI` olur ve
+    silinmez. Kayıtlı içerikten yeniden çizim aynı özeti verir; dosya deposuna bir şey yazılmaz."""
+    _okul()
+    hesap = hesap_ac(AccountRole.MUHASIP, ad="Uydurma Muhasip")
+    dosyalar = _dosyalar()
+
+    _bas(hesap.id)
+    _bas(hesap.id)
+
+    kayitlar = list(
+        GeneratedDocument.objects.filter(
+            subject_type="okul.Account", subject_id=str(hesap.id)
+        ).order_by("version")
+    )
+    assert [(k.doc_type, k.version, k.status) for k in kayitlar] == [
+        ("E63", 1, DocumentStatus.YERINI_ALDI),
+        ("E63", 2, DocumentStatus.GECERLI),
+    ]
+    son = kayitlar[-1]
+    assert (son.term_id, son.rule_package_id, son.formats, son.personal_list) == (
+        None,
+        None,
+        ["PDF"],
+        False,
+    )
+    assert str(son.generated_by_id) == TEST_HESAP_ID and son.ekler().count() == 0
+    assert "Uydurma Muhasip" not in son.content_json
+    belge = evrak_servisi.yeniden_ciz(son)
+    assert belge.kod == "E63" and evrak.icerik_ozeti(belge) == son.content_sha256
+    assert evrak.kanonik_json(belge) == son.content_json
+    # İkinci üretim aynı veriden: içerik ve özet aynı, kayıt ayrı sürüm.
+    assert kayitlar[0].content_sha256 == son.content_sha256
+    assert _dosyalar() == dosyalar
+    # Şifreli sütun düz metin taşımaz.
+    from django.db import connection
+
+    with connection.cursor() as imlec:
+        imlec.execute("SELECT content_json FROM oab_generateddocument WHERE id = %s", [son.pk])
+        (ham,) = imlec.fetchone()
+    assert '"bloklar"' not in ham and "HESAP TESLİM" not in ham and ham != son.content_json
+    for kayit in kayitlar:
+        assert denetim_izi.kaydi_dogrula(GeneratedDocument, kayit.pk) is True
+
+
+def test_e63_evrak_kaydi_yazilamazsa_pdf_verilmez(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Kaydedici kayıtlı değilse (fail-closed) ya da kayıt düşerse PDF verilmez, `BASIM` yazılmaz."""
+    from apps.okul.services import evrak_kaydi
+
+    _okul()
+    hesap = hesap_ac(AccountRole.MUHASIP, ad="Uydurma Muhasip")
+    monkeypatch.setattr(evrak_kaydi, "_kaydedici", [])
+    with pytest.raises(evrak_kaydi.EvrakKaydiYok):
+        hesaplar.teslim_pusulasi(by_hesap_id=TEST_HESAP_ID, hesap_id=hesap.id)
+    assert not AuditTrail.objects.filter(action=AuditAction.BASIM).exists()
+    assert not GeneratedDocument.objects.exists()
 
 
 # ============================================================ atıflar ve sözlük

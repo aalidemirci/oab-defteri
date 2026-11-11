@@ -106,9 +106,13 @@ HESAP TESLİM PUSULASI (E63; `teslim_pusulasi`, içerik `services.hesap_teslim_p
 "E63 hesap teslim pusulası"): yalnız program yöneticisi (`_yonetici_aktor`), kendi hesabına,
 kapalı hesaba ve kaydı ya da izi tutmayan hesaba basılmaz (`_target`: mühür, satır izi, iz boşluğu;
 kapama ve sıfırlamayla aynı sıra ve iletiler). Dosya SAKLANMAZ: PDF bellekte çizilir, çağırana
-döner; tek izi `BASIM` satırıdır (`denetim_izi.basim`: kod ve PDF'in sha256'sı; kaydın kimliği
-hesap). İz yazılamazsa PDF verilmez. Erişim günlüğüne girmez: pusula kişisel veri basmaz (ad-soyad
-yok; tasarım §4.6.4'ün türlerinden değildir).
+döner. İki izi vardır, ikisi aynı işlemde: üretimin kaydı `GeneratedDocument` satırıdır (konu hesap,
+içerik JSON'u şifreli, dosyası yok; `OLUSTUR`, önceki pusulanın kaydı `YERINI_ALDI`; tasarım §5.2.8,
+§9.1-2; plan F1b-2 ekleri 04.11.2026 (3), F1c 9. adım) ve dosyanın izi `BASIM` satırıdır
+(`denetim_izi.basim`: kod ve PDF'in sha256'sı; kaydın kimliği hesap). Kayıt `oab`'dedir, okul
+çekirdeği onu kayıt defterinden yazar (`evrak_kaydi`). İz ya da kayıt yazılamazsa PDF verilmez.
+Erişim günlüğüne girmez: pusula kişisel veri basmaz (ad-soyad yok; tasarım §4.6.4'ün türlerinden
+değildir).
 
 HESAP ↔ ÜYELİK BAĞI (tasarım §4.4.1, §4.4.5, §4.6.1; plan F1c 7. adım). Organ rollerinin (dört YK
 görevi ve Denetleme Kurulu; `ORGAN_ROLLERI`) hesabı bir organ üyeliğine bağlıdır: `open_account`
@@ -179,7 +183,7 @@ from apps.okul.oturum import (
     yazar,
 )
 from apps.okul.rol_izinleri import Eylem, yetki, yetki_oturum
-from apps.okul.services import app_password, hesap_kurallari, hesap_teslim_pusulasi
+from apps.okul.services import app_password, evrak_kaydi, hesap_kurallari, hesap_teslim_pusulasi
 from apps.okul.services.app_password import AccountSealMismatch, AppPasswordError
 from shared import crypto, evrak
 from shared.exceptions import RolYetkisiz
@@ -981,9 +985,10 @@ def teslim_pusulasi(*, by_hesap_id: object, hesap_id: object) -> TeslimPusulasi:
     açılış tarihinden, okul kartının antedinden, boşta kilit süresinden ve veri sorumlusu
     bilgisinden kurulur
     (`hesap_teslim_pusulasi.pusula_belgesi`; ad-soyad okunmaz). PDF bellekte çizilir; sonra AYNI
-    işlemde hesabın hâlâ kapalı olmadığı sorulur ve `BASIM` satırı (kod ve PDF'in sha256'sı)
-    yazılır. Satır yazılamazsa PDF verilmez (iz yazılamazsa yazma yapılmaz; 409 `iz_yazilamadi`).
-    Hiçbir dosyaya ve erişim günlüğüne yazmaz. Dönüş PDF ve indirme adıdır (`TeslimPusulasi`).
+    işlemde hesabın hâlâ kapalı olmadığı sorulur, evrak kaydı (`GeneratedDocument`, konu hesap;
+    `evrak_kaydi.kaydet`) ve `BASIM` satırı (kod ve PDF'in sha256'sı) yazılır. Biri yazılamazsa PDF
+    verilmez (iz yazılamazsa yazma yapılmaz; 409 `iz_yazilamadi`). Hiçbir dosyaya ve erişim
+    günlüğüne yazmaz. Dönüş PDF ve indirme adıdır (`TeslimPusulasi`).
     """
     dek = _active_data_key()
     aktor = _yonetici_aktor(by_hesap_id, dek)
@@ -1005,6 +1010,7 @@ def teslim_pusulasi(*, by_hesap_id: object, hesap_id: object) -> TeslimPusulasi:
         # Çizim sürerken hesap kapatıldıysa basılmaz (kapalı hesaba pusula yok).
         if not Account.objects.filter(pk=hesap.pk).exclude(status=AccountStatus.KAPALI).exists():
             raise AccountServiceError(_CLOSED_MESSAGE)
+        evrak_kaydi.kaydet(belge, konu=hesap, bicimler=("PDF",))
         denetim_izi.basim(
             model=denetim_izi.model_etiketi(Account),
             object_id=denetim_izi.kimlik_metni(Account, hesap.pk),

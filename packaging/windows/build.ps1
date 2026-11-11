@@ -236,7 +236,8 @@ if ($LASTEXITCODE -ne 0) { throw "Paket kişisel veri denetimi başarısız." }
 # Paket içi fontconfig yapılandırması (`_internal\etc\fonts\fonts.conf` = projenin
 # packaging\pyinstaller\fonts.paket.conf'u) artık spec'te yerleşir (`lisanslar.
 # fontconfig_yerlestir`); derleme sonrası kopyalama adımı (eski 4b) YOKTUR. Lisans denetimi
-# diskte yalnız o dosyayı kabul eder, `--pdf-duman` PDF'in gömülü DejaVu ile dizildiğini sınar.
+# diskte yalnız o dosyayı kabul eder, `--pdf-duman` PDF'in gömülü DejaVu Sans ve Liberation
+# Serif ile dizildiğini sınar.
 
 # --- 5. Duman testleri ------------------------------------------------------
 # Duman testleri kullanıcının makinesindeki gibi Windows'un varsayılan sistem PATH'iyle

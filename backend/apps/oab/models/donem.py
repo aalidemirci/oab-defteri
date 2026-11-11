@@ -4,7 +4,8 @@ Dönem, bağlandığı revizyonun dondurulmuş kopyasından okur (`RulePackage.c
 dosyayı değiştirse de bağlı dönem etkilenmez. `OabTerm.rule_package` yalnız revizyon geçişi servisiyle
 (`services.kural_bagi`) ve `KAPANDI` olmayan dönemde değişir.
 
-`archive_document` (→ `GeneratedDocument`) evrak hattıyla F1c'nin 9. adımında gelir.
+`archive_document` (→ `GeneratedDocument`) dönem kapanışının arşiv paketidir (E39, tasarım §8.5); alan F1c
+9. adımda evrak hattıyla gelir, yazanı dönem kapanışıdır (F4).
 """
 
 from __future__ import annotations
@@ -108,6 +109,7 @@ class OabTerm(OabBaseModel):
         "transition_completed_on",
         "closed_at",
         "closed_by",
+        "archive_document",
     )
     IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
         "created_at",
@@ -131,6 +133,7 @@ class OabTerm(OabBaseModel):
         "cancel_reason",
         "closed_at",
         "closed_by",
+        "archive_document",
     )
     IZ_DURUM_ALANLARI: ClassVar[tuple[str, ...]] = ("status",)
     #: Satırın denetim izindeki dönemi kendisidir (`AuditTrail.term`).
@@ -191,6 +194,15 @@ class OabTerm(OabBaseModel):
         blank=True,
         related_name="+",
         verbose_name="kapatan hesap",
+    )
+    #: Kapanan dönemin arşiv paketi (E39; tasarım §5.2.1, §8.5). Yazanı dönem kapanışıdır (F4).
+    archive_document = models.ForeignKey(
+        "oab.GeneratedDocument",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="arşiv paketi",
     )
 
     class Meta:
