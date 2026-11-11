@@ -3,7 +3,7 @@ UYARLA; plan F1c-4).
 
 Üç yoldan kişi kaydı açılır, üçü de `create_person`'dan geçer:
 
-* **Elle** (Kişiler → Birlik Kişileri; ekran F1c'nin 11. adımında).
+* **Elle** (ekranı Kişiler → Birlik Kişileri).
 * **Personelden kopya** (`copy_from_personnel`): okul personelinin adı ve görev türü kopyalanır,
   personel bağı (`personnel`) kurulur; görev türü `YONETICI` birlik kişisinde `IDARECI`'dir
   (görünen adı "İdareci", plan F1c kararları). Bir personelin tek birlik kişi kaydı olur.

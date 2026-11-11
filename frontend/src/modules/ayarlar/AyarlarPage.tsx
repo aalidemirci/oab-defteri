@@ -15,7 +15,8 @@
 // `guncelleme`'de görünür (adresle gelinirse varsayılan sekme açılır); Güvenlik sekmesinin
 // kartları kendi yeteneklerine bakar (`GuvenlikAyarlari`). "Diğer Ayarlar"ın Kurulum Sihirbazı
 // kartı yalnız `kurulum_tamamlama`'dadır (sihirbazın her denetimi bir yazmadır). Özet
-// yüklenirken sekmeler yerine iskelet durur: yanlış sekme ya da düğme bir an görünmesin.
+// yüklenirken sekmeler yerine iskelet durur: yanlış sekme ya da düğme bir an görünmesin. Sekmelerin
+// altında her rolde salt okunur "Kural Sürümü" satırı durur (plan F1c kararları; `KuralSurumuKarti`).
 
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
@@ -35,6 +36,7 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import type { TabItem } from "../../ui/Tabs";
 import TextField from "../../ui/TextField";
+import KuralSurumuKarti from "../birlik-donemi/KuralSurumuKarti";
 import UpdatePanel from "../guncelleme/UpdatePanel";
 import GuvenlikAyarlari from "../guvenlik/GuvenlikAyarlari";
 import OkulKartiAlanlari, { OkulKartiListesi } from "../okul/OkulKartiAlanlari";
@@ -175,6 +177,9 @@ export default function AyarlarPage() {
           </div>
         </>
       )}
+
+      {/* Kural sürümü: salt okunur satır, her rolde (plan F1c kararları; seçimi bu sürümde yok). */}
+      {yetki.durum !== "yukleniyor" && <KuralSurumuKarti />}
 
       {yetki.acik("kurulum_tamamlama") && (
         <section className="space-y-3">

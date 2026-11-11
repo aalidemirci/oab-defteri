@@ -29,13 +29,16 @@ export interface NavItem {
 // üst çubuk + h1). OAB ekranları (birlik dönemi, organlar…) fazlarıyla birlikte
 // eklenir; aile iskeletinin kütüphane ekranları F1a-2'de söküldü. Liste
 // `App.test.tsx` "kabuk gezinmesi" testiyle sabittir. Genel Bakış, Birlik Dönemi (F1c 11. adım),
-// Kişiler, Ayarlar ve Kılavuz her role açıktır (Kişiler'de personeli her rol okur, Ayarlar'ı her rol okur); Kullanıcılar
+// Kişiler, Organlar ve Temsilciler (F1c 11. adımın ikinci parçası; M2 her role en az okumaya açık),
+// Ayarlar ve Kılavuz her role açıktır (Kişiler'de personeli her rol okur, Ayarlar'ı her rol okur); Kullanıcılar
 // yalnız `kullanicilar`, Erişim Günlüğü yalnız `erisim_gunlugu` yeteneğinde görünür (program
 // yöneticisi ve Denetleme Kurulu).
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Genel Bakış", icon: "space_dashboard" },
   { to: "/birlik-donemi", label: "Birlik Dönemi", icon: "event_note" },
   { to: "/kisiler", label: "Kişiler", icon: "group" },
+  { to: "/organlar", label: "Organlar", icon: "groups" },
+  { to: "/temsilciler", label: "Temsilciler", icon: "diversity_3" },
   { to: "/kullanicilar", label: "Kullanıcılar", icon: "manage_accounts", yetenek: "kullanicilar" },
   { to: "/erisim-gunlugu", label: "Erişim Günlüğü", icon: "policy", yetenek: "erisim_gunlugu" },
   { to: "/ayarlar", label: "Ayarlar", icon: "settings" },
@@ -50,6 +53,8 @@ const PAGE_TITLES: Array<[prefix: string, title: string]> = [
   ["/birlik-donemi/gecis-kurulumu", "Geçiş Kurulumu"],
   ["/birlik-donemi", "Birlik Dönemi"],
   ["/kisiler", "Kişiler"],
+  ["/organlar", "Organlar"],
+  ["/temsilciler", "Temsilciler"],
   ["/kullanicilar", "Kullanıcılar"],
   ["/erisim-gunlugu", "Erişim Günlüğü"],
   ["/ayarlar", "Ayarlar"],

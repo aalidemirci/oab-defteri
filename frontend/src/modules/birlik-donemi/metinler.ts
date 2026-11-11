@@ -37,6 +37,8 @@ export const ALAN_ACILIS = "Açılış";
 export const ACILIS_GECIS = "Geçiş kurulumuyla açıldı";
 export const ACILIS_GENEL_KURUL = "Genel kurulla açıldı";
 export const BITIS_YOK = "Sonraki olağan genel kurul";
+/** Ayarlar'daki salt okunur kural sürümü satırının bölüm başlığı (plan F1c kararları). */
+export const KURAL_SURUMU_AYARLAR_BASLIGI = "Kural Sürümü";
 
 /** D7: dönemin kural kopyası doğrulanamadı (backend `DonemSaltOkur` iletisiyle aynı söz). */
 export const KURAL_KOPYASI_BOZUK =

@@ -674,7 +674,7 @@ satırlı katılım cetveli ve sayılar M3'tedir.
 ¹¹ Görev alma engelinin dayanağını (`eligibility_bar_basis`, özel nitelikli; §5.2.2, §4.6.4) yalnız `yonetici`
 ve YK rolleri okur; `denetleme_kurulu` ve `mudur` kadroda yalnız engelin var ya da yok işaretini görür (veri en aza;
 plan F1c 5. adım notları, kullanıcı kararı 10.11.2026). Dipnot okumayı daraltır, yazma vermez; uç katmanında dayanaklı
-daraltmadır (`oab-membership-eligibility-basis`), okuması erişim günlüğüne düşer. Aynı süzme görev alma engelinin uyum satırına ve üyeliğin uyarı özetine de uygulanır: kural kimliği (`uyelik.suc_engeli`, `yonetim_kurulu.tek_birlik`) ve atfı dayanağı ele verir; satırda ve denetim izinde kalır, ama onu yalnız `yonetici` ve YK rolleri görür, `denetleme_kurulu` ve `mudur` "görev alma engeli" genel adını atıfsız genel metinle görür (`uyum.uyum_satiri_gorunumu`; F1c'nin 6. adımında uyum satırını döndüren uç yoktur, pano 12. adımda bu görünümü kullanır; kullanıcı kararı 10.11.2026, plan F1c 6. adım notları).
+daraltmadır (`oab-membership-eligibility-basis`), okuması erişim günlüğüne düşer. Aynı süzme görev alma engelinin uyum satırına ve üyeliğin uyarı özetine de uygulanır: kural kimliği (`uyelik.suc_engeli`, `yonetim_kurulu.tek_birlik`) ve atfı dayanağı ele verir; satırda ve denetim izinde kalır, ama onu yalnız `yonetici` ve YK rolleri görür, `denetleme_kurulu` ve `mudur` "görev alma engeli" genel adını atıfsız genel metinle görür (`uyum.uyum_satiri_gorunumu`; organ kadrosu ucu (`GET terms/<pk>/roster/<organ>/`, F1c'nin 11. adımı) uyum satırlarını bu görünümle döndürür, pano 12. adımda aynısını kullanır; kullanıcı kararı 10.11.2026, plan F1c 6. adım notları).
 
 **Uygulama — iki katman** (TK13; denetim GA-18).
 

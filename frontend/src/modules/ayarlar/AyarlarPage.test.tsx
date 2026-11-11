@@ -46,6 +46,13 @@ vi.mock("../takvim/KapaliGunlerPaneli", () => ({
   ),
 }));
 
+// Kural sürümü satırı birlik dönemlerini okur (F1c 11. adım).
+const donemApi = vi.hoisted(() => ({ donemler: vi.fn() }));
+vi.mock("../birlik-donemi/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../birlik-donemi/api")>()),
+  birlikDonemiApi: donemApi,
+}));
+
 // Güncelleme paneli kendi testinde; burada yalnız sekmenin rolle görünüp görünmediği sınanır.
 vi.mock("../guncelleme/UpdatePanel", () => ({
   default: () => <div>GÜNCELLEME PANELİ</div>,
@@ -96,6 +103,7 @@ beforeEach(() => {
   });
   oapi.getSchoolConfig.mockResolvedValue(ORNEK_OKUL_KARTI);
   oapi.listSchoolTerms.mockResolvedValue([]);
+  donemApi.donemler.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -571,5 +579,41 @@ describe("AyarlarPage — rol süzmesi (okul sekmeleri öteki rollerde salt okur
     expect(screen.getByRole("heading", { level: 1, name: "Ayarlar" })).toBeInTheDocument();
     expect(screen.queryByRole("tab")).toBeNull();
     expect(screen.queryByRole("link", { name: /Kurulum Sihirbazı/ })).toBeNull();
+  });
+});
+
+describe("AyarlarPage — kural sürümü (salt okunur)", () => {
+  it("her rolde açık birlik döneminin kural sürümü yazılır; dönem yoksa söylenir", async () => {
+    donemApi.donemler.mockResolvedValue([
+      {
+        id: 3,
+        name: "2026-2027 birlik dönemi",
+        school_year: 3,
+        start_date: "2026-10-10",
+        end_date: null,
+        status: "ACIK",
+        program_start_date: null,
+        opened_by_assembly: null,
+        transition_completed_on: null,
+        kural_paketi: { paket: "OAB-2023.12", rev: 1 },
+        kural_kopyasi_tutuyor: false,
+      },
+    ]);
+    const { unmount } = renderPage("/ayarlar", []);
+    expect(
+      await screen.findByText("OAB-2023.12 · 1. revizyon · 2026-2027 birlik dönemi"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Kural Sürümü" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(/kural kopyası doğrulanamadığı/);
+    unmount();
+    donemApi.donemler.mockResolvedValue([]);
+    renderPage();
+    expect(await screen.findByText("Birlik dönemi açılmadı.")).toBeInTheDocument();
+  });
+
+  it("dönemler okunamazsa ileti", async () => {
+    donemApi.donemler.mockRejectedValue(new Error("ağ yok"));
+    renderPage();
+    expect(await screen.findByText("Birlik dönemleri okunamadı.")).toBeInTheDocument();
   });
 });

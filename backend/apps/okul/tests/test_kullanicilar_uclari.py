@@ -254,7 +254,11 @@ def test_secenekler_rolleri_nedenleri_ve_ikinci_yonetici_bilgisini_verir() -> No
         "bilgi": hesaplar.IKINCI_YONETICI_BILGISI,
         "uyelik_gerekli": False,
         "uyelikler": [],
+        "organlara_yonlendir": False,
     }
+    # Sınır engelinde (tek hesaplı rolde açık hesap) Organlar ekranına yönlendirilmez: çözüm hesabı
+    # kapatmaktır, üye girmek değil.
+    assert roller["muhasip"]["organlara_yonlendir"] is False
     assert roller["denetleme_kurulu"]["varsayilan_tanitici"] == "dk-1"
     assert all(r["bilgi"] is None for ad, r in roller.items() if ad != "yonetici")
 

@@ -1861,7 +1861,7 @@ def kullanici_secenekleri() -> dict[str, Any]:
     """ "Yeni hesap" penceresinin seçenekleri (`accounts/options/`; plan F1b-2).
 
     `roller`: her rol için `{rol, rol_etiketi, acilabilir, neden, varsayilan_tanitici, bilgi,
-    uyelik_gerekli, uyelikler}`. Rolün sınırında `neden` hesap açmanın vereceği iletinin AYNISIDIR
+    uyelik_gerekli, uyelikler, organlara_yonlendir}`. Rolün sınırında `neden` hesap açmanın vereceği iletinin AYNISIDIR
     (`_rol_acilamama_nedeni`; kaydı ya da izi tutmayan hesap için ayrı neden — orkestratör maddesi
     C-1). Organ rolünde sınır engeli yoksa rol düzeyindeki bağ nedeni gelir: bağ kuralları
     yüklenemediyse hesap açmanın iletisi (`_BOND_RULES_MISSING_MESSAGE`), hesap açılabilecek üye
@@ -1870,7 +1870,9 @@ def kullanici_secenekleri() -> dict[str, Any]:
     zaman açılamaz. `bilgi` program yöneticisi rolünde ikinci program yöneticisinin bilgisidir
     (`IKINCI_YONETICI_BILGISI`). Rolün etiketi sıra no'suzdur. Organ rolünde `uyelikler` hesap
     açılabilecek üyeliklerdir (kişi ve üyelik seçimi; bağ kuralından, `HesapBagiKurallari`); öteki
-    rollerde boş liste. Yalnız program yöneticisi; hiçbir şey yazmaz.
+    rollerde boş liste. `organlara_yonlendir` yalnız rolün nedeni üye yokluğuyken doğrudur (pencere
+    o zaman Organlar ekranına bağlantı verir; sınır engelinde ve kuralların yokluğunda çözüm orada
+    değildir). Yalnız program yöneticisi; hiçbir şey yazmaz.
     """
     yetki_oturum(Eylem.HESAP_YONETIMI)
     dek = _active_data_key()
@@ -1884,11 +1886,13 @@ def kullanici_secenekleri() -> dict[str, Any]:
             organ_rolu = rol in ORGAN_ROLLERI
             uyelikler = kurallar.uygun_uyelikler(rol) if organ_rolu and kurallar is not None else []
             # Organ rolünde rol düzeyindeki bağ nedeni (rolün sınırından sonra; modül başlığı).
+            organlara_yonlendir = False
             if organ_rolu and neden is None:
                 if kurallar is None:
                     neden = _BOND_RULES_MISSING_MESSAGE
                 elif not uyelikler:
                     neden = _NO_ELIGIBLE_MEMBERSHIP_MESSAGE
+                    organlara_yonlendir = True
             roller.append(
                 {
                     "rol": rol,
@@ -1899,6 +1903,7 @@ def kullanici_secenekleri() -> dict[str, Any]:
                     "bilgi": IKINCI_YONETICI_BILGISI if rol == AccountRole.YONETICI else None,
                     "uyelik_gerekli": organ_rolu,
                     "uyelikler": uyelikler,
+                    "organlara_yonlendir": organlara_yonlendir,
                 }
             )
     return {"roller": roller}

@@ -308,6 +308,8 @@ def test_bag_kurali_kayitli_degilse_organ_hesabi_acilmaz(monkeypatch: pytest.Mon
             False,
             hesaplar._BOND_RULES_MISSING_MESSAGE,
         ), rol
+        # Kuralların yokluğunda çözüm Organlar ekranında değildir.
+        assert roller[rol]["organlara_yonlendir"] is False, rol
     assert roller["mudur"]["acilabilir"] is True
 
 
@@ -864,12 +866,16 @@ def test_secenekler_ve_hesap_acma_ucu_uyelik_secimi() -> None:
             hesaplar._NO_ELIGIBLE_MEMBERSHIP_MESSAGE,
             [],
         ), rol
+        # Yalnız üye yokluğunda pencere Organlar ekranına yönlendirir.
+        assert roller[rol]["organlara_yonlendir"] is True, rol
+    assert roller["mudur"]["organlara_yonlendir"] is False
     assert (roller["mudur"]["acilabilir"], roller["yonetici"]["acilabilir"]) == (True, True)
     donem = o.donem()
     uyelik = _gorevli(donem, MembershipRole.MUHASIP)
     roller = {r["rol"]: r for r in istemci.get(f"{API}options/").json()["roller"]}
     assert (roller["muhasip"]["acilabilir"], roller["muhasip"]["neden"]) == (True, None)
     assert roller["muhasip"]["uyelik_gerekli"] is True
+    assert roller["muhasip"]["organlara_yonlendir"] is False
     assert roller["muhasip"]["uyelikler"] == [
         {
             "uyelik": uyelik.pk,

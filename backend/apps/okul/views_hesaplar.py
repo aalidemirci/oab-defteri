@@ -20,12 +20,13 @@ Hepsi yalnız program yöneticisine açıktır: rol kapısı (`rol_izinleri.KURA
   ad-soyadı içeriyorsa sözlükteki uyarıdır (engel değil); `bilgi` program yöneticisi rolünde ikinci
   program yöneticisinin bilgisidir (`hesaplar.IKINCI_YONETICI_BILGISI`).
 * `GET  accounts/options/` → `{roller: [{rol, rol_etiketi, acilabilir, neden, varsayilan_tanitici,
-  bilgi, uyelik_gerekli, uyelikler}]}` (`hesaplar.kullanici_secenekleri`; `uyelikler` organ rolünde
-  hesap açılabilecek üyeliklerdir: `{uyelik, kisi, ad_soyad, organ, gorev, gorev_etiketi, donem}`,
-  kişi ve üyelik seçimi): rolün sınırında açılamama nedeni hesap açmanınkiyle aynıdır;
+  bilgi, uyelik_gerekli, uyelikler, organlara_yonlendir}]}` (`hesaplar.kullanici_secenekleri`;
+  `uyelikler` organ rolünde hesap açılabilecek üyeliklerdir: `{uyelik, kisi, ad_soyad, organ, gorev,
+  gorev_etiketi, donem}`, kişi ve üyelik seçimi): rolün sınırında açılamama nedeni hesap açmanınkiyle aynıdır;
   kaydı ya da izi (satır izi ya da iz boşluğu) tutmayan hesap için ayrı neden (orkestratör maddesi
   C-1). Organ rolünde bağ kuralları yüklenemediyse ya da hesap açılabilecek üye yoksa (`uyelikler`
-  boş) rol açılamaz ve neden rol düzeyindedir (`hesaplar.kullanici_secenekleri`).
+  boş) rol açılamaz ve neden rol düzeyindedir (`hesaplar.kullanici_secenekleri`);
+  `organlara_yonlendir` yalnız bu son durumda doğrudur (pencere Organlar ekranına bağlantı verir).
 * `GET  accounts/<id>/` → satır + `{acan, kapatan, parola_degisimi, sifirlama, son_girisler}`
   (`hesaplar.kullanici_ayrintisi`); hesap yoksa 404.
 * `POST accounts/<id>/close/` (`HESAP`), `unsuspend/` (`HESAP`; dosyadaki hatalı deneme askısı

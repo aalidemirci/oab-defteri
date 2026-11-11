@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.oab.models import (
@@ -30,6 +31,7 @@ from apps.oab.models.kisi import KISI_ADI_MAX
 from apps.oab.models.kurul import KISA_METIN_MAX
 from apps.oab.models.uyelik import MEM_ONAY_NO_MAX
 from apps.oab.services import donem_kilidi
+from apps.oab.services.donemler import TOPLANTI_GUNU_UST
 from apps.okul.models import PARENT_NAME_MAX, Personnel, SchoolYear
 from apps.okul.serializers import CorruptFieldsMixin
 from shared.crypto import has_corrupt
@@ -53,6 +55,8 @@ class OabTermSerializer(serializers.ModelSerializer[OabTerm]):
             "program_start_date",
             "opened_by_assembly",
             "transition_completed_on",
+            # Yönetim kurulunun aylık toplantı günü kuralı (dönem ayarı; E01'in D bölümü, F1c 11. adım).
+            "yk_meeting_day_rule",
             "kural_paketi",
             "kural_kopyasi_tutuyor",
         ]
@@ -62,6 +66,38 @@ class OabTermSerializer(serializers.ModelSerializer[OabTerm]):
 
     def get_kural_kopyasi_tutuyor(self, donem: OabTerm) -> bool:
         return donem_kilidi.kural_kopyasi_tutuyor(donem)
+
+
+class ToplantiGunuSerializer(serializers.Serializer[dict[str, Any]]):
+    """Yönetim kurulunun aylık toplantı günü kuralı (serbest metin; boş metin kuralı siler)."""
+
+    yk_meeting_day_rule = serializers.CharField(
+        max_length=TOPLANTI_GUNU_UST, allow_blank=True, trim_whitespace=True
+    )
+
+
+class BaglanabilirKararSerializer(serializers.ModelSerializer[BoardDecision]):
+    """Bağlanabilecek yönetim kurulu kararı (kabul edilmiş ya da deftere işlenmiş): kişisiz, karar
+    metni ve şerh dönmez (şifreli). Temsilci ve yedek çağrısı kararının seçimi için."""
+
+    toplanti_gunu = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BoardDecision
+        fields = [
+            "id",
+            "kind",
+            "status",
+            "decision_no",
+            "page_no",
+            "decision_date",
+            "toplanti_gunu",
+        ]
+        read_only_fields = fields
+
+    def get_toplanti_gunu(self, karar: BoardDecision) -> str | None:
+        an = karar.meeting.held_at
+        return None if an is None else timezone.localdate(an).isoformat()
 
 
 class OabTermAcilisSerializer(serializers.Serializer[dict[str, Any]]):
@@ -415,7 +451,7 @@ class AlimKomisyonuCreateSerializer(serializers.Serializer[dict[str, Any]]):
 
 
 # ---------------------------------------------------------------------------
-# Geçiş kurulumu (tasarım §7.9 adım 1-4; plan F1c 8. adım, uçları ve ekranı 11. adımda)
+# Geçiş kurulumu (tasarım §7.9 adım 1-4; plan F1c 8. adım; ekranı Birlik Dönemi → Geçiş Kurulumu)
 # ---------------------------------------------------------------------------
 #: Geçişte devralınan kaydın organları: yönetim kurulu, Denetleme Kurulu ve temsilciler.
 _DEVRALINAN_ORGANLAR = [

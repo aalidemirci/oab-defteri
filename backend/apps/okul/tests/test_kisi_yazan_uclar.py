@@ -156,6 +156,10 @@ DIGER_UCLAR = frozenset(
         "oab-organ-roster",
         # Birlik dönemi (F1c-3): kişi verisi yazmaz, kapı `Eylem.BIRLIK_DONEMI_YAZMA`.
         "oab-term-detail",
+        # Yönetim kurulunun aylık toplantı günü (dönem ayarı, kişisiz) ve bağlanabilecek kararların
+        # listesi (kişisiz okuma; F1c 11. adım).
+        "oab-term-meeting-day",
+        "oab-term-linkable-decisions",
         "oab-term-list",
         # Geçiş kurulumu (F1c 11. adım): durum okuması (kişisiz), dönem ve karar defteri kaydının
         # iptali (şifreli gerekçe, kişi yazmaz), karar defteri ve "Geçiş kurulumu tamamlandı" işareti.

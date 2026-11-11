@@ -330,6 +330,8 @@ export default function GecisKurulumuPage() {
         <Button
           variant="text"
           icon="block"
+          // Dar sütunda düğme metni iki satıra kırılmasın (11a ekran görüntüsü; 11b düzeltmesi).
+          className="whitespace-nowrap"
           aria-label={`${u.person_name ?? ""} ${DUGME_KAYDI_IPTAL}`.trim()}
           onClick={() => setPencere({ tur: "uye-iptal", uyelik: u })}
         >

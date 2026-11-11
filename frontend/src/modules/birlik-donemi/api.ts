@@ -21,6 +21,8 @@ export interface BirlikDonemi {
   opened_by_assembly: number | null;
   /** "Geçiş kurulumu tamamlandı" işaretinin günü (genel kurulsuz dönemde). */
   transition_completed_on: string | null;
+  /** Yönetim kurulunun aylık toplantı günü kuralı (dönem ayarı, serbest metin; boşsa girilmedi). */
+  yk_meeting_day_rule?: string;
   kural_paketi: { paket: string; rev: number };
   /** Dönemin dondurulmuş kural kopyası özetini tutuyor mu? (D7: tutmuyorsa dönem salt okur.) */
   kural_kopyasi_tutuyor: boolean;

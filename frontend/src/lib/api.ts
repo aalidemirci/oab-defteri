@@ -247,6 +247,12 @@ export const api = {
   /** Dosya indirme (evrak/PDF). */
   getBlob: (path: string, secenekler?: IstekSecenekleri) =>
     requestBlob(path, { ...secenekler, method: "GET" }),
+  /**
+   * GET + dosya yanıtı ve sunucunun dosya adı (`IndirilenDosya`): basımı GET olan evrak (E01-E03;
+   * `BASIM` satırı okuma rolünde de yazılır). HEAD gönderilmez: sunucu HEAD'i 405'le reddeder.
+   */
+  getDosya: (path: string, secenekler?: IstekSecenekleri) =>
+    requestDosya(path, { ...secenekler, method: "GET" }),
   /** JSON body ile POST + dosya yanıtı. */
   postBlob: (path: string, body?: unknown, secenekler?: IstekSecenekleri) =>
     requestBlob(path, { ...secenekler, method: "POST", body }),

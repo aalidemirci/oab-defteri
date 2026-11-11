@@ -257,17 +257,50 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
             ),
             # Veli listesinden kopya yalnız program yöneticisinindir (`rol_izinleri`).
             _parca("veli listesinden birlik kişisi ekleme", "oab-person-from-parent"),
+            # Organlar ve Temsilciler ekranları (F1c 11. adım). Parçalar uç kurallarının rol
+            # kümelerine göre ayrılır: program yöneticisi ve yönetim kurulu rolleri üyelik, görev alma
+            # engeli, alım komisyonu ve temsilci kaydını yazar; görev bölümü ve yönetim kurulu yedeğinin
+            # çağrısı yalnız sekreterindir; Denetleme Kurulu yedeğinin çağrısı program yöneticisinin;
+            # düşme, görev bölümü evrakı, temsilci çizelgesi ve aylık toplantı günü ikisinindir.
+            _parca(
+                "üyelik ve temsilci kaydı",
+                "oab-membership-list",
+                "oab-membership-detail",
+                "oab-membership-cancel",
+                "oab-membership-eligibility-basis",
+                "oab-purchase-committee-list",
+                "oab-representative-list",
+            ),
+            _parca(
+                "görev bölümü ve yedek çağrısı",
+                "oab-yk-duty-assignment",
+                "oab-membership-substitute-call-yk",
+            ),
+            _parca("Denetleme Kurulu yedeğinin çağrısı", "oab-membership-substitute-call-dk"),
+            _parca("üyeliğin düşmesi", "oab-membership-drop"),
+            _parca(
+                "görev bölümü evrakı ve temsilci çizelgesi",
+                "oab-document-e01",
+                "oab-document-e03",
+                "oab-term-meeting-day",
+            ),
         ),
-        baslik="Kişiler",
+        baslik="Kişiler, Organlar, Temsilciler",
     ),
+    # Satırda iki ekran vardır (Genel Bakış'ın kartı ve Organlar → Denetleme Kurulu): başlık yerine
+    # parçalar ekranın adıyla başlar.
     Satir.M8: BugunkuIs(
         (
             _parca(
-                "yedekten geri yükleme kartını görüldü olarak işaretleme (“Gördüm”)",
+                "Genel Bakış: yedekten geri yükleme kartını görüldü olarak işaretleme (“Gördüm”)",
                 "security-integrity-restore-seen",
             ),
+            _parca(
+                "Organlar: Denetleme Kurulunun görev bölümü ve tutanağı",
+                "oab-dk-duty-assignment",
+                "oab-document-e02",
+            ),
         ),
-        baslik="Genel Bakış",
     ),
     Satir.M9: BugunkuIs(
         (_parca("son oturumun kontrolü (“Kontrol ettim”)", "dashboard-last-session"),),
@@ -332,62 +365,6 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
 #: Etkin satırlarda bilerek ADLANMAYAN yazma uçları ve gerekçeleri (orkestratör maddesi F-4; test
 #: bunları satırın kapsamından düşer). Liste yalnız gerekçeyle büyür.
 ADSIZ_UCLAR: Final[Mapping[str, str]] = {
-    "oab-membership-list": (
-        "Organlar ekranı F1c'nin 11. adımındadır; pusula yalnız bugün programda yapılabilen işleri "
-        "yazar, ekran gelince organ üyelikleri `BUGUNKU_ISLER`'e geçer."
-    ),
-    "oab-membership-detail": (
-        "Organlar ekranı F1c'nin 11. adımındadır; pusula yalnız bugün programda yapılabilen işleri "
-        "yazar, ekran gelince organ üyelikleri `BUGUNKU_ISLER`'e geçer."
-    ),
-    # F1c 6. adım: görev bölümü, yedek çağrısı, düşme, iptal, görev alma engeli, temsilciler ve alım
-    # komisyonu uçları ekransızdır (Organlar ve Temsilciler ekranları 11. adımda).
-    "oab-yk-duty-assignment": (
-        "Yönetim kurulunun görev bölümü Organlar ekranındadır (F1c 11. adım); ekran gelince "
-        "`BUGUNKU_ISLER`'e geçer."
-    ),
-    "oab-dk-duty-assignment": (
-        "Denetleme Kurulunun görev bölümü Organlar → Denetleme Kurulu'ndadır (F1c 11. adım); ekran "
-        "gelince `BUGUNKU_ISLER`'e geçer."
-    ),
-    "oab-membership-substitute-call-yk": (
-        "Yedek çağrısı Organlar ekranındadır (F1c 11. adım); ekran gelince `BUGUNKU_ISLER`'e geçer."
-    ),
-    "oab-membership-substitute-call-dk": (
-        "Yedek çağrısı Organlar ekranındadır (F1c 11. adım); ekran gelince `BUGUNKU_ISLER`'e geçer."
-    ),
-    "oab-membership-drop": (
-        "Üyeliğin düşmesi Organlar ekranındadır (F1c 11. adım); ekran gelince `BUGUNKU_ISLER`'e "
-        "geçer."
-    ),
-    "oab-membership-cancel": (
-        "Yanlış üyelik kaydının iptali Organlar ekranındadır (F1c 11. adım); ekran gelince "
-        "`BUGUNKU_ISLER`'e geçer."
-    ),
-    "oab-membership-eligibility-basis": (
-        "Görev alma engeli Organlar ekranındadır (F1c 11. adım); ekran gelince `BUGUNKU_ISLER`'e "
-        "geçer."
-    ),
-    "oab-representative-list": (
-        "Temsilciler ekranı F1c'nin 11. adımındadır; ekran gelince `BUGUNKU_ISLER`'e geçer."
-    ),
-    "oab-purchase-committee-list": (
-        "Alım komisyonu Organlar ekranının sekmesidir (F1c 11. adım); ekran gelince "
-        "`BUGUNKU_ISLER`'e geçer."
-    ),
-    # F1c 10. adım: E01-E03'ün üretim uçları ekransızdır (düğmeleri 11. adımda).
-    "oab-document-e01": (
-        "Yönetim kurulu görev bölümü karar taslağının düğmesi Organlar ekranındadır (F1c 11. adım); "
-        "ekran gelince `BUGUNKU_ISLER`'e geçer."
-    ),
-    "oab-document-e02": (
-        "Denetleme Kurulu görev bölümü tutanağının düğmesi Organlar → Denetleme Kurulu'ndadır (F1c "
-        "11. adım); ekran gelince `BUGUNKU_ISLER`'e geçer."
-    ),
-    "oab-document-e03": (
-        "Temsilci görevlendirme çizelgesinin düğmesi Temsilciler ekranındadır (F1c 11. adım); ekran "
-        "gelince `BUGUNKU_ISLER`'e geçer."
-    ),
     "oab-draft-text": (
         "Gerekçe kutusunun yarım metni; kutu yazılırken kendiliğinden kaydedilir, ayrı iş değildir."
     ),

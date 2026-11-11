@@ -333,7 +333,7 @@ def _kabul_e63(yakalanan: list[evrak.Belge]) -> None:
         for satir in etkin_hucreler(AccountRole.MUHASIP)
     ]
     assert [s[0] for s in isler.satirlar] == [
-        "Kişiler: birlik kişileri",
+        "Kişiler, Organlar, Temsilciler: birlik kişileri, üyelik ve temsilci kaydı",
         "Genel Bakış: son oturumun kontrolü (“Kontrol ettim”)",
         "Kendi parolanızı değiştirme, Kilitle, Çık",
     ]
@@ -865,19 +865,23 @@ def test_e63_guvenlik_dosyasi_sifirlamasi_is_diye_yazilmaz() -> None:
 def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
     """Orkestratör maddesi F-4, rol rol: program yöneticisi dokuz iş (veli listesi F1b 5. adımda;
     birlik kişileri ve veli listesinden birlik kişisi ekleme F1c 4. adımda Kişiler işine girdi; birlik
-    dönemi ve geçiş kurulumu F1c 11. adımda ekranıyla okul bilgileri işine girdi);
-    yönetim kurulu rolleri birlik kişileri (F1c 4. adım), Genel Bakış'ta son oturumun kontrolü ve
-    kendi parolası; Denetleme Kurulu geri yükleme kartının
-    "Gördüm"ü ve kendi parolası; okul müdürü yalnız kendi parolası (müdür yazıları F2/F4'tedir).
-    Sonraki fazların işleri hiçbir pusulada yoktur."""
+    dönemi ve geçiş kurulumu F1c 11. adımda ekranıyla okul bilgileri işine girdi; Organlar ve
+    Temsilciler F1c 11. adımın ikinci parçasında ekranlarıyla Kişiler işine girdi, satırın başlığı
+    üç ekranın adıdır); yönetim kurulu rolleri birlik kişileri, üyelik ve temsilci kaydı (sekreter
+    ayrıca görev bölümü, yedek çağrısı, düşme ve görev bölümü evrakı), Genel Bakış'ta son oturumun
+    kontrolü ve kendi parolası; Denetleme Kurulu geri yükleme kartının "Gördüm"ü, Organlar'da kendi
+    görev bölümü ve tutanağı ve kendi parolası; okul müdürü yalnız kendi parolası (müdür yazıları
+    F2/F4'tedir). Sonraki fazların işleri hiçbir pusulada yoktur."""
     kendi = "Kendi parolanızı değiştirme, Kilitle, Çık"
     son_oturum = "Genel Bakış: son oturumun kontrolü (“Kontrol ettim”)"
-    birlik_kisileri = "Kişiler: birlik kişileri"
+    birlik_kisileri = "Kişiler, Organlar, Temsilciler: birlik kişileri, üyelik ve temsilci kaydı"
     beklenen = {
         AccountRole.YONETICI: (
             "Okul bilgileri, ders yılı ve dönemler, kapalı günler, birlik dönemi ve geçiş kurulumu",
-            "Kişiler: öğretmen ve diğer personel kaydı, e-Okul aktarımı, ayrılış havuzu, birlik "
-            "kişileri, veli listesinden birlik kişisi ekleme",
+            "Kişiler, Organlar, Temsilciler: öğretmen ve diğer personel kaydı, e-Okul aktarımı, "
+            "ayrılış havuzu, birlik kişileri, veli listesinden birlik kişisi ekleme, üyelik ve "
+            "temsilci kaydı, Denetleme Kurulu yedeğinin çağrısı, üyeliğin düşmesi, görev bölümü "
+            "evrakı ve temsilci çizelgesi",
             son_oturum,
             "Kullanıcılar: hesap açma, kapama, askıdan çıkarma, parola sıfırlama, hesap teslim "
             "pusulası",
@@ -891,18 +895,26 @@ def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
         AccountRole.BASKAN: (birlik_kisileri, son_oturum, kendi),
         AccountRole.BASKAN_YARDIMCISI: (birlik_kisileri, son_oturum, kendi),
         AccountRole.MUHASIP: (birlik_kisileri, son_oturum, kendi),
-        AccountRole.SEKRETER: (birlik_kisileri, son_oturum, kendi),
+        AccountRole.SEKRETER: (
+            "Kişiler, Organlar, Temsilciler: birlik kişileri, üyelik ve temsilci kaydı, görev "
+            "bölümü ve yedek çağrısı, üyeliğin düşmesi, görev bölümü evrakı ve temsilci çizelgesi",
+            son_oturum,
+            kendi,
+        ),
         AccountRole.DENETLEME_KURULU: (
-            "Genel Bakış: yedekten geri yükleme kartını görüldü olarak işaretleme (“Gördüm”)",
+            "Genel Bakış: yedekten geri yükleme kartını görüldü olarak işaretleme (“Gördüm”), "
+            "Organlar: Denetleme Kurulunun görev bölümü ve tutanağı",
             kendi,
         ),
         AccountRole.MUDUR: (kendi,),
     }
     assert set(beklenen) == set(ROLLER)
+    # Organlar ve temsilciler F1c 11. adımın ikinci parçasında ekranlarıyla geldi: "organ" ve
+    # "temsilci" gelecek işler arasından çıktı.
     gelecek = re.compile(
         r"(?i)hesap geçişi|anahtarının yenilenmesi|küçük alım|kural sürümü|"
         r"bağışçı|takvim|uyum kaydı|genel kurul|karar|gelir-gider|harcama|bütçe|kantin|servis|"
-        r"organ|temsilci|denetim planı|müdür yazısı|devir-teslim|öğrenci"
+        r"denetim planı|müdür yazısı|devir-teslim|öğrenci"
     )
     for rol, isler in beklenen.items():
         assert e63.isler(rol) == isler, rol

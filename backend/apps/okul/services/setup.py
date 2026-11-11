@@ -99,7 +99,7 @@ STEP_CALENDAR = "calendar"
 SETUP_STEPS: tuple[str, ...] = (STEP_PASSWORD, STEP_SCHOOL, STEP_CALENDAR)
 #: 4. adım: ilk birlik dönemi — geçiş kurulumunun organ kısmı (tasarım §7.9; plan F1c-8). ATLANABİLİR:
 #: kurulumun tamamlanma koşulu değildir (`missing_setup_steps` saymaz); eksik adım Genel Bakış yol
-#: haritasının `gecis_kurulumu` maddesinde kalır. Ekranı F1c'nin 11. adımındadır.
+#: haritasının `gecis_kurulumu` maddesinde kalır. Ekranı Birlik Dönemi → Geçiş Kurulumu'dur.
 STEP_BIRLIK_DONEMI = "birlik_donemi"
 #: Atlanabilir sihirbaz adımları.
 SKIPPABLE_SETUP_STEPS: tuple[str, ...] = (STEP_BIRLIK_DONEMI,)

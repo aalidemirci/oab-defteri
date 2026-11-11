@@ -4,11 +4,14 @@
 // önce; geçici parola programın önerisiyle dolu (her açılışta yeni), kopyalama düğmesi yok, sonuçta
 // gösterilmez; sonuçta sunucunun uyarısı, bilgisi ve hesap teslim pusulası, odak sonucun başlığında;
 // hesap açıldığı hâlde parola kaydı yazılamadıysa (yarım açılış) form kapanır, yeniden açma
-// önerilmez, çıkış "Parolayı sıfırla". Veriler uydurmadır.
+// önerilmez, çıkış "Parolayı sıfırla"; organ rolünde üyelik seçimi (plan F1c 7. adım; ekranı 11. adımda):
+// seçilmeden gitmez, seçilen üyenin adı boş ad-soyada konur, gövde üyeliği ve kişisini taşır, açılabilecek
+// üye yoksa sunucunun nedeni ve Organlar bağlantısı. Veriler uydurmadır.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../lib/api";
@@ -62,9 +65,11 @@ function bas() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const { unmount } = render(
     <QueryClientProvider client={queryClient}>
-      <SnackbarProvider>
-        <YeniHesapPenceresi onClose={onClose} onDegisti={onDegisti} onSifirla={onSifirla} />
-      </SnackbarProvider>
+      <MemoryRouter>
+        <SnackbarProvider>
+          <YeniHesapPenceresi onClose={onClose} onDegisti={onDegisti} onSifirla={onSifirla} />
+        </SnackbarProvider>
+      </MemoryRouter>
     </QueryClientProvider>,
   );
   return { onClose, onDegisti, onSifirla, unmount };
@@ -559,5 +564,116 @@ describe("Yeni hesap — hesap açıldı, parola kaydı yazılamadı", () => {
     await gonder(user, p, "denetleme_kurulu");
     expect(await within(p).findByRole("alert")).toHaveTextContent(ileti);
     expect(within(p).getByRole("button", { name: "Hesabı aç" })).toBeInTheDocument();
+  });
+});
+
+describe("Yeni hesap — organ rolünde üyelik", () => {
+  const BAG_YOK =
+    "Bu role hesap açılabilecek üye yok; açık birlik döneminde üyeliği, yönetim kurulu rollerinde " +
+    "görev bölümünü de girin.";
+  const TEK_HESAP = "Bu rolde açık bir hesap zaten var; önce onu kapatın.";
+
+  beforeEach(() => {
+    apiMock.secenekler.mockResolvedValue({
+      roller: ROL_SECENEKLERI.map((r) =>
+        r.rol === "baskan"
+          ? {
+              ...r,
+              uyelik_gerekli: true,
+              uyelikler: [
+                {
+                  uyelik: 11,
+                  kisi: 7,
+                  ad_soyad: "Uydurnur Örnekkaya",
+                  organ: "YK",
+                  gorev: "BASKAN",
+                  gorev_etiketi: "Başkan",
+                  donem: 3,
+                },
+                {
+                  uyelik: 12,
+                  kisi: 8,
+                  ad_soyad: null,
+                  organ: "YK",
+                  gorev: "BASKAN",
+                  gorev_etiketi: "Başkan",
+                  donem: 3,
+                },
+              ],
+            }
+          : r.rol === "denetleme_kurulu"
+            ? {
+                ...r,
+                acilabilir: false,
+                neden: BAG_YOK,
+                uyelik_gerekli: true,
+                uyelikler: [],
+                organlara_yonlendir: true,
+              }
+            : r.rol === "muhasip"
+              ? {
+                  ...r,
+                  acilabilir: false,
+                  neden: TEK_HESAP,
+                  uyelik_gerekli: true,
+                  uyelikler: [],
+                  organlara_yonlendir: false,
+                }
+              : r,
+      ),
+    });
+  });
+
+  it("üyelik seçilmeden gitmez; seçilen üyenin adı boş ad-soyada konur; gövde üyeliği taşır", async () => {
+    const user = userEvent.setup();
+    apiMock.ac.mockResolvedValue({ hesap: BASKAN, uyari: null, bilgi: null });
+    bas();
+    const p = await pencere();
+    await user.selectOptions(alan(p, /^Rol/), "baskan");
+    const uyelik = alan(p, /^Üyelik/);
+    expect(
+      within(uyelik)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["Seçin", "Uydurnur Örnekkaya · Başkan", "Adı okunamadı · Başkan"]);
+    await user.click(within(p).getByRole("button", { name: "Hesabı aç" }));
+    expect(within(p).getByText("Üyeliği seçin.")).toBeVisible();
+    expect(apiMock.ac).not.toHaveBeenCalled();
+    await user.selectOptions(uyelik, "11");
+    expect(alan(p, /^Ad-soyad/).value).toBe("Uydurnur Örnekkaya");
+    const parola = alan(p, /^Geçici parola/).value;
+    await user.click(within(p).getByRole("button", { name: "Hesabı aç" }));
+    expect(apiMock.ac).toHaveBeenCalledWith({
+      rol: "baskan",
+      tanitici: "baskan",
+      ad_soyad: "Uydurnur Örnekkaya",
+      gecici_parola: parola,
+      uyelik: 11,
+      kisi: 7,
+    });
+  });
+
+  it("açılabilecek üye yoksa neden ve Organlar bağlantısı; seçim yok", async () => {
+    const user = userEvent.setup();
+    bas();
+    const p = await pencere();
+    await user.selectOptions(alan(p, /^Rol/), "denetleme_kurulu");
+    expect(within(p).getByText(BAG_YOK)).toBeVisible();
+    expect(within(p).getByRole("link", { name: "Organlar ekranını aç" })).toHaveAttribute(
+      "href",
+      "/organlar",
+    );
+    expect(within(p).queryByLabelText(/^Üyelik/)).toBeNull();
+    expect(within(p).getByRole("button", { name: "Hesabı aç" })).toBeDisabled();
+  });
+
+  it("sınır engelinde neden görünür, Organlar bağlantısı çıkmaz", async () => {
+    const user = userEvent.setup();
+    bas();
+    const p = await pencere();
+    await user.selectOptions(alan(p, /^Rol/), "muhasip");
+    expect(within(p).getByText(TEK_HESAP)).toBeVisible();
+    expect(within(p).queryByRole("link", { name: "Organlar ekranını aç" })).toBeNull();
+    expect(within(p).getByRole("button", { name: "Hesabı aç" })).toBeDisabled();
   });
 });

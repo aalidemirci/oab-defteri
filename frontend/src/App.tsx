@@ -12,8 +12,8 @@
 // gezinmede yoktur ve rotası `RolKapisi` ile bağlanır ("Bu ekran hesabınızın rolüne açık
 // değil."); "O" olan ekran açılır, yazma denetimlerini kendisi gizler. Bugün Genel Bakış, Birlik
 // Dönemi ve Geçiş Kurulumu (F1c 11. adım), Kişiler, Ayarlar, Kılavuz ve Hakkında her role en az
-// okumaya açıktır (sözlük §4). Organlar ve Temsilciler ekranları F1c 11. adımın ikinci
-// parçasındadır. Kurulum Sihirbazı'nın her denetimi bir yazmadır: rotası `kurulum_tamamlama`'ya
+// okumaya açıktır (sözlük §4); Organlar ve Temsilciler de (F1c 11. adımın ikinci parçası; M2 satırı her
+// rolde en az "O"), yazma denetimlerini yeteneklerle kendileri gizler. Kurulum Sihirbazı'nın her denetimi bir yazmadır: rotası `kurulum_tamamlama`'ya
 // bağlıdır ve öteki rollerde kendi iletisini verir (kullanıcı kararı 04.11.2026: matristeki "O"ya istisna; kurulum durumunda süzme yoktur). Kullanıcılar (`/kullanicilar`)
 // matriste yalnız program yöneticisinde Y, öteki rollerde "—"dir: rotası `kullanicilar`
 // yeteneğine bağlıdır. Erişim Günlüğü (`/erisim-gunlugu`) matriste program yöneticisi ve Denetleme
@@ -40,7 +40,9 @@ import { KULLANICILAR_BASLIGI } from "./modules/kullanicilar/metinler";
 import KurulumPage from "./modules/kurulum/KurulumPage";
 import RolKapisi, { KURULUM_SIHIRBAZI_KAPALI_ILETISI } from "./modules/oturum/RolKapisi";
 import { YetkiSaglayici } from "./modules/oturum/yetki";
+import OrganlarPage from "./modules/organlar/OrganlarPage";
 import PanelPage from "./modules/panel/PanelPage";
+import TemsilcilerPage from "./modules/temsilciler/TemsilcilerPage";
 
 export default function App() {
   return (
@@ -80,6 +82,10 @@ export default function App() {
               <Route path="/birlik-donemi/gecis-kurulumu" element={<GecisKurulumuPage />} />
               {/* Öğretmen ve diğer personel sicili, e-Okul içe aktarma, birlik kişileri. */}
               <Route path="/kisiler" element={<KisilerPage />} />
+              {/* Organlar ve Temsilciler (F1c 11. adım): her role okumaya açık (M2; Denetleme Kurulunun
+                  görev bölümü M8 ⁵); yazma denetimleri yeteneklere bağlıdır. */}
+              <Route path="/organlar" element={<OrganlarPage />} />
+              <Route path="/temsilciler" element={<TemsilcilerPage />} />
               {/* Hesaplar (yalnız `kullanicilar` yeteneği; matriste öteki roller "—"). */}
               <Route
                 path="/kullanicilar"

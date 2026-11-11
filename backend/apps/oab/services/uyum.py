@@ -22,8 +22,9 @@ revizyonu boş `SAPMA` satırıdır; gerekçe öteki sapmalar gibi şifreli `Com
 Rol görünümü (`uyum_satiri_gorunumu`): görev alma engeli satırının kural kimliği (`uyelik.suc_engeli`,
 `yonetim_kurulu.tek_birlik`) satırda ve denetim izinde kalır; onu yalnız program yöneticisi ve yönetim
 kurulu rolleri görür, Denetleme Kurulu ve müdür "görev alma engeli" genel adını görür (kullanıcı kararı
-10.11.2026: engelin dayanağını yalnız bu roller okur; tasarım §4.4.2 ¹¹). F1c'nin 6. adımında uyum
-satırını ya da uyarı özetini kullanıcıya döndüren uç yoktur; pano (12. adım) bu görünümü kullanır.
+10.11.2026: engelin dayanağını yalnız bu roller okur; tasarım §4.4.2 ¹¹). Organlar ekranının kadro
+okuması (`views.OrganRosterView`, F1c 11. adım) üyeliklerin uyum satırlarını bu görünümle döndürür; pano
+(12. adım) da bu görünümü kullanır.
 """
 
 from __future__ import annotations

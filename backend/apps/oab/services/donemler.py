@@ -17,12 +17,14 @@ from django.db import transaction
 
 from apps.oab.kurallar import yazma_kapisi
 from apps.oab.models import OabTerm, TermStatus
-from apps.oab.services import iz, kural_bagi
+from apps.oab.services import donem_kilidi, iz, kural_bagi
 from apps.okul import denetim_izi, rol_izinleri
 from apps.okul.models import AuditAction, AuditLabel, ParentRoster, SchoolYear
 
 ILK_DONEM_ZATEN_ACIK = "Birlik dönemi zaten açılmış; sonraki dönemler genel kurulla açılır."
 PROGRAM_BASLANGICI_ONCE = "Programa başlama günü dönem başından önce olamaz."
+#: Yönetim kurulu toplantı günü kuralının üst sınırı (`OabTerm.yk_meeting_day_rule`).
+TOPLANTI_GUNU_UST = 64
 
 
 @transaction.atomic
@@ -59,6 +61,33 @@ def create_term(
         denetim_izi.degisiklik(donem, onceki=None)
         _veli_listesini_bagla(donem)
     return donem
+
+
+@transaction.atomic
+def toplanti_gunu_yaz(donem: OabTerm, metin: str) -> OabTerm:
+    """Yönetim kurulunun aylık toplantı günü kuralı (dönem ayarı; `GUNCELLE`; tasarım §5.2.1 `OabTerm`
+    "YK aylık toplantı günü kuralı, ör. 'her ayın ilk salısı'"; plan F1c 10. adım notları: E01'in D
+    bölümünün ilk satırı, "Aylık toplantı günü (md. 13/3)").
+
+    Serbest metindir, program bir kural koymaz ve denetlemez: md. 13/3 yalnız "ayda bir toplanır" der,
+    günü kurul belirler (doğrulanamayan hüküm koda girmez, altın kural 1). Boş metin kuralı siler (E01'de
+    "………"). Dönem kilidi denetlenir (kapanmış, iptal ya da kural kopyası doğrulanamayan dönem yazılmaz).
+    Aynı değer yazılırsa satır yazılmaz. Rolü uç kuralı daraltır (E01'i üretenler: program yöneticisi ve
+    sekreter, `rol_izinleri`).
+    """
+    deger = " ".join(metin.split())
+    if len(deger) > TOPLANTI_GUNU_UST:
+        raise ValueError(f"Toplantı günü en çok {TOPLANTI_GUNU_UST} karakter olabilir.")
+    guncel = OabTerm.objects.select_related("rule_package").get(pk=donem.pk)
+    donem_kilidi.yazma_denetimi(guncel)
+    if guncel.yk_meeting_day_rule == deger:
+        return guncel
+    onceki = denetim_izi.anlik(guncel)
+    guncel.yk_meeting_day_rule = deger
+    guncel.updated_by_id = iz.yazar_hesabi()
+    guncel.save(update_fields=["yk_meeting_day_rule", "updated_at", "updated_by"])
+    denetim_izi.degisiklik(guncel, onceki=onceki)
+    return guncel
 
 
 def acik_donem_kimligi() -> int | None:

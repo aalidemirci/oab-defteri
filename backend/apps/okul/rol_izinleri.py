@@ -393,6 +393,12 @@ _DAYANAK_E02 = (
     "ve denetim planını denetim modülünde üretir; YK rolleri ve program yöneticisi üretmez (plan "
     "F1c 10. adım, `Eylem.DK_GOREV_BOLUMU_YAZMA`)."
 )
+_DAYANAK_TOPLANTI_GUNU = (
+    "Tasarım §5.2.1 `OabTerm.yk_meeting_day_rule` (dönem ayarı) ve §9.6 E01 'Üreten' sütunu: kuralın "
+    "F1c'deki tek kullanımı E01'in D bölümüdür ('Aylık toplantı günü', md. 13/3); yazanı E01'i "
+    "üretenlerle aynıdır (sekreter ve program yöneticisi; md. 13/4: yazışmayı sekreter yürütür). "
+    "Tasarımda bu daraltmanın satırı yok; plan F1c 11. adım."
+)
 _DAYANAK_HAVUZ = (
     "Plan F1b-2: ayrılış havuzu (özet dahil) yalnız program yöneticisinindir; karar e-Okul "
     "aktarımının parçasıdır (tasarım §8.1 A7). Parametre denetçisi değere bakmadığı için "
@@ -616,6 +622,17 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
         yalniz=_YONETICI_VE_SEKRETER,
         dayanak=_DAYANAK_EVRAK_URETEN,
     ),
+    # Yönetim kurulunun aylık toplantı günü kuralı (dönem ayarı; E01'in D bölümü; F1c 11. adım).
+    _yaz(
+        "oab-term-meeting-day",
+        "PUT",
+        Satir.M2,
+        yalniz=_YONETICI_VE_SEKRETER,
+        dayanak=_DAYANAK_TOPLANTI_GUNU,
+    ),
+    # Bağlanabilecek yönetim kurulu kararları (temsilci ve yedek çağrısının karar bağı; kişisiz
+    # okuma). Karar verisi M4'ündür (YK toplantı, katılım, karar taslağı); her rol okur.
+    _oku("oab-term-linkable-decisions", Satir.M4),
     _oku("oab-term-documents", Satir.M2),
     _oku("oab-document-download", Satir.M2),
     # ------------------------------------------------ Kişisel veri: veli listesi (T5; ¹⁰)
@@ -946,6 +963,14 @@ YETENEKLER: Final[Mapping[str, frozenset[tuple[str, str]]]] = {
     "dk_gorev_bolumu_yazma": _ciftler(
         ("oab-dk-duty-assignment", "POST"), ("oab-document-e02", "POST")
     ),
+    # F1c 11. adımın ikinci parçası (Organlar): Denetleme Kurulu yedeğinin çağrısı (program yöneticisi;
+    # tasarım §7.2), üyeliğin düşmesi (program yöneticisi ve sekreter), görev alma engelinin yazımı ve
+    # dayanağının okunması (program yöneticisi ve yönetim kurulu rolleri; tasarım §4.4.2 ¹¹) ve yönetim
+    # kurulunun aylık toplantı günü (E01'i üretenler).
+    "dk_yedek_cagirma": _ciftler(("oab-membership-substitute-call-dk", "POST")),
+    "uyelik_dusurme": _ciftler(("oab-membership-drop", "POST")),
+    "gorev_alma_engeli": _ciftler(("oab-membership-eligibility-basis", ("GET", "PUT"))),
+    "toplanti_gunu_yazma": _ciftler(("oab-term-meeting-day", "PUT")),
 }
 
 

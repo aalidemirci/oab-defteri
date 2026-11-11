@@ -5,7 +5,11 @@
 // seçilince sunucunun nedeni alanın altında, gönderim kapalı; program yöneticisi rolünde sunucunun
 // bilgisi — anahtar yenilemesi sonraki sürümde), tanıtıcı (rol seçilince sunucunun varsayılanı;
 // kullanıcı değiştirdiyse rol değişimi onu ezmez), ad-soyad, geçici parola (programın önerisiyle
-// dolu; `GeciciParolaAlani`). Ön denetim sunucunun kurallarıyla birebirdir (`hesapKurallari`,
+// dolu; `GeciciParolaAlani`), organ rolünde (dört yönetim kurulu görevi ve Denetleme Kurulu) bağlanacak
+// üyelik (plan F1c 7. adım: sunucunun seçenekleri — yönetim kurulunda görevdeki asıl ve rolün görevi,
+// Denetleme Kurulunda görevdeki asıl, açık birlik döneminde; açılabilecek üye yoksa rol açılamaz, neden
+// sunucunundur ve Organlar ekranına bağlantı verilir; seçilen üyenin adı ad-soyad boşsa alana konur).
+// Ön denetim sunucunun kurallarıyla birebirdir (`hesapKurallari`,
 // `parolaPolitikasi`) ve her ileti kendi alanının altında çıkar (`useFormErrors`); tanıtıcının
 // kişisel veri uyarısı (ad-soyad ya da 11 ardışık rakam) gönderimden ÖNCE de görünür, engel değildir.
 // Sunucunun alan hatası varsa alanına, yoksa (servis reddi, kaydı tutmayan hesap, iz yazılamadı)
@@ -32,6 +36,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 import { useFormErrors } from "../../hooks/useFormErrors";
 import { ApiError } from "../../lib/api";
@@ -64,19 +69,24 @@ import {
   ACILDI_BASLIGI,
   ACILDI_ZARF_METNI,
   ACILIYOR,
+  AD_OKUNAMADI,
   AD_SOYAD_YARDIMI,
   ALAN_AD_SOYAD,
   ALAN_ROL,
   ALAN_TANITICI,
+  ALAN_UYELIK,
   DUGME_HESABI_AC,
   DUGME_PUSULA,
   DUGME_SIFIRLA,
   HAZIRLANIYOR,
+  ORGANLARA_GIT,
   PUSULA_ACIKLAMASI,
   PUSULA_HAZIRLANAMADI,
   PUSULA_KAYDEDILDI_ILETISI,
   ROL_SECIN_ILETISI,
   SECENEKLER_OKUNAMADI,
+  UYELIK_SECIN,
+  UYELIK_YARDIMI,
   YARIM_ACILDI_METNI,
   YENI_HESAP_BASLIGI,
   hesapAdi,
@@ -84,8 +94,8 @@ import {
 import { pusulayiKaydet } from "./pusula";
 
 /** Formun alanları (sunucunun gövde anahtarlarıyla aynı: sunucunun alan hatası alanına düşer). */
-type Alan = "rol" | "tanitici" | "ad_soyad" | "gecici_parola";
-const ALANLAR: readonly string[] = ["rol", "tanitici", "ad_soyad", "gecici_parola"];
+type Alan = "rol" | "uyelik" | "tanitici" | "ad_soyad" | "gecici_parola";
+const ALANLAR: readonly string[] = ["rol", "uyelik", "tanitici", "ad_soyad", "gecici_parola"];
 
 /** Hesap açıldı ama parola kaydı yazılamadı (dosya başı "YARIM AÇILIŞ"). */
 interface YarimAcilis {
@@ -227,6 +237,7 @@ function HesapFormu({
   // Kullanıcı tanıtıcıyı elle değiştirdiyse rol değişimi onu ezmez.
   const [taniticiElle, setTaniticiElle] = useState(false);
   const [adSoyad, setAdSoyad] = useState("");
+  const [uyelik, setUyelik] = useState("");
   const [parola, setParola] = useState(() => geciciParolaOner());
   const { errors, setFieldError, clearErrors, applyApiError } = useFormErrors<Alan>();
   const [genelHata, setGenelHata] = useState<string | null>(null);
@@ -239,9 +250,20 @@ function HesapFormu({
   // Açılamayan rolün nedeni sunucunundur; gönderim kapalıdır.
   const rolNedeni = secili !== null && !secili.acilabilir ? secili.neden : null;
   const onUyari = taniticiUyarisi(tanitici, adSoyad);
+  // Organ rolünde üyelik seçimi (dosya başı); açılamayan rolde seçim yoktur, neden rolün altındadır.
+  const uyelikGerekli = secili?.uyelik_gerekli === true && secili.acilabilir;
+  const uyelikler = secili?.uyelikler ?? [];
+  const seciliUyelik = uyelikler.find((u) => String(u.uyelik) === uyelik) ?? null;
+
+  function uyelikDegisti(yeni: string) {
+    setUyelik(yeni);
+    const secilen = uyelikler.find((u) => String(u.uyelik) === yeni);
+    if (secilen?.ad_soyad && !adSoyad.trim()) setAdSoyad(secilen.ad_soyad);
+  }
 
   function rolDegisti(yeni: string) {
     setRol(yeni);
+    setUyelik("");
     if (!taniticiElle) {
       setTanitici(roller.find((r) => r.rol === yeni)?.varsayilan_tanitici ?? "");
     }
@@ -254,6 +276,7 @@ function HesapFormu({
     // İstemci ön denetimi (otorite sunucudur; iletiler birebir). Her ileti kendi alanında.
     const sorunlar: Array<[Alan, string | null]> = [
       ["rol", secili === null ? ROL_SECIN_ILETISI : rolNedeni],
+      ["uyelik", uyelikGerekli && seciliUyelik === null ? UYELIK_SECIN : null],
       ["tanitici", taniticiSorunu(tanitici)],
       ["ad_soyad", adSoyadSorunu(adSoyad)],
       ["gecici_parola", parolaSorunu(parola)],
@@ -270,6 +293,9 @@ function HesapFormu({
       tanitici: taniticiNormallestir(tanitici),
       ad_soyad: adSoyadNormallestir(adSoyad),
       gecici_parola: parola,
+      ...(uyelikGerekli && seciliUyelik !== null
+        ? { uyelik: seciliUyelik.uyelik, kisi: seciliUyelik.kisi }
+        : {}),
     };
     // Yarım açılışı sezmek için gönderimden önceki hesaplar (dosya başı "YARIM AÇILIŞ").
     const onceki = await hesapKimlikleri();
@@ -323,6 +349,33 @@ function HesapFormu({
           disabled={calisiyor}
           required
         />
+        {secili?.organlara_yonlendir === true && !secili.acilabilir && (
+          <div className="sm:col-span-2">
+            <Link
+              to="/organlar"
+              className="inline-flex text-label-large text-primary underline underline-offset-2"
+            >
+              {ORGANLARA_GIT}
+            </Link>
+          </div>
+        )}
+        {uyelikGerekli && (
+          <Select
+            className="sm:col-span-2"
+            label={ALAN_UYELIK}
+            placeholder="Seçin"
+            value={uyelik}
+            onChange={(e) => uyelikDegisti(e.target.value)}
+            options={uyelikler.map((u) => ({
+              value: String(u.uyelik),
+              label: `${u.ad_soyad ?? AD_OKUNAMADI} · ${u.gorev_etiketi}`,
+            }))}
+            helperText={UYELIK_YARDIMI}
+            error={errors.uyelik}
+            disabled={calisiyor}
+            required
+          />
+        )}
         {secili?.bilgi && (
           <div className="sm:col-span-2">
             <Bant ikon="info" ton="bilgi">

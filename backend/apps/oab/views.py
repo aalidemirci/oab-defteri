@@ -26,16 +26,20 @@ from apps.oab.kurallar import (
 )
 from apps.oab.kurallar.erisim import atif_metni
 from apps.oab.models import (
+    BoardDecision,
     BookKind,
     BookStatus,
     ComplianceItem,
     MembershipRole,
     OfficialBook,
+    OrganMembership,
     OrganType,
+    SeatType,
     TermStatus,
 )
 from apps.oab.serializers import (
     AlimKomisyonuCreateSerializer,
+    BaglanabilirKararSerializer,
     DevralinanSerializer,
     DkGorevBolumuSerializer,
     DkYedekCagrisiSerializer,
@@ -56,11 +60,13 @@ from apps.oab.serializers import (
     OrganMembershipUpdateSerializer,
     SayacBeyaniSerializer,
     TemsilciCreateSerializer,
+    ToplantiGunuSerializer,
     YarimMetinSerializer,
     YkGorevBolumuSerializer,
     YkYedekCagrisiSerializer,
 )
 from apps.oab.services import (
+    donemler,
     gecis,
     gorev_bolumu,
     gorev_evraki,
@@ -72,7 +78,9 @@ from apps.oab.services import (
     uyum,
     yarim_metin,
 )
+from apps.okul import denetim_izi
 from apps.okul.models import CanteenMode
+from apps.okul.oturum import yazar
 from apps.okul.permissions import RequiresAdminPassword
 from apps.okul.services import dosya_deposu
 from shared import dosya_sifreleme
@@ -155,6 +163,41 @@ class TermDetailView(APIView):
 
     def get(self, request: Request, pk: int) -> Response:
         return Response(OabTermSerializer(get_object_or_404(_donemler(), pk=pk)).data)
+
+
+class TermMeetingDayView(APIView):
+    """Yönetim kurulunun aylık toplantı günü kuralı (dönem ayarı; E01'in D bölümünün ilk satırı).
+
+    Serbest metindir, program kural koymaz (md. 13/3 yalnız "ayda bir toplanır" der; günü kurul
+    belirler). Rolü uç kuralı daraltır: E01'i üretenler (program yöneticisi ve sekreter).
+    """
+
+    def put(self, request: Request, pk: int) -> Response:
+        donem = get_object_or_404(_donemler(), pk=pk)
+        govde = ToplantiGunuSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        with _hizmet_hatalari():
+            donem = donemler.toplanti_gunu_yaz(donem, govde.validated_data["yk_meeting_day_rule"])
+        return Response(OabTermSerializer(donem).data)
+
+
+class TermLinkableDecisionsView(APIView):
+    """Dönemin bağlanabilecek yönetim kurulu kararları: kabul edilmiş ya da deftere işlenmiş (tasarım
+    §7.2 "Notlar"; temsilcinin ve yedek çağrısının karar bağı). Kişisizdir; karar metni dönmez. F1c'de
+    kararlar taslaktır (kabul ve deftere işleme F3), liste o zamana dek boş gelir."""
+
+    def get(self, request: Request, pk: int) -> Response:
+        donem = get_object_or_404(_donemler(), pk=pk)
+        kararlar = (
+            BoardDecision.objects.filter(
+                meeting__term=donem,
+                meeting__organ=OrganType.YONETIM_KURULU,
+                status__in=temsilciler.BAGLANABILIR_KARAR_DURUMLARI,
+            )
+            .select_related("meeting")
+            .order_by("decision_no", "pk")
+        )
+        return Response(BaglanabilirKararSerializer(kararlar, many=True).data)
 
 
 class TermCancelView(APIView):
@@ -250,7 +293,7 @@ class PersonFromParentView(APIView):
 
 # ---------------------------------------------------------------------------
 # Organ üyelikleri (M2; tasarım §5.2.2; plan F1c-5). Yazan uçlar ilk hesap kapısını taşır (üyelik kişi
-# kaydına bağlıdır, dayanak notu şifrelidir). Ekranı F1c'nin 11. adımındadır.
+# kaydına bağlıdır, dayanak notu şifrelidir). Ekranı Organlar'dır (F1c 11. adım).
 # ---------------------------------------------------------------------------
 #: Kadro okumasının organları (organ ekranının sekmeleri: yönetim kurulu, Denetleme Kurulu, alım
 #: komisyonu); liste okumasında temsilciler de (6. adım).
@@ -382,10 +425,70 @@ def _kadro_uyarilari(donem: Any, organ: str) -> list[dict[str, Any]]:
         return []
 
 
+def _uyelik_uyum_satirlari(donem: Any, organ: str) -> list[dict[str, Any]]:
+    """Organın üyeliklerinin açık uyum satırları (eksik, sapma), oturumdaki rolün görünümüyle.
+
+    Görev alma engeli satırını (kural kimliği ve atfı dayanağı ele verir) yalnız program yöneticisi ve
+    yönetim kurulu rolleri olduğu gibi görür; Denetleme Kurulu ve müdür atıfsız genel adı görür
+    (`uyum.uyum_satiri_gorunumu`; kullanıcı kararı 10.11.2026, tasarım §4.4.2 ¹¹). Gerekçe metni hiçbir
+    rolde dönmez. Akış satırının atfı yoktur (Yönetmelik hükmü değildir).
+    """
+    kimlikler = [
+        str(pk)
+        for pk in OrganMembership.objects.filter(term=donem, organ=organ).values_list(
+            "pk", flat=True
+        )
+    ]
+    satirlar = ComplianceItem.objects.filter(
+        term=donem,
+        subject_type=denetim_izi.model_etiketi(OrganMembership),
+        subject_id__in=kimlikler,
+        resolved_at__isnull=True,
+    ).order_by("pk")
+    kim = yazar()
+    rol = None if kim is None else kim.rol
+    sonuc: list[dict[str, Any]] = []
+    for satir in satirlar:
+        gorunum = uyum.uyum_satiri_gorunumu(satir, rol)
+        sonuc.append(
+            {
+                "id": satir.pk,
+                "uyelik": int(satir.subject_id),
+                "tur": satir.kind,
+                "metin": gorunum["message"],
+                "atif": _uyum_atfi(str(gorunum["rule_id"]), donem),
+                "gerekceli": satir.justification_group_id is not None,
+            }
+        )
+    return sonuc
+
+
+def _secilme_sayaclari(organ: str, uyeler: list[Any]) -> list[dict[str, Any]]:
+    """Görevdeki üyelerin seçilme sayaçları (md. 12/4, 14/3): programın kayıtları ve programdan önceki
+    beyan; beyan "bilinmiyor"sa `beyan` boştur. Yönetim kurulunda başkan ve üye tek sayaçtır, Denetleme
+    Kurulunda yalnız başkanlık sayılır (`uyelikler`). Alım komisyonunda sayaç yoktur."""
+    if organ == OrganType.YONETIM_KURULU:
+        sayac, beyan_alani = uyelikler.yk_secilme_sayisi, "external_yk_terms"
+    elif organ == OrganType.DENETLEME_KURULU:
+        sayac, beyan_alani = uyelikler.dk_baskanlik_sayisi, "external_dk_chair_terms"
+    else:
+        return []
+    return [
+        {
+            "uyelik": uyelik.pk,
+            "program": sayac(uyelik.person),
+            "beyan": getattr(uyelik.person, beyan_alani),
+        }
+        for uyelik in uyeler
+    ]
+
+
 class OrganRosterView(APIView):
     """Görevdeki kadro: görevdeki asıllar, çağrılmamış yedekler, kadro sayıları ve uyarıları.
 
-    Sayılan yalnız seçilmiş kayıttır; uyarı yazmaz, gerekçe istemez (sayılar uyarıdır).
+    Sayılan yalnız seçilmiş kayıttır; uyarı yazmaz, gerekçe istemez (sayılar uyarıdır). Üyeliklerin açık
+    uyum satırları role göre süzülür (`_uyelik_uyum_satirlari`); seçilme sayaçları görevdeki asıllar ve
+    çağrılmamış yedekler içindir (F1c 11. adım: Organlar ekranı).
     """
 
     def get(self, request: Request, pk: int, organ: str) -> Response:
@@ -393,23 +496,25 @@ class OrganRosterView(APIView):
         organ = _organ(organ)
         sayilar = selectors.kadro_sayilari(donem, organ)
         asillar = selectors.gorevdeki_asillar(donem, organ)
+        yedekler = selectors.bekleyen_yedekler(donem, organ)
         return Response(
             {
                 "organ": organ,
                 "gorevdeki_asillar": OrganMembershipSerializer(asillar, many=True).data,
-                "bekleyen_yedekler": OrganMembershipSerializer(
-                    selectors.bekleyen_yedekler(donem, organ), many=True
-                ).data,
-                "kadro": {"asil": sayilar["ASIL"], "yedek": sayilar["YEDEK"]},
+                "bekleyen_yedekler": OrganMembershipSerializer(yedekler, many=True).data,
+                "kadro": {"asil": sayilar[SeatType.ASIL], "yedek": sayilar[SeatType.YEDEK]},
                 "kadro_uyarilari": _kadro_uyarilari(donem, organ),
                 "oneriler": _oneriler(asillar),
+                "uyum_satirlari": _uyelik_uyum_satirlari(donem, organ),
+                "secilme_sayaclari": _secilme_sayaclari(organ, [*asillar, *yedekler]),
             }
         )
 
 
 # ---------------------------------------------------------------------------
-# Görev bölümü, yedek çağrısı, düşme, iptal, temsilciler, alım komisyonu (F1c 6. adım; ekranları 11.
-# adımda). Rol daraltmaları uç kuralındadır (`rol_izinleri`; tasarım §7.2 "Kim").
+# Görev bölümü, yedek çağrısı, düşme, iptal, temsilciler, alım komisyonu (F1c 6. adım; ekranları
+# Organlar ve Temsilciler, 11. adım). Rol daraltmaları uç kuralındadır (`rol_izinleri`; tasarım §7.2
+# "Kim").
 # ---------------------------------------------------------------------------
 _YK_GOREV_ALANLARI: dict[str, str] = {
     "baskan": MembershipRole.BASKAN,
@@ -618,7 +723,8 @@ class PurchaseCommitteeCreateView(APIView):
 
 
 # ---------------------------------------------------------------------------
-# E01, E02, E03 (F1c 10. adım; düğmeleri 11. adımda). Üretim uç kuralıyla ve serviste daraltılır
+# E01, E02, E03 (F1c 10. adım; düğmeleri Organlar ve Temsilciler'de, 11. adım). Üretim uç kuralıyla ve
+# serviste daraltılır
 # (tasarım §9.6 "Üreten"); basım her okur role açıktır, `BASIM` satırı okuma rolünde de yazılır.
 # ---------------------------------------------------------------------------
 def _evrak_satiri(kayit: oab_modelleri.GeneratedDocument) -> dict[str, Any]:
@@ -702,7 +808,7 @@ class DocumentDownloadView(APIView):
 
 
 # ---------------------------------------------------------------------------
-# Geçiş kurulumu (tasarım §7.9 adım 1-4; plan F1c 8. adım, uçları ve ekranı 11. adımda). Kaydı
+# Geçiş kurulumu (tasarım §7.9 adım 1-4; plan F1c 8. adım; ekranı Birlik Dönemi → Geçiş Kurulumu). Kaydı
 # yalnız program yöneticisi yazar (M1, `Eylem.BIRLIK_DONEMI_YAZMA`); okuma her role açıktır. İşaretten
 # sonra her yazma 409 `gecis_kapali`. Devralınan üyeliğin iptali genel iptal ucundadır
 # (`MembershipCancelView`; servis devralınan kaydı yalnız program yöneticisine açar).

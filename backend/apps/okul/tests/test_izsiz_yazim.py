@@ -398,6 +398,16 @@ def _f1c6_donemi() -> OabTerm:
     )
 
 
+def _toplanti_gunu(_: pytest.MonkeyPatch) -> Istek:
+    """Yönetim kurulunun aylık toplantı günü kuralı (dönem ayarı; F1c 11. adım): `GUNCELLE`."""
+    donem = _f1c6_donemi()
+    return Istek(
+        f"/api/v1/oab/terms/{donem.pk}/meeting-day/",
+        {"yk_meeting_day_rule": "Her ayın ilk salısı"},
+        _turler("GUNCELLE"),
+    )
+
+
 def _gecis_iptali(_: pytest.MonkeyPatch) -> Istek:
     """Geçiş döneminin iptali: durum ve şifreli gerekçe (F1c 11. adım; §7.9 "Senaryolar")."""
     donem = _f1c6_donemi()
@@ -852,6 +862,7 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     ("oab-document-e03", "POST"): Senaryo(_gorev_evraki("e03")),
     # F1c 11. adım: geçiş kurulumunun uçları (etiket `GECIS`; §7.9).
     ("oab-term-cancel", "POST"): Senaryo(_gecis_iptali),
+    ("oab-term-meeting-day", "PUT"): Senaryo(_toplanti_gunu),
     ("oab-transition-inherited", "POST"): Senaryo(_gecis_devralinan),
     ("oab-transition-election-counts", "POST"): Senaryo(_gecis_sayac_beyani),
     ("oab-transition-decision-book", "POST"): Senaryo(_gecis_karar_defteri),

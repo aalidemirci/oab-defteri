@@ -37,6 +37,7 @@ import KilitEkrani, {
   OKUNAMADI_ETIKETI,
   SECILEBILIR_HESAP_YOK_METNI,
   UNUTTUM_BASKA_ROL_METNI,
+  UYELIK_ASKISI_METNI,
 } from "./KilitEkrani";
 import { KURTARILACAK_HESAP_YOK_METNI, UCUNCU_DURUM_YOL_METNI } from "./KurtarmaIleAcma";
 import { UCUNCU_DURUMUN_CARESI, ZARFIN_UCUNCU_DURUMU } from "./metinler";
@@ -153,6 +154,8 @@ describe("KilitEkrani — hesap listesi", () => {
     expect(radyo(`${OKUNAMADI_ETIKETI} (sekreter)`)).toBeDisabled();
     // İç askı nedenleri ekrana çıkmaz.
     expect(screen.queryByText(/HATALI_DENEME|UYELIK_DUSTU/)).toBeNull();
+    // Üyelik askısındaki hesap listede: nedenin iletisi listenin altında (F1c 11. adım).
+    expect(screen.getByText(UYELIK_ASKISI_METNI)).toBeInTheDocument();
     // Birden çok seçilebilir hesap: hiçbiri kendiliğinden seçili gelmez; odak (sayfa
     // gövdesine düşmesin) ilk seçilebilir satırdadır.
     expect(radyo("Program yöneticisi (yonetici)")).not.toBeChecked();
@@ -1080,5 +1083,23 @@ describe("KilitEkrani — kurtarma anahtarı (yalnız program yöneticisi)", () 
     render(<KilitEkrani />);
 
     expect(await screen.findByText("Hesap listesi okunamadı.")).toBeInTheDocument();
+  });
+});
+
+describe("KilitEkrani — üyelik askısının iletisi", () => {
+  it("yalnız hatalı deneme askısı varsa ileti çıkmaz; görev bölümü askısında çıkar", async () => {
+    oturum.hesaplar.mockResolvedValue([YONETICI, DK_ASKIDA]);
+    const { unmount } = render(<KilitEkrani />);
+    await hazir();
+    expect(screen.queryByText(UYELIK_ASKISI_METNI)).toBeNull();
+    unmount();
+    oturum.hesaplar.mockResolvedValue([
+      YONETICI,
+      { ...MUHASIP, secilebilir: false, askida_nedeni: "GOREV_BOLUMU" },
+    ]);
+    render(<KilitEkrani />);
+    await hazir();
+    expect(screen.getByText(UYELIK_ASKISI_METNI)).toBeInTheDocument();
+    expect(radyo("Muhasip (muhasip)")).toHaveAccessibleDescription(ASKIDA_ETIKETI);
   });
 });

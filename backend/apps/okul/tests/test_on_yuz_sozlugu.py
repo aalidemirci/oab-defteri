@@ -74,6 +74,10 @@ DOSYALAR = (
     "frontend/src/modules/uyum/metinler.ts",
     "frontend/src/modules/birlik-donemi/metinler.ts",
     "frontend/src/modules/gecis-kurulumu/metinler.ts",
+    # F1c 11. adım (ikinci parça): Organlar, Temsilciler ve görev bölümü ve temsilci evrakının kartı.
+    "frontend/src/modules/organlar/metinler.ts",
+    "frontend/src/modules/temsilciler/metinler.ts",
+    "frontend/src/modules/evrak/metinler.ts",
 )
 
 #: Kullanıcıya görünmeyen düz dize sabitleri (dosya, ad) → gerekçe.

@@ -19,7 +19,19 @@ urlpatterns: list[URLPattern | URLResolver] = [
     path("terms/", views.TermListCreateView.as_view(), name="oab-term-list"),
     path("terms/<int:pk>/", views.TermDetailView.as_view(), name="oab-term-detail"),
     path("terms/<int:pk>/cancel/", views.TermCancelView.as_view(), name="oab-term-cancel"),
-    # Geçiş kurulumu (F1c 8. adımın servisleri; uçları ve ekranı 11. adımda).
+    # Yönetim kurulunun aylık toplantı günü kuralı (dönem ayarı; E01'in D bölümü, F1c 11. adım).
+    path(
+        "terms/<int:pk>/meeting-day/",
+        views.TermMeetingDayView.as_view(),
+        name="oab-term-meeting-day",
+    ),
+    # Bağlanabilecek (kabul edilmiş ya da deftere işlenmiş) yönetim kurulu kararları (F1c 11. adım).
+    path(
+        "terms/<int:pk>/linkable-decisions/",
+        views.TermLinkableDecisionsView.as_view(),
+        name="oab-term-linkable-decisions",
+    ),
+    # Geçiş kurulumu (F1c 8. adımın servisleri; uçları ve ekranı 11. adımın birinci parçasında).
     path("transition/", views.TransitionView.as_view(), name="oab-transition"),
     path(
         "transition/inherited/",
