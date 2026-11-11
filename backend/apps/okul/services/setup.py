@@ -332,7 +332,8 @@ def mark_setup_completed() -> SchoolConfig:
 # aktarımı maddesi F1b 5. adımda öğrenci tarafıyla kalktı, veli listesi dönemlik olduğu için
 # madde olmaz — plan "F1b-5 uygulama kararları"). Burada yalnız KULLANICININ İŞARETLEDİĞİ maddeler tutulur: program
 # bunların yapıldığını bilemez (ör. zarfın kapatılması). OAB'nin maddeleri
-# F1b/F1c'de eklenir (plan §2.2; genel tasarım §7.10).
+# F1b ve F1c'de eklendi (plan §2.2; genel tasarım §7.10); geçiş kurulumu maddesi kendiliğinden
+# tespit edilir (`roadmap_auto_items`).
 #
 # Aileden gelen "parola_paylasimi" maddesi ("yönetici parolasını iki kişiyle
 # paylaş") kaldırıldı: parola paylaşılmaz (BSG Yönergesi md. 7/2); kişisel

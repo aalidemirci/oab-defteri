@@ -35,8 +35,8 @@ yöneticisinin listesi, kişisiz kodlar ve kimlikler. Kalemler saklanmaz, her ok
 hesaplanır: üyelik ya da görev nedeniyle askıdaki ve bağı bugün geçersiz hesabın kapanışı (sarmalın
 silinmesi kapamayla gelir, TK11), bağı yeniden geçerli olmuş askıdaki hesabın askıdan çıkarılması
 (askı kendiliğinden kalkmaz, §4.4.5) ve açık dönemde hesabı olmayan görevli (dört YK görevi ve
-Denetleme Kurulunun görevdeki asılları) için yeni hesap. Ekranı ve Genel Bakış kalemi 11-12.
-adımdadır.
+Denetleme Kurulunun görevdeki asılları) için yeni hesap. Ekranı (Kullanıcılar, 11. adım) ve Genel
+Bakış kalemi (12. adım) geldi.
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ GOREV_TUTMUYOR = (
     "bu rol değil."
 )
 
-#: Hesap önerisi türleri (kişisiz kodlar; ekran metni 11-12. adımda sözlükten).
+#: Hesap önerisi türleri (kişisiz kodlar; ekran metni sözlükte ve `pano/metinler.ts`'te).
 ONERI_KAPAT: Final = "HESAP_KAPAT"
 ONERI_ASKIDAN_CIKAR: Final = "HESAP_ASKIDAN_CIKAR"
 ONERI_AC: Final = "HESAP_AC"

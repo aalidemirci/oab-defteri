@@ -157,7 +157,7 @@ def test_alanlarin_bos_olabilirligi_donmustur() -> None:
     ids=["docx", "xlsx"],
 )
 def test_uretilen_evrakin_tur_adi_sutuna_sigar(tur: str) -> None:
-    """Plan F1b-3: üretilen evrakın türleri F1c'de eklenir; sütun o zaman göç istemesin."""
+    """Plan F1b-3: üretilen evrakın türleri (DOCX; F1c 9. adımda eklendi) sütuna göçsüz sığar."""
     uzunluk = Attachment._meta.get_field("mime").max_length
     assert uzunluk is not None and len(tur) <= uzunluk
 

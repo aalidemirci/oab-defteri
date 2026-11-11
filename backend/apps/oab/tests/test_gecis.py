@@ -258,6 +258,8 @@ def test_karar_defteri_son_no_ve_sayfa_zorunlu() -> None:
     _ac()
     with pytest.raises(ValueError, match="son sıra no"):
         gecis.karar_defteri_kaydet(last_no_before_program=None, last_page_before_program=4)
+    with pytest.raises(ValueError, match="sayfası"):
+        gecis.karar_defteri_kaydet(last_no_before_program=4, last_page_before_program=None)
     defter = gecis.karar_defteri_kaydet(
         last_no_before_program=37,
         last_page_before_program=12,

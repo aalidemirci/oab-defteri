@@ -47,6 +47,11 @@ export default function PrograminKonumu(bolum: BolumProps) {
           Yönetim kurulunun kararı, karar defterine el ile yazılıp imzalanır. Programdaki hiçbir
           kayıt ve programdan alınan hiçbir çıktı, defterdeki yazının ve imzanın yerini almaz.
         </li>
+        <li>
+          Program yönetim kurulunun görev bölümü ve temsilcileri için karar taslağı hazırlar.
+          Taslağın başında “TASLAK — karar defterine geçirilecek metin” yazar: karar defterine el
+          ile yazılır ve imzalanır.
+        </li>
         <li>Noter tasdiki karar defteri içindir; program tasdikli defter sayılmaz.</li>
         <li>
           TEFBİS&apos;e girişi okul idaresi yapar. Program TEFBİS&apos;e bağlanmaz, oraya

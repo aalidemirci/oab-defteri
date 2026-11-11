@@ -27,6 +27,7 @@ import {
   KURTARMA_ILE_AC_ETIKETI,
   OKUNAMADI_ETIKETI,
   UNUTTUM_BASKA_ROL_METNI,
+  UYELIK_ASKISI_METNI,
 } from "../../guvenlik/KilitEkrani";
 import {
   PAROLA_CUMLESI_ONERISI,
@@ -79,6 +80,15 @@ export default function HesaplarVeOturum(bolum: BolumProps) {
         program yöneticisi askıyı kaldırmadan giriş açılmaz; <strong>{OKUNAMADI_ETIKETI}</strong>{" "}
         yazıyorsa aşağıdaki “Listede seçilebilecek hesap kalmadıysa” başlığına bakın. Kapatılmış
         hesap listede görünmez.
+      </p>
+
+      <AltBaslik>Kurul üyeliğiniz düştüyse ya da göreviniz değiştiyse</AltBaslik>
+      <p>
+        Yönetim kurulu ve Denetleme Kurulu hesapları kişinin kurul üyeliğine bağlıdır. Listede böyle
+        askıya alınmış bir hesap varsa kilit ekranı listenin altında şunu yazar: “
+        {UYELIK_ASKISI_METNI}” Program açıkken kendi hesabınız askıya alındıysa işlem kaydedilir,
+        ardından program kilitlenir ve bu ekrana dönersiniz. Görevdeki kurul üyesiyseniz yeni hesap
+        için program yöneticisine başvurun.
       </p>
 
       <AltBaslik>Parolanızı yanlış girdiyseniz</AltBaslik>

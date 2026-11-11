@@ -558,7 +558,8 @@ def test_gecici_artik_adi_tanir() -> None:
 # Tür: imza baytı
 # ---------------------------------------------------------------------------
 def test_kabul_edilen_turler_f1b_de_uc_turdur() -> None:
-    """Tasarım §5.2.8: PDF, JPEG, PNG. Üretilen evrakın türleri F1c'de bilinçli eklenir."""
+    """Tasarım §5.2.8: kullanıcı eki PDF, JPEG, PNG. Üretilen evrakın türleri (PDF ve DOCX) F1c 9.
+    adımda ayrı kümeyle eklendi; bu küme kullanıcı ekinindir."""
     assert [tur.mime for tur in ds.KABUL_EDILEN_TURLER] == [
         "application/pdf",
         "image/jpeg",

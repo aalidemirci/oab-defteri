@@ -1,7 +1,7 @@
 // OAB Defteri — kök route tanımı. Route ağacı fazlarla büyür (tasarım §14):
 // aile iskeletinden gelen kabuk kurulum, kişiler, ayarlar, kılavuz ve hakkında
-// ekranlarını taşır; OAB ekranları (birlik dönemi, organlar, pano…) F1c'den
-// itibaren eklenir. Aile iskeletinin kütüphane ekranları F1a-2'de söküldü.
+// ekranlarını taşır; OAB ekranları (birlik dönemi, organlar, temsilciler, pano) F1c'de
+// eklendi, sonraki fazların ekranları kendi fazlarında eklenir. Aile iskeletinin kütüphane ekranları F1a-2'de söküldü.
 // Kilit ekranı (GuvenlikKapisi) kurulum kapısından ÖNCE gelir — hesap kuruluysa
 // hiçbir veri ekranı (sihirbaz dahil) açılmadan kilit kişinin kendi hesabıyla
 // açılmalıdır. Aile iskeletinin kip kapısı (görevli kipi) yoktur (tasarım TK14):

@@ -1,5 +1,5 @@
 // Kılavuz bölümü: Kişiler (çapa `kisiler`). Başlık, ikon ve sıra `KilavuzPage`'dedir. Veli listesi
-// kendi bölümündedir (`VeliListesi`). Yazma adımları yalnız o yeteneği olan hesaba yazılır: kişi
+// (`VeliListesi`) ve birlik kişileri (`BirlikKisileri`, F1c) kendi bölümlerindedir. Yazma adımları yalnız o yeteneği olan hesaba yazılır: kişi
 // ekleme ve düzeltme, aktarım ve havuz kararı ayrı yeteneklerdir (`KisilerPage` rol süzmesi).
 
 import type { ReactNode } from "react";
@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import {
   AKTAR,
   AYDINLATMA_BASLIGI,
+  BIRLIK_KISILERI_SEKMESI,
   DAHA_ONCE_AKTARILMIS,
   DOSYA_ALANI_ETIKETI,
   GOREV_TURU_ETIKETI,
@@ -15,6 +16,7 @@ import {
   ONIZLE,
   ONIZLEME_BASLIGI,
   SABLON_INDIR,
+  VELI_LISTESI_SEKMESI,
 } from "../../kisiler/metinler";
 import { MEMBER_KIND_TR, PERSONNEL_TEMPLATE_FILENAME } from "../../okul/api";
 import { useYetki } from "../../oturum/yetki";
@@ -33,6 +35,13 @@ export default function Kisiler(bolum: BolumProps) {
   const havuzAcik = yetki.acik("ayrilis_havuzu");
   return (
     <KilavuzBolumu {...bolum}>
+      <p>
+        Kişiler ekranının sekmeleri hesabın rolüne göre görünür. Veli listesi ve birlik kişileri
+        kendi bölümlerinde anlatılır (
+        <Ekran to="/kilavuz#veli-listesi">{VELI_LISTESI_SEKMESI}</Ekran>,{" "}
+        <Ekran to="/kilavuz#birlik-kisileri">{BIRLIK_KISILERI_SEKMESI}</Ekran>); bu bölüm öğretmen
+        ve diğer personelin sicilini ve Ayrılış Havuzu&apos;nu anlatır.
+      </p>
       <p>
         <Ekran to="/kisiler?tab=personel">Kişiler → Öğretmenler ve Diğer Personel</Ekran> okulun
         sicilidir. Sicilde yalnız ad-soyad ve görev türü tutulur; T.C. kimlik numarası, unvan ve

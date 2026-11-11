@@ -599,12 +599,14 @@ def test_f1b_fazli_bekleyen_kalmadi() -> None:
 
 
 def test_f1c_fazli_bekleyen_kalmadi() -> None:
-    """F1c'nin 6. adımının "Bitti" ölçütü (plan F1c-6): üç bekleyen listesinde faz değeri "F1c" olan
-    kalem yoktur. `DENETIM_YAZMA` bölündü: görev bölümü ve denetim planı yeni eylemle bağlandı,
-    kalanın fazı F2'dir (md. 14/5 çağrısı; tasarım §4.4.2 "Testler")."""
-    assert "F1c" not in set(BEKLEYEN_HUCRELER.values())
-    assert "F1c" not in set(BEKLEYEN_DIPNOTLAR.values())
-    assert "F1c" not in set(BAGLANMAMIS_EYLEMLER.values())
+    """F1c kapısı (13. adım; tasarım §14 ortak madde 4; 6. adımın "Bitti" ölçütü de buydu): üç
+    bekleyen listesinde faz değeri "F1c" ya da adı "F1" ile başlayan kalem yoktur; listelerde yalnız
+    sonraki fazlar (F2 ve sonrası) kalır. `DENETIM_YAZMA` bölündü: görev bölümü ve denetim planı yeni
+    eylemle bağlandı, kalanın fazı F2'dir (md. 14/5 çağrısı; tasarım §4.4.2 "Testler")."""
+    for liste in (BEKLEYEN_HUCRELER, BEKLEYEN_DIPNOTLAR, BAGLANMAMIS_EYLEMLER):
+        fazlar = set(liste.values())
+        assert not {faz for faz in fazlar if faz.startswith("F1")}, fazlar
+        assert fazlar <= {"F2", "F3", "F4", "F5", "F6", "F7", "F8+"}, fazlar
     assert Eylem.DK_GOREV_BOLUMU_YAZMA not in BAGLANMAMIS_EYLEMLER
     assert BAGLANMAMIS_EYLEMLER[Eylem.DENETIM_YAZMA] == "F2"
 

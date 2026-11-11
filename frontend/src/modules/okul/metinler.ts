@@ -4,8 +4,8 @@
 // sabitleri kaynaktan okur: dizeler düz yazılır (tek satır ya da `"…" + "…"`; şablon dizesi yok).
 //
 // Altın kural 2: oranlar ve eşikler (öğrenci mevcudunun eşiği, arz bedeli ve pay oranları) okul
-// kartında yazılmaz; yardım metni yalnız alanın hangi hesaba girdiğini ve maddesini söyler (kural
-// paketi F1c'de). Madde numaraları OAB Yönetmeliğinindir (`docs/mevzuat/`).
+// kartında yazılmaz; yardım metni yalnız alanın hangi hesaba girdiğini ve maddesini söyler (değerler
+// kural paketindedir, F1c). Madde numaraları OAB Yönetmeliğinindir (`docs/mevzuat/`).
 
 /** Okul adımının (sihirbaz 2. adım) ve Okul Bilgileri sekmesinin açıklaması. */
 export const OKUL_KARTI_ACIKLAMASI =

@@ -114,8 +114,9 @@ def _ozet() -> dict[str, Any]:
 def _ek_tohumla() -> str:
     """Uydurma ek: depoda dosya, tabloda satır; tam yedek bunları taşır.
 
-    Geçici sahip ders yılıdır: F1b'de sahip kümesi boştur, ilk sahip F1c'de gelir (plan "Dosya
-    deposu").
+    Geçici sahip ders yılıdır: prova F1b'de yazıldı, o gün sahip kümesi boştu; ilk gerçek sahip F1c'de
+    geldi (`GeneratedDocument`, plan "Dosya deposu"). Prova ekin yedekte taşınmasını sınar, sahibin
+    türü önemsizdir.
     """
     from datetime import date
 

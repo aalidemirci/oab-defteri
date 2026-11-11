@@ -186,6 +186,8 @@ def test_karar_defteri_ucu_tasdiksiz_gerekce_ve_iptal() -> None:
     assert "(md. 23/2)." in gerekcesiz.json()["message"]
     bos = _istemci().post(f"{UC}decision-book/", {}, format="json")
     assert bos.status_code == 400 and "son sıra no" in bos.json()["message"]
+    sayfasiz = _istemci().post(f"{UC}decision-book/", {"last_no_before_program": 4}, format="json")
+    assert sayfasiz.status_code == 400 and "sayfası" in sayfasiz.json()["message"]
     yanit = _istemci().post(f"{UC}decision-book/", {**govde, "gerekce": GEREKCE}, format="json")
     assert yanit.status_code == 201, yanit.content
     defter = yanit.json()

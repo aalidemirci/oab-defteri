@@ -2,8 +2,19 @@
 // Adımlar `kurulum/KurulumPage.tsx` ve sözlük §4.4'ten; anahtarın saklanması
 // `guvenlik/KurtarmaAnahtariPaneli.tsx` ve `guvenlik/metinler.ts`'ten. Kurulum bitmeden Kılavuz
 // açılmaz (`KurulumKapisi`), bölüm bu yüzden sihirbazı yarıda bırakanı ve yeniden açanı da düşünür.
-// Programın bilgisayara kurulması bu bölümde değildir (`packaging/README.md`).
+// Programın bilgisayara kurulması `ProgramiKurmak` bölümündedir. 4. adım (Birlik Dönemi) atlanabilir
+// (plan F1c kararları "Geçiş adımı atlanabilir"; metinler `gecis-kurulumu/metinler`'den, adım adı ekranın
+// sabitinden); adımın formu Geçiş Kurulumu'nun İlk Birlik Dönemi formudur.
 
+import {
+  ALAN_DONEM_ADI,
+  ALAN_DONEM_BASI,
+  ALAN_GECIS_DERS_YILI,
+  ALAN_PROGRAMA_BASLAMA,
+  DUGME_DONEMI_AC,
+  PROGRAMA_BASLAMA_YARDIMI,
+  SIHIRBAZ_ADIM_ADI,
+} from "../../gecis-kurulumu/metinler";
 import { KURTARMA_BELGESI_ADI } from "../../guvenlik/kurtarma";
 import {
   DOGRULANMADI_BASLIGI,
@@ -29,6 +40,7 @@ export default function IlkKurulum(bolum: BolumProps) {
         <li>Program Yöneticisi Hesabı (atlanamaz)</li>
         <li>Okul Bilgileri</li>
         <li>Ders Yılı ve Kapalı Günler</li>
+        <li>{SIHIRBAZ_ADIM_ADI} (atlanabilir)</li>
       </ol>
 
       <AltBaslik>1. adım: program yöneticisi hesabını kurmak</AltBaslik>
@@ -125,10 +137,45 @@ export default function IlkKurulum(bolum: BolumProps) {
         bölümündedir.
       </p>
       <p>
-        Son düğme “Kurulumu tamamla”dır; eksik adım varken kapalıdır. Kurulum bitince Genel Bakış
-        açılır ve menüdeki bölümler kullanılabilir. Personel aktarımı sihirbazda değildir; sıradaki
-        işler <Ekran to="/kilavuz#genel-bakis">Genel Bakış</Ekran> bölümünde anlatılan Başlangıç Yol
-        Haritası&apos;ndadır.
+        Üçüncü adımda iki düğme vardır: “Devam” birlik dönemi adımına geçer, “Kurulumu tamamla”
+        birlik dönemi adımını atlayıp kurulumu bitirir. “Kurulumu tamamla” ilk üç adımdan biri
+        eksikken kapalıdır.
+      </p>
+
+      <AltBaslik>4. adım: birlik dönemi (atlanabilir)</AltBaslik>
+      <p>
+        Program okula bir birlik döneminin ortasında giriyorsa, yani okulda genel kurul yapılmış ve
+        kurullar görevdeyse, birlik dönemini bu adımda açın. Okulda daha önce genel kurul
+        yapılmadıysa adımı atlayın; o zamana dek Organlar ve Temsilciler ekranları boş görünür.
+      </p>
+      <ul className="list-disc space-y-1 pl-5">
+        <li>
+          <strong>{ALAN_DONEM_BASI}:</strong> birlik dönemi bu günle başlar.
+        </li>
+        <li>
+          <strong>{ALAN_PROGRAMA_BASLAMA}:</strong> {PROGRAMA_BASLAMA_YARDIMI} Birlik döneminin
+          başından önce olamaz.
+        </li>
+        <li>
+          <strong>{ALAN_GECIS_DERS_YILI}:</strong> son olağan genel kurulun gününü kapsayan ders
+          yılıdır. Listede yoksa önce Ayarlar → Ders Yılları&apos;ndan ekleyin.
+        </li>
+        <li>
+          <strong>{ALAN_DONEM_ADI}:</strong> örneğin “2026-2027 birlik dönemi”.
+        </li>
+      </ul>
+      <p>
+        “{DUGME_DONEMI_AC}” düğmesine basın. Son genel kurulun üzerinden bir yıldan çok geçtiyse
+        birlik dönemi yine açılır, kurulların görev süresi için uyarı çıkar. Görevdeki kurul,
+        programdan önceki seçilme sayıları ve karar defteri kurulumdan sonra girilir (
+        <Ekran to="/kilavuz#gecis-kurulumu">Geçiş Kurulumu</Ekran>). Ardından “Kurulumu tamamla”
+        düğmesine basın.
+      </p>
+      <p>
+        Kurulum bitince Genel Bakış açılır ve menüdeki bölümler kullanılabilir. Personel aktarımı
+        sihirbazda değildir; sıradaki işler <Ekran to="/kilavuz#genel-bakis">Genel Bakış</Ekran>{" "}
+        bölümünde anlatılan Başlangıç Yol Haritası&apos;ndadır. Atladığınız birlik dönemi adımı da
+        orada açık madde olarak kalır.
       </p>
 
       <AltBaslik>Sihirbazı yarıda bıraktıysanız</AltBaslik>

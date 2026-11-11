@@ -1,7 +1,7 @@
 """Gerekçe kutusunun yarım metni: hesap başına tek, şifreli kayıt (tasarım §7 "Yarım kalan metin").
 
-Metin kaydedilince ya da vazgeçilince `temizle` çağrılır. Kutunun ucu ve panodaki "yarım kalan taslak"
-kalemi ön yüzle (F1c'nin 11. ve 12. adımları) gelir. Kısa aralıklarla yazıldığı için denetim izine
+Metin kaydedilince ya da vazgeçilince `temizle` çağrılır. Kutunun ucu (F1c 11. adım) ve panodaki
+"yarım kalan taslak" kalemi (F1c 12. adım, `pano`) ön yüzle geldi. Kısa aralıklarla yazıldığı için denetim izine
 satır yazmaz: `test_izsiz_yazim.MUAF_ISLEVLER`.
 """
 

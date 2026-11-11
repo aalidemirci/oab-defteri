@@ -8,7 +8,7 @@ kendiliğinden düşer.
 
 KİŞİSİZ: kalemde kişi adı, kişi ya da üyelik kimliği yoktur; yalnız kod, gün, kural paketinin kişisiz
 iletisi, madde atfı ve götürdüğü ekran (rota + sekme). Kişi ancak kalemin götürdüğü ekranda, rolün okuma
-yetkisi içinde görünür (§7.10; OYS'nin "bildirimde kişi adı yok" ilkesi, §12.A). Kullanıcı metni
+yetkisi içinde görünür (§7.10; ailenin "bildirimde kişi adı yok" ilkesi, §12.A). Kullanıcı metni
 (başlık, açıklama) ön yüzün sözlüğe bağlı metinleridir (`modules/pano/metinler.ts`); burada yalnız kural
 paketinin iletisi döner.
 

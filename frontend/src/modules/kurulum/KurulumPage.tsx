@@ -111,7 +111,7 @@ import { yeniParolaHatalari } from "../oturum/parolaPolitikasi";
 import KapaliGunlerPaneli from "../takvim/KapaliGunlerPaneli";
 import { eksikDiniBayramIletisi, takvimYillari, tatilleriTohumla } from "../takvim/tatilTohumu";
 
-const ADIMLAR: readonly { key: WizardStep; label: string; icon: string }[] = [
+export const ADIMLAR: readonly { key: WizardStep; label: string; icon: string }[] = [
   { key: "password", label: "Program Yöneticisi Hesabı", icon: "manage_accounts" },
   { key: "school", label: "Okul Bilgileri", icon: "school" },
   { key: "calendar", label: "Ders Yılı ve Kapalı Günler", icon: "calendar_month" },

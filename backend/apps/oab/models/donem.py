@@ -5,7 +5,7 @@ dosyayı değiştirse de bağlı dönem etkilenmez. `OabTerm.rule_package` yaln�
 (`services.kural_bagi`) ve `KAPANDI` olmayan dönemde değişir.
 
 `archive_document` (→ `GeneratedDocument`) dönem kapanışının arşiv paketidir (E39, tasarım §8.5); alan F1c
-9. adımda evrak hattıyla gelir, yazanı dönem kapanışıdır (F4).
+9. adımda evrak hattıyla geldi, yazanı dönem kapanışıdır (F4).
 """
 
 from __future__ import annotations
