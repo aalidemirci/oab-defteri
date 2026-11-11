@@ -646,6 +646,9 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _oku("dashboard-last-session", Satir.M9),
     # "Kontrol ettim": M9'un Y hücreleri (program yöneticisi ve YK); DK ve müdür görür.
     _yaz("dashboard-last-session", "POST", Satir.M9),
+    # Pano kalemleri (F1c 12. adım; tasarım §7.10 "pano her role kendi kalemlerini gösterir"): her rol
+    # okur; hangi kalemi gördüğünü servis süzer (`apps.oab.services.pano.KALEM_ROLLERI`).
+    _oku("oab-dashboard", Satir.M9),
     # ------------------------------------------------ Ayarlar (boşta süre)
     _oku("security-idle-lock", Satir.AYARLAR),
     _yaz("security-idle-lock", "PUT", Satir.AYARLAR),

@@ -25,7 +25,8 @@ const oapi = vi.hoisted(() => ({
   setRoadmapHidden: vi.fn(),
   getLeavePoolSummary: vi.fn(),
 }));
-const papi = vi.hoisted(() => ({ sonOturum: vi.fn(), kontrolEttim: vi.fn() }));
+// Pano kalemleri (F1c 12. adım) kendi bileşeninde sınanır (`PanoKalemleri.test.tsx`); burada boş liste.
+const papi = vi.hoisted(() => ({ sonOturum: vi.fn(), kontrolEttim: vi.fn(), kalemler: vi.fn() }));
 // Güvenlik durumu (okunamayan alan kartı) ve dış yedek hatırlatması kendi uçlarından okur.
 const gapi = vi.hoisted(() => ({ durum: vi.fn(), disYedek: vi.fn() }));
 // Denetim izi kartları bütünlük uçlarının tek bileşik okumasından beslenir (`durum`); hangi
@@ -135,6 +136,13 @@ function yolHaritasi(): HTMLElement {
 }
 
 beforeEach(() => {
+  papi.kalemler.mockResolvedValue({
+    bugun: "2026-11-11",
+    gorunum: "hafta",
+    bilgiler: [],
+    isler: [],
+    tamamlanacaklar: [],
+  });
   oapi.getSetupStatus.mockResolvedValue(KURULU_DURUM);
   oapi.getLeavePoolSummary.mockResolvedValue({ personnel_count: 0 });
   papi.sonOturum.mockResolvedValue({

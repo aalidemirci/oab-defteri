@@ -53,6 +53,8 @@ urlpatterns: list[URLPattern | URLResolver] = [
         views.TransitionDecisionBookCancelView.as_view(),
         name="oab-transition-decision-book-cancel",
     ),
+    # Genel Bakış'ın pano kalemleri (F1c 12. adım; hesaplanır, saklanmaz, yazmaz).
+    path("dashboard/", views.DashboardView.as_view(), name="oab-dashboard"),
     # Gerekçe kutusunun yarım metni (F1c 11. adım; ortak "uyarı + gerekçe" bileşeni).
     path("drafts/", views.DraftTextView.as_view(), name="oab-draft-text"),
     path(

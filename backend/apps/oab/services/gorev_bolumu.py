@@ -208,6 +208,22 @@ def _onceki_gorev_bolumu_var(donem: OabTerm, organ: str, referans: date | None, 
     return False
 
 
+def bekleyen_sure_baslangici(donem: OabTerm, organ: str, gun: date) -> date | None:
+    """Görev bölümü süresi süren ama `gun`'e dek görev bölümü yapılmamış kurulun süre başlangıcı (yazmaz).
+
+    Genel Bakış'ın görev bölümü süresi kalemi (tasarım §7.10, F1c 12. adım) bu tek kaynaktan okur:
+    başlangıç yazmadaki süre denetimiyle aynıdır (`_sure_referansi`), başlangıçtan sonra yapılmış görev
+    bölümü varsa süre bitmiştir (`_onceki_gorev_bolumu_var`). Kurulda görevdeki asıl yoksa ya da
+    başlangıç bilinmiyorsa `None`.
+    """
+    if not selectors.gorevdeki_asillar(donem, organ):
+        return None
+    referans = _sure_referansi(donem, organ, kurulun_olustugu_gun(donem, organ))
+    if referans is None or _onceki_gorev_bolumu_var(donem, organ, referans, gun):
+        return None
+    return referans
+
+
 def _sure_gozlenen(donem: OabTerm, organ: str, gun: date) -> Any | None:
     """Süre kuralının gözleneni (gün farkı ya da eksik); süre bu görev bölümüne bağlı değilse `None`
     (çağıran kuralı denetlemez, satır açılmaz). Tarih sırası sert denetlenir."""

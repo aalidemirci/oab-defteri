@@ -41,7 +41,7 @@ import KurulumPage from "./modules/kurulum/KurulumPage";
 import RolKapisi, { KURULUM_SIHIRBAZI_KAPALI_ILETISI } from "./modules/oturum/RolKapisi";
 import { YetkiSaglayici } from "./modules/oturum/yetki";
 import OrganlarPage from "./modules/organlar/OrganlarPage";
-import PanelPage from "./modules/panel/PanelPage";
+import PanelPage from "./modules/pano/PanelPage";
 import TemsilcilerPage from "./modules/temsilciler/TemsilcilerPage";
 
 export default function App() {

@@ -168,6 +168,8 @@ DIGER_UCLAR = frozenset(
         "oab-transition",
         # Gerekçe kutusunun yarım metni (hesabın kendi şifreli kaydı; kişi sicili yazmaz).
         "oab-draft-text",
+        # Genel Bakış'ın pano kalemleri (F1c 12. adım): kişisiz, yalnız okur, hiçbir şey yazmaz.
+        "oab-dashboard",
         "oab-transition-decision-book",
         "oab-transition-decision-book-cancel",
         "oab-transition-complete",

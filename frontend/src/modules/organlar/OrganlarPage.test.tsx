@@ -465,7 +465,7 @@ describe("Organlar — yönetim kurulu", () => {
     expect(
       await screen.findByText("Üyelik olağanüstü genel kurula kadar devam edecek."),
     ).toBeInTheDocument();
-    expect(yarimMetinMock.temizle).toHaveBeenCalledWith("organlar.dusme");
+    expect(yarimMetinMock.temizle).toHaveBeenCalledWith("organlar.dusme.yk");
   });
 
   it("görev alma engeli: var seçilince dayanak ve gün zorunlu", async () => {
@@ -926,5 +926,70 @@ describe("Organlar — rol dalları, tazeleme ve erişilebilirlik", () => {
     const pencere = screen.getByRole("dialog", { name: DUSME_PENCERESI_BASLIGI });
     await user.selectOptions(within(pencere).getByLabelText(/Düşme türü/), "OGRENCI_AYRILDI");
     expect(within(pencere).queryByLabelText(/Olağanüstü genel kurula kadar sürsün/)).toBeNull();
+  });
+
+  it("Denetleme Kurulunda düşme ve yedek çağrısının yarım metni kurullu bağlamdadır", async () => {
+    // Genel Bakış'ın "yarım kalan taslak" kalemi bağlamdan sekmeyi okur (backend pano.TASLAK_EKRANLARI).
+    const user = userEvent.setup();
+    const gerekceIster = () =>
+      new ApiError(400, "gerekce_gerekli", "Bu kayıt için gerekçe yazılmalıdır. Uydurma ileti.");
+    const dkYedek = uye(23, "Uydurcan Yedekoğlu", {
+      organ: "DK",
+      seat_group: "VELI",
+      seat_type: "YEDEK",
+      seat_order: 1,
+    });
+    organlarApiMock.kadro.mockImplementation(async (_d: number, organ: string) =>
+      organ === "DK" ? { ...DK_KADRO, bekleyen_yedekler: [dkYedek] } : YK_KADRO,
+    );
+    organlarApiMock.dusur.mockRejectedValueOnce(gerekceIster()).mockResolvedValueOnce(BASKAN);
+    organlarApiMock.dkYedekCagir
+      .mockRejectedValueOnce(gerekceIster())
+      .mockResolvedValueOnce(dkYedek);
+    bas(YONETICI, "/organlar?tab=dk");
+
+    await user.click(await screen.findByRole("button", { name: /Uydurnaz Velioğlu/ }));
+    await user.click(screen.getByRole("button", { name: DUGME_DUSUR }));
+    const dusme = screen.getByRole("dialog", { name: DUSME_PENCERESI_BASLIGI });
+    await user.selectOptions(within(dusme).getByLabelText(/Düşme türü/), "OGRENCI_AYRILDI");
+    await user.click(within(dusme).getByRole("button", { name: DUGME_DUSUR }));
+    await user.type(await within(dusme).findByLabelText(/^Gerekçe/), "Uydurma gerekçe.");
+    await user.click(within(dusme).getByRole("button", { name: "Gerekçeyle kaydet" }));
+    await waitFor(() => expect(yarimMetinMock.temizle).toHaveBeenCalledWith("organlar.dusme.dk"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    await user.click(screen.getByRole("button", { name: /Uydurcan Yedekoğlu/ }));
+    await user.click(screen.getByRole("button", { name: DUGME_YEDEK_CAGIR }));
+    const yedek = screen.getByRole("dialog", { name: YEDEK_PENCERESI_BASLIGI });
+    await user.click(within(yedek).getByRole("button", { name: DUGME_YEDEK_CAGIR }));
+    await user.type(await within(yedek).findByLabelText(/^Gerekçe/), "Uydurma gerekçe.");
+    await user.click(within(yedek).getByRole("button", { name: "Gerekçeyle kaydet" }));
+    await waitFor(() =>
+      expect(yarimMetinMock.temizle).toHaveBeenCalledWith("organlar.yedek_cagrisi.dk"),
+    );
+    expect(yarimMetinMock.temizle).not.toHaveBeenCalledWith("organlar.dusme.yk");
+    expect(yarimMetinMock.temizle).not.toHaveBeenCalledWith("organlar.yedek_cagrisi.yk");
+  });
+
+  it("yönetim kurulunda yedek çağrısının yarım metni kurullu bağlamdadır", async () => {
+    // Genel Bakış'ın "yarım kalan taslak" kalemi bağlamdan sekmeyi okur (backend pano.TASLAK_EKRANLARI).
+    const user = userEvent.setup();
+    organlarApiMock.ykYedekCagir
+      .mockRejectedValueOnce(
+        new ApiError(400, "gerekce_gerekli", "Bu kayıt için gerekçe yazılmalıdır. Uydurma ileti."),
+      )
+      .mockResolvedValueOnce(YEDEK);
+    bas(SEKRETER);
+
+    await user.click(await screen.findByRole("button", { name: /Uydurhan Sınamacı/ }));
+    await user.click(screen.getByRole("button", { name: DUGME_YEDEK_CAGIR }));
+    const yedek = screen.getByRole("dialog", { name: YEDEK_PENCERESI_BASLIGI });
+    await user.click(within(yedek).getByRole("button", { name: DUGME_YEDEK_CAGIR }));
+    await user.type(await within(yedek).findByLabelText(/^Gerekçe/), "Uydurma gerekçe.");
+    await user.click(within(yedek).getByRole("button", { name: "Gerekçeyle kaydet" }));
+    await waitFor(() =>
+      expect(yarimMetinMock.temizle).toHaveBeenCalledWith("organlar.yedek_cagrisi.yk"),
+    );
+    expect(yarimMetinMock.temizle).not.toHaveBeenCalledWith("organlar.yedek_cagrisi.dk");
   });
 });

@@ -49,7 +49,7 @@ from django.utils import timezone
 
 from apps.oab import selectors
 from apps.oab.kurallar import VERI_YOK, YururlukteDegerYok, kural, yazma_kapisi
-from apps.oab.kurallar.erisim import atifli_metin
+from apps.oab.kurallar.erisim import DenetimSonucu, atifli_metin
 from apps.oab.kurallar.erisim import denetle as paket_denetle
 from apps.oab.models import (
     BoardDecision,
@@ -422,9 +422,10 @@ def engel_yaz(
 # ---------------------------------------------------------------------------
 # Öneriler ve hatırlatmalar (kayıttan hesaplanır, saklanmaz)
 # ---------------------------------------------------------------------------
-def _gorevlendirme_onerisi(uyelik: OrganMembership) -> Oneri | None:
+def gorevlendirme_denetimi(uyelik: OrganMembership) -> DenetimSonucu | None:
     """DK öğretmeninin başka kurumdaki görevlendirmesi dört aydan uzunsa yerine yedeği çağrılır (md.
-    14/6; `denetleme_kurulu.ogretmen_gorevlendirme_ay`). Bitiş girilmemişse öneri yoktur."""
+    14/6; `denetleme_kurulu.ogretmen_gorevlendirme_ay`): uyarı sonucu, yoksa `None`. Bitiş girilmemişse
+    sonuç yoktur. Yazmaz; üyeliğin önerisi ve Genel Bakış'ın yedek çağrısı kalemi (F1c 12. adım) okur."""
     baslangic, bitis = uyelik.external_assignment_start, uyelik.external_assignment_end
     if (
         uyelik.organ != OrganType.DENETLEME_KURULU
@@ -439,9 +440,17 @@ def _gorevlendirme_onerisi(uyelik: OrganMembership) -> Oneri | None:
         tarih=baslangic,
         donem=uyelik.term,
     )
-    if sonuc["durum"] != "uyari":
+    return sonuc if sonuc["durum"] == "uyari" else None
+
+
+def _gorevlendirme_onerisi(uyelik: OrganMembership) -> Oneri | None:
+    """Görevlendirme denetiminin önerisi (`gorevlendirme_denetimi`); gün görevlendirmenin başıdır."""
+    sonuc = gorevlendirme_denetimi(uyelik)
+    if sonuc is None:
         return None
-    return Oneri(tur="YEDEK_CAGRISI", metin=atifli_metin(sonuc), gun=baslangic)
+    return Oneri(
+        tur="YEDEK_CAGRISI", metin=atifli_metin(sonuc), gun=uyelik.external_assignment_start
+    )
 
 
 def oneriler(uyelik: OrganMembership) -> list[Oneri]:

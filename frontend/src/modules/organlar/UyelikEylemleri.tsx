@@ -331,7 +331,8 @@ export function YedekPenceresi({
   const [karar, setKarar] = useState("");
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<SayfaHatasi | null>(null);
-  const ug = useUyariGerekce("organlar.yedek_cagrisi");
+  // Bağlam kurulludur: pano kalemi taslağın yazıldığı kurulun sekmesine götürür (pano.TASLAK_EKRANLARI).
+  const ug = useUyariGerekce(yk ? "organlar.yedek_cagrisi.yk" : "organlar.yedek_cagrisi.dk");
 
   const vazgec = () => {
     ug.sifirla();
@@ -436,7 +437,8 @@ export function DusmePenceresi({
   const [turHatasi, setTurHatasi] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<SayfaHatasi | null>(null);
-  const ug = useUyariGerekce("organlar.dusme");
+  // Bağlam kurulludur (pencere yalnız yönetim kurulu ve Denetleme Kurulu sekmesinde açılır).
+  const ug = useUyariGerekce(uyelik.organ === "YK" ? "organlar.dusme.yk" : "organlar.dusme.dk");
   // md. 7/2: yalnız yönetim kurulunda, öğrencisi ayrılan velinin (ya da kursiyerin) üyeliğinde.
   const erteleVar = uyelik.organ === "YK" && tur === "OGRENCI_AYRILDI";
 

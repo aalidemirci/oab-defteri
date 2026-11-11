@@ -15,9 +15,9 @@ import {
 import { DIS_YEDEK_KARTI_BASLIGI } from "../../guvenlik/DisYedekKarti";
 import { DOGRULANMADI_BASLIGI } from "../../guvenlik/metinler";
 import { useYetki } from "../../oturum/yetki";
-import { YOL_HARITASI_MADDELERI } from "../../panel/BaslangicYolHaritasi";
-import { OKUNAMAYAN_ALANLAR_BASLIGI } from "../../panel/OkunamayanAlanlarKarti";
-import { SON_OTURUM_KARTI_BASLIGI } from "../../panel/SonOturumKarti";
+import { YOL_HARITASI_MADDELERI } from "../../pano/BaslangicYolHaritasi";
+import { OKUNAMAYAN_ALANLAR_BASLIGI } from "../../pano/OkunamayanAlanlarKarti";
+import { SON_OTURUM_KARTI_BASLIGI } from "../../pano/SonOturumKarti";
 import { AltBaslik, Ekran, Ipucu, KapiliEkran, KilavuzBolumu } from "../KilavuzKabugu";
 import type { BolumProps } from "../KilavuzKabugu";
 

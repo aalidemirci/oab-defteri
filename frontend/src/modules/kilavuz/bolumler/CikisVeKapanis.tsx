@@ -7,7 +7,7 @@ import { KAPANIS_BEKLENIYOR_METNI, PROGRAM_KAPANIYOR_BASLIGI } from "../../cikis
 import { SIFRELI_YEDEK_YAZILDI } from "../../guvenlik/metinler";
 import { YENIDEN_BASLAT_BASLIGI } from "../../guvenlik/YenidenBaslatEkrani";
 import { KILITLE_KISAYOLU } from "../../oturum/useKilitle";
-import { SON_OTURUM_KARTI_BASLIGI } from "../../panel/SonOturumKarti";
+import { SON_OTURUM_KARTI_BASLIGI } from "../../pano/SonOturumKarti";
 import { AltBaslik, Ekran, Ipucu, KilavuzBolumu, Tus } from "../KilavuzKabugu";
 import type { BolumProps } from "../KilavuzKabugu";
 

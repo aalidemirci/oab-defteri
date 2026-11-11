@@ -72,6 +72,7 @@ from apps.oab.services import (
     gorev_evraki,
     kisiler,
     kurullar,
+    pano,
     temsilciler,
     uyelik_gecisleri,
     uyelikler,
@@ -1024,3 +1025,18 @@ class DraftTextView(APIView):
         # `?baglam=` (kişisiz kutu adı, ör. `gecis.karar_defteri`): yalnız o kutunun metni silinir.
         yarim_metin.temizle(str(request.query_params.get("baglam", "")))
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class DashboardView(APIView):
+    """Genel Bakış'ın pano kalemleri (tasarım §7.10; F1c 12. adım "pano kabuğu"): oturumdaki rolün
+    kalemleri her okumada kaynaklardan hesaplanır, saklanmaz; kişisizdir; hiçbir şey yazmaz
+    (`services.pano`). Her rol okur (M9); rol süzmesi serviste."""
+
+    def get(self, request: Request) -> Response:
+        kim = yazar()
+        return Response(
+            pano.kalemler(
+                None if kim is None else kim.rol,
+                None if kim is None else kim.hesap_id,
+            )
+        )

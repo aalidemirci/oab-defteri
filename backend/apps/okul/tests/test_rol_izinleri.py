@@ -451,6 +451,8 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     "oab-term-linkable-decisions": {"GET": "H", "HEAD": "H"},
     # Gerekçe kutusunun yarım metni: her rol kendi kaydını yazar (KENDI satırı).
     "oab-draft-text": {"GET": "H", "HEAD": "H", "PUT": "H", "DELETE": "H"},
+    # Genel Bakış'ın pano kalemleri (F1c 12. adım): her rol okur, kalemleri servis süzer (M9).
+    "oab-dashboard": {"GET": "H", "HEAD": "H"},
     "oab-transition": {"GET": "H", "HEAD": "H"},
     "oab-transition-inherited": {"POST": "Y"},
     "oab-transition-election-counts": {"POST": "Y"},

@@ -71,11 +71,17 @@ function turAciklamasi(satir: UyumSatiriVerisi): string {
   return satir.gerekceli === false ? SAPMA_GEREKCESIZ_ACIKLAMASI : SAPMA_ACIKLAMASI;
 }
 
-/** Madde atfı satırı ("Dayanak: md. 12/4"). */
-export function Dayanak({ atif }: { atif: string | null | undefined }) {
+/** Madde atfı satırı ("Dayanak: md. 12/4"); `className` yazı boyutudur (varsayılan küçük yazı). */
+export function Dayanak({
+  atif,
+  className = "text-body-small",
+}: {
+  atif: string | null | undefined;
+  className?: string;
+}) {
   if (!atif) return null;
   return (
-    <span className="text-body-small text-on-surface-variant">
+    <span className={`${className} text-on-surface-variant`}>
       {DAYANAK_ETIKETI}: {atif}
     </span>
   );

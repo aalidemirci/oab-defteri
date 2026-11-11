@@ -29,7 +29,10 @@
 // bir üye yeter, kart herkes için kalkar); iki depo kartının Kullanıcılar bağlantısı yalnız
 // `kullanicilar`'da.
 // Aile iskeletinin kütüphane kartları (katalog şablonu, dolaşım, sayım, raporlar,
-// saklama, yıl akışları) F1a-2'de söküldü; OAB pano kartları F1c'de gelir (§7.10).
+// saklama, yıl akışları) F1a-2'de söküldü. OAB'nin pano kalemleri (§7.10; F1c 12. adım "pano kabuğu")
+// başlığın hemen altındaki listededir (`PanoKalemleri`): rolün "Bu Hafta Yapılacaklar"ı ya da veli
+// rollerinde "Bu Ay Sizden Beklenenler"i ve "Tamamlanacaklar"; her rolde çizilir, rol süzmesi
+// sunucudadır. Klasörün adı `pano`dur (plan F1c kararları); görünen ad yalnız "Genel Bakış"tır.
 //
 // Durum `GET /setup/status/`'tan tek kez okunur (kişisel veri yok). Okunamazsa
 // yol haritası gösterilmez; sayfanın geri kalanı çalışır.
@@ -51,6 +54,7 @@ import { useYetki } from "../oturum/yetki";
 import AyrilisHavuzuKarti from "./AyrilisHavuzuKarti";
 import BaslangicYolHaritasi from "./BaslangicYolHaritasi";
 import OkunamayanAlanlarKarti from "./OkunamayanAlanlarKarti";
+import PanoKalemleri from "./PanoKalemleri";
 import SonOturumKarti from "./SonOturumKarti";
 
 /** Gezinme kartlarının açıklamaları: rolün o sayfada göreceğini söyler (sözlük §4.5). */
@@ -116,6 +120,8 @@ export default function PanelPage() {
           Okul-aile birliğinin işlerini yürüttüğü yerel araç. Veriler yalnız bu bilgisayarda durur.
         </p>
       </header>
+      {/* Pano kalemleri (§7.10): rolün listesi; kişisiz, sunucuda her okumada hesaplanır. */}
+      <PanoKalemleri />
       {yetki.acik("yol_haritasi") && durum && !durum.roadmap.hidden && (
         <BaslangicYolHaritasi
           durum={durum}
