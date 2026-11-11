@@ -70,6 +70,10 @@ KISI_YAZAN_UCLAR = frozenset(
         "oab-membership-eligibility-basis",
         "oab-representative-list",
         "oab-purchase-committee-list",
+        # F1c 10. adım: E01-E03'ün üretimi (şifreli içerik JSON'u kişi adı taşır).
+        "oab-document-e01",
+        "oab-document-e02",
+        "oab-document-e03",
     }
 )
 
@@ -139,6 +143,10 @@ DIGER_UCLAR = frozenset(
         "security-status",
         "security-unlock",
         "oab-okul-karti-bilgileri",
+        # E01-E03'ün listesi ve basımı (F1c 10. adım): okur; basım `BASIM` iz satırı yazar, kişi
+        # yazmaz.
+        "oab-term-documents",
+        "oab-document-download",
         # Kadro okuması (F1c 5. adım): yalnız okur (GET). Görev alma engelinin ucu 6. adımda yazma
         # (PUT) aldı, kişi yazan listesindedir.
         "oab-organ-roster",
@@ -243,9 +251,12 @@ def test_parolasizken_kisi_yazan_her_uc_yazma_yontemiyle_409_doner(parolasiz: Pa
     # + organ üyelikleri: liste (POST), ayrıntı (PATCH)
     # + F1c 6. adım: iki görev bölümü, iki yedek çağrısı, düşme, iptal (POST), engel (PUT),
     # temsilci ve alım komisyonu (POST).
+    # + F1c 10. adım: E01, E02, E03 üretimi (POST).
     # Aile iskeletinin kütüphane uçları (üyelik, kart basımı, dolaşım masası,
     # teslim, saklama tetiği) F1a-2'de, öğrenci uçları F1b 5. adımda söküldü.
-    assert denenen == 1 + 1 * 3 + 2 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 2 + 2 + 1 + 1 + 1 + 2
+    assert (
+        denenen == 1 + 1 * 3 + 2 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 2 + 2 + 1 + 1 + 1 + 2 + 3
+    )
     assert not Personnel.all_objects.exists()
     assert not ParentRoster.objects.exists()
     assert not OabPerson.objects.exists()

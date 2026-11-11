@@ -383,6 +383,16 @@ _DAYANAK_DK_GOREV_BOLUMU = (
     "(başkan seçimi, md. 14/1) ve denetim planını denetim modülünde yazar; YK rolleri ve program "
     "yöneticisi yazmaz (plan F1c 6. adım, `Eylem.DK_GOREV_BOLUMU_YAZMA`)."
 )
+_DAYANAK_EVRAK_URETEN = (
+    "Tasarım §9.6 E01 ve E03 'Üreten' sütunu: sekreter ve program yöneticisi; başkan ve başkan "
+    "yardımcısı bu belgeleri okur, basar ve imzalar, oluşturmaz (§9.6 'YK rolleri arasında "
+    "Üreten…'; md. 13/4: yazışmayı sekreter yürütür); plan F1c 10. adım."
+)
+_DAYANAK_E02 = (
+    "Tasarım §4.4.2 ⁵ ve §9.6 E02 'Üreten' sütunu: Denetleme Kurulu kendi görev bölümü tutanağını "
+    "ve denetim planını denetim modülünde üretir; YK rolleri ve program yöneticisi üretmez (plan "
+    "F1c 10. adım, `Eylem.DK_GOREV_BOLUMU_YAZMA`)."
+)
 _DAYANAK_HAVUZ = (
     "Plan F1b-2: ayrılış havuzu (özet dahil) yalnız program yöneticisinindir; karar e-Okul "
     "aktarımının parçasıdır (tasarım §8.1 A7). Parametre denetçisi değere bakmadığı için "
@@ -452,6 +462,9 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
         dipnot=5,
         dayanak=_DAYANAK_DK_GOREV_BOLUMU,
     ),
+    # E02 Denetleme Kurulu görev bölümü tutanağı ve denetim planı (F1c 10. adım): yalnız Denetleme
+    # Kurulu; servis `Eylem.DK_GOREV_BOLUMU_YAZMA` ile yeniden sorar.
+    _yaz("oab-document-e02", "POST", Satir.M8, dipnot=5, dayanak=_DAYANAK_E02),
     # ------------------------------------------------ erişim günlüğü (§4.6.4)
     # Okuma ekranı (plan F1b-2 "Erişim günlüğü okuma ucu"): satırın "O" hücreleri program
     # yöneticisi ve Denetleme Kuruludur, öteki hücreler "—". Okuma iz bırakmaz.
@@ -571,6 +584,26 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _oku("oab-representative-list", Satir.M2),
     _yaz("oab-representative-list", "POST", Satir.M2),
     _yaz("oab-purchase-committee-list", "POST", Satir.M2),
+    # Görev bölümü ve temsilci evrakı (F1c 10. adım). E01 ve E03'ü sekreter ve program yöneticisi
+    # üretir. Liste ve basım okumadır (tasarım §4.4.2 "Okuma": evrak çıktısı okumanın kapsamındadır,
+    # `BASIM` satırı okuma rolünde de yazılır); E02'nin satırı M8'dir, okuru M2'ninkiyle aynıdır (her
+    # rol) ve servis basımda belgenin satırını yeniden sorar (`gorev_evraki.OKUMA_SATIRLARI`).
+    _yaz(
+        "oab-document-e01",
+        "POST",
+        Satir.M2,
+        yalniz=_YONETICI_VE_SEKRETER,
+        dayanak=_DAYANAK_EVRAK_URETEN,
+    ),
+    _yaz(
+        "oab-document-e03",
+        "POST",
+        Satir.M2,
+        yalniz=_YONETICI_VE_SEKRETER,
+        dayanak=_DAYANAK_EVRAK_URETEN,
+    ),
+    _oku("oab-term-documents", Satir.M2),
+    _oku("oab-document-download", Satir.M2),
     # ------------------------------------------------ Kişisel veri: veli listesi (T5; ¹⁰)
     # Özet (sınıf başına sayı) ve şablon okumadır; satırın tek okuru program yöneticisidir.
     _oku("parent-roster", Satir.KISISEL_VERI),

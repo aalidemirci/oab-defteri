@@ -4,8 +4,9 @@ Bir kuralın davranış testi ya da bir evrakın kabul testi ancak fazı geldiğ
 burasıdır: evrak kataloğu (kod → faz) ve kural paketi (kimlik → `davranis_fazi`) aynı işlevi kullanır.
 
 `GECERLI_FAZ`, kabul ve davranış testleri tamamlanmış son fazdır; bir faz kapısının kalemleri
-bitmeden ilerlemez. F1c'nin evrakları (E01-E03) ve kural davranışları henüz gelmediği için bugün
-`F1b`'dir; F1c'nin 10. adımı (plan "F1c adımları") onu `F1c` yapar, kalem eksikse testler o an düşer.
+bitmeden ilerlemez. F1c'nin 10. adımı (plan "F1c adımları") onu `F1c` yaptı: F1c'nin evrakları
+(E01-E03) kabul testleriyle, F1c kurallarının hepsi davranış testleriyle istenir; kalem eksikse
+testler düşer (`test_katalogdaki_her_kodun_testi_var`, `test_davranis_fazi_gelen_kuralin_davranis_testi_var`).
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ FAZ_SIRASI: Final[tuple[str, ...]] = (
     "F8",
     "F8+",
 )
-GECERLI_FAZ: Final = "F1b"
+GECERLI_FAZ: Final = "F1c"
 
 
 def faz_geldi_mi(faz: str, *, gecerli: str = GECERLI_FAZ) -> bool:

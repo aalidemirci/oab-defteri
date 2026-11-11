@@ -541,6 +541,23 @@ def _alim_komisyonu(_: pytest.MonkeyPatch) -> Istek:
     )
 
 
+def _gorev_evraki(
+    kod: str, rol: AccountRole | None = None
+) -> Callable[[pytest.MonkeyPatch], Istek]:
+    """E01-E03 üretimi (F1c 10. adım): evrak kaydı ve iki ek (PDF ve Word) `OLUSTUR`; kurul boşken
+    de basılır (boş yerler "………"). E02 Denetleme Kurulu hesabıyla, ötekiler program yöneticisiyle."""
+
+    def kur(_: pytest.MonkeyPatch) -> Istek:
+        donem = _f1c6_donemi()
+        _kurul_uyesi(donem, "G")
+        hesap = TEST_HESAP_ID if rol is None else _rol_oturumu(rol)
+        return Istek(
+            f"/api/v1/oab/terms/{donem.pk}/documents/{kod}/", {}, _turler("OLUSTUR"), hesap=hesap
+        )
+
+    return kur
+
+
 def _veliden_birlik_kisisi() -> Istek:
     """Önce bir veli listesi aktarılır; uç listedeki velinin adını birlik kişisine kopyalar."""
     ad, baytlar = _veli_listesi_dosyasi()
@@ -761,6 +778,9 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     ("oab-membership-eligibility-basis", "PUT"): Senaryo(_engel_yaz),
     ("oab-representative-list", "POST"): Senaryo(_temsilci_ekle),
     ("oab-purchase-committee-list", "POST"): Senaryo(_alim_komisyonu),
+    ("oab-document-e01", "POST"): Senaryo(_gorev_evraki("e01")),
+    ("oab-document-e02", "POST"): Senaryo(_gorev_evraki("e02", AccountRole.DENETLEME_KURULU)),
+    ("oab-document-e03", "POST"): Senaryo(_gorev_evraki("e03")),
     # İlk hesap: satırlar yeni hesabındır (plan F1b-1); okul kartı parmak iziyle oluşur.
     ("security-enable", "POST"): _istek(
         lambda: Istek(

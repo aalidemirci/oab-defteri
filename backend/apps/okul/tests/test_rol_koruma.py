@@ -315,7 +315,8 @@ def test_kisitli_roller_yalniz_kendi_satirlarina_yazar(rol: str) -> None:
             if _yalniz_rol_kapisi(yontem, ornek, rol).content == b"gecti":
                 acik_yazma.add(ad)
     # Bugün açık olanlar kendi hesabı ve oturum uçlarıdır; DK'de ek olarak denetim modülünün
-    # (M8) "Gördüm"ü ve görev bölümü (F1c 6. adım).
+    # (M8) "Gördüm"ü, görev bölümü (F1c 6. adım) ve görev bölümü tutanağı ile denetim planının
+    # belgesi (E02, F1c 10. adım).
     ortak = {
         "app-quit",
         "security-change-password",
@@ -325,7 +326,7 @@ def test_kisitli_roller_yalniz_kendi_satirlarina_yazar(rol: str) -> None:
         "security-unlock",
     }
     ek = (
-        {"security-integrity-restore-seen", "oab-dk-duty-assignment"}
+        {"security-integrity-restore-seen", "oab-dk-duty-assignment", "oab-document-e02"}
         if rol == AccountRole.DENETLEME_KURULU
         else set()
     )

@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 
 from apps.oab import models as oab_modelleri
 from apps.oab import selectors
+from apps.oab.hatalar import EvrakDosyasiAcilamadi, EvrakDosyasiYazilamadi
 from apps.oab.kurallar import KuralPaketiKullanilamaz, atifli_metin, bilgi_notu
 from apps.oab.models import MembershipRole, OrganType
 from apps.oab.serializers import (
@@ -40,6 +41,7 @@ from apps.oab.serializers import (
 from apps.oab.services import (
     gecis,
     gorev_bolumu,
+    gorev_evraki,
     kisiler,
     temsilciler,
     uyelik_gecisleri,
@@ -48,6 +50,8 @@ from apps.oab.services import (
 )
 from apps.okul.models import CanteenMode
 from apps.okul.permissions import RequiresAdminPassword
+from apps.okul.services import dosya_deposu
+from shared import dosya_sifreleme
 
 #: Boolean sorgu parametresinin "açık" değerleri (`okul` uçlarıyla aynı).
 TRUE_VALUES = frozenset({"true", "1"})
@@ -557,3 +561,87 @@ class PurchaseCommitteeCreateView(APIView):
             OrganMembershipSerializer(selectors.membership_all().get(pk=uyelik.pk)).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+# ---------------------------------------------------------------------------
+# E01, E02, E03 (F1c 10. adım; düğmeleri 11. adımda). Üretim uç kuralıyla ve serviste daraltılır
+# (tasarım §9.6 "Üreten"); basım her okur role açıktır, `BASIM` satırı okuma rolünde de yazılır.
+# ---------------------------------------------------------------------------
+def _evrak_satiri(kayit: oab_modelleri.GeneratedDocument) -> dict[str, Any]:
+    return {
+        "id": kayit.pk,
+        "kod": kayit.doc_type,
+        "ad": gorev_evraki.BELGE_ADLARI[str(kayit.doc_type)],
+        "surum": kayit.version,
+        "durum": kayit.status,
+        "uretim_zamani": kayit.generated_at.isoformat(),
+        "bicimler": kayit.formats,
+    }
+
+
+@contextmanager
+def _depo_yazma_hatalari() -> Iterator[None]:
+    """Dosya deposunun ret ve bakım hataları 409'dur (ileti deponundur; kayıt geri alınır)."""
+    try:
+        yield
+    except (dosya_deposu.DosyaDeposuHatasi, dosya_sifreleme.DosyaSifrelemeHatasi) as exc:
+        raise EvrakDosyasiYazilamadi(str(exc)) from exc
+
+
+class TermDocumentListView(APIView):
+    """Dönemin geçerli görev bölümü ve temsilci evrakı (E01-E03): kayıt, sürüm, biçimler."""
+
+    def get(self, request: Request, pk: int) -> Response:
+        donem = get_object_or_404(_donemler(), pk=pk)
+        return Response([_evrak_satiri(k) for k in gorev_evraki.evrak_listesi(donem)])
+
+
+class _EvrakUretimView(APIView):
+    """Evrakın üretimi: yeni sürüm kaydı, PDF ve Word dosyası; yanıtta basım uyarıları."""
+
+    permission_classes = [RequiresAdminPassword]
+    kod: str = ""
+
+    def post(self, request: Request, pk: int) -> Response:
+        donem = get_object_or_404(_donemler(), pk=pk)
+        with _hizmet_hatalari(), _depo_yazma_hatalari():
+            uretim = gorev_evraki.uret(self.kod, donem)
+        return Response(
+            {"evrak": _evrak_satiri(uretim.kayit), "uyarilar": list(uretim.uyarilar)},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class E01DocumentView(_EvrakUretimView):
+    """Yönetim kurulu görev bölümü, imza yetkisi ve temsilci karar taslağı (sekreter, yonetici)."""
+
+    kod = gorev_evraki.E01
+
+
+class E02DocumentView(_EvrakUretimView):
+    """Denetleme Kurulu görev bölümü tutanağı ve denetim planı (yalnız Denetleme Kurulu, M8 ⁵)."""
+
+    kod = gorev_evraki.E02
+
+
+class E03DocumentView(_EvrakUretimView):
+    """Birlik temsilcilerinin görevlendirme çizelgesi (sekreter, yonetici)."""
+
+    kod = gorev_evraki.E03
+
+
+class DocumentDownloadView(APIView):
+    """Kaydedilmiş evrakın dosyası (`pdf` ya da `docx`) ve `BASIM` satırı (okuma rolünde de).
+
+    HEAD dosya vermez, basım izi de yazmaz: 405 (basım yalnız GET'tir).
+    """
+
+    def get(self, request: Request, pk: int, bicim: str) -> Any:
+        kayit = get_object_or_404(oab_modelleri.GeneratedDocument.objects.all(), pk=pk)
+        try:
+            return gorev_evraki.bas(kayit, gorev_evraki.bicim_coz(bicim))
+        except (dosya_deposu.DosyaDeposuHatasi, dosya_sifreleme.DosyaSifrelemeHatasi) as exc:
+            raise EvrakDosyasiAcilamadi(str(exc)) from exc
+
+    def head(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        return self.http_method_not_allowed(request, *args, **kwargs)

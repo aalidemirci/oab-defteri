@@ -126,3 +126,23 @@ class EvrakIcerigiTutmuyor(APIException):
         "Kayıtlı evrak içeriği doğrulanamadı; belge yeniden basılmadı. Kayıt program dışından "
         "değiştirilmiş olabilir; Denetleme Kuruluna bildirin."
     )
+
+
+class EvrakDosyasiYazilamadi(APIException):
+    """Üretilen evrakın dosyası depoya yazılamadı (ör. geri yükleme sürüyor): kayıt da yazılmaz.
+
+    İleti dosya deposunun iletisidir (sözlük §1 "Ek ve dosya deposu"); özgün ad taşımaz.
+    """
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "evrak_dosyasi_yazilamadi"
+    default_detail = "Geri yükleme sürüyor; dosya yazılmadı. Biraz sonra yeniden deneyin."
+
+
+class EvrakDosyasiAcilamadi(APIException):
+    """Üretilen evrakın dosyası açılamadı (yok, bozuk ya da özeti tutmuyor): bayt verilmez, basım
+    izi yazılmaz. İleti dosya deposunun iletisidir (sözlük §1 "Ek ve dosya deposu")."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "evrak_dosyasi_acilamadi"
+    default_detail = "Dosya yok: bu ekin dosyası imha edilmiş ya da depoda bulunamadı."

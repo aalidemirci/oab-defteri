@@ -428,6 +428,13 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     "oab-membership-cancel": {"POST": "Y+YK"},
     "oab-representative-list": {"GET": "H", "HEAD": "H", "POST": "Y+YK"},
     "oab-purchase-committee-list": {"POST": "Y+YK"},
+    # F1c 10. adım: E01 ve E03'ü sekreter ve program yöneticisi, E02'yi Denetleme Kurulu üretir
+    # (tasarım §9.6 "Üreten"); liste ve basım her role açıktır (okuma).
+    "oab-document-e01": {"POST": "Y+SEK"},
+    "oab-document-e02": {"POST": "DK"},
+    "oab-document-e03": {"POST": "Y+SEK"},
+    "oab-term-documents": {"GET": "H", "HEAD": "H"},
+    "oab-document-download": {"GET": "H", "HEAD": "H"},
     "oab-okul-karti-bilgileri": {"GET": "H", "HEAD": "H"},
     "oab-organ-roster": {"GET": "H", "HEAD": "H"},
     "oab-person-detail": {"GET": "H", "HEAD": "H", "PATCH": "Y+YK"},
@@ -587,12 +594,14 @@ def test_f1c_fazli_bekleyen_kalmadi() -> None:
 
 
 def test_m8_yazma_uclari_gordum_ve_dk_gorev_bolumudur_ve_yalniz_dk_ya_aciktir() -> None:
-    """M8'in bugünkü yazma kuralları "Gördüm" ve DK görev bölümüdür (F1c 6. adım); ikisi de ⁵
-    dipnotunu adıyla anar, yalnız Denetleme Kuruluna açılır (YK rolleri DK modülüne yazamaz, program
-    yöneticisi de; tasarım §4.4.2 ⁵)."""
+    """M8'in bugünkü yazma kuralları "Gördüm", DK görev bölümü (F1c 6. adım) ve görev bölümü
+    tutanağıyla denetim planının belgesidir (E02, F1c 10. adım); hepsi ⁵ dipnotunu adıyla anar, yalnız
+    Denetleme Kuruluna açılır (YK rolleri DK modülüne yazamaz, program yöneticisi de; tasarım §4.4.2
+    ⁵)."""
     kurallar = [k for k in KURALLAR if k.satir is Satir.M8 and k.tur is KuralTuru.YAZMA]
     assert sorted((k.uc, tuple(sorted(k.yontemler)), k.dipnot) for k in kurallar) == [
         ("oab-dk-duty-assignment", ("POST",), 5),
+        ("oab-document-e02", ("POST",), 5),
         ("security-integrity-restore-seen", ("POST",), 5),
     ]
     for kural in kurallar:

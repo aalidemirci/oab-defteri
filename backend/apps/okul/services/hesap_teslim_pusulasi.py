@@ -368,6 +368,19 @@ ADSIZ_UCLAR: Final[Mapping[str, str]] = {
         "Alım komisyonu Organlar ekranının sekmesidir (F1c 11. adım); ekran gelince "
         "`BUGUNKU_ISLER`'e geçer."
     ),
+    # F1c 10. adım: E01-E03'ün üretim uçları ekransızdır (düğmeleri 11. adımda).
+    "oab-document-e01": (
+        "Yönetim kurulu görev bölümü karar taslağının düğmesi Organlar ekranındadır (F1c 11. adım); "
+        "ekran gelince `BUGUNKU_ISLER`'e geçer."
+    ),
+    "oab-document-e02": (
+        "Denetleme Kurulu görev bölümü tutanağının düğmesi Organlar → Denetleme Kurulu'ndadır (F1c "
+        "11. adım); ekran gelince `BUGUNKU_ISLER`'e geçer."
+    ),
+    "oab-document-e03": (
+        "Temsilci görevlendirme çizelgesinin düğmesi Temsilciler ekranındadır (F1c 11. adım); ekran "
+        "gelince `BUGUNKU_ISLER`'e geçer."
+    ),
     "setup-complete": (
         "Kurulum Sihirbazı'nın son adımı; pusula kurulumdan sonra basılır, hesap sahibinin işi değildir."
     ),

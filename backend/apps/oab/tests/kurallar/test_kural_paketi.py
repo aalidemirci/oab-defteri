@@ -871,7 +871,7 @@ def test_gecerli_faz_sirada_tanimlidir() -> None:
 
 def test_f1c_kurallarinin_davranis_testi_tamam() -> None:
     """F1c'nin 6. adımının "Bitti" ölçütü (plan F1c-6): geçerli faz F1c olunca istenen 36 kuralın
-    hepsinin davranış testi vardır. `GECERLI_FAZ` evrakla birlikte 10. adımda F1c olur; o gün
+    hepsinin davranış testi vardır. `GECERLI_FAZ` evrakla birlikte 10. adımda F1c oldu:
     `test_davranis_fazi_gelen_kuralin_davranis_testi_var` bu kümeyi kendiliğinden ister. 8. adımda
     karar defterinin noter tasdiki kurala bağlandı (36 → 37; plan F1c 8. adım notları)."""
     fazlar = {k["id"]: k["davranis_fazi"] for k in R1["kurallar"]}

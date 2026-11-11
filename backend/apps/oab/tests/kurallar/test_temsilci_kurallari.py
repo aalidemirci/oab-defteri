@@ -4,8 +4,8 @@ Kurul temsilcisi sayıları kademe koşuluyla (`okul.kademe`; karma okulda iki k
 birlikte): fazla temsilci yazımda uyarı + gerekçedir, eksik temsilci çizelgede tamamlanacaktır.
 Başkanın kendiliğinden üye olduğu üç komisyon görev bölümüyle açılır; başkan olmayan temsilci uyarı +
 gerekçedir. Pay dağıtım komisyonu yalnız kayıttır. Kantin denetim komisyonunun temsilcisi görevdeki
-asıl yönetim kurulu üyesi ve velidir. Kampüs yönetimi kayıt satırıdır. Kişi adları ve okul kartı
-UYDURMADIR.
+asıl yönetim kurulu üyesi ve velidir. Kampüs yönetimi kayıt satırıdır. E03'ün satırları bu çizelgeden
+basılır (`test_e03_cizelgeyle_ayni_kaynaktan`; F1c 10. adım). Kişi adları ve okul kartı UYDURMADIR.
 """
 
 from __future__ import annotations
@@ -30,10 +30,11 @@ from apps.oab.models import (
     Representation,
     SeatType,
 )
-from apps.oab.services import kurullar, temsilciler, uyum
+from apps.oab.services import gorev_evraki, kurullar, temsilciler, uyum
 from apps.oab.tests import uyelik_ortak as o
 from apps.okul.models import AccountRole, CanteenMode, SchoolLevel
 from apps.okul.tests.okul_karti_ortak import okul_kartini_dogrudan_yaz
+from shared import evrak
 
 pytestmark = pytest.mark.django_db
 
@@ -359,3 +360,47 @@ def test_temsilciler_ucu() -> None:
     cizelge = APIClient().get(f"/api/v1/oab/representatives/?term={donem.pk}").json()
     (sosyal,) = [s for s in cizelge if s["representation"] == "SOSYAL_ETKINLIKLER_KURULU"]
     assert sosyal["durum"] == "uygun" and len(sosyal["uyeler"]) == 1
+
+
+def test_e03_cizelgeyle_ayni_kaynaktan() -> None:
+    """E03'ün satırları yalnız temsilciler çizelgesindendir (tasarım §9.6 E03 satırı ve §6.4.4; plan
+    F1c-10): kurul ve komisyonlar çizelgenin sırasıyla, temsilciler çizelgenin üyeleri; kademe,
+    kantin ve kampüs koşulu değişince belge de değişir. Rehberlik komisyonunun notu çizelgenin
+    notundan basılır."""
+    donem = o.donem()
+    okul_kartini_dogrudan_yaz(
+        levels=[SchoolLevel.ORTAOKUL.value],
+        canteen_mode=CanteenMode.KANTIN_YOK.value,
+        in_campus=False,
+    )
+    _ekle(donem, Representation.SOSYAL_ETKINLIKLER_KURULU)
+
+    def belge_ve_cizelge() -> tuple[list[tuple[str, ...]], list[temsilciler.TemsilciSatiri]]:
+        belge, _ = gorev_evraki.e03_belgesi(donem)
+        (tablo,) = [b for b in belge.bloklar if isinstance(b, evrak.Tablo)]
+        notlu = evrak.Paragraf(gorev_evraki.RPD_NOTU) in belge.bloklar
+        cizelge = temsilciler.temsilci_cizelgesi(donem)
+        rpd = [s for s in cizelge if s.representation == Representation.RPD_YURUTME_KOMISYONU]
+        assert notlu is bool(rpd and rpd[0].notlar)
+        return list(tablo.satirlar), cizelge
+
+    satirlar, cizelge = belge_ve_cizelge()
+    assert [s[1] for s in satirlar if s[1]] == [s.ad for s in cizelge]
+    assert Representation.KAMPUS_YONETIMI not in {s.representation for s in cizelge}
+    (sosyal,) = [s for s in satirlar if s[1] == str(Representation.SOSYAL_ETKINLIKLER_KURULU.label)]
+    (uye,) = _cizelge(donem)[Representation.SOSYAL_ETKINLIKLER_KURULU].uyeler
+    assert sosyal[2] == evrak.ad_soyad(uye.person.first_name, uye.person.last_name)
+    okul_kartini_dogrudan_yaz(
+        levels=[SchoolLevel.ORTAOKUL.value, SchoolLevel.ORTAOGRETIM.value],
+        canteen_mode=CanteenMode.KIRAYA_VERILIYOR.value,
+        in_campus=True,
+    )
+    satirlar, cizelge = belge_ve_cizelge()
+    adlar = [s[1] for s in satirlar if s[1]]
+    assert adlar == [s.ad for s in cizelge]
+    for temsil in (
+        Representation.ODUL_DISIPLIN_KURULU,
+        Representation.KAMPUS_YONETIMI,
+        Representation.KANTIN_DENETIM_KOMISYONU,
+    ):
+        assert str(temsil.label) in adlar, temsil

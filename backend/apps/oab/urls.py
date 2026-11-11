@@ -87,4 +87,30 @@ urlpatterns: list[URLPattern | URLResolver] = [
         views.PurchaseCommitteeCreateView.as_view(),
         name="oab-purchase-committee-list",
     ),
+    # Görev bölümü ve temsilci evrakı: liste, üretim ve basım (F1c 10. adım).
+    path(
+        "terms/<int:pk>/documents/",
+        views.TermDocumentListView.as_view(),
+        name="oab-term-documents",
+    ),
+    path(
+        "terms/<int:pk>/documents/e01/",
+        views.E01DocumentView.as_view(),
+        name="oab-document-e01",
+    ),
+    path(
+        "terms/<int:pk>/documents/e02/",
+        views.E02DocumentView.as_view(),
+        name="oab-document-e02",
+    ),
+    path(
+        "terms/<int:pk>/documents/e03/",
+        views.E03DocumentView.as_view(),
+        name="oab-document-e03",
+    ),
+    path(
+        "documents/<int:pk>/<str:bicim>/",
+        views.DocumentDownloadView.as_view(),
+        name="oab-document-download",
+    ),
 ]
