@@ -27,6 +27,14 @@ def oku() -> DraftText | None:
     return DraftText.objects.filter(account_id=iz.hesap_zorunlu()).first()
 
 
-def temizle() -> None:
-    """Metin kaydedildi ya da vazgeçildi: yarım metin silinir."""
-    DraftText.objects.filter(account_id=iz.hesap_zorunlu()).delete()
+def temizle(baglam: str = "") -> None:
+    """Metin kaydedildi ya da vazgeçildi: yarım metin silinir.
+
+    `baglam` verilirse kayıt yalnız o kutunun bağlamındaysa silinir: bir kutunun kaydı ya da vazgeçişi
+    hesabın başka kutuya ait yarım metnini silmez (hesap başına tek kayıt; tasarım §7 "Yarım kalan
+    metin" — temizlenen, kaydedilen ya da vazgeçilen kutunun metnidir).
+    """
+    kayitlar = DraftText.objects.filter(account_id=iz.hesap_zorunlu())
+    if baglam:
+        kayitlar = kayitlar.filter(context=baglam)
+    kayitlar.delete()

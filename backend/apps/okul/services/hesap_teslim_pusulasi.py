@@ -223,6 +223,17 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
                 "school-year-activate",
             ),
             _parca("kapalı günler", "holiday-list", "holiday-seed", "holiday-detail"),
+            # Birlik Dönemi ekranı ve geçiş kurulumu (F1c 11. adım; tasarım §7.9 "Kim: yonetici").
+            _parca(
+                "birlik dönemi ve geçiş kurulumu",
+                "oab-term-list",
+                "oab-term-cancel",
+                "oab-transition-inherited",
+                "oab-transition-election-counts",
+                "oab-transition-decision-book",
+                "oab-transition-decision-book-cancel",
+                "oab-transition-complete",
+            ),
         )
     ),
     Satir.M2: BugunkuIs(
@@ -321,10 +332,6 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
 #: Etkin satırlarda bilerek ADLANMAYAN yazma uçları ve gerekçeleri (orkestratör maddesi F-4; test
 #: bunları satırın kapsamından düşer). Liste yalnız gerekçeyle büyür.
 ADSIZ_UCLAR: Final[Mapping[str, str]] = {
-    "oab-term-list": (
-        "Birlik döneminin ekranı F1c'nin 11. adımındadır; pusula yalnız bugün programda yapılabilen "
-        "işleri yazar, ekran gelince bu kayıt `BUGUNKU_ISLER`'e geçer."
-    ),
     "oab-membership-list": (
         "Organlar ekranı F1c'nin 11. adımındadır; pusula yalnız bugün programda yapılabilen işleri "
         "yazar, ekran gelince organ üyelikleri `BUGUNKU_ISLER`'e geçer."
@@ -380,6 +387,9 @@ ADSIZ_UCLAR: Final[Mapping[str, str]] = {
     "oab-document-e03": (
         "Temsilci görevlendirme çizelgesinin düğmesi Temsilciler ekranındadır (F1c 11. adım); ekran "
         "gelince `BUGUNKU_ISLER`'e geçer."
+    ),
+    "oab-draft-text": (
+        "Gerekçe kutusunun yarım metni; kutu yazılırken kendiliğinden kaydedilir, ayrı iş değildir."
     ),
     "setup-complete": (
         "Kurulum Sihirbazı'nın son adımı; pusula kurulumdan sonra basılır, hesap sahibinin işi değildir."

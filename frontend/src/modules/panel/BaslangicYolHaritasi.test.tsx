@@ -37,6 +37,7 @@ describe("BaslangicYolHaritasi", () => {
       "okul_karti",
       "personel_aktarimi",
       "kapali_gunler",
+      "gecis_kurulumu",
       "kurtarma_zarfi",
     ]);
   });
@@ -58,6 +59,18 @@ describe("BaslangicYolHaritasi", () => {
     expect(maddeTamamMi("okul_karti", { ...durum, school_info_complete: false })).toBe(false);
     expect(maddeTamamMi("personel_aktarimi", durum)).toBe(false);
     expect(maddeTamamMi("personel_aktarimi", { ...durum, personnel_count: 2 })).toBe(true);
+    // Geçiş kurulumu (F1c 11. adım): işaret konmuşsa ya da dönem genel kurulla açılmışsa tamam.
+    for (const [state, tamam] of [
+      ["BASLAMADI", false],
+      ["SURUYOR", false],
+      ["TAMAMLANDI", true],
+      ["GEREKMIYOR", true],
+    ] as const) {
+      expect(
+        maddeTamamMi("gecis_kurulumu", { ...durum, transition_setup: { state, open_steps: [] } }),
+      ).toBe(tamam);
+    }
+    expect(maddeTamamMi("gecis_kurulumu", { ...durum, transition_setup: null })).toBe(false);
     expect(maddeTamamMi("kapali_gunler", durum)).toBe(true);
     expect(maddeTamamMi("kurtarma_zarfi", durum)).toBe(false);
     expect(

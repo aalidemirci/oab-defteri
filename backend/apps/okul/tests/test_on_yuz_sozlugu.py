@@ -70,6 +70,10 @@ DOSYALAR = (
     "frontend/src/modules/panel/SonOturumKarti.tsx",
     "frontend/src/lib/api.ts",
     "frontend/src/lib/mevzuat.ts",
+    # F1c 11. adım (birinci parça): ortak "uyarı + gerekçe" bileşeni, Birlik Dönemi ve Geçiş Kurulumu.
+    "frontend/src/modules/uyum/metinler.ts",
+    "frontend/src/modules/birlik-donemi/metinler.ts",
+    "frontend/src/modules/gecis-kurulumu/metinler.ts",
 )
 
 #: Kullanıcıya görünmeyen düz dize sabitleri (dosya, ad) → gerekçe.

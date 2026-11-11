@@ -19,6 +19,21 @@ class KuralPaketiKullanilamaz(APIException):
     default_detail = "Kural paketi okunamadığı için bu işlem yapılamıyor. Programı yeniden kurun."
 
 
+class DonemKopyasiDogrulanamadi(KuralPaketiKullanilamaz):
+    """Dönemin dondurulmuş kopyası kanonik özetini tutmuyor (D7): kurallar o kopyadan okunmaz.
+
+    `KuralPaketiKullanilamaz`'ın alt türüdür: paket yokken okuması açık kalan yollar (öneriler, uyarılar,
+    çizelge) bozuk kopyada da yanlış değer göstermeden boş döner; yazma zaten `donem_salt_okur`'dur
+    (plan F1c 3. adım notları: kopya okuması dönemli okuma ekranıyla sertleştirildi).
+    """
+
+    default_code = "donem_kopyasi_dogrulanamadi"
+    default_detail = (
+        "Bu birlik döneminin kural kopyası doğrulanamadığı için kurallar okunamıyor. Yedekten geri "
+        "yükleme için program yöneticisine başvurun."
+    )
+
+
 class BilinmeyenKural(APIException):
     """Koddaki kimlik pakette yok: programlama hatası (D6 yakalar), çalışma anında yazma kapalı."""
 

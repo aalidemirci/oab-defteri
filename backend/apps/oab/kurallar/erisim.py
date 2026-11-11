@@ -20,11 +20,13 @@ from apps.oab.kurallar import yukleyici
 from apps.oab.kurallar.denetimler import tarih_coz
 from apps.oab.kurallar.hatalar import (
     BilinmeyenKural,
+    DonemKopyasiDogrulanamadi,
     KuralPaketiKullanilamaz,
     OlayTarihiGerekli,
     YururlukteDegerYok,
 )
 from apps.oab.kurallar.yukleyici import Paket
+from shared import kanonik
 
 Durum = Literal["uygun", "eksik", "uyari", "sert", "denetlenmedi"]
 
@@ -76,9 +78,35 @@ def yazma_kapisi() -> None:
         raise KuralPaketiKullanilamaz
 
 
+#: Kopyanın doğrulandığı özetin örnek üstündeki işareti (aynı istekte özet bir kez hesaplanır).
+_DOGRULANAN_OZET: Final = "_od_dogrulanan_ozet"
+
+
+def _kopyayi_dogrula(kopya: Any) -> None:
+    """Dönem kopyası kanonik özetini tutmuyorsa kurallar ondan okunmaz (D7; plan F1c 3. adım notları).
+
+    Özeti olmayan içerik taşıyıcı (revizyon farkının hedefi, testlerin sözlük kopyası) doğrulanmaz:
+    özeti dondurulmuş kopyanın kendisi taşır."""
+    ozet = getattr(kopya, "content_sha256", None)
+    if ozet is None or getattr(kopya, _DOGRULANAN_OZET, None) == ozet:
+        return
+    try:
+        tutuyor = yukleyici.icerik_ozeti(kopya.content) == ozet
+    except kanonik.KanonikHata:
+        tutuyor = False
+    if not tutuyor:
+        raise DonemKopyasiDogrulanamadi
+    setattr(kopya, _DOGRULANAN_OZET, ozet)
+
+
 def _paket(donem: DonemBagi | None) -> Paket:
     if donem is not None:
-        return Paket.sozlukten(donem.rule_package.content)
+        kopya = donem.rule_package
+        _kopyayi_dogrula(kopya)
+        try:
+            return Paket.sozlukten(kopya.content)
+        except (KeyError, TypeError) as exc:  # özetsiz taşıyıcıda biçimi bozuk içerik
+            raise DonemKopyasiDogrulanamadi from exc
     en_yeni = yukleyici.durum().en_yeni
     if en_yeni is None:
         raise KuralPaketiKullanilamaz

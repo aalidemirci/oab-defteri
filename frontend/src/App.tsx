@@ -10,11 +10,11 @@
 // Rol süzmesi (plan F1b-2 "Ön yüz"; `modules/oturum/yetki`): `YetkiSaglayici` kabuğun DIŞINDA
 // durur — gezinme, güncelleme bandı ve sayfalar aynı yetenekleri okur. Matriste "—" olan ekran
 // gezinmede yoktur ve rotası `RolKapisi` ile bağlanır ("Bu ekran hesabınızın rolüne açık
-// değil."); "O" olan ekran açılır, yazma denetimlerini kendisi gizler. Bugün Genel Bakış, Kişiler,
-// Ayarlar, Kılavuz ve Hakkında her role en az okumaya açıktır (sözlük §4). Kurulum Sihirbazı'nın
-// her denetimi bir yazmadır: rotası `kurulum_tamamlama`'ya bağlıdır ve öteki rollerde kendi
-// iletisini verir (kullanıcı kararı
-// 04.11.2026: matristeki "O"ya istisna; kurulum durumunda süzme yoktur). Kullanıcılar (`/kullanicilar`)
+// değil."); "O" olan ekran açılır, yazma denetimlerini kendisi gizler. Bugün Genel Bakış, Birlik
+// Dönemi ve Geçiş Kurulumu (F1c 11. adım), Kişiler, Ayarlar, Kılavuz ve Hakkında her role en az
+// okumaya açıktır (sözlük §4). Organlar ve Temsilciler ekranları F1c 11. adımın ikinci
+// parçasındadır. Kurulum Sihirbazı'nın her denetimi bir yazmadır: rotası `kurulum_tamamlama`'ya
+// bağlıdır ve öteki rollerde kendi iletisini verir (kullanıcı kararı 04.11.2026: matristeki "O"ya istisna; kurulum durumunda süzme yoktur). Kullanıcılar (`/kullanicilar`)
 // matriste yalnız program yöneticisinde Y, öteki rollerde "—"dir: rotası `kullanicilar`
 // yeteneğine bağlıdır. Erişim Günlüğü (`/erisim-gunlugu`) matriste program yöneticisi ve Denetleme
 // Kurulunda O, öteki rollerde "—"dir: rotası `erisim_gunlugu` yeteneğine bağlıdır.
@@ -24,10 +24,12 @@ import { Route, Routes } from "react-router-dom";
 import AppShell from "./AppShell";
 import KurulumKapisi from "./KurulumKapisi";
 import AyarlarPage from "./modules/ayarlar/AyarlarPage";
+import BirlikDonemiPage from "./modules/birlik-donemi/BirlikDonemiPage";
 import KapanisPenceresi from "./modules/cikis/KapanisPenceresi";
 import ErisimGunluguPage from "./modules/erisim/ErisimGunluguPage";
 import { ERISIM_GUNLUGU_BASLIGI } from "./modules/erisim/metinler";
 import ParolaYenilenmeBildirimi from "./modules/butunluk/ParolaYenilenmeBildirimi";
+import GecisKurulumuPage from "./modules/gecis-kurulumu/GecisKurulumuPage";
 import GuvenlikKapisi from "./modules/guvenlik/GuvenlikKapisi";
 import YenidenBaslatEkrani from "./modules/guvenlik/YenidenBaslatEkrani";
 import HakkindaPage from "./modules/hakkinda/HakkindaPage";
@@ -72,7 +74,11 @@ export default function App() {
                   </RolKapisi>
                 }
               />
-              {/* Öğretmen ve diğer personel sicili, e-Okul içe aktarma. */}
+              {/* Birlik dönemi ve geçiş kurulumu (F1c 11. adım): her role okumaya açık (M1); yazma
+                  denetimleri `birlik_donemi_yazma`'ya bağlıdır. Geçiş Kurulumu gezinmede yoktur. */}
+              <Route path="/birlik-donemi" element={<BirlikDonemiPage />} />
+              <Route path="/birlik-donemi/gecis-kurulumu" element={<GecisKurulumuPage />} />
+              {/* Öğretmen ve diğer personel sicili, e-Okul içe aktarma, birlik kişileri. */}
               <Route path="/kisiler" element={<KisilerPage />} />
               {/* Hesaplar (yalnız `kullanicilar` yeteneği; matriste öteki roller "—"). */}
               <Route

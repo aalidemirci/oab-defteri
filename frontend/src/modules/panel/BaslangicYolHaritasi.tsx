@@ -8,7 +8,8 @@
 //   alanları (`school_info_complete`; kurulumu F1b 4. adımdan önce tamamlanmış
 //   kurulumda yeni alanlar boştur, kurulum kapısı yeniden kapanmaz — tasarım §7.10
 //   "okul kartının eksik alanları"), personel aktarımı (sayı > 0), aktif ders yılında
-//   öğrenciye kapalı gün (> 0). Öğrenci aktarımı maddesi F1b 5. adımda öğrenci sicili ile
+//   öğrenciye kapalı gün (> 0), geçiş kurulumu (F1c 11. adım: "Geçiş kurulumu tamamlandı" işareti ya da
+//   genel kurulla açılmış birlik dönemi; `transition_setup`). Öğrenci aktarımı maddesi F1b 5. adımda öğrenci sicili ile
 //   kalktı; veli listesi dönemlik olduğu için madde olmaz (plan "F1b-5 uygulama kararları").
 // * KULLANICININ İŞARETLEDİKLERİ — program bunların yapıldığını bilemez (kurtarma
 //   anahtarı zarfının kapatılması). Parola paylaşımı maddesi yoktur: parola
@@ -35,7 +36,7 @@ import {
   OKUL_KARTI_YOL_HARITASI_BASLIGI,
 } from "../okul/metinler";
 
-type OtomatikMadde = "okul_karti" | "personel_aktarimi" | "kapali_gunler";
+type OtomatikMadde = "okul_karti" | "personel_aktarimi" | "kapali_gunler" | "gecis_kurulumu";
 
 interface MaddeTanimi {
   anahtar: OtomatikMadde | RoadmapManualItem;
@@ -67,6 +68,13 @@ export const YOL_HARITASI_MADDELERI: readonly MaddeTanimi[] = [
     bag: { to: "/ayarlar?tab=kapali-gunler", etiket: "Kapalı Günler'e git" },
   },
   {
+    anahtar: "gecis_kurulumu",
+    baslik: "Geçiş kurulumunu tamamlayın",
+    aciklama:
+      "Program okula birlik döneminin ortasında giriyorsa birlik dönemini, görevdeki kurulu, programdan önceki seçilme sayılarını ve karar defterini girip geçiş kurulumunu tamamlandı olarak işaretleyin.",
+    bag: { to: "/birlik-donemi/gecis-kurulumu", etiket: "Geçiş Kurulumu'nu aç" },
+  },
+  {
     anahtar: "kurtarma_zarfi",
     baslik: "Kurtarma anahtarını müdürlükte kapalı zarfta saklayın",
     aciklama:
@@ -79,11 +87,18 @@ const OTOMATIK: ReadonlySet<string> = new Set<OtomatikMadde>([
   "okul_karti",
   "personel_aktarimi",
   "kapali_gunler",
+  "gecis_kurulumu",
 ]);
 
 function otomatikTamam(anahtar: OtomatikMadde, durum: SetupStatus): boolean {
   if (anahtar === "okul_karti") return durum.school_info_complete;
   if (anahtar === "personel_aktarimi") return durum.personnel_count > 0;
+  // Geçiş kurulumu (backend `roadmap_auto_items`): işaret konmuşsa ya da birlik dönemi genel kurulla
+  // açılmışsa tamam; atlanmışsa ya da sürüyorsa açık kalır (tasarım §7.9, §7.10).
+  if (anahtar === "gecis_kurulumu") {
+    const gecis = durum.transition_setup?.state;
+    return gecis === "TAMAMLANDI" || gecis === "GEREKMIYOR";
+  }
   return durum.school_break_count > 0;
 }
 

@@ -24,6 +24,7 @@ import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from apps.oab.kurallar import yukleyici
 from apps.oab.models import (
     AssemblyKind,
     BoardDecision,
@@ -520,6 +521,9 @@ def _asil_uye_yururlugu_biter(donem: OabTerm, bitis: date) -> None:
     for kayit in donem.rule_package.content["kurallar"]:
         if kayit["id"] == "yonetim_kurulu.asil_uye":
             kayit["yururluk"]["bitis"] = f"{bitis:%d.%m.%Y}"
+    # Kopya okuması kanonik özeti doğrular (plan F1c 3. adım notları; F1c 11. adımda sertleşti):
+    # bellekteki değişik kopyanın özeti de bellekte yenilenir, yoksa kopya bozuk sayılırdı.
+    donem.rule_package.content_sha256 = yukleyici.icerik_ozeti(donem.rule_package.content)
 
 
 def test_kapanmis_donemde_kurallar_donemin_son_gunuyle_okunur() -> None:

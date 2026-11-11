@@ -104,7 +104,7 @@ from apps.oab.models import (
     PersonStatus,
     RulePackage,
 )
-from apps.oab.services import donemler, kisiler, kurullar, uyelikler, uyum
+from apps.oab.services import donemler, gecis, kisiler, kurullar, uyelikler, uyum
 from apps.oab.services import evrak as evrak_servisi
 from apps.oab.services import genel_kurul as genel_kurul_servisi
 from apps.okul import denetim_izi, erisim_gunlugu, iz_durumu
@@ -396,6 +396,75 @@ def _f1c6_donemi() -> OabTerm:
     return donemler.create_term(
         name="2026-2027 birlik dönemi", school_year=_yil(), start_date=date(2026, 10, 10)
     )
+
+
+def _gecis_iptali(_: pytest.MonkeyPatch) -> Istek:
+    """Geçiş döneminin iptali: durum ve şifreli gerekçe (F1c 11. adım; §7.9 "Senaryolar")."""
+    donem = _f1c6_donemi()
+    return Istek(
+        f"/api/v1/oab/terms/{donem.pk}/cancel/",
+        {"cancel_reason": "Uydurma: dönem başı yanlış girildi."},
+        _turler("DURUM", "GUNCELLE"),
+    )
+
+
+def _gecis_devralinan(_: pytest.MonkeyPatch) -> Istek:
+    """Görevdeki yönetim kurulu üyesi (`DEVRALINAN`); sayacı verilmiş kişi, uyum satırı yok."""
+    _f1c6_donemi()
+    kisi = kisiler.create_person(
+        kind="VELI", first_name="Uydurnur", last_name="Örnekkaya", external_yk_terms=1
+    )
+    return Istek(
+        "/api/v1/oab/transition/inherited/",
+        {"organ": "YK", "person": kisi.pk, "seat_type": "ASIL", "role": "UYE"},
+        _turler("OLUSTUR"),
+    )
+
+
+def _gecis_sayac_beyani(_: pytest.MonkeyPatch) -> Istek:
+    """Programdan önceki seçilme sayısının ilk beyanı: kişinin sayaç alanı (düzeltme değil)."""
+    _f1c6_donemi()
+    return Istek(
+        "/api/v1/oab/transition/election-counts/",
+        {"beyanlar": [{"person": _birlik_kisisi().pk, "yk": 2}]},
+        _turler("GUNCELLE"),
+    )
+
+
+def _gecis_karar_defteri(_: pytest.MonkeyPatch) -> Istek:
+    """Karar defterinin geçiş kaydı (noter tasdikli: kural uygun, uyum satırı yok)."""
+    _f1c6_donemi()
+    return Istek(
+        "/api/v1/oab/transition/decision-book/",
+        {
+            "last_no_before_program": 37,
+            "last_page_before_program": 12,
+            "certified_by": "NOTER",
+            "certified_on": "2024-10-01",
+            "certification_no": "Uydurma-123",
+        },
+        _turler("OLUSTUR"),
+    )
+
+
+def _gecis_karar_defteri_iptali(_: pytest.MonkeyPatch) -> Istek:
+    _f1c6_donemi()
+    defter = gecis.karar_defteri_kaydet(
+        last_no_before_program=37,
+        last_page_before_program=12,
+        certified_by="NOTER",
+        certified_on=date(2024, 10, 1),
+    )
+    return Istek(
+        f"/api/v1/oab/transition/decision-book/{defter.pk}/cancel/",
+        {"cancel_reason": "Uydurma: sayfa yanlış."},
+        _turler("DURUM", "GUNCELLE"),
+    )
+
+
+def _gecis_tamamla(_: pytest.MonkeyPatch) -> Istek:
+    _f1c6_donemi()
+    return Istek("/api/v1/oab/transition/complete/", None, _turler("GUNCELLE"))
 
 
 def _rol_oturumu(rol: AccountRole) -> str:
@@ -781,6 +850,13 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     ("oab-document-e01", "POST"): Senaryo(_gorev_evraki("e01")),
     ("oab-document-e02", "POST"): Senaryo(_gorev_evraki("e02", AccountRole.DENETLEME_KURULU)),
     ("oab-document-e03", "POST"): Senaryo(_gorev_evraki("e03")),
+    # F1c 11. adım: geçiş kurulumunun uçları (etiket `GECIS`; §7.9).
+    ("oab-term-cancel", "POST"): Senaryo(_gecis_iptali),
+    ("oab-transition-inherited", "POST"): Senaryo(_gecis_devralinan),
+    ("oab-transition-election-counts", "POST"): Senaryo(_gecis_sayac_beyani),
+    ("oab-transition-decision-book", "POST"): Senaryo(_gecis_karar_defteri),
+    ("oab-transition-decision-book-cancel", "POST"): Senaryo(_gecis_karar_defteri_iptali),
+    ("oab-transition-complete", "POST"): Senaryo(_gecis_tamamla),
     # İlk hesap: satırlar yeni hesabındır (plan F1b-1); okul kartı parmak iziyle oluşur.
     ("security-enable", "POST"): _istek(
         lambda: Istek(
@@ -851,6 +927,15 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
 #: İz satırı YAZMAYAN yazma uçları ve gerekçeleri. Yeni bir uç buraya ancak gerekçesiyle girer.
 #: Personel silme ve birleştirme F1b 5. adımdan beri izlidir (`IZLI_UCLAR`; `KVKK_SILME`).
 MUAF_UCLAR: dict[tuple[str, str], str] = {
+    ("oab-draft-text", "PUT"): (
+        'Gerekçe kutusunun yarım metni (tasarım §7 "Yarım kalan metin"): ekran yazarken kısa '
+        "aralıklarla yazar; hesabın tek, şifreli taslağıdır, kayıt değildir (`yarim_metin`, "
+        "`MUAF_ISLEVLER`)."
+    ),
+    ("oab-draft-text", "DELETE"): (
+        "Gerekçe kutusunun yarım metninin silinmesi (kayıt yapıldı ya da vazgeçildi; `yarim_metin`, "
+        "`MUAF_ISLEVLER`)."
+    ),
     ("app-quit", "POST"): (
         "Kayıt yazmaz: düzenli kapanışı başlatır. Oturum açıksa kapanış kilidi `KILIT` "
         "satırını oturumdaki hesabın adına yazar (masaüstü kancası, "

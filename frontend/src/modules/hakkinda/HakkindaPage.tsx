@@ -196,14 +196,17 @@ export default function HakkindaPage() {
                 çıkmaz.
               </li>
               <li>
-                Öğretmen ve diğer personelin ad-soyadları, velilerin ad-soyadları, hesap
-                sahiplerinin ad-soyadları ve eklerin özgün dosya adları Fernet (AES-128-CBC +
-                HMAC-SHA256) ile şifrelenir. Velinin adı için ayrıca, kayıtların anahtarından HKDF
-                ile türetilen ayrı bir anahtarla HMAC-SHA256 kör indeksi tutulur; ad şifreli
-                kaldığından indeks aynı velinin bulunması için tutulur. Veli listesindeki öğrencinin
-                sınıfı şifrelenmez. Şifreleme anahtarı her hesap için ayrı şifrelenir ve güvenlik
-                dosyasında o hesabın parola kaydında durur: hesabın parolasından Argon2id ile
-                türetilen anahtar onu tek başına açar; kurtarma anahtarının da kendi kaydı vardır.
+                Öğretmen ve diğer personelin ad-soyadları, velilerin ad-soyadları, birlik
+                kişilerinin ad-soyadları, hesap sahiplerinin ad-soyadları ve eklerin özgün dosya
+                adları Fernet (AES-128-CBC + HMAC-SHA256) ile şifrelenir. Velinin ve birlik
+                kişisinin adı için ayrıca, kayıtların anahtarından HKDF ile türetilen ayrı bir
+                anahtarla HMAC-SHA256 kör indeksi tutulur; ad şifreli kaldığından indeks yalnız aynı
+                adın bulunması için kullanılır: veli listesinden birlik kişisi eklenirken yazılan
+                adın satırını ve yeni birlik kişisinde “olası aynı kişi”yi bulur. Veli listesindeki
+                öğrencinin sınıfı şifrelenmez. Şifreleme anahtarı her hesap için ayrı şifrelenir ve
+                güvenlik dosyasında o hesabın parola kaydında durur: hesabın parolasından Argon2id
+                ile türetilen anahtar onu tek başına açar; kurtarma anahtarının da kendi kaydı
+                vardır.
               </li>
               <li>
                 Denetim izinin her kaydı, bir önceki kaydın mührüyle birlikte HMAC-SHA256 ile

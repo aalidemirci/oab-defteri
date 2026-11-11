@@ -290,3 +290,77 @@ export const VELI_ALAN_SINIF = "Öğrencinin sınıfı";
 export const KAYNAK_DOSYA_HATIRLATMASI =
   "Aktarılan dosya bilgisayarda şifresiz durur: artık gerekmiyorsa silin, Geri Dönüşüm " +
   "Kutusu'ndan (Pardus'ta Çöp'ten) de kaldırın.";
+
+// ---------------------------------------------------------------------------
+// Birlik Kişileri sekmesi (F1c 11. adım; tasarım §5.2.2 `OabPerson`; plan F1c kararları "Kişiler
+// ekranı"). Birlik kişisi organlara ve temsilciliklere girecek kişidir; personel sicilinden ayrıdır. Tür
+// görünen adı "İdareci"dir ("Program yöneticisi" ile karışmasın). T.C. kimlik no ve telefon tutulmaz
+// (K9); veli listesinden yalnız yazılan ad aranır, liste dökülmez (§8.4). Kayıt silinmez, pasif olur.
+// ---------------------------------------------------------------------------
+
+/** Sekme adı (`?tab=birlik`; sözlük §4.3). */
+export const BIRLIK_KISILERI_SEKMESI = "Birlik Kişileri";
+export const BIRLIK_KISILERI_ACIKLAMASI =
+  "Yönetim kuruluna, Denetleme Kuruluna ve temsilciliklere girecek kişiler burada kaydedilir. " +
+  "T.C. kimlik no ve telefon tutulmaz. Kayıt silinmez; kullanılmayan kişi pasif yapılır.";
+export const BIRLIK_KISILERI_OKUNAMADI = "Birlik kişileri okunamadı.";
+export const BIRLIK_KISISI_YOK = "Birlik kişisi yok";
+export const BIRLIK_KISISI_YOK_ACIKLAMASI =
+  "Kişiyi elle, öğretmen ve diğer personel sicilinden ya da veli listesinden ekleyin.";
+/** Arama doluyken boş sonuç (yeni kayda değil aramaya yönlendirir; olası aynı kişi, D30). */
+export const BIRLIK_KISISI_ARAMAYA_UYAN_YOK = "Aramaya uyan birlik kişisi yok";
+export const BIRLIK_KISISI_ARAMAYA_UYAN_YOK_ACIKLAMASI =
+  "Aramayı değiştirin ya da pasif kişileri de gösterin.";
+/** Pasif kişiler zaten gösterilirken. */
+export const ARAMAYI_DEGISTIRIN = "Aramayı değiştirin.";
+export const PASIFLERI_GOSTER = "Pasif kişileri de göster";
+export const SUTUN_TUR = "Tür";
+export const DURUM_AKTIF = "Etkin";
+export const DURUM_PASIF = "Pasif";
+export const DUGME_BIRLIK_KISISI_EKLE = "Birlik kişisi ekle";
+export const DUGME_PERSONELDEN_EKLE = "Personelden ekle";
+export const DUGME_VELI_LISTESINDEN_EKLE = "Veli listesinden ekle";
+
+/** Ekleme-düzenleme penceresi. */
+export const YENI_BIRLIK_KISISI = "Yeni birlik kişisi";
+export const BIRLIK_KISISINI_DUZENLE = "Birlik kişisini düzenle";
+export const BIRLIK_KISISI_AYRINTISI = "Birlik kişisi";
+export const ALAN_BIRLIK_TURU = "Tür";
+export const ALAN_VELIDIR = "Velidir";
+export const VELIDIR_YARDIMI = "Kişi okuldaki bir öğrencinin velisidir.";
+export const ALAN_YETISKIN_BEYANI = "On sekiz yaşını doldurduğunu beyan etti";
+export const YETISKIN_BEYANI_YARDIMI =
+  "Kursiyer yönetim kuruluna ve Denetleme Kuruluna on sekiz yaşını doldurmuşsa girer (md. 12/1, 14/1).";
+export const ALAN_OKUL_MUDURU = "Okul müdürüdür";
+export const OKUL_MUDURU_YARDIMI = "Okul müdürü yönetim kuruluna giremez.";
+export const ALAN_ONCEKI_YK = "Programdan önceki yönetim kuruluna seçilme sayısı";
+export const ALAN_ONCEKI_DK = "Programdan önceki Denetleme Kurulu başkanlığı sayısı";
+export const ONCEKI_SAYI_YOK = "Girilmedi ya da bilinmiyor";
+export const ONCEKI_SAYI_YARDIMI = "Seçilme sayıları geçiş kurulumunda beyan edilir.";
+export const PASIF_KISI_NOTU = "Bu kişi pasif; bilgileri değiştirilemez, önce etkinleştirin.";
+export const DUGME_PASIF_YAP = "Pasif yap";
+export const DUGME_ETKINLESTIR = "Etkinleştir";
+export const BIRLIK_KISISI_KAYDEDILDI = "Birlik kişisi kaydedildi.";
+export const BIRLIK_KISISI_KAYDEDILEMEDI = "Birlik kişisi kaydedilemedi.";
+export const BIRLIK_KISISI_PASIF_YAPILDI = "Birlik kişisi pasif yapıldı.";
+export const BIRLIK_KISISI_ETKINLESTIRILDI = "Birlik kişisi etkinleştirildi.";
+
+/** Olası aynı kişi (tasarım §13 D30): sunucunun iletisi adı yankılamaz. */
+export const OLASI_AYNI_KISI_BASLIGI = "Yine de yeni kişi olarak kaydedilsin mi?";
+export const OLASI_AYNI_KISI_ONAYI = "Aynı kişi değil, kaydet";
+
+/** Personelden ve veli listesinden ekleme. */
+export const PERSONELDEN_EKLE_BASLIGI = "Personelden birlik kişisi ekle";
+export const ALAN_PERSONEL = "Öğretmen ya da diğer personel";
+export const PERSONEL_ARA_YER_TUTUCU = "Ad soyad…";
+export const PERSONEL_BULUNAMADI = "Bu adla etkin personel yok.";
+export const PERSONELDEN_EKLE_YARDIMI =
+  "Ad, soyad ve görev türü sicilden alınır; yönetici görev türü “İdareci” olur.";
+export const PERSONEL_SECIN = "Personeli seçin.";
+export const VELI_LISTESINDEN_EKLE_BASLIGI = "Veli listesinden birlik kişisi ekle";
+export const ALAN_VELI_ADI = "Velinin adı-soyadı";
+export const VELI_ADI_YARDIMI =
+  "Veli listesindeki adı yazın; liste dökülmez, yalnız yazdığınız ad aranır. Soyad son sözcük " +
+  "sayılır; gerekirse kayıttan düzeltin.";
+export const VELI_ADI_ZORUNLU = "Velinin adı-soyadını yazın.";
+export const DUGME_EKLE = "Ekle";

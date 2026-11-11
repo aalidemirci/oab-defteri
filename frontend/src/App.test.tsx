@@ -379,7 +379,7 @@ describe("App — kurulum kapısı", () => {
 });
 
 describe("App — kabuk gezinmesi", () => {
-  it("program yöneticisinin gezinmesi Genel Bakış, Kişiler, Kullanıcılar, Erişim Günlüğü, Ayarlar ve Kılavuz'dur (bu sırayla)", async () => {
+  it("program yöneticisinin gezinmesi Genel Bakış, Birlik Dönemi, Kişiler, Kullanıcılar, Erişim Günlüğü, Ayarlar ve Kılavuz'dur (bu sırayla)", async () => {
     ekranaBas("/");
     await screen.findByRole("heading", { name: "Genel Bakış" });
     // Kullanıcılar yeteneğe bağlıdır: özet okunduktan sonra bakılır.
@@ -388,6 +388,7 @@ describe("App — kabuk gezinmesi", () => {
     const baglantilar = within(gezinme).getAllByRole("link");
     const beklenen: Array<[ad: string, yol: string]> = [
       ["Genel Bakış", "/"],
+      ["Birlik Dönemi", "/birlik-donemi"],
       ["Kişiler", "/kisiler"],
       ["Kullanıcılar", "/kullanicilar"],
       ["Erişim Günlüğü", "/erisim-gunlugu"],
@@ -443,6 +444,8 @@ describe("App — kabuk gezinmesi", () => {
   // üst çubuk "Genel bakış", sayfa "Panel", gezinme "Panel" diyordu.
   it.each([
     ["/", "Genel Bakış"],
+    ["/birlik-donemi", "Birlik Dönemi"],
+    ["/birlik-donemi/gecis-kurulumu", "Geçiş Kurulumu"],
     ["/kisiler", "Kişiler"],
     ["/kullanicilar", "Kullanıcılar"],
     ["/erisim-gunlugu", "Erişim Günlüğü"],
@@ -672,7 +675,7 @@ describe("App — rol süzmesi", () => {
     installer_size: 1,
   };
 
-  it("bugünkü dört ekran her rolün gezinmesinde durur", async () => {
+  it("bugünkü beş ekran her rolün gezinmesinde durur", async () => {
     oturumApiMock.ozet.mockResolvedValue(BASKAN_OTURUMU);
     ekranaBas("/");
     await screen.findByRole("heading", { name: "Genel Bakış" });
@@ -683,7 +686,7 @@ describe("App — rol süzmesi", () => {
       within(gezinme)
         .getAllByRole("link")
         .map((a) => gorunenMetin(a)),
-    ).toEqual(["Genel Bakış", "Kişiler", "Ayarlar", "Kılavuz"]);
+    ).toEqual(["Genel Bakış", "Birlik Dönemi", "Kişiler", "Ayarlar", "Kılavuz"]);
   });
 
   it("Kullanıcılar yeteneği olmayan rolde gezinmede yoktur, adresi “rolünüze açık değil” der", async () => {
@@ -720,7 +723,7 @@ describe("App — rol süzmesi", () => {
       within(gezinme)
         .getAllByRole("link")
         .map((a) => gorunenMetin(a)),
-    ).toEqual(["Genel Bakış", "Kişiler", "Erişim Günlüğü", "Ayarlar", "Kılavuz"]);
+    ).toEqual(["Genel Bakış", "Birlik Dönemi", "Kişiler", "Erişim Günlüğü", "Ayarlar", "Kılavuz"]);
   });
 
   it("Erişim Günlüğü yeteneği olmayan rolde gezinmede yoktur, adresi “rolünüze açık değil” der", async () => {

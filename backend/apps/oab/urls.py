@@ -18,6 +18,36 @@ urlpatterns: list[URLPattern | URLResolver] = [
     ),
     path("terms/", views.TermListCreateView.as_view(), name="oab-term-list"),
     path("terms/<int:pk>/", views.TermDetailView.as_view(), name="oab-term-detail"),
+    path("terms/<int:pk>/cancel/", views.TermCancelView.as_view(), name="oab-term-cancel"),
+    # Geçiş kurulumu (F1c 8. adımın servisleri; uçları ve ekranı 11. adımda).
+    path("transition/", views.TransitionView.as_view(), name="oab-transition"),
+    path(
+        "transition/inherited/",
+        views.TransitionInheritedView.as_view(),
+        name="oab-transition-inherited",
+    ),
+    path(
+        "transition/election-counts/",
+        views.TransitionElectionCountsView.as_view(),
+        name="oab-transition-election-counts",
+    ),
+    path(
+        "transition/decision-book/",
+        views.TransitionDecisionBookView.as_view(),
+        name="oab-transition-decision-book",
+    ),
+    path(
+        "transition/decision-book/<int:pk>/cancel/",
+        views.TransitionDecisionBookCancelView.as_view(),
+        name="oab-transition-decision-book-cancel",
+    ),
+    # Gerekçe kutusunun yarım metni (F1c 11. adım; ortak "uyarı + gerekçe" bileşeni).
+    path("drafts/", views.DraftTextView.as_view(), name="oab-draft-text"),
+    path(
+        "transition/complete/",
+        views.TransitionCompleteView.as_view(),
+        name="oab-transition-complete",
+    ),
     path("persons/", views.PersonListCreateView.as_view(), name="oab-person-list"),
     path(
         "persons/from-personnel/",

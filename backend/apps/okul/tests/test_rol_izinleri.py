@@ -443,6 +443,16 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     "oab-person-list": {"GET": "H", "HEAD": "H", "POST": "Y+YK"},
     "oab-term-detail": {"GET": "H", "HEAD": "H"},
     "oab-term-list": {"GET": "H", "HEAD": "H", "POST": "Y"},
+    # Geçiş kurulumu (F1c 11. adım): her rol okur, yalnız program yöneticisi yazar (§7.9 "Kim").
+    "oab-term-cancel": {"POST": "Y"},
+    # Gerekçe kutusunun yarım metni: her rol kendi kaydını yazar (KENDI satırı).
+    "oab-draft-text": {"GET": "H", "HEAD": "H", "PUT": "H", "DELETE": "H"},
+    "oab-transition": {"GET": "H", "HEAD": "H"},
+    "oab-transition-inherited": {"POST": "Y"},
+    "oab-transition-election-counts": {"POST": "Y"},
+    "oab-transition-decision-book": {"POST": "Y"},
+    "oab-transition-decision-book-cancel": {"POST": "Y"},
+    "oab-transition-complete": {"POST": "Y"},
     "setup-school-config": {"GET": "H", "HEAD": "H", "PUT": "Y"},
     "setup-status": {"GET": "H", "HEAD": "H"},
     "template-parents": {"GET": "Y", "HEAD": "Y"},
@@ -745,30 +755,44 @@ def test_yetenek_adlari_ve_rollerin_yetenekleri_anlik_goruntusu() -> None:
     tum = sorted(YETENEKLER)
     assert tum == [
         "ayrilis_havuzu",
+        "birlik_donemi_yazma",
+        "birlik_kisi_yazma",
         "bosta_sure_yazma",
         "butunluk_denetim",
         "ders_yili_yazma",
+        "dk_gorev_bolumu_yazma",
         "eokul_aktarimi",
         "erisim_gunlugu",
         "geri_yukleme_gordum",
+        "gorev_bolumu_yazma",
         "guncelleme",
         "guvenlik",
         "iki_depo",
         "kapali_gun_yazma",
+        "karar_taslagi_uretme",
         "kisi_yazma",
         "kullanicilar",
         "kurulum_tamamlama",
         "okul_karti_yazma",
+        "organ_yazma",
         "son_oturum_onay",
+        "temsilci_yazma",
         "veli_listesi",
         "yol_haritasi",
     ]
-    # "Gördüm" yalnız Denetleme Kurulunundur; program yöneticisi kartı görür, kaldıramaz.
-    assert yetenekler("yonetici") == [ad for ad in tum if ad != "geri_yukleme_gordum"]
-    for rol in YK_ROLLERI:
-        assert yetenekler(rol) == ["son_oturum_onay"]
+    # "Gördüm" ve Denetleme Kurulunun görev bölümü yalnız Denetleme Kurulunundur; yönetim kurulunun
+    # görev bölümünü ve yedek çağrısını yalnız sekreter yazar (tasarım §7.2 "Kim").
+    yalniz_baskalari = {"geri_yukleme_gordum", "dk_gorev_bolumu_yazma", "gorev_bolumu_yazma"}
+    assert yetenekler("yonetici") == [ad for ad in tum if ad not in yalniz_baskalari]
+    yk_ortak = ["birlik_kisi_yazma", "organ_yazma", "son_oturum_onay", "temsilci_yazma"]
+    for rol in YK_ROLLERI - {"sekreter"}:
+        assert yetenekler(rol) == yk_ortak
+    assert yetenekler("sekreter") == sorted(
+        [*yk_ortak, "gorev_bolumu_yazma", "karar_taslagi_uretme"]
+    )
     assert yetenekler("denetleme_kurulu") == [
         "butunluk_denetim",
+        "dk_gorev_bolumu_yazma",
         "erisim_gunlugu",
         "geri_yukleme_gordum",
     ]

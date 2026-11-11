@@ -43,8 +43,8 @@ export const SUTUN_CIKTI = "Çıktı";
 /** Boş hâller. */
 export const BOS_BASLIK = "Erişim günlüğünde kayıt yok";
 export const BOS_ACIKLAMA =
-  "Bu sürümde erişim günlüğüne yazan bir okuma yoktur; kayıtlar, kişisel veriyi okuyan ya da " +
-  "kişisel veri içeren çıktı veren ekranlar geldikçe yazılır.";
+  "Kişisel veriye dokunan hassas bir okuma ya da kişisel veri içeren bir çıktı henüz yok; böyle " +
+  "bir işlem yapıldığında kaydı burada görünür.";
 export const SUZGECE_UYAN_YOK = "Süzgeçlere uyan kayıt yok";
 export const SUZGECE_UYAN_YOK_ACIKLAMA = "Süzgeçleri değiştirin ya da temizleyin.";
 

@@ -864,7 +864,8 @@ def test_e63_guvenlik_dosyasi_sifirlamasi_is_diye_yazilmaz() -> None:
 
 def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
     """Orkestratör maddesi F-4, rol rol: program yöneticisi dokuz iş (veli listesi F1b 5. adımda;
-    birlik kişileri ve veli listesinden birlik kişisi ekleme F1c 4. adımda Kişiler işine girdi);
+    birlik kişileri ve veli listesinden birlik kişisi ekleme F1c 4. adımda Kişiler işine girdi; birlik
+    dönemi ve geçiş kurulumu F1c 11. adımda ekranıyla okul bilgileri işine girdi);
     yönetim kurulu rolleri birlik kişileri (F1c 4. adım), Genel Bakış'ta son oturumun kontrolü ve
     kendi parolası; Denetleme Kurulu geri yükleme kartının
     "Gördüm"ü ve kendi parolası; okul müdürü yalnız kendi parolası (müdür yazıları F2/F4'tedir).
@@ -874,7 +875,7 @@ def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
     birlik_kisileri = "Kişiler: birlik kişileri"
     beklenen = {
         AccountRole.YONETICI: (
-            "Okul bilgileri, ders yılı ve dönemler, kapalı günler",
+            "Okul bilgileri, ders yılı ve dönemler, kapalı günler, birlik dönemi ve geçiş kurulumu",
             "Kişiler: öğretmen ve diğer personel kaydı, e-Okul aktarımı, ayrılış havuzu, birlik "
             "kişileri, veli listesinden birlik kişisi ekleme",
             son_oturum,
@@ -899,7 +900,7 @@ def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
     }
     assert set(beklenen) == set(ROLLER)
     gelecek = re.compile(
-        r"(?i)birlik dönemi|hesap geçişi|anahtarının yenilenmesi|küçük alım|kural sürümü|"
+        r"(?i)hesap geçişi|anahtarının yenilenmesi|küçük alım|kural sürümü|"
         r"bağışçı|takvim|uyum kaydı|genel kurul|karar|gelir-gider|harcama|bütçe|kantin|servis|"
         r"organ|temsilci|denetim planı|müdür yazısı|devir-teslim|öğrenci"
     )

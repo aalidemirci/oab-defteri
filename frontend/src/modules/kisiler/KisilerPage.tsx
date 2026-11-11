@@ -8,8 +8,9 @@
 // cinsiyet, fotoğraf, unvan ve branş bu ekranda HİÇ YOKTUR — sicil ad-soyad ve görev türüyle,
 // veli listesi veli adı ve öğrencinin sınıfıyla yürür (işleme envanteri genel tasarım §3.4).
 // Öğrenciler sekmesi F1b 5. adımda öğrenci sicili ve aktarımıyla söküldü (tasarım §5.1 ALMA).
-// Sekme URL'de tutulur (`?tab=personel`, `?tab=havuz`, `?tab=veli`): başka ekranlar doğrudan o
-// sekmeye bağlanır.
+// Dördüncü sekme "Birlik Kişileri" (F1c 11. adım; `BirlikKisileri`): organlara ve temsilciliklere
+// girecek kişiler, her role okumaya açık. Sekme URL'de tutulur (`?tab=personel`, `?tab=havuz`,
+// `?tab=veli`, `?tab=birlik`): başka ekranlar doğrudan o sekmeye bağlanır.
 // Aile iskeletinin kütüphane üyelik sekmeleri ve "Bakanlık sistemi" hatırlatması
 // F1a-2'de söküldü.
 //
@@ -51,7 +52,9 @@ import { useYetki } from "../oturum/yetki";
 import type { MemberKind, Personnel, PersonnelWriteBody } from "../okul/api";
 import AktarimPaneli from "./AktarimPaneli";
 import AyrilisHavuzu from "./AyrilisHavuzu";
+import BirlikKisileri from "./BirlikKisileri";
 import {
+  BIRLIK_KISILERI_SEKMESI,
   GOREV_TURU_ETIKETI,
   GOREV_TURU_YARDIMI,
   KISI_SILME_ONAY_BASLIGI,
@@ -74,7 +77,7 @@ import VeliListesi from "./VeliListesi";
 const PAGE_SIZE = 25;
 
 // TAB_KEYS[0] varsayılan sekmedir (useTabParam fallback) — başa yeni anahtar EKLEME.
-const TAB_KEYS = ["personel", "havuz", "veli"] as const;
+const TAB_KEYS = ["personel", "havuz", "veli", "birlik"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
 // Sözlük: "personel" tek başına öğretmen anlamında kullanılmaz; görev türleri
@@ -83,6 +86,7 @@ export const TABS: TabItem[] = [
   { key: "personel", label: "Öğretmenler ve Diğer Personel", icon: "badge" },
   { key: "havuz", label: "Ayrılış Havuzu", icon: "pending_actions" },
   { key: "veli", label: VELI_LISTESI_SEKMESI, icon: "family_restroom" },
+  { key: "birlik", label: BIRLIK_KISILERI_SEKMESI, icon: "diversity_3" },
 ];
 
 /** Sekmenin yeteneği (verilmeyen sekme her role açık; dosya başı "Rol süzmesi"). */
@@ -93,12 +97,12 @@ const SEKME_YETENEGI: Partial<Record<TabKey, YetenekAdi>> = {
 
 /** Sayfanın açıklaması: yazabilen rolde ve salt okur rolde (sözlük §4.1). */
 export const KISILER_ACIKLAMASI =
-  "Öğretmen ve diğer personel sicili ve veli listesi. Personel e-Okul listesinden toplu " +
+  "Öğretmen ve diğer personel sicili, veli listesi ve birlik kişileri. Personel e-Okul listesinden toplu " +
   "aktarılabilir ya da tek tek girilebilir. Aktarım kimseyi ayırmaz: listede bulunmayanlar " +
   "Ayrılış Havuzu'nda karar bekler. Veliden yalnız adı-soyadı ve öğrencinin sınıfı alınır; " +
   "TCKN, unvan ve branş bu programda tutulmaz.";
 export const KISILER_SALT_OKUR_ACIKLAMASI =
-  "Öğretmen ve diğer personel sicili. TCKN, unvan ve branş bu programda tutulmaz.";
+  "Öğretmen ve diğer personel sicili ve birlik kişileri. TCKN, unvan ve branş bu programda tutulmaz.";
 
 /** Ayrılış onayının ortak sonucu cümlesi (ayrılış yolu kaydı silmez). */
 const AYRILIS_SONUCU = "Kaydı silinmez; sicilde “Ayrıldı · gg.aa.yyyy” rozetiyle kalır.";
@@ -152,6 +156,12 @@ export default function KisilerPage() {
             )}
             {active === "havuz" && <AyrilisHavuzu birlestirebilir={birlestirebilir} />}
             {active === "veli" && <VeliListesi />}
+            {active === "birlik" && (
+              <BirlikKisileri
+                yazabilir={yetki.acik("birlik_kisi_yazma")}
+                velidenEkleyebilir={yetki.acik("birlik_kisi_yazma") && yetki.acik("veli_listesi")}
+              />
+            )}
           </div>
         </>
       )}

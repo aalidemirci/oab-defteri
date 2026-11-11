@@ -317,8 +317,10 @@ def test_kisitli_roller_yalniz_kendi_satirlarina_yazar(rol: str) -> None:
     # Bugün açık olanlar kendi hesabı ve oturum uçlarıdır; DK'de ek olarak denetim modülünün
     # (M8) "Gördüm"ü, görev bölümü (F1c 6. adım) ve görev bölümü tutanağı ile denetim planının
     # belgesi (E02, F1c 10. adım).
+    # Gerekçe kutusunun yarım metni (F1c 11. adım) de hesabın kendi satırındadır (KENDI).
     ortak = {
         "app-quit",
+        "oab-draft-text",
         "security-change-password",
         "security-integrity-reset-notice",
         "security-lock",

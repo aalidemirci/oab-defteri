@@ -130,6 +130,9 @@ const KAPILI_ADRESLER: ReadonlyArray<readonly [adres: string, yetenek: YetenekAd
 /** Sayfaların adresleri (`App.tsx`); sekmeler ekranların sekme listelerinden. */
 const SAYFA_ADRESLERI = [
   "/",
+  // F1c 11. adım: Birlik Dönemi ve Geçiş Kurulumu (yol haritasının maddesi bağlanır).
+  "/birlik-donemi",
+  "/birlik-donemi/gecis-kurulumu",
   "/kisiler",
   "/kullanicilar",
   "/erisim-gunlugu",

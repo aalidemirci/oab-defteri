@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
+from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.generics import get_object_or_404
 from rest_framework.request import Request
@@ -15,15 +16,34 @@ from rest_framework.views import APIView
 from apps.oab import models as oab_modelleri
 from apps.oab import selectors
 from apps.oab.hatalar import EvrakDosyasiAcilamadi, EvrakDosyasiYazilamadi
-from apps.oab.kurallar import KuralPaketiKullanilamaz, atifli_metin, bilgi_notu
-from apps.oab.models import MembershipRole, OrganType
+from apps.oab.kurallar import (
+    BilinmeyenKural,
+    KuralPaketiKullanilamaz,
+    YururlukteDegerYok,
+    atifli_metin,
+    bilgi_notu,
+    kural_kaydi,
+)
+from apps.oab.kurallar.erisim import atif_metni
+from apps.oab.models import (
+    BookKind,
+    BookStatus,
+    ComplianceItem,
+    MembershipRole,
+    OfficialBook,
+    OrganType,
+    TermStatus,
+)
 from apps.oab.serializers import (
     AlimKomisyonuCreateSerializer,
+    DevralinanSerializer,
     DkGorevBolumuSerializer,
     DkYedekCagrisiSerializer,
     DusmeSerializer,
     EngelSerializer,
     IptalSerializer,
+    KararDefteriGecisSerializer,
+    KararDefteriSerializer,
     OabPersonCreateSerializer,
     OabPersonFromParentSerializer,
     OabPersonFromPersonnelSerializer,
@@ -34,7 +54,9 @@ from apps.oab.serializers import (
     OrganMembershipCreateSerializer,
     OrganMembershipSerializer,
     OrganMembershipUpdateSerializer,
+    SayacBeyaniSerializer,
     TemsilciCreateSerializer,
+    YarimMetinSerializer,
     YkGorevBolumuSerializer,
     YkYedekCagrisiSerializer,
 )
@@ -43,10 +65,12 @@ from apps.oab.services import (
     gorev_bolumu,
     gorev_evraki,
     kisiler,
+    kurullar,
     temsilciler,
     uyelik_gecisleri,
     uyelikler,
     uyum,
+    yarim_metin,
 )
 from apps.okul.models import CanteenMode
 from apps.okul.permissions import RequiresAdminPassword
@@ -115,8 +139,15 @@ class TermListCreateView(APIView):
         govde = OabTermAcilisSerializer(data=request.data)
         govde.is_valid(raise_exception=True)
         with _hizmet_hatalari():
-            donem = gecis.ilk_donemi_ac(**dict(govde.validated_data)).donem
-        return Response(OabTermSerializer(donem).data, status=status.HTTP_201_CREATED)
+            acilis = gecis.ilk_donemi_ac(**dict(govde.validated_data))
+        # Görev süresi uyarısı (md. 12/2, 14/2) kaydedilmez, gerekçe istemez: açılış yanıtında döner.
+        return Response(
+            {
+                **OabTermSerializer(acilis.donem).data,
+                "uyarilar": [_kadro_satiri(sonuc) for sonuc in acilis.uyarilar],
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class TermDetailView(APIView):
@@ -124,6 +155,23 @@ class TermDetailView(APIView):
 
     def get(self, request: Request, pk: int) -> Response:
         return Response(OabTermSerializer(get_object_or_404(_donemler(), pk=pk)).data)
+
+
+class TermCancelView(APIView):
+    """Yanlış girilmiş geçiş döneminin iptali (`ACIK` → `IPTAL`; gerekçe şifreli; §7.9 "Senaryolar").
+
+    "Geçiş kurulumu tamamlandı" işaretinden sonra 409 `gecis_kapali`; yalnız program yöneticisi (M1).
+    """
+
+    def post(self, request: Request, pk: int) -> Response:
+        donem = get_object_or_404(_donemler(), pk=pk)
+        govde = IptalSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        with _hizmet_hatalari():
+            donem = gecis.donemi_iptal_et(
+                donem, cancel_reason=govde.validated_data["cancel_reason"]
+            )
+        return Response(OabTermSerializer(donem).data)
 
 
 # ---------------------------------------------------------------------------
@@ -326,6 +374,14 @@ def _oneriler(uyeler: list[Any]) -> list[dict[str, Any]]:
         return []
 
 
+def _kadro_uyarilari(donem: Any, organ: str) -> list[dict[str, Any]]:
+    """Kadro sayılarının uyarıları; paket ya da dönem kopyası okunamazsa boş (okuma açık kalır, D1, D7)."""
+    try:
+        return [_kadro_satiri(sonuc) for sonuc in uyelikler.kadro_uyarilari(donem, organ)]
+    except KuralPaketiKullanilamaz:
+        return []
+
+
 class OrganRosterView(APIView):
     """Görevdeki kadro: görevdeki asıllar, çağrılmamış yedekler, kadro sayıları ve uyarıları.
 
@@ -345,9 +401,7 @@ class OrganRosterView(APIView):
                     selectors.bekleyen_yedekler(donem, organ), many=True
                 ).data,
                 "kadro": {"asil": sayilar["ASIL"], "yedek": sayilar["YEDEK"]},
-                "kadro_uyarilari": [
-                    _kadro_satiri(sonuc) for sonuc in uyelikler.kadro_uyarilari(donem, organ)
-                ],
+                "kadro_uyarilari": _kadro_uyarilari(donem, organ),
                 "oneriler": _oneriler(asillar),
             }
         )
@@ -645,3 +699,222 @@ class DocumentDownloadView(APIView):
 
     def head(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self.http_method_not_allowed(request, *args, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Geçiş kurulumu (tasarım §7.9 adım 1-4; plan F1c 8. adım, uçları ve ekranı 11. adımda). Kaydı
+# yalnız program yöneticisi yazar (M1, `Eylem.BIRLIK_DONEMI_YAZMA`); okuma her role açıktır. İşaretten
+# sonra her yazma 409 `gecis_kapali`. Devralınan üyeliğin iptali genel iptal ucundadır
+# (`MembershipCancelView`; servis devralınan kaydı yalnız program yöneticisine açar).
+# ---------------------------------------------------------------------------
+#: Geçiş ekranında gösterilen uyum satırlarının kuralları: seçilme sayacının "bilinmiyor" beyanı ve
+#: karar defterinin noter tasdiki (kişisiz ileti; konu kişi, üyelik ya da defter kimliğidir).
+_GECIS_UYUM_KURALLARI = frozenset({*kisiler.SAYAC_KURALLARI.values(), kurullar.TASDIK_KURALI})
+TEMSIL_GEREKLI = "Temsil edilen kurul ya da komisyon seçilmelidir."
+#: Sayaç kuralı → beyan ucunun alanı (`TransitionElectionCountsView`: `yk`, `dk_baskanlik`).
+_SAYAC_ALANLARI = {
+    kisiler.SAYAC_KURALLARI["external_yk_terms"]: "yk",
+    kisiler.SAYAC_KURALLARI["external_dk_chair_terms"]: "dk_baskanlik",
+}
+
+
+def _karar_defteri() -> OfficialBook | None:
+    defter: OfficialBook | None = (
+        OfficialBook.objects.filter(kind=BookKind.KARAR_DEFTERI)
+        .exclude(status=BookStatus.IPTAL)
+        .order_by("pk")
+        .first()
+    )
+    return defter
+
+
+def _uyum_atfi(kural_id: str, donem: Any) -> str:
+    """Satırın madde atfı (dönem kopyasından); okunamazsa boş (satırın iletisi yine gösterilir)."""
+    try:
+        return atif_metni(kural_kaydi(kural_id, tarih=timezone.localdate(), donem=donem))
+    except (BilinmeyenKural, YururlukteDegerYok, KuralPaketiKullanilamaz):
+        return ""
+
+
+def _gecis_uyum_satirlari(donem: Any) -> list[dict[str, Any]]:
+    """Geçiş döneminin açık sayaç ve tasdik satırları (eksik, sapma); ileti kişisizdir."""
+    satirlar = ComplianceItem.objects.filter(
+        term=donem, rule_id__in=_GECIS_UYUM_KURALLARI, resolved_at__isnull=True
+    ).order_by("pk")
+    return [
+        {
+            "id": satir.pk,
+            "tur": satir.kind,
+            "konu_turu": satir.subject_type,
+            "konu": satir.subject_id,
+            "metin": satir.message,
+            "atif": _uyum_atfi(satir.rule_id, donem),
+            "gerekceli": satir.justification_group_id is not None,
+            # Sayaç satırının beyan alanı (ekran beyan tablosunda "Bilinmiyor"u gösterir); öteki satırda boş.
+            "sayac_alani": _SAYAC_ALANLARI.get(satir.rule_id, ""),
+        }
+        for satir in satirlar
+    ]
+
+
+def _gorev_suresi(donem: Any) -> list[dict[str, Any]]:
+    """Görev süresi uyarıları (kaydedilmez; md. 12/2, 14/2). Paket ya da kopya okunamazsa boş."""
+    try:
+        return [_kadro_satiri(sonuc) for sonuc in gecis.gorev_suresi_uyarilari(donem)]
+    except KuralPaketiKullanilamaz:
+        return []
+
+
+class TransitionView(APIView):
+    """Geçiş kurulumunun durumu: açık adımlar, geçiş dönemi, karar defteri, uyum satırları.
+
+    Kişisizdir (adlar üyelik ve kişi uçlarından okunur). Görev süresi uyarısı ve uyum satırları
+    yalnız geçiş dönemi açıkken hesaplanır.
+    """
+
+    def get(self, request: Request) -> Response:
+        donem = gecis.gecis_donemi()
+        defter = _karar_defteri()
+        acik = donem is not None and donem.status == TermStatus.ACIK
+        return Response(
+            {
+                **gecis.yol_haritasi_durumu(),
+                "donem": None if donem is None else OabTermSerializer(donem).data,
+                "karar_defteri": None if defter is None else KararDefteriSerializer(defter).data,
+                "gorev_suresi_uyarilari": _gorev_suresi(donem) if acik else [],
+                "uyum_satirlari": _gecis_uyum_satirlari(donem) if acik else [],
+            }
+        )
+
+
+class TransitionInheritedView(APIView):
+    """Görevdeki kurulun üyesi ya da temsilci (`DEVRALINAN`; §7.9 adım 2). Koltuk uygunluğu serttir."""
+
+    permission_classes = [RequiresAdminPassword]
+
+    def post(self, request: Request) -> Response:
+        govde = DevralinanSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        veri = dict(govde.validated_data)
+        gerekce = _gerekce(veri)
+        organ = veri.pop("organ")
+        temsil = veri.pop("representation")
+        if organ == OrganType.TEMSILCI and not temsil:
+            raise serializers.ValidationError({"representation": [TEMSIL_GEREKLI]})
+        with _hizmet_hatalari():
+            if organ == OrganType.TEMSILCI:
+                uyelik = gecis.devralinan_temsilci_ekle(
+                    person=veri["person"],
+                    representation=temsil,
+                    seat_type=veri["seat_type"],
+                    start_date=veri.get("start_date"),
+                    evidence_note=veri["evidence_note"],
+                    gerekce=gerekce,
+                )
+            else:
+                uyelik = gecis.devralinan_ekle(organ=organ, **veri, gerekce=gerekce)
+        return Response(
+            OrganMembershipSerializer(selectors.membership_all().get(pk=uyelik.pk)).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class TransitionElectionCountsView(APIView):
+    """Programdan önceki seçilme sayılarının toplu beyanı (§7.9 adım 3); "bilinmiyor" tek gerekçeyle."""
+
+    permission_classes = [RequiresAdminPassword]
+
+    def post(self, request: Request) -> Response:
+        govde = SayacBeyaniSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        veri = govde.validated_data
+        beyanlar = [
+            gecis.SayacBeyani(
+                kisi=satir["person"],
+                yk=satir.get("yk", gecis.YOK),
+                dk_baskanlik=satir.get("dk_baskanlik", gecis.YOK),
+            )
+            for satir in veri["beyanlar"]
+        ]
+        with _hizmet_hatalari():
+            sonuc = gecis.sayac_beyani(
+                beyanlar,
+                gerekce=veri["gerekce"],
+                duzeltme_gerekcesi=veri["duzeltme_gerekcesi"],
+            )
+        kimlikler = [beyan.kisi.pk for beyan in beyanlar]
+        return Response(
+            {
+                "kisiler": OabPersonSerializer(
+                    selectors.person_all().filter(pk__in=kimlikler), many=True
+                ).data,
+                "bilinmeyen_sayisi": len(sonuc.bilinmeyenler),
+            }
+        )
+
+
+class TransitionDecisionBookView(APIView):
+    """Karar defterinin geçiş kaydı (§7.9 adım 4): son sıra no ve sayfa; tasdik yoksa gerekçe."""
+
+    def post(self, request: Request) -> Response:
+        govde = KararDefteriGecisSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        with _hizmet_hatalari():
+            defter = gecis.karar_defteri_kaydet(**dict(govde.validated_data))
+        return Response(KararDefteriSerializer(defter).data, status=status.HTTP_201_CREATED)
+
+
+class TransitionDecisionBookCancelView(APIView):
+    """Yanlış girilmiş karar defteri kaydının iptali (gerekçe şifreli; açık tasdik satırı kapanır)."""
+
+    def post(self, request: Request, pk: int) -> Response:
+        defter = get_object_or_404(OfficialBook.objects.filter(kind=BookKind.KARAR_DEFTERI), pk=pk)
+        govde = IptalSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        with _hizmet_hatalari():
+            defter = gecis.karar_defterini_iptal_et(
+                defter, cancel_reason=govde.validated_data["cancel_reason"]
+            )
+        return Response(KararDefteriSerializer(defter).data)
+
+
+class TransitionCompleteView(APIView):
+    """ "Geçiş kurulumu tamamlandı" işareti: geçiş kayıtları kilitlenir (sonra 409 `gecis_kapali`)."""
+
+    def post(self, request: Request) -> Response:
+        with _hizmet_hatalari():
+            donem = gecis.gecisi_tamamla()
+        return Response(OabTermSerializer(donem).data)
+
+
+# ---------------------------------------------------------------------------
+# Gerekçe kutusunun yarım metni (tasarım §7 "Yarım kalan metin"; plan F1c 3. adım notları "yarım metin
+# kaydının ucu 11. adımda"). Oturumdaki hesabın tek, şifreli kaydıdır; ekran yazarken kısa aralıklarla
+# yazar, kayıt yapılınca ya da vazgeçilince siler. Denetim izine satır yazmaz (`yarim_metin`). Panodaki
+# "yarım kalan taslak" kalemi F1c'nin 12. adımındadır.
+# ---------------------------------------------------------------------------
+class DraftTextView(APIView):
+    """Oturumdaki hesabın yarım metni: okuma, yazma (boş metin siler) ve bağlama göre silme."""
+
+    def get(self, request: Request) -> Response:
+        kayit = yarim_metin.oku()
+        if kayit is None or not isinstance(kayit.text, str):
+            return Response(status=status.HTTP_204_NO_CONTENT)  # yarım metin yok
+        return Response(
+            {
+                "metin": kayit.text,
+                "baglam": kayit.context,
+                "guncelleme": kayit.updated_at.isoformat(),
+            }
+        )
+
+    def put(self, request: Request) -> Response:
+        govde = YarimMetinSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        yarim_metin.kaydet(govde.validated_data["metin"], baglam=govde.validated_data["baglam"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def delete(self, request: Request) -> Response:
+        # `?baglam=` (kişisiz kutu adı, ör. `gecis.karar_defteri`): yalnız o kutunun metni silinir.
+        yarim_metin.temizle(str(request.query_params.get("baglam", "")))
+        return Response(status=status.HTTP_204_NO_CONTENT)

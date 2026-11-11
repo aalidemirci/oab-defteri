@@ -104,6 +104,8 @@ def test_oturum_ozetinin_anahtarlari_sabittir(client: APIClient) -> None:
         # Ön yüz süzmesinin tek kaynağı (plan F1b-2; `rol_izinleri.YETENEKLER`).
         "yetenekler": [
             "ayrilis_havuzu",
+            "birlik_donemi_yazma",
+            "birlik_kisi_yazma",
             "bosta_sure_yazma",
             "butunluk_denetim",
             "ders_yili_yazma",
@@ -113,11 +115,14 @@ def test_oturum_ozetinin_anahtarlari_sabittir(client: APIClient) -> None:
             "guvenlik",
             "iki_depo",
             "kapali_gun_yazma",
+            "karar_taslagi_uretme",
             "kisi_yazma",
             "kullanicilar",
             "kurulum_tamamlama",
             "okul_karti_yazma",
+            "organ_yazma",
             "son_oturum_onay",
+            "temsilci_yazma",
             "veli_listesi",
             "yol_haritasi",
         ],

@@ -8,6 +8,7 @@ from rest_framework import serializers
 
 from apps.oab.models import (
     BoardDecision,
+    BookCertifier,
     DropKind,
     ElectedBy,
     EligibilityBar,
@@ -16,6 +17,7 @@ from apps.oab.models import (
     MembershipRole,
     OabPerson,
     OabTerm,
+    OfficialBook,
     OrganMembership,
     OrganType,
     PersonKind,
@@ -25,6 +27,7 @@ from apps.oab.models import (
     SeatType,
 )
 from apps.oab.models.kisi import KISI_ADI_MAX
+from apps.oab.models.kurul import KISA_METIN_MAX
 from apps.oab.models.uyelik import MEM_ONAY_NO_MAX
 from apps.oab.services import donem_kilidi
 from apps.okul.models import PARENT_NAME_MAX, Personnel, SchoolYear
@@ -49,6 +52,7 @@ class OabTermSerializer(serializers.ModelSerializer[OabTerm]):
             "status",
             "program_start_date",
             "opened_by_assembly",
+            "transition_completed_on",
             "kural_paketi",
             "kural_kopyasi_tutuyor",
         ]
@@ -408,3 +412,133 @@ class AlimKomisyonuCreateSerializer(serializers.Serializer[dict[str, Any]]):
     person = serializers.PrimaryKeyRelatedField(queryset=OabPerson.objects.all())
     expertise_required = serializers.BooleanField(required=False, default=False)
     start_date = _istege_bagli_gun()
+
+
+# ---------------------------------------------------------------------------
+# Geçiş kurulumu (tasarım §7.9 adım 1-4; plan F1c 8. adım, uçları ve ekranı 11. adımda)
+# ---------------------------------------------------------------------------
+#: Geçişte devralınan kaydın organları: yönetim kurulu, Denetleme Kurulu ve temsilciler.
+_DEVRALINAN_ORGANLAR = [
+    *_YAZILAN_ORGANLAR,
+    (OrganType.TEMSILCI.value, OrganType.TEMSILCI.label),
+]
+#: Yarım metnin bağlamının sınırı (`DraftText.context`).
+_YARIM_METIN_BAGLAMI_UST = 128
+#: Defterin programdan önceki son sıra no'su ve sayfasının üst sınırı (`PositiveIntegerField`).
+_DEFTER_UST = 2_147_483_647
+
+
+class DevralinanSerializer(_GerekceMixin):
+    """Görevdeki kurulun üyesi ya da birlik temsilcisi (`DEVRALINAN`; §7.9 adım 2)."""
+
+    organ = serializers.ChoiceField(choices=_DEVRALINAN_ORGANLAR)
+    person = serializers.PrimaryKeyRelatedField(queryset=OabPerson.objects.all())
+    seat_type = serializers.ChoiceField(
+        choices=SeatType.choices, required=False, default=SeatType.ASIL
+    )
+    seat_group = serializers.ChoiceField(
+        choices=SeatGroup.choices, required=False, allow_blank=True, default=""
+    )
+    role = serializers.ChoiceField(
+        choices=MembershipRole.choices, required=False, default=MembershipRole.UYE
+    )
+    elected_by = serializers.ChoiceField(
+        choices=ElectedBy.choices, required=False, default=ElectedBy.GENEL_KURUL
+    )
+    #: Yalnız temsilcide (organ `TEMSILCI`) zorunludur.
+    representation = serializers.ChoiceField(
+        choices=Representation.choices, required=False, allow_blank=True, default=""
+    )
+    start_date = _istege_bagli_gun()
+    seat_order = serializers.IntegerField(
+        min_value=1, max_value=_SIRA_UST, required=False, allow_null=True
+    )
+    evidence_note = serializers.CharField(
+        max_length=_NOT_UST, required=False, allow_blank=True, default=""
+    )
+    mem_approval_no = serializers.CharField(
+        max_length=MEM_ONAY_NO_MAX, required=False, allow_blank=True, default=""
+    )
+
+
+class SayacBeyaniSatiriSerializer(serializers.Serializer[dict[str, Any]]):
+    """Bir kişinin beyanı: alan verilmezse değişmez, `null` "bilinmiyor"dur, sayı karar defterindendir."""
+
+    person = serializers.PrimaryKeyRelatedField(queryset=OabPerson.objects.all())
+    yk = serializers.IntegerField(
+        min_value=0, max_value=_SAYAC_UST, required=False, allow_null=True
+    )
+    dk_baskanlik = serializers.IntegerField(
+        min_value=0, max_value=_SAYAC_UST, required=False, allow_null=True
+    )
+
+
+class SayacBeyaniSerializer(serializers.Serializer[dict[str, Any]]):
+    """Programdan önceki seçilme sayılarının toplu beyanı (§7.9 adım 3)."""
+
+    beyanlar = SayacBeyaniSatiriSerializer(many=True, allow_empty=False)
+    #: "Bilinmiyor" beyanının tek (toplu) gerekçesi.
+    gerekce = serializers.CharField(
+        max_length=_NOT_UST, required=False, allow_blank=True, default=""
+    )
+    #: Verilmiş beyanın düzeltme gerekçesi.
+    duzeltme_gerekcesi = serializers.CharField(
+        max_length=_NOT_UST, required=False, allow_blank=True, default=""
+    )
+
+
+def _defter_sayisi() -> serializers.IntegerField:
+    return serializers.IntegerField(
+        min_value=0, max_value=_DEFTER_UST, required=False, allow_null=True, default=None
+    )
+
+
+class KararDefteriGecisSerializer(serializers.Serializer[dict[str, Any]]):
+    """Karar defterinin geçiş kaydı (§7.9 adım 4): son sıra no ve sayfa, tasdik bilgisi, gerekçe."""
+
+    last_no_before_program = _defter_sayisi()
+    last_page_before_program = _defter_sayisi()
+    certified_by = serializers.ChoiceField(
+        choices=BookCertifier.choices, required=False, allow_blank=True, default=""
+    )
+    certified_on = _istege_bagli_gun()
+    certification_no = serializers.CharField(
+        max_length=KISA_METIN_MAX, required=False, allow_blank=True, default=""
+    )
+    page_count = serializers.IntegerField(
+        min_value=1, max_value=_DEFTER_UST, required=False, allow_null=True, default=None
+    )
+    opened_on = _istege_bagli_gun()
+    gerekce = serializers.CharField(
+        max_length=_NOT_UST, required=False, allow_blank=True, default=""
+    )
+
+
+class YarimMetinSerializer(serializers.Serializer[dict[str, Any]]):
+    """Gerekçe kutusunun yarım metni (tasarım §7 "Yarım kalan metin"); boş metin kaydı siler."""
+
+    metin = serializers.CharField(
+        max_length=_NOT_UST, allow_blank=True, trim_whitespace=False, required=True
+    )
+    baglam = serializers.CharField(
+        max_length=_YARIM_METIN_BAGLAMI_UST, required=False, allow_blank=True, default=""
+    )
+
+
+class KararDefteriSerializer(serializers.ModelSerializer[OfficialBook]):
+    """Karar defterinin geçiş kaydı (okuma); iptal gerekçesi dönmez (şifreli)."""
+
+    class Meta:
+        model = OfficialBook
+        fields = [
+            "id",
+            "status",
+            "certified_by",
+            "certified_on",
+            "certification_no",
+            "page_count",
+            "opened_on",
+            "last_no_before_program",
+            "last_page_before_program",
+        ]
+        read_only_fields = fields

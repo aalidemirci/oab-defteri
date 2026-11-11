@@ -65,6 +65,7 @@ const HEPSI_TAMAM: SetupStatus = {
     },
     hidden: false,
   },
+  transition_setup: { state: "TAMAMLANDI", open_steps: [] },
 };
 
 /** Dış yedek hatırlatmasının sunucu özeti (`GET backups/external/`): süre dolmamış, hiç kayıt yok. */
@@ -409,16 +410,16 @@ describe("Genel Bakış", () => {
 });
 
 describe("Başlangıç Yol Haritası", () => {
-  it("yeni kurulumda okul kartı tamam, öteki üç madde yapılacak; ilerleme 1/4", async () => {
+  it("yeni kurulumda okul kartı tamam, öteki dört madde yapılacak; ilerleme 1/5", async () => {
     bas();
 
     expect(
       await screen.findByRole("heading", { name: "Başlangıç Yol Haritası" }),
     ).toBeInTheDocument();
     const kart = yolHaritasi();
-    expect(within(kart).getAllByRole("listitem")).toHaveLength(4);
+    expect(within(kart).getAllByRole("listitem")).toHaveLength(5);
     expect(within(kart).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "1");
-    expect(within(kart).getByText(/4 maddeden 1 tanesi tamamlandı/)).toBeInTheDocument();
+    expect(within(kart).getByText(/5 maddeden 1 tanesi tamamlandı/)).toBeInTheDocument();
     expect(within(kart).queryByRole("button", { name: "Kartı gizle" })).toBeNull();
   });
 
@@ -435,7 +436,7 @@ describe("Başlangıç Yol Haritası", () => {
       "href",
       "/ayarlar?tab=okul",
     );
-    expect(within(yolHaritasi()).getByText(/4 maddeden 0 tanesi tamamlandı/)).toBeInTheDocument();
+    expect(within(yolHaritasi()).getByText(/5 maddeden 0 tanesi tamamlandı/)).toBeInTheDocument();
   });
 
   it("gizlenmiş kart görünmez; durum okunamazsa da sayfa çalışır", async () => {

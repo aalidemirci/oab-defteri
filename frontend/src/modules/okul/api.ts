@@ -105,6 +105,23 @@ export type SetupStep = "password" | "school" | "calendar";
 
 export const SETUP_STEPS: readonly SetupStep[] = ["password", "school", "calendar"];
 
+/**
+ * Sihirbazın bütün adımları — backend `WIZARD_STEPS` ile BİREBİR: zorunlu üç adım ve ATLANABİLİR
+ * Birlik Dönemi adımı (`STEP_BIRLIK_DONEMI`; geçiş kurulumunun ilk birlik dönemi, tasarım §7.9; plan F1c
+ * kararları "Geçiş adımı atlanabilir"). Atlanabilir adım kurulumun tamamlanma koşulu değildir
+ * (`missing_steps`'e girmez); eksik kalırsa yol haritasının `gecis_kurulumu` maddesinde görünür.
+ */
+export type WizardStep = SetupStep | "birlik_donemi";
+
+export const WIZARD_STEPS: readonly WizardStep[] = [...SETUP_STEPS, "birlik_donemi"];
+
+/** Geçiş kurulumunun durumu (`setup/status/` → `transition_setup`; kişisiz; backend `gecis`). */
+export interface TransitionSetupStatus {
+  state: "BASLAMADI" | "SURUYOR" | "TAMAMLANDI" | "GEREKMIYOR";
+  /** Açık adımların anahtarları, sırasıyla (`donem`, `kurul`, `sayac_beyani`, `karar_defteri`, `tamamla`). */
+  open_steps: string[];
+}
+
 /** Aktif ders yılının özeti (`setup/status/` içinde; kişisel veri yok). */
 export interface ActiveSchoolYearSummary {
   id: number;
@@ -158,6 +175,8 @@ export interface SetupStatus {
   /** Aktif ders yılıyla kesişen "öğrenciye kapalı gün" kaydı sayısı. */
   school_break_count: number;
   roadmap: RoadmapState;
+  /** Geçiş kurulumunun durumu; sağlayıcı kayıtlı değilse null. */
+  transition_setup: TransitionSetupStatus | null;
 }
 
 /** Okulun kademesi — backend `SchoolLevel` ile birebir (değer adları ve sıra). */

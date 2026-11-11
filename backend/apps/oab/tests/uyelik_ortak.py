@@ -44,11 +44,20 @@ _SIRA = itertools.count(1)
 _AD_HARFLERI = "ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ"
 
 
+#: Ekin sabit uzunluğu: 29**4 = 707281 kişi. Uzunluk süreç boyunca değişmez; böylece ad sırası oluşturma
+#: sırasıdır (değişken uzunlukta "Zz"den sonra gelen "Aaa" ada göre başa geçiyordu ve testlerin koşu
+#: sırasına göre kırılıyordu).
+_EK_UZUNLUGU = 4
+
+
 def _ad_eki() -> str:
-    """Adaşlık sorusu çıkmasın diye her kişiye ayrı harf dizisi (rakamsız; sıralama testleri için)."""
-    sayi, harfler = next(_SIRA), ""
-    while sayi:
-        sayi, kalan = divmod(sayi - 1, len(_AD_HARFLERI))
+    """Adaşlık sorusu çıkmasın diye her kişiye ayrı harf dizisi (rakamsız; sıralama testleri için).
+
+    Sabit uzunlukta, 29 tabanlı ve "A" dolguludur: ad sırası oluşturma sırasıyla hep aynıdır.
+    """
+    sayi, harfler = next(_SIRA) - 1, ""
+    for _ in range(_EK_UZUNLUGU):
+        sayi, kalan = divmod(sayi, len(_AD_HARFLERI))
         harfler = _AD_HARFLERI[kalan] + harfler
     return harfler
 

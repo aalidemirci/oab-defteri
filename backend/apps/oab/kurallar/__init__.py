@@ -17,6 +17,7 @@ from apps.oab.kurallar.erisim import (
 )
 from apps.oab.kurallar.hatalar import (
     BilinmeyenKural,
+    DonemKopyasiDogrulanamadi,
     KuralPaketiKullanilamaz,
     OlayTarihiGerekli,
     YururlukteDegerYok,
@@ -25,6 +26,7 @@ from apps.oab.kurallar.hatalar import (
 __all__ = [
     "VERI_YOK",
     "BilinmeyenKural",
+    "DonemKopyasiDogrulanamadi",
     "KuralPaketiKullanilamaz",
     "OlayTarihiGerekli",
     "YururlukteDegerYok",

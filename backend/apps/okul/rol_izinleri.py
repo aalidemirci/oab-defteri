@@ -432,6 +432,9 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _yaz("app-quit", "POST", Satir.KENDI),
     _yaz("security-lock", "POST", Satir.KENDI),
     _yaz("security-change-password", "POST", Satir.KENDI),
+    # Gerekçe kutusunun yarım metni: oturumdaki hesabın kendi kaydı (F1c 11. adım; tasarım §7).
+    _oku("oab-draft-text", Satir.KENDI),
+    _yaz("oab-draft-text", ("PUT", "DELETE"), Satir.KENDI),
     # Oturumdaki hesabın kendi kartları: son girişler, parola yenilenme, kâğıt çapası.
     _oku("security-integrity", Satir.KENDI),
     # Oturumdaki hesabın parola yenilenme bildirimi ve "Gördüm"ü.
@@ -478,6 +481,17 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _oku("oab-term-list", Satir.M1),
     _yaz("oab-term-list", "POST", Satir.M1),
     _oku("oab-term-detail", Satir.M1),
+    # Geçiş kurulumu (tasarım §7.9 adım 1-4, "Kim: yonetici"; F1c 8. adımın servisleri, uçları 11. adımda):
+    # durum okuması, dönem iptali, devralınan kurul ve temsilci, seçilme sayısı beyanı, karar defteri
+    # ve iptali, "Geçiş kurulumu tamamlandı" işareti. Devralınan üyeliğin iptali M2'nin genel iptal
+    # ucundadır, servis yalnız program yöneticisine açar (`Eylem.BIRLIK_DONEMI_YAZMA`).
+    _oku("oab-transition", Satir.M1),
+    _yaz("oab-term-cancel", "POST", Satir.M1),
+    _yaz("oab-transition-inherited", "POST", Satir.M1),
+    _yaz("oab-transition-election-counts", "POST", Satir.M1),
+    _yaz("oab-transition-decision-book", "POST", Satir.M1),
+    _yaz("oab-transition-decision-book-cancel", "POST", Satir.M1),
+    _yaz("oab-transition-complete", "POST", Satir.M1),
     _yaz("setup-complete", "POST", Satir.M1),
     # Genel Bakış'ın "Başlangıç Yol Haritası" işaretleri (plan F1b-2: M1).
     _yaz("setup-roadmap", "POST", Satir.M1),
@@ -894,6 +908,43 @@ YETENEKLER: Final[Mapping[str, frozenset[tuple[str, str]]]] = {
         ("import-parents-preview", "POST"),
         ("import-parents-commit", "POST"),
         ("template-parents", "GET"),
+    ),
+    # F1c (plan F1c-11): Birlik Dönemi ve geçiş kurulumu (M1; program yöneticisi).
+    "birlik_donemi_yazma": _ciftler(
+        ("oab-term-list", "POST"),
+        ("oab-term-cancel", "POST"),
+        ("oab-transition-inherited", "POST"),
+        ("oab-transition-election-counts", "POST"),
+        ("oab-transition-decision-book", "POST"),
+        ("oab-transition-decision-book-cancel", "POST"),
+        ("oab-transition-complete", "POST"),
+    ),
+    # Kişiler → Birlik Kişileri: elle kayıt, düzenleme ve personelden ekleme (M2; program yöneticisi ve
+    # yönetim kurulu). Veli listesinden ekleme ayrıca `veli_listesi` ister (yalnız program yöneticisi).
+    "birlik_kisi_yazma": _ciftler(
+        ("oab-person-list", "POST"),
+        ("oab-person-detail", "PATCH"),
+        ("oab-person-from-personnel", "POST"),
+    ),
+    # Organlar: üyelik kaydı, ayrıntısı, iptali ve alım komisyonu (M2).
+    "organ_yazma": _ciftler(
+        ("oab-membership-list", "POST"),
+        ("oab-membership-detail", "PATCH"),
+        ("oab-membership-cancel", "POST"),
+        ("oab-purchase-committee-list", "POST"),
+    ),
+    # Temsilciler: temsilci kaydı (M2).
+    "temsilci_yazma": _ciftler(("oab-representative-list", "POST")),
+    # Yönetim kurulunun görev bölümü ve yedek çağrısı (tasarım §7.2 "Kim": sekreter).
+    "gorev_bolumu_yazma": _ciftler(
+        ("oab-yk-duty-assignment", "POST"), ("oab-membership-substitute-call-yk", "POST")
+    ),
+    # E01 ve E03 karar taslağı ve çizelgesinin üretimi (tasarım §9.6 "Üreten": sekreter, program
+    # yöneticisi).
+    "karar_taslagi_uretme": _ciftler(("oab-document-e01", "POST"), ("oab-document-e03", "POST")),
+    # Denetleme Kurulunun görev bölümü ve E02 (M8 ⁵; yalnız Denetleme Kurulu).
+    "dk_gorev_bolumu_yazma": _ciftler(
+        ("oab-dk-duty-assignment", "POST"), ("oab-document-e02", "POST")
     ),
 }
 

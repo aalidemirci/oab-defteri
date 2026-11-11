@@ -74,6 +74,10 @@ KISI_YAZAN_UCLAR = frozenset(
         "oab-document-e01",
         "oab-document-e02",
         "oab-document-e03",
+        # F1c 11. adım: geçiş kurulumunun devralınan kurul ve temsilci kaydı (üyelik, şifreli kanıt
+        # notu) ve programdan önceki seçilme sayılarının beyanı (kişi kaydının sayaç alanları).
+        "oab-transition-inherited",
+        "oab-transition-election-counts",
     }
 )
 
@@ -153,6 +157,16 @@ DIGER_UCLAR = frozenset(
         # Birlik dönemi (F1c-3): kişi verisi yazmaz, kapı `Eylem.BIRLIK_DONEMI_YAZMA`.
         "oab-term-detail",
         "oab-term-list",
+        # Geçiş kurulumu (F1c 11. adım): durum okuması (kişisiz), dönem ve karar defteri kaydının
+        # iptali (şifreli gerekçe, kişi yazmaz), karar defteri ve "Geçiş kurulumu tamamlandı" işareti.
+        # Kapı `Eylem.BIRLIK_DONEMI_YAZMA`; şifreli gerekçe anahtarsız yazılmaz.
+        "oab-term-cancel",
+        "oab-transition",
+        # Gerekçe kutusunun yarım metni (hesabın kendi şifreli kaydı; kişi sicili yazmaz).
+        "oab-draft-text",
+        "oab-transition-decision-book",
+        "oab-transition-decision-book-cancel",
+        "oab-transition-complete",
         "setup-complete",
         "setup-roadmap",
         "setup-school-config",
@@ -252,10 +266,12 @@ def test_parolasizken_kisi_yazan_her_uc_yazma_yontemiyle_409_doner(parolasiz: Pa
     # + F1c 6. adım: iki görev bölümü, iki yedek çağrısı, düşme, iptal (POST), engel (PUT),
     # temsilci ve alım komisyonu (POST).
     # + F1c 10. adım: E01, E02, E03 üretimi (POST).
+    # + F1c 11. adım: geçişte devralınan kayıt ve seçilme sayısı beyanı (POST).
     # Aile iskeletinin kütüphane uçları (üyelik, kart basımı, dolaşım masası,
     # teslim, saklama tetiği) F1a-2'de, öğrenci uçları F1b 5. adımda söküldü.
     assert (
-        denenen == 1 + 1 * 3 + 2 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 2 + 2 + 1 + 1 + 1 + 2 + 3
+        denenen
+        == 1 + 1 * 3 + 2 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 2 + 2 + 1 + 1 + 1 + 2 + 3 + 2
     )
     assert not Personnel.all_objects.exists()
     assert not ParentRoster.objects.exists()
