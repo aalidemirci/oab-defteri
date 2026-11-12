@@ -68,10 +68,19 @@ SEÇİLME SAYACI (md. 12/4 "en fazla dört defa seçilebilir", md. 14/3 "üç de
 yönetim kurulunda başkan ve üyeler TEK sayaçtır, asıl ve yedek her seçilme sayılır; Denetleme
 Kurulunda yalnız başkanlık sayılır. Sayaç = programın kayıtları (`SECILDI` ve `DUSTU`; `ADAY` ve
 `IPTAL` hariç; `source = PROGRAM`; iptal edilmiş dönemin kayıtları hariç: iptal edilen dönem hiç
-olmamıştır) + kişinin `external_*` beyanı. `DEVRALINAN` kayıt sayaç dışıdır:
-beyan görevdeki seçimi içerir (plan F1c kararları). Beyan "bilinmiyor"sa (`None`) sayaç EKSİK'tir,
+olmamıştır) + kişinin `external_*` beyanı. `DEVRALINAN` kayıt sayıma girmez: beyan görevdeki
+seçimi içerir (plan F1c kararları; çift sayılmaz). Beyan "bilinmiyor"sa (`None`) sayaç EKSİK'tir,
 engel değildir (R5); bilinen kayıtlar sınırı zaten aşıyorsa uyarıdır. Sınırın üstündeki seçim uyarı +
 gerekçedir. Yönetim kurulunda denetim programda yapılan seçilmede koşar (`SECILDI` + `PROGRAM`).
+Devralınan kaydın beyanı sınırla karşılaştırılır (kullanıcı kararı 12.11.2026; `_devralinan_beyani`):
+geçişin sayaç beyanında (`sayaci_yeniden_denetle`) görevdeki devralınan yönetim kurulu üyesinin
+(asıl ve yedek) ve görevdeki devralınan Denetleme Kurulu başkanının sayacı (program kayıtları + beyan)
+denetlenir; sınırı aşarsa uyarı + gerekçe, içindeyse açık satır kapanır. Beyan "bilinmiyor"sa satır
+açılmaz: bilinmeyen beyan kişinin toplu gerekçeli satırıdır (`gecis._kisinin_beyani`). Devralınan
+üyeliğin ilk girişinde (`assign_membership`) beyan henüz yoksa satır açılmaz; beyan verilmişse aynı
+denetim koşar (düzeltme yolu iptal + yeniden giriştir: uyarı yeni kayıtta da durur, iptal edilen
+kaydın açık sayaç satırı kapanır, `devralinan_sayac_satirlarini_kapat`). Düşmüş devralınan kayıtta
+yalnız açık sayaç satırı beyan yolunda yeniden denetlenir.
 Denetleme Kurulu başkanını seçim değil görev bölümü belirler (md. 14/1): başkanlık sayacı seçim anında
 koşmaz, görev bölümünde koşar (`dk_baskanlik_denetimi`; çağıran yol 6. adımın DK görev bölümüdür, M8).
 Her görev bölümündeki başkan seçimi bir seçilmedir (kullanıcı kararı 10.11.2026; `dk_baskanlik_sayisi`).
@@ -431,6 +440,8 @@ class _Denetim:
         self.tarih = _olay_gunu(uyelik)
         self.hazirlik = uyelik.elected_by == ElectedBy.GENEL_KURUL
         self.sonuclar: dict[str, DenetimSonucu] = {}
+        #: Bu turda denetlenmeden kapatılan satırların kuralları (özetten de düşer).
+        self.kapananlar: set[str] = set()
 
     def kaydet(self, kural_id: str, sonuc: uyum.UyumSonucu) -> None:
         self.sonuclar[kural_id] = sonuc.sonuc
@@ -445,8 +456,13 @@ class _Denetim:
         }
 
     def ozet(self, onceki: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Bu turda denetlenen kuralların eski satırları atılır, eksik ve uyarı olanlar eklenir."""
-        kalan = [satir for satir in onceki if satir.get("kural") not in self.sonuclar]
+        """Bu turda denetlenen ya da satırı kapatılan kuralların eski satırları atılır, eksik ve uyarı
+        olanlar eklenir."""
+        kalan = [
+            satir
+            for satir in onceki
+            if satir.get("kural") not in self.sonuclar and satir.get("kural") not in self.kapananlar
+        ]
         yeni = [
             _uyari_ozeti(kural_id, sonuc)
             for kural_id, sonuc in self.sonuclar.items()
@@ -523,7 +539,8 @@ def _secilme_siniri(d: _Denetim) -> None:
     """Programda yapılan yönetim kurulu seçilmesinin sayacı (modül başlığı "Seçilme sayacı").
 
     Denetleme Kurulunda seçim sayaca girmez: sayılan başkanlıktır, başkanı görev bölümü belirler
-    (`_dk_baskanlik_siniri`).
+    (`_dk_baskanlik_siniri`). Devralınan kayıt burada denetlenmez (sayıma girmez); beyanı sınırla
+    karşılaştırılır (`_devralinan_beyani`).
     """
     uyelik = d.uyelik
     if uyelik.status != MembershipStatus.SECILDI or uyelik.source != MembershipSource.PROGRAM:
@@ -601,6 +618,69 @@ def _dk_baskanlik_siniri(d: _Denetim) -> None:
         _dk_sayac_denetimi(d)
 
 
+def _devralinan_sayac_kurali(uyelik: OrganMembership) -> str | None:
+    """Devralınan kaydın beyanının karşılaştırıldığı sayaç kuralı (`_devralinan_beyani`): yönetim
+    kurulunda her kayıt (asıl ve yedek; md. 12/4), Denetleme Kurulunda yalnız asıl başkan (md. 14/3;
+    görevdeki kayıtta asıl koltukta olmalı, düşmüş kayıtta başkanlığı yeter). Öteki kayıtta `None`."""
+    if uyelik.organ == OrganType.YONETIM_KURULU:
+        return "yonetim_kurulu.secilme_siniri"
+    if uyelik.organ == OrganType.DENETLEME_KURULU and uyelik.role == MembershipRole.BASKAN:
+        if uyelik.status != MembershipStatus.SECILDI or selectors.gorevdeki_asil_mi(uyelik):
+            return "denetleme_kurulu.baskan_secilme_siniri"
+    return None
+
+
+def _devralinan_beyani(d: _Denetim) -> None:
+    """Devralınan üyenin beyanı sınırla karşılaştırılır (modül başlığı "Seçilme sayacı"; kullanıcı
+    kararı 12.11.2026): geçişin sayaç beyanında (`sayaci_yeniden_denetle`) ve beyan verilmişse
+    devralınan üyeliğin ilk girişinde (`assign_membership`; düzeltme yolu iptal + yeniden giriştir,
+    uyarı yeni kayıtta da durmalı).
+
+    Devralınan kayıt sayıma girmez, beyan görevdeki seçimi içerir: gözlenen `secilme_sayaci`dır
+    (program kayıtları + beyan). Denetlenen kayıt `_devralinan_sayac_kurali`dır. Sınırı aşarsa
+    uyarı + gerekçe, içindeyse açık satır kapanır. Beyan "bilinmiyor"sa satır açılmaz (kişinin toplu
+    gerekçeli satırı yeter; çift satır doğmaz), önceki sayıyla açılmış satır kapanır: sınır artık
+    denetlenemiyor. Düşmüş kayıtta (`DUSTU`) yalnız açık satır yeniden denetlenir, yeni satır açılmaz
+    (program kaydının `_dusmus_sayaci` karşılığı).
+    """
+    uyelik = d.uyelik
+    if uyelik.source != MembershipSource.DEVRALINAN or uyelik.status not in (
+        MembershipStatus.SECILDI,
+        MembershipStatus.DUSTU,
+    ):
+        return
+    kural_id = _devralinan_sayac_kurali(uyelik)
+    if kural_id is None:
+        return
+    acik = _acik_satiri_var(uyelik, kural_id)
+    if uyelik.status == MembershipStatus.DUSTU and not acik:
+        return
+    if kural_id == "yonetim_kurulu.secilme_siniri":
+        gozlenen = secilme_sayaci(uyelik.person, OrganType.YONETIM_KURULU)
+        if gozlenen is not None:
+            d.kaydet(kural_id, uyum.denetle("yonetim_kurulu.secilme_siniri", gozlenen, **d.ortak()))
+    else:
+        gozlenen = secilme_sayaci(uyelik.person, OrganType.DENETLEME_KURULU)
+        if gozlenen is not None:
+            d.kaydet(
+                kural_id,
+                uyum.denetle("denetleme_kurulu.baskan_secilme_siniri", gozlenen, **d.ortak()),
+            )
+    if gozlenen is None and acik:
+        uyum.acik_satiri_kapat(kural_id, donem=d.donem, konu=uyelik)
+        d.kapananlar.add(kural_id)
+
+
+def devralinan_sayac_satirlarini_kapat(uyelik: OrganMembership) -> None:
+    """İptal edilen devralınan kaydın açık sayaç satırını kapatır (`uyelik_gecisleri.uyeligi_iptal_et`):
+    iptal edilen kayıt yanlış girilmiştir, beyanın uyarısı yeniden girilen kayıtta durur
+    (`_devralinan_beyani`); geçiş ekranının uyum listesinde eski kaydın satırı kalmaz."""
+    if uyelik.source != MembershipSource.DEVRALINAN:
+        return
+    for kural_id in ("yonetim_kurulu.secilme_siniri", "denetleme_kurulu.baskan_secilme_siniri"):
+        uyum.acik_satiri_kapat(kural_id, donem=uyelik.term, konu=uyelik)
+
+
 #: Görev alma engelinin hüküm olduğu organlar (dayanak → organlar): suç engeli yönetim kurulu, alım
 #: (harcama) komisyonu (md. 12/5) ve Denetleme Kurulu (md. 14/7); başka birlik yönetimi engeli yalnız
 #: yönetim kurulu (md. 12/4 2. cümle).
@@ -645,6 +725,7 @@ def _denetle_ve_ozetle(d: _Denetim, *, secim: bool = False) -> None:
     _koltuk_denetimleri(d)
     _gorev_tekilligi(d)
     _secilme_siniri(d)
+    _devralinan_beyani(d)
     if secim:
         _engel_denetimi(d)
     uyelik = d.uyelik
@@ -714,10 +795,13 @@ def sayaci_yeniden_denetle(
     (geçiş kurulumunun 3. adımı, tasarım §7.9; `gecis.sayac_beyani`).
 
     Yönetim kurulunda programda yapılan seçilme, Denetleme Kurulunda görevdeki program başkanı
-    denetlenir (`_secilme_siniri`, `_dk_baskanlik_siniri`; devralınan kayıt sayaç dışıdır); düşmüş
-    program kaydında yalnız açık sayaç satırı yeniden denetlenir (`_dusmus_sayaci`). Uygunsa
-    açık eksik satırı kapanır, uyarıysa gerekçe ister; sonuçlar döner (beyan hâlâ "bilinmiyor"sa
-    `eksik`, çağıran toplu gerekçeyi bağlar). Özet değişirse iz satırı yazılır.
+    denetlenir (`_secilme_siniri`, `_dk_baskanlik_siniri`); düşmüş program kaydında yalnız açık sayaç
+    satırı yeniden denetlenir (`_dusmus_sayaci`). Devralınan kayıt sayıma girmez; beyanı sınırla
+    karşılaştırılır (`_devralinan_beyani`: görevdeki yönetim kurulu üyesi ve Denetleme Kurulu
+    başkanı, düşmüş devralınan kayıtta yalnız açık satır; beyan "bilinmiyor"sa satır açmaz). Uygunsa
+    açık satır kapanır, uyarıysa gerekçe ister;
+    sonuçlar döner (program kaydında beyan hâlâ "bilinmiyor"sa `eksik`, çağıran toplu gerekçeyi
+    bağlar). Özet değişirse iz satırı yazılır.
     """
     yazma_kapisi()
     guncel = _guncel(uyelik)
@@ -726,6 +810,7 @@ def sayaci_yeniden_denetle(
     _secilme_siniri(d)
     _dk_baskanlik_siniri(d)
     _dusmus_sayaci(d)
+    _devralinan_beyani(d)
     ozet = d.ozet(list(guncel.rule_warnings or []))
     if ozet != (guncel.rule_warnings or []):
         guncel.rule_warnings = ozet

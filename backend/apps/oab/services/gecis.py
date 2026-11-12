@@ -25,9 +25,12 @@ ADIMLAR:
    beyan; her alanda sayı ya da "bilinmiyor" (`None`). "Bilinmiyor" denen her kişi ve kural için uyum
    satırı `SAPMA` olur ve hepsi TEK gerekçeye bağlanır (kök neden `sayac_kok_nedeni`; R5, O3): sonraki
    beyanlarda ve F2'nin seçimlerinde aynı kök nedenle yeniden sorulmaz. Beyan görevdeki seçimi içerir,
-   `DEVRALINAN` üyelik sayaca ayrıca girmez. Sayı girilince kişinin açık satırı kapanır; dönemin
-   üyeliklerindeki açık sayaç satırları yeniden denetlenir: uygunsa kapanır, sınır aşılıyorsa uyarı +
-   gerekçe, bilinmiyorsa toplu gerekçeye bağlanır.
+   `DEVRALINAN` üyelik sayıma ayrıca girmez; beyanın kendisi sınırla karşılaştırılır (kullanıcı
+   kararı 12.11.2026): görevdeki devralınan yönetim kurulu üyesinde md. 12/4, Denetleme Kurulu
+   başkanında md. 14/3 sınırı aşılırsa üyelikte uyarı + gerekçe (`uyelikler.sayaci_yeniden_denetle`).
+   Sayı girilince kişinin açık satırı kapanır; dönemin üyeliklerindeki sayaç denetimi yeniden koşar:
+   uygunsa açık satır kapanır, sınır aşılıyorsa uyarı + gerekçe, program kaydında beyan bilinmiyorsa
+   açık eksik satırı toplu gerekçeye bağlanır (devralınan kayıtta "bilinmiyor" satır açmaz).
 4. **Karar defteri** (`karar_defteri_kaydet`): programdan önceki son sıra no ve sayfa zorunludur; tasdik
    kuralla denetlenir (`kurullar.tasdik_denetimi`, `yonetim_kurulu.karar_defteri_noter_tasdiki`,
    md. 23/2; plan F1c 8. adım notları): tasdik bilgisi (makam ve gün) yoksa ya da makam noter değilse
@@ -495,8 +498,10 @@ def _uyelikleri_yeniden_denetle(
 ) -> None:
     """Dönemin seçilmiş ve düşmüş üyeliklerinde sayaç denetimi yeniden koşar (modül başlığı, adım 3;
     düşmüş kayıtta yalnız açık sayaç satırı, `uyelikler.sayaci_yeniden_denetle`): uygunsa açık satır
-    kapanır, sınır aşılıyorsa uyarı + gerekçe (beyanın gerekçesi, kök nedensiz: kişiye özgüdür), beyan
-    "bilinmiyor"sa açık eksik satırı toplu gerekçeye bağlanır."""
+    kapanır, sınır aşılıyorsa uyarı + gerekçe (beyanın gerekçesi, kök nedensiz: kişiye özgüdür; gerekçe
+    yoksa `GerekceGerekli`, beyan geri alınır), program kaydında beyan "bilinmiyor"sa açık eksik satırı
+    toplu gerekçeye bağlanır. Görevdeki devralınan kayıt sayıma girmez, beyanı sınırla karşılaştırılır;
+    "bilinmiyor" beyanında satır açılmaz (kişinin satırı yeter)."""
     uyelikler_ = OrganMembership.objects.filter(
         term=donem,
         person=kisi,
