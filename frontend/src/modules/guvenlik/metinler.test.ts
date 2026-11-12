@@ -75,6 +75,22 @@ describe("güvenlik metinleri", () => {
     expect(`${oturum} ${iz}`).not.toMatch(/çapa|tohum|sarmal|mühür|HMAC/i);
   });
 
+  it("dürüst sınır: parola değişimi eski parolayı yalnız program içinde geçersiz kılar", () => {
+    // Tasarım §4.4.6 madde 7; sekizinci kart.
+    expect(metinler.DURUST_SINIRLAR).toHaveLength(8);
+    const metin =
+      metinler.DURUST_SINIRLAR.find(
+        (s) =>
+          s.baslik ===
+          "Parola değişimi eski parolayı program içinde geçersiz kılar, program dışında kılmaz.",
+      )?.metin ?? "";
+    expect(metin).toMatch(/eski parola kaydı, arşivdeki kopyası dahil,\s+programda giriş açmaz/);
+    expect(metin).toMatch(/yazımın yarıda kaldığı ve kayıtların program dışından/);
+    expect(metin).toMatch(/programın dışında yine açabilir/);
+    // Sözlüğün sözü "parola kaydı"dır; sonraki fazın anahtar yenilemesi vaat edilmez.
+    expect(metin).not.toMatch(/sarmal|yenileme/i);
+  });
+
   it("dürüst sınırlar iç kod taşımaz, yalnız bugün olanı söyler", () => {
     const metin = metinler.DURUST_SINIRLAR.map((s) => `${s.baslik} ${s.metin}`).join("\n");
     // Sözlük §2: karar, faz, denetim kodları yüzeye çıkmaz.

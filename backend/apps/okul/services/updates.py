@@ -63,9 +63,10 @@ CACHE_SECONDS = 15 * 60
 
 #: Paketlerin elle indirildiği alan — program bu adrese istek ATMAZ, yalnız iletide anar.
 INDIRME_ALANI = "indir.okulapp.org"
-#: Denetim GitHub'a ulaşamadığında (aile iskeletinin 27.09.2026 kullanıcı kararı, metin birebir).
+#: Denetim sunucuya ulaşamadığında (aile iskeletinin 27.09.2026 kullanıcı kararı; hizmetin adı
+#: iletide geçmez, sözlük §1 "Sürüm" ve §4.7). Ön yüzdeki `ULASILAMADI_METNI` ile birebir.
 ULASILAMADI_MESAJI = (
-    "GitHub'a ulaşılamadı; okul ağında engellenmiş olabilir. Yeni sürümü "
+    "Güncelleme sunucusuna ulaşılamadı; okul ağında engellenmiş olabilir. Yeni sürümü "
     f"{INDIRME_ALANI}'dan elle denetleyebilirsiniz."
 )
 
@@ -73,8 +74,9 @@ ULASILAMADI_MESAJI = (
 #: nedeni yanlış tarih/saat (sahada saat ileri alınmış deneme bilgisayarı) ya da güvenli
 #: bağlantıları araya girerek denetleyen bir okul ağıdır. Program doğrulamayı GEVŞETMEZ.
 SERTIFIKA_MESAJI = (
-    "GitHub ile güvenli bağlantı doğrulanamadı. Bilgisayarın tarihi ve saati yanlışsa "
-    "düzeltip yeniden deneyin; doğruysa okul ağı güvenli bağlantıları denetliyor olabilir. "
+    "Güncelleme sunucusuyla güvenli bağlantı doğrulanamadı. Bilgisayarın tarihi ve saati "
+    "yanlışsa düzeltip yeniden deneyin; doğruysa okul ağı güvenli bağlantıları denetliyor "
+    "olabilir. "
     f"Yeni sürümü {INDIRME_ALANI}'dan elle denetleyebilirsiniz."
 )
 
@@ -215,15 +217,15 @@ def _read_url(url: str, *, max_bytes: int) -> bytes:
             return b"".join(chunks)
     except HTTPError as exc:
         if exc.code == 404:
-            raise ReleaseNotFoundError("GitHub'da henüz yayımlanmış bir sürüm bulunmuyor.") from exc
+            raise ReleaseNotFoundError("Henüz yayımlanmış bir sürüm bulunmuyor.") from exc
         if exc.code in {403, 429}:
             # 403 GitHub'ın hız sınırı da olabilir, okul ağının engeli de: ikisi söylenir.
             raise UpdateError(
-                "GitHub güncelleme denetimi geçici olarak sınırlandı ya da okul ağında "
+                "Güncelleme denetimi geçici olarak sınırlandı ya da okul ağında "
                 "engellendi. Daha sonra yeniden deneyin ya da yeni sürümü "
                 f"{INDIRME_ALANI}'dan elle denetleyin."
             ) from exc
-        raise UpdateError(f"GitHub güncelleme sunucusu HTTP {exc.code} hatası verdi.") from exc
+        raise UpdateError(f"Güncelleme sunucusu HTTP {exc.code} hatası verdi.") from exc
     except URLError as exc:
         if isinstance(exc.reason, ssl.SSLCertVerificationError):
             raise UpdateError(SERTIFIKA_MESAJI) from exc
@@ -267,11 +269,11 @@ def _asset_from_json(value: Any) -> ReleaseAsset | None:
 
 def _parse_release(payload: Any) -> ReleaseInfo:
     if not isinstance(payload, dict):
-        raise UpdateError("GitHub sürüm yanıtı beklenen biçimde değil.")
+        raise UpdateError("Güncelleme sunucusunun yanıtı beklenen biçimde değil.")
     tag_name = str(payload.get("tag_name") or "").strip()
     version = tag_name.removeprefix("v").strip()
     if not version:
-        raise UpdateError("GitHub sürüm kaydında sürüm etiketi bulunmuyor.")
+        raise UpdateError("Güncelleme sunucusunun yanıtında sürüm numarası bulunmuyor.")
 
     assets = [asset for raw in payload.get("assets") or [] if (asset := _asset_from_json(raw))]
     installer = next((a for a in assets if INSTALLER_PATTERN.fullmatch(a.name)), None)
@@ -293,8 +295,8 @@ def _decode_payload(raw: bytes) -> Any:
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         # Okul ağının engelleme sayfası (HTML) da buraya düşer.
         raise UpdateError(
-            "GitHub sürüm yanıtı okunamadı; yanıt okul ağının engelleme sayfası olabilir. "
-            f"Yeni sürümü {INDIRME_ALANI}'dan elle denetleyebilirsiniz."
+            "Güncelleme sunucusunun yanıtı okunamadı; yanıt okul ağının engelleme sayfası "
+            f"olabilir. Yeni sürümü {INDIRME_ALANI}'dan elle denetleyebilirsiniz."
         ) from exc
 
 
@@ -309,7 +311,7 @@ def _highest_listed_release() -> ReleaseInfo:
     """
     payload = _decode_payload(_read_url(RELEASE_LIST_URL, max_bytes=4 * 1024 * 1024))
     if not isinstance(payload, list):
-        raise UpdateError("GitHub sürüm yanıtı beklenen biçimde değil.")
+        raise UpdateError("Güncelleme sunucusunun yanıtı beklenen biçimde değil.")
     releases: list[ReleaseInfo] = []
     for item in payload:
         if not isinstance(item, dict) or item.get("draft"):
@@ -319,7 +321,7 @@ def _highest_listed_release() -> ReleaseInfo:
         except UpdateError:
             continue
     if not releases:
-        raise ReleaseNotFoundError("GitHub'da henüz yayımlanmış bir sürüm bulunmuyor.")
+        raise ReleaseNotFoundError("Henüz yayımlanmış bir sürüm bulunmuyor.")
     return max(releases, key=lambda release: version_key(release.version))
 
 
@@ -394,7 +396,7 @@ def _expected_digest(release: ReleaseInfo) -> str:
         if re.fullmatch(r"[0-9a-f]{64}", digest):
             return digest
     if release.checksums is None:
-        raise UpdateError("Kurulum dosyasının SHA-256 doğrulama özeti bulunmuyor.")
+        raise UpdateError("Kurulum dosyasının doğrulama özeti bulunmuyor.")
     checksum_text = _read_url(release.checksums.download_url, max_bytes=256 * 1024).decode(
         "utf-8", errors="replace"
     )
@@ -405,7 +407,7 @@ def _expected_digest(release: ReleaseInfo) -> str:
         digest, filename = parts
         if filename.lstrip("*") == installer.name and re.fullmatch(r"[0-9a-fA-F]{64}", digest):
             return digest.lower()
-    raise UpdateError("SHA256SUMS.txt içinde Windows kurulum dosyası bulunmuyor.")
+    raise UpdateError("Doğrulama özetleri arasında Windows kurulum dosyası bulunmuyor.")
 
 
 def download_latest_installer(*, force: bool = False) -> Path:
@@ -428,7 +430,7 @@ def download_latest_installer(*, force: bool = False) -> Path:
     content = _read_url(installer.download_url, max_bytes=MAX_INSTALLER_BYTES)
     actual = hashlib.sha256(content).hexdigest()
     if actual != expected:
-        raise UpdateError("İndirilen kurulum dosyasının SHA-256 doğrulaması başarısız.")
+        raise UpdateError("İndirilen kurulum dosyası doğrulanamadı.")
 
     update_dir = update_directory()
     update_dir.mkdir(parents=True, exist_ok=True)

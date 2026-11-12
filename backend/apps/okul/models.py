@@ -4,7 +4,7 @@ Aile iskeletinden alındı (iskelet bunu atalarının `apps/okul/models.py`
 kalıbından türetip sadeleştirmişti). OAB'deki yeri ve değişecek alanları OAB
 tasarımının §5.1 ve §12.B'sindedir (okul kartının OAB alanları F1b 4. adımda girdi,
 kütüphane saatleri ve kısa ad aynı adımda düştü; öğrenci sicili, şube kataloğu ve hazırlık
-sınıfı bayrağı F1b 5. adımda göç 0014 ile düştü — tasarım §5.1 ALMA, T5):
+sınıfı bayrağı F1b 5. adımda düştü — tasarım §5.1 ALMA, T5):
 
 - `SchoolConfig`: okul kartı — kurum künyesi, kademeler, öğrenci mevcudu, yerleşim türü,
   kantin ve personel çalıştırma biçimi, kampüs, açılış tarihi, demirbaş onayı (sınıf yorumu).
@@ -117,7 +117,7 @@ STUDENT_COUNT_MAX = 99999
 INSTITUTION_CODE_LENGTH = 6
 #: Veri sorumlusu metninin üst sınırı (karakter; ad, adres ve iletişim bir paragrafa sığar —
 #: yazım denetimi, mevzuat hükmü değildir).
-DATA_CONTROLLER_TEXT_MAX = 500
+DATA_CONTROLLER_TEXT_MAX = 250
 
 
 #: Boşta kilit süresi (dakika; tasarım TK14, §15 M-3): varsayılan 10, ayar 3-30. Alanın
@@ -689,19 +689,8 @@ class ImportSourceType(models.TextChoices):
     """İçe aktarma kaynak türü (dosya ve pano yapıştırma AYNI türdedir; tasarım §5.1 `ImportRun`).
 
     Değerler tasarımın Türkçe büyük harf ASCII kuralına uyar (§5 O8; plan "F1b-5 uygulama
-    kararları"); eski `PERSONNEL` göç 0015'te `PERSONEL`'e çevrildi. `VELI` veli listesinin
-    aktarımıdır (`excel_veli`, `services.imports`; satırları `ParentRoster`).
-
-    ESKİ `STUDENTS` SATIRLARI (öğrenci aktarımı F1b 5. adımda söküldü) BİLEREK ÇEVRİLMEZ ve
-    silinmez: yeni kümede karşılıkları yoktur (veli listesi öğrenci aktarımı değildir); değer
-    kümede olmasa da sütunda veritabanı kısıtı olmadığı için satır geçerli kalır. `source_type`
-    satırın içerik MAC'indedir (`IZ_OZET_ALANLARI`): dokunulmayan satırın kaydı doğrulanmayı
-    sürdürür (`denetim_izi.kaydi_dogrula`), silinseydi iz satırları kaydı olmayan satıra dönerdi.
-    Satır yalnız sayı taşır (kişi adı yok, `imports.to_run_dict`); program onu okumaz. Göçle
-    `PERSONEL`'e çevrilen satırların içerik MAC'i ise çeviriden sonra tutmaz: 4. adımın okul
-    kartındaki kabulüyle aynıdır (plan "F1b-4 uygulama kararları": içerik MAC'ini bugün yalnız
-    testler doğrular; deneme kurulumları sahaya çıkmadan yeniden kurulur), koşu yeniden yazılınca
-    yeni MAC'li iz satırı düşer. Görev türü değerleri çevrilen personel satırları için de aynıdır.
+    kararları"). `VELI` veli listesinin aktarımıdır (`excel_veli`, `services.imports`; satırları
+    `ParentRoster`).
     """
 
     PERSONEL = "PERSONEL", "Personel"
@@ -1347,7 +1336,7 @@ class AuditTrail(models.Model):
 
     EKLEME-YALNIZ (yazma kuralı 2): var olan satırda `save()`, `delete()`, toplu
     `update()`/`delete()` `ImmutableRecord` yükseltir; ayrıca SQLite tetikleyicileri
-    (`BEFORE UPDATE`, `BEFORE DELETE` → `RAISE(ABORT)`, göç 0009) program içi kazayı
+    (`BEFORE UPDATE`, `BEFORE DELETE` → `RAISE(ABORT)`, `0001_initial`) program içi kazayı
     veritabanında keser. Program dışındaki değişikliği zincir yakalar. Tetikleyicileri
     kapatan bir üretim yolu YOKTUR; testlerin `flush`'ı kök `conftest.py`'dedir.
     """
@@ -1497,7 +1486,7 @@ class _AccessLogQuerySet(models.QuerySet):  # type: ignore[type-arg]  # Any davr
 class AccessLog(models.Model):
     """Erişim günlüğü — hassas okumanın ve kişisel veri içeren çıktının kaydı (tasarım §4.6.4).
 
-    KVKK md. 12 güvenlik tedbiridir (OYS'nin "okuma ≠ yönetme ≠ hassas detay" ayrımı). Tek
+    KVKK md. 12 güvenlik tedbiridir ("okuma ≠ yönetme ≠ hassas detay" ayrımı; tasarım §12.A). Tek
     yazarı `apps.okul.erisim_gunlugu.yaz`'dır; okuyan hesap ve rol yazar bağlamından gelir.
 
     * **Zincir dışıdır**: denetim izine bağlı değildir, satır mühürlenmez; süresi dolunca
@@ -1513,8 +1502,8 @@ class AccessLog(models.Model):
     * Model: var olan satırda `save()` ve `delete()`, queryset'te `bulk_create()`, `update()`,
       `bulk_update()` ve `delete()` `ImmutableRecord` yükseltir. Tek silme yolu queryset'in
       `_saklama_disini_sil`'idir; onu yalnız silme servisi çağırır.
-    * Veritabanı: `BEFORE UPDATE` tetikleyicisi (`RAISE(ABORT)`, göç 0010) model yöntemlerini
-      atlayan program içi güncellemeyi de (`_base_manager`, ham SQL) keser.
+    * Veritabanı: `BEFORE UPDATE` tetikleyicisi (`RAISE(ABORT)`, `0001_initial`) model
+      yöntemlerini atlayan program içi güncellemeyi de (`_base_manager`, ham SQL) keser.
     * DELETE için tetikleyici YOKTUR, bilerek: koşulsuz bir tetikleyici meşru silmeyi (saklama
       süresinin dolması) de keserdi; "yalnız süresi dolan satır" koşulunu tetikleyiciye yazmak
       saklama süresini ve gün sınırını (Europe/Istanbul, 29 Şubat) SQL'de ikinci kez
@@ -1618,10 +1607,10 @@ class Attachment(models.Model):
     * `original_name`: kullanıcının verdiği dosya adı; kişi adı taşıyabilir, şifrelidir (§5.3).
     * `key_wrap`: dosya anahtarının sarmalı, base64(nonce 12 ‖ şifreli anahtar 32 ‖ etiket 16) =
       80 karakterlik metin. DEK yenilemesi (TK12, F4) dosyaya dokunmadan bunu yeniler.
-    * `sha256`, `size`: AÇIK içeriğin özeti ve boyu (OYS `file_storage.py` AYNEN); manifesto onları
-      bu açık sütunlardan DEK'siz alır (plan F1b-3 "Kap ve manifesto").
-    * `mime`: imza baytından belirlenen tür (kullanıcının sözü değil). Boyu OYS'deki gibi 100'dür:
-      F1c'nin DOCX ve XLSX adları 64'e sığmaz.
+    * `sha256`, `size`: AÇIK içeriğin özeti ve boyu (`file_storage.py` AYNEN, tasarım §12.A);
+      manifesto onları bu açık sütunlardan DEK'siz alır (plan F1b-3 "Kap ve manifesto").
+    * `mime`: imza baytından belirlenen tür (kullanıcının sözü değil). Boyu kaynaktaki gibi 100'dür
+      (tasarım §12.A): F1c'nin DOCX ve XLSX adları 64'e sığmaz.
     * `owner_type`, `owner_id`: genel bağ (§5.2.10). `owner_type` kayıtlı bir model etiketidir
       (`okul.SchoolYear` biçimi; küme `services.dosya_deposu`'nda, F1b'de boş); `contenttypes`
       kimlikleri kurulumdan kuruluma değişeceği için kullanılmaz. `owner_id`

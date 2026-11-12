@@ -347,6 +347,9 @@ describe("KisilerPage — ekleme/düzenleme/silme", () => {
     // Başlık soru, gövde sonuç; silme KALICIDIR ve ayrılış yolu ayrıca gösterilir.
     const onay = await screen.findByRole("dialog", { name: "Kişi sicilden silinsin mi?" });
     expect(within(onay).getByText(/kalıcı olarak silinir/)).toBeInTheDocument();
+    expect(onay).toHaveTextContent(
+      "Denetim izine yalnız bir kaydın silindiği yazılır; kişinin adı yazılmaz.",
+    );
     expect(within(onay).getByText(/Ayrıldı olarak işaretle/)).toBeInTheDocument();
     expect(within(onay).queryByText(/gözetmen|görevlendirme|soft delete/)).not.toBeInTheDocument();
     await user.click(within(onay).getByRole("button", { name: "Sil" }));

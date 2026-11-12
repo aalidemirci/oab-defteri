@@ -176,6 +176,7 @@ def test_liste_butun_hesaplari_eylemleriyle_tasir() -> None:
     assert _satir(liste, dk1.id)["rol_etiketi"] == "Denetleme Kurulu"
 
     hatali = _satir(liste, dk1.id)
+    assert hatali["durum_etiketi"] == "Askıda"
     assert (hatali["askida_nedeni"], hatali["askida_nedeni_etiketi"]) == (
         "HATALI_DENEME",
         "Hatalı parola denemesi",

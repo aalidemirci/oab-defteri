@@ -166,7 +166,7 @@ def ensure_stamp_compatible(path: Path, app_version: str) -> None:
     if version_key(stamp.app_version) > version_key(app_version):
         raise SchemaTooNewError(
             "Bu veri, programın daha yeni bir sürümüyle "
-            f"({stamp.app_version}) oluşturulmuş. Çalışan sürüm: {app_version}.",
+            f"({stamp.app_version}) oluşturulmuş. Kurulu sürüm: {app_version}.",
             hint=(
                 "Veriyi bozmamak için program açılmadı. Bu bilgisayardaki programı "
                 "güncel sürüme yükseltip yeniden açın."

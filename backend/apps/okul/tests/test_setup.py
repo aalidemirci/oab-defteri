@@ -490,10 +490,10 @@ class TestSchoolConfigApi:
         yanit = client.put(URL, {"data_controller_text": "x" * 501}, format="json")
         assert yanit.status_code == 400
         assert yanit.json()["fields"]["data_controller_text"] == [
-            "Veri sorumlusu en çok 500 karakter olabilir."
+            "Veri sorumlusu en çok 250 karakter olabilir."
         ]
         assert (
-            client.put(URL, {"data_controller_text": "x" * 500}, format="json").status_code == 200
+            client.put(URL, {"data_controller_text": "x" * 250}, format="json").status_code == 200
         )
 
     def test_veri_sorumlusu_izde_yalniz_adiyla_gorunur(self, client: APIClient) -> None:
@@ -696,8 +696,8 @@ class TestYolHaritasi:
     def test_onceden_gizlenmis_kart_okul_karti_eksikken_yeniden_gorunur(
         self, client: APIClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """KORUMA (bağımsız denetim, F1b-4): kurulumunu okul kartının OAB alanlarından önce
-        bitirip kartı gizlemiş bir kurulumda göç 0013'ten sonra bu alanlar boştur. Kurulum
+        """KORUMA (bağımsız denetim, F1b-4): önceden tamamlanmış ve kartı gizlemiş bir kurulumda
+        okul kartının OAB alanları boş olabilir. Kurulum
         kapısı yeniden kapanmadığı için eksiği gösteren tek yer karttır: kart görünür, saklanan
         gizleme tercihi silinmez, alanlar dolunca kart yine gizlenir."""
         gercek = setup_service.setup_status
@@ -883,7 +883,7 @@ def test_update_school_config_whitelist_disi_alan_yazmaz() -> None:
             "school_name": "X",
             "app_password_hash": "hack",
             "setup_completed": True,
-            "has_prep_class": True,  # F1b 5. adımda göç 0014 ile düştü
+            "has_prep_class": True,  # F1b 5. adımda düştü
         }
     )
     config = SchoolConfig.load()

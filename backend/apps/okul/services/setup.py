@@ -354,9 +354,8 @@ def roadmap_state(
     uygulanmasıdır; SAKLANAN tercih değişmez, damga gelince kart yine gizlenir.
 
     Okul kartının zorunlu alanları eksikken de kart gizli kalamaz (aynı kural, `okul_karti`
-    maddesine): kurulumu okul kartının OAB alanlarından önce tamamlanmış ve kartı gizlemiş bir
-    kurulumda göç 0013'ten sonra bu alanlar boştur; kurulum kapısı yeniden kapanmadığı için
-    eksiği gösteren tek yer bu karttır (plan F1b-4 kararları; tasarım §7.10).
+    maddesine): önceden tamamlanmış ve kartı gizlemiş bir kurulumda bu alanlar boş olabilir;
+    kurulum kapısı yeniden kapanmadığı için eksiği gösteren tek yer bu karttır (plan F1b-4 kararları; tasarım §7.10).
 
     `recovery_confirmed` ve `school_info_complete` verilmezse burada okunur; `setup_status`
     zaten bildiği için geçirir (aynı dosya ve hesap iki kez yapılmasın).

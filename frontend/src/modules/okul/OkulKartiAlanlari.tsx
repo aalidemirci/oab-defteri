@@ -369,7 +369,7 @@ export default function OkulKartiAlanlari({
         className="sm:col-span-2"
         label={VERI_SORUMLUSU_ETIKETI}
         disabled={disabled}
-        maxLength={500}
+        maxLength={250}
         value={form.veriSorumlusu}
         onChange={(e) => onChange({ veriSorumlusu: e.target.value })}
         error={errors.data_controller_text}

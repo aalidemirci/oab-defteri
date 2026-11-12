@@ -712,7 +712,8 @@ def teslim_pusulasi(*, by_hesap_id: object, hesap_id: object) -> TeslimPusulasi:
     `Eylem.HESAP_YONETIMI`) → kendi hesabı değil → işlem gören (var, kapalı değil, mührü ve izi
     tutuyor; tutmuyorsa 409 `hesap_muhru_tutmadi` ve `BUTUNLUK` satırı — alan mühürde `seal`,
     satırın izinde `kayit_mac`, izdeki boşlukta `iz_boslugu`). İçerik yalnız tanıtıcıdan, rolden,
-    açılış tarihinden, okul kartının antedinden ve boşta kilit süresinden kurulur
+    açılış tarihinden, okul kartının antedinden, boşta kilit süresinden ve veri sorumlusu
+    bilgisinden kurulur
     (`hesap_teslim_pusulasi.pusula_belgesi`; ad-soyad okunmaz). PDF bellekte çizilir; sonra AYNI
     işlemde hesabın hâlâ kapalı olmadığı sorulur ve `BASIM` satırı (kod ve PDF'in sha256'sı)
     yazılır. Satır yazılamazsa PDF verilmez (iz yazılamazsa yazma yapılmaz; 409 `iz_yazilamadi`).
@@ -731,6 +732,7 @@ def teslim_pusulasi(*, by_hesap_id: object, hesap_id: object) -> TeslimPusulasi:
         okul_adi=okul.school_name,
         ilce=okul.district,
         bosta_dakika=okul.idle_lock_minutes,
+        veri_sorumlusu=okul.data_controller_text,
     )
     pdf = evrak.pdf_ciz(belge)
     with transaction.atomic():
@@ -1413,7 +1415,13 @@ def _kullanici_satiri(hesap: Account, gorunum: _Gorunum) -> dict[str, Any]:
         # Çözülemeyen ad (D48) boştur; ön yüz "okunamadı" yazar (sözlük §1 "Şifreleme").
         "ad_soyad": ad if isinstance(ad, str) else None,
         "durum": hesap.status,
-        "durum_etiketi": _durum_etiketi(hesap.status),
+        # Hatalı deneme askısı `status`'u değiştirmez (güvenlik dosyasındadır); ekrandaki durum yine
+        # "Askıda" yazar (sözlük §1). `durum` kodu değişmez: eylem denetimleri ona bakar.
+        "durum_etiketi": (
+            str(AccountStatus.ASKIDA.label)
+            if askida_nedeni is not None
+            else _durum_etiketi(hesap.status)
+        ),
         "askida_nedeni": askida_nedeni,
         "askida_nedeni_etiketi": _ASKI_ETIKETLERI.get(askida_nedeni or ""),
         "kayit_tutuyor": kayit is None,

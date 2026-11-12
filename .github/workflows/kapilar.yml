@@ -11,8 +11,8 @@
 #
 # Kapsam: KVKK depo denetimi → backend pytest (kapsam eşiği) → ruff → mypy →
 # masaüstü/paketleme testleri → frontend tsc/eslint/prettier/vitest.
-# Paket ÜRETİMİ ayrı iş akışıdır (paketleme.yml) ve yalnız ilgili yollar
-# değişince koşar; bu iş akışı her PR'da ve main'e her push'ta koşar.
+# Paket ÜRETİMİ ayrı iş akışıdır (paketleme.yml); o da her PR'da yol süzgeci olmadan koşar
+# (Linux ve Windows paketi main'in zorunlu kontrolleridir). Bu iş akışı her PR'da ve main'e her push'ta koşar.
 # =============================================================================
 name: Kapılar
 

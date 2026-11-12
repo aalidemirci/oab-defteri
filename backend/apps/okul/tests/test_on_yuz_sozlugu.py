@@ -6,7 +6,8 @@ görünen her metin sözlüğe uyar").
 metin modülleri (Kullanıcılar, Erişim Günlüğü, rol kapısı ve yetki, denetim izi kartları) ve
 güvenlik metinleri (F1b 3. adımın ekranları `guvenlik/metinler.ts`'ten okur), kapanış pencereleri
 ve okul kartının metinleri (F1b 4. adım, `okul/metinler.ts`), Kişiler'in görev türü ve aktarım
-metinleri, aydınlatma metinleri ve Veli Listesi (F1b 5. adım, `kisiler/metinler.ts`).
+metinleri, aydınlatma metinleri ve Veli Listesi (F1b 5. adım, `kisiler/metinler.ts`), düz dize
+sabiti olan öteki ekran dosyaları ve Kılavuz'un bölüm sabitleri (F1b 6. adım).
 Her dosyadaki düz `export const AD(: tip)? = "…" (+ "…")*;` dizesi, boşluklar tekleştirilip
 tırnaklar (“ ” → ") eşitlenerek sözlükte aranır. Hesaplanan ya da şablon dizesi kapsam dışıdır
 (işlevlerin metinleri sözlükte kalıp olarak yazılıdır, ör. "Parola sıfırlandı · gg.aa.yyyy …").
@@ -31,6 +32,7 @@ from desktop.window import (
 
 from apps.okul import excel_ortak, excel_personel, excel_veli, serializers
 from apps.okul.services import encrypted_backup, imports, live_restore
+from apps.okul.services import hesap_teslim_pusulasi as e63
 
 #: Kapsanan ön yüz dosyaları (depo köküne göre).
 DOSYALAR = (
@@ -44,6 +46,30 @@ DOSYALAR = (
     "frontend/src/lib/metinler.ts",
     "frontend/src/modules/okul/metinler.ts",
     "frontend/src/modules/kisiler/metinler.ts",
+    # F1b 6. adım (plan "F1b-6 uygulama kararları"): metni sözlükte olan öteki ekran dosyaları.
+    "frontend/src/modules/ayarlar/AyarlarPage.tsx",
+    "frontend/src/modules/butunluk/IkiDepoKarti.tsx",
+    "frontend/src/modules/guncelleme/UpdatePanel.tsx",
+    "frontend/src/modules/guvenlik/BostaKilitSuresiKarti.tsx",
+    "frontend/src/modules/guvenlik/DisYedekKarti.tsx",
+    "frontend/src/modules/guvenlik/GuvenlikAyarlari.tsx",
+    "frontend/src/modules/guvenlik/KilitEkrani.tsx",
+    "frontend/src/modules/guvenlik/KurtarmaIleAcma.tsx",
+    "frontend/src/modules/guvenlik/YenidenBaslatEkrani.tsx",
+    "frontend/src/modules/guvenlik/kurtarma.ts",
+    "frontend/src/modules/kilavuz/KilavuzPage.tsx",
+    "frontend/src/modules/kilavuz/bolumler/PrograminKonumu.tsx",
+    "frontend/src/modules/kisiler/KisilerPage.tsx",
+    "frontend/src/modules/kisiler/ortak.tsx",
+    "frontend/src/modules/kullanicilar/pusula.ts",
+    "frontend/src/modules/oturum/hesapKurallari.ts",
+    "frontend/src/modules/oturum/parolaPolitikasi.ts",
+    "frontend/src/modules/oturum/useKilitle.ts",
+    "frontend/src/modules/panel/OkunamayanAlanlarKarti.tsx",
+    "frontend/src/modules/panel/PanelPage.tsx",
+    "frontend/src/modules/panel/SonOturumKarti.tsx",
+    "frontend/src/lib/api.ts",
+    "frontend/src/lib/mevzuat.ts",
 )
 
 #: Kullanıcıya görünmeyen düz dize sabitleri (dosya, ad) → gerekçe.
@@ -52,6 +78,22 @@ ISTISNALAR: dict[tuple[str, str], str] = {
         "Yalnız köprünün olmadığı geliştirme kipinin yükleme kutusunda çıkar; programın penceresinde "
         'yedek yüklenmez (kullanıcı kararı 06.11.2026 "Yedek dosyası yüklenmez, programın Aç '
         'penceresiyle seçilir").'
+    ),
+    ("frontend/src/modules/guncelleme/UpdatePanel.tsx", "INDIRME_SAYFASI"): (
+        "Bağlantının adresi; görünen adı `INDIRME_SAYFASI_ADI` sözlüktedir."
+    ),
+    ("frontend/src/modules/guvenlik/DisYedekKarti.tsx", "GUVENLIK_ADRESI"): "Rota adresi.",
+    ("frontend/src/modules/kisiler/ortak.tsx", "HAVUZ_ADRESI"): "Rota adresi.",
+    ("frontend/src/modules/oturum/useKilitle.ts", "KILITLE_KISAYOLU_ARIA"): (
+        "`aria-keyshortcuts` değeri (standart tuş adları); görünen kısayol sözlükte yazılıdır."
+    ),
+    ("frontend/src/lib/api.ts", "ROL_YETKISIZ_OLAYI"): "Pencere olayının adı.",
+    ("frontend/src/lib/api.ts", "ETKINLIK_BASLIGI"): "HTTP üstbilgisinin adı.",
+    ("frontend/src/modules/guvenlik/kurtarma.ts", "KURTARMA_BELGESI_DOSYA_KOKU"): (
+        "Dosya adının kökü; sözlükte kaydedilen dosyanın tireli kalıbıyla yazılıdır (§2, §3)."
+    ),
+    ("frontend/src/modules/kullanicilar/pusula.ts", "PUSULA_DOSYA_KOKU"): (
+        "Dosya adının kökü; sözlükte kaydedilen dosyanın tireli kalıbıyla yazılıdır (§1, §2)."
     ),
 }
 
@@ -98,7 +140,48 @@ def test_on_yuz_metinleri_sozlukte_yazilidir() -> None:
                 eksik.append(f"{goreli}: {ad} = {deger!r}")
     assert not eksik, "Sözlükte yazılı olmayan ön yüz metinleri:\n" + "\n".join(eksik)
     # Kapsam boşalmasın (ör. dosya taşındı, kalıp artık eşleşmiyor).
-    assert sayi >= 100, sayi
+    assert sayi >= 150, sayi
+
+
+#: Program kullanıcısının aydınlatma metni (kullanıcı onayı 09.11.2026, BİREBİR; plan "F1b-6 uygulama
+#: kararları"). Metni değiştiren önce kullanıcı onayı alır; bu liste ondan sonra değişir.
+ONAYLI_HESAP_AYDINLATMASI = (
+    "Amaç: Programı kullanan hesabın açılması, role göre yetkilendirme ve yapılan işlemlerin kayda "
+    "geçmesi. Hesabın ad-soyadı, tanıtıcısı ve rolü, giriş ve parola işlemleri, kişisel veri "
+    "içeren kayıtların hangi hesapla okunduğu tutulur.",
+    "Aktarım: Kişisel veriler kimseye aktarılmaz; program okulun bilgisayarında çalışır, dışarıya "
+    "veri göndermez.",
+    "Toplama yöntemi ve hukuki sebep: Ad-soyad, hesabı açan program yöneticisince girilir; "
+    "işlemler program tarafından elektronik ortamda kaydedilir. Hukuki sebep: veri sorumlusunun "
+    "hukuki yükümlülüğünü yerine getirmesi (KVKK md. 5/2-ç), güvenlik tedbiri (KVKK md. 12/1).",
+    "Saklama: Hesap kapatılsa da hesap kaydı ve işlem izi silinmez; kişisel veri okuma günlüğünün "
+    "satırları iki yıl sonra silinir.",
+    "Haklarınız: KVKK md. 11'deki haklarınızı veri sorumlusuna başvurarak kullanabilirsiniz.",
+)
+ONAYLI_VERI_SORUMLUSU_ETIKETI = "Veri sorumlusu:"
+ONAYLI_VERI_SORUMLUSU_YERI = "Okul Bilgileri'nde girilir"
+ONAYLI_NOT = "Hukuki sebep öneridir; veri sorumlusu ve hukuki sebep okul müdürlüğünce teyit edilir."
+
+
+def test_hesap_aydinlatmasi_onayli_metindir() -> None:
+    """Sihirbazın ve pusulanın metni onaylı metnin kendisidir (iki yazım ayrışamaz)."""
+    assert e63.AYDINLATMA_SATIRLARI == ONAYLI_HESAP_AYDINLATMASI
+    assert e63.AYDINLATMA_VERI_SORUMLUSU_ETIKETI == ONAYLI_VERI_SORUMLUSU_ETIKETI
+    assert e63.AYDINLATMA_VERI_SORUMLUSU_YERI == ONAYLI_VERI_SORUMLUSU_YERI
+    assert e63.AYDINLATMA_NOTU == ONAYLI_NOT
+
+    on_yuz = _sabitler(_depo_dosyasi("frontend/src/modules/kisiler/metinler.ts"))
+    assert (
+        on_yuz["HESAP_AYDINLATMA_AMACI"],
+        on_yuz["AYDINLATMA_AKTARIM"],
+        on_yuz["HESAP_AYDINLATMA_TOPLAMA"],
+        on_yuz["HESAP_AYDINLATMA_SAKLAMA"],
+        on_yuz["HESAP_AYDINLATMA_HAKLARINIZ"],
+    ) == ONAYLI_HESAP_AYDINLATMASI
+    assert on_yuz["AYDINLATMA_VERI_SORUMLUSU_ETIKETI"] == ONAYLI_VERI_SORUMLUSU_ETIKETI
+    assert on_yuz["HESAP_VERI_SORUMLUSU_YERI"] == ONAYLI_VERI_SORUMLUSU_YERI
+    assert on_yuz["AYDINLATMA_EKRAN_NOTU"] == ONAYLI_NOT
+    assert on_yuz["AYDINLATMA_BASLIGI"] == e63.AYDINLATMA_BASLIGI
 
 
 def test_pencere_basliklari_ve_secilen_dosyanin_iletisi_sozlukte_yazilidir() -> None:

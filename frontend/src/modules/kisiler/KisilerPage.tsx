@@ -51,7 +51,13 @@ import { useYetki } from "../oturum/yetki";
 import type { MemberKind, Personnel, PersonnelWriteBody } from "../okul/api";
 import AktarimPaneli from "./AktarimPaneli";
 import AyrilisHavuzu from "./AyrilisHavuzu";
-import { GOREV_TURU_ETIKETI, GOREV_TURU_YARDIMI, VELI_LISTESI_SEKMESI } from "./metinler";
+import {
+  GOREV_TURU_ETIKETI,
+  GOREV_TURU_YARDIMI,
+  KISI_SILME_ONAY_BASLIGI,
+  KISI_SILME_ONAY_METNI,
+  VELI_LISTESI_SEKMESI,
+} from "./metinler";
 import {
   DurumRozeti,
   ErrorBand,
@@ -73,7 +79,7 @@ type TabKey = (typeof TAB_KEYS)[number];
 
 // Sözlük: "personel" tek başına öğretmen anlamında kullanılmaz; görev türleri
 // "öğretmen", "yönetici" ve "diğer personel"dir. Sekme hepsini taşır.
-const TABS: TabItem[] = [
+export const TABS: TabItem[] = [
   { key: "personel", label: "Öğretmenler ve Diğer Personel", icon: "badge" },
   { key: "havuz", label: "Ayrılış Havuzu", icon: "pending_actions" },
   { key: "veli", label: VELI_LISTESI_SEKMESI, icon: "family_restroom" },
@@ -387,8 +393,8 @@ function PersonelFormDialog({
   const remove = async () => {
     if (!personnel) return;
     const ok = await confirm({
-      title: "Kişi sicilden silinsin mi?",
-      message: `${kisiOznesi(personnel, true)} kalıcı olarak silinir, geri alınamaz. Yanlış girilmiş kayıtlar içindir; okuldan ayrılan kişi için “Ayrıldı olarak işaretle”yi kullanın.`,
+      title: KISI_SILME_ONAY_BASLIGI,
+      message: `${kisiOznesi(personnel, true)} ${KISI_SILME_ONAY_METNI}`,
       confirmLabel: "Sil",
     });
     if (!ok) return;

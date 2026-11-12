@@ -88,15 +88,15 @@ export function dogrulamaMetni(birinci: number, ikinci: number): string {
 }
 
 /**
- * Kurulum sihirbazının ilk adımı: program yöneticisi hesabı (yalnız ilk kurulumda;
- * kaldırılamaz). Parola paylaşılmaz (MEB Bilgi ve Sistem Güvenliği Yönergesi md. 7/2,
+ * Kurulum sihirbazının ilk adımı: program yöneticisi hesabı (yalnız ilk kurulumda; kaydı
+ * silinmez, açık başka program yöneticisi yokken kapatılamaz). Parola paylaşılmaz (MEB Bilgi ve Sistem Güvenliği Yönergesi md. 7/2,
  * programa kıyasen — tasarım TK9; kullanıcı kararı T1): herkes programı kendi hesabıyla
  * açar. Program yöneticisi parolasını unutursa yol kurtarma anahtarıdır; anahtar okul
  * müdürlüğünde kapalı zarfta durur (kullanıcı kararı D3; tasarım §4.4.3).
  */
 export const KURMA_UYARISI =
   "Program yöneticisi hesabı zorunludur: hesap kurulmadan öğretmen ve diğer personel " +
-  "kaydı yapılamaz. Kurulduktan sonra kaldırılamaz; parolası değiştirilebilir. " +
+  "kaydı yapılamaz. Hesabın kaydı silinmez; açık başka bir program yöneticisi hesabı yokken kapatılamaz; parolası değiştirilebilir. " +
   "Parolayı kimseyle paylaşmayın; herkes programı kendi hesabıyla ve kendi parolasıyla " +
   "açar. Program yöneticisi parolasını unutursa kayıtlar kurtarma anahtarıyla açılır ve " +
   "yeni parola belirlenir; bu yüzden anahtar okul müdürlüğünde kapalı zarfta saklanır.";
@@ -211,6 +211,8 @@ export const DOSYA_KAYIP_SIFIRLA_METNI =
  * yeniden hesaplayabilir (tehdit 6); son katman kâğıda inen "Kayıt no · Zincir" satırıdır.
  * Kâğıt bugün kullanıcının elle not ettiğidir (Genel Bakış → Son Girişler); aylık bildirim
  * ve devir tutanağı gibi belgelere basılması sonraki fazlardadır, burada vaat edilmez.
+ * Parola değişimi maddesi tasarım §4.4.6'nın 7. maddesidir; yenilemeden sonraki veriyi koruyan
+ * anahtar yenilemesi sonraki fazlardadır, burada vaat edilmez.
  */
 export const DURUST_SINIRLAR: readonly { baslik: string; metin: string }[] = [
   {
@@ -264,6 +266,14 @@ export const DURUST_SINIRLAR: readonly { baslik: string; metin: string }[] = [
       "verilerin başkalarının eline geçmesini ilgililere ve Kişisel Verileri Koruma Kuruluna " +
       "en kısa sürede bildirmek veri sorumlusunun işidir (KVKK md. 12/5). Program bu " +
       "bildirimi yapmaz; durumu okul müdürlüğüne hemen iletin.",
+  },
+  {
+    baslik: "Parola değişimi eski parolayı program içinde geçersiz kılar, program dışında kılmaz.",
+    metin:
+      "Parola değiştikten ya da sıfırlandıktan sonra eski parola kaydı, arşivdeki kopyası dahil, " +
+      "programda giriş açmaz. İstisnaları, yazımın yarıda kaldığı ve kayıtların program dışından " +
+      "değiştirildiği hâllerdir. Eski parola kaydı kayıtların anahtarını taşır; eski parolayı " +
+      "bilen biri bu kayıtla anahtarı programın dışında yine açabilir.",
   },
 ];
 

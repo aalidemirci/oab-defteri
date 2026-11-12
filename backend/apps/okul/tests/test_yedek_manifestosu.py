@@ -68,7 +68,7 @@ def test_manifestonun_okudugu_tablo_ve_sutunlar_modelle_aynidir() -> None:
 def test_kilitliyken_goruntu_gercek_ekleri_dek_ve_depo_olmadan_listeler(sahip: SchoolYear) -> None:
     """Açılıştaki yedek Django'dan önce, kilitliyken alınır: manifesto ne DEK'e ne depoya bakar.
 
-    `size` ve `sha256` açık içeriğindir (OYS AYNEN); dosya depoda bulunmasa da listede durur.
+    `size` ve `sha256` açık içeriğindir (tasarım §12.A AYNEN); dosya depoda bulunmasa da listede durur.
     """
     birinci, ikinci, imhali = _yaz(sahip, PDF), _yaz(sahip, JPEG), _yaz(sahip, PNG)
     _imha_edilmis(imhali)

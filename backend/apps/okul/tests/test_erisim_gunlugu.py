@@ -50,7 +50,7 @@ from shared import crypto
 
 pytestmark = pytest.mark.django_db
 
-#: Göç 0010'un tetikleyici adı.
+#: `0001_initial`'ın erişim günlüğü tetikleyicisi.
 TETIKLEYICI = "okul_accesslog_no_update"
 #: Uydurma kişi (gerçek kişi değildir).
 UYDURMA_AD = "Nazlıcan"

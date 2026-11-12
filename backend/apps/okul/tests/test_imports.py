@@ -11,11 +11,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from django.db import transaction
 from django.urls import NoReverseMatch, reverse
 from rest_framework.test import APIClient
 
-from apps.okul import denetim_izi
 from apps.okul.excel_ortak import ParserError
 from apps.okul.models import (
     ImportRun,
@@ -161,18 +159,6 @@ class TestImportApi:
         assert not ImportRun.objects.exists()
 
 
-@pytest.mark.django_db
-def test_aktarim_turleri_tasarimin_adlarini_tasir_eski_ogrenci_kosusu_dogrulanir() -> None:
-    """Tasarım §5.1 `ImportRun`: türler PERSONEL ve VELI. Öğrenci aktarımından kalan `STUDENTS`
-    koşusu çevrilmez (göç 0015): değeri kümede olmasa da kaydı doğrulanmayı sürdürür."""
+def test_aktarim_turleri_tasarimin_adlarini_tasir() -> None:
+    """Tasarım §5.1 `ImportRun`: türler PERSONEL ve VELI."""
     assert ImportSourceType.values == ["PERSONEL", "VELI"]
-    with transaction.atomic():
-        kosu = ImportRun.objects.create(
-            source_type="STUDENTS", file_hash="e" * 64, status=ImportStatus.COMPLETED
-        )
-        denetim_izi.degisiklik(kosu, onceki=None)
-
-    kosu.refresh_from_db()
-    assert kosu.source_type == "STUDENTS"
-    assert denetim_izi.kaydi_dogrula(ImportRun, kosu.pk) is True
-    assert denetim_izi.zinciri_dogrula() == []

@@ -78,6 +78,15 @@ def test_kurulum_yetkisi_tk7() -> None:
     assert re.search(r"^PrivilegesRequiredOverridesAllowed=dialog$", setup, flags=re.MULTILINE)
 
 
+def test_kurucu_eski_goc_dizinini_siler() -> None:
+    """Backend kaynak ağaç olarak paketlenir (`oab_defteri.spec`): eski kurulumun göç dosyaları
+    üstüne kurulumda kalırsa yeni `0001_initial` tabloları kurduktan sonra bayat `0002_holiday`
+    temiz veri dizininde "table already exists" ile düşer (plan "F1b-6 uygulama kararları")."""
+    satirlar = [satir.strip() for satir in _bolumler()["InstallDelete"]]
+    goc_dizini = r"{app}\_internal\backend\apps\okul\migrations"
+    assert f'Type: filesandordirs; Name: "{goc_dizini}"' in satirlar
+
+
 def test_kapanmayan_program_iletisi_tepsiyi_anlatmaz() -> None:
     """§4.2: "OAB Defteri açık. Programı kapatıp Yeniden Dene'ye basın." — tepsi yok (T6)."""
     kod = ISS.split("\n[Code]\n", 1)[1]

@@ -56,8 +56,8 @@ export const KAMPUS_YARDIMI =
  */
 export const VERI_SORUMLUSU_ETIKETI = "Veri sorumlusu";
 export const VERI_SORUMLUSU_YARDIMI =
-  "Okul müdürlüğünce belirlenir; personel ve veli listesi aktarım ekranlarındaki aydınlatma " +
-  "metninde görünür. Örnek: Örnek Anadolu Lisesi Müdürlüğü, Örnek Mah. Örnek Sok. No: 1, " +
+  "Okul müdürlüğünce belirlenir; personel ve veli listesi aktarım ekranlarındaki ve hesap " +
+  "teslim pusulasındaki aydınlatma metninde görünür. Örnek: Örnek Anadolu Lisesi Müdürlüğü, Örnek Mah. Örnek Sok. No: 1, " +
   "Örnek İlçe.";
 
 /** md. 9/1: yeni açılan okulda ilk genel kurulun süresi açılış tarihinden sayılır. */

@@ -71,14 +71,14 @@ export default function UpdateBanner() {
     >
       <Icon name="system_update" className="shrink-0" />
       <p className="min-w-48 flex-1 text-body-medium">
-        <span className="font-medium">OAB Defteri {update.latest_version} hazır.</span> Çalışan
+        <span className="font-medium">OAB Defteri {update.latest_version} hazır.</span> Kurulu
         sürüm: {update.current_version}.
         {update.platform === "linux" && " Yeni paketi indirme sayfasından alıp kurun."}
       </p>
       <div className="flex flex-wrap gap-1">
         {update.can_download && (
           <Button variant="tonal" icon="download" disabled={busy} onClick={() => void download()}>
-            {busy ? "İndiriliyor…" : "Güncellemeyi indir"}
+            {busy ? "İndiriliyor…" : "Doğrula ve indir"}
           </Button>
         )}
         <Button variant="text" onClick={dismiss}>

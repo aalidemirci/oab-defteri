@@ -125,7 +125,7 @@ def test_okul_ayarinda_kaldirilan_alanlar_yok_sayilir(client: APIClient) -> None
     assert yanit.status_code == 200
     assert set(yanit.json()) == set(SchoolConfigSerializer().fields)
     ayar = SchoolConfig.load()
-    # `has_prep_class` okul kartından çıktı (F1b 4. adım), alanı göç 0014 ile düştü (5. adım).
+    # `has_prep_class` okul kartından çıktı (F1b 4. adım), alanı 5. adımda düştü.
     assert ayar.school_name == "Örnek Okul"
     assert not hasattr(ayar, "has_prep_class")
 
