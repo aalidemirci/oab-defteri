@@ -93,6 +93,7 @@ _DIPNOT_EYLEMLERI: dict[int, dict[Eylem, frozenset[str]]] = {
     # YK rolleri ve program yöneticisi DK modülüne yazamaz.
     5: {
         Eylem.DENETIM_YAZMA: frozenset({"denetleme_kurulu"}),
+        Eylem.DK_GOREV_BOLUMU_YAZMA: frozenset({"denetleme_kurulu"}),
         Eylem.GERI_YUKLEME_GORDUM: frozenset({"denetleme_kurulu"}),
     },
     6: {Eylem.MUDUR_UYARISI: frozenset({"mudur"})},
@@ -157,11 +158,17 @@ def test_her_dipnotun_eylemi_var_ve_kume_kapali() -> None:
         Eylem.GERI_YUKLEME,
         Eylem.YEDEK_INDIRME,
         Eylem.BOSTA_SURE_YAZMA,
+        Eylem.BIRLIK_DONEMI_YAZMA,
+        Eylem.KURAL_SURUMU_SECIMI,
     }
     for eylem in dipnotsuz:
         assert _gecen_roller(eylem) == {"yonetici"}, eylem
-    # Dipnotlu eylemlerden bugün yalnız DK'nin "Gördüm"ü (⁵) servise bağlıdır (F1b-2 (c)).
-    assert set(BAGLANMAMIS_EYLEMLER) == set(Eylem) - dipnotsuz - {Eylem.GERI_YUKLEME_GORDUM}
+    # Dipnotlu eylemlerden bugün DK'nin "Gördüm"ü (⁵, F1b-2 (c)) ve görev bölümü (⁵, F1c 6. adım)
+    # servise bağlıdır.
+    assert set(BAGLANMAMIS_EYLEMLER) == set(Eylem) - dipnotsuz - {
+        Eylem.GERI_YUKLEME_GORDUM,
+        Eylem.DK_GOREV_BOLUMU_YAZMA,
+    }
 
 
 def test_eylemler_matrisi_asmaz() -> None:

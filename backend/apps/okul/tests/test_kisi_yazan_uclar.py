@@ -31,6 +31,7 @@ import pytest
 from django.urls import URLPattern, URLResolver, get_resolver, reverse
 from rest_framework.test import APIClient
 
+from apps.oab.models import OabPerson, OrganMembership
 from apps.okul.models import ParentRoster, Personnel
 from apps.okul.permissions import RequiresAdminPassword
 
@@ -49,6 +50,34 @@ KISI_YAZAN_UCLAR = frozenset(
         "parent-roster",
         "import-parents-preview",
         "import-parents-commit",
+        # Birlik kişileri (F1c 4. adım): elle kayıt, güncelleme, personelden ve veli listesinden kopya.
+        "oab-person-list",
+        "oab-person-detail",
+        "oab-person-from-personnel",
+        "oab-person-from-parent",
+        # Organ üyelikleri (F1c 5. adım): kişi kaydına bağlı üyelik ve şifreli dayanak notu.
+        "oab-membership-list",
+        "oab-membership-detail",
+        # F1c 6. adım: görev bölümü (görev ve şifreli gündem/karar metni), yedek çağrısı, düşme
+        # (şifreli gerekçe), iptal (şifreli gerekçe), görev alma engeli (özel nitelikli dayanak),
+        # temsilci ve alım komisyonu üyeliği.
+        "oab-yk-duty-assignment",
+        "oab-dk-duty-assignment",
+        "oab-membership-substitute-call-yk",
+        "oab-membership-substitute-call-dk",
+        "oab-membership-drop",
+        "oab-membership-cancel",
+        "oab-membership-eligibility-basis",
+        "oab-representative-list",
+        "oab-purchase-committee-list",
+        # F1c 10. adım: E01-E03'ün üretimi (şifreli içerik JSON'u kişi adı taşır).
+        "oab-document-e01",
+        "oab-document-e02",
+        "oab-document-e03",
+        # F1c 11. adım: geçiş kurulumunun devralınan kurul ve temsilci kaydı (üyelik, şifreli kanıt
+        # notu) ve programdan önceki seçilme sayılarının beyanı (kişi kaydının sayaç alanları).
+        "oab-transition-inherited",
+        "oab-transition-election-counts",
     }
 )
 
@@ -117,6 +146,33 @@ DIGER_UCLAR = frozenset(
         "security-state-reset",
         "security-status",
         "security-unlock",
+        "oab-okul-karti-bilgileri",
+        # E01-E03'ün listesi ve basımı (F1c 10. adım): okur; basım `BASIM` iz satırı yazar, kişi
+        # yazmaz.
+        "oab-term-documents",
+        "oab-document-download",
+        # Kadro okuması (F1c 5. adım): yalnız okur (GET). Görev alma engelinin ucu 6. adımda yazma
+        # (PUT) aldı, kişi yazan listesindedir.
+        "oab-organ-roster",
+        # Birlik dönemi (F1c-3): kişi verisi yazmaz, kapı `Eylem.BIRLIK_DONEMI_YAZMA`.
+        "oab-term-detail",
+        # Yönetim kurulunun aylık toplantı günü (dönem ayarı, kişisiz) ve bağlanabilecek kararların
+        # listesi (kişisiz okuma; F1c 11. adım).
+        "oab-term-meeting-day",
+        "oab-term-linkable-decisions",
+        "oab-term-list",
+        # Geçiş kurulumu (F1c 11. adım): durum okuması (kişisiz), dönem ve karar defteri kaydının
+        # iptali (şifreli gerekçe, kişi yazmaz), karar defteri ve "Geçiş kurulumu tamamlandı" işareti.
+        # Kapı `Eylem.BIRLIK_DONEMI_YAZMA`; şifreli gerekçe anahtarsız yazılmaz.
+        "oab-term-cancel",
+        "oab-transition",
+        # Gerekçe kutusunun yarım metni (hesabın kendi şifreli kaydı; kişi sicili yazmaz).
+        "oab-draft-text",
+        # Genel Bakış'ın pano kalemleri (F1c 12. adım): kişisiz, yalnız okur, hiçbir şey yazmaz.
+        "oab-dashboard",
+        "oab-transition-decision-book",
+        "oab-transition-decision-book-cancel",
+        "oab-transition-complete",
         "setup-complete",
         "setup-roadmap",
         "setup-school-config",
@@ -210,12 +266,23 @@ def test_parolasizken_kisi_yazan_her_uc_yazma_yontemiyle_409_doner(parolasiz: Pa
             denenen += 1
     # 1 liste (POST) + 1 ayrıntı (PUT/PATCH/DELETE) + 2 içe aktarma (POST)
     # + 1 ayrılış (POST) + 1 birleştirme (POST) + 1 havuz kararı (POST)
-    # + veli listesi: silme (DELETE) ve 2 aktarım (POST).
+    # + veli listesi: silme (DELETE) ve 2 aktarım (POST)
+    # + birlik kişileri: liste (POST), ayrıntı (PATCH), 2 kopya (POST)
+    # + organ üyelikleri: liste (POST), ayrıntı (PATCH)
+    # + F1c 6. adım: iki görev bölümü, iki yedek çağrısı, düşme, iptal (POST), engel (PUT),
+    # temsilci ve alım komisyonu (POST).
+    # + F1c 10. adım: E01, E02, E03 üretimi (POST).
+    # + F1c 11. adım: geçişte devralınan kayıt ve seçilme sayısı beyanı (POST).
     # Aile iskeletinin kütüphane uçları (üyelik, kart basımı, dolaşım masası,
     # teslim, saklama tetiği) F1a-2'de, öğrenci uçları F1b 5. adımda söküldü.
-    assert denenen == 1 + 1 * 3 + 2 + 1 + 1 + 1 + 1 + 2
+    assert (
+        denenen
+        == 1 + 1 * 3 + 2 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 2 + 2 + 1 + 1 + 1 + 2 + 3 + 2
+    )
     assert not Personnel.all_objects.exists()
     assert not ParentRoster.objects.exists()
+    assert not OabPerson.objects.exists()
+    assert not OrganMembership.objects.exists()
 
 
 @pytest.mark.django_db

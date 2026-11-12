@@ -1,4 +1,7 @@
-"""Denetim izi testlerinin ortak yardımcısı: program DIŞINDAN eklenen satır taklidi.
+"""Denetim izi testlerinin ortak yardımcıları: bekçilerin model kümesi ve program DIŞINDAN satır taklidi.
+
+Bekçilerin (izsiz yazım kapısı, alan sınıflaması, uydurma veri araması) model kümesi `bekci_modelleri`
+ile gelir: `okul` ve `oab`. Uygulama adı dizedir: `okul` kodu `oab`'yi içe aktarmaz (plan "F1c adımları").
 
 Sırrı olmayan biri (veri dosyasına yazabilen ama İA'yı ve `iz-durumu.json`'daki tohumu
 bilmeyen) zincirin sonuna satır ekleyebilir: herkesin bildiği mühürsüz anahtarla
@@ -15,11 +18,37 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from django.apps import apps as django_apps
 from django.db import connection
+from django.db.models import Model
 
 from apps.okul import denetim_izi
 from apps.okul.models import AuditTrail
 from shared import kanonik
+
+#: Denetim izi bekçilerinin kapsadığı uygulamalar.
+IZ_UYGULAMALARI = ("okul", "oab")
+
+
+def bekci_modelleri() -> list[type[Model]]:
+    """Bekçilerin kapsadığı uygulamaların bütün modelleri."""
+    return [
+        model for ad in IZ_UYGULAMALARI for model in django_apps.get_app_config(ad).get_models()
+    ]
+
+
+def izlenen_modeller() -> list[type[Model]]:
+    """Denetim izi listelerini taşıyan modeller (taşımayanı `LISTESIZ_MODELLER` adıyla sayar)."""
+    return [model for model in bekci_modelleri() if hasattr(model, "IZ_DEGER_ALANLARI")]
+
+
+def kor_indeks_alanlari(model: type[Model]) -> set[str]:
+    """Kör indeks sütunları (`name_index` gibi `*_index` adlı alanlar).
+
+    Kör indeks şifreli değildir, ama aday sözlüğüyle kişiyi ele verir: şifreli alan gibi korunur.
+    """
+    return {alan.name for alan in model._meta.fields if alan.name.endswith("_index")}
+
 
 #: Sahte satırın anı (UTC); veritabanına saat dilimsiz UTC metni olarak girer.
 SAHTE_AN = datetime(2026, 11, 1, 7, 30, tzinfo=UTC)

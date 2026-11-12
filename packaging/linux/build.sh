@@ -54,8 +54,13 @@ TAR_ADI="oab-defteri-${SURUM}-linux-x64.tar.gz"
 
 # .deb bağımlılıkları (aile hattından). Pango/glib/fontconfig Linux'ta BUNDLE
 # EDİLMEZ (sistem sürümüyle çakışır); dağıtımın kendi paketleri kullanılır.
-# Hepsi Debian 11 ve 12 ana deposunda mevcuttur.
-DEPENDS_TEMEL="libpango-1.0-0, libpangoft2-1.0-0, libharfbuzz0b, libfontconfig1, libglib2.0-0, fonts-dejavu-core"
+# Hepsi Debian 11 ve 12 ana deposunda mevcuttur. Evrakın yazı tipi bu bağımlılıklardan GELMEZ:
+# PDF iki sistemde paketteki Liberation Serif 2.1.5 ve DejaVu Sans'la (`fonts/`) dizilir, kanca
+# (`rthook_od.py`) evrak yoluna yalnız o dizini tarayan fontconfig yapılandırmasını bildirir
+# (`OD_EVRAK_FONTCONFIG`; tasarım §9.1-8, sistem dizini taranmaz). `fonts-liberation2` (Debian 11'de
+# 2.1.3, 12'de 2.1.5) zararsız olduğu için bağımlılıkta kaldı; PDF için gerekli değildir.
+# `fonts-liberation` 11-12'de eski 1.07 sürümünü verir, bu yüzden adı kullanılmaz.
+DEPENDS_TEMEL="libpango-1.0-0, libpangoft2-1.0-0, libharfbuzz0b, libfontconfig1, libglib2.0-0, fonts-dejavu-core, fonts-liberation2"
 # Qt WebEngine'in sistemden beklediği X/GL/ses kütüphaneleri (PySide6 tekerleği
 # Qt'nin kendisini taşır, ama bu sistem kütüphanelerini taşımaz). Liste
 # 23.09.2026'da bullseye kabında `ldd` ile doğrulandı; Qt5'ten Qt6'ya geçişte
@@ -67,7 +72,7 @@ DEPENDS_TEMEL="libpango-1.0-0, libpangoft2-1.0-0, libharfbuzz0b, libfontconfig1,
 # WeasyPrint'ten basılır (spec'te `QtPrintSupport` de paketlenmez).
 DEPENDS_QT="libgl1, libegl1, libxkbcommon0, libxkbcommon-x11-0, libxkbfile1, libdbus-1-3, libnss3, libnspr4, libxcomposite1, libxdamage1, libxrandr2, libxtst6, libxi6, libasound2, libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-randr0, libxcb-render-util0, libxcb-shape0, libxcb-xinerama0, libxcb-xkb1, libxcb-cursor0"
 
-APT_TEMEL="libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libfontconfig1 libglib2.0-0 fonts-dejavu-core binutils"
+APT_TEMEL="libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libfontconfig1 libglib2.0-0 fonts-dejavu-core fonts-liberation2 binutils"
 # libharfbuzz-subset0 Debian 11'DE YOKTUR (bookworm ile geldi). WeasyPrint font
 # alt-kümeleme için arar, bulamazsa fontu tam gömer — PDF büyür ama üretilir.
 # Bu yüzden hem burada hem .deb Depends'inde ZORUNLU DEĞİLDİR (aile hattının

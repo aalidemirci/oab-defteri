@@ -23,6 +23,11 @@
 //      ve kantinde yarıyıl ayının takvimidir; ders yılı kaydedilip aktifleşince
 //      iki takvim yılının resmî ve dini tatilleri eklenir; ara tatil ve yarıyıl
 //      Kapalı Günler panelinden (Ayarlar'daki bileşenin aynısı) girilir.
+//   4. Birlik Dönemi — ATLANABİLİR (tasarım §7.9; plan F1c kararları "Geçiş adımı atlanabilir"; F1c
+//      11. adım): program okula birlik döneminin ortasında giriyorsa geçiş kurulumunun ilk adımı (ilk
+//      birlik dönemi) burada açılır (`gecis-kurulumu/IlkDonemFormu`). Kurulumun tamamlanma koşulu
+//      değildir; geçişin öteki adımları kurulumdan sonra Birlik Dönemi → Geçiş Kurulumu'ndadır, eksik
+//      kalan adım Genel Bakış'taki yol haritasında görünür.
 // Kişi aktarımı sihirbazda değildir: Genel Bakış'taki "Başlangıç Yol Haritası"
 // kurulumdan sonra sıradaki işleri gösterir.
 //
@@ -71,8 +76,18 @@ import {
 } from "../guvenlik/metinler";
 import { HesapAydinlatmaMetni } from "../kisiler/AydinlatmaMetni";
 import OkulKartiAlanlari from "../okul/OkulKartiAlanlari";
+import { AtifliUyarilar } from "../birlik-donemi/BirlikDonemiPage";
+import type { AtifliUyari } from "../birlik-donemi/api";
+import { GOREV_SURESI_BASLIGI } from "../birlik-donemi/metinler";
+import IlkDonemFormu from "../gecis-kurulumu/IlkDonemFormu";
+import {
+  DONEM_ACILDI,
+  SIHIRBAZ_ADIM_ACIKLAMASI,
+  SIHIRBAZ_ADIM_ADI,
+  SIHIRBAZ_DEVAM_NOTU,
+} from "../gecis-kurulumu/metinler";
 import { SETUP_STEPS, okulApi } from "../okul/api";
-import type { SchoolYear, SetupStatus, SetupStep } from "../okul/api";
+import type { SchoolYear, SetupStatus, WizardStep } from "../okul/api";
 import { DERS_YILI_ACIKLAMASI, OKUL_KARTI_ACIKLAMASI } from "../okul/metinler";
 import {
   bosOkulFormu,
@@ -96,11 +111,15 @@ import { yeniParolaHatalari } from "../oturum/parolaPolitikasi";
 import KapaliGunlerPaneli from "../takvim/KapaliGunlerPaneli";
 import { eksikDiniBayramIletisi, takvimYillari, tatilleriTohumla } from "../takvim/tatilTohumu";
 
-const ADIMLAR: readonly { key: SetupStep; label: string; icon: string }[] = [
+export const ADIMLAR: readonly { key: WizardStep; label: string; icon: string }[] = [
   { key: "password", label: "Program Yöneticisi Hesabı", icon: "manage_accounts" },
   { key: "school", label: "Okul Bilgileri", icon: "school" },
   { key: "calendar", label: "Ders Yılı ve Kapalı Günler", icon: "calendar_month" },
+  { key: "birlik_donemi", label: SIHIRBAZ_ADIM_ADI, icon: "event_note" },
 ];
+
+/** Takvim adımının sırası (sonrasında atlanabilir Birlik Dönemi adımı gelir). */
+const TAKVIM_ADIMI = 2;
 
 const SON_ADIM = ADIMLAR.length - 1;
 
@@ -132,10 +151,13 @@ function BilgiBandi({ ikon, children }: { ikon: string; children: ReactNode }) {
   );
 }
 
-/** Sihirbaz ilk EKSİK adımdan açılır (hepsi tamsa son adım: "Kurulumu tamamla"). */
+/**
+ * Sihirbaz ilk EKSİK adımdan açılır; hepsi tamsa son zorunlu adımdan (takvim: "Kurulumu tamamla").
+ * Atlanabilir Birlik Dönemi adımına "Devam" ile geçilir.
+ */
 function ilkEksikAdim(s: SetupStatus): number {
   const ilk = SETUP_STEPS.findIndex((adim) => s.missing_steps.includes(adim));
-  return ilk === -1 ? SON_ADIM : ilk;
+  return ilk === -1 ? TAKVIM_ADIMI : ilk;
 }
 
 export default function KurulumPage() {
@@ -218,6 +240,8 @@ export default function KurulumPage() {
       parolaKurulu && anahtarSaklandi && !anahtarBekliyor,
       status?.school_info_complete ?? false,
       status?.active_school_year?.terms_ready ?? false,
+      // Atlanabilir adım: birlik dönemi açıldıysa (geçiş başladı ya da bitti) ya da gerekmiyorsa tamam.
+      (status?.transition_setup?.state ?? "BASLAMADI") !== "BASLAMADI",
     ],
     [status, parolaKurulu, anahtarSaklandi, anahtarBekliyor],
   );
@@ -329,7 +353,7 @@ export default function KurulumPage() {
     ileriIpucu = "Devam etmek için kurtarma anahtarını sakladığınızı doğrulayın.";
   else if (adim === 0 && parolaKapisiKapali)
     ileriIpucu = "Devam etmek için kurtarma anahtarını doğrulayın ya da yenisini üretin.";
-  else if (adim === SON_ADIM && eksikAdimVar)
+  else if ((adim === TAKVIM_ADIMI || adim === SON_ADIM) && eksikAdimVar)
     ileriIpucu = "Kurulumu tamamlamak için eksik adımları bitirin.";
 
   return (
@@ -339,8 +363,8 @@ export default function KurulumPage() {
           <h1 className="od-page-title">Kurulum Sihirbazı</h1>
           <p className="od-page-description">
             Programı kullanmaya başlamadan önce üç adımı tamamlayın: program yöneticisi hesabı, okul
-            bilgileri, ders yılı ve kapalı günler. Okul bilgilerini ve takvimi daha sonra Ayarlar
-            ekranından değiştirebilirsiniz.
+            bilgileri, ders yılı ve kapalı günler. Dördüncü adım (birlik dönemi) atlanabilir. Okul
+            bilgilerini ve takvimi daha sonra Ayarlar ekranından değiştirebilirsiniz.
           </p>
         </div>
       </div>
@@ -395,7 +419,8 @@ export default function KurulumPage() {
                 onChange={(degisiklik) => setOkul((f) => ({ ...f, ...degisiklik }))}
               />
             )}
-            {adim === 2 && <TakvimAdimi status={status} onChanged={durumTazele} />}
+            {adim === TAKVIM_ADIMI && <TakvimAdimi status={status} onChanged={durumTazele} />}
+            {adim === SON_ADIM && <BirlikDonemiAdimi status={status} onChanged={durumTazele} />}
 
             {adimHatasi && <HataBandi mesaj={adimHatasi} />}
 
@@ -430,7 +455,18 @@ export default function KurulumPage() {
                     {busy ? "Kaydediliyor…" : "Kaydet ve devam et"}
                   </Button>
                 )}
-                {adim === SON_ADIM && (
+                {/* Birlik Dönemi adımı atlanabilir: takvim adımından da kurulum tamamlanır. */}
+                {adim === TAKVIM_ADIMI && (
+                  <Button
+                    variant="outlined"
+                    icon="arrow_forward"
+                    onClick={() => adimaGit(SON_ADIM)}
+                    disabled={busy}
+                  >
+                    Devam
+                  </Button>
+                )}
+                {(adim === TAKVIM_ADIMI || adim === SON_ADIM) && (
                   <Button
                     icon="check_circle"
                     onClick={() => void kurulumuTamamla()}
@@ -1052,6 +1088,43 @@ function DonemFormu({
           {busy ? "Kaydediliyor…" : "Dönemleri kaydet"}
         </Button>
       </div>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 4. adım — Birlik Dönemi (atlanabilir; geçiş kurulumunun ilk adımı)
+// ---------------------------------------------------------------------------
+
+function BirlikDonemiAdimi({
+  status,
+  onChanged,
+}: {
+  status: SetupStatus;
+  onChanged: () => Promise<void>;
+}) {
+  const [uyarilar, setUyarilar] = useState<AtifliUyari[]>([]);
+  const baslamadi = (status.transition_setup?.state ?? "BASLAMADI") === "BASLAMADI";
+  return (
+    <Card elevation={0} className="space-y-4 p-6">
+      <p className="text-body-medium text-on-surface-variant">{SIHIRBAZ_ADIM_ACIKLAMASI}</p>
+      {baslamadi ? (
+        <IlkDonemFormu
+          onAcildi={(yanit) => {
+            setUyarilar(yanit.uyarilar);
+            void onChanged();
+          }}
+        />
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-start gap-2 rounded-shape-sm bg-secondary-container px-4 py-3 text-body-medium text-on-secondary-container">
+            <Icon name="check_circle" size="lg" />
+            <span>{DONEM_ACILDI}</span>
+          </div>
+          <AtifliUyarilar uyarilar={uyarilar} baslik={GOREV_SURESI_BASLIGI} />
+          <p className="text-body-medium text-on-surface-variant">{SIHIRBAZ_DEVAM_NOTU}</p>
+        </div>
+      )}
     </Card>
   );
 }

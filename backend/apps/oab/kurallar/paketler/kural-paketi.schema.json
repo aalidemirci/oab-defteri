@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:oab-defteri:kural-paketi:1",
+  "title": "OAB Defteri kural paketi",
+  "description": "Tasarım §6.1. Açılışta aynı dosyayı apps/oab/kurallar/dogrulayici.py okur; o küçük doğrulayıcının tanımadığı anahtar burada kullanılamaz.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "paket",
+    "rev",
+    "sema_surumu",
+    "baslik",
+    "korpus_teyit",
+    "degisiklik_notu",
+    "degisiklikler",
+    "kurallar"
+  ],
+  "properties": {
+    "paket": { "type": "string", "pattern": "^OAB-[0-9]{4}\\.[0-9]{2}$" },
+    "rev": { "type": "integer", "minimum": 1 },
+    "sema_surumu": { "const": 1 },
+    "baslik": { "$ref": "#/$defs/metin" },
+    "korpus_teyit": { "$ref": "#/$defs/tarih" },
+    "degisiklik_notu": { "$ref": "#/$defs/metin" },
+    "degisiklikler": { "type": "array", "items": { "$ref": "#/$defs/degisiklik" } },
+    "kurallar": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/kural" } }
+  },
+  "$defs": {
+    "metin": { "type": "string", "minLength": 1 },
+    "tarih": { "type": "string", "pattern": "^[0-9]{2}\\.[0-9]{2}\\.[0-9]{4}$" },
+    "faz": { "enum": ["F1c", "F2", "F3", "F4", "F5", "F6", "F7", "F8"] },
+    "ondalik": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$" },
+    "belirtec": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+    "tablo_degeri": {
+      "anyOf": [
+        { "type": "integer" },
+        { "$ref": "#/$defs/ondalik" },
+        { "type": "object", "additionalProperties": { "$ref": "#/$defs/tablo_degeri" } }
+      ]
+    },
+    "deger": {
+      "anyOf": [
+        { "type": "integer" },
+        { "type": "boolean" },
+        { "$ref": "#/$defs/ondalik" },
+        {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/belirtec" }
+        },
+        { "type": "object", "additionalProperties": { "$ref": "#/$defs/tablo_degeri" } }
+      ]
+    },
+    "degisiklik": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tur"],
+      "properties": {
+        "id": { "$ref": "#/$defs/kimlik" },
+        "tur": { "enum": ["ekleme", "bitis", "deger_degisikligi", "duzeltme"] }
+      }
+    },
+    "kimlik": {
+      "type": "string",
+      "pattern": "^(genel_kurul|yonetim_kurulu|denetleme_kurulu|uyelik|temsilci|bagis|gelir|etkinlik|makbuz|harcama|bildirim|duyuru|vergi|denetim|arz_bedeli|pay_dagitimi|kira|kantin|servis|personel)\\.[a-z][a-z0-9_]*$"
+    },
+    "madde": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capa"],
+      "dependentRequired": { "alt_bent": ["bent"], "bent": ["fikra"] },
+      "properties": {
+        "capa": { "type": "string", "pattern": "^[a-z0-9-]+\\.md#[a-z0-9-]+$" },
+        "fikra": { "type": "string", "pattern": "^[0-9]+$" },
+        "bent": { "type": "string", "pattern": "^[a-zçğıöşü]$" },
+        "alt_bent": { "type": "string", "pattern": "^[0-9]+$" },
+        "fikra_bicimi": { "enum": ["numarali", "paragraf"] }
+      }
+    },
+    "kosul_listesi": { "type": "array", "minItems": 1, "uniqueItems": true },
+    "kosul": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "okul.kademe": {
+          "$ref": "#/$defs/kosul_listesi",
+          "items": { "enum": ["OKUL_ONCESI", "ILKOKUL", "ORTAOKUL", "ORTAOGRETIM"] }
+        },
+        "okul.yerlesim_turu": {
+          "$ref": "#/$defs/kosul_listesi",
+          "items": { "enum": ["BUYUKSEHIR", "IL_MERKEZI_BUYUKSEHIR_DEGIL", "DIGER"] }
+        },
+        "okul.kantin": {
+          "$ref": "#/$defs/kosul_listesi",
+          "items": { "enum": ["KIRAYA_VERILIYOR", "BIRLIKCE_ISLETILIYOR", "KANTIN_YOK"] }
+        },
+        "okul.personel": {
+          "$ref": "#/$defs/kosul_listesi",
+          "items": { "enum": ["DOGRUDAN_ISVEREN", "HIZMET_ALIMI", "CALISTIRMIYOR"] }
+        },
+        "etkinlik.duzenleyen": {
+          "$ref": "#/$defs/kosul_listesi",
+          "items": { "enum": ["BIRLIK", "UCUNCU_KISI"] }
+        },
+        "personel.sozlesme_turu": {
+          "$ref": "#/$defs/kosul_listesi",
+          "items": { "enum": ["BELIRSIZ_SURELI", "BELIRLI_SURELI"] }
+        }
+      }
+    },
+    "kural": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "deger",
+        "birim",
+        "karsilastirma",
+        "tur",
+        "dayanak_turu",
+        "madde",
+        "aciklama",
+        "yururluk",
+        "giris",
+        "davranis_fazi",
+        "eksik_veri",
+        "toplu_gerekce"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/kimlik" },
+        "deger": { "$ref": "#/$defs/deger" },
+        "birim": {
+          "enum": [
+            "gun",
+            "is_gunu",
+            "hafta",
+            "ay",
+            "yil",
+            "takvim_ayi",
+            "ayin_gunu",
+            "kisi",
+            "ogrenci",
+            "oran",
+            "puan",
+            "adet",
+            "tarih",
+            "mantiksal",
+            "liste",
+            "tablo"
+          ]
+        },
+        "karsilastirma": {
+          "enum": [
+            "en_az",
+            "en_cok",
+            "kucuktur",
+            "esit",
+            "carpan",
+            "parametre",
+            "liste_icinde",
+            "tablo"
+          ]
+        },
+        "tur": { "enum": ["uyari", "sert"] },
+        "sert_gerekcesi": {
+          "enum": ["hesap_butunlugu", "hesaplanan_deger", "hukuki_gecersizlik", "kullanici_karari"]
+        },
+        "dayanak_turu": { "enum": ["lafiz", "yorum", "kullanici_karari"] },
+        "karar": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kimlik", "tarih"],
+          "properties": {
+            "kimlik": { "type": "string", "pattern": "^[A-Z]+-[0-9]+$" },
+            "tarih": { "$ref": "#/$defs/tarih" }
+          }
+        },
+        "madde": { "$ref": "#/$defs/madde" },
+        "ek_madde": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/madde" } },
+        "aciklama": { "$ref": "#/$defs/metin" },
+        "uyari_metni": { "$ref": "#/$defs/metin" },
+        "kosul": { "$ref": "#/$defs/kosul" },
+        "olay_tarihi": { "$ref": "#/$defs/metin" },
+        "yururluk": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["baslangic", "bitis"],
+          "properties": {
+            "baslangic": { "$ref": "#/$defs/tarih" },
+            "bitis": { "anyOf": [{ "$ref": "#/$defs/tarih" }, { "type": "null" }] }
+          }
+        },
+        "giris": { "$ref": "#/$defs/faz" },
+        "davranis_fazi": { "$ref": "#/$defs/faz" },
+        "yorum": { "$ref": "#/$defs/metin" },
+        "eksik_veri": { "enum": ["tamamlanacak", "sapma"] },
+        "toplu_gerekce": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "tur": { "const": "sert" } } },
+          "then": { "required": ["sert_gerekcesi"] },
+          "else": { "not": { "required": ["sert_gerekcesi"] } }
+        },
+        {
+          "if": { "properties": { "tur": { "const": "uyari" } } },
+          "then": { "required": ["uyari_metni"] }
+        },
+        {
+          "if": { "properties": { "dayanak_turu": { "const": "kullanici_karari" } } },
+          "then": { "required": ["karar"] },
+          "else": { "not": { "required": ["karar"] } }
+        },
+        {
+          "if": { "properties": { "dayanak_turu": { "const": "yorum" } } },
+          "then": { "required": ["yorum"] },
+          "else": { "not": { "required": ["yorum"] } }
+        },
+        {
+          "if": { "properties": { "birim": { "const": "oran" } } },
+          "then": {
+            "properties": {
+              "deger": {
+                "anyOf": [
+                  { "$ref": "#/$defs/ondalik" },
+                  { "type": "object", "additionalProperties": { "$ref": "#/$defs/ondalik" } }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

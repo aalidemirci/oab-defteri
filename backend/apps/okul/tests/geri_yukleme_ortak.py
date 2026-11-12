@@ -86,6 +86,11 @@ class HesapSatiri:
     bekleyen_ozet: str = ""
     #: Satırın iz satırı yazılsın mı (modül başlığı); yanlışsa satırın izi yoktur (fail-closed).
     iz: bool = True
+    #: Hesap bağı (F1c 7. adım; `oab` tamsayı kimlikleri). Yalnız bağ sütunlu görüntüye yazılır
+    #: (`yetkili_sqlite(bag_sutunlari=True)`); sütunsuz eski görüntüde üçü de boş olmalıdır.
+    person: int | None = None
+    membership: int | None = None
+    term: int | None = None
 
 
 #: Konusu hesap olmayan görüntülerin program yöneticisi satırı (modül başlığı "Ekli görüntü").
@@ -117,15 +122,20 @@ def muhur(dek: bytes, satir: HesapSatiri) -> str:
             "login_name": satir.login_name,
             "role": satir.role,
             "status": satir.status,
-            "person": None,
-            "membership": None,
-            "term": None,
+            "person": _bag_metni(satir.person),
+            "membership": _bag_metni(satir.membership),
+            "term": _bag_metni(satir.term),
             "opened_at": satir.opened_at,
             "closed_at": satir.closed_at,
             "wrap_digest": ozet(dek, satir),
             "wrap_digest_pending": satir.bekleyen_ozet,
         },
     )
+
+
+def _bag_metni(kimlik: int | None) -> str | None:
+    """Hesap bağının mühürdeki ve içerik MAC'indeki biçimi: kimliğin metni (`str(pk)`)."""
+    return None if kimlik is None else str(kimlik)
 
 
 def program_disindan(
@@ -159,6 +169,9 @@ def ozet_alanlari(dek: bytes, satir: HesapSatiri, muhur_: str) -> dict[str, Any]
         "login_name": satir.login_name,
         "role": satir.role,
         "display_name": AD_SOYAD,
+        "person": _bag_metni(satir.person),
+        "membership": _bag_metni(satir.membership),
+        "term": _bag_metni(satir.term),
         "status": satir.status,
         "suspend_reason": "",
         "opened_at": satir.opened_at,
@@ -240,12 +253,15 @@ def yetkili_sqlite(
     okul_karti: int = 1,
     parmak_izi: str | None = None,
     wal: bool = True,
+    bag_sutunlari: bool = False,
 ) -> bytes:
     """Okul kartı, mühürlü hesap satırları, iz anahtarı ve satırların izini taşıyan SQLite dosyası
     kurar; baytlarını döndürür.
 
     `okul_karti` okul kartının satır sayısıdır (tek olmalı; 0 ve 2 "okunamıyor" sınaması);
-    `parmak_izi` verilmezse bu DEK'in parmak izi yazılır.
+    `parmak_izi` verilmezse bu DEK'in parmak izi yazılır. `bag_sutunlari` hesap tablosuna `okul.0004`'ün
+    bağ sütunlarını (`person_id`, `membership_id`, `term_id`) ekler; verilmezse görüntü bağ sütunları
+    olmayan eski şemadadır (ORM'siz okuyucu üçünü de boş okur; plan F1c 7. adım).
     """
     yol.unlink(missing_ok=True)
     izi = crypto.key_fingerprint(dek) if parmak_izi is None else parmak_izi
@@ -274,6 +290,9 @@ def yetkili_sqlite(
             "wrap_digest varchar(64) NOT NULL, wrap_digest_pending varchar(64) NOT NULL, "
             "seal varchar(64) NOT NULL)"
         )
+        if bag_sutunlari:
+            for sutun in ("membership_id", "person_id", "term_id"):
+                baglanti.execute(f"ALTER TABLE okul_account ADD COLUMN {sutun} bigint NULL")
         baglanti.execute(
             "CREATE TABLE okul_auditkey (id integer NOT NULL PRIMARY KEY, [key] text NOT NULL, "
             "valid_from_seq bigint unsigned NOT NULL UNIQUE, created_at datetime NOT NULL, "
@@ -299,6 +318,7 @@ def yetkili_sqlite(
         sabitler = [ozetli(dek, satir) for satir in hesaplar]
         ad_belirteci = _fernet(dek).encrypt(AD_SOYAD.encode("utf-8")).decode("ascii")
         for satir in sabitler:
+            assert bag_sutunlari or (satir.person, satir.membership, satir.term) == (None,) * 3
             muhur_ = muhur(dek, satir) if satir.muhur is None else satir.muhur
             baglanti.execute(
                 "INSERT INTO okul_account (id, login_name, role, display_name, status, "
@@ -320,6 +340,12 @@ def yetkili_sqlite(
                     muhur_,
                 ),
             )
+            if bag_sutunlari:
+                baglanti.execute(
+                    "UPDATE okul_account SET person_id = ?, membership_id = ?, term_id = ? "
+                    "WHERE id = ?",
+                    (satir.person, satir.membership, satir.term, uuid.UUID(satir.id).hex),
+                )
             if satir.iz:
                 iz_satiri_ekle(
                     baglanti, hesap_id=satir.id, alanlar=ozet_alanlari(dek, satir, muhur_)

@@ -15,7 +15,6 @@ import {
   KADEME_YARDIMI,
   KAMPUS_ETIKETI,
   KAMPUS_YARDIMI,
-  KANTIN_ISLETME_BILGISI,
   KANTIN_YARDIMI,
   KURUM_KODU_YARDIMI,
   MEVCUT_YARDIMI,
@@ -109,7 +108,7 @@ export default function OkulKarti(bolum: BolumProps) {
       </ul>
       <Ipucu>
         Kantin işletme biçiminde “{CANTEEN_MODE_TR.BIRLIKCE_ISLETILIYOR}” seçilince alanın altında
-        şu bilgi çıkar: “{KANTIN_ISLETME_BILGISI}” Bu yalnız bir bilgidir, kaydı engellemez.
+        md. 23/3'ün bilgisi çıkar. Bu yalnız bir bilgidir, kaydı engellemez.
       </Ipucu>
 
       <AltBaslik>Veri sorumlusu</AltBaslik>

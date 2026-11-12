@@ -203,7 +203,8 @@ urlpatterns = [
         views_hesaplar.KullaniciParolaSifirlaView.as_view(),
         name="account-reset-password",
     ),
-    # Hesap teslim pusulası (E63; plan F1b-2): yalnız PDF, saklanmaz; izi `BASIM` satırıdır.
+    # Hesap teslim pusulası (E63; plan F1b-2, F1c 9. adım): yalnız PDF, dosya saklanmaz; üretimi
+    # `GeneratedDocument` kaydı, dosyanın izi `BASIM` satırıdır.
     path(
         "accounts/<uuid:hesap_id>/handover-slip/",
         views_hesaplar.KullaniciTeslimPusulasiView.as_view(),

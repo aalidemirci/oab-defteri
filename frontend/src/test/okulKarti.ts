@@ -3,6 +3,7 @@
 // tek yerde durur; testler yalnız farkı yazar. Veriler uydurmadır ("Örnek" önekli).
 
 import type { SchoolConfig } from "../modules/okul/api";
+import type { KantinBilgisi } from "../modules/okul/kuralBilgileri";
 
 /** İlk açılış: okul kartı boş. */
 export const BOS_OKUL_KARTI: SchoolConfig = {
@@ -40,4 +41,16 @@ export const ORNEK_OKUL_KARTI: SchoolConfig = {
   staffing_mode: "CALISTIRMIYOR",
   demirbas_onayi: true,
   setup_completed: true,
+};
+
+/** Kural paketinden gelen md. 23/3 bilgisinin metni (sözlükteki metin; uç sınaması backend'dedir). */
+export const KANTIN_ISLETME_BILGISI =
+  "Kantin ve benzeri yerler birlikçe işletilir ve vergi mükellefiyeti doğarsa birlik hakkında " +
+  "213 sayılı Vergi Usul Kanunu hükümleri uygulanır (md. 23/3).";
+
+export const ORNEK_KANTIN_BILGISI: KantinBilgisi = {
+  modlar: ["BIRLIKCE_ISLETILIYOR"],
+  metin: KANTIN_ISLETME_BILGISI,
+  paket: "OAB-2023.12",
+  rev: 1,
 };

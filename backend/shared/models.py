@@ -2,13 +2,15 @@
 
 Aile iskeletinin `shared/models.py` dosyasından AYNEN alındı (tasarım §12.B).
 İskelet, türediği kaynaktaki `created_by`/`deleted_by` FK alanlarını tek kullanıcılı
-olduğu için çıkarmıştı. OAB'de `created_by`/`updated_by` (→ `Account`) F1b'de
-hesaplarla gelir (tasarım §5 O4, §4.6.1). `created_at/updated_at/deleted_at` +
-soft-delete davranışı
+olduğu için çıkarmıştı. Okul çekirdeğinde yazarı denetim izi gösterir;
+`created_by`/`updated_by` (→ `Account`) `shared`'den `okul`'a ters bağımlılık
+doğurmasın diye `apps.oab.models.OabBaseModel`'dedir (tasarım §5 O4, §4.6.1).
+`created_at/updated_at/deleted_at` + soft-delete davranışı
 (`SoftDeleteManager`/`AllObjectsManager` + `delete()/hard_delete()/restore()`)
 AYNEN korundu.
 
-Tüm modeller `BaseModel`'i miras alır. Silme yoktur; `delete()` soft-delete yapar.
+Okul çekirdeğinin modelleri `BaseModel`'i miras alır; `delete()` soft-delete yapar.
+`oab` modelleri bu temeli almaz: silme yerine `IPTAL`/`PASIF` durumu vardır (tasarım §5 O1).
 """
 
 from __future__ import annotations

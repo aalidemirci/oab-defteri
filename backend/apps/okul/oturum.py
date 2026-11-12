@@ -102,6 +102,14 @@ masaüstünde aynı `request_quit` yoluna iner; `closing` olayı nedenini taşı
 oturum kapanışı ve görev yöneticisi de pencereyi aynı olayla kapatır), çarpıyı kullanıcının
 eylemi diye ayırmanın güvenilir yolu yoktur. Bu yüzden çarpının kilidi `SISTEM`'dir.
 
+ASKININ KİLİDİ (tasarım §4.4.5 "Üyelik düştü, görev değişti": askı girişi kapatır). Oturumdaki
+hesap bir üyelik kaydıyla askıya alınırsa (ör. sekreter kendi görevini değiştiren görev bölümünü
+yazdı; `hesaplar.uyelik_askisi`) işlem commit edilince `hesap_askiya_alindi` bekleyen kilidi kurar:
+isteğin yanıtı (DEK'le) verilir, ardından gelen İLK istekte kilit uygulanır (`degerlendir`; o istek
+423 alır). Hemen kilitlemek DEK'i yanıt kurulmadan düşürürdü. Satırı programın etkisidir: `SISTEM`
+(elle istenmiş bekleyen kilit varsa yazarı yine hesaptır). Uzun iş sürerken kilit, öteki bekleyen
+kilitler gibi ertelenir.
+
 Satır uçuştaki istekler bittikten sonra, DEK ve İA DÜŞMEDEN ÖNCE, açık anahtarla ve oturum
 kilidinin DIŞINDA (SQLite yazımı) yazılır. Yazılamazsa (veritabanı yazılamıyor) kilit yine
 uygulanır ve olay günlüğe düşer: kilit bir güvenlik eylemidir, iz satırının yazılamaması
@@ -200,8 +208,9 @@ ERTELENDI: Final = "ertelendi"
 ZATEN_KILITLI: Final = "zaten_kilitli"
 
 #: Kilidin nedeni (günlük; `KILIT` iz satırının yazarını belirler: "elle" hesabındır,
-#: "kapanis" yalnız arayüzdeki Çık bu oturumdan istendiyse; modül başlığı "KİLİDİN İZİ").
-KilitNedeni = Literal["elle", "bosta", "bekleyen", "kapanis"]
+#: "kapanis" yalnız arayüzdeki Çık bu oturumdan istendiyse; "aski" oturumdaki hesabın üyelik
+#: askısıdır, `SISTEM`'in; modül başlığı "KİLİDİN İZİ").
+KilitNedeni = Literal["elle", "bosta", "bekleyen", "kapanis", "aski"]
 
 #: Kilitlemenin uçuştaki istekleri en çok bekleyeceği süre (sn; modül başlığı).
 UCUSTA_BEKLEME_SN: Final = 30.0
@@ -805,6 +814,25 @@ class OturumDurumu:
         """
         with self._kilit:
             self._kapat_kilitli()
+
+    def hesap_askiya_alindi(self, hesap_id: str) -> bool:
+        """Askıya alınan hesap oturumdaki hesapsa bekleyen kilidi kurar (modül başlığı "ASKININ
+        KİLİDİ"); kurduysa True.
+
+        Kilit burada UYGULANMAZ: isteğin ardından gelen ilk istekte `degerlendir` uygular (neden
+        "bekleyen", satırın yazarı `SISTEM`; elle istenmiş bekleyen kilit varsa o neden kalır).
+        Bekleyen kilidin oturumu etkinlikle dirilmez. Oturum yoksa ya da başka hesabınsa bir şey
+        yapmaz. Kilit tutulurken veritabanına ve dosyaya dokunmaz.
+        """
+        with self._kilit:
+            if not self._acik() or self._hesap is None or self._hesap.id != hesap_id:
+                return False
+            if not self._kilit_bekliyor:
+                logger.info("Oturumdaki hesap askıya alındı; oturum ilk istekte kilitlenecek.")
+            self._kilit_bekliyor = True
+            if self._bekleyen_neden != "elle":
+                self._bekleyen_neden = "aski"
+            return True
 
     def kilitle(
         self,

@@ -70,6 +70,18 @@ export const AD_SOYAD_YARDIMI =
 export const ROL_SECIN_ILETISI = "Geçerli bir rol seçin.";
 
 /**
+ * Organ rolünde hesabın bağlanacağı üyelik (plan F1c 7. adım): yönetim kurulu rollerinde görevdeki asıl
+ * ve rolün görevi, Denetleme Kurulunda görevdeki asıl; açık birlik döneminde. Seçenekler sunucunundur.
+ */
+export const ALAN_UYELIK = "Üyelik";
+export const UYELIK_YARDIMI =
+  "Hesap bu üyeliğe bağlanır; üyelik düşer, iptal edilir ya da görev değişirse hesap askıya alınır.";
+export const UYELIK_SECIN = "Üyeliği seçin.";
+export const AD_OKUNAMADI = "Adı okunamadı";
+/** Organ rolünde açılabilecek üyelik yokken bandın bağlantısı (neden sunucunundur). */
+export const ORGANLARA_GIT = "Organlar ekranını aç";
+
+/**
  * Geçici parolanın kapalı zarfı (plan F1b-2 "Geçici parola"; BSG Yön. md. 10/1: parola herkesin
  * görebileceği yere yazılmaz — kapalı zarf okul uygulamasıdır). Atıf korpustan doğrulandı
  * (`docs/mevzuat/meb-bilgi-ve-sistem-guvenligi-yonergesi.md#madde-10`).

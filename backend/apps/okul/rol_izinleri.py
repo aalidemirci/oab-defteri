@@ -34,7 +34,8 @@ Değişmez: kilitliyken açık olan her (uç, yöntem) açık oturumda her role 
 az erişim vermemelidir.
 
 BEKLEYENLER. Matristeki hücrelerin ve dipnotların çoğunun ucu ya da servisi sonraki
-fazlardadır (müdür yazıları F2/F4, mali kayıtlar F3, DK modülü F4…). Ucu ya da servisi
+fazlardadır (müdür yazıları F2/F4, mali kayıtlar F3, DK'nin md. 14/5 çağrısı F2, raporları F4…).
+Ucu ya da servisi
 olmayan Y hücresi `BEKLEYEN_HUCRELER`'de, gerçek servisi olmayan dipnot
 `BEKLEYEN_DIPNOTLAR`'da, servise bağlanmamış eylem `BAGLANMAMIS_EYLEMLER`'de fazıyla durur
 (plan F1b-2 kullanıcı kararı). Listeler testte anlık görüntüdür ve yalnız küçülebilir; her
@@ -338,11 +339,65 @@ def _yaz(
 
 _YALNIZ_YONETICI: Final = frozenset({YONETICI})
 _YONETICI_VE_DK: Final = frozenset({YONETICI, DENETLEME_KURULU})
+_YONETICI_VE_YK: Final = YK_ROLLERI | {YONETICI}
+_YALNIZ_SEKRETER: Final = frozenset({AccountRole.SEKRETER.value})
+_YONETICI_VE_SEKRETER: Final = frozenset({YONETICI, AccountRole.SEKRETER.value})
 
 _DAYANAK_PERSONEL = (
     "Tasarım §8.1 A7 ('e-Okul: yonetici'): okul çekirdeğinin e-Okul kaynaklı personel sicili "
-    "F1b'de yalnız program yöneticisinin yazdığı kayıttır; M2'nin YK hücreleri OAB kişileriyle "
-    "F1c'de bağlanır (plan F1b-2 'Bugünkü uçların eşlemi'; tasarımda bu daraltmanın satırı yok)."
+    "yalnız program yöneticisinin yazdığı kayıttır; M2'nin YK hücreleri birlik kişilerinin "
+    "uçlarıyla bağlandı (F1c 4. adım; plan F1b-2 'Bugünkü uçların eşlemi'; tasarımda bu "
+    "daraltmanın satırı yok)."
+)
+_DAYANAK_VELI_KOPYASI = (
+    "Tasarım §8.4 (3) ve §4.4.2: veli listesi kişisel veri satırıdır, okuru yalnız program "
+    "yöneticisidir (¹⁰); listeden birlik kişisine ad kopyalamak listeyi kör indeksle sorgular, "
+    "bu yüzden yalnız program yöneticisine açılır (plan F1c-4; tasarımda bu daraltmanın satırı yok)."
+)
+_DAYANAK_ENGEL_DAYANAGI = (
+    "Tasarım §5.2.2 ve §4.6.4: görev alma engelinin dayanağı özel nitelikli kişisel veridir (KVKK "
+    "md. 6/1); kadro okumasına girmez, ayrı uçtan okunur ve okuması erişim günlüğüne yazılır. Okuru "
+    "üyeliği yazan roller (program yöneticisi ve yönetim kurulu rolleri) ile sınırlıdır; Denetleme "
+    "Kurulu ve müdür engelin var ya da yok olduğunu kadroda görür (tasarım §4.4.2 ¹¹; plan F1c 5. "
+    "adım notları, kullanıcı kararı 10.11.2026)."
+)
+_DAYANAK_YK_GOREV_BOLUMU = (
+    "Tasarım §7.2 'YK görev bölümü' satırı: kaydı ve karar taslağını sekreter yazar (program "
+    "yöneticisinin payı hesap işlemidir, Kullanıcılar satırı); plan F1c 6. adım."
+)
+_DAYANAK_YK_YEDEK = (
+    "Tasarım §7.2 'YK yedeğinin çağrılması' satırı: sekreter (YK kararıyla); md. 13/6; plan F1c 6. "
+    "adım."
+)
+_DAYANAK_DK_YEDEK = (
+    "Tasarım §7.2 'DK yedeğinin çağrılması' satırı: program yöneticisi (üyelik kaydı, M2); md. "
+    "14/6 çağırma yetkisini yönetim kuruluna vermez; plan F1c 6. adım."
+)
+_DAYANAK_DUSME = (
+    "Tasarım §7.2 'Öğrencisi ayrılan veli' satırı: program yöneticisi ve sekreter; devamsızlıkla "
+    "düşmenin onayı da sekreterindir (F3). Öteki düşme türlerinin satırı yoktur, en dar okumayla "
+    "aynı iki rol (plan F1c 6. adım)."
+)
+_DAYANAK_DK_GOREV_BOLUMU = (
+    "Tasarım §4.4.2 ⁵ ve §7.2 'DK görev bölümü' satırı: Denetleme Kurulu kendi görev bölümünü "
+    "(başkan seçimi, md. 14/1) ve denetim planını denetim modülünde yazar; YK rolleri ve program "
+    "yöneticisi yazmaz (plan F1c 6. adım, `Eylem.DK_GOREV_BOLUMU_YAZMA`)."
+)
+_DAYANAK_EVRAK_URETEN = (
+    "Tasarım §9.6 E01 ve E03 'Üreten' sütunu: sekreter ve program yöneticisi; başkan ve başkan "
+    "yardımcısı bu belgeleri okur, basar ve imzalar, oluşturmaz (§9.6 'YK rolleri arasında "
+    "Üreten…'; md. 13/4: yazışmayı sekreter yürütür); plan F1c 10. adım."
+)
+_DAYANAK_E02 = (
+    "Tasarım §4.4.2 ⁵ ve §9.6 E02 'Üreten' sütunu: Denetleme Kurulu kendi görev bölümü tutanağını "
+    "ve denetim planını denetim modülünde üretir; YK rolleri ve program yöneticisi üretmez (plan "
+    "F1c 10. adım, `Eylem.DK_GOREV_BOLUMU_YAZMA`)."
+)
+_DAYANAK_TOPLANTI_GUNU = (
+    "Tasarım §5.2.1 `OabTerm.yk_meeting_day_rule` (dönem ayarı) ve §9.6 E01 'Üreten' sütunu: kuralın "
+    "F1c'deki tek kullanımı E01'in D bölümüdür ('Aylık toplantı günü', md. 13/3); yazanı E01'i "
+    "üretenlerle aynıdır (sekreter ve program yöneticisi; md. 13/4: yazışmayı sekreter yürütür). "
+    "Tasarımda bu daraltmanın satırı yok; plan F1c 11. adım."
 )
 _DAYANAK_HAVUZ = (
     "Plan F1b-2: ayrılış havuzu (özet dahil) yalnız program yöneticisinindir; karar e-Okul "
@@ -383,6 +438,9 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _yaz("app-quit", "POST", Satir.KENDI),
     _yaz("security-lock", "POST", Satir.KENDI),
     _yaz("security-change-password", "POST", Satir.KENDI),
+    # Gerekçe kutusunun yarım metni: oturumdaki hesabın kendi kaydı (F1c 11. adım; tasarım §7).
+    _oku("oab-draft-text", Satir.KENDI),
+    _yaz("oab-draft-text", ("PUT", "DELETE"), Satir.KENDI),
     # Oturumdaki hesabın kendi kartları: son girişler, parola yenilenme, kâğıt çapası.
     _oku("security-integrity", Satir.KENDI),
     # Oturumdaki hesabın parola yenilenme bildirimi ve "Gördüm"ü.
@@ -405,6 +463,17 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
         dipnot=5,
         dayanak=_DAYANAK_GORDUM,
     ),
+    # DK görev bölümü ve denetim planı (F1c 6. adım; E02'nin verisi): yalnız Denetleme Kurulu.
+    _yaz(
+        "oab-dk-duty-assignment",
+        "POST",
+        Satir.M8,
+        dipnot=5,
+        dayanak=_DAYANAK_DK_GOREV_BOLUMU,
+    ),
+    # E02 Denetleme Kurulu görev bölümü tutanağı ve denetim planı (F1c 10. adım): yalnız Denetleme
+    # Kurulu; servis `Eylem.DK_GOREV_BOLUMU_YAZMA` ile yeniden sorar.
+    _yaz("oab-document-e02", "POST", Satir.M8, dipnot=5, dayanak=_DAYANAK_E02),
     # ------------------------------------------------ erişim günlüğü (§4.6.4)
     # Okuma ekranı (plan F1b-2 "Erişim günlüğü okuma ucu"): satırın "O" hücreleri program
     # yöneticisi ve Denetleme Kuruludur, öteki hücreler "—". Okuma iz bırakmaz.
@@ -412,6 +481,23 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     # ------------------------------------------------ M1: okul kartı, ders yılı, kapalı günler
     _oku("setup-school-config", Satir.M1),
     _yaz("setup-school-config", "PUT", Satir.M1),
+    # Okul kartının kural paketinden gelen bilgisi (md. 23/3; okul kartını okuyan her rol).
+    _oku("oab-okul-karti-bilgileri", Satir.M1),
+    # Birlik dönemi: liste, ayrıntı (kural sürümü salt okunur satırıyla) ve ilk dönemin açılışı.
+    _oku("oab-term-list", Satir.M1),
+    _yaz("oab-term-list", "POST", Satir.M1),
+    _oku("oab-term-detail", Satir.M1),
+    # Geçiş kurulumu (tasarım §7.9 adım 1-4, "Kim: yonetici"; F1c 8. adımın servisleri, uçları 11. adımda):
+    # durum okuması, dönem iptali, devralınan kurul ve temsilci, seçilme sayısı beyanı, karar defteri
+    # ve iptali, "Geçiş kurulumu tamamlandı" işareti. Devralınan üyeliğin iptali M2'nin genel iptal
+    # ucundadır, servis yalnız program yöneticisine açar (`Eylem.BIRLIK_DONEMI_YAZMA`).
+    _oku("oab-transition", Satir.M1),
+    _yaz("oab-term-cancel", "POST", Satir.M1),
+    _yaz("oab-transition-inherited", "POST", Satir.M1),
+    _yaz("oab-transition-election-counts", "POST", Satir.M1),
+    _yaz("oab-transition-decision-book", "POST", Satir.M1),
+    _yaz("oab-transition-decision-book-cancel", "POST", Satir.M1),
+    _yaz("oab-transition-complete", "POST", Satir.M1),
     _yaz("setup-complete", "POST", Satir.M1),
     # Genel Bakış'ın "Başlangıç Yol Haritası" işaretleri (plan F1b-2: M1).
     _yaz("setup-roadmap", "POST", Satir.M1),
@@ -454,6 +540,101 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _oku("template-personnel", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_SABLON),
     _oku("leave-pool", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_HAVUZ),
     _yaz("leave-pool-resolve", "POST", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_HAVUZ),
+    # ------------------------------------------------ M2: birlik kişileri (F1c 4. adım)
+    # Program yöneticisi ve yönetim kurulu rolleri yazar, Denetleme Kurulu ve müdür okur.
+    _oku("oab-person-list", Satir.M2),
+    _yaz("oab-person-list", "POST", Satir.M2),
+    _oku("oab-person-detail", Satir.M2),
+    _yaz("oab-person-detail", "PATCH", Satir.M2),
+    _yaz("oab-person-from-personnel", "POST", Satir.M2),
+    _yaz(
+        "oab-person-from-parent",
+        "POST",
+        Satir.M2,
+        yalniz=_YALNIZ_YONETICI,
+        dayanak=_DAYANAK_VELI_KOPYASI,
+    ),
+    # ------------------------------------------------ M2: organ üyelikleri (F1c 5. adım)
+    # Program yöneticisi ve yönetim kurulu rolleri yazar, Denetleme Kurulu ve müdür okur; görev alma
+    # engelinin dayanağı (özel nitelikli) yalnız yazanlara açıktır ve okuması erişim günlüğüne düşer.
+    _oku("oab-membership-list", Satir.M2),
+    _yaz("oab-membership-list", "POST", Satir.M2),
+    _oku("oab-membership-detail", Satir.M2),
+    _yaz("oab-membership-detail", "PATCH", Satir.M2),
+    _oku(
+        "oab-membership-eligibility-basis",
+        Satir.M2,
+        yalniz=_YONETICI_VE_YK,
+        dayanak=_DAYANAK_ENGEL_DAYANAGI,
+    ),
+    _oku("oab-organ-roster", Satir.M2),
+    # Görev bölümü, yedek çağrısı, düşme, iptal, görev alma engeli, temsilciler ve alım komisyonu
+    # (F1c 6. adım). Satırın daraltmaları tasarım §7.2'nin "Kim" sütunundandır.
+    _yaz(
+        "oab-yk-duty-assignment",
+        "POST",
+        Satir.M2,
+        yalniz=_YALNIZ_SEKRETER,
+        dayanak=_DAYANAK_YK_GOREV_BOLUMU,
+    ),
+    _yaz(
+        "oab-membership-substitute-call-yk",
+        "POST",
+        Satir.M2,
+        yalniz=_YALNIZ_SEKRETER,
+        dayanak=_DAYANAK_YK_YEDEK,
+    ),
+    _yaz(
+        "oab-membership-substitute-call-dk",
+        "POST",
+        Satir.M2,
+        yalniz=_YALNIZ_YONETICI,
+        dayanak=_DAYANAK_DK_YEDEK,
+    ),
+    _yaz(
+        "oab-membership-drop",
+        "POST",
+        Satir.M2,
+        yalniz=_YONETICI_VE_SEKRETER,
+        dayanak=_DAYANAK_DUSME,
+    ),
+    _yaz("oab-membership-cancel", "POST", Satir.M2),
+    # Görev alma engelinin yazımı: dayanağı okuyabilen roller yazar (satırın Y hücreleri).
+    _yaz("oab-membership-eligibility-basis", "PUT", Satir.M2),
+    _oku("oab-representative-list", Satir.M2),
+    _yaz("oab-representative-list", "POST", Satir.M2),
+    _yaz("oab-purchase-committee-list", "POST", Satir.M2),
+    # Görev bölümü ve temsilci evrakı (F1c 10. adım). E01 ve E03'ü sekreter ve program yöneticisi
+    # üretir. Liste ve basım okumadır (tasarım §4.4.2 "Okuma": evrak çıktısı okumanın kapsamındadır,
+    # `BASIM` satırı okuma rolünde de yazılır); E02'nin satırı M8'dir, okuru M2'ninkiyle aynıdır (her
+    # rol) ve servis basımda belgenin satırını yeniden sorar (`gorev_evraki.OKUMA_SATIRLARI`).
+    _yaz(
+        "oab-document-e01",
+        "POST",
+        Satir.M2,
+        yalniz=_YONETICI_VE_SEKRETER,
+        dayanak=_DAYANAK_EVRAK_URETEN,
+    ),
+    _yaz(
+        "oab-document-e03",
+        "POST",
+        Satir.M2,
+        yalniz=_YONETICI_VE_SEKRETER,
+        dayanak=_DAYANAK_EVRAK_URETEN,
+    ),
+    # Yönetim kurulunun aylık toplantı günü kuralı (dönem ayarı; E01'in D bölümü; F1c 11. adım).
+    _yaz(
+        "oab-term-meeting-day",
+        "PUT",
+        Satir.M2,
+        yalniz=_YONETICI_VE_SEKRETER,
+        dayanak=_DAYANAK_TOPLANTI_GUNU,
+    ),
+    # Bağlanabilecek yönetim kurulu kararları (temsilci ve yedek çağrısının karar bağı; kişisiz
+    # okuma). Karar verisi M4'ündür (YK toplantı, katılım, karar taslağı); her rol okur.
+    _oku("oab-term-linkable-decisions", Satir.M4),
+    _oku("oab-term-documents", Satir.M2),
+    _oku("oab-document-download", Satir.M2),
     # ------------------------------------------------ Kişisel veri: veli listesi (T5; ¹⁰)
     # Özet (sınıf başına sayı) ve şablon okumadır; satırın tek okuru program yöneticisidir.
     _oku("parent-roster", Satir.KISISEL_VERI),
@@ -465,6 +646,9 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _oku("dashboard-last-session", Satir.M9),
     # "Kontrol ettim": M9'un Y hücreleri (program yöneticisi ve YK); DK ve müdür görür.
     _yaz("dashboard-last-session", "POST", Satir.M9),
+    # Pano kalemleri (F1c 12. adım; tasarım §7.10 "pano her role kendi kalemlerini gösterir"): her rol
+    # okur; hangi kalemi gördüğünü servis süzer (`apps.oab.services.pano.KALEM_ROLLERI`).
+    _oku("oab-dashboard", Satir.M9),
     # ------------------------------------------------ Ayarlar (boşta süre)
     _oku("security-idle-lock", Satir.AYARLAR),
     _yaz("security-idle-lock", "PUT", Satir.AYARLAR),
@@ -591,9 +775,9 @@ def _bekleyen(satir: Satir, roller: Iterable[str], faz: str) -> dict[tuple[Satir
 #: Ucu ya da servisi henüz olmayan Y hücreleri → bağlanacakları faz (tasarım §14 faz
 #: ataması). Yalnız küçülebilir; testte anlık görüntüdür.
 BEKLEYEN_HUCRELER: Final[Mapping[tuple[Satir, str], str]] = {
-    # Kişiler ve organlar: YK rollerinin kişi yazımı OAB kişileriyle (personel e-Okul
-    # kaydı yalnız program yöneticisinin; `_DAYANAK_PERSONEL`).
-    **_bekleyen(Satir.M2, sorted(YK_ROLLERI), "F1c"),
+    # Kişiler ve organlar (M2): YK rollerinin hücresi birlik kişilerinin uçlarıyla bağlandı (F1c 4.
+    # adım; personel e-Okul kaydı yalnız program yöneticisinin, `_DAYANAK_PERSONEL`); organ, temsilci,
+    # görev bölümü ve yedek çağrısı uçları F1c'nin 5. ve 6. adımlarında aynı satıra eklendi.
     # Genel kurul (müdürün ¹ yazıları dahil).
     **_bekleyen(Satir.M3, (YONETICI, *sorted(YK_ROLLERI), MUDUR), "F2"),
     # YK toplantı ve karar; gelir-gider (mali kayıtları yalnız muhasip girer).
@@ -614,9 +798,10 @@ BEKLEYEN_HUCRELER: Final[Mapping[tuple[Satir, str], str]] = {
     # Kişisel veri: program yöneticisinin hücresi veli listesinin uçlarıyla bağlandı (F1b 5.
     # adım); adlı E07/E08 çıktısının kapısı ¹⁰ dipnotunun eylemidir (`BEKLEYEN_DIPNOTLAR`, F2).
     # F1b'de bekleyen kalmadı: Kullanıcılar (program yöneticisi) uçlarıyla, Denetleme Kurulunun
-    # M8 hücresi geri yükleme kartının "Gördüm"üyle bağlandı (F1b-2 (c)). DK
-    # modülünün öteki işleri (görev bölümü, denetim planı, rapor, md. 14/5 çağrısı) F4'tedir; M8
-    # hücresi satır düzeyindedir, ilk ucu bağlayınca bekleyenden çıkar.
+    # M8 hücresi geri yükleme kartının "Gördüm"üyle bağlandı (F1b-2 (c)). M8 hücresi satır
+    # düzeyindedir; DK görev bölümü ve denetim planı F1c'nin 6. adımında bağlandı
+    # (`Eylem.DK_GOREV_BOLUMU_YAZMA`), md. 14/5 çağrısı F2'de, kontrol listesi, bulgu ve raporlar
+    # F4'te gelir (`Eylem.DENETIM_YAZMA`).
 }
 
 #: Gerçek servisi henüz olmayan dipnotlar → faz. Dipnotun kapı testi bugünden vardır
@@ -647,6 +832,19 @@ def etkin_hucreler(rol: str) -> tuple[Satir, ...]:
         satir
         for satir, hucreler in MATRIS.items()
         if rol in hucreler and hucreler[rol][0] == YAZAR and (satir, rol) not in BEKLEYEN_HUCRELER
+    )
+
+
+def yazabildigi_uclar(rol: str) -> frozenset[str]:
+    """Rolün en az bir yazma kuralıyla yazabildiği uçların adları (kurallardan türer).
+
+    Hesap teslim pusulası bir satırın iş parçalarını role göre bununla süzer (aynı satırda program
+    yöneticisine daraltılmış uçlar ile bütün yazanlara açık uçlar birlikte durabilir; M2).
+    """
+    return frozenset(
+        kural.uc
+        for kural in KURALLAR
+        if kural.tur is KuralTuru.YAZMA and rol in kural_rolleri(kural)
     )
 
 
@@ -731,6 +929,51 @@ YETENEKLER: Final[Mapping[str, frozenset[tuple[str, str]]]] = {
         ("import-parents-commit", "POST"),
         ("template-parents", "GET"),
     ),
+    # F1c (plan F1c-11): Birlik Dönemi ve geçiş kurulumu (M1; program yöneticisi).
+    "birlik_donemi_yazma": _ciftler(
+        ("oab-term-list", "POST"),
+        ("oab-term-cancel", "POST"),
+        ("oab-transition-inherited", "POST"),
+        ("oab-transition-election-counts", "POST"),
+        ("oab-transition-decision-book", "POST"),
+        ("oab-transition-decision-book-cancel", "POST"),
+        ("oab-transition-complete", "POST"),
+    ),
+    # Kişiler → Birlik Kişileri: elle kayıt, düzenleme ve personelden ekleme (M2; program yöneticisi ve
+    # yönetim kurulu). Veli listesinden ekleme ayrıca `veli_listesi` ister (yalnız program yöneticisi).
+    "birlik_kisi_yazma": _ciftler(
+        ("oab-person-list", "POST"),
+        ("oab-person-detail", "PATCH"),
+        ("oab-person-from-personnel", "POST"),
+    ),
+    # Organlar: üyelik kaydı, ayrıntısı, iptali ve alım komisyonu (M2).
+    "organ_yazma": _ciftler(
+        ("oab-membership-list", "POST"),
+        ("oab-membership-detail", "PATCH"),
+        ("oab-membership-cancel", "POST"),
+        ("oab-purchase-committee-list", "POST"),
+    ),
+    # Temsilciler: temsilci kaydı (M2).
+    "temsilci_yazma": _ciftler(("oab-representative-list", "POST")),
+    # Yönetim kurulunun görev bölümü ve yedek çağrısı (tasarım §7.2 "Kim": sekreter).
+    "gorev_bolumu_yazma": _ciftler(
+        ("oab-yk-duty-assignment", "POST"), ("oab-membership-substitute-call-yk", "POST")
+    ),
+    # E01 ve E03 karar taslağı ve çizelgesinin üretimi (tasarım §9.6 "Üreten": sekreter, program
+    # yöneticisi).
+    "karar_taslagi_uretme": _ciftler(("oab-document-e01", "POST"), ("oab-document-e03", "POST")),
+    # Denetleme Kurulunun görev bölümü ve E02 (M8 ⁵; yalnız Denetleme Kurulu).
+    "dk_gorev_bolumu_yazma": _ciftler(
+        ("oab-dk-duty-assignment", "POST"), ("oab-document-e02", "POST")
+    ),
+    # F1c 11. adımın ikinci parçası (Organlar): Denetleme Kurulu yedeğinin çağrısı (program yöneticisi;
+    # tasarım §7.2), üyeliğin düşmesi (program yöneticisi ve sekreter), görev alma engelinin yazımı ve
+    # dayanağının okunması (program yöneticisi ve yönetim kurulu rolleri; tasarım §4.4.2 ¹¹) ve yönetim
+    # kurulunun aylık toplantı günü (E01'i üretenler).
+    "dk_yedek_cagirma": _ciftler(("oab-membership-substitute-call-dk", "POST")),
+    "uyelik_dusurme": _ciftler(("oab-membership-drop", "POST")),
+    "gorev_alma_engeli": _ciftler(("oab-membership-eligibility-basis", ("GET", "PUT"))),
+    "toplanti_gunu_yazma": _ciftler(("oab-term-meeting-day", "PUT")),
 }
 
 
@@ -767,6 +1010,9 @@ class Eylem(StrEnum):
     GERI_YUKLEME = "GERI_YUKLEME"
     YEDEK_INDIRME = "YEDEK_INDIRME"
     BOSTA_SURE_YAZMA = "BOSTA_SURE_YAZMA"
+    # Birlik dönemi (M1) ve kural sürümü seçimi (Ayarlar).
+    BIRLIK_DONEMI_YAZMA = "BIRLIK_DONEMI_YAZMA"
+    KURAL_SURUMU_SECIMI = "KURAL_SURUMU_SECIMI"
     # ¹ genel kurul
     GENEL_KURUL_YAZMA = "GENEL_KURUL_YAZMA"
     GENEL_KURUL_YENI_OKUL_DAVETI = "GENEL_KURUL_YENI_OKUL_DAVETI"
@@ -781,8 +1027,10 @@ class Eylem(StrEnum):
     HARCAMA_MALI_HALKA = "HARCAMA_MALI_HALKA"
     HARCAMA_KARAR_KOMISYON_BELGE = "HARCAMA_KARAR_KOMISYON_BELGE"
     HARCAMA_TALEP = "HARCAMA_TALEP"
-    # ⁵ Denetleme Kurulu
+    # ⁵ Denetleme Kurulu. Görev bölümü ve denetim planı F1c'de ayrı eyleme bölündü (tasarım §4.4.2
+    # "Testler"): `DENETIM_YAZMA`'nın kalanı md. 14/5 çağrısı, kontrol listesi, bulgu ve raporlardır.
     DENETIM_YAZMA = "DENETIM_YAZMA"
+    DK_GOREV_BOLUMU_YAZMA = "DK_GOREV_BOLUMU_YAZMA"
     GERI_YUKLEME_GORDUM = "GERI_YUKLEME_GORDUM"
     # ⁶ müdürün md. 27/3 uyarısı
     MUDUR_UYARISI = "MUDUR_UYARISI"
@@ -854,6 +1102,12 @@ EYLEM_KURALLARI: Final[Mapping[Eylem, EylemKurali]] = {
     Eylem.BOSTA_SURE_YAZMA: _ek(
         Satir.AYARLAR, (YONETICI,), dayanak="Tasarım §4.4.2 Ayarlar satırı (boşta süre)"
     ),
+    Eylem.BIRLIK_DONEMI_YAZMA: _ek(
+        Satir.M1, (YONETICI,), dayanak="Tasarım §4.4.2 M1 (birlik dönemi açma ve kapama), §7.9"
+    ),
+    Eylem.KURAL_SURUMU_SECIMI: _ek(
+        Satir.AYARLAR, (YONETICI,), dayanak="Tasarım §4.4.2 Ayarlar (kural sürümü seçimi), §6.2-5"
+    ),
     Eylem.GENEL_KURUL_YAZMA: _ek(
         Satir.M3, _YK_VE_YONETICI, dipnot=1, dayanak="¹ müdür genel kurulun öteki işlerinde okur"
     ),
@@ -880,7 +1134,13 @@ EYLEM_KURALLARI: Final[Mapping[Eylem, EylemKurali]] = {
         Satir.M6, (MUDUR,), dipnot=4, sahiplik=True, dayanak="⁴; md. 18/1; §15 M-11"
     ),
     Eylem.DENETIM_YAZMA: _ek(
-        Satir.M8, (DENETLEME_KURULU,), dipnot=5, sahiplik=True, dayanak="⁵; md. 14/1, 14/4, 14/5"
+        Satir.M8, (DENETLEME_KURULU,), dipnot=5, sahiplik=True, dayanak="⁵; md. 14/4, 14/5"
+    ),
+    Eylem.DK_GOREV_BOLUMU_YAZMA: _ek(
+        Satir.M8,
+        (DENETLEME_KURULU,),
+        dipnot=5,
+        dayanak="⁵; md. 14/1 (görev bölümü ve denetim planı, E02)",
     ),
     Eylem.GERI_YUKLEME_GORDUM: _ek(
         Satir.M8, (DENETLEME_KURULU,), dipnot=5, dayanak="⁵; §4.4.4 (DK 'gördüm')"
@@ -908,7 +1168,8 @@ EYLEM_KURALLARI: Final[Mapping[Eylem, EylemKurali]] = {
 
 #: Gerçek servise henüz bağlanmamış eylemler → faz (yalnız küçülebilir; test kaynakta
 #: `Eylem.<AD>` çağrısını arar). Bağlı olanlar: hesap yönetimi, kurtarma anahtarı, geri
-#: yükleme, şifreli yedeğin kaydedilmesi, boşta süre yazımı, geri yükleme kartının "Gördüm"ü (⁵).
+#: yükleme, şifreli yedeğin kaydedilmesi, boşta süre yazımı, birlik dönemi, kural sürümü seçimi,
+#: geri yükleme kartının "Gördüm"ü (⁵) ve DK görev bölümü (⁵; F1c 6. adım).
 BAGLANMAMIS_EYLEMLER: Final[Mapping[Eylem, str]] = {
     Eylem.GENEL_KURUL_YAZMA: "F2",
     Eylem.GENEL_KURUL_YENI_OKUL_DAVETI: "F2",
@@ -921,7 +1182,8 @@ BAGLANMAMIS_EYLEMLER: Final[Mapping[Eylem, str]] = {
     Eylem.HARCAMA_MALI_HALKA: "F4",
     Eylem.HARCAMA_KARAR_KOMISYON_BELGE: "F4",
     Eylem.HARCAMA_TALEP: "F4",
-    Eylem.DENETIM_YAZMA: "F4",
+    # Kalanın en erken işi md. 14/5 çağrısıdır (tasarım §4.4.2 "Testler"; plan F1c kararları).
+    Eylem.DENETIM_YAZMA: "F2",
     Eylem.MUDUR_UYARISI: "F4",
     Eylem.EVRAK_KAYDI: "F2",
     Eylem.DONEM_KILIDI: "F4",

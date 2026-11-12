@@ -65,11 +65,21 @@ DOSYALAR = (
     "frontend/src/modules/oturum/hesapKurallari.ts",
     "frontend/src/modules/oturum/parolaPolitikasi.ts",
     "frontend/src/modules/oturum/useKilitle.ts",
-    "frontend/src/modules/panel/OkunamayanAlanlarKarti.tsx",
-    "frontend/src/modules/panel/PanelPage.tsx",
-    "frontend/src/modules/panel/SonOturumKarti.tsx",
+    "frontend/src/modules/pano/OkunamayanAlanlarKarti.tsx",
+    "frontend/src/modules/pano/PanelPage.tsx",
+    "frontend/src/modules/pano/SonOturumKarti.tsx",
     "frontend/src/lib/api.ts",
     "frontend/src/lib/mevzuat.ts",
+    # F1c 11. adım (birinci parça): ortak "uyarı + gerekçe" bileşeni, Birlik Dönemi ve Geçiş Kurulumu.
+    "frontend/src/modules/uyum/metinler.ts",
+    "frontend/src/modules/birlik-donemi/metinler.ts",
+    "frontend/src/modules/gecis-kurulumu/metinler.ts",
+    # F1c 11. adım (ikinci parça): Organlar, Temsilciler ve görev bölümü ve temsilci evrakının kartı.
+    "frontend/src/modules/organlar/metinler.ts",
+    "frontend/src/modules/temsilciler/metinler.ts",
+    "frontend/src/modules/evrak/metinler.ts",
+    # F1c 12. adım: Genel Bakış'ın pano kalemleri.
+    "frontend/src/modules/pano/metinler.ts",
 )
 
 #: Kullanıcıya görünmeyen düz dize sabitleri (dosya, ad) → gerekçe.

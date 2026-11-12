@@ -32,9 +32,12 @@ katmanı ayrı ayrı sınamaktır:
    kip ilk açılışta değil, burada patlar ("WeasyPrint Windows DLL" tuzağı —
    packaging/windows/NOTLAR.md).
 3. **Türkçe karakterler doğru font ile mi diziliyor** — üretilen PDF'te
-   `ĞÜŞİÖÇ ığüşiöç` metni geri okunabiliyor ve kullanılan font gömülü DejaVu
-   ise, fontconfig gömülü fonta bakıyor demektir ("fontconfig tuzağı" —
-   `fonts.conf.tmpl` başlığı).
+   `ĞÜŞİÖÇ ığüşiöç` metni geri okunabiliyor ve kullanılan fontlar gömülü
+   DejaVu Sans (taban şablon) ile evrakın Liberation Serif'i (tasarım §9.1-8)
+   ise, fontconfig gömülü fontlara bakıyor demektir ("fontconfig tuzağı" —
+   `fonts.conf.tmpl` başlığı). Örnek metin iki yazı tipiyle de dizilir. Yazı tipi
+   yapılandırması programın evrak yoluyla aynıdır (`shared.pdf.font_yapilandirmasi`):
+   Linux paketinde kancanın bildirdiği paketli yapılandırma, sistem dizini taranmaz.
 
 Ailedeki JPEG gömme denetimi bilinçli olarak ALINMADI: tek JPEG üreticisi
 öğrenci fotoğrafıydı ve fotoğraf özelliği bu projede yok. Evrakta raster
@@ -131,8 +134,11 @@ DESKTOP_PLATFORM = "win32"
 
 # Duman testinin aradığı metin — Türkçe'ye özgü altı harf, hem büyük hem küçük.
 TURKISH_SAMPLE = "ĞÜŞİÖÇ ığüşiöç"
-# Yalnız gömülü DejaVu ile dizilmeli; sistem fontuna düşerse bu ad görünmez.
-EXPECTED_FONT_FRAGMENT = "DejaVu"
+# Yalnız gömülü yazı tipleriyle dizilmeli; sistem fontuna düşerse bu adlar görünmez. Taban şablon
+# DejaVu Sans'la, evrak hattı Liberation Serif'le dizer (tasarım §9.1-8); ikisi de aranır.
+EXPECTED_FONT_FRAGMENTS: tuple[str, ...] = ("DejaVu", "Liberation")
+# Evrak hattının yazı tipi (`documents/evrak.html`); örnek metin bununla da dizilir.
+EVRAK_FONT_FAMILY = "Liberation Serif"
 # Taban şablonun `@page` altlığı ("Sayfa 1 / 1"); görünmüyorsa şablon uygulanmadı.
 BASE_TEMPLATE_MARKER = "Sayfa"
 # Evrakın ortak taban şablonu (backend/templates altında).
@@ -144,6 +150,7 @@ _SMOKE_TEMPLATE = """{% extends "documents/base.html" %}
   <div class="doc-title">PDF DUMAN TESTİ</div>
   <div class="doc-subtitle">OAB Defteri — paket doğrulama belgesi</div>
   <p class="para">{{ sample }}</p>
+  <p class="para" style="font-family: '{{ evrak_font }}'">{{ sample }}</p>
   <table class="info">
     <tr><td class="label">Belge</td><td>Örnek karar taslağı</td></tr>
     <tr><td class="label">Birim</td><td>Okul-Aile Birliği</td></tr>
@@ -154,6 +161,7 @@ _SMOKE_TEMPLATE = """{% extends "documents/base.html" %}
 """
 _SMOKE_CONTEXT = {
     "sample": TURKISH_SAMPLE,
+    "evrak_font": EVRAK_FONT_FAMILY,
     "authority": "ÖRNEK İLÇE KAYMAKAMLIĞI",
     "unit_line": "Örnek Ortaokulu Müdürlüğü",
 }
@@ -275,10 +283,15 @@ def _fontconfig_teshisi() -> None:
     """
     import os
 
-    for degisken in ("FONTCONFIG_FILE", "FONTCONFIG_PATH", "OD_RTHOOK_UYARI"):
+    for degisken in (
+        "FONTCONFIG_FILE",
+        "FONTCONFIG_PATH",
+        "OD_EVRAK_FONTCONFIG",
+        "OD_RTHOOK_UYARI",
+    ):
         _write(f"  {degisken}={os.environ.get(degisken, '<yok>')}")
 
-    conf = os.environ.get("FONTCONFIG_FILE", "")
+    conf = os.environ.get("OD_EVRAK_FONTCONFIG", "") or os.environ.get("FONTCONFIG_FILE", "")
     if conf:
         yol = Path(conf)
         _write(f"  fonts.conf var mı: {yol.is_file()}")
@@ -309,8 +322,17 @@ def run_pdf_smoke(target: Path) -> int:
 
     from weasyprint import HTML
 
+    # Yazı tipi yapılandırması programınkiyle aynı yoldan kurulur: Linux paketinde kancanın
+    # bildirdiği paketli yapılandırma (`shared.pdf.font_yapilandirmasi`, `OD_EVRAK_FONTCONFIG`).
+    from desktop.paths import resolve_backend_dir
+
+    backend = str(resolve_backend_dir())
+    if backend not in sys.path:
+        sys.path.insert(0, backend)
+    from shared import pdf as pdf_kapisi
+
     target.parent.mkdir(parents=True, exist_ok=True)
-    HTML(string=html).write_pdf(str(target))
+    HTML(string=html).write_pdf(str(target), font_config=pdf_kapisi.font_yapilandirmasi())
     if not target.is_file() or target.stat().st_size == 0:
         _write(f"HATA: PDF üretilemedi ({target}).")
         return EXIT_PDF_SMOKE_FAILED
@@ -338,10 +360,13 @@ def run_pdf_smoke(target: Path) -> int:
         return EXIT_PDF_SMOKE_FAILED
 
     fonts = _pdf_fonts(target)
-    if not any(EXPECTED_FONT_FRAGMENT in name for name in sorted(fonts)):
+    eksik_fontlar = [
+        parca for parca in EXPECTED_FONT_FRAGMENTS if not any(parca in ad for ad in fonts)
+    ]
+    if eksik_fontlar:
         _write(
-            "HATA: PDF gömülü DejaVu fontu ile dizilmemiş "
-            f"(bulunan fontlar: {sorted(fonts)}). Fontconfig sistem fontuna düşmüş olabilir."
+            f"HATA: PDF gömülü yazı tipleriyle dizilmemiş (eksik: {', '.join(eksik_fontlar)}; "
+            f"bulunan fontlar: {sorted(fonts)}). Fontconfig sistem fontuna düşmüş olabilir."
         )
         _fontconfig_teshisi()
         return EXIT_PDF_SMOKE_FAILED

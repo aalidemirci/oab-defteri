@@ -81,6 +81,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "apps.okul",
+    "apps.oab",
 ]
 
 MIDDLEWARE = [

@@ -4,8 +4,8 @@
 // sabitleri kaynaktan okur: dizeler düz yazılır (tek satır ya da `"…" + "…"`; şablon dizesi yok).
 //
 // Altın kural 2: oranlar ve eşikler (öğrenci mevcudunun eşiği, arz bedeli ve pay oranları) okul
-// kartında yazılmaz; yardım metni yalnız alanın hangi hesaba girdiğini ve maddesini söyler (kural
-// paketi F1c'de). Madde numaraları OAB Yönetmeliğinindir (`docs/mevzuat/`).
+// kartında yazılmaz; yardım metni yalnız alanın hangi hesaba girdiğini ve maddesini söyler (değerler
+// kural paketindedir, F1c). Madde numaraları OAB Yönetmeliğinindir (`docs/mevzuat/`).
 
 /** Okul adımının (sihirbaz 2. adım) ve Okul Bilgileri sekmesinin açıklaması. */
 export const OKUL_KARTI_ACIKLAMASI =
@@ -30,14 +30,6 @@ export const YERLESIM_YARDIMI = "Kantin gelirinin pay dağılımı buna göre ya
 /** md. 17/1-a-1, 17/1-b-1: arz bedeli işletme biçimine göre. */
 export const KANTIN_YARDIMI =
   "Kantin ve benzeri yerlerin arz bedeli buna göre hesaplanır (md. 17/1).";
-
-/**
- * Kantin birlikçe işletiliyorsa seçimin altında görünen bilgi (md. 23/3; tasarım §6.4.8
- * `kantin.isletmede_vergi_uyarisi`). Uyarıdır, engel değildir.
- */
-export const KANTIN_ISLETME_BILGISI =
-  "Kantin ve benzeri yerler birlikçe işletilir ve vergi mükellefiyeti doğarsa birlik hakkında " +
-  "213 sayılı Vergi Usul Kanunu hükümleri uygulanır (md. 23/3).";
 
 /** K3 ve md. 6/1-d: personel modülü yalnız doğrudan işverende açılır. */
 export const PERSONEL_YARDIMI =

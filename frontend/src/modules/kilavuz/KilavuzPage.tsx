@@ -1,15 +1,24 @@
 // Kullanım Kılavuzu — statik içerik, çevrimdışı. Kabuk bileşenleri `KilavuzKabugu`'ndadır, her
 // bölüm `bolumler/` altında kendi dosyasındadır. Aile iskeletinin kütüphane kılavuzu F1a-2'de
-// silindi; OAB'nin bölümleri her fazın özellikleriyle birlikte yazılır (tasarım §14).
+// silindi; OAB'nin bölümleri her fazın özellikleriyle birlikte yazılır (tasarım §14). F1c'nin
+// bölümleri (13. adım): Programı Kurmak, Birlik Kişileri, Birlik Dönemi, Geçiş Kurulumu, Organlar,
+// Temsilciler; İlk Kurulum, Genel Bakış, Hesaplar ve Oturum, Kullanıcılar ve Kişiler güncellendi.
 //
 // Bölüm eklemek: `bolumler/` altına dosyayı koy, `BOLUMLER`'e satırını ekle. Çapa, başlık, ikon
 // ve sıra YALNIZ buradadır; bölüm dosyası bunları `BolumProps` olarak alır.
 
 import Card from "../../ui/Card";
-import { VELI_LISTESI_SEKMESI } from "../kisiler/metinler";
+import { BIRLIK_DONEMI_BASLIGI } from "../birlik-donemi/metinler";
+import { GECIS_BASLIGI } from "../gecis-kurulumu/metinler";
+import { BIRLIK_KISILERI_SEKMESI, VELI_LISTESI_SEKMESI } from "../kisiler/metinler";
 import { KULLANICILAR_BASLIGI } from "../kullanicilar/metinler";
+import { ORGANLAR_BASLIGI } from "../organlar/metinler";
+import { TEMSILCILER_BASLIGI } from "../temsilciler/metinler";
+import BirlikDonemi from "./bolumler/BirlikDonemi";
+import BirlikKisileri from "./bolumler/BirlikKisileri";
 import CikisVeKapanis from "./bolumler/CikisVeKapanis";
 import DersYiliKapaliGunler from "./bolumler/DersYiliKapaliGunler";
+import GecisKurulumu from "./bolumler/GecisKurulumu";
 import GenelBakis from "./bolumler/GenelBakis";
 import Guncelleme from "./bolumler/Guncelleme";
 import GuvenlikVeKisiselVeriler from "./bolumler/GuvenlikVeKisiselVeriler";
@@ -18,7 +27,10 @@ import IlkKurulum from "./bolumler/IlkKurulum";
 import Kisiler from "./bolumler/Kisiler";
 import Kullanicilar from "./bolumler/Kullanicilar";
 import OkulKarti from "./bolumler/OkulKarti";
+import Organlar from "./bolumler/Organlar";
 import PrograminKonumu from "./bolumler/PrograminKonumu";
+import ProgramiKurmak from "./bolumler/ProgramiKurmak";
+import Temsilciler from "./bolumler/Temsilciler";
 import VeliListesi from "./bolumler/VeliListesi";
 import YedekVeGeriYukleme from "./bolumler/YedekVeGeriYukleme";
 import { useCapayaKaydir } from "./KilavuzKabugu";
@@ -29,6 +41,7 @@ import { useCapayaKaydir } from "./KilavuzKabugu";
  */
 const BOLUMLER = {
   "programin-konumu": { baslik: "Programın Konumu", ikon: "info", Bolum: PrograminKonumu },
+  "programi-kurmak": { baslik: "Programı Kurmak", ikon: "install_desktop", Bolum: ProgramiKurmak },
   "ilk-kurulum": { baslik: "İlk Kurulum", ikon: "flag", Bolum: IlkKurulum },
   "genel-bakis": { baslik: "Genel Bakış", ikon: "space_dashboard", Bolum: GenelBakis },
   "hesaplar-ve-oturum": { baslik: "Hesaplar ve Oturum", ikon: "key", Bolum: HesaplarVeOturum },
@@ -41,6 +54,15 @@ const BOLUMLER = {
   },
   kisiler: { baslik: "Kişiler", ikon: "group", Bolum: Kisiler },
   "veli-listesi": { baslik: VELI_LISTESI_SEKMESI, ikon: "family_restroom", Bolum: VeliListesi },
+  "birlik-kisileri": {
+    baslik: BIRLIK_KISILERI_SEKMESI,
+    ikon: "diversity_3",
+    Bolum: BirlikKisileri,
+  },
+  "birlik-donemi": { baslik: BIRLIK_DONEMI_BASLIGI, ikon: "event_note", Bolum: BirlikDonemi },
+  "gecis-kurulumu": { baslik: GECIS_BASLIGI, ikon: "move_down", Bolum: GecisKurulumu },
+  organlar: { baslik: ORGANLAR_BASLIGI, ikon: "account_tree", Bolum: Organlar },
+  temsilciler: { baslik: TEMSILCILER_BASLIGI, ikon: "groups", Bolum: Temsilciler },
   "yedek-ve-geri-yukleme": {
     baslik: "Yedek ve Geri Yükleme",
     ikon: "backup",

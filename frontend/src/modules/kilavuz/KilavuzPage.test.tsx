@@ -1,5 +1,6 @@
 // Kullanım Kılavuzu — kabuk, bölüm dizilişi ve sözlük kilitleri (aile kalıbı). Aile iskeletinin
-// kütüphane içeriği ve onu ekran metinleriyle eşleyen testler F1a-2'de silindi.
+// kütüphane içeriği ve onu ekran metinleriyle eşleyen testler F1a-2'de silindi. F1c'nin bölümleri
+// (13. adım) aynı kilitlere bağlandı: ekran, sekme, düğme ve belge adları ekran sabitlerinden okunur.
 //
 // Üç tür kilit var:
 // 1. Ekran adları DEPODAN gelir: sekme, başlık ve düğme adları ekran sabitlerinden okunur;
@@ -22,13 +23,44 @@ import { describe, expect, it, vi } from "vitest";
 
 import { TAB_ITEMS as AYAR_SEKMELERI } from "../ayarlar/AyarlarPage";
 import {
+  BIRLIK_DONEMI_BASLIGI,
+  DUGME_DONEMI_IPTAL,
+  KURAL_KOPYASI_BOZUK,
+  KURAL_SURUMU_AYARLAR_BASLIGI,
+} from "../birlik-donemi/metinler";
+import {
   DEGISTIRILMIS_HESAP_KARTI_BASLIGI,
   DENETIM_IZI_KARTI_BASLIGI,
   EKSIK_EKLER_KARTI_BASLIGI,
   GERI_YUKLEME_KARTI_BASLIGI,
 } from "../butunluk/metinler";
 import { ERISIM_GUNLUGU_BASLIGI } from "../erisim/metinler";
-import { KILIT_EKRANI_BASLIGI, KURTARMA_ILE_AC_ETIKETI } from "../guvenlik/KilitEkrani";
+import {
+  DUGME_OLUSTUR,
+  DUGME_PDF,
+  DUGME_WORD,
+  E01_ADI,
+  E02_ADI,
+  E03_ADI,
+  TASLAK_ACIKLAMASI,
+  URETIM_UYARILARI_BASLIGI,
+} from "../evrak/metinler";
+import {
+  DEFTER_BASLIGI,
+  DUGME_TAMAMLA,
+  DUGME_UYE_EKLE,
+  GECIS_BASLIGI,
+  ILK_DONEM_BASLIGI,
+  KURUL_BASLIGI,
+  SAYAC_BASLIGI,
+  SIHIRBAZ_ADIM_ADI,
+  TAMAMLA_BASLIGI,
+} from "../gecis-kurulumu/metinler";
+import {
+  KILIT_EKRANI_BASLIGI,
+  KURTARMA_ILE_AC_ETIKETI,
+  UYELIK_ASKISI_METNI,
+} from "../guvenlik/KilitEkrani";
 import { KURTARMA_BELGESI_ADI } from "../guvenlik/kurtarma";
 import {
   DOSYA_KAYIP_BASLIGI,
@@ -37,19 +69,51 @@ import {
   SIFRELI_YEDEK_KARTI_BASLIGI,
   YEDEK_RAPORU_ADI,
 } from "../guvenlik/metinler";
-import { VELI_LISTESI_SEKMESI } from "../kisiler/metinler";
+import {
+  BIRLIK_KISILERI_SEKMESI,
+  DUGME_BIRLIK_KISISI_EKLE,
+  DUGME_PASIF_YAP,
+  DUGME_PERSONELDEN_EKLE,
+  DUGME_VELI_LISTESINDEN_EKLE,
+  VELI_LISTESI_SEKMESI,
+} from "../kisiler/metinler";
 import { TABS as KISI_SEKMELERI } from "../kisiler/KisilerPage";
 import {
+  ALAN_UYELIK,
   DUGME_ASKIDAN_CIKAR,
   DUGME_KAPAT,
   DUGME_SIFIRLA,
   KULLANICILAR_BASLIGI,
+  ORGANLARA_GIT,
   YENI_HESAP_BASLIGI,
 } from "../kullanicilar/metinler";
+import { ADIMLAR as SIHIRBAZ_ADIMLARI } from "../kurulum/KurulumPage";
+import {
+  DUGME_DAYANAK,
+  DUGME_DK_GOREV_BOLUMU,
+  DUGME_DUSUR,
+  DUGME_ENGEL,
+  DUGME_GOREV_BOLUMU,
+  DUGME_KAYDI_IPTAL,
+  DUGME_YEDEK_CAGIR,
+  ORGANLAR_BASLIGI,
+  TOPLANTI_GUNU_BASLIGI,
+} from "../organlar/metinler";
+import { TAB_ITEMS as ORGAN_SEKMELERI } from "../organlar/OrganlarPage";
 import { YETENEK_ADLARI } from "../oturum/api";
 import type { YetenekAdi } from "../oturum/api";
 import { YetkiDegeri, hazirYetki } from "../oturum/yetki";
 import type { Yetki } from "../oturum/yetki";
+import { YOL_HARITASI_MADDELERI } from "../pano/BaslangicYolHaritasi";
+import {
+  AY_BASLIGI,
+  HAFTA_BASLIGI,
+  HESAP_ONERISI_BASLIGI,
+  TAMAMLANACAKLAR_BASLIGI,
+  YARIM_TASLAK_BASLIGI,
+  YK_GOREV_BOLUMU_BASLIGI,
+} from "../pano/metinler";
+import { CIZELGE_BASLIGI, DUGME_TEMSILCI_EKLE, TEMSILCILER_BASLIGI } from "../temsilciler/metinler";
 import { KILAVUZ_SIHIRBAZ_KAPALI_METNI } from "./bolumler/PrograminKonumu";
 import {
   AltBaslik,
@@ -94,6 +158,7 @@ function sekmeAdi(sekmeler: ReadonlyArray<{ key: string; label: string }>, key: 
 /** Sıra kullanıcının iş sırasıdır; adı sabiti olanlar ekranın sabitinden gelir. */
 const BEKLENEN_BOLUMLER: ReadonlyArray<readonly [id: string, baslik: string]> = [
   ["programin-konumu", "Programın Konumu"],
+  ["programi-kurmak", "Programı Kurmak"],
   ["ilk-kurulum", "İlk Kurulum"],
   ["genel-bakis", "Genel Bakış"],
   ["hesaplar-ve-oturum", "Hesaplar ve Oturum"],
@@ -102,6 +167,12 @@ const BEKLENEN_BOLUMLER: ReadonlyArray<readonly [id: string, baslik: string]> = 
   ["ders-yili-kapali-gunler", "Ders Yılları ve Kapalı Günler"],
   ["kisiler", "Kişiler"],
   ["veli-listesi", VELI_LISTESI_SEKMESI],
+  // F1c (13. adım): birlik kişileri, birlik dönemi, geçiş kurulumu, organlar, temsilciler.
+  ["birlik-kisileri", sekmeAdi(KISI_SEKMELERI, "birlik")],
+  ["birlik-donemi", BIRLIK_DONEMI_BASLIGI],
+  ["gecis-kurulumu", GECIS_BASLIGI],
+  ["organlar", ORGANLAR_BASLIGI],
+  ["temsilciler", TEMSILCILER_BASLIGI],
   ["yedek-ve-geri-yukleme", "Yedek ve Geri Yükleme"],
   ["guvenlik-ve-kvkk", "Güvenlik ve Kişisel Veriler"],
   ["guncelleme", sekmeAdi(AYAR_SEKMELERI, "guncelleme")],
@@ -110,7 +181,11 @@ const BEKLENEN_BOLUMLER: ReadonlyArray<readonly [id: string, baslik: string]> = 
 
 /** Her `Mevzuat` kutusunun beklenen metni (kaynak satırı → docs/mevzuat'tan birebir kopya). */
 const MEVZUAT_ALINTILARI: Readonly<Record<string, string>> = {
+  "Yönetmelik md. 12/3":
+    "Yönetim kurulu, seçimden sonraki ilk hafta içinde okulda toplanarak üyeleri arasından bir başkan, bir başkan yardımcısı, bir muhasip ve bir sekreter seçerek görev ve iş bölümü yapar. Yönetim kurulu üyelerinden üyeliği sona erenlerin yerine yedeklerin çağrılmasıyla oluşan yeni yönetim kurulu bir hafta içinde toplanarak aralarında görev dağılımı yaparlar.",
   "Yönetmelik md. 13/5": "Yönetim kurulu kararları, karar defterine el ile yazılarak imzalanır.",
+  "Yönetmelik md. 13/6":
+    "Özürsüz olarak üst üste üç toplantıya katılmayan yönetim kurulu üyesinin görevi sona erer. Bu şekilde görevi sona erenler ile öğrencisinin okuldan ayrılması veya öğrenciliğin sona ermesi nedenleriyle yönetim kurulu üyeliği sona eren velinin yerine yedek üyeler, aldıkları oy sırasına göre asıl üye olarak göreve çağırılır.",
   "Yönetmelik md. 23/2":
     "Yönetim kurulunca, yönetim kurulu karar defterinin noterce tasdik edilmesi zorunlu olup diğer defter ve belgeler ise birliğin bağlı bulunduğu il/ilçe millî eğitim müdürlüğünce tasdik edilir.",
   "Yönetmelik md. 23/5":
@@ -130,7 +205,11 @@ const KAPILI_ADRESLER: ReadonlyArray<readonly [adres: string, yetenek: YetenekAd
 /** Sayfaların adresleri (`App.tsx`); sekmeler ekranların sekme listelerinden. */
 const SAYFA_ADRESLERI = [
   "/",
+  "/birlik-donemi",
+  "/birlik-donemi/gecis-kurulumu",
   "/kisiler",
+  "/organlar",
+  "/temsilciler",
   "/kullanicilar",
   "/erisim-gunlugu",
   "/ayarlar",
@@ -448,6 +527,7 @@ describe("KilavuzPage — ekran bağlantıları", () => {
     const sekmeler: Record<string, readonly string[]> = {
       "/ayarlar": AYAR_SEKMELERI.map((s) => s.key),
       "/kisiler": KISI_SEKMELERI.map((s) => s.key),
+      "/organlar": ORGAN_SEKMELERI.map((s) => s.key),
     };
     const capalar = KILAVUZ_BOLUMLERI.map((b) => `#${b.id}`);
 
@@ -468,15 +548,39 @@ describe("KilavuzPage — ekran bağlantıları", () => {
 describe("KilavuzPage — bölüm içerikleri", () => {
   /** Bölüm → ekranda sabiti olan ve bölümde adıyla geçmesi gereken adlar. */
   const EKRAN_ADLARI: Readonly<Record<string, readonly string[]>> = {
-    "ilk-kurulum": ["Kurulum Sihirbazı", KURTARMA_BELGESI_ADI],
+    "ilk-kurulum": [
+      "Kurulum Sihirbazı",
+      KURTARMA_BELGESI_ADI,
+      ...SIHIRBAZ_ADIMLARI.map((a) => a.label),
+      SIHIRBAZ_ADIM_ADI,
+    ],
     "genel-bakis": [
+      AY_BASLIGI,
+      HAFTA_BASLIGI,
+      TAMAMLANACAKLAR_BASLIGI,
+      YK_GOREV_BOLUMU_BASLIGI,
+      HESAP_ONERISI_BASLIGI,
+      YARIM_TASLAK_BASLIGI,
+      ...YOL_HARITASI_MADDELERI.map((m) => m.baslik),
       DENETIM_IZI_KARTI_BASLIGI,
       DEGISTIRILMIS_HESAP_KARTI_BASLIGI,
       GERI_YUKLEME_KARTI_BASLIGI,
       EKSIK_EKLER_KARTI_BASLIGI,
     ],
-    "hesaplar-ve-oturum": [KILIT_EKRANI_BASLIGI, KURTARMA_ILE_AC_ETIKETI, "Kilitle"],
-    kullanicilar: [YENI_HESAP_BASLIGI, DUGME_SIFIRLA, DUGME_ASKIDAN_CIKAR, DUGME_KAPAT],
+    "hesaplar-ve-oturum": [
+      KILIT_EKRANI_BASLIGI,
+      KURTARMA_ILE_AC_ETIKETI,
+      "Kilitle",
+      UYELIK_ASKISI_METNI,
+    ],
+    kullanicilar: [
+      YENI_HESAP_BASLIGI,
+      DUGME_SIFIRLA,
+      DUGME_ASKIDAN_CIKAR,
+      DUGME_KAPAT,
+      ALAN_UYELIK,
+      ORGANLARA_GIT,
+    ],
     "okul-karti": [sekmeAdi(AYAR_SEKMELERI, "okul")],
     "ders-yili-kapali-gunler": [
       sekmeAdi(AYAR_SEKMELERI, "ders-yillari"),
@@ -484,6 +588,47 @@ describe("KilavuzPage — bölüm içerikleri", () => {
     ],
     kisiler: [sekmeAdi(KISI_SEKMELERI, "personel"), sekmeAdi(KISI_SEKMELERI, "havuz")],
     "veli-listesi": [VELI_LISTESI_SEKMESI],
+    "birlik-kisileri": [
+      BIRLIK_KISILERI_SEKMESI,
+      DUGME_BIRLIK_KISISI_EKLE,
+      DUGME_PERSONELDEN_EKLE,
+      DUGME_VELI_LISTESINDEN_EKLE,
+      DUGME_PASIF_YAP,
+    ],
+    "birlik-donemi": [
+      BIRLIK_DONEMI_BASLIGI,
+      DUGME_DONEMI_IPTAL,
+      KURAL_SURUMU_AYARLAR_BASLIGI,
+      KURAL_KOPYASI_BOZUK,
+    ],
+    "gecis-kurulumu": [
+      GECIS_BASLIGI,
+      ILK_DONEM_BASLIGI,
+      KURUL_BASLIGI,
+      SAYAC_BASLIGI,
+      DEFTER_BASLIGI,
+      TAMAMLA_BASLIGI,
+      DUGME_TAMAMLA,
+      DUGME_UYE_EKLE,
+    ],
+    organlar: [
+      ORGANLAR_BASLIGI,
+      ...ORGAN_SEKMELERI.map((s) => s.label),
+      DUGME_GOREV_BOLUMU,
+      DUGME_DK_GOREV_BOLUMU,
+      DUGME_YEDEK_CAGIR,
+      DUGME_DUSUR,
+      DUGME_ENGEL,
+      DUGME_KAYDI_IPTAL,
+      TOPLANTI_GUNU_BASLIGI,
+      E01_ADI,
+      E02_ADI,
+      DUGME_OLUSTUR,
+      DUGME_PDF,
+      DUGME_WORD,
+      URETIM_UYARILARI_BASLIGI,
+    ],
+    temsilciler: [TEMSILCILER_BASLIGI, CIZELGE_BASLIGI, DUGME_TEMSILCI_EKLE, E03_ADI],
     "yedek-ve-geri-yukleme": [
       SIFRELI_YEDEK_KARTI_BASLIGI,
       SIFRELI_YEDEK_DUGMESI,
@@ -500,6 +645,25 @@ describe("KilavuzPage — bölüm içerikleri", () => {
   const MADDE_ATIFLARI: Readonly<Record<string, readonly string[]>> = {
     "programin-konumu": ["13/5", "23/2", "23/5"],
     "okul-karti": ["9/2", "17/1", "23/3"],
+    "genel-bakis": ["12/3", "14/1"],
+    "birlik-kisileri": ["12/1", "14/1"],
+    "birlik-donemi": ["12/2", "14/2"],
+    "gecis-kurulumu": ["12/4", "14/3", "23/2"],
+    organlar: [
+      "7/2",
+      "12/1",
+      "12/3",
+      "12/4",
+      "12/5",
+      "13/3",
+      "13/5",
+      "13/6",
+      "14/1",
+      "14/4",
+      "14/6",
+      "14/7",
+      "18/1",
+    ],
   };
 
   function bolumMetni(id: string): string {
@@ -521,6 +685,69 @@ describe("KilavuzPage — bölüm içerikleri", () => {
   it.each(Object.entries(MADDE_ATIFLARI))("%s: dayanak maddeleri yazılıdır", (id, maddeler) => {
     const metin = bolumMetni(id);
     for (const madde of maddeler) expect(metin, madde).toContain(madde);
+  });
+
+  it("F1 kod kapısının kılavuz bölümleri yazılıdır: kurulum, okul bilgileri, kullanıcılar, organlar", () => {
+    // Plan §2.4 "Kılavuzda F1 bölümleri"; tasarım §14 F1c satırı.
+    for (const id of ["programi-kurmak", "ilk-kurulum", "okul-karti", "kullanicilar", "organlar"]) {
+      expect(
+        KILAVUZ_BOLUMLERI.map((b) => b.id),
+        id,
+      ).toContain(id);
+      expect(bolumMetni(id).length, id).toBeGreaterThan(400);
+    }
+    expect(bolumMetni("programi-kurmak")).toMatch(/kurulum dosyası/);
+    expect(bolumMetni("programi-kurmak")).toContain(".deb");
+  });
+
+  it("evrakın konumu: karar taslağı karar defterine el ile yazılır (CLAUDE.md §1)", () => {
+    expect(bolumMetni("programin-konumu")).toContain("karar defterine el ile yazılır ve imzalanır");
+    expect(bolumMetni("organlar")).toContain(TASLAK_ACIKLAMASI);
+    expect(bolumMetni("temsilciler")).toContain(TASLAK_ACIKLAMASI);
+    for (const id of ["organlar", "gecis-kurulumu"]) {
+      expect(bolumMetni(id), id).toContain("karar defterinin yerine geçmez");
+    }
+  });
+
+  it("sihirbazın adımları ekrandaki sırayla sayılır; birlik dönemi adımı atlanabilir", () => {
+    const { container } = bas("/kilavuz", BUTUN_YETENEKLER);
+    const liste = container.querySelector('[id="ilk-kurulum"] ol');
+    const maddeler = Array.from(liste?.querySelectorAll("li") ?? []).map((li) => li.textContent);
+    expect(maddeler).toHaveLength(SIHIRBAZ_ADIMLARI.length);
+    SIHIRBAZ_ADIMLARI.forEach((adim, i) => expect(maddeler[i]).toContain(adim.label));
+    expect(maddeler.at(-1)).toContain("atlanabilir");
+  });
+
+  it("F1c bölümlerinin yazma adımları yalnız o yeteneği olan hesaba anlatılır", () => {
+    const yazmayan = ["birlik_donemi_yazma", "birlik_kisi_yazma", "temsilci_yazma"];
+    const { container } = bas(
+      "/kilavuz",
+      hazirYetki(YETENEK_ADLARI.filter((ad) => !yazmayan.includes(ad))),
+    );
+    const metin = (id: string) => container.querySelector(`[id="${id}"]`)?.textContent ?? "";
+    expect(metin("birlik-donemi")).not.toContain(DUGME_DONEMI_IPTAL);
+    expect(metin("birlik-kisileri")).not.toContain(DUGME_BIRLIK_KISISI_EKLE);
+    expect(metin("temsilciler")).not.toContain(DUGME_TEMSILCI_EKLE);
+    expect(metin("gecis-kurulumu")).not.toContain(DUGME_UYE_EKLE);
+    for (const id of ["birlik-donemi", "birlik-kisileri", "temsilciler", "gecis-kurulumu"]) {
+      expect(metin(id), id).toMatch(/program yöneticisine (?:başvurun|bildirin)/);
+    }
+  });
+
+  it("görev alma engelinin dayanağı yalnız onu okuyabilen hesaba anlatılır", () => {
+    const engelsiz = hazirYetki(YETENEK_ADLARI.filter((ad) => ad !== "gorev_alma_engeli"));
+    const { container, unmount } = bas("/kilavuz", engelsiz);
+    expect(container.querySelector('[id="organlar"]')?.textContent).toContain(
+      "yalnız engelin var olduğu görünür",
+    );
+    unmount();
+    expect(bolumMetni("organlar")).toContain(DUGME_DAYANAK);
+  });
+
+  it("öğretmen üyenin yedek çağrısı görevlendirmenin süresine bağlanır, geçen zamana değil (md. 14/6)", () => {
+    const metin = bolumMetni("genel-bakis");
+    expect(metin).toContain("dört aydan fazla süreli görevlendirildi (md. 13/6, 14/6)");
+    expect(metin).not.toContain("dört ayı aştı");
   });
 
   it("parolayı unutunca ne olacağı kilit ekranından önce öğretilir", () => {

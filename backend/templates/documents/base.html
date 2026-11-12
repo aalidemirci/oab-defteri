@@ -10,7 +10,10 @@
   kaynağından gelir: templates/print/_design.css.
   ÖNEMLİ: text-transform:uppercase YOK — WeasyPrint Türkçe küçük "i"yi locale-
   duyarsız noktasız "I"ya çevirir; büyük harfli başlıklar şablonda DOĞRUDAN büyük
-  harfle yazılır. Yazı tipi DejaVu Sans (Türkçe-tam). Antet shared.letterhead'den.{% endcomment %}
+  harfle yazılır. Tabanın yazı tipi DejaVu Sans'tır (Türkçe-tam; program belgeleri: kurtarma
+  anahtarı, yedek raporu); evrak hattı (`evrak.html`) gövdeyi Liberation Serif 12 puntoyla yeniden
+  kurar (tasarım §9.1-8; plan F1c kararları "Evrak biçimi"). Antet shared.letterhead'den; birliğin
+  belgelerinde birim satırının altında "Okul-Aile Birliği" satırı (`alt_birim`) durur.{% endcomment %}
   <style>
     {% include "print/_design.css" %}
     @page {
@@ -134,7 +137,7 @@
     Usulü); eski bağlam (`unit_line` yok) için iki satırlı biçim yedek kalır.{% endcomment %}
     {% if unit_line %}<div class="school">{{ unit_line }}</div>
     {% else %}<div class="school">{{ school_name }}</div>
-    {% if unit %}<div class="unit">{{ unit }}</div>{% endif %}{% endif %}
+    {% if unit %}<div class="unit">{{ unit }}</div>{% endif %}{% endif %}{% if alt_birim %}<div class="alt-birim">{{ alt_birim }}</div>{% endif %}
   </div>
   <div class="rule"></div>
   <div class="rule-thin"></div>{% if anonim_kopya_ibaresi %}<div class="anonim-kopya">{{ anonim_kopya_ibaresi }}</div>{% endif %}

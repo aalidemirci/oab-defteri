@@ -14,6 +14,7 @@ import {
   ALAN_GECICI_PAROLA,
   ALAN_ROL,
   ALAN_TANITICI,
+  ALAN_UYELIK,
   ASKIDAN_CIKARILDI_ILETISI,
   AYRINTI_BASLIGI,
   BU_OTURUM,
@@ -37,6 +38,8 @@ import {
   ETIKET_TANITICI,
   KAPAMA_ONAY_BASLIGI,
   KULLANICILAR_BASLIGI,
+  ORGANLARA_GIT,
+  UYELIK_YARDIMI,
   YENI_HESAP_BASLIGI,
 } from "../../kullanicilar/metinler";
 import { useYetki } from "../../oturum/yetki";
@@ -104,6 +107,16 @@ export default function Kullanicilar(bolum: BolumProps) {
           <strong>{ALAN_ROL}</strong> alanından kişinin rolünü seçin. Rolde yer yoksa nedeni alanın
           altında yazar: tek hesaplı rollerde “Bu rolde açık bir hesap zaten var; önce onu
           kapatın.”, Denetleme Kurulunda “Denetleme Kurulu için en çok 3 hesap açık olabilir.”
+        </li>
+        <li>
+          Rol başkan, başkan yardımcısı, muhasip, sekreter ya da Denetleme Kurulu ise{" "}
+          <strong>{ALAN_UYELIK}</strong> alanı çıkar; kişinin kurul üyeliğini seçin.{" "}
+          {UYELIK_YARDIMI} Açık birlik döneminde yönetim kurulu rollerinde o görevdeki asıl üye,
+          Denetleme Kurulunda görevdeki asıl üyeler listelenir; yedek üyeye ve görevi olmayan asıl
+          üyeye hesap açılmaz. Üyelik seçilince boş Ad-soyad alanı üyenin adıyla dolar. Hesap
+          açılabilecek üye yoksa nedeni <strong>{ALAN_ROL}</strong> alanının altında yazar; neden
+          üye yokluğuysa <strong>{ORGANLARA_GIT}</strong> bağlantısı da çıkar: önce üye kaydını ya
+          da görev bölümünü tamamlayın (<Ekran to="/kilavuz#organlar">Organlar</Ekran>).
         </li>
         <li>
           <strong>{ALAN_TANITICI}</strong> alanını program doldurur, dilerseniz değiştirin. Tanıtıcı
@@ -182,6 +195,16 @@ export default function Kullanicilar(bolum: BolumProps) {
         {ASKIDAN_CIKARILDI_ILETISI}” der ve yanlış deneme sayacı sıfırlanır. Kişi parolasını da
         unuttuysa <strong>{DUGME_ASKIDAN_CIKAR}</strong> düğmesine gerek yoktur:{" "}
         <strong>{DUGME_SIFIRLA}</strong> düğmesi askıyı da kaldırır ve yeni geçici parola verir.
+      </p>
+
+      <AltBaslik>Üyelik ya da görev nedeniyle askıdaki hesap</AltBaslik>
+      <p>
+        Bağlı olduğu kurul üyeliği düşen ya da iptal edilen hesabın durumu “Askıda · Üyelik düştü”,
+        görev bölümünde görevi değişen kişinin hesabı “Askıda · Görev bölümü” olur. Bu hesap askıdan
+        kendiliğinden çıkmaz. Üyelik bağı geçersiz kaldıysa hesap askıdan çıkarılmaz ve parolası
+        sıfırlanmaz: hesabı kapatın, görevdeki üyeye yeni hesap açın. Bağ yeniden geçerli olduysa
+        (örneğin görev aynı kişiye döndüyse) askıdan çıkarılabilir. Genel Bakış bu işleri hesap
+        önerisi olarak listeler.
       </p>
 
       <AltBaslik>Görevi biten kişinin hesabını kapatmak için</AltBaslik>

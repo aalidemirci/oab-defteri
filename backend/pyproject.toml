@@ -42,8 +42,10 @@ django_settings_module = "config.settings"
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"
 python_files = ["test_*.py", "*_test.py"]
-# `--strict-markers` açık: işaretsiz ad yazım hatası sayılır. Aile iskeletinin `yavas`
-# işareti (katalog ve kütüphane ölçümleri) F1a-2'de onlarla birlikte söküldü.
+# Kayıtsız işaret toplama hatasıdır. Ayar `strict_markers`'tır: `addopts`'taki `--strict-markers`
+# bu pytest sürümünde kayıtsız işareti yalnız uyarı yapıyordu (F1c-1 doğrulaması; tasarım §6.3 D6
+# buna dayanır). Aile iskeletinin `yavas` işareti F1a-2'de onlarla birlikte söküldü.
+strict_markers = true
 addopts = "--reuse-db --strict-markers -ra --cov=apps --cov=shared --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=75"
 # `hesapsiz`: veritabanı kullanan testte program yöneticisinin hesabı ve iz anahtarı
 # KURULMAZ (kök `conftest.py`, `varsayilan_hesap`); şifreli tabloların boş olmasını
@@ -53,6 +55,8 @@ addopts = "--reuse-db --strict-markers -ra --cov=apps --cov=shared --cov-report=
 markers = [
     "hesapsiz: veritabanında varsayılan hesap ve iz anahtarı kurulmaz (kök conftest)",
     "bos_zincir: varsayılan hesabın iz satırı yazılmaz, zincir boş başlar (kök conftest)",
+    "kural_deger: kural paketindeki kimliğin değer ve atıf testi (tasarım §6.3 D6, §10.1)",
+    "kural_davranis: kural paketindeki kimliğin davranış testi (tasarım §6.3 D6, §10.1)",
 ]
 testpaths = ["apps", "shared"]
 

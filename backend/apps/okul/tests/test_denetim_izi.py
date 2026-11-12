@@ -37,13 +37,9 @@ from apps.okul.models import (
     AuditActor,
     AuditKeyMode,
     AuditTrail,
-    Holiday,
     ImmutableRecord,
-    ImportRun,
     Personnel,
     SchoolConfig,
-    SchoolTerm,
-    SchoolYear,
     SuspendReason,
 )
 from apps.okul.oturum import (
@@ -67,7 +63,7 @@ from apps.okul.tests.hesap_ortak import (
     muhurle,
     sarmal,
 )
-from apps.okul.tests.iz_ortak import sahte_satir
+from apps.okul.tests.iz_ortak import izlenen_modeller, kor_indeks_alanlari, sahte_satir
 from apps.okul.tests.okul_karti_ortak import okul_karti
 from apps.okul.tests.oturum_ortak import SahteSaat, kurulum_durumunu_yaz, oturum_saatini_kur
 from conftest import (
@@ -347,26 +343,24 @@ def test_listesiz_model_izlenmez() -> None:
         denetim_izi.kayit(AuditAction.GUNCELLE, AuditKey(pk=1), onceki=None)
 
 
-@pytest.mark.parametrize(
-    "model",
-    [
-        Account,
-        SchoolConfig,
-        SchoolYear,
-        SchoolTerm,
-        Holiday,
-        Personnel,
-        ImportRun,
-        Attachment,
-    ],
-    ids=lambda m: m.__name__,
-)
+#: KVKK silme kümesindeki modeller (tasarım §5.4, §4.6.2): satırı silinir; iz satırı değer taşımaz,
+#: kişi alanları içerik MAC'ine girmez. Yeni model buraya ADIYLA girer.
+KVKK_SILME_KUMESI = frozenset({"okul.Personnel", "oab.OabPerson"})
+#: KVKK BOŞALTMA kümesindeki alanlar (tasarım §5.4): kayıt kalır, şifreli alan dönem kapanışında
+#: boşaltılır; değer listesine de içerik MAC'ine de girmez (O4). Yeni alan buraya ADIYLA girer.
+KVKK_BOSALTMA_ALANLARI = {
+    "oab.OrganMembership": frozenset({"dropped_reason", "eligibility_bar_basis"}),
+}
+
+
+@pytest.mark.parametrize("model", izlenen_modeller(), ids=lambda m: m.__name__)
 def test_izin_listeleri_modelin_alanlarini_eksiksiz_siniflar(model: Any) -> None:
     """Kimlik dışındaki her alan ya içerik MAC'indedir ya MAC dışıdır (§4.6.2'nin MAC dışı
     alanları: KVKK gereği boşaltılan ya da SİLİNEN alanlar — tasarım §5 O4; veli listesi
     okul çekirdeğinde yok); değer listesi özetin alt kümesidir, şifreli alan içermez. MAC
-    dışı alan KVKK silme kümesindeki modelin (değer listesi boş) kişi alanı ya da imhada
-    boşalan iki `Attachment` alanıdır (plan F1b-3 "Dosya deposu"; adlarıyla)."""
+    dışı alan KVKK silme kümesindeki modelin (değer listesi boş) kişi alanı, imhada
+    boşalan iki `Attachment` alanı (plan F1b-3 "Dosya deposu"; adlarıyla) ya da KVKK boşaltma
+    kümesindeki şifreli alandır (organ üyeliğinin düşme gerekçesi ve engel dayanağı; F1c-5)."""
     alanlar = {a.name for a in model._meta.concrete_fields if not a.primary_key}
     ozet = set(model.IZ_OZET_ALANLARI)
     mac_disi = set(getattr(model, "IZ_MAC_DISI_ALANLARI", ()))
@@ -374,11 +368,21 @@ def test_izin_listeleri_modelin_alanlarini_eksiksiz_siniflar(model: Any) -> None
     assert set(model.IZ_DEGER_ALANLARI) <= ozet
     sifreli = {a.name for a in crypto.encrypted_fields_of(model)}
     assert not sifreli & set(model.IZ_DEGER_ALANLARI)
+    # Kör indeks aday sözlüğüyle kişiyi ele verir: izde değer olamaz (O4); silinecek kişinin
+    # kör indeksi de içerik MAC'ine girmez, yoksa MAC aday sözlüğüyle kişiyi geri verir.
+    kor_indeksler = kor_indeks_alanlari(model)
+    assert not kor_indeksler & set(model.IZ_DEGER_ALANLARI)
+    if model._meta.label in KVKK_SILME_KUMESI:
+        assert kor_indeksler <= mac_disi
     if model is Attachment:
         assert mac_disi == {"original_name", "key_wrap"}
+    elif model._meta.label in KVKK_BOSALTMA_ALANLARI:
+        # Boşaltılan alanlar şifrelidir; öteki şifreli serbest metin kaydıyla kalır, MAC'tedir.
+        assert mac_disi == KVKK_BOSALTMA_ALANLARI[model._meta.label]
+        assert mac_disi <= sifreli
     elif mac_disi:
-        assert model is Personnel and model.IZ_DEGER_ALANLARI == ()
-    if mac_disi:
+        assert model._meta.label in KVKK_SILME_KUMESI and model.IZ_DEGER_ALANLARI == ()
+    if mac_disi and model._meta.label not in KVKK_BOSALTMA_ALANLARI:
         assert sifreli <= mac_disi  # silinen kişi verisinin hiçbiri MAC'e girmez
 
 

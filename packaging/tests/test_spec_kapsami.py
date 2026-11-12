@@ -34,6 +34,7 @@ from typing import Any
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
+FONTLAR = REPO / "packaging" / "fontlar"
 SPEC = REPO / "packaging" / "pyinstaller" / "oab_defteri.spec"
 GIRIS = REPO / "packaging" / "pyinstaller" / "giris.py"
 BACKEND = REPO / "backend"
@@ -276,17 +277,53 @@ def test_bagimlilik_duman_var_olan_modulde_gecer(monkeypatch: pytest.MonkeyPatch
 
 
 def test_pdf_duman_uctan_uca_taban_sablon_turkce_ve_font(tmp_path: Path) -> None:
-    """Sağlıklı kurulumda (backend kabı: WeasyPrint + DejaVu) duman kipi geçer.
+    """Sağlıklı kurulumda (backend kabı: WeasyPrint + DejaVu + Liberation Serif) duman kipi geçer.
 
     Belge `documents/base.html`'den üretilir: antet ve sayfa altlığı PDF'te
-    görünmeli, fontlar gömülü DejaVu olmalı.
+    görünmeli; fontlar yalnız taban şablonun DejaVu Sans'ı ve evrakın Liberation Serif'i olmalı
+    (tasarım §9.1-8), ikisi de bulunmalı.
     """
     hedef = tmp_path / "duman.pdf"
     assert _GIRIS["run_pdf_smoke"](hedef) == 0
     metin = _GIRIS["_pdf_text"](hedef)
     assert "ÖRNEK İLÇE KAYMAKAMLIĞI" in metin  # antet bloğu taban şablondan
     assert "Sayfa 1 / 1" in metin  # `@page` altlığı taban şablondan
-    assert all("DejaVu" in ad for ad in _GIRIS["_pdf_fonts"](hedef))
+    fontlar = _GIRIS["_pdf_fonts"](hedef)
+    assert all("DejaVu" in ad or "Liberation" in ad for ad in fontlar), fontlar
+    assert any("DejaVu" in ad for ad in fontlar) and any("Liberation" in ad for ad in fontlar)
+
+
+def _font_yapilandirmasi(tmp_path: Path, font_dizini: Path) -> Path:
+    """Kancanın Linux'ta yaptığı gibi: paketteki şablon gömülü font dizini ve önbellekle işlenir."""
+    sablon = REPO / "packaging" / "pyinstaller" / "fonts.conf.tmpl"
+    metin = sablon.read_text(encoding="utf-8")
+    metin = metin.replace("@FONT_DIR@", font_dizini.as_posix())
+    metin = metin.replace("@CACHE_DIR@", (tmp_path / "onbellek").as_posix())
+    hedef = tmp_path / "fonts.conf"
+    hedef.write_text(metin, encoding="utf-8")
+    return hedef
+
+
+def test_pdf_duman_paketli_font_yapilandirmasini_kullanir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Linux paketi (`OD_EVRAK_FONTCONFIG`): duman kipi programın evrak yoluyla aynı yapılandırmayı
+    kurar, yalnız paketteki `packaging/fontlar/` taranır (tasarım §9.1-8). Paketli dizinde Liberation
+    Serif yoksa sistemde kurulu olsa da kullanılmaz ve kip kapanır: sistem dizini taranmaz."""
+    monkeypatch.setenv("OD_EVRAK_FONTCONFIG", str(_font_yapilandirmasi(tmp_path, FONTLAR)))
+    hedef = tmp_path / "paketli.pdf"
+    assert _GIRIS["run_pdf_smoke"](hedef) == 0
+    fontlar = _GIRIS["_pdf_fonts"](hedef)
+    assert any("DejaVu" in ad for ad in fontlar) and any("Liberation" in ad for ad in fontlar)
+
+    yalniz_dejavu = tmp_path / "yalniz-dejavu"
+    yalniz_dejavu.mkdir()
+    for ttf in FONTLAR.glob("DejaVu*.ttf"):
+        (yalniz_dejavu / ttf.name).write_bytes(ttf.read_bytes())
+    eksik = tmp_path / "eksik"
+    eksik.mkdir()
+    monkeypatch.setenv("OD_EVRAK_FONTCONFIG", str(_font_yapilandirmasi(eksik, yalniz_dejavu)))
+    assert _GIRIS["run_pdf_smoke"](tmp_path / "eksik.pdf") == 8
 
 
 def test_pdf_duman_sablon_yoksa_kapanir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

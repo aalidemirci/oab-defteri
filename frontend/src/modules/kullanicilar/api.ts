@@ -105,6 +105,32 @@ export interface RolSecenegi {
   varsayilan_tanitici: string;
   /** Program yöneticisi rolünde ikinci program yöneticisinin bilgisi; yoksa null. */
   bilgi: string | null;
+  /**
+   * Organ rolü mü (dört yönetim kurulu görevi ve Denetleme Kurulu)? Öyleyse hesap bir organ üyeliğine
+   * bağlanır (plan F1c 7. adım); `uyelikler` açılabilecek üyeliklerdir. Eski sunucuda alan yoksa
+   * (`undefined`) üyelik sorulmaz.
+   */
+  uyelik_gerekli?: boolean;
+  uyelikler?: HesapUyeligi[];
+  /**
+   * Rolün nedeni üye yokluğu mu? Yalnız o zaman pencere Organlar ekranına bağlantı verir (sınır engelinde
+   * ya da bağ kurallarının yokluğunda çözüm orada değildir). Eski sunucuda alan yoksa bağlantı yok.
+   */
+  organlara_yonlendir?: boolean;
+}
+
+/**
+ * Hesap açılabilecek üyelik (`hesap_baglari.uygun_uyelikler`): açık birlik döneminin görevdeki asılları
+ * arasından rolün kuralına uyan ve açık hesaba bağlı olmayan; çözülemeyen ad `null`.
+ */
+export interface HesapUyeligi {
+  uyelik: number;
+  kisi: number;
+  ad_soyad: string | null;
+  organ: string;
+  gorev: string;
+  gorev_etiketi: string;
+  donem: number;
 }
 
 export interface KullaniciSecenekleri {
@@ -117,6 +143,9 @@ export interface HesapAcmaGovdesi {
   tanitici: string;
   ad_soyad: string;
   gecici_parola: string;
+  /** Organ rolünde bağlanacak üyelik ve kişisi (seçim ekranının bayat kalmasına karşı). */
+  uyelik?: number;
+  kisi?: number;
 }
 
 /** `POST accounts/` yanıtı (201). */

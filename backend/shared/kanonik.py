@@ -42,8 +42,8 @@ yerde kullanılır, üçü de altın vektörle donar:
 * **Zincir** — `iz_mac`: `HMAC(HKDF(İA, "od-denetim-izi/v1"), kanonik(satır) ‖
   prev_mac)`. `kanonik(satır)` `IZ_SATIRI_ALANLARI`'nın sözlüğüdür; `prev_mac`
   kanoniğe GİRMEZ, onaltılık metninin ASCII baytları olarak SONA eklenir (ilk satırda
-  boş dize). `term` ve `compliance_item` hedef modelleri F1c'de gelir; anahtarlar
-  bugünden `null` olarak kanoniktedir (hesap mührünün `person`/`membership`/`term`
+  boş dize). `term` ve `compliance_item` hedef modelleri F1c'de geldi (`okul.0002`); anahtarlar
+  F1b'den beri `null` olarak kanoniktedir (hesap mührünün `person`/`membership`/`term`
   deseni): sütunlar eklenince var olan MAC'ler değişmez. Hesap kimliği (`account`)
   UUID'nin TİRELİ metnidir (`str(uuid)`); SQLite sütunu tiresiz 32 hane saklar, salt
   okunur `sqlite3` denetimi tireli biçime çevirir.
@@ -165,9 +165,9 @@ def esit(a: object, b: object) -> bool:
 # ---------------------------------------------------------------------------
 # Hesap mührü (tasarım §4.6.1)
 # ---------------------------------------------------------------------------
-#: Mühre giren `Account` alanları. `person`, `membership` ve `term`in hedef
-#: modelleri F1c'de gelir; alanlar bugün de anahtar olarak (değeri `null`)
-#: mühürdedir: alanlar eklenince var olan mühürler değişmez. `last_login_at`,
+#: Mühre giren `Account` alanları. `person`, `membership` ve `term` F1c 7. adımda
+#: geldi; öncesinde de anahtar olarak (değeri `null`) mühürdeydiler: bağsız hesabın
+#: mührü alanların gelişiyle değişmedi, bağlı hesapta değer kimliğin metnidir. `last_login_at`,
 #: `password_changed_at`, sıfırlama alanları ve `display_name` mührün dışındadır
 #: (oturum ve bildirim izleri; ad şifrelidir ve DEK yenilemesinde yeniden yazılır).
 #: `wrap_digest` ve `wrap_digest_pending` hesabın `guvenlik.json`'daki parola kaydının (sarmalın)
@@ -279,7 +279,8 @@ IZ_SATIRI_ALANLARI: tuple[str, ...] = (
     "key_ref",
 )
 #: Satırın yabancı anahtar alanları: değer kimliğin METNİ ya da `None`dır. `term` ve
-#: `compliance_item` F1c'ye dek daima `None`dır.
+#: `compliance_item` F1c'den önceki satırlarda daima `None`dır; F1c'de dönemli ve uyum satırlı
+#: yazımlar doldurur.
 IZ_SATIRI_YABANCI_ANAHTARLARI: tuple[str, ...] = ("account", "term", "compliance_item")
 #: Satırın metin alanları (boş olabilir, `None` olamaz).
 _IZ_SATIRI_METINLERI: tuple[str, ...] = (

@@ -3,9 +3,9 @@
 Tasarım §4.4.5 (hesap açma), §9.1 (tek içerik, iki çizici; "Parola hiçbir belgede yoktur"), §9.5
 (E63: dayanak BSG Yön. md. 9/2, 10/1-2; biçim yalnız PDF; F1b) ve §9.6 (E63: veri kaynağı, imza
 bloğu, kabul örneği). Bu modül YALNIZ içeriği kurar (`shared.evrak.Belge`); ayrı şablon yoktur,
-PDF evrak hattının tek kapısından çizilir (`shared.evrak.pdf_ciz`; yazı tipi bugünkü hattınki,
-DejaVu Sans). Yetki, kayıt denetimi, basım izi ve dosyanın verilişi `hesaplar.teslim_pusulasi` ve
-`views_hesaplar`'dadır.
+PDF evrak hattının tek kapısından çizilir (`shared.evrak.pdf_ciz`; yazı tipi ve punto hattınkidir:
+Liberation Serif, gövde 12; plan F1c kararları "Evrak biçimi", 9. adım). Yetki, kayıt denetimi,
+basım izi, evrak kaydı ve dosyanın verilişi `hesaplar.teslim_pusulasi` ve `views_hesaplar`'dadır.
 
 BASILANLAR (planın lafzı):
 
@@ -57,9 +57,8 @@ from django.utils import timezone
 
 from apps.okul.models import AccountRole
 from apps.okul.oturum import rol_etiketi
-from apps.okul.rol_izinleri import Satir, etkin_hucreler
+from apps.okul.rol_izinleri import Satir, etkin_hucreler, yazabildigi_uclar
 from shared import evrak
-from shared.letterhead import letterhead_authority, letterhead_unit
 from shared.text import tr_upper
 
 #: Evrak kataloğu kodu (tasarım §9.5). Yalnız altlıkta görünür (sözlük §2 istisna 1).
@@ -73,7 +72,7 @@ KUNYE_BASLIKLARI: Final = ("Tanıtıcı", "Rol", "Açılış tarihi")
 IS_BASLIGI: Final = "Bu programda sizin işiniz"
 
 # Bölüm paragrafları: "<başlık>: " + cümleler (iki noktadan sonra cümle büyük harfle başlar). Sayfa
-# bütçesi (program yöneticisinde en çok iki, öteki rollerde bir sayfa; kullanıcı kararı 04.11.2026;
+# bütçesi (her rolde en çok iki sayfa; kullanıcı kararı 11.11.2026, program yöneticisinde 04.11.2026;
 # `test_evrak_kurallari.py`) bölümlerin tablo yerine paragraf olmasını ister.
 ILK_GIRIS_BASLIGI: Final = "İlk girişte"
 #: İlk giriş adımları (kilit ekranının metinleriyle: "Parola", "Aç", "Yeni parola", "Parola
@@ -176,16 +175,30 @@ class BugunkuIs:
     """Bir matris satırının BUGÜN programda yapılabilen işi (orkestratör maddesi F-4).
 
     Ad `baslik` + ": " + parçalardır (başlık yoksa yalnız parçalar); iki noktadan sonrası liste
-    olduğu için küçük harfle sürer.
+    olduğu için küçük harfle sürer. Pusulada rolün adı yalnız o rolün yazabildiği parçaları taşır
+    (`rol_parcalari`; F1c 4. adım: M2'de personel işleri yalnız program yöneticisinin, birlik
+    kişileri yönetim kurulu rollerinin de işidir). `ad` bütün parçalardır.
     """
 
     parcalar: tuple[IsParcasi, ...]
     baslik: str = ""
 
+    def _ad(self, parcalar: tuple[IsParcasi, ...]) -> str:
+        govde = ", ".join(parca.ad for parca in parcalar)
+        return f"{self.baslik}: {govde}" if self.baslik else govde
+
     @property
     def ad(self) -> str:
-        govde = ", ".join(parca.ad for parca in self.parcalar)
-        return f"{self.baslik}: {govde}" if self.baslik else govde
+        return self._ad(self.parcalar)
+
+    def rol_parcalari(self, rol: str) -> tuple[IsParcasi, ...]:
+        """Rolün bütün uçlarını yazabildiği parçalar (kurallardan türer; ikinci bir matris doğmaz)."""
+        yazilabilir = yazabildigi_uclar(rol)
+        return tuple(parca for parca in self.parcalar if parca.uclar <= yazilabilir)
+
+    def rol_adi(self, rol: str) -> str:
+        """Rolün pusulasındaki ad: yalnız o rolün parçalarıyla."""
+        return self._ad(self.rol_parcalari(rol))
 
 
 #: Rolün bugün yazabildiği matris satırlarının pusuladaki işleri (orkestratör maddesi F-4): YALNIZ
@@ -210,6 +223,17 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
                 "school-year-activate",
             ),
             _parca("kapalı günler", "holiday-list", "holiday-seed", "holiday-detail"),
+            # Birlik Dönemi ekranı ve geçiş kurulumu (F1c 11. adım; tasarım §7.9 "Kim: yonetici").
+            _parca(
+                "birlik dönemi ve geçiş kurulumu",
+                "oab-term-list",
+                "oab-term-cancel",
+                "oab-transition-inherited",
+                "oab-transition-election-counts",
+                "oab-transition-decision-book",
+                "oab-transition-decision-book-cancel",
+                "oab-transition-complete",
+            ),
         )
     ),
     Satir.M2: BugunkuIs(
@@ -223,17 +247,60 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
             ),
             _parca("e-Okul aktarımı", "import-personnel-preview", "import-personnel-commit"),
             _parca("ayrılış havuzu", "leave-pool-resolve"),
+            # Birlik kişileri (F1c 4. adım): program yöneticisi ve yönetim kurulu rolleri. Ekranı
+            # Kişiler'in "Birlik Kişileri" sekmesidir (F1c 11. adım).
+            _parca(
+                "birlik kişileri",
+                "oab-person-list",
+                "oab-person-detail",
+                "oab-person-from-personnel",
+            ),
+            # Veli listesinden kopya yalnız program yöneticisinindir (`rol_izinleri`).
+            _parca("veli listesinden birlik kişisi ekleme", "oab-person-from-parent"),
+            # Organlar ve Temsilciler ekranları (F1c 11. adım). Parçalar uç kurallarının rol
+            # kümelerine göre ayrılır: program yöneticisi ve yönetim kurulu rolleri üyelik, görev alma
+            # engeli, alım komisyonu ve temsilci kaydını yazar; görev bölümü ve yönetim kurulu yedeğinin
+            # çağrısı yalnız sekreterindir; Denetleme Kurulu yedeğinin çağrısı program yöneticisinin;
+            # düşme, görev bölümü evrakı, temsilci çizelgesi ve aylık toplantı günü ikisinindir.
+            _parca(
+                "üyelik ve temsilci kaydı",
+                "oab-membership-list",
+                "oab-membership-detail",
+                "oab-membership-cancel",
+                "oab-membership-eligibility-basis",
+                "oab-purchase-committee-list",
+                "oab-representative-list",
+            ),
+            _parca(
+                "görev bölümü ve yedek çağrısı",
+                "oab-yk-duty-assignment",
+                "oab-membership-substitute-call-yk",
+            ),
+            _parca("Denetleme Kurulu yedeğinin çağrısı", "oab-membership-substitute-call-dk"),
+            _parca("üyeliğin düşmesi", "oab-membership-drop"),
+            _parca(
+                "görev bölümü evrakı ve temsilci çizelgesi",
+                "oab-document-e01",
+                "oab-document-e03",
+                "oab-term-meeting-day",
+            ),
         ),
-        baslik="Kişiler",
+        baslik="Kişiler, Organlar, Temsilciler",
     ),
+    # Satırda iki ekran vardır (Genel Bakış'ın kartı ve Organlar → Denetleme Kurulu): başlık yerine
+    # parçalar ekranın adıyla başlar.
     Satir.M8: BugunkuIs(
         (
             _parca(
-                "yedekten geri yükleme kartını görüldü olarak işaretleme (“Gördüm”)",
+                "Genel Bakış: yedekten geri yükleme kartını görüldü olarak işaretleme (“Gördüm”)",
                 "security-integrity-restore-seen",
             ),
+            _parca(
+                "Organlar: Denetleme Kurulunun görev bölümü ve tutanağı",
+                "oab-dk-duty-assignment",
+                "oab-document-e02",
+            ),
         ),
-        baslik="Genel Bakış",
     ),
     Satir.M9: BugunkuIs(
         (_parca("son oturumun kontrolü (“Kontrol ettim”)", "dashboard-last-session"),),
@@ -298,6 +365,9 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
 #: Etkin satırlarda bilerek ADLANMAYAN yazma uçları ve gerekçeleri (orkestratör maddesi F-4; test
 #: bunları satırın kapsamından düşer). Liste yalnız gerekçeyle büyür.
 ADSIZ_UCLAR: Final[Mapping[str, str]] = {
+    "oab-draft-text": (
+        "Gerekçe kutusunun yarım metni; kutu yazılırken kendiliğinden kaydedilir, ayrı iş değildir."
+    ),
     "setup-complete": (
         "Kurulum Sihirbazı'nın son adımı; pusula kurulumdan sonra basılır, hesap sahibinin işi değildir."
     ),
@@ -317,8 +387,9 @@ ADSIZ_UCLAR: Final[Mapping[str, str]] = {
 
 def isler(rol: str) -> tuple[str, ...]:
     """Rolün "bu programda sizin işiniz" satırları: `etkin_hucreler` sırasıyla, bugünkü adlarıyla
-    (`BUGUNKU_ISLER`). Etkin satırın adı yoksa `KeyError` (test her etkin satırın adını sınar)."""
-    return tuple(BUGUNKU_ISLER[satir].ad for satir in etkin_hucreler(rol))
+    (`BUGUNKU_ISLER`; yalnız rolün parçaları). Etkin satırın adı yoksa `KeyError` (test her etkin
+    satırın adını sınar)."""
+    return tuple(BUGUNKU_ISLER[satir].rol_adi(rol) for satir in etkin_hucreler(rol))
 
 
 def _gun(an: datetime) -> str:
@@ -334,7 +405,8 @@ def _bolum(baslik: str, cumleler: tuple[str, ...] | list[str]) -> str:
 def _aydinlatma(veri_sorumlusu: str) -> tuple[evrak.Dipnot, ...]:
     """Aydınlatma bölümü; `veri_sorumlusu` okul kartındaki bilgidir (`data_controller_text`).
 
-    Dipnot puntosuyla, imza bloklarından sonra durur: gövde puntosunda tek sayfa bütçesini aşar.
+    Dipnot puntosuyla (9; RYUE md. 7/1'in yazı alanı alt sınırı, kullanıcı kararı 11.11.2026), imza
+    bloklarından sonra durur; gerekirse ikinci yaprağa geçer (sayfa bütçesi her rolde en çok iki).
     """
     deger = veri_sorumlusu.strip() or AYDINLATMA_VERI_SORUMLUSU_YERI
     return tuple(
@@ -364,11 +436,7 @@ def pusula_belgesi(
     adimlar = [adim.format(tanitici=tanitici) for adim in ILK_GIRIS_ADIMLARI]
     return evrak.Belge(
         kod=KOD,
-        antet=evrak.Antet(
-            tc="T.C.",
-            authority=letterhead_authority(ilce),
-            unit_line=letterhead_unit(okul_adi),
-        ),
+        antet=evrak.okul_anteti(okul_adi=okul_adi, ilce=ilce),
         bloklar=(
             evrak.Baslik(BELGE_ADI),
             evrak.Tablo(

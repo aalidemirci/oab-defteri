@@ -1037,6 +1037,26 @@ def _elle_bilesenler() -> list[tuple[Bilesen, list[tuple[str, str]]]]:
             [("DejaVu-LISANS.txt", dejavu)],
         )
     )
+    # Evrakın yazı tipi (tasarım §9.1-8; plan F1c kararları "Evrak biçimi"): kesimler ve lisans
+    # Debian'ın `fonts-liberation` 2.1.5 paketindendir (lisans dosyası paketin `copyright`'ı).
+    liberation = (REPO / "packaging" / "fontlar" / "Liberation-LISANS.txt").read_text(
+        encoding="utf-8"
+    )
+    sonuc.append(
+        (
+            Bilesen(
+                ad="Liberation Serif",
+                surum="2.1.5",
+                tur="yazi-tipi",
+                platformlar=list(PLATFORMLAR),
+                lisans="OFL-1.1",
+                dosyalar=["Liberation-LISANS.txt"],
+                kaynak="https://github.com/liberationfonts/liberation-fonts",
+                aciklama="Evrakın gömülü yazı tipi (4 kesim; ölçüleri Times New Roman'la aynı)",
+            ),
+            [("Liberation-LISANS.txt", liberation)],
+        )
+    )
     nupkg = _indir_bayt(
         f"https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/{WEBVIEW2_SDK_SURUMU}"
     )

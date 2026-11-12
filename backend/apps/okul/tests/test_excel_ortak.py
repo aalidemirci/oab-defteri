@@ -45,6 +45,17 @@ class TestNormalizeHeader:
         assert normalize_header("ŞUBE/SINIF") == "sube sinif"
         assert normalize_header("İçerik Ğğ Üü Öö Çç") == "icerik gg uu oo cc"
 
+    def test_sapkali_harfler_duz_harfe_katlanir(self) -> None:
+        """Düzeltme işareti adı ayırmaz: "Hâle" ≡ "Hale", "Kâzım" ≡ "Kazım" (ad eşleşmesi)."""
+        assert normalize_header("Hâle Âşık Kâzım") == "hale asik kazim"
+        assert normalize_header("Îlke Rûhi ÛMRAN") == "ilke ruhi umran"
+        assert normalize_header("Hâle Yılmaz") == normalize_header("Hale Yılmaz") == "hale yilmaz"
+
+    def test_ayrisik_yazim_birlesik_yazimla_ayni_anahtari_verir(self) -> None:
+        """NFC: a + U+0302 (â) ve I + U+0307 (İ) tek harf gibi katlanır."""
+        assert normalize_header("Hâle") == "hale"
+        assert normalize_header("İLKAY") == normalize_header("İLKAY") == "ilkay"
+
     def test_bos_ve_metin_olmayan(self) -> None:
         assert normalize_header(None) == ""
         assert normalize_header("  -- ") == ""

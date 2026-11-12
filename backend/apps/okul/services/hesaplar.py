@@ -106,9 +106,37 @@ HESAP TESLİM PUSULASI (E63; `teslim_pusulasi`, içerik `services.hesap_teslim_p
 "E63 hesap teslim pusulası"): yalnız program yöneticisi (`_yonetici_aktor`), kendi hesabına,
 kapalı hesaba ve kaydı ya da izi tutmayan hesaba basılmaz (`_target`: mühür, satır izi, iz boşluğu;
 kapama ve sıfırlamayla aynı sıra ve iletiler). Dosya SAKLANMAZ: PDF bellekte çizilir, çağırana
-döner; tek izi `BASIM` satırıdır (`denetim_izi.basim`: kod ve PDF'in sha256'sı; kaydın kimliği
-hesap). İz yazılamazsa PDF verilmez. Erişim günlüğüne girmez: pusula kişisel veri basmaz (ad-soyad
-yok; tasarım §4.6.4'ün türlerinden değildir).
+döner. İki izi vardır, ikisi aynı işlemde: üretimin kaydı `GeneratedDocument` satırıdır (konu hesap,
+içerik JSON'u şifreli, dosyası yok; `OLUSTUR`, önceki pusulanın kaydı `YERINI_ALDI`; tasarım §5.2.8,
+§9.1-2; plan F1b-2 ekleri 04.11.2026 (3), F1c 9. adım) ve dosyanın izi `BASIM` satırıdır
+(`denetim_izi.basim`: kod ve PDF'in sha256'sı; kaydın kimliği hesap). Kayıt `oab`'dedir, okul
+çekirdeği onu kayıt defterinden yazar (`evrak_kaydi`). İz ya da kayıt yazılamazsa PDF verilmez.
+Erişim günlüğüne girmez: pusula kişisel veri basmaz (ad-soyad yok; tasarım §4.6.4'ün türlerinden
+değildir).
+
+HESAP ↔ ÜYELİK BAĞI (tasarım §4.4.1, §4.4.5, §4.6.1; plan F1c 7. adım). Organ rollerinin (dört YK
+görevi ve Denetleme Kurulu; `ORGAN_ROLLERI`) hesabı bir organ üyeliğine bağlıdır: `open_account`
+üyelik ister (`uyelik`; kişi ve dönem üyelikten türer, `kisi` verilirse üyeliğin kişisi olmalıdır),
+program yöneticisi ve okul müdürü hesabı bağ almaz. Bağın KURALI `oab`'dedir ve kayıt defterinden
+gelir (`register_account_bond_rules`; `AppConfig.ready`): `okul` `oab`'yi içe aktarmaz (plan "F1c
+adımları"). Kural kayıtlı değilse organ rolüne hesap açılmaz (fail-closed). Bağ hesap açmanın
+işleminin İÇİNDE yeniden denetlenir (`BEGIN IMMEDIATE`): üyeliği düşüren yazımla yarışan açma bayat
+bağ yazamaz. Kısıtlar: aynı üyeliğe bağlı tek açık hesap (DB kısıtı), dört YK görevi ve okul müdürü
+için tek, Denetleme Kurulu için en çok üç açık hesap (tasarım §4.6.1).
+
+Üyelik düştüğünde, iptal edildiğinde ya da görev değiştiğinde bağlı hesap kayıtla AYNI işlemde
+askıya alınır (`uyelik_askisi`; `UYELIK_DUSTU` · `GOREV_BOLUMU`; tasarım §4.4.5 "Askı: kaydı yazan
+(programın etkisi)"): iz satırının yazarı üyeliği yazan hesaptır, hesap yönetimi yetkisi
+sorulmaz. Kaydı ya da izi tutmayan satıra askı da dokunmaz (modül başlığının kuralı; o hesabın girişi
+zaten açılmaz): üyelik yazımı geri alınmaz, askı yazılmaz, olay `BUTUNLUK` satırıyla izlenir (`SISTEM`;
+tasarım §4.4.5 "Hesap kaydı ya da izi tutmadı"). Sıra durum en sondur: mühür ve iz, kapalı ya da
+askıdaki satırda da durumdan ÖNCE denetlenir (program dışından kapatılmış satır atlanmaz). Askıya
+alınan hesap oturumdaki hesapsa oturum, işlem commit edilince kilitlenir (isteğin ardından ilk
+istekte; giriş kapanır). Bağı geçersiz hesap
+askıdan çıkarılmaz (`unsuspend`; satırın eylemi aynı nedeni söyler), parolası da sıfırlanmaz;
+Kullanıcılar satırının giriş ve sıfırlama nedenleri de bağı söyler. Kapanış, bağı yeniden geçerli
+olmuş askının kaldırılması (askı kendiliğinden kalkmaz) ve yeni görevliye hesap program yöneticisinin
+"hesap önerileri"dir (`apps.oab.services.hesap_baglari.hesap_onerileri`).
 
 KULLANICILAR EKRANININ VERİSİ (`kullanici_listesi`, `kullanici_ayrintisi`, `kullanici_satiri`,
 `kullanici_secenekleri`; uçları `views_hesaplar`): yalnız program yöneticisi (yetki kapısı
@@ -129,6 +157,7 @@ from datetime import UTC, datetime
 from typing import Any, NoReturn
 
 from django.db import IntegrityError, transaction
+from django.db.models import QuerySet
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 
@@ -145,9 +174,16 @@ from apps.okul.models import (
     SchoolConfig,
     SuspendReason,
 )
-from apps.okul.oturum import ham_an_sutunlari, hesap_ani, rol_etiketi, sistem_olarak, yazar
+from apps.okul.oturum import (
+    OTURUM,
+    ham_an_sutunlari,
+    hesap_ani,
+    rol_etiketi,
+    sistem_olarak,
+    yazar,
+)
 from apps.okul.rol_izinleri import Eylem, yetki, yetki_oturum
-from apps.okul.services import app_password, hesap_kurallari, hesap_teslim_pusulasi
+from apps.okul.services import app_password, evrak_kaydi, hesap_kurallari, hesap_teslim_pusulasi
 from apps.okul.services.app_password import AccountSealMismatch, AppPasswordError
 from shared import crypto, evrak
 from shared.exceptions import RolYetkisiz
@@ -180,6 +216,30 @@ _AUDIT_BOARD_LIMIT_MESSAGE = (
 _LAST_ADMIN_MESSAGE = "Son program yöneticisi hesabı kapatılamaz."
 _ROLE_MESSAGE = "Geçerli bir rol seçin."
 _SUSPENDED_RESET_MESSAGE = "Askıdaki hesabın parolası sıfırlanamaz; önce hesabı askıdan çıkarın."  # noqa: S105
+#: Hesap ↔ üyelik bağı (modül başlığı "HESAP ↔ ÜYELİK BAĞI"; sözlük §1 "Kullanıcılar").
+_BOND_REQUIRED_MESSAGE = "Bu rolün hesabı bir organ üyeliğine bağlanır; üyeliği seçin."
+_BOND_NOT_ALLOWED_MESSAGE = (
+    "Program yöneticisi ve okul müdürü hesabı organ üyeliğine bağlanmaz; üyelik seçmeyin."
+)
+_BOND_RULES_MISSING_MESSAGE = "Organ üyeliklerinin kuralları yüklenemedi; bu role hesap açılamıyor. Programı yeniden başlatın."
+_MEMBERSHIP_TAKEN_MESSAGE = "Bu üyeliğe bağlı açık bir hesap zaten var; önce onu kapatın."
+_BOND_PERSON_MESSAGE = "Seçilen kişi bu üyeliğin kişisi değil."
+_BOND_INVALID_UNSUSPEND_MESSAGE = (
+    "Hesabın bağlı olduğu üyelik düşmüş ya da görevi değişmiş; hesap askıdan çıkarılmaz. "
+    "Hesabı kapatın, görevdeki üyeye yeni hesap açın."
+)
+#: Bağı geçersiz askıdaki hesabın parola sıfırlaması (askıdan çıkarılamadığı için F1b'nin "önce
+#: askıdan çıkarın" yolu açılmaz).
+_BOND_INVALID_RESET_MESSAGE = (  # noqa: S105 — kullanıcı iletisidir, parola değil
+    "Hesabın bağlı olduğu üyelik düşmüş ya da görevi değişmiş; parolası sıfırlanmaz. "
+    "Hesabı kapatın, görevdeki üyeye yeni hesap açın."
+)
+#: Organ rolünde hesap açılabilecek üye yoksa "Yeni hesap" penceresindeki rolün nedeni
+#: (`kullanici_secenekleri`).
+_NO_ELIGIBLE_MEMBERSHIP_MESSAGE = (
+    "Bu role hesap açılabilecek üye yok; açık birlik döneminde üyeliği, yönetim kurulu "
+    "rollerinde görev bölümünü de girin."
+)
 # Genel Bakış'ın "Hesaplar ve Güvenlik Dosyası" kartında görünür: "sarmal" kullanıcı metnine
 # girmez, kullanıcıdaki adı hesabın güvenlik dosyasındaki parola kaydıdır (sözlük §1 "Denetim izi").
 _NOT_ORPHAN_MESSAGE = (
@@ -266,6 +326,113 @@ class ParolaKaydiSilinemedi(GuvenlikDosyasiYazilamadi):
     400 `validation_error`'a çevirir (eskiden 500); ileti iç ayrıntı (yol, işletim sistemi iletisi)
     taşımaz.
     """
+
+
+# ---------------------------------------------------------------------------
+# Hesap ↔ üyelik bağı (modül başlığı "HESAP ↔ ÜYELİK BAĞI"; plan F1c 7. adım)
+# ---------------------------------------------------------------------------
+#: Organ üyeliğine bağlanan roller (tasarım §4.4.1): dört YK görevi ve Denetleme Kurulu.
+ORGAN_ROLLERI: frozenset[str] = frozenset(
+    {
+        AccountRole.BASKAN.value,
+        AccountRole.BASKAN_YARDIMCISI.value,
+        AccountRole.MUHASIP.value,
+        AccountRole.SEKRETER.value,
+        AccountRole.DENETLEME_KURULU.value,
+    }
+)
+
+
+@dataclass(frozen=True)
+class HesapBagi:
+    """Hesabın bağı: üyelik ve üyelikten türeyen kişi ve dönem (`oab` kimlikleri)."""
+
+    person_id: int
+    membership_id: int
+    term_id: int
+
+
+class HesapBagiReddi(ValueError):
+    """Bağ kuralının Türkçe reddi (üyelik yok, seçilmiş değil, görevi rolü tutmuyor, …)."""
+
+
+@dataclass(frozen=True)
+class HesapBagiKurallari:
+    """`oab`'nin kayıt defterine bildirdiği bağ kuralları (`AppConfig.ready`; modül başlığı)."""
+
+    #: (rol, üyelik kimliği) → bağ; bağlanamıyorsa `HesapBagiReddi` (Türkçe ileti).
+    bagla: Callable[[str, object], HesapBagi]
+    #: Organ rolündeki hesabın bağı bugün geçersizse askı nedeni (`SuspendReason`), değilse None.
+    gecersizlik_nedeni: Callable[[Account], str | None]
+    #: Rolün hesap açılabilecek üyelikleri ("Yeni hesap" penceresi; `kullanici_secenekleri`).
+    uygun_uyelikler: Callable[[str], list[dict[str, Any]]]
+
+
+#: Kayıtlı bağ kuralları (en çok bir; `register_account_bond_rules`).
+_bag_kurallari: list[HesapBagiKurallari] = []
+
+
+def register_account_bond_rules(kurallar: HesapBagiKurallari) -> None:
+    """Bağ kurallarını kaydeder (`AppConfig.ready`; idempotent, son kayıt geçerlidir)."""
+    _bag_kurallari[:] = [kurallar]
+
+
+def _kurallar() -> HesapBagiKurallari | None:
+    return _bag_kurallari[0] if _bag_kurallari else None
+
+
+def bag_gecersizlik_nedeni(hesap: Account) -> str | None:
+    """Organ rolündeki hesabın bağı bugün geçersizse askı nedeni, geçerliyse ya da rol organ rolü
+    değilse None. Kural kayıtlı değilse bağ geçersiz sayılır (fail-closed; `UYELIK_DUSTU`)."""
+    if hesap.role not in ORGAN_ROLLERI:
+        return None
+    kurallar = _kurallar()
+    if kurallar is None:
+        return SuspendReason.UYELIK_DUSTU.value
+    return kurallar.gecersizlik_nedeni(hesap)
+
+
+def _bos(deger: object) -> bool:
+    return deger is None or deger == ""
+
+
+def _bagi_coz(role: str, uyelik: object, kisi: object) -> HesapBagi | None:
+    """Hesap açmanın bağı (modül başlığı): organ rolünde üyelik zorunlu ve kurala uygun, öteki
+    rollerde verilmez. Aynı üyeliğe bağlı açık hesap varsa ret (DB kısıtının Türkçe önü)."""
+    if role not in ORGAN_ROLLERI:
+        if not _bos(uyelik) or not _bos(kisi):
+            raise AccountServiceError(_BOND_NOT_ALLOWED_MESSAGE)
+        return None
+    if _bos(uyelik):
+        raise AccountServiceError(_BOND_REQUIRED_MESSAGE)
+    kurallar = _kurallar()
+    if kurallar is None:
+        raise AccountServiceError(_BOND_RULES_MISSING_MESSAGE)
+    try:
+        bag = kurallar.bagla(role, uyelik)
+    except HesapBagiReddi as exc:
+        raise AccountServiceError(str(exc)) from exc
+    if not _bos(kisi) and str(kisi) != str(bag.person_id):
+        raise AccountServiceError(_BOND_PERSON_MESSAGE)
+    if (
+        Account.objects.exclude(status=AccountStatus.KAPALI)
+        .filter(membership_id=bag.membership_id)
+        .exists()
+    ):
+        raise AccountServiceError(_MEMBERSHIP_TAKEN_MESSAGE)
+    return bag
+
+
+def _kisit_iletisi(login: str, role: str, bag: HesapBagi | None) -> str:
+    """Yarışta DB kısıtının son sözü (`IntegrityError`): hangi kısıtın tuttuğunu söyleyen ileti."""
+    acik = Account.objects.exclude(status=AccountStatus.KAPALI)
+    if acik.filter(login_name=login).exists():
+        return _LOGIN_NAME_TAKEN_MESSAGE
+    if bag is not None and acik.filter(membership_id=bag.membership_id).exists():
+        return _MEMBERSHIP_TAKEN_MESSAGE
+    if role in SINGLE_ACCOUNT_ROLES and acik.filter(role=role).exists():
+        return _SINGLE_ROLE_MESSAGE
+    return _LOGIN_NAME_TAKEN_MESSAGE
 
 
 def _kural(dogrulayici: Callable[[str], str], deger: str) -> str:
@@ -418,13 +585,22 @@ def default_login_name(role: str) -> str:
 
 @sensitive_variables("temp_password", "parola", "dek")
 def open_account(
-    *, by_hesap_id: object, role: str, tanitici: str, display_name: str, temp_password: str
+    *,
+    by_hesap_id: object,
+    role: str,
+    tanitici: str,
+    display_name: str,
+    temp_password: str,
+    uyelik: object = None,
+    kisi: object = None,
 ) -> Account:
     """Yeni hesap açar (`PAROLA_YENILENMELI`); ilk girişte geçici parola değiştirilir.
 
     Önce veritabanı (mühürlü satır), sonra geçici parolalı sarmal (modül başlığı).
-    Kısıt ihlali Türkçe iletiyle reddedilir. Organ bağı (üyelik) F1c'de zorunlu
-    olur; bugün hesap rolle açılır (tasarım §4.4.1).
+    Kısıt ihlali Türkçe iletiyle reddedilir. Organ rolünde hesap üyeliğe bağlanır (`uyelik`;
+    `kisi` verilirse üyeliğin kişisi olmalıdır; modül başlığı "HESAP ↔ ÜYELİK BAĞI"): bağ rolün
+    sınırından SONRA ve satırın işleminin içinde yeniden denetlenir; kişi ve dönem üyelikten gelir
+    ve mühre, içerik MAC'ine girer.
 
     Sarmal güvenlik dosyasına yazılamazsa (ör. dosyayı başka bir program tutuyor) satır ve `HESAP`
     satırı yerinde kalır (iki depo kuralı 2: hesap açıktır, sarmalsızdır, giriş açılmaz) ve hata
@@ -446,6 +622,8 @@ def open_account(
     neden = _rol_acilamama_nedeni(role, app_password.hesap_satirlari(acik.filter(role=role)), dek)
     if neden is not None:
         raise AccountServiceError(neden)
+    # Bağın ön denetimi (pahalı sarmal kurulmadan Türkçe ret); asıl karar satırın işlemindedir.
+    bag = _bagi_coz(role, uyelik, kisi)
     hesap = Account(
         login_name=login,
         role=role,
@@ -460,11 +638,18 @@ def open_account(
     hesap.wrap_digest = app_password.wrap_digest(dek, sarmal) or ""
     try:
         with transaction.atomic():
+            # `BEGIN IMMEDIATE`: üyeliği düşüren ya da görevi değiştiren yazımla sıralıdır; bağ
+            # burada yeniden denetlenir (modül başlığı).
+            bag = _bagi_coz(role, uyelik, kisi)
+            if bag is not None:
+                hesap.person_id = bag.person_id
+                hesap.membership_id = bag.membership_id
+                hesap.term_id = bag.term_id
             hesap.seal = hesap.compute_seal(dek)
             hesap.save(force_insert=True)
             denetim_izi.kayit(AuditAction.HESAP, hesap, onceki=None)
     except IntegrityError as exc:  # yarış: DB kısıtı son sözü söyler
-        raise AccountServiceError(_LOGIN_NAME_TAKEN_MESSAGE) from exc
+        raise AccountServiceError(_kisit_iletisi(login, role, bag)) from exc
     try:
         app_password.write_account_wrap(
             data_key=dek, hesap_id=hesap.id, tanitici=login, sarmal=sarmal
@@ -555,7 +740,8 @@ def reset_password(*, by_hesap_id: object, hesap_id: object, temp_password: str)
     `reset_notice_pending`, mühür), sonra sarmal yeni geçici parolayla kurulur;
     hatalı deneme sayacı ve askısı sıfırlanır. Sahibi ilk girişinde parolasını
     değiştirir ve sıfırlama bildirimini görür. `ASKIDA` durumundaki hesap önce
-    askıdan çıkarılır. Oturumdaki hesap kendi parolasını buradan sıfırlayamaz (plan F1b-2 "Kendi
+    askıdan çıkarılır (bağı geçersiz organ hesabı askıdan çıkarılmaz: ret iletisi kapanışı ve yeni
+    hesabı söyler, `_BOND_INVALID_RESET_MESSAGE`). Oturumdaki hesap kendi parolasını buradan sıfırlayamaz (plan F1b-2 "Kendi
     hesabı"): kendi parolası Ayarlar → Güvenlik'te eski parolayla değiştirilir
     (`app_password.change_password`).
 
@@ -583,7 +769,12 @@ def reset_password(*, by_hesap_id: object, hesap_id: object, temp_password: str)
         raise AccountServiceError(_OWN_RESET_MESSAGE)
     hesap = _target(hesap_id, dek)
     if hesap.status == AccountStatus.ASKIDA:
-        raise AccountServiceError(_SUSPENDED_RESET_MESSAGE)
+        # Bağı geçersiz organ hesabı askıdan çıkarılmaz: yol kapanış ve yeni hesaptır.
+        raise AccountServiceError(
+            _BOND_INVALID_RESET_MESSAGE
+            if bag_gecersizlik_nedeni(hesap) is not None
+            else _SUSPENDED_RESET_MESSAGE
+        )
     parola = _kural(hesap_kurallari.validate_password, temp_password)
     # Geçici parolanın sarmalı önce bellekte kurulur: özeti iki aşamalı yazımın 1. adımında
     # bekleyen özet olur (`app_password` modül başlığı "İKİ AŞAMALI ÖZET").
@@ -663,6 +854,9 @@ def unsuspend(*, by_hesap_id: object, hesap_id: object) -> Account:
     _yonetici_aktor(by_hesap_id, dek)
     hesap = _target(hesap_id, dek)
     veritabani_askisi = hesap.status == AccountStatus.ASKIDA
+    # Bağı geçersiz organ hesabı askıdan çıkarılmaz (modül başlığı "HESAP ↔ ÜYELİK BAĞI").
+    if veritabani_askisi and bag_gecersizlik_nedeni(hesap) is not None:
+        raise AccountServiceError(_BOND_INVALID_UNSUSPEND_MESSAGE)
     if veritabani_askisi:
         with transaction.atomic():
             onceki = denetim_izi.anlik(hesap)
@@ -692,6 +886,82 @@ def unsuspend(*, by_hesap_id: object, hesap_id: object) -> Account:
     return hesap
 
 
+#: Üyelik askısının nedenleri (tasarım §4.4.5): üyelik düştü (iptal dahil) · görev değişti.
+_UYELIK_ASKI_NEDENLERI: frozenset[str] = frozenset(SuspendReason.values)
+
+
+def uyelik_askisi(hesap: Account, neden: str | None = None) -> Account | None:
+    """Bağı geçersizleşen hesabı askıya alır: programın etkisi, ÜYELİK KAYDIYLA AYNI İŞLEMDE.
+
+    Tasarım §4.4.5 "Üyelik düştü, görev değişti": kayıtla aynı işlemde `ASKIDA` (giriş kapanır);
+    iz satırının yazarı kaydı yazan hesaptır, hesap yönetimi yetkisi sorulmaz (modül başlığı "HESAP ↔
+    ÜYELİK BAĞI"). Çağıran (`apps.oab.services.hesap_baglari`) açık bir işlemin içinde olmalıdır:
+    askı yazılamazsa üyelik kaydı da geri alınır.
+
+    SIRA `_target`'ınkidir: varlık, mühür ve satırın izi, DURUM EN SON — doğrulanmış satırdan. Kaydı
+    ya da izi tutmayan satıra dokunulmaz (yeniden mühürlemek değişikliği aklardı; giriş zaten
+    açılmaz): askı yazılmaz, üyelik kaydı geri alınmaz, olay bir `BUTUNLUK` satırıyla (yazar
+    `SISTEM`; alan `seal`, `kayit_mac` ya da `iz_boslugu`) dış işlemin içinde izlenir (tasarım §4.4.5
+    "Hesap kaydı ya da izi tutmadı"). Program dışından `KAPALI` ya da aynı nedenle `ASKIDA` yapılmış
+    satır da bu yüzden sessizce atlanmaz, `BUTUNLUK` satırını alır. Doğrulanmış satırda: kapalı
+    hesaba ve zaten aynı nedenle (ya da üyeliğin düşmesiyle) askıdaki hesaba dokunulmaz; bağı geçerli
+    hesaba da (`neden` verilmemişse neden doğrulanmış satırın bağından hesaplanır,
+    `bag_gecersizlik_nedeni`; `hesap_baglari.hesaplari_esitle` böyle çağırır).
+
+    Askıya alınan hesap oturumdaki hesapsa (ör. sekreter kendi görevini değiştiren görev bölümünü ya
+    da kendi düşmesini yazdı) işlem commit edilince oturum kilitlenir: kilit isteğin ardından ilk
+    istekte uygulanır (`KILIT` satırı `SISTEM`'in; `OturumDurumu.hesap_askiya_alindi`), askıdaki hesap
+    eski rolüyle yazmayı sürdürmez ve askı girişi kapattığı için yeniden açılamaz.
+
+    Askı yazıldıysa güncel satırı, yazılmadıysa None döndürür. Kilitliyken ret (mühür DEK ister).
+    """
+    if neden is not None and neden not in _UYELIK_ASKI_NEDENLERI:
+        raise ValueError(f"Bilinmeyen askı nedeni: {neden}")
+    if not transaction.get_connection().in_atomic_block:
+        raise RuntimeError("Üyelik askısı üyelik kaydıyla aynı işlemde yazılır.")
+    dek = _active_data_key()
+    guncel = app_password.account_by_id(hesap.id)
+    if guncel is None:
+        return None
+    # Önce kayıt (mühür, satırın izi, izdeki boşluk): tutmayan satırın hiçbir değerine — durumuna,
+    # askı nedenine, bağına — güvenilmez.
+    kayit = _kayit_durumlari([guncel], dek)[str(guncel.id)]
+    if kayit is not None:
+        logger.warning(
+            "Kaydı ya da izi tutmayan hesaba askı yazılmadı; hesabın girişi zaten açılmaz (%s).",
+            guncel.id,
+        )
+        # Tasarım §4.4.5 "Hesap kaydı ya da izi tutmadı": olay `BUTUNLUK` satırıyla izlenir (yazar
+        # `SISTEM`; satıra dokunulmaz). Satır dış işlemin içinde yazılır, üyelik kaydıyla commit edilir.
+        app_password._muhur_bozuk_izi(guncel, dek, alan=_BUTUNLUK_ALANLARI[kayit])
+        return None
+    # Durum en son, doğrulanmış satırdan.
+    if guncel.status == AccountStatus.KAPALI:
+        return None
+    if neden is None:
+        neden = bag_gecersizlik_nedeni(guncel)
+        if neden is None:
+            return None
+    if guncel.status == AccountStatus.ASKIDA and guncel.suspend_reason in (
+        neden,
+        SuspendReason.UYELIK_DUSTU,
+    ):
+        return None
+    onceki = denetim_izi.anlik(guncel)
+    guncel.status = AccountStatus.ASKIDA
+    guncel.suspend_reason = neden
+    guncel.seal = guncel.compute_seal(dek)
+    guncel.save(update_fields=["status", "suspend_reason", "seal"])
+    denetim_izi.kayit(AuditAction.HESAP, guncel, onceki=onceki)
+    # Askıya alınan oturumdaki hesapsa oturum kilitlenir (giriş kapanır; tasarım §4.4.5): işlem
+    # commit edilince bekleyen kilit kurulur, isteğin ardından ilk istekte uygulanır
+    # (`OturumDurumu.hesap_askiya_alindi`). İşlem geri alınırsa kilit kurulmaz.
+    kimlik = str(guncel.id)
+    transaction.on_commit(lambda: OTURUM.hesap_askiya_alindi(kimlik))
+    logger.info("Hesap askıya alındı (%s, %s).", guncel.login_name, neden)
+    return guncel
+
+
 @dataclass(frozen=True)
 class TeslimPusulasi:
     """Basılan hesap teslim pusulası: bellekteki PDF ve indirme adı (dosya saklanmaz).
@@ -715,9 +985,10 @@ def teslim_pusulasi(*, by_hesap_id: object, hesap_id: object) -> TeslimPusulasi:
     açılış tarihinden, okul kartının antedinden, boşta kilit süresinden ve veri sorumlusu
     bilgisinden kurulur
     (`hesap_teslim_pusulasi.pusula_belgesi`; ad-soyad okunmaz). PDF bellekte çizilir; sonra AYNI
-    işlemde hesabın hâlâ kapalı olmadığı sorulur ve `BASIM` satırı (kod ve PDF'in sha256'sı)
-    yazılır. Satır yazılamazsa PDF verilmez (iz yazılamazsa yazma yapılmaz; 409 `iz_yazilamadi`).
-    Hiçbir dosyaya ve erişim günlüğüne yazmaz. Dönüş PDF ve indirme adıdır (`TeslimPusulasi`).
+    işlemde hesabın hâlâ kapalı olmadığı sorulur, evrak kaydı (`GeneratedDocument`, konu hesap;
+    `evrak_kaydi.kaydet`) ve `BASIM` satırı (kod ve PDF'in sha256'sı) yazılır. Biri yazılamazsa PDF
+    verilmez (iz yazılamazsa yazma yapılmaz; 409 `iz_yazilamadi`). Hiçbir dosyaya ve erişim
+    günlüğüne yazmaz. Dönüş PDF ve indirme adıdır (`TeslimPusulasi`).
     """
     dek = _active_data_key()
     aktor = _yonetici_aktor(by_hesap_id, dek)
@@ -739,6 +1010,7 @@ def teslim_pusulasi(*, by_hesap_id: object, hesap_id: object) -> TeslimPusulasi:
         # Çizim sürerken hesap kapatıldıysa basılmaz (kapalı hesaba pusula yok).
         if not Account.objects.filter(pk=hesap.pk).exclude(status=AccountStatus.KAPALI).exists():
             raise AccountServiceError(_CLOSED_MESSAGE)
+        evrak_kaydi.kaydet(belge, konu=hesap, bicimler=("PDF",))
         denetim_izi.basim(
             model=denetim_izi.model_etiketi(Account),
             object_id=denetim_izi.kimlik_metni(Account, hesap.pk),
@@ -1161,6 +1433,12 @@ def recovery_accounts() -> list[dict[str, Any]]:
 KAYIT_MUHUR = "muhur"
 KAYIT_SATIR_IZI = "satir_izi"
 KAYIT_IZ_BOSLUGU = "iz_boslugu"
+#: Kayıt durumunun `BUTUNLUK` satırındaki alan adı (hesap servislerinin retleriyle aynı; `uyelik_askisi`).
+_BUTUNLUK_ALANLARI: dict[str, str] = {
+    KAYIT_MUHUR: "seal",
+    KAYIT_SATIR_IZI: app_password.KAYIT_MAC_ALANI,
+    KAYIT_IZ_BOSLUGU: app_password.IZ_BOSLUGU_ALANI,
+}
 
 #: Satırın eylemleri (sunucu hesaplar, ön yüz yalnız eşler; plan F1b-2 "Sözleşme"). `pusula`
 #: hesap teslim pusulasıdır (E63; `teslim_pusulasi`, uç `handover-slip/`).
@@ -1182,6 +1460,10 @@ _ROW_GAP_MESSAGE = (
 _NOT_SUSPENDED_MESSAGE = "Hesap askıda değil."
 _LOGIN_CLOSED_MESSAGE = "Hesap kapalı."
 _LOGIN_SUSPENDED_MESSAGE = "Hesap askıda; askıdan çıkarılınca giriş açılır."
+#: Bağı geçersiz askıdaki hesap (askıdan çıkarılmaz; modül başlığı "HESAP ↔ ÜYELİK BAĞI").
+_LOGIN_BOND_INVALID_MESSAGE = (
+    "Hesap askıda; bağlı olduğu üyelik düşmüş ya da görevi değişmiş, bu hesapla giriş açılmaz."
+)
 _LOGIN_NO_WRAP_MESSAGE = (
     "Parola kaydı bu bilgisayarın güvenlik dosyasında yok; parolasını sıfırlayın."  # noqa: S105
 )
@@ -1231,6 +1513,21 @@ def _kayit_durumlari(hesaplar: list[Account], dek: bytes) -> dict[str, str | Non
         else:
             durumlar[kimlik] = KAYIT_SATIR_IZI
     return durumlar
+
+
+def kaydi_tutan_satirlar(sorgu: QuerySet[Account]) -> list[Account]:
+    """Sorgunun kaydı ve izi tutan satırları, sırasıyla; tutmayanlar düşer (`_kayit_durumlari`).
+
+    Satırlar ve kararlar tek anlık görüntüde (`atomic`) okunur; durum ancak dönen (doğrulanmış)
+    satırlardan sorulur. Hiçbir şey yazmaz: tutmayan satırın `BUTUNLUK` satırı yalnız bir işlem
+    reddedilince düşer. Program yöneticisinin hesap önerileri (`apps.oab.services.hesap_baglari`)
+    bunu kullanır: servislerin dokunmayacağı satır öneriye girmez. Kilitliyken ret (mühür DEK ister).
+    """
+    dek = _active_data_key()
+    with transaction.atomic():
+        satirlar = app_password.hesap_satirlari(sorgu)
+        durumlar = _kayit_durumlari(satirlar, dek)
+    return [satir for satir in satirlar if durumlar[str(satir.id)] is None]
 
 
 def _rol_acilamama_nedeni(rol: str, acik_hesaplar: list[Account], dek: bytes) -> str | None:
@@ -1339,7 +1636,11 @@ def _eylem(neden: str | None) -> dict[str, Any]:
 
 
 def _giris_engeli(
-    hesap: Account, gorunum: _Gorunum, kayit_iletisi: str | None, askida_nedeni: str | None
+    hesap: Account,
+    gorunum: _Gorunum,
+    kayit_iletisi: str | None,
+    askida_nedeni: str | None,
+    bag_nedeni: str | None,
 ) -> str | None:
     """Hesap bugün kilit ekranından girebilir mi? Giremiyorsa nedeni (kullanıcı metni).
 
@@ -1348,7 +1649,8 @@ def _giris_engeli(
     durumuna güvenilmez), kapalı, askıda, parola kaydı yok, parola kaydının özeti tutmuyor (iki
     depo kartının "Giriş yapamayan hesaplar"ı ve özeti tutmayanlar). Kilit ekranı parola kaydının
     yokluğunu ve dosyadaki askıyı mühürden önce (parola denenmeden) sorar; orada aynı hesap
-    "askıda" ya da "parola kaydı yok" iletisini alabilir.
+    "askıda" ya da "parola kaydı yok" iletisini alabilir. Bağı geçersiz (`bag_nedeni`) askıdaki
+    organ hesabı askıdan çıkarılmaz: iletisi bağı söyler (`_LOGIN_BOND_INVALID_MESSAGE`).
     """
     kimlik = str(hesap.id)
     if kayit_iletisi is not None:
@@ -1356,6 +1658,8 @@ def _giris_engeli(
     if hesap.status == AccountStatus.KAPALI:
         return _LOGIN_CLOSED_MESSAGE
     if askida_nedeni is not None:
+        if hesap.status == AccountStatus.ASKIDA and bag_nedeni is not None:
+            return _LOGIN_BOND_INVALID_MESSAGE
         return _LOGIN_SUSPENDED_MESSAGE
     if kimlik not in gorunum.ozetler:
         return _LOGIN_NO_WRAP_MESSAGE
@@ -1370,7 +1674,8 @@ def _kullanici_satiri(hesap: Account, gorunum: _Gorunum) -> dict[str, Any]:
     Eylemlerin nedenleri servislerin sırasıyla ve iletileriyledir (`close_account`, `unsuspend`,
     `reset_password`, `teslim_pusulasi`): kendi hesabı → kaydı ya da izi tutmuyor → kapalı (durum
     en son, doğrulanmış satırdan; `_target`) → (kapamada) son program yöneticisi; askıdaki hesabın parolası sıfırlanmaz; askıda olmayan hesap
-    askıdan çıkarılmaz; teslim pusulası askıdaki hesaba da basılır.
+    askıdan çıkarılmaz; teslim pusulası askıdaki hesaba da basılır. Bağı geçersiz askıdaki organ
+    hesabında askıdan çıkarma, sıfırlama ve giriş nedenleri bağı söyler (askıdan çıkarılmaz).
     Kaydı tutmayan satırda ileti, servisin reddinin ("kayda dokunulmadı") önceden söylenişidir
     ("program bu kayda dokunmaz"); kayıt kodu (`KAYIT_*`) yalnız iletiyi seçer.
     """
@@ -1396,14 +1701,19 @@ def _kullanici_satiri(hesap: Account, gorunum: _Gorunum) -> dict[str, Any]:
     kapat = _ortak(_OWN_CLOSE_MESSAGE)
     if kapat is None and hesap.role == AccountRole.YONETICI and gorunum.acik_yonetici <= 1:
         kapat = _LAST_ADMIN_MESSAGE
+    bag_nedeni = None if kapali or kayit is not None else bag_gecersizlik_nedeni(hesap)
     askidan_cikar = _ortak(None)
     if askidan_cikar is None and askida_nedeni is None:
         askidan_cikar = _NOT_SUSPENDED_MESSAGE
+    if askidan_cikar is None and hesap.status == AccountStatus.ASKIDA and bag_nedeni is not None:
+        askidan_cikar = _BOND_INVALID_UNSUSPEND_MESSAGE
     sifirla = _ortak(_OWN_RESET_MESSAGE)
     if sifirla is None and hesap.status == AccountStatus.ASKIDA:
-        sifirla = _SUSPENDED_RESET_MESSAGE
+        sifirla = (
+            _BOND_INVALID_RESET_MESSAGE if bag_nedeni is not None else _SUSPENDED_RESET_MESSAGE
+        )
     pusula = _ortak(_OWN_SLIP_MESSAGE)
-    giris = _giris_engeli(hesap, gorunum, kayit_iletisi, askida_nedeni)
+    giris = _giris_engeli(hesap, gorunum, kayit_iletisi, askida_nedeni, bag_nedeni)
 
     ad = hesap.display_name
     return {
@@ -1425,6 +1735,18 @@ def _kullanici_satiri(hesap: Account, gorunum: _Gorunum) -> dict[str, Any]:
         "askida_nedeni": askida_nedeni,
         "askida_nedeni_etiketi": _ASKI_ETIKETLERI.get(askida_nedeni or ""),
         "kayit_tutuyor": kayit is None,
+        # Hesap ↔ üyelik bağı (kişisiz kimlikler; organ rolü değilse None). `gecerli`: üyelik
+        # seçilmiş ve görev rolü tutuyor (kapalı ya da kaydı tutmayan hesapta sorulmaz: None).
+        "uyelik_bagi": (
+            {
+                "kisi": hesap.person_id,
+                "uyelik": hesap.membership_id,
+                "donem": hesap.term_id,
+                "gecerli": None if kapali or kayit is not None else bag_nedeni is None,
+            }
+            if hesap.role in ORGAN_ROLLERI
+            else None
+        ),
         "oturumdaki": kendi,
         "acilis": _yerel(hesap.opened_at),
         "kapanis": _yerel(hesap.closed_at),
@@ -1538,20 +1860,39 @@ def kullanici_ayrintisi(hesap_id: object) -> dict[str, Any] | None:
 def kullanici_secenekleri() -> dict[str, Any]:
     """ "Yeni hesap" penceresinin seçenekleri (`accounts/options/`; plan F1b-2).
 
-    `roller`: her rol için `{rol, rol_etiketi, acilabilir, neden, varsayilan_tanitici, bilgi}`.
-    `neden` hesap açmanın vereceği iletinin AYNISIDIR (`_rol_acilamama_nedeni`; kaydı ya da izi
-    tutmayan hesap için ayrı neden — orkestratör maddesi C-1). `bilgi` program yöneticisi rolünde
-    ikinci program yöneticisinin bilgisidir (`IKINCI_YONETICI_BILGISI`). Rolün etiketi sıra
-    no'suzdur. Yalnız program yöneticisi; hiçbir şey yazmaz.
+    `roller`: her rol için `{rol, rol_etiketi, acilabilir, neden, varsayilan_tanitici, bilgi,
+    uyelik_gerekli, uyelikler, organlara_yonlendir}`. Rolün sınırında `neden` hesap açmanın vereceği iletinin AYNISIDIR
+    (`_rol_acilamama_nedeni`; kaydı ya da izi tutmayan hesap için ayrı neden — orkestratör maddesi
+    C-1). Organ rolünde sınır engeli yoksa rol düzeyindeki bağ nedeni gelir: bağ kuralları
+    yüklenemediyse hesap açmanın iletisi (`_BOND_RULES_MISSING_MESSAGE`), hesap açılabilecek üye
+    yoksa (`uyelikler` boş) `_NO_ELIGIBLE_MEMBERSHIP_MESSAGE` — bu ikincisi hesap açmanın ilk
+    retiyle bire bir aynı değildir (açma seçilen üyeliğin kuralını söyler), rolün nedenidir; rol o
+    zaman açılamaz. `bilgi` program yöneticisi rolünde ikinci program yöneticisinin bilgisidir
+    (`IKINCI_YONETICI_BILGISI`). Rolün etiketi sıra no'suzdur. Organ rolünde `uyelikler` hesap
+    açılabilecek üyeliklerdir (kişi ve üyelik seçimi; bağ kuralından, `HesapBagiKurallari`); öteki
+    rollerde boş liste. `organlara_yonlendir` yalnız rolün nedeni üye yokluğuyken doğrudur (pencere
+    o zaman Organlar ekranına bağlantı verir; sınır engelinde ve kuralların yokluğunda çözüm orada
+    değildir). Yalnız program yöneticisi; hiçbir şey yazmaz.
     """
     yetki_oturum(Eylem.HESAP_YONETIMI)
     dek = _active_data_key()
+    kurallar = _kurallar()
     roller: list[dict[str, Any]] = []
     with transaction.atomic():
         acik = app_password.hesap_satirlari(Account.objects.exclude(status=AccountStatus.KAPALI))
         alinmis = [hesap.login_name for hesap in acik]
         for rol in AccountRole.values:
             neden = _rol_acilamama_nedeni(rol, [h for h in acik if h.role == rol], dek)
+            organ_rolu = rol in ORGAN_ROLLERI
+            uyelikler = kurallar.uygun_uyelikler(rol) if organ_rolu and kurallar is not None else []
+            # Organ rolünde rol düzeyindeki bağ nedeni (rolün sınırından sonra; modül başlığı).
+            organlara_yonlendir = False
+            if organ_rolu and neden is None:
+                if kurallar is None:
+                    neden = _BOND_RULES_MISSING_MESSAGE
+                elif not uyelikler:
+                    neden = _NO_ELIGIBLE_MEMBERSHIP_MESSAGE
+                    organlara_yonlendir = True
             roller.append(
                 {
                     "rol": rol,
@@ -1560,6 +1901,9 @@ def kullanici_secenekleri() -> dict[str, Any]:
                     "neden": neden,
                     "varsayilan_tanitici": hesap_kurallari.default_login_name(rol, alinmis),
                     "bilgi": IKINCI_YONETICI_BILGISI if rol == AccountRole.YONETICI else None,
+                    "uyelik_gerekli": organ_rolu,
+                    "uyelikler": uyelikler,
+                    "organlara_yonlendir": organlara_yonlendir,
                 }
             )
     return {"roller": roller}

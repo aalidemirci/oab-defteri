@@ -318,6 +318,77 @@ def test_programin_yedeginde_eksik_ek_durdurmaz_saglam_ek_doner(
     assert not (depo / bozuk.stored_name).exists()
 
 
+@pytest.mark.django_db(transaction=True)
+def test_programin_yedeginde_uretilen_evrak_ve_ekleri_geri_yuklenir(
+    tmp_path: Path, depo: Path
+) -> None:
+    """F1c kapısı "şifreli yedek geri yüklenir (OAB ve ek)" kolu (plan F1c 9. adım): gerçek sahip
+    (`oab.GeneratedDocument`, kayıtlı tek sahip), birlik dönemi, şifreli içerik JSON'u ve iki ek (PDF
+    ile yalnız üretilen evrakın aldığı DOCX). Program yedeği kaydeder, depo kaybolur; geri yüklenen
+    veritabanında dönem ve evrak satırı aynı şifreli içerikle durur, iki ek programın yoluyla açılır.
+    Adlar uydurmadır."""
+    from apps.oab.models import GeneratedDocument
+    from apps.oab.services import donemler
+    from apps.oab.services import evrak as evrak_servisi
+    from shared import evrak
+
+    yil = school_year_service.create_school_year(
+        name="2026-2027", start_date=date(2026, 9, 7), end_date=date(2027, 6, 25), activate=True
+    )
+    donem = donemler.create_term(
+        name="2026-2027 birlik dönemi", school_year=yil, start_date=date(2026, 10, 10)
+    )
+    belge = evrak.Belge(
+        kod="E01",
+        antet=evrak.birlik_anteti(okul_adi="Örnek Ortaokulu", ilce="Örnek İlçe"),
+        bloklar=(
+            evrak.Baslik("yönetim kurulu görev bölümü", alt=evrak.TASLAK_IBARESI),
+            evrak.Paragraf(f"{evrak.ad_soyad('uydurnur', 'örnekkaya')} başkan seçildi."),
+            evrak.KonumCumlesi(evrak.KDT),
+            evrak.Imza(sahipler=(evrak.ImzaSahibi(evrak.ad_soyad("ayşe", "örnek"), "Başkan"),)),
+        ),
+    )
+    kayit = evrak_servisi.kaydet(belge, konu=donem, bicimler=("DOCX", "PDF"), donem=donem)
+    pdf, docx = evrak.pdf_ciz(belge), evrak.docx_ciz(belge)
+    pdf_eki = evrak_servisi.dosya_ekle(kayit, pdf, bicim="PDF", dosya_adi="Gorev-Bolumu.pdf")
+    docx_eki = evrak_servisi.dosya_ekle(kayit, docx, bicim="DOCX", dosya_adi="Gorev-Bolumu.docx")
+    yedek = _programin_yedegi(tmp_path)
+
+    sonuc_kayit = encrypted_backup.sifreli_yedegi_kaydet(str(yedek))
+
+    assert (sonuc_kayit.ek_sayisi, sonuc_kayit.eksik, sonuc_kayit.denetlendi) == (2, 0, True)
+    with closing(sqlite3.connect(str(connection.settings_dict["NAME"]))) as baglanti:
+        (sifreli,) = baglanti.execute(
+            "SELECT content_json FROM oab_generateddocument WHERE id = ?", [kayit.pk]
+        ).fetchone()
+    assert "uydurnur" not in sifreli.casefold() and sifreli != kayit.content_json
+    shutil.rmtree(depo)
+    hedef = tmp_path / "canli" / "db.sqlite3"
+
+    sonuc = backup_restore.restore_database(yedek, hedef, recovery_key=TEST_KURTARMA_ANAHTARI)
+
+    assert sonuc.dosya_raporu.sayilar()["yerine_konan"] == 2
+    assert (sonuc.dosya_raporu.eksik, sonuc.dosya_raporu.bozuk) == (0, 0)
+    with closing(sqlite3.connect(hedef)) as baglanti:
+        satir = baglanti.execute(
+            "SELECT doc_type, version, status, content_sha256, content_json, term_id "
+            "FROM oab_generateddocument"
+        ).fetchall()
+        donemler_ = baglanti.execute("SELECT id, status FROM oab_oabterm").fetchall()
+        ekler = baglanti.execute(
+            "SELECT owner_type, owner_id, mime FROM okul_attachment ORDER BY id"
+        ).fetchall()
+    assert satir == [("E01", 1, "GECERLI", kayit.content_sha256, sifreli, donem.pk)]
+    assert donemler_ == [(donem.pk, "ACIK")]
+    assert ekler == [
+        ("oab.GeneratedDocument", str(kayit.pk), ds.PDF.mime),
+        ("oab.GeneratedDocument", str(kayit.pk), ds.DOCX.mime),
+    ]
+    assert dosya_deposu.oku(pdf_eki) == pdf and dosya_deposu.oku(docx_eki) == docx
+    assert GeneratedDocument.objects.get(pk=kayit.pk).content_json == evrak.kanonik_json(belge)
+    assert not _hazirlik_dizinleri(depo)
+
+
 def test_ek_sorgusu_modelin_sutunlarini_okur() -> None:
     """Masaüstü ve çekirdek ORM'siz okur: sütun adı değişirse sorgu sessizce düşmesin."""
     sutunlar = {alan.column for alan in Attachment._meta.fields}

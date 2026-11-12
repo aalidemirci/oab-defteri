@@ -41,8 +41,9 @@ SİLME (`suresi_dolanlari_sil`; gün işi `gun_isi`, kayıt `gun_isini_kaydet`):
   veritabanı. Anahtarların bellekte olup olmadığı o kilidin altında okunur; `KILIT` satırı,
   çapa ve anahtarların düşmesi bu işin ortasına girmez.
 
-ENVANTER (02.11.2026). Bugün kodda tasarımın hassas okuma türlerinden birine AÇIKÇA uyan yol
-yoktur; yazıcı bu yüzden hiçbir uca bağlı değildir. Kişisel veriye dokunan bugünkü yollar:
+ENVANTER (02.11.2026; F1c 5. adımda güncellendi). F1b'de kodda tasarımın hassas okuma
+türlerinden birine AÇIKÇA uyan yol yoktu; yazıcı hiçbir uca bağlı değildi. Kişisel veriye dokunan
+F1b yolları:
 personel listesi ve ayrıntısı (öğrenci sicili F1b 5. adımda söküldü), ayrılış havuzu
 (olağan okuma; tasarımın "okuma ≠ hassas detay" ayrımında okuma), içe aktarma önizlemesi (kullanıcının yüklediği dosyanın
 işlenmesi; programın verisinin çıktısı değildir), boş şablonlar ve kurtarma anahtarı belgesi
@@ -51,9 +52,12 @@ satırındadır, izi denetim izinde `YEDEK` satırıdır — erişim günlüğü
 listesi (F1b 5. adım: aktarımı ve silinmesi yalnız denetim izine kişisiz parti satırıdır; ekranı
 yalnız sayıları gösterir, adı okuyan yol yoktur — plan "F1b-5 uygulama kararları").
 T.C. kimlik no (K9, F3), veli adı taşıyan E07/E08 çıktıları (F2), kişi dökümü ve ihlal dökümü,
-özel nitelikli alan ve ek (F1c-F5) henüz yoktur; o okumaları getiren adımlar bu yazıcıya
-bağlar. Özel nitelikli ekin tek okuma yolu `services.dosya_deposu.oku` F1b-3'ten beri bu
-yazıcıyı çağırır; ona bağlı uç F1c'dedir.
+kantin isteklisinin katılım engeli dayanağı (F5) henüz yoktur; o okumaları getiren adımlar bu
+yazıcıya bağlar. Özel nitelikli ekin tek okuma yolu `services.dosya_deposu.oku` F1b-3'ten beri bu
+yazıcıyı çağırır; ona bağlı uç F1c'dedir. İlk bağlı uç (F1c 5. adım, 10.11.2026): organ
+üyeliğindeki görev alma engelinin dayanağı (`OZEL_NITELIKLI_ALAN`, `oab.OrganMembership`,
+`eligibility_bar_basis`; `apps.oab.services.uyelikler.engel_dayanagini_oku`, uç
+`oab-membership-eligibility-basis`); dolu dayanak satır yazıldıktan sonra verilir.
 
 OKUMA (`liste`; ucu `GET access-log/`, `views_erisim_gunlugu`; plan F1b-2 "Erişim günlüğü okuma
 ucu"; tasarım §4.6.4 "Okuyan: yonetici ve DK"):

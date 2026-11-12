@@ -54,7 +54,7 @@ import { OTURUM_SORGU_ANAHTARI } from "../oturum/useOturum";
 import { YetkiDegeri, hazirYetki } from "../oturum/yetki";
 import { ORNEK_OKUL_KARTI } from "../../test/okulKarti";
 import KisilerPage from "./KisilerPage";
-import { DOSYA_ALANI_ETIKETI, VELI_LISTESI_SEKMESI } from "./metinler";
+import { BIRLIK_KISILERI_SEKMESI, DOSYA_ALANI_ETIKETI, VELI_LISTESI_SEKMESI } from "./metinler";
 
 const PERSONNEL: Personnel = {
   id: 5,
@@ -481,7 +481,7 @@ describe("KisilerPage — ayrılış", () => {
 });
 
 describe("KisilerPage — sekmeler", () => {
-  it("sekmeler: personel sicili, Ayrılış Havuzu ve Veli Listesi (öğrenci, BEP ve fotoğraf yok)", async () => {
+  it("sekmeler: personel sicili, Ayrılış Havuzu, Veli Listesi ve Birlik Kişileri (öğrenci, BEP ve fotoğraf yok)", async () => {
     renderPage();
     await screen.findByText("Mehmet Demirci");
 
@@ -489,13 +489,16 @@ describe("KisilerPage — sekmeler", () => {
       expect.stringContaining("Öğretmenler ve Diğer Personel"),
       expect.stringContaining("Ayrılış Havuzu"),
       expect.stringContaining(VELI_LISTESI_SEKMESI),
+      expect.stringContaining(BIRLIK_KISILERI_SEKMESI),
     ]);
     expect(screen.queryByRole("tab", { name: /Öğrenci|BEP/ })).toBeNull();
     expect(screen.queryByText(/fotoğraf/i)).toBeNull();
     // Sayfanın açıklaması öğrenci sicilinden söz etmez; veli listesini anar ("veli bilgisi
     // tutulmaz" ibaresi T5 ile kalktı).
     expect(
-      screen.getByText(/^Öğretmen ve diğer personel sicili ve veli listesi\. Personel/),
+      screen.getByText(
+        /^Öğretmen ve diğer personel sicili, veli listesi ve birlik kişileri\. Personel/,
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/veli bilgisi/)).toBeNull();
   });
@@ -729,14 +732,16 @@ describe("KisilerPage — okunamayan şifreli alan", () => {
 });
 
 describe("KisilerPage — rol süzmesi (personeli her rol okur)", () => {
-  it("yazma yeteneği olmayan rolde yalnız personel sekmesi açılır; liste salt okurdur", async () => {
+  it("yazma yeteneği olmayan rolde personel ve birlik kişileri sekmesi açılır; personel salt okurdur", async () => {
     // Denetleme Kurulunun yetenekleri (sunucudan gelir gibi): Kişiler'de yazma yok.
     renderPage("/kisiler", ["butunluk_denetim", "erisim_gunlugu", "geri_yukleme_gordum"]);
 
     expect(await screen.findByText("Mehmet Demirci")).toBeInTheDocument();
     const sekmeler = screen.getAllByRole("tab");
-    expect(sekmeler).toHaveLength(1);
+    expect(sekmeler).toHaveLength(2);
     expect(sekmeler[0]).toHaveAccessibleName(/Öğretmenler ve Diğer Personel/);
+    // Birlik kişilerini her rol okur (M2 satırı; F1c 11. adım).
+    expect(sekmeler[1]).toHaveAccessibleName(new RegExp(BIRLIK_KISILERI_SEKMESI));
     expect(okulApiMock.getLeavePool).not.toHaveBeenCalled();
     expect(screen.getByRole("note")).toHaveTextContent(
       "Bu bölüm hesabınızın rolüne yalnız okuma için açık.",
@@ -749,7 +754,9 @@ describe("KisilerPage — rol süzmesi (personeli her rol okur)", () => {
     expect(screen.queryByRole("button", { name: /Önizle|Aktar|şablon/i })).toBeNull();
     expect(screen.queryByRole("region", { name: /aydınlatma/i })).toBeNull();
     expect(okulApiMock.getParentRoster).not.toHaveBeenCalled();
-    expect(screen.getByText(/^Öğretmen ve diğer personel sicili\. TCKN/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/^Öğretmen ve diğer personel sicili ve birlik kişileri\. TCKN/),
+    ).toBeInTheDocument();
   });
 
   it("veli listesi yeteneği olmayan rolde Veli Listesi sekmesi yoktur; adresi ilk sekmeye düşer", async () => {
@@ -782,12 +789,12 @@ describe("KisilerPage — rol süzmesi (personeli her rol okur)", () => {
     expect(screen.queryByText(/içe aktarın/)).toBeNull();
   });
 
-  it("program yöneticisinde üç sekme ve yazma denetimleri durur", async () => {
+  it("program yöneticisinde dört sekme ve yazma denetimleri durur", async () => {
     const user = userEvent.setup();
     renderPage("/kisiler?tab=personel");
 
     expect(await screen.findByText("Mehmet Demirci")).toBeInTheDocument();
-    expect(screen.getAllByRole("tab")).toHaveLength(3);
+    expect(screen.getAllByRole("tab")).toHaveLength(4);
     expect(screen.getByRole("button", { name: "Kişi ekle" })).toBeInTheDocument();
     expect(screen.queryByRole("note")).toBeNull();
     await user.click(screen.getByRole("button", { name: /Mehmet Demirci.*düzenle/ }));

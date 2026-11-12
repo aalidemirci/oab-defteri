@@ -18,8 +18,13 @@ Bu modül üç şey yapar:
    ve kilit altında paylaşılır. Aksi hâlde WeasyPrint her belgede fontconfig'i
    baştan kurar; Windows paketinde fontconfig önbelleği hiç yazılmadığından
    (`cache/fontconfig` boş kalıyor) bu, her belgede yazı tiplerinin yeniden
-   taranması demekti. Belgede `@font-face` YOKTUR (yalnız gömülü DejaVu);
-   olsaydı paylaşılan yapılandırma belgeler arasında taşırdı.
+   taranması demekti. Belgede `@font-face` YOKTUR (gömülü DejaVu Sans ve evrakın Liberation
+   Serif'i fontconfig'ten bulunur);
+   olsaydı paylaşılan yapılandırma belgeler arasında taşırdı. İki sistemde de PAKETLİ yazı tipleri
+   kullanılır, sistem yazı tipi dizini taranmaz (tasarım §9.1-8): Windows'ta paket içi
+   `etc/fonts/fonts.conf`, Linux'ta kancanın bildirdiği yapılandırma (`font_yapilandirmasi`,
+   `OD_EVRAK_FONTCONFIG`). Linux'ta süreç geneli `FONTCONFIG_FILE` kurulmaz; pencere yazı tipleri
+   sistemden kalır.
 3. **Ağsız kaynak okuyucu** (`url_fetcher`; tasarım §4.1, §13 D47) — WeasyPrint
    belgedeki ya da CSS'teki bir `http(s)` adresini kendi istemcisiyle indirirdi;
    kaynak taraması (`test_dis_istek_kapilari`) kitaplığın içini görmez. Okuyucu
@@ -37,6 +42,7 @@ kapsam dışıdır.)
 
 from __future__ import annotations
 
+import os
 import re
 import threading
 from pathlib import Path
@@ -45,6 +51,9 @@ from urllib.parse import unquote, urlsplit
 
 _lock = threading.Lock()
 _font_config: Any = None
+
+#: Paketli yazı tipi yapılandırmasının yolu (Linux paketinde `rthook_od.py` bildirir; modül başlığı 2).
+ENV_EVRAK_FONTCONFIG = "OD_EVRAK_FONTCONFIG"
 
 #: Belgenin okuyabileceği yerel dosyaların kökü: `backend/` (şablonlar, statik
 #: dosyalar). Paketli programda da backend kaynak dizini olarak paketlenir.
@@ -91,6 +100,33 @@ def url_okuyucu() -> Any:
     return _AgsizOkuyucu(allow_redirects=False)
 
 
+def font_yapilandirmasi() -> Any:
+    """Evrakın yazı tipi yapılandırması (modül başlığı 2); paketli yapılandırma bildirilmişse ondan.
+
+    `OD_EVRAK_FONTCONFIG` doluysa (Linux paketi) WeasyPrint'in fontconfig'i YALNIZ o dosyayla kurulur:
+    `FontConfiguration`, fontconfig'in `FcInitLoadConfigAndFonts`'u ile `FONTCONFIG_FILE`'ı kurulum
+    anında okur; değişken yalnız bu çağrı süresince o dosyayı gösterir, sonra eski hâline döner.
+    Böylece süreç geneli (Qt pencere yazı tipleri) sistem yapılandırmasında kalır. Değişken boşsa
+    (Windows paketi, geliştirme, Docker) varsayılan yapılandırma kullanılır: Windows'ta paket içi
+    `etc/fonts/fonts.conf` zaten yalnız gömülü dizini tarar. Çağıran `html_to_pdf`'in kilidi
+    altındadır (ya da tek iş parçacıklı duman kipidir).
+    """
+    from weasyprint.text.fonts import FontConfiguration  # tembel import — ağır bağımlılık
+
+    paketli = os.environ.get(ENV_EVRAK_FONTCONFIG, "")
+    if not paketli:
+        return FontConfiguration()
+    eski = os.environ.get("FONTCONFIG_FILE")
+    os.environ["FONTCONFIG_FILE"] = paketli
+    try:
+        return FontConfiguration()
+    finally:
+        if eski is None:
+            os.environ.pop("FONTCONFIG_FILE", None)
+        else:
+            os.environ["FONTCONFIG_FILE"] = eski
+
+
 def html_to_pdf(html: str) -> bytes:
     """HTML'i PDF'e çevirir — kilit altında, paylaşılan yazı tipi yapılandırmasıyla."""
     from weasyprint import HTML  # tembel import — ağır bağımlılık (DLL'ler)
@@ -98,8 +134,6 @@ def html_to_pdf(html: str) -> bytes:
     global _font_config
     with _lock:
         if _font_config is None:
-            from weasyprint.text.fonts import FontConfiguration
-
-            _font_config = FontConfiguration()
+            _font_config = font_yapilandirmasi()
         belge = HTML(string=html, url_fetcher=url_okuyucu())
         return bytes(belge.write_pdf(font_config=_font_config))

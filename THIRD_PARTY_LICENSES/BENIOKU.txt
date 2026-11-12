@@ -475,6 +475,12 @@ Yazı tipleri:
       Kullanım : Evrakta gömülü yazı tipi (4 kesim)
       Kaynak   : https://dejavu-fonts.github.io/
       Dosyalar : DejaVu-LISANS.txt
+  Liberation Serif 2.1.5
+      Lisans   : OFL-1.1
+      Platform : Windows + Linux
+      Kullanım : Evrakın gömülü yazı tipi (4 kesim; ölçüleri Times New Roman'la aynı)
+      Kaynak   : https://github.com/liberationfonts/liberation-fonts
+      Dosyalar : Liberation-LISANS.txt
 
 Diğer ikili bileşenler:
 

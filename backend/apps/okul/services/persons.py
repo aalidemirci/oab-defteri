@@ -9,8 +9,9 @@ organ üyeliği, komisyon, imza bloğu, bağış ya da sözleşme — tasarım �
 çekirdeği bu bağları bilmez, bu yüzden düzen kayıt defterlerine ayrıldı.
 Bağımlılık yönü <uygulama> → okul'dur: okul diğer uygulamaları import etmez,
 her uygulama kendi denetimini `AppConfig.ready` içinde buraya kaydeder. OAB
-modelleri kancalarını F1c'den itibaren kaydeder (tasarım §12.B); bugün kayıtlı
-kanca yoktur:
+modelleri kancalarını F1c'den itibaren kaydeder (tasarım §12.B); F1c 4. adımdan beri
+birlik kişisinin personel bağı (`OabPerson.personnel`) bağ denetimini ve birleştirme
+kancasını kaydeder (`apps.oab.services.kisiler`):
 
 - `register_obligation_check(fn)` → `fn(kişi) -> list[str]`: kişinin AÇIK
   yükümlülüklerinin Türkçe gerekçeleri. Gerekçe KİŞİ ADI İÇERMEZ (hata
@@ -55,10 +56,10 @@ silme engeli varsa gerekçeyle reddedilir; kişi birlik kayıtlarına bağlıysa
 silinmez, ayrılış yoluna yönlendirilir (`MEMBER_DELETE_MESSAGE`; birlik kaydı
 silinmez — CLAUDE.md §2 altın kural 4); bağı yoksa katı silinir. Katı silme
 BİLİNÇLİDİR: yanlış girilmiş kaydın yumuşak silmesi kişi verisini süresiz
-tutardı. Bugün personele bağlanan bir birlik kaydı YOKTUR: hiçbir model personele
-yabancı anahtar taşımaz (hesap kendi ad-soyadını taşır, kişiye bağlanmaz; ekin genel sahip
-kümesi F1b'de boştur, `services.dosya_deposu`); bağlar F1c'den itibaren kayıt defterleriyle
-gelir (organ üyeliği, imza bloğu…) ve silmeyi o gün keser.
+tutardı. Personele bağlanan birlik kaydı F1c 4. adımdan beri birlik kişisidir
+(`OabPerson.personnel`; tasarım §5.4: bağı olanın adı birlik kişisinde kalır): bağlı personel
+silinmez (bağ denetimi). Hesap kendi ad-soyadını taşır, kişiye bağlanmaz; organ üyeliği ve imza
+bloğu bağları birlik kişisinin üstünden gelir.
 
 DENETİM İZİ (tasarım §4.6.2; plan F1b-1 alt commit c). Her yazım veriyle AYNI işlemde iz
 satırı yazar (`denetim_izi.degisiklik`): oluşturma `OLUSTUR`, ad/görev türü değişikliği
@@ -180,7 +181,7 @@ def open_obligations(person: Person) -> list[str]:
 
 
 def was_ever_member(person: Person) -> bool:
-    """Kişi birlik kayıtlarına bağlanmış mı? (bugün kayıtlı denetim yok → False)"""
+    """Kişi birlik kayıtlarına bağlanmış mı? (F1c 4. adım: birlik kişisinin personel bağı)"""
     return any(check(person) for check in _membership_checks)
 
 
@@ -409,8 +410,8 @@ def merge_personnel(source: Personnel, target: Personnel) -> Personnel:
     listede artık bulunmayan (ayrılış havuzundaki) eski kayıt KAYNAKTIR.
     Birleştirme aktarım önizlemesinden sonra ya da ayrılış havuzundan yapılır.
     İki kayıt da canlı olmalıdır (görünüm yalnız canlı kayıtları çözer) ve aynı
-    kişi olamaz. Taşıma birleştirme kancalarıyla yapılır (OAB modelleri F1c'den
-    itibaren kaydeder); bugün kayıtlı kanca yoktur.
+    kişi olamaz. Taşıma birleştirme kancalarıyla yapılır (F1c 4. adımdan beri birlik
+    kişisinin personel bağı hedefe taşınır; `apps.oab.services.kisiler`).
 
     Kaynağın silinmesi denetim izine `KVKK_SILME` satırıyla düşer (tetik `BIRLESTIRME`; modül
     başlığı); hedef kayıt değişmez. Kancaların taşıdığı bağların izini kancalar yazar.

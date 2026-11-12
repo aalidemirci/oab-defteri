@@ -87,6 +87,20 @@ export const KILIT_EKRANI_BASLIGI = "Kayıtlar kilitli";
 
 /** Askıdaki hesabın etiketi (iki askı kaynağı da; sözlük §1 "Hesap"). */
 export const ASKIDA_ETIKETI = "askıda — program yöneticisine başvurun";
+/**
+ * Üyelik ya da görev askısının nedeni (plan F1c 7. adım "Askı kilidi"; 11. adımda ekran iletisi): bağlı
+ * kurul üyeliği düşen, iptal edilen ya da görev bölümünde görevi değişen hesap aynı işlemde askıya
+ * alınır; oturumdaki hesapsa program sonraki istekte kilitlenir ve kişi bu ekrana döner. Listede böyle
+ * bir hesap varsa listenin altında durur (hatalı deneme askısında çıkmaz; neden kodu
+ * `UYELIK_DUSTU` · `GOREV_BOLUMU`).
+ */
+export const UYELIK_ASKISI_METNI =
+  "Bağlı olduğu kurul üyeliği düşen, iptal edilen ya da görev bölümünde görevi değişen kişinin " +
+  "hesabı askıya alınır; askıya alınan hesap o anda açık oturumun hesabıysa program kilitlenir. Askıdan " +
+  "çıkarmayı ya da hesabı kapatıp görevdeki üyeye yeni hesap açmayı program yöneticisi yapar.";
+/** Üyelik ya da görev askısının neden kodları (backend `SuspendReason`). */
+const UYELIK_ASKISI_NEDENLERI: ReadonlySet<string> = new Set(["UYELIK_DUSTU", "GOREV_BOLUMU"]);
+
 /** Rolü veritabanından okunamayan satır (backend `oturum.ROL_OKUNAMADI_ETIKETI`). */
 export const OKUNAMADI_ETIKETI = "Hesap kaydı okunamadı";
 /** Program yöneticisi olmayan hesap seçiliyken parolasını unutan kişiye. */
@@ -343,6 +357,9 @@ export default function KilitEkrani() {
   // bir hesap vardır ve liste o kipte tazelenmez (askıda önce parola kipine dönülür).
   const yolGoster =
     hesaplar !== null && hesaplar.length > 0 && !secenekler.some((h) => h.secilebilir);
+  const uyelikAskisiVar = (hesaplar ?? []).some(
+    (h) => h.askida_nedeni !== null && UYELIK_ASKISI_NEDENLERI.has(h.askida_nedeni),
+  );
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center p-4">
@@ -391,6 +408,12 @@ export default function KilitEkrani() {
               disabled={kapali || kip === "yenile"}
               hata={hesapHatasi}
             />
+
+            {uyelikAskisiVar && (
+              <p role="note" className="text-body-small text-on-surface-variant">
+                {UYELIK_ASKISI_METNI}
+              </p>
+            )}
 
             {yolGoster ? (
               <div ref={yolGostermeRef} className="flex flex-col gap-3">

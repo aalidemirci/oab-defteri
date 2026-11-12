@@ -12,7 +12,7 @@ az biri düşer:
    bağlamı istek başında kurulur) sürülür; başarılı yanıttan sonra en az bir yeni iz
    satırı, beklenen türlerle, beklenen hesabın adına düşmüş olmalı; satırların içerik
    MAC'i kaydın bugünkü değerini tutmalı ve zincir bütün olmalıdır. Üstelik uçtan önce ve
-   sonra okul tablolarının bütün satırları karşılaştırılır: değişen, eklenen ya da silinen
+   sonra `okul` ve `oab` tablolarının bütün satırları karşılaştırılır: değişen, eklenen ya da silinen
    HER kaydın bu istekte yazılmış bir iz satırı olmalı ve kayıt bütünlüğü (`kaydi_dogrula`)
    tutmalıdır — iki kayıt yazıp birini izleyen uç düşer. KVKK silmesinin satırı kimlik
    taşımaz (`denetim_izi.kvkk_silme`): bir modelin SİLİNEN kayıtlarını, o modelin bu istekte
@@ -86,6 +86,27 @@ from django.utils import timezone
 from openpyxl import Workbook
 from rest_framework.test import APIClient
 
+from apps.oab.models import (
+    AssemblyKind,
+    BoardDecision,
+    BoardMeeting,
+    BoardMeetingAttendance,
+    ComplianceItem,
+    ComplianceJustification,
+    DecisionKind,
+    GeneralAssembly,
+    GeneratedDocument,
+    MeetingKind,
+    OabPerson,
+    OabTerm,
+    OfficialBook,
+    OrganMembership,
+    PersonStatus,
+    RulePackage,
+)
+from apps.oab.services import donemler, gecis, kisiler, kurullar, uyelikler, uyum
+from apps.oab.services import evrak as evrak_servisi
+from apps.oab.services import genel_kurul as genel_kurul_servisi
 from apps.okul import denetim_izi, erisim_gunlugu, iz_durumu
 from apps.okul.excel_ortak import ParserError
 from apps.okul.models import (
@@ -113,7 +134,15 @@ from apps.okul.services import school_year as school_year_service
 from apps.okul.services import setup as setup_service
 from apps.okul.services import terms as term_service
 from apps.okul.services.templates import PARENT_TEMPLATE_HEADERS, PERSONNEL_TEMPLATE_HEADERS
-from apps.okul.tests.hesap_ortak import GECICI_PAROLA, YENI_PAROLA, hesap_ac, muhurle
+from apps.okul.tests.hesap_ortak import (
+    GECICI_PAROLA,
+    YENI_PAROLA,
+    hesap_ac,
+    hesap_uyeligi,
+    muhurle,
+    rol_hesabi,
+)
+from apps.okul.tests.iz_ortak import bekci_modelleri, izlenen_modeller, kor_indeks_alanlari
 from apps.okul.tests.okul_karti_ortak import okul_karti
 from conftest import (
     TEST_HESAP_ID,
@@ -122,7 +151,7 @@ from conftest import (
     oturumu_ac_test,
     varsayilan_yazar,
 )
-from shared import crypto
+from shared import crypto, evrak
 
 YAZMA_YONTEMLERI = ("post", "put", "patch", "delete")
 #: `backend/` kökü (kaynak taraması buradan göreli yol yazar).
@@ -233,6 +262,18 @@ def _aktiflestir(_: pytest.MonkeyPatch) -> Istek:
     return Istek(f"/api/v1/school-years/{ikinci.pk}/activate/", None, _turler("DURUM"))
 
 
+def _birlik_donemi_ac(_: pytest.MonkeyPatch) -> Istek:
+    return Istek(
+        "/api/v1/oab/terms/",
+        {
+            "name": "2026-2027 birlik dönemi",
+            "school_year": _yil().pk,
+            "start_date": "2026-10-10",
+        },
+        _turler("OLUSTUR", "OLUSTUR"),
+    )
+
+
 def _kapali_gun_sil(_: pytest.MonkeyPatch) -> Istek:
     gun = calendar_service.create_holiday(
         name="Uydurma idari izin",
@@ -292,6 +333,319 @@ def _veli_listesini_sil() -> Istek:
     return Istek("/api/v1/parent-roster/", None, _turler("KVKK_SILME"))
 
 
+def _birlik_kisisi() -> OabPerson:
+    return kisiler.create_person(kind="VELI", first_name="Uydurnur", last_name="Örnekkaya")
+
+
+def _dk_ogretmeni() -> OrganMembership:
+    """Denetleme Kurulunun öğretmen koltuğu: öğretmenler kurulunca seçilir, kayıt `SECILDI` açılır."""
+    donem = donemler.create_term(
+        name="2026-2027 birlik dönemi", school_year=_yil(), start_date=date(2026, 10, 10)
+    )
+    kisi = kisiler.create_person(kind="OGRETMEN", first_name="Uydurnur", last_name="Örnekkaya")
+    return uyelikler.assign_membership(
+        term=donem,
+        person=kisi,
+        organ="DK",
+        seat_type="ASIL",
+        seat_group="OGRETMEN",
+        elected_by="OGRETMENLER_KURULU",
+        start_date=date(2026, 10, 12),
+    )
+
+
+def _uyelik_ac() -> Istek:
+    donem = donemler.create_term(
+        name="2026-2027 birlik dönemi", school_year=_yil(), start_date=date(2026, 10, 10)
+    )
+    kisi = kisiler.create_person(kind="OGRETMEN", first_name="Uydurnur", last_name="Örnekkaya")
+    return Istek(
+        "/api/v1/oab/memberships/",
+        {
+            "term": donem.pk,
+            "person": kisi.pk,
+            "organ": "DK",
+            "seat_type": "ASIL",
+            "seat_group": "OGRETMEN",
+            "elected_by": "OGRETMENLER_KURULU",
+            "start_date": "2026-10-12",
+        },
+        _turler("OLUSTUR"),
+    )
+
+
+def _kurul_uyesi(donem: OabTerm, ad: str, **alanlar: Any) -> OrganMembership:
+    """Devralınan (geçişte görevdeki) seçilmiş üye; kişi adları uydurmadır, adaşlık sorusu çıkmaz."""
+    kisi = kisiler.create_person(
+        kind=alanlar.pop("kind", "VELI"),
+        first_name=f"Uydurnur {ad}",
+        last_name="Örnekkaya",
+        ayni_kisi_degil=True,
+    )
+    varsayilan: dict[str, Any] = {
+        "organ": "YK",
+        "seat_type": "ASIL",
+        "elected_by": "GENEL_KURUL",
+        "source": "DEVRALINAN",
+        "start_date": date(2026, 10, 12),
+    }
+    return uyelikler.assign_membership(term=donem, person=kisi, **{**varsayilan, **alanlar})
+
+
+def _f1c6_donemi() -> OabTerm:
+    return donemler.create_term(
+        name="2026-2027 birlik dönemi", school_year=_yil(), start_date=date(2026, 10, 10)
+    )
+
+
+def _toplanti_gunu(_: pytest.MonkeyPatch) -> Istek:
+    """Yönetim kurulunun aylık toplantı günü kuralı (dönem ayarı; F1c 11. adım): `GUNCELLE`."""
+    donem = _f1c6_donemi()
+    return Istek(
+        f"/api/v1/oab/terms/{donem.pk}/meeting-day/",
+        {"yk_meeting_day_rule": "Her ayın ilk salısı"},
+        _turler("GUNCELLE"),
+    )
+
+
+def _gecis_iptali(_: pytest.MonkeyPatch) -> Istek:
+    """Geçiş döneminin iptali: durum ve şifreli gerekçe (F1c 11. adım; §7.9 "Senaryolar")."""
+    donem = _f1c6_donemi()
+    return Istek(
+        f"/api/v1/oab/terms/{donem.pk}/cancel/",
+        {"cancel_reason": "Uydurma: dönem başı yanlış girildi."},
+        _turler("DURUM", "GUNCELLE"),
+    )
+
+
+def _gecis_devralinan(_: pytest.MonkeyPatch) -> Istek:
+    """Görevdeki yönetim kurulu üyesi (`DEVRALINAN`); sayacı verilmiş kişi, uyum satırı yok."""
+    _f1c6_donemi()
+    kisi = kisiler.create_person(
+        kind="VELI", first_name="Uydurnur", last_name="Örnekkaya", external_yk_terms=1
+    )
+    return Istek(
+        "/api/v1/oab/transition/inherited/",
+        {"organ": "YK", "person": kisi.pk, "seat_type": "ASIL", "role": "UYE"},
+        _turler("OLUSTUR"),
+    )
+
+
+def _gecis_sayac_beyani(_: pytest.MonkeyPatch) -> Istek:
+    """Programdan önceki seçilme sayısının ilk beyanı: kişinin sayaç alanı (düzeltme değil)."""
+    _f1c6_donemi()
+    return Istek(
+        "/api/v1/oab/transition/election-counts/",
+        {"beyanlar": [{"person": _birlik_kisisi().pk, "yk": 2}]},
+        _turler("GUNCELLE"),
+    )
+
+
+def _gecis_karar_defteri(_: pytest.MonkeyPatch) -> Istek:
+    """Karar defterinin geçiş kaydı (noter tasdikli: kural uygun, uyum satırı yok)."""
+    _f1c6_donemi()
+    return Istek(
+        "/api/v1/oab/transition/decision-book/",
+        {
+            "last_no_before_program": 37,
+            "last_page_before_program": 12,
+            "certified_by": "NOTER",
+            "certified_on": "2024-10-01",
+            "certification_no": "Uydurma-123",
+        },
+        _turler("OLUSTUR"),
+    )
+
+
+def _gecis_karar_defteri_iptali(_: pytest.MonkeyPatch) -> Istek:
+    _f1c6_donemi()
+    defter = gecis.karar_defteri_kaydet(
+        last_no_before_program=37,
+        last_page_before_program=12,
+        certified_by="NOTER",
+        certified_on=date(2024, 10, 1),
+    )
+    return Istek(
+        f"/api/v1/oab/transition/decision-book/{defter.pk}/cancel/",
+        {"cancel_reason": "Uydurma: sayfa yanlış."},
+        _turler("DURUM", "GUNCELLE"),
+    )
+
+
+def _gecis_tamamla(_: pytest.MonkeyPatch) -> Istek:
+    _f1c6_donemi()
+    return Istek("/api/v1/oab/transition/complete/", None, _turler("GUNCELLE"))
+
+
+def _rol_oturumu(rol: AccountRole) -> str:
+    """Uydurma hesapla rol oturumu (iz satırları bu hesabındır)."""
+    hesap = rol_hesabi(rol)
+    oturumu_ac_test(str(hesap.id), tanitici=hesap.login_name, rol=rol.value)
+    return str(hesap.id)
+
+
+def _yk_gorev_bolumu(_: pytest.MonkeyPatch) -> Istek:
+    """Yönetim kurulu görev bölümü (sekreter): toplantı ve katılım (`OLUSTUR`), toplantının
+    `YAPILDI` geçişi (`DURUM`), görev (`GUNCELLE`), `TASLAK` karar (`OLUSTUR`)."""
+    donem = _f1c6_donemi()
+    uyeler = [_kurul_uyesi(donem, ad) for ad in ("A", "B", "C", "D", "E")]
+    hesap = _rol_oturumu(AccountRole.SEKRETER)
+    return Istek(
+        f"/api/v1/oab/terms/{donem.pk}/duty-assignment/yk/",
+        {
+            "held_at": "2026-10-15T15:00:00+03:00",
+            "sekreter": uyeler[0].pk,
+            "katilim": [{"membership": u.pk, "present": True} for u in uyeler],
+        },
+        _turler("OLUSTUR", "DURUM", "GUNCELLE"),
+        hesap=hesap,
+    )
+
+
+def _dk_gorev_bolumu(_: pytest.MonkeyPatch) -> Istek:
+    """Denetleme Kurulu görev bölümü ve denetim planı (Denetleme Kurulu hesabı). Devralınan başkan
+    sayaç dışıdır (uyum satırı yok); plan tarihleri dönem ayarıdır (`GUNCELLE`)."""
+    donem = _f1c6_donemi()
+    veli = _kurul_uyesi(donem, "V", organ="DK", seat_group="VELI")
+    ogretmenler = [
+        _kurul_uyesi(
+            donem,
+            ad,
+            kind="OGRETMEN",
+            organ="DK",
+            seat_group="OGRETMEN",
+            elected_by="OGRETMENLER_KURULU",
+        )
+        for ad in ("Ö", "P")
+    ]
+    hesap = _rol_oturumu(AccountRole.DENETLEME_KURULU)
+    return Istek(
+        f"/api/v1/oab/terms/{donem.pk}/duty-assignment/dk/",
+        {
+            "held_at": "2026-10-15T15:00:00+03:00",
+            "baskan": veli.pk,
+            "katilim": [{"membership": u.pk, "present": True} for u in [veli, *ogretmenler]],
+            "denetim_plani": ["2027-01-15", "2027-05-15"],
+        },
+        _turler("OLUSTUR", "DURUM", "GUNCELLE"),
+        hesap=hesap,
+    )
+
+
+def _yk_yedek_cagrisi(_: pytest.MonkeyPatch) -> Istek:
+    """Yönetim kurulu yedeği (sekreter): karar bağı yok, uyarı + gerekçe (uyum satırı ve gerekçe
+    `OLUSTUR`), çağrı `GUNCELLE`."""
+    donem = _f1c6_donemi()
+    yedek = _kurul_uyesi(donem, "Y", seat_type="YEDEK", seat_order=1)
+    hesap = _rol_oturumu(AccountRole.SEKRETER)
+    return Istek(
+        f"/api/v1/oab/memberships/{yedek.pk}/substitute-call/yk/",
+        {"promoted_on": "2026-11-02", "gerekce": "Karar defteri ekranı henüz yok."},
+        _turler("OLUSTUR", "GUNCELLE"),
+        hesap=hesap,
+    )
+
+
+def _dk_yedek_cagrisi(_: pytest.MonkeyPatch) -> Istek:
+    """Denetleme Kurulu yedeği (program yöneticisi; karar bağı yok, öğretmen asıl hücresi boş)."""
+    donem = _f1c6_donemi()
+    yedek = _kurul_uyesi(
+        donem,
+        "Y",
+        kind="OGRETMEN",
+        organ="DK",
+        seat_type="YEDEK",
+        seat_group="OGRETMEN",
+        elected_by="OGRETMENLER_KURULU",
+    )
+    return Istek(
+        f"/api/v1/oab/memberships/{yedek.pk}/substitute-call/dk/",
+        {"promoted_on": "2026-11-02"},
+        _turler("GUNCELLE"),
+    )
+
+
+def _uyelik_dusur(_: pytest.MonkeyPatch) -> Istek:
+    uye = _kurul_uyesi(_f1c6_donemi(), "D")
+    return Istek(
+        f"/api/v1/oab/memberships/{uye.pk}/drop/",
+        {"drop_kind": "ISTIFA", "end_date": "2026-11-02"},
+        _turler("DURUM", "GUNCELLE"),  # durum ve düşme alanları (tür, gün)
+    )
+
+
+def _uyelik_iptal(_: pytest.MonkeyPatch) -> Istek:
+    uye = _kurul_uyesi(_f1c6_donemi(), "İ")
+    return Istek(
+        f"/api/v1/oab/memberships/{uye.pk}/cancel/",
+        {"cancel_reason": "Uydurma yanlış kayıt."},
+        _turler("DURUM", "GUNCELLE"),  # durum ve şifreli gerekçe
+    )
+
+
+def _engel_yaz(_: pytest.MonkeyPatch) -> Istek:
+    uye = _kurul_uyesi(_f1c6_donemi(), "E")
+    return Istek(
+        f"/api/v1/oab/memberships/{uye.pk}/eligibility-basis/",
+        {
+            "eligibility_bar": "VAR",
+            "eligibility_bar_basis": "TEK_BIRLIK_12_4",
+            "eligibility_bar_found_on": "2026-11-02",
+        },
+        _turler("GUNCELLE"),
+    )
+
+
+def _temsilci_ekle(_: pytest.MonkeyPatch) -> Istek:
+    """Sosyal etkinlikler kurulu temsilcisi (tek kişi: kural uygun, uyum satırı yok)."""
+    donem = _f1c6_donemi()
+    return Istek(
+        "/api/v1/oab/representatives/",
+        {
+            "term": donem.pk,
+            "person": _birlik_kisisi().pk,
+            "representation": "SOSYAL_ETKINLIKLER_KURULU",
+            "start_date": "2026-10-20",
+        },
+        _turler("OLUSTUR"),
+    )
+
+
+def _alim_komisyonu(_: pytest.MonkeyPatch) -> Istek:
+    donem = _f1c6_donemi()
+    return Istek(
+        "/api/v1/oab/purchase-committee/",
+        {"term": donem.pk, "person": _birlik_kisisi().pk, "start_date": "2026-10-20"},
+        _turler("OLUSTUR"),
+    )
+
+
+def _gorev_evraki(
+    kod: str, rol: AccountRole | None = None
+) -> Callable[[pytest.MonkeyPatch], Istek]:
+    """E01-E03 üretimi (F1c 10. adım): evrak kaydı ve iki ek (PDF ve Word) `OLUSTUR`; kurul boşken
+    de basılır (boş yerler "………"). E02 Denetleme Kurulu hesabıyla, ötekiler program yöneticisiyle."""
+
+    def kur(_: pytest.MonkeyPatch) -> Istek:
+        donem = _f1c6_donemi()
+        _kurul_uyesi(donem, "G")
+        hesap = TEST_HESAP_ID if rol is None else _rol_oturumu(rol)
+        return Istek(
+            f"/api/v1/oab/terms/{donem.pk}/documents/{kod}/", {}, _turler("OLUSTUR"), hesap=hesap
+        )
+
+    return kur
+
+
+def _veliden_birlik_kisisi() -> Istek:
+    """Önce bir veli listesi aktarılır; uç listedeki velinin adını birlik kişisine kopyalar."""
+    ad, baytlar = _veli_listesi_dosyasi()
+    import_service.commit_parents_file(file_bytes=baytlar, file_name=ad)
+    return Istek(
+        "/api/v1/oab/persons/from-parent/", {"full_name": "Uydurma Veli"}, _turler("OLUSTUR")
+    )
+
+
 def _personel_listesi() -> dict[str, Any]:
     return {"text": "\n".join([PERSONEL_BASLIGI, "UYDURNUR\tÖRNEKKAYA\tÖğretmen\t"])}
 
@@ -329,6 +683,19 @@ def _parola_bildirimi(_: pytest.MonkeyPatch) -> Istek:
     return Istek("/api/v1/security/integrity/reset-notice/", None, _turler("GUNCELLE"))
 
 
+def _hesap_ac(_: pytest.MonkeyPatch) -> Istek:
+    """Kullanıcılar: muhasibin hesabı görevli üyeliğe bağlı açılır (`HESAP`; plan F1c 7. adım).
+    Üyelik hazırlıkta kurulur, izi sayımdan öncedir."""
+    govde = {
+        "rol": "muhasip",
+        "tanitici": "muhasip",
+        "ad_soyad": "Uydurma Muhasip",
+        "gecici_parola": GECICI_PAROLA,
+        "uyelik": hesap_uyeligi(AccountRole.MUHASIP),
+    }
+    return Istek("/api/v1/accounts/", govde, _turler("HESAP"))
+
+
 def _hesabi_kapat(_: pytest.MonkeyPatch) -> Istek:
     """Kullanıcılar: uydurma muhasibin hesabı kapatılır (`HESAP`; sarmalda sayaç yok)."""
     return Istek(f"/api/v1/accounts/{hesap_ac().id}/close/", None, _turler("HESAP"))
@@ -352,9 +719,12 @@ def _parolayi_sifirla(_: pytest.MonkeyPatch) -> Istek:
 
 
 def _teslim_pusulasi(_: pytest.MonkeyPatch) -> Istek:
-    """Kullanıcılar: uydurma muhasibin hesap teslim pusulası (E63) — tek izi `BASIM` satırıdır
-    (dosya saklanmaz; hesap satırı değişmez)."""
-    return Istek(f"/api/v1/accounts/{hesap_ac().id}/handover-slip/", None, _turler("BASIM"))
+    """Kullanıcılar: uydurma muhasibin hesap teslim pusulası (E63) — evrak kaydı (`OLUSTUR`,
+    `oab.GeneratedDocument`; plan F1c 9. adım) ve dosyanın izi `BASIM` satırı (dosya saklanmaz;
+    hesap satırı değişmez)."""
+    return Istek(
+        f"/api/v1/accounts/{hesap_ac().id}/handover-slip/", None, _turler("OLUSTUR", "BASIM")
+    )
 
 
 def _geri_yuklemeyi_gordum(_: pytest.MonkeyPatch) -> Istek:
@@ -402,6 +772,8 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     ),
     ("school-year-terms", "PUT"): Senaryo(_donemler),
     ("school-year-activate", "POST"): Senaryo(_aktiflestir),
+    # Birlik dönemi: ilk açılışta kural kopyası da dondurulur (`RulePackage`, `OabTerm`).
+    ("oab-term-list", "POST"): Senaryo(_birlik_donemi_ac),
     ("holiday-list", "POST"): _sabit(
         "/api/v1/holidays/",
         {
@@ -448,6 +820,54 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     ),
     ("import-parents-commit", "POST"): Senaryo(lambda _m: _veli_listesi_yerine_koy()),
     ("parent-roster", "DELETE"): Senaryo(lambda _m: _veli_listesini_sil()),
+    # Birlik kişileri (F1c 4. adım): kişi KVKK silme kümesindedir, satır değer taşımaz.
+    ("oab-person-list", "POST"): _sabit(
+        "/api/v1/oab/persons/",
+        {"kind": "VELI", "first_name": "Uydurnur", "last_name": "Örnekkaya"},
+        "OLUSTUR",
+    ),
+    ("oab-person-detail", "PATCH"): _istek(
+        lambda: Istek(
+            f"/api/v1/oab/persons/{_birlik_kisisi().pk}/", {"is_parent": False}, _turler("GUNCELLE")
+        )
+    ),
+    ("oab-person-from-personnel", "POST"): _istek(
+        lambda: Istek(
+            "/api/v1/oab/persons/from-personnel/",
+            {"personnel": _personel().pk},
+            _turler("OLUSTUR"),
+        )
+    ),
+    ("oab-person-from-parent", "POST"): Senaryo(lambda _m: _veliden_birlik_kisisi()),
+    # Organ üyelikleri (F1c 5. adım): öğretmen koltuğu genel kurul dışı kanaldır, kayıt seçilmiş açılır.
+    ("oab-membership-list", "POST"): _istek(_uyelik_ac),
+    ("oab-membership-detail", "PATCH"): _istek(
+        lambda: Istek(
+            f"/api/v1/oab/memberships/{_dk_ogretmeni().pk}/", {"votes": 12}, _turler("GUNCELLE")
+        )
+    ),
+    # F1c 6. adım: görev bölümü, yedek çağrısı, düşme, iptal, görev alma engeli, temsilci, alım
+    # komisyonu. Rol daraltmalı uçların senaryosu o rolün oturumundadır.
+    ("oab-yk-duty-assignment", "POST"): Senaryo(_yk_gorev_bolumu),
+    ("oab-dk-duty-assignment", "POST"): Senaryo(_dk_gorev_bolumu),
+    ("oab-membership-substitute-call-yk", "POST"): Senaryo(_yk_yedek_cagrisi),
+    ("oab-membership-substitute-call-dk", "POST"): Senaryo(_dk_yedek_cagrisi),
+    ("oab-membership-drop", "POST"): Senaryo(_uyelik_dusur),
+    ("oab-membership-cancel", "POST"): Senaryo(_uyelik_iptal),
+    ("oab-membership-eligibility-basis", "PUT"): Senaryo(_engel_yaz),
+    ("oab-representative-list", "POST"): Senaryo(_temsilci_ekle),
+    ("oab-purchase-committee-list", "POST"): Senaryo(_alim_komisyonu),
+    ("oab-document-e01", "POST"): Senaryo(_gorev_evraki("e01")),
+    ("oab-document-e02", "POST"): Senaryo(_gorev_evraki("e02", AccountRole.DENETLEME_KURULU)),
+    ("oab-document-e03", "POST"): Senaryo(_gorev_evraki("e03")),
+    # F1c 11. adım: geçiş kurulumunun uçları (etiket `GECIS`; §7.9).
+    ("oab-term-cancel", "POST"): Senaryo(_gecis_iptali),
+    ("oab-term-meeting-day", "PUT"): Senaryo(_toplanti_gunu),
+    ("oab-transition-inherited", "POST"): Senaryo(_gecis_devralinan),
+    ("oab-transition-election-counts", "POST"): Senaryo(_gecis_sayac_beyani),
+    ("oab-transition-decision-book", "POST"): Senaryo(_gecis_karar_defteri),
+    ("oab-transition-decision-book-cancel", "POST"): Senaryo(_gecis_karar_defteri_iptali),
+    ("oab-transition-complete", "POST"): Senaryo(_gecis_tamamla),
     # İlk hesap: satırlar yeni hesabındır (plan F1b-1); okul kartı parmak iziyle oluşur.
     ("security-enable", "POST"): _istek(
         lambda: Istek(
@@ -506,16 +926,7 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     ),
     # Kullanıcılar (plan F1b-2): hesap açma, kapama, askıdan çıkarma, parola sıfırlama, hesap
     # teslim pusulası.
-    ("account-list", "POST"): _sabit(
-        "/api/v1/accounts/",
-        {
-            "rol": "muhasip",
-            "tanitici": "muhasip",
-            "ad_soyad": "Uydurma Muhasip",
-            "gecici_parola": GECICI_PAROLA,
-        },
-        "HESAP",
-    ),
+    ("account-list", "POST"): Senaryo(_hesap_ac),
     ("account-close", "POST"): Senaryo(_hesabi_kapat),
     ("account-unsuspend", "POST"): Senaryo(_askidan_cikar),
     ("account-reset-password", "POST"): Senaryo(_parolayi_sifirla),
@@ -527,6 +938,15 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
 #: İz satırı YAZMAYAN yazma uçları ve gerekçeleri. Yeni bir uç buraya ancak gerekçesiyle girer.
 #: Personel silme ve birleştirme F1b 5. adımdan beri izlidir (`IZLI_UCLAR`; `KVKK_SILME`).
 MUAF_UCLAR: dict[tuple[str, str], str] = {
+    ("oab-draft-text", "PUT"): (
+        'Gerekçe kutusunun yarım metni (tasarım §7 "Yarım kalan metin"): ekran yazarken kısa '
+        "aralıklarla yazar; hesabın tek, şifreli taslağıdır, kayıt değildir (`yarim_metin`, "
+        "`MUAF_ISLEVLER`)."
+    ),
+    ("oab-draft-text", "DELETE"): (
+        "Gerekçe kutusunun yarım metninin silinmesi (kayıt yapıldı ya da vazgeçildi; `yarim_metin`, "
+        "`MUAF_ISLEVLER`)."
+    ),
     ("app-quit", "POST"): (
         "Kayıt yazmaz: düzenli kapanışı başlatır. Oturum açıksa kapanış kilidi `KILIT` "
         "satırını oturumdaki hesabın adına yazar (masaüstü kancası, "
@@ -579,7 +999,7 @@ def _parametreler() -> list[Any]:
     ]
 
 
-#: Tablo karşılaştırmasının dışında kalan okul modelleri: izin kendisi ve iz anahtarı
+#: Tablo karşılaştırmasının dışında kalan modeller: izin kendisi ve iz anahtarı
 #: (`LISTESIZ_MODELLER`; anahtar ilk hesapla aynı işlemde yazılır).
 _KARSILASTIRMA_DISI = frozenset({"AuditTrail", "AuditKey"})
 #: Satırı iz satırı DOĞURMAYAN, yalnız eklenen modeller: zincir dışı erişim günlüğü (tasarım
@@ -589,13 +1009,13 @@ _YALNIZ_EKLENEN = frozenset({"okul.AccessLog"})
 
 
 def _tablolar() -> dict[str, dict[str, tuple[Any, ...]]]:
-    """Okul modellerinin BÜTÜN satırları, ham SQL ile: model etiketi → {kimlik metni: satır}.
+    """`okul` ve `oab` modellerinin BÜTÜN satırları, ham SQL ile: etiket → {kimlik metni: satır}.
 
     Ham okunur: şifreli sütun token'ıyla karşılaştırılır (kilitliyken de okunur, çözülmez).
     Kimlik `denetim_izi.kimlik_metni` biçimindedir (iz satırının `object_id`'siyle aynı).
     """
     sonuc: dict[str, dict[str, tuple[Any, ...]]] = {}
-    for model in django_apps.get_app_config("okul").get_models():
+    for model in bekci_modelleri():
         if model.__name__ in _KARSILASTIRMA_DISI:
             continue
         pk = model._meta.pk
@@ -833,6 +1253,14 @@ ILKELLER: dict[tuple[str, str], str] = {
 
 #: İzsiz kalabilen işlevler (göreli dosya yolu, birim) → gerekçe. Başka muafiyet yoktur.
 MUAF_ISLEVLER: dict[tuple[str, str], str] = {
+    ("apps/oab/services/yarim_metin.py", "kaydet"): (
+        "Gerekçe kutusunun kısa süreli taslağı: kısa aralıklarla yazılır, kayıt değildir (tasarım §7 "
+        "'Yarım kalan metin'); `DraftText` modeli izsizdir (`LISTESIZ_MODELLER`)."
+    ),
+    ("apps/oab/services/yarim_metin.py", "temizle"): (
+        "Yarım metnin silinmesi: kaydedilen gerekçenin izi `services.uyum`'dadır, taslağın izi yoktur "
+        "(`LISTESIZ_MODELLER`)."
+    ),
     ("apps/okul/services/ozet_onarimi.py", "ozetleri_onar"): (
         "Geri yüklemenin parola kaydı özeti onarımı (kullanıcı kararı 03.11.2026): ORM'siz, "
         "takastan ÖNCE geri yüklenecek `.tmp` dosyasında; o veritabanında oturum yoktur, "
@@ -868,6 +1296,22 @@ ORM_DISI_CAGRILAR: dict[tuple[str, str, str], str] = {
     ),
     ("apps/okul/services/geri_yukleme_notu.py", "dosya_ozeti", "ozet.update"): (
         "`hashlib.sha256().update`: kenara alınan dosyanın özeti."
+    ),
+    ("apps/okul/services/geri_yukleme_yetkisi.py", "hesap_satiri", "baglanti.execute"): (
+        "Salt okuma: hesap satırının mühre giren sütunlarını okur; metni hesap bağı sütunları "
+        "olmayan eski görüntü için sabitlerden kurulur (plan F1c 7. adım)."
+    ),
+    ("apps/okul/services/geri_yukleme_yetkisi.py", "hesap_satirlari", "baglanti.execute"): (
+        "Salt okuma: bütün hesap satırlarının mühre giren sütunlarını okur; metni hesap bağı "
+        "sütunları olmayan eski görüntü için sabitlerden kurulur (plan F1c 7. adım)."
+    ),
+    ("apps/okul/services/satir_izi.py", "_hesap_satiri", "baglanti.execute"): (
+        "Salt okuma: hesap satırının içerik MAC'ine giren sütunlarını okur; metni hesap bağı "
+        "sütunları olmayan eski görüntü için sabitlerden kurulur (plan F1c 7. adım)."
+    ),
+    ("apps/okul/services/satir_izi.py", "_iz_satirlari", "baglanti.execute"): (
+        "Salt okuma: denetim izi satırlarını okur (bu modülün iki sabit `WHERE` koşulu); metni "
+        "sütunları olmayan eski görüntü için sabitlerden kurulur."
     ),
     ("apps/okul/services/satir_izi.py", "okuma_islemi", "baglanti.execute"): (
         "Okuma işleminin sınırları (`BEGIN`, `COMMIT`, hata yolunda `ROLLBACK`): kayıt yazmaz; "
@@ -1625,6 +2069,21 @@ def _ham_sutunlar(tablo: str, sutunlar: tuple[str, ...]) -> list[str]:
         return [str(deger) for satir in cursor.fetchall() for deger in satir if deger]
 
 
+def _sifreli_tokenlar() -> list[str]:
+    """`okul` ve `oab`'de şifreli ya da kör indeks sütunu taşıyan her tablonun ham değerleri."""
+    tokenlar: list[str] = []
+    for model in bekci_modelleri():
+        kor_indeksler = kor_indeks_alanlari(model)
+        alanlar = (
+            *crypto.encrypted_fields_of(model),
+            *(alan for alan in model._meta.fields if alan.name in kor_indeksler),
+        )
+        sutunlar = tuple(str(alan.column) for alan in alanlar)
+        if sutunlar:
+            tokenlar += _ham_sutunlar(model._meta.db_table, sutunlar)
+    return tokenlar
+
+
 def _veli_xlsx(satirlar: list[tuple[str, ...]]) -> bytes:
     kitap = Workbook()
     sayfa = kitap.active
@@ -1653,15 +2112,18 @@ def _xlsx(satirlar: list[tuple[str, ...]]) -> bytes:
 def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch) -> None:
     """Tasarım §4.6.2 kural 6, §14 F1b kapısı (modül başlığı, madde 3).
 
-    Her izli model (`Account`, `SchoolConfig`, `SchoolYear`, `SchoolTerm`, `Holiday`,
-    `Personnel`, `ImportRun`, `Attachment`) uydurma kişi verisiyle yazılır, güncellenir ve
+    `okul` ve `oab`'nin her izli modeli (bugün `Account`, `SchoolConfig`, `SchoolYear`, `SchoolTerm`,
+    `Holiday`, `Personnel`, `ImportRun`, `Attachment`, birlik dönemi ve kural kopyası, genel kurul,
+    uyum satırı ve gerekçesi, birlik kişisi) uydurma kişi verisiyle yazılır, güncellenir ve
     durumu değişir; iz satırlarının hiçbir sütununda bu değerler, parçaları, büyük-küçük harf
-    biçimleri ve şifreli token'ları geçmez. Arşiv dökümü henüz yoktur. Veli listesi (T5)
+    biçimleri ve şifreli token'ları geçmez. Senaryosu yazılmamış izli model testi düşürür. Arşiv
+    dökümü henüz yoktur. Veli listesi (T5)
     uydurma veli adıyla aktarılır, sınıfı yerine konur ve elle silinir: ne adı ne token'ı izde
     geçer. (Öğrenci sicili ve şube kataloğu F1b 5. adımda söküldü.)
     """
-    # Hesap (ad-soyad şifreli kişi verisi).
-    hesap_ac(AccountRole.MUHASIP, ad=f"{UYDURMA_AD} {UYDURMA_SOYAD}")
+    # Hesap (ad-soyad şifreli kişi verisi). Program yöneticisi: organ rolündeki hesap üyeliğe bağlı
+    # açılır ve dönemi açardı (plan F1c 7. adım); dönem aşağıda veli listesinden sonra açılır.
+    hesap_ac(AccountRole.YONETICI, ad=f"{UYDURMA_AD} {UYDURMA_SOYAD}")
     # Okul kartı: okul adı, il, ilçe, müdür adı serbest metin / kişi adı; demirbaş no serbest
     # kod (değeriyle girer, kişi verisi taşımaz). Kodlu alanlar (kademe, mevcut, türler) değerli.
     setup_service.update_school_config(
@@ -1745,25 +2207,103 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
         yazar=varsayilan_yazar(),
         kisi_listesi=False,
     )
+    # Dönemsiz aktarılan veli listesi ilk dönem açılırken o döneme bağlanır (kişisiz olay satırı).
+    import_service.commit_parents_file(
+        file_bytes=_veli_xlsx([(f"{UYDURMA_AD} {UYDURMA_SOYAD}", "9-A")]), file_name=dosya_adi
+    )
+    veli_tokenlari += _ham_sutunlar("okul_parentroster", ("full_name", "name_index"))
+    # Birlik dönemi, kural kopyası, genel kurul, uyum satırı ve gerekçe: ad ve gerekçe serbest metin.
+    donem = donemler.create_term(
+        name=UYDURMA_UZUN[:40], school_year=yil, start_date=date(2026, 10, 10)
+    )
+    assert ParentRoster.objects.filter(term=donem).count() == 1
+    # Birlik kişisi (F1c 4. adım): ad ve soyad şifreli, kör indeks; elle, personelden ve veli
+    # listesinden; güncelleme ve durum (`PASIF`). Satırlar değer taşımaz (KVKK silme kümesi).
+    kisi = kisiler.create_person(
+        kind="KURSIYER", first_name=UYDURMA_AD, last_name=f"{UYDURMA_SOYAD} {UYDURMA_TCKN}"
+    )
+    kisiler.update_person(
+        kisi, first_name=f"{UYDURMA_AD} {UYDURMA_METIN}"[:100], last_name=UYDURMA_TELEFON
+    )
+    kisiler.update_person(kisi, status=PersonStatus.PASIF)
+    kisiler.copy_from_personnel(
+        persons.create_personnel(first_name=UYDURMA_AD, last_name=UYDURMA_ADRES[:100])
+    )
+    kisiler.copy_from_parent(f"{UYDURMA_AD} {UYDURMA_SOYAD}", ayni_kisi_degil=True)
+    kurul = genel_kurul_servisi.genel_kurul_olustur(donem=donem, kind=AssemblyKind.OLAGAN)
+    genel_kurul_servisi.yeter_sayiyi_dondur(kurul, tarih=date(2026, 10, 1))
+    # Organ üyeliği (F1c 5. adım): dayanak notu serbest metin; durum geçişi; düşme gerekçesi ve görev
+    # alma engelinin dayanağı KVKK boşaltma kümesindedir (değer listesine ve içerik MAC'ine girmez).
+    ogretmen = kisiler.create_person(
+        kind="OGRETMEN", first_name=UYDURMA_AD, last_name=f"{UYDURMA_SOYAD} {UYDURMA_TCKN}"
+    )
+    uyelik = uyelikler.assign_membership(
+        term=donem,
+        person=ogretmen,
+        organ="DK",
+        seat_type="ASIL",
+        seat_group="OGRETMEN",
+        elected_by="OGRETMENLER_KURULU",
+        start_date=date(2026, 10, 12),
+        evidence_note=f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_METIN}",
+    )
+    uyelikler.update_membership(uyelik, evidence_note=UYDURMA_UZUN, votes=9)
+    uyelik.eligibility_bar_basis = "SUC_12_5_14_7"
+    uyelik.status, uyelik.drop_kind = "DUSTU", "DIGER"
+    uyelik.dropped_reason = f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_ADRES}"
+    onceki = denetim_izi.anlik(uyelik)
+    uyelik.save()
+    denetim_izi.degisiklik(uyelik, onceki=onceki)
+    # Karar defteri, toplantı, katılım ve karar taslağı: gündem, karar metni serbest metin.
+    kurullar.karar_defteri_olustur(certification_no="Uydurma-1", page_count=100)
+    toplanti = kurullar.toplanti_olustur(
+        donem=donem,
+        organ="DK",
+        kind=MeetingKind.GOREV_BOLUMU,
+        place=UYDURMA_ADRES[:128],
+        agenda=f"{UYDURMA_AD} {UYDURMA_METIN}",
+    )
+    ikinci_ogretmen = uyelikler.assign_membership(
+        term=donem,
+        person=kisiler.create_person(
+            kind="OGRETMEN", first_name=UYDURMA_SOYAD, last_name=UYDURMA_AD
+        ),
+        organ="DK",
+        seat_type="ASIL",
+        seat_group="OGRETMEN",
+        elected_by="OGRETMENLER_KURULU",
+        start_date=date(2026, 10, 12),
+    )
+    kurullar.katilim_yaz(toplanti, ikinci_ogretmen, present=False, excused=True)
+    kurullar.karar_taslagi_olustur(
+        toplanti, kind=DecisionKind.GOREV_BOLUMU, text=f"{UYDURMA_AD} {UYDURMA_SOYAD} başkan"
+    )
+    # Üretilen evrak (F1c 9. adım): içerik JSON'u kişi adı taşır, şifrelidir; yeniden üretim
+    # öncekinin yerini alır (`DURUM`). İzde yalnız kod, sürüm, biçim ve özet görünür.
+    uydurma_belge = evrak.Belge(
+        kod="E01",
+        antet=evrak.birlik_anteti(okul_adi=UYDURMA_UZUN, ilce=UYDURMA_AD),
+        bloklar=(evrak.Paragraf(f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_ADRES}"),),
+    )
+    for bicimler in (("DOCX", "PDF"), ("PDF",)):
+        evrak_servisi.kaydet(uydurma_belge, konu=toplanti, bicimler=bicimler, donem=donem)
+    uyum.denetle(
+        "genel_kurul.ilan_en_az_gun",
+        3,
+        donem=donem,
+        konu=kurul,
+        tarih=date(2026, 10, 1),
+        gerekce=uyum.Gerekce(metin=f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_METIN}"),
+    )
 
     metin = _iz_metni()
     modeller = set(AuditTrail.objects.values_list("model", flat=True))
-    assert {
-        "okul.Account",
-        "okul.SchoolConfig",
-        "okul.SchoolYear",
-        "okul.SchoolTerm",
-        "okul.Holiday",
-        "okul.Personnel",
-        "okul.ImportRun",
-        "okul.Attachment",
-    } <= modeller
+    assert {denetim_izi.model_etiketi(model) for model in izlenen_modeller()} <= modeller
     for parca in ARANACAKLAR:
         assert parca not in metin, parca
     tokenlar = [
-        *_ham_sutunlar("okul_personnel", ("first_name", "last_name")),
-        *_ham_sutunlar("okul_account", ("display_name",)),
-        *_ham_sutunlar("okul_attachment", ("original_name", "key_wrap", "sha256")),
+        *_sifreli_tokenlar(),
+        *_ham_sutunlar("okul_attachment", ("key_wrap", "sha256")),
         *veli_tokenlari,
     ]
     assert tokenlar
@@ -1848,12 +2388,18 @@ LISTESIZ_MODELLER = {
     "AccessLog": (
         "Erişim günlüğü: zincir dışı, değer tutmaz (tasarım §4.6.4); silmesi `KVKK_SILME`."
     ),
+    "DraftText": (
+        "Yarım metin: gerekçe kutusu kısa aralıklarla kaydeder, kısa süreli şifreli taslaktır "
+        "(tasarım §7 'Yarım kalan metin'); kayıt değildir, metin kaydedilince ya da vazgeçilince "
+        "silinir. Denetim izi taslağa değil, kaydedilen gerekçeye yazılır."
+    ),
     "ParentRoster": (
         "Veli listesi: satır başına iz yazılmaz, hiçbir alanı satıra ve içerik MAC'ine girmez "
         "(tasarım §4.6.2); aktarım kişisiz parti satırıdır (koşunun `ImportRun` izi), silmesi "
         "`KVKK_SILME` (plan 'F1b-5 uygulama kararları')."
     ),
 }
+#: Elle yazılı karşılaştırma listesi: `oab`'nin modelleri geldikçe buraya da adıyla girer.
 IZLI_MODELLER = (
     Account,
     SchoolConfig,
@@ -1863,20 +2409,29 @@ IZLI_MODELLER = (
     Personnel,
     ImportRun,
     Attachment,
+    RulePackage,
+    OabTerm,
+    GeneralAssembly,
+    ComplianceItem,
+    ComplianceJustification,
+    OabPerson,
+    OrganMembership,
+    OfficialBook,
+    BoardMeeting,
+    BoardMeetingAttendance,
+    BoardDecision,
+    GeneratedDocument,
 )
 
 
-def test_okul_modellerinin_hepsi_izli_ya_da_gerekceli_listesizdir() -> None:
-    """Yeni bir okul modeli izin listeleri olmadan eklenemez (yazıcı onu yazmaz)."""
-    modeller = {model.__name__ for model in django_apps.get_app_config("okul").get_models()}
-    listesiz = {
-        ad for ad in modeller if not hasattr(django_apps.get_model("okul", ad), "IZ_DEGER_ALANLARI")
-    }
-    assert listesiz == set(LISTESIZ_MODELLER)
-    assert modeller - listesiz == {model.__name__ for model in IZLI_MODELLER}
+def test_okul_ve_oab_modellerinin_hepsi_izli_ya_da_gerekceli_listesizdir() -> None:
+    """Yeni bir okul ya da birlik modeli izin listeleri olmadan eklenemez (yazıcı onu yazmaz)."""
+    izliler = set(izlenen_modeller())
+    assert {m.__name__ for m in bekci_modelleri() if m not in izliler} == set(LISTESIZ_MODELLER)
+    assert izliler == set(IZLI_MODELLER)
 
 
-@pytest.mark.parametrize("model", IZLI_MODELLER, ids=lambda m: m.__name__)
+@pytest.mark.parametrize("model", izlenen_modeller(), ids=lambda m: m.__name__)
 def test_durum_alanlari_modelin_alanlaridir(model: Any) -> None:
     alanlar = {a.name for a in model._meta.concrete_fields if not a.primary_key}
     durum = set(getattr(model, "IZ_DURUM_ALANLARI", ()))

@@ -6,19 +6,22 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { todayIso } from "../../lib/format";
-import { BOS_OKUL_KARTI, ORNEK_OKUL_KARTI } from "../../test/okulKarti";
+import { BOS_OKUL_KARTI, KANTIN_ISLETME_BILGISI, ORNEK_OKUL_KARTI } from "../../test/okulKarti";
 import OkulKartiAlanlari, { OkulKartiListesi, mevcutYazimi } from "./OkulKartiAlanlari";
-import {
-  KANTIN_ISLETME_BILGISI,
-  KAMPUS_ETIKETI,
-  OKUL_ADI_YARDIMI,
-  VERI_SORUMLUSU_YARDIMI,
-} from "./metinler";
+import { KAMPUS_ETIKETI, OKUL_ADI_YARDIMI, VERI_SORUMLUSU_YARDIMI } from "./metinler";
 import { bosOkulFormu } from "./okulBilgileri";
 import type { OkulFormu } from "./okulBilgileri";
+
+const kantinBilgisi = vi.hoisted(() => ({ useKantinIsletmeBilgisi: vi.fn() }));
+vi.mock("./kuralBilgileri", () => kantinBilgisi);
+
+beforeEach(async () => {
+  const { ORNEK_KANTIN_BILGISI } = await import("../../test/okulKarti");
+  kantinBilgisi.useKantinIsletmeBilgisi.mockReturnValue(ORNEK_KANTIN_BILGISI);
+});
 
 /** Durumlu sarmalayıcı: her değişiklik forma işlenir ve dışarı bildirilir. */
 function Sarmal({
@@ -167,6 +170,14 @@ describe("OkulKartiAlanlari — form", () => {
     await user.click(screen.getByRole("radio", { name: "Kiraya veriliyor" }));
     expect(screen.queryByText(KANTIN_ISLETME_BILGISI)).toBeNull();
     expect(bolge).toBeEmptyDOMElement();
+  });
+
+  it("kural paketi okunamazsa bilgi çıkmaz, form çalışır", async () => {
+    kantinBilgisi.useKantinIsletmeBilgisi.mockReturnValue(null);
+    const user = userEvent.setup();
+    bas();
+    await user.click(screen.getByRole("radio", { name: "Birlikçe işletiliyor" }));
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it("künye alanları sözlükteki sırayla durur: okul adı, il, ilçe, müdür, kurum kodu", () => {

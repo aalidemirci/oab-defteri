@@ -13,7 +13,10 @@
    - text-transform KULLANILMAZ (WeasyPrint Türkçe i→I tuzağı) — büyük harf
      doğrudan yazılır.
    - Renkli dolgu yok; palet nötr slate gri (ofis yazıcısı dostu).
-   - Yazı tipi DejaVu Sans (tam Türkçe kapsama).
+   - Yazı tipi: program belgeleri (taban şablon) DejaVu Sans (tam Türkçe kapsama);
+     evrak hattı (documents/evrak.html) paketli Liberation Serif, gövde 12 punto,
+     5-7 sütunlu tabloda 10 punto; DejaVu yalnız eksik glif yedeği (tasarım §9.1-8,
+     plan F1c kararları "Evrak biçimi"). Sistem yazı tipi dizini taranmaz.
    - Ekran temasının token'larından bağımsızdır (kurumsal kâğıt düzeni).
    Belge: docs/tasarim/2026-10-31-genel-tasarim.md §9.1 (evrak ilkeleri)
    ========================================================================= */
@@ -33,7 +36,7 @@
   --pr-bar-text: #ffffff;     /* koyu bant üzerindeki metin */
   --pr-bar-hint: #cbd5e1;     /* koyu bant üzerindeki ikincil ipucu */
 
-  /* Tipografi ölçeği (DejaVu Sans) */
+  /* Tipografi ölçeği (taban şablon, DejaVu Sans; evrak hattı evrak.html'de kendi ölçeğini kurar) */
   --pr-size-school: 11.5pt;   /* okul adı (anted/üst bant) */
   --pr-size-title: 12pt;      /* belge başlığı */
   --pr-size-body: 10pt;       /* gövde (kompakt evrakta 9.5pt'e daralabilir) */

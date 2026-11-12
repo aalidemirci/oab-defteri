@@ -315,16 +315,23 @@ def test_kisitli_roller_yalniz_kendi_satirlarina_yazar(rol: str) -> None:
             if _yalniz_rol_kapisi(yontem, ornek, rol).content == b"gecti":
                 acik_yazma.add(ad)
     # Bugün açık olanlar kendi hesabı ve oturum uçlarıdır; DK'de ek olarak denetim modülünün
-    # (M8) "Gördüm"ü.
+    # (M8) "Gördüm"ü, görev bölümü (F1c 6. adım) ve görev bölümü tutanağı ile denetim planının
+    # belgesi (E02, F1c 10. adım).
+    # Gerekçe kutusunun yarım metni (F1c 11. adım) de hesabın kendi satırındadır (KENDI).
     ortak = {
         "app-quit",
+        "oab-draft-text",
         "security-change-password",
         "security-integrity-reset-notice",
         "security-lock",
         "security-recover",
         "security-unlock",
     }
-    ek = {"security-integrity-restore-seen"} if rol == AccountRole.DENETLEME_KURULU else set()
+    ek = (
+        {"security-integrity-restore-seen", "oab-dk-duty-assignment", "oab-document-e02"}
+        if rol == AccountRole.DENETLEME_KURULU
+        else set()
+    )
     assert acik_yazma == ortak | ek
 
 

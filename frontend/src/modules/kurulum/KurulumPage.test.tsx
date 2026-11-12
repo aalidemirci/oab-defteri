@@ -25,7 +25,7 @@ import { ApiError } from "../../lib/api";
 import { todayIso } from "../../lib/format";
 import { pencereIcerigi } from "../../lib/kilit";
 import { ILK_ACILIS_DURUMU } from "../../test/kurulumDurumu";
-import { BOS_OKUL_KARTI, ORNEK_OKUL_KARTI } from "../../test/okulKarti";
+import { BOS_OKUL_KARTI, KANTIN_ISLETME_BILGISI, ORNEK_OKUL_KARTI } from "../../test/okulKarti";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import type {
@@ -59,7 +59,16 @@ vi.mock("../okul/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../okul/api")>();
   return { ...actual, okulApi: oapi };
 });
+vi.mock("../okul/kuralBilgileri", async () => {
+  const { ORNEK_KANTIN_BILGISI } = await import("../../test/okulKarti");
+  return { useKantinIsletmeBilgisi: () => ORNEK_KANTIN_BILGISI };
+});
 vi.mock("../guvenlik/api", () => ({ guvenlikApi: gapi }));
+const donemApi = vi.hoisted(() => ({ ilkDonemiAc: vi.fn() }));
+vi.mock("../birlik-donemi/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../birlik-donemi/api")>()),
+  birlikDonemiApi: donemApi,
+}));
 vi.mock("../../lib/download", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../lib/download")>()),
   saveBlob: indirme.saveBlob,
@@ -86,11 +95,8 @@ import {
   HESAP_AYDINLATMA_TOPLAMA,
   HESAP_VERI_SORUMLUSU_YERI,
 } from "../kisiler/metinler";
-import {
-  DERS_YILI_ACIKLAMASI,
-  KANTIN_ISLETME_BILGISI,
-  OKUL_KARTI_ACIKLAMASI,
-} from "../okul/metinler";
+import { SIHIRBAZ_ADIM_ACIKLAMASI, SIHIRBAZ_DEVAM_NOTU } from "../gecis-kurulumu/metinler";
+import { DERS_YILI_ACIKLAMASI, OKUL_KARTI_ACIKLAMASI } from "../okul/metinler";
 import KurulumPage from "./KurulumPage";
 
 const ANAHTAR = "TEST-KURT-ARMA-ANAH-TARI-ABCD-EFGH-JKLM";
@@ -111,6 +117,8 @@ interface Sunucu {
   yillar: SchoolYear[];
   donemli: Set<number>;
   tamam: boolean;
+  /** Geçiş kurulumunun ilk birlik dönemi açıldı mı? (atlanabilir 4. adım) */
+  gecis: boolean;
 }
 
 const BOS_OKUL: SchoolConfig = BOS_OKUL_KARTI;
@@ -158,6 +166,9 @@ function durum(): SetupStatus {
       terms_ready: donemli,
     },
     missing_steps: eksik,
+    transition_setup: sunucu.gecis
+      ? { state: "SURUYOR", open_steps: ["kurul", "karar_defteri", "tamamla"] }
+      : { state: "BASLAMADI", open_steps: ["donem"] },
   };
 }
 
@@ -171,6 +182,7 @@ function sunucuyuKur(baslangic: Partial<Sunucu> = {}) {
     yillar: [],
     donemli: new Set(),
     tamam: false,
+    gecis: false,
     ...baslangic,
   };
   oapi.getSetupStatus.mockImplementation(async () => durum());
@@ -958,5 +970,49 @@ describe("KurulumPage — bilgilendirme", () => {
     oapi.getSetupStatus.mockRejectedValue(new ApiError(500, "error", "Sunucuya ulaşılamadı."));
     renderPage();
     expect(await screen.findByText("Sunucuya ulaşılamadı.")).toBeInTheDocument();
+  });
+});
+
+describe("KurulumPage — 4. adım: Birlik Dönemi (atlanabilir)", () => {
+  it("takvim adımından kurulum tamamlanabilir; Devam ile ilk birlik dönemi açılır", async () => {
+    const user = userEvent.setup();
+    sunucuyuKur({ parola: true, okul: { ...TAM_OKUL }, tamam: true });
+    sunucu.yillar = [AKTIF_YIL];
+    sunucu.donemli.add(AKTIF_YIL.id);
+    donemApi.ilkDonemiAc.mockImplementation(async () => {
+      sunucu.gecis = true;
+      return {
+        id: 1,
+        name: "2026-2027 birlik dönemi",
+        uyarilar: [
+          {
+            metin: "Görev süresi 1 yıldır; son genel kuruldan bu yana bu süre geçti (md. 12/2).",
+            atif: "md. 12/2",
+            durum: "uyari",
+          },
+        ],
+      };
+    });
+    renderPage();
+    expect(await screen.findByText("3. Ders Yılı")).toBeInTheDocument();
+    // Atlanabilir: takvim adımında da "Kurulumu tamamla" açıktır.
+    expect(ileri("Kurulumu tamamla")).toBeEnabled();
+    await user.click(ileri("Devam"));
+    expect(await screen.findByText(SIHIRBAZ_ADIM_ACIKLAMASI)).toBeInTheDocument();
+    expect(ileri("Kurulumu tamamla")).toBeEnabled();
+    await waitFor(() => expect(oapi.listSchoolYears).toHaveBeenCalled());
+    await user.type(screen.getByLabelText(/Son olağan genel kurulun günü/), "2026-10-10");
+    await user.click(ileri("Birlik dönemini aç"));
+    expect(donemApi.ilkDonemiAc).toHaveBeenCalledWith({
+      name: "2026-2027 birlik dönemi",
+      school_year: 3,
+      start_date: "2026-10-10",
+      program_start_date: null,
+    });
+    expect(await screen.findByText(SIHIRBAZ_DEVAM_NOTU)).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Görev süresi uyarıları" })).toHaveTextContent(
+      "Dayanak: md. 12/2",
+    );
+    expect(screen.queryByRole("button", { name: "Birlik dönemini aç" })).toBeNull();
   });
 });

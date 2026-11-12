@@ -37,10 +37,13 @@ yazım reddedilir. ORM ile ham SQL aynı metni görür, çeviri gerekmez (UUIDFi
 Python'da tireli metin verir; plan F1b-2'nin konsol geri yüklemesi maddesi).
 
 TÜR (tasarım §5.2.8): imza baytından, libmagic'siz (tasarım §12.A: python-magic ve yalnız-PDF kuralı
-kalkar). F1b'de kabul edilen türler PDF, JPEG ve PNG'dir. Uzantıya bakılmaz; bu modül dosyanın
-adını hiç görmez. Üretilen evrakın türleri (DOCX, XLSX, HTML) F1c'de `GeneratedDocument`'la
-eklenir (plan F1b-3 "Dosya deposu"); tür tablosu (`DosyaTuru`) buna açıktır, kabul kümesi
-(`KABUL_EDILEN_TURLER`) F1b'de üç türdür.
+kalkar). Kullanıcının eklediği dosyada kabul edilen türler PDF, JPEG ve PNG'dir
+(`KABUL_EDILEN_TURLER`). Uzantıya bakılmaz; bu modül dosyanın adını hiç görmez. Programın ürettiği
+evrakın türleri (`URETILEN_EVRAK_TURLERI`: PDF ve DOCX; plan F1c 9. adım) yalnız üretilen evrak
+sahibine yazılır, hangi kümenin geçerli olduğunu sahip seçer (`apps.okul.services.dosya_deposu`
+`sahip_kaydet`). DOCX bir ZIP kabıdır: imza baytı (`PK\x03\x04`) tek başına yetmez, kapta Word'ün
+`[Content_Types].xml` ve `word/document.xml` girdileri aranır (yalnız ad listesi okunur, içerik
+açılmaz). XLSX ve HTML listelerin ve duyuruların fazında eklenir.
 
 ÖZET VE BOY (plan F1b-3 "Kap ve manifesto"): `sha256` ve `size` AÇIK içeriğin özeti ve boyudur
 (`compute_sha256` AYNEN, tasarım §12.A); manifesto onları satırın açık sütunlarından anahtarsız alır.
@@ -71,11 +74,13 @@ import base64
 import binascii
 import errno
 import hashlib
+import io
 import os
 import re
 import secrets
 import stat
 import uuid
+import zipfile
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
@@ -376,26 +381,53 @@ class DosyaTuru:
 
     mime: str
     imzalar: tuple[bytes, ...]
+    #: ZIP kaplı türde kapta bulunması gereken girdiler (boşsa yalnız imza baytı bakılır).
+    zip_girdileri: tuple[str, ...] = ()
 
     def tutar(self, acik: bytes) -> bool:
-        return any(acik.startswith(imza) for imza in self.imzalar)
+        if not any(acik.startswith(imza) for imza in self.imzalar):
+            return False
+        return not self.zip_girdileri or _zip_girdileri_var(acik, self.zip_girdileri)
+
+
+def _zip_girdileri_var(acik: bytes, girdiler: tuple[str, ...]) -> bool:
+    """ZIP kabının ad listesinde `girdiler`'in hepsi var mı? İçerik açılmaz; bozuk kap `False`."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(acik)) as kap:
+            adlar = set(kap.namelist())
+    except (zipfile.BadZipFile, ValueError, OSError):
+        return False
+    return set(girdiler) <= adlar
 
 
 PDF: Final = DosyaTuru("application/pdf", (b"%PDF-",))
 JPEG: Final = DosyaTuru("image/jpeg", (b"\xff\xd8\xff",))
 PNG: Final = DosyaTuru("image/png", (b"\x89PNG\r\n\x1a\n",))
-#: F1b'de kabul edilen türler (tasarım §5.2.8). Üretilen evrakın türleri F1c'de eklenir.
+#: Word belgesi (Office Open XML); `mime` 100 karakterlik sütuna sığar.
+DOCX: Final = DosyaTuru(
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    (b"PK\x03\x04",),
+    ("[Content_Types].xml", "word/document.xml"),
+)
+#: Kullanıcının eklediği dosyada kabul edilen türler (tasarım §5.2.8).
 KABUL_EDILEN_TURLER: Final[tuple[DosyaTuru, ...]] = (PDF, JPEG, PNG)
+#: Programın ürettiği evrakın türleri (`GeneratedDocument`; plan F1c 9. adım).
+URETILEN_EVRAK_TURLERI: Final[tuple[DosyaTuru, ...]] = (PDF, DOCX)
+
+_TUR_HATASI: Final = {
+    KABUL_EDILEN_TURLER: "Bu dosya türü eklenemez; yalnız PDF, JPEG ve PNG dosyaları kabul edilir.",
+    URETILEN_EVRAK_TURLERI: "Üretilen evrak yalnız PDF ya da Word dosyası olarak saklanır.",
+}
 
 
-def tur_belirle(acik: bytes) -> str:
-    """İçeriğin MIME türü, imza baytından; boşsa ya da kabul edilen türlerden değilse `TurHatasi`."""
+def tur_belirle(acik: bytes, turler: tuple[DosyaTuru, ...] = KABUL_EDILEN_TURLER) -> str:
+    """İçeriğin MIME türü, imza baytından; boşsa ya da `turler`'den değilse `TurHatasi`."""
     if len(acik) == 0:
         raise TurHatasi("Boş dosya eklenemez.")
-    for tur in KABUL_EDILEN_TURLER:
+    for tur in turler:
         if tur.tutar(acik):
             return tur.mime
-    raise TurHatasi("Bu dosya türü eklenemez; yalnız PDF, JPEG ve PNG dosyaları kabul edilir.")
+    raise TurHatasi(_TUR_HATASI.get(turler, "Bu dosya türü eklenemez."))
 
 
 # ---------------------------------------------------------------------------
@@ -417,14 +449,19 @@ class HazirDosya:
     mime: str
 
 
-def dosya_hazirla(acik: bytes, *, sarmal_anahtari: bytes) -> HazirDosya:
+def dosya_hazirla(
+    acik: bytes,
+    *,
+    sarmal_anahtari: bytes,
+    turler: tuple[DosyaTuru, ...] = KABUL_EDILEN_TURLER,
+) -> HazirDosya:
     """Türü imzadan belirler, yeni ad ve anahtarla şifreler, anahtarı sarar; diske yazmaz.
 
     Reddedilen dosya için hiçbir şey üretilmez (tasarım §12.A `validate_upload` ilkesi:
-    reddedilen dosya diske yazılmaz).
+    reddedilen dosya diske yazılmaz). `turler` sahibin kabul kümesidir (modül başlığı "TÜR").
     """
     _anahtar_denetle(sarmal_anahtari, "Sarmal anahtarı")
-    mime = tur_belirle(acik)
+    mime = tur_belirle(acik, turler)
     ad = yeni_depo_adi()
     anahtar = yeni_dosya_anahtari()
     return HazirDosya(

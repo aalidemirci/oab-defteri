@@ -6,7 +6,8 @@ C-1..C-5).
   seçenekler, ayrıntı ve son girişler, açma, kapama, askıdan çıkarma, parola sıfırlama; eylemleri ve
   nedenleri sunucu hesaplar.
 * Kendi hesabı kapatılamaz, kendi parolası buradan sıfırlanamaz; ikinci program yöneticisi açılır.
-* Kapanmış hesap giremez: elle kapanış ve üyelik düşmesi (mühürlü, izli `ASKIDA (UYELIK_DUSTU)`).
+* Kapanmış hesap giremez: elle kapanış ve üyelik düşmesi (gerçek servis: düşme aynı işlemde
+  `ASKIDA (UYELIK_DUSTU)` yazar; plan F1c 7. adım).
 * Geçici parola hiçbir yanıtta, günlükte, iz satırında, güvenlik dosyasında ya da iletide yok.
 * C-1: kaydı ya da izi tutmayan hesap için rol seçeneklerinde ayrı neden (servisle aynı).
 * C-2: uçlar istek boyu işlem açmaz; reddedilen işlemin `BUTUNLUK` satırı yanıttan sonra kalır.
@@ -32,6 +33,7 @@ import json
 import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +43,8 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from apps.oab.models import OrganMembership
+from apps.oab.services import uyelik_gecisleri
 from apps.okul import denetim_izi, iz_dogrulama, rol_izinleri
 from apps.okul.models import (
     Account,
@@ -61,6 +65,7 @@ from apps.okul.tests.hesap_ortak import (
     ham_guncelle,
     ham_satir,
     hesap_ac,
+    hesap_uyeligi,
     muhurle,
     sarmal,
     sarmal_kimlikleri,
@@ -247,7 +252,13 @@ def test_secenekler_rolleri_nedenleri_ve_ikinci_yonetici_bilgisini_verir() -> No
         "neden": None,
         "varsayilan_tanitici": "yonetici-2",
         "bilgi": hesaplar.IKINCI_YONETICI_BILGISI,
+        "uyelik_gerekli": False,
+        "uyelikler": [],
+        "organlara_yonlendir": False,
     }
+    # Sınır engelinde (tek hesaplı rolde açık hesap) Organlar ekranına yönlendirilmez: çözüm hesabı
+    # kapatmaktır, üye girmek değil.
+    assert roller["muhasip"]["organlara_yonlendir"] is False
     assert roller["denetleme_kurulu"]["varsayilan_tanitici"] == "dk-1"
     assert all(r["bilgi"] is None for ad, r in roller.items() if ad != "yonetici")
 
@@ -310,6 +321,7 @@ def test_hesap_acma_ucu_ve_ikinci_program_yoneticisi() -> None:
             "tanitici": "baskan",
             "ad_soyad": "Uydurma Örnekkaya",
             "gecici_parola": GIZLI_GECICI,
+            "uyelik": hesap_uyeligi(AccountRole.BASKAN),
         },
         format="json",
     )
@@ -420,17 +432,24 @@ def _ac_ve_gir(hesap: Account) -> None:
 @pytest.mark.parametrize("kol", ["elle_kapanis", "uyelik_dusmesi"])
 def test_kapanmis_hesap_giremez(kol: str) -> None:
     """Tasarım §14 F1b kapısı "kapanmış hesap giremez" (plan F1b-2): elle kapanış ve üyelik
-    düşmesi (mühürlü, izli bir `ASKIDA (UYELIK_DUSTU)` satırı; servisi organla F1c'de gelir)
-    kollarında hesap Kullanıcılar ucundan kapatılır. Giriş açılmaz; parola kaydı (sarmal) dosyaya
-    eski bir kopyadan geri konsa da açılmaz; kilit ekranında listelenmez."""
+    düşmesi (gerçek servis, plan F1c 7. adım: `uyelik_gecisleri.uyeligi_dusur` bağlı hesabı aynı
+    işlemde `ASKIDA (UYELIK_DUSTU)` yapar; askıdan çıkarılamaz) kollarında hesap Kullanıcılar
+    ucundan kapatılır. Giriş açılmaz; parola kaydı (sarmal) dosyaya eski bir kopyadan geri konsa da
+    açılmaz; kilit ekranında listelenmez."""
     hesap = hesap_ac(AccountRole.MUHASIP, ad="Uydurma Muhasip")
     _ac_ve_gir(hesap)
     if kol == "uyelik_dusmesi":
-        hesap = muhurle(
-            Account.objects.get(pk=hesap.id),
-            status=AccountStatus.ASKIDA,
-            suspend_reason=SuspendReason.UYELIK_DUSTU,
+        assert hesap.membership_id is not None
+        uyelik = OrganMembership.objects.get(pk=hesap.membership_id)
+        uyelik_gecisleri.uyeligi_dusur(uyelik, drop_kind="ISTIFA", end_date=date(2026, 11, 2))
+        hesap = Account.objects.get(pk=hesap.id)
+        assert (hesap.status, hesap.suspend_reason) == (
+            AccountStatus.ASKIDA,
+            SuspendReason.UYELIK_DUSTU,
         )
+        askidan = _istemci().post(f"{API}{hesap.id}/unsuspend/")
+        assert askidan.status_code == 400
+        assert askidan.json()["message"] == hesaplar._BOND_INVALID_UNSUSPEND_MESSAGE
         app_password.lock()
         with pytest.raises(app_password.AccountSuspended):
             app_password.unlock(hesap_id=hesap.id, password=YENI_PAROLA)
@@ -473,6 +492,7 @@ def test_gecici_parola_hicbir_yerde_yok(caplog: pytest.LogCaptureFixture) -> Non
             "tanitici": "sekreter",
             "ad_soyad": "Uydurma Sekreter",
             "gecici_parola": GIZLI_GECICI,
+            "uyelik": hesap_uyeligi(AccountRole.SEKRETER),
         },
         format="json",
     )
@@ -1024,6 +1044,7 @@ def test_hesap_acma_taniticida_kimlik_numarasina_benzer_sayiyi_uyarir() -> None:
             "tanitici": "uydurmaca-12345678901",
             "ad_soyad": "Uydurmaca Örnekoğlu",
             "gecici_parola": GIZLI_GECICI,
+            "uyelik": hesap_uyeligi(AccountRole.SEKRETER),
         },
         format="json",
     )
@@ -1224,12 +1245,14 @@ def test_hesap_acmada_parola_kaydi_yazilamazsa_turkce_ileti(
     2: satır (`PAROLA_YENILENMELI`) ve `HESAP` satırı yerinde kalır, parola kaydı güvenlik dosyasında
     yoktur — Kullanıcılar satırı girişin nedenini söyler, iki depo kartında görünür; çıkış (iletinin
     dediği) parola sıfırlamasıdır: geçici parolayla açılır."""
+    uyelik = hesap_uyeligi(AccountRole.MUHASIP)
     son = _son_seq()
     govde = {
         "rol": "muhasip",
         "tanitici": "muhasip",
         "ad_soyad": "Uydurma Muhasip",
         "gecici_parola": GIZLI_GECICI,
+        "uyelik": uyelik,
     }
 
     with _dosya_yazilamaz(monkeypatch, "_write_structural"):
@@ -1448,6 +1471,12 @@ def test_kullanicilar_ve_iz_iletileri_sozlukte_yazilidir() -> None:
         hesaplar.UNSUSPEND_WRAP_MESSAGE,
         hesaplar.UNSUSPEND_NOTHING_MESSAGE,
         app_password.ISLEMDE_PAROLA_KAYDI_MESSAGE,
+        # Hesap ↔ üyelik bağı (plan F1c 7. adım; bağımsız denetim bulguları).
+        hesaplar._BOND_INVALID_UNSUSPEND_MESSAGE,
+        hesaplar._BOND_INVALID_RESET_MESSAGE,
+        hesaplar._LOGIN_BOND_INVALID_MESSAGE,
+        hesaplar._NO_ELIGIBLE_MEMBERSHIP_MESSAGE,
+        hesaplar._BOND_RULES_MISSING_MESSAGE,
     ]
     eksik = [ileti for ileti in iletiler if f'**"{ileti}"**' not in sozluk]
     assert eksik == []

@@ -16,6 +16,12 @@ from __future__ import annotations
 
 from shared.text import tr_upper
 
+#: Birliğin kendi belgelerinde antedin altına eklenen satır (tasarım §9.1-8 "Birlik antedi"; plan
+#: F1c kararları "Evrak biçimi"). Birlik okul bünyesinde kurulur ve okulun adını alır (OAB Yön.
+#: md. 5): ayrı logo yoktur, satır RYUE md. 10/2'deki birim satırı gibi okul antedinin altındadır.
+#: Kurum kodu antede girmez. Evrak hattındaki kullanımı `shared.evrak.birlik_anteti`'dir.
+BIRLIK_SATIRI = "Okul-Aile Birliği"
+
 
 def letterhead_authority(district: str | None = None) -> str:
     """Antedin ikinci satırı: '<İLÇE> KAYMAKAMLIĞI' (ilçe yoksa yer-tutucu).

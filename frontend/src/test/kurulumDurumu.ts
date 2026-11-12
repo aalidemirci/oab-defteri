@@ -4,7 +4,8 @@
 
 import type { SetupStatus } from "../modules/okul/api";
 
-/** Kurulum bitmiş, hesap kurulu, anahtar doğrulanmış, aktif yıl dönemleriyle hazır; yol haritası boş. */
+/** Kurulum bitmiş, hesap kurulu, anahtar doğrulanmış, aktif yıl dönemleriyle hazır; yol haritası boş,
+ *  geçiş kurulumu başlamamış. */
 export const KURULU_DURUM: SetupStatus = {
   setup_completed: true,
   password_set: true,
@@ -23,6 +24,8 @@ export const KURULU_DURUM: SetupStatus = {
   personnel_count: 0,
   school_break_count: 0,
   roadmap: { marks: {}, hidden: false },
+  // Geçiş kurulumu başlamadı (yol haritasında açık madde; atlanabilir adım, kurulum kapısını açık tutmaz).
+  transition_setup: { state: "BASLAMADI", open_steps: ["donem"] },
 };
 
 /** İlk açılış: parola yok, okul bilgisi yok, ders yılı yok. */

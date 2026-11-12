@@ -43,8 +43,8 @@ export const SUTUN_CIKTI = "Çıktı";
 /** Boş hâller. */
 export const BOS_BASLIK = "Erişim günlüğünde kayıt yok";
 export const BOS_ACIKLAMA =
-  "Bu sürümde erişim günlüğüne yazan bir okuma yoktur; kayıtlar, kişisel veriyi okuyan ya da " +
-  "kişisel veri içeren çıktı veren ekranlar geldikçe yazılır.";
+  "Kişisel veriye dokunan hassas bir okuma ya da kişisel veri içeren bir çıktı henüz yok; böyle " +
+  "bir işlem yapıldığında kaydı burada görünür.";
 export const SUZGECE_UYAN_YOK = "Süzgeçlere uyan kayıt yok";
 export const SUZGECE_UYAN_YOK_ACIKLAMA = "Süzgeçleri değiştirin ya da temizleyin.";
 
@@ -56,10 +56,15 @@ export const HESAP_KAYDI_BULUNAMADI = "hesap kaydı bulunamadı";
 
 /**
  * Model ve alan kodlarının ekrandaki adları (sözlük §1 "Erişim günlüğü (F1b)": o okumaları getiren
- * fazda eklenir). Bugün günlüğe yazan okuma yoktur; eşlem boştur. Eşlemde olmayan kod yazılmaz.
+ * fazda eklenir). F1c: organ üyeliğindeki görev alma engelinin dayanağı (özel nitelikli alan).
+ * Eşlemde olmayan kod yazılmaz.
  */
-export const MODEL_ADLARI: Readonly<Record<string, string>> = {};
-export const ALAN_ADLARI: Readonly<Record<string, string>> = {};
+export const MODEL_ADLARI: Readonly<Record<string, string>> = {
+  "oab.OrganMembership": "Organ üyeliği",
+};
+export const ALAN_ADLARI: Readonly<Record<string, string>> = {
+  eligibility_bar_basis: "görev alma engelinin dayanağı",
+};
 /** Eşlemde adı olmayan model ya da alan (kod ekrana çıkmaz). */
 export const BILINMEYEN_KAYIT_TURU = "Bilinmeyen kayıt türü";
 export const BILINMEYEN_ALAN = "bilinmeyen alan";

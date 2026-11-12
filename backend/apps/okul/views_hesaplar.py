@@ -10,14 +10,23 @@ Hepsi yalnız program yöneticisine açıktır: rol kapısı (`rol_izinleri.KURA
   askida_nedeni_etiketi, kayit_tutuyor, oturumdaki, acilis, kapanis, son_giris, giris: {yapabilir,
   neden}, eylemler: {kapat, askidan_cikar, parola_sifirla: {yapilabilir, neden}}}`. Eylemleri
   sunucu hesaplar (servislerin kuralları ve iletileriyle), ön yüz yalnız eşler.
-* `POST accounts/` `{rol, tanitici, ad_soyad, gecici_parola}` → hesap açma
-  (`hesaplar.open_account`; `HESAP` satırı) → 201 `{hesap: satır, uyari, bilgi}`. `uyari` tanıtıcı
+* `POST accounts/` `{rol, tanitici, ad_soyad, gecici_parola, uyelik?, kisi?}` → hesap açma
+  (`hesaplar.open_account`; `HESAP` satırı) → 201 `{hesap: satır, uyari, bilgi}`. Organ rolünde
+  (dört YK görevi ve Denetleme Kurulu) `uyelik` zorunludur: hesap o organ üyeliğine bağlanır, kişi
+  ve dönem üyelikten gelir; `kisi` verilirse üyeliğin kişisi olmalıdır (seçim ekranının bayat
+  kalmasına karşı). Program yöneticisi ve okul müdürü hesabında ikisi de verilmez (plan F1c 7.
+  adım; `hesaplar` modül başlığı "HESAP ↔ ÜYELİK BAĞI"). Satır `uyelik_bagi`'nı taşır (`{kisi,
+  uyelik, donem, gecerli}`, organ rolü değilse null). `uyari` tanıtıcı
   ad-soyadı içeriyorsa sözlükteki uyarıdır (engel değil); `bilgi` program yöneticisi rolünde ikinci
   program yöneticisinin bilgisidir (`hesaplar.IKINCI_YONETICI_BILGISI`).
 * `GET  accounts/options/` → `{roller: [{rol, rol_etiketi, acilabilir, neden, varsayilan_tanitici,
-  bilgi}]}` (`hesaplar.kullanici_secenekleri`): açılamama nedeni hesap açmanınkiyle aynıdır;
+  bilgi, uyelik_gerekli, uyelikler, organlara_yonlendir}]}` (`hesaplar.kullanici_secenekleri`;
+  `uyelikler` organ rolünde hesap açılabilecek üyeliklerdir: `{uyelik, kisi, ad_soyad, organ, gorev,
+  gorev_etiketi, donem}`, kişi ve üyelik seçimi): rolün sınırında açılamama nedeni hesap açmanınkiyle aynıdır;
   kaydı ya da izi (satır izi ya da iz boşluğu) tutmayan hesap için ayrı neden (orkestratör maddesi
-  C-1).
+  C-1). Organ rolünde bağ kuralları yüklenemediyse ya da hesap açılabilecek üye yoksa (`uyelikler`
+  boş) rol açılamaz ve neden rol düzeyindedir (`hesaplar.kullanici_secenekleri`);
+  `organlara_yonlendir` yalnız bu son durumda doğrudur (pencere Organlar ekranına bağlantı verir).
 * `GET  accounts/<id>/` → satır + `{acan, kapatan, parola_degisimi, sifirlama, son_girisler}`
   (`hesaplar.kullanici_ayrintisi`); hesap yoksa 404.
 * `POST accounts/<id>/close/` (`HESAP`), `unsuspend/` (`HESAP`; dosyadaki hatalı deneme askısı
@@ -27,9 +36,11 @@ Hepsi yalnız program yöneticisine açıktır: rol kapısı (`rol_izinleri.KURA
 * `POST accounts/<id>/handover-slip/` → hesap teslim pusulası (E63; plan F1b-2 "E63 hesap teslim
   pusulası"): yalnız PDF, ek olarak indirilir (`Cache-Control: no-store`); dosya adı rol etiketini
   taşır (`Hesap-Teslim-Pusulası_Muhasip_03.11.2026.pdf`; tanıtıcı ve ad girmez); dosya SAKLANMAZ,
-  bellekten verilir; izi `BASIM` satırıdır (kod ve PDF'in sha256'sı; `hesaplar.teslim_pusulasi`),
-  erişim günlüğüne girmez. Kendi hesabına, kapalı hesaba ve kaydı ya da izi tutmayan hesaba basılmaz
-  (satırın `pusula` eylemi aynı nedenleri söyler). İz satırı yazacağı için yöntem POST'tur.
+  bellekten verilir; üretimin kaydı `GeneratedDocument` satırıdır (içerik JSON'u şifreli, dosyası
+  yok; `OLUSTUR`, önceki pusulanın kaydı `YERINI_ALDI`; plan F1c 9. adım), dosyanın izi `BASIM`
+  satırıdır (kod ve PDF'in sha256'sı); ikisi aynı işlemde (`hesaplar.teslim_pusulasi`), erişim
+  günlüğüne girmez. Kendi hesabına, kapalı hesaba ve kaydı ya da izi tutmayan hesaba basılmaz
+  (satırın `pusula` eylemi aynı nedenleri söyler). Kayıt ve iz satırı yazacağı için yöntem POST'tur.
 
 GEÇİCİ PAROLA (plan F1b-2 "Geçici parola"): istemci önerir; sunucu yalnız politikayı denetler
 (`hesap_kurallari.validate_password`) ve parolayı sarmala koyar. Parola HİÇBİR yanıtta, günlükte,
@@ -90,6 +101,10 @@ class HesapAcmaSerializer(serializers.Serializer[dict[str, Any]]):
     tanitici = servise_birakan_metin()
     ad_soyad = servise_birakan_metin()
     gecici_parola = servise_birakan_metin(write_only=True)
+    #: Organ rolünde bağlanacak üyelik ve (isteğe bağlı) kişisi; yokluğu ve uyumu servisin
+    #: Türkçe iletisidir (`hesaplar._bagi_coz`).
+    uyelik = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+    kisi = serializers.IntegerField(required=False, allow_null=True, min_value=1)
 
 
 class ParolaSifirlamaSerializer(serializers.Serializer[dict[str, Any]]):
@@ -125,6 +140,8 @@ class KullanicilarView(APIView):
                 tanitici=veri["tanitici"],
                 display_name=veri["ad_soyad"],
                 temp_password=veri["gecici_parola"],
+                uyelik=veri.get("uyelik"),
+                kisi=veri.get("kisi"),
             )
             satir = _satir(hesap.id)
         return Response(

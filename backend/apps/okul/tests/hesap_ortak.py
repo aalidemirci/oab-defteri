@@ -8,8 +8,10 @@ yapan açık hesap ister). Adlar uydurmadır; gerçek kişi değildir.
 from __future__ import annotations
 
 import base64
+import itertools
 import json
 from contextlib import nullcontext
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -17,8 +19,8 @@ from django.db import connection, transaction
 from django.utils import timezone
 
 from apps.okul import denetim_izi
-from apps.okul.models import Account, AccountRole, AuditAction
-from apps.okul.oturum import sistem_olarak, yazar
+from apps.okul.models import Account, AccountRole, AccountStatus, AuditAction, SchoolYear
+from apps.okul.oturum import Yazar, sistem_olarak, yazar, yazar_olarak
 from apps.okul.services import app_password, hesaplar
 from conftest import TEST_DEK, TEST_HESAP_ID, TEST_IA
 from shared import crypto
@@ -34,15 +36,143 @@ def hesap_ac(
     tanitici: str | None = None,
     ad: str = "Örnek Muhasip",
     parola: str = GECICI_PAROLA,
+    uyelik: Any = None,
 ) -> Account:
-    """Varsayılan program yöneticisiyle yeni hesap açar (`PAROLA_YENILENMELI`)."""
+    """Varsayılan program yöneticisiyle yeni hesap açar (`PAROLA_YENILENMELI`).
+
+    Organ rolünde hesap üyeliğe bağlı açılır (plan F1c 7. adım): `uyelik` verilmezse
+    `hesap_uyeligi` bulur ya da kurar (kilitliyken kurmaz: hesap açma kilit iletisiyle reddeder)."""
+    if uyelik is None and role in hesaplar.ORGAN_ROLLERI and crypto.is_unlocked():
+        uyelik = hesap_uyeligi(role)
     return hesaplar.open_account(
         by_hesap_id=TEST_HESAP_ID,
         role=role,
         tanitici=tanitici or hesaplar.default_login_name(role),
         display_name=ad,
         temp_password=parola,
+        uyelik=None if uyelik is None else getattr(uyelik, "pk", uyelik),
     )
+
+
+#: Fabrikanın açtığı dönemin günü ve ders yılı (`apps.oab.tests.uyelik_ortak` ile aynı değerler:
+#: oradaki `donem()` açık dönemi yeniden kullanır).
+FABRIKA_DONEM_GUNU = date(2026, 10, 10)
+_FABRIKA_SIRASI = itertools.count(1)
+_AD_HARFLERI = "ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ"
+
+
+def _fabrika_eki() -> str:
+    """Adaşlık sorusu çıkmasın diye her kişiye ayrı harf dizisi (rakamsız)."""
+    sayi, harfler = next(_FABRIKA_SIRASI), ""
+    while sayi:
+        sayi, kalan = divmod(sayi - 1, len(_AD_HARFLERI))
+        harfler = _AD_HARFLERI[kalan] + harfler
+    return harfler
+
+
+def fabrika_donemi() -> Any:
+    """Açık birlik dönemi; yoksa uydurma ders yılıyla açılır (program yöneticisi adına)."""
+    from apps.oab.models import OabTerm, TermStatus
+    from apps.oab.services import donemler
+
+    donem = OabTerm.objects.filter(status=TermStatus.ACIK).first()
+    if donem is not None:
+        return donem
+    yil = SchoolYear.objects.filter(is_active=True).first() or SchoolYear.objects.create(
+        name="2026-2027", start_date=date(2026, 9, 7), end_date=date(2027, 6, 25), is_active=True
+    )
+    with yazar_olarak(Yazar(hesap_id=TEST_HESAP_ID, rol=AccountRole.YONETICI.value)):
+        return donemler.create_term(
+            name="2026-2027 birlik dönemi", school_year=yil, start_date=FABRIKA_DONEM_GUNU
+        )
+
+
+def hesap_uyeligi(role: str) -> Any:
+    """Organ rolündeki hesabın bağlanacağı üyelik (F1b fabrikalarının bağı; plan F1c 7. adım).
+
+    Açık dönemde (yoksa `fabrika_donemi`) önce rolün açık hesaba bağlı olmayan uygun üyeliği
+    (`hesap_baglari.uygun_uyelikler`'in kuralı). Yoksa yönetim kurulu rolünde görevi taşıyan üye
+    (görev tekildir), Denetleme Kurulunda kurul doluysa (bir veli, iki öğretmen; md. 14/1, sert)
+    görevdeki ilk asıl: ikisi de bağlıdır, hesap açma rolün sınırıyla ya da üyeliğin açık hesabıyla
+    reddeder. Kurulda yer varsa uydurma kişiyle devralınan görevli üyelik açılır (geçiş kurulumunun
+    kaydı, tasarım §7.9): yönetim kurulunda veli asıl, Denetleme Kurulunda boş koltuğun grubu
+    (önce veli, sonra öğretmen). Yazar program yöneticisidir.
+    """
+    from apps.oab import selectors
+    from apps.oab.models import ElectedBy, MembershipSource, OrganType, PersonKind, SeatGroup
+    from apps.oab.services import hesap_baglari, kisiler, uyelikler
+
+    donem = fabrika_donemi()
+    with yazar_olarak(Yazar(hesap_id=TEST_HESAP_ID, rol=AccountRole.YONETICI.value)):
+        uygun = hesap_baglari.uygun_uyelikler(role)
+        if uygun:
+            return uygun[0]["uyelik"]
+        gorev = hesap_baglari.ROL_GOREVLERI.get(role)
+        organ = OrganType.YONETIM_KURULU if gorev is not None else OrganType.DENETLEME_KURULU
+        gorevdekiler = selectors.gorevdeki_asillar(donem, organ)
+        if gorev is not None:
+            for mevcut in gorevdekiler:
+                if mevcut.role == gorev:
+                    return mevcut.pk
+            grup = ""
+        else:
+            veli_var = any(u.seat_group == SeatGroup.VELI for u in gorevdekiler)
+            if len(gorevdekiler) >= 3:
+                return gorevdekiler[0].pk
+            grup = SeatGroup.OGRETMEN if veli_var else SeatGroup.VELI
+        ogretmen = grup == SeatGroup.OGRETMEN
+        kisi = kisiler.create_person(
+            kind=PersonKind.OGRETMEN if ogretmen else PersonKind.VELI,
+            first_name=f"Uydurma {_fabrika_eki()}",
+            last_name="Hesapoğlu",
+            is_parent=not ogretmen,
+            ayni_kisi_degil=True,
+        )
+        return uyelikler.assign_membership(
+            term=donem,
+            person=kisi,
+            organ=organ,
+            seat_type="ASIL",
+            seat_group=grup,
+            role=gorev or "UYE",
+            elected_by=ElectedBy.OGRETMENLER_KURULU if ogretmen else ElectedBy.GENEL_KURUL,
+            source=MembershipSource.DEVRALINAN,
+            start_date=FABRIKA_DONEM_GUNU,
+        ).pk
+
+
+def rol_hesabi(role: str, *, ad: str = "Uydurma Hesap") -> Account:
+    """YALNIZ ROL OTURUMU İÇİN açık (`ACIK`) hesap satırı: mühürlü, izli, BAĞSIZ.
+
+    Yetki testleri rolün oturumunu ister; sınadıkları kurula görevli eklemek (hesap açmanın üyelik
+    bağı) kadroyu ve görev bölümünün katılım listesini değiştirirdi. Satır `conftest.yonetici_hesabi`
+    gibi doğrudan, `HESAP` satırıyla aynı işlemde yazılır (meşru program yazımı gibi; sarmal yok).
+    Bağ kuralı burada sınanmaz: `hesap_ac` ve `test_hesap_baglari.py` sınar (plan F1c 7. adım).
+    """
+    kilitliydi = not crypto.is_unlocked()
+    if kilitliydi:
+        crypto.load_key(TEST_DEK, audit_key=TEST_IA)
+    try:
+        simdi = timezone.now()
+        hesap = Account(
+            login_name=hesaplar.default_login_name(role),
+            role=role,
+            display_name=ad,
+            status=AccountStatus.ACIK,
+            opened_at=simdi,
+            password_changed_at=simdi,
+        )
+        baglam = sistem_olarak() if yazar() is None else nullcontext()
+        with baglam, transaction.atomic():
+            hesap.seal = hesap.compute_seal(TEST_DEK)
+            hesap.save(force_insert=True)
+            denetim_izi.kayit(
+                AuditAction.HESAP, hesap, onceki=None, anahtar=denetim_izi.anahtari_coz(TEST_DEK)
+            )
+    finally:
+        if kilitliydi:
+            crypto.unload_key()
+    return hesap
 
 
 def muhurle(hesap: Account, **alanlar: Any) -> Account:

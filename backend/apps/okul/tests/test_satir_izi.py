@@ -97,6 +97,7 @@ from apps.okul.tests.hesap_ortak import (
     durum_yaz,
     ham_guncelle,
     hesap_ac,
+    hesap_uyeligi,
     muhurle,
 )
 from apps.okul.tests.iz_ortak import sahte_satir
@@ -126,12 +127,16 @@ _BASKA_KAYIT = "6f708192-a3b4-4c5d-8e6f-708192a3b4c5"
 
 #: İçerik MAC'ine giren `Account` alanları — ALTIN LİSTE (sıra dahil; `satir_izi` modül başlığı).
 #: Değişirse var olan satırların izi tutmaz: kümeyi değiştiren değişiklik `KAPALI` dahil BÜTÜN
-#: satırların izini (önce eski hâlleriyle doğrulayıp) yeniden kurmalıdır; o adımın bugün yeri yoktur
-#: (`satir_izi.HESAP_OZET_ALANLARI` yorumu; kullanıcı kararı bekler).
+#: satırların izini (önce eski hâlleriyle doğrulayıp) yeniden kurmalıdır; o adımın yeri F4'tür
+#: (`satir_izi.HESAP_OZET_ALANLARI` yorumu). Hesap bağları F1c 7. adımda girdi (plan "F1c uygulama
+#: kararları": F1b deneme kurulumları açılmaz, yeniden kurma yazılmaz).
 _ALTIN_LISTE = (
     "login_name",
     "role",
     "display_name",
+    "person",
+    "membership",
+    "term",
     "status",
     "suspend_reason",
     "opened_at",
@@ -148,6 +153,9 @@ _ALTIN_LISTE = (
     "wrap_digest_pending",
     "seal",
 )
+#: ORM'siz hesap satırında (`geri_yukleme_yetkisi.hesap_satiri`) asıl ve bekleyen özetin yeri.
+_OZET = geri_yukleme_yetkisi.SIRA_OZET
+_BEKLEYEN = geri_yukleme_yetkisi.SIRA_BEKLEYEN
 
 
 # ============================================================ yardımcılar
@@ -593,11 +601,12 @@ def test_islemi_yapanin_geri_sarilan_satiri_hesap_islemi_acmaz() -> None:
     app_password.change_password(
         hesap_id=TEST_HESAP_ID, current_password=TEST_PAROLA, new_password=YENI_PAROLA
     )
+    uyelik = hesap_uyeligi(AccountRole.MUHASIP)  # bağın üyeliği önceden (plan F1c 7. adım)
     _geri_sar(TEST_HESAP_ID, kopya)
     hesap_sayisi, son = Account.objects.count(), _son_seq()
 
     with pytest.raises(app_password.AccountRecordStale) as hata:
-        hesap_ac()
+        hesap_ac(uyelik=uyelik)
 
     _reddedilir(hata, hesaplar._SEAL_MESSAGE)
     _tek_butunluk(TEST_HESAP_ID, son)
@@ -1381,10 +1390,10 @@ def test_bosluklu_capa_k_a_ya_duser(capa: str, tmp_path: Path) -> None:
     programa_al(db)
     app_password.lock()
     if capa == "bosluksuz":
-        assert satir[6] == app_password.wrap_digest(TEST_DEK, _sarmal(kimlik))
+        assert satir[_OZET] == app_password.wrap_digest(TEST_DEK, _sarmal(kimlik))
         assert app_password.unlock(hesap_id=kimlik, password=YENI_PAROLA).id == muhasip.id
     else:
-        assert (satir[6], satir[7]) == ("", "")
+        assert (satir[_OZET], satir[_BEKLEYEN]) == ("", "")
         with pytest.raises(app_password.WrapDigestMismatch):
             app_password.unlock(hesap_id=kimlik, password=YENI_PAROLA)
 
@@ -2030,7 +2039,7 @@ def test_reddedilen_satirin_cikisi_kurtarma_anahtariyla_geri_yuklemedir(tmp_path
     db = geri_yukle(tmp_path, yedek, guncel, recovery_key=TEST_KURTARMA_ANAHTARI)
 
     satir = hesap_satiri_oku(db, kimlik)
-    assert (satir[6], satir[7]) == ("", "")
+    assert (satir[_OZET], satir[_BEKLEYEN]) == ("", "")
     _dosyada_hepsi_izli(db)
     programa_al(db)
     with pytest.raises(app_password.WrapDigestMismatch):
@@ -2092,9 +2101,15 @@ def test_kullanilamayan_capada_dosyadakini_tutmayan_ozetler_bosaltilir(tmp_path:
     assert sonuc.bosaltilan == tuple(sorted([tutmayan.id, sarmalsiz.id, bekleyeni_dolu.id]))
     assert set(sonuc.degismeyen) == {tutan.id, bekleyeni_tutan.id}
     for satir in (tutmayan, sarmalsiz, bekleyeni_dolu):
-        assert (hesap_satiri_oku(db, satir.id)[6], hesap_satiri_oku(db, satir.id)[7]) == ("", "")
-    assert hesap_satiri_oku(db, tutan.id)[6] == "aa" * 32
-    assert hesap_satiri_oku(db, muhursuz.id)[6] == "ff" * 32  # dokunulmadı
+        assert (
+            hesap_satiri_oku(db, satir.id)[_OZET],
+            hesap_satiri_oku(db, satir.id)[_BEKLEYEN],
+        ) == (
+            "",
+            "",
+        )
+    assert hesap_satiri_oku(db, tutan.id)[_OZET] == "aa" * 32
+    assert hesap_satiri_oku(db, muhursuz.id)[_OZET] == "ff" * 32  # dokunulmadı
     # Onarımın iz satırı YALNIZ değişen alanların adlarını taşır (tasarım §4.6.2), model sırasıyla:
     # bekleyen özeti zaten boş olan satırda bekleyen değişmemiştir.
     onarim = _onarim_satirlari(db, len(satirlar))
@@ -2116,7 +2131,7 @@ def test_izi_tutmayan_geri_yuklenen_satir_onarilmaz_aklanmaz(tmp_path: Path) -> 
     sonuc, db = _onar(tmp_path, [izsiz], {izsiz.id: "12" * 32})
 
     assert sonuc.bosaltilan == () and sonuc.degismeyen == ()
-    assert hesap_satiri_oku(db, izsiz.id)[6] == "dd" * 32
+    assert hesap_satiri_oku(db, izsiz.id)[_OZET] == "dd" * 32
     assert _onarim_satirlari(db, 0) == []
     with closing(sqlite3.connect(db)) as baglanti:
         assert not satir_izi.hesap_izi_tutuyor(baglanti, izsiz.id, TEST_DEK)
@@ -2142,7 +2157,7 @@ def test_onarim_izi_yazilamazsa_onarim_yapilmaz(tmp_path: Path) -> None:
             dek=TEST_DEK,
             sarmal_ozetleri={tutmayan.id: "12" * 32},
         )
-    assert hesap_satiri_oku(yeni_db, tutmayan.id)[6] == "dd" * 32
+    assert hesap_satiri_oku(yeni_db, tutmayan.id)[_OZET] == "dd" * 32
 
 
 def test_derin_ic_ice_guvenlik_dosyasi_turkce_ret_verir() -> None:
@@ -2321,7 +2336,7 @@ def test_sahte_taze_capa_gecici_parolayi_taze_yedege_tasimaz(
         db = geri_yukle(tmp_path, taze_yedek, guncel, recovery_key=TEST_KURTARMA_ANAHTARI)
 
     satir = hesap_satiri_oku(db, kimlik)
-    assert (satir[6], satir[7]) == ("", "")
+    assert (satir[_OZET], satir[_BEKLEYEN]) == ("", "")
     _dosyada_hepsi_izli(db)
     programa_al(db)
     app_password.lock()
@@ -2394,7 +2409,9 @@ def test_derin_ic_ice_iz_satiri_geri_yuklemeyi_dusurmez(sir: str, tmp_path: Path
     else:
         db = geri_yukle(tmp_path, yedek, guncel, recovery_key=TEST_KURTARMA_ANAHTARI)
 
-    assert hesap_satiri_oku(db, kimlik)[6] == app_password.wrap_digest(TEST_DEK, _sarmal(kimlik))
+    assert hesap_satiri_oku(db, kimlik)[_OZET] == app_password.wrap_digest(
+        TEST_DEK, _sarmal(kimlik)
+    )
     programa_al(db)
     assert app_password.unlock(hesap_id=kimlik, password=GECICI_PAROLA).id == muhasip.id
 

@@ -12,6 +12,8 @@ pytest==9.0.3
 pytest-django==4.9.0
 pytest-cov==6.0.0
 factory-boy==3.3.1
+# Kural paketi şemasının testi (tasarım §6.1); üretime girmez, açılışta `apps/oab/kurallar/dogrulayici.py` koşar.
+jsonschema==4.23.0
 
 # ---------- Lint / Biçimlendirme ----------
 ruff==0.8.4
