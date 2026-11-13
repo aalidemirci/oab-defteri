@@ -203,14 +203,15 @@ kullanılmaz** (altın kural 5):
   programın verdiği addır (`Content-Disposition`;
   `lib/download.ts` `basliktanDosyaAdi`); ekranın aynı kalıpla kurduğu ad yalnız o ad okunamazsa kullanılır.
 - **Dosyayı program kaydeder** (kullanıcı kararı 07.11.2026 "Program kaydetsin"; `desktop/window.py` `dosya_kaydet`):
-  PDF, Excel ve kurulum dosyası programın kaydetme penceresiyle kaydedilir, tarayıcı indirmesi kullanılmaz. Windows'ta
+  PDF, Word, Excel ve kurulum dosyası programın kaydetme penceresiyle kaydedilir, tarayıcı indirmesi kullanılmaz. Windows'ta
   pencere işletim sisteminindir; üzerine yazmayı kendisi sorar. Pardus'ta pencere masaüstünündür (zenity, yoksa kdialog;
   sistemin dilinde açılır, kenar çubuğunda takılı USB bellek görünür; saha bulgusu K-P3); başlığı **"Farklı kaydet"**tir,
   tür kutusu Windows'takiyle aynı yazar, üzerine yazmayı pencere sorar. Masaüstü penceresi açılamazsa Qt'nin penceresi
   açılır (Türkçe; kaydetmede tür süzgeci göstermez). Ad uzantısız yazılırsa önerilen addaki uzantıyı
   program ekler; noktalı tarih ya da sayı uzantı sayılmaz (`Rapor_07.11.2026` adı `Rapor_07.11.2026.pdf` olur). O ad
   zaten varsa pencere seçilen klasörde o adla yeniden açılır. Windows'taki tür kutusu `PDF belgesi (*.pdf)` ·
-  `Excel dosyası (*.xlsx)`, öteki dosyalarda `Tüm dosyalar (*.*)` yazar. Pencere son seçilen klasörde açılır; klasör
+  `Word belgesi (*.docx)` · `Excel dosyası (*.xlsx)` · `Kurulum dosyası (*.exe)`, öteki dosyalarda `Tüm dosyalar (*.*)`
+  yazar (saha bulgusu K-yeni-3). Pencere son seçilen klasörde açılır; klasör
   program kapanınca unutulur, iptal onu değiştirmez, artık yoksa ev klasörü açılır. Kurtarma anahtarı belgesinin
   penceresi her seferinde ev klasöründe açılır ve son klasörü değiştirmez (kullanıcı kararı 07.11.2026 "Hep ev
   klasöründe"): anahtar şifreli yedeğin yanına önerilmez. **"… PDF olarak kaydedildi."** ve öteki başarı bildirimleri
@@ -220,9 +221,10 @@ kullanılmaz** (altın kural 5):
   İndirilenler'de açılır ve program sonucu bilmez: bildirim iptalde de çıkar, kurtarma anahtarı alanı boşalır.
   Yukarıdaki klasör, bildirim ve iptal kuralları programın kaydetme penceresi içindir. Pardus'ta sayfadaki dosya
   kutuları (Kişiler'de e-Okul personel listesi ve veli listesi) da aynı Aç penceresiyle açılır (başlığı **"Dosya aç"**,
-  tür kutusu **"Uygun dosyalar"** · **"Tüm dosyalar"**). Pardus'ta pencere ana pencereye bağlı değildir: bir dosya
-  penceresi açıkken başka bir düğme ikinci pencereyi açmaz, bildirim **"Açık bir dosya penceresi var; önce onu
-  kapatın."** der. Yazılamazsa tek ileti:
+  tür kutusu **"Uygun dosyalar"** · **"Tüm dosyalar"**). Pardus'ta pencere ana pencerenin üstünde durur, görev
+  çubuğunda ayrı görünmez (X11 oturumunda; saha bulgusu K-yeni-2); ana pencere yine tıklanabilir: bir dosya
+  penceresi açıkken başka bir düğme ikinci pencereyi açmaz, açık pencere öne gelir, bildirim **"Açık bir dosya
+  penceresi var; önce onu kapatın."** der. Yazılamazsa tek ileti:
   **"Dosya seçilen yere yazılamadı; yerin takılı ve yazılabilir olduğundan emin olun. Aynı adlı dosya açıksa kapatıp
   yeniden deneyin."**
 

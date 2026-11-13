@@ -93,6 +93,11 @@ boş beyaz kalıyorsa:
 .deb paketini kurarsanız bu liste kendiliğinden çözülür; el ile kurmak yalnız
 taşınabilir sürümde gerekir.
 
+Kaydetme ve Aç pencereleri masaüstünün penceresiyle (zenity paketi) açılır;
+Pardus'ta zenity kurulu gelir, .deb paketi de onu önerir. zenity (ve KDE'nin
+kdialog'u) yoksa pencere Qt'nin penceresidir: kenar çubuğunda USB bellek
+görünmeyebilir.
+
 Pencereyi çizen kütüphaneler programla birlikte, LGPLv3 lisansıyla dağıtılır;
 kurulum klasöründe ayrı dosyalar hâlinde durur ve değiştirilebilir.
 

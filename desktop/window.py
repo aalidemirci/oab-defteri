@@ -59,11 +59,14 @@ yalnız durum döner (`kaydedildi`, `iptal`, `hata`). Yol ön yüze, günlüğe,
 günlüğe girmez: kurtarma belgesi anahtar taşır. İçerik pencereden önce çözülür, bozuksa pencere
 açılmaz. Yazım atomiktir (`_atomik_yaz`): yarım dosya seçilen adda görünmez.
 
-Tür süzgeci uzantıya göredir (`TUR_SUZGECLERI`); Windows'ta süzgecin uzantısını ve üzerine yazma
-sorusunu pencere kendi yapar. Qt kolu kaydetmede süzgeç uygulamaz, uzantı eklemez: ad uzantısız
-kaldıysa önerilen addaki uzantıyı köprü ekler. Noktalı son ek her zaman uzantı değildir (`_uzanti`):
-programın adları tarihle biter, `Rapor_07.11.2026`nin `.2026`sı uzantı sayılsaydı dosya `.pdf`siz
-yazılırdı. Pencere yalnız yazılan adı sormuştur: uzantı eklenen ad zaten varsa dosya ezilmez, pencere
+Tür süzgeci uzantıya göredir (`TUR_SUZGECLERI`): ön yüzün `saveBlob` ile kaydettiği her uzantının
+süzgeci vardır (PDF, Word, Excel, kurulum dosyası; saha bulgusu K-yeni-3, Pardus 25, 13.11.2026: Word
+evrakı "Tüm dosyalar | *" ile kaydediliyordu). Eşitlik `desktop/tests/test_kayit_suzgecleri.py`'de ön
+yüz kaynağı taranarak bağlıdır: yeni bir uzantı süzgeçsiz kalırsa test düşer. Süzgeç Windows'ta da
+gelir. Windows'ta süzgecin uzantısını ve üzerine yazma sorusunu pencere kendi yapar. Qt kolu
+kaydetmede süzgeç uygulamaz, uzantı eklemez: ad uzantısız kaldıysa önerilen addaki
+uzantıyı köprü ekler. Noktalı son ek her zaman uzantı değildir (`_uzanti`): programın adları
+tarihle biter, `Rapor_07.11.2026`nin `.2026`sı uzantı sayılsaydı dosya `.pdf`siz yazılırdı. Pencere yalnız yazılan adı sormuştur: uzantı eklenen ad zaten varsa dosya ezilmez, pencere
 kullanıcının seçtiği klasörde o adla yeniden açılır, soruyu pencere sorar.
 
 **Linux'ta pencere masaüstünündür** (saha bulgusu K-P3, Pardus 25, 12.11.2026; `desktop/yerel_pencere.py`).
@@ -73,16 +76,21 @@ kdialog; programın kütüphane yolundan temizlenmiş ortamla, `desktop/dis_sure
 Qt penceresine düşer (`_pencere_ac`). İki yol aynı seçenekleri alır: başlık `PENCERE_METINLERI`, açılış
 klasörü ve önerilen ad yukarıdaki kurallarla, süzgeç `TUR_SUZGECLERI`; zenity de uzantı eklemez, uzantı ve
 "eklenen uzantılı ad varsa yeniden aç" kuralı (`_kayit_hedefi`) iki yolda da aynen çalışır; üzerine yazma
-sorusunu zenity sorar. Dış süreç ana pencereye bağlı değildir, ana pencere tıklanabilir kalır: pencere
-açıkken gelen ikinci pencere çağrısı beklemeden iptal döner (`_tek_pencere`; ön yüzde Excel şablonu
-düğmeleri bekleme sırasında kilitlenmez, başka ekrana da geçilebilir). İptal sessiz kalmaz: köprü ön yüze
-`od:dosya-penceresi-acik` olayını yollar, ön yüz "Açık bir dosya penceresi var" bildirimini gösterir
-(`frontend/src/DosyaPenceresiBildirimi.tsx`; dış pencere ana pencerenin arkasında kalmış olabilir).
+sorusunu zenity sorar. Dış süreç kipli değildir, ana pencere tıklanabilir kalır; X11 oturumunda dış pencere
+ana pencereye bağlanır (`WM_TRANSIENT_FOR`; saha bulgusu K-yeni-2, `desktop/x11_pencere.py`): pencere
+yöneticisi onu ana pencerenin üstünde tutar, görev çubuğunda ayrı girdi olmaz. Pencere açıkken gelen
+ikinci pencere çağrısı beklemeden iptal döner (`_tek_pencere`; ön yüzde Excel şablonu düğmeleri bekleme
+sırasında kilitlenmez, başka ekrana da geçilebilir). İptal sessiz kalmaz: açık pencere öne getirilir
+(`YerelPencere.one_getir`), köprü ön yüze `od:dosya-penceresi-acik` olayını yollar, ön yüz "Açık bir
+dosya penceresi var" bildirimini gösterir (`frontend/src/DosyaPenceresiBildirimi.tsx`; bağlanamayan dış
+pencere, örneğin Wayland'da, ana pencerenin arkasında kalmış olabilir).
 Sayfanın dosya kutuları (`<input type="file">`) da aynı pencereyle ve aynı kilitle açılır
 (`_yukleme_dosyasi_sec`, `desktop/yerel_pencere.py` "Sayfanın dosya kutuları da"): kutunun kabul ettiği
 uzantılar "Uygun dosyalar" süzgecidir, "Tüm dosyalar" da seçilebilir (sunucu türü yine denetler).
-pywebview'ın Qt kolunda bağlanan iki şey (dosya kutusu, dış bağlantıların temiz ortamla açılması,
-`desktop/dis_surec.py`) arka uç yüklenince, pencere kurulmadan önce kurulur (`_arka_uc_kurulunca`).
+pywebview'ın Qt kolunda bağlananlar (dosya kutusu; dış bağlantıların temiz ortamla açılması ve yeni
+pencere isteğinin pencerenin profiliyle karşılanması, `desktop/dis_surec.py`; ana pencerenin X kimliği,
+`desktop/x11_pencere.py`; sayfa önbelleği, aşağıda) arka uç yüklenince, pencere kurulmadan önce kurulur
+(`_arka_uc_kurulunca`).
 Program kapanırken açık pencere sonlandırılır (`open_window`). Windows yolu değişmez.
 
 **Son klasör.** Üç pencere de son seçilen klasörde açılır; klasör yalnız bellektedir,
@@ -117,12 +125,23 @@ bir oturumda yazılan da sonraki açılışta gider; silme kapanışta yapılmaz
 Önceki oturumun bileşen süreci programdan sonra kapanır, o sırada dosyalar kilitlidir: kilitli dosya
 `TEMIZLIK_BEKLEME_SN` boyunca yeniden denenir, süre dolarsa açılış uyarıyla sürer. Günlük dosyaları ana
 veritabanından önce silinir: ana dosya gidip günlük kalsaydı yeni veritabanına eski sayfalar uygulanabilirdi.
-Silinen yollar yalnız WebView2'nindir; Qt kolunda (Pardus) işlev hiçbir şey silmez. Orada kapatılacak
-ayar da yoktur: Qt WebEngine'in ayarlarında (`QWebEngineSettings`) form önerisinin karşılığı bulunmaz.
-Qt'nin sayfa önbelleği profil dizininin (`storage_path`) dışındadır (`QWebEngineProfile.cachePath`;
-büyük olasılıkla `~/.cache/oab-defteri/QtWebEngine`), yeni yanıtları sunucunun `no-store`u korur. Qt
-WebEngine'in neyi sakladığı Pardus'ta gerçek pencerede denetlenir (plan F1b-3 ekleri). Öteki kalan
-riskler (kapatmanın tutmadığı oturumda açılışa dek bekleyen dosya, silinen dosyanın diskte kalan
+`pencere_onbellegini_temizle`'nin sildiği yollar yalnız WebView2'nindir; Qt kolunda (Pardus) o işlev
+hiçbir şey silmez. Orada kapatılacak form önerisi ayarı da yoktur: Qt WebEngine'in ayarlarında
+(`QWebEngineSettings`) karşılığı bulunmaz.
+
+**Qt kolunda sayfa önbelleği bellektedir** (saha bulgusu N-2, Pardus 25.2, 13.11.2026). Qt'nin HTTP disk
+önbelleği profil dizininin (`storage_path`) dışındadır (`QWebEngineProfile.cachePath`:
+`~/.cache/oab-defteri/QtWebEngine/pywebview`); sunucu her açılışta yeni port aldığı için aynı varlıklar
+her açılışta yeniden yazılıyordu (`Cache` 79 MB; 3,9 MB'lık simge yazı tipi 17 kez). `qt_onbellegini_bagla`
+pencerenin sayfası profiliyle kurulurken, sayfa yüklenmeden önce profilin HTTP önbelleğini bellek içi
+yapar (`QWebEngineProfile.setHttpCacheType(MemoryHttpCache)`: diske hiçbir şey yazılmaz, oturum içinde
+yine önbellek vardır) ve önceki sürümlerin bıraktığı disk önbelleğini (`cachePath`) siler. Silme yalnız
+yol (bağlar çözülerek) programın önbellek kökünün (`storage_path`'in üst dizini, `AppPaths.cache`:
+`~/.cache/oab-defteri`) içindeyse yapılır; kökün kendisi, pencerenin deposu (`storage_path`: oturum
+çerezi, taslaklar) ve onu içeren dizinler, boş ya da göreli yol (gizli profilin `cachePath`'i boştur,
+çalışma dizinine çözülürdü; bağımsız denetim 14.11.2026) silinmez (`eski_qt_onbellegini_sil`). Silinemezse
+pencere yine açılır, günlüğe yalnız hata türü düşer. `/api/` yanıtlarını ayrıca sunucunun `no-store`u
+korur. Öteki kalan riskler (kapatmanın tutmadığı oturumda açılışa dek bekleyen dosya, silinen dosyanın diskte kalan
 içeriği, bileşenin çökme dökümleri `EBWebView/Crashpad`) tasarım §4.3 tehdit 24'tedir.
 """
 
@@ -136,14 +155,15 @@ import sys
 import tempfile
 import threading
 import time
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Final, Protocol
 
-from desktop.dis_surec import dis_tarayiciyi_bagla
+from desktop.dis_surec import dis_tarayiciyi_bagla, yeni_pencere_isleyicisini_bagla
 from desktop.errors import WebViewUnavailableError
 from desktop.paths import resource_root
+from desktop.x11_pencere import SARMALAYICI_ISARETI, DisPencereBaglayici, ana_pencereyi_bagla
 from desktop.yerel_pencere import YerelDosyaPenceresi, yukleme_penceresini_bagla
 
 logger = logging.getLogger("oab_defteri.window")
@@ -178,9 +198,12 @@ _WEBVIEW2_HINT = (
 #: eder (`util.parse_file_type`); uymayan süzgeç pencereyi açmadan `ValueError` verirdi.
 KAYDETME_SUZGECI = ("OAB Defteri yedeği (*.odbak)",)
 #: `dosya_kaydet` penceresinin uzantıya göre tür süzgeci; açıklama kuralı yukarıdakinin aynısıdır.
+#: Ön yüzün kaydettiği her uzantı buradadır (modül başlığı; `test_kayit_suzgecleri.py`).
 TUR_SUZGECLERI: Final = {
     ".pdf": ("PDF belgesi (*.pdf)",),
+    ".docx": ("Word belgesi (*.docx)",),
     ".xlsx": ("Excel dosyası (*.xlsx)",),
+    ".exe": ("Kurulum dosyası (*.exe)",),
 }
 #: Öteki uzantıların süzgeci: süzgeç hiç verilmezse pywebview İngilizce "All files" yazardı.
 GENEL_SUZGEC: Final = ("Tüm dosyalar (*.*)",)
@@ -244,6 +267,9 @@ class YerelPencere(Protocol):
     def ac(
         self, *, kaydet: bool, baslik: str, klasor: str, ad: str, suzgecler: Sequence[str]
     ) -> str | None: ...
+
+    def one_getir(self) -> None:
+        """Açık pencereyi öne getirir (X11'de, bağlanmışsa); yoksa bir şey yapmaz."""
 
 
 def _read_registry_value(hive: str, subkey: str, value_name: str) -> str | None:
@@ -539,16 +565,22 @@ class PencereKoprusu(TitleBarApi):
             self._pencere_kilidi.release()
 
     def _acik_pencereyi_bildir(self) -> None:
-        """Ön yüze "açık bir dosya penceresi var" olayını yollar; çağıranı bekletmez.
+        """Açık pencereyi öne getirir, ön yüze "açık bir dosya penceresi var" olayını yollar.
 
-        `evaluate_js` sonucu bekler, dosya kutusunda çağıranın beklediği Qt'nin ana iş parçacığıdır:
-        olay ayrı iş parçacığından gider. Hata iptali bozmaz.
+        Çağıranı bekletmez: `evaluate_js` sonucu bekler, dosya kutusunda çağıranın beklediği Qt'nin ana
+        iş parçacığıdır; ikisi de ayrı iş parçacığından gider. Hata iptali bozmaz.
         """
         window = self._window
-        if window is None:
-            return
+        yerel = self._yerel_pencere
 
         def yolla() -> None:
+            try:
+                if yerel is not None:
+                    yerel.one_getir()
+            except Exception as hata:  # noqa: BLE001 — öne getirilemese de bildirim çıkar
+                logger.warning("Açık pencere öne getirilemedi (%s).", type(hata).__name__)
+            if window is None:
+                return
             try:
                 window.evaluate_js(_DOSYA_PENCERESI_ACIK_BETIGI)
             except Exception as hata:  # noqa: BLE001 — bildirim gitmese de iptal sürer
@@ -944,21 +976,23 @@ class WindowController:
             logger.exception("Pencere kapatılamadı.")
 
 
-def _arka_uc_kurulunca(webview: Any, islev: Callable[[Any], None]) -> None:
-    """`webview.initialize`'ı sarar: arka uç yüklenince, pencere kurulmadan önce `islev` koşar.
+def _arka_uc_kurulunca(webview: Any, *islevler: Callable[[Any], object]) -> None:
+    """`webview.initialize`'ı sarar: arka uç yüklenince, pencere kurulmadan önce `islevler` koşar.
 
     `desktop.qt_kurulum.indirme_isleyicisini_bagla` ile aynı yol: `webview.platforms.qt` `start`'tan
-    önce içe aktarılamaz (pencere deposu). `initialize` birden çok çağrılabilir; `islev` bunu kaldırır.
+    önce içe aktarılamaz (pencere deposu). `initialize` birden çok çağrılabilir; işlevler bunu kaldırır
+    (ikinci bağlama yeniden sarmaz). Her işlev ayrı denenir: biri bağlanamazsa ötekiler yine bağlanır.
     Hata pencereyi durdurmaz.
     """
     asil = webview.initialize
 
     def initialize(*args: Any, **kwargs: Any) -> Any:
         arka_uc = asil(*args, **kwargs)
-        try:
-            islev(arka_uc)
-        except Exception as hata:  # noqa: BLE001 — bağlanamasa da pencere açılır
-            logger.warning("Pencere bileşenine bağlanılamadı (%s).", type(hata).__name__)
+        for islev in islevler:
+            try:
+                islev(arka_uc)
+            except Exception as hata:  # noqa: BLE001 — bağlanamasa da pencere açılır
+                logger.warning("Pencere bileşenine bağlanılamadı (%s).", type(hata).__name__)
         return arka_uc
 
     webview.initialize = initialize
@@ -973,6 +1007,75 @@ def _sil(hedef: Path, *, dizin: bool) -> None:
         shutil.rmtree(hedef)
     except FileNotFoundError:
         pass
+
+
+def eski_qt_onbellegini_sil(
+    dizin: Path, onbellek_koku: Path, *, korunanlar: Iterable[Path] = ()
+) -> bool:
+    """Qt'nin eski disk önbelleğini siler; yol programın önbellek kökünün içinde değilse dokunmaz.
+
+    Göreli ya da boş yol (gizli profilin boş `cachePath`'i çalışma dizinine çözülürdü) silinmez. Yol
+    ve kök bağlar çözülerek karşılaştırılır; kökün kendisi, `korunanlar` (pencerenin deposu) ve
+    onları içeren dizinler silinmez. Silindiyse ya da zaten yoksa `True` (modül başlığı "Qt kolunda
+    sayfa önbelleği bellektedir").
+    """
+    if not dizin.is_absolute():
+        logger.warning("Pencerenin önbellek yolu boş ya da göreli; silinmedi.")
+        return False
+    try:
+        gercek = dizin.resolve()
+        kok = onbellek_koku.resolve()
+        korunan = [yol.resolve() for yol in korunanlar]
+    except (OSError, RuntimeError) as hata:
+        logger.warning("Pencerenin eski önbelleği çözülemedi (%s).", type(hata).__name__)
+        return False
+    if kok not in gercek.parents:
+        logger.warning("Pencerenin önbelleği programın önbellek dizininin dışında; silinmedi.")
+        return False
+    if any(yol == gercek or gercek in yol.parents for yol in korunan):
+        logger.warning("Pencerenin önbelleği pencerenin deposunu kapsıyor; silinmedi.")
+        return False
+    try:
+        _sil(gercek, dizin=True)
+    except OSError as hata:
+        logger.warning("Pencerenin eski önbelleği silinemedi (%s).", type(hata).__name__)
+        return False
+    return True
+
+
+def qt_profilinin_onbellegini_duzenle(
+    profil: Any, onbellek_koku: Path, *, korunanlar: Iterable[Path] = ()
+) -> None:
+    """Profilin HTTP önbelleği bellek içi olur, eski disk önbelleği silinir (modül başlığı)."""
+    profil.setHttpCacheType(type(profil).HttpCacheType.MemoryHttpCache)
+    eski_qt_onbellegini_sil(Path(str(profil.cachePath())), onbellek_koku, korunanlar=korunanlar)
+
+
+def qt_onbellegini_bagla(
+    arka_uc: Any, onbellek_koku: Path, *, korunanlar: Iterable[Path] = ()
+) -> None:
+    """pywebview Qt kolunun sayfası profiliyle kurulurken önbelleği düzenler (modül başlığı).
+
+    `BrowserView.WebPage.__init__` sarılır: profil pencerenin kurucusunda yaratılır, sayfaya verilir;
+    ilk yükleme (`setUrl`) sayfa kurulduktan sonradır. Arka uç yüklenince, pencere kurulmadan önce
+    çağrılır (`open_window`). Hata pencereyi durdurmaz.
+    """
+    sayfa_sinifi = arka_uc.BrowserView.WebPage
+    asil = sayfa_sinifi.__init__
+    if getattr(asil, SARMALAYICI_ISARETI, False):
+        return
+    korunan = tuple(korunanlar)
+
+    def __init__(sayfa: Any, parent: Any = None, profile: Any = None) -> None:
+        if profile is not None:
+            try:
+                qt_profilinin_onbellegini_duzenle(profile, onbellek_koku, korunanlar=korunan)
+            except Exception as hata:  # noqa: BLE001 — önbellek düzenlenemese de pencere açılır
+                logger.warning("Pencerenin önbelleği düzenlenemedi (%s).", type(hata).__name__)
+        asil(sayfa, parent, profile)
+
+    setattr(__init__, SARMALAYICI_ISARETI, True)
+    sayfa_sinifi.__init__ = __init__
 
 
 def pencere_onbellegini_temizle(
@@ -1097,7 +1200,8 @@ def open_window(
     # İzin o yol için pencere oluşturulmadan önce açılır: tıklama sessizce yutulmasın.
     module.settings["ALLOW_DOWNLOADS"] = True
     # Linux: kaydetme ve Aç pencereleri masaüstünün, dış bağlantılar temiz ortamla (modül başlığı).
-    yerel = YerelDosyaPenceresi() if system.startswith("linux") else None
+    baglayici = DisPencereBaglayici() if system.startswith("linux") else None
+    yerel = YerelDosyaPenceresi(baglayici=baglayici) if baglayici is not None else None
     kopru = PencereKoprusu(platform=system, webview=module, yerel_pencere=yerel)
     window = module.create_window(
         title,
@@ -1116,13 +1220,20 @@ def open_window(
         if controller.quitting:
             logger.info("Çıkış pencere açılmadan istendi; pencere açılmıyor.")
             return
-    if yerel is not None:
+    if yerel is not None and baglayici is not None:
+        # `storage_path` `AppPaths.webview_storage_path`'tir: programın önbellek kökü üst dizinidir.
+        onbellek_koku = storage_path.parent
 
-        def bagla(arka_uc: Any) -> None:
-            dis_tarayiciyi_bagla(arka_uc, platform=system)
-            yukleme_penceresini_bagla(arka_uc, kopru._yukleme_dosyasi_sec)
-
-        _arka_uc_kurulunca(module, bagla)
+        _arka_uc_kurulunca(
+            module,
+            lambda arka_uc: dis_tarayiciyi_bagla(arka_uc, platform=system),
+            lambda arka_uc: yeni_pencere_isleyicisini_bagla(arka_uc, platform=system),
+            lambda arka_uc: yukleme_penceresini_bagla(arka_uc, kopru._yukleme_dosyasi_sec),
+            lambda arka_uc: ana_pencereyi_bagla(arka_uc, baglayici),
+            lambda arka_uc: qt_onbellegini_bagla(
+                arka_uc, onbellek_koku, korunanlar=(storage_path,)
+            ),
+        )
     logger.info("Pencere açılıyor (%s).", gui_backend_for(system))
     try:
         module.start(

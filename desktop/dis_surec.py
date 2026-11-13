@@ -64,10 +64,57 @@ listesine (`backend/apps/okul/tests/test_dis_istek_kapilari.py` `IZINLI`) girmez
 `desktop/tests/test_dis_surec.py`'de kaynak düzeyinde kilitlidir: yeni bir dış süreç çağrısı
 `env=temiz_ortam()` vermezse ya da `subprocess`, `webbrowser`, `os.exec*` takma adla veya doğrudan
 içe aktarılırsa test düşer.
+
+**Yeni pencere isteği pencerenin profiliyle karşılanır** (saha bulgusu K-yeni-1, Pardus 25.2, PR #11'in
+paketi, 13.11.2026). Hakkında'daki "Lisansın resmî metni" bağlantısı tıklanınca hiçbir şey olmuyor,
+her tıkta Qt "Can not adopt content from a different WebEngineProfile." basıyordu; `xdg-open`'a hiç
+varılmıyordu. Kök neden pywebview 5.3.2'nin Qt kolundadır (`platforms/qt.py`, kaynaktan doğrulandı):
+sayfa (`BrowserView.WebPage`) pencerenin kendi profiliyle kurulur (`QWebEngineProfile('pywebview')`,
+`setPersistentStoragePath`), ama `createWindow` sayfanın `nav_handler`'ını döndürür;
+`NavigationHandler` `QWebPage(page)` ile, yani ebeveyni sayfa olan ama VARSAYILAN profilli bir sayfa
+olarak kurulur. Qt yeni pencerenin içeriğini başka profilin sayfasına aktaramaz (`QWebEnginePage`
+`adoptNewWindow` bu iletiyle döner), `acceptNavigationRequest` hiç çağrılmaz. Kolun her sürümünde
+böyledir: gizli kipte de profil `QWebEngineProfile()`'dur, varsayılan profil değildir.
+
+`yeni_pencere_isleyicisini_bagla` Linux'ta, arka uç yüklenince ve pencere kurulmadan önce
+`BrowserView.WebPage.createWindow`'u değiştirir (sayfanın dosya kutusuyla aynı yol,
+`desktop/yerel_pencere.py` `yukleme_penceresini_bagla`): her istek için ana sayfanın profiliyle
+(`sayfa.profile()`), ana sayfanın çocuğu olan yeni bir sayfa kurulur. Qt içeriği ona aktarır, gezinme
+isteği o sayfanın `acceptNavigationRequest`'ine gelir; karar `yeni_pencere_karari`'dır:
+- http/https dış adres pywebview'ın `OPEN_EXTERNAL_LINKS_IN_BROWSER` ayarına göre (varsayılanı
+  açık, program değiştirmez) sistemin tarayıcısına gider: kolun modülündeki `webbrowser` adıyla, yani
+  `dis_tarayiciyi_bagla`'nın koyduğu temiz ortamlı açıcıyla; ayar kapalıysa ana pencerede açılır
+  (pywebview'ın davranışı);
+- programın kendi kökeni (ana sayfanın şeması, adı ve portu) ve bu bilgisayarı gösteren adresler dış
+  tarayıcıya verilmez, ana pencerede de açılmaz: reddedilir. Programın sunucusu oturum belirteci
+  ister, tarayıcıda açılan sayfa çalışmazdı; programda böyle bağlantı yoktur. Bu bilgisayar: geri
+  döngü ağı (127.0.0.0/8, `::1`), belirsiz adres (IPv4'ün dört sıfırlı adresi ve `::`; Linux'ta yerele bağlanır), bunların
+  IPv4 eşlemli IPv6 yazılışı (`::ffff:127.0.0.1`; Python'un `ipaddress`'i eski 3.12 yama sürümlerinde
+  bunu geri döngü saymıyordu, test kabının 3.12.16'sı sayar, paket hattı da yüzen
+  `python:3.12-bullseye` etiketiyle son yamayı alır; gerilerse `test_yeni_pencere_karari` düşer),
+  `localhost` ve `*.localhost` (RFC 6761 §6.3); sondaki nokta atılır (`localhost.`; bağımsız denetim
+  14.11.2026). Ad `urlsplit`'ten küçük harfle gelir. `127.1` ya da `2130706433` gibi kısa yazılışlar
+  buraya gelmez: Chromium adresi Qt'ye vermeden önce `127.0.0.1` biçimine çevirir (gerçek Qt'de
+  ölçüldü, 14.11.2026);
+- öteki şemalar (`file:`, `ftp:`, `ws:`, `data:`, `blob:`, `javascript:`, boş adres) reddedilir.
+Sayfa her durumda gezinmeyi reddeder (`False`) ve kendini siler (`deleteLater`): yeni pencere açılmaz.
+Günlüğe adres yazılmaz.
+
+Windows'ta (EdgeChromium kolu) yol başkadır ve değişmez: `edgechromium.py` `on_new_window_request`
+`NewWindowRequested`'i karşılar (`Handled = True`), ayar açıkken adresi `webbrowser.open`'a verir;
+profil sorunu yoktur. O kol adresin şemasını ve kökenini süzmez; programın `target="_blank"`
+bağlantıları yalnız sabit https adresleridir (`HakkindaPage.tsx`, `UpdatePanel.tsx`). Yeni pencere
+isteği yalnız onlardan gelmez: program içi bir bağlantıya (React Router `<Link>`) Ctrl ya da orta
+tuşla tıklanınca da gelir (`<Link>` değiştirici tuşta tarayıcının varsayılanına bırakır). Windows'ta
+o istek sistemin tarayıcısını `http://127.0.0.1:<port>/<yol>` adresiyle açar; adreste ve tarayıcıda
+oturum belirteci olmadığı için sunucu isteği 403 ile reddeder (`desktop/session_guard.py`), sayfa
+çalışmaz. Linux kolu aynı isteği reddeder: iki platform burada ayrışır (bağımsız
+denetim 14.11.2026; Windows koluna bu işte dokunulmadı, kullanıcıya raporlandı).
 """
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
 import shutil
@@ -76,7 +123,8 @@ import sys
 import threading
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, Literal
+from urllib.parse import urlsplit
 
 logger = logging.getLogger("oab_defteri.dis_surec")
 
@@ -103,6 +151,17 @@ PROGRAM_DEGISKENLERI: Final = ("QT_API", "force_s3tc_enable")
 ENV_QT_STIL: Final = "QT_STYLE_OVERRIDE"
 #: Dış bağlantıyı açan araç.
 BAGLANTI_ACICI: Final = "xdg-open"
+
+#: Yeni pencere isteğinin sistem tarayıcısına gidebilen şemaları (modül başlığı).
+DIS_SEMALAR: Final = ("http", "https")
+_YEREL_ADLAR: Final = frozenset({"localhost"})
+#: `*.localhost` her zaman bu bilgisayardır (RFC 6761 §6.3; Chromium da öyle çözer).
+_YEREL_SON_EK: Final = ".localhost"
+#: `yeni_pencere_karari`'nın dönüşleri.
+TARAYICIDA: Final = "tarayicida"
+ANA_PENCEREDE: Final = "ana_pencerede"
+REDDET: Final = "reddet"
+YeniPencereKarari = Literal["tarayicida", "ana_pencerede", "reddet"]
 
 BaglantiAcici = Callable[[str, int, bool], bool]
 
@@ -222,4 +281,87 @@ def dis_tarayiciyi_bagla(arka_uc: Any, *, platform: str | None = None) -> bool:
         logger.warning("Pencere bileşeninin dış bağlantı açıcısı bulunamadı.")
         return False
     arka_uc.webbrowser = TemizOrtamTarayicisi(yedek)
+    return True
+
+
+def _yerel_mi(ad: str) -> bool:
+    """Ad (`urlsplit`'in küçük harfli `hostname`'i) bu bilgisayarı mı gösteriyor (modül başlığı)?"""
+    ad = ad.rstrip(".")
+    if ad in _YEREL_ADLAR or ad.endswith(_YEREL_SON_EK):
+        return True
+    try:
+        adres = ipaddress.ip_address(ad)
+    except ValueError:
+        return False
+    return adres.is_loopback or adres.is_unspecified
+
+
+def yeni_pencere_karari(adres: str, ana_adres: str, *, tarayicida: bool) -> YeniPencereKarari:
+    """Yeni pencere isteğinin kararı (modül başlığı "Yeni pencere isteği")."""
+    try:
+        hedef = urlsplit(adres)
+        ana = urlsplit(ana_adres)
+        koken = (hedef.scheme, hedef.hostname, hedef.port)
+        ana_koken = (ana.scheme, ana.hostname, ana.port)
+    except ValueError:
+        return REDDET
+    if hedef.scheme not in DIS_SEMALAR or not hedef.hostname:
+        return REDDET
+    if koken == ana_koken or _yerel_mi(hedef.hostname):
+        return REDDET
+    return TARAYICIDA if tarayicida else ANA_PENCEREDE
+
+
+def yeni_pencere_isleyicisi(arka_uc: Any) -> Callable[[Any, Any], Any]:
+    """`BrowserView.WebPage.createWindow`'un yerine geçen yöntem (modül başlığı).
+
+    Yeni sayfa ana sayfanın profiliyle kurulur; gezinme isteğine `yeni_pencere_karari` uygulanır.
+    Dış adres kolun modülündeki `webbrowser` adıyla açılır (çağrı anında okunur: temiz ortamlı açıcı).
+    """
+    taban: Any = arka_uc.QWebPage
+    ayarlar = arka_uc.settings
+
+    class YeniPencereSayfasi(taban):  # type: ignore[misc]  # Qt sınıfı çalışma anında gelir
+        def __init__(self, ana_sayfa: Any) -> None:
+            super().__init__(ana_sayfa.profile(), ana_sayfa)
+            self._ana_sayfa = ana_sayfa
+
+        def acceptNavigationRequest(self, url: Any, _tur: Any, _ana_cerceve: Any) -> bool:  # noqa: N802
+            try:
+                adres = str(url.toString())
+                karar = yeni_pencere_karari(
+                    adres,
+                    str(self._ana_sayfa.url().toString()),
+                    tarayicida=bool(ayarlar.get("OPEN_EXTERNAL_LINKS_IN_BROWSER", True)),
+                )
+                if karar == TARAYICIDA:
+                    arka_uc.webbrowser.open(adres, 2, True)
+                elif karar == ANA_PENCEREDE:
+                    self._ana_sayfa.setUrl(url)
+                else:
+                    logger.warning(
+                        "Yeni pencere isteği reddedildi (program içi ya da dış olmayan adres)."
+                    )
+            except Exception as hata:  # noqa: BLE001 — Qt'nin yuvasından hata taşmasın
+                logger.warning("Yeni pencere isteği karşılanamadı (%s).", type(hata).__name__)
+            finally:
+                self.deleteLater()
+            return False
+
+    def createWindow(sayfa: Any, _tur: Any) -> Any:  # noqa: N802 — Qt adı
+        return YeniPencereSayfasi(sayfa)
+
+    return createWindow
+
+
+def yeni_pencere_isleyicisini_bagla(arka_uc: Any, *, platform: str | None = None) -> bool:
+    """Linux: pywebview Qt kolunun yeni pencere isteğini pencerenin profiline bağlar (modül başlığı).
+
+    Arka uç yüklenince, sayfa kurulmadan önce çağrılır (`desktop.window.open_window`). Windows'ta (ve
+    macOS'ta) hiçbir şey yapmaz.
+    """
+    sistem = sys.platform if platform is None else platform
+    if _windows_mu(sistem) or sistem == "darwin":
+        return False
+    arka_uc.BrowserView.WebPage.createWindow = yeni_pencere_isleyicisi(arka_uc)
     return True

@@ -27,6 +27,7 @@ from desktop.window import (
     open_window,
     yukleme_suzgecleri,
 )
+from desktop.x11_pencere import DisPencereBaglayici
 from desktop.yerel_pencere import YerelDosyaPenceresi
 
 _ICERIK = b"%PDF-1.7 uydurma"
@@ -69,6 +70,10 @@ class _SahteYerel:
         self._bekle = bekle
         self.acildi = threading.Event()
         self.cagrilar: list[dict[str, Any]] = []
+        self.one_getirildi = threading.Event()
+
+    def one_getir(self) -> None:
+        self.one_getirildi.set()
 
     def ac(self, **secenekler: Any) -> str | None:
         self.cagrilar.append(secenekler)
@@ -298,12 +303,53 @@ def test_ikinci_cagrinin_iptali_on_yuze_bildirilir(tmp_path: Path) -> None:
     assert DOSYA_PENCERESI_ACIK_OLAYI == "od:dosya-penceresi-acik"
 
 
+def test_ikinci_cagrida_acik_pencere_one_getirilir(tmp_path: Path) -> None:
+    """K-yeni-2 (Pardus 25, 13.11.2026): pencere arkada kaldıysa bildirimle birlikte öne gelir."""
+    birak = threading.Event()
+    yerel = _SahteYerel(str(tmp_path / "ilk.pdf"), bekle=birak)
+    qt = _QtPenceresi()
+    kopru = _kopru(yerel, qt)
+    is_parcacigi = threading.Thread(target=lambda: kopru.dosya_kaydet(_b64(), "ilk.pdf"))
+    is_parcacigi.start()
+    assert yerel.acildi.wait(5)
+    try:
+        assert kopru._yukleme_dosyasi_sec([".xlsx"]) == []
+        assert yerel.one_getirildi.wait(5)
+        assert qt.betik_geldi.wait(5)
+    finally:
+        birak.set()
+        is_parcacigi.join(5)
+
+
+def test_one_getirme_hatasi_bildirimi_engellemez(tmp_path: Path, od_gunlugu: list[Any]) -> None:
+    class _OneGelmeyen(_SahteYerel):
+        def one_getir(self) -> None:
+            raise OSError("X yok")
+
+    birak = threading.Event()
+    yerel = _OneGelmeyen(str(tmp_path / "ilk.pdf"), bekle=birak)
+    qt = _QtPenceresi()
+    kopru = _kopru(yerel, qt)
+    is_parcacigi = threading.Thread(target=lambda: kopru.dosya_kaydet(_b64(), "ilk.pdf"))
+    is_parcacigi.start()
+    assert yerel.acildi.wait(5)
+    try:
+        assert kopru.yedek_dosyasi_sor() == ""
+        assert qt.betik_geldi.wait(5)
+    finally:
+        birak.set()
+        is_parcacigi.join(5)
+    assert "OSError" in " ".join(k.getMessage() for k in od_gunlugu)
+
+
 def test_ilk_pencere_bildirim_yollamaz(tmp_path: Path) -> None:
     qt = _QtPenceresi()
+    yerel = _SahteYerel(str(tmp_path / "a.pdf"))
 
-    _kopru(_SahteYerel(str(tmp_path / "a.pdf")), qt).dosya_kaydet(_b64(), "a.pdf")
+    _kopru(yerel, qt).dosya_kaydet(_b64(), "a.pdf")
 
     assert not qt.betik_geldi.wait(0.2)
+    assert not yerel.one_getirildi.is_set()
 
 
 def test_bildirim_gonderilemese_de_iptal_doner(tmp_path: Path) -> None:
@@ -503,13 +549,31 @@ class _EskiAcici:
         return True
 
 
+class _SahtePencereSinifi:
+    """pywebview `BrowserView`: `showEvent` sınıftadır."""
+
+    def showEvent(self, olay: Any) -> None:  # noqa: N802 — Qt adı
+        pass
+
+
+class _SahteSayfaKurucusu(_SahteSayfa):
+    def __init__(self, parent: Any = None, profile: Any = None) -> None:
+        self.kurulus = (parent, profile)
+
+
 def _sahte_arka_uc() -> SimpleNamespace:
     """`webview.platforms.qt`'nin kullandığımız yüzeyi."""
     return SimpleNamespace(
         webbrowser=_EskiAcici(),
         QWebPage=_TabanSayfa,
-        BrowserView=SimpleNamespace(WebPage=type("WebPage", (_SahteSayfa,), {})),
+        BrowserView=type(
+            "BrowserView",
+            (_SahtePencereSinifi,),
+            {"WebPage": type("WebPage", (_SahteSayfaKurucusu,), {})},
+        ),
+        QApplication=SimpleNamespace(platformName=lambda: "xcb"),
         QtCore=SimpleNamespace(),
+        settings={"OPEN_EXTERNAL_LINKS_IN_BROWSER": True},
     )
 
 
@@ -577,6 +641,46 @@ def test_linuxta_arka_uc_yuklenince_baglanti_acicisi_ve_dosya_kutusu_baglanir(
     assert arka_uc.webbrowser._yedek == eski_acici.open
     assert callable(arka_uc.BrowserView.WebPage.chooseFiles)
     assert "chooseFiles" not in vars(_SahteSayfa)
+    # K-yeni-1, K-yeni-2, N-2: yeni pencere isteği, ana pencerenin X kimliği, sayfa önbelleği.
+    sinif = arka_uc.BrowserView
+    assert "createWindow" in vars(sinif.WebPage)
+    assert "__init__" in vars(sinif.WebPage)
+    assert "showEvent" in vars(sinif)
+
+
+def test_linuxta_kopru_penceresi_x11_baglayicisiyla_kurulur(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """K-yeni-2: masaüstü penceresi bağlayıcıyla kurulur; pencere gösterilince kimliği ona gider."""
+    monkeypatch.setattr(YerelDosyaPenceresi, "kapat", lambda self: None)
+    sahte = _SahteWebview()
+
+    open_window("http://127.0.0.1:1/", webview=sahte, platform="linux", storage_path=tmp_path)
+
+    baglayici = sahte.pencereler[0]["js_api"]._yerel_pencere._baglayici
+    assert isinstance(baglayici, DisPencereBaglayici)
+    pencere = sahte.arka_uc.BrowserView()
+    pencere.winId = lambda: 0x400007
+    sahte.arka_uc.BrowserView.showEvent(pencere, "olay")
+    assert baglayici.ana_pencere_kimligi == 0x400007
+
+
+def test_bir_baglama_dusse_de_otekiler_baglanir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[Any]
+) -> None:
+    """Her bağlama ayrı denenir: dış bağlantı açıcısı bağlanamasa da dosya kutusu bağlanır."""
+    monkeypatch.setattr(YerelDosyaPenceresi, "kapat", lambda self: None)
+
+    def patla(*_a: Any, **_k: Any) -> None:
+        raise RuntimeError("bağlanamadı")
+
+    monkeypatch.setattr(window_mod, "dis_tarayiciyi_bagla", patla)
+    sahte = _SahteWebview()
+
+    open_window("http://127.0.0.1:1/", webview=sahte, platform="linux", storage_path=tmp_path)
+
+    assert callable(vars(sahte.arka_uc.BrowserView.WebPage).get("chooseFiles"))
+    assert "RuntimeError" in " ".join(k.getMessage() for k in od_gunlugu)
 
 
 def test_linuxta_dosya_kutusu_kopruye_baglanir(
@@ -650,4 +754,6 @@ def test_windowsta_kopru_masaustu_penceresi_ve_tarayici_kurmaz(
     assert sahte.pencereler[0]["js_api"]._yerel_pencere is None
     assert sahte.initialize == sahte.ilk_initialize
     assert sahte.arka_uc.webbrowser is eski_acici
-    assert "chooseFiles" not in vars(sahte.arka_uc.BrowserView.WebPage)
+    sinif = sahte.arka_uc.BrowserView
+    assert not {"chooseFiles", "createWindow", "__init__"} & set(vars(sinif.WebPage))
+    assert "showEvent" not in vars(sinif)

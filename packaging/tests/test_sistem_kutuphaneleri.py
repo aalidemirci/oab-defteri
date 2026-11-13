@@ -333,6 +333,29 @@ def test_depends_sablonu_tek_satir_yer_tutucu() -> None:
     assert all(re.fullmatch(r"[a-z0-9][a-z0-9+.-]+", p) for p in S.depends_paketleri())
 
 
+def test_deb_zenityi_onerir_bagimlilik_yapmaz() -> None:
+    """N-3 (Pardus 25 sınaması, 13.11.2026): kaydetme ve Aç pencereleri zenity'yle açılır; yoksa
+    kdialog'a, sonra Qt'nin penceresine düşülür (`desktop/yerel_pencere.py`): Depends değil Recommends."""
+    betik = BUILD_SH.read_text(encoding="utf-8")
+    sablon = (REPO / "packaging" / "linux" / "debian-control.tmpl").read_text(encoding="utf-8")
+    eslesme = re.search(r'^RECOMMENDS="([^"]*)"$', betik, re.MULTILINE)
+
+    assert eslesme is not None
+    assert '-e "s|@RECOMMENDS@|${RECOMMENDS}|" \\\n' in betik
+    assert betik.index("RECOMMENDS=") < betik.index('-e "s|@RECOMMENDS@|')
+    assert "Recommends: @RECOMMENDS@\n" in sablon
+    assert sablon.index("Depends: @DEPENDS@") < sablon.index("Recommends: @RECOMMENDS@")
+    kontrol = sablon.replace("@RECOMMENDS@", eslesme.group(1)).replace(
+        "@DEPENDS@", ", ".join(S.depends_paketleri())
+    )
+    alanlar = dict(
+        satir.split(": ", 1) for satir in kontrol.splitlines() if re.match(r"^[A-Z][\w-]*: ", satir)
+    )
+    assert alanlar["Recommends"] == "zenity"
+    assert "zenity" not in alanlar["Depends"]
+    assert "zenity" not in betik.split("DEPENDS_QT=", 1)[1].split("\n", 1)[0]
+
+
 # ------------------------------------------------------------------ taşınabilir sürüm
 
 

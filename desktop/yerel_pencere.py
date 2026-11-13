@@ -25,7 +25,9 @@ geçerlidir. `--confirm-overwrite` zenity 3'te üzerine yazma sorusunu açar; ze
 does nothing" (GTK4 soruyu kendisi sorar) ve uyarı basar, "gelecek sürümde kaldırılacak" der:
 kaldırılırsa seçenek pencereyi açmadan 255'le düşürürdü. Bu yüzden yalnız sürüm 4'ten küçükse
 verilir; sürüm okunamazsa da verilir (tanınmazsa Qt penceresine düşülür, o da sorar). `--attach`
-(pencereyi ana pencereye bağlar) zenity 4'te etkisizdir ve kaldırılacaktır: kullanılmaz. kdialog
+(pencereyi ana pencereye bağlar) zenity 4'te etkisizdir ve kaldırılacaktır; zenity 3.32 ve 3.44
+seçeneği kabul eder ama dosya penceresine `WM_TRANSIENT_FOR` yazmaz (debian:11/12 kaplarında Xvfb +
+xfwm4 altında `xprop` ile ölçüldü, 13.11.2026): kullanılmaz, bağlamayı `desktop/x11_pencere.py` yapar. kdialog
 `--title AD --getsavefilename YOL SÜZGEÇ` ve `--getopenfilename KLASÖR SÜZGEÇ` biçimini kabul eder;
 süzgeç kdialog'un belgelediği "*.pdf|PDF belgesi" biçimindedir. Türkçe başlık UTF-8 yerel ayarda
 geçer; C yerel ayarında (UTF-8 olmayan) zenity ASCII dışı argümanı 255'le reddeder, köprü Qt
@@ -36,11 +38,31 @@ penceresine düşer.
 yukarıda doğrulandı). Başka her kod, başlatılamama ya da boş seçim zenity için kdialog'a, sonra Qt'ye
 düşüştür (boş seçim iptal sayılır).
 
-**Pencere ana pencereye bağlı değildir** (dış süreç; `--attach` yukarıda). Ana pencere tıklanabilir
-kalır: köprü aynı anda ikinci pencereyi açmaz, ikinci çağrı beklemeden iptal döner
-(`PencereKoprusu._tek_pencere`). Program kapanırken açık pencere sonlandırılır (`kapat`): pywebview'ın
-köprü iş parçacığı gündelik (daemon olmayan) iş parçacığıdır, pencere açık kaldıkça süreç bitmezdi;
-sonlandırılan pencere iptal sayılır, dosya yazılmaz. Seçilen yol günlüğe yazılmaz (hesap adını taşır).
+**Portal** (saha bulgusu N-1, Pardus 25.2, 13.11.2026). zenity 4 kaydetme penceresinde `--filename`'deki
+klasöre uymuyor, pencere ev klasöründe açılıyordu; Aç penceresinde uyuyordu. Kök neden zenity 4.1.90'ın
+`src/fileselection.c`'sindedir (kaynaktan doğrulandı): pencere `GtkFileChooserNative`'dir; kayıtta
+dosya yoksa önce `gtk_file_chooser_set_file`, sonra `gtk_file_chooser_set_current_name` çağrılır. GTK4
+masaüstünde `xdg-desktop-portal` varsa pencereyi portala çizdirir; bu sırayla portala ad gider, klasör
+gitmez (ölçüldü; GTK'nın portal kodu ayrıca okunmadı). Aç penceresinde sondaki `/` yüzünden
+`gtk_file_chooser_set_current_folder` çağrılır, klasör gider. debian:13 kabında xfwm4 +
+`xdg-desktop-portal-gtk` ile ölçüldü (ekran görüntüleriyle): portallı pencere `xdg-desktop-portal-gtk`
+sürecinindir ve klasörü göstermez; `GDK_DEBUG=no-portals` ile pencere zenity'nin kendi GTK4 penceresidir,
+`--filename`'deki klasörde açılır. zenity bu yüzden
+`GDK_DEBUG=no-portals` ile açılır (`zenity_ortami`; varsa kullanıcının öteki `GDK_DEBUG` değerleri
+korunur). GTK3 (zenity 3) portalı yalnız `GTK_USE_PORTAL=1` ile kullanır, değeri tanımaz; zenity 3.44
+pencereyi yine klasörde açar (debian:12 kabında ekran görüntüsüyle). Portal kapalıyken pencere zenity'nin
+sürecindedir: ana pencereye bağlanabilir (aşağıda). Son klasör türler arasında ortaktır
+(`desktop/window.py` "Son klasör"); burada değişmez.
+
+**Pencere ana pencereye bağlanır** (saha bulgusu K-yeni-2; `desktop/x11_pencere.py`). Dış süreç kipli
+değildir; X11 oturumunda açılan pencerenin `_NET_WM_PID`'i sürecinkiyle eşlenip ona `WM_TRANSIENT_FOR`
+yazılır (`baglayici.izle`), süreç bitince unutulur (`birak`). Pencere ana pencerenin üstünde kalır,
+görev çubuğunda ayrı girdi olmaz; X11 değilse ya da bağlanamazsa eskisi gibi bağımsızdır. Ana pencere
+tıklanabilir kalır: köprü aynı anda ikinci pencereyi açmaz, ikinci çağrı beklemeden iptal döner ve açık
+pencereyi öne getirir (`one_getir`; `PencereKoprusu._tek_pencere`). Program kapanırken açık pencere
+sonlandırılır (`kapat`): pywebview'ın köprü iş parçacığı gündelik (daemon olmayan)
+iş parçacığıdır, pencere açık kaldıkça süreç bitmezdi; sonlandırılan pencere iptal
+sayılır, dosya yazılmaz. Seçilen yol günlüğe yazılmaz (hesap adını taşır).
 
 **Sayfanın dosya kutuları da** (`<input type="file">`: Kişiler'de e-Okul personel listesi ve okulun veli
 listesi şablonu; bağımsız denetim 13.11.2026) aynı pencereyle açılır. Bu kutular köprüden geçmez:
@@ -72,6 +94,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, Final
 
 from desktop.dis_surec import temiz_ortam
+from desktop.x11_pencere import DisPencereBaglayici
 
 logger = logging.getLogger("oab_defteri.yerel_pencere")
 
@@ -83,6 +106,9 @@ ZENITY_SORAN_SON_SURUM: Final = 3
 SURUM_SORUSU_SN: Final = 5.0
 #: Dosya kutusunun penceresi beklenirken iç döngünün dış süreci yoklama aralığı.
 BEKLEME_ARALIGI_MS: Final = 50
+#: GTK'nın hata ayıklama değişkeni ve portalı kapatan değeri (modül başlığı "Portal").
+ENV_GDK_HATA_AYIKLAMA: Final = "GDK_DEBUG"
+PORTALSIZ: Final = "no-portals"
 DONUS_SECILDI: Final = 0
 DONUS_IPTAL: Final = 1
 #: pywebview'ın süzgeç biçimi: "Açıklama (*.uz;*.uz2)" (`util.parse_file_type`).
@@ -157,6 +183,17 @@ def kdialog_argv(
     return argv
 
 
+def zenity_ortami(ortam: dict[str, str]) -> dict[str, str]:
+    """zenity'nin ortamı: GTK4'ün masaüstü portalı kapatılır (modül başlığı "Portal").
+
+    Var olan `GDK_DEBUG` değerleri korunur; GTK3 değeri tanımaz, yok sayar. Ortam yerinde değişir.
+    """
+    onceki = [deger for deger in ortam.get(ENV_GDK_HATA_AYIKLAMA, "").split(",") if deger]
+    if PORTALSIZ not in onceki:
+        ortam[ENV_GDK_HATA_AYIKLAMA] = ",".join([*onceki, PORTALSIZ])
+    return ortam
+
+
 def _ana_surum(cikti: str) -> int | None:
     eslesme = re.match(r"\s*(\d+)\.", cikti)
     return int(eslesme.group(1)) if eslesme else None
@@ -166,7 +203,9 @@ class YerelDosyaPenceresi:
     """zenity/kdialog ile kaydetme ve Aç penceresi; `ac` yolu, iptalde boş metni, olmazsa `None` döner.
 
     `bul` aracı arar (`shutil.which`), `baslat` süreci başlatır (`subprocess.Popen`); testler sahtesini
-    verir. Açık süreçler `kapat` için tutulur.
+    verir. Açık süreçler `kapat` için tutulur. `baglayici` verilirse açılan pencere X11'de ana
+    pencereye bağlanır ve `one_getir` onu öne getirir (`desktop/x11_pencere.py`); verilmezse pencere
+    bağımsızdır.
     """
 
     def __init__(
@@ -174,9 +213,11 @@ class YerelDosyaPenceresi:
         *,
         bul: Bulucu = shutil.which,
         baslat: Callable[..., subprocess.Popen[bytes]] = subprocess.Popen,
+        baglayici: DisPencereBaglayici | None = None,
     ) -> None:
         self._bul = bul
         self._baslat = baslat
+        self._baglayici = baglayici
         self._kilit = threading.Lock()
         self._surecler: set[subprocess.Popen[bytes]] = set()
         self._kapandi = False
@@ -217,6 +258,14 @@ class YerelDosyaPenceresi:
                 return sonuc
         return None
 
+    @staticmethod
+    def _ortam(arac_adi: str) -> dict[str, str] | None:
+        """Dış sürecin ortamı: temiz ortam, zenity'de portal kapalı (modül başlığı)."""
+        ortam = temiz_ortam()
+        if ortam is not None and arac_adi == ZENITY:
+            zenity_ortami(ortam)
+        return ortam
+
     def _calistir(self, arac_adi: str, argv: list[str]) -> str | None:
         """Pencereyi açar, kapanmasını bekler; dönüş `ac`'ınkiyle aynı anlamdadır (modül başlığı)."""
         try:
@@ -225,17 +274,21 @@ class YerelDosyaPenceresi:
                     return ""
                 surec = self._baslat(
                     argv,
-                    env=temiz_ortam(),
+                    env=self._ortam(arac_adi),
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.DEVNULL,
                 )
                 self._surecler.add(surec)
+            if self._baglayici is not None:
+                self._baglayici.izle(surec.pid, lambda: surec.poll() is None)
             try:
                 cikti, _ = surec.communicate()
             finally:
                 with self._kilit:
                     self._surecler.discard(surec)
+                if self._baglayici is not None:
+                    self._baglayici.birak(surec.pid)
         except (OSError, subprocess.SubprocessError, ValueError) as hata:
             logger.warning("%s penceresi açılamadı (%s).", arac_adi, type(hata).__name__)
             return None
@@ -272,6 +325,11 @@ class YerelDosyaPenceresi:
                 logger.warning("zenity sürümü okunamadı (%s).", type(hata).__name__)
             self._zenity_surumu[arac] = surum
         return self._zenity_surumu[arac]
+
+    def one_getir(self) -> None:
+        """Açık pencereyi öne getirir (X11'de, bağlanmışsa; modül başlığı); çağıranı bekletmez."""
+        if self._baglayici is not None:
+            self._baglayici.one_getir()
 
     def kapat(self) -> None:
         """Program kapanıyor: açık pencereler sonlandırılır, yenisi açılmaz (iptal sayılır)."""

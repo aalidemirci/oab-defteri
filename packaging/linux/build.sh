@@ -79,6 +79,11 @@ DEPENDS_QT="libgl1, libegl1, libxkbcommon0, libxkbcommon-x11-0, libxkbfile1, lib
 # sonrası denetim aynı listeyle sınar). Qt'siz derlemede de girer: libstdc++, zlib, expat,
 # zstd Qt dışındaki ikililerin de bağımlılığıdır. Adlar Debian 11, 12 ve 13'te aynıdır.
 DEPENDS_SISTEM="$(python "$DEPO/packaging/linux/sistem_kutuphaneleri.py" depends)"
+# Önerilen paketler (Depends değil): kaydetme ve Aç pencerelerini masaüstünün penceresiyle açan
+# zenity (`desktop/yerel_pencere.py`; açılış hatası iletisi de onunla çıkar, `desktop/dialogs.py`).
+# Yoksa kdialog, o da yoksa Qt'nin kendi penceresi açılır: program zenity'siz de çalışır.
+# apt önerilenleri varsayılan olarak kurar; Pardus'ta zenity zaten kurulu gelir.
+RECOMMENDS="zenity"
 
 APT_TEMEL="libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libfontconfig1 libglib2.0-0 fonts-dejavu-core fonts-liberation2 binutils"
 # libharfbuzz-subset0 Debian 11'DE YOKTUR (bookworm ile geldi). WeasyPrint font
@@ -251,6 +256,7 @@ BOYUT_KB="$(du -sk "$DEB_AGACI" | cut -f1)"
 sed -e "s|@VERSION@|${DEB_SURUM}|" \
     -e "s|@SIZE@|${BOYUT_KB}|" \
     -e "s|@DEPENDS@|${DEPENDS}|" \
+    -e "s|@RECOMMENDS@|${RECOMMENDS}|" \
     "$DEPO/packaging/linux/debian-control.tmpl" > "$DEB_AGACI/DEBIAN/control"
 install -m 0755 "$DEPO/packaging/linux/postinst" "$DEB_AGACI/DEBIAN/postinst"
 install -m 0755 "$DEPO/packaging/linux/prerm" "$DEB_AGACI/DEBIAN/prerm"

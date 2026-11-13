@@ -26,11 +26,14 @@ from desktop.yerel_pencere import (
     yukleme_isleyicisi,
     yukleme_penceresini_bagla,
     zenity_argv,
+    zenity_ortami,
 )
 
 
 class _SahteSurec:
     """`subprocess.Popen`'ın kullandığımız yüzeyi."""
+
+    pid = 4242
 
     def __init__(self, kod: int, cikti: bytes = b"", bekle: threading.Event | None = None) -> None:
         self.returncode: int | None = None
@@ -44,6 +47,9 @@ class _SahteSurec:
             self._bekle.wait(5)
         self.returncode = -15 if self.sonlandirildi else self._kod
         return self._cikti, None
+
+    def poll(self) -> int | None:
+        return self.returncode
 
     def terminate(self) -> None:
         self.sonlandirildi = True
@@ -310,9 +316,147 @@ def test_pencere_temiz_ortamla_acilir(monkeypatch: pytest.MonkeyPatch) -> None:
     _kaydet(_pencere(baslatici, "zenity"))
 
     ((_, anahtarlar),) = baslatici.cagrilar
-    assert anahtarlar["env"] == {"TEMIZ": "1"}
+    # zenity'de GTK4'ün masaüstü portalı da kapatılır (N-1, K-yeni-2; modül başlığı "Portal").
+    assert anahtarlar["env"] == {"TEMIZ": "1", "GDK_DEBUG": "no-portals"}
     assert anahtarlar["stdout"] is subprocess.PIPE
     assert anahtarlar["stdin"] is subprocess.DEVNULL
+
+
+def test_kdialogun_ortamina_portal_degiskeni_eklenmez(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(yerel_pencere, "temiz_ortam", lambda: {"TEMIZ": "1"})
+    baslatici = _Baslatici(_SahteSurec(1))
+
+    _kaydet(_pencere(baslatici, "kdialog"))
+
+    ((_, anahtarlar),) = baslatici.cagrilar
+    assert anahtarlar["env"] == {"TEMIZ": "1"}
+
+
+@pytest.mark.parametrize(
+    ("onceki", "beklenen"),
+    [
+        (None, "no-portals"),
+        ("", "no-portals"),
+        ("misc", "misc,no-portals"),
+        ("no-portals", "no-portals"),
+        ("misc,no-portals,", "misc,no-portals,"),
+    ],
+    ids=["yok", "bos", "baska_deger", "zaten_var", "zaten_var_dokunulmaz"],
+)
+def test_zenity_ortaminda_portal_kapanir_kullanicinin_degerleri_korunur(
+    onceki: str | None, beklenen: str
+) -> None:
+    """Pardus 25'te (debian:13 kabında portal + xfwm4 ile ölçüldü) zenity 4 kaydetme penceresini
+    `xdg-desktop-portal-gtk`'ya çizdiriyor, klasör kayboluyordu (N-1); pencere de portalın
+    sürecinde olduğu için ana pencereye bağlanamıyordu (K-yeni-2)."""
+    ortam = {"LANG": "tr_TR.UTF-8"}
+    if onceki is not None:
+        ortam["GDK_DEBUG"] = onceki
+
+    zenity_ortami(ortam)
+
+    assert ortam == {"LANG": "tr_TR.UTF-8", "GDK_DEBUG": beklenen}
+
+
+def test_windowsta_ortam_none_kalir_portal_degiskeni_eklenmez(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(yerel_pencere, "temiz_ortam", lambda: None)
+    baslatici = _Baslatici(_SahteSurec(1))
+
+    _kaydet(_pencere(baslatici, "zenity"))
+
+    assert baslatici.cagrilar[0][1]["env"] is None
+
+
+def test_son_klasor_kaydetmede_tam_yolla_verilir_portal_yolu_degismez() -> None:
+    """N-1: klasör zenity'ye yine `--filename=<klasör>/<ad>` ile gider; klasörü zenity 4.1.90'da
+    `gtk_file_chooser_set_file` kurar, portal kapalıyken uyar (debian:13 kabında ekran görüntüsüyle)."""
+    argv = zenity_argv(
+        "zenity",
+        kaydet=True,
+        baslik="Farklı kaydet",
+        klasor="/media/uydurma/USB/Yedekler",
+        ad="Rapor_07.11.2026.pdf",
+        suzgecler=(),
+        ana_surum=4,
+    )
+
+    assert "--filename=/media/uydurma/USB/Yedekler/Rapor_07.11.2026.pdf" in argv
+
+
+# ------------------------------------------------- ana pencereye bağlama (K-yeni-2)
+
+
+class _SahteBaglayici:
+    def __init__(self) -> None:
+        self.izlenen: list[tuple[int, bool]] = []
+        self.birakilan: list[int] = []
+        self.one_getirme = 0
+
+    def izle(self, pid: int, suruyor: Any) -> None:
+        self.izlenen.append((pid, suruyor()))
+
+    def birak(self, pid: int) -> None:
+        self.birakilan.append(pid)
+
+    def one_getir(self) -> bool:
+        self.one_getirme += 1
+        return True
+
+
+def _bagli_pencere(baslatici: _Baslatici, baglayici: _SahteBaglayici) -> YerelDosyaPenceresi:
+    return YerelDosyaPenceresi(
+        bul=_bulucu("zenity"), baslat=cast(Any, baslatici), baglayici=cast(Any, baglayici)
+    )
+
+
+def test_acilan_pencere_baglayiciya_verilir_kapaninca_birakilir() -> None:
+    baglayici = _SahteBaglayici()
+    pencere = _bagli_pencere(_Baslatici(_SahteSurec(0, b"/a.pdf\n")), baglayici)
+
+    assert _kaydet(pencere) == "/a.pdf"
+
+    # Süreç açıkken izlenir (`poll` henüz `None`), biter bitmez bırakılır.
+    assert baglayici.izlenen == [(4242, True)]
+    assert baglayici.birakilan == [4242]
+
+
+def test_baglama_is_parcacigi_baslamasa_da_pencere_sonucu_doner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bağımsız denetim 14.11.2026: `izle` iş parçacığını başlatamazsa (`RuntimeError`) hata pencereye
+    taşmaz; süreç beklenir, sonucu döner, açık süreçlerden çıkarılır (zenity yetim kalmaz)."""
+    from desktop.x11_pencere import DisPencereBaglayici
+
+    baglayici = DisPencereBaglayici(x11_yukle=lambda: cast(Any, object()))
+    baglayici.ana_pencere(0x400007)
+
+    def baslamaz(_self: threading.Thread) -> None:
+        raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(threading.Thread, "start", baslamaz)
+    pencere = YerelDosyaPenceresi(
+        bul=_bulucu("zenity"),
+        baslat=cast(Any, _Baslatici(_SahteSurec(0, b"/a.pdf\n"))),
+        baglayici=baglayici,
+    )
+
+    assert _kaydet(pencere) == "/a.pdf"
+    assert pencere._surecler == set()
+
+
+def test_one_getir_baglayiciya_gider() -> None:
+    baglayici = _SahteBaglayici()
+    pencere = _bagli_pencere(_Baslatici(), baglayici)
+
+    pencere.one_getir()
+
+    assert baglayici.one_getirme == 1
+
+
+def test_baglayicisiz_pencere_one_getirmede_bir_sey_yapmaz() -> None:
+    _pencere(_Baslatici(), "zenity").one_getir()
 
 
 @pytest.mark.parametrize(

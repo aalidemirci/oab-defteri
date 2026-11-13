@@ -628,3 +628,271 @@ def test_yerel_pencere_sureci_subprocess_ile_baslatir() -> None:
     pencere = yerel_pencere.YerelDosyaPenceresi()
 
     assert pencere._baslat is subprocess.Popen
+
+
+# ------------------------------------------- yeni pencere isteği (saha bulgusu K-yeni-1)
+
+_ANA_ADRES = "http://127.0.0.1:53817/hakkinda"
+
+
+@pytest.mark.parametrize(
+    ("adres", "tarayicida", "beklenen"),
+    [
+        ("https://polyformproject.org/licenses/noncommercial/1.0.0/", True, "tarayicida"),
+        ("http://okulapp.org/oab-defteri", True, "tarayicida"),
+        ("https://okulapp.org/oab-defteri", False, "ana_pencerede"),
+        ("http://127.0.0.1:53817/ayarlar", True, "reddet"),
+        ("http://127.0.0.1:9/baska-port", True, "reddet"),
+        ("http://localhost:53817/", True, "reddet"),
+        ("http://[::1]:8000/", True, "reddet"),
+        ("http://127.0.0.2/", True, "reddet"),
+        ("file:///etc/passwd", True, "reddet"),
+        ("javascript:alert(1)", True, "reddet"),
+        ("blob:http://127.0.0.1:53817/abc", True, "reddet"),
+        ("data:text/html,merhaba", True, "reddet"),
+        ("about:blank", True, "reddet"),
+        ("", True, "reddet"),
+        ("http://[bozuk/", True, "reddet"),
+        ("https://okulapp.org:99999/", True, "reddet"),
+        # Bağımsız denetim 14.11.2026: şemanın kendisi süzülür (adı olan http dışı adresler) ve
+        # geri döngünün öteki yazılışları da yereldir.
+        ("file://sunucu/paylasim/x", True, "reddet"),
+        ("ftp://ornek.org/", True, "reddet"),
+        ("ws://ornek.org/", True, "reddet"),
+        ("http://localhost./", True, "reddet"),
+        ("http://LOCALHOST:53817/", True, "reddet"),
+        ("http://a.localhost:53817/", True, "reddet"),
+        ("http://a.b.localhost./", True, "reddet"),
+        ("http://0.0.0.0:53817/", True, "reddet"),
+        ("http://[::]:53817/", True, "reddet"),
+        ("http://[::ffff:127.0.0.1]:53817/", True, "reddet"),
+        ("http://[::ffff:0.0.0.0]/", True, "reddet"),
+        ("https://localhost.okulapp.org/", True, "tarayicida"),
+        ("https://ornek-localhost/", True, "tarayicida"),
+        ("http://[::ffff:8.8.8.8]/", True, "tarayicida"),
+    ],
+    ids=[
+        "lisans",
+        "http",
+        "ayar_kapaliysa_ana_pencere",
+        "kendi_koken",
+        "geri_dongu_baska_port",
+        "localhost",
+        "ipv6_geri_dongu",
+        "geri_dongu_agi",
+        "file",
+        "javascript",
+        "blob",
+        "data",
+        "about_blank",
+        "bos",
+        "bicimsiz",
+        "gecersiz_port",
+        "file_sunuculu",
+        "ftp",
+        "ws",
+        "localhost_noktali",
+        "localhost_buyuk_harf",
+        "localhost_alt_adi",
+        "localhost_alt_adi_noktali",
+        "belirsiz_ipv4",
+        "belirsiz_ipv6",
+        "ipv4_eslemli_geri_dongu",
+        "ipv4_eslemli_belirsiz",
+        "localhost_ile_baslayan_dis_ad",
+        "localhost_ile_biten_tek_ad",
+        "ipv4_eslemli_dis",
+    ],
+)
+def test_yeni_pencere_karari(adres: str, tarayicida: bool, beklenen: str) -> None:
+    assert dis_surec.yeni_pencere_karari(adres, _ANA_ADRES, tarayicida=tarayicida) == beklenen
+
+
+@pytest.mark.parametrize(
+    ("adres", "beklenen"),
+    [
+        ("http://ornek.test:8000/ayarlar", "reddet"),
+        ("http://ORNEK.test:8000/", "reddet"),
+        ("http://ornek.test:8001/", "tarayicida"),
+        ("https://ornek.test:8000/", "tarayicida"),
+        ("http://baska.test:8000/", "tarayicida"),
+    ],
+    ids=["ayni_koken", "ayni_koken_buyuk_harf", "baska_port", "baska_sema", "baska_ad"],
+)
+def test_kendi_koken_geri_dongu_olmasa_da_reddedilir(adres: str, beklenen: str) -> None:
+    """Köken eşitliği tek başına sınanır: ana adres geri döngü değildir (bağımsız denetim 14.11.2026)."""
+    ana = "http://ornek.test:8000/hakkinda"
+
+    assert dis_surec.yeni_pencere_karari(adres, ana, tarayicida=True) == beklenen
+
+
+class _SahteUrl:
+    def __init__(self, adres: str) -> None:
+        self._adres = adres
+
+    def toString(self) -> str:  # noqa: N802 — Qt adı
+        return self._adres
+
+
+class _SahteProfil:
+    pass
+
+
+class _QtSayfasi:
+    """`QWebEnginePage`'in kullandığımız yüzeyi: kurucu profili ve ebeveyni alır."""
+
+    def __init__(self, profil: Any = None, ebeveyn: Any = None) -> None:
+        self.kurulus = (profil, ebeveyn)
+        self.silindi = 0
+
+    def deleteLater(self) -> None:  # noqa: N802 — Qt adı
+        self.silindi += 1
+
+
+class _AnaSayfa(_QtSayfasi):
+    def __init__(self) -> None:
+        super().__init__()
+        self._profil = _SahteProfil()
+        self.yuklenen: list[Any] = []
+
+    def profile(self) -> _SahteProfil:
+        return self._profil
+
+    def url(self) -> _SahteUrl:
+        return _SahteUrl(_ANA_ADRES)
+
+    def setUrl(self, url: Any) -> None:  # noqa: N802 — Qt adı
+        self.yuklenen.append(url)
+
+
+class _Kaydedici:
+    def __init__(self) -> None:
+        self.acilan: list[tuple[str, int, bool]] = []
+
+    def open(self, url: str, new: int = 0, autoraise: bool = True) -> bool:
+        self.acilan.append((url, new, autoraise))
+        return True
+
+
+def _yeni_pencere_arka_ucu(**ayarlar: Any) -> SimpleNamespace:
+    return SimpleNamespace(
+        QWebPage=_QtSayfasi,
+        BrowserView=SimpleNamespace(WebPage=type("WebPage", (_QtSayfasi,), {})),
+        webbrowser=_Kaydedici(),
+        settings={"OPEN_EXTERNAL_LINKS_IN_BROWSER": True, **ayarlar},
+    )
+
+
+def _yeni_pencere(arka_uc: SimpleNamespace, ana: _AnaSayfa) -> Any:
+    return dis_surec.yeni_pencere_isleyicisi(arka_uc)(ana, "WebBrowserTab")
+
+
+def test_yeni_pencere_sayfasi_ana_sayfanin_profiliyle_kurulur() -> None:
+    """K-yeni-1'in kök nedeni: pywebview'ın `NavigationHandler`'ı varsayılan profille kuruluyordu,
+    Qt "Can not adopt content from a different WebEngineProfile." deyip içeriği aktarmıyordu."""
+    ana = _AnaSayfa()
+
+    sayfa = _yeni_pencere(_yeni_pencere_arka_ucu(), ana)
+
+    assert isinstance(sayfa, _QtSayfasi)
+    assert sayfa.kurulus == (ana.profile(), ana)
+
+
+def test_dis_baglanti_kolun_aciciyla_tarayicida_acilir_pencere_acilmaz() -> None:
+    arka_uc = _yeni_pencere_arka_ucu()
+    ana = _AnaSayfa()
+    sayfa = _yeni_pencere(arka_uc, ana)
+    adres = "https://polyformproject.org/licenses/noncommercial/1.0.0/"
+
+    assert sayfa.acceptNavigationRequest(_SahteUrl(adres), "LinkClicked", True) is False
+
+    # pywebview'ın çağrısıyla aynı (`webbrowser.open(url, 2, True)`): `dis_tarayiciyi_bagla`'nın
+    # koyduğu temiz ortamlı açıcı bu addadır.
+    assert arka_uc.webbrowser.acilan == [(adres, 2, True)]
+    assert ana.yuklenen == []
+    assert sayfa.silindi == 1
+
+
+def test_acici_cagri_aninda_okunur_temiz_ortamli_aciciya_gider() -> None:
+    """İşleyici bağlandıktan sonra `dis_tarayiciyi_bagla` açıcıyı değiştirse de yenisi kullanılır."""
+    arka_uc = _yeni_pencere_arka_ucu()
+    isleyici = dis_surec.yeni_pencere_isleyicisi(arka_uc)
+    yeni = _Kaydedici()
+    arka_uc.webbrowser = yeni
+
+    isleyici(_AnaSayfa(), "tab").acceptNavigationRequest(
+        _SahteUrl("https://okulapp.org/"), "LinkClicked", True
+    )
+
+    assert yeni.acilan == [("https://okulapp.org/", 2, True)]
+
+
+@pytest.mark.parametrize(
+    "adres",
+    ["http://127.0.0.1:53817/ayarlar", "file:///etc/passwd", "javascript:void(0)", ""],
+    ids=["kendi_koken", "file", "javascript", "bos"],
+)
+def test_program_ici_ve_dis_olmayan_adres_reddedilir(adres: str, od_gunlugu: list[Any]) -> None:
+    arka_uc = _yeni_pencere_arka_ucu()
+    ana = _AnaSayfa()
+    sayfa = _yeni_pencere(arka_uc, ana)
+
+    assert sayfa.acceptNavigationRequest(_SahteUrl(adres), "LinkClicked", True) is False
+
+    assert arka_uc.webbrowser.acilan == []
+    assert ana.yuklenen == []
+    metin = " ".join(k.getMessage() for k in od_gunlugu)
+    assert "reddedildi" in metin
+    assert "/etc/passwd" not in metin and "53817" not in metin
+
+
+def test_ayar_kapaliysa_dis_adres_ana_pencerede_acilir() -> None:
+    """pywebview'ın `OPEN_EXTERNAL_LINKS_IN_BROWSER = False` davranışı korunur."""
+    arka_uc = _yeni_pencere_arka_ucu(OPEN_EXTERNAL_LINKS_IN_BROWSER=False)
+    ana = _AnaSayfa()
+    url = _SahteUrl("https://okulapp.org/")
+
+    _yeni_pencere(arka_uc, ana).acceptNavigationRequest(url, "LinkClicked", True)
+
+    assert ana.yuklenen == [url]
+    assert arka_uc.webbrowser.acilan == []
+
+
+def test_acici_hata_verirse_qt_yuvasindan_hata_tasmaz(od_gunlugu: list[Any]) -> None:
+    class _Patlayan:
+        def open(self, *_a: Any) -> bool:
+            raise OSError("yok")
+
+    arka_uc = _yeni_pencere_arka_ucu()
+    arka_uc.webbrowser = _Patlayan()
+    sayfa = _yeni_pencere(arka_uc, _AnaSayfa())
+
+    assert sayfa.acceptNavigationRequest(_SahteUrl("https://okulapp.org/"), "x", True) is False
+    assert sayfa.silindi == 1
+    assert "OSError" in " ".join(k.getMessage() for k in od_gunlugu)
+
+
+def test_her_istek_kendi_sayfasini_alir() -> None:
+    """Kullanılmış sayfa yeniden verilmez: Qt her yeni pencerenin içeriğini taze sayfaya aktarır."""
+    isleyici = dis_surec.yeni_pencere_isleyicisi(_yeni_pencere_arka_ucu())
+    ana = _AnaSayfa()
+
+    assert isleyici(ana, "tab") is not isleyici(ana, "tab")
+
+
+def test_linuxta_yeni_pencere_istegi_sayfa_sinifina_baglanir() -> None:
+    arka_uc = _yeni_pencere_arka_ucu()
+
+    assert dis_surec.yeni_pencere_isleyicisini_bagla(arka_uc, platform="linux") is True
+
+    sayfa = arka_uc.BrowserView.WebPage.createWindow(_AnaSayfa(), "tab")
+    assert isinstance(sayfa, _QtSayfasi)
+
+
+@pytest.mark.parametrize("platform", ["win32", "darwin"])
+def test_windowsta_yeni_pencere_istegine_dokunulmaz(platform: str) -> None:
+    """Windows'ta EdgeChromium kolu `NewWindowRequested`'le açar; profil sorunu yoktur."""
+    arka_uc = _yeni_pencere_arka_ucu()
+
+    assert dis_surec.yeni_pencere_isleyicisini_bagla(arka_uc, platform=platform) is False
+    assert "createWindow" not in vars(arka_uc.BrowserView.WebPage)
