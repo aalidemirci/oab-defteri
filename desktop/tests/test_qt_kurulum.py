@@ -421,7 +421,13 @@ def test_sigterm_sonrasi_cikis_hatasi_qt_dongusunu_dusurmez(
 def _qt_modulu_taklidi(_ad: str) -> SimpleNamespace:
     """`load_qt`'nin okuduğu bütün sınıfları taşıyan boş taklit modül."""
     return SimpleNamespace(
-        QApplication=object, QFileDialog=object, QIcon=object, QPixmap=object, QTimer=object
+        QApplication=object,
+        QFileDialog=object,
+        QIcon=object,
+        QLibraryInfo=object,
+        QPixmap=object,
+        QTimer=object,
+        QTranslator=object,
     )
 
 
@@ -561,3 +567,140 @@ def test_pencere_bileseni_yoksa_kurulum_surer(od_gunlugu: list[logging.LogRecord
     assert kurulum.hazir is True
     assert any("İndirme işleyicisi bağlanamadı." in k.getMessage() for k in od_gunlugu)
     kurulum.durdur()
+
+
+# ------------------------------------------- Qt penceresinin Türkçesi (saha bulgusu K-P3)
+
+
+class _SahteCevirmen:
+    """`QTranslator`: `load` dosyayı okur, uygulama `installTranslator` ile kurar."""
+
+    def __init__(self, ebeveyn: Any = None) -> None:
+        self.ebeveyn = ebeveyn
+        self.yuklenen: str | None = None
+
+    def load(self, dosya: str) -> bool:
+        self.yuklenen = dosya
+        return Path(dosya).read_bytes().startswith(b"qm")
+
+
+class _CeviriUygulamasi:
+    def __init__(self) -> None:
+        self.kurulan: list[Any] = []
+
+    def installTranslator(self, cevirmen: Any) -> bool:
+        self.kurulan.append(cevirmen)
+        return True
+
+
+def _ceviri_qt(ceviri_dizini: Path | None = None, paket: Path | None = None) -> Any:
+    class _Yer:
+        TranslationsPath = "ceviriler"
+
+    class QLibraryInfo:
+        LibraryPath = _Yer
+
+        @staticmethod
+        def path(yer: str) -> str:
+            assert yer == "ceviriler"
+            return str(ceviri_dizini) if ceviri_dizini is not None else ""
+
+    return SimpleNamespace(
+        QTranslator=_SahteCevirmen, QLibraryInfo=QLibraryInfo, paket_dizini=paket
+    )
+
+
+def test_qt_penceresi_turkce_cevirisini_alir(tmp_path: Path) -> None:
+    """pywebview'ın Qt penceresi (masaüstü penceresi açılamazsa düşülen yol) İngilizce açılıyordu:
+    `qtbase_tr.qm` pakette vardı (`PySide6/Qt/translations/`), yüklenmiyordu."""
+    (tmp_path / "qtbase_tr.qm").write_bytes(b"qm-uydurma")
+    uygulama = _CeviriUygulamasi()
+
+    cevirmen = qt_kurulum.qt_cevirisini_kur(_ceviri_qt(tmp_path), uygulama)
+
+    assert cevirmen is not None and uygulama.kurulan == [cevirmen]
+    assert cevirmen.yuklenen == str(tmp_path / "qtbase_tr.qm")
+    assert cevirmen.ebeveyn is uygulama  # Python'da tutulmasa da Qt'de yaşar
+
+
+def test_qt_ceviri_dizini_bulunamazsa_paketin_dizinine_bakilir(tmp_path: Path) -> None:
+    """Donmuş pakette `QLibraryInfo` boş ya da yanlış yer verebilir: PySide6'nın kendi dizini de aranır."""
+    dizin = tmp_path / "PySide6" / "Qt" / "translations"
+    dizin.mkdir(parents=True)
+    (dizin / "qtbase_tr.qm").write_bytes(b"qm-uydurma")
+    uygulama = _CeviriUygulamasi()
+
+    cevirmen = qt_kurulum.qt_cevirisini_kur(
+        _ceviri_qt(tmp_path / "yok", paket=tmp_path / "PySide6"), uygulama
+    )
+
+    assert cevirmen is not None and cevirmen.yuklenen == str(dizin / "qtbase_tr.qm")
+
+
+def test_qt_ceviri_dosyasi_yoksa_sessizce_gecer(
+    tmp_path: Path, od_gunlugu: list[logging.LogRecord]
+) -> None:
+    uygulama = _CeviriUygulamasi()
+
+    assert qt_kurulum.qt_cevirisini_kur(_ceviri_qt(tmp_path), uygulama) is None
+
+    assert uygulama.kurulan == []
+    assert od_gunlugu == []
+
+
+def test_qt_ceviri_dosyasi_okunamazsa_kurulmaz(tmp_path: Path) -> None:
+    (tmp_path / "qtbase_tr.qm").write_bytes(b"bozuk")
+    uygulama = _CeviriUygulamasi()
+
+    assert qt_kurulum.qt_cevirisini_kur(_ceviri_qt(tmp_path), uygulama) is None
+    assert uygulama.kurulan == []
+
+
+def test_kurulum_qt_cevirisini_uygulamaya_kurar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "qtbase_tr.qm").write_bytes(b"qm-uydurma")
+    qt = _SahteQt()
+    ceviri = _ceviri_qt(tmp_path)
+    qt.QTranslator, qt.QLibraryInfo, qt.paket_dizini = (  # type: ignore[attr-defined]
+        ceviri.QTranslator,
+        ceviri.QLibraryInfo,
+        None,
+    )
+    kurulan: list[Any] = []
+
+    def kur(_uygulama: Any, cevirmen: Any) -> bool:
+        kurulan.append(cevirmen)
+        return True
+
+    monkeypatch.setattr(qt.QApplication, "installTranslator", kur, raising=False)
+
+    kurulum = _kurulum(qt, _Sayac())
+
+    assert kurulum.hazir is True
+    assert len(kurulan) == 1 and kurulan[0].yuklenen == str(tmp_path / "qtbase_tr.qm")
+    kurulum.durdur()
+
+
+def test_ceviri_kurulamazsa_kurulum_surer(od_gunlugu: list[logging.LogRecord]) -> None:
+    """`_SahteQt`'de çevirmen yoktur (eski yüzey): uygulama yine hazırdır."""
+    kurulum = _kurulum(_SahteQt(), _Sayac())
+
+    assert kurulum.hazir is True
+    kurulum.durdur()
+
+
+def test_qt_yukleyici_ceviri_siniflarini_ve_paket_dizinini_verir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def taklit(ad: str) -> SimpleNamespace:
+        modul = _qt_modulu_taklidi(ad)
+        modul.__file__ = str(tmp_path / "PySide6" / "QtCore.abi3.so")
+        return modul
+
+    monkeypatch.setattr(qt_kurulum, "importlib", SimpleNamespace(import_module=taklit))
+
+    qt = qt_kurulum.load_qt()
+
+    assert qt.QTranslator is object and qt.QLibraryInfo is object
+    assert qt.paket_dizini == tmp_path / "PySide6"

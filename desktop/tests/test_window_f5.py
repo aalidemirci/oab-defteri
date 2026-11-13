@@ -78,6 +78,9 @@ class _Webview:
         self.settings: dict[str, Any] = {}
         self.kw: dict[str, Any] = {}
 
+    def initialize(self, gui: str | None = None) -> Any:
+        return None  # arka uç; Linux'ta `open_window` ona bağlanır
+
     def create_window(self, title: str, url: str, **kw: Any) -> _Pencere:
         self.kw = kw
         return _Pencere()

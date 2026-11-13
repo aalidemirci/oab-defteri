@@ -74,6 +74,10 @@ class _SahteWebview:
         #: `start` çağrıldığında profil dizininde bulunan dosyalar (temizlik sırası için).
         self.start_aninda_dosyalar: set[Path] = set()
 
+    def initialize(self, gui: str | None = None) -> Any:
+        """Arka uç: Linux'ta `open_window` ona bağlanır (`desktop/tests/test_window_yerel_pencere.py`)."""
+        return None
+
     def create_window(self, title: str, url: str, **kwargs: Any) -> _SahtePencere:
         self.pencereler.append({"title": title, "url": url, **kwargs})
         return self.pencere

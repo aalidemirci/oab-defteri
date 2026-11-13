@@ -41,6 +41,23 @@ pencerede değiştirmek etkisizdir. Değişim `webview.initialize`'ın ardına k
 okur, `webview.start` `storage_path`'i ondan hemen önce yazar; erken içe aktarma pencere deposunu
 ev dizinine (`~/.pywebview`) kaydırırdı.
 
+**Qt penceresi Türkçedir** (saha bulgusu K-P3, Pardus 25, 12.11.2026). Kaydetme ve Aç pencereleri
+Linux'ta masaüstünün penceresiyle dış süreçte açılır (`desktop/yerel_pencere.py`); açılamazsa
+pywebview'ın Qt penceresine düşülür, köprü yokken düşülen indirme işleyicisi de Qt penceresidir. Qt
+o pencereyi kendi çevirisi yüklenmezse İngilizce çizer: `qtbase_tr.qm` pakette vardır
+(`_internal/PySide6/Qt/translations/`) ama hiçbir yerde kurulmuyordu. `qt_cevirisini_kur` uygulama
+kurulunca çeviriyi `QLibraryInfo`'nun çeviri dizininden, bulamazsa PySide6'nın kendi dizininden
+yükler; dosya yoksa sessizce geçer. Program yalnız Türkçedir: çeviri sistemin diline bakmadan
+kurulur. İndirme işleyicisi masaüstü penceresine bağlanmaz: yalnız köprü sayfaya yetişmeden basılan
+düğmede devreye girer (`frontend/src/lib/download.ts` `saveBlob`: köprü yoksa tarayıcının
+indirmesi), Qt'nin ana iş parçacığında koşar ve isteği yuvanın içinde kabul etmelidir; dış süreci
+beklemek pencereyi o süre dondururdu.
+
+Masaüstünün penceresini Qt'ye veren `platformthemes/libqgtk3.so` süreç içinde yüklenemez: sistemin
+GTK3'ü pakete gömülü bullseye glib'ine bağlanır (debian:13 kabında paketle, `QT_QPA_PLATFORMTHEME=gtk3
+QT_DEBUG_PLUGINS=1`: "libatspi.so.0: undefined symbol: g_once_init_leave_pointer", 13.11.2026). Çözümü
+paket yığınının değişmesidir, bu kurulumun işi değildir.
+
 **Linux oturum kapanışı.** Oturum kapanırken süreç SIGTERM alır; varsayılan
 davranış sessiz ölümdür ve temiz kapanış işareti (T15) yazılmazdı. Qt döngüsü
 C++'ta beklerken Python sinyal işleyicisi koşamaz; kısa aralıklı bir `QTimer`
@@ -78,6 +95,8 @@ _FALLBACK_ICON_COLOR: Final = "#1f4e79"
 _FALLBACK_ICON_SIZE: Final = 64
 #: SIGTERM'in Qt döngüsünde fark edilme aralığı.
 _SIGNAL_POLL_MS: Final = 500
+#: Qt'nin Türkçe çevirisi (modül belgesi): `QFileDialog`'un metinleri `qtbase`'tedir.
+QT_CEVIRISI: Final = "qtbase_tr.qm"
 #: Linux Qt bağlayıcısı (LGPLv3). Python paketi ve qtpy'nin `QT_API` değeri.
 QT_PACKAGE: Final = "PySide6"
 QT_BINDING: Final = "pyside6"
@@ -112,12 +131,17 @@ def load_qt() -> SimpleNamespace:
     qt_core = importlib.import_module(f"{QT_PACKAGE}.QtCore")
     qt_gui = importlib.import_module(f"{QT_PACKAGE}.QtGui")
     qt_widgets = importlib.import_module(f"{QT_PACKAGE}.QtWidgets")
+    paket = getattr(qt_core, "__file__", None)
     return SimpleNamespace(
         QApplication=qt_widgets.QApplication,
         QFileDialog=qt_widgets.QFileDialog,
         QIcon=qt_gui.QIcon,
+        QLibraryInfo=qt_core.QLibraryInfo,
         QPixmap=qt_gui.QPixmap,
         QTimer=qt_core.QTimer,
+        QTranslator=qt_core.QTranslator,
+        #: PySide6'nın dizini; donmuş pakette `_internal/PySide6` (çeviri dizini oradan da aranır).
+        paket_dizini=Path(paket).parent if paket else None,
     )
 
 
@@ -157,6 +181,37 @@ def _qt_icon(qt: Any, icon_path: Path | None) -> Any:
     pixmap = qt.QPixmap()
     pixmap.loadFromData(buffer.getvalue(), "PNG")
     return qt.QIcon(pixmap)
+
+
+def _ceviri_dizinleri(qt: Any) -> list[Path]:
+    """Çevirinin aranacağı dizinler: önce `QLibraryInfo`'nunki, sonra PySide6'nın kendi dizini."""
+    dizinler: list[Path] = []
+    try:
+        dizin = str(qt.QLibraryInfo.path(qt.QLibraryInfo.LibraryPath.TranslationsPath))
+    except Exception:  # noqa: BLE001 — eski yüzey; PySide6'nın dizinine bakılır
+        dizin = ""
+    if dizin:
+        dizinler.append(Path(dizin))
+    paket = getattr(qt, "paket_dizini", None)
+    if paket is not None:
+        dizinler.append(Path(paket) / "Qt" / "translations")
+    return dizinler
+
+
+def qt_cevirisini_kur(qt: Any, app: Any) -> Any | None:
+    """Qt'nin Türkçe çevirisini uygulamaya kurar (modül belgesi); kurulan çevirmen ya da `None`.
+
+    Çevirmen uygulamanın çocuğudur, Qt'de uygulamayla yaşar. Dosya yoksa ya da okunamazsa sessizce
+    geçilir: pencere Qt'nin kendi dilinde açılır.
+    """
+    for dizin in _ceviri_dizinleri(qt):
+        dosya = dizin / QT_CEVIRISI
+        if not dosya.is_file():
+            continue
+        cevirmen = qt.QTranslator(app)
+        if cevirmen.load(str(dosya)) and app.installTranslator(cevirmen):
+            return cevirmen
+    return None
 
 
 def indirme_isleyicisi(dosya_penceresi: Any) -> Callable[[Any, Any], None]:
@@ -216,6 +271,7 @@ class QtKurulumu:
         self._install_signal = signal_installer
         self._webview_loader = webview_loader
         self._app: Any | None = None
+        self._cevirmen: Any | None = None
         self._timer: Any | None = None
         self._previous_sigterm: Any | None = None
         self._termination_requested = threading.Event()
@@ -233,10 +289,17 @@ class QtKurulumu:
             logger.warning("Qt yüklenemedi; pencere açılışı hata verecek.", exc_info=True)
             return False
         self._app = app
+        self._ceviriyi_kur(qt, app)
         self._indirmeyi_bagla(qt)
         self._watch_termination(qt)
         logger.info("Qt uygulaması hazır.")
         return True
+
+    def _ceviriyi_kur(self, qt: Any, app: Any) -> None:
+        try:
+            self._cevirmen = qt_cevirisini_kur(qt, app)
+        except Exception:  # noqa: BLE001 — çevirisiz Qt penceresi de açılır
+            logger.warning("Qt çevirisi kurulamadı.", exc_info=True)
 
     def _indirmeyi_bagla(self, qt: Any) -> None:
         try:
