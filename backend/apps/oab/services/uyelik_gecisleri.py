@@ -29,6 +29,8 @@ alınır: bağ artık geçerli bir koltuğa dayanmaz.
 İPTAL (`uyeligi_iptal_et`): yanlış kayıt `IPTAL` olur (aday ya da seçilmiş); gerekçe zorunludur (sert,
 O1), kim `updated_by` ve iz satırıdır. Devralınan kaydı yalnız program yöneticisi iptal eder (geçiş
 kaydı; tasarım §7.9 adım 2), uç hangisi olursa olsun. İptal kaydı hiç olmamış sayılır (tekil kısıt, sayaç, tek koltuk).
+İptal edilen devralınan kaydın açık sayaç satırı kapanır: beyanın sınır uyarısı yeniden girilen kayıtta
+durur (`uyelikler.devralinan_sayac_satirlarini_kapat`; kullanıcı kararı 12.11.2026).
 
 GÖREV ALMA ENGELİ (`engel_yaz`): `eligibility_bar` hüküm alanıdır; `VAR`'da dayanak (şifreli, özel
 nitelikli) ve tespit günü zorunludur. Engel işaretli adayın seçimi uyarı + gerekçedir
@@ -369,6 +371,9 @@ def uyeligi_iptal_et(uyelik: OrganMembership, *, cancel_reason: str) -> OrganMem
         guncel.save(update_fields=["status", "cancel_reason", "updated_at", "updated_by"])
         denetim_izi.degisiklik(guncel, onceki=onceki)
         hesap_baglari.hesaplari_esitle(guncel)
+        if devralinan:
+            # Beyanın sınır uyarısı yeniden girilen kayıtta durur (kullanıcı kararı 12.11.2026).
+            uyelikler.devralinan_sayac_satirlarini_kapat(guncel)
         if baskan:
             temsilciler.baskan_satirlarini_kapat(
                 guncel.term, guncel.person_id, gun=timezone.localdate(), iptal=True

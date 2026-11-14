@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -110,3 +112,25 @@ def test_gunluk_verilirse_ileti_gunluge_yazilmaz_kutuda_gosterilir(
     metin = " | ".join(kayit.getMessage() for kayit in od_gunlugu)
     assert "Yedek dosyası bulunamadı." in metin and "Masalcıoğlu" not in metin
     assert "Masalcıoğlu" in gorulen[0][-1]
+
+
+def test_ileti_penceresi_temiz_ortamla_acilir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Saha bulgusu K-P2 (Pardus 25, 12.11.2026): zenity paketin `LD_LIBRARY_PATH`'ini devralıp
+    gömülü bullseye cairo'suna bağlanıyor, "undefined symbol: cairo_set_hairline" ile çöküyordu;
+    açılış hatası iletisi hiç görünmüyordu. Süreç `temiz_ortam()` ile başlar (`desktop/dis_surec.py`)."""
+    import desktop.dialogs as dialogs_mod
+
+    cagrilar: list[tuple[list[str], dict[str, Any]]] = []
+
+    def calistir(argv: list[str], **anahtarlar: Any) -> None:
+        cagrilar.append((argv, anahtarlar))
+
+    monkeypatch.setattr(shutil, "which", lambda ad: f"/usr/bin/{ad}")
+    monkeypatch.setattr(subprocess, "run", calistir)
+    monkeypatch.setattr(dialogs_mod, "temiz_ortam", lambda: {"TEMIZ": "1"})
+
+    assert dialogs_mod._run_dialog_command(["zenity", "--error", "--text=Uydurma"]) is True
+
+    ((argv, anahtarlar),) = cagrilar
+    assert argv == ["/usr/bin/zenity", "--error", "--text=Uydurma"]
+    assert anahtarlar["env"] == {"TEMIZ": "1"}

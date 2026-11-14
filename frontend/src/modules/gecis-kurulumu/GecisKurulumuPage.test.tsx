@@ -2,7 +2,8 @@
 // birlik dönemi formu (ders yılı dönem başından önerilir, görev süresi uyarısı açılışı engellemez);
 // görevdeki kurul (devralınan kayıt; gövde kurula göre kurulur; iptal gerekçeyle); seçilme sayısı beyanı
 // (değişmeyen alan gitmez, "Bilinmiyor" tek gerekçeyle, verilmiş sayının düzeltmesi gerekçe ister); karar
-// defteri (tasdik yoksa sunucu gerekçe ister, ikinci istek gerekçeyi taşır); "Geçiş kurulumu tamamlandı"
+// defteri (tasdik yoksa sunucu gerekçe ister, ikinci istek gerekçeyi taşır; makam noter yapılınca boş
+// gerekçeyle kayıt gider ve kabul edilir); "Geçiş kurulumu tamamlandı"
 // onayla; işaretten sonra, salt okur rolde ve kural kopyası doğrulanamayan (D7) dönemde yazma denetimi
 // yok, boş bölümler öğütsüz "girilmedi" cümlesi gösterir; "Bilinmiyor" beyanı uyum satırından okunur
 // (yalnız kişinin satırı), iptal edilmiş ve programda kurulan üyelik ile temsilci sayaçta yok; değişiklik
@@ -570,6 +571,46 @@ describe("GecisKurulumuPage", () => {
     await user.type(within(iptal).getByLabelText(/İptal gerekçesi/), "Uydurma: sayfa yanlış.");
     await user.click(within(iptal).getByRole("button", { name: "İptal et" }));
     expect(gecisApiMock.kararDefteriniIptalEt).toHaveBeenCalledWith(4, "Uydurma: sayfa yanlış.");
+  });
+
+  it("karar defteri: MEM tasdiki gerekçe ister; makam noter yapılınca boş gerekçeyle kayıt gider ve kaydedilir", async () => {
+    const user = userEvent.setup();
+    gecisApiMock.kararDefteriKaydet
+      .mockRejectedValueOnce(
+        new ApiError(
+          400,
+          "gerekce_gerekli",
+          "Bu kayıt için gerekçe yazılmalıdır. Yönetim kurulu karar defterinin noterce tasdik edilmesi zorunludur (md. 23/2).",
+        ),
+      )
+      .mockResolvedValueOnce({});
+    bas();
+    await user.type(await screen.findByLabelText(/Programdan önceki son karar sıra no'su/), "37");
+    await user.type(screen.getByLabelText(/Programdan önceki son sayfa/), "12");
+    // Tasdik günü girildi; sapmanın tek nedeni makamdır (sunucu `tasdik_gozlenen`: makam ya da gün
+    // yoksa da gerekçe ister, bu yüzden gün baştan doludur).
+    await user.type(screen.getByLabelText(/Tasdik günü/), "2026-09-01");
+    await user.selectOptions(screen.getByLabelText(/Tasdik eden makam/), "IL_ILCE_MEM");
+    await user.click(screen.getByRole("button", { name: DUGME_DEFTERI_KAYDET }));
+    expect(gecisApiMock.kararDefteriKaydet).toHaveBeenLastCalledWith(
+      expect.objectContaining({ certified_by: "IL_ILCE_MEM", certified_on: "2026-09-01" }),
+    );
+    expect(await screen.findByText("Dayanak: md. 23/2")).toBeInTheDocument();
+
+    // Sapma düzeltildi (noter tasdiki ve günü girili): gerekçe yazılmadan kaydet isteği gönderir
+    // (gerekçesiz), sunucu kabul eder.
+    await user.selectOptions(screen.getByLabelText(/Tasdik eden makam/), "NOTER");
+    await user.click(screen.getByRole("button", { name: "Gerekçeyle kaydet" }));
+    expect(gecisApiMock.kararDefteriKaydet).toHaveBeenCalledTimes(2);
+    const ikinci = gecisApiMock.kararDefteriKaydet.mock.calls[1][0] as Record<string, unknown>;
+    expect(ikinci).toMatchObject({
+      certified_by: "NOTER",
+      certified_on: "2026-09-01",
+      last_no_before_program: 37,
+    });
+    expect(ikinci).not.toHaveProperty("gerekce");
+    expect(await screen.findByText("Karar defteri kaydedildi.")).toBeInTheDocument();
+    expect(screen.queryByText("Gerekçe yazın.")).toBeNull();
   });
 
   it("tamamlama onay ister, eksik adımları söyler; işaretten sonra ekran salt okunurdur", async () => {

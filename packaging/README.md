@@ -54,7 +54,10 @@ packaging/
 │   ├── test-kurulum.sh          debian:11 + 12 + 13 kurulum provası
 │   ├── kap-ici-test.sh          prova kabının içinde koşan betik
 │   ├── apt_dene.sh              apt ayna tutarsızlığı sarmalı
+│   ├── sistem_denetimi.sh       provanın sistem kütüphanesi denetimleri (kaynak alınır)
 │   ├── debian-control.tmpl      .deb üstverisi (@VERSION@/@SIZE@/@DEPENDS@)
+│   ├── sistem_kutuphaneleri.py  pakete gömülmeyip sistemden alınan kütüphaneler
+│   │                            (spec süzgeci, Depends, derleme sonrası denetim)
 │   ├── postinst / prerm         bakım betikleri (ASCII — aşağıdaki nota bakın)
 │   ├── oab-defteri.desktop menü kaydı
 │   ├── kur.sh / kaldir.sh       taşınabilir .tar.gz kurucusu
@@ -84,6 +87,22 @@ OD_WITH_QT=0 bash packaging/linux/docker-build.sh
 
 Çıktılar `dist/cikti/` altındadır (`dist/` .gitignore'da). Derleme kabı
 bilinçli olarak `python:3.12-bullseye`'dır: glibc 2.31 = Pardus 21 tabanı.
+
+Bedeli: PyInstaller bullseye'ın kütüphanelerini pakete gömer. Grafik sürücüsü
+(Mesa) sistemden yüklenir ve sürücüyle paylaşılan kütüphanenin gömülü eski
+kopyasına bağlanırsa pencere açılmaz (Pardus 25, 12.11.2026: "Could not
+initialize GLX"). Bu kütüphaneler (C++ çalışma kütüphanesi, libgbm, libdrm,
+Wayland, DRI/GLX bağı, expat, zlib, zstd) pakete girmez, `.deb` Depends'ine girer;
+liste ve gerekçeler `linux/sistem_kutuphaneleri.py`'dedir. Kurulum provası bunu
+ekransız sınar (`linux/sistem_denetimi.sh`): Mesa sürücüsü `ldd -r` ile paketin
+kütüphanelerine bağlanır.
+
+Yan etkisi: libwayland-client sistemden gelince Qt'nin Wayland platform eklentisi
+(libwayland-cursor0 ve libwayland-egl1 kurulu makinelerde) eksiksiz bağlanır ve Wayland
+oturumunda xcb'den önce yüklenir; gömülü Wayland 1.18 ile bu yol çalışamazdı. Wayland
+üzerinden çizim sınanmadığı için çalışma zamanı kancası (`pyinstaller/rthook_od.py`)
+Linux'ta `QT_QPA_PLATFORM`'u `xcb`'ye sabitler (dışarıdan verilen değer ezilmez);
+Wayland oturumunda pencere XWayland üzerinden açılır.
 
 ## Windows paketi üretme
 

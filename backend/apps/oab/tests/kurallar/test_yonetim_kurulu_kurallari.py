@@ -42,6 +42,7 @@ from apps.oab.models import (
     EligibilityBar,
     GeneralAssembly,
     MeetingKind,
+    MembershipSource,
     MembershipStatus,
     OfficialBook,
     OrganMembership,
@@ -425,17 +426,46 @@ def test_beyan_bilinmese_de_bilinen_kayitlar_siniri_asiyorsa_uyari() -> None:
 
 @pytest.mark.kural_davranis(f"{YK}.secilme_siniri")
 def test_devralinan_kayit_sayac_disinda() -> None:
-    """Devralınan üyelik sayaca girmez: beyan görevdeki seçimi içerir (plan F1c kararları). Beyan
-    sınırın üstünde ya da bilinmiyor; denetim koşsaydı gerekçe ya da eksik satırı isterdi."""
+    """Devralınan üyelik sayıma girmez: beyan görevdeki seçimi içerir (plan F1c kararları). Beyanın
+    kendisi sınırla karşılaştırılır (kullanıcı kararı 12.11.2026): dört seçilme beyanlı başkan
+    uyarısızdır (devralınan kayıt sayılsaydı beşe çıkar, gerekçe isterdi); beyan "bilinmiyor"sa satır
+    açılmaz (eksik satırı kişinin beyan adımındadır). Sınır üstü beyanla ilk giriş aşağıdaki testte,
+    geçişin beyan adımı `test_gecis.py`'dedir."""
     donem = o.donem()
-    kisi = o.kisi(external_yk_terms=5)
+    kisi = o.kisi(external_yk_terms=4)
     uyelik = o.devralinan(donem, kisi, role="BASKAN")
     assert uyelik.status == MembershipStatus.SECILDI
     assert _satirlar(uyelik, f"{YK}.secilme_siniri") == []
     assert uyelikler.yk_secilme_sayisi(kisi) == 0
-    assert uyelikler.secilme_sayaci(kisi, "YK") == 5
+    assert uyelikler.secilme_sayaci(kisi, "YK") == 4
     bilinmeyen = o.devralinan(donem, o.kisi())  # external_yk_terms = None
     assert _satirlar(bilinmeyen, f"{YK}.secilme_siniri") == []
+
+
+@pytest.mark.kural_davranis(f"{YK}.secilme_siniri")
+def test_devralinan_kaydin_sinir_ustu_beyani_ilk_giriste_uyari_gerekce() -> None:
+    """Beyan verilmiş kişinin devralınan kaydı girilirken beyan sınırla karşılaştırılır (md. 12/4;
+    kullanıcı kararı 12.11.2026): beş seçilme beyanı gerekçesiz geri alınır, gerekçeyle `SAPMA`."""
+    donem = o.donem()
+    kisi = o.kisi(external_yk_terms=5)
+    with pytest.raises(GerekceGerekli) as hata:
+        o.devralinan(donem, kisi, role="BASKAN")
+    assert "md. 12/4" in str(hata.value.detail)
+    assert not OrganMembership.objects.filter(person=kisi).exists()
+    uyelik = uyelikler.assign_membership(
+        term=donem,
+        person=kisi,
+        organ="YK",
+        seat_type="ASIL",
+        elected_by="GENEL_KURUL",
+        role="BASKAN",
+        source=MembershipSource.DEVRALINAN,
+        start_date=o.GUN,
+        gerekce=uyum.Gerekce(metin="Uydurma gerekçe metni."),
+    )
+    (satir,) = _satirlar(uyelik, f"{YK}.secilme_siniri")
+    assert (satir.kind, satir.resolved_at) == (ComplianceKind.SAPMA, None)
+    assert uyelikler.secilme_sayaci(kisi, "YK") == 5
 
 
 @pytest.mark.kural_davranis(f"{YK}.secilme_siniri")

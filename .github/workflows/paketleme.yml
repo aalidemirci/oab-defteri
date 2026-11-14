@@ -98,6 +98,7 @@ jobs:
             dist/cikti/*.deb
             dist/cikti/*.tar.gz
             dist/cikti/pdf-duman.pdf
+            dist/cikti/SHA256SUMS.txt
           retention-days: 7
 
   # ---------------------------------------------------------------------------
@@ -238,6 +239,7 @@ jobs:
             dist/cikti/*.exe
             dist/cikti/*.zip
             dist/cikti/pdf-duman.pdf
+            dist/cikti/SHA256SUMS.txt
           retention-days: 7
 
   # ---------------------------------------------------------------------------
@@ -269,7 +271,10 @@ jobs:
       - name: SHA256SUMS.txt
         working-directory: yayin
         run: |
-          rm -f pdf-duman.pdf
+          # Paket artefaktları derleme işinin kendi SHA256SUMS.txt'sini de taşır (PR koşusunda
+          # paketi indiren doğrulayabilsin diye; 12.11.2026). İki artefakt aynı ada iner, biri
+          # ötekini ezer ve .deb'i `~`li adıyla anlatır: Release özeti burada SIFIRDAN üretilir.
+          rm -f pdf-duman.pdf SHA256SUMS.txt
           for paket in *~*.deb; do
             [ -e "${paket}" ] || continue
             # Tilde TIRNAKLI olmak ZORUNDA: bash `${degisken//desen/…}` içindeki

@@ -191,7 +191,9 @@ def test_etiket_version_kapisi_beta_etiketini_gecirir() -> None:
 
 
 def _yayin_dizini(kok: Path) -> Path:
-    """Paket işlerinin artefaktları indirilmiş hâli (`.deb` adında `~`, duman PDF'i var)."""
+    """Paket işlerinin artefaktları indirilmiş hâli (`.deb` adında `~`, duman PDF'i ve
+    derleme işinin kendi SHA256SUMS.txt'si var — 12.11.2026'dan beri iki artefakt da onu
+    taşır; ikisi aynı ada indiği için biri ötekini ezer ve `~`'li adı anlatır)."""
     yayin = kok / "yayin"
     yayin.mkdir(parents=True)
     for ad in (
@@ -200,6 +202,7 @@ def _yayin_dizini(kok: Path) -> Path:
         f"oab-defteri-{VERSION}-win64-setup.exe",
         f"oab-defteri-{VERSION}-win64-portable.zip",
         "pdf-duman.pdf",
+        "SHA256SUMS.txt",
     ):
         # İçerikler ayrı: özet denetimi bir dosyanın bozulmasını ayırt edebilsin.
         (yayin / ad).write_bytes(ad.encode())
@@ -216,6 +219,31 @@ def test_sha256sums_adimi_tildeyi_nokta_yapar_ve_duman_pdfini_atar(tmp_path: Pat
     assert f"oab-defteri_{VERSION.replace('-', '.')}_amd64.deb" in adlar
     ozet = (yayin / "SHA256SUMS.txt").read_text(encoding="utf-8").splitlines()
     assert len(ozet) == 4
+    # Artefaktla gelen eski özet yeniden özetlenmez (kendi kendini anlatan satır olmaz).
+    assert not any(satir.endswith("SHA256SUMS.txt") for satir in ozet)
+    assert all("~" not in satir for satir in ozet)
+
+
+def _artefakt_yollari(ad: str) -> list[str]:
+    """`upload-artifact` adımında `name: <ad>` olan artefaktın `path:` satırları."""
+    satirlar = IS_AKISI.splitlines()
+    i = next(j for j, s in enumerate(satirlar) if s.strip() == f"name: {ad}")
+    assert satirlar[i + 1].strip() == "path: |", f"{ad}: path bloğu bulunamadı"
+    girinti = len(satirlar[i + 1]) - len(satirlar[i + 1].lstrip())
+    yollar: list[str] = []
+    for satir in satirlar[i + 2 :]:
+        if not satir.strip() or len(satir) - len(satir.lstrip()) <= girinti:
+            break
+        yollar.append(satir.strip())
+    return yollar
+
+
+@pytest.mark.parametrize("ad", ["linux-paketleri", "windows-paketleri"])
+def test_paket_artefaktlari_sha256sumsu_tasir(ad: str) -> None:
+    """Saha sınaması (12.11.2026, paket 9b35c17): PR koşusunun `linux-paketleri`
+    artefaktında SHA256SUMS.txt yoktu; paketi indiren onu elle doğrulayamadı. İki derleme
+    betiği de dosyayı üretir (build.sh adım 8, build.ps1)."""
+    assert "dist/cikti/SHA256SUMS.txt" in _artefakt_yollari(ad)
 
 
 @pytest.mark.parametrize(

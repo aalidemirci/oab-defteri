@@ -91,6 +91,95 @@ def test_linuxta_yalniz_evrak_font_yapilandirmasi_bildirilir(
     assert metin.count("<dir") == 1 and "@FONT_DIR@" not in metin and "@CACHE_DIR@" not in metin
 
 
+def _linux_kurulumu(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> ModuleType:
+    kanca = _kanca(monkeypatch, tmp_path)
+    monkeypatch.setattr(kanca.sys, "platform", "linux")
+    monkeypatch.setattr(kanca, "_bundle_root", lambda: tmp_path)
+    monkeypatch.setattr(kanca, "_cache_root", lambda: tmp_path / "onbellek")
+    # Kanca içe aktarılırken bir kez koştu; değişken her testte boştan kurulur.
+    os.environ.pop("QT_QPA_PLATFORM", None)
+    return kanca
+
+
+def test_linuxta_qt_platformu_xcbye_sabitlenir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Denetim bulgusu (13.11.2026): libwayland-client artık sistemden alınıyor
+    (`packaging/linux/sistem_kutuphaneleri.py`). Gömülü bullseye kopyası (Wayland 1.18)
+    Qt 6.8'in Wayland eklentisinin istediği `wl_proxy_marshal_flags`'i vermiyordu. Sistem
+    kopyasıyla (debian:13'te libwayland-cursor0 ve libwayland-egl1 kuruluyken `ldd -r`
+    eksiksiz) Qt Wayland oturumunda eklentiyi xcb'den önce yükler (`QT_DEBUG_PLUGINS=1`) ve
+    pencere sınanmamış yola (WebEngine'in Wayland/EGL çizimi) geçerdi. Kanca sınanmış yolu,
+    xcb'yi sabitler."""
+    kanca = _linux_kurulumu(monkeypatch, tmp_path)
+
+    kanca.setup()
+
+    assert os.environ["QT_QPA_PLATFORM"] == "xcb"
+
+
+def test_disaridan_verilen_qt_platformu_ezilmez(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Sahada teşhis için kullanıcı `QT_QPA_PLATFORM=wayland` verebilir (`setdefault`)."""
+    kanca = _linux_kurulumu(monkeypatch, tmp_path)
+    os.environ["QT_QPA_PLATFORM"] = "wayland"
+
+    kanca.setup()
+
+    assert os.environ["QT_QPA_PLATFORM"] == "wayland"
+
+
+def test_kanca_qt_platformunu_kurdugunu_isaretler(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Değişken dış süreçlere geçmesin diye (saha bulgusu K-P2): kanca değeri kendisi yazdıysa
+    `OD_QT_PLATFORM_KANCADAN=1` bırakır; `desktop.dis_surec.temiz_ortam` yalnız o zaman siler."""
+    kanca = _linux_kurulumu(monkeypatch, tmp_path)
+    os.environ.pop("OD_QT_PLATFORM_KANCADAN", None)
+
+    kanca.setup()
+
+    assert os.environ["OD_QT_PLATFORM_KANCADAN"] == "1"
+
+
+def test_disaridan_verilen_qt_platformunda_isaret_birakilmaz(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    kanca = _linux_kurulumu(monkeypatch, tmp_path)
+    os.environ.pop("OD_QT_PLATFORM_KANCADAN", None)
+    os.environ["QT_QPA_PLATFORM"] = "wayland"
+
+    kanca.setup()
+
+    assert "OD_QT_PLATFORM_KANCADAN" not in os.environ
+
+
+def test_qt_platformu_isareti_dis_surec_modulundekiyle_ayni_ad(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Kanca masaüstü modüllerini içe aktarmaz; ad iki yerde yazılıdır ve aynı olmalıdır."""
+    from desktop import dis_surec
+
+    kanca = _kanca(monkeypatch, tmp_path)
+
+    assert kanca.ENV_QT_PLATFORM_KANCADAN == dis_surec.ENV_QT_PLATFORM_KANCADAN
+    assert kanca.ENV_QT_PLATFORM == dis_surec.ENV_QT_PLATFORM
+
+
+def test_windowsta_qt_platformu_kurulmaz(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    kanca = _kanca(monkeypatch, tmp_path)
+    monkeypatch.setattr(kanca.sys, "platform", "win32")
+    monkeypatch.setattr(kanca, "_bundle_root", lambda: tmp_path)
+    monkeypatch.setattr(kanca, "setup_fontconfig", lambda *_a: None)
+    monkeypatch.setattr(kanca, "_cache_root", lambda: tmp_path / "onbellek")
+    os.environ.pop("QT_QPA_PLATFORM", None)
+
+    kanca.setup()
+
+    assert "QT_QPA_PLATFORM" not in os.environ
+
+
 def test_evrak_font_degiskeni_pdf_kapisiyla_ayni_ad() -> None:
     """Kanca backend'i içe aktarmaz; değişken adı iki yerde yazılıdır ve aynı olmalıdır."""
     tanim = 'ENV_EVRAK_FONTCONFIG = "OD_EVRAK_FONTCONFIG"'

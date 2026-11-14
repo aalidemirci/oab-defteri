@@ -61,28 +61,42 @@ saklanır, sonra silinir.
 
 GEREKLİ SİSTEM PAKETLERİ
 ------------------------
-Taşınabilir sürüm, dağıtımın kendi yazı tipi ve metin dizme kütüphanelerini
-kullanır. Eksikse PDF üretimi çalışmaz. Yönetici yetkisiyle:
+Taşınabilir sürüm, dağıtımın kendi yazı tipi ve metin dizme kütüphanelerini,
+C++ çalışma kütüphanesini ve sıkıştırma kütüphanelerini kullanır. Eksikse PDF
+üretimi çalışmaz. Yönetici yetkisiyle:
 
     sudo apt install libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
                      libfontconfig1 libglib2.0-0 fonts-dejavu-core \
-                     fonts-liberation2
+                     fonts-liberation2 libstdc++6 libgcc-s1 libexpat1 \
+                     zlib1g libzstd1
 
-Pardus 21 ve Pardus 23'te ilk altısı kurulu gelir; fonts-liberation2 kurulu
-değilse bu komut onu da kurar. Evrakın yazı tipleri programın içinde gelir.
+Pardus 21 ve Pardus 23'te ilk altısı kurulu gelir; eksik olanı bu komut kurar,
+kurulu olana dokunmaz. Komut Debian 13 tabanlı Pardus 25'te de aynıdır.
+Evrakın yazı tipleri programın içinde gelir.
 
-Program penceresi de dağıtımın birkaç sistem kütüphanesine dayanır. Pencere
-açılmıyorsa ya da boş beyaz kalıyorsa:
+Program penceresi de dağıtımın birkaç sistem kütüphanesine dayanır. Ekran
+kartı sürücüsünün kullandığı kütüphaneler bilerek programın içinde gelmez:
+programla gelen eski kopyalar yeni sürücüyle çakışıyordu (Pardus 25'te pencere
+"Could not initialize GLX" iletisiyle açılmıyordu). Pencere açılmıyorsa ya da
+boş beyaz kalıyorsa:
 
     sudo apt install libgl1 libegl1 libxkbcommon0 libxkbcommon-x11-0 \
                      libxkbfile1 libdbus-1-3 libnss3 libnspr4 libxcomposite1 \
                      libxdamage1 libxrandr2 libxtst6 libxi6 libasound2 \
                      libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
                      libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 \
-                     libxcb-xkb1 libxcb-cursor0
+                     libxcb-xkb1 libxcb-cursor0 libgbm1 libdrm2 \
+                     libwayland-client0 libwayland-server0 libx11-xcb1 \
+                     libxcb-glx0 libxcb-present0 libxcb-sync1 libxcb-dri2-0 \
+                     libxcb-dri3-0 libxshmfence1
 
 .deb paketini kurarsanız bu liste kendiliğinden çözülür; el ile kurmak yalnız
 taşınabilir sürümde gerekir.
+
+Kaydetme ve Aç pencereleri masaüstünün penceresiyle (zenity paketi) açılır;
+Pardus'ta zenity kurulu gelir, .deb paketi de onu önerir. zenity (ve KDE'nin
+kdialog'u) yoksa pencere Qt'nin penceresidir: kenar çubuğunda USB bellek
+görünmeyebilir.
 
 Pencereyi çizen kütüphaneler programla birlikte, LGPLv3 lisansıyla dağıtılır;
 kurulum klasöründe ayrı dosyalar hâlinde durur ve değiştirilebilir.

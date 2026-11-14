@@ -35,8 +35,9 @@ for surum in "${SURUMLER[@]}"; do
     echo
     echo "############ debian:$surum ############"
     # Betik dizini BÜTÜN olarak bağlanır: kap-ici-test.sh yanındaki apt_dene.sh'yi
-    # kaynak olarak alır. Yalnız tek dosya bağlansaydı yerel prova "apt_dene.sh
-    # yok" ile düşerdi (CI'da depo checkout'u olduğu için fark görünmüyordu).
+    # ve sistem_denetimi.sh'yi kaynak olarak alır. Yalnız tek dosya bağlansaydı yerel
+    # prova "apt_dene.sh yok" ile düşerdi (CI'da depo checkout'u olduğu için fark
+    # görünmüyordu).
     docker run --rm \
         -v "$CIKTI:/paketler:ro" \
         -v "$DEPO/packaging/linux:/betikler:ro" \
