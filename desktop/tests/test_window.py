@@ -1497,6 +1497,9 @@ def test_onbellek_kokunun_disindaki_yol_silinmez(tmp_path: Path, od_gunlugu: lis
     assert (yabanci / "Cache" / "Cache_Data" / "f_000011").is_file()
     metin = " ".join(k.getMessage() for k in od_gunlugu)
     assert "dışında" in metin and str(tmp_path) not in metin
+    # `--data-dir` kipinde her açılışta olur: günlüğe uyarı olarak düşmez (INFO düzeyinde görünmez).
+    disarida = [k for k in od_gunlugu if "dışında" in k.getMessage()]
+    assert disarida and all(k.levelno == logging.DEBUG for k in disarida)
 
 
 def test_onbellek_kokunun_kendisi_silinmez(tmp_path: Path) -> None:

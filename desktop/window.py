@@ -1030,7 +1030,10 @@ def eski_qt_onbellegini_sil(
         logger.warning("Pencerenin eski önbelleği çözülemedi (%s).", type(hata).__name__)
         return False
     if kok not in gercek.parents:
-        logger.warning("Pencerenin önbelleği programın önbellek dizininin dışında; silinmedi.")
+        # Uyarı değil: `--data-dir` kipinde kök `<veri>/cache`dir, Qt'nin `cachePath`'i ise
+        # `~/.cache/oab-defteri`de kalır; her açılışta günlüğe uyarı düşerdi (Pardus sınaması,
+        # 14.11.2026). Önbellek yine bellek içidir, diske yazılmaz.
+        logger.debug("Pencerenin önbelleği programın önbellek dizininin dışında; silinmedi.")
         return False
     if any(yol == gercek or gercek in yol.parents for yol in korunan):
         logger.warning("Pencerenin önbelleği pencerenin deposunu kapsıyor; silinmedi.")
