@@ -21,6 +21,7 @@ from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
 from apps.oab.kurallar import VERI_YOK, YururlukteDegerYok
+from apps.oab.kurallar import yukleyici as yk
 from apps.oab.models import (
     ComplianceItem,
     ComplianceKind,
@@ -33,8 +34,18 @@ from apps.oab.models import (
     SeatType,
     TermStatus,
 )
-from apps.oab.services import gecis, kisiler, kurullar, pano, temsilciler, uyelikler, uyum
+from apps.oab.services import (
+    gecis,
+    kisiler,
+    kural_bagi,
+    kurullar,
+    pano,
+    temsilciler,
+    uyelikler,
+    uyum,
+)
 from apps.oab.tests import uyelik_ortak as o
+from apps.oab.tests.kurallar import paket_ortak
 from apps.okul import denetim_izi, iz_durumu
 from apps.okul.models import AccountRole, AuditTrail
 from apps.okul.services import app_password
@@ -240,6 +251,44 @@ def test_gecis_adimlari_ve_hesap_onerileri_kisisiz() -> None:
         set(k["ek"]) == {"tur", "rol", "neden", "sayi"} and k["rota"] == "/kullanicilar"
         for k in hesap
     )
+
+
+def test_kural_surumu_guncellemesi_yalniz_yoneticide_gecisle_duser(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Plan F2 2. adım, §6.3 ve §7 U2; tasarım §7.10 (yol haritası: kural sürümü seçimi): programla açık
+    dönemden daha yeni revizyon geldiyse program yöneticisine kişisiz kalem çıkar (yalnız iki sürüm;
+    götürdüğü ekran Birlik Dönemi); öteki rollerde yoktur; geçiş yapılınca kendiliğinden düşer."""
+    monkeypatch.setattr(
+        yk._Onbellek,
+        "durum",
+        yk.PaketDurumu(paketler=(yk.Paket.sozlukten(paket_ortak.oku(paket_ortak.DOSYALAR[0])),)),
+    )
+    donem = o.donem()
+    monkeypatch.setattr(
+        yk._Onbellek,
+        "durum",
+        yk.PaketDurumu(paketler=tuple(yk.Paket.sozlukten(i) for i in paket_ortak.REVIZYONLAR)),
+    )
+    kalemler = [k for k in _pano()["isler"] if k["kod"] == "KURAL_SURUMU"]
+    assert len(kalemler) == 1
+    (kalem,) = kalemler
+    assert (kalem["rota"], kalem["sekme"], kalem["vade"], kalem["metin"]) == (
+        "/birlik-donemi",
+        "",
+        None,
+        "",
+    )
+    assert kalem["ek"] == {
+        "bagli_paket": paket_ortak.PAKET,
+        "bagli_rev": 1,
+        "yeni_paket": paket_ortak.PAKET,
+        "yeni_rev": paket_ortak.EN_YENI_REV,
+    }
+    for rol in ROLLER[1:]:
+        assert "KURAL_SURUMU" not in _kodlar(_pano(rol)), rol
+    kural_bagi.revizyon_gecisi(donem, paket=paket_ortak.PAKET, rev=paket_ortak.EN_YENI_REV)
+    assert "KURAL_SURUMU" not in _kodlar(_pano())
 
 
 def test_ayni_oneriler_kisisiz_sayimla_tek_kalem() -> None:

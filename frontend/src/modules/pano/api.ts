@@ -26,6 +26,7 @@ export type IsKodu =
   | "YK_GOREV_BOLUMU"
   | "DK_GOREV_BOLUMU"
   | "GECIS_ADIMI"
+  | "KURAL_SURUMU"
   | "YEDEK_CAGRISI"
   | "KADRO"
   | "HESAP_ONERISI"
@@ -48,7 +49,8 @@ export interface PanoKalemi {
   metin: string;
   /** Madde atfı ("md. 12/3"); yoksa boş. */
   atif: string;
-  /** Kodun kişisiz ayrıntısı (geçiş adımı, hesap önerisinin türü ve rolü, taslağın bağlamı, kurul);
+  /** Kodun kişisiz ayrıntısı (geçiş adımı, kural sürümü güncellemesinin iki sürümü, hesap önerisinin
+   * türü ve rolü, taslağın bağlamı, kurul);
    * `sayi`: aynı önerilerin tek kaleme toplandığı sayı (hesap önerisi, Denetleme Kurulunun yedek
    * çağrısı; kişisiz sayım). */
   ek: Record<string, string | number>;

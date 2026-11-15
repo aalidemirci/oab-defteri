@@ -23,6 +23,10 @@ F1c KALEMLERİ (§7.10 "Fazlar": pano kabuğu; F2-F6 kaynakları kalem üretmez,
   programdan önce oluşmuştur (devralınan kurul): geçmiş geriye dönük işletilmez (§7.9 "Ne olmaz"),
   kalem çıkmaz;
 * `GECIS_ADIMI` — geçiş kurulumunun açık adımları (`gecis.yol_haritasi_durumu`; §7.9, §7.10);
+* `KURAL_SURUMU` — kural sürümü güncellemesi (F2 2. adım; tasarım §7.10 "Kurulum yol haritası … kural sürümü
+  seçimi", §6.2-5; plan F2 §6.3, §7 U2): programla açık dönemden daha yeni revizyon geldi
+  (`kural_bagi.guncelleme_onerisi`); `ek` yalnız iki sürümü taşır (paket kimliği ve revizyon). Kalem geçiş
+  yapılınca kendiliğinden düşer;
 * `YEDEK_CAGRISI` — yönetim kurulunda görevdeki asıl sayısı kural paketindeki asıl üye sayısının altında
   ve çağrılmamış yedek varken (md. 13/6; ileti `yonetim_kurulu.asil_uye`'nin), Denetleme Kurulunda
   öğretmen üyenin başka kurumdaki görevlendirmesi kural süresini aştıysa
@@ -45,9 +49,10 @@ F1c KALEMLERİ (§7.10 "Fazlar": pano kabuğu; F2-F6 kaynakları kalem üretmez,
 ROL BAŞINA GÖRÜNÜM (§7.10 tablosu ve §4.4.2; `KALEM_ROLLERI`): program yöneticisi bütün listeyi görür;
 sekreter yönetim kurulunun görev bölümü süresini, yedek çağrısı önerisini ve kadrosunu; başkan ve başkan
 yardımcısı yönetim kurulunun görev bölümü süresini; Denetleme Kurulu kendi görev bölümü süresini ve
-kadrosunu. Geçiş adımları, hesap önerileri ve Denetleme Kurulunun yedek çağrısı (yedeği program yöneticisi
-çağırır, md. 14/6) yalnız program yöneticisinindir. Tamamlanacaklar, bilgiler ve kendi yarım taslağı her
-roldedir (M2 ve M1'i her rol okur; Organlar ekranının kadro okuması aynı satırları aynı süzmeyle verir).
+kadrosunu. Geçiş adımları, kural sürümü güncellemesi, hesap önerileri ve Denetleme Kurulunun yedek
+çağrısı (yedeği program yöneticisi çağırır, md. 14/6) yalnız program yöneticisinindir. Tamamlanacaklar,
+bilgiler ve kendi yarım taslağı her roldedir (M2 ve M1'i her rol okur; Organlar ekranının kadro okuması
+aynı satırları aynı süzmeyle verir).
 Veli rollerinde (başkan, başkan yardımcısı, muhasip, sekreter) varsayılan görünüm "bu ay sizden
 beklenenler"dir (`gorunum: "ay"`), ötekilerde "bu hafta yapılacaklar" (`"hafta"`); ön yüz rol adıyla
 dallanmaz, görünümü buradan okur.
@@ -89,6 +94,7 @@ from apps.oab.services import (
     gecis,
     gorev_bolumu,
     hesap_baglari,
+    kural_bagi,
     uyelik_gecisleri,
     uyelikler,
     uyum,
@@ -102,6 +108,7 @@ from apps.okul.models import AccountRole
 YK_GOREV_BOLUMU: Final = "YK_GOREV_BOLUMU"
 DK_GOREV_BOLUMU: Final = "DK_GOREV_BOLUMU"
 GECIS_ADIMI: Final = "GECIS_ADIMI"
+KURAL_SURUMU: Final = "KURAL_SURUMU"
 YEDEK_CAGRISI_YK: Final = "YEDEK_CAGRISI_YK"
 YEDEK_CAGRISI_DK: Final = "YEDEK_CAGRISI_DK"
 KADRO_YK: Final = "KADRO_YK"
@@ -132,6 +139,7 @@ KALEM_ROLLERI: Final[dict[str, frozenset[str]]] = {
     YK_GOREV_BOLUMU: frozenset({_YONETICI, _BASKAN, _BASKAN_YARDIMCISI, _SEKRETER}),
     DK_GOREV_BOLUMU: frozenset({_YONETICI, _DK}),
     GECIS_ADIMI: frozenset({_YONETICI}),
+    KURAL_SURUMU: frozenset({_YONETICI}),
     YEDEK_CAGRISI_YK: frozenset({_YONETICI, _SEKRETER}),
     YEDEK_CAGRISI_DK: frozenset({_YONETICI}),
     KADRO_YK: frozenset({_YONETICI, _SEKRETER}),
@@ -357,6 +365,21 @@ def _gecis_kalemleri() -> list[dict[str, Any]]:
     return [_kalem(GECIS_ADIMI, rota=_GECIS_KURULUMU, adim=adim) for adim in durum["open_steps"]]
 
 
+def _kural_surumu_kalemi() -> dict[str, Any] | None:
+    """Kural sürümü güncellemesi önerisi (kişisiz; götürdüğü ekran Birlik Dönemi)."""
+    oneri = kural_bagi.guncelleme_onerisi()
+    if oneri is None:
+        return None
+    return _kalem(
+        KURAL_SURUMU,
+        rota=_BIRLIK_DONEMI,
+        bagli_paket=oneri["bagli"]["paket"],
+        bagli_rev=oneri["bagli"]["rev"],
+        yeni_paket=oneri["en_yeni"]["paket"],
+        yeni_rev=oneri["en_yeni"]["rev"],
+    )
+
+
 def _hesap_kalemleri() -> list[dict[str, Any]]:
     """Program yöneticisinin hesap önerileri: yalnız tür, rol, neden ve sayı (kimlik dönmez). Aynı tür,
     rol ve nedenli öneriler tek kalemdir (ilk görülme sırası; aynı adlı bağlantılar yinelenmez)."""
@@ -489,6 +512,9 @@ def kalemler(rol: str | None, hesap_id: str | None, *, gun: date | None = None) 
         adaylar.extend(_kuralli_kalemler(donem, gun))
     if rol == _YONETICI:
         adaylar.extend((GECIS_ADIMI, k) for k in _gecis_kalemleri())
+        kural_surumu = _kural_surumu_kalemi()
+        if kural_surumu is not None:
+            adaylar.append((KURAL_SURUMU, kural_surumu))
         adaylar.extend((HESAP_ONERISI, k) for k in _hesap_kalemleri())
     isler = [k for kod, k in adaylar if rol is not None and rol in KALEM_ROLLERI[kod]]
     taslak = _taslak_kalemi(hesap_id)

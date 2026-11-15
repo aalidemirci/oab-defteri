@@ -86,6 +86,7 @@ from django.utils import timezone
 from openpyxl import Workbook
 from rest_framework.test import APIClient
 
+from apps.oab.kurallar import yukleyici
 from apps.oab.models import (
     AssemblyKind,
     BoardDecision,
@@ -104,7 +105,7 @@ from apps.oab.models import (
     PersonStatus,
     RulePackage,
 )
-from apps.oab.services import donemler, gecis, kisiler, kurullar, uyelikler, uyum
+from apps.oab.services import donemler, gecis, kisiler, kural_bagi, kurullar, uyelikler, uyum
 from apps.oab.services import evrak as evrak_servisi
 from apps.oab.services import genel_kurul as genel_kurul_servisi
 from apps.okul import denetim_izi, erisim_gunlugu, iz_durumu
@@ -404,6 +405,25 @@ def _toplanti_gunu(_: pytest.MonkeyPatch) -> Istek:
     return Istek(
         f"/api/v1/oab/terms/{donem.pk}/meeting-day/",
         {"yk_meeting_day_rule": "Her ayın ilk salısı"},
+        _turler("GUNCELLE"),
+    )
+
+
+def _kural_surumu_gecisi(monkeypatch: pytest.MonkeyPatch) -> Istek:
+    """Kural sürümü güncellemesi (F2 2. adım; tasarım §6.2-5): `r1`'e bağlı açık dönem `r2`'ye geçer.
+    Dönem satırının `GUNCELLE`'si ve paket-revizyon çiftini taşıyan olay satırı (`GUNCELLE`); hedefin
+    kopyası önceden vardır, yeni kopya yazılmaz. Dönem yalnız `r1` dağıtılmışken açılır (F1 kurulumunun
+    hâli; hiç bağlanmadığı eski revizyona inilemez, `kural_bagi.hedefler`)."""
+    gercek = yukleyici.durum()
+    assert gercek.en_yeni is not None
+    r1 = next(p for p in gercek.paketler if p.rev == 1)
+    monkeypatch.setattr(yukleyici._Onbellek, "durum", yukleyici.PaketDurumu(paketler=(r1,)))
+    donem = _f1c6_donemi()
+    monkeypatch.setattr(yukleyici._Onbellek, "durum", gercek)
+    kural_bagi.kopya_dondur(gercek.en_yeni)
+    return Istek(
+        f"/api/v1/oab/terms/{donem.pk}/rule-revision/",
+        {"paket": "OAB-2023.12", "rev": 2},
         _turler("GUNCELLE"),
     )
 
@@ -863,6 +883,7 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     # F1c 11. adım: geçiş kurulumunun uçları (etiket `GECIS`; §7.9).
     ("oab-term-cancel", "POST"): Senaryo(_gecis_iptali),
     ("oab-term-meeting-day", "PUT"): Senaryo(_toplanti_gunu),
+    ("oab-term-rule-revision", "POST"): Senaryo(_kural_surumu_gecisi),
     ("oab-transition-inherited", "POST"): Senaryo(_gecis_devralinan),
     ("oab-transition-election-counts", "POST"): Senaryo(_gecis_sayac_beyani),
     ("oab-transition-decision-book", "POST"): Senaryo(_gecis_karar_defteri),

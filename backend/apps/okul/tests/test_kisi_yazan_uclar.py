@@ -160,6 +160,9 @@ DIGER_UCLAR = frozenset(
         # listesi (kişisiz okuma; F1c 11. adım).
         "oab-term-meeting-day",
         "oab-term-linkable-decisions",
+        # Kural sürümü güncellemesi (F2 2. adım): dönemin kural bağını yazar, kişi yazmaz; kapı
+        # `Eylem.KURAL_SURUMU_SECIMI`.
+        "oab-term-rule-revision",
         "oab-term-list",
         # Geçiş kurulumu (F1c 11. adım): durum okuması (kişisiz), dönem ve karar defteri kaydının
         # iptali (şifreli gerekçe, kişi yazmaz), karar defteri ve "Geçiş kurulumu tamamlandı" işareti.

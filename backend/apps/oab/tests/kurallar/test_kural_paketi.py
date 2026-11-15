@@ -1901,6 +1901,129 @@ def test_ekleme_revizyonu_hesap_degistirmez(monkeypatch: pytest.MonkeyPatch) -> 
     assert GeneralAssembly.objects.get(pk=kurul.pk).quorum_required == 64
 
 
+#: `r1`'den `r2`'ye geçişin hesabı değiştirmediğinin ölçüsü: kuralın değeri ve hesaba ya da uyarının
+#: doğmasına giren alanları (metin, açıklama ve dayanak türü hesap değildir).
+_HESAP_ALANLARI = (
+    "deger",
+    "birim",
+    "karsilastirma",
+    "tur",
+    "kosul",
+    "olay_tarihi",
+    "yururluk",
+    "eksik_veri",
+    "toplu_gerekce",
+)
+#: `r2`'nin tek düzeltmesi (S3 (a)): değer aynı, dayanak yorum, ileti "birinci toplantının günü".
+_R2_DUZELTME = "genel_kurul.olagan_son_ay"
+
+
+def _r1e_bagli_donem(monkeypatch: pytest.MonkeyPatch) -> OabTerm:
+    """F1 kurulumunun hâli: dönem yalnız `r1` dağıtılmışken açıldı, program sonra `r2` ile güncellendi."""
+    _dagit(monkeypatch, R1)
+    donem = _ilk_donem()
+    _dagit(monkeypatch, *GERCEK)
+    assert _bag(donem) == (PAKET, 1)
+    return donem
+
+
+def _hesap_alanlari(icerik: dict[str, Any], kid: str) -> list[dict[str, Any]]:
+    return [{a: k.get(a) for a in _HESAP_ALANLARI} for k in icerik["kurallar"] if k["id"] == kid]
+
+
+@pytest.mark.django_db
+def test_r2_yalniz_ekleme_ve_hesap_degistirmez(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Plan F2 2. adım, §7 U1; tasarım §6.2-2: gerçek `r2` yalnız sekiz ekleme ve değeri aynı bir
+    düzeltme taşır (`olagan_son_ay`, dayanak yorum). `r1`'in öteki her kuralı `r2`'de aynen, düzeltilen
+    kural aynı değer ve yürürlükle durur; `r1`'e bağlı açık dönemin geçişi etkilenen kayıt üretmez, onay
+    istemez, dondurulmuş yeter sayıyı ve hesabı değiştirmez."""
+    donem = _r1e_bagli_donem(monkeypatch)
+    kurul = genel_kurul.yeter_sayiyi_dondur(_kurul(donem), tarih=GUN)
+    once = genel_kurul_hesabi.genel_kurul_yeter_sayisi(
+        120, tarih=GUN, donem=OabTerm.objects.get(pk=donem.pk)
+    ).gerekli
+
+    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=2)
+    eklenen = {d["id"] for d in R2["degisiklikler"] if d["tur"] == "ekleme"}
+    assert len(eklenen) == 8
+    assert set(fark.eklenen) == eklenen
+    assert fark.duzeltilen == (_R2_DUZELTME,)
+    assert (fark.cikarilan, fark.biten, fark.deger_degisen) == ((), (), ())
+    assert fark.kayitlar == ()
+    for kayit in R1["kurallar"]:
+        kid = kayit["id"]
+        if kid == _R2_DUZELTME:
+            assert _hesap_alanlari(R2, kid) == _hesap_alanlari(R1, kid)
+        else:
+            assert [k for k in R2["kurallar"] if k["id"] == kid] == [
+                k for k in R1["kurallar"] if k["id"] == kid
+            ], kid
+
+    sonuc = kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=2)
+    assert sonuc.kayitlar == ()
+    assert _bag(donem) == (PAKET, 2)
+    sonra = OabTerm.objects.get(pk=donem.pk)
+    assert genel_kurul_hesabi.genel_kurul_yeter_sayisi(120, tarih=GUN, donem=sonra).gerekli == once
+    assert GeneralAssembly.objects.get(pk=kurul.pk).quorum_required == kurul.quorum_required
+    assert kural(_R2_DUZELTME, tarih=GUN, donem=sonra) == _kayit_al(R1, _R2_DUZELTME)["deger"]
+
+
+@pytest.mark.django_db
+def test_acilis_bagi_en_yeni_revizyondur_acik_donem_kendiliginden_gecmez(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Plan F2 §7 U2, tasarım §6.2-4: açılan dönem (ilk dönem; F2'nin 4. adımında hazırlık dönemi)
+    programla gelen en yeni revizyona bağlanır; daha yeni revizyon gelince açık dönemin bağı
+    kendiliğinden değişmez, yalnız öneri çıkar (`guncelleme_onerisi`)."""
+    donem = _ilk_donem()
+    assert kural_bagi.acilis_bagi() == donem.rule_package
+    assert kural_bagi.guncelleme_onerisi() is None
+    _dagit(monkeypatch, *GERCEK, _ekleme_revizyonu())
+    yeni = kural_bagi.acilis_bagi()
+    assert (yeni.package, yeni.rev) == (PAKET, YENI_REV)
+    assert _bag(donem) == (PAKET, SON_REV)
+    assert kural_bagi.guncelleme_onerisi() == {
+        "donem": donem.pk,
+        "bagli": {"paket": PAKET, "rev": SON_REV},
+        "en_yeni": {"paket": PAKET, "rev": YENI_REV},
+    }
+    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=YENI_REV)
+    assert kural_bagi.guncelleme_onerisi() is None
+
+
+@pytest.mark.django_db
+def test_guncelleme_onerisi_kapanmis_bozuk_ve_daha_yeni_bagda_cikmaz(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Öneri yalnız `ACIK` dönem eski revizyondayken çıkar: kapanmış dönem geçemez (§6.2-6), kopyası
+    tutmayan dönem salt okurdur (D7), dönem dağıtılandan daha yeni revizyondaysa (ör. daha yeni
+    programın yedeği) eskiye geçiş önerilmez; paket yüklenemezse (D1) öneri yoktur."""
+    r3 = _ekleme_revizyonu()
+    donem = _ilk_donem()
+    _dagit(monkeypatch, *GERCEK, r3)
+    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=YENI_REV)
+    _dagit(monkeypatch, *GERCEK)
+    assert kural_bagi.guncelleme_onerisi() is None  # dönem dağıtılandan yeni
+    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=SON_REV)
+    _dagit(monkeypatch, *GERCEK, r3)
+    assert kural_bagi.guncelleme_onerisi() is not None
+    monkeypatch.setattr(yk._Onbellek, "durum", yk.PaketDurumu(hatalar=("Uydurma D1 hatası",)))
+    assert kural_bagi.guncelleme_onerisi() is None
+    _dagit(monkeypatch, *GERCEK, r3)
+    # Kapanmış dönem kolu kopyası sağlamken sınanır (bozuk kopya sonucu örtmesin).
+    bitis = OabTerm.objects.get(pk=donem.pk).end_date
+    assert donem_kilidi.kural_kopyasi_tutuyor(_kapat(donem))
+    assert kural_bagi.guncelleme_onerisi() is None
+    OabTerm.objects.filter(pk=donem.pk).update(status=TermStatus.ACIK, end_date=bitis)
+    assert kural_bagi.guncelleme_onerisi() is not None  # aynı dönem açıkken öneri çıkar
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "UPDATE oab_rulepackage SET content = json_set(content, '$.bozuk', 1) WHERE id = %s",
+            [OabTerm.objects.get(pk=donem.pk).rule_package_id],
+        )
+    assert kural_bagi.guncelleme_onerisi() is None
+
+
 @pytest.mark.django_db
 def test_duzeltme_revizyonunda_hesabi_degisecek_kayitlar_listelenir(
     monkeypatch: pytest.MonkeyPatch,

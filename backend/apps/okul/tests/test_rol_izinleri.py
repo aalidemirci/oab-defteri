@@ -449,6 +449,9 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     # bağlanabilecek kararların listesi her role açıktır (M4 okuması).
     "oab-term-meeting-day": {"PUT": "Y+SEK"},
     "oab-term-linkable-decisions": {"GET": "H", "HEAD": "H"},
+    # F2 2. adım: kural sürümü güncellemesi (Ayarlar satırının kural sürümü seçimi; okuma da yalnız
+    # program yöneticisine daraltıldı, tasarım §6.2-5, plan F2 §6.1).
+    "oab-term-rule-revision": {"GET": "Y", "HEAD": "Y", "POST": "Y"},
     # Gerekçe kutusunun yarım metni: her rol kendi kaydını yazar (KENDI satırı).
     "oab-draft-text": {"GET": "H", "HEAD": "H", "PUT": "H", "DELETE": "H"},
     # Genel Bakış'ın pano kalemleri (F1c 12. adım): her rol okur, kalemleri servis süzer (M9).

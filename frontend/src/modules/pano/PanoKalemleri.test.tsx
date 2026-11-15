@@ -24,6 +24,8 @@ import {
   EKSIK_ROZETI,
   HAFTA_BASLIGI,
   HAFTA_BOS,
+  KURAL_SURUMU_ACIKLAMASI,
+  KURAL_SURUMU_BASLIGI,
   PANO_OKUNAMADI,
   PANO_YUKLENIYOR,
   TAMAMLANACAKLAR_ACIKLAMASI,
@@ -192,6 +194,27 @@ describe("Pano kalemleri", () => {
     expect(screen.getByText(EKSIK_ROZETI)).toHaveClass("text-label-medium");
     expect(screen.getByText(TAMAMLANACAKLAR_ACIKLAMASI)).toHaveClass("text-body-small");
     expect(screen.getByRole("status")).toHaveClass("text-body-medium");
+  });
+
+  it("kural sürümü güncellemesi: başlık, durum cümlesi, Birlik Dönemi'ne götürür", async () => {
+    const SURUM = kalem({
+      kod: "KURAL_SURUMU",
+      rota: "/birlik-donemi",
+      sekme: "",
+      ek: { bagli_paket: "OAB-2023.12", bagli_rev: 1, yeni_paket: "OAB-2023.12", yeni_rev: 2 },
+    });
+    papi.kalemler.mockResolvedValue(yanit({ isler: [SURUM] }));
+    bas();
+    const bolum = await screen.findByRole("region", { name: HAFTA_BASLIGI });
+    const satir = within(bolum)
+      .getAllByRole("link")
+      .find((b) => b.textContent?.includes(KURAL_SURUMU_BASLIGI));
+    expect(satir).toHaveAttribute("href", "/birlik-donemi");
+    expect(satir).toHaveTextContent(KURAL_SURUMU_ACIKLAMASI);
+    expect(satir).toHaveTextContent("Birlik Dönemi");
+    // Paket kodu ve revizyon numarası kullanıcı metnine çıkmaz (sözlük §2).
+    expect(satir).not.toHaveTextContent("OAB-2023.12");
+    expect(KURAL_SURUMU_BASLIGI).toBe("Kural sürümü güncellemesi");
   });
 
   it("yedek çağrısı ve kadro başlığı kurula göre", () => {

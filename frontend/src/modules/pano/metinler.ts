@@ -30,6 +30,7 @@ export const EKSIK_ROZETI = "Eksik";
 export const YK_GOREV_BOLUMU_BASLIGI = "Yönetim kurulunun görev bölümü";
 export const DK_GOREV_BOLUMU_BASLIGI = "Denetleme Kurulunun görev bölümü";
 export const GECIS_BASLIGI = "Geçiş kurulumu";
+export const KURAL_SURUMU_BASLIGI = "Kural sürümü güncellemesi";
 export const YK_YEDEK_BASLIGI = "Yönetim kurulunda yedek çağrısı";
 export const DK_YEDEK_BASLIGI = "Denetleme Kurulunda yedek çağrısı";
 export const YK_KADRO_BASLIGI = "Yönetim kurulunun kadrosu";
@@ -51,6 +52,12 @@ export const GECIS_ADIMI_CUMLESI: Record<string, string> = {
   karar_defteri: "Karar defteri girilmedi.",
   tamamla: "“Geçiş kurulumu tamamlandı” işareti konmadı.",
 };
+
+/** Kural sürümü güncellemesi (F2; backend `kural_bagi.guncelleme_onerisi`; tasarım §6.2-5): programla açık
+ * birlik döneminden daha yeni kural sürümü geldi. Kalem yalnız durumu söyler; geçiş farkı görülüp
+ * onaylanınca yapılır ve kalem kendiliğinden düşer. */
+export const KURAL_SURUMU_ACIKLAMASI =
+  "Programla yeni bir kural sürümü geldi; açık birlik dönemi önceki sürümle hesaplanıyor.";
 
 /** Hesap önerisindeki rolün adı (organ rolleri; sözlük §1 "Hesap"). */
 export const ROL_ADI: Record<string, string> = {
@@ -153,6 +160,7 @@ export function kalemBasligi(kalem: PanoKalemi): string {
     YK_GOREV_BOLUMU: YK_GOREV_BOLUMU_BASLIGI,
     DK_GOREV_BOLUMU: DK_GOREV_BOLUMU_BASLIGI,
     GECIS_ADIMI: GECIS_BASLIGI,
+    KURAL_SURUMU: KURAL_SURUMU_BASLIGI,
     YEDEK_CAGRISI: dk ? DK_YEDEK_BASLIGI : YK_YEDEK_BASLIGI,
     KADRO: dk ? DK_KADRO_BASLIGI : YK_KADRO_BASLIGI,
     HESAP_ONERISI: HESAP_ONERISI_BASLIGI,
@@ -170,6 +178,8 @@ export function kalemAciklamasi(kalem: PanoKalemi): string {
       return DK_GOREV_BOLUMU_ACIKLAMASI;
     case "GECIS_ADIMI":
       return GECIS_ADIMI_CUMLESI[String(kalem.ek.adim)] ?? "";
+    case "KURAL_SURUMU":
+      return KURAL_SURUMU_ACIKLAMASI;
     case "HESAP_ONERISI":
       return hesapOnerisiCumlesi(kalem.ek);
     case "YARIM_TASLAK":

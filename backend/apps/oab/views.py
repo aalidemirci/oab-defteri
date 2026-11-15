@@ -48,6 +48,8 @@ from apps.oab.serializers import (
     IptalSerializer,
     KararDefteriGecisSerializer,
     KararDefteriSerializer,
+    KuralSurumuGecisiSerializer,
+    KuralSurumuSerializer,
     OabPersonCreateSerializer,
     OabPersonFromParentSerializer,
     OabPersonFromPersonnelSerializer,
@@ -71,6 +73,7 @@ from apps.oab.services import (
     gorev_bolumu,
     gorev_evraki,
     kisiler,
+    kural_bagi,
     kurullar,
     pano,
     temsilciler,
@@ -180,6 +183,74 @@ class TermMeetingDayView(APIView):
         with _hizmet_hatalari():
             donem = donemler.toplanti_gunu_yaz(donem, govde.validated_data["yk_meeting_day_rule"])
         return Response(OabTermSerializer(donem).data)
+
+
+class TermRuleRevisionView(APIView):
+    """Kural sürümü güncellemesi: dönemin bağı, geçebileceği revizyonlar, fark ve geçiş (tasarım §6.2-5;
+    plan F2 §6.1, 2. adım). Okuma ve yazma yalnız program yöneticisinindir (Ayarlar satırı, kural sürümü
+    seçimi; `Eylem.KURAL_SURUMU_SECIMI`). Hedefler programla gelen daha yeni revizyonlar ve dönemin
+    önceki bağlarıdır (`kural_bagi.hedefler`); başka sürüm sorulursa 400. Hedef verilmezse programla
+    gelen en yeni revizyondur (dönemin bağından eskiyse hedef yoktur); hedef dönemin bugünkü bağıysa
+    fark boştur. Kapanmış dönemde geçiş sert engeldir (409 `donem_kapali`); hesabı ya da uyarısı
+    değişecek kayıt varsa geçiş `onay` ister (409 `revizyon_onayi_gerekli`)."""
+
+    def get(self, request: Request, pk: int) -> Response:
+        donem = get_object_or_404(_donemler(), pk=pk)
+        bagli = {"paket": donem.rule_package.package, "rev": donem.rule_package.rev}
+        en_yeni = kural_bagi.en_yeni_surum()
+        hedefler = kural_bagi.hedefler(donem)
+        if request.query_params:
+            sorgu = KuralSurumuSerializer(data=request.query_params)
+            sorgu.is_valid(raise_exception=True)
+            hedef: dict[str, Any] | None = {
+                "paket": sorgu.validated_data["paket"],
+                "rev": sorgu.validated_data["rev"],
+            }
+        else:
+            # Varsayılan hedef en yeni revizyondur. Dönem ondan daha yeni sürümdeyse (ör. daha yeni
+            # programın yedeği) eskiye geçiş önerilmez (`guncelleme_onerisi` ile aynı ölçü): hedef yok,
+            # fark boş; geri alma ancak sorguyla okunur.
+            hedef = None
+            if en_yeni is not None:
+                surum = (en_yeni["paket"], en_yeni["rev"])
+                bag = (bagli["paket"], bagli["rev"])
+                if surum == bag or (surum > bag and en_yeni in hedefler):
+                    hedef = en_yeni
+        fark = None
+        if hedef is not None and hedef != bagli:
+            with _hizmet_hatalari():
+                fark = kural_bagi.fark_gorunumu(donem, paket=hedef["paket"], rev=hedef["rev"])
+        return Response(
+            {
+                "donem": donem.pk,
+                "bagli": bagli,
+                "en_yeni": en_yeni,
+                "hedefler": hedefler,
+                "gecilebilir": kural_bagi.gecilebilir(donem),
+                "hedef": hedef,
+                "fark": fark,
+            }
+        )
+
+    def post(self, request: Request, pk: int) -> Response:
+        donem = get_object_or_404(_donemler(), pk=pk)
+        govde = KuralSurumuGecisiSerializer(data=request.data)
+        govde.is_valid(raise_exception=True)
+        once = donem.rule_package.content
+        with _hizmet_hatalari():
+            fark = kural_bagi.revizyon_gecisi(
+                donem,
+                paket=govde.validated_data["paket"],
+                rev=govde.validated_data["rev"],
+                onay=govde.validated_data["onay"],
+            )
+        donem = get_object_or_404(_donemler(), pk=pk)
+        return Response(
+            {
+                **OabTermSerializer(donem).data,
+                "fark": kural_bagi.fark_sozlugu(fark, once=once, sonra=donem.rule_package.content),
+            }
+        )
 
 
 class TermLinkableDecisionsView(APIView):

@@ -382,6 +382,12 @@ ADSIZ_UCLAR: Final[Mapping[str, str]] = {
         "Kendi parola yenilenme bildiriminin “Gördüm”ü; bildirim kendiliğinden açılır, ayrı iş "
         "değildir."
     ),
+    # F2 2. adım: uç var, ekranı (Birlik Dönemi → Kural sürümü güncellemesi) F2'nin 11. adımındadır;
+    # ekran gelince Ayarlar satırının parçası olur ve buradan çıkar.
+    "oab-term-rule-revision": (
+        "Kural sürümü güncellemesi; ekranı henüz yoktur, bugün programda yapılabilen iş diye "
+        "yazılmaz."
+    ),
 }
 
 

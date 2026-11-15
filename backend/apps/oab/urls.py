@@ -25,6 +25,12 @@ urlpatterns: list[URLPattern | URLResolver] = [
         views.TermMeetingDayView.as_view(),
         name="oab-term-meeting-day",
     ),
+    # Kural sürümü güncellemesi: bağ, hedefler, fark ve revizyon geçişi (tasarım §6.2-5; F2 2. adım).
+    path(
+        "terms/<int:pk>/rule-revision/",
+        views.TermRuleRevisionView.as_view(),
+        name="oab-term-rule-revision",
+    ),
     # Bağlanabilecek (kabul edilmiş ya da deftere işlenmiş) yönetim kurulu kararları (F1c 11. adım).
     path(
         "terms/<int:pk>/linkable-decisions/",

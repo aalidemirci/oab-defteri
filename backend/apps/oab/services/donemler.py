@@ -53,7 +53,7 @@ def create_term(
             school_year=school_year,
             start_date=start_date,
             program_start_date=program_start_date,
-            rule_package=kural_bagi.en_yeni_kopya(),
+            rule_package=kural_bagi.acilis_bagi(),
             status=TermStatus.ACIK,
             created_by_id=hesap,
             updated_by_id=hesap,

@@ -405,6 +405,11 @@ _DAYANAK_HAVUZ = (
     "`?summary=true` ayrı açılamaz."
 )
 _DAYANAK_SABLON = "Plan F1b-2: şablonlar e-Okul aktarımının parçasıdır (tasarım §8.1 A7)."
+_DAYANAK_KURAL_SURUMU = (
+    "Tasarım §6.2-5 ('Yönetici \"kural paketi güncellemesi\" ekranında farkı görür … onaylar') ve plan F2 "
+    "§6.1 (Kural sürümü güncellemesi ekranı: yalnız yonetici): fark ekranı geçişin onay adımıdır, "
+    "satırın öteki okurları kural sürümünü Birlik Dönemi ve Ayarlar'daki salt okunur satırdan görür."
+)
 _DAYANAK_VELI = (
     "Tasarım §8.4 (4) ve §4.4.2: veli listesini aktarmak kişisel veri içeren dışa aktarım "
     "yetkisidir (¹⁰, yalnız program yöneticisi); §5.4: program yöneticisi listeyi onayla elle "
@@ -487,6 +492,16 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _oku("oab-term-list", Satir.M1),
     _yaz("oab-term-list", "POST", Satir.M1),
     _oku("oab-term-detail", Satir.M1),
+    # Kural sürümü güncellemesi (tasarım §6.2-5; plan F2 §6.1, 2. adım): Ayarlar satırının kural sürümü
+    # seçimi; okuma (fark) da yalnız program yöneticisine daraltılır. Servis `Eylem.KURAL_SURUMU_SECIMI`
+    # ile yeniden sorar.
+    _oku(
+        "oab-term-rule-revision",
+        Satir.AYARLAR,
+        yalniz=_YALNIZ_YONETICI,
+        dayanak=_DAYANAK_KURAL_SURUMU,
+    ),
+    _yaz("oab-term-rule-revision", "POST", Satir.AYARLAR),
     # Geçiş kurulumu (tasarım §7.9 adım 1-4, "Kim: yonetici"; F1c 8. adımın servisleri, uçları 11. adımda):
     # durum okuması, dönem iptali, devralınan kurul ve temsilci, seçilme sayısı beyanı, karar defteri
     # ve iptali, "Geçiş kurulumu tamamlandı" işareti. Devralınan üyeliğin iptali M2'nin genel iptal
