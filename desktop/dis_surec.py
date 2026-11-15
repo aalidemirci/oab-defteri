@@ -100,16 +100,24 @@ isteği o sayfanın `acceptNavigationRequest`'ine gelir; karar `yeni_pencere_kar
 Sayfa her durumda gezinmeyi reddeder (`False`) ve kendini siler (`deleteLater`): yeni pencere açılmaz.
 Günlüğe adres yazılmaz.
 
-Windows'ta (EdgeChromium kolu) yol başkadır ve değişmez: `edgechromium.py` `on_new_window_request`
-`NewWindowRequested`'i karşılar (`Handled = True`), ayar açıkken adresi `webbrowser.open`'a verir;
-profil sorunu yoktur. O kol adresin şemasını ve kökenini süzmez; programın `target="_blank"`
-bağlantıları yalnız sabit https adresleridir (`HakkindaPage.tsx`, `UpdatePanel.tsx`). Yeni pencere
-isteği yalnız onlardan gelmez: program içi bir bağlantıya (React Router `<Link>`) Ctrl ya da orta
-tuşla tıklanınca da gelir (`<Link>` değiştirici tuşta tarayıcının varsayılanına bırakır). Windows'ta
-o istek sistemin tarayıcısını `http://127.0.0.1:<port>/<yol>` adresiyle açar; adreste ve tarayıcıda
-oturum belirteci olmadığı için sunucu isteği 403 ile reddeder (`desktop/session_guard.py`), sayfa
-çalışmaz. Linux kolu aynı isteği reddeder: iki platform burada ayrışır (bağımsız
-denetim 14.11.2026; Windows koluna bu işte dokunulmadı, kullanıcıya raporlandı).
+**Windows'ta da aynı karar uygulanır** (bağımsız denetim 14.11.2026, Pardus yeniden sınamasının
+K-yeni-1 notu; Windows'ta gerçek pencerede ölçülmedi, pywebview kaynağından çıkarıldı).
+EdgeChromium kolunda profil sorunu yoktur: pywebview 5.3.2'nin `platforms/edgechromium.py`
+`on_new_window_request`'i `NewWindowRequested`'i karşılar (`Handled = True`) ve ayar açıkken adresi
+`webbrowser.open`'a verir; ama adresin şemasını ve kökenini süzmez. Yeni pencere isteği yalnız
+programın `target="_blank"` bağlantılarından (sabit https adresleri: `HakkindaPage.tsx`,
+`UpdatePanel.tsx`) gelmez: program içi bir bağlantıya (React Router `<Link>`) Ctrl ya da orta tuşla
+tıklanınca da gelir (`<Link>` değiştirici tuşta tarayıcının varsayılanına bırakır). Kolun kendi
+işleyicisi bu isteği sistemin tarayıcısında `http://127.0.0.1:<port>/<yol>` adresiyle açar; adreste ve
+tarayıcıda oturum belirteci olmadığı için sunucu 403 verir (`desktop/session_guard.py`). `yeni_pencere_isleyicisini_bagla`
+Windows'ta, arka uç (`platforms/winforms.py`) yüklenince ve pencere kurulmadan önce, kolun
+`Chromium.EdgeChrome.on_new_window_request`'ini `edgechromium_yeni_pencere_isleyicisi` ile değiştirir.
+Yöntem sınıfta değiştirilir: kol onu bileşen hazır olunca (`on_webview_ready`,
+`NewWindowRequested += self.on_new_window_request`) örnekten okur, değişiklik o ana dek yapılmış olur.
+Yeni işleyici isteği önce karşılar (`Handled = True`; WebView2 kendi açılır penceresini açmaz), sonra
+`yeni_pencere_karari`'nı ana adres olarak bileşenin o anki adresiyle (`CoreWebView2.Source`) uygular:
+dış adres kolun modülündeki `webbrowser` adıyla açılır, ayar kapalıysa ana pencerede (`load_url`),
+program içi ve dış olmayan adres reddedilir. Hata .NET olayından taşmaz; günlüğe adres yazılmaz.
 """
 
 from __future__ import annotations
@@ -354,14 +362,56 @@ def yeni_pencere_isleyicisi(arka_uc: Any) -> Callable[[Any, Any], Any]:
     return createWindow
 
 
-def yeni_pencere_isleyicisini_bagla(arka_uc: Any, *, platform: str | None = None) -> bool:
-    """Linux: pywebview Qt kolunun yeni pencere isteğini pencerenin profiline bağlar (modül başlığı).
+def edgechromium_yeni_pencere_isleyicisi(chromium: Any) -> Callable[[Any, Any, Any], None]:
+    """`EdgeChrome.on_new_window_request`'in yerine geçen yöntem (modül başlığı, Windows).
 
-    Arka uç yüklenince, sayfa kurulmadan önce çağrılır (`desktop.window.open_window`). Windows'ta (ve
-    macOS'ta) hiçbir şey yapmaz.
+    `chromium` kolun `platforms/edgechromium.py` modülüdür; ayar ve `webbrowser` çağrı anında okunur.
+    """
+
+    def on_new_window_request(self: Any, sender: Any, args: Any) -> None:
+        try:
+            args.set_Handled(True)
+            adres = str(args.get_Uri())
+            karar = yeni_pencere_karari(
+                adres,
+                str(sender.Source),
+                tarayicida=bool(
+                    chromium.webview_settings.get("OPEN_EXTERNAL_LINKS_IN_BROWSER", True)
+                ),
+            )
+            if karar == TARAYICIDA:
+                chromium.webbrowser.open(adres)
+            elif karar == ANA_PENCEREDE:
+                self.load_url(adres)
+            else:
+                logger.warning(
+                    "Yeni pencere isteği reddedildi (program içi ya da dış olmayan adres)."
+                )
+        except Exception as hata:  # noqa: BLE001 — .NET olayından hata taşmasın
+            logger.warning("Yeni pencere isteği karşılanamadı (%s).", type(hata).__name__)
+
+    return on_new_window_request
+
+
+def yeni_pencere_isleyicisini_bagla(arka_uc: Any, *, platform: str | None = None) -> bool:
+    """Yeni pencere isteğini `yeni_pencere_karari`'na bağlar (modül başlığı).
+
+    Arka uç yüklenince, pencere kurulmadan önce çağrılır (`desktop.window.open_window`). Linux'ta Qt
+    kolunun sayfa sınıfına (`createWindow`, pencerenin profiliyle), Windows'ta EdgeChromium kolunun
+    sınıfına (`on_new_window_request`) bağlanır; macOS'ta hiçbir şey yapmaz. Windows'ta kol
+    EdgeChromium değilse (`Chromium` adı yoksa) bağlanmaz, günlüğe uyarı düşer.
     """
     sistem = sys.platform if platform is None else platform
-    if _windows_mu(sistem) or sistem == "darwin":
+    if sistem == "darwin":
         return False
+    if _windows_mu(sistem):
+        chromium = getattr(arka_uc, "Chromium", None)
+        if chromium is None:
+            logger.warning(
+                "Pencere bileşeni EdgeChromium değil; yeni pencere isteğine bağlanılmadı."
+            )
+            return False
+        chromium.EdgeChrome.on_new_window_request = edgechromium_yeni_pencere_isleyicisi(chromium)
+        return True
     arka_uc.BrowserView.WebPage.createWindow = yeni_pencere_isleyicisi(arka_uc)
     return True
