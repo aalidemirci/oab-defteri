@@ -288,6 +288,42 @@ describe("App — oturum", () => {
   });
 });
 
+describe("App — açık dosya penceresi bildirimi", () => {
+  function pencereAcik() {
+    act(() => {
+      window.dispatchEvent(new CustomEvent("od:dosya-penceresi-acik"));
+    });
+  }
+
+  it("açık oturumda çıkar", async () => {
+    ekranaBas("/");
+    await screen.findByRole("heading", { name: "Genel Bakış" });
+
+    pencereAcik();
+
+    expect(screen.getByText("Açık bir dosya penceresi var; önce onu kapatın.")).toBeInTheDocument();
+  });
+
+  it("kilit ekranında da çıkar", async () => {
+    const durum = vi.spyOn(guvenlikApi, "durum").mockResolvedValue({
+      ...GUVENLIK_OKUNAMADI,
+      password_set: true,
+      locked: true,
+      account_count: 1,
+    });
+    oturumApiMock.ozet.mockResolvedValue({ ...ACIK_OTURUM, durum: "kilitli", hesap: null });
+    oturumApiMock.hesaplar.mockResolvedValue([]);
+    oturumApiMock.kurtarmaHesaplari.mockResolvedValue([]);
+    ekranaBas("/");
+    await screen.findByRole("heading", { name: "Kayıtlar kilitli" });
+
+    pencereAcik();
+
+    expect(screen.getByText("Açık bir dosya penceresi var; önce onu kapatın.")).toBeInTheDocument();
+    durum.mockRestore();
+  });
+});
+
 describe("App — kapanış penceresi", () => {
   function kapanisBekliyor() {
     act(() => {

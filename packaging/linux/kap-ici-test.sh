@@ -15,7 +15,11 @@
 #   5. Dosya yerleşimi (menü kaydı, ikon, /usr/bin bağlantısı) ve lisanslar
 #      (DEP-5 copyright, THIRD_PARTY_LICENSES, readline ve Qt'nin yalnız GPL'li
 #      modülleri yok, Windows'a özgü pywebview dosyaları yok)
-#   6. Temiz kaldırma
+#   6. Grafik sürücüsüyle paylaşılan kütüphaneler pakette yok; paketteki ELF'lerin
+#      bağımlılıkları bu dağıtımda çözülüyor (ldd); sistemin Mesa sürücüsü paketin
+#      kütüphaneleriyle eksik sembolsüz bağlanıyor (ldd -r) — pencere açmadan
+#      (Pardus 25 GLX çöküşü, 12.11.2026)
+#   7. Temiz kaldırma
 # =============================================================================
 set -euo pipefail
 
@@ -83,6 +87,31 @@ if find /opt/oab-defteri -path '*webview*' \( -name '*.dll' -o -name '*.jar' \) 
     echo "HATA: Windows'a özgü pywebview dosyaları Linux paketinde" >&2
     exit 1
 fi
+
+# --- Sistemden alınan kütüphaneler (Pardus 25 saha bulgusu, 12.11.2026) ---------------
+# Üç denetim de sistem_denetimi.sh'teki işlevlerdir (davranışları sahte ağaç ve sahte ldd ile
+# sınanır — packaging/tests/test_sistem_kutuphaneleri.py). ÇIPLAK deyimle çağrılır: dönüş 1,
+# `set -euo pipefail` altında provayı durdurur; `|| true` ya da `if` içine ALINMAZ.
+. "$(dirname "${BASH_SOURCE[0]}")/sistem_denetimi.sh"
+
+echo "== sistemden alınan kütüphaneler pakette yok (dosya ya da sembolik bağ)"
+sistemden_alinanlar_pakette_yok /opt/oab-defteri
+
+echo "== paketteki ELF'lerin bağımlılıkları bu dağıtımda çözülüyor (ldd)"
+paket_elfleri_cozuluyor /opt/oab-defteri
+
+echo "== sistemin Mesa sürücüsü paketin kütüphaneleriyle bağlanıyor (ldd -r)"
+apt_dene apt-get install -y -qq --no-install-recommends \
+    libgl1-mesa-dri libglx-mesa0 libegl-mesa0 libgbm1
+mesa_paketle_baglaniyor /opt/oab-defteri/_internal \
+    /usr/lib/x86_64-linux-gnu/libGLX_mesa.so.0 \
+    /usr/lib/x86_64-linux-gnu/libEGL_mesa.so.0 \
+    /usr/lib/x86_64-linux-gnu/libgbm.so.1 \
+    /usr/lib/x86_64-linux-gnu/libgallium-*.so \
+    /usr/lib/x86_64-linux-gnu/gbm/*.so \
+    /usr/lib/x86_64-linux-gnu/dri/swrast_dri.so \
+    /usr/lib/x86_64-linux-gnu/dri/iris_dri.so \
+    /usr/lib/x86_64-linux-gnu/dri/radeonsi_dri.so
 
 echo "== --bagimlilik-duman (üçüncü taraf modüller pakette mi)"
 oab-defteri --bagimlilik-duman

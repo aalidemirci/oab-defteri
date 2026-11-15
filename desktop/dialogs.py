@@ -17,6 +17,8 @@ import subprocess
 import sys
 from collections.abc import Callable
 
+from desktop.dis_surec import temiz_ortam
+
 logger = logging.getLogger("oab_defteri.dialogs")
 
 DialogRunner = Callable[[list[str]], bool]
@@ -37,7 +39,11 @@ def _show_windows_message_box(title: str, message: str) -> bool:
 
 
 def _run_dialog_command(argv: list[str]) -> bool:
-    """Linux'ta zenity/kdialog ile ileti gösterir; ikisi de yoksa False."""
+    """Linux'ta zenity/kdialog ile ileti gösterir; ikisi de yoksa False.
+
+    Süreç temiz ortamla başlar (`desktop/dis_surec.py`; saha bulgusu K-P2): paketin kütüphane
+    yolunu devralan zenity Pardus 25'te gömülü cairo'ya bağlanıp çöküyor, ileti görünmüyordu.
+    """
     executable = shutil.which(argv[0])
     if executable is None:
         return False
@@ -46,6 +52,7 @@ def _run_dialog_command(argv: list[str]) -> bool:
             [executable, *argv[1:]],
             check=False,
             timeout=60,
+            env=temiz_ortam(),
         )
     except (OSError, subprocess.SubprocessError):
         return False

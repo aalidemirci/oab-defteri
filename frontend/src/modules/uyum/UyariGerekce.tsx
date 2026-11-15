@@ -4,7 +4,11 @@
 // * `UyumSatiri` — bir uyum satırı (eksik · sapma · takvim): rozet, sunucunun kişisiz iletisi ve madde
 //   atfı ("Dayanak: md. 12/4"). Eksik satır gerekçe istemez; sapma satırının gerekçesi alınmıştır.
 // * `useUyariGerekce` — yazma akışının durumu: sunucu 400 `gerekce_gerekli` dönünce gerekçe kutusu
-//   açılır, çağıran aynı isteği `gerekce` ile yeniden gönderir (`ek()`); gerekçe boşsa istek gitmez.
+//   açılır, çağıran aynı isteği `gerekce` ile yeniden gönderir (`ek()`). Neyin sapma olduğunu yalnız
+//   sunucu bilir: kutu açıkken gerekçe boş bırakılsa da istek gider, gerekçesiz gider (kullanıcı sapmayı
+//   düzeltmiş olabilir; ör. tasdik makamını noter yaptı). Sunucu kabul ederse kayıt olur ve çağıranın
+//   başarı yolu kutuyu kapatır (`sifirla`); sunucu yine gerekçe isterse kutu açık kalır ve alan hatası
+//   ("Gerekçe yazın.") o anda görünür. Gerekçe yalnız bilinçli sapmada istenir (altın kural 3).
 //   Toplu gerekçede (kök neden; O3) kök nedeni sunucu ya da çağıran koyar, kutu yalnız bunu söyler.
 // * `UyariGerekceAlani` — gerekçe kutusu ya da sert engel, kural paketi (D1) ve dönem kilidi bandı.
 //
@@ -136,11 +140,13 @@ export interface UyariGerekceDurumu {
   gerekceIstendi: boolean;
   gerekce: string;
   setGerekce: (metin: string) => void;
-  /** Kutunun alan hatası ("Gerekçe yazın."). */
+  /** Kutunun alan hatası ("Gerekçe yazın."): kutu açıkken boş gerekçeyle giden istek yine gerekçe
+   * isteyince yazılır. */
   alanHatasi: string | undefined;
-  /** İsteğe eklenecek alan: gerekçe istendiyse `{ gerekce }`, değilse boş. */
+  /** İsteğe eklenecek alan: gerekçe istendiyse ve yazıldıysa `{ gerekce }`, değilse boş. */
   ek: () => { gerekce?: string };
-  /** Gerekçe istendi ama boşsa alan hatasını yazar ve false döner (istek gitmez). */
+  /** Gönderimden önce çağrılır: eski alan hatasını siler ve true döner. İsteği engellemez; boş gerekçe
+   * gerekçesiz gider, sapmanın sürüp sürmediğine sunucu karar verir (dosya başı). */
   hazir: () => boolean;
   /** Hata bir uyum hatasıysa durumu kurar ve true döner; değilse false (çağıran gösterir). */
   yakala: (e: unknown) => boolean;
@@ -199,23 +205,29 @@ export function useUyariGerekce(yarimMetinBaglami?: string): UyariGerekceDurumu 
     [gerekceIstendi, gerekce],
   );
 
+  // Boş gerekçe isteği engellemez (dosya başı): sapma düzeltildiyse sunucu kaydı gerekçesiz kabul eder.
   const hazir = useCallback(() => {
-    if (gerekceIstendi && !gerekce.trim()) {
-      setAlanHatasi(GEREKCE_ZORUNLU);
-      return false;
-    }
-    return true;
-  }, [gerekceIstendi, gerekce]);
-
-  const yakala = useCallback((e: unknown) => {
-    const okunan = uyumHatasiOku(e);
-    setHata(okunan);
-    if (okunan === null) return false;
-    // Gerekçe kutusu bir kez açılınca kayıt tamamlanana dek açık kalır (sonraki ret başka türden olsa
-    // da yazılan gerekçe kaybolmaz).
-    if (okunan.tur === "gerekce") setGerekceIstendi(true);
+    setAlanHatasi(undefined);
     return true;
   }, []);
+
+  // `yakala` gönderimin yapıldığı çizimdeki durumu görür: kutu o anda açık ve gerekçe boşsa sunucunun
+  // yeni gerekçe isteği, gerekçesiz giden isteğin reddidir; alan hatası o zaman yazılır.
+  const yakala = useCallback(
+    (e: unknown) => {
+      const okunan = uyumHatasiOku(e);
+      setHata(okunan);
+      if (okunan === null) return false;
+      // Gerekçe kutusu bir kez açılınca kayıt tamamlanana dek açık kalır (sonraki ret başka türden olsa
+      // da yazılan gerekçe kaybolmaz).
+      if (okunan.tur === "gerekce") {
+        if (gerekceIstendi && !gerekce.trim()) setAlanHatasi(GEREKCE_ZORUNLU);
+        setGerekceIstendi(true);
+      }
+      return true;
+    },
+    [gerekceIstendi, gerekce],
+  );
 
   const sifirla = useCallback(() => {
     setHata(null);

@@ -47,6 +47,7 @@ from apps.oab.services import (
     temsilciler,
     uyelik_gecisleri,
     uyelikler,
+    uyum,
 )
 from apps.oab.tests import uyelik_ortak as o
 from apps.okul.models import (
@@ -866,3 +867,239 @@ def test_baskan_olmayan_devralinan_dk_uyesi_sayac_adimi_acmaz() -> None:
         "karar_defteri",
         "tamamla",
     ]
+
+
+# ============================================================ 3. adım: devralınan üyenin beyanı sınırla
+# Devralınan kayıt sayıma girmez (beyan görevdeki seçimi içerir; tasarım §15 B-12), ama beyanın kendisi
+# sınırla karşılaştırılır (kullanıcı kararı 12.11.2026): md. 12/4 yönetim kurulunda "en fazla dört
+# defa", md. 14/3 Denetleme Kurulu başkanlığında "üç defa"; sınırın üstü uyarı + gerekçedir.
+
+YK_SAYAC = "yonetim_kurulu.secilme_siniri"
+DK_SAYAC = "denetleme_kurulu.baskan_secilme_siniri"
+
+
+def _uyelik_satirlari(uyelik: OrganMembership, kural_id: str) -> list[ComplianceItem]:
+    return list(
+        ComplianceItem.objects.filter(
+            subject_type="oab.OrganMembership", subject_id=str(uyelik.pk), rule_id=kural_id
+        ).order_by("pk")
+    )
+
+
+def _ozet(uyelik: OrganMembership, kural_id: str) -> list[dict[str, object]]:
+    guncel = OrganMembership.objects.get(pk=uyelik.pk)
+    return [u for u in (guncel.rule_warnings or []) if u["kural"] == kural_id]
+
+
+@pytest.mark.kural_davranis(YK_SAYAC)
+def test_devralinan_yk_baskani_dort_beyaninda_uyarisiz() -> None:
+    """Sınırın içi: dört seçilme beyanı (görevdeki seçim dâhil) uyarısızdır, satır açılmaz."""
+    _ac()
+    kisi = o.kisi()
+    uye = gecis.devralinan_ekle(person=kisi, organ="YK", role=MembershipRole.BASKAN)
+    gecis.sayac_beyani([gecis.SayacBeyani(kisi=kisi, yk=4)])
+    assert _uyelik_satirlari(uye, YK_SAYAC) == []
+    assert _ozet(uye, YK_SAYAC) == []
+    kisi.refresh_from_db()
+    assert uyelikler.secilme_sayaci(kisi, "YK") == 4  # devralınan kayıt ayrıca sayılmaz
+
+
+@pytest.mark.kural_davranis(YK_SAYAC)
+@pytest.mark.parametrize(
+    ("seat_type", "role"),
+    [(SeatType.ASIL, MembershipRole.BASKAN), (SeatType.YEDEK, MembershipRole.UYE)],
+)
+def test_devralinan_yk_uyesi_bes_beyani_uyari_gerekce_ve_duzeltmeyle_kapanir(
+    seat_type: str, role: str
+) -> None:
+    """Beşinci seçilme beyanı (md. 12/4): gerekçesiz geri alınır (beyan yazılmaz), toplu gerekçeyle
+    üyelikte kişiye özgü gerekçeli `SAPMA`; dörde düzeltilince açık satır kapanır. Yedek de sayılır."""
+    _ac()
+    kisi = o.kisi()
+    uye = gecis.devralinan_ekle(person=kisi, organ="YK", seat_type=seat_type, role=role)
+    with pytest.raises(GerekceGerekli) as hata:
+        gecis.sayac_beyani([gecis.SayacBeyani(kisi=kisi, yk=5)])
+    assert "md. 12/4" in str(hata.value.detail)
+    kisi.refresh_from_db()
+    assert kisi.external_yk_terms is None  # işlem bütünüyle geri alındı
+    assert not ComplianceItem.objects.exists()
+    once = _son_seq()
+    gecis.sayac_beyani([gecis.SayacBeyani(kisi=kisi, yk=5)], gerekce=GEREKCE)
+    (satir,) = _uyelik_satirlari(uye, YK_SAYAC)
+    assert (satir.kind, satir.resolved_at) == (ComplianceKind.SAPMA, None)
+    assert satir.justification_group is not None
+    assert not satir.justification_group.root_cause  # kişiye özgü
+    assert (satir.rule_package, satir.rev) == ("OAB-2023.12", 1)
+    (ozet,) = _ozet(uye, YK_SAYAC)
+    assert (ozet["durum"], ozet["atif"]) == ("uyari", "md. 12/4")
+    assert "5 defa" in str(ozet["mesaj"])
+    iz_satiri = AuditTrail.objects.get(
+        seq__gt=once, model="oab.OrganMembership", object_id=str(uye.pk)
+    )
+    assert "rule_warnings" in iz_satiri.changed_fields and iz_satiri.label == AuditLabel.GECIS
+    # Aynı beyanın yinelenmesi yeniden sorulmaz.
+    gecis.sayac_beyani([gecis.SayacBeyani(kisi=kisi, yk=5)])
+    assert len(_uyelik_satirlari(uye, YK_SAYAC)) == 1
+    # Dörde düzeltme (düzeltme gerekçesiyle): uyarı kalkar.
+    gecis.sayac_beyani(
+        [gecis.SayacBeyani(kisi=kisi, yk=4)], duzeltme_gerekcesi="Uydurma: defter yeniden sayıldı."
+    )
+    assert ComplianceItem.objects.get(pk=satir.pk).resolved_at is not None
+    assert _ozet(uye, YK_SAYAC) == []
+
+
+@pytest.mark.kural_davranis(DK_SAYAC)
+def test_devralinan_dk_baskaninin_dorduncu_baskanligi_uyari_baskan_olmayanda_satir_yok() -> None:
+    """md. 14/3: Denetleme Kurulunda yalnız başkanlık sayılır; görevdeki devralınan başkanın dördüncü
+    başkanlık beyanı uyarı + gerekçedir, başkan olmayan devralınan üyede aynı beyan satır açmaz."""
+    _ac()
+    baskan = o.ogretmen()
+    uye = gecis.devralinan_ekle(
+        person=baskan,
+        organ="DK",
+        seat_group=SeatGroup.OGRETMEN,
+        elected_by="OGRETMENLER_KURULU",
+        role=MembershipRole.BASKAN,
+    )
+    oteki = o.kisi()
+    diger = gecis.devralinan_ekle(person=oteki, organ="DK", seat_group=SeatGroup.VELI)
+    gecis.sayac_beyani([gecis.SayacBeyani(kisi=oteki, dk_baskanlik=4)])
+    assert _uyelik_satirlari(diger, DK_SAYAC) == []
+    with pytest.raises(GerekceGerekli):
+        gecis.sayac_beyani([gecis.SayacBeyani(kisi=baskan, dk_baskanlik=4)])
+    gecis.sayac_beyani([gecis.SayacBeyani(kisi=baskan, dk_baskanlik=4)], gerekce=GEREKCE)
+    (satir,) = _uyelik_satirlari(uye, DK_SAYAC)
+    assert (satir.kind, satir.resolved_at) == (ComplianceKind.SAPMA, None)
+    (ozet,) = _ozet(uye, DK_SAYAC)
+    assert (ozet["durum"], ozet["atif"]) == ("uyari", "md. 14/3")
+    assert _ozet(diger, DK_SAYAC) == []
+
+
+@pytest.mark.kural_davranis(DK_SAYAC)
+def test_devralinan_dk_baskaninin_ucuncu_baskanligi_uyarisiz() -> None:
+    _ac()
+    baskan = o.ogretmen()
+    uye = gecis.devralinan_ekle(
+        person=baskan,
+        organ="DK",
+        seat_group=SeatGroup.OGRETMEN,
+        elected_by="OGRETMENLER_KURULU",
+        role=MembershipRole.BASKAN,
+    )
+    gecis.sayac_beyani([gecis.SayacBeyani(kisi=baskan, dk_baskanlik=3)])
+    assert _uyelik_satirlari(uye, DK_SAYAC) == []
+
+
+@pytest.mark.kural_davranis(YK_SAYAC)
+def test_devralinan_bilinmiyor_beyani_uyelikte_yeni_satir_acmaz() -> None:
+    """Kişinin "bilinmiyor" beyanı toplu gerekçeli `SAPMA` satırıdır; devralınan üyelikte ikinci satır
+    açılmaz. Sayıyla açılmış uyarı "bilinmiyor"a düzeltilince kapanır (sınır artık denetlenemiyor)."""
+    _ac()
+    kisi = o.kisi()
+    uye = gecis.devralinan_ekle(person=kisi, organ="YK", role=MembershipRole.BASKAN)
+    gecis.sayac_beyani([gecis.SayacBeyani(kisi=kisi, yk=None)], gerekce=GEREKCE)
+    assert _uyelik_satirlari(uye, YK_SAYAC) == []
+    assert _ozet(uye, YK_SAYAC) == []
+    (kisinin,) = ComplianceItem.objects.filter(subject_type="oab.OabPerson", rule_id=YK_SAYAC)
+    assert (kisinin.kind, kisinin.resolved_at) == (ComplianceKind.SAPMA, None)
+    # Sayı (5) girilir: üyelikte uyarı; sonra "bilinmiyor"a düzeltme: üyeliğin satırı kapanır.
+    gecis.sayac_beyani([gecis.SayacBeyani(kisi=kisi, yk=5)], gerekce=GEREKCE)
+    (satir,) = _uyelik_satirlari(uye, YK_SAYAC)
+    assert satir.resolved_at is None
+    gecis.sayac_beyani(
+        [gecis.SayacBeyani(kisi=kisi, yk=None)],
+        gerekce=GEREKCE,
+        duzeltme_gerekcesi="Uydurma: sayı doğrulanamadı.",
+    )
+    assert ComplianceItem.objects.get(pk=satir.pk).resolved_at is not None
+    assert len(_uyelik_satirlari(uye, YK_SAYAC)) == 1  # yeni satır açılmadı
+    assert _ozet(uye, YK_SAYAC) == []
+    assert ComplianceItem.objects.filter(
+        subject_type="oab.OabPerson", rule_id=YK_SAYAC, resolved_at__isnull=True
+    ).exists()
+
+
+def _acik_uyelik_satirlari(kural_id: str) -> list[ComplianceItem]:
+    return list(
+        ComplianceItem.objects.filter(
+            subject_type="oab.OrganMembership", rule_id=kural_id, resolved_at__isnull=True
+        ).order_by("pk")
+    )
+
+
+@pytest.mark.kural_davranis(YK_SAYAC)
+def test_iptal_edilip_yeniden_girilen_devralinan_uyede_beyan_uyarisi_korunur() -> None:
+    """Devralınan alanın düzeltme yolu iptal + yeniden giriştir (`GECIS_ALANI_DEGISMEZ`): beyan
+    verilmişse yeni üyeliğin ilk girişinde de beyan sınırla karşılaştırılır (gerekçesiz geri alınır,
+    gerekçeyle `SAPMA`); iptal edilen üyeliğin açık sayaç satırı kapanır (tek açık satır kalır)."""
+    _ac()
+    kisi = o.kisi()
+    eski = gecis.devralinan_ekle(person=kisi, organ="YK", role=MembershipRole.BASKAN)
+    gecis.sayac_beyani([gecis.SayacBeyani(kisi=kisi, yk=5)], gerekce=GEREKCE)
+    (eski_satir,) = _uyelik_satirlari(eski, YK_SAYAC)
+    gecis.devralinan_iptal_et(eski, cancel_reason="Uydurma: başlangıç günü yanlış.")
+    assert ComplianceItem.objects.get(pk=eski_satir.pk).resolved_at is not None
+    assert _acik_uyelik_satirlari(YK_SAYAC) == []
+    with pytest.raises(GerekceGerekli) as hata:
+        gecis.devralinan_ekle(person=kisi, organ="YK", role=MembershipRole.BASKAN)
+    assert "md. 12/4" in str(hata.value.detail)
+    assert not OrganMembership.objects.filter(
+        person=kisi, status=MembershipStatus.SECILDI
+    ).exists()  # işlem geri alındı
+    yeni = gecis.devralinan_ekle(
+        person=kisi, organ="YK", role=MembershipRole.BASKAN, gerekce=uyum.Gerekce(metin=GEREKCE)
+    )
+    (satir,) = _acik_uyelik_satirlari(YK_SAYAC)
+    assert (satir.subject_id, satir.kind) == (str(yeni.pk), ComplianceKind.SAPMA)
+    (ozet,) = _ozet(yeni, YK_SAYAC)
+    assert (ozet["durum"], ozet["atif"]) == ("uyari", "md. 12/4")
+    kisi.refresh_from_db()
+    assert uyelikler.secilme_sayaci(kisi, "YK") == 5  # devralınan kayıt yine sayılmaz
+
+
+@pytest.mark.kural_davranis(DK_SAYAC)
+def test_beyani_verilmis_devralinan_dk_baskaninin_ilk_girisi_sinirla_karsilastirilir() -> None:
+    _ac()
+    baskan = o.ogretmen()
+    gecis.sayac_beyani([gecis.SayacBeyani(kisi=baskan, dk_baskanlik=4)])  # henüz üyeliği yok
+
+    def _ekle(gerekce: uyum.Gerekce | None = None) -> OrganMembership:
+        return gecis.devralinan_ekle(
+            person=baskan,
+            organ="DK",
+            seat_group=SeatGroup.OGRETMEN,
+            elected_by="OGRETMENLER_KURULU",
+            role=MembershipRole.BASKAN,
+            gerekce=gerekce,
+        )
+
+    with pytest.raises(GerekceGerekli) as hata:
+        _ekle()
+    assert "md. 14/3" in str(hata.value.detail)
+    uye = _ekle(uyum.Gerekce(metin=GEREKCE))
+    (satir,) = _uyelik_satirlari(uye, DK_SAYAC)
+    assert (satir.kind, satir.resolved_at) == (ComplianceKind.SAPMA, None)
+
+
+@pytest.mark.kural_davranis(YK_SAYAC)
+def test_dusmus_devralinan_uyede_beyan_duzeltilince_sinir_uyarisi_kapanir() -> None:
+    """Düşmüş devralınan kaydın açık sayaç satırı beyan yolunda yeniden denetlenir (program kaydının
+    `_dusmus_sayaci` karşılığı): dörde düzeltilince kapanır, özetten düşer. Düşmüş kayıtta yeni satır
+    açılmaz."""
+    _ac()
+    kisi = o.kisi()
+    uye = gecis.devralinan_ekle(person=kisi, organ="YK")
+    gecis.sayac_beyani([gecis.SayacBeyani(kisi=kisi, yk=5)], gerekce=GEREKCE)
+    (satir,) = _uyelik_satirlari(uye, YK_SAYAC)
+    uyelik_gecisleri.uyeligi_dusur(uye, drop_kind="ISTIFA", end_date=date(2026, 11, 2))
+    gecis.sayac_beyani(
+        [gecis.SayacBeyani(kisi=kisi, yk=4)], duzeltme_gerekcesi="Uydurma: defter yeniden sayıldı."
+    )
+    assert ComplianceItem.objects.get(pk=satir.pk).resolved_at is not None
+    assert _ozet(uye, YK_SAYAC) == []
+    # Beyandan önce düşmüş devralınan üyede sınır üstü beyan satır açmaz (gerekçe de istemez).
+    oteki = o.kisi()
+    dusmus = gecis.devralinan_ekle(person=oteki, organ="YK")
+    uyelik_gecisleri.uyeligi_dusur(dusmus, drop_kind="ISTIFA", end_date=date(2026, 11, 2))
+    gecis.sayac_beyani([gecis.SayacBeyani(kisi=oteki, yk=5)])
+    assert _uyelik_satirlari(dusmus, YK_SAYAC) == []

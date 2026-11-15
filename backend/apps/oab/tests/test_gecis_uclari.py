@@ -177,6 +177,58 @@ def test_sayac_beyani_ucu_bilinmiyor_tek_gerekce_ve_uyum_satiri() -> None:
     assert "gerekçe" in yanit.json()["message"]
 
 
+@pytest.mark.kural_davranis("yonetim_kurulu.secilme_siniri")
+def test_sayac_beyani_ucu_devralinan_baskanin_sinir_ustu_beyani_gerekce_ister() -> None:
+    """Devralınan kayıt sayıma girmez, beyanı sınırla karşılaştırılır (md. 12/4; kullanıcı kararı
+    12.11.2026): görevdeki başkana beşinci seçilme beyanı gerekçesiz 400 `gerekce_gerekli` (beyan
+    yazılmaz), gerekçeyle 200 ve üyeliğin sayaç satırı durum okumasında (ekranın uyarı listesi)."""
+    _ac()
+    veli = o.kisi()
+    uye = gecis.devralinan_ekle(person=veli, organ="YK", role="BASKAN")
+    govde = {"beyanlar": [{"person": veli.pk, "yk": 5}]}
+    gerekcesiz = _istemci().post(f"{UC}election-counts/", govde, format="json")
+    assert gerekcesiz.status_code == 400
+    assert gerekcesiz.json()["code"] == "gerekce_gerekli"
+    assert "md. 12/4" in gerekcesiz.json()["message"]
+    assert OabPerson.objects.get(pk=veli.pk).external_yk_terms is None
+    yanit = _istemci().post(f"{UC}election-counts/", {**govde, "gerekce": GEREKCE}, format="json")
+    assert yanit.status_code == 200, yanit.content
+    (satir,) = _durum()["uyum_satirlari"]
+    assert (satir["tur"], satir["atif"], satir["konu_turu"], satir["konu"]) == (
+        "SAPMA",
+        "md. 12/4",
+        "oab.OrganMembership",
+        str(uye.pk),
+    )
+    assert (satir["gerekceli"], satir["sayac_alani"]) == (True, "yk")
+
+
+@pytest.mark.kural_davranis("yonetim_kurulu.secilme_siniri")
+def test_devralinan_ucu_iptal_ve_yeniden_giriste_beyan_uyarisi_yeni_kayitta() -> None:
+    """Devralınan alanın düzeltme yolu iptal + yeniden giriştir: beyan verilmiş kişinin yeniden girişi
+    gerekçesiz 400 `gerekce_gerekli` (kayıt yok), gerekçeyle 201; durum okumasında tek sayaç satırı
+    kalır ve yeni kayıttadır (iptal edilen kaydın satırı kapanır)."""
+    _ac()
+    veli = o.kisi()
+    eski = gecis.devralinan_ekle(person=veli, organ="YK", role="BASKAN")
+    beyan = {"beyanlar": [{"person": veli.pk, "yk": 5}], "gerekce": GEREKCE}
+    assert _istemci().post(f"{UC}election-counts/", beyan, format="json").status_code == 200
+    gecis.devralinan_iptal_et(eski, cancel_reason="Uydurma: başlangıç günü yanlış.")
+    govde = {"organ": "YK", "person": veli.pk, "role": "BASKAN"}
+    gerekcesiz = _istemci().post(f"{UC}inherited/", govde, format="json")
+    assert gerekcesiz.status_code == 400
+    assert gerekcesiz.json()["code"] == "gerekce_gerekli"
+    assert "md. 12/4" in gerekcesiz.json()["message"]
+    yanit = _istemci().post(f"{UC}inherited/", {**govde, "gerekce": GEREKCE}, format="json")
+    assert yanit.status_code == 201, yanit.content
+    (satir,) = _durum()["uyum_satirlari"]
+    assert (satir["tur"], satir["konu_turu"], satir["konu"]) == (
+        "SAPMA",
+        "oab.OrganMembership",
+        str(yanit.json()["id"]),
+    )
+
+
 def test_karar_defteri_ucu_tasdiksiz_gerekce_ve_iptal() -> None:
     _ac()
     govde = {"last_no_before_program": 5, "last_page_before_program": 2}

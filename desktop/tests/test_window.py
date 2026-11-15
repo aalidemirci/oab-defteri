@@ -74,6 +74,10 @@ class _SahteWebview:
         #: `start` çağrıldığında profil dizininde bulunan dosyalar (temizlik sırası için).
         self.start_aninda_dosyalar: set[Path] = set()
 
+    def initialize(self, gui: str | None = None) -> Any:
+        """Arka uç: Linux'ta `open_window` ona bağlanır (`desktop/tests/test_window_yerel_pencere.py`)."""
+        return None
+
     def create_window(self, title: str, url: str, **kwargs: Any) -> _SahtePencere:
         self.pencereler.append({"title": title, "url": url, **kwargs})
         return self.pencere
@@ -411,10 +415,13 @@ def test_var_olan_dosyanin_uzerine_yazilir(tmp_path: Path) -> None:
         ("Kurtarma-Anahtarı-Belgesi_07.11.2026.pdf", "PDF belgesi (*.pdf)"),
         ("BELGE.PDF", "PDF belgesi (*.pdf)"),
         ("sablon-ogrenci.xlsx", "Excel dosyası (*.xlsx)"),
-        ("oab-defteri-kurulum.exe", "Tüm dosyalar (*.*)"),
+        # K-yeni-3 (Pardus 25, 13.11.2026): Word evrakı ve kurulum dosyası da süzgeçlidir; Windows'ta da.
+        ("Yönetim-Kurulu-Görev-Bölümü-Karar-Taslağı_13.11.2026.docx", "Word belgesi (*.docx)"),
+        ("oab-defteri-1.2.0-win64-setup.exe", "Kurulum dosyası (*.exe)"),
+        ("fotograf.png", "Tüm dosyalar (*.*)"),
         ("uzantisiz", "Tüm dosyalar (*.*)"),
     ],
-    ids=["pdf", "buyuk_harf", "xlsx", "kurulum", "uzantisiz"],
+    ids=["pdf", "buyuk_harf", "xlsx", "docx", "kurulum", "bilinmeyen", "uzantisiz"],
 )
 def test_tur_suzgeci_uzantiya_gore_turkcedir(ad: str, beklenen: str) -> None:
     pencere = _KaydetmePenceresi(None)
@@ -1435,3 +1442,247 @@ def test_profil_yoksa_temizlik_sessizdir(
     pencere_onbellegini_temizle(tmp_path / "yok")
 
     assert not od_gunlugu
+
+
+# ------------------------------------ Qt kolunda sayfa önbelleği bellektedir (saha bulgusu N-2)
+
+
+class _HttpCacheType:
+    MemoryHttpCache = "bellek"
+    DiskHttpCache = "disk"
+
+
+class _SahteProfil:
+    """`QWebEngineProfile`'in kullandığımız yüzeyi."""
+
+    HttpCacheType = _HttpCacheType
+
+    def __init__(self, onbellek: Path) -> None:
+        self._onbellek = onbellek
+        self.tur: list[str] = []
+
+    def setHttpCacheType(self, tur: str) -> None:  # noqa: N802 — Qt adı
+        self.tur.append(tur)
+
+    def cachePath(self) -> str:  # noqa: N802 — Qt adı
+        return str(self._onbellek)
+
+
+def _eski_onbellek(kok: Path) -> Path:
+    """Pardus'ta görülen düzen: `~/.cache/oab-defteri/QtWebEngine/pywebview/Cache/…`."""
+    dizin = kok / "QtWebEngine" / "pywebview"
+    (dizin / "Cache" / "Cache_Data").mkdir(parents=True)
+    (dizin / "Cache" / "Cache_Data" / "f_000011").write_bytes(b"material-symbols" * 64)
+    return dizin
+
+
+def test_eski_qt_onbellegi_programin_onbellek_kokundeyse_silinir(tmp_path: Path) -> None:
+    kok = tmp_path / "oab-defteri"
+    dizin = _eski_onbellek(kok)
+    (kok / "webview").mkdir()
+
+    assert window_mod.eski_qt_onbellegini_sil(dizin, kok) is True
+
+    assert not dizin.exists()
+    assert kok.is_dir() and (kok / "webview").is_dir()
+
+
+def test_onbellek_kokunun_disindaki_yol_silinmez(tmp_path: Path, od_gunlugu: list[Any]) -> None:
+    kok = tmp_path / "oab-defteri"
+    kok.mkdir()
+    yabanci = _eski_onbellek(tmp_path / "baska-program")
+
+    assert window_mod.eski_qt_onbellegini_sil(yabanci, kok) is False
+
+    assert (yabanci / "Cache" / "Cache_Data" / "f_000011").is_file()
+    metin = " ".join(k.getMessage() for k in od_gunlugu)
+    assert "dışında" in metin and str(tmp_path) not in metin
+    # `--data-dir` kipinde her açılışta olur: günlüğe uyarı olarak düşmez (INFO düzeyinde görünmez).
+    disarida = [k for k in od_gunlugu if "dışında" in k.getMessage()]
+    assert disarida and all(k.levelno == logging.DEBUG for k in disarida)
+
+
+def test_onbellek_kokunun_kendisi_silinmez(tmp_path: Path) -> None:
+    kok = tmp_path / "oab-defteri"
+    (kok / "data").mkdir(parents=True)
+
+    assert window_mod.eski_qt_onbellegini_sil(kok, kok) is False
+    assert window_mod.eski_qt_onbellegini_sil(kok / "QtWebEngine" / "..", kok) is False
+
+    assert (kok / "data").is_dir()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="sembolik bağ POSIX'te sınanır")
+def test_baglarla_koke_kacan_yol_silinmez(tmp_path: Path) -> None:
+    kok = tmp_path / "oab-defteri"
+    kok.mkdir()
+    disari = tmp_path / "kullanici-verisi"
+    disari.mkdir()
+    (disari / "veri.db").write_bytes(b"x")
+    (kok / "QtWebEngine").symlink_to(disari, target_is_directory=True)
+
+    assert window_mod.eski_qt_onbellegini_sil(kok / "QtWebEngine", kok) is False
+
+    assert (disari / "veri.db").is_file()
+
+
+def test_eski_onbellek_yoksa_sessizdir(tmp_path: Path) -> None:
+    kok = tmp_path / "oab-defteri"
+    kok.mkdir()
+
+    assert window_mod.eski_qt_onbellegini_sil(kok / "QtWebEngine" / "pywebview", kok) is True
+
+
+def test_bos_ya_da_goreli_onbellek_yolu_silinmez(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, od_gunlugu: list[Any]
+) -> None:
+    """Gizli profilde `cachePath()` boştur: `Path("")` çalışma dizinine çözülürdü (denetim 14.11.2026)."""
+    kok = tmp_path / "oab-defteri"
+    depo = kok / "webview"
+    (depo / "Local Storage").mkdir(parents=True)
+    (kok / "QtWebEngine").mkdir()
+    monkeypatch.chdir(depo)
+
+    assert window_mod.eski_qt_onbellegini_sil(Path(""), kok) is False
+    assert window_mod.eski_qt_onbellegini_sil(Path("Local Storage"), kok) is False
+    monkeypatch.chdir(kok)
+    assert window_mod.eski_qt_onbellegini_sil(Path("QtWebEngine"), kok) is False
+
+    assert (depo / "Local Storage").is_dir() and (kok / "QtWebEngine").is_dir()
+    assert "göreli" in " ".join(k.getMessage() for k in od_gunlugu)
+
+
+def test_pencerenin_deposu_ve_ust_dizini_silinmez(tmp_path: Path) -> None:
+    kok = tmp_path / "oab-defteri"
+    depo = kok / "ic" / "webview"
+    (depo / "Local Storage").mkdir(parents=True)
+
+    assert window_mod.eski_qt_onbellegini_sil(depo, kok, korunanlar=[depo]) is False
+    assert window_mod.eski_qt_onbellegini_sil(kok / "ic", kok, korunanlar=[depo]) is False
+    assert window_mod.eski_qt_onbellegini_sil(depo / "..", kok, korunanlar=[depo]) is False
+
+    assert (depo / "Local Storage").is_dir()
+
+
+def test_korunanin_kardesi_silinir(tmp_path: Path) -> None:
+    kok = tmp_path / "oab-defteri"
+    dizin = _eski_onbellek(kok)
+    depo = kok / "webview"
+    depo.mkdir()
+
+    assert window_mod.eski_qt_onbellegini_sil(dizin, kok, korunanlar=[depo]) is True
+
+    assert not dizin.exists() and depo.is_dir()
+
+
+def _sayfa_arka_ucu() -> SimpleNamespace:
+    kurulan: list[tuple[Any, Any]] = []
+
+    class WebPage:
+        def __init__(self, parent: Any = None, profile: Any = None) -> None:
+            kurulan.append((parent, profile))
+
+    return SimpleNamespace(BrowserView=SimpleNamespace(WebPage=WebPage), kurulan=kurulan)
+
+
+def test_sayfa_kurulurken_profilin_onbellegi_bellek_ici_olur_eskisi_silinir(tmp_path: Path) -> None:
+    kok = tmp_path / "oab-defteri"
+    profil = _SahteProfil(_eski_onbellek(kok))
+    arka_uc = _sayfa_arka_ucu()
+    window_mod.qt_onbellegini_bagla(arka_uc, kok)
+
+    arka_uc.BrowserView.WebPage("pencere", profile=profil)
+
+    assert profil.tur == ["bellek"]
+    assert not (kok / "QtWebEngine" / "pywebview").exists()
+    assert arka_uc.kurulan == [("pencere", profil)]
+
+
+def test_profilin_onbellegi_pencere_deposunu_gosterirse_silinmez(tmp_path: Path) -> None:
+    kok = tmp_path / "oab-defteri"
+    depo = kok / "webview"
+    (depo / "Local Storage").mkdir(parents=True)
+    profil = _SahteProfil(depo)
+    arka_uc = _sayfa_arka_ucu()
+    window_mod.qt_onbellegini_bagla(arka_uc, kok, korunanlar=[depo])
+
+    arka_uc.BrowserView.WebPage("pencere", profile=profil)
+
+    assert profil.tur == ["bellek"]
+    assert (depo / "Local Storage").is_dir()
+
+
+def test_profilsiz_sayfa_aynen_kurulur(tmp_path: Path) -> None:
+    arka_uc = _sayfa_arka_ucu()
+    window_mod.qt_onbellegini_bagla(arka_uc, tmp_path)
+
+    arka_uc.BrowserView.WebPage("pencere")
+
+    assert arka_uc.kurulan == [("pencere", None)]
+
+
+def test_onbellek_duzenlenemezse_sayfa_yine_kurulur(tmp_path: Path, od_gunlugu: list[Any]) -> None:
+    class _Bozuk(_SahteProfil):
+        def setHttpCacheType(self, tur: str) -> None:  # noqa: N802
+            raise RuntimeError("profil kapandı")
+
+    arka_uc = _sayfa_arka_ucu()
+    window_mod.qt_onbellegini_bagla(arka_uc, tmp_path)
+    profil = _Bozuk(tmp_path / "x")
+
+    arka_uc.BrowserView.WebPage("pencere", profile=profil)
+
+    assert arka_uc.kurulan == [("pencere", profil)]
+    assert "RuntimeError" in " ".join(k.getMessage() for k in od_gunlugu)
+
+
+def test_onbellek_baglamasi_ikinci_kez_sarmaz(tmp_path: Path) -> None:
+    arka_uc = _sayfa_arka_ucu()
+    window_mod.qt_onbellegini_bagla(arka_uc, tmp_path)
+    ilk = arka_uc.BrowserView.WebPage.__init__
+
+    window_mod.qt_onbellegini_bagla(arka_uc, tmp_path)
+
+    assert arka_uc.BrowserView.WebPage.__init__ is ilk
+
+
+def test_linuxta_onbellek_koku_pencere_deposunun_ust_dizinidir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`storage_path` `AppPaths.webview_storage_path`'tir (`<önbellek>/webview`): kök onun üstüdür."""
+    from desktop.paths import resolve_app_paths
+    from desktop.yerel_pencere import YerelDosyaPenceresi
+
+    yollar = resolve_app_paths(platform="linux", environ={"HOME": str(tmp_path)})
+    assert yollar.webview_storage_path.parent == yollar.cache
+
+    baglanan: list[tuple[Path, tuple[Path, ...]]] = []
+    monkeypatch.setattr(
+        window_mod,
+        "qt_onbellegini_bagla",
+        lambda _a, kok, *, korunanlar: baglanan.append((kok, tuple(korunanlar))),
+    )
+    monkeypatch.setattr(YerelDosyaPenceresi, "kapat", lambda self: None)
+
+    class _Webview:
+        settings: dict[str, Any] = {}
+        SAVE_DIALOG = 30
+
+        def initialize(self, gui: Any = None) -> Any:
+            return SimpleNamespace()
+
+        def create_window(self, *_a: Any, **_k: Any) -> Any:
+            return SimpleNamespace(events=SimpleNamespace())
+
+        def start(self, **_k: Any) -> None:
+            self.initialize()
+
+    open_window(
+        "http://127.0.0.1:1/",
+        webview=_Webview(),
+        platform="linux",
+        storage_path=yollar.webview_storage_path,
+    )
+
+    # Pencerenin kendi deposu (oturum çerezi, taslaklar) silmeden korunur (bağımsız denetim 14.11.2026).
+    assert baglanan == [(yollar.cache, (yollar.webview_storage_path,))]

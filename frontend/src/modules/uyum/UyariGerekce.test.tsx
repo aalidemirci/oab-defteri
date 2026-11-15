@@ -1,8 +1,9 @@
 // Ortak "uyarı + gerekçe" bileşeni (altın kural 3): hata gövdelerinin okunması (gerekçe, sert engel,
 // kural paketi D1, dönem ve geçiş kilidi), madde atfının ayrılması, uyum satırının türleri (eksik gerekçe
 // istemez), gerekçe kutusunun akışı (sunucu isteyince açılır, odak alana geçer ve uyarı alanın açıklaması
-// olur, boşken istek gitmez, ikinci istek gerekçeyi taşır, toplu notu), yarım metnin yalnız kendi kutusunda
-// silinmesi. Veriler uydurmadır.
+// olur, ikinci istek gerekçeyi taşır, toplu notu; kutu açıkken boş gerekçe isteği engellemez: gerekçesiz
+// giden istek kabul edilirse kutu kapanır, yine gerekçe istenirse alan hatası o anda görünür), yarım metnin
+// yalnız kendi kutusunda silinmesi. Veriler uydurmadır.
 
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -153,13 +154,14 @@ function Form({
 }
 
 describe("gerekçe akışı", () => {
-  it("sunucu gerekçe isteyince kutu açılır; boşken istek gitmez; ikinci istek gerekçeyi taşır", async () => {
+  it("sunucu gerekçe isteyince kutu açılır; boş gerekçe yine reddedilirse alan hatası görünür; ikinci istek gerekçeyi taşır", async () => {
     const user = userEvent.setup();
+    const ret = () =>
+      new ApiError(400, "gerekce_gerekli", `Bu kayıt için gerekçe yazılmalıdır. ${UYARI}`);
     const gonder = vi
       .fn()
-      .mockRejectedValueOnce(
-        new ApiError(400, "gerekce_gerekli", `Bu kayıt için gerekçe yazılmalıdır. ${UYARI}`),
-      )
+      .mockRejectedValueOnce(ret())
+      .mockRejectedValueOnce(ret())
       .mockResolvedValueOnce(undefined);
     render(<Form gonder={gonder} toplu />);
 
@@ -169,16 +171,64 @@ describe("gerekçe akışı", () => {
     expect(kutu).toHaveTextContent("en fazla 4 defa seçilebilir.");
     expect(kutu).toHaveTextContent("Dayanak: md. 12/4");
     expect(kutu).toHaveTextContent(TOPLU_GEREKCE_NOTU);
+    // İlk ret alan hatası değildir: kullanıcı henüz boş gerekçe göndermedi.
+    expect(screen.queryByRole("alert")).toBeNull();
 
+    // Kutu açık, gerekçe boş: istek engellenmez, gerekçesiz gider; sunucu yine isteyince alan hatası.
     await user.click(screen.getByRole("button", { name: "Gönder" }));
-    expect(screen.getByRole("alert")).toHaveTextContent(GEREKCE_ZORUNLU);
-    expect(gonder).toHaveBeenCalledTimes(1);
+    expect(gonder).toHaveBeenCalledTimes(2);
+    expect(gonder).toHaveBeenLastCalledWith({});
+    expect(await screen.findByRole("alert")).toHaveTextContent(GEREKCE_ZORUNLU);
+    expect(screen.getByRole("group", { name: GEREKCE_BASLIGI })).toBeInTheDocument();
+    expect(screen.queryByText("Kaydedildi")).toBeNull();
 
     await user.type(screen.getByLabelText(/Gerekçe/), "  Uydurma gerekçe  ");
+    // Yazmaya başlayınca alan hatası kalkar.
+    expect(screen.queryByRole("alert")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Gönder" }));
     expect(gonder).toHaveBeenLastCalledWith({ gerekce: "Uydurma gerekçe" });
     expect(await screen.findByText("Kaydedildi")).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: GEREKCE_BASLIGI })).toBeNull();
+  });
+
+  it("kutu açıkken boş gerekçeyle istek gerekçesiz gider; sunucu kabul ederse (sapma düzeltildi) kutu kapanır", async () => {
+    const user = userEvent.setup();
+    const gonder = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new ApiError(400, "gerekce_gerekli", `Bu kayıt için gerekçe yazılmalıdır. ${UYARI}`),
+      )
+      .mockResolvedValueOnce(undefined);
+    render(<Form gonder={gonder} />);
+
+    await user.click(screen.getByRole("button", { name: "Gönder" }));
+    await screen.findByRole("group", { name: GEREKCE_BASLIGI });
+    await user.click(screen.getByRole("button", { name: "Gönder" }));
+    expect(gonder).toHaveBeenCalledTimes(2);
+    expect(gonder).toHaveBeenLastCalledWith({});
+    expect(await screen.findByText("Kaydedildi")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: GEREKCE_BASLIGI })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("kutu açıkken boş gerekçeyle giden istek başka türden reddedilirse alan hatası yazılmaz, kutu açık kalır", async () => {
+    const user = userEvent.setup();
+    const gonder = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new ApiError(400, "gerekce_gerekli", `Bu kayıt için gerekçe yazılmalıdır. ${UYARI}`),
+      )
+      .mockRejectedValueOnce(new ApiError(400, "kural_sert", "Kural dışı (md. 12/1)."));
+    render(<Form gonder={gonder} />);
+
+    await user.click(screen.getByRole("button", { name: "Gönder" }));
+    await screen.findByRole("group", { name: GEREKCE_BASLIGI });
+    await user.click(screen.getByRole("button", { name: "Gönder" }));
+    expect(gonder).toHaveBeenCalledTimes(2);
+    const bant = await screen.findByRole("alert");
+    expect(bant).toHaveTextContent(KURAL_SERT_BASLIGI);
+    expect(bant).not.toHaveTextContent(GEREKCE_ZORUNLU);
+    expect(screen.getByRole("group", { name: GEREKCE_BASLIGI })).toBeInTheDocument();
   });
 
   it("kutu açılınca odak gerekçe alanına geçer; alanın açıklaması uyarı ve dayanakla başlar", async () => {
@@ -193,10 +243,12 @@ describe("gerekçe akışı", () => {
     const alan = await screen.findByLabelText(/Gerekçe/);
     expect(alan).toHaveFocus();
     expect(alan).toHaveAccessibleDescription(/en fazla 4 defa seçilebilir\..*Dayanak: md\. 12\/4/);
-    // Boş gönderimde alan hatası da açıklamaya girer.
+    // Boş gerekçe yine reddedilince alan hatası da açıklamaya girer.
     await user.click(screen.getByRole("button", { name: "Gönder" }));
-    expect(screen.getByLabelText(/Gerekçe/)).toHaveAccessibleDescription(
-      expect.stringContaining(GEREKCE_ZORUNLU),
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Gerekçe/)).toHaveAccessibleDescription(
+        expect.stringContaining(GEREKCE_ZORUNLU),
+      ),
     );
   });
 

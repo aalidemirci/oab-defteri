@@ -33,6 +33,23 @@ konulamaz:
    `frontend/dist` altındadır; Django tarafı bu yolu `OD_FRONTEND_DIR`
    değişkeninden okur.
 
+4. **Qt platformu (yalnız Linux): xcb.** `QT_QPA_PLATFORM` boşsa `xcb` yazılır; dışarıdan
+   verilen değer ezilmez (sahada teşhis için). Gerekçe (denetim bulgusu 13.11.2026):
+   `libwayland-client` artık pakete gömülmez, sistemden alınır
+   (`packaging/linux/sistem_kutuphaneleri.py`). Eskiden gömülü bullseye kopyası (Wayland
+   1.18) Qt 6.8'in Wayland eklentisinin istediği `wl_proxy_marshal_flags`'i (1.20)
+   vermiyordu (`ldd -r`: undefined symbol): Wayland yolu hiç çalışamazdı. Sistem kopyasıyla
+   eklenti, libwayland-cursor0 ve libwayland-egl1'in kurulu olduğu her makinede
+   (GNOME/GTK masaüstleri) eksiksiz bağlanır ve Qt `XDG_SESSION_TYPE=wayland` oturumunda
+   onu xcb'den ÖNCE yükler (debian:13'te `QT_DEBUG_PLUGINS=1` ile görüldü, 13.11.2026);
+   pencere hiç sınanmamış yola, WebEngine'in Wayland/EGL çizimine geçerdi. Sabitleme
+   sınanmış pencere yolunu (xcb + GLX; saha: Pardus 25 XFCE) korur, Wayland oturumunda
+   pencere XWayland üzerinden açılır. Değişken dış süreçlere geçmez: kanca değeri kendisi
+   yazdıysa `OD_QT_PLATFORM_KANCADAN=1` bırakır, `desktop.dis_surec.temiz_ortam` programın
+   açtığı süreçlerin ortamından (kdialog, tarayıcı) ikisini de atar; dışarıdan verilmiş değer
+   onlara da geçer (saha bulgusu K-P2, 13.11.2026). Wayland yolunu açmak gerçek pencere
+   sınaması ister.
+
 Kancadaki hiçbir hata programı durdurmaz: eksik font yapılandırması PDF'i
 bozar ama birlik kayıtlarına erişimi engellememeli. Sorunlar günlüğe değil
 (günlük henüz kurulmadı) `OD_RTHOOK_UYARI` değişkenine yazılır.
@@ -53,6 +70,11 @@ ENV_FRONTEND_DIR = "OD_FRONTEND_DIR"
 ENV_WEASYPRINT_DLL = "WEASYPRINT_DLL_DIRECTORIES"
 #: `shared.pdf.ENV_EVRAK_FONTCONFIG` ile aynı ad (kanca backend'i içe aktarmaz).
 ENV_EVRAK_FONTCONFIG = "OD_EVRAK_FONTCONFIG"
+#: Linux paketinin sınanmış pencere yolu (modül belgesi, madde 4).
+ENV_QT_PLATFORM = "QT_QPA_PLATFORM"
+QT_PLATFORM_LINUX = "xcb"
+#: Kanca platformu kendisi kurduysa bırakılan işaret (`desktop.dis_surec` ile aynı ad).
+ENV_QT_PLATFORM_KANCADAN = "OD_QT_PLATFORM_KANCADAN"
 
 _FONTS_CONF_TEMPLATE = "fonts.conf.tmpl"
 _FONTS_CONF = "fonts.conf"
@@ -146,6 +168,16 @@ def announce_evrak_fontconfig(root: Path, cache_root: Path) -> Path | None:
     return target
 
 
+def pin_qt_platform() -> None:
+    """Linux: Qt'yi sınanmış xcb yoluna sabitler; dışarıdan verilen değer ezilmez.
+
+    Değeri kanca yazdıysa işaret bırakır: dış süreçler onu devralmaz (modül belgesi, madde 4).
+    """
+    if ENV_QT_PLATFORM not in os.environ:
+        os.environ[ENV_QT_PLATFORM] = QT_PLATFORM_LINUX
+        os.environ[ENV_QT_PLATFORM_KANCADAN] = "1"
+
+
 def setup() -> None:
     """Kancanın tüm adımları (test edilebilirlik için ayrı fonksiyon)."""
     root = _bundle_root()
@@ -154,6 +186,7 @@ def setup() -> None:
         announce_weasyprint_dll_dirs(root)
         setup_fontconfig(root, _cache_root())
     else:
+        pin_qt_platform()
         announce_evrak_fontconfig(root, _cache_root())
 
 

@@ -22,6 +22,7 @@
 import { Route, Routes } from "react-router-dom";
 
 import AppShell from "./AppShell";
+import DosyaPenceresiBildirimi from "./DosyaPenceresiBildirimi";
 import KurulumKapisi from "./KurulumKapisi";
 import AyarlarPage from "./modules/ayarlar/AyarlarPage";
 import BirlikDonemiPage from "./modules/birlik-donemi/BirlikDonemiPage";
@@ -54,6 +55,9 @@ export default function App() {
         {/* Uzun iş sürerken gelen kapanışın iletisi: çarpı her ekranda basılabilir, kapıların
             DIŞINDADIR (kilit, kurulum ve yeniden başlat ekranında da açılır). */}
         <KapanisPenceresi />
+        {/* Pardus'ta açık dosya penceresinin bildirimi: dış pencere kilit ekranında da açık kalmış
+            olabilir, kapıların DIŞINDADIR. Hiçbir şey çizmez, yalnız geçici bildirim gösterir. */}
+        <DosyaPenceresiBildirimi />
         <GuvenlikKapisi>
           {/* Parola yenilenme bildirimi (tasarım §4.4.3, tehdit 12): parolası sıfırlanan ya da
               kurtarma anahtarıyla yenilenen hesabın sahibine, kilit ekranından açılıştan sonra

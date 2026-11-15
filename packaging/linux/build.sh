@@ -16,6 +16,7 @@
 #   1. Sistem bağımlılıkları (yalnız DERLEME için; pakete girmez)
 #   2. Python bağımlılıkları
 #   3. PyInstaller onedir + lisans denetimi (THIRD_PARTY_LICENSES pakete) +
+#      sistemden alınan kütüphaneler pakette yok mu (sistem_kutuphaneleri.py) +
 #      paket dizininde veri sızıntısı denetimi
 #   4. Duman testleri: `--bagimlilik-duman` (hiddenimports) + `--autotest` (çıkış 0)
 #      + `--pdf-duman` (evrak şablonu + Türkçe PDF) + `--evrak-duman` (Word)
@@ -54,7 +55,7 @@ TAR_ADI="oab-defteri-${SURUM}-linux-x64.tar.gz"
 
 # .deb bağımlılıkları (aile hattından). Pango/glib/fontconfig Linux'ta BUNDLE
 # EDİLMEZ (sistem sürümüyle çakışır); dağıtımın kendi paketleri kullanılır.
-# Hepsi Debian 11 ve 12 ana deposunda mevcuttur. Evrakın yazı tipi bu bağımlılıklardan GELMEZ:
+# Hepsi Debian 11, 12 ve 13 ana deposunda mevcuttur. Evrakın yazı tipi bu bağımlılıklardan GELMEZ:
 # PDF iki sistemde paketteki Liberation Serif 2.1.5 ve DejaVu Sans'la (`fonts/`) dizilir, kanca
 # (`rthook_od.py`) evrak yoluna yalnız o dizini tarayan fontconfig yapılandırmasını bildirir
 # (`OD_EVRAK_FONTCONFIG`; tasarım §9.1-8, sistem dizini taranmaz). `fonts-liberation2` (Debian 11'de
@@ -71,6 +72,18 @@ DEPENDS_TEMEL="libpango-1.0-0, libpangoft2-1.0-0, libharfbuzz0b, libfontconfig1,
 # `libcups2` BİLEREK YOK: yalnız Qt'nin yazdırma eklentisi ister, evrak
 # WeasyPrint'ten basılır (spec'te `QtPrintSupport` de paketlenmez).
 DEPENDS_QT="libgl1, libegl1, libxkbcommon0, libxkbcommon-x11-0, libxkbfile1, libdbus-1-3, libnss3, libnspr4, libxcomposite1, libxdamage1, libxrandr2, libxtst6, libxi6, libasound2, libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-randr0, libxcb-render-util0, libxcb-shape0, libxcb-xinerama0, libxcb-xkb1, libxcb-cursor0"
+# Pakete GÖMÜLMEYEN, sistemden alınan kütüphanelerin Debian paketleri (Pardus 25 saha
+# bulgusu, 12.11.2026: gömülü bullseye libstdc++/libgbm/… Mesa 25 sürücüsünü kırıyordu —
+# "Could not initialize GLX"). Liste ve gerekçeler TEK kaynakta:
+# packaging/linux/sistem_kutuphaneleri.py (spec aynı listeyle süzer, aşağıdaki derleme
+# sonrası denetim aynı listeyle sınar). Qt'siz derlemede de girer: libstdc++, zlib, expat,
+# zstd Qt dışındaki ikililerin de bağımlılığıdır. Adlar Debian 11, 12 ve 13'te aynıdır.
+DEPENDS_SISTEM="$(python "$DEPO/packaging/linux/sistem_kutuphaneleri.py" depends)"
+# Önerilen paketler (Depends değil): kaydetme ve Aç pencerelerini masaüstünün penceresiyle açan
+# zenity (`desktop/yerel_pencere.py`; açılış hatası iletisi de onunla çıkar, `desktop/dialogs.py`).
+# Yoksa kdialog, o da yoksa Qt'nin kendi penceresi açılır: program zenity'siz de çalışır.
+# apt önerilenleri varsayılan olarak kurar; Pardus'ta zenity zaten kurulu gelir.
+RECOMMENDS="zenity"
 
 APT_TEMEL="libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libfontconfig1 libglib2.0-0 fonts-dejavu-core fonts-liberation2 binutils"
 # libharfbuzz-subset0 Debian 11'DE YOKTUR (bookworm ile geldi). WeasyPrint font
@@ -170,6 +183,12 @@ python "$DEPO/packaging/lisanslar/lisanslar.py" paket \
     --calisma "$CALISMA/oab_defteri" \
     --platform linux
 
+# Sistemden alınan kütüphaneler (spec `sistemden_suz`'un ikinci sigortası): paketin
+# diskteki hâlinde bu kütüphanelerden biri (dosya ya da sembolik bağ) bulunursa derleme
+# DURUR — Pardus 25'te pencere "Could not initialize GLX" ile açılmıyordu (12.11.2026).
+bilgi "sistem kütüphanesi denetimi (grafik sürücüsüyle paylaşılanlar pakette olmamalı)"
+python "$DEPO/packaging/linux/sistem_kutuphaneleri.py" denetle --paket "$PAKET_KOKU/oab-defteri"
+
 bilgi "paket kişisel veri sızıntısı denetimi"
 python "$DEPO/packaging/veri_sizintisi.py" "$PAKET_KOKU/oab-defteri"
 
@@ -228,7 +247,7 @@ for boyut in 16 24 32 48 64 128 256; do
     cp "$DEPO/packaging/ikonlar/oab-defteri-${boyut}.png" "$hedef/oab-defteri.png"
 done
 
-DEPENDS="$DEPENDS_TEMEL"
+DEPENDS="$DEPENDS_TEMEL, $DEPENDS_SISTEM"
 if [ "$QT_ILE" != "0" ]; then
     DEPENDS="$DEPENDS, $DEPENDS_QT"
 fi
@@ -237,6 +256,7 @@ BOYUT_KB="$(du -sk "$DEB_AGACI" | cut -f1)"
 sed -e "s|@VERSION@|${DEB_SURUM}|" \
     -e "s|@SIZE@|${BOYUT_KB}|" \
     -e "s|@DEPENDS@|${DEPENDS}|" \
+    -e "s|@RECOMMENDS@|${RECOMMENDS}|" \
     "$DEPO/packaging/linux/debian-control.tmpl" > "$DEB_AGACI/DEBIAN/control"
 install -m 0755 "$DEPO/packaging/linux/postinst" "$DEB_AGACI/DEBIAN/postinst"
 install -m 0755 "$DEPO/packaging/linux/prerm" "$DEB_AGACI/DEBIAN/prerm"

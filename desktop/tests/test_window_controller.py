@@ -114,6 +114,9 @@ class _SahteWebview:
         self.pencere = pencere
         self.start_kwargs: dict[str, Any] | None = None
 
+    def initialize(self, gui: str | None = None) -> Any:
+        return None  # arka uç; Linux'ta `open_window` ona bağlanır
+
     def create_window(self, title: str, url: str, **kwargs: Any) -> _SahtePencere:
         return self.pencere
 

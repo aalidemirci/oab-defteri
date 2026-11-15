@@ -113,7 +113,8 @@ export default function YedekVeGeriYukleme(bolum: BolumProps) {
         </li>
         <li>
           Açılan pencerede yer olarak USB belleği seçin. Dosyanın adını program önerir; uzantısını
-          değiştirmeyin.
+          değiştirmeyin. Pardus&apos;ta USB belleği pencerenin solundaki listeden seçin; ad alanına
+          tam yol yazmayın.
         </li>
         <li>
           Bekleyin: program dosyayı yazar, yeniden açıp denetler. Bu iş birkaç dakika sürebilir.

@@ -428,6 +428,29 @@ if WITH_QT and not WINDOWS:
         f"LİSANS: Qt'nin yalnız GPL'li modüllerinden {len(_qt_gpl_ayiklanan)} dosya ayıklandı."
     )
 
+# ---------------------------------------------------------------------------
+# Sistemden alınan kütüphaneler (YALNIZ Linux; Pardus 25 saha bulgusu, 12.11.2026): paket
+# bullseye'da derlenir ve PyInstaller bullseye'ın libstdc++, libgbm, libexpat, zlib, zstd …
+# kopyalarını gömer; sistemden yüklenen yeni Mesa sürücüsü aynı adlı (SONAME) bu eski
+# kopyalara bağlanır ve GLX açılmaz ("Could not initialize GLX" → Aborted). Sürücüyle
+# paylaşılan kütüphaneler pakete girmez; hedef sistemin kopyası kullanılır ve Debian paketi
+# `.deb` Depends'ine girer. Liste, her öğenin gerekçesi ve dışlanMAyanlar (libX11/xcb
+# ailesinin geneli, libssl1.1, libffi7) TEK kaynaktadır:
+# `packaging/linux/sistem_kutuphaneleri.py`. Derleme sonrası denetim (`build.sh`,
+# `sistem_kutuphaneleri.py denetle`) paketin diskteki hâlinde aynı kuralı sınar; kurulum
+# provası (`kap-ici-test.sh`) da. Windows paketi etkilenmez.
+# ---------------------------------------------------------------------------
+if not WINDOWS:
+    sys.path.insert(0, str(REPO / "packaging" / "linux"))
+    import sistem_kutuphaneleri as _sistem  # noqa: E402 — yalnız standart kitaplık
+
+    a.binaries, _sistemden_ikili = _sistem.sistemden_suz(a.binaries)
+    a.datas, _sistemden_veri = _sistem.sistemden_suz(a.datas)
+    _lisanslar.yaz(
+        f"Sistemden alınan kütüphaneler: {len(_sistemden_ikili) + len(_sistemden_veri)} dosya "
+        f"ayıklandı ({', '.join(sorted(_sistemden_ikili + _sistemden_veri))})."
+    )
+
 pyz = PYZ(a.pure)  # noqa: F821 — PyInstaller global'i
 
 exe = EXE(  # noqa: F821 — PyInstaller global'i
