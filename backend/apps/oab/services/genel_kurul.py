@@ -19,6 +19,7 @@ from apps.okul import denetim_izi
 from apps.okul.models import SchoolConfig
 
 OGRENCI_MEVCUDU_BOS = "Okul kartında öğrenci mevcudu girilmemiş; yeter sayı hesaplanamadı."
+DONEMSIZ_GENEL_KURUL = "Genel kurulun birlik dönemi yok; yeter sayı hesaplanamadı."
 
 
 @transaction.atomic
@@ -50,14 +51,21 @@ def genel_kurul_olustur(
 def yeter_sayiyi_dondur(kurul: GeneralAssembly, *, tarih: date) -> GeneralAssembly:
     """Okul kartındaki mevcudu kurula kopyalar, yeter sayıyı hesaplar ve dondurur (O7, §7.1 ilan)."""
     yazma_kapisi()
-    guncel = GeneralAssembly.objects.select_related("term__rule_package").get(pk=kurul.pk)
-    donem_kilidi.yazma_denetimi(guncel.term, hazirlik_yazimi=True)
+    guncel: GeneralAssembly = GeneralAssembly.objects.select_related(
+        "term__rule_package", "opens_term__rule_package"
+    ).get(pk=kurul.pk)
+    # Kurallar kapanacak dönemin kopyasından okunur; yeni okulun ilk genel kurulunda kapanacak dönem
+    # yoktur, hazırlık döneminin kopyasından okunur (plan F2 §7 U1; `ck_generalassembly_donem`).
+    donem = guncel.term if guncel.term is not None else guncel.opens_term
+    if donem is None:
+        raise ValueError(DONEMSIZ_GENEL_KURUL)
+    donem_kilidi.yazma_denetimi(donem, hazirlik_yazimi=True)
     if guncel.quorum_required is not None:
         raise YeterSayiDonduruldu
     mevcut = SchoolConfig.objects.get(pk=SchoolConfig.SINGLETON_PK).student_count
     if mevcut is None:
         raise ValueError(OGRENCI_MEVCUDU_BOS)
-    hesap = genel_kurul.genel_kurul_yeter_sayisi(mevcut, tarih=tarih, donem=guncel.term)
+    hesap = genel_kurul.genel_kurul_yeter_sayisi(mevcut, tarih=tarih, donem=donem)
     onceki = denetim_izi.anlik(guncel)
     guncel.student_count_snapshot = mevcut
     guncel.quorum_base = hesap.taban

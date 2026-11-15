@@ -1,4 +1,5 @@
-"""Üretilen evrak kaydı (tasarım §5.2.8 `GeneratedDocument`, §9.1-2 "Evrak izi"; plan F1c 9. adım).
+"""Üretilen evrak kaydı (tasarım §5.2.8 `GeneratedDocument`, §9.1-2 "Evrak izi"; plan F1c 9. adım) ve
+gelen-giden evrak kaydı (`DocumentRecord`, §5.2.8; plan F2 3. adım; sınıfın belgesinde).
 
 Her üretim bir satırdır: evrak kodu, konu (genel bağ), dönem, kural paketi, üreten hesap ve zaman,
 içerik JSON'u (`content_json`, şifreli; `shared.evrak.kanonik_json`) ve onun kanonik özeti
@@ -12,6 +13,14 @@ DOSYALAR (`files` → `Attachment`): ekler genel bağla bu satıra bağlanır (`
 yoktur: tek yazar dosya deposudur (`apps.okul.services.dosya_deposu`), model bu bağı `ekler()` ile
 okur. Bu model dosya deposunun ilk sahibidir (plan F1b-3; `apps.oab.apps` kaydeder) ve DOCX türünü
 yalnız o alır.
+
+KİP VE TOPLANTI (plan F2 §7 U34; F2 3. adım): aynı genel kurula aynı koddan birden çok geçerli belge
+olur — kişisiz ve adlı kip (`variant`: E07 davet ve teslim çizelgesi, E08 boş satırlı ve adlı cetvel)
+ile birinci ve ikinci toplantı (`meeting`: E05, E06 ilanı, E64 yeter sayı tespiti). Tek geçerli satır
+kısıtı (`uq_generateddocument_gecerli`) ve yeniden üretimin süzgeci (`services.evrak.kaydet`) bu iki
+alanla genişler; F1c belgeleri ikisini boş yazar, davranışları değişmez. Sürüm numarası kod ve konu
+başınadır (`uq_generateddocument_surum` değişmez). Evrak kodu kip eki almaz (`EVRAK_KODU`). Adlı kip
+veli adı taşır: `personal_list` doğrudur (kısıt).
 
 VELİ ADI TAŞIYAN BELGE (R9; `personal_list`): program dosyasını ve içerik JSON'unu saklamaz —
 `content_json` boştur (veritabanı kısıtı), dosya deposu bu sahibe ek yazmaz; satırda tür, tarih, satır
@@ -32,7 +41,16 @@ from django.db.models import Q
 from django.db.models.functions import Length
 from django.db.models.lookups import Exact
 
-from apps.oab.models._base import DocumentFormat, DocumentStatus, OabBaseModel
+from apps.oab.models._base import (
+    AssemblyMeeting,
+    DocumentDirection,
+    DocumentFormat,
+    DocumentStatus,
+    DocumentVariant,
+    OabBaseModel,
+    SilinmezOabModel,
+    SilinmezQuerySet,
+)
 from apps.okul.models import Attachment, ImmutableRecord
 from shared.crypto import EncryptedTextField
 
@@ -65,6 +83,8 @@ class GeneratedDocument(OabBaseModel):
         "doc_type",
         "subject_type",
         "subject_id",
+        "variant",
+        "meeting",
         "term",
         "version",
         "formats",
@@ -85,6 +105,8 @@ class GeneratedDocument(OabBaseModel):
         "doc_type",
         "subject_type",
         "subject_id",
+        "variant",
+        "meeting",
         "term",
         "version",
         "formats",
@@ -105,6 +127,14 @@ class GeneratedDocument(OabBaseModel):
     #: Konunun model etiketi (`okul.Account` biçimi) ve kimlik metni (`denetim_izi.kimlik_metni`).
     subject_type = models.CharField("konu kaydın modeli", max_length=64)
     subject_id = models.CharField("konu kaydın kimliği", max_length=64)
+    #: Kip (modül başlığı "Kip ve toplantı"); F1c belgelerinde boş.
+    variant = models.CharField(
+        "kip", max_length=8, choices=DocumentVariant.choices, blank=True, default=""
+    )
+    #: Genel kurulun toplantısı (modül başlığı "Kip ve toplantı"); F1c belgelerinde boş.
+    meeting = models.CharField(
+        "toplantı", max_length=8, choices=AssemblyMeeting.choices, blank=True, default=""
+    )
     term = models.ForeignKey(
         "oab.OabTerm",
         on_delete=models.PROTECT,
@@ -176,13 +206,27 @@ class GeneratedDocument(OabBaseModel):
                 | (Q(personal_list=False) & ~Q(content_json="")),
                 name="ck_generateddocument_icerik",
             ),
+            models.CheckConstraint(
+                condition=Q(variant__in=["", *DocumentVariant.values]),
+                name="ck_generateddocument_variant",
+            ),
+            models.CheckConstraint(
+                condition=Q(meeting__in=["", *AssemblyMeeting.values]),
+                name="ck_generateddocument_meeting",
+            ),
+            # Adlı kip veli adı taşır (R9): içeriği ve dosyası saklanmaz.
+            models.CheckConstraint(
+                condition=~Q(variant=DocumentVariant.ADLI) | Q(personal_list=True),
+                name="ck_generateddocument_adli_kip",
+            ),
             models.UniqueConstraint(
                 fields=["doc_type", "subject_type", "subject_id", "version"],
                 name="uq_generateddocument_surum",
             ),
-            # Aynı konunun aynı evrakında tek geçerli kayıt (yeniden üretim öncekinin yerini alır).
+            # Aynı konunun aynı evrakında, kip ve toplantı başına tek geçerli kayıt (yeniden üretim
+            # öncekinin yerini alır; U34).
             models.UniqueConstraint(
-                fields=["doc_type", "subject_type", "subject_id"],
+                fields=["doc_type", "subject_type", "subject_id", "variant", "meeting"],
                 condition=Q(status=DocumentStatus.GECERLI),
                 name="uq_generateddocument_gecerli",
             ),
@@ -202,6 +246,11 @@ class GeneratedDocument(OabBaseModel):
             raise EvrakKaydiGecersiz("Evrak kodu biçimsiz.")
         if self.status != DocumentStatus.GECERLI:
             raise EvrakKaydiGecersiz("Üretilen evrak geçerli durumda açılır.")
+        if self.variant not in ("", *DocumentVariant.values) or self.meeting not in (
+            "",
+            *AssemblyMeeting.values,
+        ):
+            raise EvrakKaydiGecersiz("Evrakın kipi ya da toplantısı geçersiz.")
         bicimler = self.formats
         if (
             not isinstance(bicimler, list)
@@ -238,3 +287,108 @@ class GeneratedDocument(OabBaseModel):
 
     def delete(self, *args: Any, **kwargs: Any) -> tuple[int, dict[str, int]]:
         raise ImmutableRecord("Üretilen evrak kaydı silinmez (tasarım §5.2.8).")
+
+
+class DocumentRecord(SilinmezOabModel):
+    """Gelen-giden evrak kaydı (tasarım §5.2.8; ADR-0028'in `OabDocumentRecord`'u, OYS'de yazılmamıştı).
+
+    Defteri gelen-giden evrak defteridir (`OfficialBook(GELEN_GIDEN_EVRAK_DEFTERI)`; tür denetimi ve
+    müdür yazısının programca işlenmesi 7. adımın servisindedir, dipnot 7). (defter, yıl, kayıt no)
+    tekildir — sert; sıra atlama uyarıdır (servis). Karşı taraf ve konu serbest metindir, şifrelidir
+    (tasarım §5.3); dış sayı (karşı tarafın ya da EBYS'nin sayısı) açıktır. Giden yazının programdaki
+    karşılığı `generated_document`'tır; gelen kayıtta boştur (kısıt). Ekler `Attachment`'a genel bağla
+    bağlanır (`ekler()`; dosya deposunun sahip kaydı 7. adımda). Kayıt silinmez (altın kural 4).
+    """
+
+    IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "book",
+        "direction",
+        "year",
+        "record_no",
+        "date",
+        "external_ref",
+        "generated_document",
+        "term",
+    )
+    IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
+        "created_at",
+        "created_by",
+        "updated_at",
+        "updated_by",
+        "book",
+        "direction",
+        "year",
+        "record_no",
+        "date",
+        "counterparty",
+        "subject",
+        "external_ref",
+        "generated_document",
+        "term",
+    )
+    IZ_DURUM_ALANLARI: ClassVar[tuple[str, ...]] = ()
+    IZ_DONEM_ALANI: ClassVar[str] = "term"
+
+    book = models.ForeignKey(
+        "oab.OfficialBook",
+        on_delete=models.PROTECT,
+        related_name="document_records",
+        verbose_name="gelen-giden evrak defteri",
+    )
+    direction = models.CharField("yön", max_length=8, choices=DocumentDirection.choices)
+    year = models.PositiveSmallIntegerField("yıl")
+    record_no = models.PositiveIntegerField("kayıt no")
+    date = models.DateField("tarih")
+    counterparty = EncryptedTextField("karşı taraf", blank=True, default="")
+    subject = EncryptedTextField("konu", blank=True, default="")
+    #: Karşı tarafın ya da EBYS'nin sayısı.
+    external_ref = models.CharField("dış sayı", max_length=64, blank=True, default="")
+    generated_document = models.ForeignKey(
+        GeneratedDocument,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="giden yazının üretilen evrakı",
+    )
+    term = models.ForeignKey(
+        "oab.OabTerm",
+        on_delete=models.PROTECT,
+        related_name="document_records",
+        verbose_name="birlik dönemi",
+    )
+
+    objects = SilinmezQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = "gelen-giden evrak kaydı"
+        verbose_name_plural = "gelen-giden evrak kayıtları"
+        ordering = ["book", "year", "record_no"]
+        base_manager_name = "objects"
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(direction__in=DocumentDirection.values),
+                name="ck_documentrecord_direction",
+            ),
+            models.CheckConstraint(
+                condition=Q(record_no__gte=1), name="ck_documentrecord_record_no"
+            ),
+            # Programdaki üretilen evrak yalnız giden yazının karşılığıdır.
+            models.CheckConstraint(
+                condition=Q(generated_document__isnull=True) | Q(direction=DocumentDirection.GIDEN),
+                name="ck_documentrecord_giden_evrak",
+            ),
+            # (defter, yıl, kayıt no) tekil — sert (tasarım §5.2.8).
+            models.UniqueConstraint(
+                fields=["book", "year", "record_no"], name="uq_documentrecord_defter_yil_no"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_direction_display()} evrak {self.year}/{self.record_no}"
+
+    def ekler(self) -> models.QuerySet[Attachment]:
+        """Bu kayda bağlı ekler (`attachments`; genel bağ)."""
+        return Attachment.objects.filter(
+            owner_type=self._meta.label, owner_id=str(self.pk)
+        ).order_by("uploaded_at", "id")

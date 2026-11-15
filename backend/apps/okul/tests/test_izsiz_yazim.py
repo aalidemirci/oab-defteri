@@ -88,13 +88,19 @@ from rest_framework.test import APIClient
 
 from apps.oab.kurallar import yukleyici
 from apps.oab.models import (
+    AgendaItem,
+    Announcement,
     AssemblyKind,
+    AssemblyMinutes,
+    AttendanceCorrection,
+    AuditReport,
     BoardDecision,
     BoardMeeting,
     BoardMeetingAttendance,
     ComplianceItem,
     ComplianceJustification,
     DecisionKind,
+    DocumentRecord,
     GeneralAssembly,
     GeneratedDocument,
     MeetingKind,
@@ -1262,6 +1268,17 @@ ILKELLER: dict[tuple[str, str], str] = {
     ("shared/models.py", "BaseModel.restore"): _MODEL_ILKELI,
     ("shared/models.py", "SoftDeleteQuerySet.delete"): _MODEL_ILKELI,
     ("shared/models.py", "SoftDeleteQuerySet.hard_delete"): _MODEL_ILKELI,
+    ("apps/oab/models/genel_kurul.py", "_GenelKurulQuerySet.update"): (
+        "Genel kurulun toplu güncelleme ilkesi (plan F2 3. adım, U7): dondurulmuş yeter sayıyı "
+        "değiştiren toplu güncellemeyi reddeder, ötekini modelin ilkeline bırakır; kendisi iz "
+        "yazmaz, izi onu çağıran servis düşer (servislerin çağrısı bu taramanın kapsamındadır)."
+    ),
+    ("apps/oab/models/denetim.py", "_DenetimRaporuQuerySet.update"): (
+        "Denetleme Kurulu raporunun toplu güncelleme ilkesi (plan F2 3. adım, S6 (ii)): md. 14/5 "
+        "bağını bozan toplu güncellemeyi (çağrıya bağlı raporun md. 6 işaretini kaldırma, başka "
+        "raporla çağrılmış genel kurula bağlama) reddeder, ötekini modelin ilkeline bırakır; kendisi "
+        "iz yazmaz, izi onu çağıran servis düşer (servislerin çağrısı bu taramanın kapsamındadır)."
+    ),
     ("apps/okul/models.py", "_AccessLogQuerySet._saklama_disini_sil"): (
         "Erişim günlüğünün tek silme ilkesi (saklama süresi dolan satırlar): kendisi siler, "
         "izini (`KVKK_SILME`) çağıranı düşer. Bu tarama ilkelin çağrısını yazım sayar "
@@ -2135,7 +2152,8 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
 
     `okul` ve `oab`'nin her izli modeli (bugün `Account`, `SchoolConfig`, `SchoolYear`, `SchoolTerm`,
     `Holiday`, `Personnel`, `ImportRun`, `Attachment`, birlik dönemi ve kural kopyası, genel kurul,
-    uyum satırı ve gerekçesi, birlik kişisi) uydurma kişi verisiyle yazılır, güncellenir ve
+    uyum satırı ve gerekçesi, birlik kişisi; F2'nin gündem, tutanak, katılım düzeltmesi, denetim raporu,
+    duyuru ve gelen-giden evrak kaydı) uydurma kişi verisiyle yazılır, güncellenir ve
     durumu değişir; iz satırlarının hiçbir sütununda bu değerler, parçaları, büyük-küçük harf
     biçimleri ve şifreli token'ları geçmez. Senaryosu yazılmamış izli model testi düşürür. Arşiv
     dökümü henüz yoktur. Veli listesi (T5)
@@ -2316,6 +2334,77 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
         tarih=date(2026, 10, 1),
         gerekce=uyum.Gerekce(metin=f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_METIN}"),
     )
+    # Genel kurulun F2 modelleri (F2 3. adım; servisleri 4.-7. adımlarda): model ve yazıcıyla yazılır.
+    # Çağrı nedeni, iptal gerekçesi, gündemin notu ve sonuç metni, tutanağın evrak listesi, düzeltme
+    # gerekçesi, evrak kaydının karşı tarafı ve konusu şifreli serbest metindir; toplantı yeri ve
+    # gündem başlığı açık serbest metindir. Hiçbiri izde değer olarak görünmez.
+    kurul.refresh_from_db()  # yeter sayı dondurulmuş: bellekteki eski hâl yazılamaz
+    onceki = denetim_izi.anlik(kurul)
+    kurul.call_reason = f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_METIN}"
+    kurul.venue = UYDURMA_ADRES
+    kurul.save()
+    denetim_izi.degisiklik(kurul, onceki=onceki)
+    madde = AgendaItem.objects.create(
+        assembly=kurul,
+        order=1,
+        kind="DIGER",
+        title=f"{UYDURMA_AD} {UYDURMA_SOYAD}",
+        notes=f"{UYDURMA_AD} {UYDURMA_TELEFON}",
+        result_text=UYDURMA_UZUN,
+    )
+    denetim_izi.degisiklik(madde, onceki=None)
+    onceki = denetim_izi.anlik(madde)
+    madde.removed_by_vote, madde.change_votes_for, madde.change_votes_against = True, 30, 2
+    madde.save()
+    denetim_izi.degisiklik(madde, onceki=onceki)
+    tutanak = AssemblyMinutes.objects.create(
+        assembly=kurul,
+        yk_report_reader=kisi,
+        unaudited_documents_note=f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_TCKN}",
+        handed_to_new_yk_on=date(2026, 10, 25),
+    )
+    denetim_izi.degisiklik(tutanak, onceki=None)
+    duzeltme = AttendanceCorrection.objects.create(
+        assembly=kurul,
+        meeting="BIRINCI",
+        field="observer_count",
+        old_value=3,
+        new_value=4,
+        justification=f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_ADRES}",
+        corrected_at=timezone.now(),
+    )
+    denetim_izi.degisiklik(duzeltme, onceki=None)
+    rapor = AuditReport.objects.create(term=donem, kind="ARA", report_date=date(2026, 10, 2))
+    denetim_izi.degisiklik(rapor, onceki=None)
+    onceki = denetim_izi.anlik(rapor)
+    rapor.status = "DK_IMZALADI"
+    rapor.save()
+    denetim_izi.degisiklik(rapor, onceki=onceki)
+    duyuru = Announcement.objects.create(
+        term=donem,
+        kind="GK_CAGRISI",
+        subject_type=denetim_izi.model_etiketi(GeneralAssembly),
+        subject_id=str(kurul.pk),
+    )
+    denetim_izi.degisiklik(duyuru, onceki=None)
+    onceki = denetim_izi.anlik(duyuru)
+    duyuru.status, duyuru.posted_board_on = "YAYIMLANDI", date(2026, 10, 3)
+    duyuru.save()
+    denetim_izi.degisiklik(duyuru, onceki=onceki)
+    evrak_defteri = OfficialBook.objects.create(kind="GELEN_GIDEN_EVRAK_DEFTERI")
+    denetim_izi.degisiklik(evrak_defteri, onceki=None)
+    evrak_kaydi = DocumentRecord.objects.create(
+        book=evrak_defteri,
+        direction="GELEN",
+        year=2026,
+        record_no=1,
+        date=date(2026, 10, 2),
+        counterparty=f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_ADRES}",
+        subject=f"{UYDURMA_METIN} {UYDURMA_TELEFON_ARALIKLI}",
+        external_ref="E-2026-15",
+        term=donem,
+    )
+    denetim_izi.degisiklik(evrak_kaydi, onceki=None)
 
     metin = _iz_metni()
     modeller = set(AuditTrail.objects.values_list("model", flat=True))
@@ -2442,6 +2531,12 @@ IZLI_MODELLER = (
     BoardMeetingAttendance,
     BoardDecision,
     GeneratedDocument,
+    AgendaItem,
+    AssemblyMinutes,
+    AttendanceCorrection,
+    AuditReport,
+    Announcement,
+    DocumentRecord,
 )
 
 

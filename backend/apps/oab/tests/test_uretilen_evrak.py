@@ -182,7 +182,8 @@ def test_ayni_konuda_tek_gecerli_kayit_ve_surum_tekil() -> None:
         "content_json": "{}",
         "generated_at": "2026-11-10T09:00:00Z",
     }
-    with transaction.atomic(), pytest.raises(IntegrityError, match=r"subject_id$"):
+    # Tek geçerli satır kısıtı kip ve toplantıyla genişledi (plan F2 §7 U34).
+    with transaction.atomic(), pytest.raises(IntegrityError, match=r"subject_id, .*meeting$"):
         GeneratedDocument.objects.create(version=2, **temel)
     with (
         transaction.atomic(),

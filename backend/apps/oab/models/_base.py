@@ -14,7 +14,14 @@ kural 2).
 
 from __future__ import annotations
 
+from typing import Any
+
 from django.db import models
+
+# `AssemblyMeeting` okul çekirdeğindedir (veli listesinin katılım işareti onu kullanır, `okul` `oab`'yi
+# içe aktarmaz); `oab` buradan yeniden verir.
+from apps.okul.models import AssemblyMeeting as AssemblyMeeting
+from apps.okul.models import ImmutableRecord
 
 
 class OabBaseModel(models.Model):
@@ -320,3 +327,136 @@ class DocumentStatus(models.TextChoices):
 
     GECERLI = "GECERLI", "Geçerli"
     YERINI_ALDI = "YERINI_ALDI", "Yerini aldı"
+
+
+class DocumentVariant(models.TextChoices):
+    """Aynı evrakın kipi (plan F2 §7 U14, U34): kişisiz (davet ve sınıf başına adet, boş satırlı
+    cetvel) ya da adlı (teslim çizelgesi, adlı cetvel; veli adı taşır, R9). F1c evrakında boştur."""
+
+    KISISIZ = "KISISIZ", "Kişisiz"
+    ADLI = "ADLI", "Adlı"
+
+
+class AssemblyCaller(models.TextChoices):
+    """Genel kurulu çağıran (tasarım §5.2.3 `called_by`; md. 9/1, 9/6, 13/8, 14/5, 25/2).
+
+    Değerler `genel_kurul.olaganustu_cagiranlar` kuralının liste değerleridir; listede olmayan tek
+    değer `MUDUR_YENI_OKUL`'dur (yeni açılan okulda müdürün daveti, md. 9/1).
+    """
+
+    YONETIM_KURULU = "YONETIM_KURULU", "Yönetim kurulu"
+    OKUL_MUDURU = "OKUL_MUDURU", "Okul müdürü"
+    MUDUR_YENI_OKUL = "MUDUR_YENI_OKUL", "Okul müdürü (yeni açılan okul)"
+    DENETLEME_KURULU = "DENETLEME_KURULU", "Denetleme Kurulu"
+    UYE_BASVURUSU = "UYE_BASVURUSU", "Üyelerin yazılı başvurusu"
+    BASKAN_VEYA_MUDUR_13_8 = "BASKAN_VEYA_MUDUR_13_8", "Birlik başkanı ya da okul müdürü (md. 13/8)"
+    MUDUR_25_2 = "MUDUR_25_2", "Okul müdürü (md. 25/2)"
+
+
+class Discharge(models.TextChoices):
+    """İbra sonucu (md. 11/1-c), kurul başına ayrı (`discharge_yk`, `discharge_dk`)."""
+
+    EDILDI = "EDILDI", "İbra edildi"
+    EDILMEDI = "EDILMEDI", "İbra edilmedi"
+    GORUSULMEDI = "GORUSULMEDI", "Görüşülmedi"
+
+
+class AttendanceKind(models.TextChoices):
+    """Genel kurul katılımının türe göre dağılımı (`attendance_by_kind` anahtarları; tasarım §5.2.3
+    "veli/kursiyer, öğretmen, yönetici, hayırsever, diğer"). "Yönetici" kişi türündeki gibi
+    `IDARECI` yazılır: "Program yöneticisi" ile karışmasın (plan F1c kararları)."""
+
+    VELI_KURSIYER = "VELI_KURSIYER", "Veli ve kursiyer"
+    OGRETMEN = "OGRETMEN", "Öğretmen"
+    IDARECI = "IDARECI", "İdareci"
+    HAYIRSEVER = "HAYIRSEVER", "Hayırsever"
+    DIGER = "DIGER", "Diğer"
+
+
+class AgendaItemKind(models.TextChoices):
+    """Genel kurul gündem maddesinin türü (tasarım §5.2.3 `AgendaItem.kind`)."""
+
+    ACILIS = "ACILIS", "Açılış"
+    DIVAN_SECIMI = "DIVAN_SECIMI", "Divan seçimi"
+    YK_FAALIYET_RAPORU = "YK_FAALIYET_RAPORU", "Yönetim kurulu faaliyet raporu"
+    DK_RAPORU = "DK_RAPORU", "Denetleme Kurulu raporu"
+    IBRA = "IBRA", "İbra"
+    TAHMINI_BUTCE = "TAHMINI_BUTCE", "Tahmini bütçe"
+    YETKILENDIRME = "YETKILENDIRME", "Yetkilendirme"
+    SECIM_YK = "SECIM_YK", "Yönetim kurulu seçimi"
+    SECIM_DK = "SECIM_DK", "Denetleme Kurulu seçimi"
+    ONERILER = "ONERILER", "Öneriler"
+    DILEK = "DILEK", "Dilek ve temenniler"
+    KAPANIS = "KAPANIS", "Kapanış"
+    DIGER = "DIGER", "Diğer"
+
+
+class AgendaResult(models.TextChoices):
+    """Gündem maddesinin sonucu (tasarım §5.2.3 `AgendaItem.result`)."""
+
+    KABUL = "KABUL", "Kabul"
+    RET = "RET", "Ret"
+    GORUSULDU = "GORUSULDU", "Görüşüldü"
+
+
+class AnnouncementKind(models.TextChoices):
+    """Duyurunun türü (tasarım §5.2.7 `Announcement.kind`); F2'de genel kurul çağrıları kullanılır."""
+
+    GK_CAGRISI = "GK_CAGRISI", "Genel kurul çağrısı"
+    OLAGANUSTU_GK_CAGRISI = "OLAGANUSTU_GK_CAGRISI", "Olağanüstü genel kurul çağrısı"
+    BUTCE = "BUTCE", "Bütçe"
+    GELIR_GIDER_DONEMLIK = "GELIR_GIDER_DONEMLIK", "Dönemlik gelir-gider"
+    SERVIS_ISI_ILANI = "SERVIS_ISI_ILANI", "Servis işi ilanı"
+    TASIMACI_LISTESI = "TASIMACI_LISTESI", "Taşımacı listesi"
+    DIGER = "DIGER", "Diğer"
+
+
+class AnnouncementStatus(models.TextChoices):
+    """Duyurunun durumu: `TASLAK` → `YAYIMLANDI` → `KALDIRILDI` (tasarım §5.2.7)."""
+
+    TASLAK = "TASLAK", "Taslak"
+    YAYIMLANDI = "YAYIMLANDI", "Yayımlandı"
+    KALDIRILDI = "KALDIRILDI", "Kaldırıldı"
+
+
+class DocumentDirection(models.TextChoices):
+    """Gelen-giden evrak kaydının yönü (tasarım §5.2.8 `DocumentRecord.direction`)."""
+
+    GELEN = "GELEN", "Gelen"
+    GIDEN = "GIDEN", "Giden"
+
+
+class AuditReportKind(models.TextChoices):
+    """Denetleme Kurulu raporunun türü (tasarım §5.2.4 `AuditReport.kind`; md. 14/4)."""
+
+    ARA = "ARA", "Ara rapor"
+    NIHAI = "NIHAI", "Nihai rapor"
+
+
+class AuditReportStatus(models.TextChoices):
+    """Denetleme Kurulu raporunun durumu: `TASLAK` → `DK_IMZALADI` → `SUNULDU` (tasarım §5.2.4)."""
+
+    TASLAK = "TASLAK", "Taslak"
+    DK_IMZALADI = "DK_IMZALADI", "Denetleme Kurulu imzaladı"
+    SUNULDU = "SUNULDU", "Sunuldu"
+
+
+class SilinmezQuerySet(models.QuerySet):  # type: ignore[type-arg]  # Any davranışı korunur
+    """Toplu silmeyi reddeden queryset (altın kural 4: kayıt silinmez; tasarım §5 O1).
+
+    Yanlış kayıt `IPTAL` ya da modelin kendi düzeltme yoluyla düzelir; silme ucu yoktur. Örnek
+    silmesini `SilinmezOabModel` reddeder.
+    """
+
+    def delete(self) -> tuple[int, dict[str, int]]:
+        raise ImmutableRecord(f"{self.model._meta.verbose_name} silinmez (tasarım §5 O1).")
+
+
+class SilinmezOabModel(OabBaseModel):
+    """Örnek silmesini reddeden `oab` temeli (altın kural 4; `SilinmezQuerySet`'in örnek eşi)."""
+
+    class Meta:
+        abstract = True
+
+    def delete(self, *args: Any, **kwargs: Any) -> tuple[int, dict[str, int]]:
+        raise ImmutableRecord(f"{self._meta.verbose_name} silinmez (tasarım §5 O1).")
