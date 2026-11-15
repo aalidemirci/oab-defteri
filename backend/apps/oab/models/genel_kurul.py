@@ -27,8 +27,9 @@ ILAN_EDILDI → YAPILDI → TUTANAK_TAMAM`, `ILAN_EDILDI → YETER_SAYI_YOK → 
 yazarsa yazsın geçiş veritabanındaki durumla denetlenir (`BoardDecision` kalıbı).
 
 KATILIM DÜZELTMESİ (`AttendanceCorrection`): ekleme-yalnızdır; satır değişmez, silinmez. Genel kuruldaki
-sayı son düzeltme satırının değeridir (yazanı 5. adımın servisi). Düzeltilebilen alanlar kapalı
-listedir (`DUZELTILEBILIR_ALANLAR`); yeter sayının dört alanı listede yoktur (veritabanı kısıtı).
+sayı son düzeltme satırının değeridir (yazanı `services.genel_kurul.katilim_duzelt`, F2 5. adım).
+Düzeltilebilen alanlar kapalı listedir (`DUZELTILEBILIR_ALANLAR`); yeter sayının dört alanı listede
+yoktur (veritabanı kısıtı).
 
 MD. 14/5 ÇAĞRISININ İKİ BAĞI (kullanıcı kararı S6 (ii), hukuken geçersiz işlem; plan F2 §7 U13):
 Denetleme Kurulunun çağrısı iki yabancı anahtardadır: genel kuruldaki `call_audit_report` ve rapordaki
@@ -557,7 +558,9 @@ class AgendaItem(SilinmezOabModel):
     (genel kurul, sıra) tekildir; SQLite tekil kısıtı ertelemediği için sıra değişikliği servis
     katmanında geçici değerle iki adımda yapılır. Çıkarılan madde silinmez: `removed_by_vote` (md. 9/4);
     çıkarılan madde görüşülmez, sonucu yoktur. Kabul ya da ret sonucu oylarla birlikte yazılır (sonuç
-    oylardan hesaplanır; S6 (iii) servistedir).
+    oylardan hesaplanır; S6 (iii) servistedir). Oylamada salonda bulunan sayı (`present_count`; F2 5.
+    adım, kullanıcı kararı S2) girilmişse karar çoğunluğunun paydası odur, girilmemişse toplantının
+    katılım sayısıdır; yalnız oyları girilmiş maddede bulunur.
     """
 
     IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = (
@@ -570,6 +573,7 @@ class AgendaItem(SilinmezOabModel):
         "change_votes_against",
         "votes_for",
         "votes_against",
+        "present_count",
         "result",
     )
     IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
@@ -589,6 +593,7 @@ class AgendaItem(SilinmezOabModel):
         "result_text",
         "votes_for",
         "votes_against",
+        "present_count",
         "result",
     )
     IZ_DURUM_ALANLARI: ClassVar[tuple[str, ...]] = ("removed_by_vote", "result")
@@ -616,6 +621,8 @@ class AgendaItem(SilinmezOabModel):
     result_text = EncryptedTextField("sonuç metni", blank=True, default="")
     votes_for = models.PositiveIntegerField("kabul oyu", null=True, blank=True)
     votes_against = models.PositiveIntegerField("ret oyu", null=True, blank=True)
+    #: Oylamada salonda bulunan üye sayısı (toplantıdan ayrılan varsa; kullanıcı kararı S2).
+    present_count = models.PositiveIntegerField("oylamada salonda bulunan", null=True, blank=True)
     result = models.CharField(
         "sonuç", max_length=12, choices=AgendaResult.choices, blank=True, default=""
     )
@@ -651,6 +658,16 @@ class AgendaItem(SilinmezOabModel):
                 condition=~Q(result__in=(AgendaResult.KABUL, AgendaResult.RET))
                 | Q(votes_for__isnull=False, votes_against__isnull=False),
                 name="ck_agendaitem_sonuc_oylari",
+            ),
+            # Salondaki sayı yalnız oyları girilmiş maddede ve oyların toplamından az değil.
+            models.CheckConstraint(
+                condition=Q(present_count__isnull=True)
+                | Q(
+                    votes_for__isnull=False,
+                    votes_against__isnull=False,
+                    present_count__gte=F("votes_for") + F("votes_against"),
+                ),
+                name="ck_agendaitem_salondaki_sayi",
             ),
             models.UniqueConstraint(fields=["assembly", "order"], name="uq_agendaitem_sira"),
         ]

@@ -6,12 +6,14 @@ F1c kararları; denetim UY-10): genel kurul bağı boşken (dönem, organ, kişi
 kurul dışı seçimlerde etkisiz kalırdı. Geçiş kurulumunda görevdeki kurul `DEVRALINAN` üyelikle aday
 şartı olmadan seçilmiş açılır (§7.9); toplu sayaç beyanı geçiş kurulumunun adımıdır (8. adım).
 Bir kişi aynı dönemde aynı kurulda tek koltuk tutar (kullanıcı kararı 10.11.2026). F2 4. adımdan
-beri genel kurulun hazırlık dönemi senaryoları (dosyanın sonu).
+beri genel kurulun hazırlık dönemi senaryoları, 5. adımdan beri veli listesinin katılım işareti
+(dosyanın sonu).
 Kişi adları UYDURMADIR.
 """
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 import pytest
@@ -20,7 +22,9 @@ from django.db import IntegrityError, transaction
 from apps.oab.hatalar import GecisKapali, GerekceGerekli, KuralSert
 from apps.oab.models import (
     AssemblyKind,
+    AssemblyMeeting,
     AssemblyStatus,
+    AttendanceCorrection,
     ComplianceItem,
     ComplianceJustification,
     ComplianceKind,
@@ -39,7 +43,15 @@ from apps.oab.services import donem_kilidi, gecis, genel_kurul, kisiler, uyelikl
 from apps.oab.tests import genel_kurul_ortak as gko
 from apps.oab.tests import uyelik_ortak as o
 from apps.oab.tests.kurallar import paket_ortak
-from apps.okul.models import AccountRole, AuditTrail
+from apps.okul.models import (
+    AccessKind,
+    AccessLog,
+    AccountRole,
+    AuditAction,
+    AuditTrail,
+    ParentRoster,
+)
+from apps.okul.services import imports as import_service
 from shared.exceptions import RolYetkisiz
 
 pytestmark = pytest.mark.django_db
@@ -374,3 +386,256 @@ def test_gk_iptalinde_hazirlik_donemi_iptal() -> None:
     sonra = GeneralAssembly.objects.get(pk=yeni.pk)
     assert (sonra.status, sonra.quorum_required) == (AssemblyStatus.IPTAL, 64)
     assert not OabTerm.objects.filter(status=TermStatus.HAZIRLIK).exists()
+
+
+# ---------------------------------------------------------------------------
+# F2 5. adım: veli listesinin katılım işareti (plan F2 §7 U33, S12)
+# ---------------------------------------------------------------------------
+#: Uydurma veli satırları (veli adı, öğrencinin sınıfı).
+_VELILER = (
+    ("Uydurnur Örnekkaya", "9-A"),
+    ("Masalgül Hayalkaya", "9-A"),
+    ("Uydurhan Örnekçi", "10-B"),
+)
+
+
+def _isaretli_kurul() -> GeneralAssembly:
+    """Veli listesi aktarılmış, ilan edilmiş (birinci toplantısı sürmekte olan) olağan genel kurul."""
+    gko.acik_donem()
+    gko.veli_aktar(_VELILER)
+    kurul = gko.olagan_cagir(gko.planla())
+    return genel_kurul.ilan_et(kurul, kanallar=gko.kanallar()).kurul
+
+
+def _satirlar(sinif: str) -> list[int]:
+    return list(
+        ParentRoster.objects.filter(student_class=sinif).order_by("pk").values_list("pk", flat=True)
+    )
+
+
+@pytest.mark.parametrize(
+    "rol",
+    [
+        AccountRole.SEKRETER,
+        AccountRole.BASKAN,
+        AccountRole.MUDUR,
+        AccountRole.DENETLEME_KURULU,
+    ],
+)
+def test_katilim_isareti_yalniz_yonetici_ve_erisim_gunlugu(rol: AccountRole) -> None:
+    """U33 (R9, dipnot ¹⁰): işaret penceresi veli adını gösterir; okuması da yazması da yalnız program
+    yöneticisinin (kişisel veri içeren çıktı kapısı). Öteki roller `RolYetkisiz` alır, ret ne erişim
+    günlüğüne ne işarete yazar. Program yöneticisinin okuması erişim günlüğüne düşer (tür veli
+    listesi çıktısı, kayıt genel kurul, listenin sha256'sı ve satır sayısı; ad yok). İşaretin izi
+    kişisiz `ISARET` satırıdır: satır kimliği, ad ve sınıf ize girmez."""
+    kurul = _isaretli_kurul()
+    dokuz_a = _satirlar("9-A")
+    with o.rol_olarak(rol), pytest.raises(RolYetkisiz):
+        genel_kurul.katilim_isaretleri(kurul, toplanti=AssemblyMeeting.BIRINCI)
+    with o.rol_olarak(rol), pytest.raises(RolYetkisiz):
+        genel_kurul.katilim_isaretle(kurul, toplanti=AssemblyMeeting.BIRINCI, isaretle=dokuz_a)
+    assert not AccessLog.objects.exists()
+    assert genel_kurul.katilim_isareti_sayisi(kurul, AssemblyMeeting.BIRINCI) == 0
+
+    liste = genel_kurul.katilim_isaretleri(kurul, toplanti=AssemblyMeeting.BIRINCI)
+    assert [s["sinif"] for s in liste] == ["9-A", "10-B"]
+    assert [v["veli"] for v in liste[0]["satirlar"]] == ["Masalgül Hayalkaya", "Uydurnur Örnekkaya"]
+    assert not any(v["isaretli"] or v["baska_isaret"] for s in liste for v in s["satirlar"])
+    gunluk = AccessLog.objects.get()
+    assert (gunluk.kind, gunluk.model, gunluk.object_id, gunluk.row_count, gunluk.role) == (
+        AccessKind.VELI_LISTESI_CIKTISI,
+        "oab.GeneralAssembly",
+        str(kurul.pk),
+        3,
+        "yonetici",
+    )
+    assert len(gunluk.document_sha256) == 64
+
+    assert (
+        genel_kurul.katilim_isaretle(kurul, toplanti=AssemblyMeeting.BIRINCI, isaretle=dokuz_a) == 2
+    )
+    iz = AuditTrail.objects.get(model="okul.ParentRoster", action=AuditAction.ISARET)
+    assert (iz.object_id, iz.values, iz.term_id) == ("", {}, kurul.term_id)
+    assert sorted(iz.changed_fields) == ["attended_assembly", "attended_meeting"]
+    metin = " ".join(
+        str(deger)
+        for satir in AuditTrail.objects.all()
+        for deger in (satir.values, satir.changed_fields, satir.object_id)
+    )
+    for ad, _ in _VELILER:
+        assert ad not in metin
+    tekrar = genel_kurul.katilim_isaretleri(kurul, toplanti=AssemblyMeeting.BIRINCI)
+    assert [v["isaretli"] for v in tekrar[0]["satirlar"]] == [True, True]
+    assert AccessLog.objects.count() == 2
+
+
+def test_katilim_isareti_sayiyi_degistirmez() -> None:
+    """U33: işaret sayım yardımıdır. İşaret sayısı katılım sayısına öneridir; toplantının katılım
+    sayısı elle girilen alan kalır, işaretten hesaplanmaz ve işaretle değişmez (düzeltme satırı da
+    açılmaz). İşaret yapılmakta ya da yapılmış toplantıya konur, kaldırılabilir; birinci toplantıda
+    yapılan genel kurulun ikinci toplantısı yoktur; başka genel kurulun işaretli satırı
+    işaretlenmez."""
+    kurul = _isaretli_kurul()
+    dokuz_a, (on_b,) = _satirlar("9-A"), _satirlar("10-B")
+    assert (
+        genel_kurul.katilim_isaretle(kurul, toplanti=AssemblyMeeting.BIRINCI, isaretle=dokuz_a) == 2
+    )
+    yapildi = genel_kurul.birinci_toplanti(kurul, katilim=gko.katilim(70)).kurul
+    assert (yapildi.status, yapildi.first_attendee_count) == (AssemblyStatus.YAPILDI, 70)
+    assert (
+        genel_kurul.katilim_isaretle(
+            kurul, toplanti=AssemblyMeeting.BIRINCI, isaretle=[on_b], kaldir=dokuz_a[:1]
+        )
+        == 2
+    )
+    sonra = GeneralAssembly.objects.get(pk=kurul.pk)
+    assert (sonra.first_attendee_count, sonra.attendance_by_kind) == (70, {})
+    assert not AttendanceCorrection.objects.exists()
+    with pytest.raises(ValueError, match="bu durumdayken"):
+        genel_kurul.katilim_isaretle(kurul, toplanti=AssemblyMeeting.IKINCI, isaretle=[on_b])
+    with pytest.raises(ValueError, match="işareti yok"):
+        genel_kurul.katilim_isaretle(kurul, toplanti=AssemblyMeeting.BIRINCI, kaldir=dokuz_a[:1])
+    with pytest.raises(ValueError, match="veli listesinde yok"):
+        genel_kurul.katilim_isaretle(kurul, toplanti=AssemblyMeeting.BIRINCI, isaretle=[0])
+    # Başka (olağanüstü) genel kurulun işareti olan satır bu genel kurulda işaretlenmez.
+    olaganustu = gko.olaganustu_cagir(gko.planla(kind=AssemblyKind.OLAGANUSTU))
+    genel_kurul.ilan_et(olaganustu, kanallar=gko.kanallar())
+    with pytest.raises(ValueError, match="başka bir genel kurulun"):
+        genel_kurul.katilim_isaretle(olaganustu, toplanti=AssemblyMeeting.BIRINCI, isaretle=[on_b])
+    # Planlanmış (ilan edilmemiş) genel kurulda toplantı yoktur.
+    planli = gko.planla(kind=AssemblyKind.OLAGANUSTU)
+    with pytest.raises(ValueError, match="bu durumdayken"):
+        genel_kurul.katilim_isaretle(planli, toplanti=AssemblyMeeting.BIRINCI, isaretle=dokuz_a)
+
+
+def test_ikinci_toplantinin_katilim_isareti() -> None:
+    """Pilot akışı (U33: toplantı `BIRINCI` · `IKINCI` seçilir): birinci toplantıda yeter sayı
+    sağlanamayınca ikinci toplantıya işaret konur; ikinci toplantının işaret listesi okunur (erişim
+    günlüğüne düşer) ve sayısı sayılır. İkinci toplantıya ilandan önce ve yeter sayı sorulmadan
+    işaret konmaz. Satır tek işaret taşır: birinci toplantıda işaretli satır ikinci toplantıda
+    işaretlenince işaret ikinci toplantıya taşınır (birincinin sayısı kurulda dondurulmuştur);
+    liste bu satırı `oteki_toplanti` diye gösterir. Katılım sayıları işaretle değişmez."""
+    gko.acik_donem()
+    gko.veli_aktar(_VELILER)
+    kurul = gko.olagan_cagir(gko.planla())
+    genel_kurul.ilan_et(kurul, kanallar=gko.kanallar(), second_meeting_at=gko.an(date(2026, 11, 3)))
+    dokuz_a, (on_b,) = _satirlar("9-A"), _satirlar("10-B")
+    genel_kurul.katilim_isaretle(kurul, toplanti=AssemblyMeeting.BIRINCI, isaretle=dokuz_a)
+    with pytest.raises(ValueError, match="bu durumdayken"):
+        genel_kurul.katilim_isaretle(kurul, toplanti=AssemblyMeeting.IKINCI, isaretle=[on_b])
+    genel_kurul.birinci_toplanti(kurul, katilim=gko.katilim(10))
+    assert GeneralAssembly.objects.get(pk=kurul.pk).status == AssemblyStatus.YETER_SAYI_YOK
+
+    gunluk_oncesi = AccessLog.objects.count()
+    liste = genel_kurul.katilim_isaretleri(kurul, toplanti=AssemblyMeeting.IKINCI)
+    assert AccessLog.objects.count() == gunluk_oncesi + 1
+    assert [
+        (v["isaretli"], v["oteki_toplanti"], v["baska_isaret"]) for v in liste[0]["satirlar"]
+    ] == [(False, True, False), (False, True, False)]
+    assert genel_kurul.katilim_isareti_sayisi(kurul, AssemblyMeeting.IKINCI) == 0
+
+    assert (
+        genel_kurul.katilim_isaretle(
+            kurul, toplanti=AssemblyMeeting.IKINCI, isaretle=[dokuz_a[0], on_b]
+        )
+        == 2
+    )
+    assert genel_kurul.katilim_isareti_sayisi(kurul, AssemblyMeeting.BIRINCI) == 1
+    tasinan = ParentRoster.objects.get(pk=dokuz_a[0])
+    assert (tasinan.attended_assembly_id, tasinan.attended_meeting) == (
+        kurul.pk,
+        AssemblyMeeting.IKINCI,
+    )
+    with pytest.raises(ValueError, match="işareti yok"):
+        genel_kurul.katilim_isaretle(kurul, toplanti=AssemblyMeeting.IKINCI, kaldir=dokuz_a[1:])
+
+    genel_kurul.ikinci_toplanti(kurul, katilim=gko.katilim(5))
+    assert genel_kurul.katilim_isaretle(kurul, toplanti=AssemblyMeeting.IKINCI, kaldir=[on_b]) == 1
+    tekrar = genel_kurul.katilim_isaretleri(kurul, toplanti=AssemblyMeeting.IKINCI)
+    assert {v["id"]: v["isaretli"] for s in tekrar for v in s["satirlar"]} == {
+        dokuz_a[0]: True,
+        dokuz_a[1]: False,
+        on_b: False,
+    }
+    sonra = GeneralAssembly.objects.get(pk=kurul.pk)
+    assert (sonra.status, sonra.held_at_meeting) == (
+        AssemblyStatus.YAPILDI,
+        AssemblyMeeting.IKINCI,
+    )
+    assert (sonra.first_attendee_count, sonra.second_attendee_count) == (10, 5)
+    assert not AttendanceCorrection.objects.exists()
+
+
+def _ilanli_olaganustu() -> GeneralAssembly:
+    kurul = gko.olaganustu_cagir(gko.planla(kind=AssemblyKind.OLAGANUSTU))
+    return genel_kurul.ilan_et(kurul, kanallar=gko.kanallar()).kurul
+
+
+def test_iptal_edilen_kurulun_isareti_yeni_kurulu_engellemez() -> None:
+    """U33: işaret yalnız `TUTANAK_TAMAM`'a dek yazılan sayım yardımıdır, kanıt değildir (sayılar
+    kurulda dondurulur). İşareti engel sayılan başka kurul yalnız işareti hâlâ yazılabilen
+    (ilan edilmiş, yeter sayısı sağlanamamış ya da yapılmış) kuruldur. İptal edilen kurulun işareti
+    kaldırılamaz ama aynı dönemdeki yeni kurulda üzerine yazılır; liste onu engel diye göstermez."""
+    gko.acik_donem()
+    gko.veli_aktar(_VELILER)
+    iptal = _ilanli_olaganustu()
+    dokuz_a = _satirlar("9-A")
+    genel_kurul.katilim_isaretle(iptal, toplanti=AssemblyMeeting.BIRINCI, isaretle=dokuz_a)
+    genel_kurul.iptal_et(iptal, cancel_reason="Uydurma: salon kullanılamadı.")
+    with pytest.raises(ValueError, match="bu durumdayken"):
+        genel_kurul.katilim_isaretle(iptal, toplanti=AssemblyMeeting.BIRINCI, kaldir=dokuz_a)
+
+    yeni = _ilanli_olaganustu()
+    liste = genel_kurul.katilim_isaretleri(yeni, toplanti=AssemblyMeeting.BIRINCI)
+    assert not any(
+        v["isaretli"] or v["oteki_toplanti"] or v["baska_isaret"]
+        for s in liste
+        for v in s["satirlar"]
+    )
+    assert (
+        genel_kurul.katilim_isaretle(yeni, toplanti=AssemblyMeeting.BIRINCI, isaretle=dokuz_a) == 2
+    )
+    assert genel_kurul.katilim_isareti_sayisi(iptal, AssemblyMeeting.BIRINCI) == 0
+    assert set(
+        ParentRoster.objects.filter(pk__in=dokuz_a).values_list("attended_assembly_id", flat=True)
+    ) == {yeni.pk}
+
+    # İşareti hâlâ yazılabilen (ilan edilmiş) kurulun işareti ise öteki kurulu engeller.
+    ucuncu = _ilanli_olaganustu()
+    engelli = genel_kurul.katilim_isaretleri(ucuncu, toplanti=AssemblyMeeting.BIRINCI)
+    assert [v["baska_isaret"] for v in engelli[0]["satirlar"]] == [True, True]
+    with pytest.raises(ValueError, match="başka bir genel kurulun"):
+        genel_kurul.katilim_isaretle(ucuncu, toplanti=AssemblyMeeting.BIRINCI, isaretle=dokuz_a)
+    assert genel_kurul.katilim_isareti_sayisi(yeni, AssemblyMeeting.BIRINCI) == 2
+
+
+def test_yeniden_aktarimda_dusen_isaret_sayisi_onizlemede() -> None:
+    """Kullanıcı kararı S12 (a): önceki parti kuralı aynen; yeniden aktarılan sınıfın işaretli
+    satırları işaretleriyle düşer. Önizleme düşecek işaret sayısını sınıf başına ve toplamda yalnız
+    SAYI olarak gösterir (ad yok) ve hiçbir şey yazmaz; aktarım işaretleri düşürür, dokunulmayan
+    sınıfın işareti kalır. Genel kuruldaki katılım sayısı dondurulmuştur, değişmez."""
+    kurul = _isaretli_kurul()
+    genel_kurul.katilim_isaretle(
+        kurul,
+        toplanti=AssemblyMeeting.BIRINCI,
+        isaretle=[*_satirlar("9-A"), *_satirlar("10-B")],
+    )
+    genel_kurul.birinci_toplanti(kurul, katilim=gko.katilim(70))
+    dosya = gko.veli_xlsx([("Hayalnur Masalcı", "9-A"), ("Uydurgül Örnekoğlu", "9-A")])
+
+    rapor = import_service.preview_parents_file(file_bytes=dosya, file_name="yeni.xlsx")
+    assert rapor.dry_run is True
+    assert [(c.student_class, c.rows, c.replaced_rows, c.dropped_marks) for c in rapor.classes] == [
+        ("9-A", 2, 2, 2)
+    ]
+    assert rapor.dropped_marks == 2
+    govde = str(rapor.to_dict())
+    for ad, _ in _VELILER:
+        assert ad not in govde
+    assert genel_kurul.katilim_isareti_sayisi(kurul, AssemblyMeeting.BIRINCI) == 3
+
+    aktarim = import_service.commit_parents_file(file_bytes=dosya, file_name="yeni.xlsx")
+    assert aktarim.dropped_marks == 2
+    assert genel_kurul.katilim_isareti_sayisi(kurul, AssemblyMeeting.BIRINCI) == 1
+    assert ParentRoster.objects.get(student_class="10-B").attended_assembly_id == kurul.pk
+    assert GeneralAssembly.objects.get(pk=kurul.pk).first_attendee_count == 70

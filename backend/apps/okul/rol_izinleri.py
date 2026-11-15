@@ -833,7 +833,9 @@ BEKLEYEN_DIPNOTLAR: Final[Mapping[int, str]] = {
     7: "F2",
     8: "F4",
     9: "F5",
-    10: "F2",
+    # 10: bağlı — kişisel veri içeren çıktı (`Eylem.KISISEL_VERI_CIKTISI`; F2 5. adım: genel kurulun
+    # veli adlı katılım işaretleri, `genel_kurul` servisi). Adlı E07 ve E08 8.-9. adımlarda aynı
+    # eylemle bağlanır.
 }
 
 
@@ -1186,8 +1188,9 @@ EYLEM_KURALLARI: Final[Mapping[Eylem, EylemKurali]] = {
 #: Gerçek servise henüz bağlanmamış eylemler → faz (yalnız küçülebilir; test kaynakta
 #: `Eylem.<AD>` çağrısını arar). Bağlı olanlar: hesap yönetimi, kurtarma anahtarı, geri
 #: yükleme, şifreli yedeğin kaydedilmesi, boşta süre yazımı, birlik dönemi, kural sürümü seçimi,
-#: geri yükleme kartının "Gördüm"ü (⁵), DK görev bölümü (⁵; F1c 6. adım) ve genel kurul yazma
-#: kapısı (¹; F2 4. adım, `genel_kurul` servisi).
+#: geri yükleme kartının "Gördüm"ü (⁵), DK görev bölümü (⁵; F1c 6. adım), genel kurul yazma
+#: kapısı (¹; F2 4. adım, `genel_kurul` servisi) ve kişisel veri içeren çıktı (¹⁰; F2 5. adım,
+#: genel kurulun veli adlı katılım işaretleri, plan F2 §7 U33).
 BAGLANMAMIS_EYLEMLER: Final[Mapping[Eylem, str]] = {
     Eylem.GENEL_KURUL_YENI_OKUL_DAVETI: "F2",
     Eylem.OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR: "F2",
@@ -1207,7 +1210,6 @@ BAGLANMAMIS_EYLEMLER: Final[Mapping[Eylem, str]] = {
     Eylem.HESAP_GECISI: "F4",
     Eylem.DEK_YENILEME: "F4",
     Eylem.KANTIN_SERVIS_YAZMA: "F5",
-    Eylem.KISISEL_VERI_CIKTISI: "F2",
     Eylem.MASKESIZ_TCKN: "F3",
 }
 

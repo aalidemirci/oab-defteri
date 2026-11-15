@@ -4,16 +4,19 @@
 F1c genel kurulun asgari kaydını (dönem bağı, yeter sayının anlık görüntüsü) kurdu; F2 3. adım tasarımın
 alanlarını ve model düzeyindeki durum makinesini (`models.genel_kurul`) getirdi. Bu modül geçişlerin
 servisidir: planlama, çağrı, ilan, birinci toplantı, yeter sayı yok, ikinci toplantının ilanı ve kendisi,
-iptal. Gündem değişikliği, divan, karar ve katılım düzeltmesi 5. adımda; seçim, ibra, tutanak ve dönemin
-açılması 6. adımda; müdürün ve Denetleme Kurulunun yazıları (yeni okul daveti, müdürün olağanüstü
-çağrısı, md. 14/5 çağrısı) ve gelen-giden evrak bağı 7. adımdadır. Uç ve ekran 11. adımdadır.
+iptal (4. adım); gündem değişikliği, gündeme bağlılık, karar sonucu, divan, katılım düzeltmesi ve katılım
+işareti (5. adım). Seçim, ibra, tutanak ve dönemin açılması 6. adımda; müdürün ve Denetleme Kurulunun
+yazıları (yeni okul daveti, müdürün olağanüstü çağrısı, md. 14/5 çağrısı) ve gelen-giden evrak bağı 7.
+adımdadır. Uç ve ekran 11. adımdadır.
 
 KİM (tasarım §4.4.2 M3 ve §7.1 "Kim" sütunu; Kim matrisi daraltır, genişletemez). Her yazma önce
 `Eylem.GENEL_KURUL_YAZMA` kapısından geçer (program yöneticisi ve yönetim kurulu rolleri; müdür ve
 Denetleme Kurulu okur), sonra geçişin "Kim"iyle daraltılır: planlama, tarih değişikliği, ilan ve
 toplantılar program yöneticisi ve sekreter; yönetim kurulunun çağrısı sekreter (YK kararı); başkanın md.
 13/8 çağrısı başkan; üyelerin yazılı başvurusunu program yöneticisi kaydeder; iptal yalnız program
-yöneticisi. Müdürün (md. 9/1 yeni okul, 9/6, 13/8, 25/2) ve Denetleme Kurulunun (md. 14/5) çağrısının
+yöneticisi. Gündem, karar, divan ve katılım düzeltmesi tutanağın işidir (§7.1 `YAPILDI →
+TUTANAK_TAMAM` "Kim"): program yöneticisi ve sekreter. Katılım işareti veli adını gösterir (R9, dipnot
+¹⁰; U33): yalnız program yöneticisi, kişisel veri içeren çıktı kapısıyla. Müdürün (md. 9/1 yeni okul, 9/6, 13/8, 25/2) ve Denetleme Kurulunun (md. 14/5) çağrısının
 kendi eylemleri 7. adımda bağlanır; o güne dek bu çağıranlar hiçbir rolle kaydedilmez (`RolYetkisiz`).
 
 KURALLAR (altın kural 1-3). Değerler kural paketindedir; kurallar kapanacak dönemin kopyasından, yeni
@@ -61,6 +64,29 @@ TOPLANTILAR. Birinci toplantıda katılım dondurulmuş yeter sayıdan azsa duru
 Gözlemci öğrenci (md. 9/5) ayrı alandır, katılım sayısına eklenmez. Açılışı okul müdürü yapar (md.
 10/1-b): bilgi satırıdır.
 
+GÜNDEM VE KARAR (md. 9/2, 9/4, 9/6; 5. adım). Gündeme ekleme ve çıkarma toplantıda oylanır: oylama
+satırı yoksa ya da kabul retten fazla değilse uyarı + gerekçe (`genel_kurul.gundem_degisikligi`;
+kullanıcı kararı S2: md. 9/4'te kabul > ret); çıkarılan madde silinmez (`removed_by_vote`). Sıra
+değişikliği uyarı üretmez (MA-16); SQLite tekil kısıtı ertelemediği için geçici sırayla iki adımda
+yazılır. Olağanüstü genel kurulda toplantıda eklenen madde çağrı gündemi dışındadır: uyarı + gerekçe
+(`genel_kurul.olaganustu_gundeme_baglilik`; B-13). Karar sonucu oylardan hesaplanır
+(`genel_kurul.karar_cogunlugu`, sert — hesap bütünlüğü; S2 (a): kabul oyu paydanın yarısından fazla,
+payda oylamada salonda bulunan sayı ya da toplantının katılımı); oylarla çelişen sonuç kaydedilmez
+(kullanıcı kararı S6 (iii)).
+
+DİVAN (md. 10/1-c; U25). Ayrı servistir (`divan_sec`); kayıt `OrganMembership(DIVAN)`, genel kurulun
+kendi dönemine (yeni okulda hazırlık dönemine) seçilmiş açılır, aday kaydı aranmaz. Kişi türü
+(`genel_kurul.divan_uye_turleri`: veli ya da 18 yaşını doldurmuş kursiyer; veli olan öğretmen veli
+sayılır, MA-11) uyarı + gerekçedir.
+
+KATILIM DÜZELTMESİ VE İŞARETİ. Toplantıda girilen sayılar yalnız gerekçeli düzeltme satırıyla değişir
+(`AttendanceCorrection`, ekleme-yalnız); dondurulmuş yeter sayı düzeltilemez (sert). Düzeltme birinci
+toplantıda yeter sayının sağlanıp sağlanmadığını değiştirirse uyarı + gerekçedir (akış satırı; durum
+değişmez). Veli listesinin katılım işareti (`ParentRoster.attended_*`) yalnız sayım yardımıdır: işaret
+sayısı öneridir, katılım sayısı işaretten hesaplanmaz; işaret tutanak tamamlanana dek yazılır, adlar
+yalnız işaret penceresinin okumasında çözülür ve okuma erişim günlüğüne düşer (U33). Yeniden aktarımda
+işaretler satırlarıyla düşer (S12 (a); `okul.services.imports`).
+
 Her yazma denetim izine düşer (izli servis kalıbı: `denetim_izi.degisiklik`). Kayıt silinmez: genel
 kurul `IPTAL` olur (altın kural 4).
 """
@@ -68,6 +94,8 @@ kurul `IPTAL` olur (altın kural 4).
 from __future__ import annotations
 
 import calendar
+import hashlib
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -75,9 +103,10 @@ from decimal import Decimal
 from typing import Any, Final
 
 from django.db import transaction
+from django.db.models import QuerySet
 from django.utils import timezone
 
-from apps.oab.hatalar import KuralSurumuGuncellenmeli, YeterSayiDonduruldu
+from apps.oab.hatalar import KuralSert, KuralSurumuGuncellenmeli, YeterSayiDonduruldu
 from apps.oab.kurallar import (
     VERI_YOK,
     BilinmeyenKural,
@@ -90,6 +119,7 @@ from apps.oab.kurallar.erisim import DenetimSonucu
 from apps.oab.models import (
     AgendaItem,
     AgendaItemKind,
+    AgendaResult,
     Announcement,
     AnnouncementKind,
     AnnouncementStatus,
@@ -97,17 +127,31 @@ from apps.oab.models import (
     AssemblyKind,
     AssemblyMeeting,
     AssemblyStatus,
+    AttendanceCorrection,
     AttendanceKind,
+    ElectedBy,
     GeneralAssembly,
+    MembershipRole,
+    MembershipStatus,
+    OabPerson,
     OabTerm,
+    OrganMembership,
+    OrganType,
+    SeatType,
     TermStatus,
 )
-from apps.oab.models.genel_kurul import BASLIK_MAX, YER_MAX
-from apps.oab.services import donem_kilidi, gecis, iz, kural_bagi, uyum
-from apps.okul import denetim_izi, rol_izinleri
-from apps.okul.models import AccountRole, ParentRoster, SchoolConfig
+from apps.oab.models.genel_kurul import (
+    BASLIK_MAX,
+    DONDURULAN_ALANLAR,
+    DUZELTILEBILIR_ALANLAR,
+    YER_MAX,
+)
+from apps.oab.services import donem_kilidi, gecis, iz, kural_bagi, uyelikler, uyum
+from apps.okul import denetim_izi, erisim_gunlugu, excel_veli, normalize, rol_izinleri
+from apps.okul.models import AccessKind, AccountRole, AuditAction, ParentRoster, SchoolConfig
 from apps.okul.oturum import yazar
 from apps.okul.services import app_password
+from shared.crypto import is_corrupt
 from shared.exceptions import RolYetkisiz
 
 # ---------------------------------------------------------------------------
@@ -170,6 +214,75 @@ DAGILIM_TOPLAMI = (
 )
 IPTAL_GEREKCESI_GEREKLI = "İptal gerekçesi yazılmalıdır."
 HAZIRLIK_DONEMI_IPTAL_NEDENI = "Dönemi açan genel kurul iptal edildi."
+# Gündem ve karar (5. adım).
+OYLAR_BIRLIKTE = "Kabul ve ret oyları birlikte girilir."
+OYLAR_KATILANI_ASAR = (
+    "Kabul ve ret oylarının toplamı oylamaya katılabilecek üye sayısını aşamaz (hesap bütünlüğü)."
+)
+EKLEME_SIRASI_GECERSIZ = (
+    "Eklenecek maddenin sırası 1 ile gündemin son sırasının bir fazlası arasında olmalıdır."
+)
+MADDE_CIKARILMIS = "Bu gündem maddesi oylamayla çıkarıldı; görüşülmez."
+EKLENEN_CIKARILMAZ = (
+    "Oylamayla eklenen madde ayrıca çıkarılamaz; ekleme oylamasının sonucunu kayda geçirin."
+)
+SONUCLU_MADDE_CIKARILMAZ = "Sonucu girilmiş gündem maddesi çıkarılamaz."
+SIRA_GECERSIZ = "Yeni sıra gündemin bütün maddelerini birer kez içermelidir."
+SONUC_GECERSIZ = "Sonuç kabul, ret ya da görüşüldü olmalıdır."
+SONUC_KENDI_YOLUNDA = "İbra ve seçim maddelerinin sonucu kendi adımında girilir."
+GORUSULDU_OYSUZ = "Görüşüldü sonucunda oy girilmez."
+OYLAR_GEREKLI = (
+    "Oylanan maddede kabul ve ret oyları girilmelidir; oylanmayan madde görüşüldü diye kaydedilir."
+)
+SALONDAKI_KATILANDAN_COK = (
+    "Oylamada salonda bulunan sayı toplantıya katılan üye sayısından büyük olamaz (hesap "
+    "bütünlüğü)."
+)
+KARAR_OYLARLA_CELISIYOR = (
+    "Genel kurul kararları katılanların çoğunluğuyla alınır ve sonuç oylardan hesaplanır; girilen "
+    "sonuç oylarla çelişiyor"
+)
+# Divan (5. adım).
+DIVAN_AYNI_KISI = "Divan başkanı ve kâtip ayrı kişilerdir (md. 10/1-c)."
+DIVAN_SECILDI = "Bu genel kurulun divanı seçildi."
+# Katılım düzeltmesi ve işareti (5. adım).
+TOPLANTI_GECERSIZ = "Toplantı birinci ya da ikinci toplantı olmalıdır."
+DUZELTME_GEREKCESI_GEREKLI = "Katılım düzeltmesinin gerekçesi yazılmalıdır."
+DUZELTME_BOS = "Düzeltilecek en az bir sayı girilmelidir."
+DUZELTME_ALANI_GECERSIZ = (
+    "Düzeltilen sayı katılım sayısı, türe göre dağılım, velisi katılan öğrenci ya da gözlemci "
+    "sayısı olmalıdır."
+)
+DUZELTME_TOPLANTISI = "Bu sayı seçilen toplantının sayısı değil."
+DUZELTME_DEGISMIYOR = "Düzeltilen sayı önceki değerle aynı."
+IKINCI_TOPLANTI_YAPILMADI = "İkinci toplantı yapılmadı; ikinci toplantının sayısı düzeltilemez."
+DUZELTME_OYLARIN_ALTINDA = (
+    "Katılım sayısı, gündem maddelerine girilmiş oyların, oylamada salonda bulunan sayının ya da "
+    "gündem değişikliği oylarının toplamının altına düzeltilemez (hesap bütünlüğü)."
+)
+ISARET_CAKISIYOR = "Aynı satır hem işaretlenip hem işareti kaldırılamaz."
+ISARET_SATIRI_YOK = "Satır bu genel kurulun veli listesinde yok."
+ISARET_BASKA_KURULDA = "Bu satır başka bir genel kurulun katılım işaretini taşıyor."
+ISARET_YOK = "Bu satırda bu toplantının katılım işareti yok."
+
+#: Katılım düzeltmesi birinci toplantıda yeter sayının sağlanıp sağlanmadığını değiştirince yazılan
+#: akış satırı (tasarım §5.2.3 "uyarı + gerekçe"; kural paketinde değeri yoktur, atıf basılmaz).
+DUZELTME_YETER_SAYI_AKISI: Final = "akis.genel_kurul_katilim_duzeltmesi"
+DUZELTME_YETER_SAYI: Final = (
+    "Düzeltme, birinci toplantıda yeter sayının sağlanıp sağlanmadığını değiştiriyor; genel "
+    "kurulun durumu değişmez, düzeltme gerekçesiyle kayda geçer (program uyarısıdır)."
+)
+#: Katılım düzeltmesi, salondaki sayısı girilmemiş oylanmış maddenin oylardan hesaplanan sonucunu
+#: değiştirince yazılan akış satırı (plan F2 §5.1 "sonucu değiştiren düzeltme uyarı + gerekçe");
+#: sonuç kullanıcı kararı S6 (iii) gereği yeni paydayla yeniden hesaplanır. Atıf basılmaz.
+DUZELTME_KARAR_AKISI: Final = "akis.genel_kurul_karar_duzeltmesi"
+DUZELTME_KARAR: Final = (
+    "Düzeltme, oylamaya katılabilecek üye sayısını değiştirdiği için oylardan hesaplanan karar "
+    "sonucunu değiştiriyor; sonuç yeni sayıyla yeniden hesaplanır, düzeltme gerekçesiyle kayda geçer "
+    "(program uyarısıdır)."
+)
+#: Sıra değişikliğinin bilgi satırı (md. 9/4 birinci cümle; MA-16: kural değildir).
+SIRA_BILGISI: Final = "Genel kurul gündem maddelerini sırasıyla görüşür (md. 9/4)."
 
 #: Olağan genel kurulun yönetim kurulu kararı bağı yokluğunun akış satırı (kullanıcı kararı S1;
 #: Yönetmelik maddesi değildir, atıf basılmaz; F1c'nin yedek çağrısı emsali).
@@ -212,6 +325,11 @@ PLANLAYAN_ROLLER: Final = frozenset({_YONETICI, _SEKRETER})
 ILAN_VE_TOPLANTI_ROLLERI: Final = frozenset({_YONETICI, _SEKRETER})
 #: §7.1 `… → IPTAL` "Kim": program yöneticisi.
 IPTAL_EDEN_ROLLER: Final = frozenset({_YONETICI})
+#: §7.1 `YAPILDI → TUTANAK_TAMAM` "Kim" (gündem değişikliği, karar, divan, katılım düzeltmesi) ve
+#: ilandan önceki gündem düzeni (planlama "Kim"i): program yöneticisi, sekreter.
+TUTANAK_ROLLERI: Final = frozenset({_YONETICI, _SEKRETER})
+#: Katılım işareti (U33; R9, dipnot ¹⁰): yalnız program yöneticisi.
+ISARET_ROLLERI: Final = frozenset({_YONETICI})
 #: §7.1 çağrı "Kim"i, çağırana göre. Müdürün ve Denetleme Kurulunun çağrısı bu tabloda yoktur (7. adım).
 CAGIRAN_ROLLERI: Final[Mapping[str, frozenset[str]]] = {
     AssemblyCaller.YONETIM_KURULU: frozenset({_SEKRETER}),
@@ -279,8 +397,31 @@ _IPTAL_EDILEBILIR: Final = frozenset(
         AssemblyStatus.YETER_SAYI_YOK,
     }
 )
+#: Gündem sırasının değiştiği durumlar: ilandan önce (planlama, çağrı) ve toplantıda (md. 9/4).
+_SIRA_DEGISEBILIR: Final = (
+    AssemblyStatus.PLANLANDI,
+    AssemblyStatus.CAGRILDI,
+    AssemblyStatus.YAPILDI,
+)
+#: Sonucu bu yoldan girilmeyen gündem maddeleri: ibra ve seçim (6. adım).
+_KENDI_YOLUNDA: Final = frozenset(
+    {AgendaItemKind.IBRA, AgendaItemKind.SECIM_YK, AgendaItemKind.SECIM_DK}
+)
+#: Katılım sayılarının düzeltildiği durumlar: toplantıda sayılar girildikten sonra.
+_DUZELTILEBILIR_DURUMLAR: Final = (
+    AssemblyStatus.YETER_SAYI_YOK,
+    AssemblyStatus.YAPILDI,
+    AssemblyStatus.TUTANAK_TAMAM,
+)
+#: Türe göre dağılımın düzeltme alanı öneki (`DUZELTILEBILIR_ALANLAR`).
+_DAGILIM_ONEKI: Final = "attendance_by_kind."
 #: İlan kanıtı yazılabilen durumlar (tutanak tamamlanana dek; tamamlanınca eksik sapmaya döner, 6. adım).
 _KANIT_YAZILABILIR: Final = frozenset(
+    {AssemblyStatus.ILAN_EDILDI, AssemblyStatus.YETER_SAYI_YOK, AssemblyStatus.YAPILDI}
+)
+
+#: Katılım işaretinin yazılabildiği durumlar (U33: tutanak tamamlanana dek; `_isaret_toplantisi`).
+_ISARET_YAZILABILIR: Final = frozenset(
     {AssemblyStatus.ILAN_EDILDI, AssemblyStatus.YETER_SAYI_YOK, AssemblyStatus.YAPILDI}
 )
 
@@ -381,8 +522,9 @@ class _Tur:
         if satir is not None:
             self.uyarilar.append(satir)
 
-    def akis(self, akis_id: str, mesaj: str) -> None:
-        """Atıfsız akış satırı (gerekçesi alınmış uyarı) kurulun özetine ve dönen uyarılara girer."""
+    def akis(self, akis_id: str, mesaj: str, *, kurulun: bool = True) -> None:
+        """Atıfsız akış satırı (gerekçesi alınmış uyarı) dönen uyarılara, konusu kurulsa kurulun
+        özetine girer."""
         satir: dict[str, Any] = {
             "kural": akis_id,
             "atif": "",
@@ -391,7 +533,8 @@ class _Tur:
             "paket": "",
             "rev": None,
         }
-        self.ozet_satirlari[akis_id] = satir
+        if kurulun:
+            self.ozet_satirlari[akis_id] = satir
         self.uyarilar.append(satir)
 
     def ozet(self) -> list[dict[str, Any]]:
@@ -603,20 +746,22 @@ def _gundem_yaz(kurul: GeneralAssembly, maddeler: Sequence[tuple[str, str]]) -> 
     return yazilanlar
 
 
+def _gundem_maddesi(madde: GundemMaddesi) -> tuple[str, str]:
+    """Gündem maddesinin türü ve boşlukları sadeleşmiş başlığı (türü tanımlı, başlığı dolu ve sınırda)."""
+    if madde.kind not in AgendaItemKind.values:
+        raise ValueError(GUNDEM_TURU_GECERSIZ)
+    baslik = " ".join(madde.title.split())
+    if not baslik:
+        raise ValueError(GUNDEM_BASLIGI_GEREKLI)
+    if len(baslik) > BASLIK_MAX:
+        raise ValueError(GUNDEM_BASLIGI_UZUN)
+    return madde.kind, baslik
+
+
 def _cagri_gundemi(gundem: Sequence[GundemMaddesi]) -> list[tuple[str, str]]:
     if not gundem:
         raise ValueError(GUNDEM_GEREKLI)
-    maddeler: list[tuple[str, str]] = []
-    for madde in gundem:
-        if madde.kind not in AgendaItemKind.values:
-            raise ValueError(GUNDEM_TURU_GECERSIZ)
-        baslik = " ".join(madde.title.split())
-        if not baslik:
-            raise ValueError(GUNDEM_BASLIGI_GEREKLI)
-        if len(baslik) > BASLIK_MAX:
-            raise ValueError(GUNDEM_BASLIGI_UZUN)
-        maddeler.append((madde.kind, baslik))
-    return maddeler
+    return [_gundem_maddesi(madde) for madde in gundem]
 
 
 def _toplanti_gunu_denetimi(tur: _Tur) -> None:
@@ -1285,3 +1430,776 @@ def iptal_et(kurul: GeneralAssembly, *, cancel_reason: str) -> GeneralAssembly:
         hazirlik.save(update_fields=["status", "cancel_reason", "updated_at", "updated_by"])
         denetim_izi.degisiklik(hazirlik, onceki=onceki_donem)
     return guncel
+
+
+# ---------------------------------------------------------------------------
+# Gündem değişikliği (md. 9/4), gündeme bağlılık (md. 9/6), karar (md. 9/2, 9/6)
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class GundemSonucu:
+    """Gündem yazımının sonucu: güncel madde, bu yazımda çıkan uyarılar (atıflı) ve bilgi satırları."""
+
+    madde: AgendaItem
+    uyarilar: tuple[dict[str, Any], ...] = ()
+    bilgiler: tuple[str, ...] = ()
+
+
+def _toplanti_katilani(kurul: GeneralAssembly) -> int:
+    """Genel kurulun yapıldığı toplantının katılım sayısı (son düzeltme satırının değeri)."""
+    sayi = (
+        kurul.second_attendee_count
+        if kurul.held_at_meeting == AssemblyMeeting.IKINCI
+        else kurul.first_attendee_count
+    )
+    if sayi is None:  # tür daraltması: yapılmış genel kurulun toplantısının katılımı doludur
+        raise ValueError(DURUM_GECERSIZ)
+    return sayi
+
+
+def _yapildigi_gun(kurul: GeneralAssembly) -> date:
+    """Genel kurulun yapıldığı toplantının yerel günü (divanın seçildiği gün)."""
+    an = (
+        kurul.second_meeting_at
+        if kurul.held_at_meeting == AssemblyMeeting.IKINCI
+        else kurul.first_meeting_at
+    )
+    if an is None:  # tür daraltması: yapılmış genel kurulun toplantı anı doludur
+        raise ValueError(DURUM_GECERSIZ)
+    return yerel_gun(an)
+
+
+def _madde_ve_kurul(madde: AgendaItem) -> tuple[AgendaItem, GeneralAssembly]:
+    """Maddenin ve genel kurulunun güncel hâli; dönem yazılabilir olmalı."""
+    guncel: AgendaItem = AgendaItem.objects.get(pk=madde.pk)
+    return guncel, _guncel(guncel.assembly)
+
+
+def _degisiklik_oylari(
+    kurul: GeneralAssembly, kabul: object, ret: object
+) -> tuple[int | None, int | None]:
+    """Gündem değişikliğinin oyları: ikisi birlikte girilir; toplamı katılımı aşamaz (hesap
+    bütünlüğü). Girilmemişse oylama satırı yoktur (kural uyarısı; tutanak olduğu gibi girilir)."""
+    if (kabul is None) != (ret is None):
+        raise ValueError(OYLAR_BIRLIKTE)
+    if kabul is None or ret is None:
+        return None, None
+    kabul_sayisi, ret_sayisi = _sayi(kabul), _sayi(ret)
+    if kabul_sayisi + ret_sayisi > _toplanti_katilani(kurul):
+        raise ValueError(OYLAR_KATILANI_ASAR)
+    return kabul_sayisi, ret_sayisi
+
+
+def _gundem_degisikligi_denetimi(tur: _Tur, madde: AgendaItem) -> None:
+    """md. 9/4: ekleme ve çıkarma oylanır, oy çokluğu aranır (kullanıcı kararı S2: kabul > ret).
+    Oylama satırı yoksa ya da kabul retten fazla değilse uyarı + gerekçe; konu maddedir."""
+    kabul, ret = madde.change_votes_for, madde.change_votes_against
+    oy_coklugu = kabul is not None and ret is not None and kabul > ret
+    sonuc = uyum.denetle("genel_kurul.gundem_degisikligi", oy_coklugu, konu=madde, **tur.ortak())
+    tur.kaydet("genel_kurul.gundem_degisikligi", sonuc, kurulun=False)
+
+
+def _gundeme_baglilik_denetimi(tur: _Tur, madde: AgendaItem) -> None:
+    """md. 9/6 "gündeme bağlılık ilkesi geçerlidir" (kullanıcı kararı B-13: sert değil): olağanüstü
+    genel kurulda toplantıda eklenen madde çağrı gündeminde değildir; uyarı + gerekçe."""
+    if tur.kurul.kind != AssemblyKind.OLAGANUSTU:
+        return
+    # Gözlenen: madde çağrının gündemine bağlı mı? Toplantıda eklenen madde çağrıda yoktu.
+    sonuc = uyum.denetle(
+        "genel_kurul.olaganustu_gundeme_baglilik", False, konu=madde, **tur.ortak()
+    )
+    tur.kaydet("genel_kurul.olaganustu_gundeme_baglilik", sonuc, kurulun=False)
+
+
+def _yer_ac(maddeler: Sequence[AgendaItem], sira: int) -> None:
+    """`sira` ve sonrasındaki maddeleri birer kaydırır (büyükten küçüğe: tekil kısıt çakışmaz)."""
+    hesap = iz.yazar_hesabi()
+    for madde in sorted(maddeler, key=lambda m: m.order, reverse=True):
+        if madde.order < sira:
+            continue
+        onceki = denetim_izi.anlik(madde)
+        madde.order += 1
+        madde.updated_by_id = hesap
+        madde.save(update_fields=["order", "updated_at", "updated_by"])
+        denetim_izi.degisiklik(madde, onceki=onceki)
+
+
+def _sirala(sirali: Sequence[AgendaItem]) -> None:
+    """Maddeleri verilen sırayla 1'den numaralar. SQLite tekil kısıtı (genel kurul, sıra) ertelemediği
+    için yeri değişen maddeler önce kullanılmayan geçici sıralara, sonra yerlerine yazılır (tasarım
+    §5.2.3). Her madde tek iz satırıyla izlenir: önceki hâl → son hâl."""
+    degisen = [m for yeni, m in enumerate(sirali, start=1) if m.order != yeni]
+    if not degisen:
+        return
+    oncekiler = {m.pk: denetim_izi.anlik(m) for m in degisen}
+    gecici = max(m.order for m in sirali) + 1
+    for adim, madde in enumerate(degisen):
+        madde.order = gecici + adim
+        madde.save(update_fields=["order"])
+    hesap = iz.yazar_hesabi()
+    for yeni, madde in enumerate(sirali, start=1):
+        if madde.pk not in oncekiler:
+            continue
+        madde.order = yeni
+        madde.updated_by_id = hesap
+        madde.save(update_fields=["order", "updated_at", "updated_by"])
+        denetim_izi.degisiklik(madde, onceki=oncekiler[madde.pk])
+
+
+@transaction.atomic
+def gundeme_madde_ekle(
+    kurul: GeneralAssembly,
+    *,
+    title: str,
+    kind: str = AgendaItemKind.DIGER,
+    sira: int | None = None,
+    change_votes_for: int | None = None,
+    change_votes_against: int | None = None,
+    gerekce: uyum.Gerekce | None = None,
+) -> GundemSonucu:
+    """Toplantıda gündeme oylamayla madde ekler (md. 9/4; `added_by_vote`). Oylama satırı yoksa ya da
+    oy çokluğu yoksa uyarı + gerekçe (`genel_kurul.gundem_degisikligi`); olağanüstü genel kurulda
+    eklenen madde çağrı gündemi dışındadır, uyarı + gerekçe (`genel_kurul.olaganustu_gundeme_baglilik`,
+    B-13). `sira` verilmezse madde sona eklenir; verilirse o sıradaki ve sonraki maddeler kayar."""
+    yazma_kapisi()
+    _baslangic(TUTANAK_ROLLERI)
+    guncel = _guncel(kurul)
+    _durum(guncel, AssemblyStatus.YAPILDI)
+    tur_adi, baslik = _gundem_maddesi(GundemMaddesi(title=title, kind=kind))
+    kabul, ret = _degisiklik_oylari(guncel, change_votes_for, change_votes_against)
+    maddeler = list(AgendaItem.objects.filter(assembly=guncel).order_by("order"))
+    son_sira = maddeler[-1].order if maddeler else 0
+    yeni_sira = son_sira + 1 if sira is None else sira
+    if (
+        not isinstance(yeni_sira, int)
+        or isinstance(yeni_sira, bool)
+        or not 1 <= yeni_sira <= son_sira + 1
+    ):
+        raise ValueError(EKLEME_SIRASI_GECERSIZ)
+    _yer_ac(maddeler, yeni_sira)
+    hesap = iz.yazar_hesabi()
+    madde = AgendaItem.objects.create(
+        assembly=guncel,
+        order=yeni_sira,
+        kind=tur_adi,
+        title=baslik,
+        added_by_vote=True,
+        change_votes_for=kabul,
+        change_votes_against=ret,
+        created_by_id=hesap,
+        updated_by_id=hesap,
+    )
+    tur = _Tur(guncel, gerekce)
+    _gundem_degisikligi_denetimi(tur, madde)
+    _gundeme_baglilik_denetimi(tur, madde)
+    denetim_izi.degisiklik(madde, onceki=None)
+    return GundemSonucu(madde=madde, uyarilar=tuple(tur.uyarilar))
+
+
+@transaction.atomic
+def gundemden_madde_cikar(
+    madde: AgendaItem,
+    *,
+    change_votes_for: int | None = None,
+    change_votes_against: int | None = None,
+    gerekce: uyum.Gerekce | None = None,
+) -> GundemSonucu:
+    """Toplantıda gündemden oylamayla madde çıkarır (md. 9/4): madde silinmez, `removed_by_vote` olur
+    ve görüşülmez. Oylama satırı yoksa ya da oy çokluğu yoksa uyarı + gerekçe."""
+    yazma_kapisi()
+    _baslangic(TUTANAK_ROLLERI)
+    guncel_madde, kurul = _madde_ve_kurul(madde)
+    _durum(kurul, AssemblyStatus.YAPILDI)
+    if guncel_madde.removed_by_vote:
+        raise ValueError(MADDE_CIKARILMIS)
+    if guncel_madde.added_by_vote:
+        raise ValueError(EKLENEN_CIKARILMAZ)
+    if guncel_madde.result:
+        raise ValueError(SONUCLU_MADDE_CIKARILMAZ)
+    kabul, ret = _degisiklik_oylari(kurul, change_votes_for, change_votes_against)
+    onceki = denetim_izi.anlik(guncel_madde)
+    guncel_madde.removed_by_vote = True
+    guncel_madde.change_votes_for = kabul
+    guncel_madde.change_votes_against = ret
+    guncel_madde.updated_by_id = iz.yazar_hesabi()
+    guncel_madde.save(
+        update_fields=[
+            "removed_by_vote",
+            "change_votes_for",
+            "change_votes_against",
+            "updated_at",
+            "updated_by",
+        ]
+    )
+    tur = _Tur(kurul, gerekce)
+    _gundem_degisikligi_denetimi(tur, guncel_madde)
+    denetim_izi.degisiklik(guncel_madde, onceki=onceki)
+    return GundemSonucu(madde=guncel_madde, uyarilar=tuple(tur.uyarilar))
+
+
+@transaction.atomic
+def gundem_sirasini_degistir(kurul: GeneralAssembly, *, sira: Sequence[int]) -> GenelKurulSonucu:
+    """Gündemin sırasını değiştirir: `sira` maddelerin kimlikleridir, yeni sırayla, hepsi bir kez
+    (çıkarılan maddeler de yerini korur). Sıra değişikliği md. 9/4'ün ekleme ve çıkarması değildir,
+    uyarı üretmez (MA-16); gündem ilandan önce (planlama ve çağrı) ve toplantıda değiştirilir.
+    Kural okumaz."""
+    _baslangic(TUTANAK_ROLLERI)
+    guncel = _guncel(kurul)
+    _durum(guncel, *_SIRA_DEGISEBILIR)
+    maddeler = {m.pk: m for m in AgendaItem.objects.filter(assembly=guncel)}
+    kimlikler = list(sira)
+    if len(set(kimlikler)) != len(kimlikler) or set(kimlikler) != set(maddeler):
+        raise ValueError(SIRA_GECERSIZ)
+    _sirala([maddeler[pk] for pk in kimlikler])
+    return GenelKurulSonucu(kurul=guncel, bilgiler=(SIRA_BILGISI,))
+
+
+@transaction.atomic
+def karar_sonucu_yaz(
+    madde: AgendaItem,
+    *,
+    result: str | None = None,
+    votes_for: int | None = None,
+    votes_against: int | None = None,
+    present_count: int | None = None,
+    result_text: str = "",
+) -> GundemSonucu:
+    """Gündem maddesinin sonucunu yazar (md. 9/2, 9/6; kullanıcı kararı S6 (iii)).
+
+    Oylanan maddenin sonucu oylardan HESAPLANIR (`genel_kurul.karar_cogunlugu`, sert — hesap
+    bütünlüğü): kabul oyu paydanın yarısından fazlaysa kabul, değilse ret (eşitlikte karar
+    alınmamıştır; S2 (a)). Payda oylamada salonda bulunan sayıdır, girilmemişse toplantının katılım
+    sayısıdır. `result` verilirse hesapla karşılaştırılır: oylarla çelişen sonuç (ör. çoğunluk yokken
+    "kabul") kaydedilmez (`KuralSert`). Oylanmayan madde "görüşüldü"dür (raporlar, tahmini bütçe,
+    dilekler; oy girilmez). İbra ve seçim maddelerinin sonucu kendi yolundadır (6. adım).
+    """
+    yazma_kapisi()
+    _baslangic(TUTANAK_ROLLERI)
+    guncel_madde, kurul = _madde_ve_kurul(madde)
+    _durum(kurul, AssemblyStatus.YAPILDI)
+    if guncel_madde.removed_by_vote:
+        raise ValueError(MADDE_CIKARILMIS)
+    if guncel_madde.kind in _KENDI_YOLUNDA:
+        raise ValueError(SONUC_KENDI_YOLUNDA)
+    if result is not None and result not in AgendaResult.values:
+        raise ValueError(SONUC_GECERSIZ)
+    oylar_girildi = any(v is not None for v in (votes_for, votes_against, present_count))
+    kabul: int | None = None
+    ret: int | None = None
+    salondaki: int | None = None
+    if result == AgendaResult.GORUSULDU:
+        if oylar_girildi:
+            raise ValueError(GORUSULDU_OYSUZ)
+        hesaplanan = str(AgendaResult.GORUSULDU)
+    else:
+        if votes_for is None or votes_against is None:
+            raise ValueError(OYLAR_GEREKLI)
+        kabul, ret = _sayi(votes_for), _sayi(votes_against)
+        katilan = _toplanti_katilani(kurul)
+        salondaki = _secimli_sayi(present_count)
+        payda = katilan if salondaki is None else salondaki
+        if payda > katilan:
+            raise ValueError(SALONDAKI_KATILANDAN_COK)
+        if kabul + ret > payda:
+            raise ValueError(OYLAR_KATILANI_ASAR)
+        sonuc = genel_kurul.karar_cogunlugu(
+            kabul, payda, tarih=birinci_toplanti_gunu(kurul), donem=kural_donemi(kurul)
+        )
+        hesaplanan = str(AgendaResult.KABUL if sonuc["durum"] == "uygun" else AgendaResult.RET)
+        if result is not None and result != hesaplanan:
+            raise KuralSert(detail=f"{KARAR_OYLARLA_CELISIYOR} ({sonuc['atif']}).")
+    onceki = denetim_izi.anlik(guncel_madde)
+    guncel_madde.result = hesaplanan
+    guncel_madde.votes_for = kabul
+    guncel_madde.votes_against = ret
+    guncel_madde.present_count = salondaki
+    guncel_madde.result_text = result_text.strip()
+    guncel_madde.updated_by_id = iz.yazar_hesabi()
+    guncel_madde.save(
+        update_fields=[
+            "result",
+            "votes_for",
+            "votes_against",
+            "present_count",
+            "result_text",
+            "updated_at",
+            "updated_by",
+        ]
+    )
+    denetim_izi.degisiklik(guncel_madde, onceki=onceki)
+    return GundemSonucu(madde=guncel_madde)
+
+
+# ---------------------------------------------------------------------------
+# Divan (md. 10/1-c; U25)
+# ---------------------------------------------------------------------------
+def kurulun_divani(kurul: GeneralAssembly) -> list[OrganMembership]:
+    """Genel kurulun iptal edilmemiş divan kayıtları (başkan önce)."""
+    return sorted(
+        OrganMembership.objects.filter(assembly=kurul, organ=OrganType.DIVAN).exclude(
+            status=MembershipStatus.IPTAL
+        ),
+        key=lambda u: (u.role != MembershipRole.BASKAN, u.pk),
+    )
+
+
+def _divan_uyesi(tur: _Tur, kisi: OabPerson, rol: str, gun: date) -> OrganMembership:
+    """Divanın bir kaydı: genel kurulun kendi dönemine, seçilmiş açılır (aday kaydı aranmaz, U25);
+    kişi türü `genel_kurul.divan_uye_turleri` ile denetlenir (uyarı + gerekçe; konu üyelik)."""
+    hesap = iz.yazar_hesabi()
+    uyelik = OrganMembership.objects.create(
+        term=tur.donem,
+        person=kisi,
+        organ=OrganType.DIVAN,
+        assembly=tur.kurul,
+        role=rol,
+        seat_type=SeatType.ASIL,
+        elected_by=ElectedBy.GENEL_KURUL,
+        status=MembershipStatus.SECILDI,
+        start_date=gun,
+        created_by_id=hesap,
+        updated_by_id=hesap,
+    )
+    # Veli işareti türden önce gelir (MA-11): veli olan öğretmen ve idareci velidir; 18 yaşını
+    # doldurduğu beyan edilmiş kursiyer kursiyerdir; öteki kişiler listede olmayan türdür.
+    sonuc = uyum.denetle(
+        "genel_kurul.divan_uye_turleri",
+        uyelikler.yk_uye_turu(kisi),
+        konu=uyelik,
+        **tur.ortak(),
+    )
+    tur.kaydet("genel_kurul.divan_uye_turleri", sonuc, kurulun=False)
+    satir = _ozet_satiri("genel_kurul.divan_uye_turleri", sonuc.sonuc)
+    if satir is not None:
+        uyelik.rule_warnings = [satir]
+        uyelik.save(update_fields=["rule_warnings"])
+    denetim_izi.degisiklik(uyelik, onceki=None)
+    return uyelik
+
+
+@transaction.atomic
+def divan_sec(
+    kurul: GeneralAssembly,
+    *,
+    baskan: OabPerson,
+    katip: OabPerson,
+    gerekce: uyum.Gerekce | None = None,
+) -> GenelKurulSonucu:
+    """Divan başkanını ve kâtibi kaydeder (md. 10/1-c; U25): genel kurulun yapıldığı toplantıda, açık
+    oyla, veliler ya da 18 yaşını doldurmuş kursiyerler arasından. Kayıt `OrganMembership(DIVAN)`'dır,
+    kişiler birlik kişisidir (adlar şifreli, `OabPerson`). Kişi türü uyarıdır (gerekçeyle kaydedilir);
+    başkan ve kâtip ayrı kişidir; bir genel kurulun tek divanı vardır."""
+    yazma_kapisi()
+    _baslangic(TUTANAK_ROLLERI)
+    guncel = _guncel(kurul)
+    _durum(guncel, AssemblyStatus.YAPILDI)
+    if baskan.pk == katip.pk:
+        raise ValueError(DIVAN_AYNI_KISI)
+    if kurulun_divani(guncel):
+        raise ValueError(DIVAN_SECILDI)
+    baskan_kaydi = uyelikler.kisi_aktif(baskan)
+    katip_kaydi = uyelikler.kisi_aktif(katip)
+    tur = _Tur(guncel, gerekce)
+    gun = _yapildigi_gun(guncel)
+    _divan_uyesi(tur, baskan_kaydi, MembershipRole.BASKAN, gun)
+    _divan_uyesi(tur, katip_kaydi, MembershipRole.KATIP, gun)
+    return _sonuc(tur)
+
+
+# ---------------------------------------------------------------------------
+# Katılım düzeltmesi (tasarım §5.2.3 `AttendanceCorrection`)
+# ---------------------------------------------------------------------------
+def katilim_duzeltmeleri(kurul: GeneralAssembly) -> list[AttendanceCorrection]:
+    """Genel kurulun katılım düzeltmeleri, yazılış sırasıyla (ekleme-yalnız; tutanak ve evrak okur)."""
+    return list(AttendanceCorrection.objects.filter(assembly=kurul).order_by("corrected_at", "pk"))
+
+
+def ilk_girilen_deger(kurul: GeneralAssembly, alan: str) -> int | None:
+    """Düzeltilmiş sayının toplantıda girilen (ilk) değeri: ilk düzeltme satırının önceki değeri;
+    düzeltme yoksa kayıttaki değer. Kayıttaki değer son düzeltme satırının değeridir."""
+    if alan not in DUZELTILEBILIR_ALANLAR:
+        raise ValueError(DUZELTME_ALANI_GECERSIZ)
+    ilk = (
+        AttendanceCorrection.objects.filter(assembly=kurul, field=alan)
+        .order_by("corrected_at", "pk")
+        .first()
+    )
+    if ilk is not None:
+        onceki: int | None = ilk.old_value
+        return onceki
+    if alan.startswith(_DAGILIM_ONEKI):
+        deger = (kurul.attendance_by_kind or {}).get(alan.removeprefix(_DAGILIM_ONEKI))
+        return None if deger is None else int(deger)
+    sayi: int | None = getattr(kurul, alan)
+    return sayi
+
+
+def _dagilimin_toplantisi(kurul: GeneralAssembly) -> str:
+    """Türe göre dağılım, velisi katılan öğrenci ve gözlemci son yapılan toplantının sayılarıdır:
+    ikinci toplantı yapıldıysa ikincinin (4. adım: ikinci toplantı birincinin üzerine yazar)."""
+    return str(
+        AssemblyMeeting.IKINCI
+        if kurul.second_attendee_count is not None
+        else AssemblyMeeting.BIRINCI
+    )
+
+
+def _alanin_toplantisi(kurul: GeneralAssembly, alan: str) -> str:
+    if alan == "first_attendee_count":
+        return str(AssemblyMeeting.BIRINCI)
+    if alan == "second_attendee_count":
+        return str(AssemblyMeeting.IKINCI)
+    return _dagilimin_toplantisi(kurul)
+
+
+def _yeter_sayi_sonucu_degisir(kurul: GeneralAssembly, eski: int | None, yeni: int) -> bool:
+    """Birinci toplantının katılımı dondurulmuş yeter sayının bir yanından öbür yanına geçiyor mu?"""
+    gerekli = kurul.quorum_required
+    if gerekli is None or eski is None:  # tür daraltması: ilandan sonra ikisi de doludur
+        return False
+    return (eski >= gerekli) != (yeni >= gerekli)
+
+
+def _paydasi_degisen_kararlar(kurul: GeneralAssembly, katilan: int) -> list[tuple[AgendaItem, str]]:
+    """Katılım düzeltmesinin gündem maddelerine etkisi (kullanıcı kararı S6 (iii); hesap bütünlüğü).
+
+    Düzeltilen sayı genel kurulun yapıldığı toplantının katılımıysa oylamaya katılabilecek üye sayısı
+    da değişir: girilmiş oyların, oylamada salonda bulunan sayının ve gündem değişikliği oylarının
+    toplamı yeni katılımı aşamaz (sert; `karar_sonucu_yaz` ve `_degisiklik_oylari` ile aynı sınır).
+    Salondaki sayısı girilmemiş oylanmış maddenin paydası katılımdır: sonucu yeni paydayla yeniden
+    hesaplanır (`genel_kurul.karar_cogunlugu`). Sonucu değişen maddeler yeni sonuçlarıyla döner
+    (yazmaz)."""
+    degisenler: list[tuple[AgendaItem, str]] = []
+    tarih, donem = birinci_toplanti_gunu(kurul), kural_donemi(kurul)
+    for madde in AgendaItem.objects.filter(assembly=kurul).order_by("order"):
+        if madde.change_votes_for is not None and madde.change_votes_against is not None:
+            if madde.change_votes_for + madde.change_votes_against > katilan:
+                raise ValueError(DUZELTME_OYLARIN_ALTINDA)
+        if madde.votes_for is None or madde.votes_against is None:
+            continue
+        if max(madde.present_count or 0, madde.votes_for + madde.votes_against) > katilan:
+            raise ValueError(DUZELTME_OYLARIN_ALTINDA)
+        if (
+            madde.present_count is not None
+            or madde.kind in _KENDI_YOLUNDA
+            or madde.result not in (AgendaResult.KABUL, AgendaResult.RET)
+        ):
+            continue
+        sonuc = genel_kurul.karar_cogunlugu(madde.votes_for, katilan, tarih=tarih, donem=donem)
+        hesaplanan = str(AgendaResult.KABUL if sonuc["durum"] == "uygun" else AgendaResult.RET)
+        if hesaplanan != madde.result:
+            degisenler.append((madde, hesaplanan))
+    return degisenler
+
+
+def _karar_sonucunu_yeniden_yaz(madde: AgendaItem, sonuc: str, satir: int) -> str:
+    """Düzeltmenin değiştirdiği karar sonucunu yazar (izli; iz satırı akış satırına bağlı) ve bilgi
+    satırını döner."""
+    onceki = denetim_izi.anlik(madde)
+    eski = AgendaResult(madde.result).label
+    madde.result = sonuc
+    madde.updated_by_id = iz.yazar_hesabi()
+    madde.save(update_fields=["result", "updated_at", "updated_by"])
+    denetim_izi.degisiklik(madde, onceki=onceki, compliance_item=satir)
+    return (
+        f"{madde.order}. {madde.title}: sonuç oylardan yeniden hesaplandı "
+        f"({eski} → {AgendaResult(sonuc).label})."
+    )
+
+
+@transaction.atomic
+def katilim_duzelt(
+    kurul: GeneralAssembly,
+    *,
+    toplanti: str,
+    degerler: Mapping[str, int],
+    justification: str,
+    gerekce: uyum.Gerekce | None = None,
+) -> GenelKurulSonucu:
+    """Toplantıda girilen katılım sayılarını gerekçeyle düzeltir (tasarım §5.2.3, §7.1).
+
+    Her değişen sayı bir `AttendanceCorrection` satırıdır (ekleme-yalnız: satır değişmez, silinmez);
+    genel kuruldaki sayı son satırın değeridir. Gerekçe zorunludur ve şifrelidir. Dondurulmuş yeter
+    sayı düzeltilemez (sert — hesap bütünlüğü; `YeterSayiDonduruldu`). Birden çok sayı tek işlemde
+    düzeltilir: türe göre dağılımın toplamı yine katılım sayısını tutmalıdır (hesap bütünlüğü).
+    Düzeltme birinci toplantıda yeter sayının sağlanıp sağlanmadığını değiştiriyorsa uyarı +
+    gerekçedir (akış satırı); genel kurulun durumu hiçbir düzeltmede değişmez.
+
+    Genel kurulun yapıldığı toplantının katılımı düzeltilirse gündem maddeleri aynı işlemde yeniden
+    denetlenir (`_paydasi_degisen_kararlar`): oy toplamları yeni katılımı aşamaz (sert — hesap
+    bütünlüğü); salondaki sayısı girilmemiş maddenin sonucu yeni paydayla yeniden hesaplanıp yazılır
+    (kullanıcı kararı S6 (iii): oylarla çelişen sonuç kayıtta durmaz) ve sonucu değiştiren düzeltme
+    uyarı + gerekçedir (plan F2 §5.1; akış satırı, konusu katılım sayısının düzeltme satırı)."""
+    yazma_kapisi()
+    _baslangic(TUTANAK_ROLLERI)
+    metin = justification.strip()
+    if not metin:
+        raise ValueError(DUZELTME_GEREKCESI_GEREKLI)
+    guncel = _guncel(kurul)
+    _durum(guncel, *_DUZELTILEBILIR_DURUMLAR)
+    if toplanti not in AssemblyMeeting.values:
+        raise ValueError(TOPLANTI_GECERSIZ)
+    if not degerler:
+        raise ValueError(DUZELTME_BOS)
+    onceki_kurul = denetim_izi.anlik(guncel)
+    yapildi = guncel.status in (AssemblyStatus.YAPILDI, AssemblyStatus.TUTANAK_TAMAM)
+    eski_payda = _toplanti_katilani(guncel) if yapildi else None
+    dagilim = dict(guncel.attendance_by_kind or {})
+    degisenler: list[tuple[str, int | None, int]] = []
+    alanlar: set[str] = set()
+    for alan, deger in degerler.items():
+        if alan in DONDURULAN_ALANLAR:
+            raise YeterSayiDonduruldu
+        if alan not in DUZELTILEBILIR_ALANLAR:
+            raise ValueError(DUZELTME_ALANI_GECERSIZ)
+        yeni = _sayi(deger)
+        if alan == "second_attendee_count" and guncel.second_attendee_count is None:
+            raise ValueError(IKINCI_TOPLANTI_YAPILMADI)
+        if toplanti != _alanin_toplantisi(guncel, alan):
+            raise ValueError(DUZELTME_TOPLANTISI)
+        eski: int | None
+        if alan.startswith(_DAGILIM_ONEKI):
+            tur_adi = alan.removeprefix(_DAGILIM_ONEKI)
+            eski = dagilim.get(tur_adi)
+            dagilim[tur_adi] = yeni
+            alanlar.add("attendance_by_kind")
+        else:
+            eski = getattr(guncel, alan)
+            setattr(guncel, alan, yeni)
+            alanlar.add(alan)
+        if eski == yeni:
+            raise ValueError(DUZELTME_DEGISMIYOR)
+        degisenler.append((alan, eski, yeni))
+    guncel.attendance_by_kind = dagilim
+    katilan = (
+        guncel.second_attendee_count
+        if _dagilimin_toplantisi(guncel) == AssemblyMeeting.IKINCI
+        else guncel.first_attendee_count
+    )
+    if dagilim and sum(dagilim.values()) != katilan:
+        raise ValueError(DAGILIM_TOPLAMI)
+    yeni_payda = _toplanti_katilani(guncel) if yapildi else None
+    payda_alani = (
+        "second_attendee_count"
+        if guncel.held_at_meeting == AssemblyMeeting.IKINCI
+        else "first_attendee_count"
+    )
+    kararlar = (
+        _paydasi_degisen_kararlar(guncel, yeni_payda)
+        if yeni_payda is not None and yeni_payda != eski_payda
+        else []
+    )
+    tur = _Tur(guncel, gerekce)
+    hesap = iz.yazar_hesabi()
+    an = timezone.now()
+    bilgiler: list[str] = []
+    for alan, eski, yeni in degisenler:
+        duzeltme = AttendanceCorrection.objects.create(
+            assembly=guncel,
+            meeting=toplanti,
+            field=alan,
+            old_value=eski,
+            new_value=yeni,
+            justification=metin,
+            corrected_by_id=hesap,
+            corrected_at=an,
+            created_by_id=hesap,
+            updated_by_id=hesap,
+        )
+        bag = None
+        if alan == "first_attendee_count" and _yeter_sayi_sonucu_degisir(guncel, eski, yeni):
+            satir = uyum.akis_sapmasi(
+                DUZELTME_YETER_SAYI_AKISI,
+                DUZELTME_YETER_SAYI,
+                donem=tur.donem,
+                konu=duzeltme,
+                gerekce=gerekce,
+                hazirlik_yazimi=True,
+            )
+            tur.akis(DUZELTME_YETER_SAYI_AKISI, DUZELTME_YETER_SAYI, kurulun=False)
+            bag = satir.pk
+        if alan == payda_alani and kararlar:
+            karar_satiri = uyum.akis_sapmasi(
+                DUZELTME_KARAR_AKISI,
+                DUZELTME_KARAR,
+                donem=tur.donem,
+                konu=duzeltme,
+                gerekce=gerekce,
+                hazirlik_yazimi=True,
+            )
+            tur.akis(DUZELTME_KARAR_AKISI, DUZELTME_KARAR, kurulun=False)
+            bilgiler.extend(
+                _karar_sonucunu_yeniden_yaz(madde, sonuc, karar_satiri.pk)
+                for madde, sonuc in kararlar
+            )
+            bag = karar_satiri.pk if bag is None else bag
+        denetim_izi.degisiklik(duzeltme, onceki=None, compliance_item=bag)
+    guncel.updated_by_id = hesap
+    guncel.save(update_fields=[*sorted(alanlar), "updated_at", "updated_by"])
+    denetim_izi.degisiklik(guncel, onceki=onceki_kurul)
+    return _sonuc(tur, bilgiler)
+
+
+# ---------------------------------------------------------------------------
+# Katılım işareti (`ParentRoster.attended_*`; plan F2 §7 U33, S12)
+# ---------------------------------------------------------------------------
+def _isaret_kapisi() -> None:
+    """Katılım işareti veli adını gösterir (R9, dipnot ¹⁰): yalnız program yöneticisi; kişisel veri
+    içeren çıktı kapısı ve genel kurul yazma kapısı."""
+    rol_izinleri.yetki_oturum(rol_izinleri.Eylem.KISISEL_VERI_CIKTISI)
+    _kapi()
+    _daralt(ISARET_ROLLERI)
+
+
+def _isaret_toplantisi(kurul: GeneralAssembly, toplanti: str) -> None:
+    """İşaret yapılmakta ya da yapılmış toplantıya, tutanak tamamlanana dek konur: birinci toplantı
+    ilandan sonra; ikinci toplantı birincide yeter sayı sağlanamadıysa ve tarihi ilan edildiyse."""
+    if toplanti not in AssemblyMeeting.values:
+        raise ValueError(TOPLANTI_GECERSIZ)
+    if toplanti == AssemblyMeeting.BIRINCI:
+        _durum(
+            kurul,
+            AssemblyStatus.ILAN_EDILDI,
+            AssemblyStatus.YETER_SAYI_YOK,
+            AssemblyStatus.YAPILDI,
+        )
+        return
+    _durum(kurul, AssemblyStatus.YETER_SAYI_YOK, AssemblyStatus.YAPILDI)
+    if kurul.second_meeting_at is None or kurul.held_at_meeting == AssemblyMeeting.BIRINCI:
+        raise ValueError(DURUM_GECERSIZ)
+
+
+def _isareti_engelleyen_kurullar(kurul: GeneralAssembly, kurul_kimlikleri: set[int]) -> set[int]:
+    """Satırlarındaki işaret başka bir genel kurulda işaretlemeyi engelleyen genel kurullar: işareti
+    hâlâ yazılabilen (ilan edilmiş, yeter sayısı sağlanamamış ya da yapılmış) öteki kurullar. İptal
+    edilmiş ya da tutanağı tamamlanmış kurulun işareti bitmiş bir sayım yardımıdır (U33: işaret
+    yalnız `TUTANAK_TAMAM`'a dek yazılır; sayılar kurulda dondurulmuştur), yeni işaretle üzerine
+    yazılır."""
+    adaylar = kurul_kimlikleri - {kurul.pk}
+    if not adaylar:
+        return set()
+    return set(
+        GeneralAssembly.objects.filter(pk__in=adaylar, status__in=_ISARET_YAZILABILIR).values_list(
+            "pk", flat=True
+        )
+    )
+
+
+def _veli_satirlari(kurul: GeneralAssembly) -> QuerySet[ParentRoster]:
+    """Genel kurulun veli listesi: kapanacak dönemin satırları; yeni okulun ilk genel kurulunda
+    dönemsiz satırlar (ilk dönem açılınca bağlanırlar)."""
+    if kurul.term_id is None:
+        return ParentRoster.objects.filter(term__isnull=True)
+    return ParentRoster.objects.filter(term_id=kurul.term_id)
+
+
+def katilim_isareti_sayisi(kurul: GeneralAssembly, toplanti: str) -> int:
+    """Toplantının işaret sayısı (kişisiz): katılım sayısına ÖNERİdir, hesaplanmaz (U33)."""
+    return ParentRoster.objects.filter(
+        attended_assembly_id=kurul.pk, attended_meeting=toplanti
+    ).count()
+
+
+def katilim_isaretleri(kurul: GeneralAssembly, *, toplanti: str) -> list[dict[str, Any]]:
+    """Katılım işaretleri penceresinin listesi (U33): sınıf başına veli satırları, veli adı ve bu
+    toplantının işareti; `oteki_toplanti` aynı kurulun öteki toplantısının işaretidir (işaretlenirse
+    bu toplantıya taşınır), `baska_isaret` işaretlemeyi engelleyen başka kurulun işaretidir
+    (`_isareti_engelleyen_kurullar`). Ad yalnız burada çözülür; okuma erişim günlüğüne yazılır
+    (kişisel veri içeren çıktı, `VELI_LISTESI_CIKTISI`: listenin sha256'sı ve satır sayısı; ad
+    günlüğe girmez). Günlük satırı yazılamazsa liste verilmez. Yalnız program yöneticisi."""
+    _isaret_kapisi()
+    guncel = _guncel(kurul)
+    _isaret_toplantisi(guncel, toplanti)
+    satirlar = sorted(
+        _veli_satirlari(guncel),
+        key=lambda s: (
+            excel_veli.sinif_sira_anahtari(s.student_class),
+            normalize.tr_sort_key("" if is_corrupt(s.full_name) else s.full_name),
+            s.pk,
+        ),
+    )
+    engelleyen = _isareti_engelleyen_kurullar(
+        guncel, {s.attended_assembly_id for s in satirlar if s.attended_assembly_id is not None}
+    )
+    siniflar: dict[str, list[dict[str, Any]]] = {}
+    for satir in satirlar:
+        bu_kurul = satir.attended_assembly_id == guncel.pk
+        siniflar.setdefault(satir.student_class, []).append(
+            {
+                "id": satir.pk,
+                "veli": None if is_corrupt(satir.full_name) else str(satir.full_name),
+                "isaretli": bu_kurul and satir.attended_meeting == toplanti,
+                "oteki_toplanti": bu_kurul and satir.attended_meeting != toplanti,
+                "baska_isaret": satir.attended_assembly_id in engelleyen,
+            }
+        )
+    liste = [{"sinif": sinif, "satirlar": ogeler} for sinif, ogeler in siniflar.items()]
+    ozet = hashlib.sha256(
+        json.dumps(liste, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    erisim_gunlugu.yaz(
+        AccessKind.VELI_LISTESI_CIKTISI,
+        model=GeneralAssembly,
+        object_id=guncel.pk,
+        document_sha256=ozet,
+        row_count=len(satirlar),
+    )
+    return liste
+
+
+@transaction.atomic
+def katilim_isaretle(
+    kurul: GeneralAssembly,
+    *,
+    toplanti: str,
+    isaretle: Sequence[int] = (),
+    kaldir: Sequence[int] = (),
+) -> int:
+    """Veli satırlarına toplantının katılım işaretini koyar ya da kaldırır (U33); toplantının işaret
+    sayısını döner (öneri). İşaret sayım yardımıdır: genel kuruldaki katılım sayısı elle girilir,
+    işaretten hesaplanmaz. İşareti hâlâ yazılabilen başka genel kurulun işaretini taşıyan satır
+    işaretlenmez; iptal edilmiş ya da tutanağı tamamlanmış kurulun işaretinin üzerine yazılır. Satır
+    tek işaret taşır: aynı kurulun öteki toplantısında işaretli satır işaretlenince işaret bu
+    toplantıya taşınır (öteki toplantının sayısı kurulda dondurulmuştur). Denetim izine
+    kişisiz `ISARET` satırı düşer (satır kimliği, ad, sınıf ve sayı yok; veli listesinin hiçbir
+    alanı ize girmez, tasarım §4.6.2). Kural okumaz. Yalnız program yöneticisi."""
+    app_password.require_password_set()
+    _isaret_kapisi()
+    guncel = _guncel(kurul)
+    _isaret_toplantisi(guncel, toplanti)
+    eklenecek, kaldirilacak = set(isaretle), set(kaldir)
+    if eklenecek & kaldirilacak:
+        raise ValueError(ISARET_CAKISIYOR)
+    istenen = eklenecek | kaldirilacak
+    if not istenen:
+        return katilim_isareti_sayisi(guncel, toplanti)
+    durumlar = {
+        pk: (kurul_pk, gorusme)
+        for pk, kurul_pk, gorusme in _veli_satirlari(guncel)
+        .filter(pk__in=istenen)
+        .values_list("pk", "attended_assembly_id", "attended_meeting")
+    }
+    if set(durumlar) != istenen:
+        raise ValueError(ISARET_SATIRI_YOK)
+    engelleyen = _isareti_engelleyen_kurullar(
+        guncel, {durumlar[pk][0] for pk in eklenecek if durumlar[pk][0] is not None}
+    )
+    if any(durumlar[pk][0] in engelleyen for pk in eklenecek):
+        raise ValueError(ISARET_BASKA_KURULDA)
+    if any(durumlar[pk] != (guncel.pk, toplanti) for pk in kaldirilacak):
+        raise ValueError(ISARET_YOK)
+    if eklenecek:
+        ParentRoster.objects.filter(pk__in=eklenecek).update(
+            attended_assembly=guncel, attended_meeting=toplanti
+        )
+    if kaldirilacak:
+        ParentRoster.objects.filter(pk__in=kaldirilacak).update(
+            attended_assembly=None, attended_meeting=""
+        )
+    denetim_izi.olay(
+        AuditAction.ISARET,
+        model=denetim_izi.model_etiketi(ParentRoster),
+        object_id="",
+        changed_fields=["attended_assembly", "attended_meeting"],
+        term=kural_donemi(guncel).pk,
+    )
+    return katilim_isareti_sayisi(guncel, toplanti)

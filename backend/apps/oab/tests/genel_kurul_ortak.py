@@ -8,16 +8,20 @@ adları UYDURMADIR.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime
+from io import BytesIO
 
 from django.utils import timezone
+from openpyxl import Workbook
 
-from apps.oab.models import AssemblyCaller, AssemblyKind, GeneralAssembly, OabTerm
+from apps.oab.models import AgendaItem, AssemblyCaller, AssemblyKind, GeneralAssembly, OabTerm
 from apps.oab.services import donemler, uyum
 from apps.oab.services import genel_kurul as gk
 from apps.oab.tests import uyelik_ortak as o
 from apps.okul.models import AccountRole, SchoolConfig, SchoolYear
+from apps.okul.services import imports as import_service
+from apps.okul.services.templates import PARENT_TEMPLATE_HEADERS
 
 #: Kapanacak dönemin başı (geçiş kurulumu).
 DONEM_BASI = date(2025, 11, 3)
@@ -136,3 +140,57 @@ def katilim(
         parent_students_count=velisi_katilan,
         observer_count=gozlemci,
     )
+
+
+# ---------------------------------------------------------------------------
+# 5. adım: yapılmış genel kurul, gündem maddesi, veli listesi
+# ---------------------------------------------------------------------------
+#: Birinci toplantının katılımı (yeter sayı 64'ün üstünde: genel kurul birinci toplantıda yapılır).
+KATILAN = 70
+
+
+def yapilmis_olagan(katilan: int = KATILAN) -> GeneralAssembly:
+    """Birinci toplantıda yapılmış olağan genel kurul (`YAPILDI`; katılım `katilan`)."""
+    kurul = ilanli_olagan()
+    return gk.birinci_toplanti(kurul, katilim=katilim(katilan)).kurul
+
+
+def yapilmis_olaganustu(katilan: int = KATILAN) -> GeneralAssembly:
+    """Birinci toplantıda yapılmış olağanüstü genel kurul (çağrı gündemi `OLAGANUSTU_GUNDEM`)."""
+    acik_donem()
+    kurul = olaganustu_cagir(planla(kind=AssemblyKind.OLAGANUSTU))
+    gk.ilan_et(kurul, kanallar=kanallar())
+    return gk.birinci_toplanti(kurul, katilim=katilim(katilan)).kurul
+
+
+def madde(kurul: GeneralAssembly, kind: str) -> AgendaItem:
+    """Genel kurulun verilen türdeki (ilk) gündem maddesi."""
+    bulunan: AgendaItem | None = (
+        AgendaItem.objects.filter(assembly=kurul, kind=kind).order_by("order").first()
+    )
+    assert bulunan is not None, kind
+    return bulunan
+
+
+def gundem(kurul: GeneralAssembly) -> list[tuple[int, str]]:
+    """Gündemin (sıra, başlık) listesi."""
+    return list(
+        AgendaItem.objects.filter(assembly=kurul).order_by("order").values_list("order", "title")
+    )
+
+
+def veli_aktar(satirlar: Sequence[tuple[str, str]], ad: str = "veli-listesi.xlsx") -> None:
+    """Okulun şablonuyla veli listesi aktarımı (veli adı, öğrencinin sınıfı); adlar UYDURMADIR."""
+    import_service.commit_parents_file(file_bytes=veli_xlsx(satirlar), file_name=ad)
+
+
+def veli_xlsx(satirlar: Sequence[tuple[str, str]]) -> bytes:
+    kitap = Workbook()
+    sayfa = kitap.active
+    assert sayfa is not None
+    sayfa.append(list(PARENT_TEMPLATE_HEADERS))
+    for satir in satirlar:
+        sayfa.append(list(satir))
+    tampon = BytesIO()
+    kitap.save(tampon)
+    return tampon.getvalue()

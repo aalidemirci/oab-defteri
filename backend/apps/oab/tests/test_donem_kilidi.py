@@ -678,6 +678,12 @@ YAZMA_SERVISLERI = frozenset(
         "genel_kurul.birinci_toplanti",
         "genel_kurul.ikinci_toplanti",
         "genel_kurul.iptal_et",
+        # F2 5. adım: gündem, karar, divan ve katılım düzeltmesi (tasarım §5.2.3, §7.1).
+        "genel_kurul.gundeme_madde_ekle",
+        "genel_kurul.gundemden_madde_cikar",
+        "genel_kurul.karar_sonucu_yaz",
+        "genel_kurul.divan_sec",
+        "genel_kurul.katilim_duzelt",
     }
 )
 #: `@transaction.atomic` taşıyıp kural okumayan servisler ve gerekçesi.
@@ -729,6 +735,15 @@ KURALSIZ = {
     "uyum.iptalde_eksikleri_kapat": (
         "Yalnız iptal edilen kaydın açık eksiklerini kapatır: kural okumaz; dönem kilidi yine "
         "denetlenir."
+    ),
+    # F2 5. adım: gündemin sırası ve veli listesinin katılım işareti kural okumaz.
+    "genel_kurul.gundem_sirasini_degistir": (
+        "Gündemin sıra değişikliği kural okumaz: md. 9/4'ün ekleme ve çıkarması değildir, uyarı "
+        "üretmez (MA-16); dönem kilidi yine denetlenir."
+    ),
+    "genel_kurul.katilim_isaretle": (
+        "Veli listesinin katılım işareti sayım yardımıdır, kural okumaz (plan F2 §7 U33); dönem "
+        "kilidi yine denetlenir."
     ),
     "donemler.toplanti_gunu_yaz": (
         "Yönetim kurulunun aylık toplantı günü serbest metindir, kural okumaz (md. 13/3 yalnız 'ayda "

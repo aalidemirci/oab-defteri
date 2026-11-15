@@ -490,6 +490,11 @@ def test_gundem_sirasi_genel_kurulda_tekildir() -> None:
             "ck_agendaitem_cikarilan_sonucsuz",
         ),
         ({"result": "KABUL", "votes_for": 40}, "ck_agendaitem_sonuc_oylari"),
+        ({"present_count": 10}, "ck_agendaitem_salondaki_sayi"),
+        (
+            {"result": "KABUL", "votes_for": 30, "votes_against": 11, "present_count": 40},
+            "ck_agendaitem_salondaki_sayi",
+        ),
     ],
 )
 def test_gundem_maddesi_kisitlari(alanlar: dict[str, Any], kisit: str) -> None:

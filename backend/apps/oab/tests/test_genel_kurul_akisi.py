@@ -1,5 +1,6 @@
 """Genel kurulun durum makinesi: rol kapısı, hazırlık koşulları ve geçişlerin hesap bütünlüğü (F2 4.
-adım; tasarım §4.4.2 M3, §7.1; plan F2 §6.2, §7 U1, U7, S1).
+adım; tasarım §4.4.2 M3, §7.1; plan F2 §6.2, §7 U1, U7, S1). F2 5. adımdan beri gündem, karar, divan
+ve katılım düzeltmesinin rol kapısı, hesap bütünlüğü ve ekleme-yalnızlığı (dosyanın sonu).
 
 Rol kapısı iki katlıdır: `Eylem.GENEL_KURUL_YAZMA` (program yöneticisi ve yönetim kurulu rolleri) ve
 geçişin "Kim"i (tasarım §7.1). Ret `RolYetkisiz`'dir; uç katmanında 403 `rol_yetkisiz` olur
@@ -18,7 +19,12 @@ import pytest
 from django.utils import timezone
 from rest_framework import status
 
-from apps.oab.hatalar import GerekceGerekli, KuralSurumuGuncellenmeli
+from apps.oab.hatalar import (
+    DonemKapali,
+    GerekceGerekli,
+    KuralSurumuGuncellenmeli,
+    YeterSayiDonduruldu,
+)
 from apps.oab.kurallar import genel_kurul as gk_kurallari
 from apps.oab.kurallar import yukleyici as yk
 from apps.oab.models import (
@@ -29,18 +35,29 @@ from apps.oab.models import (
     AssemblyKind,
     AssemblyMeeting,
     AssemblyStatus,
+    AttendanceCorrection,
     ComplianceItem,
     ComplianceKind,
     GeneralAssembly,
     OabTerm,
+    OrganMembership,
+    OrganType,
+    PersonStatus,
     TermStatus,
 )
 from apps.oab.services import genel_kurul as gk
-from apps.oab.services import kural_bagi, uyum
+from apps.oab.services import kisiler, kural_bagi, uyum
 from apps.oab.tests import genel_kurul_ortak as gko
 from apps.oab.tests import uyelik_ortak as o
 from apps.oab.tests.kurallar import paket_ortak
-from apps.okul.models import AccountRole, AuditAction, AuditTrail, SchoolConfig, SchoolYear
+from apps.okul.models import (
+    AccountRole,
+    AuditAction,
+    AuditTrail,
+    ImmutableRecord,
+    SchoolConfig,
+    SchoolYear,
+)
 from apps.okul.services import app_password
 from shared.exceptions import RolYetkisiz, RolYetkisizResponse
 
@@ -736,3 +753,570 @@ def test_iptal_denetim_izine_duser() -> None:
         assert son.action == AuditAction.DURUM
         assert son.role == AccountRole.YONETICI.value
         assert son.account_id is not None
+
+
+# ============================================================ 5. adım: gündem, karar, divan, düzeltme
+def _yaz_gundem_ekle(kurul: GeneralAssembly) -> None:
+    gk.gundeme_madde_ekle(
+        kurul, title="Uydurma madde", change_votes_for=40, change_votes_against=10
+    )
+
+
+def _yaz_gundem_cikar(kurul: GeneralAssembly) -> None:
+    gk.gundemden_madde_cikar(
+        gko.madde(kurul, "DILEK"), change_votes_for=40, change_votes_against=10
+    )
+
+
+def _yaz_sira(kurul: GeneralAssembly) -> None:
+    maddeler = list(AgendaItem.objects.filter(assembly=kurul).order_by("order"))
+    gk.gundem_sirasini_degistir(kurul, sira=[m.pk for m in reversed(maddeler)])
+
+
+def _yaz_karar(kurul: GeneralAssembly) -> None:
+    gk.karar_sonucu_yaz(gko.madde(kurul, "YETKILENDIRME"), votes_for=50, votes_against=10)
+
+
+def _yaz_divan(kurul: GeneralAssembly) -> None:
+    gk.divan_sec(kurul, baskan=o.kisi(), katip=o.kisi())
+
+
+def _yaz_duzeltme(kurul: GeneralAssembly) -> None:
+    gk.katilim_duzelt(
+        kurul,
+        toplanti=AssemblyMeeting.BIRINCI,
+        degerler={"first_attendee_count": 71},
+        justification="Uydurma: cetvelde bir imza sonradan sayıldı.",
+    )
+
+
+_TUTANAK_YAZIMLARI: dict[str, Callable[[GeneralAssembly], None]] = {
+    "gundem_ekle": _yaz_gundem_ekle,
+    "gundem_cikar": _yaz_gundem_cikar,
+    "sira": _yaz_sira,
+    "karar": _yaz_karar,
+    "divan": _yaz_divan,
+    "duzeltme": _yaz_duzeltme,
+}
+
+
+@pytest.mark.parametrize("yazim", sorted(_TUTANAK_YAZIMLARI))
+@pytest.mark.parametrize(
+    "rol",
+    [
+        AccountRole.BASKAN,
+        AccountRole.BASKAN_YARDIMCISI,
+        AccountRole.MUHASIP,
+        AccountRole.DENETLEME_KURULU,
+        AccountRole.MUDUR,
+    ],
+)
+def test_tutanak_yazimlari_yalniz_program_yoneticisi_ve_sekreter(
+    yazim: str, rol: AccountRole
+) -> None:
+    """Tasarım §7.1 `YAPILDI → TUTANAK_TAMAM` "Kim": gündem değişikliği, karar, divan ve katılım
+    düzeltmesi program yöneticisi ve sekreterdir; Denetleme Kurulu ve müdür okur (M3), başkan,
+    başkan yardımcısı ve muhasip bu geçişin "Kim"i değildir. Ret hiçbir şey yazmaz; sekreter yazar."""
+    kurul = gko.yapilmis_olagan()
+    # Rol hesabının ve divana yazılacak kişilerin açılışı sayılmaz; genel kurulun kayıtları sayılır.
+    genel_kurul_izleri = AuditTrail.objects.exclude(model__in=["okul.Account", "oab.OabPerson"])
+    izler = genel_kurul_izleri.count()
+    with o.rol_olarak(rol), pytest.raises(RolYetkisiz):
+        _TUTANAK_YAZIMLARI[yazim](kurul)
+    assert genel_kurul_izleri.count() == izler
+    with o.rol_olarak(AccountRole.SEKRETER):
+        _TUTANAK_YAZIMLARI[yazim](kurul)
+    assert genel_kurul_izleri.count() > izler
+
+
+def test_karar_sonucunun_hesap_butunlugu() -> None:
+    """Karar sonucu (S6 (iii), S2): oyların toplamı paydayı aşamaz, salondaki sayı katılımı aşamaz
+    (hesap bütünlüğü, sert; Türkçe ileti). Oylanmayan madde "görüşüldü"dür, oy almaz; oylanan madde
+    iki oyu da ister. İbra ve seçim sonuçları 6. adımın yolundadır. Sonuç yalnız yapılmış genel
+    kurulda yazılır."""
+    kurul = gko.yapilmis_olagan()
+    yetki = gko.madde(kurul, "YETKILENDIRME")
+    with pytest.raises(ValueError, match="aşamaz"):
+        gk.karar_sonucu_yaz(yetki, votes_for=60, votes_against=11)
+    with pytest.raises(ValueError, match="aşamaz"):
+        gk.karar_sonucu_yaz(yetki, votes_for=30, votes_against=11, present_count=40)
+    with pytest.raises(ValueError, match="salonda bulunan"):
+        gk.karar_sonucu_yaz(yetki, votes_for=30, votes_against=11, present_count=71)
+    with pytest.raises(ValueError, match="ret oyları girilmelidir"):
+        gk.karar_sonucu_yaz(yetki, votes_for=30)
+    rapor = gko.madde(kurul, "YK_FAALIYET_RAPORU")
+    with pytest.raises(ValueError, match="oy girilmez"):
+        gk.karar_sonucu_yaz(rapor, result="GORUSULDU", votes_for=30, votes_against=1)
+    sonuc = gk.karar_sonucu_yaz(rapor, result="GORUSULDU")
+    assert (sonuc.madde.result, sonuc.madde.votes_for) == ("GORUSULDU", None)
+    for tur in ("IBRA", "SECIM_YK", "SECIM_DK"):
+        with pytest.raises(ValueError, match="kendi adımında"):
+            gk.karar_sonucu_yaz(gko.madde(kurul, tur), votes_for=50, votes_against=1)
+    with pytest.raises(ValueError, match="kabul, ret ya da görüşüldü"):
+        gk.karar_sonucu_yaz(yetki, result="BELKI", votes_for=50, votes_against=1)
+    assert AgendaItem.objects.get(pk=yetki.pk).result == ""
+
+    olaganustu = gko.olaganustu_cagir(gko.planla(kind=AssemblyKind.OLAGANUSTU))
+    gk.ilan_et(olaganustu, kanallar=gko.kanallar())
+    with pytest.raises(ValueError, match="bu durumdayken"):
+        gk.karar_sonucu_yaz(gko.madde(olaganustu, "ACILIS"), result="GORUSULDU")
+
+
+def test_gundemden_cikarilan_madde_silinmez_ve_gorusulmez() -> None:
+    """md. 9/4, altın kural 4: çıkarılan madde silinmez, yerinde kalır, görüşülmez (sonuç yazılmaz);
+    ikinci kez çıkarılmaz. Sonucu girilmiş madde çıkarılmaz; oylamayla eklenen madde ayrıca
+    çıkarılmaz. Oylar birlikte girilir ve katılımı aşamaz."""
+    kurul = gko.yapilmis_olagan()
+    dilek = gko.madde(kurul, "DILEK")
+    with pytest.raises(ValueError, match="birlikte"):
+        gk.gundemden_madde_cikar(dilek, change_votes_for=40)
+    with pytest.raises(ValueError, match="aşamaz"):
+        gk.gundemden_madde_cikar(dilek, change_votes_for=40, change_votes_against=31)
+    gk.gundemden_madde_cikar(dilek, change_votes_for=40, change_votes_against=30)
+    with pytest.raises(ImmutableRecord):
+        AgendaItem.objects.filter(pk=dilek.pk).delete()
+    assert AgendaItem.objects.get(pk=dilek.pk).removed_by_vote is True
+    with pytest.raises(ValueError, match="çıkarıldı"):
+        gk.gundemden_madde_cikar(dilek, change_votes_for=40, change_votes_against=30)
+    with pytest.raises(ValueError, match="çıkarıldı"):
+        gk.karar_sonucu_yaz(dilek, result="GORUSULDU")
+
+    yetki = gko.madde(kurul, "YETKILENDIRME")
+    gk.karar_sonucu_yaz(yetki, votes_for=50, votes_against=10)
+    with pytest.raises(ValueError, match="Sonucu girilmiş"):
+        gk.gundemden_madde_cikar(yetki, change_votes_for=40, change_votes_against=30)
+    eklenen = gk.gundeme_madde_ekle(
+        kurul, title="Uydurma madde", change_votes_for=40, change_votes_against=10
+    ).madde
+    with pytest.raises(ValueError, match="ayrıca çıkarılamaz"):
+        gk.gundemden_madde_cikar(eklenen, change_votes_for=40, change_votes_against=10)
+    with pytest.raises(ValueError, match="sırası"):
+        gk.gundeme_madde_ekle(
+            kurul, title="Uydurma", sira=99, change_votes_for=40, change_votes_against=10
+        )
+
+
+def test_gundem_degisikligi_yalniz_toplantida() -> None:
+    """Gündeme ekleme ve çıkarma toplantıda oylanır (md. 9/4): ilandan önce, ilan edilmiş ama
+    toplanmamış ya da yeter sayı sağlanamamış genel kurulda yapılmaz."""
+    kurul = gko.ilanli_olagan()
+    with pytest.raises(ValueError, match="bu durumdayken"):
+        _yaz_gundem_ekle(kurul)
+    gk.birinci_toplanti(kurul, katilim=gko.katilim(10))
+    with pytest.raises(ValueError, match="bu durumdayken"):
+        _yaz_gundem_cikar(kurul)
+
+
+def test_divan_tek_ve_ayri_kisiler() -> None:
+    """md. 10/1-c "bir divan başkanı ve bir kâtip": aynı kişi ikisi olamaz; bir genel kurulun tek
+    divanı vardır; pasif kişi divana yazılmaz. Divan yalnız yapılmış genel kurulda seçilir."""
+    kurul = gko.ilanli_olagan()
+    veli = o.kisi()
+    with pytest.raises(ValueError, match="bu durumdayken"):
+        gk.divan_sec(kurul, baskan=veli, katip=o.kisi())
+    gk.birinci_toplanti(kurul, katilim=gko.katilim(70))
+    with pytest.raises(ValueError, match="ayrı kişilerdir"):
+        gk.divan_sec(kurul, baskan=veli, katip=veli)
+    pasif = o.kisi()
+    kisiler.update_person(pasif, status=PersonStatus.PASIF)
+    with pytest.raises(ValueError, match="Pasif"):
+        gk.divan_sec(kurul, baskan=veli, katip=pasif)
+    assert not OrganMembership.objects.filter(organ=OrganType.DIVAN).exists()
+    gk.divan_sec(kurul, baskan=veli, katip=o.kisi())
+    with pytest.raises(ValueError, match="divanı seçildi"):
+        gk.divan_sec(kurul, baskan=o.kisi(), katip=o.kisi())
+    assert len(gk.kurulun_divani(kurul)) == 2
+
+
+def test_ikinci_toplantida_divan_ikinci_toplanti_gunuyle() -> None:
+    """İkinci toplantıda yapılan genel kurulun divanı ikinci toplantının günüyle yazılır; payda
+    ikinci toplantının katılımıdır (md. 9/2: çoğunluk aranmaz, kararlar katılanların çoğunluğuyla)."""
+    kurul = gko.ilanli_olagan(second_meeting_at=gko.an(date(2026, 11, 3)))
+    gk.birinci_toplanti(kurul, katilim=gko.katilim(10))
+    gk.ikinci_toplanti(kurul, katilim=gko.katilim(5))
+    gk.divan_sec(kurul, baskan=o.kisi(), katip=o.kisi())
+    assert {u.start_date for u in gk.kurulun_divani(kurul)} == {date(2026, 11, 3)}
+    yetki = gko.madde(kurul, "YETKILENDIRME")
+    assert gk.karar_sonucu_yaz(yetki, votes_for=3, votes_against=2).madde.result == "KABUL"
+    with pytest.raises(ValueError, match="aşamaz"):
+        gk.karar_sonucu_yaz(yetki, votes_for=3, votes_against=3)
+
+
+# ------------------------------------------------------------ katılım düzeltmesi
+def test_katilim_duzeltmesi_ekleme_yalniz() -> None:
+    """Tasarım §5.2.3: düzeltme ekleme-yalnızdır; her düzeltme yeni satırdır, satır değişmez ve
+    silinmez. Genel kuruldaki sayı son düzeltme satırının değeridir; toplantıda girilen ilk değer
+    ilk satırın önceki değerinden okunur. Durum değişmez; yazımlar izlidir."""
+    kurul = gko.yapilmis_olagan()
+    _yaz_duzeltme(kurul)
+    gk.katilim_duzelt(
+        kurul,
+        toplanti=AssemblyMeeting.BIRINCI,
+        degerler={"first_attendee_count": 72, "observer_count": 4},
+        justification="Uydurma: ikinci sayım.",
+    )
+    sonra = GeneralAssembly.objects.get(pk=kurul.pk)
+    assert (sonra.status, sonra.first_attendee_count, sonra.observer_count) == (
+        AssemblyStatus.YAPILDI,
+        72,
+        4,
+    )
+    satirlar = gk.katilim_duzeltmeleri(kurul)
+    assert [(s.field, s.old_value, s.new_value) for s in satirlar] == [
+        ("first_attendee_count", 70, 71),
+        ("first_attendee_count", 71, 72),
+        ("observer_count", None, 4),
+    ]
+    assert satirlar[0].justification == "Uydurma: cetvelde bir imza sonradan sayıldı."
+    assert gk.ilk_girilen_deger(sonra, "first_attendee_count") == 70
+    assert gk.ilk_girilen_deger(sonra, "second_attendee_count") is None
+    ilk = satirlar[0]
+    ilk.new_value = 99
+    with pytest.raises(ImmutableRecord):
+        ilk.save()
+    with pytest.raises(ImmutableRecord):
+        AttendanceCorrection.objects.filter(pk=ilk.pk).update(new_value=99)
+    with pytest.raises(ImmutableRecord):
+        AttendanceCorrection.objects.filter(pk=ilk.pk).delete()
+    with pytest.raises(ImmutableRecord):
+        AttendanceCorrection.objects.get(pk=ilk.pk).delete()
+    assert AttendanceCorrection.objects.get(pk=ilk.pk).new_value == 71
+    assert (
+        AuditTrail.objects.filter(
+            model="oab.AttendanceCorrection", action=AuditAction.OLUSTUR
+        ).count()
+        == 3
+    )
+
+
+def test_katilim_duzeltmesi_gerekce_ister_ve_yeter_sayiya_uzanmaz() -> None:
+    """Gerekçe zorunludur (boş gerekçe satır yazmaz). Dondurulmuş yeter sayının dört alanı
+    düzeltilemez (sert — hesap bütünlüğü); bilinmeyen alan, aynı değer, başka toplantının sayısı ve
+    yapılmamış ikinci toplantı reddedilir."""
+    kurul = gko.yapilmis_olagan()
+    with pytest.raises(ValueError, match="gerekçesi"):
+        gk.katilim_duzelt(
+            kurul,
+            toplanti=AssemblyMeeting.BIRINCI,
+            degerler={"first_attendee_count": 71},
+            justification="   ",
+        )
+    for alan in ("quorum_required", "quorum_base", "quorum_multiplier", "student_count_snapshot"):
+        with pytest.raises(YeterSayiDonduruldu):
+            gk.katilim_duzelt(
+                kurul,
+                toplanti=AssemblyMeeting.BIRINCI,
+                degerler={alan: 10},
+                justification="Uydurma: yanlış.",
+            )
+    durumlar: list[tuple[str, dict[str, Any], str]] = [
+        (AssemblyMeeting.BIRINCI, {"venue": 1}, "Düzeltilen sayı"),
+        (AssemblyMeeting.BIRINCI, {"first_attendee_count": 70}, "aynı"),
+        (AssemblyMeeting.IKINCI, {"first_attendee_count": 71}, "seçilen toplantının"),
+        (AssemblyMeeting.IKINCI, {"second_attendee_count": 3}, "İkinci toplantı yapılmadı"),
+        (AssemblyMeeting.BIRINCI, {}, "en az bir"),
+    ]
+    for toplanti, degerler, ileti in durumlar:
+        with pytest.raises(ValueError, match=ileti):
+            gk.katilim_duzelt(
+                kurul, toplanti=toplanti, degerler=degerler, justification="Uydurma: yanlış."
+            )
+    assert not AttendanceCorrection.objects.exists()
+    assert GeneralAssembly.objects.get(pk=kurul.pk).quorum_required == 64
+
+
+def test_yeter_sayi_sonucunu_degistiren_duzeltme_gerekce_ister() -> None:
+    """Tasarım §5.2.3: düzeltme birinci toplantıda yeter sayının sağlanıp sağlanmadığını
+    değiştiriyorsa uyarı + gerekçedir (akış satırı; atıfsız). Gerekçesiz ret satır yazmaz;
+    gerekçeyle düzeltme kaydedilir, sapma satırının konusu düzeltmedir, iz satırı ona bağlıdır.
+    Genel kurulun durumu değişmez."""
+    kurul = gko.yapilmis_olagan()
+    with pytest.raises(GerekceGerekli):
+        gk.katilim_duzelt(
+            kurul,
+            toplanti=AssemblyMeeting.BIRINCI,
+            degerler={"first_attendee_count": 60},
+            justification="Uydurma: mükerrer imzalar ayıklandı.",
+        )
+    assert not AttendanceCorrection.objects.exists()
+    sonuc = gk.katilim_duzelt(
+        kurul,
+        toplanti=AssemblyMeeting.BIRINCI,
+        degerler={"first_attendee_count": 60},
+        justification="Uydurma: mükerrer imzalar ayıklandı.",
+        gerekce=gko.GEREKCE,
+    )
+    assert [u["kural"] for u in sonuc.uyarilar] == [gk.DUZELTME_YETER_SAYI_AKISI]
+    assert (sonuc.kurul.status, sonuc.kurul.first_attendee_count) == (AssemblyStatus.YAPILDI, 60)
+    duzeltme = AttendanceCorrection.objects.get()
+    satir = ComplianceItem.objects.get(rule_id=gk.DUZELTME_YETER_SAYI_AKISI)
+    assert (satir.kind, satir.subject_type, satir.subject_id) == (
+        ComplianceKind.SAPMA,
+        "oab.AttendanceCorrection",
+        str(duzeltme.pk),
+    )
+    iz = AuditTrail.objects.get(model="oab.AttendanceCorrection", object_id=str(duzeltme.pk))
+    assert iz.compliance_item_id == satir.pk
+    # Yeter sayının aynı yanında kalan düzeltme uyarı üretmez.
+    gk.katilim_duzelt(
+        kurul,
+        toplanti=AssemblyMeeting.BIRINCI,
+        degerler={"first_attendee_count": 61},
+        justification="Uydurma: bir imza daha.",
+    )
+    assert ComplianceItem.objects.filter(rule_id=gk.DUZELTME_YETER_SAYI_AKISI).count() == 1
+    # Eşitlik sınırı (yeter sayı 64; birinci toplantının hesabıyla aynı `>=`): 64'e çıkan düzeltme
+    # yeter sayıyı sağlatır, 63'e inen düşürür; ikisi de gerekçe ister. 64'te ya da üstünde kalan
+    # düzeltme uyarısızdır.
+    adimlar = ((64, True), (65, False), (64, False), (63, True))
+    for sayi, uyarili in adimlar:
+        degerler = {"first_attendee_count": sayi}
+        if uyarili:
+            with pytest.raises(GerekceGerekli):
+                gk.katilim_duzelt(
+                    kurul,
+                    toplanti=AssemblyMeeting.BIRINCI,
+                    degerler=degerler,
+                    justification="Uydurma: sayım.",
+                )
+        sonuc = gk.katilim_duzelt(
+            kurul,
+            toplanti=AssemblyMeeting.BIRINCI,
+            degerler=degerler,
+            justification="Uydurma: sayım.",
+            gerekce=gko.GEREKCE if uyarili else None,
+        )
+        assert bool(sonuc.uyarilar) is uyarili, sayi
+        assert sonuc.kurul.status == AssemblyStatus.YAPILDI
+    assert ComplianceItem.objects.filter(rule_id=gk.DUZELTME_YETER_SAYI_AKISI).count() == 3
+
+
+def test_yeter_sayi_yokken_yeter_sayiyi_saglatan_duzeltme_gerekce_ister() -> None:
+    """Tasarım §5.2.3'ün en ağır hâli: birinci toplantıda yeter sayı aslında sağlanmıştı
+    (`YETER_SAYI_YOK` kurulda katılım 10'dan 64'e düzeltilir). Düzeltme gerekçe ister; genel kurulun
+    durumu değişmez (`YETER_SAYI_YOK` kalır, ikinci toplantı yolu açık kalır)."""
+    kurul = gko.ilanli_olagan(second_meeting_at=gko.an(date(2026, 11, 3)))
+    gk.birinci_toplanti(kurul, katilim=gko.katilim(10))
+    with pytest.raises(GerekceGerekli):
+        gk.katilim_duzelt(
+            kurul,
+            toplanti=AssemblyMeeting.BIRINCI,
+            degerler={"first_attendee_count": 64},
+            justification="Uydurma: ikinci sayfa sayılmamış.",
+        )
+    assert not AttendanceCorrection.objects.exists()
+    sonuc = gk.katilim_duzelt(
+        kurul,
+        toplanti=AssemblyMeeting.BIRINCI,
+        degerler={"first_attendee_count": 64},
+        justification="Uydurma: ikinci sayfa sayılmamış.",
+        gerekce=gko.GEREKCE,
+    )
+    assert [u["kural"] for u in sonuc.uyarilar] == [gk.DUZELTME_YETER_SAYI_AKISI]
+    sonra = GeneralAssembly.objects.get(pk=kurul.pk)
+    assert (sonra.status, sonra.first_attendee_count) == (AssemblyStatus.YETER_SAYI_YOK, 64)
+    assert not sonra.held_at_meeting
+    assert gk.ilk_girilen_deger(sonra, "first_attendee_count") == 10
+
+
+def test_duzeltmede_dagilim_toplami_katilimi_tutar() -> None:
+    """Hesap bütünlüğü (4. adım kararı): türe göre dağılımın toplamı katılım sayısını tutar; katılım
+    düzeltilirse dağılım aynı işlemde düzeltilir. İkinci toplantı yapıldıysa dağılım ikincinindir
+    (`test_ikinci_toplantinin_katilimi_dagilimla_duzeltilir`)."""
+    kurul = gko.ilanli_olagan()
+    gk.birinci_toplanti(
+        kurul, katilim=gko.katilim(70, dagilim={"VELI_KURSIYER": 60, "OGRETMEN": 10})
+    )
+    with pytest.raises(ValueError, match="toplamı"):
+        _yaz_duzeltme(kurul)
+    gk.katilim_duzelt(
+        kurul,
+        toplanti=AssemblyMeeting.BIRINCI,
+        degerler={"first_attendee_count": 71, "attendance_by_kind.OGRETMEN": 11},
+        justification="Uydurma: bir öğretmen geç imzaladı.",
+    )
+    sonra = GeneralAssembly.objects.get(pk=kurul.pk)
+    assert (sonra.first_attendee_count, sonra.attendance_by_kind) == (
+        71,
+        {"VELI_KURSIYER": 60, "OGRETMEN": 11},
+    )
+    assert gk.ilk_girilen_deger(sonra, "attendance_by_kind.OGRETMEN") == 10
+    assert gk.ilk_girilen_deger(sonra, "attendance_by_kind.VELI_KURSIYER") == 60
+
+    with pytest.raises(ValueError, match="seçilen toplantının"):
+        gk.katilim_duzelt(
+            kurul,
+            toplanti=AssemblyMeeting.IKINCI,
+            degerler={"observer_count": 2},
+            justification="Uydurma.",
+        )
+
+
+def test_ikinci_toplantinin_katilimi_dagilimla_duzeltilir() -> None:
+    """Pilot akışı: birinci toplantıda yeter sayı yok, genel kurul ikinci toplantıda yapılır. Dağılım
+    ikinci toplantınındır: ikinci toplantının katılımı dağılımla birlikte düzeltilir, toplamı ikinci
+    katılımı tutmayan dağılım reddedilir, dağılım birinci toplantı adıyla düzeltilemez. Kararların
+    paydası ikinci toplantının katılımıdır: birincinin katılımı oyların altına inebilir, ikincininki
+    inemez (hesap bütünlüğü)."""
+    kurul = gko.ilanli_olagan(second_meeting_at=gko.an(date(2026, 11, 3)))
+    gk.birinci_toplanti(kurul, katilim=gko.katilim(10))
+    gk.ikinci_toplanti(kurul, katilim=gko.katilim(5, dagilim={"VELI_KURSIYER": 4, "OGRETMEN": 1}))
+    yetki = gko.madde(kurul, "YETKILENDIRME")
+    assert gk.karar_sonucu_yaz(yetki, votes_for=4, votes_against=1).madde.result == "KABUL"
+    with pytest.raises(ValueError, match="toplamı"):
+        gk.katilim_duzelt(
+            kurul,
+            toplanti=AssemblyMeeting.IKINCI,
+            degerler={"second_attendee_count": 7},
+            justification="Uydurma: iki imza sonradan sayıldı.",
+        )
+    with pytest.raises(ValueError, match="seçilen toplantının"):
+        gk.katilim_duzelt(
+            kurul,
+            toplanti=AssemblyMeeting.BIRINCI,
+            degerler={"attendance_by_kind.OGRETMEN": 3},
+            justification="Uydurma: iki imza sonradan sayıldı.",
+        )
+    assert not AttendanceCorrection.objects.exists()
+    sonuc = gk.katilim_duzelt(
+        kurul,
+        toplanti=AssemblyMeeting.IKINCI,
+        degerler={"second_attendee_count": 7, "attendance_by_kind.OGRETMEN": 3},
+        justification="Uydurma: iki imza sonradan sayıldı.",
+    )
+    assert (sonuc.uyarilar, sonuc.bilgiler) == ((), ())
+    sonra = GeneralAssembly.objects.get(pk=kurul.pk)
+    assert (
+        sonra.status,
+        sonra.held_at_meeting,
+        sonra.first_attendee_count,
+        sonra.second_attendee_count,
+        sonra.attendance_by_kind,
+    ) == (
+        AssemblyStatus.YAPILDI,
+        AssemblyMeeting.IKINCI,
+        10,
+        7,
+        {"VELI_KURSIYER": 4, "OGRETMEN": 3},
+    )
+    satirlar = gk.katilim_duzeltmeleri(kurul)
+    assert [(s.meeting, s.field, s.old_value, s.new_value) for s in satirlar] == [
+        (AssemblyMeeting.IKINCI, "second_attendee_count", 5, 7),
+        (AssemblyMeeting.IKINCI, "attendance_by_kind.OGRETMEN", 1, 3),
+    ]
+    assert gk.ilk_girilen_deger(sonra, "second_attendee_count") == 5
+    assert gk.ilk_girilen_deger(sonra, "attendance_by_kind.OGRETMEN") == 1
+    # Birinci toplantının katılımı kararların paydası değildir: oyların (5) altına inebilir, karar
+    # yeniden hesaplanmaz. İkinci toplantının katılımı paydadır: oyların altına inemez.
+    gk.katilim_duzelt(
+        kurul,
+        toplanti=AssemblyMeeting.BIRINCI,
+        degerler={"first_attendee_count": 3},
+        justification="Uydurma: mükerrer imzalar.",
+    )
+    assert AgendaItem.objects.get(pk=yetki.pk).result == "KABUL"
+    with pytest.raises(ValueError, match="altına düzeltilemez"):
+        gk.katilim_duzelt(
+            kurul,
+            toplanti=AssemblyMeeting.IKINCI,
+            degerler={"second_attendee_count": 4, "attendance_by_kind.OGRETMEN": 0},
+            justification="Uydurma: mükerrer imzalar.",
+        )
+    assert GeneralAssembly.objects.get(pk=kurul.pk).second_attendee_count == 7
+
+
+def _karar_duzelt(
+    kurul: GeneralAssembly, sayi: int, gerekce: uyum.Gerekce | None = None
+) -> gk.GenelKurulSonucu:
+    return gk.katilim_duzelt(
+        kurul,
+        toplanti=AssemblyMeeting.BIRINCI,
+        degerler={"first_attendee_count": sayi},
+        justification="Uydurma: katılım cetveli yeniden sayıldı.",
+        gerekce=gerekce,
+    )
+
+
+def test_duzeltme_karar_paydasini_degistirince_sonuc_yeniden_hesaplanir() -> None:
+    """Kullanıcı kararı S6 (iii) (sert — hesap bütünlüğü): karar sonucu oylardan hesaplanır, oylarla
+    çelişen sonuç kayıtta durmaz. Salondaki sayısı girilmemiş maddenin paydası genel kurulun
+    yapıldığı toplantının katılımıdır; bu sayı düzeltilince sonuç aynı işlemde yeni paydayla yeniden
+    hesaplanıp yazılır. Sonucu değiştiren düzeltme uyarı + gerekçedir (plan F2 §5.1; akış satırı,
+    konusu düzeltme satırı; maddenin iz satırı ona bağlı); gerekçesiz ret hiçbir şey yazmaz.
+    Oyların, salondaki sayının ve gündem değişikliği oylarının toplamı yeni katılımı aşamaz (sert)."""
+    kurul = gko.yapilmis_olagan()  # katılım 70
+    yetki = gko.madde(kurul, "YETKILENDIRME")
+    assert gk.karar_sonucu_yaz(yetki, votes_for=36, votes_against=30).madde.result == "KABUL"
+    with pytest.raises(ValueError, match="altına düzeltilemez"):
+        _karar_duzelt(kurul, 65)  # kabul + ret = 66
+    # Salondaki sayısı girilmiş madde: payda salondaki sayıdır, katılım onun altına inemez.
+    eklenen = gk.gundeme_madde_ekle(
+        kurul, title="Uydurma: okul bahçesi", change_votes_for=40, change_votes_against=10
+    ).madde
+    gk.karar_sonucu_yaz(eklenen, votes_for=35, votes_against=20, present_count=68)
+    with pytest.raises(ValueError, match="altına düzeltilemez"):
+        _karar_duzelt(kurul, 67)
+    # Gündem değişikliğinin oyları da katılımı aşamaz.
+    gk.gundemden_madde_cikar(gko.madde(kurul, "DILEK"), change_votes_for=60, change_votes_against=9)
+    with pytest.raises(ValueError, match="altına düzeltilemez"):
+        _karar_duzelt(kurul, 68)
+    assert not AttendanceCorrection.objects.exists()
+
+    # 36/75 çoğunluk değildir: sonuç ret olur; gerekçesiz ret hiçbir şey yazmaz.
+    with pytest.raises(GerekceGerekli):
+        _karar_duzelt(kurul, 75)
+    assert not AttendanceCorrection.objects.exists()
+    assert AgendaItem.objects.get(pk=yetki.pk).result == "KABUL"
+    sonuc = _karar_duzelt(kurul, 75, gko.GEREKCE)
+    assert [u["kural"] for u in sonuc.uyarilar] == [gk.DUZELTME_KARAR_AKISI]
+    assert len(sonuc.bilgiler) == 1
+    assert "(Kabul → Ret)" in sonuc.bilgiler[0]
+    sonra = AgendaItem.objects.get(pk=yetki.pk)
+    assert (sonra.result, sonra.votes_for, sonra.votes_against, sonra.present_count) == (
+        "RET",
+        36,
+        30,
+        None,
+    )
+    assert AgendaItem.objects.get(pk=eklenen.pk).result == "KABUL"  # payda salondaki sayı
+    duzeltme = AttendanceCorrection.objects.get()
+    satir = ComplianceItem.objects.get(rule_id=gk.DUZELTME_KARAR_AKISI)
+    assert (satir.kind, satir.subject_type, satir.subject_id) == (
+        ComplianceKind.SAPMA,
+        "oab.AttendanceCorrection",
+        str(duzeltme.pk),
+    )
+    madde_izi = AuditTrail.objects.filter(model="oab.AgendaItem", object_id=str(yetki.pk)).latest(
+        "pk"
+    )
+    assert madde_izi.compliance_item_id == satir.pk
+    assert "result" in madde_izi.changed_fields
+    # Aynı oyların yeniden yazımı aynı sonucu hesaplar (kayıt oylarla tutarlıdır).
+    assert gk.karar_sonucu_yaz(yetki, votes_for=36, votes_against=30).madde.result == "RET"
+
+    # Sonucu değiştirmeyen düzeltme (36/72 yine çoğunluk değil) uyarısızdır.
+    sonuc = _karar_duzelt(kurul, 72)
+    assert (sonuc.uyarilar, sonuc.bilgiler) == ((), ())
+    # Ters yönde de (36/71 çoğunluk) gerekçe ister ve sonuç kabul olur.
+    with pytest.raises(GerekceGerekli):
+        _karar_duzelt(kurul, 71)
+    assert AgendaItem.objects.get(pk=yetki.pk).result == "RET"
+    sonuc = _karar_duzelt(kurul, 71, gko.GEREKCE)
+    assert "(Ret → Kabul)" in sonuc.bilgiler[0]
+    assert AgendaItem.objects.get(pk=yetki.pk).result == "KABUL"
+    assert ComplianceItem.objects.filter(rule_id=gk.DUZELTME_KARAR_AKISI).count() == 2
+
+
+def test_kapanmis_donemde_duzeltme_ve_tutanak_yazimlari_reddedilir() -> None:
+    """O2 dönem kilidi: genel kurulun dönemi kapanmışsa düzeltme, karar, gündem ve divan yazılmaz
+    (`DonemKapali`); ret satır yazmaz."""
+    kurul = gko.yapilmis_olagan()
+    assert kurul.term_id is not None
+    OabTerm.objects.filter(pk=kurul.term_id).update(
+        status=TermStatus.KAPANDI, end_date=date(2027, 10, 1)
+    )
+    for yazim in _TUTANAK_YAZIMLARI.values():
+        with pytest.raises(DonemKapali):
+            yazim(kurul)
+    assert not AttendanceCorrection.objects.exists()
+    assert not OrganMembership.objects.filter(organ=OrganType.DIVAN).exists()

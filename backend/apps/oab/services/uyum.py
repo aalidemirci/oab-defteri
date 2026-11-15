@@ -337,13 +337,17 @@ def akis_sapmasi(
     donem: OabTerm,
     konu: models.Model,
     gerekce: Gerekce | None = None,
+    hazirlik_yazimi: bool = False,
 ) -> ComplianceItem:
-    """Akış satırı (modül başlığı): gerekçesiz geçmez; aynı iletili açık satır varsa yeniden sorulmaz."""
+    """Akış satırı (modül başlığı): gerekçesiz geçmez; aynı iletili açık satır varsa yeniden sorulmaz.
+
+    `hazirlik_yazimi`: genel kurul hazırlığının satırı (yeni okulun ilk genel kurulunda dönem
+    hazırlık dönemidir; `donem_kilidi.yazma_denetimi`)."""
     yazma_kapisi()
     if not akis_id.startswith(AKIS_ONEKI):
         raise ValueError("Akış satırının kimliği akış önekiyle başlar.")
     donem = OabTerm.objects.select_related("rule_package").get(pk=donem.pk)
-    donem_kilidi.yazma_denetimi(donem)
+    donem_kilidi.yazma_denetimi(donem, hazirlik_yazimi=hazirlik_yazimi)
     acik = _acik_satir(donem, konu, akis_id)
     if acik is not None and acik.kind == ComplianceKind.SAPMA and acik.message == mesaj:
         return acik

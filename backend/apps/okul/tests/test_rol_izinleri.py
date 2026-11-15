@@ -577,7 +577,6 @@ def test_bekleyen_dipnotlar_anlik_goruntusu() -> None:
         7: "F2",
         8: "F4",
         9: "F5",
-        10: "F2",
     }
     for dipnot in range(1, 11):
         bagli = any(
@@ -723,6 +722,8 @@ def test_eylem_baglama_anlik_goruntusu() -> None:
         Eylem.DK_GOREV_BOLUMU_YAZMA,
         # F2 4. adım: genel kurulun durum makinesi (`genel_kurul` servisi; dipnot ¹).
         Eylem.GENEL_KURUL_YAZMA,
+        # F2 5. adım: genel kurulun veli adlı katılım işaretleri (`genel_kurul` servisi; dipnot ¹⁰).
+        Eylem.KISISEL_VERI_CIKTISI,
     }
 
 

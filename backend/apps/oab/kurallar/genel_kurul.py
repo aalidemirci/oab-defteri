@@ -4,15 +4,21 @@ Taban kurul bileşiminden gelir, üyelik kaydı sayılmaz: eksik kadroyla da yet
 genel kurulda da aynı hesap uygulanır (md. 9/2, 9/6). Değerler dönemin kural kopyasından, dönem
 verilmezse dağıtılan en yeni revizyondan okunur. Çarpanın seçimi sert kuraldır (hesap bütünlüğü):
 kullanıcı değeri değiştiremez.
+
+Karar çoğunluğu da saf hesaptır (md. 9/2, 9/6; `genel_kurul.karar_cogunlugu`, sert — hesap
+bütünlüğü): kabul oyunun paydaya oranı kuralın oranından büyükse karar alınmıştır (kullanıcı kararı
+S2 (a): "katılanların çoğunluğu", çekimser ve kullanılmayan oy kabul sayılmaz; eşitlikte karar
+alınmamıştır). Karşılaştırma kural paketinindir (`buyuktur`); program sonucu oylardan hesaplar.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 from typing import Any
 
-from apps.oab.kurallar.erisim import DonemBagi, kural
+from apps.oab.kurallar.erisim import DenetimSonucu, DonemBagi, denetle, kural
 
 
 @dataclass(frozen=True)
@@ -55,3 +61,27 @@ def genel_kurul_oylamasindaki_koltuklar(
         },
         "DK_VELI": dict(koltuklar["VELI"]),
     }
+
+
+class KararCogunluguHesaplanamadi(ValueError):
+    """Karar çoğunluğu kuralının olay gününde metni yok: sonuç hesaplanamaz (Türkçe ileti)."""
+
+
+def karar_cogunlugu(
+    kabul: int, payda: int, *, tarih: date, donem: DonemBagi | None = None
+) -> DenetimSonucu:
+    """Kabul oyunun paydaya oranını kuralla karşılaştırır: `uygun` karar alındı, `sert` alınmadı.
+
+    Payda oylamada salonda bulunan sayı ya da toplantının katılım sayısıdır (S2); sıfır paydada oran
+    sıfırdır (oy kullanılamaz, karar alınmamıştır). Sayıların doğruluğu (kabul + ret paydayı aşmaz)
+    çağıranındır.
+    """
+    if kabul < 0 or payda < 0:
+        raise ValueError("Oy ve katılım sayısı eksi olamaz.")
+    oran = Decimal(0) if payda == 0 else Decimal(kabul) / Decimal(payda)
+    sonuc = denetle("genel_kurul.karar_cogunlugu", oran, tarih=tarih, donem=donem)
+    if sonuc["durum"] not in ("uygun", "sert"):
+        raise KararCogunluguHesaplanamadi(
+            "Karar çoğunluğu kuralının olay günündeki metni yok; kararın sonucu hesaplanamadı."
+        )
+    return sonuc
