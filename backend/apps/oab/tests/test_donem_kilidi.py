@@ -693,6 +693,8 @@ YAZMA_SERVISLERI = frozenset(
         "genel_kurul.divani_iptal_et",
         "genel_kurul.tutanagi_tamamla",
         "genel_kurul.donem_gecisini_onayla",
+        # F2 7. adım: üyelerin başvurusunun gelen evrak bağının akış eksiği (U12).
+        "uyum.akis_eksigi",
     }
 )
 #: `@transaction.atomic` taşıyıp kural okumayan servisler ve gerekçesi.
@@ -762,6 +764,22 @@ KURALSIZ = {
     "donemler.toplanti_gunu_yaz": (
         "Yönetim kurulunun aylık toplantı günü serbest metindir, kural okumaz (md. 13/3 yalnız 'ayda "
         "bir' der; F1c 11. adım); dönem kilidi yine denetlenir."
+    ),
+    # F2 7. adım: gelen-giden evrak, asgari denetim raporu ve çağrı yazısının bağı kural okumaz.
+    "gelen_giden_evrak.evrak_defteri_olustur": (
+        "Gelen-giden evrak defteri dönemsizdir, kural okumaz (tasdikine ilişkin kural paketinde kural "
+        "yoktur; md. 23/2)."
+    ),
+    "gelen_giden_evrak.evrak_kaydet": (
+        "Evrak kaydı kural okumaz: numara tekilliği hesap bütünlüğüdür, sıra atlama akış satırıdır "
+        "(`uyum.akis_sapmasi` kendi yazma kapısından geçer); dönem kilidi yine denetlenir."
+    ),
+    "denetim.denetim_raporu_yaz": (
+        "Asgari denetim raporu kural okumaz (plan F2 §7 U13; md. 14/4'ün yılda iki incelemesi F4'te); "
+        "dönem kilidi yine denetlenir."
+    ),
+    "genel_kurul.cagri_yazisini_bagla": (
+        "Çağrı yazısının bağı kural okumaz: akış eksiğini kapatır (U12); dönem kilidi yine denetlenir."
     ),
     "evrak.kaydet": (
         "Evrak kaydı kural okumaz: içerik çizilmiş modeldir, kural paketi dönemin bağlı kopyasından "

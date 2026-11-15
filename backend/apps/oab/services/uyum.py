@@ -18,6 +18,10 @@ Akış satırı (`akis_sapmasi`): tasarımın bir akışa bağladığı, Yönetm
 dayanmayan uyarı + gerekçe (yönetim kurulu kararı bağlanmamış yedek çağrısı, tasarım §7.2; plan F1c
 kararları). Hiçbir maddenin satırına yazılmaz (atıf basılmaz): kimliği `akis.` önekli, paketi ve
 revizyonu boş `SAPMA` satırıdır; gerekçe öteki sapmalar gibi şifreli `ComplianceJustification`'dadır.
+Akış eksiği (`akis_eksigi`; F2 7. adım): aynı biçimde atıfsız, ama henüz girilmemiş bir bağın
+hatırlatmasıdır (üyelerin yazılı başvurusunun gelen evrak kaydı, plan F2 §7 U12): `EKSIK` satırıdır,
+gerekçe istemez; bağ girilince kapanır (`acik_satiri_kapat`), kapatıcı geçişte hâlâ açıksa öteki
+eksikler gibi gerekçeyle sapmaya döner (O3; gerekçesi toplu açıktır).
 
 Rol görünümü (`uyum_satiri_gorunumu`): görev alma engeli satırının kural kimliği (`uyelik.suc_engeli`,
 `yonetim_kurulu.tek_birlik`) satırda ve denetim izinde kalır; onu yalnız program yöneticisi ve yönetim
@@ -94,6 +98,10 @@ def _toplu_acik(
 
 
 def _kapanis_toplu_acik(satir: ComplianceItem, *, donem: OabTerm, tarih: date) -> bool:
+    if satir.rule_id.startswith(AKIS_ONEKI):
+        return (
+            True  # akış satırı kural paketinde değildir; gerekçesi toplu açıktır (`akis_sapmasi`)
+        )
     try:
         return _toplu_acik(satir.rule_id, donem=donem, tarih=tarih, olaylar=None)
     except BilinmeyenKural:
@@ -375,6 +383,42 @@ def akis_sapmasi(
         rev=None,
         message=mesaj,
         justification_group=bagli,
+        created_by_id=hesap,
+        updated_by_id=hesap,
+    )
+    denetim_izi.degisiklik(satir, onceki=None, compliance_item=satir.pk)
+    return satir
+
+
+@transaction.atomic
+def akis_eksigi(
+    akis_id: str,
+    mesaj: str,
+    *,
+    donem: OabTerm,
+    konu: models.Model,
+    hazirlik_yazimi: bool = False,
+) -> ComplianceItem:
+    """Akış eksiği (modül başlığı): gerekçe istemez; kaydın bu kimlikte açık satırı varsa yenisi
+    açılmaz, o döner."""
+    yazma_kapisi()
+    if not akis_id.startswith(AKIS_ONEKI):
+        raise ValueError("Akış satırının kimliği akış önekiyle başlar.")
+    donem = OabTerm.objects.select_related("rule_package").get(pk=donem.pk)
+    donem_kilidi.yazma_denetimi(donem, hazirlik_yazimi=hazirlik_yazimi)
+    acik = _acik_satir(donem, konu, akis_id)
+    if acik is not None:
+        return acik
+    hesap = iz.yazar_hesabi()
+    satir = ComplianceItem.objects.create(
+        term=donem,
+        kind=ComplianceKind.EKSIK,
+        subject_type=denetim_izi.model_etiketi(type(konu)),
+        subject_id=denetim_izi.kimlik_metni(type(konu), konu.pk),
+        rule_id=akis_id,
+        rule_package="",
+        rev=None,
+        message=mesaj,
         created_by_id=hesap,
         updated_by_id=hesap,
     )

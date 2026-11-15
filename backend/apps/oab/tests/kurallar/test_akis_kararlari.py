@@ -812,8 +812,9 @@ def test_yeni_okulun_ilk_genel_kurulunda_donem_acilir_veli_listesi_baglanir() ->
     """Plan F2 §5.2 "Yeni okulun ilk genel kurulu" (S5 (i)): kapanacak dönem yoktur. Onayla hazırlık
     dönemi `ACIK` olur (başlangıç genel kurulun günü), kapanış yazılmaz; açık dönem yokken aktarılmış
     dönemsiz veli satırları yeni döneme bağlanır (kişisiz tek `DURUM` olayı); okul idaresinin TEFBİS
-    girişleri yeni dönemin takvimine girer. Müdürün yeni okul çağrısı 7. adımdadır: çağrı durumu
-    burada model düzeyinde kurulur."""
+    girişleri yeni dönemin takvimine girer. Uçtan uca (F2 7. adım): program yöneticisi planlar, okul
+    müdürü kendi hesabından davet eder (md. 9/1; K2), ilan, toplantı ve tutanak program yöneticisinindir;
+    gelen-giden evrak defteri henüz yoktur, müdürün yazısı deftere işlenmez (bilgi satırı)."""
     gko.ders_yillari()
     gko.mevcut()
     SchoolConfig.objects.filter(pk=SchoolConfig.SINGLETON_PK).update(opened_on=date(2026, 9, 7))
@@ -821,8 +822,11 @@ def test_yeni_okulun_ilk_genel_kurulunda_donem_acilir_veli_listesi_baglanir() ->
     assert set(ParentRoster.objects.values_list("term", flat=True)) == {None}
     kurul = gko.planla()
     assert (kurul.term_id, kurul.called_by) == (None, AssemblyCaller.MUDUR_YENI_OKUL)
-    kurul.status = AssemblyStatus.CAGRILDI
-    kurul.save(update_fields=["status"])
+    with o.rol_olarak(AccountRole.MUDUR):
+        cagri = genel_kurul.cagir(kurul)
+    assert cagri.kurul.status == AssemblyStatus.CAGRILDI
+    assert cagri.kurul.call_document_id is None
+    assert genel_kurul.MUDUR_YAZISI_DEFTERSIZ in cagri.bilgiler
     genel_kurul.ilan_et(kurul, kanallar=gko.kanallar())
     genel_kurul.birinci_toplanti(kurul, katilim=gko.katilim(gko.KATILAN))
     genel_kurul.tutanagi_tamamla(kurul)

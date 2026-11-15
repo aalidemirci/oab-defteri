@@ -1,6 +1,7 @@
 """Genel kurul kuralları (`gk`, tasarım §10.3): yeter sayının hesabı ve anlık görüntüsü; F2 4.
 adımdan beri genel kurulun durum makinesinin kuralları, 5. adımdan beri gündem, karar ve divan
-kuralları, 6. adımdan beri seçim, ibra ve tutanak kuralları (dosyanın sonu).
+kuralları, 6. adımdan beri seçim, ibra ve tutanak kuralları (dosyanın sonu), 7. adımdan beri müdürün ve
+Denetleme Kurulunun çağrısı ile üyelerin başvurusunun gelen evrak bağı (çağıran testlerinin yanında).
 
 Yeter sayı 16 × 4 (mevcut ≥ 100) ya da 16 × 2 (mevcut < 100); taban kurul bileşiminden gelir, üyelik
 kaydı sayılmaz; olağanüstü genel kurulda da aynıdır (tasarım §12.A S-1, S-2 düzeltmeleri). Değerler
@@ -25,8 +26,11 @@ from apps.oab.models import (
     AssemblyMeeting,
     AssemblyMinutes,
     AssemblyStatus,
+    AuditReport,
     ComplianceItem,
     ComplianceKind,
+    DocumentDirection,
+    DocumentRecord,
     GeneralAssembly,
     MembershipRole,
     MembershipStatus,
@@ -36,7 +40,7 @@ from apps.oab.models import (
     PersonKind,
     TermStatus,
 )
-from apps.oab.services import donemler, uyum
+from apps.oab.services import denetim, donemler, gelen_giden_evrak, uyum
 from apps.oab.services import genel_kurul as genel_kurul_servisi
 from apps.oab.tests import genel_kurul_ortak as gko
 from apps.oab.tests import uyelik_ortak as o
@@ -479,10 +483,208 @@ def test_baskanin_13_8_cagrisi_listede() -> None:
     assert sonuc.uyarilar == ()
     assert sonuc.kurul.called_by == AssemblyCaller.BASKAN_VEYA_MUDUR_13_8
     assert sonuc.kurul.status == AssemblyStatus.CAGRILDI
+    # Başkanın çağrısı müdürün yazısı değildir: evrak defterine programca işlenmez (⁷). Yazanın rolü
+    # kayıttadır (E05'in imzası başkanın).
+    assert sonuc.kurul.call_document_id is None
+    assert sonuc.kurul.called_by_role == AccountRole.BASKAN
+    assert genel_kurul_servisi.cagri_sahibi(sonuc.kurul) is None
+
+
+@pytest.mark.django_db
+@pytest.mark.kural_davranis("genel_kurul.olaganustu_cagiranlar")
+def test_mudurun_13_8_cagrisi_mudur_hesabindan_listede() -> None:
+    """md. 13/8 "birlik başkanı ya da okul müdürü": müdürün hesabından müdürün eylemiyle
+    (`OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR`; tasarım §4.4.2 ¹) yazılır, çağıran listededir; müdürün yazısı
+    evrak defterine giden evrak olarak işlenir (⁷). Yazanın rolü kayıttadır (`called_by_role`): çağrı
+    müdürün yazısıdır, sahibi müdürdür."""
+    gko.acik_donem()
+    gelen_giden_evrak.evrak_defteri_olustur()
+    kurul = gko.planla(kind=AssemblyKind.OLAGANUSTU)
+    with o.rol_olarak(AccountRole.MUDUR):
+        sonuc = genel_kurul_servisi.cagir(
+            kurul,
+            called_by=AssemblyCaller.BASKAN_VEYA_MUDUR_13_8,
+            call_reason=gko.OLAGANUSTU_NEDEN,
+            gundem=gko.OLAGANUSTU_GUNDEM,
+        )
+    assert sonuc.uyarilar == ()
+    assert sonuc.kurul.called_by_role == AccountRole.MUDUR
+    assert genel_kurul_servisi.cagri_sahibi(sonuc.kurul) == "mudur"
+    yazi = DocumentRecord.objects.get()
+    assert sonuc.kurul.call_document_id == yazi.pk
+    assert (yazi.direction, yazi.subject) == (
+        DocumentDirection.GIDEN,
+        genel_kurul_servisi.MUDUR_YAZISI_KONUSU[AssemblyCaller.BASKAN_VEYA_MUDUR_13_8],
+    )
+
+
+@pytest.mark.django_db
+@pytest.mark.kural_davranis("genel_kurul.yeni_okul_ay")
+def test_yeni_okul_cagrisi_mudur_hesabindan() -> None:
+    """md. 9/1 "yeni açılan okullarda … okul müdürünün daveti"; K2 ve §15 M-11: davet müdürün yazısıdır,
+    müdürün hesabından yazılır (`Eylem.GENEL_KURUL_YENI_OKUL_DAVETI`; tasarım §4.4.2 ¹). Program yöneticisi,
+    yönetim kurulu rolleri ve Denetleme Kurulu yazamaz; ret hiçbir şey yazmaz. Müdür genel kurulun öteki
+    işlerinde okurdur (planlama, ilan). Kapanacak dönem yoktur (`term` boş, `opens_term` hazırlık dönemi;
+    S5 (i)); yönetim kurulu kararı bağı akış satırı yazılmaz. Gelen-giden evrak defteri kayıtlıysa müdürün
+    yazısı hazırlık dönemine giden evrak olarak programca işlenir (⁷), kaydın izi müdürün hesabıyladır."""
+    gko.ders_yillari()
+    gko.mevcut()
+    SchoolConfig.objects.filter(pk=SchoolConfig.SINGLETON_PK).update(opened_on=date(2026, 9, 15))
+    gelen_giden_evrak.evrak_defteri_olustur()
+    kurul = gko.planla(birinci=gko.an(date(2026, 11, 10)))
+    once = AuditTrail.objects.exclude(action=AuditAction.HESAP).count()
+    for rol in (
+        AccountRole.YONETICI,
+        AccountRole.SEKRETER,
+        AccountRole.BASKAN,
+        AccountRole.DENETLEME_KURULU,
+    ):
+        with o.rol_olarak(rol), pytest.raises(RolYetkisiz):
+            genel_kurul_servisi.cagir(kurul)
+    # Rolün oturumu için açılan hesabın `HESAP` satırı dışında iz yazılmaz.
+    assert AuditTrail.objects.exclude(action=AuditAction.HESAP).count() == once
+    assert GeneralAssembly.objects.get(pk=kurul.pk).status == AssemblyStatus.PLANLANDI
+    with o.rol_olarak(AccountRole.MUDUR) as mudur:
+        with pytest.raises(RolYetkisiz):
+            gko.planla(birinci=gko.an(date(2026, 11, 11)))
+        sonuc = genel_kurul_servisi.cagir(kurul)
+        with pytest.raises(RolYetkisiz):
+            genel_kurul_servisi.ilan_et(kurul, kanallar=gko.kanallar(date(2026, 10, 20)))
+    cagrilan = sonuc.kurul
+    assert (cagrilan.status, cagrilan.called_by, cagrilan.term_id) == (
+        AssemblyStatus.CAGRILDI,
+        AssemblyCaller.MUDUR_YENI_OKUL,
+        None,
+    )
+    assert cagrilan.opens_term is not None and cagrilan.opens_term.status == TermStatus.HAZIRLIK
+    assert sonuc.uyarilar == ()
+    assert not ComplianceItem.objects.filter(
+        rule_id=genel_kurul_servisi.KARARSIZ_CAGRI_AKISI
+    ).exists()
+    yazi = DocumentRecord.objects.get()
+    assert cagrilan.call_document_id == yazi.pk
+    assert (yazi.direction, yazi.term_id, yazi.record_no) == (
+        DocumentDirection.GIDEN,
+        cagrilan.opens_term_id,
+        1,
+    )
+    durum = AuditTrail.objects.filter(
+        model="oab.GeneralAssembly", object_id=str(kurul.pk), action=AuditAction.DURUM
+    ).latest("seq")
+    kayit_izi = AuditTrail.objects.get(model="oab.DocumentRecord", object_id=str(yazi.pk))
+    for satir in (durum, kayit_izi):
+        assert (str(satir.account_id), satir.role) == (str(mudur.id), "mudur")
+    assert kayit_izi.action == AuditAction.OLUSTUR
+
+
+def _md6_raporu(md6: bool = True, *, usulsuzluk: bool = False) -> AuditReport:
+    with o.rol_olarak(AccountRole.DENETLEME_KURULU):
+        return denetim.denetim_raporu_yaz(
+            kind="ARA",
+            report_date=date(2026, 9, 30),
+            md6_violation_found=md6,
+            irregularity_found=usulsuzluk,
+        )
+
+
+def _baska_donem() -> OabTerm:
+    """Genel kurulun döneminden başka bir birlik dönemi: olağan genel kurulun açtığı hazırlık dönemi
+    (kaydı başka döneme taşımak için; testin kurgusu)."""
+    hazirlik = OabTerm.objects.filter(status=TermStatus.HAZIRLIK).first()
+    if hazirlik is not None:
+        return hazirlik
+    acilan = gko.planla().opens_term
+    assert acilan is not None
+    return acilan
+
+
+def _dk_cagrisi(
+    kurul: GeneralAssembly,
+    rapor: AuditReport | None,
+    *,
+    yazi: DocumentRecord | None = None,
+) -> genel_kurul_servisi.GenelKurulSonucu:
+    return genel_kurul_servisi.cagir(
+        kurul,
+        called_by=AssemblyCaller.DENETLEME_KURULU,
+        call_reason=gko.OLAGANUSTU_NEDEN,
+        gundem=gko.OLAGANUSTU_GUNDEM,
+        call_document=yazi,
+        call_audit_report=rapor,
+    )
+
+
+@pytest.mark.django_db
+@pytest.mark.kural_davranis("genel_kurul.olaganustu_cagiranlar")
+def test_dk_14_5_cagrisi_yalniz_md6_aykirilik_isaretiyle() -> None:
+    """md. 14/5: Denetleme Kurulu, yönetim kurulunun md. 6'da sayılan görev ve yetkilere aykırı faaliyetini
+    tespit ederse olağanüstü genel kurulu çağırır. Çağrı yalnız md. 6 aykırılık işaretli raporla açılır
+    (kullanıcı kararı S6 (ii), sert): raporsuz ve yalnız usulsüzlük işaretli (`irregularity_found`, MB-10:
+    müdürün md. 27/3 yolu) raporla reddedilir, hiçbir şey yazılmaz. Çağrı Denetleme Kurulunun hesabından
+    (`Eylem.DK_GENEL_KURUL_YAZMA`; K2: yalnız denetim modülüne yazar); program yöneticisi ve yönetim kurulu
+    rolleri adına yazamaz. İki bağ aynı işlemde yazılır; çağıran listededir, uyarı yoktur."""
+    gko.acik_donem()
+    kurul = gko.planla(kind=AssemblyKind.OLAGANUSTU)
+    usulsuzluk = _md6_raporu(False, usulsuzluk=True)
+    isaretli = _md6_raporu()
+    with o.rol_olarak(AccountRole.DENETLEME_KURULU):
+        once = AuditTrail.objects.count()
+        for rapor in (None, usulsuzluk):
+            with pytest.raises(ValueError, match="md. 14/5"):
+                _dk_cagrisi(kurul, rapor)
+        assert AuditTrail.objects.count() == once
+    for rol in (AccountRole.YONETICI, AccountRole.SEKRETER, AccountRole.MUDUR):
+        with o.rol_olarak(rol), pytest.raises(RolYetkisiz):
+            _dk_cagrisi(kurul, isaretli)
+    # Yönetim kurulunun çağrısına denetim raporu bağlanmaz.
+    with o.rol_olarak(AccountRole.SEKRETER), pytest.raises(ValueError):
+        genel_kurul_servisi.cagir(
+            kurul,
+            called_by=AssemblyCaller.YONETIM_KURULU,
+            call_reason=gko.OLAGANUSTU_NEDEN,
+            gundem=gko.OLAGANUSTU_GUNDEM,
+            call_audit_report=isaretli,
+        )
+    assert GeneralAssembly.objects.get(pk=kurul.pk).status == AssemblyStatus.PLANLANDI
+    # Rapor genel kurulun birlik dönemine ait olmalıdır (S6 (ii), sert): başka dönemin işaretli raporu
+    # çağrı açmaz, hiçbir şey yazılmaz.
+    baska_donem = _md6_raporu()
+    AuditReport.objects.filter(pk=baska_donem.pk).update(term=_baska_donem())
+    with o.rol_olarak(AccountRole.DENETLEME_KURULU):
+        once = AuditTrail.objects.count()
+        with pytest.raises(ValueError, match="birlik dönemine ait"):
+            _dk_cagrisi(kurul, baska_donem)
+        assert AuditTrail.objects.count() == once
+    assert AuditReport.objects.get(pk=baska_donem.pk).escalated_assembly_id is None
+    assert GeneralAssembly.objects.get(pk=kurul.pk).status == AssemblyStatus.PLANLANDI
+    with o.rol_olarak(AccountRole.DENETLEME_KURULU):
+        sonuc = _dk_cagrisi(kurul, isaretli)
+    assert sonuc.uyarilar == ()
+    assert sonuc.kurul.called_by_role == AccountRole.DENETLEME_KURULU
+    # Denetleme Kurulunun yazısını program işlemez; evrak bağı girilmedi (bilgi satırı).
+    assert sonuc.kurul.call_document_id is None
+    assert genel_kurul_servisi.DK_YAZISI_BAGSIZ in sonuc.bilgiler
+    cagrilan = sonuc.kurul
+    assert (cagrilan.status, cagrilan.called_by, cagrilan.call_audit_report_id) == (
+        AssemblyStatus.CAGRILDI,
+        AssemblyCaller.DENETLEME_KURULU,
+        isaretli.pk,
+    )
+    assert AuditReport.objects.get(pk=isaretli.pk).escalated_assembly_id == kurul.pk
+    assert AuditReport.objects.get(pk=usulsuzluk.pk).escalated_assembly_id is None
+    assert genel_kurul_servisi.cagri_sahibi(cagrilan) == "denetleme_kurulu"
+    # Bir rapor iki genel kurulu çağırmaz.
+    ikinci = gko.planla(kind=AssemblyKind.OLAGANUSTU)
+    with o.rol_olarak(AccountRole.DENETLEME_KURULU), pytest.raises(ValueError):
+        _dk_cagrisi(ikinci, isaretli)
 
 
 def _uye_basvurusu(
-    basvuran: int | None, uye: int | None, gerekce: uyum.Gerekce | None = None
+    basvuran: int | None,
+    uye: int | None,
+    gerekce: uyum.Gerekce | None = None,
+    *,
+    yazi: DocumentRecord | None = None,
 ) -> genel_kurul_servisi.GenelKurulSonucu:
     if not OabTerm.objects.exists():
         gko.acik_donem()
@@ -494,37 +696,286 @@ def _uye_basvurusu(
         gundem=gko.OLAGANUSTU_GUNDEM,
         member_application_count=basvuran,
         member_count_declared=uye,
+        call_document=yazi,
         gerekce=gerekce,
     )
+
+
+def _basvuru_yazisi(yon: str = DocumentDirection.GELEN) -> DocumentRecord:
+    """Üyelerin yazılı başvurusunun gelen evrak kaydı (program yöneticisi; karşı taraf ve konu uydurma)."""
+    if gelen_giden_evrak.evrak_defteri() is None:
+        gelen_giden_evrak.evrak_defteri_olustur()
+    return gelen_giden_evrak.evrak_kaydet(
+        direction=yon,
+        tarih=date(2026, 9, 25),
+        counterparty="Uydurma başvuran üyeler",
+        subject="Olağanüstü genel kurul başvurusu",
+    ).kayit
 
 
 @pytest.mark.django_db
 @pytest.mark.kural_davranis("genel_kurul.olaganustu_basvuru_oran")
 def test_yuzde_10_alti_basvuru_uyari() -> None:
     """md. 9/6 "birlik üyelerinin %10'unun yazılı başvurusu": 9 / 100 uyarı + gerekçe (U12: üye sayısı
-    elle girilir); başvuruyu program yöneticisi kaydeder."""
+    elle girilir); başvuruyu program yöneticisi kaydeder. Başvuru yazısının gelen evrak bağı girilmemişse
+    akış eksiğidir (gerekçe istemez)."""
     with pytest.raises(GerekceGerekli):
         _uye_basvurusu(9, 100)
     sonuc = _uye_basvurusu(9, 100, gko.GEREKCE)
     (satir,) = _sapmalar("genel_kurul.olaganustu_basvuru_oran")
     assert satir.subject_id == str(sonuc.kurul.pk)
     assert (sonuc.kurul.member_application_count, sonuc.kurul.member_count_declared) == (9, 100)
-    assert sonuc.kurul.call_document_id is None  # gelen evrak bağı 7. adımda; eksik, gerekçesiz
-    assert genel_kurul_servisi.BASVURU_YAZISI_BILGISI in sonuc.bilgiler
+    assert sonuc.kurul.call_document_id is None
+    (eksik,) = _acik_satirlar(genel_kurul_servisi.BASVURU_YAZISI_AKISI)
+    assert (eksik.kind, eksik.subject_id) == (ComplianceKind.EKSIK, str(sonuc.kurul.pk))
 
 
 @pytest.mark.django_db
 @pytest.mark.kural_davranis("genel_kurul.olaganustu_basvuru_oran")
 def test_yuzde_10_basvuru_uyarisiz() -> None:
-    """10 / 100 tam sınır: uyarı yok (ondalık karşılaştırma, `Decimal`). Üye sayısı girilmemişse oran
-    eksiktir: gerekçe istemez, tamamlanacaklara düşer."""
-    sonuc = _uye_basvurusu(10, 100)
+    """10 / 100 tam sınır: uyarı yok (ondalık karşılaştırma, `Decimal`; başvuru yazısı bağlı). Üye sayısı
+    girilmemişse oran eksiktir: gerekçe istemez, tamamlanacaklara düşer."""
+    gko.acik_donem()
+    sonuc = _uye_basvurusu(10, 100, yazi=_basvuru_yazisi())
     assert sonuc.uyarilar == ()
     assert not ComplianceItem.objects.filter(rule_id="genel_kurul.olaganustu_basvuru_oran").exists()
-    sonuc = _uye_basvurusu(12, None)
+    sonuc = _uye_basvurusu(12, None, yazi=_basvuru_yazisi())
     (satir,) = _acik_satirlar("genel_kurul.olaganustu_basvuru_oran")
     assert satir.kind == ComplianceKind.EKSIK
     assert [u["durum"] for u in sonuc.uyarilar] == ["eksik"]
+
+
+@pytest.mark.django_db
+def test_yuzde_10_basvurusu_gelen_evrak_kaydina_baglanir() -> None:
+    """U12: üyelerin yazılı başvurusu gelen evrak olarak kaydedilir (`DocumentRecord(GELEN)`), kişi listesi
+    tutulmaz; çağrı yazısı bağı (`call_document`) çağrıda girilmezse akış eksiğidir (gerekçe istemez; 4.
+    adımda boş bırakılmıştı), sonra bağlanınca eksik kapanır ve kurulun özetinden düşer. Bağı başvuruyu
+    kaydeden program yöneticisi girer; giden evrak ve başka genel kurulun kaydı bağlanmaz (başka dönemin
+    kaydı: `test_baska_donemin_evrak_kaydi_cagri_yazisi_olarak_baglanmaz`), bağ bir kez girilir."""
+    gko.acik_donem()
+    sonuc = _uye_basvurusu(10, 100)
+    kurul = sonuc.kurul
+    assert [u["kural"] for u in sonuc.uyarilar] == [genel_kurul_servisi.BASVURU_YAZISI_AKISI]
+    assert [s["kural"] for s in kurul.rule_warnings] == [genel_kurul_servisi.BASVURU_YAZISI_AKISI]
+    (eksik,) = _acik_satirlar(genel_kurul_servisi.BASVURU_YAZISI_AKISI)
+    assert (eksik.kind, eksik.justification_group_id) == (ComplianceKind.EKSIK, None)
+
+    yazi = _basvuru_yazisi()
+    giden = _basvuru_yazisi(DocumentDirection.GIDEN)
+    with o.rol_olarak(AccountRole.SEKRETER), pytest.raises(RolYetkisiz):
+        genel_kurul_servisi.cagri_yazisini_bagla(kurul, kayit=yazi)
+    with o.rol_olarak(AccountRole.MUDUR), pytest.raises(RolYetkisiz):
+        genel_kurul_servisi.cagri_yazisini_bagla(kurul, kayit=yazi)
+    with pytest.raises(ValueError, match="gelen evrak"):
+        genel_kurul_servisi.cagri_yazisini_bagla(kurul, kayit=giden)
+    bagli = genel_kurul_servisi.cagri_yazisini_bagla(kurul, kayit=yazi).kurul
+    assert bagli.call_document_id == yazi.pk
+    assert bagli.rule_warnings == []
+    assert not _acik_satirlar(genel_kurul_servisi.BASVURU_YAZISI_AKISI)
+    assert ComplianceItem.objects.get(pk=eksik.pk).resolved_at is not None
+    with pytest.raises(ValueError, match="bağlı"):
+        genel_kurul_servisi.cagri_yazisini_bagla(kurul, kayit=_basvuru_yazisi())
+    # Aynı başvuru yazısı başka genel kurulun çağrı yazısı olamaz (tek kaynak).
+    with pytest.raises(ValueError, match="başka bir genel kurulun"):
+        _uye_basvurusu(10, 100, yazi=yazi)
+    # Başvurunun bağı yalnız üyelerin başvurusunda girilir.
+    yk_kurulu = gko.olaganustu_cagir(gko.planla(kind=AssemblyKind.OLAGANUSTU))
+    with pytest.raises(ValueError, match="yalnız üyelerin"):
+        genel_kurul_servisi.cagri_yazisini_bagla(yk_kurulu, kayit=_basvuru_yazisi())
+
+
+@pytest.mark.django_db
+def test_iptal_edilen_14_5_cagrisinin_raporu_yeni_cagriya_baglanir() -> None:
+    """md. 14/5 çağrısının iki bağı (S6 (ii)): iptal edilmiş genel kurulu gösteren rapor "başka genel
+    kurulu çağırmış" sayılmaz; Denetleme Kurulu aynı raporla yeniden çağırır, ikinci rapor gerekmez.
+    Raporun bağı izli güncellemeyle yeni kurula taşınır, iptal edilen kurulun bağı iz olarak kalır
+    (kayıt silinmez). İptal edilmemiş başka kurulu gösteren rapor ise yine çağrı açmaz."""
+    gko.acik_donem()
+    rapor = _md6_raporu()
+    ilk = gko.planla(kind=AssemblyKind.OLAGANUSTU)
+    with o.rol_olarak(AccountRole.DENETLEME_KURULU):
+        _dk_cagrisi(ilk, rapor)
+    _iptal(ilk)
+    yeni = gko.planla(kind=AssemblyKind.OLAGANUSTU)
+    with o.rol_olarak(AccountRole.DENETLEME_KURULU):
+        sonuc = _dk_cagrisi(yeni, rapor)
+    assert (sonuc.kurul.status, sonuc.kurul.call_audit_report_id) == (
+        AssemblyStatus.CAGRILDI,
+        rapor.pk,
+    )
+    assert AuditReport.objects.get(pk=rapor.pk).escalated_assembly_id == yeni.pk
+    iptal_edilen = GeneralAssembly.objects.get(pk=ilk.pk)
+    assert (iptal_edilen.status, iptal_edilen.call_audit_report_id) == (
+        AssemblyStatus.IPTAL,
+        rapor.pk,
+    )
+    izler = AuditTrail.objects.filter(model="oab.AuditReport", object_id=str(rapor.pk))
+    assert izler.filter(action=AuditAction.GUNCELLE).count() == 2
+    ucuncu = gko.planla(kind=AssemblyKind.OLAGANUSTU)
+    with (
+        o.rol_olarak(AccountRole.DENETLEME_KURULU),
+        pytest.raises(ValueError, match="başka bir olağanüstü genel kurulun"),
+    ):
+        _dk_cagrisi(ucuncu, rapor)
+
+
+def _dk_yazisi(yon: str = DocumentDirection.GIDEN) -> DocumentRecord:
+    """Denetleme Kurulunun çağrı yazısının evrak kaydı (program yöneticisi; metinler uydurma)."""
+    if gelen_giden_evrak.evrak_defteri() is None:
+        gelen_giden_evrak.evrak_defteri_olustur()
+    return gelen_giden_evrak.evrak_kaydet(
+        direction=yon,
+        tarih=date(2026, 9, 30),
+        counterparty="Uydurma birlik üyeleri",
+        subject="Denetleme Kurulunun olağanüstü genel kurul çağrısı",
+    ).kayit
+
+
+@pytest.mark.django_db
+def test_dk_cagrisinin_yazisi_evrak_kaydina_baglanir() -> None:
+    """Tasarım §5.2.3 `call_document` ("müdür ya da DK yazısı, üye başvurusu") ve plan F2 §1.1-11:
+    Denetleme Kurulunun çağrı yazısının evrak kaydı çağrıya bağlanır. Program DK'nin yazısını işlemez
+    (DK evrak kaydı yazmaz, M10): kaydı yetkili rol girer, bağ çağrıda ya da sonra program yöneticisince
+    girilir. Yazının yönü denetlenmez (kaynaklar söylemez). Bağ girilmemişse bilgi satırıdır (eksik
+    değil); Denetleme Kurulu, sekreter ve müdür bağ giremez."""
+    gko.acik_donem()
+    yazi = _dk_yazisi()
+    kurul = gko.planla(kind=AssemblyKind.OLAGANUSTU)
+    with o.rol_olarak(AccountRole.DENETLEME_KURULU):
+        sonuc = _dk_cagrisi(kurul, _md6_raporu(), yazi=yazi)
+    assert sonuc.kurul.call_document_id == yazi.pk
+    assert genel_kurul_servisi.DK_YAZISI_BAGSIZ not in sonuc.bilgiler
+
+    ikinci = gko.planla(kind=AssemblyKind.OLAGANUSTU)
+    with o.rol_olarak(AccountRole.DENETLEME_KURULU):
+        ikinci = _dk_cagrisi(ikinci, _md6_raporu()).kurul
+    sonra = _dk_yazisi(DocumentDirection.GELEN)
+    for rol in (AccountRole.DENETLEME_KURULU, AccountRole.SEKRETER, AccountRole.MUDUR):
+        with o.rol_olarak(rol), pytest.raises(RolYetkisiz):
+            genel_kurul_servisi.cagri_yazisini_bagla(ikinci, kayit=sonra)
+    assert GeneralAssembly.objects.get(pk=ikinci.pk).call_document_id is None
+    with pytest.raises(ValueError, match="başka bir genel kurulun"):
+        genel_kurul_servisi.cagri_yazisini_bagla(ikinci, kayit=yazi)
+    bagli = genel_kurul_servisi.cagri_yazisini_bagla(ikinci, kayit=sonra).kurul
+    assert bagli.call_document_id == sonra.pk
+    assert not ComplianceItem.objects.filter(
+        rule_id=genel_kurul_servisi.BASVURU_YAZISI_AKISI
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_cagri_yazisi_bagi_mudurun_ve_yk_cagrisinda_girilmez() -> None:
+    """Çağrı yazısı bağı yalnız üyelerin başvurusunda ve Denetleme Kurulunun çağrısında girilir: yönetim
+    kurulunun çağrısında yazı yoktur, müdürün yazısını program işler (⁷). Verilen kayıt reddedilir;
+    kurul planlı kalır, evrak kaydı ve iz yazılmaz (müdürün yazısı da işlenmez)."""
+    gko.acik_donem()
+    yazi = _basvuru_yazisi()
+    kurul = gko.planla(kind=AssemblyKind.OLAGANUSTU)
+    once = (
+        DocumentRecord.objects.count(),
+        AuditTrail.objects.exclude(action=AuditAction.HESAP).count(),
+    )
+    for rol, cagiran in (
+        (AccountRole.SEKRETER, AssemblyCaller.YONETIM_KURULU),
+        (AccountRole.MUDUR, AssemblyCaller.OKUL_MUDURU),
+    ):
+        with o.rol_olarak(rol), pytest.raises(ValueError, match="yalnız üyelerin"):
+            genel_kurul_servisi.cagir(
+                kurul,
+                called_by=cagiran,
+                call_reason=gko.OLAGANUSTU_NEDEN,
+                gundem=gko.OLAGANUSTU_GUNDEM,
+                call_document=yazi,
+            )
+    assert (
+        DocumentRecord.objects.count(),
+        AuditTrail.objects.exclude(action=AuditAction.HESAP).count(),
+    ) == once
+    guncel = GeneralAssembly.objects.get(pk=kurul.pk)
+    assert (guncel.status, guncel.call_document_id) == (AssemblyStatus.PLANLANDI, None)
+
+
+@pytest.mark.django_db
+def test_baska_donemin_evrak_kaydi_cagri_yazisi_olarak_baglanmaz() -> None:
+    """Çağrı yazısının evrak kaydı genel kurulun birlik dönemine ait olmalıdır (tek kaynak): başka dönemin
+    gelen evrakı ne çağrıda ne sonra bağlanır; ret hiçbir şey yazmaz, akış eksiği açık kalır."""
+    gko.acik_donem()
+    baska = _basvuru_yazisi()
+    DocumentRecord.objects.filter(pk=baska.pk).update(term=_baska_donem())
+    kurul = gko.planla(kind=AssemblyKind.OLAGANUSTU)
+    once = AuditTrail.objects.count()
+    with pytest.raises(ValueError, match="birlik dönemine ait"):
+        genel_kurul_servisi.cagir(
+            kurul,
+            called_by=AssemblyCaller.UYE_BASVURUSU,
+            call_reason=gko.OLAGANUSTU_NEDEN,
+            gundem=gko.OLAGANUSTU_GUNDEM,
+            member_application_count=10,
+            member_count_declared=100,
+            call_document=baska,
+        )
+    assert AuditTrail.objects.count() == once
+    assert GeneralAssembly.objects.get(pk=kurul.pk).status == AssemblyStatus.PLANLANDI
+    cagrilan = _uye_basvurusu(10, 100).kurul
+    once = AuditTrail.objects.count()
+    with pytest.raises(ValueError, match="birlik dönemine ait"):
+        genel_kurul_servisi.cagri_yazisini_bagla(cagrilan, kayit=baska)
+    assert AuditTrail.objects.count() == once
+    assert GeneralAssembly.objects.get(pk=cagrilan.pk).call_document_id is None
+    (eksik,) = _acik_satirlar(genel_kurul_servisi.BASVURU_YAZISI_AKISI)
+    assert eksik.subject_id == str(cagrilan.pk)
+
+
+@pytest.mark.django_db
+def test_iptal_edilen_basvurunun_yazisi_yeni_cagriya_baglanir_iptalde_bag_girilmez() -> None:
+    """Bağ tutanak tamamlanana dek girilir: iptal edilmiş genel kurula bağ girilmez (durum kapısı).
+    İptal edilmiş genel kurulun başvuru yazısı "başka genel kurulun yazısı" sayılmaz, yeni çağrıya
+    bağlanır; iptal edilen kurulun bağı iz olarak kalır (kayıt silinmez)."""
+    gko.acik_donem()
+    yazi = _basvuru_yazisi()
+    ilk = _uye_basvurusu(10, 100, yazi=yazi).kurul
+    _iptal(ilk)
+    yazisiz = _uye_basvurusu(10, 100).kurul
+    _iptal(yazisiz)
+    sonra = _basvuru_yazisi()
+    once = AuditTrail.objects.count()
+    with pytest.raises(ValueError, match="bu durumdayken"):
+        genel_kurul_servisi.cagri_yazisini_bagla(yazisiz, kayit=sonra)
+    assert AuditTrail.objects.count() == once
+    assert GeneralAssembly.objects.get(pk=yazisiz.pk).call_document_id is None
+    yeni = _uye_basvurusu(10, 100, yazi=yazi).kurul
+    assert yeni.call_document_id == yazi.pk
+    assert GeneralAssembly.objects.get(pk=ilk.pk).call_document_id == yazi.pk
+
+
+@pytest.mark.django_db
+def test_basvuru_yazisi_eksigi_tutanak_tamamlanirken_gerekceyle_sapmaya_doner() -> None:
+    """U12 ve O3: üyelerin başvurusuyla (10/100, yazısız) çağrılan, ilan edilen ve birinci toplantıda
+    yapılan genel kurulda başvuru yazısının akış eksiği tutanak tamamlanırken hâlâ açıksa gerekçe ister
+    (kural paketinde olmayan akış satırı da kapatıcı geçişe girer); gerekçesiz ret hiçbir şey yazmaz.
+    Gerekçeyle satır sapmaya döner ve gerekçeye bağlanır, kurul `TUTANAK_TAMAM`; sonra bağ girilmez."""
+    gko.acik_donem()
+    kurul = _uye_basvurusu(10, 100).kurul
+    genel_kurul_servisi.ilan_et(kurul, kanallar=gko.kanallar())
+    genel_kurul_servisi.birinci_toplanti(kurul, katilim=gko.katilim(gko.KATILAN))
+    (eksik,) = _acik_satirlar(genel_kurul_servisi.BASVURU_YAZISI_AKISI)
+    once = (list(ComplianceItem.objects.order_by("pk").values()), AuditTrail.objects.count())
+    with pytest.raises(GerekceGerekli) as hata:
+        genel_kurul_servisi.tutanagi_tamamla(kurul)
+    assert genel_kurul_servisi.BASVURU_YAZISI_EKSIK in str(hata.value.detail)
+    assert (
+        list(ComplianceItem.objects.order_by("pk").values()),
+        AuditTrail.objects.count(),
+    ) == once
+    assert GeneralAssembly.objects.get(pk=kurul.pk).status == AssemblyStatus.YAPILDI
+    sonuc = genel_kurul_servisi.tutanagi_tamamla(kurul, gerekce=gko.GEREKCE)
+    assert sonuc.kurul.status == AssemblyStatus.TUTANAK_TAMAM
+    eksik.refresh_from_db()
+    assert (eksik.kind, eksik.resolved_at) == (ComplianceKind.SAPMA, None)
+    assert eksik.justification_group is not None
+    with pytest.raises(ValueError, match="bu durumdayken"):
+        genel_kurul_servisi.cagri_yazisini_bagla(kurul, kayit=_basvuru_yazisi())
+    assert GeneralAssembly.objects.get(pk=kurul.pk).call_document_id is None
 
 
 @pytest.mark.django_db

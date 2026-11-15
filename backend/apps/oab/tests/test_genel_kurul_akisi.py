@@ -84,7 +84,7 @@ def test_rol_yetkisiz_403_yaniti_olur() -> None:
     ],
 )
 def test_planlama_yalniz_program_yoneticisi_ve_sekreter(rol: AccountRole) -> None:
-    """Denetleme Kurulu ve müdür genel kurulu okur (M3; müdürün kendi yazıları 7. adımda); başkan,
+    """Denetleme Kurulu ve müdür genel kurulu okur (M3; müdürün kendi yazısı çağrıdır); başkan,
     başkan yardımcısı ve muhasip M3'te yazar ama planlamanın "Kim"i değildir. Ret yazmaz."""
     gko.acik_donem()
     with o.rol_olarak(rol), pytest.raises(RolYetkisiz):
@@ -120,8 +120,8 @@ def test_mudurun_ve_denetleme_kurulunun_cagrisi_bu_yoldan_kaydedilmez(
     cagiran: str, rol: AccountRole
 ) -> None:
     """Müdürün (md. 9/1, 9/6, 25/2) ve Denetleme Kurulunun (md. 14/5) çağrısı kendi hesaplarından,
-    kendi eylemleriyle yazılır (7. adım); program yöneticisi ve yönetim kurulu rolleri adlarına
-    kaydedemez."""
+    kendi eylemleriyle yazılır (F2 7. adım; tasarım §4.4.2 ¹, ⁵, §15 M-11); program yöneticisi ve
+    yönetim kurulu rolleri adlarına kaydedemez."""
     gko.acik_donem()
     kurul = gko.planla(kind=AssemblyKind.OLAGANUSTU)
     with o.rol_olarak(rol), pytest.raises(RolYetkisiz):

@@ -6,8 +6,9 @@ alanlarını ve model düzeyindeki durum makinesini (`models.genel_kurul`) getir
 servisidir: planlama, çağrı, ilan, birinci toplantı, yeter sayı yok, ikinci toplantının ilanı ve kendisi,
 iptal (4. adım); gündem değişikliği, gündeme bağlılık, karar sonucu, divan, katılım düzeltmesi ve katılım
 işareti (5. adım); aday ve seçim, ibra ve "ibra edilmedi" yan akışı, tutanağın tamamlanması ve dönem
-geçişinin onayı (6. adım). Müdürün ve Denetleme Kurulunun yazıları (yeni okul daveti, müdürün olağanüstü
-çağrısı, md. 14/5 çağrısı) ve gelen-giden evrak bağı 7. adımdadır. Uç ve ekran 11. adımdadır.
+geçişinin onayı (6. adım); müdürün ve Denetleme Kurulunun çağrısı (yeni okul daveti, müdürün olağanüstü
+çağrısı, md. 14/5 çağrısı), çağrı yazısının gelen-giden evrak bağı ve ilan kanıtının eki (7. adım). Uç
+ve ekran 11. adımdadır.
 
 KİM (tasarım §4.4.2 M3 ve §7.1 "Kim" sütunu; Kim matrisi daraltır, genişletemez). Her yazma önce
 `Eylem.GENEL_KURUL_YAZMA` kapısından geçer (program yöneticisi ve yönetim kurulu rolleri; müdür ve
@@ -18,8 +19,32 @@ yöneticisi. Gündem, karar, divan ve katılım düzeltmesi tutanağın işidir 
 TUTANAK_TAMAM` "Kim"): program yöneticisi ve sekreter; aday kaydı, seçim, ibra ve tutanağın
 tamamlanması da. Dönem geçişini yalnız program yöneticisi onaylar (U32; M1, `Eylem.BIRLIK_DONEMI_YAZMA`).
 Katılım işareti veli adını gösterir (R9, dipnot ¹⁰; U33): yalnız program yöneticisi, kişisel veri içeren
-çıktı kapısıyla. Müdürün (md. 9/1 yeni okul, 9/6, 13/8, 25/2) ve Denetleme Kurulunun (md. 14/5) çağrısının
-kendi eylemleri 7. adımda bağlanır; o güne dek bu çağıranlar hiçbir rolle kaydedilmez (`RolYetkisiz`).
+çıktı kapısıyla.
+
+MÜDÜR VE DENETLEME KURULU (K2; tasarım §4.4.2 ¹, ⁵, ⁷; §7.1 çağrı satırları; §15 M-5, M-6, M-11; F2 7.
+adım). Müdür genel kurulun öteki işlerinde okurdur, yalnız kendi yazısını yazar: yeni açılan okulda
+genel kurul daveti (md. 9/1; `Eylem.GENEL_KURUL_YENI_OKUL_DAVETI`) ve olağanüstü genel kurul çağrısı
+(md. 9/6, 13/8, 25/2; `Eylem.OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR`). md. 13/8'in çağıranı "başkan ya da
+müdür"dür: başkanın hesabından yönetim kurulu kapısıyla, müdürün hesabından müdürün eylemiyle yazılır;
+hangisinin yazdığı kayıttadır (`called_by_role`, çağrıda yazanın rolü). Program yöneticisi müdürün yazısının taslağını hazırlamaz (M-11): müdürün çağıranları müdürün hesabı
+dışında kaydedilmez. Denetleme Kurulu yalnız denetim modülüne yazar; md. 14/5 çağrısı oradandır
+(`Eylem.DK_GENEL_KURUL_YAZMA`): çağrı yalnız md. 6 aykırılık işaretli, aynı dönemin, başka genel kurulu
+çağırmamış denetim raporuyla açılır (kullanıcı kararı S6 (ii), sert — hukuken geçersiz işlem); iki bağ
+(`call_audit_report`, raporun `escalated_assembly`'si) aynı işlemde yazılır. Müdür ya da Denetleme Kurulu
+çağırsa da planlama, ilan ve toplantılar program yöneticisi ve sekreterdedir (§7.1 "Kim").
+SAHİPLİK (plan F1b-2 "kayıt sahipliği rol düzeyindedir"; tasarım §4.4.2 "müdür yalnız kendi yazısını
+düzenler"): çağrının yazısı çağıranındır (`cagri_sahibi`; md. 13/8'de müdür yazdıysa müdürün). Müdürün ya
+da Denetleme Kurulunun çağırdığı genel kurulda çağrıdaki toplantı zamanı, yeri ve gündem sırası ilandan
+önce (`CAGRILDI`) yalnız yazının sahibince, çağrının eylemiyle düzenlenir (`_duzenleme_kapisi`); başka rol
+değiştirmez. Toplantıdaki gündem değişikliği genel kurulun kararıdır (md. 9/4).
+EVRAK DEFTERİ (⁷): müdürün yazısı gelen-giden evrak defterine program tarafından giden evrak olarak
+işlenir ve çağrı yazısı bağı (`call_document`) olur (`gelen_giden_evrak.mudur_yazisini_isle`); defter
+kaydedilmemişse işlenmez, bilgi satırı döner. Konusu çağıranla genel kurulun türünden seçilir
+(`mudur_yazisi_konusu`). Denetleme Kurulunun yazısını program işlemez (DK evrak kaydı yazmaz, M10):
+yetkili rolün kaydettiği evrak kaydı çağrıda ya da sonra (`cagri_yazisini_bagla`) bağlanır (tasarım
+§5.2.3 `call_document`, plan F2 §1.1-11); bağ girilmemişse bilgi satırı döner. Bağı iptal edilmiş genel
+kurulu gösteren evrak kaydı ve denetim raporu yeni çağrıya bağlanabilir (iptal edilen kurulun bağı iz
+olarak kalır).
 
 KURALLAR (altın kural 1-3). Değerler kural paketindedir; kurallar kapanacak dönemin kopyasından, yeni
 okulun ilk genel kurulunda hazırlık döneminin kopyasından okunur (U1). Kopya genel kurul kurallarını
@@ -51,8 +76,10 @@ denetimine girmez. Olağanüstü genel kurulda tohum yoktur; gündem çağrı ne
 dek atıfsız akış satırıdır, uyarı + gerekçe (kullanıcı kararı S1; `KARARSIZ_CAGRI_AKISI`). Olağanüstüde
 çağıran ve çağrı nedeni zorunludur, çağıran `genel_kurul.olaganustu_cagiranlar` ile denetlenir; üyelerin
 yazılı başvurusunda oran başvuran sayısı / elle girilen üye sayısıdır (U12;
-`genel_kurul.olaganustu_basvuru_oran`), biri girilmemişse eksiktir. Başvuru yazısının gelen evrak bağı
-(`call_document`) 7. adımdadır; o güne dek boştur ve eksik sayılır (gerekçe istemez, satır açılmaz).
+`genel_kurul.olaganustu_basvuru_oran`), biri girilmemişse eksiktir. Başvuru yazısı gelen evrak olarak
+kaydedilir, kişi listesi tutulmaz (U12): çağrı yazısı bağı (`call_document`) `DocumentRecord(GELEN)`'dir;
+çağrıda ya da sonra (`cagri_yazisini_bagla`) girilir, girilmemişse akış eksiğidir (`BASVURU_YAZISI_AKISI`;
+gerekçe istemez, bağ girilince kapanır, tutanak tamamlanırken hâlâ açıksa gerekçeyle sapmaya döner).
 
 İLAN (U7-U10). Her ilan bir `Announcement` kaydıdır; üç kanalın kanıt günleri ayrı alanlardır. 15 gün
 her kanal için ayrıdır, bağlayıcı olan en geç kanalın günüdür (U9); kanalı eksik ilan
@@ -159,10 +186,13 @@ from apps.oab.models import (
     AssemblyStatus,
     AttendanceCorrection,
     AttendanceKind,
+    AuditReport,
     ComplianceItem,
     ComplianceKind,
     ComplianceObligation,
     Discharge,
+    DocumentDirection,
+    DocumentRecord,
     DropKind,
     ElectedBy,
     GeneralAssembly,
@@ -177,6 +207,8 @@ from apps.oab.models import (
 )
 from apps.oab.models.genel_kurul import (
     BASLIK_MAX,
+    DK_RAPORU_BASKA_KURULDA,
+    DK_RAPORU_ISARETSIZ,
     DONDURULAN_ALANLAR,
     DUZELTILEBILIR_ALANLAR,
     YER_MAX,
@@ -185,6 +217,7 @@ from apps.oab.services import (
     donem_kilidi,
     donemler,
     gecis,
+    gelen_giden_evrak,
     iz,
     kural_bagi,
     uyelik_gecisleri,
@@ -192,9 +225,17 @@ from apps.oab.services import (
     uyum,
 )
 from apps.okul import denetim_izi, erisim_gunlugu, excel_veli, normalize, rol_izinleri
-from apps.okul.models import AccessKind, AccountRole, AuditAction, ParentRoster, SchoolConfig
+from apps.okul.models import (
+    AccessKind,
+    AccountRole,
+    Attachment,
+    AttachmentSensitivity,
+    AuditAction,
+    ParentRoster,
+    SchoolConfig,
+)
 from apps.okul.oturum import yazar
-from apps.okul.services import app_password
+from apps.okul.services import app_password, dosya_deposu
 from shared.crypto import is_corrupt
 from shared.exceptions import RolYetkisiz
 
@@ -247,6 +288,20 @@ SAYI_GECERSIZ = "Sayılar sıfır ya da pozitif tam sayı olmalıdır."
 UYE_SAYISI_SIFIR = "Birlik üye sayısı sıfırdan büyük olmalıdır."
 BASVURAN_UYEDEN_COK = "Başvuran üye sayısı birlik üye sayısından büyük olamaz."
 IKINCI_TOPLANTI_SIRASI = "İkinci toplantı birinci toplantıdan sonra olmalıdır."
+DK_RAPORU_GEREKLI = (
+    "Denetleme Kurulunun olağanüstü genel kurul çağrısı, yönetim kurulunun md. 6'ya aykırı faaliyeti "
+    "işaretlenmiş denetim raporuyla açılır (md. 14/5); rapor seçilmelidir."
+)
+DK_RAPORU_DONEMI = "Denetim raporu genel kurulun birlik dönemine ait olmalıdır."
+DENETIM_RAPORU_YALNIZ_DK = "Denetim raporu yalnız Denetleme Kurulunun çağrısına bağlanır."
+CAGRI_YAZISI_YALNIZ_BASVURUDA = (
+    "Çağrı yazısı bağı yalnız üyelerin yazılı başvurusunda ve Denetleme Kurulunun çağrısında girilir; "
+    "müdürün yazısını program işler."
+)
+CAGRI_YAZISI_GELEN_OLMALI = "Üyelerin yazılı başvurusu gelen evrak kaydıdır (md. 9/6)."
+CAGRI_YAZISI_DONEMI = "Çağrı yazısının evrak kaydı genel kurulun birlik dönemine ait olmalıdır."
+CAGRI_YAZISI_BASKA_KURULDA = "Bu evrak kaydı başka bir genel kurulun çağrı yazısı."
+CAGRI_YAZISI_BAGLI = "Bu genel kurulun çağrı yazısı bağlı."
 IKINCI_TOPLANTI_TARIHI_YOK = (
     "İkinci toplantının tarihi ilan edilmedi; önce ikinci toplantının ilanını kaydedin."
 )
@@ -354,8 +409,22 @@ OLAGANUSTU_DONEM_ACMAZ_BILGISI: Final = (
 GUNDEME_BAGLILIK_BILGISI: Final = (
     "Olağanüstü genel kurulda gündeme bağlılık ilkesi geçerlidir (md. 9/6)."
 )
-BASVURU_YAZISI_BILGISI: Final = (
-    "Üyelerin yazılı başvurusu gelen evrak kaydına bağlanmadı; bağ eksik sayılır, gerekçe istemez."
+#: Müdür yazısının evrak defterine işlenmesinin bilgi satırları (⁷).
+MUDUR_YAZISI_ISLENDI: Final = (
+    "Müdürün yazısı gelen-giden evrak defterine giden evrak olarak işlendi ({yil}/{no})."
+)
+MUDUR_YAZISI_DEFTERSIZ: Final = (
+    "Gelen-giden evrak defteri kaydedilmediği için müdürün yazısı evrak defterine işlenmedi."
+)
+#: Denetleme Kurulunun yazısının evrak bağı girilmediğinde (modül başlığı "Evrak defteri").
+DK_YAZISI_BAGSIZ: Final = (
+    "Denetleme Kurulunun çağrı yazısı gelen-giden evrak defterine kaydedilince çağrıya bağlanır."
+)
+#: Üyelerin yazılı başvurusunun gelen evrak bağının akış eksiği (U12; atıf basılmaz, gerekçe istemez).
+BASVURU_YAZISI_AKISI: Final = "akis.genel_kurul_basvuru_yazisi"
+BASVURU_YAZISI_EKSIK: Final = (
+    "Üyelerin yazılı başvurusu gelen evrak kaydına bağlanmadı; başvuru yazısı gelen evrak olarak "
+    "kaydedilip bağlanınca eksik kapanır (program hatırlatmasıdır)."
 )
 VELI_LISTESI_ONERISI: Final = (
     "Veli listesi aktarılmadı. Elden yazılı davetin sınıf başına adedi ve katılım cetveli için okulun "
@@ -379,12 +448,44 @@ IPTAL_EDEN_ROLLER: Final = frozenset({_YONETICI})
 TUTANAK_ROLLERI: Final = frozenset({_YONETICI, _SEKRETER})
 #: Katılım işareti (U33; R9, dipnot ¹⁰): yalnız program yöneticisi.
 ISARET_ROLLERI: Final = frozenset({_YONETICI})
-#: §7.1 çağrı "Kim"i, çağırana göre. Müdürün ve Denetleme Kurulunun çağrısı bu tabloda yoktur (7. adım).
+_MUDUR: Final = AccountRole.MUDUR.value
+_DENETLEME_KURULU: Final = AccountRole.DENETLEME_KURULU.value
+#: §7.1 çağrı "Kim"i, genel kurul yazma kapısından geçen çağıranlar. Müdürün ve Denetleme Kurulunun
+#: çağrısı kendi eylemleriyle yazılır (`_cagri_kapisi`); md. 13/8'in müdür kolu da.
 CAGIRAN_ROLLERI: Final[Mapping[str, frozenset[str]]] = {
     AssemblyCaller.YONETIM_KURULU: frozenset({_SEKRETER}),
     AssemblyCaller.BASKAN_VEYA_MUDUR_13_8: frozenset({_BASKAN}),
     AssemblyCaller.UYE_BASVURUSU: frozenset({_YONETICI}),
 }
+#: Yalnız müdürün yazabildiği çağıranlar (md. 9/1 yeni okul, 9/6, 25/2; ¹, M-5).
+MUDUR_CAGIRANLARI: Final = frozenset(
+    {AssemblyCaller.OKUL_MUDURU, AssemblyCaller.MUDUR_25_2, AssemblyCaller.MUDUR_YENI_OKUL}
+)
+#: Müdürün yazısının eylemleri (¹; sahiplikli): yazısı evrak defterine programca işlenir (⁷).
+_MUDUR_EYLEMLERI: Final = frozenset(
+    {
+        rol_izinleri.Eylem.GENEL_KURUL_YENI_OKUL_DAVETI,
+        rol_izinleri.Eylem.OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR,
+    }
+)
+#: Müdürün yazısının programca evrak kaydında konu (kişisiz; ⁷). md. 25/2 çağrıyı kendi metninde
+#: saymaz, yetki md. 9/6'daki 2023 ek ibaresindendir (plan F2 §3.2).
+MUDUR_YAZISI_KONUSU: Final[Mapping[str, str]] = {
+    AssemblyCaller.MUDUR_YENI_OKUL: "Genel kurul toplantı çağrısı (yeni açılan okul; md. 9/1)",
+    AssemblyCaller.OKUL_MUDURU: "Olağanüstü genel kurul toplantı çağrısı (md. 9/6)",
+    AssemblyCaller.BASKAN_VEYA_MUDUR_13_8: "Olağanüstü genel kurul toplantı çağrısı (md. 13/8)",
+    AssemblyCaller.MUDUR_25_2: "Olağanüstü genel kurul toplantı çağrısı (md. 9/6, 25/2)",
+}
+
+
+def mudur_yazisi_konusu(kind: str, cagiran: str) -> str:
+    """Müdürün yazısının evrak kaydındaki konusu: çağırana ve genel kurulun türüne göre. Yeni açılan
+    okulun daveti (md. 9/1) olağan genel kuruldur; olağanüstü genel kurulda `MUDUR_YENI_OKUL` listede
+    olmayan çağırandır (uyarı + gerekçe, plan F2 §3.2), yazı müdürün olağanüstü çağrısıdır (md. 9/6)."""
+    if cagiran == AssemblyCaller.MUDUR_YENI_OKUL and kind == AssemblyKind.OLAGANUSTU:
+        return MUDUR_YAZISI_KONUSU[AssemblyCaller.OKUL_MUDURU]
+    return MUDUR_YAZISI_KONUSU[cagiran]
+
 
 # ---------------------------------------------------------------------------
 # Kurallar, gündem tohumu, ilan kanalları
@@ -585,6 +686,19 @@ class _Tur:
         }
         if kurulun:
             self.ozet_satirlari[akis_id] = satir
+        self.uyarilar.append(satir)
+
+    def akis_eksik(self, akis_id: str, mesaj: str) -> None:
+        """Atıfsız akış eksiği (gerekçe istemez) dönen uyarılara ve kurulun özetine girer."""
+        satir: dict[str, Any] = {
+            "kural": akis_id,
+            "atif": "",
+            "mesaj": mesaj,
+            "durum": "eksik",
+            "paket": "",
+            "rev": None,
+        }
+        self.ozet_satirlari[akis_id] = satir
         self.uyarilar.append(satir)
 
     def ozet(self) -> list[dict[str, Any]]:
@@ -1028,10 +1142,11 @@ def toplanti_bilgisini_degistir(
     yeniden denetlenir (plan F2 §3.1 "PLANLANDI ve tarih değişiminde"), hazırlık döneminin ders yılı
     yeni güne göre izlenir (U5)."""
     yazma_kapisi()
-    _baslangic(PLANLAYAN_ROLLER)
+    _duzenleme_kapisi(kurul, PLANLAYAN_ROLLER)
     guncel = _guncel(kurul)
     if guncel.status not in (AssemblyStatus.PLANLANDI, AssemblyStatus.CAGRILDI):
         raise ValueError(TARIH_DEGISMEZ)
+    _cagri_sahipligi(guncel)
     gun = yerel_gun(first_meeting_at)
     _kurallar_denetimi(kural_donemi(guncel), gun)
     _hazirlik_ders_yilini_esitle(guncel, gun)
@@ -1050,6 +1165,95 @@ def toplanti_bilgisini_degistir(
 # ---------------------------------------------------------------------------
 # PLANLANDI → CAGRILDI
 # ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class CagriKaydi:
+    """Yetki kapısının sorduğu kayıt (`rol_izinleri.YetkiKaydi`): genel kurulun çağrısı."""
+
+    donem_kapali: bool
+    sahip_rol: str | None
+
+
+def cagri_sahibi(kurul: GeneralAssembly) -> str | None:
+    """Çağrı yazısının sahibi olan rol (modül başlığı "Sahiplik"): müdürün çağıranlarında ve müdürün
+    yazdığı md. 13/8 çağrısında (`called_by_role`) müdür, Denetleme Kurulunun çağrısında Denetleme Kurulu.
+    Öteki çağıranlarda (yönetim kurulu, üye başvurusu, başkanın md. 13/8 çağrısı) sahip rol yoktur:
+    `None`."""
+    if kurul.called_by in MUDUR_CAGIRANLARI or (
+        kurul.called_by == AssemblyCaller.BASKAN_VEYA_MUDUR_13_8 and kurul.called_by_role == _MUDUR
+    ):
+        return _MUDUR
+    if kurul.called_by == AssemblyCaller.DENETLEME_KURULU:
+        return _DENETLEME_KURULU
+    return None
+
+
+def _cagri_kaydi(kurul: GeneralAssembly) -> CagriKaydi:
+    donem = kural_donemi(kurul)
+    return CagriKaydi(donem_kapali=donem.donem_kapali, sahip_rol=cagri_sahibi(kurul))
+
+
+def _cagri_eylemi(kurul: GeneralAssembly, cagiran: str, rol: str | None) -> rol_izinleri.Eylem:
+    """Çağrının eylemi (modül başlığı "Müdür ve Denetleme Kurulu"): müdürün yazısı müdürün eylemiyle,
+    Denetleme Kurulunun çağrısı denetim modülünün eylemiyle, ötekiler genel kurul yazma kapısıyla."""
+    if cagiran == AssemblyCaller.DENETLEME_KURULU:
+        return rol_izinleri.Eylem.DK_GENEL_KURUL_YAZMA
+    if cagiran == AssemblyCaller.MUDUR_YENI_OKUL and kurul.kind == AssemblyKind.OLAGAN:
+        return rol_izinleri.Eylem.GENEL_KURUL_YENI_OKUL_DAVETI
+    if cagiran in MUDUR_CAGIRANLARI or (
+        cagiran == AssemblyCaller.BASKAN_VEYA_MUDUR_13_8 and rol == _MUDUR
+    ):
+        return rol_izinleri.Eylem.OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR
+    return rol_izinleri.Eylem.GENEL_KURUL_YAZMA
+
+
+def _cagri_kapisi(kurul: GeneralAssembly, cagiran: str) -> rol_izinleri.Eylem:
+    """Çağrının rol kapısı: eylem ve (genel kurul yazma kapısında) çağrının "Kim"i; sahiplikli eylemde
+    kayıt da sorulur. Geçen eylem döner."""
+    kim = yazar()
+    eylem = _cagri_eylemi(kurul, cagiran, None if kim is None else kim.rol)
+    if eylem is rol_izinleri.Eylem.GENEL_KURUL_YENI_OKUL_DAVETI:
+        rol_izinleri.yetki_oturum(
+            rol_izinleri.Eylem.GENEL_KURUL_YENI_OKUL_DAVETI, _cagri_kaydi(kurul)
+        )
+    elif eylem is rol_izinleri.Eylem.OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR:
+        rol_izinleri.yetki_oturum(
+            rol_izinleri.Eylem.OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR, _cagri_kaydi(kurul)
+        )
+    elif eylem is rol_izinleri.Eylem.DK_GENEL_KURUL_YAZMA:
+        rol_izinleri.yetki_oturum(rol_izinleri.Eylem.DK_GENEL_KURUL_YAZMA, _cagri_kaydi(kurul))
+    else:
+        _kapi()
+        _daralt(CAGIRAN_ROLLERI.get(cagiran, frozenset()))
+    return eylem
+
+
+def _cagri_sahipligi(kurul: GeneralAssembly) -> None:
+    """Çağrılmış genel kurulda çağrı yazısının (toplantı zamanı, gündem) sahibi müdür ya da Denetleme
+    Kuruluysa ilandan önce başka rolce değiştirilmez (modül başlığı "Sahiplik")."""
+    if kurul.status != AssemblyStatus.CAGRILDI:
+        return
+    sahip = cagri_sahibi(kurul)
+    kim = yazar()
+    if sahip is not None and (kim is None or kim.rol != sahip):
+        raise RolYetkisiz
+
+
+def _duzenleme_kapisi(kurul: GeneralAssembly, roller: frozenset[str]) -> None:
+    """Çağrı yazısının alanlarını (toplantı zamanı ve yeri, gündem sırası) düzenleyen yazmanın başı
+    (modül başlığı "Sahiplik"; tasarım §4.4.2 "müdür yalnız kendi yazısını düzenler"). Çağrılmış genel
+    kurulda yazının sahibi müdür ya da Denetleme Kuruluysa kapı çağrının eylemidir (sahiplikli: yalnız
+    sahip rol geçer); öteki hâllerde genel kurul yazma kapısı ve geçişin "Kim"i (`roller`)."""
+    kayit = GeneralAssembly.objects.get(pk=kurul.pk)
+    sahip = cagri_sahibi(kayit) if kayit.status == AssemblyStatus.CAGRILDI else None
+    if sahip is None:
+        _baslangic(roller)
+        return
+    app_password.require_password_set()
+    rol_izinleri.yetki_oturum(
+        _cagri_eylemi(kayit, kayit.called_by, kayit.called_by_role), _cagri_kaydi(kayit)
+    )
+
+
 def _cagiran(kurul: GeneralAssembly, called_by: str) -> str:
     """Çağıran: olağanda kayıttan belirlidir (yönetim kurulu; yeni okulda müdür), olağanüstüde zorunlu
     ve kapalı listedir (`AssemblyCaller`)."""
@@ -1069,6 +1273,57 @@ def _cagiran(kurul: GeneralAssembly, called_by: str) -> str:
     return called_by
 
 
+#: Çağrı yazısının evrak bağı girilen çağıranlar (modül başlığı "Çağrı", "Evrak defteri"): üyelerin
+#: başvurusu (U12) ve Denetleme Kurulunun yazısı (tasarım §5.2.3, plan F2 §1.1-11). Müdürün yazısını
+#: program işler (⁷).
+YAZI_BAGLANAN_CAGIRANLAR: Final = frozenset(
+    {AssemblyCaller.UYE_BASVURUSU, AssemblyCaller.DENETLEME_KURULU}
+)
+
+
+def _cagri_yazisi_denetimi(
+    kurul: GeneralAssembly, cagiran: str, kayit: DocumentRecord
+) -> DocumentRecord:
+    """Çağrı yazısının evrak kaydı: genel kurulun döneminde, iptal edilmemiş başka genel kurulun çağrı
+    yazısı değil (tek kaynak); üyelerin başvurusunda gelen evrak (U12). Denetleme Kurulunun yazısında
+    yön denetlenmez: kaynaklar yazının gelen mi giden mi kaydedileceğini söylemez (altın kural 1)."""
+    guncel = DocumentRecord.objects.get(pk=kayit.pk)
+    if cagiran == AssemblyCaller.UYE_BASVURUSU and guncel.direction != DocumentDirection.GELEN:
+        raise ValueError(CAGRI_YAZISI_GELEN_OLMALI)
+    if guncel.term_id != kurul.term_id:
+        raise ValueError(CAGRI_YAZISI_DONEMI)
+    if (
+        GeneralAssembly.objects.filter(call_document=guncel)
+        .exclude(pk=kurul.pk)
+        .exclude(status=AssemblyStatus.IPTAL)
+        .exists()
+    ):
+        raise ValueError(CAGRI_YAZISI_BASKA_KURULDA)
+    return guncel
+
+
+def _dk_raporu_denetimi(kurul: GeneralAssembly, rapor: AuditReport | None) -> AuditReport:
+    """md. 14/5 çağrısının raporu: md. 6 aykırılık işaretli, genel kurulun döneminde, iptal edilmemiş
+    başka genel kurulu çağırmamış (kullanıcı kararı S6 (ii), sert; `models.genel_kurul` "md. 14/5
+    çağrısının iki bağı"). İptal edilen genel kurulun raporu yeni çağrıya bağlanır."""
+    if rapor is None:
+        raise ValueError(DK_RAPORU_GEREKLI)
+    guncel = AuditReport.objects.get(pk=rapor.pk)
+    if not guncel.md6_violation_found:
+        raise ValueError(DK_RAPORU_ISARETSIZ)
+    if guncel.term_id != kurul.term_id:
+        raise ValueError(DK_RAPORU_DONEMI)
+    if (
+        guncel.escalated_assembly_id is not None
+        and guncel.escalated_assembly_id != kurul.pk
+        and not GeneralAssembly.objects.filter(
+            pk=guncel.escalated_assembly_id, status=AssemblyStatus.IPTAL
+        ).exists()
+    ):
+        raise ValueError(DK_RAPORU_BASKA_KURULDA)
+    return guncel
+
+
 @transaction.atomic
 def cagir(
     kurul: GeneralAssembly,
@@ -1078,15 +1333,19 @@ def cagir(
     gundem: Sequence[GundemMaddesi] = (),
     member_application_count: int | None = None,
     member_count_declared: int | None = None,
+    call_document: DocumentRecord | None = None,
+    call_audit_report: AuditReport | None = None,
     gerekce: uyum.Gerekce | None = None,
 ) -> GenelKurulSonucu:
-    """Genel kurulu çağırır (`PLANLANDI → CAGRILDI`; modül başlığı "Çağrı")."""
+    """Genel kurulu çağırır (`PLANLANDI → CAGRILDI`; modül başlığı "Çağrı", "Müdür ve Denetleme
+    Kurulu"). Rol kapısı çağırana göredir; müdürün yazısı evrak defterine işlenir (⁷), Denetleme
+    Kurulunun çağrısı işaretli raporla iki bağı yazar, üyelerin başvurusunun gelen evrak bağı burada ya
+    da sonra girilir."""
     yazma_kapisi()
     app_password.require_password_set()
-    _kapi()
+    cagiran = _cagiran(GeneralAssembly.objects.get(pk=kurul.pk), called_by)
+    eylem = _cagri_kapisi(GeneralAssembly.objects.get(pk=kurul.pk), cagiran)
     guncel = _guncel(kurul)
-    cagiran = _cagiran(guncel, called_by)
-    _daralt(CAGIRAN_ROLLERI.get(cagiran, frozenset()))
     _durum(guncel, AssemblyStatus.PLANLANDI)
     basvuran = _secimli_sayi(member_application_count)
     uye_sayisi = _secimli_sayi(member_count_declared)
@@ -1108,6 +1367,18 @@ def cagir(
             raise ValueError(UYE_SAYISI_SIFIR)
         if basvuran is not None and uye_sayisi is not None and basvuran > uye_sayisi:
             raise ValueError(BASVURAN_UYEDEN_COK)
+    if call_document is not None and cagiran not in YAZI_BAGLANAN_CAGIRANLAR:
+        raise ValueError(CAGRI_YAZISI_YALNIZ_BASVURUDA)
+    if call_audit_report is not None and cagiran != AssemblyCaller.DENETLEME_KURULU:
+        raise ValueError(DENETIM_RAPORU_YALNIZ_DK)
+    rapor = (
+        _dk_raporu_denetimi(guncel, call_audit_report)
+        if cagiran == AssemblyCaller.DENETLEME_KURULU
+        else None
+    )
+    bagli_yazi = (
+        None if call_document is None else _cagri_yazisi_denetimi(guncel, cagiran, call_document)
+    )
     tur = _Tur(guncel, gerekce)
     bilgiler: list[str] = []
     if olaganustu:
@@ -1125,9 +1396,13 @@ def cagir(
                 "genel_kurul.olaganustu_basvuru_oran", oran, konu=guncel, **tur.ortak()
             )
             tur.kaydet("genel_kurul.olaganustu_basvuru_oran", sonuc)
-            bilgiler.append(BASVURU_YAZISI_BILGISI)
+            if bagli_yazi is None:
+                uyum.akis_eksigi(
+                    BASVURU_YAZISI_AKISI, BASVURU_YAZISI_EKSIK, donem=tur.donem, konu=guncel
+                )
+                tur.akis_eksik(BASVURU_YAZISI_AKISI, BASVURU_YAZISI_EKSIK)
         bilgiler.append(OLAGANUSTU_DONEM_ACMAZ_BILGISI)
-    elif guncel.call_decision_id is None:
+    elif cagiran == AssemblyCaller.YONETIM_KURULU and guncel.call_decision_id is None:
         if guncel.term is None:  # tür daraltması: yönetim kurulunun çağrısı kapanacak dönemdedir
             raise ValueError(DONEMSIZ_GENEL_KURUL)
         uyum.akis_sapmasi(
@@ -1136,23 +1411,71 @@ def cagir(
         tur.akis(KARARSIZ_CAGRI_AKISI, KARARSIZ_CAGRI)
     if maddeler:
         _gundem_yaz(guncel, maddeler)
+    yazi = bagli_yazi
+    if cagiran == AssemblyCaller.DENETLEME_KURULU and yazi is None:
+        bilgiler.append(DK_YAZISI_BAGSIZ)
+    if eylem in _MUDUR_EYLEMLERI:
+        yazi = gelen_giden_evrak.mudur_yazisini_isle(
+            donem=tur.donem, subject=mudur_yazisi_konusu(guncel.kind, cagiran)
+        )
+        bilgiler.append(
+            MUDUR_YAZISI_DEFTERSIZ
+            if yazi is None
+            else MUDUR_YAZISI_ISLENDI.format(yil=yazi.year, no=yazi.record_no)
+        )
+    kim = yazar()
     guncel.called_by = cagiran
+    guncel.called_by_role = (None if kim is None else kim.rol) or ""
     guncel.call_reason = neden
     guncel.member_application_count = basvuran
     guncel.member_count_declared = uye_sayisi
+    guncel.call_document = yazi
+    guncel.call_audit_report = rapor
     guncel.status = AssemblyStatus.CAGRILDI
     _ozeti_yaz(
         guncel,
         tur,
         (
             "called_by",
+            "called_by_role",
             "call_reason",
             "member_application_count",
             "member_count_declared",
+            "call_document",
+            "call_audit_report",
             "status",
         ),
     )
+    if rapor is not None:
+        onceki = denetim_izi.anlik(rapor)
+        rapor.escalated_assembly = guncel
+        rapor.updated_by_id = iz.yazar_hesabi()
+        rapor.save(update_fields=["escalated_assembly", "updated_at", "updated_by"])
+        denetim_izi.degisiklik(rapor, onceki=onceki)
     return _sonuc(tur, bilgiler)
+
+
+@transaction.atomic
+def cagri_yazisini_bagla(kurul: GeneralAssembly, *, kayit: DocumentRecord) -> GenelKurulSonucu:
+    """Çağrı yazısının evrak kaydını bağlar (modül başlığı "Çağrı", "Evrak defteri"): üyelerin yazılı
+    başvurusunun gelen evrak kaydı (U12; akış eksiği kapanır) ya da Denetleme Kurulunun yazısının kaydı
+    (tasarım §5.2.3). Bağı program yöneticisi girer (başvuruyu kaydeden, §7.1 "Kim"; DK evrak kaydı
+    yazmaz, M10); bağ tutanak tamamlanana dek girilir, bir kez girilir."""
+    _baslangic(CAGIRAN_ROLLERI[AssemblyCaller.UYE_BASVURUSU])
+    guncel = _guncel(kurul)
+    if guncel.called_by not in YAZI_BAGLANAN_CAGIRANLAR:
+        raise ValueError(CAGRI_YAZISI_YALNIZ_BASVURUDA)
+    _durum(guncel, AssemblyStatus.CAGRILDI, *_KANIT_YAZILABILIR)
+    if guncel.call_document_id is not None:
+        raise ValueError(CAGRI_YAZISI_BAGLI)
+    yazi = _cagri_yazisi_denetimi(guncel, guncel.called_by, kayit)
+    tur = _Tur(guncel, None)
+    if guncel.called_by == AssemblyCaller.UYE_BASVURUSU:
+        uyum.acik_satiri_kapat(BASVURU_YAZISI_AKISI, donem=tur.donem, konu=guncel)
+        tur.ozet_satirlari[BASVURU_YAZISI_AKISI] = None
+    guncel.call_document = yazi
+    _ozeti_yaz(guncel, tur, ("call_document",))
+    return _sonuc(tur)
 
 
 # ---------------------------------------------------------------------------
@@ -1349,6 +1672,28 @@ def ilan_kanitlarini_yaz(
         guncel.second_announced_on = kanallar.en_gec()
         _ozeti_yaz(guncel, tur, ("second_announced_on",))
     return _sonuc(tur)
+
+
+def ilan_kanitina_ek_ekle(duyuru: Announcement, icerik: bytes, *, dosya_adi: str) -> Attachment:
+    """İlanın kanıt dosyasını (ilan panosunun fotoğrafı, internet sayfasının görüntüsü, elden yazılı
+    davetin teslim kaydı) dosya deposuna yazar; sahip ilan kaydıdır (`Announcement.ekler()`; kullanıcı
+    eki kümesi PDF, JPEG, PNG). İlan ve toplantının "Kim"i; kanıt yazılabilen durumlarda (tutanak
+    tamamlanana dek). Veli adı taşıyan çizelge buraya eklenmez: adlı çıktı saklanmaz (R9)."""
+    _baslangic(ILAN_VE_TOPLANTI_ROLLERI)
+    guncel_duyuru = Announcement.objects.get(pk=duyuru.pk)
+    if guncel_duyuru.subject_type != denetim_izi.model_etiketi(GeneralAssembly):
+        raise ValueError(DUYURU_GENEL_KURULUN_DEGIL)
+    guncel = _guncel(GeneralAssembly.objects.get(pk=int(guncel_duyuru.subject_id)))
+    if guncel.status not in _KANIT_YAZILABILIR:
+        raise ValueError(DURUM_GECERSIZ)
+    return dosya_deposu.yaz(
+        icerik,
+        original_name=dosya_adi,
+        sensitivity=AttachmentSensitivity.NORMAL,
+        owner=guncel_duyuru,
+        yazar=yazar(),
+        kisi_listesi=False,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1689,9 +2034,10 @@ def gundem_sirasini_degistir(kurul: GeneralAssembly, *, sira: Sequence[int]) -> 
     (çıkarılan maddeler de yerini korur). Sıra değişikliği md. 9/4'ün ekleme ve çıkarması değildir,
     uyarı üretmez (MA-16); gündem ilandan önce (planlama ve çağrı) ve toplantıda değiştirilir.
     Kural okumaz."""
-    _baslangic(TUTANAK_ROLLERI)
+    _duzenleme_kapisi(kurul, TUTANAK_ROLLERI)
     guncel = _guncel(kurul)
     _durum(guncel, *_SIRA_DEGISEBILIR)
+    _cagri_sahipligi(guncel)
     maddeler = {m.pk: m for m in AgendaItem.objects.filter(assembly=guncel)}
     kimlikler = list(sira)
     if len(set(kimlikler)) != len(kimlikler) or set(kimlikler) != set(maddeler):

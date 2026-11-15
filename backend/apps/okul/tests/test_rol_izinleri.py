@@ -569,12 +569,12 @@ def test_etkin_hucreler_bekleyende_olmayan_y_hucreleridir() -> None:
 def test_bekleyen_dipnotlar_anlik_goruntusu() -> None:
     """Gerçek servisi olmayan dipnotlar, fazlarıyla (yalnız küçülebilir). Her dipnot (1-10) ya
     bağlı bir eylemle gerçek serviste sınanır ya da burada bekler; ikisi birden olamaz."""
+    # ⁷ F2 7. adımda bağlandı: gelen-giden evrak (`EVRAK_KAYDI`) ve müdür yazısının programca kaydı.
     assert dict(BEKLEYEN_DIPNOTLAR) == {
         2: "F3",
         3: "F4",
         4: "F4",
         6: "F4",
-        7: "F2",
         8: "F4",
         9: "F5",
     }
@@ -603,13 +603,40 @@ def test_f1c_fazli_bekleyen_kalmadi() -> None:
     """F1c kapısı (13. adım; tasarım §14 ortak madde 4; 6. adımın "Bitti" ölçütü de buydu): üç
     bekleyen listesinde faz değeri "F1c" ya da adı "F1" ile başlayan kalem yoktur; listelerde yalnız
     sonraki fazlar (F2 ve sonrası) kalır. `DENETIM_YAZMA` bölündü: görev bölümü ve denetim planı yeni
-    eylemle bağlandı, kalanın fazı F2'dir (md. 14/5 çağrısı; tasarım §4.4.2 "Testler")."""
+    eylemle bağlandı (F1c); md. 14/5 çağrısı F2 7. adımda ikinci kez bölündü (`DK_GENEL_KURUL_YAZMA`,
+    bağlı), kalanın (kontrol listesi, bulgu, raporlar) fazı F4'tür (plan F2 §6.2)."""
     for liste in (BEKLEYEN_HUCRELER, BEKLEYEN_DIPNOTLAR, BAGLANMAMIS_EYLEMLER):
         fazlar = set(liste.values())
         assert not {faz for faz in fazlar if faz.startswith("F1")}, fazlar
         assert fazlar <= {"F2", "F3", "F4", "F5", "F6", "F7", "F8+"}, fazlar
     assert Eylem.DK_GOREV_BOLUMU_YAZMA not in BAGLANMAMIS_EYLEMLER
-    assert BAGLANMAMIS_EYLEMLER[Eylem.DENETIM_YAZMA] == "F2"
+    assert Eylem.DK_GENEL_KURUL_YAZMA not in BAGLANMAMIS_EYLEMLER
+    assert BAGLANMAMIS_EYLEMLER[Eylem.DENETIM_YAZMA] == "F4"
+
+
+def test_f2_yedinci_adimin_eylemleri_baglandi() -> None:
+    """Plan F2 §6.2 ve 7. adım: müdürün yeni okul daveti ve olağanüstü çağrısı (¹; ilk sahiplikli
+    eylemler), gelen-giden evrak (⁷) ve Denetleme Kurulunun genel kurul işi (⁵; md. 14/5) servise bağlı;
+    bağlanmamış listede F2 değerli eylem kalmadı. M3 ve M10 hücreleri uçlarıyla (11. adım) bağlanır."""
+    for eylem in (
+        Eylem.GENEL_KURUL_YENI_OKUL_DAVETI,
+        Eylem.OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR,
+        Eylem.EVRAK_KAYDI,
+        Eylem.DK_GENEL_KURUL_YAZMA,
+    ):
+        assert eylem not in BAGLANMAMIS_EYLEMLER, eylem
+    assert "F2" not in set(BAGLANMAMIS_EYLEMLER.values())
+    assert 7 not in BEKLEYEN_DIPNOTLAR
+    dk = EYLEM_KURALLARI[Eylem.DK_GENEL_KURUL_YAZMA]
+    assert (dk.satir, dk.roller, dk.dipnot, dk.sahiplik) == (
+        Satir.M8,
+        frozenset({"denetleme_kurulu"}),
+        5,
+        True,
+    )
+    assert "25/2" in EYLEM_KURALLARI[Eylem.OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR].dayanak
+    assert BEKLEYEN_HUCRELER[(Satir.M3, "mudur")] == "F2"
+    assert BEKLEYEN_HUCRELER[(Satir.M10, "yonetici")] == "F2"
 
 
 def test_m8_yazma_uclari_gordum_ve_dk_gorev_bolumudur_ve_yalniz_dk_ya_aciktir() -> None:
@@ -724,6 +751,12 @@ def test_eylem_baglama_anlik_goruntusu() -> None:
         Eylem.GENEL_KURUL_YAZMA,
         # F2 5. adım: genel kurulun veli adlı katılım işaretleri (`genel_kurul` servisi; dipnot ¹⁰).
         Eylem.KISISEL_VERI_CIKTISI,
+        # F2 7. adım: müdürün yazıları (¹), Denetleme Kurulunun md. 14/5 çağrısı ve asgari raporu (⁵),
+        # gelen-giden evrak (⁷).
+        Eylem.GENEL_KURUL_YENI_OKUL_DAVETI,
+        Eylem.OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR,
+        Eylem.DK_GENEL_KURUL_YAZMA,
+        Eylem.EVRAK_KAYDI,
     }
 
 

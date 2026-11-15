@@ -814,23 +814,23 @@ BEKLEYEN_HUCRELER: Final[Mapping[tuple[Satir, str], str]] = {
     # adım); adlı E07/E08 çıktısının kapısı ¹⁰ dipnotunun eylemidir (`BEKLEYEN_DIPNOTLAR`, F2).
     # F1b'de bekleyen kalmadı: Kullanıcılar (program yöneticisi) uçlarıyla, Denetleme Kurulunun
     # M8 hücresi geri yükleme kartının "Gördüm"üyle bağlandı (F1b-2 (c)). M8 hücresi satır
-    # düzeyindedir; DK görev bölümü ve denetim planı F1c'nin 6. adımında bağlandı
-    # (`Eylem.DK_GOREV_BOLUMU_YAZMA`), md. 14/5 çağrısı F2'de, kontrol listesi, bulgu ve raporlar
-    # F4'te gelir (`Eylem.DENETIM_YAZMA`).
+    # düzeyindedir; DK görev bölümü ve denetim planı F1c'nin 6. adımında (`Eylem.DK_GOREV_BOLUMU_YAZMA`),
+    # md. 14/5 çağrısı F2'nin 7. adımında bağlandı (`Eylem.DK_GENEL_KURUL_YAZMA`); kontrol listesi,
+    # bulgu ve raporlar F4'te gelir (`Eylem.DENETIM_YAZMA`).
 }
 
 #: Gerçek servisi henüz olmayan dipnotlar → faz. Dipnotun kapı testi bugünden vardır
 #: (`test_yetki_kapisi.py`, sahte kayıtla); gerçek servis gelince satır silinir.
 BEKLEYEN_DIPNOTLAR: Final[Mapping[int, str]] = {
     # 1: bağlı — genel kurul yazma kapısı (`Eylem.GENEL_KURUL_YAZMA`, `genel_kurul` servisi; F2 4.
-    # adım). Dipnotun müdür kolu (yeni okul daveti, olağanüstü çağrı; sahiplik) 7. adımdadır
-    # (`BAGLANMAMIS_EYLEMLER`).
+    # adım) ve müdür kolu (yeni okul daveti, olağanüstü çağrı; sahiplik; F2 7. adım).
     2: "F3",
     3: "F4",
     4: "F4",
     # 5: bağlı — DK'nin "Gördüm"ü (`Eylem.GERI_YUKLEME_GORDUM`, `hesaplar.acknowledge_restore`).
     6: "F4",
-    7: "F2",
+    # 7: bağlı — gelen-giden evrak (`Eylem.EVRAK_KAYDI`, `gelen_giden_evrak` servisi) ve müdür
+    # yazısının programca evrak kaydı (müdür yazısı eyleminin yan etkisi; F2 7. adım).
     8: "F4",
     9: "F5",
     # 10: bağlı — kişisel veri içeren çıktı (`Eylem.KISISEL_VERI_CIKTISI`; F2 5. adım: genel kurulun
@@ -1046,10 +1046,12 @@ class Eylem(StrEnum):
     HARCAMA_MALI_HALKA = "HARCAMA_MALI_HALKA"
     HARCAMA_KARAR_KOMISYON_BELGE = "HARCAMA_KARAR_KOMISYON_BELGE"
     HARCAMA_TALEP = "HARCAMA_TALEP"
-    # ⁵ Denetleme Kurulu. Görev bölümü ve denetim planı F1c'de ayrı eyleme bölündü (tasarım §4.4.2
-    # "Testler"): `DENETIM_YAZMA`'nın kalanı md. 14/5 çağrısı, kontrol listesi, bulgu ve raporlardır.
+    # ⁵ Denetleme Kurulu. Görev bölümü ve denetim planı F1c'de, genel kurulun işleri (md. 14/4 nihai
+    # raporun dosya eki, md. 14/5 çağrısı) F2'de ayrı eyleme bölündü (tasarım §4.4.2 "Testler"; plan F2
+    # §6.2): `DENETIM_YAZMA`'nın kalanı kontrol listesi, bulgu ve raporlardır (F4).
     DENETIM_YAZMA = "DENETIM_YAZMA"
     DK_GOREV_BOLUMU_YAZMA = "DK_GOREV_BOLUMU_YAZMA"
+    DK_GENEL_KURUL_YAZMA = "DK_GENEL_KURUL_YAZMA"
     GERI_YUKLEME_GORDUM = "GERI_YUKLEME_GORDUM"
     # ⁶ müdürün md. 27/3 uyarısı
     MUDUR_UYARISI = "MUDUR_UYARISI"
@@ -1134,7 +1136,7 @@ EYLEM_KURALLARI: Final[Mapping[Eylem, EylemKurali]] = {
         Satir.M3, (MUDUR,), dipnot=1, sahiplik=True, dayanak="¹; md. 9/1"
     ),
     Eylem.OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR: _ek(
-        Satir.M3, (MUDUR,), dipnot=1, sahiplik=True, dayanak="¹; md. 9/6, 13/8"
+        Satir.M3, (MUDUR,), dipnot=1, sahiplik=True, dayanak="¹; md. 9/6, 13/8, 25/2; §15 M-5"
     ),
     Eylem.MALI_KAYIT: _ek(Satir.M5, _MUHASIP, dipnot=2, dayanak="²; K2, D2"),
     Eylem.ISARET_DEFTERE_GECIRME: _ek(
@@ -1153,7 +1155,21 @@ EYLEM_KURALLARI: Final[Mapping[Eylem, EylemKurali]] = {
         Satir.M6, (MUDUR,), dipnot=4, sahiplik=True, dayanak="⁴; md. 18/1; §15 M-11"
     ),
     Eylem.DENETIM_YAZMA: _ek(
-        Satir.M8, (DENETLEME_KURULU,), dipnot=5, sahiplik=True, dayanak="⁵; md. 14/4, 14/5"
+        Satir.M8,
+        (DENETLEME_KURULU,),
+        dipnot=5,
+        sahiplik=True,
+        dayanak="⁵; md. 14/4 (kontrol listesi, bulgu, ara ve nihai rapor)",
+    ),
+    Eylem.DK_GENEL_KURUL_YAZMA: _ek(
+        Satir.M8,
+        (DENETLEME_KURULU,),
+        dipnot=5,
+        sahiplik=True,
+        dayanak=(
+            "⁵; md. 14/4 (nihai raporun genel kurul dosya eki), 14/5 (olağanüstü genel kurul "
+            "çağrısı); §15 M-6; plan F2 §6.2"
+        ),
     ),
     Eylem.DK_GOREV_BOLUMU_YAZMA: _ek(
         Satir.M8,
@@ -1189,11 +1205,12 @@ EYLEM_KURALLARI: Final[Mapping[Eylem, EylemKurali]] = {
 #: `Eylem.<AD>` çağrısını arar). Bağlı olanlar: hesap yönetimi, kurtarma anahtarı, geri
 #: yükleme, şifreli yedeğin kaydedilmesi, boşta süre yazımı, birlik dönemi, kural sürümü seçimi,
 #: geri yükleme kartının "Gördüm"ü (⁵), DK görev bölümü (⁵; F1c 6. adım), genel kurul yazma
-#: kapısı (¹; F2 4. adım, `genel_kurul` servisi) ve kişisel veri içeren çıktı (¹⁰; F2 5. adım,
-#: genel kurulun veli adlı katılım işaretleri, plan F2 §7 U33).
+#: kapısı (¹; F2 4. adım, `genel_kurul` servisi), kişisel veri içeren çıktı (¹⁰; F2 5. adım,
+#: genel kurulun veli adlı katılım işaretleri, plan F2 §7 U33), müdürün yeni okul daveti ve
+#: olağanüstü çağrısı (¹; sahiplikli ilk eylemler), Denetleme Kurulunun md. 14/5 çağrısı ve asgari
+#: denetim raporu (⁵) ve gelen-giden evrak (⁷) (F2 7. adım: `genel_kurul`, `denetim`,
+#: `gelen_giden_evrak` servisleri).
 BAGLANMAMIS_EYLEMLER: Final[Mapping[Eylem, str]] = {
-    Eylem.GENEL_KURUL_YENI_OKUL_DAVETI: "F2",
-    Eylem.OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR: "F2",
     Eylem.MALI_KAYIT: "F3",
     Eylem.ISARET_DEFTERE_GECIRME: "F3",
     Eylem.ISARET_TEFBIS_GIRISI: "F3",
@@ -1202,10 +1219,10 @@ BAGLANMAMIS_EYLEMLER: Final[Mapping[Eylem, str]] = {
     Eylem.HARCAMA_MALI_HALKA: "F4",
     Eylem.HARCAMA_KARAR_KOMISYON_BELGE: "F4",
     Eylem.HARCAMA_TALEP: "F4",
-    # Kalanın en erken işi md. 14/5 çağrısıdır (tasarım §4.4.2 "Testler"; plan F1c kararları).
-    Eylem.DENETIM_YAZMA: "F2",
+    # md. 14/5 çağrısı F2'de ayrı eyleme bölündü (`DK_GENEL_KURUL_YAZMA`; plan F2 §6.2); kalanın
+    # (kontrol listesi, bulgu, raporlar) fazı F4'tür.
+    Eylem.DENETIM_YAZMA: "F4",
     Eylem.MUDUR_UYARISI: "F4",
-    Eylem.EVRAK_KAYDI: "F2",
     Eylem.DONEM_KILIDI: "F4",
     Eylem.HESAP_GECISI: "F4",
     Eylem.DEK_YENILEME: "F4",

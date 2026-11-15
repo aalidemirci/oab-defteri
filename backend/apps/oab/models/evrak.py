@@ -293,11 +293,12 @@ class DocumentRecord(SilinmezOabModel):
     """Gelen-giden evrak kaydı (tasarım §5.2.8; ADR-0028'in `OabDocumentRecord`'u, OYS'de yazılmamıştı).
 
     Defteri gelen-giden evrak defteridir (`OfficialBook(GELEN_GIDEN_EVRAK_DEFTERI)`; tür denetimi ve
-    müdür yazısının programca işlenmesi 7. adımın servisindedir, dipnot 7). (defter, yıl, kayıt no)
-    tekildir — sert; sıra atlama uyarıdır (servis). Karşı taraf ve konu serbest metindir, şifrelidir
-    (tasarım §5.3); dış sayı (karşı tarafın ya da EBYS'nin sayısı) açıktır. Giden yazının programdaki
-    karşılığı `generated_document`'tır; gelen kayıtta boştur (kısıt). Ekler `Attachment`'a genel bağla
-    bağlanır (`ekler()`; dosya deposunun sahip kaydı 7. adımda). Kayıt silinmez (altın kural 4).
+    müdür yazısının programca işlenmesi `services.gelen_giden_evrak`'tadır, dipnot 7). (defter, yıl,
+    kayıt no) tekildir — sert; sıra atlama uyarıdır (servis). Karşı taraf ve konu serbest metindir,
+    şifrelidir (tasarım §5.3); dış sayı (karşı tarafın ya da EBYS'nin sayısı) açıktır. Giden yazının
+    programdaki karşılığı `generated_document`'tır; gelen kayıtta boştur (kısıt). Ekler `Attachment`'a
+    genel bağla bağlanır (`ekler()`; dosya deposunun sahibidir, F2 7. adım). Kayıt silinmez (altın
+    kural 4).
     """
 
     IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = (

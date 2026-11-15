@@ -529,12 +529,20 @@ def test_yukleme_siniri_ayarla_bicim_sinirinin_kucugudur(settings: Any) -> None:
     assert dosya_deposu.yukleme_siniri() == ds.AZAMI_ACIK_BOY
 
 
-def test_sahip_kumesinde_yalniz_uretilen_evrak_vardir() -> None:
-    """İlk ve bugünkü tek sahip `oab.GeneratedDocument`'tır ve üretilen evrak sahibidir (PDF, DOCX;
-    plan F1c 9. adım); kullanıcı eki sahibi henüz yoktur."""
-    assert dosya_deposu._SAHIP_ETIKETLERI == {"oab.GeneratedDocument"}
+def test_sahip_kumesi_uretilen_evrak_ilan_ve_evrak_kaydidir() -> None:
+    """İlk sahip `oab.GeneratedDocument`'tır ve üretilen evrak sahibidir (PDF, DOCX; plan F1c 9. adım);
+    F2 7. adımdan beri ilan kaydı (kanal kanıtı) ve gelen-giden evrak kaydı kullanıcı eki sahibidir
+    (PDF, JPEG, PNG)."""
+    from apps.oab.models import Announcement, DocumentRecord
+
+    assert dosya_deposu._SAHIP_ETIKETLERI == {
+        "oab.GeneratedDocument",
+        "oab.Announcement",
+        "oab.DocumentRecord",
+    }
     assert dosya_deposu._URETILEN_EVRAK_SAHIPLERI == {"oab.GeneratedDocument"}
-    assert dosya_deposu.kabul_turleri(SchoolYear) == ds.KABUL_EDILEN_TURLER
+    for model in (Announcement, DocumentRecord, SchoolYear):
+        assert dosya_deposu.kabul_turleri(model) == ds.KABUL_EDILEN_TURLER
 
 
 DOCX_KAPI = "Bu dosya türü eklenemez; yalnız PDF, JPEG ve PNG dosyaları kabul edilir."

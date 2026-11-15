@@ -335,6 +335,44 @@ def test_kisitli_roller_yalniz_kendi_satirlarina_yazar(rol: str) -> None:
     assert acik_yazma == ortak | ek
 
 
+#: Kısıtlı rollerin servis katmanında bağlı eylemleri (F2 7. adım): müdürün yazıları M3 ¹ (yeni okul
+#: daveti, olağanüstü çağrı; sahiplikli), Denetleme Kurulununkiler M8 ⁵ ("Gördüm", görev bölümü, md.
+#: 14/5 çağrısı ve asgari rapor). Uçları 11. adımda gelir; o güne dek olumlu yarı servis katmanındadır.
+_KISITLI_ROLUN_BAGLI_EYLEMLERI = {
+    AccountRole.DENETLEME_KURULU.value: {
+        rol_izinleri.Eylem.GERI_YUKLEME_GORDUM,
+        rol_izinleri.Eylem.DK_GOREV_BOLUMU_YAZMA,
+        rol_izinleri.Eylem.DK_GENEL_KURUL_YAZMA,
+    },
+    AccountRole.MUDUR.value: {
+        rol_izinleri.Eylem.GENEL_KURUL_YENI_OKUL_DAVETI,
+        rol_izinleri.Eylem.OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR,
+    },
+}
+
+
+@pytest.mark.parametrize("rol", ["denetleme_kurulu", "mudur"])
+def test_kisitli_roller_servis_katmaninda_yalniz_kendi_eylemlerini_gecer(rol: str) -> None:
+    """Tasarım §14 F1b kapısı ve K2'nin servis katmanındaki yarısı: Denetleme Kurulu yalnız denetim
+    modülünün (M8), müdür yalnız kendi yazılarının (M3 ¹, M6 ⁴, müdür yazısı ⁶) eylemlerini geçer; ⁷ müdüre
+    gelen-giden evrak yazdırmaz (`EVRAK_KAYDI` öteki rollerindir). Bugün servise bağlı olanlar F2 7.
+    adımın müdür ve Denetleme Kurulu eylemleridir; her biri sahiplikli ve tek rolludur."""
+    izinli = _KISITLI_ROLUN_SATIRLARI[rol]
+    gecen = set()
+    for eylem, kural in rol_izinleri.EYLEM_KURALLARI.items():
+        if rol in kural.roller:
+            assert kural.satir in izinli, (rol, eylem)
+            gecen.add(eylem)
+    assert rol_izinleri.Eylem.EVRAK_KAYDI not in gecen
+    bagli = gecen - set(rol_izinleri.BAGLANMAMIS_EYLEMLER)
+    assert bagli == _KISITLI_ROLUN_BAGLI_EYLEMLERI[rol]
+    for eylem in bagli - {rol_izinleri.Eylem.GERI_YUKLEME_GORDUM}:
+        kural = rol_izinleri.EYLEM_KURALLARI[eylem]
+        assert kural.roller == frozenset({rol}), eylem
+        if eylem is not rol_izinleri.Eylem.DK_GOREV_BOLUMU_YAZMA:
+            assert kural.sahiplik, eylem
+
+
 # ============================================================ tam zincir dumanları
 
 

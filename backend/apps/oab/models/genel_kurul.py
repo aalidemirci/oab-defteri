@@ -39,7 +39,14 @@ işaretine bağlar. Genel kuruldaki bağın da işaretli rapor istemesi ve iki b
 MODEL KATMANINDADIR (başka tabloyu okur): genel kurulun `save()`'i ve toplu güncellemesi bağlanan
 raporun işaretine ve bağına bakar (`_cagri_raporu_denetimi`); raporun tarafı `models.denetim`'dedir
 (çağrıya bağlı raporun işareti kaldırılmaz, rapor başka raporla çağrılmış genel kurulu göstermez). Ham
-SQL bu korumayı aşar; 7. adımın servisi iki bağı aynı işlemde yazar.
+SQL bu korumayı aşar; 7. adımın servisi iki bağı aynı işlemde yazar. İptal edilmiş genel kurulu gösteren
+bağ "başka genel kurul" sayılmaz: rapor yeni çağrıya bağlanabilir (bağ izli güncellemeyle taşınır, iptal
+edilen kurulun bağı iz olarak kalır; 5. adımın katılım işareti emsali).
+
+ÇAĞRIYI YAZAN ROL (`called_by_role`; plan F2 7. adım): çağrıda yazanın rolü yazılır. md. 13/8'in
+çağıranı "başkan ya da müdür"dür ve tek değerdir (`BASKAN_VEYA_MUDUR_13_8`): hangisinin yazdığı bu
+alandan okunur (çağrının sahipliği, E05'in imzası). md. 13/8 çağrısında yazan başkan ya da müdürdür
+(veritabanı kısıtı).
 
 İBRA OYLAMASI (md. 11/1-c; tasarım §9.6 E10 "YK ve DK ibrası ayrı oylama satırı"; F2 6. adım): ibra
 genel kurulun kararıdır, sonucu oylardan hesaplanır (kullanıcı kararı S6 (iii)). Oylama kurul başına
@@ -78,7 +85,7 @@ from apps.oab.models._base import (
     SilinmezOabModel,
     SilinmezQuerySet,
 )
-from apps.okul.models import ImmutableRecord
+from apps.okul.models import AccountRole, ImmutableRecord
 from shared.crypto import EncryptedTextField
 
 #: Yeter sayının ilanda dondurulan dört alanı (modül başlığı "Yeter sayı").
@@ -146,11 +153,12 @@ class GenelKurulKaydiGecersiz(ValueError):
 
 
 def _cagri_raporu_denetimi(rapor: object, kurul_pkleri: list[int | None]) -> None:
-    """md. 14/5 bağı (modül başlığı): rapor md. 6 işaretli olmalı, başka genel kurulu göstermemeli.
+    """md. 14/5 bağı (modül başlığı): rapor md. 6 işaretli olmalı, iptal edilmemiş başka genel kurulu
+    göstermemeli.
 
     `rapor` örnek ya da birincil anahtardır; boşsa bağ yoktur. Rapor yoksa yabancı anahtar kısıtı
     reddeder. Henüz kaydedilmemiş genel kurulun anahtarı boştur: rapor bir genel kurulu gösteriyorsa
-    o, bu değildir.
+    o, bu değildir. Raporun gösterdiği genel kurul iptal edildiyse bağ serbesttir (modül başlığı).
     """
     rapor_pk = getattr(rapor, "pk", rapor)
     if rapor_pk is None:
@@ -166,7 +174,11 @@ def _cagri_raporu_denetimi(rapor: object, kurul_pkleri: list[int | None]) -> Non
     if not deger["md6_violation_found"]:
         raise GenelKurulKaydiGecersiz(DK_RAPORU_ISARETSIZ)
     bag = deger["escalated_assembly_id"]
-    if bag is not None and any(pk != bag for pk in kurul_pkleri):
+    if (
+        bag is not None
+        and any(pk != bag for pk in kurul_pkleri)
+        and not GeneralAssembly._base_manager.filter(pk=bag, status=AssemblyStatus.IPTAL).exists()
+    ):
         raise GenelKurulKaydiGecersiz(DK_RAPORU_BASKA_KURULDA)
 
 
@@ -238,6 +250,7 @@ class GeneralAssembly(SilinmezOabModel):
         "opens_term",
         "kind",
         "called_by",
+        "called_by_role",
         "call_decision",
         "call_document",
         "call_audit_report",
@@ -276,6 +289,7 @@ class GeneralAssembly(SilinmezOabModel):
         "opens_term",
         "kind",
         "called_by",
+        "called_by_role",
         "call_reason",
         "call_decision",
         "call_document",
@@ -333,6 +347,10 @@ class GeneralAssembly(SilinmezOabModel):
     #: Çağıran; çağrıdan (`CAGRILDI`) itibaren zorunlu, kapalı liste (md. 9/1, 9/6).
     called_by = models.CharField(
         "çağıran", max_length=32, choices=AssemblyCaller.choices, blank=True, default=""
+    )
+    #: Çağrıyı yazanın rolü (modül başlığı "Çağrıyı yazan rol"); çağrıda yazılır.
+    called_by_role = models.CharField(
+        "çağrıyı yazan rol", max_length=24, choices=AccountRole.choices, blank=True, default=""
     )
     #: Çağrı nedeni (olağanüstüde zorunlu; serbest metin, şifreli).
     call_reason = EncryptedTextField("çağrı nedeni", blank=True, default="")
@@ -478,6 +496,17 @@ class GeneralAssembly(SilinmezOabModel):
             models.CheckConstraint(
                 condition=Q(called_by__in=["", *AssemblyCaller.values]),
                 name="ck_generalassembly_called_by",
+            ),
+            models.CheckConstraint(
+                condition=Q(called_by_role__in=["", *AccountRole.values]),
+                name="ck_generalassembly_called_by_role",
+            ),
+            # md. 13/8'in çağrısını başkan ya da müdür yazar (modül başlığı "Çağrıyı yazan rol").
+            models.CheckConstraint(
+                condition=~Q(called_by=AssemblyCaller.BASKAN_VEYA_MUDUR_13_8)
+                | Q(status__in=_CAGRISIZ)
+                | Q(called_by_role__in=[AccountRole.BASKAN, AccountRole.MUDUR]),
+                name="ck_generalassembly_13_8_yazan",
             ),
             models.CheckConstraint(
                 condition=Q(held_at_meeting__in=["", *AssemblyMeeting.values]),

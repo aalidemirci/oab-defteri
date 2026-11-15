@@ -16,7 +16,8 @@ S6 (ii), hukuken geçersiz işlem).
 (`ck_auditreport_md6_cagri`) yalnız bu tablodaki bağı işarete bağlar. Genel kuruldaki bağın işareti ve
 iki bağın birbirini göstermesi model katmanındadır: genel kurul tarafı `models.genel_kurul`'da; bu
 tarafta `save()` ve toplu güncelleme çağrıya bağlı raporun işaretinin kaldırılmasını ve başka raporla
-çağrılmış genel kurula bağlanmayı reddeder. Ham SQL bu korumayı aşar.
+çağrılmış genel kurula bağlanmayı reddeder. Ham SQL bu korumayı aşar. İptal edilmiş genel kurulu gösteren
+bağ yeni çağrıya taşınabilir (`models.genel_kurul` başlığı; denetim izli güncellemeyle, servis yazar).
 
 Kayıt silinmez (altın kural 4).
 """

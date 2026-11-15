@@ -5,8 +5,8 @@ Model tasarımdaki alanlarıyla tamdır; F2'de genel kurul çağrıları (`GK_CA
 (`distributed_written_on` elden yazılı, `posted_board_on` ilan panosu, `published_web_on` internet
 sayfası; md. 9/3) ayrı alanlardır: 15 günlük süre her kanal için ayrıdır (plan F2 §7 U9). Konu genel
 bağdır (`subject_type`, `subject_id`: genel kurul, bütçe, ders dönemi, tespit süreci; üretilen evrakın
-biçimi). Kanıt dosyaları `Attachment`'a genel bağla bağlanır (`ekler()`; dosya deposunun sahip kaydı ve
-yazma yolu 7. adımda).
+biçimi). Kanıt dosyaları `Attachment`'a genel bağla bağlanır (`ekler()`; dosya deposunun sahibidir, yazma
+yolu `services.genel_kurul.ilan_kanitina_ek_ekle`; F2 7. adım).
 
 İçerikte kişi adı yoktur (altın kural 5): içeriği üretilen evraktır (`content` → `GeneratedDocument`),
 modelin serbest metin alanı yoktur. Web metni HTML dosyasıdır; program yayımlamaz.

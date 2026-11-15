@@ -50,8 +50,10 @@ kayıt canlı okunur, Genel Bakış'taki Eksik Ekler kartı buradan beslenir. Pl
 ekler kişisiz bilgiyle listelenir": asıl dosya adı yalnız bu kartta ve kaydın kendisinde görünür,
 kilit açıkken çözülür. Yanıt yalnız program yöneticisine ve Denetleme Kuruluna gider.
 
-SAHİP KÜMESİ: `owner_type` kayıtlı model etiketlerinden gelir (`sahip_kaydet`); ilk ve bugünkü tek
-sahip `oab.GeneratedDocument`'tır (`apps.oab.apps`; üretilen evrak: PDF ve DOCX). Sahibin
+SAHİP KÜMESİ: `owner_type` kayıtlı model etiketlerinden gelir (`sahip_kaydet`); ilk sahip
+`oab.GeneratedDocument`'tır (`apps.oab.apps`; üretilen evrak: PDF ve DOCX), F2 7. adımdan beri ilan kaydı
+(`oab.Announcement`, kanal kanıtı) ve gelen-giden evrak kaydı (`oab.DocumentRecord`) kullanıcı eki
+sahibidir (PDF, JPEG, PNG). Sahibin
 `verbose_name`'i Türkçedir: eksik ve bozuk ek listelerinin "kayıt türü" oradan okunur
 (`geri_yukleme_ekleri.tur_adi`). Testler geçici sahip kaydeder (plan F1b-3).
 
