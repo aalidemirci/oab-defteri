@@ -65,7 +65,9 @@ siteyi ve evrakı kapsar.
    tasarım §4.4.4; genel kurulda — 15.11.2026, F2 planı S6: seçilen yalnız aynı genel kurulun
    aday kaydından olur ve karar sonucu oylardan hesaplanır, oylarla çelişen "kabul" konamaz
    (hesap bütünlüğü); Denetleme Kurulunun md. 14/5 çağrısı md. 6 aykırılık işareti olmadan
-   açılmaz ve veri sorumlusu bilgisi boşken E04 basılmaz (hukuken geçersiz işlem)).
+   açılmaz ve veri sorumlusu bilgisi boşken E04 basılmaz (hukuken geçersiz işlem); olağanüstü
+   genel kurul Denetleme Kurulunun veli koltuğuna seçim yapmaz — F2 planı S10 (a), md. 13/8
+   yalnız YK'yi sayar).
    Kullanıcının belgeden **girdiği** değer (teminat, kira, artış, ay sayısı, EK-3 puanı,
    taksit) mevzuattan saparsa, eksik belge ve kantinde onay eksikliği uyarı + gerekçedir.
    Henüz girilmemiş veri "eksik"tir, gerekçe istemez; gerekçe yalnız bilinçli sapmada.

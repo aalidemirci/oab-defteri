@@ -90,8 +90,10 @@ seçimi uyarı + gerekçedir: dayanak suçsa `uyelik.suc_engeli`, başka birlik 
 `yonetim_kurulu.tek_birlik` (yalnız yönetim kurulunda). Görevdeki üyede engel düşürme önerisidir
 (`uyelik_gecisleri.oneriler`). Okulun beyan uygulaması işaretlenmediyse mevzuat uyarısı yoktur.
 
-Olay günü (kuralın yürürlüğü) seçilme günüdür (`start_date`); adayda genel kurulun birinci
-toplantısının yerel günü, o da yoksa bugünün yerel günü (`timezone.localdate()`).
+Olay günü (kuralın yürürlüğü) seçilme günüdür (`start_date`); adayda genel kurulun günü
+(`selectors.genel_kurul_gunu`: yapıldığı toplantının, ikinci toplantıda yapıldıysa onun yerel günü;
+henüz yapılmadıysa birinci toplantının; plan F2 §7 U6), o da yoksa bugünün yerel günü
+(`timezone.localdate()`).
 """
 
 from __future__ import annotations
@@ -339,8 +341,10 @@ def _sayac_gozlenen(kural_sonucu: DenetimSonucu, program: int, beyan: int | None
 def _olay_gunu(uyelik: OrganMembership) -> date:
     if uyelik.start_date is not None:
         return uyelik.start_date
-    if uyelik.assembly is not None and uyelik.assembly.first_meeting_at is not None:
-        return timezone.localdate(uyelik.assembly.first_meeting_at)
+    if uyelik.assembly is not None:
+        gun = selectors.genel_kurul_gunu(uyelik.assembly)
+        if gun is not None:
+            return gun
     return timezone.localdate()
 
 

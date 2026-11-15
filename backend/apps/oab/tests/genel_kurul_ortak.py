@@ -1,4 +1,4 @@
-"""Genel kurul akışı testlerinin ortak kurulumu (F2 4. adım; `gk`, `ak` ve akış testleri).
+"""Genel kurul akışı testlerinin ortak kurulumu (F2 4-6. adım; `gk`, `ak`, `yk`, `dk` ve akış testleri).
 
 Kapanacak dönem geçiş kurulumuyla 2025-2026 ders yılında açılır; olağan genel kurul 2026-2027 ders
 yılının Ekim'inde toplanır (hazırlık döneminin ders yılı birinci toplantının günüdür, U5). Saatler
@@ -15,7 +15,16 @@ from io import BytesIO
 from django.utils import timezone
 from openpyxl import Workbook
 
-from apps.oab.models import AgendaItem, AssemblyCaller, AssemblyKind, GeneralAssembly, OabTerm
+from apps.oab.models import (
+    AgendaItem,
+    AssemblyCaller,
+    AssemblyKind,
+    GeneralAssembly,
+    OabPerson,
+    OabTerm,
+    OrganMembership,
+    SeatGroup,
+)
 from apps.oab.services import donemler, uyum
 from apps.oab.services import genel_kurul as gk
 from apps.oab.tests import uyelik_ortak as o
@@ -155,9 +164,11 @@ def yapilmis_olagan(katilan: int = KATILAN) -> GeneralAssembly:
     return gk.birinci_toplanti(kurul, katilim=katilim(katilan)).kurul
 
 
-def yapilmis_olaganustu(katilan: int = KATILAN) -> GeneralAssembly:
-    """Birinci toplantıda yapılmış olağanüstü genel kurul (çağrı gündemi `OLAGANUSTU_GUNDEM`)."""
-    acik_donem()
+def yapilmis_olaganustu(katilan: int = KATILAN, *, donem_ac: bool = True) -> GeneralAssembly:
+    """Birinci toplantıda yapılmış olağanüstü genel kurul (çağrı gündemi `OLAGANUSTU_GUNDEM`);
+    `donem_ac=False`: açık dönem önceden kuruldu."""
+    if donem_ac:
+        acik_donem()
     kurul = olaganustu_cagir(planla(kind=AssemblyKind.OLAGANUSTU))
     gk.ilan_et(kurul, kanallar=kanallar())
     return gk.birinci_toplanti(kurul, katilim=katilim(katilan)).kurul
@@ -194,3 +205,103 @@ def veli_xlsx(satirlar: Sequence[tuple[str, str]]) -> bytes:
     tampon = BytesIO()
     kitap.save(tampon)
     return tampon.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 6. adım: ikinci toplantıda yapılmış genel kurul, aday, seçim, tutanak ve dönem geçişi
+# ---------------------------------------------------------------------------
+#: İkinci toplantının günü (birinci toplantıdan 16 gün sonra; md. 9/2'nin 30 günü içinde).
+IKINCI_GUN = date(2026, 11, 5)
+#: Birinci toplantının katılımı ikinci toplantılı akışta (yeter sayı 64'ün altında).
+BIRINCIDE_KATILAN = 10
+#: İkinci toplantının katılımı (çoğunluk aranmaz, md. 9/2).
+IKINCIDE_KATILAN = 20
+
+
+def ikinci_toplantida_yapilmis_olagan(katilan: int = IKINCIDE_KATILAN) -> GeneralAssembly:
+    """Birinci toplantıda yeter sayı sağlanamamış, ikinci toplantıda yapılmış olağan genel kurul (saha
+    8; pilot akışı). İkinci toplantının tarihi ilk ilanda girilmiştir."""
+    kurul = ilanli_olagan(second_meeting_at=an(IKINCI_GUN))
+    gk.birinci_toplanti(kurul, katilim=katilim(BIRINCIDE_KATILAN))
+    return gk.ikinci_toplanti(kurul, katilim=katilim(katilan)).kurul
+
+
+def ikinci_toplantida_yapilmis_olaganustu(katilan: int = IKINCIDE_KATILAN) -> GeneralAssembly:
+    """Birinci toplantıda yeter sayı sağlanamamış, ikinci toplantıda yapılmış olağanüstü genel kurul
+    (A-1; çağrı gündemi `OLAGANUSTU_GUNDEM`). Açık dönem önceden kurulur."""
+    kurul = olaganustu_cagir(planla(kind=AssemblyKind.OLAGANUSTU))
+    gk.ilan_et(kurul, kanallar=kanallar(), second_meeting_at=an(IKINCI_GUN))
+    gk.birinci_toplanti(kurul, katilim=katilim(BIRINCIDE_KATILAN))
+    return gk.ikinci_toplanti(kurul, katilim=katilim(katilan)).kurul
+
+
+#: İbra oylamaları (payda oylamada salonda bulunan 18: katılımı 18 ve üstü her toplantıda geçerli).
+#: 12 > 9: ibra edildi; 4 > 9 değil: ibra edilmedi (md. 9/2, S2 (a)).
+IBRA_EDILDI = gk.IbraOylamasi(votes_for=12, votes_against=3, present_count=18)
+IBRA_EDILMEDI = gk.IbraOylamasi(votes_for=4, votes_against=12, present_count=18)
+
+
+def aday(
+    kurul: GeneralAssembly,
+    *,
+    organ: str = "YK",
+    seat_type: str = "ASIL",
+    kisi: OabPerson | None = None,
+) -> OrganMembership:
+    """Genel kurulun aday kaydı (program yöneticisi); Denetleme Kurulunda veli koltuğu."""
+    return gk.aday_kaydet(
+        kurul,
+        person=kisi or o.kisi(),
+        organ=organ,
+        seat_type=seat_type,
+        seat_group=SeatGroup.VELI if organ == "DK" else "",
+    )
+
+
+def secim(
+    kurul: GeneralAssembly,
+    kind: str,
+    adaylar: Sequence[OrganMembership],
+    *,
+    oylar: Sequence[int] | None = None,
+    liste: bool | None = True,
+    acik_oy: bool | None = True,
+    gerekce: uyum.Gerekce | None = None,
+) -> gk.SecimSonucu:
+    """Adayların hepsi seçilir; oylar verilmezse katılımdan birer eksilerek (yedek sırası belirli)."""
+    kurul = GeneralAssembly.objects.get(pk=kurul.pk)
+    katilan = (
+        kurul.second_attendee_count
+        if kurul.second_attendee_count is not None
+        else kurul.first_attendee_count
+    )
+    assert katilan is not None
+    oy_listesi = list(oylar) if oylar is not None else [katilan - i for i in range(len(adaylar))]
+    return gk.secim_sonucu_yaz(
+        madde(kurul, kind),
+        adaylar=[
+            gk.AdayOyu(uyelik=u, votes=oy, secildi=True)
+            for u, oy in zip(adaylar, oy_listesi, strict=True)
+        ],
+        liste=liste,
+        acik_oy=acik_oy,
+        gerekce=gerekce,
+    )
+
+
+def kurullari_sec(
+    kurul: GeneralAssembly, *, yk_asil: int = 5, yk_yedek: int = 0
+) -> tuple[list[OrganMembership], list[OrganMembership]]:
+    """Yönetim kurulu (asıl ve yedek) ve Denetleme Kurulunun veli koltuğu (asıl) seçimi; seçilenler."""
+    yk = [aday(kurul) for _ in range(yk_asil)]
+    yk += [aday(kurul, seat_type="YEDEK") for _ in range(yk_yedek)]
+    dk = [aday(kurul, organ="DK")]
+    secilen_yk = secim(kurul, "SECIM_YK", yk).secilenler
+    secilen_dk = secim(kurul, "SECIM_DK", dk).secilenler
+    return list(secilen_yk), list(secilen_dk)
+
+
+def tamamla_ve_onayla(kurul: GeneralAssembly) -> gk.DonemGecisi:
+    """Tutanak tamamlanır (program yöneticisi), dönem geçişi onaylanır (program yöneticisi, U32)."""
+    gk.tutanagi_tamamla(kurul)
+    return gk.donem_gecisini_onayla(kurul)

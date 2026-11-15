@@ -41,6 +41,13 @@ raporun işaretine ve bağına bakar (`_cagri_raporu_denetimi`); raporun tarafı
 (çağrıya bağlı raporun işareti kaldırılmaz, rapor başka raporla çağrılmış genel kurulu göstermez). Ham
 SQL bu korumayı aşar; 7. adımın servisi iki bağı aynı işlemde yazar.
 
+İBRA OYLAMASI (md. 11/1-c; tasarım §9.6 E10 "YK ve DK ibrası ayrı oylama satırı"; F2 6. adım): ibra
+genel kurulun kararıdır, sonucu oylardan hesaplanır (kullanıcı kararı S6 (iii)). Oylama kurul başına
+ayrı alanlardadır (`discharge_<yk|dk>_votes_for`, `_votes_against`, `_present_count`): kabul ve ret
+birlikte dolar, oy varsa ibra oylanmıştır (`EDILDI` ya da `EDILMEDI`), salonda bulunan oyların
+toplamından az olamaz (veritabanı kısıtı). Sonucun oylarla tutarlılığı serviste hesaplanır (payda
+toplantının katılımına bağlıdır).
+
 ŞİFRELEME (tasarım §5.3): `call_reason`, `cancel_reason`, gündemin `notes` ve `result_text`'i,
 tutanağın `unaudited_documents_note`'u ve düzeltmenin `justification`'ı şifrelidir; değer listesine
 girmez, içerik MAC'indedir. Toplantı yeri ve gündem başlığı açık serbest metindir: yalnız içerik
@@ -190,6 +197,39 @@ def katilim_dagilimi_gecerli_mi(deger: object) -> bool:
     )
 
 
+def _ibra_oylari_kisiti(kurul: str) -> models.CheckConstraint:
+    """Bir kurulun ibra oylamasının kısıtı (`discharge_<kurul>_*`)."""
+    onek = f"discharge_{kurul}"
+    return models.CheckConstraint(
+        condition=Q(
+            **{
+                f"{onek}_votes_for__isnull": True,
+                f"{onek}_votes_against__isnull": True,
+                f"{onek}_present_count__isnull": True,
+            }
+        )
+        | (
+            Q(
+                **{
+                    f"{onek}_votes_for__isnull": False,
+                    f"{onek}_votes_against__isnull": False,
+                    f"{onek}__in": [Discharge.EDILDI, Discharge.EDILMEDI],
+                }
+            )
+            & (
+                Q(**{f"{onek}_present_count__isnull": True})
+                | Q(
+                    **{
+                        f"{onek}_present_count__gte": F(f"{onek}_votes_for")
+                        + F(f"{onek}_votes_against")
+                    }
+                )
+            )
+        ),
+        name=f"ck_generalassembly_ibra_oylari_{kurul}",
+    )
+
+
 class GeneralAssembly(SilinmezOabModel):
     """Genel kurul (modül başlığı); `term` kapanacak, `opens_term` olağanda açılacak dönemdir."""
 
@@ -219,6 +259,12 @@ class GeneralAssembly(SilinmezOabModel):
         "observer_count",
         "discharge_yk",
         "discharge_dk",
+        "discharge_yk_votes_for",
+        "discharge_yk_votes_against",
+        "discharge_yk_present_count",
+        "discharge_dk_votes_for",
+        "discharge_dk_votes_against",
+        "discharge_dk_present_count",
         "status",
     )
     IZ_OZET_ALANLARI: ClassVar[tuple[str, ...]] = (
@@ -253,6 +299,12 @@ class GeneralAssembly(SilinmezOabModel):
         "observer_count",
         "discharge_yk",
         "discharge_dk",
+        "discharge_yk_votes_for",
+        "discharge_yk_votes_against",
+        "discharge_yk_present_count",
+        "discharge_dk_votes_for",
+        "discharge_dk_votes_against",
+        "discharge_dk_present_count",
         "status",
         "rule_warnings",
         "cancel_reason",
@@ -363,6 +415,27 @@ class GeneralAssembly(SilinmezOabModel):
         choices=Discharge.choices,
         blank=True,
         default="",
+    )
+    #: İbra oylaması kurul başına ayrı satırdır (md. 11/1-c; tasarım §9.6 E10 "YK ve DK ibrası ayrı
+    #: oylama satırı"): kabul, ret ve oylamada salonda bulunan. İbra sonucu bu oylardan hesaplanır
+    #: (`genel_kurul.karar_cogunlugu`, kullanıcı kararı S6 (iii); servis `genel_kurul.ibra_yaz`).
+    discharge_yk_votes_for = models.PositiveIntegerField(
+        "yönetim kurulunun ibrasında kabul oyu", null=True, blank=True
+    )
+    discharge_yk_votes_against = models.PositiveIntegerField(
+        "yönetim kurulunun ibrasında ret oyu", null=True, blank=True
+    )
+    discharge_yk_present_count = models.PositiveIntegerField(
+        "yönetim kurulunun ibrasında salonda bulunan", null=True, blank=True
+    )
+    discharge_dk_votes_for = models.PositiveIntegerField(
+        "Denetleme Kurulunun ibrasında kabul oyu", null=True, blank=True
+    )
+    discharge_dk_votes_against = models.PositiveIntegerField(
+        "Denetleme Kurulunun ibrasında ret oyu", null=True, blank=True
+    )
+    discharge_dk_present_count = models.PositiveIntegerField(
+        "Denetleme Kurulunun ibrasında salonda bulunan", null=True, blank=True
     )
     status = models.CharField(
         "durum", max_length=16, choices=AssemblyStatus.choices, default=AssemblyStatus.PLANLANDI
@@ -490,6 +563,9 @@ class GeneralAssembly(SilinmezOabModel):
                 condition=Q(discharge_yk="", discharge_dk="") | Q(status__in=_YAPILMIS),
                 name="ck_generalassembly_ibra",
             ),
+            # İbra oylaması kurul başına: kabul ve ret birlikte; oy varsa ibra oylanmıştır (edildi ya da
+            # edilmedi); salonda bulunan oyların toplamından az olamaz (S6 (iii), hesap bütünlüğü).
+            *(_ibra_oylari_kisiti(kurul) for kurul in ("yk", "dk")),
             # md. 14/5 raporu yalnız Denetleme Kurulunun çağrısında. Raporun md. 6 işareti başka
             # tablodadır, kısıt okuyamaz: `save()` ve toplu güncelleme denetler (modül başlığı, S6 (ii)).
             models.CheckConstraint(

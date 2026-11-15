@@ -14,11 +14,15 @@ seçildiği koltuk olarak kalır (plan F1c kararları).
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import date
 from typing import Any
 
 from django.db.models import Q, QuerySet
+from django.utils import timezone
 
 from apps.oab.models import (
+    AssemblyMeeting,
+    GeneralAssembly,
     MembershipStatus,
     OabPerson,
     OabTerm,
@@ -29,6 +33,23 @@ from apps.oab.models import (
 from apps.okul import normalize
 from apps.okul.excel_ortak import normalize_header
 from shared.crypto import has_corrupt
+
+
+def genel_kurul_gunu(kurul: GeneralAssembly) -> date | None:
+    """Genel kurulun günü: yapıldığı toplantının yerel günü (Europe/Istanbul; plan F2 §7 U6).
+
+    `held_at_meeting` ikinci toplantıysa ikinci, değilse birinci toplantının günüdür; henüz yapılmamış
+    kurulda (ya da F1c'nin durum makinesinden geçmemiş asgari kaydında) birinci toplantının günü.
+    Toplantı anı girilmemişse `None`. Seçilme günü, görev bölümü süresi ve evrak günü buradan okunur
+    (`uyelikler._olay_gunu`, `gorev_bolumu`, `gorev_evraki`); genel kurul kurallarının olay günü ve
+    yeter sayının dondurulduğu gün birinci toplantınındır, buradan okunmaz (U7; `kural_bagi`).
+    """
+    an = (
+        kurul.second_meeting_at
+        if kurul.held_at_meeting == AssemblyMeeting.IKINCI
+        else kurul.first_meeting_at
+    )
+    return None if an is None else timezone.localtime(an).date()
 
 
 def _kisi_sira_anahtari(kisi: OabPerson) -> tuple[Any, ...]:

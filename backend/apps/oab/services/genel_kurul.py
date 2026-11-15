@@ -5,9 +5,9 @@ F1c genel kurulun asgari kaydını (dönem bağı, yeter sayının anlık görü
 alanlarını ve model düzeyindeki durum makinesini (`models.genel_kurul`) getirdi. Bu modül geçişlerin
 servisidir: planlama, çağrı, ilan, birinci toplantı, yeter sayı yok, ikinci toplantının ilanı ve kendisi,
 iptal (4. adım); gündem değişikliği, gündeme bağlılık, karar sonucu, divan, katılım düzeltmesi ve katılım
-işareti (5. adım). Seçim, ibra, tutanak ve dönemin açılması 6. adımda; müdürün ve Denetleme Kurulunun
-yazıları (yeni okul daveti, müdürün olağanüstü çağrısı, md. 14/5 çağrısı) ve gelen-giden evrak bağı 7.
-adımdadır. Uç ve ekran 11. adımdadır.
+işareti (5. adım); aday ve seçim, ibra ve "ibra edilmedi" yan akışı, tutanağın tamamlanması ve dönem
+geçişinin onayı (6. adım). Müdürün ve Denetleme Kurulunun yazıları (yeni okul daveti, müdürün olağanüstü
+çağrısı, md. 14/5 çağrısı) ve gelen-giden evrak bağı 7. adımdadır. Uç ve ekran 11. adımdadır.
 
 KİM (tasarım §4.4.2 M3 ve §7.1 "Kim" sütunu; Kim matrisi daraltır, genişletemez). Her yazma önce
 `Eylem.GENEL_KURUL_YAZMA` kapısından geçer (program yöneticisi ve yönetim kurulu rolleri; müdür ve
@@ -15,8 +15,10 @@ Denetleme Kurulu okur), sonra geçişin "Kim"iyle daraltılır: planlama, tarih 
 toplantılar program yöneticisi ve sekreter; yönetim kurulunun çağrısı sekreter (YK kararı); başkanın md.
 13/8 çağrısı başkan; üyelerin yazılı başvurusunu program yöneticisi kaydeder; iptal yalnız program
 yöneticisi. Gündem, karar, divan ve katılım düzeltmesi tutanağın işidir (§7.1 `YAPILDI →
-TUTANAK_TAMAM` "Kim"): program yöneticisi ve sekreter. Katılım işareti veli adını gösterir (R9, dipnot
-¹⁰; U33): yalnız program yöneticisi, kişisel veri içeren çıktı kapısıyla. Müdürün (md. 9/1 yeni okul, 9/6, 13/8, 25/2) ve Denetleme Kurulunun (md. 14/5) çağrısının
+TUTANAK_TAMAM` "Kim"): program yöneticisi ve sekreter; aday kaydı, seçim, ibra ve tutanağın
+tamamlanması da. Dönem geçişini yalnız program yöneticisi onaylar (U32; M1, `Eylem.BIRLIK_DONEMI_YAZMA`).
+Katılım işareti veli adını gösterir (R9, dipnot ¹⁰; U33): yalnız program yöneticisi, kişisel veri içeren
+çıktı kapısıyla. Müdürün (md. 9/1 yeni okul, 9/6, 13/8, 25/2) ve Denetleme Kurulunun (md. 14/5) çağrısının
 kendi eylemleri 7. adımda bağlanır; o güne dek bu çağıranlar hiçbir rolle kaydedilmez (`RolYetkisiz`).
 
 KURALLAR (altın kural 1-3). Değerler kural paketindedir; kurallar kapanacak dönemin kopyasından, yeni
@@ -87,6 +89,26 @@ sayısı öneridir, katılım sayısı işaretten hesaplanmaz; işaret tutanak t
 yalnız işaret penceresinin okumasında çözülür ve okuma erişim günlüğüne düşer (U33). Yeniden aktarımda
 işaretler satırlarıyla düşer (S12 (a); `okul.services.imports`).
 
+SEÇİM (md. 10/1-d, 11/1-a, b, 12/4, 13/8; U26, U27; 6. adım). Aday kaydı planlamadan toplantının sonuna
+dek açılır (`aday_kaydet`; salondan adaylık); olağanda açılacak (hazırlık) döneme, olağanüstüde genel
+kurulun kendi dönemine yazılır. Seçilen yalnız aynı genel kurulun aday kaydından olur (kullanıcı kararı
+S6 (i), sert — hesap bütünlüğü). Koltuk uygunluğu, tek koltuk, aynı dönemde iki kurul ve okul müdürü
+engeli F1c'nin sert kurallarıdır (`uyelikler`); seçimde denetlenen tek seçilme sınırı md. 12/4'tür,
+md. 14/3 Denetleme Kurulunun görev bölümünde kalır. Seçimin biçimi `genel_kurul.secim_bicimi` (uyarı +
+gerekçe). Olağanüstü genel kurulda yönetim kurulu seçilince görevdeki eski üyelikler düşer (U27);
+olağanüstü genel kurul Denetleme Kuruluna seçim yapmaz (kullanıcı kararı S10 (a)).
+
+İBRA VE TUTANAK (md. 11/1-c, ç; S4 (a); U32). İbra kurul başına ayrıdır; yönetim kurulunun hesapları
+ibra edilmezse ibra edilmeyen muhasebe evrakı tutanağa yazılır, tutanak tamamlanınca il/ilçe MEM
+bildirimi takvime girer. `TUTANAK_TAMAM` kapatıcı geçiştir: açık eksikler gerekçeyle sapmaya döner
+(O3). Olağanda dönem bu geçişte değişmez; program yöneticisinin onayıyla hazırlık dönemi `ACIK`
+(başlangıç genel kurulun yapıldığı gün, U6), kapanacak dönem `KAPANISTA` (bir önceki gün biter) olur,
+aralık çakışması serttir (U4), okul idaresinin TEFBİS girişleri takvime girer (md. 23/5).
+
+GÜN KAYNAĞI (U6). Genel kurulun yapıldığı gün `genel_kurul_gunu`'dür (`selectors.genel_kurul_gunu`:
+birinci ya da ikinci toplantı); divanın ve seçilenlerin günü, yeni dönemin başlangıcı ve görev bölümü
+süresi buradan okunur. Kuralların olay günü yine birinci toplantınındır (U7).
+
 Her yazma denetim izine düşer (izli servis kalıbı: `denetim_izi.degisiklik`). Kayıt silinmez: genel
 kurul `IPTAL` olur (altın kural 4).
 """
@@ -98,15 +120,22 @@ import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
+from enum import Enum
 from typing import Any, Final
 
 from django.db import transaction
 from django.db.models import QuerySet
 from django.utils import timezone
 
-from apps.oab.hatalar import KuralSert, KuralSurumuGuncellenmeli, YeterSayiDonduruldu
+from apps.oab import selectors
+from apps.oab.hatalar import (
+    GerekceGerekli,
+    KuralSert,
+    KuralSurumuGuncellenmeli,
+    YeterSayiDonduruldu,
+)
 from apps.oab.kurallar import (
     VERI_YOK,
     BilinmeyenKural,
@@ -126,9 +155,15 @@ from apps.oab.models import (
     AssemblyCaller,
     AssemblyKind,
     AssemblyMeeting,
+    AssemblyMinutes,
     AssemblyStatus,
     AttendanceCorrection,
     AttendanceKind,
+    ComplianceItem,
+    ComplianceKind,
+    ComplianceObligation,
+    Discharge,
+    DropKind,
     ElectedBy,
     GeneralAssembly,
     MembershipRole,
@@ -146,7 +181,16 @@ from apps.oab.models.genel_kurul import (
     DUZELTILEBILIR_ALANLAR,
     YER_MAX,
 )
-from apps.oab.services import donem_kilidi, gecis, iz, kural_bagi, uyelikler, uyum
+from apps.oab.services import (
+    donem_kilidi,
+    donemler,
+    gecis,
+    iz,
+    kural_bagi,
+    uyelik_gecisleri,
+    uyelikler,
+    uyum,
+)
 from apps.okul import denetim_izi, erisim_gunlugu, excel_veli, normalize, rol_izinleri
 from apps.okul.models import AccessKind, AccountRole, AuditAction, ParentRoster, SchoolConfig
 from apps.okul.oturum import yazar
@@ -257,8 +301,13 @@ DUZELTME_TOPLANTISI = "Bu sayı seçilen toplantının sayısı değil."
 DUZELTME_DEGISMIYOR = "Düzeltilen sayı önceki değerle aynı."
 IKINCI_TOPLANTI_YAPILMADI = "İkinci toplantı yapılmadı; ikinci toplantının sayısı düzeltilemez."
 DUZELTME_OYLARIN_ALTINDA = (
-    "Katılım sayısı, gündem maddelerine girilmiş oyların, oylamada salonda bulunan sayının ya da "
-    "gündem değişikliği oylarının toplamının altına düzeltilemez (hesap bütünlüğü)."
+    "Katılım sayısı, gündem maddelerine ve ibraya girilmiş oyların, oylamada salonda bulunan sayının "
+    "ya da gündem değişikliği oylarının toplamının altına düzeltilemez (hesap bütünlüğü)."
+)
+#: Katılım düzeltmesi yönetim kurulunun ibra sonucunu değiştirince bilgi satırı (md. 11/1-ç; S4 (a)).
+IBRA_YAN_AKISI_GOZDEN_GECIR: Final = (
+    'Yönetim kurulunun ibra sonucu değişti: "ibra edilmedi" yan akışı (ibra edilmeyen muhasebe '
+    "evrakının listesi, il/ilçe millî eğitim müdürlüğüne bildirim; md. 11/1-ç) gözden geçirilmelidir."
 )
 ISARET_CAKISIYOR = "Aynı satır hem işaretlenip hem işareti kaldırılamaz."
 ISARET_SATIRI_YOK = "Satır bu genel kurulun veli listesinde yok."
@@ -415,7 +464,8 @@ _DUZELTILEBILIR_DURUMLAR: Final = (
 )
 #: Türe göre dağılımın düzeltme alanı öneki (`DUZELTILEBILIR_ALANLAR`).
 _DAGILIM_ONEKI: Final = "attendance_by_kind."
-#: İlan kanıtı yazılabilen durumlar (tutanak tamamlanana dek; tamamlanınca eksik sapmaya döner, 6. adım).
+#: İlan kanıtı yazılabilen durumlar (tutanak tamamlanana dek; tamamlanınca eksik sapmaya döner:
+#: `tutanagi_tamamla`).
 _KANIT_YAZILABILIR: Final = frozenset(
     {AssemblyStatus.ILAN_EDILDI, AssemblyStatus.YETER_SAYI_YOK, AssemblyStatus.YAPILDI}
 )
@@ -1456,16 +1506,13 @@ def _toplanti_katilani(kurul: GeneralAssembly) -> int:
     return sayi
 
 
-def _yapildigi_gun(kurul: GeneralAssembly) -> date:
-    """Genel kurulun yapıldığı toplantının yerel günü (divanın seçildiği gün)."""
-    an = (
-        kurul.second_meeting_at
-        if kurul.held_at_meeting == AssemblyMeeting.IKINCI
-        else kurul.first_meeting_at
-    )
-    if an is None:  # tür daraltması: yapılmış genel kurulun toplantı anı doludur
+def genel_kurul_gunu(kurul: GeneralAssembly) -> date:
+    """Genel kurulun yapıldığı toplantının yerel günü (`selectors.genel_kurul_gunu`, plan F2 §7 U6):
+    divanın ve seçilenlerin günü, yeni dönemin başlangıcı. Gün yoksa `DURUM_GECERSIZ`."""
+    gun = selectors.genel_kurul_gunu(kurul)
+    if gun is None:  # tür daraltması: yapılmış genel kurulun toplantı anı doludur
         raise ValueError(DURUM_GECERSIZ)
-    return yerel_gun(an)
+    return gun
 
 
 def _madde_ve_kurul(madde: AgendaItem) -> tuple[AgendaItem, GeneralAssembly]:
@@ -1653,6 +1700,42 @@ def gundem_sirasini_degistir(kurul: GeneralAssembly, *, sira: Sequence[int]) -> 
     return GenelKurulSonucu(kurul=guncel, bilgiler=(SIRA_BILGISI,))
 
 
+@dataclass(frozen=True)
+class _Oylama:
+    """Bir oylamanın denetlenmiş sayıları ve çoğunluk hesabı (`genel_kurul.karar_cogunlugu`)."""
+
+    kabul: int
+    ret: int
+    salondaki: int | None
+    cogunluk: bool
+    atif: str
+
+
+def _oylama(kurul: GeneralAssembly, kabul: object, ret: object, salondaki: object) -> _Oylama:
+    """Oylamanın sonucu (md. 9/2 "katılanların çoğunluğu"; kullanıcı kararı S2 (a), S6 (iii); sert —
+    hesap bütünlüğü): payda oylamada salonda bulunan sayıdır, girilmemişse toplantının katılım sayısı;
+    salondaki katılımı, kabul ve ret toplamı paydayı aşamaz. Kabul oyu paydanın yarısından fazlaysa
+    çoğunluk vardır (eşitlikte yoktur). Gündem maddesinin kararı ve ibra aynı hesabı kullanır."""
+    kabul_sayisi, ret_sayisi = _sayi(kabul), _sayi(ret)
+    katilan = _toplanti_katilani(kurul)
+    salondaki_sayisi = _secimli_sayi(salondaki)
+    payda = katilan if salondaki_sayisi is None else salondaki_sayisi
+    if payda > katilan:
+        raise ValueError(SALONDAKI_KATILANDAN_COK)
+    if kabul_sayisi + ret_sayisi > payda:
+        raise ValueError(OYLAR_KATILANI_ASAR)
+    sonuc = genel_kurul.karar_cogunlugu(
+        kabul_sayisi, payda, tarih=birinci_toplanti_gunu(kurul), donem=kural_donemi(kurul)
+    )
+    return _Oylama(
+        kabul=kabul_sayisi,
+        ret=ret_sayisi,
+        salondaki=salondaki_sayisi,
+        cogunluk=sonuc["durum"] == "uygun",
+        atif=str(sonuc["atif"]),
+    )
+
+
 @transaction.atomic
 def karar_sonucu_yaz(
     madde: AgendaItem,
@@ -1693,20 +1776,11 @@ def karar_sonucu_yaz(
     else:
         if votes_for is None or votes_against is None:
             raise ValueError(OYLAR_GEREKLI)
-        kabul, ret = _sayi(votes_for), _sayi(votes_against)
-        katilan = _toplanti_katilani(kurul)
-        salondaki = _secimli_sayi(present_count)
-        payda = katilan if salondaki is None else salondaki
-        if payda > katilan:
-            raise ValueError(SALONDAKI_KATILANDAN_COK)
-        if kabul + ret > payda:
-            raise ValueError(OYLAR_KATILANI_ASAR)
-        sonuc = genel_kurul.karar_cogunlugu(
-            kabul, payda, tarih=birinci_toplanti_gunu(kurul), donem=kural_donemi(kurul)
-        )
-        hesaplanan = str(AgendaResult.KABUL if sonuc["durum"] == "uygun" else AgendaResult.RET)
+        oylama = _oylama(kurul, votes_for, votes_against, present_count)
+        kabul, ret, salondaki = oylama.kabul, oylama.ret, oylama.salondaki
+        hesaplanan = str(AgendaResult.KABUL if oylama.cogunluk else AgendaResult.RET)
         if result is not None and result != hesaplanan:
-            raise KuralSert(detail=f"{KARAR_OYLARLA_CELISIYOR} ({sonuc['atif']}).")
+            raise KuralSert(detail=f"{KARAR_OYLARLA_CELISIYOR} ({oylama.atif}).")
     onceki = denetim_izi.anlik(guncel_madde)
     guncel_madde.result = hesaplanan
     guncel_madde.votes_for = kabul
@@ -1799,7 +1873,7 @@ def divan_sec(
     baskan_kaydi = uyelikler.kisi_aktif(baskan)
     katip_kaydi = uyelikler.kisi_aktif(katip)
     tur = _Tur(guncel, gerekce)
-    gun = _yapildigi_gun(guncel)
+    gun = genel_kurul_gunu(guncel)
     _divan_uyesi(tur, baskan_kaydi, MembershipRole.BASKAN, gun)
     _divan_uyesi(tur, katip_kaydi, MembershipRole.KATIP, gun)
     return _sonuc(tur)
@@ -1891,6 +1965,29 @@ def _paydasi_degisen_kararlar(kurul: GeneralAssembly, katilan: int) -> list[tupl
     return degisenler
 
 
+def _paydasi_degisen_ibralar(kurul: GeneralAssembly, katilan: int) -> dict[str, str]:
+    """Katılım düzeltmesinin ibraya etkisi (`_paydasi_degisen_kararlar`'ın ibra kolu; kullanıcı kararı
+    S6 (iii)): ibra oylarının ve salondaki sayının toplamı yeni katılımı aşamaz (sert); salondaki sayısı
+    girilmemiş ibranın sonucu yeni paydayla yeniden hesaplanır. Sonucu değişen kurulların ibra alanı ve
+    yeni sonucu döner (yazmaz)."""
+    degisenler: dict[str, str] = {}
+    tarih, donem = birinci_toplanti_gunu(kurul), kural_donemi(kurul)
+    for sonuc_alani, kabul_alani, ret_alani, salondaki_alani in _IBRA_ALANLARI.values():
+        kabul, ret = getattr(kurul, kabul_alani), getattr(kurul, ret_alani)
+        salondaki = getattr(kurul, salondaki_alani)
+        if kabul is None or ret is None:
+            continue
+        if max(salondaki or 0, kabul + ret) > katilan:
+            raise ValueError(DUZELTME_OYLARIN_ALTINDA)
+        if salondaki is not None:
+            continue
+        sonuc = genel_kurul.karar_cogunlugu(kabul, katilan, tarih=tarih, donem=donem)
+        hesaplanan = str(Discharge.EDILDI if sonuc["durum"] == "uygun" else Discharge.EDILMEDI)
+        if hesaplanan != getattr(kurul, sonuc_alani):
+            degisenler[sonuc_alani] = hesaplanan
+    return degisenler
+
+
 def _karar_sonucunu_yeniden_yaz(madde: AgendaItem, sonuc: str, satir: int) -> str:
     """Düzeltmenin değiştirdiği karar sonucunu yazar (izli; iz satırı akış satırına bağlı) ve bilgi
     satırını döner."""
@@ -1904,6 +2001,38 @@ def _karar_sonucunu_yeniden_yaz(madde: AgendaItem, sonuc: str, satir: int) -> st
         f"{madde.order}. {madde.title}: sonuç oylardan yeniden hesaplandı "
         f"({eski} → {AgendaResult(sonuc).label})."
     )
+
+
+def _ibrayi_yeniden_yaz(tur: _Tur, kurul: GeneralAssembly, ibralar: Mapping[str, str]) -> list[str]:
+    """Düzeltmenin değiştirdiği ibra sonuçlarını kurula işler (kayıt düzeltmenin yazımıyla, izli) ve
+    bilgi satırlarını döner. Yönetim kurulunun ibrası değişirse yan akış gözden geçirilir (md. 11/1-ç);
+    tutanak tamamlanmışsa ve yeni sonuç "ibra edilmedi"yse il/ilçe MEM bildirimi takvime girer (tutanağın
+    tamamlanmasındaki satır, S4 (a))."""
+    bilgiler: list[str] = []
+    for alan, yeni in ibralar.items():
+        kurul_adi = alan.removeprefix("discharge_")
+        eski = Discharge(getattr(kurul, alan)).label
+        setattr(kurul, alan, yeni)
+        bilgiler.append(
+            f"İbra ({_IBRA_KURUL_ADI[kurul_adi]}): sonuç oylardan yeniden hesaplandı "
+            f"({eski} → {Discharge(yeni).label})."
+        )
+    if "discharge_yk" in ibralar:
+        bilgiler.append(IBRA_YAN_AKISI_GOZDEN_GECIR)
+        if (
+            kurul.status == AssemblyStatus.TUTANAK_TAMAM
+            and ibralar["discharge_yk"] == Discharge.EDILMEDI
+        ):
+            uyum.takvim_satiri_yaz(
+                ComplianceObligation.IBRA_EDILMEDI_BILDIRIMI,
+                donem=tur.donem,
+                due_date=genel_kurul_gunu(kurul),
+                mesaj=IBRA_BILDIRIMI_MESAJI,
+                responsible_role=_YONETICI,
+                konu=kurul,
+                hazirlik_yazimi=True,
+            )
+    return bilgiler
 
 
 @transaction.atomic
@@ -1928,7 +2057,9 @@ def katilim_duzelt(
     denetlenir (`_paydasi_degisen_kararlar`): oy toplamları yeni katılımı aşamaz (sert — hesap
     bütünlüğü); salondaki sayısı girilmemiş maddenin sonucu yeni paydayla yeniden hesaplanıp yazılır
     (kullanıcı kararı S6 (iii): oylarla çelişen sonuç kayıtta durmaz) ve sonucu değiştiren düzeltme
-    uyarı + gerekçedir (plan F2 §5.1; akış satırı, konusu katılım sayısının düzeltme satırı)."""
+    uyarı + gerekçedir (plan F2 §5.1; akış satırı, konusu katılım sayısının düzeltme satırı). İbra
+    oylaması da aynı denetimden geçer (`_paydasi_degisen_ibralar`): sonucu değişen ibra yeniden yazılır,
+    yönetim kurulunun ibrası değişirse yan akış bilgi satırıyla gözden geçirilir."""
     yazma_kapisi()
     _baslangic(TUTANAK_ROLLERI)
     metin = justification.strip()
@@ -1983,11 +2114,11 @@ def katilim_duzelt(
         if guncel.held_at_meeting == AssemblyMeeting.IKINCI
         else "first_attendee_count"
     )
-    kararlar = (
-        _paydasi_degisen_kararlar(guncel, yeni_payda)
-        if yeni_payda is not None and yeni_payda != eski_payda
-        else []
-    )
+    kararlar: list[tuple[AgendaItem, str]] = []
+    ibralar: dict[str, str] = {}
+    if yeni_payda is not None and yeni_payda != eski_payda:
+        kararlar = _paydasi_degisen_kararlar(guncel, yeni_payda)
+        ibralar = _paydasi_degisen_ibralar(guncel, yeni_payda)
     tur = _Tur(guncel, gerekce)
     hesap = iz.yazar_hesabi()
     an = timezone.now()
@@ -2017,7 +2148,7 @@ def katilim_duzelt(
             )
             tur.akis(DUZELTME_YETER_SAYI_AKISI, DUZELTME_YETER_SAYI, kurulun=False)
             bag = satir.pk
-        if alan == payda_alani and kararlar:
+        if alan == payda_alani and (kararlar or ibralar):
             karar_satiri = uyum.akis_sapmasi(
                 DUZELTME_KARAR_AKISI,
                 DUZELTME_KARAR,
@@ -2031,6 +2162,8 @@ def katilim_duzelt(
                 _karar_sonucunu_yeniden_yaz(madde, sonuc, karar_satiri.pk)
                 for madde, sonuc in kararlar
             )
+            bilgiler.extend(_ibrayi_yeniden_yaz(tur, guncel, ibralar))
+            alanlar.update(ibralar.keys())
             bag = karar_satiri.pk if bag is None else bag
         denetim_izi.degisiklik(duzeltme, onceki=None, compliance_item=bag)
     guncel.updated_by_id = hesap
@@ -2203,3 +2336,886 @@ def katilim_isaretle(
         term=kural_donemi(guncel).pk,
     )
     return katilim_isareti_sayisi(guncel, toplanti)
+
+
+# ---------------------------------------------------------------------------
+# 6. adım: aday ve seçim (md. 10/1-d, 11/1-a, b, 12/4, 13/8; plan F2 §7 U26, U27, S6 (i), S10)
+# ---------------------------------------------------------------------------
+#: Aday kaydı ve seçim "Kim"i: ilandan önce planlamanın, toplantıda tutanağın rolleri (tasarım §7.1
+#: `PLANLANDI` ve `YAPILDI → TUTANAK_TAMAM`): program yöneticisi, sekreter.
+SECIM_ROLLERI: Final = frozenset({_YONETICI, _SEKRETER})
+#: Seçim maddesinin kurulu (gündem türü → organ).
+SECIM_ORGANLARI: Final[Mapping[str, str]] = {
+    AgendaItemKind.SECIM_YK: OrganType.YONETIM_KURULU,
+    AgendaItemKind.SECIM_DK: OrganType.DENETLEME_KURULU,
+}
+#: Aday kaydının açıldığı durumlar: planlamadan toplantının sonuna dek (U26: salondan adaylık).
+_ADAY_KAYDI_ACIK: Final = (
+    AssemblyStatus.PLANLANDI,
+    AssemblyStatus.CAGRILDI,
+    AssemblyStatus.ILAN_EDILDI,
+    AssemblyStatus.YETER_SAYI_YOK,
+    AssemblyStatus.YAPILDI,
+)
+#: `genel_kurul.secim_bicimi` belirteçleri (kural paketinin değerleri; md. 10/1-d, 11/1-a, b).
+SECIM_LISTE: Final = "LISTE"
+SECIM_ACIK_OY: Final = "ACIK_OY"
+#: Yönetim kurulu seçilme sayacının kuralı (U26: bilinmeyen beyanın toplu gerekçesi).
+_YK_SAYAC_KURALI: Final = "yonetim_kurulu.secilme_siniri"
+
+ADAY_ORGANI = (
+    "Genel kurulda yalnız yönetim kurulu ve Denetleme Kurulunun veli koltuğu için aday kaydedilir "
+    "(md. 11/1-a, b)."
+)
+SECIM_MADDESI_DEGIL = "Bu gündem maddesi seçim maddesi değil."
+SECIM_SONUCU_GIRILDI = (
+    "Bu seçimin sonucu girildi; yanlış girilen sonuç seçimin gerekçeli iptaliyle düzeltilir "
+    "(seçilenlerin kayıtları iptal olur, sonuç yeniden girilir)."
+)
+SECIM_SONUCU_YOK = "Bu seçimin sonucu girilmedi."
+SECIM_BICIMI_GECERSIZ = (
+    "Seçimin biçimi girilirken liste hâlinde ve açık oyla yapılıp yapılmadığı ikisi birlikte "
+    "işaretlenir."
+)
+ADAY_TEKRAR = "Bir adayın sonucu bir kez girilir."
+SECILEN_ADAYDAN = (
+    "Seçilen yalnız bu genel kurulun bu kurula aday kaydından olur (tek kaynak; hesap bütünlüğü)."
+)
+OY_KATILANDAN_COK = "Bir adayın oyu toplantıya katılan üye sayısını aşamaz (hesap bütünlüğü)."
+YEDEK_SIRASI_YALNIZ_SECILEN_YEDEKTE = "Yedek sırası yalnız seçilen yedek üyeye verilir."
+YEDEK_SIRASI_GECERSIZ = "Yedek sırası 1 ya da daha büyük tam sayı olmalıdır."
+YEDEK_SIRASI_TEKRAR = (
+    "Seçilen yedeklerin sırası birbirinden farklı olmalıdır (md. 13/6; hesap bütünlüğü)."
+)
+OLAGANUSTU_DK_SECIMI_YOK = (
+    "Olağanüstü genel kurul Denetleme Kuruluna seçim yapmaz: md. 13/8 olağanüstü genel kurulun "
+    "seçtiği kurul olarak yalnız yönetim kurulunu sayar (kullanıcı kararı S10)."
+)
+ESIT_OYLU_YEDEK_BILGISI: Final = (
+    "Eşit oy alan ya da oyu girilmeyen yedeklerin sırası programca hesaplanmaz; sıra elle girilir "
+    "(md. 13/6 yedekleri aldıkları oy sırasıyla çağırır, eşitlikte yöntem vermez)."
+)
+
+
+@dataclass(frozen=True)
+class AdayOyu:
+    """Seçimde bir adayın sonucu: aldığı oy, seçilip seçilmediği ve (eşit oyda) elle yedek sırası."""
+
+    uyelik: OrganMembership
+    votes: int | None = None
+    secildi: bool = False
+    seat_order: int | None = None
+
+
+@dataclass(frozen=True)
+class SecimSonucu:
+    """Seçimin sonucu: seçim maddesi, seçilenler, olağanüstü seçimde düşen eski üyelikler, uyarılar
+    (atıflı) ve bilgi satırları."""
+
+    madde: AgendaItem
+    secilenler: tuple[OrganMembership, ...] = ()
+    dusenler: tuple[OrganMembership, ...] = ()
+    uyarilar: tuple[dict[str, Any], ...] = ()
+    bilgiler: tuple[str, ...] = ()
+
+
+def secim_donemi(kurul: GeneralAssembly) -> OabTerm:
+    """Adayların ve seçilenlerin dönemi: olağanda açılacak (hazırlık) dönem, olağanüstüde genel
+    kurulun kendi dönemi (tasarım §7.1 notları; md. 13/8; `uyelikler._genel_kurul_bagi`)."""
+    donem = kurul.term if kurul.kind == AssemblyKind.OLAGANUSTU else kurul.opens_term
+    if donem is None:  # tür daraltması: olağan genel kurul hazırlık dönemini açar
+        raise ValueError(DONEMSIZ_GENEL_KURUL)
+    return donem
+
+
+@transaction.atomic
+def aday_kaydet(
+    kurul: GeneralAssembly,
+    *,
+    person: OabPerson,
+    organ: str,
+    seat_type: str,
+    seat_group: str = "",
+    gerekce: uyum.Gerekce | None = None,
+) -> OrganMembership:
+    """Genel kurulun asıl ya da yedek listesine aday kaydeder (U26; `ADAY`). Kayıt planlamadan
+    toplantının sonuna dek açılır (salondan adaylık; mevzuat aday başvurusunu düzenlemez). Kişi ve
+    koltuk uygunluğu, tek koltuk, iki kurul ve müdür engeli F1c'nin kayıt yolunda denetlenir
+    (`uyelikler.assign_membership`; sert olanlar CLAUDE.md altın kural 3). Denetleme Kurulunda yalnız
+    veli koltuğu (öğretmen koltuğu genel kurul oylamasına girmez, md. 14/1); olağanüstü genel kurul
+    Denetleme Kuruluna seçim yapmaz (kullanıcı kararı S10)."""
+    yazma_kapisi()
+    _baslangic(SECIM_ROLLERI)
+    guncel = _guncel(kurul)
+    _durum(guncel, *_ADAY_KAYDI_ACIK)
+    if organ not in SECIM_ORGANLARI.values():
+        raise ValueError(ADAY_ORGANI)
+    if guncel.kind == AssemblyKind.OLAGANUSTU and organ == OrganType.DENETLEME_KURULU:
+        raise ValueError(OLAGANUSTU_DK_SECIMI_YOK)
+    return uyelikler.assign_membership(
+        term=secim_donemi(guncel),
+        person=person,
+        organ=organ,
+        seat_type=seat_type,
+        seat_group=seat_group,
+        elected_by=ElectedBy.GENEL_KURUL,
+        assembly=guncel,
+        gerekce=gerekce,
+    )
+
+
+def _aday_kayitlari(
+    kurul: GeneralAssembly, organ: str, adaylar: Sequence[AdayOyu], katilan: int
+) -> list[tuple[OrganMembership, AdayOyu]]:
+    """Seçimin aday kayıtları: her biri bu genel kurulun bu kuruldaki `ADAY` kaydıdır (S6 (i), sert —
+    hesap bütünlüğü); oy katılımı aşamaz; yedek sırası yalnız seçilen yedekte."""
+    kimlikler = [aday.uyelik.pk for aday in adaylar]
+    if len(set(kimlikler)) != len(kimlikler):
+        raise ValueError(ADAY_TEKRAR)
+    kayitlar: list[tuple[OrganMembership, AdayOyu]] = []
+    for aday in adaylar:
+        uyelik = uyelikler.guncel_kayit(aday.uyelik)
+        if (
+            uyelik.assembly_id != kurul.pk
+            or uyelik.organ != organ
+            or uyelik.status != MembershipStatus.ADAY
+        ):
+            raise ValueError(SECILEN_ADAYDAN)
+        oy = _secimli_sayi(aday.votes)
+        if oy is not None and oy > katilan:
+            raise ValueError(OY_KATILANDAN_COK)
+        if aday.seat_order is not None:
+            if not aday.secildi or uyelik.seat_type != SeatType.YEDEK:
+                raise ValueError(YEDEK_SIRASI_YALNIZ_SECILEN_YEDEKTE)
+            if _sayi(aday.seat_order) < 1:
+                raise ValueError(YEDEK_SIRASI_GECERSIZ)
+        kayitlar.append((uyelik, aday))
+    return kayitlar
+
+
+def _yedek_siralari(
+    kayitlar: Sequence[tuple[OrganMembership, AdayOyu]],
+) -> tuple[dict[int, int], bool]:
+    """Seçilen yedeklerin sırası (U26; md. 13/6 "aldıkları oy sırasına göre"): oydan hesaplanır, eşit
+    oyda program sıra hesaplamaz (sıra boş kalır, elle girilir); elle girilen sıra hesaplananın yerine
+    geçer. Sıralar birbirinden farklıdır (hesap bütünlüğü). İkinci değer: eşit oylu ya da oysuz yedek
+    sırasız kaldı mı?"""
+    yedekler = [(u, a) for u, a in kayitlar if a.secildi and u.seat_type == SeatType.YEDEK]
+    oylar = [(u, a.votes) for u, a in yedekler if a.votes is not None]
+    siralar: dict[int, int] = {}
+    sira = 1
+    for oy in sorted({o for _, o in oylar}, reverse=True):
+        grup = [u for u, o in oylar if o == oy]
+        if len(grup) == 1:
+            siralar[grup[0].pk] = sira
+        sira += len(grup)
+    siralar.update({u.pk: a.seat_order for u, a in yedekler if a.seat_order is not None})
+    if len(set(siralar.values())) != len(siralar):
+        raise ValueError(YEDEK_SIRASI_TEKRAR)
+    return siralar, any(u.pk not in siralar for u, _ in yedekler)
+
+
+def _secim_bicimi_denetimi(
+    tur: _Tur, madde: AgendaItem, liste: bool | None, acik_oy: bool | None
+) -> None:
+    """md. 10/1-d "asıl ve yedek olarak liste hâlinde oylanarak", 11/1-a, b "açık oylamayla"
+    (`genel_kurul.secim_bicimi`, uyarı): gözlenen seçimin yapılış biçimidir; girilmediyse eksik
+    (tamamlanacak: `secim_bicimini_yaz` ile tutanak tamamlanana dek girilir, girilince eksik kapanır;
+    tutanak tamamlanırken hâlâ eksikse gerekçe ister). Konu seçim maddesidir. Gözlenen değer ayrı
+    alanda saklanmaz: sapma ya da eksik uyum satırıdır, satır yoksa seçim liste hâlinde ve açık oyla
+    yapılmıştır (plan F2 6. adım kararı)."""
+    gozlenen: Any = (
+        VERI_YOK
+        if liste is None or acik_oy is None
+        else [belirtec for belirtec, var in ((SECIM_LISTE, liste), (SECIM_ACIK_OY, acik_oy)) if var]
+    )
+    sonuc = uyum.denetle("genel_kurul.secim_bicimi", gozlenen, konu=madde, **tur.ortak())
+    tur.kaydet("genel_kurul.secim_bicimi", sonuc, kurulun=False)
+
+
+def _olaganustu_eski_yk_dusur(kurul: GeneralAssembly, gun: date) -> list[OrganMembership]:
+    """U27 (md. 13/8 "olağanüstü genel kurul tarafından seçilen yönetim kurulu"): görevdeki eski yönetim
+    kurulu üyelikleri (asıl ve yedek, md. 7/2'de ertelenen dahil) seçilenlerin kaydından önce aynı
+    işlemde `DUSTU (OLAGANUSTU_GK_SECIMI)` olur; bağlı hesaplar askıya alınır, başkanın temsilci
+    satırları kapanır (`uyelik_gecisleri.uyeligi_dusur`). Denetleme Kurulu kolu yoktur (S10)."""
+    eskiler = (
+        OrganMembership.objects.filter(
+            term_id=kurul.term_id,
+            organ=OrganType.YONETIM_KURULU,
+            status=MembershipStatus.SECILDI,
+        )
+        .exclude(assembly=kurul)
+        .order_by("pk")
+    )
+    return [
+        uyelik_gecisleri.uyeligi_dusur(
+            uyelik, drop_kind=DropKind.OLAGANUSTU_GK_SECIMI, end_date=gun
+        )
+        for uyelik in eskiler
+    ]
+
+
+def _bilinmeyen_beyani_bagla(secilen: OrganMembership, gun: date) -> None:
+    """U26: seçilen yönetim kurulu üyesinin programdan önceki seçilme sayısı geçiş kurulumunda
+    "bilinmiyor" diye beyan edildiyse sayacın eksik satırı geçişin toplu gerekçesine bağlanır
+    (`gecis.sayac_kok_nedeni`; gerekçe yeniden sorulmaz). Beyan hiç verilmediyse eksik kalır."""
+    if secilen.organ != OrganType.YONETIM_KURULU or secilen.person.external_yk_terms is not None:
+        return
+    gecis_donemi = gecis.gecis_donemi()
+    if gecis_donemi is None:
+        return
+    kok = gecis.sayac_kok_nedeni(gecis_donemi)
+    beyan_edildi = ComplianceItem.objects.filter(
+        subject_type=denetim_izi.model_etiketi(OabPerson),
+        subject_id=denetim_izi.kimlik_metni(OabPerson, secilen.person_id),
+        rule_id=_YK_SAYAC_KURALI,
+        kind=ComplianceKind.SAPMA,
+        justification_group__root_cause=kok,
+    ).exists()
+    eksik = ComplianceItem.objects.filter(
+        subject_type=denetim_izi.model_etiketi(OrganMembership),
+        subject_id=denetim_izi.kimlik_metni(OrganMembership, secilen.pk),
+        rule_id=_YK_SAYAC_KURALI,
+        kind=ComplianceKind.EKSIK,
+        resolved_at__isnull=True,
+    ).exists()
+    if not (beyan_edildi and eksik):
+        return
+    uyum.bilinmeyen_beyan_sapmasi(
+        _YK_SAYAC_KURALI,
+        donem=secilen.term,
+        konu=secilen,
+        mesaj=gecis.BILINMIYOR_MESAJI["external_yk_terms"],
+        gerekce=uyum.Gerekce(kok_neden=kok),
+        tarih=gun,
+        hazirlik_yazimi=True,
+    )
+
+
+@transaction.atomic
+def secim_sonucu_yaz(
+    madde: AgendaItem,
+    *,
+    adaylar: Sequence[AdayOyu],
+    liste: bool | None = None,
+    acik_oy: bool | None = None,
+    result_text: str = "",
+    gerekce: uyum.Gerekce | None = None,
+) -> SecimSonucu:
+    """Seçim maddesinin sonucu (md. 10/1-d, 11/1-a, b; U26). Sonuç `karar_sonucu_yaz`'dan girilmez.
+
+    Seçilen, aynı genel kurulun aday kaydının kendisidir (S6 (i), sert — hesap bütünlüğü): her aday
+    `ADAY` → `SECILDI` olur (`uyelikler.elect_membership`; seçilme günü genel kurulun yapıldığı gün,
+    U6). Koltuk uygunluğu, tek koltuk, iki kurul ve müdür engeli yeniden, seçilme sınırı yalnız
+    yönetim kurulunda (md. 12/4) denetlenir; Denetleme Kurulunun başkanlık sayacı (md. 14/3) seçimde
+    koşmaz, görev bölümündedir. Oy aday başınadır; seçilmeyen adayın oyu da yazılır, kaydı aday kalır.
+    Yedek sırası oydan hesaplanır, eşit oyda elle girilir (`_yedek_siralari`). Seçimin biçimi (liste
+    hâlinde, açık oy) `genel_kurul.secim_bicimi` ile denetlenir (uyarı + gerekçe; girilmediyse eksik,
+    `secim_bicimini_yaz` ile sonradan girilir).
+
+    Olağanüstü genel kurulda yönetim kurulu seçilince görevdeki eski üyelikler önce düşer (U27);
+    Denetleme Kuruluna seçim yapılmaz (S10). Madde "görüşüldü" olur; sonucu bir kez girilir, yanlış
+    girilen sonuç `secimi_iptal_et` ile iptal edilip yeniden girilir."""
+    yazma_kapisi()
+    _baslangic(SECIM_ROLLERI)
+    guncel_madde, kurul = _madde_ve_kurul(madde)
+    _durum(kurul, AssemblyStatus.YAPILDI)
+    organ = SECIM_ORGANLARI.get(str(guncel_madde.kind))
+    if organ is None:
+        raise ValueError(SECIM_MADDESI_DEGIL)
+    if guncel_madde.removed_by_vote:
+        raise ValueError(MADDE_CIKARILMIS)
+    if guncel_madde.result:
+        raise ValueError(SECIM_SONUCU_GIRILDI)
+    if kurul.kind == AssemblyKind.OLAGANUSTU and organ == OrganType.DENETLEME_KURULU:
+        raise ValueError(OLAGANUSTU_DK_SECIMI_YOK)
+    gun = genel_kurul_gunu(kurul)
+    kayitlar = _aday_kayitlari(kurul, organ, adaylar, _toplanti_katilani(kurul))
+    siralar, sirasiz = _yedek_siralari(kayitlar)
+    tur = _Tur(kurul, gerekce)
+    _secim_bicimi_denetimi(tur, guncel_madde, liste, acik_oy)
+    secilecekler = sorted(
+        ((u, a) for u, a in kayitlar if a.secildi),
+        key=lambda kayit: (kayit[0].seat_type != SeatType.ASIL, kayit[0].pk),
+    )
+    dusenler: list[OrganMembership] = []
+    if secilecekler and kurul.kind == AssemblyKind.OLAGANUSTU:
+        dusenler = _olaganustu_eski_yk_dusur(kurul, gun)
+    secilenler: list[OrganMembership] = []
+    uyarilar = list(tur.uyarilar)
+    for uyelik, aday in secilecekler:
+        secilen = uyelikler.elect_membership(
+            uyelik,
+            start_date=gun,
+            votes=aday.votes,
+            seat_order=siralar.get(uyelik.pk),
+            gerekce=gerekce,
+        )
+        _bilinmeyen_beyani_bagla(secilen, gun)
+        secilenler.append(secilen)
+        uyarilar.extend(s for s in (secilen.rule_warnings or []) if s.get("durum") == "uyari")
+    for uyelik, aday in kayitlar:
+        if not aday.secildi and aday.votes is not None:
+            uyelikler.update_membership(uyelik, votes=aday.votes)
+    onceki = denetim_izi.anlik(guncel_madde)
+    guncel_madde.result = AgendaResult.GORUSULDU
+    guncel_madde.result_text = result_text.strip()
+    guncel_madde.updated_by_id = iz.yazar_hesabi()
+    guncel_madde.save(update_fields=["result", "result_text", "updated_at", "updated_by"])
+    denetim_izi.degisiklik(guncel_madde, onceki=onceki)
+    return SecimSonucu(
+        madde=guncel_madde,
+        secilenler=tuple(secilenler),
+        dusenler=tuple(dusenler),
+        uyarilar=tuple(uyarilar),
+        bilgiler=(ESIT_OYLU_YEDEK_BILGISI,) if sirasiz else (),
+    )
+
+
+@transaction.atomic
+def secim_bicimini_yaz(
+    madde: AgendaItem,
+    *,
+    liste: bool,
+    acik_oy: bool,
+    gerekce: uyum.Gerekce | None = None,
+) -> SecimSonucu:
+    """Seçimin biçimini (liste hâlinde, açık oy) sonucu girilmiş seçim maddesine sonradan girer ya da
+    düzeltir (tamamlanacaklar; tutanak tamamlanana dek; `ilan_kanitlarini_yaz` emsali, tasarım O3).
+    `genel_kurul.secim_bicimi` yeniden denetlenir: liste hâlinde ve açık oyla yapılan seçimde eksik
+    satırı (ya da önceki sapma) kapanır; sapma uyarı + gerekçedir, gerekçesiz ret hiçbir şey yazmaz.
+    Seçilenler değişmez."""
+    yazma_kapisi()
+    _baslangic(SECIM_ROLLERI)
+    guncel_madde, kurul = _madde_ve_kurul(madde)
+    _durum(kurul, AssemblyStatus.YAPILDI)
+    if str(guncel_madde.kind) not in SECIM_ORGANLARI:
+        raise ValueError(SECIM_MADDESI_DEGIL)
+    if guncel_madde.removed_by_vote:
+        raise ValueError(MADDE_CIKARILMIS)
+    if not guncel_madde.result:
+        raise ValueError(SECIM_SONUCU_YOK)
+    if not isinstance(liste, bool) or not isinstance(acik_oy, bool):
+        raise ValueError(SECIM_BICIMI_GECERSIZ)
+    tur = _Tur(kurul, gerekce)
+    _secim_bicimi_denetimi(tur, guncel_madde, liste, acik_oy)
+    return SecimSonucu(madde=guncel_madde, uyarilar=tuple(tur.uyarilar))
+
+
+@transaction.atomic
+def secimi_iptal_et(madde: AgendaItem, *, cancel_reason: str) -> list[OrganMembership]:
+    """Yanlış girilen seçim sonucunu düzeltir (divanın düzeltilmesi emsali, `divani_iptal_et`; en dar
+    yol): bu genel kurulun bu kurula seçilmiş kayıtları gerekçeyle `IPTAL` olur (altın kural 4;
+    `uyelik_gecisleri.uyeligi_iptal_et`, gerekçe zorunlu ve şifreli), iptal edilen kayıtların açık
+    eksik satırları kapanır (`uyum.iptalde_eksikleri_kapat`), maddenin sonucu boşalır (izli). Seçilmemiş
+    adaylar aday kalır; seçilmiş kaydı iptal edilen kişi yeniden aday kaydedilir, sonuç
+    `secim_sonucu_yaz` ile yeniden girilir. Olağanüstü seçimde düşen eski yönetim kurulu üyelikleri
+    (U27) bu iptalle geri gelmez. Yalnız tutanak tamamlanmadan."""
+    yazma_kapisi()
+    _baslangic(SECIM_ROLLERI)
+    metin = cancel_reason.strip()
+    if not metin:
+        raise ValueError(uyelik_gecisleri.IPTAL_GEREKCESI_GEREKLI)
+    guncel_madde, kurul = _madde_ve_kurul(madde)
+    _durum(kurul, AssemblyStatus.YAPILDI)
+    organ = SECIM_ORGANLARI.get(str(guncel_madde.kind))
+    if organ is None:
+        raise ValueError(SECIM_MADDESI_DEGIL)
+    if not guncel_madde.result:
+        raise ValueError(SECIM_SONUCU_YOK)
+    secilenler = OrganMembership.objects.filter(
+        assembly=kurul, organ=organ, status=MembershipStatus.SECILDI
+    ).order_by("pk")
+    iptaller = [
+        uyelik_gecisleri.uyeligi_iptal_et(uyelik, cancel_reason=metin) for uyelik in secilenler
+    ]
+    if iptaller:
+        uyum.iptalde_eksikleri_kapat(secim_donemi(kurul), iptaller, hazirlik_yazimi=True)
+    onceki = denetim_izi.anlik(guncel_madde)
+    guncel_madde.result = ""
+    guncel_madde.result_text = ""
+    guncel_madde.updated_by_id = iz.yazar_hesabi()
+    guncel_madde.save(update_fields=["result", "result_text", "updated_at", "updated_by"])
+    denetim_izi.degisiklik(guncel_madde, onceki=onceki)
+    return iptaller
+
+
+# ---------------------------------------------------------------------------
+# 6. adım: ibra ve "ibra edilmedi" yan akışı (md. 11/1-c, ç; plan F2 §9 S4)
+# ---------------------------------------------------------------------------
+IBRA_MADDESI_DEGIL = "Bu gündem maddesi ibra maddesi değil."
+IBRA_SONUCU_GECERSIZ = "İbra sonucu ibra edildi, ibra edilmedi ya da görüşülmedi olmalıdır."
+IBRA_OYLARI_GEREKLI = (
+    "İbra genel kurulun kararıdır, sonucu oylardan hesaplanır: ibra edildi ya da edilmedi sonucu kabul "
+    "ve ret oylarıyla girilir; oylanmayan ibra görüşülmedi diye kaydedilir (md. 11/1-c, 9/2)."
+)
+IBRA_GORUSULMEDI_OYSUZ = "Görüşülmedi sonucunda ibra oyu girilmez."
+EVRAK_NOTU_YALNIZ_IBRA_EDILMEDIGINDE = (
+    "İbra edilmeyen muhasebe evrakı yalnız yönetim kurulunun hesapları ibra edilmediğinde yazılır "
+    "(md. 11/1-ç)."
+)
+IBRA_EDILMEDI_BILGISI: Final = (
+    "Hesaplar ibra edilmedi: diğer gündem maddeleri görüşülür; divan ibra edilmeyen muhasebe "
+    "evrakını tutanak altına alarak yeni yönetim ve denetleme kuruluna teslim eder (md. 11/1-ç). "
+    "Tutanak tamamlanınca il/ilçe millî eğitim müdürlüğüne bildirim takvime girer."
+)
+IBRA_BILDIRIMI_MESAJI: Final = (
+    "Hesaplar ibra edilmedi: yeni yönetim kurulu ve okul yönetimi il/ilçe millî eğitim müdürlüğüne "
+    "resmî yazıyla bildirir (md. 11/1-ç)."
+)
+
+
+def _tutanak(kurul: GeneralAssembly) -> AssemblyMinutes:
+    """Genel kurulun tutanak kaydı (1:1); yoksa açılır (izli)."""
+    tutanak: AssemblyMinutes | None = AssemblyMinutes.objects.filter(assembly=kurul).first()
+    if tutanak is not None:
+        return tutanak
+    hesap = iz.yazar_hesabi()
+    yeni = AssemblyMinutes.objects.create(assembly=kurul, created_by_id=hesap, updated_by_id=hesap)
+    denetim_izi.degisiklik(yeni, onceki=None)
+    return yeni
+
+
+def _tutanagi_yaz(tutanak: AssemblyMinutes, alanlar: Mapping[str, Any]) -> AssemblyMinutes:
+    """Tutanağın değişen alanlarını yazar ve izler; değişen yoksa yazmaz."""
+    degisen = [ad for ad, deger in alanlar.items() if getattr(tutanak, ad) != deger]
+    if not degisen:
+        return tutanak
+    onceki = denetim_izi.anlik(tutanak)
+    for ad in degisen:
+        setattr(tutanak, ad, alanlar[ad])
+    tutanak.updated_by_id = iz.yazar_hesabi()
+    tutanak.save(update_fields=[*degisen, "updated_at", "updated_by"])
+    denetim_izi.degisiklik(tutanak, onceki=onceki)
+    return tutanak
+
+
+@dataclass(frozen=True)
+class IbraOylamasi:
+    """Bir kurulun ibra oylaması (md. 11/1-c; tasarım §9.6 E10 "YK ve DK ibrası ayrı oylama satırı"):
+    kabul ve ret oyu, oylamada salonda bulunan (girilmezse payda toplantının katılımıdır, S2)."""
+
+    votes_for: int
+    votes_against: int
+    present_count: int | None = None
+
+
+#: Kurul başına ibra alanları (sonuç, kabul, ret, salondaki).
+_IBRA_ALANLARI: Final[Mapping[str, tuple[str, str, str, str]]] = {
+    kurul: (
+        f"discharge_{kurul}",
+        f"discharge_{kurul}_votes_for",
+        f"discharge_{kurul}_votes_against",
+        f"discharge_{kurul}_present_count",
+    )
+    for kurul in ("yk", "dk")
+}
+_IBRA_KURUL_ADI: Final[Mapping[str, str]] = {"yk": "yönetim kurulu", "dk": "Denetleme Kurulu"}
+
+
+def _ibra_sonucu(
+    kurul: GeneralAssembly, oylama: IbraOylamasi | None, verilen: str | None
+) -> tuple[str, int | None, int | None, int | None]:
+    """Bir kurulun ibra sonucu ve oyları (md. 11/1-c, 9/2; kullanıcı kararı S6 (iii), sert — hesap
+    bütünlüğü). Oylama verilmediyse ibra görüşülmemiştir; verildiyse sonuç oylardan hesaplanır
+    (`_oylama`): çoğunluk varsa ibra edildi, yoksa edilmedi. `verilen` (tutanağın yazdığı sonuç)
+    hesapla karşılaştırılır: oylarla çelişen sonuç kaydedilmez (`KuralSert`)."""
+    if verilen is not None and verilen not in Discharge.values:
+        raise ValueError(IBRA_SONUCU_GECERSIZ)
+    if oylama is None:
+        if verilen not in (None, Discharge.GORUSULMEDI):
+            raise ValueError(IBRA_OYLARI_GEREKLI)
+        return str(Discharge.GORUSULMEDI), None, None, None
+    if verilen == Discharge.GORUSULMEDI:
+        raise ValueError(IBRA_GORUSULMEDI_OYSUZ)
+    sonuc = _oylama(kurul, oylama.votes_for, oylama.votes_against, oylama.present_count)
+    hesaplanan = str(Discharge.EDILDI if sonuc.cogunluk else Discharge.EDILMEDI)
+    if verilen is not None and verilen != hesaplanan:
+        raise KuralSert(detail=f"{KARAR_OYLARLA_CELISIYOR} ({sonuc.atif}).")
+    return hesaplanan, sonuc.kabul, sonuc.ret, sonuc.salondaki
+
+
+@transaction.atomic
+def ibra_yaz(
+    madde: AgendaItem,
+    *,
+    yk: IbraOylamasi | None,
+    dk: IbraOylamasi | None,
+    discharge_yk: str | None = None,
+    discharge_dk: str | None = None,
+    unaudited_documents_note: str = "",
+) -> GenelKurulSonucu:
+    """İbra maddesinin sonucu (md. 11/1-c "yönetim ve denetleme kurulu faaliyet raporlarını görüşmek
+    ve ibra etmek"): yönetim kurulu ve Denetleme Kurulu ayrı oylanır (`yk`, `dk`; tasarım §9.6 E10
+    "ayrı oylama satırı"). İbra genel kurulun kararıdır: sonuç oylardan HESAPLANIR
+    (`genel_kurul.karar_cogunlugu`, kullanıcı kararı S6 (iii), sert — hesap bütünlüğü; payda S2). Oylama
+    verilmeyen kurulun ibrası görüşülmemiştir. `discharge_yk`, `discharge_dk` verilirse hesapla
+    karşılaştırılır; oylarla çelişen sonuç kaydedilmez. Sonuç `karar_sonucu_yaz`'dan girilmez.
+
+    Yönetim kurulunun hesapları ibra edilmezse yan akış açılır (kullanıcı kararı S4 (a)): ibra
+    edilmeyen muhasebe evrakının listesi tutanağa yazılır (`AssemblyMinutes.unaudited_documents_note`,
+    şifreli) ve tutanak tamamlanınca il/ilçe MEM bildirimi takvime girer; Denetleme Kurulunun ibra
+    edilmemesi yalnız tutanağa yazılır. Tutanak tamamlanana dek düzeltilir (izli; her çağrı iki kurulun
+    oylamasını birlikte yazar)."""
+    yazma_kapisi()
+    _baslangic(TUTANAK_ROLLERI)
+    guncel_madde, kurul = _madde_ve_kurul(madde)
+    _durum(kurul, AssemblyStatus.YAPILDI)
+    if guncel_madde.kind != AgendaItemKind.IBRA:
+        raise ValueError(IBRA_MADDESI_DEGIL)
+    if guncel_madde.removed_by_vote:
+        raise ValueError(MADDE_CIKARILMIS)
+    sonuclar = {
+        "yk": _ibra_sonucu(kurul, yk, discharge_yk),
+        "dk": _ibra_sonucu(kurul, dk, discharge_dk),
+    }
+    yk_sonucu = sonuclar["yk"][0]
+    not_metni = unaudited_documents_note.strip()
+    if not_metni and yk_sonucu != Discharge.EDILMEDI:
+        raise ValueError(EVRAK_NOTU_YALNIZ_IBRA_EDILMEDIGINDE)
+    alanlar = {
+        ad: deger
+        for kurul_adi, degerler in sonuclar.items()
+        for ad, deger in zip(_IBRA_ALANLARI[kurul_adi], degerler, strict=True)
+    }
+    degisen = [ad for ad, deger in alanlar.items() if getattr(kurul, ad) != deger]
+    if degisen:
+        onceki = denetim_izi.anlik(kurul)
+        for ad in degisen:
+            setattr(kurul, ad, alanlar[ad])
+        _kaydet(kurul, onceki, degisen)
+    mevcut = AssemblyMinutes.objects.filter(assembly=kurul).first()
+    if not_metni or (mevcut is not None and mevcut.unaudited_documents_note):
+        _tutanagi_yaz(_tutanak(kurul), {"unaudited_documents_note": not_metni})
+    gorusuldu = {s[0] for s in sonuclar.values()} != {Discharge.GORUSULMEDI}
+    sonuc = str(AgendaResult.GORUSULDU) if gorusuldu else ""
+    if guncel_madde.result != sonuc:
+        onceki_madde = denetim_izi.anlik(guncel_madde)
+        guncel_madde.result = sonuc
+        guncel_madde.updated_by_id = iz.yazar_hesabi()
+        guncel_madde.save(update_fields=["result", "updated_at", "updated_by"])
+        denetim_izi.degisiklik(guncel_madde, onceki=onceki_madde)
+    bilgiler = (IBRA_EDILMEDI_BILGISI,) if yk_sonucu == Discharge.EDILMEDI else ()
+    return GenelKurulSonucu(kurul=_guncel(kurul), bilgiler=bilgiler)
+
+
+class _Verilmedi(Enum):
+    """Kısmi yazımda "alan verilmedi" belirteci (`None` alanı boşaltır)."""
+
+    VERILMEDI = "VERILMEDI"
+
+
+#: `tutanak_bilgilerini_yaz`'da verilmeyen alan yazılmaz.
+VERILMEDI: Final = _Verilmedi.VERILMEDI
+TUTANAK_BILGISI_BOS = "Yazılacak tutanak bilgisi verilmedi."
+TUTANAK_TAMAM_YALNIZ_TESLIM = (
+    "Tutanak tamamlandıktan sonra yalnız yeni yönetim kuruluna teslim günü yazılır; raporları okuyanlar "
+    "ve bütçeyi sunan tutanakla birlikte girilir."
+)
+
+
+@transaction.atomic
+def tutanak_bilgilerini_yaz(
+    kurul: GeneralAssembly,
+    *,
+    yk_report_reader: OabPerson | None | _Verilmedi = VERILMEDI,
+    dk_report_reader: OabPerson | None | _Verilmedi = VERILMEDI,
+    budget_presenter: OabPerson | None | _Verilmedi = VERILMEDI,
+    handed_to_new_yk_on: date | None | _Verilmedi = VERILMEDI,
+) -> AssemblyMinutes:
+    """Tutanağın kişi bağları ve teslim günü (tasarım §5.2.3 `AssemblyMinutes`): raporları okuyanlar ve
+    tahmini bütçeyi sunan birlik kişisidir (serbest metin ad yok); yeni yönetim kuruluna teslim günü
+    md. 10/1-ç (F2'de yalnız tarih, U29). Kısmi yazımdır: yalnız verilen alan yazılır, `None` alanı
+    boşaltır. Pasif kişi yeni bağlanamaz; tutanakta zaten bağlı kişi sonradan pasifleşse de bağ
+    yeniden verilince korunur (kayıt toplantıdaki durumu yazar). Kişi bağları tutanak tamamlanana dek
+    (`YAPILDI`) yazılır; teslim günü tutanak tamamlandıktan sonra da yazılır ve düzeltilir (tasarım §7.1
+    `TUTANAK_TAMAM` sonrası "tutanak ve belgeler yeni YK'ye teslim", §7.8 sıra; dönem kilidi
+    denetlenir). Divan ve seçilenler üyelik kayıtlarından okunur (tek kaynak, O6)."""
+    yazma_kapisi()
+    _baslangic(TUTANAK_ROLLERI)
+    guncel = _guncel(kurul)
+    kisiler = {
+        "yk_report_reader": yk_report_reader,
+        "dk_report_reader": dk_report_reader,
+        "budget_presenter": budget_presenter,
+    }
+    verilen = {ad: kisi for ad, kisi in kisiler.items() if not isinstance(kisi, _Verilmedi)}
+    if verilen and guncel.status == AssemblyStatus.TUTANAK_TAMAM:
+        raise ValueError(TUTANAK_TAMAM_YALNIZ_TESLIM)
+    _durum(guncel, AssemblyStatus.YAPILDI, AssemblyStatus.TUTANAK_TAMAM)
+    mevcut = AssemblyMinutes.objects.filter(assembly=guncel).first()
+    alanlar: dict[str, Any] = {}
+    for ad, kisi in verilen.items():
+        alan = f"{ad}_id"
+        if kisi is None:
+            alanlar[alan] = None
+        elif mevcut is not None and getattr(mevcut, alan) == kisi.pk:
+            alanlar[alan] = kisi.pk  # bağ değişmiyor: aktiflik yeni bağda sorulur
+        else:
+            alanlar[alan] = uyelikler.kisi_aktif(kisi).pk
+    if not isinstance(handed_to_new_yk_on, _Verilmedi):
+        alanlar["handed_to_new_yk_on"] = handed_to_new_yk_on
+    if not alanlar:
+        raise ValueError(TUTANAK_BILGISI_BOS)
+    return _tutanagi_yaz(_tutanak(guncel), alanlar)
+
+
+# ---------------------------------------------------------------------------
+# 6. adım: yanlış seçilen divanın düzeltilmesi (5. adımın açık bıraktığı nokta)
+# ---------------------------------------------------------------------------
+DIVAN_YOK = "Bu genel kurulun divanı seçilmedi."
+
+
+@transaction.atomic
+def divani_iptal_et(kurul: GeneralAssembly, *, cancel_reason: str) -> list[OrganMembership]:
+    """Yanlış girilen divanı düzeltir (en dar yol): iki kayıt da gerekçeyle `IPTAL` olur (altın kural
+    4; `uyelik_gecisleri.uyeligi_iptal_et`, gerekçe zorunlu ve şifreli), sonra `divan_sec` yeniden
+    yazılır. Yalnız tutanak tamamlanmadan; divan birlikte düzelir (başkan ve kâtip aynı açık oylamanın
+    sonucudur, md. 10/1-c)."""
+    yazma_kapisi()
+    _baslangic(TUTANAK_ROLLERI)
+    guncel = _guncel(kurul)
+    _durum(guncel, AssemblyStatus.YAPILDI)
+    divan = kurulun_divani(guncel)
+    if not divan:
+        raise ValueError(DIVAN_YOK)
+    return [
+        uyelik_gecisleri.uyeligi_iptal_et(uyelik, cancel_reason=cancel_reason) for uyelik in divan
+    ]
+
+
+# ---------------------------------------------------------------------------
+# 6. adım: YAPILDI → TUTANAK_TAMAM (tasarım §7.1; plan F2 §5.2, §7 U32)
+# ---------------------------------------------------------------------------
+TUTANAK_EKSIGI: Final = (
+    "Tutanak tamamlanırken hâlâ eksik bilgi var; tamamlanınca bu bilgi girilemez, sapma olarak "
+    "gerekçesiyle kayda geçer"
+)
+DONEM_ONAYI_BEKLIYOR: Final = (
+    "Yeni birlik döneminin açılması program yöneticisinin onayını bekliyor (dönemin başlangıcı "
+    "genel kurulun yapıldığı gün: {gun:%d.%m.%Y})."
+)
+
+
+def _acik_eksikler(donem: OabTerm, konular: Sequence[Any]) -> list[tuple[Any, ComplianceItem]]:
+    """Konuların açık `EKSIK` satırları (konu, satır), konu sırasıyla."""
+    eksikler: list[tuple[Any, ComplianceItem]] = []
+    for konu in konular:
+        satirlar = ComplianceItem.objects.filter(
+            term=donem,
+            kind=ComplianceKind.EKSIK,
+            resolved_at__isnull=True,
+            subject_type=denetim_izi.model_etiketi(type(konu)),
+            subject_id=denetim_izi.kimlik_metni(type(konu), konu.pk),
+        ).order_by("pk")
+        eksikler.extend((konu, satir) for satir in satirlar)
+    return eksikler
+
+
+@transaction.atomic
+def tutanagi_tamamla(
+    kurul: GeneralAssembly, *, gerekce: uyum.Gerekce | None = None
+) -> GenelKurulSonucu:
+    """Tutanağı tamamlar (`YAPILDI → TUTANAK_TAMAM`; tasarım §7.1 "Kim": sekreter, program yöneticisi).
+
+    Kapatıcı geçiştir (O3): genel kurulun, ilanlarının ve gündem maddelerinin hâlâ açık eksikleri
+    (ör. kanıt günü girilmemiş ilan kanalı — `genel_kurul.ilan_kanallari`'nın konusu ilan kaydıdır —,
+    girilmemiş seçim biçimi) sapmaya döner ve gerekçe ister (`uyum.kapanis_gecisi`); gerekçesiz ret
+    hiçbir şey yazmaz. Yönetim kurulunun hesapları ibra edilmediyse il/ilçe MEM bildirimi takvime
+    girer (`ComplianceItem(TAKVIM, IBRA_EDILMEDI_BILDIRIMI)`, md. 11/1-ç; S4 (a)). Dönem değişmez:
+    olağan genel kurulda dönem geçişini program yöneticisi ayrıca onaylar (U32;
+    `donem_gecisini_onayla`)."""
+    yazma_kapisi()
+    _baslangic(TUTANAK_ROLLERI)
+    guncel = _guncel(kurul)
+    _durum(guncel, AssemblyStatus.YAPILDI)
+    donem = kural_donemi(guncel)
+    konular: list[Any] = [
+        guncel,
+        *kurulun_duyurulari(guncel),
+        *AgendaItem.objects.filter(assembly=guncel).order_by("order"),
+    ]
+    eksikler = _acik_eksikler(donem, konular)
+    if eksikler:
+        if gerekce is None or not (gerekce.metin.strip() or gerekce.kok_neden.strip()):
+            iletiler = "; ".join(dict.fromkeys(satir.message for _, satir in eksikler))
+            raise GerekceGerekli(detail=f"{TUTANAK_EKSIGI}: {iletiler}")
+        gun = birinci_toplanti_gunu(guncel)
+        for konu in dict.fromkeys(konu for konu, _ in eksikler):
+            kurallar = {satir.rule_id for k, satir in eksikler if k is konu}
+            uyum.kapanis_gecisi(
+                donem,
+                gerekceler=dict.fromkeys(kurallar, gerekce),
+                tarih=gun,
+                konu=konu,
+                hazirlik_yazimi=True,
+            )
+    yapildigi_gun = genel_kurul_gunu(guncel)
+    if guncel.discharge_yk == Discharge.EDILMEDI:
+        uyum.takvim_satiri_yaz(
+            ComplianceObligation.IBRA_EDILMEDI_BILDIRIMI,
+            donem=donem,
+            due_date=yapildigi_gun,
+            mesaj=IBRA_BILDIRIMI_MESAJI,
+            responsible_role=_YONETICI,
+            konu=guncel,
+            hazirlik_yazimi=True,
+        )
+    onceki = denetim_izi.anlik(guncel)
+    guncel.status = AssemblyStatus.TUTANAK_TAMAM
+    _kaydet(guncel, onceki, ("status",))
+    bilgiler: tuple[str, ...] = ()
+    if guncel.opens_term_id is not None:
+        bilgiler = (DONEM_ONAYI_BEKLIYOR.format(gun=yapildigi_gun),)
+    return GenelKurulSonucu(kurul=_guncel(guncel), bilgiler=bilgiler)
+
+
+# ---------------------------------------------------------------------------
+# 6. adım: dönem geçişi önerisi ve onayı (tasarım §5.2.1, §7.1, §7.8; plan F2 §5.2, §7 U4, U32)
+# ---------------------------------------------------------------------------
+DONEM_ACMAZ = (
+    "Bu genel kurul birlik dönemi açmaz; dönem geçişi olağan genel kurulun hazırlık dönemindedir "
+    "(md. 13/8)."
+)
+TUTANAK_TAMAMLANMADI = "Dönem geçişi genel kurulun tutanağı tamamlandıktan sonra onaylanır."
+DONEM_HAZIRLIKTA_DEGIL = "Bu genel kurulun açtığı dönem hazırlıkta değil; dönem geçişi onaylandı ya da dönem iptal edildi."
+KAPANACAK_ACIK_DEGIL = (
+    "Kapanacak birlik dönemi açık değil; dönem geçişi yapılamaz (hesap bütünlüğü)."
+)
+DONEM_CAKISIYOR = (
+    "Yeni birlik döneminin başlangıcı ({gun:%d.%m.%Y}) başka bir dönemin tarih aralığıyla "
+    "çakışıyor; birlik dönemlerinin aralıkları çakışmaz (hesap bütünlüğü)."
+)
+#: Okul idaresinin genel kuruldan sonraki TEFBİS girişleri (tasarım §7.1 `TUTANAK_TAMAM` sonrası,
+#: §5.2.7; md. 23/5). Süre kural değildir ("genel kuruldan hemen sonra" yalnız rehberde, RH-001): son
+#: gün yeni dönemin başlangıcıdır, yükümlülüğün doğduğu gün (plan F2 6. adım kararı).
+TEFBIS_TAKVIMI: Final[tuple[tuple[str, str], ...]] = (
+    (
+        ComplianceObligation.TEFBIS_YONETIM_BILGISI,
+        "Okul idaresi birliğin kayıtlarını TEFBİS'e girer (md. 23/5): genel kuruldan sonra yeni "
+        "yönetimin bilgisi girilir.",
+    ),
+    (
+        ComplianceObligation.TEFBIS_BANKA_BILGISI,
+        "Okul idaresi birliğin kayıtlarını TEFBİS'e girer (md. 23/5): genel kuruldan sonra banka "
+        "hesap bilgileri girilir.",
+    ),
+    (
+        ComplianceObligation.TEFBIS_BUTCE_GIRISI,
+        "Okul idaresi birliğin kayıtlarını TEFBİS'e girer (md. 23/5): genel kuruldan sonra tahmini "
+        "bütçe girilir.",
+    ),
+)
+
+
+@dataclass(frozen=True)
+class DonemGecisi:
+    """Dönem geçişinin önizlemesi ya da sonucu (kişisiz): açılacak dönem ve başlangıcı, kapanacak
+    dönem ve bitişi, geçişi engelleyen hesap bütünlüğü iletileri."""
+
+    kurul: GeneralAssembly
+    yeni_donem: OabTerm
+    baslangic: date
+    kapanacak: OabTerm | None
+    kapanacak_bitis: date | None
+    engeller: tuple[str, ...] = ()
+
+
+def _cakisma_var(yeni: OabTerm, kapanacak: OabTerm | None, gun: date) -> bool:
+    """Yeni dönemin aralığı [gun, …) başka bir başlamış dönemle çakışır mı? (U4; tasarım §5.2.1
+    "dönem aralıkları çakışmaz"). Kapanacak dönem `gun`'den bir önceki gün biter: başlangıcı `gun`'den
+    önce olmalıdır. Öteki başlamış dönemler (`KAPANISTA`, `KAPANDI`) `gun`'den önce bitmiş olmalıdır."""
+    if kapanacak is not None and (kapanacak.start_date is None or kapanacak.start_date >= gun):
+        return True
+    haric = [yeni.pk] if kapanacak is None else [yeni.pk, kapanacak.pk]
+    digerleri = OabTerm.objects.exclude(status__in=(TermStatus.IPTAL, TermStatus.HAZIRLIK)).exclude(
+        pk__in=haric
+    )
+    return any(d.end_date is None or d.end_date >= gun for d in digerleri)
+
+
+def donem_gecisi_onizlemesi(kurul: GeneralAssembly) -> DonemGecisi:
+    """Dönem geçişinin önerisi (U32; yazmaz, kişisiz): tutanak tamamlanınca sistem geçişi önerir,
+    denetimler ve çakışma bu anda görünür. Başlangıç genel kurulun yapıldığı gündür (birinci ya da
+    ikinci toplantı, U6); kapanacak dönem bir önceki gün biter."""
+    guncel: GeneralAssembly = GeneralAssembly.objects.select_related(
+        "term", "opens_term__rule_package"
+    ).get(pk=kurul.pk)
+    if guncel.kind != AssemblyKind.OLAGAN or guncel.opens_term is None:
+        raise ValueError(DONEM_ACMAZ)
+    yeni = guncel.opens_term
+    kapanacak = guncel.term
+    gun = genel_kurul_gunu(guncel)
+    engeller: list[str] = []
+    if guncel.status != AssemblyStatus.TUTANAK_TAMAM:
+        engeller.append(TUTANAK_TAMAMLANMADI)
+    if yeni.status != TermStatus.HAZIRLIK:
+        engeller.append(DONEM_HAZIRLIKTA_DEGIL)
+    elif kapanacak is not None and kapanacak.status != TermStatus.ACIK:
+        engeller.append(KAPANACAK_ACIK_DEGIL)
+    elif _cakisma_var(yeni, kapanacak, gun):
+        engeller.append(DONEM_CAKISIYOR.format(gun=gun))
+    return DonemGecisi(
+        kurul=guncel,
+        yeni_donem=yeni,
+        baslangic=gun,
+        kapanacak=kapanacak,
+        kapanacak_bitis=None if kapanacak is None else gun - timedelta(days=1),
+        engeller=tuple(engeller),
+    )
+
+
+@transaction.atomic
+def donem_gecisini_onayla(kurul: GeneralAssembly) -> DonemGecisi:
+    """Dönem geçişini onaylar (U32; tasarım §7.1, §7.8 "sistem; yonetici onaylar"): yalnız program
+    yöneticisi (M1, `Eylem.BIRLIK_DONEMI_YAZMA`). Tek işlemde: kapanacak dönem `ACIK → KAPANISTA`
+    (bitiş genel kurulun yapıldığı günden bir önceki gün), hazırlık dönemi `HAZIRLIK → ACIK`
+    (başlangıç genel kurulun yapıldığı gün); aralık çakışması sert (hesap bütünlüğü). Kural bağı
+    değişmez (U2). Yeni açılan okulun ilk genel kurulunda dönemsiz veli satırları döneme bağlanır.
+    Okul idaresinin TEFBİS girişleri yeni dönemin takvimine girer (md. 23/5). Her yazım izlidir, iz
+    satırı onaylayan hesabındır. Kapanış (`KAPANISTA → KAPANDI`) F4'tedir."""
+    yazma_kapisi()
+    app_password.require_password_set()
+    _kapi()
+    rol_izinleri.yetki_oturum(rol_izinleri.Eylem.BIRLIK_DONEMI_YAZMA)
+    onizleme = donem_gecisi_onizlemesi(kurul)
+    if onizleme.engeller:
+        raise ValueError(onizleme.engeller[0])
+    gun = onizleme.baslangic
+    hesap = iz.yazar_hesabi()
+    kapanacak: OabTerm | None = None
+    if onizleme.kapanacak is not None:
+        kapanacak = OabTerm.objects.select_related("rule_package").get(pk=onizleme.kapanacak.pk)
+        donem_kilidi.yazma_denetimi(kapanacak)
+        onceki = denetim_izi.anlik(kapanacak)
+        kapanacak.status = TermStatus.KAPANISTA
+        kapanacak.end_date = onizleme.kapanacak_bitis
+        kapanacak.updated_by_id = hesap
+        kapanacak.save(update_fields=["status", "end_date", "updated_at", "updated_by"])
+        denetim_izi.degisiklik(kapanacak, onceki=onceki)
+    yeni = OabTerm.objects.select_related("rule_package").get(pk=onizleme.yeni_donem.pk)
+    donem_kilidi.yazma_denetimi(yeni, hazirlik_yazimi=True)
+    onceki_yeni = denetim_izi.anlik(yeni)
+    yeni.status = TermStatus.ACIK
+    yeni.start_date = gun
+    yeni.updated_by_id = hesap
+    yeni.save(update_fields=["status", "start_date", "updated_at", "updated_by"])
+    denetim_izi.degisiklik(yeni, onceki=onceki_yeni)
+    if kapanacak is None:
+        donemler.ilk_donemin_veli_listesini_bagla(yeni)
+    for yukumluluk, mesaj in TEFBIS_TAKVIMI:
+        uyum.takvim_satiri_yaz(
+            yukumluluk,
+            donem=yeni,
+            due_date=gun,
+            mesaj=mesaj,
+            responsible_role=_YONETICI,
+            konu=onizleme.kurul,
+        )
+    return DonemGecisi(
+        kurul=onizleme.kurul,
+        yeni_donem=yeni,
+        baslangic=gun,
+        kapanacak=kapanacak,
+        kapanacak_bitis=onizleme.kapanacak_bitis,
+    )

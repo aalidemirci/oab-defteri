@@ -684,6 +684,15 @@ YAZMA_SERVISLERI = frozenset(
         "genel_kurul.karar_sonucu_yaz",
         "genel_kurul.divan_sec",
         "genel_kurul.katilim_duzelt",
+        "genel_kurul.aday_kaydet",
+        "genel_kurul.secim_sonucu_yaz",
+        "genel_kurul.secim_bicimini_yaz",
+        "genel_kurul.secimi_iptal_et",
+        "genel_kurul.ibra_yaz",
+        "genel_kurul.tutanak_bilgilerini_yaz",
+        "genel_kurul.divani_iptal_et",
+        "genel_kurul.tutanagi_tamamla",
+        "genel_kurul.donem_gecisini_onayla",
     }
 )
 #: `@transaction.atomic` taşıyıp kural okumayan servisler ve gerekçesi.
@@ -701,6 +710,11 @@ _GECIS_KURALSIZ = (
 )
 KURALSIZ = {
     "uyum.eksik_kapat": "Yalnız satırı kapatır: kural okumaz; dönem kilidi yine denetlenir.",
+    "uyum.takvim_satiri_yaz": (
+        "Takvim satırı kural kimliği taşımaz (süre ya da değer kural paketinde değildir; tasarım "
+        "§5.2.7), kural okumaz; dönem kilidi yine denetlenir. Çağıranlar (genel kurulun tutanağı ve "
+        "dönem geçişi, F2 6. adım) yazma kapısıyla başlar."
+    ),
     "kurullar.karar_defteri_olustur": (
         "Karar defteri dönemsizdir, kural okumaz; tasdik uyarısı geçiş kurulumundadır (8. adım)."
     ),

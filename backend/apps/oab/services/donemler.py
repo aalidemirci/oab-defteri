@@ -98,6 +98,13 @@ def acik_donem_kimligi() -> int | None:
     return kimlik
 
 
+def ilk_donemin_veli_listesini_bagla(donem: OabTerm) -> int:
+    """Yeni açılan okulun ilk genel kuruluyla açılan dönem `ACIK` olunca dönemsiz veli satırları ona
+    bağlanır (genel kurul servisinin dönem geçişi onayı; plan F2 §5.2 "Yeni okulun ilk genel kurulu").
+    Biçim ilk dönemin açılışıyla aynıdır (`_veli_listesini_bagla`)."""
+    return _veli_listesini_bagla(donem)
+
+
 def _veli_listesini_bagla(donem: OabTerm) -> int:
     """Dönemsiz veli satırlarını döneme bağlar; satır varsa kişisiz `DURUM` olayı yazar.
 

@@ -390,16 +390,18 @@ def _karar_defteri(karar: BoardDecision | None) -> str:
 
 
 def _secen_genel_kurul_gunu(donem: OabTerm, organ: str) -> date | None:
-    """Kurulu seçen genel kurulun günü: olağanüstü genel kurulla yenilenen kurulda o günün, öteki
-    hâllerde dönemi açan genel kurulun günü (`gorev_bolumu.dk_secen_genel_kurul_gunu` kalıbı)."""
+    """Kurulu seçen genel kurulun günü: olağanüstü genel kurulla yenilenen yönetim kurulunda o genel
+    kurulun yapıldığı gün (`selectors.genel_kurul_gunu`; ikinci toplantıda yapıldıysa onun günü, plan
+    F2 §7 U6), öteki hâllerde dönemi açan genel kurulun günü. Denetleme Kurulunu olağanüstü genel
+    kurul seçmez (kullanıcı kararı S10 (a)): `gorev_bolumu.dk_secen_genel_kurul_gunu`."""
     if organ == OrganType.DENETLEME_KURULU:
         return gorev_bolumu.dk_secen_genel_kurul_gunu(donem)
     gunler = [
-        timezone.localdate(uyelik.assembly.first_meeting_at)
+        gun
         for uyelik in selectors.gorevdeki_asillar(donem, organ)
         if uyelik.assembly is not None
         and uyelik.assembly.kind == AssemblyKind.OLAGANUSTU
-        and uyelik.assembly.first_meeting_at is not None
+        and (gun := selectors.genel_kurul_gunu(uyelik.assembly)) is not None
     ]
     return max(gunler) if gunler else donem.start_date
 

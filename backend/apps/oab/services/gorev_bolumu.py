@@ -15,11 +15,13 @@ görev verilmez. Bir görev bölümü kaydı:
     md. 12/3). Süre kurulun bugünkü bileşiminin oluştuğu günden sayılır: görevdeki asılların en geç
     seçilme ya da yedekten çağrı günü (`start_date`, `promoted_on`);
   - Denetleme Kurulu: genel kuruldan sonraki ilk hafta (`denetleme_kurulu.gorev_bolumu_gun`, md. 14/1).
-    Süre kurulu seçen genel kurulun gününden sayılır (kullanıcı kararı 10.11.2026): görevdeki veli
-    koltuğunun bağlı olduğu genel kurul olağanüstüyse (md. 13/8; kurulu dönem içinde yeniler) o genel
-    kurulun günü, değilse dönemi açan genel kurulun günü (`OabTerm.start_date`; birinci ya da ikinci
-    toplantı). Süre yalnız o genel kuruldan sonraki ilk görev bölümünde denetlenir: yedek çağrısı
-    (md. 14/6) süreyi yeniden başlatmaz;
+    Süre kurulu seçen genel kurulun gününden sayılır (kullanıcı kararı 10.11.2026). Olağanüstü genel
+    kurul Denetleme Kuruluna seçim yapmaz (kullanıcı kararı S10 (a), 15.11.2026; md. 13/8 yalnız
+    yönetim kurulunu sayar): kurulu seçen genel kurul dönemi açan genel kuruldur, süre onun yapıldığı
+    günden (`OabTerm.start_date`; birinci ya da ikinci toplantı, plan F2 §7 U6) sayılır
+    (`dk_secen_genel_kurul_gunu`).
+    Süre yalnız o genel kuruldan sonraki ilk görev bölümünde denetlenir: yedek çağrısı (md. 14/6)
+    süreyi yeniden başlatmaz;
   - kurulun bugünkü bileşimi oluştuktan sonra yapılmış görev bölümü varsa sonraki görev değişimi süreye
     bağlı değildir (md. 12/3 ve 14/1 yalnız seçimden ya da genel kuruldan ve yönetim kurulunda yedek
     çağrısından sonraki görev bölümüne süre koyar).
@@ -34,6 +36,13 @@ E03). Başkanlığı düşmeyle ya da iptalle biten kişinin satırları o geçi
 sahibi `UYE` olur, başka göreve geçen üye) hesabı aynı işlemde askıya alınır (`GOREV_BOLUMU`;
 `hesap_baglari.hesaplari_esitle`, tasarım §4.4.5; F1c 7. adım). Denetleme Kurulu hesabı göreve
 bağlı değildir: kurulda görev değişimi hesabı askıya almaz.
+
+YENİ DÖNEMİN GÖREV BÖLÜMÜ (tasarım §4.4.5, §7.8 "Yeni görev bölümü kaydı eski organ hesaplarını askıya
+alır"; plan F2 §7 U28): genel kurulla açılan dönemde kurulun görev bölümü yazılınca önceki dönemin aynı
+kuruldaki üyeliklerine bağlı açık hesaplar aynı işlemde `ASKIDA (GOREV_BOLUMU)` olur
+(`hesap_baglari.onceki_donem_hesaplarini_askiya_al`); yönetim kurulunda da Denetleme Kurulunda da.
+Aynı dönem içindeki görev değişimi yukarıdaki F1c davranışında kalır. Hesap geçişi ve DEK yenilemesi
+F4'tedir.
 
 DENETLEME KURULU: başkan seçimi, görev bölümü tutanağı ve denetim planı yalnız Denetleme Kurulunundur
 (`Eylem.DK_GOREV_BOLUMU_YAZMA`, M8 ⁵; YK rolleri ve program yöneticisi yazmaz). Başkanlık sayacı burada
@@ -165,18 +174,21 @@ def dk_secen_genel_kurul_gunu(donem: OabTerm) -> date | None:
     """Denetleme Kurulunu seçen genel kurulun günü (md. 14/1 "genel kuruldan sonraki ilk hafta";
     kullanıcı kararı 10.11.2026; modül başlığı).
 
-    Görevdeki veli koltuğunun (genel kurul seçer) bağlı olduğu genel kurul olağanüstüyse kurulu dönem
-    içinde yenilemiştir (md. 13/8): onun günü. Öteki hâllerde (olağan genel kurul, devralınan ya da boş
-    veli koltuğu) dönemi açan genel kurulun günü (`OabTerm.start_date`; birinci ya da ikinci toplantı,
-    tasarım §7.1). Olağanüstü genel kurulun günü F1c'de birinci toplantının yerel günüdür; ikinci
-    toplantı alanı F2'de gelince o toplantının günü olur. Bilinmiyorsa `None` (eksik)."""
+    Olağanüstü genel kurul Denetleme Kuruluna seçim yapmaz (kullanıcı kararı S10 (a), 15.11.2026: md.
+    13/8 olağanüstü genel kurulun seçtiği kurul olarak yalnız yönetim kurulunu sayar; genel kurulun
+    seçim yolu `genel_kurul.aday_kaydet` ve `secim_sonucu_yaz` reddeder). Kurulu seçen genel kurul bu
+    yüzden dönemi açan genel kuruldur: gün dönemin başlangıcıdır (`OabTerm.start_date`; genel kurulun
+    yapıldığı gün — birinci ya da ikinci toplantı, tasarım §7.1, plan F2 §7 U6; geçiş kurulumuyla
+    açılan dönemde dönem başı). Görevdeki veli koltuğu yine de olağanüstü genel kurula bağlıysa (yalnız
+    alt düzey üyelik yolu `uyelikler.assign_membership` yazabilir; programın seçim akışında oluşmaz)
+    o genel kurulun günü okunur (`selectors.genel_kurul_gunu`). Bilinmiyorsa `None` (eksik)."""
     gunler = [
-        timezone.localdate(uyelik.assembly.first_meeting_at)
+        gun
         for uyelik in selectors.gorevdeki_asillar(donem, OrganType.DENETLEME_KURULU)
         if uyelik.seat_group == SeatGroup.VELI
         and uyelik.assembly is not None
         and uyelik.assembly.kind == AssemblyKind.OLAGANUSTU
-        and uyelik.assembly.first_meeting_at is not None
+        and (gun := selectors.genel_kurul_gunu(uyelik.assembly)) is not None
     ]
     return max(gunler) if gunler else donem.start_date
 
@@ -384,6 +396,7 @@ def yk_gorev_bolumu(
         donem, OrganType.YONETIM_KURULU, held_at=held_at, place=place, katilim=katilim
     )
     yazilanlar = _gorevleri_dagit(donem, OrganType.YONETIM_KURULU, atamalar)
+    hesap_baglari.onceki_donem_hesaplarini_askiya_al(donem, OrganType.YONETIM_KURULU)
     karar = kurullar.karar_taslagi_olustur(
         toplanti, kind=DecisionKind.GOREV_BOLUMU, text=text, decision_date=gun
     )
@@ -458,6 +471,7 @@ def dk_gorev_bolumu(
         donem, OrganType.DENETLEME_KURULU, held_at=held_at, place=place, katilim=katilim
     )
     yazilanlar = _gorevleri_dagit(donem, OrganType.DENETLEME_KURULU, atamalar)
+    hesap_baglari.onceki_donem_hesaplarini_askiya_al(donem, OrganType.DENETLEME_KURULU)
     # Başkan tekilliği (hesap bütünlüğü; md. 14/1 "bir başkan"): önceki başkan üye oldu, sayım teyittir.
     baskanlar = [
         u

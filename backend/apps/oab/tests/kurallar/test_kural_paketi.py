@@ -23,6 +23,7 @@ import jsonschema
 import pytest
 from django.db import connection
 
+from apps.oab import selectors
 from apps.oab.hatalar import (
     DonemKapali,
     GerekceGerekli,
@@ -45,7 +46,10 @@ from apps.oab.kurallar import genel_kurul as genel_kurul_hesabi
 from apps.oab.kurallar import yukleyici as yk
 from apps.oab.kurallar.dogrulayici import SemaHatasi, sema_hatalari
 from apps.oab.models import (
+    AssemblyCaller,
     AssemblyKind,
+    AssemblyMeeting,
+    AssemblyStatus,
     ComplianceItem,
     ComplianceJustification,
     ComplianceKind,
@@ -2224,6 +2228,37 @@ def test_etkilenen_kurulun_gunu_istanbul_gunudur(monkeypatch: pytest.MonkeyPatch
     kurul = _dondurulmus_kurul(donem, datetime(2026, 12, 31, 21, 30, tzinfo=UTC))
     assert kurul.quorum_required == 64
     _dagit(monkeypatch, *GERCEK, _deger_degisikligi_revizyonu(kid=CARPAN_KURALI, deger=3))
+    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=YENI_REV)
+    assert [(k.model, k.kayit_id, k.kural_id) for k in fark.kayitlar] == [
+        ("oab.GeneralAssembly", str(kurul.pk), CARPAN_KURALI)
+    ]
+
+
+@pytest.mark.django_db
+def test_etkilenen_kayit_ikinci_toplantida_birinci_gunle_hesaplanir(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Plan F2 §7 U6, U7: genel kurulun günü (`genel_kurul_gunu`) ikinci toplantıda yapılan kurulda
+    ikinci toplantının günüdür; revizyon farkı ise dondurulmuş yeter sayıyı birinci toplantının
+    günüyle yeniden hesaplar (dondurmanın kural günü). Çarpan 01.01.2027'de değişirse birinci toplantısı
+    30.12.2026, ikinci toplantısı 10.01.2027 olan kurul etkilenmez; birinci toplantısı yeni değerin
+    yürürlüğüne düşen kurul etkilenir."""
+    donem = _ilk_donem()
+    kurul = _dondurulmus_kurul(donem, datetime(2026, 12, 30, 7, 0, tzinfo=UTC))
+    GeneralAssembly.objects.filter(pk=kurul.pk).update(
+        status=AssemblyStatus.YAPILDI,
+        called_by=AssemblyCaller.YONETIM_KURULU,
+        second_meeting_at=datetime(2027, 1, 10, 7, 0, tzinfo=UTC),
+        first_attendee_count=10,
+        second_attendee_count=20,
+        held_at_meeting=AssemblyMeeting.IKINCI,
+    )
+    assert selectors.genel_kurul_gunu(GeneralAssembly.objects.get(pk=kurul.pk)) == date(2027, 1, 10)
+    _dagit(monkeypatch, *GERCEK, _deger_degisikligi_revizyonu(kid=CARPAN_KURALI, deger=3))
+    assert kural_bagi.revizyon_farki(donem, paket=PAKET, rev=YENI_REV).kayitlar == ()
+    GeneralAssembly.objects.filter(pk=kurul.pk).update(
+        first_meeting_at=datetime(2027, 1, 2, 7, 0, tzinfo=UTC)
+    )
     fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=YENI_REV)
     assert [(k.model, k.kayit_id, k.kural_id) for k in fark.kayitlar] == [
         ("oab.GeneralAssembly", str(kurul.pk), CARPAN_KURALI)

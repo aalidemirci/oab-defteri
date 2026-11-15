@@ -53,6 +53,7 @@ from apps.oab.models import (
     ComplianceItem,
     ComplianceJustification,
     ComplianceKind,
+    ComplianceObligation,
     OabTerm,
     RulePackage,
 )
@@ -390,6 +391,7 @@ def bilinmeyen_beyan_sapmasi(
     mesaj: str,
     gerekce: Gerekce | None,
     tarih: date | None = None,
+    hazirlik_yazimi: bool = False,
 ) -> ComplianceItem | None:
     """Kullanıcının "bilinmiyor" beyanı: kuralın denetleyeceği bilgi sonra da gelmeyecek (tasarım §7.9
     adım 3, §5 O3 "toplu gerekçe"). Eksik değildir, uyarı + gerekçedir: satır `SAPMA` olur.
@@ -397,11 +399,12 @@ def bilinmeyen_beyan_sapmasi(
     Açık `EKSIK` satırı varsa `SAPMA`'ya döner; aynı iletili açık `SAPMA` varsa yeniden sorulmaz;
     yoksa yeni `SAPMA` açılır. Gerekçe toplu gerekçe kuralına uyar (`kok_neden`; `_gerekce_bagla`):
     aynı kök nedenli gerekçe varsa ona bağlanır, metin yeniden istenmez. Kuralın olay günündeki metni
-    yoksa ya da kural bu okulda uygulanmıyorsa satır açılmaz (`None`).
+    yoksa ya da kural bu okulda uygulanmıyorsa satır açılmaz (`None`). `hazirlik_yazimi`: genel kurul
+    hazırlığının satırı (olağan genel kurulun seçtiği üyelik hazırlık dönemindedir; F2 6. adım).
     """
     yazma_kapisi()
     donem = OabTerm.objects.select_related("rule_package").get(pk=donem.pk)
-    donem_kilidi.yazma_denetimi(donem)
+    donem_kilidi.yazma_denetimi(donem, hazirlik_yazimi=hazirlik_yazimi)
     sonuc = paket_denetle(kural_id, VERI_YOK, tarih=tarih, donem=donem)
     if sonuc["durum"] in ("denetlenmedi", "uygun"):
         return None
@@ -508,6 +511,7 @@ def kapanis_gecisi(
     gerekceler: Mapping[str, Gerekce],
     tarih: date,
     konu: models.Model | None = None,
+    hazirlik_yazimi: bool = False,
 ) -> list[ComplianceItem]:
     """Kapatıcı geçişte hâlâ açık `EKSIK` satırları `SAPMA`'ya çevirir (O3).
 
@@ -515,10 +519,12 @@ def kapanis_gecisi(
     (toplu gerekçe bayrağı o günkü kayıttan okunur). Gerekçesi eksik kural varsa hiçbir satır değişmez.
     `toplu_gerekce: false` olan kuralda birden çok satır çevrilecekse de değişmez: çağıran bu kuralları
     `konu` ile kayıt kayıt geçirir (F4'ün dönem kapanışı kayıt başına metin toplar).
+    `hazirlik_yazimi`: genel kurulun kapatıcı geçişi (tutanağın tamamlanması; yeni okulun ilk genel
+    kurulunda dönem hazırlık dönemidir, F2 6. adım).
     """
     yazma_kapisi()
     donem = OabTerm.objects.select_related("rule_package").get(pk=donem.pk)
-    donem_kilidi.yazma_denetimi(donem)
+    donem_kilidi.yazma_denetimi(donem, hazirlik_yazimi=hazirlik_yazimi)
     satirlar = ComplianceItem.objects.filter(
         term=donem, kind=ComplianceKind.EKSIK, resolved_at__isnull=True
     )
@@ -546,6 +552,41 @@ def kapanis_gecisi(
         )
         _sapmaya_cevir(satir, bagli, sonuc=None)
     return cevrilenler
+
+
+@transaction.atomic
+def takvim_satiri_yaz(
+    obligation: str,
+    *,
+    donem: OabTerm,
+    due_date: date,
+    mesaj: str,
+    responsible_role: str,
+    konu: models.Model | None = None,
+    hazirlik_yazimi: bool = False,
+) -> ComplianceItem:
+    """Takvim satırı (`TAKVIM`; tasarım §5.2.7 "modelde karşılığı olmayan yükümlülükler"): yükümlülük,
+    son gün, sorumlu rol ve atıflı kişisiz ileti. Kural kimliği yoktur (kural paketinde süre ya da değer
+    taşımaz); gerekçe istemez. Yapıldığı gün ve kanıt sonra işlenir (pano, F2 12. adım). İzlidir."""
+    if obligation not in ComplianceObligation.values:
+        raise ValueError("Takvim satırının yükümlülüğü tanımlı yükümlülüklerden biri olmalıdır.")
+    guncel = OabTerm.objects.select_related("rule_package").get(pk=donem.pk)
+    donem_kilidi.yazma_denetimi(guncel, hazirlik_yazimi=hazirlik_yazimi)
+    hesap = iz.yazar_hesabi()
+    satir = ComplianceItem.objects.create(
+        term=guncel,
+        kind=ComplianceKind.TAKVIM,
+        subject_type="" if konu is None else denetim_izi.model_etiketi(type(konu)),
+        subject_id="" if konu is None else denetim_izi.kimlik_metni(type(konu), konu.pk),
+        message=mesaj,
+        obligation=obligation,
+        due_date=due_date,
+        responsible_role=responsible_role,
+        created_by_id=hesap,
+        updated_by_id=hesap,
+    )
+    denetim_izi.degisiklik(satir, onceki=None, compliance_item=satir.pk)
+    return satir
 
 
 @transaction.atomic

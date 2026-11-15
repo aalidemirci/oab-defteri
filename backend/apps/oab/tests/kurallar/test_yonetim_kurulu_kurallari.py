@@ -42,8 +42,10 @@ from apps.oab.models import (
     EligibilityBar,
     GeneralAssembly,
     MeetingKind,
+    MembershipRole,
     MembershipSource,
     MembershipStatus,
+    OabTerm,
     OfficialBook,
     OrganMembership,
     PersonKind,
@@ -51,6 +53,7 @@ from apps.oab.models import (
 )
 from apps.oab.services import (
     gorev_bolumu,
+    hesap_baglari,
     kisiler,
     kurullar,
     temsilciler,
@@ -58,9 +61,13 @@ from apps.oab.services import (
     uyelikler,
     uyum,
 )
+from apps.oab.tests import genel_kurul_ortak as gko
 from apps.oab.tests import uyelik_ortak as o
 from apps.oab.tests.kurallar import paket_ortak
-from apps.okul.models import AccountRole, AuditTrail
+from apps.okul.models import Account, AccountRole, AccountStatus, AuditTrail
+from apps.okul.services import hesaplar
+from apps.okul.tests.hesap_ortak import GECICI_PAROLA
+from conftest import TEST_HESAP_ID
 
 pytestmark = pytest.mark.django_db
 
@@ -1349,3 +1356,102 @@ def test_noter_tasdiki_kural_paketindedir_akis_satiri_degil() -> None:
             TASDIK_METNI,
             "md. 23/2",
         )
+
+
+# ============================================================ F2 6. adım: genel kurul seçimi ve yeni dönem
+# Genel kurul ikinci toplantıda (05.11.2026) yapılır; birinci toplantı 20.10.2026'dır (plan F2 §7 U6,
+# U26, U28; `genel_kurul_ortak`). Adlar UYDURMADIR.
+
+
+def test_aday_ve_secilen_ayni_kayit_genel_kurul_kanalinda() -> None:
+    """Tek kaynak (§12.A ilkesi AYNEN; S6 (i)) genel kurulun seçim yolunda: aday kaydı genel kurulun
+    adayıdır, seçilen aynı kaydın `ADAY` → `SECILDI` geçişidir; seçilme günü genel kurulun yapıldığı
+    gündür (ikinci toplantı, U6), kayıt hazırlık dönemindedir. Seçimin sonucu bir kez girilir."""
+    kurul = gko.ikinci_toplantida_yapilmis_olagan()
+    aday = gko.aday(kurul)
+    assert (aday.status, aday.assembly_id, aday.term_id) == (
+        MembershipStatus.ADAY,
+        kurul.pk,
+        kurul.opens_term_id,
+    )
+    sonuc = gko.secim(kurul, "SECIM_YK", [aday], oylar=[17])
+    (secilen,) = sonuc.secilenler
+    assert secilen.pk == aday.pk
+    assert (secilen.status, secilen.start_date, secilen.votes) == (
+        MembershipStatus.SECILDI,
+        gko.IKINCI_GUN,
+        17,
+    )
+    assert OrganMembership.objects.filter(organ="YK").count() == 1
+    with pytest.raises(ValueError, match="sonucu girildi"):
+        gko.secim(kurul, "SECIM_YK", [gko.aday(kurul)])
+
+
+@pytest.mark.kural_davranis(f"{YK}.gorev_bolumu_gun")
+@pytest.mark.parametrize(
+    ("gun", "uyari"), [(date(2026, 11, 12), False), (date(2026, 11, 13), True)]
+)
+def test_gorev_bolumu_suresi_ikinci_toplanti_gunundan(gun: date, uyari: bool) -> None:
+    """md. 12/3 "seçimden sonraki ilk hafta" (saha 8): genel kurul ikinci toplantıda yapıldıysa süre
+    ikinci toplantının gününden (05.11.2026) sayılır, birinci toplantının gününden (20.10.2026) değil
+    (U6). Yeni dönemin ilk görev bölümünde 7. gün uyarısız, 8. gün uyarı + gerekçe."""
+    kurul = gko.ikinci_toplantida_yapilmis_olagan()
+    yk, _ = gko.kurullari_sec(kurul)
+    yeni = gko.tamamla_ve_onayla(kurul).yeni_donem
+    if not uyari:
+        o.yk_gorev_bolumu(yeni, {MembershipRole.BASKAN: yk[0]}, gun=gun)
+        assert not ComplianceItem.objects.filter(rule_id=f"{YK}.gorev_bolumu_gun").exists()
+        return
+    with pytest.raises(GerekceGerekli) as hata:
+        o.yk_gorev_bolumu(yeni, {MembershipRole.BASKAN: yk[0]}, gun=gun)
+    assert "8 gün" in str(hata.value.detail)
+    o.yk_gorev_bolumu(yeni, {MembershipRole.BASKAN: yk[0]}, gun=gun, gerekce="Uydurma gerekçe.")
+    (satir,) = ComplianceItem.objects.filter(rule_id=f"{YK}.gorev_bolumu_gun")
+    assert (satir.kind, satir.term_id) == (ComplianceKind.SAPMA, yeni.pk)
+
+
+def test_yeni_donem_gorev_bolumu_eski_donem_yk_hesabini_askiya_alir() -> None:
+    """U28 (tasarım §4.4.5, §7.8 "Yeni görev bölümü kaydı eski organ hesaplarını askıya alır"): dönem
+    geçişinden sonra eski dönemin yönetim kurulu hesabı açık kalır (eski kurul devir-teslime dek
+    görevdedir); yeni dönemin görev bölümü yazılınca aynı işlemde `ASKIDA (GOREV_BOLUMU)` olur. Hesap
+    önerileri eski hesabı kapanışa, yeni görevliyi hesap açmaya önerir. Denetleme Kurulu hesabı yönetim
+    kurulunun görev bölümüyle askıya alınmaz."""
+    kurul = gko.ikinci_toplantida_yapilmis_olagan()
+    eski_muhasip = o.devralinan(OabTerm.objects.get(assemblies=kurul), o.kisi(), role="MUHASIP")
+    eski_dk = o.secilmis(OabTerm.objects.get(assemblies=kurul), organ="DK", seat_group="VELI")
+    muhasip_hesabi = _hesap_ac(AccountRole.MUHASIP, eski_muhasip)
+    dk_hesabi = _hesap_ac(AccountRole.DENETLEME_KURULU, eski_dk)
+    yk, _ = gko.kurullari_sec(kurul)
+    yeni = gko.tamamla_ve_onayla(kurul).yeni_donem
+    assert Account.objects.get(pk=muhasip_hesabi.pk).status == AccountStatus.PAROLA_YENILENMELI
+    assert hesap_baglari.gecersizlik_nedeni(Account.objects.get(pk=muhasip_hesabi.pk)) is None
+    o.yk_gorev_bolumu(
+        yeni,
+        {MembershipRole.BASKAN: yk[0], MembershipRole.MUHASIP: yk[1]},
+        gun=date(2026, 11, 8),
+    )
+    askida = Account.objects.get(pk=muhasip_hesabi.pk)
+    assert (askida.status, askida.suspend_reason) == (AccountStatus.ASKIDA, "GOREV_BOLUMU")
+    assert Account.objects.get(pk=dk_hesabi.pk).status == AccountStatus.PAROLA_YENILENMELI
+    oneriler = hesap_baglari.hesap_onerileri()
+    assert {
+        "tur": "HESAP_KAPAT",
+        "hesap": str(muhasip_hesabi.pk),
+        "rol": "muhasip",
+        "neden": "GOREV_BOLUMU",
+    } in oneriler
+    assert any(
+        o_["tur"] == "HESAP_AC" and o_["uyelik"] == yk[1].pk and o_["rol"] == "muhasip"
+        for o_ in oneriler
+    )
+
+
+def _hesap_ac(rol: str, uyelik: OrganMembership) -> Account:
+    return hesaplar.open_account(
+        by_hesap_id=TEST_HESAP_ID,
+        role=rol,
+        tanitici=hesaplar.default_login_name(rol),
+        display_name="Uydurma Hesap Sahibi",
+        temp_password=GECICI_PAROLA,
+        uyelik=uyelik.pk,
+    )

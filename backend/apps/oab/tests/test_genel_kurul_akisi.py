@@ -1,6 +1,7 @@
 """Genel kurulun durum makinesi: rol kapısı, hazırlık koşulları ve geçişlerin hesap bütünlüğü (F2 4.
 adım; tasarım §4.4.2 M3, §7.1; plan F2 §6.2, §7 U1, U7, S1). F2 5. adımdan beri gündem, karar, divan
-ve katılım düzeltmesinin rol kapısı, hesap bütünlüğü ve ekleme-yalnızlığı (dosyanın sonu).
+ve katılım düzeltmesinin rol kapısı, hesap bütünlüğü ve ekleme-yalnızlığı; 6. adımdan beri aday,
+seçim, ibra, tutanak ve divanın düzeltilmesinin rol kapısı ve hesap bütünlüğü (dosyanın sonu).
 
 Rol kapısı iki katlıdır: `Eylem.GENEL_KURUL_YAZMA` (program yöneticisi ve yönetim kurulu rolleri) ve
 geçişin "Kim"i (tasarım §7.1). Ret `RolYetkisiz`'dir; uç katmanında 403 `rol_yetkisiz` olur
@@ -29,11 +30,13 @@ from apps.oab.kurallar import genel_kurul as gk_kurallari
 from apps.oab.kurallar import yukleyici as yk
 from apps.oab.models import (
     AgendaItem,
+    AgendaResult,
     Announcement,
     AnnouncementStatus,
     AssemblyCaller,
     AssemblyKind,
     AssemblyMeeting,
+    AssemblyMinutes,
     AssemblyStatus,
     AttendanceCorrection,
     ComplianceItem,
@@ -50,6 +53,7 @@ from apps.oab.services import kisiler, kural_bagi, uyum
 from apps.oab.tests import genel_kurul_ortak as gko
 from apps.oab.tests import uyelik_ortak as o
 from apps.oab.tests.kurallar import paket_ortak
+from apps.okul import denetim_izi
 from apps.okul.models import (
     AccountRole,
     AuditAction,
@@ -1320,3 +1324,434 @@ def test_kapanmis_donemde_duzeltme_ve_tutanak_yazimlari_reddedilir() -> None:
             yazim(kurul)
     assert not AttendanceCorrection.objects.exists()
     assert not OrganMembership.objects.filter(organ=OrganType.DIVAN).exists()
+
+
+# ---------------------------------------------------------------------------
+# F2 6. adım: aday, seçim, ibra, tutanak, divanın düzeltilmesi, dönem geçişi
+# ---------------------------------------------------------------------------
+def _yaz_aday(kurul: GeneralAssembly) -> None:
+    gko.aday(kurul)
+
+
+def _yaz_secim(kurul: GeneralAssembly) -> None:
+    gk.secim_sonucu_yaz(
+        gko.madde(kurul, "SECIM_DK"),
+        adaylar=[gk.AdayOyu(uyelik=_DK_ADAYI[kurul.pk], votes=40, secildi=True)],
+        liste=True,
+        acik_oy=True,
+    )
+
+
+def _yaz_ibra(kurul: GeneralAssembly) -> None:
+    gk.ibra_yaz(gko.madde(kurul, "IBRA"), yk=gko.IBRA_EDILDI, dk=gko.IBRA_EDILDI)
+
+
+def _yaz_tutanak_bilgisi(kurul: GeneralAssembly) -> None:
+    gk.tutanak_bilgilerini_yaz(kurul, handed_to_new_yk_on=gko.BIRINCI_GUN)
+
+
+def _yaz_divan_iptal(kurul: GeneralAssembly) -> None:
+    gk.divani_iptal_et(kurul, cancel_reason="Uydurma: kâtip yanlış kişi girildi.")
+
+
+def _yaz_tutanak_tamam(kurul: GeneralAssembly) -> None:
+    gk.tutanagi_tamamla(kurul)
+
+
+#: Kurulun Denetleme Kurulu adayı (seçim yazımının kurulumu; program yöneticisi kaydeder).
+_DK_ADAYI: dict[int, OrganMembership] = {}
+
+_ALTINCI_ADIM_YAZIMLARI: dict[str, Callable[[GeneralAssembly], None]] = {
+    "aday": _yaz_aday,
+    "secim": _yaz_secim,
+    "ibra": _yaz_ibra,
+    "tutanak_bilgisi": _yaz_tutanak_bilgisi,
+    "divan_iptal": _yaz_divan_iptal,
+    "tutanak_tamam": _yaz_tutanak_tamam,
+}
+
+
+def _altinci_adim_kurulu() -> GeneralAssembly:
+    """Yapılmış olağan genel kurul: divanı seçilmiş, Denetleme Kurulu adayı kayıtlı."""
+    kurul = gko.yapilmis_olagan()
+    gk.divan_sec(kurul, baskan=o.kisi(), katip=o.kisi())
+    _DK_ADAYI[kurul.pk] = gko.aday(kurul, organ="DK")
+    return kurul
+
+
+@pytest.mark.parametrize("yazim", sorted(_ALTINCI_ADIM_YAZIMLARI))
+@pytest.mark.parametrize(
+    "rol",
+    [
+        AccountRole.BASKAN,
+        AccountRole.BASKAN_YARDIMCISI,
+        AccountRole.MUHASIP,
+        AccountRole.DENETLEME_KURULU,
+        AccountRole.MUDUR,
+    ],
+)
+def test_secim_ve_tutanak_yazimlari_yalniz_program_yoneticisi_ve_sekreter(
+    yazim: str, rol: AccountRole
+) -> None:
+    """Tasarım §7.1 `PLANLANDI` ve `YAPILDI → TUTANAK_TAMAM` "Kim": aday kaydı, seçim, ibra, tutanak
+    bilgisi, divanın düzeltilmesi ve tutanağın tamamlanması program yöneticisi ve sekreterdir;
+    Denetleme Kurulu ve müdür okur (M3). Ret hiçbir şey yazmaz; sekreter yazar."""
+    kurul = _altinci_adim_kurulu()
+    genel_kurul_izleri = AuditTrail.objects.exclude(model__in=["okul.Account", "oab.OabPerson"])
+    izler = genel_kurul_izleri.count()
+    with o.rol_olarak(rol), pytest.raises(RolYetkisiz):
+        _ALTINCI_ADIM_YAZIMLARI[yazim](kurul)
+    assert genel_kurul_izleri.count() == izler
+    with o.rol_olarak(AccountRole.SEKRETER):
+        _ALTINCI_ADIM_YAZIMLARI[yazim](kurul)
+    assert genel_kurul_izleri.count() > izler
+
+
+def test_kapanmis_donemde_secim_ve_tutanak_yazimlari_reddedilir() -> None:
+    """O2 dönem kilidi: genel kurulun dönemi kapanmışsa aday, seçim, ibra, tutanak ve divanın düzeltilmesi
+    yazılmaz (`DonemKapali`); ret satır yazmaz."""
+    kurul = _altinci_adim_kurulu()
+    OabTerm.objects.filter(assemblies=kurul).update(
+        status=TermStatus.KAPANDI, end_date=date(2027, 10, 1)
+    )
+    # Aday yazımının kişisinin açılışı sayılmaz; genel kurulun kayıtları sayılır.
+    genel_kurul_izleri = AuditTrail.objects.exclude(model="oab.OabPerson")
+    izler = genel_kurul_izleri.count()
+    for yazim in _ALTINCI_ADIM_YAZIMLARI.values():
+        with pytest.raises(DonemKapali):
+            yazim(kurul)
+    assert genel_kurul_izleri.count() == izler
+    assert not AssemblyMinutes.objects.exists()
+
+
+def test_secim_ve_ibra_yalniz_yapilmis_kurulda_aday_toplantidan_once_de() -> None:
+    """Aday kaydı planlamadan toplantının sonuna dek açıktır (U26); seçim ve ibra yalnız yapılmış genel
+    kurulda, tutanak tamamlanmadan yazılır. İptal edilmiş genel kurula aday yazılmaz."""
+    gko.acik_donem()
+    kurul = gko.planla()
+    aday = gko.aday(kurul)
+    assert (aday.status, aday.term_id) == ("ADAY", kurul.opens_term_id)
+    with pytest.raises(ValueError, match="bu durumdayken"):
+        gk.secim_sonucu_yaz(gko.madde(kurul, "SECIM_YK"), adaylar=[gk.AdayOyu(uyelik=aday)])
+    with pytest.raises(ValueError, match="bu durumdayken"):
+        gk.ibra_yaz(gko.madde(kurul, "IBRA"), yk=gko.IBRA_EDILDI, dk=gko.IBRA_EDILDI)
+    with pytest.raises(ValueError, match="yalnız yönetim kurulu ve Denetleme Kurulunun"):
+        gk.aday_kaydet(kurul, person=o.kisi(), organ=OrganType.DIVAN, seat_type="ASIL")
+    gk.iptal_et(kurul, cancel_reason="Uydurma: salon kullanılamadı.")
+    with pytest.raises(ValueError, match="bu durumdayken"):
+        gko.aday(kurul)
+
+
+def test_yedek_sirasi_oydan_esitlikte_elle() -> None:
+    """U26, md. 13/6 "aldıkları oy sırasına göre": seçilen yedeklerin sırası oydan hesaplanır; eşit oyda
+    program sıra hesaplamaz (sıra boş kalır, bilgi satırı), elle girilen sıra yazılır. Sıralar farklı
+    olmalı (hesap bütünlüğü); sıra yalnız seçilen yedeğe verilir. Seçilmeyen adayın oyu yazılır, kaydı
+    aday kalır."""
+    kurul = gko.yapilmis_olagan()
+    yedekler = [gko.aday(kurul, seat_type="YEDEK") for _ in range(4)]
+    asil = gko.aday(kurul)
+    madde = gko.madde(kurul, "SECIM_YK")
+    with pytest.raises(ValueError, match="seçim maddesi değil"):
+        gk.secim_sonucu_yaz(gko.madde(kurul, "IBRA"), adaylar=[])
+    with pytest.raises(ValueError, match="yalnız seçilen yedek"):
+        gk.secim_sonucu_yaz(madde, adaylar=[gk.AdayOyu(uyelik=asil, secildi=True, seat_order=1)])
+    with pytest.raises(ValueError, match="farklı olmalıdır"):
+        gk.secim_sonucu_yaz(
+            madde,
+            adaylar=[
+                gk.AdayOyu(uyelik=yedekler[0], votes=30, secildi=True),
+                gk.AdayOyu(uyelik=yedekler[1], votes=25, secildi=True, seat_order=1),
+            ],
+        )
+    with pytest.raises(ValueError, match="aşamaz"):
+        gk.secim_sonucu_yaz(madde, adaylar=[gk.AdayOyu(uyelik=asil, votes=71, secildi=True)])
+    sonuc = gk.secim_sonucu_yaz(
+        madde,
+        adaylar=[
+            gk.AdayOyu(uyelik=asil, votes=50, secildi=True),
+            gk.AdayOyu(uyelik=yedekler[0], votes=30, secildi=True),
+            gk.AdayOyu(uyelik=yedekler[1], votes=25, secildi=True),
+            gk.AdayOyu(uyelik=yedekler[2], votes=25, secildi=True),
+            gk.AdayOyu(uyelik=yedekler[3], votes=9),
+        ],
+        liste=True,
+        acik_oy=True,
+    )
+    assert "Eşit oy" in sonuc.bilgiler[0]
+    siralar = {
+        u.pk: (u.status, u.seat_order, u.votes)
+        for u in OrganMembership.objects.filter(pk__in=[y.pk for y in yedekler])
+    }
+    assert siralar == {
+        yedekler[0].pk: ("SECILDI", 1, 30),
+        yedekler[1].pk: ("SECILDI", None, 25),
+        yedekler[2].pk: ("SECILDI", None, 25),
+        yedekler[3].pk: ("ADAY", None, 9),
+    }
+
+
+def test_yedek_sirasi_esit_oyda_elle_girilir() -> None:
+    """Eşit oy alan yedeklerin sırası elle verilince yazılır (E10'a geçer; mevzuat yöntem vermez)."""
+    kurul = gko.yapilmis_olagan()
+    a, b = (gko.aday(kurul, seat_type="YEDEK") for _ in range(2))
+    sonuc = gk.secim_sonucu_yaz(
+        gko.madde(kurul, "SECIM_YK"),
+        adaylar=[
+            gk.AdayOyu(uyelik=a, votes=25, secildi=True, seat_order=2),
+            gk.AdayOyu(uyelik=b, votes=25, secildi=True, seat_order=1),
+        ],
+        liste=True,
+        acik_oy=True,
+    )
+    assert sonuc.bilgiler == ()
+    assert {u.pk: u.seat_order for u in sonuc.secilenler} == {a.pk: 2, b.pk: 1}
+
+
+def test_yanlis_divan_iptal_edilip_yeniden_secilir() -> None:
+    """5. adımın açık bıraktığı nokta (en dar yol): yanlış girilen divanın iki kaydı gerekçeyle iptal
+    edilir (silinmez, altın kural 4; gerekçe şifreli), sonra divan yeniden seçilir. Gerekçesiz iptal
+    yoktur; divanı olmayan kurulda iptal yoktur; tutanak tamamlandıktan sonra divan değişmez."""
+    kurul = gko.yapilmis_olagan()
+    with pytest.raises(ValueError, match="divanı seçilmedi"):
+        gk.divani_iptal_et(kurul, cancel_reason="Uydurma.")
+    yanlis_katip = o.kisi()
+    gk.divan_sec(kurul, baskan=o.kisi(), katip=yanlis_katip)
+    with pytest.raises(ValueError, match="gerekçe"):
+        gk.divani_iptal_et(kurul, cancel_reason="  ")
+    iptaller = gk.divani_iptal_et(kurul, cancel_reason="Uydurma: kâtip yanlış kişi girildi.")
+    assert [u.status for u in iptaller] == ["IPTAL", "IPTAL"]
+    assert OrganMembership.objects.get(pk=iptaller[1].pk).cancel_reason == (
+        "Uydurma: kâtip yanlış kişi girildi."
+    )
+    assert gk.kurulun_divani(kurul) == []
+    yeni_baskan = OrganMembership.objects.get(pk=iptaller[0].pk).person
+    gk.divan_sec(kurul, baskan=yeni_baskan, katip=o.kisi())
+    assert len(gk.kurulun_divani(kurul)) == 2
+    assert OrganMembership.objects.filter(organ=OrganType.DIVAN).count() == 4
+    gk.tutanagi_tamamla(kurul)
+    with pytest.raises(ValueError, match="bu durumdayken"):
+        gk.divani_iptal_et(kurul, cancel_reason="Uydurma: geç fark edildi.")
+
+
+def test_ibra_duzeltilir_ve_tutanak_bilgileri_kisilere_baglanir() -> None:
+    """İbra sonucu tutanak tamamlanana dek düzeltilir (izli); yönetim kurulu yeniden ibra edilince
+    ibra edilmeyen evrak listesi boşalır. Oylaması verilmeyen kurulun ibrası görüşülmemiştir. Tutanağın
+    okuyucuları birlik kişisidir (serbest metin ad yok), pasif kişi yeni bağlanamaz; teslim günü md.
+    10/1-ç."""
+    kurul = gko.yapilmis_olagan()
+    ibra = gko.madde(kurul, "IBRA")
+    with pytest.raises(ValueError, match="ibra edildi, ibra edilmedi"):
+        gk.ibra_yaz(ibra, yk=gko.IBRA_EDILDI, dk=gko.IBRA_EDILDI, discharge_yk="BELKI")
+    with pytest.raises(ValueError, match="ibra maddesi değil"):
+        gk.ibra_yaz(gko.madde(kurul, "DILEK"), yk=gko.IBRA_EDILDI, dk=gko.IBRA_EDILDI)
+    gk.ibra_yaz(
+        ibra,
+        yk=gko.IBRA_EDILMEDI,
+        dk=gko.IBRA_EDILDI,
+        unaudited_documents_note="Uydurma evrak.",
+    )
+    sonuc = gk.ibra_yaz(ibra, yk=gko.IBRA_EDILDI, dk=gko.IBRA_EDILDI)
+    assert (sonuc.kurul.discharge_yk, sonuc.bilgiler) == ("EDILDI", ())
+    assert AssemblyMinutes.objects.get(assembly=kurul).unaudited_documents_note == ""
+    gorusulmedi = gk.ibra_yaz(ibra, yk=None, dk=None)
+    assert (gorusulmedi.kurul.discharge_yk, gorusulmedi.kurul.discharge_yk_votes_for) == (
+        "GORUSULMEDI",
+        None,
+    )
+    assert gko.madde(kurul, "IBRA").result == ""
+    ibra_izleri = [
+        satir
+        for satir in AuditTrail.objects.filter(model="oab.GeneralAssembly", object_id=str(kurul.pk))
+        if satir.action == AuditAction.GUNCELLE and "discharge_yk" in (satir.changed_fields or [])
+    ]
+    assert len(ibra_izleri) == 3
+    okuyan = o.kisi()
+    pasif = o.kisi()
+    kisiler.update_person(pasif, status=PersonStatus.PASIF)
+    with pytest.raises(ValueError, match="Pasif kişi"):
+        gk.tutanak_bilgilerini_yaz(kurul, yk_report_reader=pasif)
+    tutanak = gk.tutanak_bilgilerini_yaz(
+        kurul, yk_report_reader=okuyan, budget_presenter=okuyan, handed_to_new_yk_on=gko.BIRINCI_GUN
+    )
+    assert (tutanak.yk_report_reader_id, tutanak.dk_report_reader_id) == (okuyan.pk, None)
+    assert tutanak.handed_to_new_yk_on == gko.BIRINCI_GUN
+
+
+def test_tutanak_bilgisi_kismi_yazilir_bagli_kisi_pasiflesse_de_korunur() -> None:
+    """Tutanak bilgisi kısmi yazılır: verilmeyen alan değişmez, `None` boşaltır. Raporu okuyan kişi
+    sonradan pasifleşirse aynı bağ yeniden verilince korunur (kayıt toplantıdaki durumu yazar); pasif
+    kişiye yeni bağ kurulmaz. Hiçbir alan verilmezse yazım yoktur."""
+    kurul = gko.yapilmis_olagan()
+    okuyan, sunan, pasif = o.kisi(), o.kisi(), o.kisi()
+    gk.tutanak_bilgilerini_yaz(kurul, yk_report_reader=okuyan, budget_presenter=sunan)
+    kisiler.update_person(okuyan, status=PersonStatus.PASIF)
+    kisiler.update_person(pasif, status=PersonStatus.PASIF)
+    tutanak = gk.tutanak_bilgilerini_yaz(kurul, handed_to_new_yk_on=gko.BIRINCI_GUN)
+    assert (tutanak.yk_report_reader_id, tutanak.budget_presenter_id) == (okuyan.pk, sunan.pk)
+    tutanak = gk.tutanak_bilgilerini_yaz(kurul, yk_report_reader=okuyan, budget_presenter=None)
+    assert (tutanak.yk_report_reader_id, tutanak.budget_presenter_id) == (okuyan.pk, None)
+    assert tutanak.handed_to_new_yk_on == gko.BIRINCI_GUN
+    with pytest.raises(ValueError, match="Pasif kişi"):
+        gk.tutanak_bilgilerini_yaz(kurul, dk_report_reader=pasif)
+    with pytest.raises(ValueError, match="verilmedi"):
+        gk.tutanak_bilgilerini_yaz(kurul)
+
+
+def test_teslim_gunu_tutanak_tamamlandiktan_ve_donem_acildiktan_sonra_yazilir() -> None:
+    """Tasarım §7.1 `TUTANAK_TAMAM` sonrası "tutanak ve belgeler yeni YK'ye teslim" (md. 10/1-ç), §7.8
+    sıra (tutanak → yeni dönem açık → devir-teslim): yeni yönetim kuruluna teslim günü tutanak
+    tamamlandıktan ve dönem geçişi onaylandıktan sonra da yazılır ve düzeltilir (izli). Kişi bağları
+    tutanakla birlikte girilir, tutanak tamamlandıktan sonra değişmez. Kapanmış dönemde yazılmaz."""
+    kurul = gko.yapilmis_olagan()
+    gko.kurullari_sec(kurul)
+    gko.tamamla_ve_onayla(kurul)
+    tutanak = gk.tutanak_bilgilerini_yaz(kurul, handed_to_new_yk_on=gko.BIRINCI_GUN)
+    assert tutanak.handed_to_new_yk_on == gko.BIRINCI_GUN
+    duzeltilen = gk.tutanak_bilgilerini_yaz(kurul, handed_to_new_yk_on=date(2026, 10, 21))
+    assert duzeltilen.handed_to_new_yk_on == date(2026, 10, 21)
+    izler = AuditTrail.objects.filter(model="oab.AssemblyMinutes", object_id=str(tutanak.pk))
+    assert [s.action for s in izler.order_by("pk")] == [
+        AuditAction.OLUSTUR,
+        AuditAction.GUNCELLE,
+        AuditAction.GUNCELLE,
+    ]
+    with pytest.raises(ValueError, match="yalnız yeni yönetim kuruluna teslim günü"):
+        gk.tutanak_bilgilerini_yaz(kurul, yk_report_reader=o.kisi())
+    OabTerm.objects.filter(assemblies=kurul).update(
+        status=TermStatus.KAPANDI, end_date=date(2026, 10, 19)
+    )
+    with pytest.raises(DonemKapali):
+        gk.tutanak_bilgilerini_yaz(kurul, handed_to_new_yk_on=gko.BIRINCI_GUN)
+
+
+def test_yanlis_secim_iptal_edilip_yeniden_girilir() -> None:
+    """Seçimin sonucu bir kez girilir; yanlış girilen sonuç (divan emsali, en dar yol) seçimin gerekçeli
+    iptaliyle düzeltilir: bu kurula seçilmiş kayıtlar `IPTAL` olur (silinmez, altın kural 4; gerekçe
+    şifreli), maddenin sonucu boşalır, seçilmemiş aday aday kalır. Kaydı iptal edilen kişi yeniden aday
+    kaydedilir, sonuç yeniden girilir. Gerekçesiz iptal yoktur; sonucu girilmemiş seçim iptal
+    edilmez; tutanak tamamlandıktan sonra seçim değişmez."""
+    kurul = gko.yapilmis_olagan()
+    madde = gko.madde(kurul, "SECIM_YK")
+    with pytest.raises(ValueError, match="sonucu girilmedi"):
+        gk.secimi_iptal_et(madde, cancel_reason="Uydurma.")
+    yanlis, dogru, dogru_da = gko.aday(kurul), gko.aday(kurul), gko.aday(kurul)
+    gko.secim(kurul, "SECIM_YK", [yanlis, dogru_da])
+    with pytest.raises(ValueError, match="sonucu girildi"):
+        gko.secim(kurul, "SECIM_YK", [dogru])
+    with pytest.raises(ValueError, match="gerekçe"):
+        gk.secimi_iptal_et(madde, cancel_reason="  ")
+    iptaller = gk.secimi_iptal_et(
+        madde, cancel_reason="Uydurma: tutanakta yanlış aday işaretlendi."
+    )
+    assert sorted(u.pk for u in iptaller) == sorted([yanlis.pk, dogru_da.pk])
+    assert {u.status for u in OrganMembership.objects.filter(pk__in=[yanlis.pk, dogru_da.pk])} == {
+        "IPTAL"
+    }
+    assert OrganMembership.objects.get(pk=dogru.pk).status == "ADAY"
+    assert gko.madde(kurul, "SECIM_YK").result == ""
+    yeniden = gko.aday(kurul, kisi=OrganMembership.objects.get(pk=dogru_da.pk).person)
+    sonuc = gko.secim(kurul, "SECIM_YK", [dogru, yeniden])
+    assert {u.pk for u in sonuc.secilenler} == {dogru.pk, yeniden.pk}
+    assert (
+        OrganMembership.objects.filter(
+            assembly=kurul, organ=OrganType.YONETIM_KURULU, status="SECILDI"
+        ).count()
+        == 2
+    )
+    assert gko.madde(kurul, "SECIM_YK").result == AgendaResult.GORUSULDU
+    gk.tutanagi_tamamla(kurul)
+    with pytest.raises(ValueError, match="bu durumdayken"):
+        gk.secimi_iptal_et(madde, cancel_reason="Uydurma: geç fark edildi.")
+
+
+def test_secimin_hesap_butunlugu_retleri_hicbir_sey_yazmaz() -> None:
+    """S6 (i) ve U26 (hesap bütünlüğü, sert): bir adayın sonucu bir kez girilir; elle yedek sırası 1 ya
+    da daha büyüktür; oylamayla gündemden çıkarılmış seçim ya da ibra maddesine sonuç yazılmaz (md.
+    9/4). Her ret hiçbir şey yazmaz: aday aday kalır, maddenin sonucu boş kalır."""
+    kurul = gko.yapilmis_olagan()
+    asil = gko.aday(kurul)
+    yedek = gko.aday(kurul, seat_type="YEDEK")
+    madde = gko.madde(kurul, "SECIM_YK")
+    with pytest.raises(ValueError, match="bir kez girilir"):
+        gk.secim_sonucu_yaz(
+            madde,
+            adaylar=[
+                gk.AdayOyu(uyelik=asil, votes=40, secildi=True),
+                gk.AdayOyu(uyelik=asil, votes=10),
+            ],
+            liste=True,
+            acik_oy=True,
+        )
+    with pytest.raises(ValueError, match="1 ya da daha büyük"):
+        gk.secim_sonucu_yaz(
+            madde,
+            adaylar=[gk.AdayOyu(uyelik=yedek, votes=30, secildi=True, seat_order=0)],
+            liste=True,
+            acik_oy=True,
+        )
+    assert {u.status for u in OrganMembership.objects.filter(pk__in=[asil.pk, yedek.pk])} == {
+        "ADAY"
+    }
+    assert gko.madde(kurul, "SECIM_YK").result == ""
+
+    ibra = gko.madde(kurul, "IBRA")
+    for cikarilan in (madde, ibra):
+        gk.gundemden_madde_cikar(cikarilan, change_votes_for=50, change_votes_against=10)
+    with pytest.raises(ValueError, match="çıkarıldı"):
+        gk.secim_sonucu_yaz(
+            madde,
+            adaylar=[gk.AdayOyu(uyelik=asil, votes=40, secildi=True)],
+            liste=True,
+            acik_oy=True,
+        )
+    with pytest.raises(ValueError, match="çıkarıldı"):
+        gk.ibra_yaz(ibra, yk=gko.IBRA_EDILDI, dk=gko.IBRA_EDILDI)
+    with pytest.raises(ValueError, match="çıkarıldı"):
+        gk.secim_bicimini_yaz(madde, liste=True, acik_oy=True)
+    assert OrganMembership.objects.get(pk=asil.pk).status == "ADAY"
+    assert (gko.madde(kurul, "SECIM_YK").result, gko.madde(kurul, "IBRA").result) == ("", "")
+    guncel = GeneralAssembly.objects.get(pk=kurul.pk)
+    assert (guncel.discharge_yk, guncel.discharge_yk_votes_for) == ("", None)
+
+
+def test_secim_bicimi_ve_secim_iptali_yalniz_program_yoneticisi_ve_sekreter() -> None:
+    """Tasarım §7.1 `YAPILDI → TUTANAK_TAMAM` "Kim": seçimin biçimi ve seçimin iptali program
+    yöneticisi ve sekreterdir; Denetleme Kurulu okur (M3). Ret hiçbir şey yazmaz."""
+    kurul = gko.yapilmis_olagan()
+    gko.secim(kurul, "SECIM_DK", [gko.aday(kurul, organ="DK")], liste=None)
+    madde = gko.madde(kurul, "SECIM_DK")
+    genel_kurul_izleri = AuditTrail.objects.exclude(model__in=["okul.Account", "oab.OabPerson"])
+    izler = genel_kurul_izleri.count()
+    with o.rol_olarak(AccountRole.DENETLEME_KURULU), pytest.raises(RolYetkisiz):
+        gk.secim_bicimini_yaz(madde, liste=True, acik_oy=True)
+    with o.rol_olarak(AccountRole.DENETLEME_KURULU), pytest.raises(RolYetkisiz):
+        gk.secimi_iptal_et(madde, cancel_reason="Uydurma.")
+    assert genel_kurul_izleri.count() == izler
+    with o.rol_olarak(AccountRole.SEKRETER):
+        gk.secim_bicimini_yaz(madde, liste=True, acik_oy=True)
+        gk.secimi_iptal_et(madde, cancel_reason="Uydurma: yanlış aday.")
+    assert gko.madde(kurul, "SECIM_DK").result == ""
+
+
+def test_secim_tutanak_ve_donem_gecisi_denetim_izine_duser() -> None:
+    """Altın kural 4, tasarım §4.6.2: aday, seçim, ibra, tutanak, dönem geçişi ve takvim satırları
+    izlidir; iz satırlarının yazarı yazan hesaptır ve zincir bütündür."""
+    kurul = gko.yapilmis_olagan()
+    gko.kurullari_sec(kurul)
+    gk.ibra_yaz(gko.madde(kurul, "IBRA"), yk=gko.IBRA_EDILMEDI, dk=gko.IBRA_EDILDI)
+    gko.tamamla_ve_onayla(kurul)
+    for model in (
+        "oab.OrganMembership",
+        "oab.AgendaItem",
+        "oab.GeneralAssembly",
+        "oab.OabTerm",
+        "oab.ComplianceItem",
+    ):
+        assert AuditTrail.objects.filter(model=model).exists(), model
+    takvim = ComplianceItem.objects.filter(kind="TAKVIM").values_list("pk", flat=True)
+    assert set(
+        AuditTrail.objects.filter(
+            model="oab.ComplianceItem", action=AuditAction.OLUSTUR
+        ).values_list("compliance_item_id", flat=True)
+    ) >= set(takvim)
+    assert denetim_izi.zinciri_dogrula() == []

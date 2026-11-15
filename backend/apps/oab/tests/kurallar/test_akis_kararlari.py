@@ -6,8 +6,8 @@ F1c kararları; denetim UY-10): genel kurul bağı boşken (dönem, organ, kişi
 kurul dışı seçimlerde etkisiz kalırdı. Geçiş kurulumunda görevdeki kurul `DEVRALINAN` üyelikle aday
 şartı olmadan seçilmiş açılır (§7.9); toplu sayaç beyanı geçiş kurulumunun adımıdır (8. adım).
 Bir kişi aynı dönemde aynı kurulda tek koltuk tutar (kullanıcı kararı 10.11.2026). F2 4. adımdan
-beri genel kurulun hazırlık dönemi senaryoları, 5. adımdan beri veli listesinin katılım işareti
-(dosyanın sonu).
+beri genel kurulun hazırlık dönemi senaryoları, 5. adımdan beri veli listesinin katılım işareti,
+6. adımdan beri seçim, tutanak ve dönem geçişi senaryoları (dosyanın sonu).
 Kişi adları UYDURMADIR.
 """
 
@@ -21,6 +21,7 @@ from django.db import IntegrityError, transaction
 
 from apps.oab.hatalar import GecisKapali, GerekceGerekli, KuralSert
 from apps.oab.models import (
+    AssemblyCaller,
     AssemblyKind,
     AssemblyMeeting,
     AssemblyStatus,
@@ -50,6 +51,8 @@ from apps.okul.models import (
     AuditAction,
     AuditTrail,
     ParentRoster,
+    SchoolConfig,
+    SchoolYear,
 )
 from apps.okul.services import imports as import_service
 from shared.exceptions import RolYetkisiz
@@ -639,3 +642,216 @@ def test_yeniden_aktarimda_dusen_isaret_sayisi_onizlemede() -> None:
     assert genel_kurul.katilim_isareti_sayisi(kurul, AssemblyMeeting.BIRINCI) == 1
     assert ParentRoster.objects.get(student_class="10-B").attended_assembly_id == kurul.pk
     assert GeneralAssembly.objects.get(pk=kurul.pk).first_attendee_count == 70
+
+
+# ---------------------------------------------------------------------------
+# F2 6. adım: seçim, tutanak ve dönemin açılması (tasarım §5.2.1, §7.1, §7.8; plan F2 §5.2, §7 U4,
+# U6, U32, U33)
+# ---------------------------------------------------------------------------
+def test_ikinci_toplantida_secilen_kurulla_donem_acik() -> None:
+    """Hazırlık dönemi senaryosu (tasarım §14 F2 kapısı; saha 8): birinci toplantıda yeter sayı
+    sağlanamaz, genel kurul ikinci toplantıda yapılır; seçilenler hazırlık dönemine, ikinci toplantının
+    günüyle yazılır (U6). Tutanak tamamlanıp program yöneticisi onaylayınca hazırlık dönemi `ACIK`
+    olur, başlangıcı ikinci toplantının günüdür; kapanacak dönem `KAPANISTA`, bitişi bir önceki gün.
+    Kural bağı değişmez (U2). Okul idaresinin TEFBİS girişleri yeni dönemin takvimine girer (md. 23/5;
+    son gün yeni dönemin başı)."""
+    kurul = gko.ikinci_toplantida_yapilmis_olagan()
+    assert kurul.held_at_meeting == AssemblyMeeting.IKINCI
+    hazirlik = OabTerm.objects.get(opened_by_assembly=kurul)
+    bag = hazirlik.rule_package_id
+    yk, dk = gko.kurullari_sec(kurul, yk_asil=5, yk_yedek=2)
+    assert {(u.term_id, u.start_date, u.assembly_id) for u in [*yk, *dk]} == {
+        (hazirlik.pk, gko.IKINCI_GUN, kurul.pk)
+    }
+    assert [u.seat_order for u in yk if u.seat_type == "YEDEK"] == [1, 2]
+    gecis_ = gko.tamamla_ve_onayla(kurul)
+    yeni = OabTerm.objects.get(pk=hazirlik.pk)
+    eski = OabTerm.objects.get(assemblies=kurul)
+    assert (yeni.status, yeni.start_date, yeni.end_date) == (
+        TermStatus.ACIK,
+        gko.IKINCI_GUN,
+        None,
+    )
+    assert (eski.status, eski.end_date) == (TermStatus.KAPANISTA, date(2026, 11, 4))
+    assert (gecis_.baslangic, gecis_.kapanacak_bitis) == (gko.IKINCI_GUN, date(2026, 11, 4))
+    assert yeni.rule_package_id == bag
+    takvim = ComplianceItem.objects.filter(kind=ComplianceKind.TAKVIM).order_by("pk")
+    assert [(s.obligation, s.due_date, s.term_id, s.responsible_role) for s in takvim] == [
+        (yukumluluk, gko.IKINCI_GUN, yeni.pk, "yonetici")
+        for yukumluluk in (
+            "TEFBIS_YONETIM_BILGISI",
+            "TEFBIS_BANKA_BILGISI",
+            "TEFBIS_BUTCE_GIRISI",
+        )
+    ]
+    assert all("md. 23/5" in s.message for s in takvim)
+    assert GeneralAssembly.objects.get(pk=kurul.pk).status == AssemblyStatus.TUTANAK_TAMAM
+    # Dönem geçişi izlidir: iki dönemin durum satırları onaylayanın hesabıyla yazılır.
+    durumlar = AuditTrail.objects.filter(model="oab.OabTerm", action=AuditAction.DURUM)
+    assert {s.object_id for s in durumlar} >= {str(yeni.pk), str(eski.pk)}
+
+
+def test_tutanak_tamam_donemi_kendiliginden_acmaz_onay_yalniz_yonetici() -> None:
+    """U32 (tasarım §7.1, §7.8 "sistem; yonetici onaylar"; M1): sekreterin tamamladığı tutanak dönemi
+    `ACIK` yapmaz, sistem geçişi önerir (önizleme engelsiz, bilgi satırı). Onayı yalnız program
+    yöneticisi verir: öteki roller `RolYetkisiz`, hiçbir şey yazılmaz. Onay bir kez verilir."""
+    kurul = gko.yapilmis_olagan()
+    gko.kurullari_sec(kurul)
+    onizleme = genel_kurul.donem_gecisi_onizlemesi(kurul)
+    assert any("tutanağı tamamlandıktan" in e for e in onizleme.engeller)
+    with o.rol_olarak(AccountRole.SEKRETER):
+        sonuc = genel_kurul.tutanagi_tamamla(kurul)
+    assert "onayını bekliyor" in sonuc.bilgiler[0] and "20.10.2026" in sonuc.bilgiler[0]
+    hazirlik = OabTerm.objects.get(opened_by_assembly=kurul)
+    assert hazirlik.status == TermStatus.HAZIRLIK
+    assert OabTerm.objects.get(assemblies=kurul).status == TermStatus.ACIK
+    assert genel_kurul.donem_gecisi_onizlemesi(kurul).engeller == ()
+    for rol in (
+        AccountRole.SEKRETER,
+        AccountRole.BASKAN,
+        AccountRole.MUHASIP,
+        AccountRole.DENETLEME_KURULU,
+        AccountRole.MUDUR,
+    ):
+        with o.rol_olarak(rol), pytest.raises(RolYetkisiz):
+            genel_kurul.donem_gecisini_onayla(kurul)
+    assert OabTerm.objects.get(pk=hazirlik.pk).status == TermStatus.HAZIRLIK
+    assert not ComplianceItem.objects.filter(kind=ComplianceKind.TAKVIM).exists()
+    genel_kurul.donem_gecisini_onayla(kurul)
+    assert OabTerm.objects.get(pk=hazirlik.pk).status == TermStatus.ACIK
+    with pytest.raises(ValueError, match="hazırlıkta değil"):
+        genel_kurul.donem_gecisini_onayla(kurul)
+
+
+def test_donem_gecisinde_aralik_cakismasi_serttir() -> None:
+    """U4 (tasarım §5.2.1 "dönem aralıkları çakışmaz", hesap bütünlüğü): yeni dönemin başlangıcı başka
+    bir başlamış dönemin aralığına düşerse onay reddedilir, hiçbir şey yazılmaz. Olağanüstü genel kurul
+    dönem açmaz (md. 13/8)."""
+    kurul = gko.yapilmis_olagan()
+    genel_kurul.tutanagi_tamamla(kurul)
+    eski_yil = SchoolYear.objects.get(name="2025-2026")
+    gecmis = OabTerm.objects.create(
+        name="uydurma geçmiş dönem",
+        school_year=eski_yil,
+        rule_package=OabTerm.objects.get(assemblies=kurul).rule_package,
+        status=TermStatus.KAPANDI,
+        start_date=date(2024, 11, 1),
+        end_date=date(2026, 10, 25),
+    )
+    with pytest.raises(ValueError, match="çakışıyor"):
+        genel_kurul.donem_gecisini_onayla(kurul)
+    assert OabTerm.objects.get(opened_by_assembly=kurul).status == TermStatus.HAZIRLIK
+    assert OabTerm.objects.get(assemblies=kurul).status == TermStatus.ACIK
+    OabTerm.objects.filter(pk=gecmis.pk).update(end_date=date(2025, 11, 2))
+    genel_kurul.donem_gecisini_onayla(kurul)
+    assert OabTerm.objects.get(opened_by_assembly=kurul).status == TermStatus.ACIK
+
+    olaganustu = gko.yapilmis_olaganustu(donem_ac=False)
+    with pytest.raises(ValueError, match="birlik dönemi açmaz"):
+        genel_kurul.donem_gecisi_onizlemesi(olaganustu)
+
+
+def test_tutanagi_tamam_kurulun_katilim_isareti_ustune_yazilir() -> None:
+    """U33: işaret yalnız `TUTANAK_TAMAM`'a dek yazılır; tutanağı tamamlanmış kurulun işareti bitmiş bir
+    sayım yardımıdır, aynı dönemin yeni kurulunda üzerine yazılır (5. adımda bu durum erişilemezdi).
+    Tamamlanmış kurulun işareti artık değiştirilemez."""
+    gko.acik_donem()
+    gko.veli_aktar(_VELILER)
+    ilk = _ilanli_olaganustu()
+    dokuz_a = _satirlar("9-A")
+    genel_kurul.katilim_isaretle(ilk, toplanti=AssemblyMeeting.BIRINCI, isaretle=dokuz_a)
+    genel_kurul.birinci_toplanti(ilk, katilim=gko.katilim(gko.KATILAN))
+    genel_kurul.tutanagi_tamamla(ilk)
+    with pytest.raises(ValueError, match="bu durumdayken"):
+        genel_kurul.katilim_isaretle(ilk, toplanti=AssemblyMeeting.BIRINCI, kaldir=dokuz_a)
+    yeni = _ilanli_olaganustu()
+    liste = genel_kurul.katilim_isaretleri(yeni, toplanti=AssemblyMeeting.BIRINCI)
+    assert not any(v["baska_isaret"] for s in liste for v in s["satirlar"])
+    assert (
+        genel_kurul.katilim_isaretle(yeni, toplanti=AssemblyMeeting.BIRINCI, isaretle=dokuz_a) == 2
+    )
+    assert genel_kurul.katilim_isareti_sayisi(ilk, AssemblyMeeting.BIRINCI) == 0
+    assert GeneralAssembly.objects.get(pk=ilk.pk).first_attendee_count == gko.KATILAN
+
+
+def test_secimde_bilinmeyen_beyan_gecisin_toplu_gerekcesine_baglanir() -> None:
+    """U26 (tasarım §7.1 "programdan önceki sayı bilinmiyorsa geçiş kurulumundaki toplu gerekçe
+    yeter", §7.9): geçiş kurulumunda seçilme sayısı "bilinmiyor" denen kişi genel kurulda seçilince
+    sayaç satırı geçişin toplu gerekçesine bağlanır, gerekçe yeniden sorulmaz. Beyanı hiç verilmemiş
+    kişinin satırı eksik kalır."""
+    gko.acik_donem()
+    bilinmeyen, verilmemis = o.kisi(), o.kisi()
+    gecis.sayac_beyani(
+        [gecis.SayacBeyani(kisi=bilinmeyen, yk=None)], gerekce="Uydurma: eski defter elde değil."
+    )
+    tek = ComplianceJustification.objects.get(rule_id="yonetim_kurulu.secilme_siniri")
+    kurul = gko.olagan_cagir(gko.planla())
+    genel_kurul.ilan_et(kurul, kanallar=gko.kanallar())
+    genel_kurul.birinci_toplanti(kurul, katilim=gko.katilim(gko.KATILAN))
+    adaylar = [gko.aday(kurul, kisi=bilinmeyen), gko.aday(kurul, kisi=verilmemis)]
+    secilenler = gko.secim(kurul, "SECIM_YK", adaylar).secilenler
+
+    def satir(uyelik: OrganMembership) -> ComplianceItem:
+        return ComplianceItem.objects.get(
+            subject_type="oab.OrganMembership",
+            subject_id=str(uyelik.pk),
+            rule_id="yonetim_kurulu.secilme_siniri",
+        )
+
+    assert (satir(secilenler[0]).kind, satir(secilenler[0]).justification_group_id) == (
+        ComplianceKind.SAPMA,
+        tek.pk,
+    )
+    assert satir(secilenler[1]).kind == ComplianceKind.EKSIK
+    assert (
+        ComplianceJustification.objects.filter(rule_id="yonetim_kurulu.secilme_siniri").count() == 1
+    )
+
+
+def test_yeni_okulun_ilk_genel_kurulunda_donem_acilir_veli_listesi_baglanir() -> None:
+    """Plan F2 §5.2 "Yeni okulun ilk genel kurulu" (S5 (i)): kapanacak dönem yoktur. Onayla hazırlık
+    dönemi `ACIK` olur (başlangıç genel kurulun günü), kapanış yazılmaz; açık dönem yokken aktarılmış
+    dönemsiz veli satırları yeni döneme bağlanır (kişisiz tek `DURUM` olayı); okul idaresinin TEFBİS
+    girişleri yeni dönemin takvimine girer. Müdürün yeni okul çağrısı 7. adımdadır: çağrı durumu
+    burada model düzeyinde kurulur."""
+    gko.ders_yillari()
+    gko.mevcut()
+    SchoolConfig.objects.filter(pk=SchoolConfig.SINGLETON_PK).update(opened_on=date(2026, 9, 7))
+    gko.veli_aktar(_VELILER)
+    assert set(ParentRoster.objects.values_list("term", flat=True)) == {None}
+    kurul = gko.planla()
+    assert (kurul.term_id, kurul.called_by) == (None, AssemblyCaller.MUDUR_YENI_OKUL)
+    kurul.status = AssemblyStatus.CAGRILDI
+    kurul.save(update_fields=["status"])
+    genel_kurul.ilan_et(kurul, kanallar=gko.kanallar())
+    genel_kurul.birinci_toplanti(kurul, katilim=gko.katilim(gko.KATILAN))
+    genel_kurul.tutanagi_tamamla(kurul)
+    onizleme = genel_kurul.donem_gecisi_onizlemesi(kurul)
+    assert (onizleme.kapanacak, onizleme.kapanacak_bitis, onizleme.engeller) == (None, None, ())
+    olaylar = AuditTrail.objects.filter(model="okul.ParentRoster", action=AuditAction.DURUM)
+    assert not olaylar.exists()
+    gecis_ = genel_kurul.donem_gecisini_onayla(kurul)
+    yeni = OabTerm.objects.get(opened_by_assembly=kurul)
+    assert (gecis_.kapanacak, gecis_.kapanacak_bitis, gecis_.baslangic) == (
+        None,
+        None,
+        gko.BIRINCI_GUN,
+    )
+    assert (yeni.status, yeni.start_date, yeni.end_date) == (
+        TermStatus.ACIK,
+        gko.BIRINCI_GUN,
+        None,
+    )
+    assert OabTerm.objects.count() == 1
+    assert set(ParentRoster.objects.values_list("term", flat=True)) == {yeni.pk}
+    (olay,) = olaylar
+    assert (olay.object_id, olay.changed_fields, olay.term_id) == ("", ["term"], yeni.pk)
+    takvim = ComplianceItem.objects.filter(kind=ComplianceKind.TAKVIM).order_by("pk")
+    assert [(s.obligation, s.term_id, s.due_date) for s in takvim] == [
+        (yukumluluk, yeni.pk, gko.BIRINCI_GUN)
+        for yukumluluk in (
+            "TEFBIS_YONETIM_BILGISI",
+            "TEFBIS_BANKA_BILGISI",
+            "TEFBIS_BUTCE_GIRISI",
+        )
+    ]
