@@ -55,7 +55,7 @@ from apps.oab.models import (
     TermStatus,
 )
 from apps.oab.services import donem_kilidi, donemler, genel_kurul, kural_bagi, uyum
-from apps.oab.tests.kurallar import atif_ortak, faz_ortak, isaret_ortak
+from apps.oab.tests.kurallar import atif_ortak, faz_ortak, isaret_ortak, paket_ortak
 from apps.okul import denetim_izi
 from apps.okul.models import (
     AuditAction,
@@ -68,10 +68,17 @@ from apps.okul.models import (
     StaffingMode,
 )
 
-DOSYA = "OAB-2023.12.r1.json"
 SEMA: dict[str, Any] = json.loads((yk.PAKETLER_DIZINI / yk.SEMA_ADI).read_text(encoding="utf-8"))
-R1: dict[str, Any] = json.loads((yk.PAKETLER_DIZINI / DOSYA).read_text(encoding="utf-8"))
-KURALLAR: dict[str, dict[str, Any]] = {k["id"]: k for k in R1["kurallar"]}
+#: Yayımlanmış revizyonlar değişmez (tasarım §6.2-1); `r1`'in sayımı ve D7 sentetik dizinleri buna bakar.
+R1_DOSYA = "OAB-2023.12.r1.json"
+R1: dict[str, Any] = paket_ortak.oku(R1_DOSYA)
+R2_DOSYA = "OAB-2023.12.r2.json"
+R2: dict[str, Any] = paket_ortak.oku(R2_DOSYA)
+#: Programla gelen bütün revizyonlar ve en yenisi: değer, atıf ve kapsam testleri en yenisine bakar
+#: (plan F2 §3.3); yeni revizyon eklenince bu testler kendiliğinden ona geçer.
+GERCEK = paket_ortak.REVIZYONLAR
+EN_YENI = paket_ortak.EN_YENI
+KURALLAR: dict[str, dict[str, Any]] = {k["id"]: k for k in EN_YENI["kurallar"]}
 KORPUS = atif_ortak.korpus_kokleri(Path(__file__))
 Y = "meb-okul-aile-birligi-yonetmeligi.md"
 #: Tasarım §15.1 ve §15.1b'nin kullanıcı kararı kimlikleri (elle yazıldı).
@@ -126,6 +133,7 @@ class B:
     kosul: dict[str, list[str]] | None = None
     karar: str | None = None
     eksik_veri: str = "tamamlanacak"
+    giris: str = "F1c"
 
 
 HB, HD, HG, KK = "hesap_butunlugu", "hesaplanan_deger", "hukuki_gecersizlik", "kullanici_karari"
@@ -139,16 +147,28 @@ _DK_KOLTUK = ("Y 14/1", "Y 11/1-b")
 # Satır başına bir kural: tablo paketle yan yana okunur, biçimleyici bölmesin.
 # fmt: off
 DEGER_TABLOSU: dict[str, B] = {
-    # §6.4.1 Genel kurul (Y:137-150)
-    "genel_kurul.olagan_son_ay": B(10, "takvim_ayi", "en_cok", None, "lafiz", ("Y 9/1",), _2012, "F2"),
+    # §6.4.1 Genel kurul (Y:137-180). `r2` (F2): sekiz ekleme; `olagan_son_ay` düzeltmesi dayanağı
+    # yoruma çevirir (sınır birinci toplantının günü; plan F2 §9 S3).
+    "genel_kurul.olagan_son_ay": B(10, "takvim_ayi", "en_cok", None, "yorum", ("Y 9/1",), _2012, "F2"),
+    "genel_kurul.yeni_okul_ay": B(2, "ay", "en_cok", None, "lafiz", ("Y 9/1",), _2012, "F2", giris="F2"),
     "genel_kurul.ilan_en_az_gun": B(15, "gun", "en_az", None, "lafiz", ("Y 9/3", "Y 9/6"), _2012, "F2"),
+    "genel_kurul.ilan_kanallari": B(["ELDEN_YAZILI", "ILAN_PANOSU", "INTERNET_SAYFASI"], "liste", "hepsi", None, "lafiz", ("Y 9/3", "Y 9/6"), _2012, "F2", giris="F2"),
     "genel_kurul.yeter_sayi_taban": B(16, "kisi", "parametre", HB, "yorum", ("Y 9/2", "Y 12/1", "Y 14/1"), _2012),
     "genel_kurul.yeter_sayi_carpan": B(4, "adet", "carpan", HB, "lafiz", ("Y 9/2", "Y 9/6"), _2012),
     "genel_kurul.kucuk_okul_carpan": B(2, "adet", "carpan", HB, "lafiz", ("Y 9/2", "Y 9/6"), _2012),
     "genel_kurul.kucuk_okul_esik": B(100, "ogrenci", "kucuktur", HB, "lafiz", ("Y 9/2", "Y 9/6"), _2012),
     "genel_kurul.ikinci_toplanti_en_gec_gun": B(30, "gun", "en_cok", None, "yorum", ("Y 9/2",), _2012, "F2"),
     "genel_kurul.ikinci_toplanti_cogunluk_aranmaz": B(True, "mantiksal", "esit", HB, "lafiz", ("Y 9/2",), _2012, "F2"),
+    # Payda katılan üye sayısıdır, eşitlikte karar alınmaz (plan F2 §9 S2: yorum).
+    "genel_kurul.karar_cogunlugu": B("0.50", "oran", "buyuktur", HB, "yorum", ("Y 9/2", "Y 9/6"), _2012, "F2", giris="F2"),
+    "genel_kurul.gundem_degisikligi": B(True, "mantiksal", "esit", None, "lafiz", ("Y 9/4",), _2012, "F2", giris="F2"),
+    "genel_kurul.olaganustu_cagiranlar": B(["YONETIM_KURULU", "OKUL_MUDURU", "DENETLEME_KURULU", "UYE_BASVURUSU", "BASKAN_VEYA_MUDUR_13_8", "MUDUR_25_2"], "liste", "liste_icinde", None, "lafiz", ("Y 9/6", "Y 13/8", "Y 14/5", "Y 25/2"), _2023, "F2", giris="F2"),
+    "genel_kurul.olaganustu_basvuru_oran": B("0.10", "oran", "en_az", None, "lafiz", ("Y 9/6",), _2012, "F2", giris="F2"),
+    "genel_kurul.olaganustu_gundeme_baglilik": B(True, "mantiksal", "esit", None, "lafiz", ("Y 9/6",), _2012, "F2", giris="F2"),
     "genel_kurul.divan_uye_turleri": B(["VELI", "KURSIYER"], "liste", "liste_icinde", None, "lafiz", ("Y 10/1-c",), _2023, "F2"),
+    # Yürürlük 09.02.2012 DOĞRULANMADI: korpusta yalnız bugünkü metin var; 10/1-d şerhsizdir, "açık
+    # oylamayla" ibaresinin (11/1-a, b) 2012 metninde bulunduğu korpustan teyit edilemedi (plan F2 §3.2).
+    "genel_kurul.secim_bicimi": B(["LISTE", "ACIK_OY"], "liste", "hepsi", None, "lafiz", ("Y 10/1-d", "Y 11/1-a", "Y 11/1-b"), _2012, "F2", giris="F2"),
     # §6.4.2 Yönetim kurulu ve ortak üyelik (Y:113-116, 186-210, 396)
     "yonetim_kurulu.asil_uye": B(5, "kisi", "esit", None, "lafiz", _YK_KOLTUK, _2012),
     "yonetim_kurulu.yedek_uye": B(5, "kisi", "esit", None, "lafiz", _YK_KOLTUK, _2012),
@@ -250,10 +270,16 @@ def _paket_dizini(hedef: Path, *icerikler: dict[str, Any], sema: Any = None) -> 
 # ======================================================================= sayım
 
 
+def _dagilim(degerler: list[str]) -> dict[str, int]:
+    return {d: degerler.count(d) for d in set(degerler)}
+
+
 def test_r1_kural_sayimi() -> None:
-    """Tasarım §6.4.11: r1 = 55 kural; 17 sert, 38 uyarı; 37 davranışı F1c, 18'i sonra."""
+    """Tasarım §6.4.11: r1 = 55 kural; 17 sert, 38 uyarı; 37 davranışı F1c, 18'i sonra.
+
+    `r1` dosyasından sayılır: yayımlanmış revizyon değişmez, en yeni revizyon ondan büyüktür."""
     kurallar = R1["kurallar"]
-    assert len(kurallar) == 55 == len(KURALLAR)
+    assert (R1["rev"], len(kurallar)) == (1, 55)
     assert sum(k["tur"] == "sert" for k in kurallar) == 17
     assert sum(k["tur"] == "uyari" for k in kurallar) == 38
     assert sum(k["davranis_fazi"] == "F1c" for k in kurallar) == 37
@@ -266,6 +292,64 @@ def test_r1_kural_sayimi() -> None:
         "F8": 1,
     }
     assert {k["giris"] for k in kurallar} == {"F1c"}
+
+
+#: `r2`'nin (F2) sekiz eklemesi (tasarım §6.4.1, plan F2 §3.2).
+R2_EKLENEN = frozenset(
+    {
+        "genel_kurul.yeni_okul_ay",
+        "genel_kurul.ilan_kanallari",
+        "genel_kurul.karar_cogunlugu",
+        "genel_kurul.gundem_degisikligi",
+        "genel_kurul.olaganustu_cagiranlar",
+        "genel_kurul.olaganustu_basvuru_oran",
+        "genel_kurul.olaganustu_gundeme_baglilik",
+        "genel_kurul.secim_bicimi",
+    }
+)
+
+
+def test_r2_kural_sayimi() -> None:
+    """Plan F2 §3: r2 = 63 kural (55 + 8); 18 sert, 45 uyarı; giriş F1c 55, F2 8; davranış fazı F1c 37,
+    F2 13, F3 10, F4 1, F5 1, F8 1."""
+    kurallar = R2["kurallar"]
+    assert (R2["rev"], len(kurallar)) == (2, 63)
+    assert sum(k["tur"] == "sert" for k in kurallar) == 18
+    assert sum(k["tur"] == "uyari" for k in kurallar) == 45
+    assert _dagilim([k["giris"] for k in kurallar]) == {"F1c": 55, "F2": 8}
+    assert {k["id"] for k in kurallar if k["giris"] == "F2"} == R2_EKLENEN
+    assert _dagilim([k["davranis_fazi"] for k in kurallar]) == {
+        "F1c": 37,
+        "F2": 13,
+        "F3": 10,
+        "F4": 1,
+        "F5": 1,
+        "F8": 1,
+    }
+    sertler = {k["id"] for k in kurallar if k["tur"] == "sert"}
+    assert sertler - {k["id"] for k in R1["kurallar"] if k["tur"] == "sert"} == {
+        "genel_kurul.karar_cogunlugu"
+    }
+
+
+def test_r2_degisiklikleri_sekiz_ekleme_ve_bir_duzeltme() -> None:
+    """`r1`'in 55 kuralı `olagan_son_ay` dışında aynen taşınır; düzeltme değeri ve aralığı korur
+    (plan F2 §9 S3: dayanak yorum, sınır birinci toplantının günü)."""
+    beyan = {(s["id"], s["tur"]) for s in R2["degisiklikler"]}
+    assert beyan == {(kid, "ekleme") for kid in R2_EKLENEN} | {
+        ("genel_kurul.olagan_son_ay", "duzeltme")
+    }
+    assert len(R2["degisiklikler"]) == 9
+    assert denetimler.d2_kimlik(R2, R1) == []
+    r2 = {k["id"]: k for k in R2["kurallar"]}
+    for once in R1["kurallar"]:
+        if once["id"] != "genel_kurul.olagan_son_ay":
+            assert r2[once["id"]] == once, once["id"]
+    once, simdi = _bul(R1, "genel_kurul.olagan_son_ay"), r2["genel_kurul.olagan_son_ay"]
+    assert (simdi["deger"], simdi["yururluk"]) == (once["deger"], once["yururluk"])
+    assert (once["dayanak_turu"], simdi["dayanak_turu"]) == ("lafiz", "yorum")
+    assert "birinci toplantının günü" in simdi["yorum"]
+    assert "birinci toplantının günü" in simdi["uyari_metni"]
 
 
 # ======================================================================= değer tablosu
@@ -287,7 +371,7 @@ def test_deger_tablosu(kid: str) -> None:
     assert k["dayanak_turu"] == b.dayanak_turu
     assert [k["madde"], *k.get("ek_madde", [])] == [_madde(a) for a in b.atif]
     assert k["yururluk"] == {"baslangic": b.yururluk, "bitis": None}
-    assert (k["giris"], k["davranis_fazi"]) == ("F1c", b.davranis_fazi)
+    assert (k["giris"], k["davranis_fazi"]) == (b.giris, b.davranis_fazi)
     assert k.get("kosul") == b.kosul
     assert (k.get("karar") or {}).get("kimlik") == b.karar
     assert k["eksik_veri"] == b.eksik_veri and k["toplu_gerekce"] is True
@@ -297,9 +381,63 @@ def test_deger_tablosu(kid: str) -> None:
 
 
 def test_sema_gecerli() -> None:
+    """Programla gelen her revizyon bugünkü şemadan geçer: `r1` şemanın eklemeleriyle de geçerlidir
+    (`hepsi`, `buyuktur`; `sema_surumu` 1'de kalır, plan F2 §3.3)."""
     jsonschema.Draft202012Validator.check_schema(SEMA)
-    assert not list(jsonschema.Draft202012Validator(SEMA).iter_errors(R1))
-    assert _d1(R1) == []
+    assert [icerik["rev"] for icerik in GERCEK] == list(range(1, len(GERCEK) + 1))
+    assert len(GERCEK) >= 2
+    for icerik in GERCEK:
+        assert icerik["sema_surumu"] == 1
+        assert not list(jsonschema.Draft202012Validator(SEMA).iter_errors(icerik))
+        assert _d1(icerik) == []
+
+
+def test_sema_hepsi_ve_buyuktur_karsilastirmalarini_tanir() -> None:
+    """Yeni karşılaştırmalar kendi değer türleriyle geçerlidir: `hepsi` liste, `buyuktur` tamsayı
+    ya da ondalık dize (r1'in kurallarına yazılarak; `sema_surumu` 1'de kalır)."""
+    karsilastirmalar = SEMA["$defs"]["kural"]["properties"]["karsilastirma"]["enum"]
+    assert {"hepsi", "buyuktur"} <= set(karsilastirmalar)
+    for kid, ad in (
+        ("genel_kurul.divan_uye_turleri", "hepsi"),  # liste değer
+        ("genel_kurul.ilan_en_az_gun", "buyuktur"),  # tamsayı değer
+        ("arz_bedeli.kira_oran", "buyuktur"),  # ondalık dize değer
+    ):
+        icerik = _kopya()
+        _bul(icerik, kid)["karsilastirma"] = ad
+        assert sema_hatalari(icerik, SEMA) == [], (kid, ad)
+        assert not list(jsonschema.Draft202012Validator(SEMA).iter_errors(icerik)), (kid, ad)
+        assert _d1(icerik) == [], (kid, ad)
+
+
+#: Karşılaştırmayla değer türünün uyuşmadığı yazımlar; `denetle`ye kalmadan açılışta (D1) düşer.
+_UYUMSUZ_KARSILASTIRMALAR = [
+    ("genel_kurul.ilan_en_az_gun", "hepsi"),  # küme karşılaştırması, tamsayı değer
+    ("genel_kurul.ilan_en_az_gun", "liste_icinde"),
+    ("genel_kurul.divan_uye_turleri", "buyuktur"),  # sıralı karşılaştırma, liste değer
+    ("genel_kurul.divan_uye_turleri", "en_az"),
+    ("pay_dagitimi.genel", "en_cok"),  # sıralı karşılaştırma, tablo değer
+    ("yonetim_kurulu.karar_defteri_noter_tasdiki", "kucuktur"),
+]
+
+
+@pytest.mark.parametrize(
+    ("kid", "ad"), _UYUMSUZ_KARSILASTIRMALAR, ids=[f"{k}-{a}" for k, a in _UYUMSUZ_KARSILASTIRMALAR]
+)
+def test_sema_karsilastirmayla_uyusmayan_degeri_reddeder(kid: str, ad: str) -> None:
+    icerik = _kopya()
+    _bul(icerik, kid)["karsilastirma"] = ad
+    assert list(jsonschema.Draft202012Validator(SEMA).iter_errors(icerik))
+    assert any(".deger" in satir for satir in sema_hatalari(icerik, SEMA))
+    assert _d1(icerik)
+
+
+def test_uyumsuz_karsilastirmali_paket_yuklenmez(tmp_path: Path) -> None:
+    """Değer türüyle uyuşmayan karşılaştırma `denetle` çağrılınca değil, yüklemede (D1) yakalanır."""
+    icerik = _kopya()
+    _kural0(icerik)["karsilastirma"] = "hepsi"
+    durum = yk.yukle(_paket_dizini(tmp_path, icerik))
+    assert durum.yuklendi is False and durum.en_yeni is None
+    assert any("(D1)" in satir and ".deger" in satir for satir in durum.hatalar)
 
 
 def _boz(degistir: Any) -> dict[str, Any]:
@@ -333,6 +471,17 @@ _BOZUK_ORNEKLER = {
     "deger_bos_liste": lambda i: _kural0(i).update(deger=[]),
     "deger_liste_yinelenen": lambda i: _kural0(i).update(deger=["VELI", "VELI"]),
     "deger_liste_kucuk_harf": lambda i: _kural0(i).update(deger=["veli"]),
+    "hepsi_tamsayi_deger": lambda i: _kural0(i).update(karsilastirma="hepsi"),
+    "liste_icinde_ondalik_deger": lambda i: _bul(i, "arz_bedeli.kira_oran").update(
+        karsilastirma="liste_icinde"
+    ),
+    "buyuktur_liste_deger": lambda i: _bul(i, "genel_kurul.divan_uye_turleri").update(
+        karsilastirma="buyuktur"
+    ),
+    "en_az_mantiksal_deger": lambda i: _bul(i, "yonetim_kurulu.karar_defteri_noter_tasdiki").update(
+        karsilastirma="en_az", deger=True
+    ),
+    "en_cok_tablo_deger": lambda i: _bul(i, "pay_dagitimi.genel").update(karsilastirma="en_cok"),
     "oran_tamsayi": lambda i: _bul(i, "arz_bedeli.kira_oran").update(deger=3),
     "oran_tablo_tamsayi": lambda i: _bul(i, "pay_dagitimi.genel").update(deger={"birlik": 1}),
     "kimlik_alan_disi": lambda i: _kural0(i).update(id="kulup.ad"),
@@ -405,7 +554,8 @@ def test_jsonschema_uretim_bagimliligi_degil() -> None:
 
 
 def test_ondalik_dize_kayan_nokta_yok() -> None:
-    assert denetimler._kayan_noktalar(R1, "$") == []
+    for icerik in GERCEK:
+        assert denetimler._kayan_noktalar(icerik, "$") == []
     for kid, deger in (
         ("arz_bedeli.kira_oran", 0.03),
         ("pay_dagitimi.genel", {"birlik": 0.8, "ilce": 0.1, "il": 0.1}),
@@ -423,7 +573,8 @@ def test_sert_kuralda_gerekce_zorunlu() -> None:
     icerik = _kopya()
     del _bul(icerik, "genel_kurul.yeter_sayi_taban")["sert_gerekcesi"]
     assert _d1(icerik)
-    assert {k["sert_gerekcesi"] for k in R1["kurallar"] if k["tur"] == "sert"} == {HB, HD, HG, KK}
+    sertler = EN_YENI["kurallar"]
+    assert {k["sert_gerekcesi"] for k in sertler if k["tur"] == "sert"} == {HB, HD, HG, KK}
 
 
 def test_kullanici_karari_kuralinda_karar_zorunlu() -> None:
@@ -467,7 +618,7 @@ def test_kosul_anahtar_ve_degerleri_sozlukte() -> None:
         "etkinlik.duzenleyen",
         "personel.sozlesme_turu",
     }
-    for k in R1["kurallar"]:
+    for k in EN_YENI["kurallar"]:
         for anahtar, degerler in k.get("kosul", {}).items():
             assert set(degerler) <= set(sozluk[anahtar]["items"]["enum"]), k["id"]
 
@@ -489,7 +640,9 @@ def test_kosul_degerleri_okul_karti_enumlariyla_ayni(anahtar: str, enum: Any) ->
 
 
 def test_kimlik_bicimi_ve_tekillik() -> None:
-    assert denetimler.d2_kimlik(R1) == []
+    """Programla gelen revizyon zinciri D2'den geçer: her revizyon bir öncekiyle karşılaştırılır."""
+    for onceki, icerik in zip((None, *GERCEK), GERCEK, strict=False):
+        assert denetimler.d2_kimlik(icerik, onceki) == [], icerik["rev"]
     icerik = _kopya()
     icerik["kurallar"].append(deepcopy(_kural0(icerik)))
     assert any("aynı aralıkla" in satir for satir in denetimler.d2_kimlik(icerik))
@@ -631,7 +784,7 @@ def test_yururlukten_kalkmis_metinde_bitis_zorunlu(tmp_path: Path) -> None:
 
 
 def test_kullanici_karari_kimligi_listede() -> None:
-    kararlar = {k["karar"]["kimlik"] for k in R1["kurallar"] if "karar" in k}
+    kararlar = {k["karar"]["kimlik"] for k in EN_YENI["kurallar"] if "karar" in k}
     assert kararlar == {"A-2", "KE-15"}
     assert kararlar <= KULLANICI_KARARLARI
     assert "X-9" not in KULLANICI_KARARLARI
@@ -744,7 +897,8 @@ def test_yeniden_duzenlenen_iptal_bent_gecer(tmp_path: Path) -> None:
 
 
 def test_yeter_sayi_tabani_bilesimle_tutarli() -> None:
-    assert denetimler.d5_tutarlilik(R1) == []
+    for gercek in GERCEK:
+        assert denetimler.d5_tutarlilik(gercek) == []
     icerik = _kopya()
     _bul(icerik, "genel_kurul.yeter_sayi_taban")["deger"] = 15
     assert any("yeter_sayi_taban" in s for s in denetimler.d5_tutarlilik(icerik))
@@ -837,7 +991,7 @@ def test_her_kuralin_deger_testi_var() -> None:
 
 
 def test_davranis_fazi_gelen_kuralin_davranis_testi_var() -> None:
-    fazlar = {k["id"]: k["davranis_fazi"] for k in R1["kurallar"]}
+    fazlar = {k["id"]: k["davranis_fazi"] for k in EN_YENI["kurallar"]}
     gelenler = faz_ortak.fazi_gelenler(fazlar)
     assert gelenler <= _kural_isaretleri()["kural_davranis"]
 
@@ -874,7 +1028,7 @@ def test_f1c_kurallarinin_davranis_testi_tamam() -> None:
     hepsinin davranış testi vardır. `GECERLI_FAZ` evrakla birlikte 10. adımda F1c oldu:
     `test_davranis_fazi_gelen_kuralin_davranis_testi_var` bu kümeyi kendiliğinden ister. 8. adımda
     karar defterinin noter tasdiki kurala bağlandı (36 → 37; plan F1c 8. adım notları)."""
-    fazlar = {k["id"]: k["davranis_fazi"] for k in R1["kurallar"]}
+    fazlar = {k["id"]: k["davranis_fazi"] for k in EN_YENI["kurallar"]}
     gelenler = faz_ortak.fazi_gelenler(fazlar, gecerli="F1c")
     assert len(gelenler) == 37
     assert gelenler - _kural_isaretleri()["kural_davranis"] == set()
@@ -882,7 +1036,7 @@ def test_f1c_kurallarinin_davranis_testi_tamam() -> None:
 
 def test_davranis_kolu_eksik_isarette_dislidir() -> None:
     """Davranış kolu dişlidir: işareti olmayan bir F1c kuralı kümeden düşünce eksik görünür."""
-    fazlar = {k["id"]: k["davranis_fazi"] for k in R1["kurallar"]}
+    fazlar = {k["id"]: k["davranis_fazi"] for k in EN_YENI["kurallar"]}
     gelenler = faz_ortak.fazi_gelenler(fazlar, gecerli="F1c")
     isaretli = _kural_isaretleri()["kural_davranis"] - {"temsilci.pay_dagitim_komisyonu"}
     assert gelenler - isaretli == {"temsilci.pay_dagitim_komisyonu"}
@@ -926,18 +1080,40 @@ def test_kimliksiz_isaret_yazim_hatasidir() -> None:
 # ======================================================================= D7
 
 
+#: Yayımlanmış revizyonun bayt özeti: dosya bir daha değişmez (tasarım §6.2-1), MANIFEST yeniden
+#: üretilse de bu satır tutmalıdır. Yeni revizyon program sürümüyle yayımlanınca buraya eklenir.
+YAYIMLANMIS_OZETLER = {
+    R1_DOSYA: "e0ba5c776da96b5aa9bec39f6a5f9152c53101f9334f64fdecee32011228b68a",
+}
+
+
 def test_dagitilan_paket_ozeti() -> None:
+    """D7: MANIFEST dizindeki bütün revizyonları sırasıyla ve bayt özetleriyle taşır."""
     manifest = json.loads((yk.PAKETLER_DIZINI / yk.MANIFEST_ADI).read_text("utf-8"))
-    ham = (yk.PAKETLER_DIZINI / DOSYA).read_bytes()
-    assert manifest["paketler"] == [{"dosya": DOSYA, "sha256": hashlib.sha256(ham).hexdigest()}]
+    diskteki = sorted(
+        (yol.name for yol in yk.PAKETLER_DIZINI.glob("OAB-*.r*.json")), key=yk._ad_parcalari
+    )
+    assert diskteki == list(paket_ortak.DOSYALAR) and R2_DOSYA in diskteki
+    assert manifest["paketler"] == [
+        {"dosya": ad, "sha256": hashlib.sha256((yk.PAKETLER_DIZINI / ad).read_bytes()).hexdigest()}
+        for ad in diskteki
+    ]
+    ozetler = {satir["dosya"]: satir["sha256"] for satir in manifest["paketler"]}
+    for ad, ozet in YAYIMLANMIS_OZETLER.items():
+        assert ozetler[ad] == ozet, ad
     sema_ham = (yk.PAKETLER_DIZINI / yk.SEMA_ADI).read_bytes()
     assert manifest["sema_sha256"] == hashlib.sha256(sema_ham).hexdigest()
-    assert yk.yukle().yuklendi is True
+    durum = yk.yukle()
+    assert durum.yuklendi is True
+    assert [(p.kimlik, p.rev) for p in durum.paketler] == [
+        (icerik["paket"], icerik["rev"]) for icerik in GERCEK
+    ]
+    assert durum.en_yeni is not None and durum.en_yeni.icerik == EN_YENI
 
 
 def test_ozeti_tutmayan_paket_yuklenmez(tmp_path: Path) -> None:
     dizin = _paket_dizini(tmp_path, _kopya())
-    (dizin / DOSYA).write_bytes((dizin / DOSYA).read_bytes() + b" ")
+    (dizin / R1_DOSYA).write_bytes((dizin / R1_DOSYA).read_bytes() + b" ")
     durum = yk.yukle(dizin)
     assert durum.yuklendi is False and durum.en_yeni is None
     assert any("D7" in satir for satir in durum.hatalar)
@@ -968,7 +1144,7 @@ def test_manifestte_olmayan_paket_yuklenmez(tmp_path: Path) -> None:
 
 def test_dosya_adi_icerikle_tutmali(tmp_path: Path) -> None:
     dizin = _paket_dizini(tmp_path, _kopya())
-    (dizin / DOSYA).rename(dizin / "OAB-2023.12.r5.json")
+    (dizin / R1_DOSYA).rename(dizin / "OAB-2023.12.r5.json")
     manifest = json.loads((dizin / yk.MANIFEST_ADI).read_text("utf-8"))
     manifest["paketler"][0]["dosya"] = "OAB-2023.12.r5.json"
     (dizin / yk.MANIFEST_ADI).write_text(json.dumps(manifest), "utf-8")
@@ -1053,12 +1229,12 @@ def test_gercek_acilis_ac_islevi_durumu_yeniler(
 
 
 def _d8_sayilari() -> tuple[set[int], set[str]]:
-    return isaret_ortak.paket_sayilari(R1["kurallar"])
+    return isaret_ortak.paket_sayilari(k for icerik in GERCEK for k in icerik["kurallar"])
 
 
 def test_sabit_taramasi() -> None:
     tamsayilar, ondaliklar = _d8_sayilari()
-    assert {4, 15, 16} <= tamsayilar and {"0.03", "0.80"} <= ondaliklar
+    assert {2, 4, 15, 16, 30} <= tamsayilar and {"0.03", "0.80", "0.10", "0.50"} <= ondaliklar
     oab = _backend() / "apps" / "oab"
     assert isaret_ortak.oab_sabit_bulgulari(oab, tamsayilar, ondaliklar, izinli=set()) == []
 
@@ -1253,6 +1429,8 @@ def test_kullanici_karari_atfi_yonetmelik_geregi_demez() -> None:
         ("arz_bedeli.sozlesme_vade_gunu", "EK-2 md. 7/1. paragraf"),
         ("personel.sgk_saklama_yil", "5510 md. 86/2. paragraf"),
         ("temsilci.kantin_denetim_komisyonu", "G.2020/8 A-1/a"),
+        ("genel_kurul.olaganustu_cagiranlar", "md. 9/6"),
+        ("genel_kurul.secim_bicimi", "md. 10/1-d"),
     ],
 )
 def test_atif_metni(kid: str, beklenen: str) -> None:
@@ -1260,7 +1438,7 @@ def test_atif_metni(kid: str, beklenen: str) -> None:
 
 
 def test_her_atif_dosyasinin_kisa_adi_var() -> None:
-    for k in R1["kurallar"]:
+    for k in EN_YENI["kurallar"]:
         for madde in atif_ortak.butun_maddeler(k):
             assert madde["capa"].split("#")[0] in erisim._KISA_ADLAR, k["id"]
 
@@ -1282,6 +1460,10 @@ def test_her_atif_dosyasinin_kisa_adi_var() -> None:
         ("yonetim_kurulu.asil_uye", 4, "uyari"),
         ("yonetim_kurulu.uye_turleri", "VELI", "uygun"),
         ("yonetim_kurulu.uye_turleri", "OGRETMEN", "sert"),
+        ("genel_kurul.yeni_okul_ay", 2, "uygun"),
+        ("genel_kurul.yeni_okul_ay", 3, "uyari"),
+        ("genel_kurul.olaganustu_cagiranlar", "MUDUR_25_2", "uygun"),
+        ("genel_kurul.olaganustu_cagiranlar", "MUDUR_YENI_OKUL", "uyari"),
     ],
 )
 def test_denetle_sinirin_iki_yani(kid: str, gozlenen: Any, durum: str) -> None:
@@ -1296,7 +1478,7 @@ def test_denetle_mesaji_yer_tutucuyu_doldurur() -> None:
         "atif": "md. 9/3",
         "dayanak_turu": "lafiz",
         "paket": "OAB-2023.12",
-        "rev": 1,
+        "rev": paket_ortak.EN_YENI_REV,
     }
 
 
@@ -1322,6 +1504,103 @@ def test_liste_gozlenen_alt_kume_olarak_kiyaslanir() -> None:
     assert denetle("yonetim_kurulu.uye_turleri", ["VELI", "IDARECI"])["durum"] == "sert"
 
 
+@pytest.mark.parametrize(
+    ("karsilastirma", "gozlenen", "deger", "beklenen"),
+    [
+        ("en_az", Decimal("0.10"), "0.10", True),
+        ("en_az", Decimal("0.0999"), "0.10", False),
+        ("en_az", 1, "0.10", True),
+        ("en_az", "0.25", "0.10", True),
+        ("en_cok", Decimal("0.20"), "0.2", True),
+        ("en_cok", Decimal("0.2001"), "0.2", False),
+        ("kucuktur", Decimal("0.0999"), "0.10", True),
+        ("kucuktur", Decimal("0.10"), "0.10", False),
+        ("buyuktur", Decimal("0.5001"), "0.50", True),
+        ("buyuktur", Decimal("0.50"), "0.50", False),
+        ("buyuktur", 5, 4, True),
+        ("buyuktur", 4, 4, False),
+        ("en_az", 15, 15, True),
+    ],
+)
+def test_sirali_karsilastirma_ondalik_dizeyi_decimal_ile_kiyaslar(
+    karsilastirma: str, gozlenen: Any, deger: Any, beklenen: bool
+) -> None:
+    """Plan F2 §3.3: `en_az`, `en_cok`, `kucuktur`, `buyuktur` ondalık dizeyi `Decimal`'e çevirir
+    (eskiden yalnız `esit` çevirirdi; `Decimal >= str` `TypeError` verirdi)."""
+    assert erisim._uyuyor(karsilastirma, gozlenen, deger) is beklenen
+
+
+def test_oran_kurali_decimal_ile_denetlenir() -> None:
+    kid = "genel_kurul.olaganustu_basvuru_oran"
+    assert denetle(kid, Decimal(10) / Decimal(100))["durum"] == "uygun"
+    assert denetle(kid, Decimal(9) / Decimal(100))["durum"] == "uyari"
+    assert denetle(kid, Decimal(12) / Decimal(100))["durum"] == "uygun"
+    with pytest.raises(TypeError):
+        denetle(kid, 0.12)
+
+
+def test_buyuktur_esitlik_sinirinda_uymaz() -> None:
+    """`karar_cogunlugu`: kabul oyu katılanların yarısından fazla olmalı; tam yarı karar değildir
+    (plan F2 §9 S2). Kural sert olduğu için sapma `sert` döner."""
+    kid = "genel_kurul.karar_cogunlugu"
+    assert denetle(kid, Decimal(50) / Decimal(100))["durum"] == "sert"
+    assert denetle(kid, Decimal(51) / Decimal(100))["durum"] == "uygun"
+    assert denetle(kid, Decimal(32) / Decimal(64))["durum"] == "sert"
+    assert denetle(kid, Decimal(33) / Decimal(64))["durum"] == "uygun"
+    assert denetle(kid, Decimal(0))["durum"] == "sert"
+
+
+@pytest.mark.parametrize(
+    ("kid", "gozlenen", "durum"),
+    [
+        (
+            "genel_kurul.ilan_kanallari",
+            ["ELDEN_YAZILI", "ILAN_PANOSU", "INTERNET_SAYFASI"],
+            "uygun",
+        ),
+        (
+            "genel_kurul.ilan_kanallari",
+            ["INTERNET_SAYFASI", "ELDEN_YAZILI", "ILAN_PANOSU"],
+            "uygun",
+        ),
+        (
+            "genel_kurul.ilan_kanallari",
+            ("ILAN_PANOSU", "INTERNET_SAYFASI", "ELDEN_YAZILI"),
+            "uygun",
+        ),
+        (
+            "genel_kurul.ilan_kanallari",
+            {"ILAN_PANOSU", "INTERNET_SAYFASI", "ELDEN_YAZILI"},
+            "uygun",
+        ),
+        (
+            "genel_kurul.ilan_kanallari",
+            ["ELDEN_YAZILI", "SMS", "ILAN_PANOSU", "INTERNET_SAYFASI"],
+            "uygun",
+        ),
+        ("genel_kurul.ilan_kanallari", ["ILAN_PANOSU", "INTERNET_SAYFASI"], "uyari"),
+        ("genel_kurul.ilan_kanallari", ["ILAN_PANOSU", "INTERNET_SAYFASI", "SMS"], "uyari"),
+        ("genel_kurul.ilan_kanallari", [], "uyari"),
+        ("genel_kurul.secim_bicimi", ["LISTE", "ACIK_OY"], "uygun"),
+        ("genel_kurul.secim_bicimi", ["ACIK_OY", "LISTE"], "uygun"),
+        ("genel_kurul.secim_bicimi", ["LISTE"], "uyari"),
+        ("genel_kurul.secim_bicimi", ["LISTE", "GIZLI_OY"], "uyari"),
+    ],
+)
+def test_hepsi_kumeyi_kapsar_siradan_bagimsiz(kid: str, gozlenen: Any, durum: str) -> None:
+    """Plan F2 §3.3: `hepsi` gözlenen kümenin değeri kapsamasıdır; sıra ve fazla öğe sonucu
+    değiştirmez, eksik öğe uyarıdır. Sıraya duyarlı liste eşitliğine düşmez."""
+    assert denetle(kid, gozlenen)["durum"] == durum
+
+
+def test_hepsi_tek_degeri_kume_saymaz() -> None:
+    """Düz dize karakterlerine bölünüp yanlış "uygun" vermesin: gözlenen bir küme olmalıdır."""
+    with pytest.raises(TypeError):
+        denetle("genel_kurul.secim_bicimi", "LISTE")
+    assert erisim._uyuyor("hepsi", ["B", "A", "C"], ["A", "B"]) is True
+    assert erisim._uyuyor("hepsi", ["A"], ["A", "B"]) is False
+
+
 def test_eksik_veri_gerekce_istemeden_eksik_doner() -> None:
     sonuc = denetle("genel_kurul.ilan_en_az_gun")
     assert sonuc["durum"] == "eksik" and sonuc["mesaj"] == erisim.EKSIK_NOTU
@@ -1344,7 +1623,7 @@ def test_kosul_saglanmazsa_kural_uygulanmaz() -> None:
         "atif": "OKY md. 25/1-a",
         "dayanak_turu": "lafiz",
         "paket": "OAB-2023.12",
-        "rev": 1,
+        "rev": paket_ortak.EN_YENI_REV,
     }
     # Karma okul: kesişim boş değilse uygulanır.
     assert denetle(kid, 0, okul={"okul.kademe": ["ORTAOKUL", "ORTAOGRETIM"]})["durum"] == "uyari"
@@ -1432,7 +1711,7 @@ def test_ekran_metni_taramasi_yakalar(metin: str) -> None:
     assert _ekran_metni_bulgulari(metin)
 
 
-# ============================================================ dönem bağı (§6.2; sentetik r2, r3)
+# ============================================================ dönem bağı (§6.2; sentetik r3, r4)
 
 GUN = date(2026, 10, 1)
 IZIN_KURALI = "genel_kurul.ilan_en_az_gun"
@@ -1440,6 +1719,10 @@ CARPAN_KURALI = "genel_kurul.yeter_sayi_carpan"
 ESIK_KURALI = "genel_kurul.kucuk_okul_esik"
 YENI_KURAL = "genel_kurul.yeni_bilgi"
 PAKET = "OAB-2023.12"
+#: Yeni dönem programla gelen en yeni gerçek revizyona bağlanır; sentetik revizyonlar onun üstüne
+#: kurulur (plan F2 §3.3: gerçek `r2` gelince sentetik `rev=2` bozulmasın diye `r3` ve sonrası).
+SON_REV = paket_ortak.EN_YENI_REV
+YENI_REV = SON_REV + 1
 
 
 def _dagit(monkeypatch: pytest.MonkeyPatch, *icerikler: dict[str, Any]) -> None:
@@ -1452,7 +1735,7 @@ def _dagit(monkeypatch: pytest.MonkeyPatch, *icerikler: dict[str, Any]) -> None:
 
 
 def _rev(rev: int, *degisiklikler: tuple[str, str]) -> dict[str, Any]:
-    kopya = deepcopy(R1)
+    kopya = deepcopy(EN_YENI)
     kopya["rev"] = rev
     kopya["degisiklikler"] = [{"id": kid, "tur": tur} for kid, tur in degisiklikler]
     return kopya
@@ -1462,7 +1745,7 @@ def _kayit_al(icerik: dict[str, Any], kid: str) -> dict[str, Any]:
     return next(k for k in icerik["kurallar"] if k["id"] == kid)
 
 
-def _ekleme_revizyonu(rev: int = 2) -> dict[str, Any]:
+def _ekleme_revizyonu(rev: int = YENI_REV) -> dict[str, Any]:
     kopya = _rev(rev, ("genel_kurul.yeni_bilgi", "ekleme"))
     yeni = deepcopy(_kayit_al(kopya, IZIN_KURALI))
     yeni["id"] = "genel_kurul.yeni_bilgi"
@@ -1470,7 +1753,7 @@ def _ekleme_revizyonu(rev: int = 2) -> dict[str, Any]:
     return kopya
 
 
-def _duzeltme_revizyonu(rev: int = 2, *, carpan: int = 3, gun: int = 14) -> dict[str, Any]:
+def _duzeltme_revizyonu(rev: int = YENI_REV, *, carpan: int = 3, gun: int = 14) -> dict[str, Any]:
     """Değeri baştan yanlış yazılmış kurallar: aynı yürürlük aralığı, yeni değer (§6.2-3a)."""
     kopya = _rev(rev, (CARPAN_KURALI, "duzeltme"), (IZIN_KURALI, "duzeltme"))
     _kayit_al(kopya, CARPAN_KURALI)["deger"] = carpan
@@ -1479,7 +1762,7 @@ def _duzeltme_revizyonu(rev: int = 2, *, carpan: int = 3, gun: int = 14) -> dict
 
 
 def _deger_degisikligi_revizyonu(
-    rev: int = 2, *, kid: str = IZIN_KURALI, deger: int = 20
+    rev: int = YENI_REV, *, kid: str = IZIN_KURALI, deger: int = 20
 ) -> dict[str, Any]:
     """Değer 01.01.2027'de değişir: eski kaydın bitişi dolar, yeni kayıt eklenir (§6.2-3)."""
     kopya = _rev(rev, (kid, "deger_degisikligi"))
@@ -1524,15 +1807,15 @@ def _bag(donem: OabTerm) -> tuple[str, int]:
 
 
 def test_sentetik_revizyonlar_d2_den_gecer() -> None:
-    assert denetimler.d2_kimlik(_ekleme_revizyonu(), R1) == []
-    assert denetimler.d2_kimlik(_duzeltme_revizyonu(), R1) == []
-    assert denetimler.d2_kimlik(_deger_degisikligi_revizyonu(), R1) == []
+    assert denetimler.d2_kimlik(_ekleme_revizyonu(), EN_YENI) == []
+    assert denetimler.d2_kimlik(_duzeltme_revizyonu(), EN_YENI) == []
+    assert denetimler.d2_kimlik(_deger_degisikligi_revizyonu(), EN_YENI) == []
 
 
 @pytest.mark.django_db
 def test_kapanmis_donem_yeni_revizyonla_ayni_sonuc(monkeypatch: pytest.MonkeyPatch) -> None:
     donem = _kapat(_ilk_donem())
-    _dagit(monkeypatch, R1, _duzeltme_revizyonu())
+    _dagit(monkeypatch, *GERCEK, _duzeltme_revizyonu())
     assert kural(CARPAN_KURALI, tarih=GUN) == 3  # program yeni revizyonu taşıyor
     assert kural(CARPAN_KURALI, tarih=GUN, donem=donem) == 4
     assert genel_kurul_hesabi.genel_kurul_yeter_sayisi(120, tarih=GUN, donem=donem).gerekli == 64
@@ -1541,31 +1824,31 @@ def test_kapanmis_donem_yeni_revizyonla_ayni_sonuc(monkeypatch: pytest.MonkeyPat
 @pytest.mark.django_db
 def test_kapanmis_donemde_revizyon_gecisi_sert(monkeypatch: pytest.MonkeyPatch) -> None:
     donem = _kapat(_ilk_donem())
-    _dagit(monkeypatch, R1, _ekleme_revizyonu())
+    _dagit(monkeypatch, *GERCEK, _ekleme_revizyonu())
     with pytest.raises(DonemKapali):
-        kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=2)
-    assert _bag(donem) == ("OAB-2023.12", 1)
+        kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=YENI_REV)
+    assert _bag(donem) == (PAKET, SON_REV)
 
 
 @pytest.mark.django_db
 def test_acik_donem_gecisi_fark_listesi_ve_denetim_izi(monkeypatch: pytest.MonkeyPatch) -> None:
     donem = _ilk_donem()
-    r2 = _ekleme_revizyonu()
-    _dagit(monkeypatch, R1, r2)
-    fark = kural_bagi.revizyon_farki(donem, paket="OAB-2023.12", rev=2)
+    r3 = _ekleme_revizyonu()
+    _dagit(monkeypatch, *GERCEK, r3)
+    fark = kural_bagi.revizyon_farki(donem, paket="OAB-2023.12", rev=YENI_REV)
     assert fark.eklenen == ("genel_kurul.yeni_bilgi",)
     assert (fark.biten, fark.deger_degisen, fark.duzeltilen, fark.cikarilan) == ((), (), (), ())
     assert fark.kayitlar == ()
-    assert _bag(donem) == ("OAB-2023.12", 1)  # fark kayıt yazmaz
+    assert _bag(donem) == (PAKET, SON_REV)  # fark kayıt yazmaz
 
-    kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=2)
-    assert _bag(donem) == ("OAB-2023.12", 2)
+    kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=YENI_REV)
+    assert _bag(donem) == (PAKET, YENI_REV)
     guncelleme = AuditTrail.objects.get(model="oab.OabTerm", action=AuditAction.GUNCELLE)
     assert guncelleme.term_id == donem.pk
     assert guncelleme.account_id is not None
     assert "rule_package" in guncelleme.changed_fields
     olay = AuditTrail.objects.get(model="kural.revizyon_gecisi", object_id=str(donem.pk))
-    assert olay.values == {"paket": ["OAB-2023.12", "OAB-2023.12"], "rev": [1, 2]}
+    assert olay.values == {"paket": ["OAB-2023.12", "OAB-2023.12"], "rev": [SON_REV, YENI_REV]}
     assert olay.term_id == donem.pk
 
 
@@ -1573,14 +1856,14 @@ def test_acik_donem_gecisi_fark_listesi_ve_denetim_izi(monkeypatch: pytest.Monke
 def test_acik_donem_gecisi_geri_alinir(monkeypatch: pytest.MonkeyPatch) -> None:
     """Geçiş dönem kapanana kadar geri alınabilir (§6.2-5)."""
     donem = _ilk_donem()
-    _dagit(monkeypatch, R1, _ekleme_revizyonu())
-    kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=2)
-    fark = kural_bagi.revizyon_farki(donem, paket="OAB-2023.12", rev=1)
+    _dagit(monkeypatch, *GERCEK, _ekleme_revizyonu())
+    kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=YENI_REV)
+    fark = kural_bagi.revizyon_farki(donem, paket="OAB-2023.12", rev=SON_REV)
     assert fark.cikarilan == ("genel_kurul.yeni_bilgi",)
-    kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=1)
-    assert _bag(donem) == ("OAB-2023.12", 1)
+    kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=SON_REV)
+    assert _bag(donem) == (PAKET, SON_REV)
     with pytest.raises(ValueError, match="zaten"):
-        kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=1)
+        kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=SON_REV)
 
 
 @pytest.mark.django_db
@@ -1594,9 +1877,9 @@ def test_olmayan_revizyona_gecilmez() -> None:
 def test_eski_degerli_olay_eski_degerle_hesaplanir(monkeypatch: pytest.MonkeyPatch) -> None:
     """Değer değişince değişiklikten önceki olaylar eski değerle kalır (§6.2-3)."""
     donem = _ilk_donem()
-    r2 = _deger_degisikligi_revizyonu()
-    _dagit(monkeypatch, R1, r2)
-    kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=2)
+    r3 = _deger_degisikligi_revizyonu()
+    _dagit(monkeypatch, *GERCEK, r3)
+    kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=YENI_REV)
     donem = OabTerm.objects.get(pk=donem.pk)
     assert kural(IZIN_KURALI, tarih=date(2026, 12, 31), donem=donem) == 15
     assert kural(IZIN_KURALI, tarih=date(2027, 1, 1), donem=donem) == 20
@@ -1606,8 +1889,8 @@ def test_eski_degerli_olay_eski_degerle_hesaplanir(monkeypatch: pytest.MonkeyPat
 def test_ekleme_revizyonu_hesap_degistirmez(monkeypatch: pytest.MonkeyPatch) -> None:
     donem = _ilk_donem()
     kurul = genel_kurul.yeter_sayiyi_dondur(_kurul(donem), tarih=GUN)
-    _dagit(monkeypatch, R1, _ekleme_revizyonu())
-    fark = kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=2)
+    _dagit(monkeypatch, *GERCEK, _ekleme_revizyonu())
+    fark = kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=YENI_REV)
     assert fark.kayitlar == ()
     assert (
         genel_kurul_hesabi.genel_kurul_yeter_sayisi(
@@ -1637,36 +1920,36 @@ def test_duzeltme_revizyonunda_hesabi_degisecek_kayitlar_listelenir(
         gerekce=uyum.Gerekce(metin="Uydurma gerekçe"),
     ).satir
     assert satir is not None
-    _dagit(monkeypatch, R1, _duzeltme_revizyonu())
-    fark = kural_bagi.revizyon_farki(donem, paket="OAB-2023.12", rev=2)
+    _dagit(monkeypatch, *GERCEK, _duzeltme_revizyonu())
+    fark = kural_bagi.revizyon_farki(donem, paket="OAB-2023.12", rev=YENI_REV)
     assert fark.duzeltilen == (IZIN_KURALI, CARPAN_KURALI)
     assert {(k.model, k.kayit_id, k.kural_id) for k in fark.kayitlar} == {
         ("oab.ComplianceItem", str(satir.pk), IZIN_KURALI),
         ("oab.GeneralAssembly", str(kurul.pk), CARPAN_KURALI),
     }
     with pytest.raises(RevizyonOnayiGerekli):
-        kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=2)
-    assert _bag(donem) == ("OAB-2023.12", 1)
-    kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=2, onay=True)
-    assert _bag(donem) == ("OAB-2023.12", 2)
+        kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=YENI_REV)
+    assert _bag(donem) == (PAKET, SON_REV)
+    kural_bagi.revizyon_gecisi(donem, paket="OAB-2023.12", rev=YENI_REV, onay=True)
+    assert _bag(donem) == (PAKET, YENI_REV)
 
 
 def _atlamali_revizyonlar() -> tuple[dict[str, Any], dict[str, Any]]:
-    """r2 kuralı bitirir, r3 aynı aralıkta değeri düzeltir; ikisi de ardışık olarak D2'den geçer."""
-    r2 = _rev(2, (IZIN_KURALI, "bitis"))
-    _kayit_al(r2, IZIN_KURALI)["yururluk"]["bitis"] = "31.12.2026"
-    r3 = deepcopy(r2)
-    r3["rev"] = 3
-    r3["degisiklikler"] = [{"id": IZIN_KURALI, "tur": "duzeltme"}]
-    _kayit_al(r3, IZIN_KURALI)["deger"] = 14
-    return r2, r3
+    """r3 kuralı bitirir, r4 aynı aralıkta değeri düzeltir; ikisi de ardışık olarak D2'den geçer."""
+    r3 = _rev(YENI_REV, (IZIN_KURALI, "bitis"))
+    _kayit_al(r3, IZIN_KURALI)["yururluk"]["bitis"] = "31.12.2026"
+    r4 = deepcopy(r3)
+    r4["rev"] = YENI_REV + 1
+    r4["degisiklikler"] = [{"id": IZIN_KURALI, "tur": "duzeltme"}]
+    _kayit_al(r4, IZIN_KURALI)["deger"] = 14
+    return r3, r4
 
 
 @pytest.mark.django_db
 def test_atlamali_geciste_duzeltme_bitis_sayilmaz(monkeypatch: pytest.MonkeyPatch) -> None:
-    r2, r3 = _atlamali_revizyonlar()
-    assert denetimler.d2_kimlik(r2, R1) == []
-    assert denetimler.d2_kimlik(r3, r2) == []
+    r3, r4 = _atlamali_revizyonlar()
+    assert denetimler.d2_kimlik(r3, EN_YENI) == []
+    assert denetimler.d2_kimlik(r4, r3) == []
     donem = _ilk_donem()
     satir = uyum.denetle(
         IZIN_KURALI,
@@ -1677,20 +1960,20 @@ def test_atlamali_geciste_duzeltme_bitis_sayilmaz(monkeypatch: pytest.MonkeyPatc
         gerekce=uyum.Gerekce(metin="Uydurma gerekçe"),
     ).satir
     assert satir is not None
-    _dagit(monkeypatch, R1, r2, r3)
-    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=3)
+    _dagit(monkeypatch, *GERCEK, r3, r4)
+    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=YENI_REV + 1)
     assert (fark.deger_degisen, fark.biten) == ((IZIN_KURALI,), ())
     assert [(k.model, k.kayit_id) for k in fark.kayitlar] == [("oab.ComplianceItem", str(satir.pk))]
     with pytest.raises(RevizyonOnayiGerekli):
-        kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=3)
-    assert _bag(donem) == (PAKET, 1)
+        kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=YENI_REV + 1)
+    assert _bag(donem) == (PAKET, SON_REV)
 
 
 def test_tek_revizyonda_bitis_kiliginda_deger_degisikligi_yakalanir() -> None:
-    r2 = _rev(2, (IZIN_KURALI, "bitis"))
-    _kayit_al(r2, IZIN_KURALI)["yururluk"]["bitis"] = "31.12.2026"
-    _kayit_al(r2, IZIN_KURALI)["deger"] = 14
-    assert any("beyanı tutmuyor" in s for s in denetimler.d2_kimlik(r2, R1))
+    r3 = _rev(YENI_REV, (IZIN_KURALI, "bitis"))
+    _kayit_al(r3, IZIN_KURALI)["yururluk"]["bitis"] = "31.12.2026"
+    _kayit_al(r3, IZIN_KURALI)["deger"] = 14
+    assert any("beyanı tutmuyor" in s for s in denetimler.d2_kimlik(r3, EN_YENI))
 
 
 def _dondurulmus_kurul(donem: OabTerm, ilk_toplanti: datetime | None) -> GeneralAssembly:
@@ -1705,25 +1988,25 @@ def test_tarihsiz_dondurulmus_kurul_duzeltmede_listelenir(
 ) -> None:
     donem = _ilk_donem()
     kurul = _dondurulmus_kurul(donem, None)
-    _dagit(monkeypatch, R1, _duzeltme_revizyonu())
-    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=2)
+    _dagit(monkeypatch, *GERCEK, _duzeltme_revizyonu())
+    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=YENI_REV)
     assert [(k.model, k.kayit_id, k.kural_id) for k in fark.kayitlar] == [
         ("oab.GeneralAssembly", str(kurul.pk), CARPAN_KURALI)
     ]
     with pytest.raises(RevizyonOnayiGerekli):
-        kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=2)
+        kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=YENI_REV)
 
 
 @pytest.mark.django_db
 def test_hedefte_yururlukte_deger_yoksa_kurul_listelenir(monkeypatch: pytest.MonkeyPatch) -> None:
     """Eşik düzeltilir, çarpan toplantıdan önce biter: fark çökmez, kurul onaya düşer (§6.1)."""
-    r2 = _rev(2, (ESIK_KURALI, "duzeltme"), (CARPAN_KURALI, "bitis"))
-    _kayit_al(r2, ESIK_KURALI)["deger"] = 90
-    _kayit_al(r2, CARPAN_KURALI)["yururluk"]["bitis"] = "31.12.2026"
+    r3 = _rev(YENI_REV, (ESIK_KURALI, "duzeltme"), (CARPAN_KURALI, "bitis"))
+    _kayit_al(r3, ESIK_KURALI)["deger"] = 90
+    _kayit_al(r3, CARPAN_KURALI)["yururluk"]["bitis"] = "31.12.2026"
     donem = _ilk_donem()
     kurul = _dondurulmus_kurul(donem, datetime(2027, 3, 1, 9, 0, tzinfo=UTC))
-    _dagit(monkeypatch, R1, r2)
-    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=2)
+    _dagit(monkeypatch, *GERCEK, r3)
+    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=YENI_REV)
     assert [(k.model, k.kayit_id, k.kural_id) for k in fark.kayitlar] == [
         ("oab.GeneralAssembly", str(kurul.pk), ESIK_KURALI)
     ]
@@ -1736,23 +2019,23 @@ def test_deger_degisikliginde_acik_satir_listelenir_onay_ister(
     donem = _ilk_donem()
     satir = uyum.denetle(IZIN_KURALI, donem=donem, konu=_kurul(donem), tarih=GUN).satir
     assert satir is not None
-    _dagit(monkeypatch, R1, _deger_degisikligi_revizyonu())
-    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=2)
+    _dagit(monkeypatch, *GERCEK, _deger_degisikligi_revizyonu())
+    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=YENI_REV)
     assert fark.deger_degisen == (IZIN_KURALI,)
     assert [(k.model, k.kayit_id) for k in fark.kayitlar] == [("oab.ComplianceItem", str(satir.pk))]
     with pytest.raises(RevizyonOnayiGerekli):
-        kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=2)
-    assert _bag(donem) == (PAKET, 1)
+        kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=YENI_REV)
+    assert _bag(donem) == (PAKET, SON_REV)
 
 
-def _r2de_acik_eksik(
-    monkeypatch: pytest.MonkeyPatch, r2: dict[str, Any] | None = None, kurul_sayisi: int = 1
+def _r3te_acik_eksik(
+    monkeypatch: pytest.MonkeyPatch, r3: dict[str, Any] | None = None, kurul_sayisi: int = 1
 ) -> tuple[OabTerm, list[ComplianceItem]]:
-    """Dönem r2'ye geçer, r1'de olmayan kural için açık `EKSIK` satırları yazılır."""
+    """Dönem sentetik r3'e geçer; bağlı revizyonda olmayan kural için açık `EKSIK` satırları yazılır."""
     donem = _ilk_donem()
     kurullar = [_kurul(donem) for _ in range(kurul_sayisi)]
-    _dagit(monkeypatch, R1, r2 or _ekleme_revizyonu())
-    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=2)
+    _dagit(monkeypatch, *GERCEK, r3 or _ekleme_revizyonu())
+    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=YENI_REV)
     satirlar = [
         uyum.denetle(YENI_KURAL, donem=donem, konu=kurul, tarih=GUN).satir for kurul in kurullar
     ]
@@ -1761,13 +2044,13 @@ def _r2de_acik_eksik(
 
 @pytest.mark.django_db
 def test_geri_almada_cikarilan_kuralin_satiri_listelenir(monkeypatch: pytest.MonkeyPatch) -> None:
-    donem, (satir,) = _r2de_acik_eksik(monkeypatch)
-    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=1)
+    donem, (satir,) = _r3te_acik_eksik(monkeypatch)
+    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=SON_REV)
     assert fark.cikarilan == (YENI_KURAL,)
     assert [(k.model, k.kayit_id) for k in fark.kayitlar] == [("oab.ComplianceItem", str(satir.pk))]
     with pytest.raises(RevizyonOnayiGerekli):
-        kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=1)
-    assert _bag(donem) == (PAKET, 2)
+        kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=SON_REV)
+    assert _bag(donem) == (PAKET, YENI_REV)
 
 
 @pytest.mark.django_db
@@ -1775,13 +2058,13 @@ def test_geri_alinan_revizyonun_eksigi_kapanista_sapmaya_doner(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """§6.2-5, O3: kural bağlı revizyonda yoksa bayrak satırın yazıldığı revizyondan okunur."""
-    donem, (satir,) = _r2de_acik_eksik(monkeypatch)
-    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=1, onay=True)
+    donem, (satir,) = _r3te_acik_eksik(monkeypatch)
+    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=SON_REV, onay=True)
     uyum.kapanis_gecisi(
         donem, gerekceler={YENI_KURAL: uyum.Gerekce(metin="Uydurma gerekçe")}, tarih=GUN
     )
     satir.refresh_from_db()
-    assert (satir.kind, satir.rev) == (ComplianceKind.SAPMA, 2)
+    assert (satir.kind, satir.rev) == (ComplianceKind.SAPMA, YENI_REV)
     assert satir.justification_group is not None
 
 
@@ -1789,10 +2072,10 @@ def test_geri_alinan_revizyonun_eksigi_kapanista_sapmaya_doner(
 def test_geri_alinan_kuralin_kapali_toplu_bayragi_satirin_revizyonundan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    r2 = _ekleme_revizyonu()
-    _kayit_al(r2, YENI_KURAL)["toplu_gerekce"] = False
-    donem, satirlar = _r2de_acik_eksik(monkeypatch, r2, kurul_sayisi=2)
-    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=1, onay=True)
+    r3 = _ekleme_revizyonu()
+    _kayit_al(r3, YENI_KURAL)["toplu_gerekce"] = False
+    donem, satirlar = _r3te_acik_eksik(monkeypatch, r3, kurul_sayisi=2)
+    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=SON_REV, onay=True)
     with pytest.raises(GerekceGerekli):
         uyum.kapanis_gecisi(donem, gerekceler={YENI_KURAL: uyum.Gerekce(metin="Tek")}, tarih=GUN)
     assert {ComplianceItem.objects.get(pk=s.pk).kind for s in satirlar} == {ComplianceKind.EKSIK}
@@ -1805,8 +2088,8 @@ def test_fark_listesi_yalniz_kendi_donemine_bakar(monkeypatch: pytest.MonkeyPatc
     uyum.denetle(IZIN_KURALI, donem=eski, konu=kurul, tarih=GUN)
     OabTerm.objects.filter(pk=eski.pk).update(status=TermStatus.IPTAL, start_date=None)
     yeni = donemler.create_term(name="ikinci", school_year=eski.school_year, start_date=GUN)
-    _dagit(monkeypatch, R1, _duzeltme_revizyonu())
-    fark = kural_bagi.revizyon_farki(yeni, paket=PAKET, rev=2)
+    _dagit(monkeypatch, *GERCEK, _duzeltme_revizyonu())
+    fark = kural_bagi.revizyon_farki(yeni, paket=PAKET, rev=YENI_REV)
     assert fark.duzeltilen == (IZIN_KURALI, CARPAN_KURALI)
     assert fark.kayitlar == ()
 
@@ -1817,8 +2100,8 @@ def test_etkilenen_kurulun_gunu_istanbul_gunudur(monkeypatch: pytest.MonkeyPatch
     donem = _ilk_donem()
     kurul = _dondurulmus_kurul(donem, datetime(2026, 12, 31, 21, 30, tzinfo=UTC))
     assert kurul.quorum_required == 64
-    _dagit(monkeypatch, R1, _deger_degisikligi_revizyonu(kid=CARPAN_KURALI, deger=3))
-    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=2)
+    _dagit(monkeypatch, *GERCEK, _deger_degisikligi_revizyonu(kid=CARPAN_KURALI, deger=3))
+    fark = kural_bagi.revizyon_farki(donem, paket=PAKET, rev=YENI_REV)
     assert [(k.model, k.kayit_id, k.kural_id) for k in fark.kayitlar] == [
         ("oab.GeneralAssembly", str(kurul.pk), CARPAN_KURALI)
     ]
@@ -1829,13 +2112,13 @@ def test_geri_alma_dagitimda_olmayan_revizyonu_kopyadan_okur(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     donem = _ilk_donem()
-    r2 = _ekleme_revizyonu()
-    _dagit(monkeypatch, R1, r2)
-    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=2)
-    _dagit(monkeypatch, r2)
-    assert kural_bagi.revizyon_farki(donem, paket=PAKET, rev=1).cikarilan == (YENI_KURAL,)
-    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=1)
-    assert _bag(donem) == (PAKET, 1)
+    r3 = _ekleme_revizyonu()
+    _dagit(monkeypatch, *GERCEK, r3)
+    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=YENI_REV)
+    _dagit(monkeypatch, r3)
+    assert kural_bagi.revizyon_farki(donem, paket=PAKET, rev=SON_REV).cikarilan == (YENI_KURAL,)
+    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=SON_REV)
+    assert _bag(donem) == (PAKET, SON_REV)
 
 
 @pytest.mark.django_db
@@ -1853,21 +2136,21 @@ def test_bozuk_kopyaya_gecilmez_donem_saglam_kopyasinda_kalir(
 ) -> None:
     """D7, §6.2-5: bozukluk geçiş anında bilinir; dönem salt okura düşmez."""
     donem = _ilk_donem()
-    r2 = _ekleme_revizyonu()
-    _dagit(monkeypatch, R1, r2)
-    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=2)
-    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=1)
-    hedef = RulePackage.objects.get(package=PAKET, rev=2)
+    r3 = _ekleme_revizyonu()
+    _dagit(monkeypatch, *GERCEK, r3)
+    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=YENI_REV)
+    kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=SON_REV)
+    hedef = RulePackage.objects.get(package=PAKET, rev=YENI_REV)
     with connection.cursor() as cursor:
         cursor.execute(sql, [hedef.pk])
     izler = AuditTrail.objects.filter(model="kural.revizyon_gecisi").count()
     with pytest.raises(ValueError, match="bozuk"):
-        kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=2)
+        kural_bagi.revizyon_gecisi(donem, paket=PAKET, rev=YENI_REV)
     with pytest.raises(ValueError, match="bozuk"):
-        kural_bagi.revizyon_farki(donem, paket=PAKET, rev=2)
+        kural_bagi.revizyon_farki(donem, paket=PAKET, rev=YENI_REV)
     with pytest.raises(ValueError, match="tutmuyor"):
-        kural_bagi.kopya_dondur(yk.Paket.sozlukten(r2))
-    assert _bag(donem) == (PAKET, 1)
+        kural_bagi.kopya_dondur(yk.Paket.sozlukten(r3))
+    assert _bag(donem) == (PAKET, SON_REV)
     assert AuditTrail.objects.filter(model="kural.revizyon_gecisi").count() == izler
     donem_kilidi.yazma_denetimi(OabTerm.objects.get(pk=donem.pk))
 
@@ -1877,9 +2160,9 @@ def test_donem_kopyasi_ozeti() -> None:
     """D7 dönem kolu: dondurulmuş kopyanın kanonik özeti."""
     donem = _ilk_donem()
     kopya = donem.rule_package
-    assert kopya.content_sha256 == yk.icerik_ozeti(kopya.content) == yk.icerik_ozeti(R1)
+    assert kopya.content_sha256 == yk.icerik_ozeti(kopya.content) == yk.icerik_ozeti(EN_YENI)
     assert donem_kilidi.kural_kopyasi_tutuyor(donem)
-    bozuk = deepcopy(R1)
+    bozuk = deepcopy(EN_YENI)
     bozuk["kurallar"][0]["deger"] = 11
     with connection.cursor() as cursor:
         cursor.execute(
@@ -1958,13 +2241,13 @@ def test_uyari_gerekcesiz_reddedilir_gerekceyle_kaydedilir() -> None:
     )
     assert sonuc.satir is not None
     satir = sonuc.satir
-    assert (satir.kind, satir.rule_package, satir.rev) == (ComplianceKind.SAPMA, "OAB-2023.12", 1)
+    assert (satir.kind, satir.rule_package, satir.rev) == (ComplianceKind.SAPMA, PAKET, SON_REV)
     assert satir.justification_group is not None
     iz = AuditTrail.objects.get(model="oab.ComplianceItem", object_id=str(satir.pk))
     assert iz.compliance_item_id == satir.pk
     assert iz.term_id == donem.pk
     assert iz.values["rule_id"] == [None, IZIN_KURALI]
-    assert iz.values["rev"] == [None, 1]
+    assert iz.values["rev"] == [None, SON_REV]
     assert denetim_izi.kaydi_dogrula(ComplianceItem, satir.pk) is True
 
 
@@ -2059,9 +2342,9 @@ def test_eksik_bilgi_sapan_degerle_gelince_sapmaya_doner() -> None:
 def test_eksik_veri_sapma_olan_kuralda_eksiklik_bastan_sapmadir(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    r2 = _rev(2, (IZIN_KURALI, "duzeltme"))
-    _kayit_al(r2, IZIN_KURALI)["eksik_veri"] = "sapma"
-    _dagit(monkeypatch, r2)
+    r3 = _rev(YENI_REV, (IZIN_KURALI, "duzeltme"))
+    _kayit_al(r3, IZIN_KURALI)["eksik_veri"] = "sapma"
+    _dagit(monkeypatch, r3)
     donem = _ilk_donem()
     kurul = _kurul(donem)
     with pytest.raises(GerekceGerekli):
@@ -2130,9 +2413,9 @@ def test_toplu_gerekce_bir_gerekce_cok_kayit() -> None:
 
 @pytest.mark.django_db
 def test_toplu_gerekce_kapali_kuralda_tek_tek(monkeypatch: pytest.MonkeyPatch) -> None:
-    r2 = _rev(2, (IZIN_KURALI, "duzeltme"))
-    _kayit_al(r2, IZIN_KURALI)["toplu_gerekce"] = False
-    _dagit(monkeypatch, r2)
+    r3 = _rev(YENI_REV, (IZIN_KURALI, "duzeltme"))
+    _kayit_al(r3, IZIN_KURALI)["toplu_gerekce"] = False
+    _dagit(monkeypatch, r3)
     donem = _ilk_donem()
     birinci, ikinci = _kurul(donem), _kurul(donem)
     uyum.denetle(
@@ -2167,9 +2450,9 @@ def test_toplu_gerekce_kapali_kuralda_tek_tek(monkeypatch: pytest.MonkeyPatch) -
 @pytest.mark.django_db
 def test_toplu_gerekce_kapali_kuralda_kapanis_tek_tek(monkeypatch: pytest.MonkeyPatch) -> None:
     """O3: tek metin her satıra çoğaltılmaz; kök neden yok sayılır, her kayıt kendi metnini alır."""
-    r2 = _rev(2, (IZIN_KURALI, "duzeltme"))
-    _kayit_al(r2, IZIN_KURALI)["toplu_gerekce"] = False
-    _dagit(monkeypatch, r2)
+    r3 = _rev(YENI_REV, (IZIN_KURALI, "duzeltme"))
+    _kayit_al(r3, IZIN_KURALI)["toplu_gerekce"] = False
+    _dagit(monkeypatch, r3)
     donem = _ilk_donem()
     kurullar = (_kurul(donem), _kurul(donem))
     for kurul in kurullar:
@@ -2288,15 +2571,15 @@ def test_eksikten_donen_sapma_ileti_paket_ve_revizyonu_gunceller(
     kurul = _kurul(donem)
     satir = uyum.denetle(IZIN_KURALI, donem=donem, konu=kurul, tarih=GUN).satir
     assert satir is not None
-    assert (satir.message, satir.rule_package, satir.rev) == (erisim.EKSIK_NOTU, PAKET, 1)
-    r2 = _rev(2)
-    r2["paket"] = "OAB-2099.01"
-    _dagit(monkeypatch, R1, r2)
-    kural_bagi.revizyon_gecisi(donem, paket="OAB-2099.01", rev=2)
+    assert (satir.message, satir.rule_package, satir.rev) == (erisim.EKSIK_NOTU, PAKET, SON_REV)
+    r3 = _rev(YENI_REV)
+    r3["paket"] = "OAB-2099.01"
+    _dagit(monkeypatch, *GERCEK, r3)
+    kural_bagi.revizyon_gecisi(donem, paket="OAB-2099.01", rev=YENI_REV)
     uyum.denetle(
         IZIN_KURALI, 3, donem=donem, konu=kurul, tarih=GUN, gerekce=uyum.Gerekce(metin="Uydurma")
     )
     satir.refresh_from_db()
     assert satir.kind == ComplianceKind.SAPMA
     assert "3 gün" in satir.message
-    assert (satir.rule_package, satir.rev) == ("OAB-2099.01", 2)
+    assert (satir.rule_package, satir.rev) == ("OAB-2099.01", YENI_REV)

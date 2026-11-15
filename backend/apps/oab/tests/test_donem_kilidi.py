@@ -34,6 +34,7 @@ from apps.oab.models import (
 from apps.oab.services import donem_kilidi, donemler, uyum, yarim_metin
 from apps.oab.services import genel_kurul as genel_kurul_servisi
 from apps.oab.services import iz as iz_yazari
+from apps.oab.tests.kurallar import paket_ortak
 from apps.okul import denetim_izi
 from apps.okul.models import (
     AccountRole,
@@ -84,7 +85,10 @@ def test_donem_acilisi_ilk_donemi_en_yeni_revizyona_baglar() -> None:
     donem = _donem()
     assert donem.status == TermStatus.ACIK
     assert donem.opened_by_assembly is None
-    assert (donem.rule_package.package, donem.rule_package.rev) == ("OAB-2023.12", 1)
+    assert (donem.rule_package.package, donem.rule_package.rev) == (
+        "OAB-2023.12",
+        paket_ortak.EN_YENI_REV,
+    )
     assert donem_kilidi.kural_kopyasi_tutuyor(donem)
 
 
@@ -600,7 +604,7 @@ def test_birlik_donemi_ucu_acilis_liste_ve_ayrinti() -> None:
     assert yanit.status_code == 201, yanit.content
     veri = yanit.json()
     assert veri["status"] == "ACIK"
-    assert veri["kural_paketi"] == {"paket": "OAB-2023.12", "rev": 1}
+    assert veri["kural_paketi"] == {"paket": "OAB-2023.12", "rev": paket_ortak.EN_YENI_REV}
     assert veri["kural_kopyasi_tutuyor"] is True
 
     liste = _istemci().get(UC).json()

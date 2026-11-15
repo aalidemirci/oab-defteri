@@ -271,21 +271,41 @@ def _kosul_durumu(kayit: Mapping[str, Any], okul: Mapping[str, Any] | None) -> b
     return True
 
 
-def _esit(gozlenen: Any, deger: Any) -> bool:
+def _sayilar(gozlenen: Any, deger: Any) -> tuple[Any, Any]:
+    """Ondalık dize değer (oran, tutar) `Decimal`'e çevrilir, gözlenen de; öteki değer olduğu gibi.
+
+    Dizeyle sayının sıralı karşılaştırması `TypeError` verirdi (`olaganustu_basvuru_oran`)."""
     if isinstance(deger, str):
-        return Decimal(str(gozlenen)) == Decimal(deger)
+        return Decimal(str(gozlenen)), Decimal(deger)
+    return gozlenen, deger
+
+
+def _esit(gozlenen: Any, deger: Any) -> bool:
+    gozlenen, deger = _sayilar(gozlenen, deger)
     return bool(gozlenen == deger)
+
+
+def _hepsi(gozlenen: Any, deger: Any) -> bool:
+    """Gözlenen küme değerin bütün öğelerini kapsar; sıra ve fazla öğe sonucu değiştirmez."""
+    if not isinstance(gozlenen, list | tuple | set | frozenset):
+        raise TypeError("`hepsi` karşılaştırmasında gözlenen değer bir küme olmalıdır.")
+    return set(deger) <= set(gozlenen)
 
 
 def _uyuyor(karsilastirma: str, gozlenen: Any, deger: Any) -> bool:
     if isinstance(gozlenen, float):
         raise TypeError("Kural değerleri kayan noktayla karşılaştırılmaz.")
-    if karsilastirma == "en_az":
-        return bool(gozlenen >= deger)
-    if karsilastirma == "en_cok":
-        return bool(gozlenen <= deger)
-    if karsilastirma == "kucuktur":
-        return bool(gozlenen < deger)
+    if karsilastirma in ("en_az", "en_cok", "kucuktur", "buyuktur"):
+        sol, sag = _sayilar(gozlenen, deger)
+        if karsilastirma == "en_az":
+            return bool(sol >= sag)
+        if karsilastirma == "en_cok":
+            return bool(sol <= sag)
+        if karsilastirma == "kucuktur":
+            return bool(sol < sag)
+        return bool(sol > sag)
+    if karsilastirma == "hepsi":
+        return _hepsi(gozlenen, deger)
     if karsilastirma == "liste_icinde":
         return (
             all(oge in deger for oge in gozlenen)

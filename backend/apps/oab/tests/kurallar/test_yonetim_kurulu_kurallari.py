@@ -59,6 +59,7 @@ from apps.oab.services import (
     uyum,
 )
 from apps.oab.tests import uyelik_ortak as o
+from apps.oab.tests.kurallar import paket_ortak
 from apps.okul.models import AccountRole, AuditTrail
 
 pytestmark = pytest.mark.django_db
@@ -332,10 +333,10 @@ def test_baskan_besinci_secim_gerekceyle_gecer() -> None:
     assert uyelik.status == MembershipStatus.SECILDI
     (satir,) = _satirlar(uyelik, f"{YK}.secilme_siniri")
     assert satir.kind == ComplianceKind.SAPMA and satir.justification_group is not None
-    assert (satir.rule_package, satir.rev) == ("OAB-2023.12", 1)
+    assert (satir.rule_package, satir.rev) == ("OAB-2023.12", paket_ortak.EN_YENI_REV)
     iz = AuditTrail.objects.filter(model="oab.ComplianceItem", object_id=str(satir.pk)).first()
     assert iz is not None and iz.values["rule_id"][1] == f"{YK}.secilme_siniri"
-    assert iz.values["rev"][1] == 1
+    assert iz.values["rev"][1] == paket_ortak.EN_YENI_REV
     ozet = {u["kural"]: u for u in OrganMembership.objects.get(pk=uyelik.pk).rule_warnings}
     assert ozet[f"{YK}.secilme_siniri"]["durum"] == "uyari"
     assert ozet[f"{YK}.secilme_siniri"]["atif"] == "md. 12/4"
@@ -1319,13 +1320,14 @@ def test_noter_tasdiki_sapmasi_gerekceyle_kaydedilir_defter_basina_bir_gerekce()
     assert (satir.kind, satir.rule_package, satir.rev, satir.message) == (
         ComplianceKind.SAPMA,
         "OAB-2023.12",
-        1,
+        paket_ortak.EN_YENI_REV,
         TASDIK_METNI,
     )
     assert satir.justification_group is not None
     assert satir.justification_group.root_cause == kurullar.tasdik_kok_nedeni(defter)
     iz = AuditTrail.objects.filter(model="oab.ComplianceItem", object_id=str(satir.pk)).first()
-    assert iz is not None and iz.values["rule_id"][1] == TASDIK and iz.values["rev"][1] == 1
+    assert iz is not None and iz.values["rule_id"][1] == TASDIK
+    assert iz.values["rev"][1] == paket_ortak.EN_YENI_REV
     tekrar = kurullar.tasdik_denetimi(defter, donem=donem)
     assert tekrar.satir is not None and tekrar.satir.pk == satir.pk
     assert ComplianceJustification.objects.filter(rule_id=TASDIK).count() == 1

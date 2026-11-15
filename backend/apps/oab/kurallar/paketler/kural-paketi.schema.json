@@ -155,10 +155,12 @@
             "en_az",
             "en_cok",
             "kucuktur",
+            "buyuktur",
             "esit",
             "carpan",
             "parametre",
             "liste_icinde",
+            "hepsi",
             "tablo"
           ]
         },
@@ -216,6 +218,20 @@
           "if": { "properties": { "dayanak_turu": { "const": "yorum" } } },
           "then": { "required": ["yorum"] },
           "else": { "not": { "required": ["yorum"] } }
+        },
+        {
+          "if": { "properties": { "karsilastirma": { "enum": ["hepsi", "liste_icinde"] } } },
+          "then": { "properties": { "deger": { "type": "array" } } }
+        },
+        {
+          "if": {
+            "properties": { "karsilastirma": { "enum": ["en_az", "en_cok", "kucuktur", "buyuktur"] } }
+          },
+          "then": {
+            "properties": {
+              "deger": { "anyOf": [{ "type": "integer" }, { "$ref": "#/$defs/ondalik" }] }
+            }
+          }
         },
         {
           "if": { "properties": { "birim": { "const": "oran" } } },

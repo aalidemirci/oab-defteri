@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 
 from apps.oab.kurallar import atifli_metin, bilgi_notu
 from apps.oab.kurallar import yukleyici as yk
+from apps.oab.tests.kurallar import paket_ortak
 from apps.okul.models import CanteenMode
 
 KURAL = "kantin.isletmede_vergi_uyarisi"
@@ -42,7 +43,7 @@ def test_okul_karti_bilgisi_pakettendir() -> None:
             "modlar": ["BIRLIKCE_ISLETILIYOR"],
             "metin": BEKLENEN_METIN,
             "paket": "OAB-2023.12",
-            "rev": 1,
+            "rev": paket_ortak.EN_YENI_REV,
         }
     }
 
