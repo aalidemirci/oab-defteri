@@ -889,10 +889,179 @@ def test_linuxta_yeni_pencere_istegi_sayfa_sinifina_baglanir() -> None:
     assert isinstance(sayfa, _QtSayfasi)
 
 
-@pytest.mark.parametrize("platform", ["win32", "darwin"])
-def test_windowsta_yeni_pencere_istegine_dokunulmaz(platform: str) -> None:
-    """Windows'ta EdgeChromium kolu `NewWindowRequested`'le açar; profil sorunu yoktur."""
+def test_macosta_yeni_pencere_istegine_dokunulmaz() -> None:
     arka_uc = _yeni_pencere_arka_ucu()
 
-    assert dis_surec.yeni_pencere_isleyicisini_bagla(arka_uc, platform=platform) is False
+    assert dis_surec.yeni_pencere_isleyicisini_bagla(arka_uc, platform="darwin") is False
     assert "createWindow" not in vars(arka_uc.BrowserView.WebPage)
+
+
+# --- Windows: EdgeChromium kolunun `on_new_window_request`'i (modül başlığı) ---------------------
+
+
+class _EdgeChrome:
+    """pywebview 5.3.2 `platforms/edgechromium.py` `EdgeChrome`'un kullandığımız yüzeyi."""
+
+    def __init__(self) -> None:
+        self.yuklenen: list[str] = []
+
+    def load_url(self, url: str) -> None:
+        self.yuklenen.append(url)
+
+    def on_new_window_request(self, sender: Any, args: Any) -> None:
+        raise AssertionError("pywebview'ın süzmeyen işleyicisi çağrılmamalı")
+
+
+class _NetAcici:
+    """Kolun modülündeki `webbrowser`: pywebview `webbrowser.open(url)` diye tek değerle çağırır."""
+
+    def __init__(self) -> None:
+        self.acilan: list[str] = []
+
+    def open(self, url: str) -> bool:
+        self.acilan.append(url)
+        return True
+
+
+class _YeniPencereOlayi:
+    """`CoreWebView2NewWindowRequestedEventArgs`'ın kullandığımız yüzeyi."""
+
+    def __init__(self, adres: Any) -> None:
+        self._adres = adres
+        self.karsilandi: list[bool] = []
+
+    def get_Uri(self) -> Any:  # noqa: N802 — .NET adı
+        return self._adres
+
+    def set_Handled(self, deger: bool) -> None:  # noqa: N802 — .NET adı
+        self.karsilandi.append(deger)
+
+
+def _chromium(**ayarlar: Any) -> SimpleNamespace:
+    """Kolun modülü: `webview_settings` (pywebview'ın `settings` sözlüğü), `webbrowser`, `EdgeChrome`."""
+    return SimpleNamespace(
+        EdgeChrome=type("EdgeChrome", (_EdgeChrome,), {}),
+        webbrowser=_NetAcici(),
+        webview_settings={"OPEN_EXTERNAL_LINKS_IN_BROWSER": True, **ayarlar},
+    )
+
+
+def _bagla(chromium: SimpleNamespace) -> None:
+    arka_uc = SimpleNamespace(Chromium=chromium)
+    assert dis_surec.yeni_pencere_isleyicisini_bagla(arka_uc, platform="win32") is True
+
+
+def _istek(chromium: SimpleNamespace, adres: Any) -> tuple[Any, _YeniPencereOlayi]:
+    """Bağlanmış işleyiciyi pywebview'ın çağırdığı gibi (örnekten) çağırır."""
+    _bagla(chromium)
+    ornek = chromium.EdgeChrome()
+    olay = _YeniPencereOlayi(adres)
+    # `sender` CoreWebView2'dir; `Source` o anki adrestir (düz metin).
+    ornek.on_new_window_request(SimpleNamespace(Source=_ANA_ADRES), olay)
+    return ornek, olay
+
+
+def test_windowsta_yeni_pencere_istegi_edgechromium_sinifina_baglanir() -> None:
+    chromium = _chromium()
+
+    _bagla(chromium)
+
+    assert "on_new_window_request" in vars(chromium.EdgeChrome)
+
+
+def test_windowsta_kol_edgechromium_degilse_baglanmaz(od_gunlugu: list[Any]) -> None:
+    """MSHTML ya da CEF kolunda `Chromium` adı yoktur (`platforms/winforms.py`)."""
+    assert dis_surec.yeni_pencere_isleyicisini_bagla(SimpleNamespace(), platform="win32") is False
+    assert "EdgeChromium değil" in " ".join(k.getMessage() for k in od_gunlugu)
+
+
+@pytest.mark.parametrize(
+    "adres",
+    [
+        "http://127.0.0.1:53817/organlar",
+        "http://localhost:53817/organlar",
+        "file:///C:/Windows/win.ini",
+        "javascript:void(0)",
+        "",
+    ],
+    ids=["kendi_koken", "localhost", "file", "javascript", "bos"],
+)
+def test_windowsta_program_ici_ve_dis_olmayan_adres_reddedilir(
+    adres: str, od_gunlugu: list[Any]
+) -> None:
+    """Bağımsız denetim 14.11.2026 (K-yeni-1 notu): kolun kendi işleyicisi Ctrl ya da orta tuşla
+    tıklanan program içi bağlantıyı sistemin tarayıcısında oturum belirteçsiz yerel adresle açar,
+    sunucu 403 verir."""
+    chromium = _chromium()
+
+    ornek, olay = _istek(chromium, adres)
+
+    assert olay.karsilandi == [True]  # WebView2 kendi açılır penceresini açmaz
+    assert chromium.webbrowser.acilan == []
+    assert ornek.yuklenen == []
+    metin = " ".join(k.getMessage() for k in od_gunlugu)
+    assert "reddedildi" in metin
+    assert "53817" not in metin and "win.ini" not in metin
+
+
+def test_windowsta_dis_baglanti_kolun_aciciyla_tarayicida_acilir() -> None:
+    chromium = _chromium()
+    adres = "https://polyformproject.org/licenses/noncommercial/1.0.0/"
+
+    ornek, olay = _istek(chromium, adres)
+
+    assert olay.karsilandi == [True]
+    assert chromium.webbrowser.acilan == [adres]
+    assert ornek.yuklenen == []
+
+
+def test_windowsta_uri_metne_cevrilir() -> None:
+    """Adres metne çevrilerek karara verilir (pywebview de `str(args.get_Uri())` uygular)."""
+
+    class _Uri:
+        def __str__(self) -> str:
+            return "https://okulapp.org/"
+
+    chromium = _chromium()
+
+    _istek(chromium, _Uri())
+
+    assert chromium.webbrowser.acilan == ["https://okulapp.org/"]
+
+
+def test_windowsta_ayar_kapaliysa_dis_adres_ana_pencerede_acilir() -> None:
+    """pywebview'ın `OPEN_EXTERNAL_LINKS_IN_BROWSER = False` davranışı (`load_url`) korunur."""
+    chromium = _chromium(OPEN_EXTERNAL_LINKS_IN_BROWSER=False)
+
+    ornek, _olay = _istek(chromium, "https://okulapp.org/")
+
+    assert ornek.yuklenen == ["https://okulapp.org/"]
+    assert chromium.webbrowser.acilan == []
+
+
+def test_windowsta_ayar_ve_acici_cagri_aninda_okunur() -> None:
+    chromium = _chromium(OPEN_EXTERNAL_LINKS_IN_BROWSER=False)
+    _bagla(chromium)
+    yeni = _NetAcici()
+    chromium.webbrowser = yeni
+    chromium.webview_settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
+
+    chromium.EdgeChrome().on_new_window_request(
+        SimpleNamespace(Source=_ANA_ADRES), _YeniPencereOlayi("https://okulapp.org/")
+    )
+
+    assert yeni.acilan == ["https://okulapp.org/"]
+
+
+def test_windowsta_acici_hata_verirse_net_olayindan_hata_tasmaz(od_gunlugu: list[Any]) -> None:
+    class _Patlayan:
+        def open(self, *_a: Any) -> bool:
+            raise OSError("yok")
+
+    chromium = _chromium()
+    chromium.webbrowser = _Patlayan()
+
+    _ornek, olay = _istek(chromium, "https://okulapp.org/")
+
+    assert olay.karsilandi == [True]
+    assert "OSError" in " ".join(k.getMessage() for k in od_gunlugu)

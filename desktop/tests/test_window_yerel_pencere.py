@@ -4,7 +4,8 @@
 kendisi `test_yerel_pencere.py`'de sınanır; burada köprünün ona verdiği seçenekler, Qt penceresine
 düşüş, uzantı ve yeniden açma kuralının bu yolda da çalışması, ikinci çağrının iptali ve ön yüze
 bildirilmesi, sayfanın dosya kutusunun aynı pencereyle açılması, arka uca bağlananlar, kapanışta açık
-pencerenin sonlandırılması ve Windows yolunun değişmemesi sınanır (bağımsız denetim 13.11.2026).
+pencerenin sonlandırılması sınanır; Windows'ta Qt kolunun hiçbir yerine dokunulmaması (bağımsız denetim
+13.11.2026) ve arka uca yalnız EdgeChromium kolunun yeni pencere isteğinin bağlanması da buradadır.
 """
 
 from __future__ import annotations
@@ -735,8 +736,10 @@ def test_pencere_dongusu_hata_verse_de_masaustu_penceresi_kapatilir(
 def test_windowsta_kopru_masaustu_penceresi_ve_tarayici_kurmaz(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Bağımsız denetimin M26'sı (13.11.2026): Windows'ta masaüstü penceresi hiç kurulmaz, arka uca
-    hiçbir şey bağlanmaz. Eşzamanlıdır: iş parçacığındaki hatanın testi düşürmemesi sorunu yoktur."""
+    """Bağımsız denetimin M26'sı (13.11.2026): Windows'ta masaüstü penceresi hiç kurulmaz, Qt kolunun
+    hiçbir yerine dokunulmaz. Arka uca yalnız EdgeChromium kolunun yeni pencere isteği bağlanır (aşağıdaki
+    test); bu sahte arka uçta o kol yoktur. Eşzamanlıdır: iş parçacığındaki hatanın testi düşürmemesi
+    sorunu yoktur."""
     kurulan: list[object] = []
 
     class _Kaydeden(YerelDosyaPenceresi):
@@ -752,8 +755,30 @@ def test_windowsta_kopru_masaustu_penceresi_ve_tarayici_kurmaz(
 
     assert kurulan == []
     assert sahte.pencereler[0]["js_api"]._yerel_pencere is None
-    assert sahte.initialize == sahte.ilk_initialize
     assert sahte.arka_uc.webbrowser is eski_acici
     sinif = sahte.arka_uc.BrowserView
     assert not {"chooseFiles", "createWindow", "__init__"} & set(vars(sinif.WebPage))
     assert "showEvent" not in vars(sinif)
+
+
+def test_windowsta_yeni_pencere_istegi_starttan_once_edgechromium_koluna_baglanir(
+    tmp_path: Path,
+) -> None:
+    """Bağımsız denetim 14.11.2026 (K-yeni-1 notu): kolun kendi işleyicisi Ctrl ile tıklanan program
+    içi bağlantıyı 403 veren tarayıcıda açar. Kol yöntemi bileşen hazır olunca örnekten okur; bağlama
+    `start` içindeki `initialize`'da olur."""
+
+    class _EdgeChrome:
+        def on_new_window_request(self, sender: Any, args: Any) -> None:
+            raise AssertionError("pywebview'ın süzmeyen işleyicisi")
+
+    sahte = _SahteWebview()
+    sahte.arka_uc.Chromium = SimpleNamespace(
+        EdgeChrome=_EdgeChrome, webbrowser=sahte.arka_uc.webbrowser, webview_settings={}
+    )
+    asil = _EdgeChrome.on_new_window_request
+
+    open_window("http://127.0.0.1:1/", webview=sahte, platform="win32", storage_path=tmp_path)
+
+    assert _EdgeChrome.on_new_window_request is not asil
+    assert sahte.pencereler[0]["js_api"]._yerel_pencere is None

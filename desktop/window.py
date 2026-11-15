@@ -91,7 +91,10 @@ pywebview'ın Qt kolunda bağlananlar (dosya kutusu; dış bağlantıların temi
 pencere isteğinin pencerenin profiliyle karşılanması, `desktop/dis_surec.py`; ana pencerenin X kimliği,
 `desktop/x11_pencere.py`; sayfa önbelleği, aşağıda) arka uç yüklenince, pencere kurulmadan önce kurulur
 (`_arka_uc_kurulunca`).
-Program kapanırken açık pencere sonlandırılır (`open_window`). Windows yolu değişmez.
+Program kapanırken açık pencere sonlandırılır (`open_window`). Windows'ta arka uca yalnız yeni pencere
+isteği bağlanır (EdgeChromium kolunun `on_new_window_request`'i, `desktop/dis_surec.py`): dış
+bağlantı da bu işleyicinin kararıyla kolun `webbrowser`'ında açılır (Linux'taki temiz ortam Windows'ta
+gerekmez); dosya pencereleri pywebview'ın yolundadır.
 
 **Son klasör.** Üç pencere de son seçilen klasörde açılır; klasör yalnız bellektedir,
 süreç kapanınca unutulur, diske ve günlüğe yazılmaz. İptal onu değiştirmez; klasör artık yoksa (bellek
@@ -1218,6 +1221,10 @@ def open_window(
     kopru.bind_window(window)
     if system.startswith("win"):
         window.events.shown += lambda: form_onerisini_kapat(window)
+        # Ctrl ya da orta tuşla tıklanan program içi bağlantı tarayıcıya gitmesin (`desktop/dis_surec.py`).
+        _arka_uc_kurulunca(
+            module, lambda arka_uc: yeni_pencere_isleyicisini_bagla(arka_uc, platform=system)
+        )
     if controller is not None:
         controller.bind(window)
         if controller.quitting:
