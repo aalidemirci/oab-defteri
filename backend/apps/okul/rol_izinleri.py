@@ -834,8 +834,8 @@ BEKLEYEN_DIPNOTLAR: Final[Mapping[int, str]] = {
     8: "F4",
     9: "F5",
     # 10: bağlı — kişisel veri içeren çıktı (`Eylem.KISISEL_VERI_CIKTISI`; F2 5. adım: genel kurulun
-    # veli adlı katılım işaretleri, `genel_kurul` servisi). Adlı E07 ve E08 8.-9. adımlarda aynı
-    # eylemle bağlanır.
+    # veli adlı katılım işaretleri, `genel_kurul` servisi) ve F2 8. adım: adlı E07 ve E08'in tek
+    # istekte üretilip verilmesi (`genel_kurul_evraki.adli_uret_ve_ver`; içerikleri 9. adımda).
 }
 
 

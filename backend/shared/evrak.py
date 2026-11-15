@@ -36,11 +36,38 @@ sonraki bloğa bağlıdır. Antet okulundur (`okul_anteti`); birliğin kendi bel
 "Okul-Aile Birliği" satırını ekler (`birlik_anteti`; ayrı logo yok, kurum kodu antede girmez). Karar
 taslağının konum cümlesi tek sabittir (`KDT`, tasarım §9.2), başlıktaki taslak ibaresi
 `TASLAK_IBARESI`'dir. İmza bloğunda ad "Ad SOYAD" biçimindedir (`ad_soyad`; RYUE md. 17/2).
+
+F2 EKLERİ (plan F2 §4.2, 8. adım):
+
+- **Resmî yazı bloğu** (`ResmiYazi`; RYUE md. 10-14): okul idaresinin resmî yazısının (E12) başı.
+  Başlık (antet) md. 10/3'e göre okul kartından kurulur (`okul_anteti`; yeni iş değildir). Blok
+  belgenin İLK bloğudur (md. 11/2: "Sayı:" başlığın son satırından iki satır boşlukla); "Sayı:" ve
+  tarih aynı satırdadır, tarih yazı alanının en sağında (md. 12/1); "Konu:" bir alt satırdadır ve
+  yazı alanının dikey orta hizasını geçmez, sonunda noktalama yoktur (md. 13/1); iki yan başlığın
+  iki noktası aynı hizadadır (md. 15/3). Word, PDF ve web sayfası bu satırları dört sütunlu
+  çerçevesiz bir ızgarada çizer (`RYUE_SUTUNLARI`, `resmi_yazi_izgarasi`): sola yaslı yan başlık adı
+  (hücre iç boşluğu yok: yazı alanının solundan başlar, md. 11/2), kendi dar sütununda iki nokta
+  (iki satırda aynı sütun: aynı hiza, md. 15/3), değer ve sağa yaslı tarih. Muhatap konudan iki
+  satır boşlukla ortalanır (md. 14/1); idarenin adı büyük harftir (md. 14/2, `tr_upper`), birim adı
+  alt satırda parantez içindedir (md. 14/2, 14/5; `muhatap_satirlari`). Muhatabın biçimi kullanıcı
+  kararı S11 (a)'dır (`shared.letterhead.mem_muhatabi`); alan serbest metindir, basımda düzenlenir.
+  "Sayı:"nın içeriği EBYS'nindir (md. 11/1; program numara üretmez, plan F2 §7 U20). Excel çizicisi
+  resmî yazı çizmez (`xlsx_ciz` reddeder): F2'de Excel'i olan E08 ve E14 resmî yazı değildir.
+- **Ek bloğu** (`Ekler`; RYUE md. 18): imza bölümünden sonra, yazı alanının solundan (md. 18/1).
+  Program sözleşmesi olarak ek bölümü imza bloğunun hemen ardından gelir (aralarına başka blok
+  girmez; dağıtım bölümü ekten sonra, olur bölümü imzadan sonra gelir, bu sıra onlarla çelişmez). Tek
+  ekte "Ek: <ibare>", birden çok ekte "Ek:" ve altında numaralı ekler (md. 18/2).
+- **Sayfa sonu** (`SayfaSonu`): sonraki blok yeni sayfada başlar (E08'in sınıf başına sayfası, plan
+  F2 §7 U16). Metin taşımaz, akışa girmez; belgenin ilk ya da son bloğu olamaz, art arda gelmez.
+- **Çiziciler:** Word ve PDF'in yanında Excel (`xlsx_ciz`; openpyxl'e yalnız `shared.xlsx`
+  kapısından) ve tek dosyalık, dış kaynaksız web sayfası (`web_html_ciz`; E06'nın internet sayfası).
+  Web sayfası WeasyPrint baskı şablonunun yerine kullanılmaz; ikisi de aynı içerik modelinden çizilir.
 """
 
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
@@ -199,7 +226,115 @@ class Imza:
     tarih: str = ""
 
 
-Blok = Baslik | AltBaslik | Paragraf | Tablo | KonumCumlesi | Imza | Dipnot
+# ---------------------------------------------------------------------------
+# Resmî yazı (RYUE md. 10-14, 18) ve sayfa sonu (modül başlığı "F2 ekleri")
+# ---------------------------------------------------------------------------
+
+#: "Sayı:", "Konu:" ve "Ek:" yan başlıkları (RYUE md. 11/1, 13/1, 18/1; yönetmeliğin yazımıyla).
+SAYI_ETIKETI = "Sayı:"
+KONU_ETIKETI = "Konu:"
+EK_ETIKETI = "Ek:"
+#: Yan başlığın iki noktası. Izgarada yan başlığın adından ayrı, kendi dar sütununda durur: "Sayı" ve
+#: "Konu" yazı alanının solundan başlar (md. 11/2), iki noktaları aynı hizadadır (md. 15/3).
+IKI_NOKTA = ":"
+#: Resmî yazı başının dört sütunu, yazı alanının yüzdesi: sola yaslı yan başlık adı (md. 11/2), iki
+#: nokta (md. 15/3), değer ve sağa yaslı tarih (md. 12/1). İlk üç sütun yazı alanının yarısıdır: konu
+#: dikey orta hizayı geçmez (md. 13/1). Ad sütunu 12 puntoda "Konu" sözcüğünü (~0,95 cm) alır.
+#: Word ve PDF aynı yüzdeleri kullanır; hücrelerin iç boşluğu yoktur.
+RYUE_SUTUNLARI: tuple[float, float, float, float] = (7.5, 2.5, 40.0, 50.0)
+#: Excel çizicisinin resmî yazıyı reddi (`xlsx_ciz`; F2'de Excel'i olan E08 ve E14 resmî yazı değildir).
+RESMI_YAZI_EXCEL_DISI = (
+    "Resmî yazı Excel'e çizilmez: RYUE düzeni Excel sayfasının ızgarasında korunamaz. Resmî yazı Word "
+    "ya da PDF olarak verilir."
+)
+#: Konunun sonunda bulunmayacak işaretler (md. 13/1: "herhangi bir noktalama işareti konulmaksızın"):
+#: nokta, virgül, iki nokta, noktalı virgül, soru, ünlem, üç nokta; açma ve kapama ayraçları;
+#: tırnaklar ve kesme; kısa çizgi, uzun çizgi, eğik ve ters eğik çizgi.
+_KONU_SONU_NOKTALAMA = frozenset(".,;:!?…()[]{}\"'‘’“”«»-‐–—/\\")
+
+
+@dataclass(frozen=True)
+class ResmiYazi:
+    """Resmî yazının başı (modül başlığı "F2 ekleri"; RYUE md. 11-14).
+
+    `muhatap` idarenin adıdır, büyük harfe `tr_upper` ile çevrilerek saklanır (md. 14/2); `birim`
+    verilirse alt satırda parantez içinde basılır (md. 14/2, 14/5; parantezsiz saklanır). Sayı,
+    tarih, konu ve muhatap boş olamaz (md. 11/1 "sayı bulunması zorunludur"). Sayının yer tutucusu
+    vardır: program sayıyı kuramaz, çağıran "………" verir (plan F2 §7 U20); muhatap önerisinde adı
+    bilinmeyen il ya da ilçe de yer tutucuyla basılır (`letterhead.mem_muhatabi`). Konu her zaman
+    kurucunun metnidir, yer tutucu olamaz: sonunda noktalama olmaz (md. 13/1) ve "…" de noktalamadır.
+
+    Muhatap biçimi idare ya da özel hukuk tüzel kişisi içindir (md. 14/2; E12 bu hâldedir). Gerçek
+    kişi muhatap ("Sayın" + adın ilk harfi büyük + SOYADI, md. 14/3) bu blokta yoktur; seçeneği onu
+    gerektiren evrakın fazında (E35, E77) eklenir.
+    """
+
+    sayi: str
+    tarih: str
+    konu: str
+    muhatap: str
+    birim: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "muhatap", tr_upper(self.muhatap))
+        for alan in (self.sayi, self.tarih, self.konu, self.muhatap):
+            if not alan.strip():
+                raise ValueError("Resmî yazının sayısı, tarihi, konusu ve muhatabı boş olamaz.")
+        if self.konu.rstrip()[-1] in _KONU_SONU_NOKTALAMA:
+            raise ValueError("Resmî yazının konusu noktalama işaretiyle bitmez (RYUE md. 13/1).")
+
+
+def resmi_yazi_izgarasi(blok: ResmiYazi) -> tuple[tuple[str, str, str, str], ...]:
+    """Resmî yazı başının iki satırı, `RYUE_SUTUNLARI`'nın dört sütunuyla: yan başlık adı, iki nokta,
+    değer, tarih ("Sayı" satırında; md. 12/1) — "Konu" satırının tarih hücresi boştur (md. 13/1)."""
+    return (
+        (SAYI_ETIKETI.removesuffix(IKI_NOKTA), IKI_NOKTA, blok.sayi, blok.tarih),
+        (KONU_ETIKETI.removesuffix(IKI_NOKTA), IKI_NOKTA, blok.konu, ""),
+    )
+
+
+def muhatap_satirlari(blok: ResmiYazi) -> tuple[str, ...]:
+    """Muhatabın basılan satırları: idarenin adı ve (varsa) parantez içinde birim (md. 14/2, 14/5)."""
+    return (blok.muhatap, f"({blok.birim})") if blok.birim else (blok.muhatap,)
+
+
+@dataclass(frozen=True)
+class Ekler:
+    """Belgenin ekleri (RYUE md. 18): imza bölümünden sonra (md. 18/1; programda imza bloğunun hemen
+    ardından); en az bir ek."""
+
+    ekler: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.ekler or any(not ek.strip() for ek in self.ekler):
+            raise ValueError("Ek bölümü en az bir ek taşır; ekin ibaresi boş olamaz.")
+
+
+def ek_satirlari(blok: Ekler) -> tuple[str, ...]:
+    """Ek bölümünün satırları: tek ekte "Ek: <ibare>", birden çok ekte "Ek:" ve altında numaralı
+    ekler (md. 18/2)."""
+    if len(blok.ekler) == 1:
+        return (f"{EK_ETIKETI} {blok.ekler[0]}",)
+    return (EK_ETIKETI, *(f"{sira}- {ek}" for sira, ek in enumerate(blok.ekler, start=1)))
+
+
+@dataclass(frozen=True)
+class SayfaSonu:
+    """Sonraki blok yeni sayfada başlar (E08'in sınıf sayfaları). Metin taşımaz."""
+
+
+Blok = (
+    Baslik
+    | AltBaslik
+    | Paragraf
+    | Tablo
+    | KonumCumlesi
+    | Imza
+    | Dipnot
+    | ResmiYazi
+    | Ekler
+    | SayfaSonu
+)
 
 _BLOK_TURLERI: dict[str, type[Any]] = {
     "baslik": Baslik,
@@ -209,6 +344,9 @@ _BLOK_TURLERI: dict[str, type[Any]] = {
     "konum": KonumCumlesi,
     "imza": Imza,
     "dipnot": Dipnot,
+    "resmi_yazi": ResmiYazi,
+    "ekler": Ekler,
+    "sayfa_sonu": SayfaSonu,
 }
 _TUR_ADI = {tur: ad for ad, tur in _BLOK_TURLERI.items()}
 
@@ -225,19 +363,37 @@ class Belge:
     def __post_init__(self) -> None:
         dipnot_basladi = False
         for sira, blok in enumerate(self.bloklar):
+            onceki = self.bloklar[sira - 1] if sira > 0 else None
+            sonraki = self.bloklar[sira + 1] if sira + 1 < len(self.bloklar) else None
             if isinstance(blok, Dipnot):
                 dipnot_basladi = True
             elif dipnot_basladi:
                 raise ValueError(
                     "Dipnot belgenin sonunda durur; ardından yalnız başka dipnot gelebilir."
                 )
-            if isinstance(blok, KonumCumlesi):
-                sonraki = self.bloklar[sira + 1] if sira + 1 < len(self.bloklar) else None
-                if not isinstance(sonraki, Imza):
-                    raise ValueError(
-                        "Konum cümlesi gövdenin sonunda, imza bloğunun hemen üstünde olmalı "
-                        "(tasarım §9.2)."
-                    )
+            if isinstance(blok, KonumCumlesi) and not isinstance(sonraki, Imza):
+                raise ValueError(
+                    "Konum cümlesi gövdenin sonunda, imza bloğunun hemen üstünde olmalı "
+                    "(tasarım §9.2)."
+                )
+            if isinstance(blok, ResmiYazi) and sira != 0:
+                raise ValueError(
+                    "Resmî yazının başı (sayı, tarih, konu, muhatap) belgenin ilk bloğudur "
+                    "(RYUE md. 11/2)."
+                )
+            if isinstance(blok, Ekler) and not isinstance(onceki, Imza):
+                raise ValueError(
+                    "Ek bölümü imza bölümünden sonra gelir (RYUE md. 18/1); programda imza "
+                    "bloğunun hemen ardındadır."
+                )
+            if isinstance(blok, SayfaSonu) and (
+                onceki is None or sonraki is None or isinstance(onceki, SayfaSonu)
+            ):
+                raise ValueError(
+                    "Sayfa sonu belgenin ilk ya da son bloğu olamaz ve art arda gelmez."
+                )
+        if sum(isinstance(blok, Ekler) for blok in self.bloklar) > 1:
+            raise ValueError("Belgenin tek ek bölümü olur (RYUE md. 18).")
 
 
 # ---------------------------------------------------------------------------
@@ -341,6 +497,8 @@ def _blok_coz(veri: Any) -> Blok:
             sahipler=tuple(ImzaSahibi(**_metin_alanlari(ImzaSahibi, sahip)) for sahip in sahipler),
             tarih=alanlar["tarih"],
         )
+    if tur is Ekler:
+        return Ekler(ekler=_metinler(alanlar["ekler"]))
     blok: Blok = tur(**_metin_alanlari(tur, alanlar))
     return blok
 
@@ -375,11 +533,19 @@ def metin_akisi(belge: Belge) -> list[str]:
 
     Sıra: antet satırları, sonra bloklar belge sırasıyla; tablo başlık ve
     hücreleri satır satır; imzada tarih, sonra her sahibin adı ve görevi; dipnotlar
-    en sonda. Boş metinler akışa girmez.
+    en sonda. Resmî yazının başı ızgaranın hücreleriyle ("Sayı", ":", sayı, tarih, "Konu", ":",
+    konu; `resmi_yazi_izgarasi`), sonra muhatabın satırları; ek bölümü satır satır. Sayfa sonu
+    metin taşımaz. Boş metinler akışa girmez.
     """
     akis = [belge.antet.tc, belge.antet.authority, belge.antet.unit_line, belge.antet.alt_birim]
     for blok in belge.bloklar:
-        if isinstance(blok, Baslik):
+        if isinstance(blok, ResmiYazi):
+            for izgara_satiri in resmi_yazi_izgarasi(blok):
+                akis += list(izgara_satiri)
+            akis += list(muhatap_satirlari(blok))
+        elif isinstance(blok, Ekler):
+            akis += list(ek_satirlari(blok))
+        elif isinstance(blok, Baslik):
             akis += [blok.metin, blok.alt]
         elif isinstance(blok, AltBaslik | Paragraf | KonumCumlesi | Dipnot):
             akis.append(blok.metin)
@@ -434,6 +600,12 @@ def _html_ogesi(blok: Blok, *, ilk: bool) -> dict[str, Any]:
         oge["punto"] = tablo_punto(len(blok.basliklar))
         # CSS'te ondalık ayracı noktadır; şablonun yerel sayı biçimine (virgül) bırakılmaz.
         oge["genislikler"] = [f"{yuzde:.2f}%" for yuzde in sutun_yuzdeleri(blok)]
+    elif isinstance(blok, ResmiYazi):
+        oge["genislikler"] = [f"{yuzde:.2f}%" for yuzde in RYUE_SUTUNLARI]
+        oge["satirlar"] = resmi_yazi_izgarasi(blok)
+        oge["muhatap"] = muhatap_satirlari(blok)
+    elif isinstance(blok, Ekler):
+        oge["satirlar"] = ek_satirlari(blok)
     return oge
 
 
@@ -456,7 +628,18 @@ def docx_ciz(belge: Belge) -> bytes:
         cizici.ortali_satir(d, belge.antet.alt_birim)
 
     for blok in belge.bloklar:
-        if isinstance(blok, Baslik):
+        if isinstance(blok, ResmiYazi):
+            cizici.resmi_yazi_basi(
+                d,
+                satirlar=resmi_yazi_izgarasi(blok),
+                muhatap=muhatap_satirlari(blok),
+                yuzdeler=RYUE_SUTUNLARI,
+            )
+        elif isinstance(blok, Ekler):
+            cizici.ekler(d, ek_satirlari(blok))
+        elif isinstance(blok, SayfaSonu):
+            cizici.sayfa_sonu(d)
+        elif isinstance(blok, Baslik):
             cizici.ortali_satir(d, blok.metin, kalin=True)
             if blok.alt:
                 cizici.ortali_satir(d, blok.alt, punto=10)
@@ -481,6 +664,176 @@ def docx_ciz(belge: Belge) -> bytes:
 
     cizici.altlik_yaz(d, belge.kod)
     return cizici.kaydet(d)
+
+
+def xlsx_ciz(belge: Belge) -> bytes:
+    """Belgenin Excel dosyası (E08 katılım cetveli, E14 yıllık iş takvimi; tasarım §9.5). openpyxl'e
+    yalnız `shared.xlsx` kapısından gidilir; içerik aynı modeldendir (tek içerik).
+
+    Tek çalışma sayfası, A4 dikey, sayfa genişliğine sığdırılır. Sayfanın sütun sayısı belgedeki en
+    geniş tablonun sütun sayısıdır; dar tablonun son sütunu ve paragraflar kalan sütunlara yayılır.
+    Sayfa sonu Excel'in elle sayfa sonudur. Altlık Word ve PDF'tekiyle aynıdır ("OAB Defteri · <kod>
+    · Sayfa n/m"), metin akışına girmez.
+
+    Resmî yazı (`ResmiYazi`) Excel'e çizilmez, `ValueError` verir: sayfanın tek sütun ızgarası
+    tablonundur, RYUE başının sütunları (yan başlık, iki nokta, konu yazı alanının yarısında) onunla
+    birlikte korunamaz. F2'de Excel'i olan E08 ve E14 resmî yazı değildir; resmî yazı Word ve PDF'tir.
+    """
+    from shared import xlsx as cizici
+
+    if any(isinstance(blok, ResmiYazi) for blok in belge.bloklar):
+        raise ValueError(RESMI_YAZI_EXCEL_DISI)
+    tablolar = [blok for blok in belge.bloklar if isinstance(blok, Tablo)]
+    genislik = max([1, *(len(t.basliklar) for t in tablolar)])
+    en_genis = next((t for t in tablolar if len(t.basliklar) == genislik), None)
+    yuzdeler = sutun_yuzdeleri(en_genis) if en_genis is not None else (100.0,) * genislik
+    k = cizici.Kitap(belge.kod, yuzdeler)
+    for satir in (belge.antet.tc, belge.antet.authority, belge.antet.unit_line):
+        if satir:
+            k.ortali_satir(satir, kalin=True)
+    if belge.antet.alt_birim:
+        k.ortali_satir(belge.antet.alt_birim)
+    for blok in belge.bloklar:
+        if isinstance(blok, Ekler):
+            k.bos_satir()
+            for satir in ek_satirlari(blok):
+                k.sola_satir(satir)
+        elif isinstance(blok, SayfaSonu):
+            k.sayfa_sonu()
+        elif isinstance(blok, Baslik):
+            k.ortali_satir(blok.metin, kalin=True)
+            if blok.alt:
+                k.ortali_satir(blok.alt, punto=10)
+        elif isinstance(blok, AltBaslik):
+            k.sola_satir(blok.metin, kalin=True)
+        elif isinstance(blok, Paragraf):
+            k.paragraf(blok.metin)
+        elif isinstance(blok, KonumCumlesi):
+            k.paragraf(blok.metin, punto=cizici.KONUM_PUNTO)
+        elif isinstance(blok, Tablo):
+            k.tablo(blok.basliklar, blok.satirlar, punto=tablo_punto(len(blok.basliklar)))
+        elif isinstance(blok, Imza):
+            k.imza(blok.tarih, [(sahip.ad, sahip.gorev) for sahip in blok.sahipler])
+        elif isinstance(blok, Dipnot):
+            k.paragraf(blok.metin, punto=cizici.DIPNOT_PUNTO)
+    return k.kaydet()
+
+
+# ---------------------------------------------------------------------------
+# Web sayfası (E06'nın internet sayfası; tasarım §9.6 "html tek dosya, dış bağlantısız")
+# ---------------------------------------------------------------------------
+
+#: Web sayfasının biçemi. Dış kaynak YOKTUR: yazı tipi adla istenir (indirilmez), görsel, `url(...)`
+#: ve `@import` yoktur; sayfa tek dosyadır ve çevrimdışı açılır. Harf dönüşümü yoktur (büyük harf
+#: verinin kendisinde). Baskıda sayfa sonu korunur.
+WEB_BICEMI = (
+    "*{box-sizing:border-box}"
+    "body{margin:0;background:#fff;color:#1f2937;"
+    "font-family:'Times New Roman','Liberation Serif',serif;font-size:1rem;line-height:1.45}"
+    "main{max-width:48rem;margin:0 auto;padding:1.5rem 1rem}"
+    ".antet{text-align:center;font-weight:bold;margin-bottom:1rem}"
+    ".antet p{margin:0}.antet .alt-birim{font-weight:normal}"
+    "h1{font-size:1.15rem;text-align:center;margin:1rem 0 .25rem}"
+    ".alt{text-align:center;margin:0 0 .75rem}"
+    "h2{font-size:1rem;margin:1rem 0 .25rem}"
+    "p{margin:.5rem 0}.govde{text-align:justify}"
+    ".tablo{overflow-x:auto}"
+    "table{border-collapse:collapse;width:100%;table-layout:fixed;margin:.5rem 0}"
+    "th,td{border:1px solid #9ca3af;padding:.25rem .4rem;text-align:left;vertical-align:top;"
+    "overflow-wrap:break-word}"
+    "th{background:#f3f4f6}"
+    ".ryue td{border:0;padding:0}.ryue .tarih{text-align:right}"
+    ".ryue .ad{width:3.5em}.ryue .iki-nokta{width:1em}.ryue col.tarih{width:50%}"
+    ".muhatap{text-align:center;margin:1.5rem 0}.muhatap p{margin:0}"
+    ".imza{margin-top:1.5rem}.imza .tarih{text-align:right}"
+    ".sahipler{display:flex;flex-wrap:wrap;justify-content:space-around;gap:1rem}"
+    ".sahip{text-align:center;min-width:9rem}.sahip p{margin:0}.sahip .ad{font-weight:bold}"
+    ".ekler p{margin:0}"
+    ".konum,.dipnot{font-size:.875rem}"
+    ".sayfa-sonu{border:0;border-top:1px dashed #9ca3af;margin:1.5rem 0}"
+    "@media print{.sayfa-sonu{border:0;break-after:page}}"
+)
+
+
+def web_html_ciz(belge: Belge) -> str:
+    """Belgenin tek dosyalık web sayfası (E06; modül başlığı "F2 ekleri").
+
+    Bütün metin `html.escape` ile kaçışlıdır; sayfada bağlantı, betik, görsel ya da başka bir dış
+    kaynak yoktur (`WEB_BICEMI`). WeasyPrint baskı şablonunun yerine geçmez: baskı PDF'i `pdf_ciz`'dir.
+    Gövdenin metni `metin_akisi` ile aynıdır (içerik eşdeğerliği); sayfanın adı (`<title>`) başlıktan
+    gelir ve gövdede değildir. Altlık yoktur.
+    """
+
+    def e(metin: str) -> str:
+        return html.escape(metin, quote=True)
+
+    def p(metin: str, sinif: str = "") -> str:
+        return f'<p class="{sinif}">{e(metin)}</p>' if sinif else f"<p>{e(metin)}</p>"
+
+    antet = belge.antet
+    parcalar = ['<header class="antet">']
+    parcalar += [p(satir) for satir in (antet.tc, antet.authority, antet.unit_line) if satir]
+    if antet.alt_birim:
+        parcalar.append(p(antet.alt_birim, "alt-birim"))
+    parcalar.append("</header>")
+    for blok in belge.bloklar:
+        if isinstance(blok, ResmiYazi):
+            # Ad ve iki nokta sütunu yazı biriminde (dar ekranda "Konu" sığsın); tarih sütunu yarıdır,
+            # konu yarıyı geçmez (md. 13/1).
+            gen = '<col class="ad"><col class="iki-nokta"><col><col class="tarih">'
+            satirlar = "".join(
+                f'<tr><td>{e(ad)}</td><td>{e(iki)}</td><td>{e(deger)}</td><td class="tarih">'
+                f"{e(sag)}</td></tr>"
+                for ad, iki, deger, sag in resmi_yazi_izgarasi(blok)
+            )
+            parcalar.append(f'<table class="ryue"><colgroup>{gen}</colgroup>{satirlar}</table>')
+            satirlar = "".join(p(satir) for satir in muhatap_satirlari(blok))
+            parcalar.append(f'<div class="muhatap">{satirlar}</div>')
+        elif isinstance(blok, Ekler):
+            satirlar = "".join(p(satir) for satir in ek_satirlari(blok))
+            parcalar.append(f'<div class="ekler">{satirlar}</div>')
+        elif isinstance(blok, SayfaSonu):
+            parcalar.append('<hr class="sayfa-sonu">')
+        elif isinstance(blok, Baslik):
+            parcalar.append(f"<h1>{e(blok.metin)}</h1>")
+            if blok.alt:
+                parcalar.append(p(blok.alt, "alt"))
+        elif isinstance(blok, AltBaslik):
+            parcalar.append(f"<h2>{e(blok.metin)}</h2>")
+        elif isinstance(blok, Paragraf):
+            parcalar.append(p(blok.metin, "govde"))
+        elif isinstance(blok, KonumCumlesi):
+            parcalar.append(p(blok.metin, "konum"))
+        elif isinstance(blok, Tablo):
+            gen = "".join(f'<col style="width:{yuzde:.2f}%">' for yuzde in sutun_yuzdeleri(blok))
+            bas = "".join(f"<th>{e(hucre)}</th>" for hucre in blok.basliklar)
+            govde = "".join(
+                "<tr>" + "".join(f"<td>{e(hucre)}</td>" for hucre in satir) + "</tr>"
+                for satir in blok.satirlar
+            )
+            parcalar.append(
+                f'<div class="tablo"><table><colgroup>{gen}</colgroup>'
+                f"<thead><tr>{bas}</tr></thead><tbody>{govde}</tbody></table></div>"
+            )
+        elif isinstance(blok, Imza):
+            sahipler = "".join(
+                f'<div class="sahip">{p(sahip.ad, "ad")}{p(sahip.gorev, "gorev")}</div>'
+                for sahip in blok.sahipler
+            )
+            tarih = p(blok.tarih, "tarih") if blok.tarih else ""
+            parcalar.append(
+                f'<div class="imza">{tarih}<div class="sahipler">{sahipler}</div></div>'
+            )
+        elif isinstance(blok, Dipnot):
+            parcalar.append(p(blok.metin, "dipnot"))
+    baslik = next((b.metin for b in belge.bloklar if isinstance(b, Baslik)), belge.kod)
+    return (
+        '<!DOCTYPE html>\n<html lang="tr">\n<head>\n<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        f"<title>{e(baslik)}</title>\n<style>{WEB_BICEMI}</style>\n</head>\n<body>\n<main>\n"
+        + "\n".join(parcalar)
+        + "\n</main>\n</body>\n</html>\n"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -527,6 +880,69 @@ def ornek_belge() -> Belge:
                     ImzaSahibi(ad_soyad("İsmail", "Deneme"), "Sekreter"),
                 ),
             ),
+            Dipnot(KISISEL_VERI_DIPNOTU),
+        ),
+    )
+
+
+def ornek_resmi_yazi() -> Belge:
+    """Resmî yazı bloğunun ve ek bölümünün örneği (çizici testleri). Adlar UYDURMADIR.
+
+    Okul antedi (RYUE md. 10/3), "Sayı:" ve tarih aynı satırda, konu, iki satırlı muhatap (kullanıcı
+    kararı S11 (a): ilçe millî eğitim müdürlüğüne kaymakamlık üzerinden), metin, "Ad SOYAD" imza ve
+    iki ek.
+    """
+    from shared.letterhead import MEM_ILCE, mem_muhatabi
+
+    muhatap, birim = mem_muhatabi(MEM_ILCE, il="Örnek İl", ilce="Örnek İlçe")
+    return Belge(
+        kod="DUMAN",
+        antet=okul_anteti(okul_adi="Örnek Ortaokulu", ilce="Örnek İlçe"),
+        bloklar=(
+            ResmiYazi(
+                sayi="………",
+                tarih="01.11.2026",
+                konu="Genel Kurulda İbra Edilmeyen Yönetim Kurulu",
+                muhatap=muhatap,
+                birim=birim,
+            ),
+            Paragraf(
+                f"Türkçe örnek: {TURKCE_ORNEK}. Bu yazı evrak hattının resmî yazı bloğunu sınar."
+            ),
+            Paragraf("Bilgilerinizi ve gereğini arz ederim."),
+            Imza(
+                sahipler=(
+                    ImzaSahibi(ad_soyad("ayşe", "örnek"), "Birlik Başkanı"),
+                    ImzaSahibi(ad_soyad("İsmail", "Deneme"), "Okul Müdürü"),
+                ),
+            ),
+            Ekler(("Teslim tutanağı (1 sayfa)", "Genel kurul tutanağı örneği (2 sayfa)")),
+        ),
+    )
+
+
+def ornek_sayfali_belge() -> Belge:
+    """Sayfa sonu bloğunun örneği (sınıf başına sayfa; çizici testleri). Adlar UYDURMADIR."""
+    basliklar = ("Sıra", "Velinin adı ve soyadı", "Öğrencinin sınıfı", "İmza")
+    return Belge(
+        kod="DUMAN",
+        antet=birlik_anteti(okul_adi="Örnek Ortaokulu", ilce="Örnek İlçe"),
+        bloklar=(
+            Baslik("sayfa sonu örneği"),
+            AltBaslik("Sınıf: 5-A"),
+            Tablo(
+                basliklar=basliklar,
+                satirlar=(("1", "Ayşe ÖRNEK", "5-A", ""),),
+                oranlar=(1, 5, 3, 3),
+            ),
+            SayfaSonu(),
+            AltBaslik("Sınıf: 5-B"),
+            Tablo(
+                basliklar=basliklar,
+                satirlar=(("1", "Şükrü DENEME", "5-B", ""),),
+                oranlar=(1, 5, 3, 3),
+            ),
+            Imza(sahipler=(ImzaSahibi(ad_soyad("ayşe", "örnek"), "Divan Başkanı"),)),
             Dipnot(KISISEL_VERI_DIPNOTU),
         ),
     )

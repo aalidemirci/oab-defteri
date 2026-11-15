@@ -1842,3 +1842,78 @@ def test_e01_aylik_bildirim_md_18_5_lafziyla() -> None:
     assert f"(5) {gorev_evraki.AYLIK_BILDIRIM_DEGERI}" in korpus
     for konu in ("elde edilen gelirler", "alınan bağışlar", "yönetim kurulu kararlarıyla"):
         assert konu in gorev_evraki.AYLIK_BILDIRIM_DEGERI
+
+
+# ============================================================ veli adlı belge (F2 8. adım; R9, U15)
+
+
+def _adli_metin(icerik: bytes, bicim: str) -> str:
+    """Verilen dosyanın metni (adların gerçekten dosyada olduğunu görmek için)."""
+    from shared import xlsx
+
+    if bicim == "PDF":
+        return " ".join(s.extract_text() or "" for s in PdfReader(io.BytesIO(icerik)).pages)
+    if bicim == "DOCX":
+        return " ".join(cizici_.govde_metin_akisi(cizici_.ac(icerik)))
+    return " ".join(xlsx.metin_akisi(icerik))
+
+
+@pytest.mark.parametrize("kod", ["E07", "E08"])
+def test_veli_adli_belge_saklanmaz(kod: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Plan F2 §2 kapısı ve §7 U15 (tasarım §5.2.8, §9.6 E07-E08; R9). İSKELET: içerik 9. adımın
+    kurucusundan gelir, burada deneme kurucusuyla (`genel_kurul_evraki_ortak.adli_kurucu`).
+
+    Veli adlı kip yalnız program yöneticisinin tek isteğinde üretilir ve verilir: dosya hiçbir yerde
+    saklanmaz (dosya deposunda eki yok), içerik JSON'u saklanmaz (yalnız özet, satır sayısı ve tarih),
+    yeniden basılmaz; aynı işlemde `BASIM` satırı (kod ve dosyanın sha256'sı) ve erişim günlüğünün
+    `VELI_LISTESI_CIKTISI` satırı (dosyanın sha256'sı ve satır sayısı) yazılır; iz ve günlük veli adı
+    taşımaz. Her biçimde (E07: Word, PDF; E08: ayrıca Excel). Arşiv paketine girmemesi F4'te
+    (arşiv paketiyle) sınanır."""
+    from apps.oab.hatalar import EvrakIcerigiSaklanmaz
+    from apps.oab.services import genel_kurul_evraki as gke
+    from apps.oab.tests import genel_kurul_evraki_ortak as gke_ortak
+    from apps.oab.tests import genel_kurul_ortak as gko
+    from apps.okul.models import AccessKind, Attachment
+
+    gke_ortak.kuruculari_kur(monkeypatch)
+    kurul = gko.ilanli_olagan()
+    for bicim in gke.ADLI_BICIMLER[kod]:
+        son = _son_seq()
+        cikti = gke.adli_uret_ve_ver(kod, kurul, bicim=bicim)
+        ozet = hashlib.sha256(cikti.icerik).hexdigest()
+        metin = "".join(_adli_metin(cikti.icerik, bicim).split())
+        assert all("".join(veli.split()) in metin for veli, _ in gke_ortak.VELILER), bicim
+
+        kayit = GeneratedDocument.objects.get(pk=cikti.kayit.pk)
+        assert (kayit.doc_type, kayit.variant, kayit.personal_list) == (kod, "ADLI", True)
+        assert (kayit.content_json, kayit.row_count) == ("", len(gke_ortak.VELILER))
+        assert kayit.formats == [bicim] and kayit.status == DocumentStatus.GECERLI
+        assert not Attachment.objects.filter(
+            owner_type="oab.GeneratedDocument", owner_id=str(kayit.pk)
+        ).exists()
+        with pytest.raises(EvrakIcerigiSaklanmaz):
+            evrak_servisi.yeniden_ciz(kayit)
+
+        yeni = list(AuditTrail.objects.filter(seq__gt=son).order_by("seq"))
+        basim = [s for s in yeni if s.action == AuditAction.BASIM]
+        assert len(basim) == 1
+        assert basim[0].values == {"kod": [None, kod], "sha256": [None, ozet]}
+        assert (basim[0].model, basim[0].object_id) == ("oab.GeneralAssembly", str(kurul.pk))
+        gunluk = AccessLog.objects.order_by("-pk").first()
+        assert gunluk is not None
+        assert (gunluk.kind, gunluk.document_sha256, gunluk.row_count) == (
+            AccessKind.VELI_LISTESI_CIKTISI,
+            ozet,
+            len(gke_ortak.VELILER),
+        )
+        assert (gunluk.model, gunluk.object_id) == ("oab.GeneralAssembly", str(kurul.pk))
+        izler = "".join(f"{s.values}{s.changed_fields}{s.object_id}" for s in yeni)
+        for veli, _ in gke_ortak.VELILER:
+            for parca in veli.split():
+                assert parca not in izler, parca
+    # Her basım yeni sürümdür; öncekinin yerini alır, silinmez.
+    assert GeneratedDocument.objects.filter(doc_type=kod).count() == len(gke.ADLI_BICIMLER[kod])
+    assert AccessLog.objects.filter(kind="VELI_LISTESI_CIKTISI").count() == len(
+        gke.ADLI_BICIMLER[kod]
+    )
+    assert denetim_izi.zinciri_dogrula() == []

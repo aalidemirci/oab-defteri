@@ -10,7 +10,8 @@ yükleme) ayrıca gerçek çağrıyla sınanır: rol kapısının ardından serv
 savunma). ⁵ gerçek serviste de sınanır: Denetleme Kurulunun geri yükleme kartındaki "Gördüm"ü
 (`test_dipnot_bes_gercek_serviste_yalniz_denetleme_kurulu`; plan F1b-2 kullanıcı kararı). F2 7. adımdan
 beri ¹ (müdürün kendi yazıları, sahiplik) ve ⁷ (gelen-giden evrak; müdür yazısının programca kaydı)
-de gerçek serviste sınanır (dosyanın sonu; uydurma veriyle).
+de gerçek serviste sınanır (dosyanın sonu; uydurma veriyle). F2 8. adımdan beri ¹⁰ de gerçek
+serviste sınanır: veli adlı E07 ve E08 çıktısı (`genel_kurul_evraki.adli_uret_ve_ver`).
 """
 
 from __future__ import annotations
@@ -622,3 +623,39 @@ def test_dipnot_yedi_gercek_serviste_mudur_yazmaz_yazisi_programca_islenir() -> 
         yazi, b"%PDF-1.7 uydurma", dosya_adi="mudur-yazisi.pdf"
     )
     assert list(yazi.ekler()) == [ek]
+
+
+# ============================================================ ¹⁰ gerçek serviste (F2 8. adım)
+
+
+@pytest.mark.django_db
+def test_dipnot_on_gercek_serviste_adli_cikti_yalniz_program_yoneticisi(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tasarım §4.4.2 ¹⁰ (R9; plan F2 §6.2, §7 U14-U15): veli adı taşıyan çıktı — adlı E07 teslim
+    çizelgesi ve adlı E08 katılım cetveli — yalnız program yöneticisinin hesabından verilir
+    (`Eylem.KISISEL_VERI_CIKTISI`; `genel_kurul_evraki.adli_uret_ve_ver`). Öteki her rol, kişisiz
+    kipi üretebilen sekreter dahil, `RolYetkisiz` alır; ne evrak kaydı ne iz satırı ne erişim günlüğü
+    satırı yazılır. İçerik 9. adımda; burada deneme kurucusuyla (`genel_kurul_evraki_ortak`)."""
+    from apps.oab.models import DocumentFormat, GeneratedDocument
+    from apps.oab.services import genel_kurul_evraki
+    from apps.oab.tests import genel_kurul_evraki_ortak
+    from apps.okul.models import AccessLog
+
+    genel_kurul_evraki_ortak.kuruculari_kur(monkeypatch)
+    kurul = gko.ilanli_olagan()
+    once = (AuditTrail.objects.exclude(action="HESAP").count(), AccessLog.objects.count())
+    for rol in sorted(set(ROLLER) - {"yonetici"}):
+        with o.rol_olarak(AccountRole(rol)):
+            for kod in genel_kurul_evraki.ADLI_KODLAR:
+                with pytest.raises(RolYetkisiz):
+                    genel_kurul_evraki.adli_uret_ve_ver(kod, kurul, bicim=DocumentFormat.PDF)
+    assert not GeneratedDocument.objects.exists()
+    assert (AuditTrail.objects.exclude(action="HESAP").count(), AccessLog.objects.count()) == once
+
+    with o.rol_olarak(AccountRole.YONETICI):
+        for kod in genel_kurul_evraki.ADLI_KODLAR:
+            cikti = genel_kurul_evraki.adli_uret_ve_ver(kod, kurul, bicim=DocumentFormat.PDF)
+            assert cikti.kayit.personal_list and cikti.icerik.startswith(b"%PDF")
+    assert AccessLog.objects.count() == once[1] + len(genel_kurul_evraki.ADLI_KODLAR)
+    assert {a.role for a in AccessLog.objects.all()} == {"yonetici"}
