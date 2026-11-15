@@ -163,11 +163,12 @@ def test_her_dipnotun_eylemi_var_ve_kume_kapali() -> None:
     }
     for eylem in dipnotsuz:
         assert _gecen_roller(eylem) == {"yonetici"}, eylem
-    # Dipnotlu eylemlerden bugün DK'nin "Gördüm"ü (⁵, F1b-2 (c)) ve görev bölümü (⁵, F1c 6. adım)
-    # servise bağlıdır.
+    # Dipnotlu eylemlerden bugün DK'nin "Gördüm"ü (⁵, F1b-2 (c)), görev bölümü (⁵, F1c 6. adım) ve
+    # genel kurul yazma kapısı (¹, F2 4. adım) servise bağlıdır.
     assert set(BAGLANMAMIS_EYLEMLER) == set(Eylem) - dipnotsuz - {
         Eylem.GERI_YUKLEME_GORDUM,
         Eylem.DK_GOREV_BOLUMU_YAZMA,
+        Eylem.GENEL_KURUL_YAZMA,
     }
 
 

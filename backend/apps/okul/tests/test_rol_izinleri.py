@@ -570,7 +570,6 @@ def test_bekleyen_dipnotlar_anlik_goruntusu() -> None:
     """Gerçek servisi olmayan dipnotlar, fazlarıyla (yalnız küçülebilir). Her dipnot (1-10) ya
     bağlı bir eylemle gerçek serviste sınanır ya da burada bekler; ikisi birden olamaz."""
     assert dict(BEKLEYEN_DIPNOTLAR) == {
-        1: "F2",
         2: "F3",
         3: "F4",
         4: "F4",
@@ -722,6 +721,8 @@ def test_eylem_baglama_anlik_goruntusu() -> None:
         Eylem.KURAL_SURUMU_SECIMI,
         Eylem.GERI_YUKLEME_GORDUM,
         Eylem.DK_GOREV_BOLUMU_YAZMA,
+        # F2 4. adım: genel kurulun durum makinesi (`genel_kurul` servisi; dipnot ¹).
+        Eylem.GENEL_KURUL_YAZMA,
     }
 
 

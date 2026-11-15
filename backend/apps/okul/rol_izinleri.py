@@ -822,7 +822,9 @@ BEKLEYEN_HUCRELER: Final[Mapping[tuple[Satir, str], str]] = {
 #: Gerçek servisi henüz olmayan dipnotlar → faz. Dipnotun kapı testi bugünden vardır
 #: (`test_yetki_kapisi.py`, sahte kayıtla); gerçek servis gelince satır silinir.
 BEKLEYEN_DIPNOTLAR: Final[Mapping[int, str]] = {
-    1: "F2",
+    # 1: bağlı — genel kurul yazma kapısı (`Eylem.GENEL_KURUL_YAZMA`, `genel_kurul` servisi; F2 4.
+    # adım). Dipnotun müdür kolu (yeni okul daveti, olağanüstü çağrı; sahiplik) 7. adımdadır
+    # (`BAGLANMAMIS_EYLEMLER`).
     2: "F3",
     3: "F4",
     4: "F4",
@@ -1184,9 +1186,9 @@ EYLEM_KURALLARI: Final[Mapping[Eylem, EylemKurali]] = {
 #: Gerçek servise henüz bağlanmamış eylemler → faz (yalnız küçülebilir; test kaynakta
 #: `Eylem.<AD>` çağrısını arar). Bağlı olanlar: hesap yönetimi, kurtarma anahtarı, geri
 #: yükleme, şifreli yedeğin kaydedilmesi, boşta süre yazımı, birlik dönemi, kural sürümü seçimi,
-#: geri yükleme kartının "Gördüm"ü (⁵) ve DK görev bölümü (⁵; F1c 6. adım).
+#: geri yükleme kartının "Gördüm"ü (⁵), DK görev bölümü (⁵; F1c 6. adım) ve genel kurul yazma
+#: kapısı (¹; F2 4. adım, `genel_kurul` servisi).
 BAGLANMAMIS_EYLEMLER: Final[Mapping[Eylem, str]] = {
-    Eylem.GENEL_KURUL_YAZMA: "F2",
     Eylem.GENEL_KURUL_YENI_OKUL_DAVETI: "F2",
     Eylem.OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR: "F2",
     Eylem.MALI_KAYIT: "F3",

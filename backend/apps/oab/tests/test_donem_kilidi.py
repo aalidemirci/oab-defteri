@@ -668,6 +668,16 @@ YAZMA_SERVISLERI = frozenset(
         "uyum.bilinmeyen_beyan_sapmasi",
         "uyum.duzeltme_kaydi",
         "uyelikler.sayaci_yeniden_denetle",
+        # F2 4. adım: genel kurulun durum makinesi (tasarım §7.1).
+        "genel_kurul.planla",
+        "genel_kurul.toplanti_bilgisini_degistir",
+        "genel_kurul.cagir",
+        "genel_kurul.ilan_et",
+        "genel_kurul.ikinci_toplanti_ilani",
+        "genel_kurul.ilan_kanitlarini_yaz",
+        "genel_kurul.birinci_toplanti",
+        "genel_kurul.ikinci_toplanti",
+        "genel_kurul.iptal_et",
     }
 )
 #: `@transaction.atomic` taşıyıp kural okumayan servisler ve gerekçesi.
@@ -715,6 +725,11 @@ KURALSIZ = {
     "gecis.karar_defterini_iptal_et": _GECIS_KURALSIZ,
     "gecis.gecisi_tamamla": _GECIS_KURALSIZ,
     "uyum.acik_satiri_kapat": "Yalnız açık satırı kapatır: kural okumaz; dönem kilidi yine denetlenir.",
+    # F2 4. adım: iptal edilen genel kurulun açık eksikleri kapanır (O3; kural okumaz).
+    "uyum.iptalde_eksikleri_kapat": (
+        "Yalnız iptal edilen kaydın açık eksiklerini kapatır: kural okumaz; dönem kilidi yine "
+        "denetlenir."
+    ),
     "donemler.toplanti_gunu_yaz": (
         "Yönetim kurulunun aylık toplantı günü serbest metindir, kural okumaz (md. 13/3 yalnız 'ayda "
         "bir' der; F1c 11. adım); dönem kilidi yine denetlenir."

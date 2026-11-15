@@ -5,7 +5,8 @@ F1c kararları; denetim UY-10): genel kurul bağı boşken (dönem, organ, kişi
 (dönem, organ, kişi, genel kurul). SQLite tekil dizinde NULL'ları ayrı saydığından tek kısıt genel
 kurul dışı seçimlerde etkisiz kalırdı. Geçiş kurulumunda görevdeki kurul `DEVRALINAN` üyelikle aday
 şartı olmadan seçilmiş açılır (§7.9); toplu sayaç beyanı geçiş kurulumunun adımıdır (8. adım).
-Bir kişi aynı dönemde aynı kurulda tek koltuk tutar (kullanıcı kararı 10.11.2026; dosyanın sonu).
+Bir kişi aynı dönemde aynı kurulda tek koltuk tutar (kullanıcı kararı 10.11.2026). F2 4. adımdan
+beri genel kurulun hazırlık dönemi senaryoları (dosyanın sonu).
 Kişi adları UYDURMADIR.
 """
 
@@ -18,19 +19,28 @@ from django.db import IntegrityError, transaction
 
 from apps.oab.hatalar import GecisKapali, GerekceGerekli, KuralSert
 from apps.oab.models import (
+    AssemblyKind,
+    AssemblyStatus,
     ComplianceItem,
     ComplianceJustification,
     ComplianceKind,
     DropKind,
     ElectedBy,
+    GeneralAssembly,
     MembershipSource,
     MembershipStatus,
+    OabTerm,
     OrganMembership,
     Representation,
     SeatGroup,
+    TermStatus,
 )
-from apps.oab.services import gecis, kisiler, uyelikler
+from apps.oab.services import donem_kilidi, gecis, genel_kurul, kisiler, uyelikler
+from apps.oab.tests import genel_kurul_ortak as gko
 from apps.oab.tests import uyelik_ortak as o
+from apps.oab.tests.kurallar import paket_ortak
+from apps.okul.models import AccountRole, AuditTrail
+from shared.exceptions import RolYetkisiz
 
 pytestmark = pytest.mark.django_db
 
@@ -296,3 +306,71 @@ def test_gecis_toplu_sayac_beyani_tek_gerekce() -> None:
     )
     assert satir(ub).resolved_at is not None
     assert ComplianceJustification.objects.filter(rule_id=SAYAC).count() == 1
+
+
+# ---------------------------------------------------------------------------
+# F2 4. adım: hazırlık dönemi (tasarım §5.2.1, §7.1, §7.8; plan F2 §5.2, §7 U2-U5)
+# ---------------------------------------------------------------------------
+def test_hazirlik_donemi_gk_planlaninca_acilir() -> None:
+    """Olağan genel kurul planlanınca yeni birlik dönemi `HAZIRLIK` açılır: aynı işlemde genel kurula
+    bağlanır (U3; geçiş dönemi sanılmaz), en yeni revizyona bağlanır (U2), ders yılı birinci toplantı
+    gününü içeren yıldır (U5), başlangıç günü boştur. Kapanacak dönem açık kalır. Olağanüstü genel
+    kurul dönem açmaz (md. 13/8)."""
+    acik = gko.acik_donem()
+    kurul = gko.planla()
+    hazirlik = OabTerm.objects.select_related("rule_package", "school_year").get(
+        status=TermStatus.HAZIRLIK
+    )
+    assert kurul.term_id == acik.pk
+    assert kurul.opens_term_id == hazirlik.pk
+    assert hazirlik.opened_by_assembly_id == kurul.pk
+    assert (hazirlik.rule_package.package, hazirlik.rule_package.rev) == (
+        paket_ortak.PAKET,
+        paket_ortak.EN_YENI_REV,
+    )
+    assert hazirlik.school_year.name == "2026-2027"
+    assert (hazirlik.start_date, hazirlik.end_date) == (None, None)
+    assert hazirlik.name == "2026-2027 birlik dönemi"
+    assert not donem_kilidi.gecis_donemi_mi(hazirlik)
+    assert gecis.gecis_donemi() == acik
+    assert OabTerm.objects.get(pk=acik.pk).status == TermStatus.ACIK
+    assert AuditTrail.objects.filter(model="oab.OabTerm", object_id=str(hazirlik.pk)).exists()
+
+    olaganustu = gko.planla(kind=AssemblyKind.OLAGANUSTU)
+    assert olaganustu.opens_term_id is None
+    assert OabTerm.objects.filter(status=TermStatus.HAZIRLIK).count() == 1
+    # Aynı anda tek olağan genel kurul hazırlanır (tek hazırlık dönemi).
+    with pytest.raises(ValueError, match="Hazırlıkta bir birlik dönemi var"):
+        gko.planla()
+
+
+def test_gk_iptalinde_hazirlik_donemi_iptal() -> None:
+    """Genel kurul `IPTAL` olursa hazırlık dönemi de `IPTAL` olur (tasarım §7.1, sert); gerekçe zorunlu
+    ve şifrelidir, iptali yalnız program yöneticisi yapar. İlan ve dondurulmuş yeter sayı iz olarak
+    kalır; iptal edilmiş kurulun yeter sayısı dondurulmaz (U7). Sonra yeni genel kurul planlanabilir."""
+    acik = gko.acik_donem()
+    kurul = gko.planla()
+    with pytest.raises(ValueError, match="İptal gerekçesi"):
+        genel_kurul.iptal_et(kurul, cancel_reason="  ")
+    with o.rol_olarak(AccountRole.SEKRETER), pytest.raises(RolYetkisiz):
+        genel_kurul.iptal_et(kurul, cancel_reason="Uydurma: tarih yanlış.")
+    iptal = genel_kurul.iptal_et(kurul, cancel_reason="Uydurma: tarih yanlış.")
+    assert iptal.status == AssemblyStatus.IPTAL
+    assert GeneralAssembly.objects.get(pk=kurul.pk).cancel_reason == "Uydurma: tarih yanlış."
+    hazirlik = OabTerm.objects.get(opened_by_assembly=kurul)
+    assert hazirlik.status == TermStatus.IPTAL
+    assert OabTerm.objects.get(pk=acik.pk).status == TermStatus.ACIK
+    with pytest.raises(ValueError, match="İptal edilmiş genel kurulun yeter sayısı"):
+        genel_kurul.yeter_sayiyi_dondur(kurul, tarih=gko.BIRINCI_GUN)
+    with pytest.raises(ValueError, match="bu durumdayken"):
+        genel_kurul.iptal_et(kurul, cancel_reason="Uydurma: ikinci kez.")
+
+    yeni = gko.planla()
+    assert OabTerm.objects.get(status=TermStatus.HAZIRLIK).pk == yeni.opens_term_id
+    # İlandan sonra da iptal edilir; dondurulmuş yeter sayı kalır.
+    gko.olagan_cagir(yeni)
+    genel_kurul.ilan_et(yeni, kanallar=gko.kanallar())
+    genel_kurul.iptal_et(yeni, cancel_reason="Uydurma: salon kullanılamadı.")
+    sonra = GeneralAssembly.objects.get(pk=yeni.pk)
+    assert (sonra.status, sonra.quorum_required) == (AssemblyStatus.IPTAL, 64)
+    assert not OabTerm.objects.filter(status=TermStatus.HAZIRLIK).exists()

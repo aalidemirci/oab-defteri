@@ -30,7 +30,7 @@ okuması (`views.OrganRosterView`, F1c 11. adım) üyeliklerin uyum satırların
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Final
@@ -226,12 +226,20 @@ def denetle(
     gerekce: Gerekce | None = None,
     fiili_kayit: bool = False,
     hazirlik_yazimi: bool = False,
+    ek_ileti: str = "",
 ) -> UyumSonucu:
-    """Kaydın kurala uyumunu denetler, sonuca göre uyum satırını yazar (modül başlığı)."""
+    """Kaydın kurala uyumunu denetler, sonuca göre uyum satırını yazar (modül başlığı).
+
+    `ek_ileti`: uyarı ya da sert sonucun iletisine eklenen kullanıcı kararı atfı (tasarım §6.1
+    "kullanıcı kararı atıfla görünür"; ör. olağanüstü genel kurulda ikinci toplantı kurallarının A-1
+    atfı, plan F2 §7 U10). Paket değişmez; ek, satırın iletisine ve gerekçe isteğine girer.
+    """
     yazma_kapisi()
     donem = OabTerm.objects.select_related("rule_package").get(pk=donem.pk)
     donem_kilidi.yazma_denetimi(donem, hazirlik_yazimi=hazirlik_yazimi)
     sonuc = paket_denetle(kural_id, gozlenen, tarih=tarih, donem=donem, okul=okul, olaylar=olaylar)
+    if ek_ileti and sonuc["durum"] in ("uyari", "sert"):
+        sonuc = DenetimSonucu(**{**sonuc, "mesaj": f"{sonuc['mesaj'].rstrip()} {ek_ileti}"})
     durum = sonuc["durum"]
     acik = _acik_satir(donem, konu, kural_id)
     if durum == "denetlenmedi":
@@ -416,6 +424,36 @@ def acik_satiri_kapat(kural_id: str, *, donem: OabTerm, konu: models.Model) -> b
         return False
     _kapat(acik)
     return True
+
+
+@transaction.atomic
+def iptalde_eksikleri_kapat(
+    donem: OabTerm, konular: Sequence[models.Model], *, hazirlik_yazimi: bool = False
+) -> list[ComplianceItem]:
+    """İptal edilen kaydın (ve ona bağlı kayıtların) açık `EKSIK` satırlarını kapatır.
+
+    O3'te eksik, sonradan girilecek veridir; iptal edilen kayıtta bu veri hiç girilmeyecek, satır açık
+    kalırsa dönemin tamamlanacaklar listesinde kalıcı olur ve dönem kapanışında (`kapanis_gecisi`)
+    gerçekleşmeyecek iş için gerekçe ister. Satır silinmez: `resolved_at` alır, kapanışı iz satırına
+    düşer (altın kural 4). Gerekçesi alınmış `SAPMA` satırlarına dokunulmaz. F1c emsali: karar
+    defterinin iptalinde tasdik satırı, devralınan üyeliğin iptalinde sayaç satırları kapanır.
+    Kapanan satırlar döner.
+    """
+    guncel = OabTerm.objects.select_related("rule_package").get(pk=donem.pk)
+    donem_kilidi.yazma_denetimi(guncel, hazirlik_yazimi=hazirlik_yazimi)
+    kapananlar: list[ComplianceItem] = []
+    for konu in konular:
+        satirlar = ComplianceItem.objects.filter(
+            term=guncel,
+            kind=ComplianceKind.EKSIK,
+            resolved_at__isnull=True,
+            subject_type=denetim_izi.model_etiketi(type(konu)),
+            subject_id=denetim_izi.kimlik_metni(type(konu), konu.pk),
+        ).order_by("pk")
+        for satir in satirlar:
+            _kapat(satir)
+            kapananlar.append(satir)
+    return kapananlar
 
 
 @transaction.atomic
