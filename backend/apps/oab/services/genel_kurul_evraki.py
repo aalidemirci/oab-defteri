@@ -169,7 +169,7 @@ from apps.oab.models import (
     SeatType,
 )
 from apps.oab.services import evrak as evrak_servisi
-from apps.oab.services import genel_kurul, uyelikler
+from apps.oab.services import gelen_giden_evrak, genel_kurul, uyelikler, uyum
 from apps.oab.services.gorev_evraki import (
     BOS,
     KONU_BILGI,
@@ -200,7 +200,7 @@ from apps.okul.services import app_password, dosya_deposu
 from shared import evrak
 from shared.crypto import is_corrupt
 from shared.exceptions import RolYetkisiz
-from shared.letterhead import MEM_ILCE, mem_muhatabi
+from shared.letterhead import MEM_IL, MEM_ILCE, mem_muhatabi
 
 logger = logging.getLogger(__name__)
 
@@ -1651,10 +1651,21 @@ IS_BANKA: Final = "Bankaya müşterek imza yetkililerinin (başkan ve muhasip) b
 IS_TEFBIS: Final = (
     "TEFBİS'e yeni yönetimin, banka hesap bilgilerinin ve tahmini bütçenin girişi (okul idaresi)"
 )
-IS_MEM_YAZISI: Final = (
-    "Hesaplar ibra edilmediği için il/ilçe millî eğitim müdürlüğüne resmî yazı (yeni yönetim kurulu "
-    "ve okul yönetimi)"
-)
+#: İl/ilçe millî eğitim müdürlüğüne yazının işi (md. 11/1-ç), yönetim kurulunun seçilip seçilmediğine
+#: göre (`genel_kurul.secilen_kurullar`; teslim alanlarla aynı kaynak): seçimsiz olağanüstü genel kurulda
+#: yeni yönetim kurulu yoktur, yazıyı görevdeki yönetim kurulu ve okul yönetimi yazar.
+IS_MEM_YAZILARI: Final[Mapping[bool, str]] = {
+    True: (
+        "Hesaplar ibra edilmediği için il/ilçe millî eğitim müdürlüğüne resmî yazı (yeni yönetim "
+        "kurulu ve okul yönetimi)"
+    ),
+    False: (
+        "Hesaplar ibra edilmediği için il/ilçe millî eğitim müdürlüğüne resmî yazı (görevdeki "
+        "yönetim kurulu ve okul yönetimi)"
+    ),
+}
+#: Yönetim kurulunu seçen genel kurulun satırı (geriye dönük ad).
+IS_MEM_YAZISI: Final = IS_MEM_YAZILARI[True]
 SON_GUN_DEGERI: Final = "en geç {gun}"
 GOREV_BOLUMUNDEN_SONRA: Final = "Yönetim kurulunun görev bölümünden sonra"
 GENEL_KURULDAN_SONRA: Final = "Genel kuruldan sonra"
@@ -1838,21 +1849,13 @@ def _yeni_gorevli(kurul: GeneralAssembly, role: str) -> OrganMembership | None:
 
 def _gundem_turleri(kurul: GeneralAssembly) -> set[str]:
     """Gündemde kalan maddelerin türleri (oylamayla çıkarılan madde sayılmaz; md. 9/4)."""
-    return {
-        str(tur)
-        for tur in AgendaItem.objects.filter(assembly=kurul, removed_by_vote=False).values_list(
-            "kind", flat=True
-        )
-    }
+    return genel_kurul.gundem_turleri(kurul)
 
 
 def _secilen_kurullar(kurul: GeneralAssembly, turler: set[str]) -> tuple[bool, bool]:
-    """Bu genel kurul yönetim kurulunu ve Denetleme Kurulunu (veli koltuğu) seçer mi: gündemde kalan
-    seçim maddesi; olağanüstü genel kurul Denetleme Kuruluna seçim yapmaz (kullanıcı kararı S10 (a))."""
-    return (
-        AgendaItemKind.SECIM_YK in turler,
-        AgendaItemKind.SECIM_DK in turler and kurul.kind == AssemblyKind.OLAGAN,
-    )
+    """Bu genel kurul yönetim kurulunu ve Denetleme Kurulunu (veli koltuğu) seçer mi (tek kaynak:
+    `genel_kurul.secilen_kurullar`; olağanüstü genel kurul Denetleme Kuruluna seçim yapmaz, S10 (a))."""
+    return genel_kurul.secilen_kurullar(kurul, turler)
 
 
 def _teslim_alan(kurul: GeneralAssembly) -> str:
@@ -2502,7 +2505,8 @@ def _sonraki_isler(
         satirlar.append((IS_BANKA, GOREV_BOLUMUNDEN_SONRA, DAYANAK_BANKA))
     satirlar.append((IS_TEFBIS, GENEL_KURULDAN_SONRA, DAYANAK_TEFBIS))
     if kurul.discharge_yk == Discharge.EDILMEDI:
-        satirlar.append((IS_MEM_YAZISI, GENEL_KURULDAN_SONRA, DAYANAK_MEM_YAZISI))
+        yeni_yk = _secilen_kurullar(kurul, turler)[0]
+        satirlar.append((IS_MEM_YAZILARI[yeni_yk], GENEL_KURULDAN_SONRA, DAYANAK_MEM_YAZISI))
     return tuple(satirlar)
 
 
@@ -3103,3 +3107,172 @@ def bicim_coz(metin: str, bicimler: Mapping[str, str] = UZANTILAR) -> str:
         if metin == uzanti:
             return bicim
     raise Http404
+
+
+# ---------------------------------------------------------------------------
+# Uçların okumaları (plan F2 11. adım: katalog, muhatap önerisi, yıllık iş takvimi, E12'nin evrak kaydı)
+# ---------------------------------------------------------------------------
+#: E04 üretilmez: dört alt metnin kullanıcı onayı beklenir (plan F2 §9 S8 (i), 10. adımın notu).
+URETILEMEZ_NEDENLERI: Final[dict[str, str]] = {
+    E04: "Kişisel veri aydınlatma metninin dört alt metni onay bekliyor; belge bu sürümde üretilmez.",
+}
+#: Belgenin konusu (katalog; modül başlığı "Konu ve dönem").
+KONU_GENEL_KURUL: Final = "genel_kurul"
+KONU_DONEM: Final = "donem"
+KONU_OKUL: Final = "okul"
+#: E12'nin muhatap seçenekleri (plan F2 §7 U20, kullanıcı kararı S11 (a); varsayılan ilçe).
+MUHATAP_BIRIMLERI: Final[dict[str, str]] = {"ILCE": MEM_ILCE, "IL": MEM_IL}
+VARSAYILAN_MUHATAP: Final = "ILCE"
+MUHATAP_SECIMI_GECERSIZ: Final = "Muhatap il ya da ilçe millî eğitim müdürlüğü olmalıdır."
+
+
+def katalog() -> list[dict[str, object]]:
+    """Genel kurul evrakının kataloğu (tasarım §9.5): kod, ad, konu, biçimler, kip ve toplantı
+    seçenekleri, üreten roller ve üretilebilirlik. Kurucusu olmayan kod (E04) katalogda durur ama
+    üretilmez; nedeni yanındadır. Kişisizdir, yazmaz."""
+    satirlar: list[dict[str, object]] = []
+    for kod in KODLAR:
+        tur = _konu_turu(kod)
+        konu = (
+            KONU_GENEL_KURUL
+            if tur is GeneralAssembly
+            else KONU_DONEM
+            if tur is OabTerm
+            else KONU_OKUL
+        )
+        uretilebilir = kod in KURUCULAR
+        satirlar.append(
+            {
+                "kod": kod,
+                "ad": BELGE_ADLARI[kod],
+                "konu": konu,
+                "bicimler": list(BICIMLER[kod]),
+                "kipler": [DocumentVariant.KISISIZ, DocumentVariant.ADLI]
+                if kod in KIPLI_KODLAR
+                else [],
+                "adli_bicimler": list(ADLI_BICIMLER.get(kod, ())),
+                "toplantili": kod in TOPLANTILI_KODLAR,
+                "muhatapli": kod in MUHATAPLI_KODLAR,
+                "ureten_roller": sorted(URETEN_ROLLER[kod]),
+                "okuma_satiri": OKUMA_SATIRLARI[kod].value,
+                "uretilebilir": uretilebilir,
+                "uretilemez_nedeni": ""
+                if uretilebilir
+                else URETILEMEZ_NEDENLERI.get(kod, KOD_GECERSIZ),
+            }
+        )
+    return satirlar
+
+
+def muhatap_onerileri() -> dict[str, dict[str, str]]:
+    """E12'nin muhatap önerileri (il ve ilçe millî eğitim müdürlüğü; okul kartından). Basımda
+    düzenlenir; varsayılan ilçedir."""
+    okul = SchoolConfig.load()
+    sonuc: dict[str, dict[str, str]] = {}
+    for anahtar, birim in MUHATAP_BIRIMLERI.items():
+        idare, alt = mem_muhatabi(birim, il=okul.province, ilce=okul.district)
+        sonuc[anahtar] = {"idare": idare, "birim": alt}
+    return sonuc
+
+
+def muhatap_sec(anahtar: str) -> Muhatap:
+    """Seçilen il ya da ilçe millî eğitim müdürlüğünün önerilen muhatabı."""
+    if anahtar not in MUHATAP_BIRIMLERI:
+        raise ValueError(MUHATAP_SECIMI_GECERSIZ)
+    oneri = muhatap_onerileri()[anahtar]
+    return Muhatap(idare=oneri["idare"], birim=oneri["birim"])
+
+
+def yillik_is_takvimi(donem: OabTerm) -> dict[str, object]:
+    """Yıllık iş takviminin verisi (Genel Bakış → Yıllık İş Takvimi; M9: her rol okur): E14'ün iki
+    bölümünün satırları ve basım uyarıları, aynı kaynaktan (`_kural_satirlari`, `_plan_satirlari`).
+    Kişisizdir, okuma yazmaz; hazırlıktaki dönemin de takvimi okunur (basımı yazılmaz)."""
+    guncel = OabTerm.objects.select_related("rule_package", "school_year").get(pk=donem.pk)
+    uyarilar = _Uyarilar()
+    kural_satirlari = [
+        {"tarih": tarih, "is": is_, "kural": kural_id, "atif": atif}
+        for tarih, is_, kural_id, atif in _kural_satirlari(guncel, uyarilar)
+    ]
+    plan_satirlari = [
+        {"tarih": tarih, "is": is_, "kaynak": kaynak}
+        for tarih, is_, kaynak in _plan_satirlari(guncel, uyarilar)
+    ]
+    return {
+        "donem": guncel.pk,
+        "bolumler": list(E14_BOLUMLER),
+        "kural_satirlari": kural_satirlari,
+        "plan_satirlari": plan_satirlari,
+        "uyarilar": list(uyarilar.liste),
+    }
+
+
+#: E12'nin evrak kaydı önerisi: giden yazının konusu (RYUE md. 13/1, belgedekiyle aynı).
+GIDEN_KONU: Final = E12_KONU
+
+
+def _resmi_yazi(kayit: GeneratedDocument) -> evrak.ResmiYazi | None:
+    belge = evrak_servisi.yeniden_ciz(kayit)
+    return next((b for b in belge.bloklar if isinstance(b, evrak.ResmiYazi)), None)
+
+
+def giden_kayit_onerisi(kayit: GeneratedDocument) -> dict[str, object]:
+    """Programın ürettiği giden yazının (E12) gelen-giden evrak kaydı önerisi (plan F2 §7 U20, 10.
+    adımın notu: kendiliğinden kaydedilmez, önerilir; kullanıcı onaylayınca `giden_kaydet`). Yazmaz.
+    Karşı taraf belgedeki muhataptır (kişi değil, idaredir), konu belgenin konusudur, tarih belgenin
+    tarihidir; numara kullanımdaki defterin o yılda sıradaki numarasıdır. Kayıtlıysa kaydın yılı ve
+    numarası döner. Defter kayıtlı değilse öneri numarasızdır (`defter` boş)."""
+    if str(kayit.doc_type) not in gelen_giden_evrak.GIDEN_KAYDEDILEN_KODLAR:
+        raise ValueError(gelen_giden_evrak.URETILEN_EVRAK_GECERSIZ)
+    _okuma_yetkisi(str(kayit.doc_type))
+    yazi = _resmi_yazi(kayit)
+    try:
+        gun = (
+            datetime.strptime(yazi.tarih, "%d.%m.%Y").date()
+            if yazi is not None
+            else timezone.localdate()
+        )
+    except ValueError:
+        gun = timezone.localdate()
+    karsi_taraf = "" if yazi is None else yazi.muhatap + (f" ({yazi.birim})" if yazi.birim else "")
+    onceki = gelen_giden_evrak.giden_kaydi(kayit)
+    defter = gelen_giden_evrak.evrak_defteri()
+    return {
+        "evrak": kayit.pk,
+        "kod": str(kayit.doc_type),
+        "kayitli": None
+        if onceki is None
+        else {"id": onceki.pk, "yil": onceki.year, "kayit_no": onceki.record_no},
+        "direction": "GIDEN",
+        "tarih": gun.isoformat(),
+        "counterparty": karsi_taraf,
+        "subject": GIDEN_KONU,
+        "defter": None if defter is None else defter.pk,
+        "onerilen_no": None
+        if defter is None
+        else gelen_giden_evrak.beklenen_kayit_no(defter, gun.year),
+        "gecerli": kayit.status == DocumentStatus.GECERLI,
+    }
+
+
+def giden_kaydet(
+    kayit: GeneratedDocument,
+    *,
+    tarih: date,
+    counterparty: str,
+    subject: str,
+    external_ref: str = "",
+    record_no: int | None = None,
+    gerekce: uyum.Gerekce | None = None,
+) -> gelen_giden_evrak.EvrakKaydiSonucu:
+    """Önerinin kullanıcı onayıyla kaydı: giden evrak, yazının üretilen evrak bağıyla
+    (`gelen_giden_evrak.evrak_kaydet`; kapısı `Eylem.EVRAK_KAYDI`, M10)."""
+    return gelen_giden_evrak.evrak_kaydet(
+        direction="GIDEN",
+        tarih=tarih,
+        counterparty=counterparty,
+        subject=subject,
+        external_ref=external_ref,
+        record_no=record_no,
+        generated_document=kayit,
+        gerekce=gerekce,
+    )

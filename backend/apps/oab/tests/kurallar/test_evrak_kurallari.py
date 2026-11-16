@@ -363,6 +363,7 @@ def _kabul_e63(yakalanan: list[evrak.Belge]) -> None:
     assert [s[0] for s in isler.satirlar] == [
         e63.BUGUNKU_ISLER[satir].rol_adi(AccountRole.MUHASIP)
         for satir in etkin_hucreler(AccountRole.MUHASIP)
+        if satir not in e63.EKRANSIZ_SATIRLAR
     ]
     assert [s[0] for s in isler.satirlar] == [
         "Kişiler, Organlar, Temsilciler: birlik kişileri, üyelik ve temsilci kaydı",
@@ -842,30 +843,39 @@ def test_e63_bugunku_isler_yalniz_etkin_satirlardadir() -> None:
     işlerin anahtarları TAM OLARAK bir rolün etkin satırlarıdır (`etkin_hucreler`, tek yüklem):
     etkin satırın adı eksik olamaz, bekleyen satıra (sonraki fazın işine) ad yazılamaz. Adlarda iç
     kod ve kullanılmaz kısaltma (YK, DK, M1…) yoktur; her rolün işleri `etkin_hucreler`
-    sırasıyladır."""
+    sırasıyladır. Uçları bağlı ama ekranı henüz olmayan satır (`EKRANSIZ_SATIRLAR`; F2 11a: Genel
+    Kurul ve Gelen-Giden Evrak) basılmaz, adı yazılmaz; liste bayatlamaz (her biri etkin bir satırdır,
+    gerekçesi vardır)."""
     etkin = {satir for rol in ROLLER for satir in etkin_hucreler(rol)}
-    assert set(e63.BUGUNKU_ISLER) == etkin
+    ekransiz = set(e63.EKRANSIZ_SATIRLAR)
+    assert ekransiz <= etkin
+    assert all(gerekce.strip() for gerekce in e63.EKRANSIZ_SATIRLAR.values())
+    assert set(e63.BUGUNKU_ISLER) == etkin - ekransiz
     for is_ in e63.BUGUNKU_ISLER.values():
         assert is_.parcalar and all(parca.ad.strip() for parca in is_.parcalar), is_
         assert not re.search(r"\b(YK|DK|DEK|M\d+|E\d{2})\b", is_.ad), is_.ad
     for rol in ROLLER:
         assert e63.isler(rol) == tuple(
-            e63.BUGUNKU_ISLER[s].rol_adi(rol) for s in etkin_hucreler(rol)
+            e63.BUGUNKU_ISLER[s].rol_adi(rol) for s in etkin_hucreler(rol) if s not in ekransiz
         )
         # Etkin satırın, rolün pusulasında en az bir parçası vardır (boş ad basılmaz).
         for satir in etkin_hucreler(rol):
-            assert e63.BUGUNKU_ISLER[satir].rol_parcalari(rol), (rol, satir)
+            if satir not in ekransiz:
+                assert e63.BUGUNKU_ISLER[satir].rol_parcalari(rol), (rol, satir)
 
 
 def test_e63_is_parcalari_var_olan_uclara_karsilik_gelir() -> None:
     """Orkestratör maddesi F-4: her işin her parçası, pusulası basılan rolün o satırda bugün
     yazabildiği bir uca bağlıdır (uç yoksa ad yazılamaz: "hesap geçişi", "birlik döneminin
     açılması" bugün yazılamaz). Ters yönde, etkin satırın her yazma ucu bir parçada adlanır ya da
-    `ADSIZ_UCLAR`'da gerekçesiyle durur: bir faz yeni bir uç getirince ad da büyür."""
+    `ADSIZ_UCLAR`'da gerekçesiyle durur: bir faz yeni bir uç getirince ad da büyür. Ekranı henüz
+    olmayan satırın (`EKRANSIZ_SATIRLAR`) uçları adlanmaz; satır ekranıyla bütünüyle gelir."""
     adsiz_kullanilan: set[str] = set()
     kullanilan_parcalar: set[tuple[Satir, str]] = set()
     for rol in ROLLER:
         for satir in etkin_hucreler(rol):
+            if satir in e63.EKRANSIZ_SATIRLAR:
+                continue
             uclar = _yazma_uclari(satir, rol)
             adli: set[str] = set()
             # Pusula rolün parçalarını basar (`rol_parcalari`, F1c 4. adım: M2'de personel işleri
@@ -1158,7 +1168,10 @@ def _e63_metinleri() -> Iterator[str]:
     yield from (is_.ad for is_ in e63.BUGUNKU_ISLER.values())
     # Rolün pusulasındaki ad yalnız o rolün parçalarıdır (M2'de yönetim kurulu rolleri).
     yield from (
-        e63.BUGUNKU_ISLER[satir].rol_adi(rol) for rol in ROLLER for satir in etkin_hucreler(rol)
+        e63.BUGUNKU_ISLER[satir].rol_adi(rol)
+        for rol in ROLLER
+        for satir in etkin_hucreler(rol)
+        if satir not in e63.EKRANSIZ_SATIRLAR
     )
     yield e63.ILK_GIRIS_BASLIGI
     yield from (adim.format(tanitici="<tanıtıcı>") for adim in e63.ILK_GIRIS_ADIMLARI)

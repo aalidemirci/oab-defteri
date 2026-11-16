@@ -665,7 +665,11 @@ def test_oturumdaki_hesap_kendi_askisini_yazinca_oturum_kilitlenir(
                     uyelik, drop_kind="ISTIFA", end_date=date(2026, 11, 2)
                 )
             else:
-                uyelik_gecisleri.uyeligi_iptal_et(uyelik, cancel_reason="Uydurma yanlış kayıt.")
+                # F2 11a (plan F2 §10.2 madde 26): genel kurulun seçtiği kayıt genel yoldan iptal
+                # edilmez; askı ve kilit aynı servisin genel kurul yolunda sınanır (seçimin iptali).
+                uyelik_gecisleri.uyeligi_iptal_et(
+                    uyelik, cancel_reason="Uydurma yanlış kayıt.", genel_kurul_yolu=True
+                )
         assert _hesap(yazan.id).status == AccountStatus.ASKIDA
         assert OTURUM.kilit_bekliyor() is True
         son = _son()

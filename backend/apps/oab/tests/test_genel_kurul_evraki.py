@@ -1710,7 +1710,7 @@ def _genel_kurul_evraki_ii_metinleri() -> list[str]:
         g.IS_DK_GOREV_BOLUMU,
         g.IS_BANKA,
         g.IS_TEFBIS,
-        g.IS_MEM_YAZISI,
+        *g.IS_MEM_YAZILARI.values(),
         g.SON_GUN_DEGERI.format(gun="gg.aa.yyyy"),
         g.GOREV_BOLUMUNDEN_SONRA,
         g.GENEL_KURULDAN_SONRA,

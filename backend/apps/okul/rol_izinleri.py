@@ -410,6 +410,68 @@ _DAYANAK_KURAL_SURUMU = (
     "§6.1 (Kural sürümü güncellemesi ekranı: yalnız yonetici): fark ekranı geçişin onay adımıdır, "
     "satırın öteki okurları kural sürümünü Birlik Dönemi ve Ayarlar'daki salt okunur satırdan görür."
 )
+_YONETICI_SEKRETER_MUDUR: Final = frozenset({YONETICI, AccountRole.SEKRETER.value, MUDUR})
+_GK_CAGIRANLARI: Final = frozenset({YONETICI, AccountRole.SEKRETER.value, AccountRole.BASKAN.value})
+_YALNIZ_MUDUR: Final = frozenset({MUDUR})
+#: Genel kurul evrakını üretebilen roller (tasarım §9.6 "Üreten"): program yöneticisi, sekreter, başkan
+#: (md. 13/8 çağrısının E05'i) ve müdür (kendi çağrısının E05'i, ¹). Başkan yardımcısı ve muhasip üretmez.
+_GK_EVRAK_URETENLERI: Final = _GK_CAGIRANLARI | {MUDUR}
+_DAYANAK_GK_KIM = (
+    "Tasarım §7.1 'Kim' sütunu (matrisi daraltır): planlama, ilan, toplantılar, gündem, karar, divan, "
+    "katılım düzeltmesi, aday, seçim, ibra ve tutanak program yöneticisi ve sekreterin işidir "
+    "(`genel_kurul.PLANLAYAN_ROLLER`, `ILAN_VE_TOPLANTI_ROLLERI`, `TUTANAK_ROLLERI`, `SECIM_ROLLERI`); "
+    "servis aynı daraltmayı yeniden sorar (plan F2 4-6. adım, 11. adım)."
+)
+_DAYANAK_GK_IPTAL = (
+    "Tasarım §7.1 '… → IPTAL' satırı 'Kim: yonetici'; üyelerin yazılı başvurusunun evrak bağını "
+    "başvuruyu kaydeden program yöneticisi girer (§7.1 çağrı satırı; plan F2 7. adım)."
+)
+_DAYANAK_GK_CAGRI = (
+    "Tasarım §7.1 çağrı satırları: yönetim kurulunun çağrısını sekreter (YK kararı), md. 13/8 çağrısını "
+    "başkan, üyelerin yazılı başvurusunu program yöneticisi kaydeder (`genel_kurul.CAGIRAN_ROLLERI`); "
+    "müdürün ve Denetleme Kurulunun çağrısı kendi uçlarındadır (¹, ⁵; plan F2 7. adım)."
+)
+_DAYANAK_GK_SAHIPLIK = (
+    "Tasarım §4.4.2 ¹ ('müdür yalnız kendi yazısını düzenler') ve §7.1 'Kim': toplantı zamanı, yeri ve "
+    "gündem sırası ilandan önce program yöneticisi ve sekreterce, müdürün çağırdığı genel kurulda "
+    "çağrı yazısının sahibi müdürce düzenlenir (`genel_kurul._duzenleme_kapisi`; plan F2 7. adım "
+    "inceleme kararları). Denetleme Kurulunun yazısının düzenlenmesi bu uçtan değildir."
+)
+_DAYANAK_GK_MUDUR = (
+    "Tasarım §4.4.2 ¹: müdür genel kurulun öteki işlerinde okur, yalnız kendi yazısını yazar — yeni "
+    "açılan okulda davet (md. 9/1) ve olağanüstü çağrı (md. 9/6, 13/8, 25/2); §15 M-5, M-11 (taslağı "
+    "program yöneticisi hazırlamaz). Servis çağrının sahiplikli eylemini sorar (plan F2 7. adım)."
+)
+_DAYANAK_GK_DK = (
+    "Tasarım §4.4.2 ⁵: Denetleme Kurulu yalnız denetim modülüne yazar; md. 14/5 olağanüstü genel kurul "
+    "çağrısı (md. 6 aykırılık işaretli raporla, kullanıcı kararı S6 (ii)), çağrı yazısı (E05) ve md. "
+    "14/4 nihai raporun genel kurul dosya eki (E33) `Eylem.DK_GENEL_KURUL_YAZMA` ile (plan F2 §6.2, "
+    "§7 U13, U23)."
+)
+_DAYANAK_GK_DOSYA_EKI = (
+    "Plan F2 §7 U23 ve kullanıcı kararı S13 (a): yönetim kurulu faaliyet raporu ve kesin hesap (E34) "
+    "ile tahmini bütçe (E28) yönetim kurulu rolleri ve program yöneticisince genel kurul kaydına eklenir "
+    "(M3'ün başkan yardımcısı ve muhasip hücrelerinin karşılığı; md. 13/4); müdür eklemez (¹)."
+)
+_DAYANAK_GK_EVRAK = (
+    "Tasarım §9.6 'Üreten' sütunu (matrisi daraltır): genel kurul evrakını sekreter ve program "
+    "yöneticisi, E05'i çağırana göre (başkanın md. 13/8 çağrısında başkan, müdürün çağrısında müdür, ¹), "
+    "E12'yi program yöneticisi üretir; başkan yardımcısı ve muhasip üretmez. Servis belgeye göre yeniden "
+    "daraltır (`genel_kurul_evraki.URETEN_ROLLER`, `_e05_yetkisi`). Denetleme Kurulunun E05'i kendi "
+    "ucundadır (⁵)."
+)
+_DAYANAK_KATILIM_ISARETI = (
+    "Plan F2 §7 U33 ve tasarım §4.4.2 ¹⁰ (R9): katılım işareti veli adını gösterir; pencere yalnız "
+    "program yöneticisine açıktır, okuması erişim günlüğüne yazılır (`Eylem.KISISEL_VERI_CIKTISI`)."
+)
+_DAYANAK_ADLI_EVRAK = (
+    "Plan F2 §7 U14, U15 ve tasarım §4.4.2 ¹⁰ (R9): veli adlı E07 ve E08 yalnız program yöneticisince "
+    "tek istekte üretilip verilir, saklanmaz; erişim günlüğüne yazılır (`Eylem.KISISEL_VERI_CIKTISI`)."
+)
+_DAYANAK_E14 = (
+    "Tasarım §9.6 E14 'Üreten: yonetici' (matrisi daraltır); yıllık iş takvimi Genel Bakış'ın sekmesidir "
+    "(M9; plan F2 §6.1), basımı her rol okur (`genel_kurul_evraki.OKUMA_SATIRLARI`)."
+)
 _DAYANAK_VELI = (
     "Tasarım §8.4 (4) ve §4.4.2: veli listesini aktarmak kişisel veri içeren dışa aktarım "
     "yetkisidir (¹⁰, yalnız program yöneticisi); §5.4: program yöneticisi listeyi onayla elle "
@@ -650,6 +712,156 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _oku("oab-term-linkable-decisions", Satir.M4),
     _oku("oab-term-documents", Satir.M2),
     _oku("oab-document-download", Satir.M2),
+    # ------------------------------------------------ M3: genel kurul (plan F2 §6.1, 11. adım)
+    # Her rol okur; yazma tasarım §7.1'in "Kim"iyle daraltılır, servis yeniden sorar
+    # (`Eylem.GENEL_KURUL_YAZMA`). Müdür yalnız kendi yazısını yazar (¹), Denetleme Kurulu kendi uçlarında
+    # (M8 ⁵), katılım işareti ve veli adlı çıktı kişisel veri satırındadır (¹⁰), dönem geçişinin onayı
+    # M1'dir (U32).
+    _oku("oab-assembly-list", Satir.M3),
+    _yaz(
+        "oab-assembly-list",
+        "POST",
+        Satir.M3,
+        yalniz=_YONETICI_VE_SEKRETER,
+        dayanak=_DAYANAK_GK_KIM,
+    ),
+    _oku("oab-assembly-detail", Satir.M3),
+    _yaz(
+        "oab-assembly-detail",
+        "PATCH",
+        Satir.M3,
+        dipnot=1,
+        yalniz=_YONETICI_SEKRETER_MUDUR,
+        dayanak=_DAYANAK_GK_SAHIPLIK,
+    ),
+    _yaz(
+        "oab-assembly-agenda-order",
+        "PUT",
+        Satir.M3,
+        dipnot=1,
+        yalniz=_YONETICI_SEKRETER_MUDUR,
+        dayanak=_DAYANAK_GK_SAHIPLIK,
+    ),
+    _yaz("oab-assembly-call", "POST", Satir.M3, yalniz=_GK_CAGIRANLARI, dayanak=_DAYANAK_GK_CAGRI),
+    _yaz(
+        "oab-assembly-principal-call",
+        "POST",
+        Satir.M3,
+        dipnot=1,
+        yalniz=_YALNIZ_MUDUR,
+        dayanak=_DAYANAK_GK_MUDUR,
+    ),
+    _yaz(
+        "oab-assembly-call-document",
+        "POST",
+        Satir.M3,
+        yalniz=_YALNIZ_YONETICI,
+        dayanak=_DAYANAK_GK_IPTAL,
+    ),
+    _yaz(
+        "oab-assembly-cancel", "POST", Satir.M3, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_GK_IPTAL
+    ),
+    *(
+        _yaz(uc, yontem, Satir.M3, yalniz=_YONETICI_VE_SEKRETER, dayanak=_DAYANAK_GK_KIM)
+        for uc, yontem in (
+            ("oab-assembly-announcement", "POST"),
+            ("oab-assembly-second-announcement", "POST"),
+            ("oab-announcement-evidence", "PUT"),
+            ("oab-announcement-attachments", "POST"),
+            ("oab-assembly-first-meeting", "POST"),
+            ("oab-assembly-second-meeting", "POST"),
+            ("oab-assembly-attendance-corrections", "POST"),
+            ("oab-assembly-agenda", "POST"),
+            ("oab-agenda-item-removal", "POST"),
+            ("oab-agenda-item-result", "POST"),
+            ("oab-agenda-item-election", "POST"),
+            ("oab-agenda-item-election-form", "PUT"),
+            ("oab-agenda-item-election-cancel", "POST"),
+            ("oab-agenda-item-discharge", "POST"),
+            ("oab-assembly-presiding-board", "POST"),
+            ("oab-assembly-presiding-board-cancel", "POST"),
+            ("oab-assembly-candidates", "POST"),
+            ("oab-assembly-minutes", "PATCH"),
+            ("oab-assembly-minutes-complete", "POST"),
+        )
+    ),
+    _yaz(
+        "oab-agenda-item-attachments",
+        "POST",
+        Satir.M3,
+        yalniz=_YONETICI_VE_YK,
+        dayanak=_DAYANAK_GK_DOSYA_EKI,
+    ),
+    # Genel kurulun dosya ekleri, ilan kanıtları ve gelen-giden evrak kaydının ekleri: okuyan her rol
+    # indirir; servis ekin sahibinin satırını sorar (M3, M10: her rol okur).
+    _oku("oab-attachment-download", Satir.M3),
+    # Genel kurul evrakı: katalog, liste ve üretim (E05-E13, E64; E04'ün kurucusu yok). Basım genel
+    # indirme ucundadır (`oab-document-download`; servis belgenin okuma satırını sorar).
+    _oku("oab-assembly-document-catalog", Satir.M3),
+    _oku("oab-assembly-documents", Satir.M3),
+    _yaz(
+        "oab-assembly-document",
+        "POST",
+        Satir.M3,
+        dipnot=1,
+        yalniz=_GK_EVRAK_URETENLERI,
+        dayanak=_DAYANAK_GK_EVRAK,
+    ),
+    # Dönem geçişinin önizlemesi ve onayı (U32; tasarım §7.1, §7.8 "yonetici onaylar"; M1).
+    _oku("oab-assembly-term-transition", Satir.M1),
+    _yaz("oab-assembly-term-transition", "POST", Satir.M1),
+    # ------------------------------------------------ M8: Denetleme Kurulunun genel kurul işi (⁵)
+    _yaz(
+        "oab-assembly-audit-board-call",
+        "POST",
+        Satir.M8,
+        dipnot=5,
+        dayanak=_DAYANAK_GK_DK,
+    ),
+    _yaz(
+        "oab-agenda-item-audit-board-attachment",
+        "POST",
+        Satir.M8,
+        dipnot=5,
+        dayanak=_DAYANAK_GK_DK,
+    ),
+    _yaz(
+        "oab-assembly-document-e05-audit-board",
+        "POST",
+        Satir.M8,
+        dipnot=5,
+        dayanak=_DAYANAK_GK_DK,
+    ),
+    # ------------------------------------------------ Kişisel veri: katılım işareti ve adlı çıktı (¹⁰)
+    _oku("oab-assembly-attendance-marks", Satir.KISISEL_VERI),
+    _yaz(
+        "oab-assembly-attendance-marks",
+        "POST",
+        Satir.KISISEL_VERI,
+        dipnot=10,
+        dayanak=_DAYANAK_KATILIM_ISARETI,
+    ),
+    _yaz(
+        "oab-assembly-document-named",
+        "POST",
+        Satir.KISISEL_VERI,
+        dipnot=10,
+        dayanak=_DAYANAK_ADLI_EVRAK,
+    ),
+    # ------------------------------------------------ M9: yıllık iş takvimi (Genel Bakış; E14)
+    _oku("oab-term-annual-calendar", Satir.M9),
+    _yaz("oab-document-e14", "POST", Satir.M9, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_E14),
+    # ------------------------------------------------ M10: gelen-giden evrak (⁷: müdür okur)
+    # Defter ve kayıt program yöneticisi ve yönetim kurulu rollerinindir; müdürün kendi yazısını program
+    # işler (`genel_kurul.cagir`), müdür ve Denetleme Kurulu okur. E12'nin evrak kaydı önerilir, kullanıcı
+    # onaylayınca kaydedilir (plan F2 §7 U20).
+    _oku("oab-document-book-list", Satir.M10),
+    _yaz("oab-document-book-list", "POST", Satir.M10),
+    _oku("oab-document-record-list", Satir.M10),
+    _yaz("oab-document-record-list", "POST", Satir.M10),
+    _yaz("oab-document-record-attachments", "POST", Satir.M10),
+    _oku("oab-document-outgoing-record", Satir.M10),
+    _yaz("oab-document-outgoing-record", "POST", Satir.M10),
     # ------------------------------------------------ Kişisel veri: veli listesi (T5; ¹⁰)
     # Özet (sınıf başına sayı) ve şablon okumadır; satırın tek okuru program yöneticisidir.
     _oku("parent-roster", Satir.KISISEL_VERI),
@@ -793,8 +1005,8 @@ BEKLEYEN_HUCRELER: Final[Mapping[tuple[Satir, str], str]] = {
     # Kişiler ve organlar (M2): YK rollerinin hücresi birlik kişilerinin uçlarıyla bağlandı (F1c 4.
     # adım; personel e-Okul kaydı yalnız program yöneticisinin, `_DAYANAK_PERSONEL`); organ, temsilci,
     # görev bölümü ve yedek çağrısı uçları F1c'nin 5. ve 6. adımlarında aynı satıra eklendi.
-    # Genel kurul (müdürün ¹ yazıları dahil).
-    **_bekleyen(Satir.M3, (YONETICI, *sorted(YK_ROLLERI), MUDUR), "F2"),
+    # Genel kurul (müdürün ¹ yazıları dahil) ve gelen-giden evrak F2'nin 11. adımında uçlarıyla bağlandı
+    # (M3: genel kurul uçları, müdürün çağrısı ve dosya ekleri; M10: defter ve kayıt uçları).
     # YK toplantı ve karar; gelir-gider (mali kayıtları yalnız muhasip girer).
     **_bekleyen(Satir.M4, (YONETICI, *sorted(YK_ROLLERI)), "F3"),
     **_bekleyen(Satir.M5, (AccountRole.MUHASIP.value,), "F3"),
@@ -804,8 +1016,6 @@ BEKLEYEN_HUCRELER: Final[Mapping[tuple[Satir, str], str]] = {
     **_bekleyen(Satir.M7, (YONETICI, *sorted(YK_ROLLERI)), "F4"),
     **_bekleyen(Satir.MUDUR_YAZISI, (MUDUR,), "F4"),
     **_bekleyen(Satir.M11, (YONETICI, *sorted(YK_ROLLERI)), "F4"),
-    # Gelen-giden evrak: ilk kullanımı genel kurulun evrakıdır.
-    **_bekleyen(Satir.M10, (YONETICI, *sorted(YK_ROLLERI)), "F2"),
     # Kantin (F5) ve servis (F6) aynı satırdadır; ilk bağlanacağı faz.
     **_bekleyen(Satir.M13_M14, (YONETICI, *sorted(YK_ROLLERI)), "F5"),
     # Personel modülü (doğrudan işveren okullar; K3) sürüm 2.
@@ -993,6 +1203,73 @@ YETENEKLER: Final[Mapping[str, frozenset[tuple[str, str]]]] = {
     "uyelik_dusurme": _ciftler(("oab-membership-drop", "POST")),
     "gorev_alma_engeli": _ciftler(("oab-membership-eligibility-basis", ("GET", "PUT"))),
     "toplanti_gunu_yazma": _ciftler(("oab-term-meeting-day", "PUT")),
+    # F2 11. adım (plan F2 §6.1, §6.2). Genel Kurul sihirbazı: planlama, ilan, toplantılar, gündem,
+    # karar, divan, katılım düzeltmesi, aday, seçim, ibra ve tutanak (program yöneticisi ve sekreter;
+    # tasarım §7.1 "Kim").
+    "genel_kurul_yazma": _ciftler(
+        ("oab-assembly-list", "POST"),
+        ("oab-assembly-detail", "PATCH"),
+        ("oab-assembly-agenda-order", "PUT"),
+        ("oab-assembly-announcement", "POST"),
+        ("oab-assembly-second-announcement", "POST"),
+        ("oab-announcement-evidence", "PUT"),
+        ("oab-announcement-attachments", "POST"),
+        ("oab-assembly-first-meeting", "POST"),
+        ("oab-assembly-second-meeting", "POST"),
+        ("oab-assembly-attendance-corrections", "POST"),
+        ("oab-assembly-agenda", "POST"),
+        ("oab-agenda-item-removal", "POST"),
+        ("oab-agenda-item-result", "POST"),
+        ("oab-agenda-item-election", "POST"),
+        ("oab-agenda-item-election-form", "PUT"),
+        ("oab-agenda-item-election-cancel", "POST"),
+        ("oab-agenda-item-discharge", "POST"),
+        ("oab-assembly-presiding-board", "POST"),
+        ("oab-assembly-presiding-board-cancel", "POST"),
+        ("oab-assembly-candidates", "POST"),
+        ("oab-assembly-minutes", "PATCH"),
+        ("oab-assembly-minutes-complete", "POST"),
+    ),
+    # Çağrı penceresi (yönetim kurulu, başkanın md. 13/8 çağrısı, üyelerin başvurusu; servis çağırana
+    # göre daraltır) ve evrak üretimi (servis belgenin "Üreten"ine göre daraltır).
+    "genel_kurul_cagri": _ciftler(("oab-assembly-call", "POST")),
+    "genel_kurul_evraki": _ciftler(("oab-assembly-document", "POST")),
+    # İptal ve üyelerin başvurusunun evrak bağı (program yöneticisi; §7.1).
+    "genel_kurul_iptal": _ciftler(
+        ("oab-assembly-cancel", "POST"), ("oab-assembly-call-document", "POST")
+    ),
+    # Dosya ekleri: yönetim kurulu faaliyet raporu ve kesin hesap, tahmini bütçe (U23).
+    "genel_kurul_dosya_eki": _ciftler(("oab-agenda-item-attachments", "POST")),
+    # Müdürün kendi yazıları (¹): yeni okul daveti ve olağanüstü çağrı; çağrısındaki düzenleme.
+    "mudur_genel_kurul_yazisi": _ciftler(
+        ("oab-assembly-principal-call", "POST"),
+        ("oab-assembly-detail", "PATCH"),
+        ("oab-assembly-agenda-order", "PUT"),
+    ),
+    # Denetleme Kurulunun genel kurul işi (⁵): md. 14/5 çağrısı, çağrı yazısı ve nihai raporun eki.
+    "dk_genel_kurul_yazma": _ciftler(
+        ("oab-assembly-audit-board-call", "POST"),
+        ("oab-assembly-document-e05-audit-board", "POST"),
+        ("oab-agenda-item-audit-board-attachment", "POST"),
+    ),
+    # Dönem geçişinin onayı (U32; M1, program yöneticisi).
+    "donem_gecisi_onayi": _ciftler(("oab-assembly-term-transition", "POST")),
+    # Katılım işaretleri penceresi ve veli adlı çıktı (¹⁰, R9; program yöneticisi).
+    "kisisel_veri_ciktisi": _ciftler(
+        ("oab-assembly-attendance-marks", ("GET", "POST")),
+        ("oab-assembly-document-named", "POST"),
+    ),
+    # Gelen-Giden Evrak: defter, kayıt, ek ve E12'nin kaydı (M10; müdür ve Denetleme Kurulu okur).
+    "evrak_kaydi": _ciftler(
+        ("oab-document-book-list", "POST"),
+        ("oab-document-record-list", "POST"),
+        ("oab-document-record-attachments", "POST"),
+        ("oab-document-outgoing-record", "POST"),
+    ),
+    # Yıllık iş takviminin basımı (E14; program yöneticisi).
+    "yillik_is_takvimi_uretme": _ciftler(("oab-document-e14", "POST")),
+    # Birlik Dönemi → Kural sürümü güncellemesi (Ayarlar satırı; program yöneticisi; F2 2. adım).
+    "kural_surumu_guncelleme": _ciftler(("oab-term-rule-revision", ("GET", "POST"))),
 }
 
 

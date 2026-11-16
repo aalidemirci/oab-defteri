@@ -327,10 +327,25 @@ def test_kisitli_roller_yalniz_kendi_satirlarina_yazar(rol: str) -> None:
         "security-recover",
         "security-unlock",
     }
+    # F2 11. adım: Denetleme Kurulunun genel kurul işi (md. 14/5 çağrısı, çağrı yazısı, raporunun dosya
+    # eki; M8 ⁵) ve müdürün kendi yazısı (yeni okul daveti ve olağanüstü çağrı, çağrısının zamanı ve
+    # gündem sırası, belgesi; M3 ¹).
     ek = (
-        {"security-integrity-restore-seen", "oab-dk-duty-assignment", "oab-document-e02"}
+        {
+            "security-integrity-restore-seen",
+            "oab-dk-duty-assignment",
+            "oab-document-e02",
+            "oab-assembly-audit-board-call",
+            "oab-assembly-document-e05-audit-board",
+            "oab-agenda-item-audit-board-attachment",
+        }
         if rol == AccountRole.DENETLEME_KURULU
-        else set()
+        else {
+            "oab-assembly-principal-call",
+            "oab-assembly-detail",
+            "oab-assembly-agenda-order",
+            "oab-assembly-document",
+        }
     )
     assert acik_yazma == ortak | ek
 

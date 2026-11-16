@@ -53,6 +53,8 @@ from apps.oab.models import (
     BookStatus,
     DocumentDirection,
     DocumentRecord,
+    DocumentStatus,
+    GeneratedDocument,
     OabTerm,
     OfficialBook,
     TermStatus,
@@ -85,6 +87,16 @@ KAYIT_NO_GECIS_ONCESI = (
 )
 DIS_SAYI_UZUN = "Dış sayı en çok {uzunluk} karakter olabilir."
 ACIK_DONEM_YOK = "Açık birlik dönemi yok; evrak kaydı açık birlik dönemine yazılır."
+URETILEN_EVRAK_YALNIZ_GIDENDE = "Programın ürettiği yazı yalnız giden evrak olarak kaydedilir."
+URETILEN_EVRAK_GECERSIZ = "Bu evrak giden yazı olarak kaydedilmez; geçerli sürümü kaydedin."
+URETILEN_EVRAK_KAYITLI = (
+    "Bu yazı gelen-giden evrak defterine kaydedildi ({yil}/{no}); bir yazı bir kez kaydedilir (hesap "
+    "bütünlüğü)."
+)
+#: Giden evrak olarak kaydedilebilen, programın ürettiği yazılar: okul idaresinin resmî yazısı (E12;
+#: plan F2 §7 U20 "Giden yazı `DocumentRecord(GIDEN)` önerisiyle kaydedilir"). Öteki belgeler okul
+#: içidir ya da kendi yolundan işlenir (müdür yazısı, ⁷).
+GIDEN_KAYDEDILEN_KODLAR: Final = frozenset({"E12"})
 
 #: Sıra atlamanın akış satırı (tasarım §5.2.8 "Sıra atlama uyarı"; Yönetmelik maddesi değildir, atıf
 #: basılmaz; `uyum.akis_sapmasi`).
@@ -185,6 +197,7 @@ def _kaydi_yaz(
     subject: str,
     external_ref: str,
     record_no: int,
+    generated_document: GeneratedDocument | None = None,
 ) -> DocumentRecord:
     hesap = iz.yazar_hesabi()
     kayit = DocumentRecord.objects.create(
@@ -196,12 +209,39 @@ def _kaydi_yaz(
         counterparty=counterparty,
         subject=subject,
         external_ref=external_ref,
+        generated_document=generated_document,
         term=donem,
         created_by_id=hesap,
         updated_by_id=hesap,
     )
     denetim_izi.degisiklik(kayit, onceki=None)
     return kayit
+
+
+def _uretilen_evrak(kayit: GeneratedDocument, direction: str) -> GeneratedDocument:
+    """Giden yazının programdaki karşılığı: giden evrak, kaydedilebilen kod, geçerli sürüm, daha önce
+    kaydedilmemiş (`evrak_kaydet`)."""
+    if direction != DocumentDirection.GIDEN:
+        raise ValueError(URETILEN_EVRAK_YALNIZ_GIDENDE)
+    guncel = GeneratedDocument.objects.get(pk=kayit.pk)
+    if (
+        guncel.doc_type not in GIDEN_KAYDEDILEN_KODLAR
+        or guncel.status != DocumentStatus.GECERLI
+        or guncel.personal_list
+    ):
+        raise ValueError(URETILEN_EVRAK_GECERSIZ)
+    onceki = giden_kaydi(guncel)
+    if onceki is not None:
+        raise ValueError(URETILEN_EVRAK_KAYITLI.format(yil=onceki.year, no=onceki.record_no))
+    return guncel
+
+
+def giden_kaydi(kayit: GeneratedDocument) -> DocumentRecord | None:
+    """Programın ürettiği yazının gelen-giden evrak kaydı; kaydedilmemişse `None`."""
+    bulunan: DocumentRecord | None = (
+        DocumentRecord.objects.filter(generated_document=kayit).order_by("pk").first()
+    )
+    return bulunan
 
 
 # ---------------------------------------------------------------------------
@@ -251,13 +291,22 @@ def evrak_kaydet(
     external_ref: str = "",
     record_no: int | None = None,
     defter: OfficialBook | None = None,
+    generated_document: GeneratedDocument | None = None,
     gerekce: uyum.Gerekce | None = None,
 ) -> EvrakKaydiSonucu:
     """Gelen ya da giden evrakı deftere kaydeder (modül başlığı "Numara"). Kayıt açık birlik dönemine
-    yazılır; numara verilmezse sıradaki numaradır, sıradakinden büyükse uyarı + gerekçe."""
+    yazılır; numara verilmezse sıradaki numaradır, sıradakinden büyükse uyarı + gerekçe.
+
+    `generated_document`: programın ürettiği giden yazı (E12; `GIDEN_KAYDEDILEN_KODLAR`). Kendiliğinden
+    kaydedilmez: ekran öneriyi gösterir, kullanıcı onaylayınca bu yolla kaydedilir (plan F2 §7 U20, 10.
+    adımın notu). Yalnız giden evraktır, geçerli sürümdür ve bir kez kaydedilir (tek kaynak; hesap
+    bütünlüğü)."""
     _kapi()
     if direction not in DocumentDirection.values:
         raise ValueError(YON_GECERSIZ)
+    uretilen = (
+        None if generated_document is None else _uretilen_evrak(generated_document, direction)
+    )
     if not isinstance(tarih, date) or isinstance(tarih, datetime):
         raise ValueError(TARIH_GECERSIZ)
     dis_sayi = external_ref.strip()
@@ -293,6 +342,7 @@ def evrak_kaydet(
         subject=subject.strip(),
         external_ref=dis_sayi,
         record_no=numara,
+        generated_document=uretilen,
     )
     uyarilar: list[dict[str, Any]] = []
     if numara > beklenen:

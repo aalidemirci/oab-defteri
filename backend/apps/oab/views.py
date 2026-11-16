@@ -70,6 +70,7 @@ from apps.oab.serializers import (
 from apps.oab.services import (
     donemler,
     gecis,
+    genel_kurul_evraki,
     gorev_bolumu,
     gorev_evraki,
     kisiler,
@@ -389,7 +390,8 @@ def _organ(deger: str, izinli: frozenset[str] = _KADRO_ORGANLARI) -> str:
 
 def _donem_parametresi(request: Request) -> Any:
     ham = request.query_params.get("term", "").strip()
-    if not ham.isdigit():
+    # `str.isdigit` tek başına yetmez: "²" gibi rakamlar onu doğru yapar, `int` çeviremez (500 olurdu).
+    if not (ham.isascii() and ham.isdigit()):
         raise serializers.ValidationError({"term": [DONEM_GEREKLI]})
     return get_object_or_404(_donemler(), pk=int(ham))
 
@@ -799,11 +801,19 @@ class PurchaseCommitteeCreateView(APIView):
 # serviste daraltılır
 # (tasarım §9.6 "Üreten"); basım her okur role açıktır, `BASIM` satırı okuma rolünde de yazılır.
 # ---------------------------------------------------------------------------
+#: Dönemin evrakının adları: görev bölümü ve temsilci evrakı (E01-E03) ve yıllık iş takvimi (E14; F2 11.
+#: adım).
+_DONEM_BELGE_ADLARI: dict[str, str] = {
+    **gorev_evraki.BELGE_ADLARI,
+    **genel_kurul_evraki.BELGE_ADLARI,
+}
+
+
 def _evrak_satiri(kayit: oab_modelleri.GeneratedDocument) -> dict[str, Any]:
     return {
         "id": kayit.pk,
         "kod": kayit.doc_type,
-        "ad": gorev_evraki.BELGE_ADLARI[str(kayit.doc_type)],
+        "ad": _DONEM_BELGE_ADLARI[str(kayit.doc_type)],
         "surum": kayit.version,
         "durum": kayit.status,
         "uretim_zamani": kayit.generated_at.isoformat(),
@@ -821,11 +831,13 @@ def _depo_yazma_hatalari() -> Iterator[None]:
 
 
 class TermDocumentListView(APIView):
-    """Dönemin geçerli görev bölümü ve temsilci evrakı (E01-E03): kayıt, sürüm, biçimler."""
+    """Dönemin geçerli görev bölümü ve temsilci evrakı (E01-E03) ve yıllık iş takvimi (E14; konusu
+    dönemdir, F2 11. adım): kayıt, sürüm, biçimler."""
 
     def get(self, request: Request, pk: int) -> Response:
         donem = get_object_or_404(_donemler(), pk=pk)
-        return Response([_evrak_satiri(k) for k in gorev_evraki.evrak_listesi(donem)])
+        kayitlar = [*gorev_evraki.evrak_listesi(donem), *genel_kurul_evraki.evrak_listesi(donem)]
+        return Response([_evrak_satiri(k) for k in kayitlar])
 
 
 class _EvrakUretimView(APIView):
@@ -863,7 +875,8 @@ class E03DocumentView(_EvrakUretimView):
 
 
 class DocumentDownloadView(APIView):
-    """Kaydedilmiş evrakın dosyası (`pdf` ya da `docx`) ve `BASIM` satırı (okuma rolünde de).
+    """Kaydedilmiş evrakın dosyası (`pdf`, `docx`; genel kurul evrakında `xlsx`, `html` de) ve `BASIM`
+    satırı (okuma rolünde de).
 
     HEAD dosya vermez, basım izi de yazmaz: 405 (basım yalnız GET'tir).
     """
@@ -871,6 +884,10 @@ class DocumentDownloadView(APIView):
     def get(self, request: Request, pk: int, bicim: str) -> Any:
         kayit = get_object_or_404(oab_modelleri.GeneratedDocument.objects.all(), pk=pk)
         try:
+            # Genel kurul evrakı ve yıllık iş takvimi kendi basım yolundadır (F2 11. adım; Excel ve web
+            # sayfası kayıtlı içerikten çizilir, veli adlı kayıt basılmaz).
+            if str(kayit.doc_type) in genel_kurul_evraki.KODLAR:
+                return genel_kurul_evraki.bas(kayit, genel_kurul_evraki.bicim_coz(bicim))
             return gorev_evraki.bas(kayit, gorev_evraki.bicim_coz(bicim))
         except (dosya_deposu.DosyaDeposuHatasi, dosya_sifreleme.DosyaSifrelemeHatasi) as exc:
             raise EvrakDosyasiAcilamadi(str(exc)) from exc

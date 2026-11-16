@@ -531,17 +531,19 @@ def test_yukleme_siniri_ayarla_bicim_sinirinin_kucugudur(settings: Any) -> None:
 
 def test_sahip_kumesi_uretilen_evrak_ilan_ve_evrak_kaydidir() -> None:
     """İlk sahip `oab.GeneratedDocument`'tır ve üretilen evrak sahibidir (PDF, DOCX; plan F1c 9. adım);
-    F2 7. adımdan beri ilan kaydı (kanal kanıtı) ve gelen-giden evrak kaydı kullanıcı eki sahibidir
-    (PDF, JPEG, PNG)."""
-    from apps.oab.models import Announcement, DocumentRecord
+    F2 7. adımdan beri ilan kaydı (kanal kanıtı) ve gelen-giden evrak kaydı, 11. adımdan beri genel
+    kurulun gündem maddesi (genel kurulun dosya ekleri, plan F2 §7 U23) kullanıcı eki sahibidir (PDF,
+    JPEG, PNG)."""
+    from apps.oab.models import AgendaItem, Announcement, DocumentRecord
 
     assert dosya_deposu._SAHIP_ETIKETLERI == {
         "oab.GeneratedDocument",
         "oab.Announcement",
         "oab.DocumentRecord",
+        "oab.AgendaItem",
     }
     assert dosya_deposu._URETILEN_EVRAK_SAHIPLERI == {"oab.GeneratedDocument"}
-    for model in (Announcement, DocumentRecord, SchoolYear):
+    for model in (AgendaItem, Announcement, DocumentRecord, SchoolYear):
         assert dosya_deposu.kabul_turleri(model) == ds.KABUL_EDILEN_TURLER
 
 

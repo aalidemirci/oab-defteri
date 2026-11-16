@@ -9,6 +9,7 @@ from __future__ import annotations
 from django.urls import URLPattern, URLResolver, path
 
 from apps.oab import views
+from apps.oab import views_genel_kurul as gk
 
 urlpatterns: list[URLPattern | URLResolver] = [
     path(
@@ -158,9 +159,204 @@ urlpatterns: list[URLPattern | URLResolver] = [
         views.E03DocumentView.as_view(),
         name="oab-document-e03",
     ),
+    # Yıllık iş takvimi (Genel Bakış; E14'ün verisi ve basımı; F2 11. adım).
+    path(
+        "terms/<int:pk>/annual-calendar/",
+        gk.TermAnnualCalendarView.as_view(),
+        name="oab-term-annual-calendar",
+    ),
+    path(
+        "terms/<int:pk>/documents/e14/",
+        gk.E14DocumentView.as_view(),
+        name="oab-document-e14",
+    ),
+    # E12'nin gelen-giden evrak kaydı (öneri ve onay; plan F2 §7 U20). İndirme deseninden önce durur.
+    path(
+        "documents/<int:pk>/outgoing-record/",
+        gk.DocumentOutgoingRecordView.as_view(),
+        name="oab-document-outgoing-record",
+    ),
     path(
         "documents/<int:pk>/<str:bicim>/",
         views.DocumentDownloadView.as_view(),
         name="oab-document-download",
+    ),
+    # ------------------------------------------------------------------ genel kurul (plan F2 §6.1)
+    path("assemblies/", gk.AssemblyListView.as_view(), name="oab-assembly-list"),
+    path("assemblies/<int:pk>/", gk.AssemblyDetailView.as_view(), name="oab-assembly-detail"),
+    path("assemblies/<int:pk>/call/", gk.AssemblyCallView.as_view(), name="oab-assembly-call"),
+    path(
+        "assemblies/<int:pk>/principal-call/",
+        gk.AssemblyPrincipalCallView.as_view(),
+        name="oab-assembly-principal-call",
+    ),
+    path(
+        "assemblies/<int:pk>/audit-board-call/",
+        gk.AssemblyAuditBoardCallView.as_view(),
+        name="oab-assembly-audit-board-call",
+    ),
+    path(
+        "assemblies/<int:pk>/call-document/",
+        gk.AssemblyCallDocumentView.as_view(),
+        name="oab-assembly-call-document",
+    ),
+    path(
+        "assemblies/<int:pk>/announcement/",
+        gk.AssemblyAnnouncementView.as_view(),
+        name="oab-assembly-announcement",
+    ),
+    path(
+        "assemblies/<int:pk>/second-announcement/",
+        gk.AssemblySecondAnnouncementView.as_view(),
+        name="oab-assembly-second-announcement",
+    ),
+    path(
+        "announcements/<int:pk>/evidence/",
+        gk.AnnouncementEvidenceView.as_view(),
+        name="oab-announcement-evidence",
+    ),
+    path(
+        "announcements/<int:pk>/attachments/",
+        gk.AnnouncementAttachmentsView.as_view(),
+        name="oab-announcement-attachments",
+    ),
+    path(
+        "assemblies/<int:pk>/first-meeting/",
+        gk.AssemblyFirstMeetingView.as_view(),
+        name="oab-assembly-first-meeting",
+    ),
+    path(
+        "assemblies/<int:pk>/second-meeting/",
+        gk.AssemblySecondMeetingView.as_view(),
+        name="oab-assembly-second-meeting",
+    ),
+    path(
+        "assemblies/<int:pk>/cancel/", gk.AssemblyCancelView.as_view(), name="oab-assembly-cancel"
+    ),
+    path(
+        "assemblies/<int:pk>/attendance-corrections/",
+        gk.AssemblyAttendanceCorrectionsView.as_view(),
+        name="oab-assembly-attendance-corrections",
+    ),
+    path(
+        "assemblies/<int:pk>/attendance-marks/",
+        gk.AssemblyAttendanceMarksView.as_view(),
+        name="oab-assembly-attendance-marks",
+    ),
+    path(
+        "assemblies/<int:pk>/agenda/", gk.AssemblyAgendaView.as_view(), name="oab-assembly-agenda"
+    ),
+    path(
+        "assemblies/<int:pk>/agenda-order/",
+        gk.AssemblyAgendaOrderView.as_view(),
+        name="oab-assembly-agenda-order",
+    ),
+    path(
+        "agenda-items/<int:pk>/removal/",
+        gk.AgendaItemRemovalView.as_view(),
+        name="oab-agenda-item-removal",
+    ),
+    path(
+        "agenda-items/<int:pk>/result/",
+        gk.AgendaItemResultView.as_view(),
+        name="oab-agenda-item-result",
+    ),
+    path(
+        "agenda-items/<int:pk>/election/",
+        gk.AgendaItemElectionView.as_view(),
+        name="oab-agenda-item-election",
+    ),
+    path(
+        "agenda-items/<int:pk>/election-form/",
+        gk.AgendaItemElectionFormView.as_view(),
+        name="oab-agenda-item-election-form",
+    ),
+    path(
+        "agenda-items/<int:pk>/election-cancel/",
+        gk.AgendaItemElectionCancelView.as_view(),
+        name="oab-agenda-item-election-cancel",
+    ),
+    path(
+        "agenda-items/<int:pk>/discharge/",
+        gk.AgendaItemDischargeView.as_view(),
+        name="oab-agenda-item-discharge",
+    ),
+    path(
+        "agenda-items/<int:pk>/attachments/",
+        gk.AgendaItemAttachmentsView.as_view(),
+        name="oab-agenda-item-attachments",
+    ),
+    path(
+        "agenda-items/<int:pk>/audit-board-attachment/",
+        gk.AgendaItemAuditBoardAttachmentView.as_view(),
+        name="oab-agenda-item-audit-board-attachment",
+    ),
+    path(
+        "assemblies/<int:pk>/presiding-board/",
+        gk.AssemblyPresidingBoardView.as_view(),
+        name="oab-assembly-presiding-board",
+    ),
+    path(
+        "assemblies/<int:pk>/presiding-board-cancel/",
+        gk.AssemblyPresidingBoardCancelView.as_view(),
+        name="oab-assembly-presiding-board-cancel",
+    ),
+    path(
+        "assemblies/<int:pk>/candidates/",
+        gk.AssemblyCandidatesView.as_view(),
+        name="oab-assembly-candidates",
+    ),
+    path(
+        "assemblies/<int:pk>/minutes/",
+        gk.AssemblyMinutesView.as_view(),
+        name="oab-assembly-minutes",
+    ),
+    path(
+        "assemblies/<int:pk>/minutes-complete/",
+        gk.AssemblyMinutesCompleteView.as_view(),
+        name="oab-assembly-minutes-complete",
+    ),
+    path(
+        "assemblies/<int:pk>/term-transition/",
+        gk.AssemblyTermTransitionView.as_view(),
+        name="oab-assembly-term-transition",
+    ),
+    # Genel kurul evrakı (E05-E13, E64): katalog, liste, üretim, Denetleme Kurulunun E05'i, adlı çıktı.
+    path(
+        "assembly-documents/catalog/",
+        gk.AssemblyDocumentCatalogView.as_view(),
+        name="oab-assembly-document-catalog",
+    ),
+    path(
+        "assemblies/<int:pk>/documents/",
+        gk.AssemblyDocumentListView.as_view(),
+        name="oab-assembly-documents",
+    ),
+    path(
+        "assemblies/<int:pk>/documents/e05/audit-board/",
+        gk.AssemblyE05AuditBoardView.as_view(),
+        name="oab-assembly-document-e05-audit-board",
+    ),
+    path(
+        "assemblies/<int:pk>/documents/<str:kod>/named/",
+        gk.AssemblyNamedDocumentView.as_view(),
+        name="oab-assembly-document-named",
+    ),
+    path(
+        "assemblies/<int:pk>/documents/<str:kod>/",
+        gk.AssemblyDocumentView.as_view(),
+        name="oab-assembly-document",
+    ),
+    # ------------------------------------------------------------------ gelen-giden evrak (M10)
+    path("document-books/", gk.DocumentBookListView.as_view(), name="oab-document-book-list"),
+    path("document-records/", gk.DocumentRecordListView.as_view(), name="oab-document-record-list"),
+    path(
+        "document-records/<int:pk>/attachments/",
+        gk.DocumentRecordAttachmentsView.as_view(),
+        name="oab-document-record-attachments",
+    ),
+    # Kullanıcı eklerinin indirilmesi (genel kurulun dosya ekleri, ilan kanıtları, evrak kaydının ekleri).
+    path(
+        "attachments/<int:pk>/", gk.AttachmentDownloadView.as_view(), name="oab-attachment-download"
     ),
 ]

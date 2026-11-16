@@ -28,7 +28,11 @@ alınır: bağ artık geçerli bir koltuğa dayanmaz.
 
 İPTAL (`uyeligi_iptal_et`): yanlış kayıt `IPTAL` olur (aday ya da seçilmiş); gerekçe zorunludur (sert,
 O1), kim `updated_by` ve iz satırıdır. Devralınan kaydı yalnız program yöneticisi iptal eder (geçiş
-kaydı; tasarım §7.9 adım 2), uç hangisi olursa olsun. İptal kaydı hiç olmamış sayılır (tekil kısıt, sayaç, tek koltuk).
+kaydı; tasarım §7.9 adım 2), uç hangisi olursa olsun. Genel kurula bağlı kayıt (plan F2 §10.2,
+en dar seçenek): genel kurulun seçtiği üye ve divan bu genel yoldan iptal edilmez, genel kurulun kendi
+iptalindedir (`genel_kurul.secimi_iptal_et`, `divani_iptal_et`; `genel_kurul_yolu=True`); genel
+kurulun adayı genel yoldan yalnız adayı kaydeden rollerce ve seçimin sonucu girilmeden iptal edilir
+(`genel_kurul.aday_iptali_denetimi`; tek kaynak S6 (i), tasarım §7.1 "Kim"). İptal kaydı hiç olmamış sayılır (tekil kısıt, sayaç, tek koltuk).
 İptal edilen devralınan kaydın açık sayaç satırı kapanır: beyanın sınır uyarısı yeniden girilen kayıtta
 durur (`uyelikler.devralinan_sayac_satirlarini_kapat`; kullanıcı kararı 12.11.2026).
 
@@ -110,6 +114,11 @@ ERTELEME_KOSULU_YOK = (
 )
 IPTAL_GEREKCESI_GEREKLI = "İptal gerekçesi yazılmalıdır."
 YALNIZ_ADAY_YA_DA_SECILMIS_IPTAL = "Yalnız aday ya da seçilmiş üyelik iptal edilir."
+GENEL_KURUL_SECILENI_IPTALI = (
+    "Genel kurulun seçtiği üyenin ve divanın kaydı buradan iptal edilmez: yanlış girilen seçim Genel "
+    "Kurul'da seçimin iptaliyle, divan divanın düzeltilmesiyle düzeltilir (tek kaynak; hesap "
+    "bütünlüğü)."
+)
 ENGEL_DAYANAGI_GEREKLI = "Görev alma engelinin dayanağı ve tespit günü girilmelidir."
 ENGEL_YOKSA_DAYANAK_YOK = "Engel yoksa dayanak ve tespit günü girilmez."
 ENGEL_DEGISMEZ = "Düşmüş ya da iptal edilmiş üyeliğin görev alma engeli değiştirilemez."
@@ -346,14 +355,27 @@ def uyeligi_dusur(
 # İptal (O1)
 # ---------------------------------------------------------------------------
 @transaction.atomic
-def uyeligi_iptal_et(uyelik: OrganMembership, *, cancel_reason: str) -> OrganMembership:
-    """Yanlış kaydı iptal eder (`DURUM`); gerekçe zorunlu, kim `updated_by` ve iz satırıdır."""
+def uyeligi_iptal_et(
+    uyelik: OrganMembership, *, cancel_reason: str, genel_kurul_yolu: bool = False
+) -> OrganMembership:
+    """Yanlış kaydı iptal eder (`DURUM`); gerekçe zorunlu, kim `updated_by` ve iz satırıdır.
+
+    `genel_kurul_yolu` yalnız genel kurulun kendi iptallerindedir (`genel_kurul.secimi_iptal_et`,
+    `divani_iptal_et`; kapıları orada). Genel yolda genel kurula bağlı kayıt modül başlığındaki
+    sınırdadır (sert; hesap bütünlüğü)."""
     metin = cancel_reason.strip()
     if not metin:
         raise ValueError(IPTAL_GEREKCESI_GEREKLI)
     guncel = _baslangic(uyelik)
     if guncel.status not in (MembershipStatus.ADAY, MembershipStatus.SECILDI):
         raise UyelikDurumuGecersiz(YALNIZ_ADAY_YA_DA_SECILMIS_IPTAL)
+    if guncel.assembly_id is not None and not genel_kurul_yolu:
+        if guncel.status == MembershipStatus.SECILDI:
+            raise ValueError(GENEL_KURUL_SECILENI_IPTALI)
+        # Döngüsel içe aktarım: genel kurul servisi bu modülü kullanır.
+        from apps.oab.services import genel_kurul
+
+        genel_kurul.aday_iptali_denetimi(guncel)
     devralinan = guncel.source == MembershipSource.DEVRALINAN
     if devralinan:
         # Devralınan üyelik geçiş kaydıdır: kaydı yalnız program yöneticisi yazar ve iptal eder (tasarım

@@ -78,6 +78,21 @@ KISI_YAZAN_UCLAR = frozenset(
         # notu) ve programdan önceki seçilme sayılarının beyanı (kişi kaydının sayaç alanları).
         "oab-transition-inherited",
         "oab-transition-election-counts",
+        # F2 11. adım: genel kurulun kişi yazan uçları — veli satırının katılım işareti, aday, seçim ve
+        # seçimin iptali (üyelik), divan ve iptali (üyelik), tutanağın kişi bağları, dönem geçişinin onayı
+        # (dönemsiz veli satırlarını döneme bağlar), genel kurul evrakının üretimi (şifreli içerik kişi
+        # adı taşır; Denetleme Kurulunun E05'i ve veli adlı çıktının evrak kaydı dahil).
+        "oab-assembly-attendance-marks",
+        "oab-assembly-candidates",
+        "oab-agenda-item-election",
+        "oab-agenda-item-election-cancel",
+        "oab-assembly-presiding-board",
+        "oab-assembly-presiding-board-cancel",
+        "oab-assembly-minutes",
+        "oab-assembly-term-transition",
+        "oab-assembly-document",
+        "oab-assembly-document-e05-audit-board",
+        "oab-assembly-document-named",
     }
 )
 
@@ -176,6 +191,43 @@ DIGER_UCLAR = frozenset(
         "oab-transition-decision-book",
         "oab-transition-decision-book-cancel",
         "oab-transition-complete",
+        # F2 11. adım: genel kurulun kişi yazmayan uçları (kayıt, çağrı, ilan, toplantı sayıları, gündem,
+        # karar, ibra, iptal, dosya ekleri, tutanağın tamamlanması; şifreli serbest metin anahtarsız
+        # yazılmaz, servis ilk hesap kapısını yeniden sorar), evrak kataloğu ve listesi, yıllık iş
+        # takvimi ve basımı (kişisiz), gelen-giden evrak (karşı taraf ve konu şifreli serbest metin;
+        # kişi kaydı değildir) ve kullanıcı eklerinin indirilmesi.
+        "oab-assembly-list",
+        "oab-assembly-detail",
+        "oab-assembly-agenda-order",
+        "oab-assembly-call",
+        "oab-assembly-principal-call",
+        "oab-assembly-audit-board-call",
+        "oab-assembly-call-document",
+        "oab-assembly-cancel",
+        "oab-assembly-announcement",
+        "oab-assembly-second-announcement",
+        "oab-announcement-evidence",
+        "oab-announcement-attachments",
+        "oab-assembly-first-meeting",
+        "oab-assembly-second-meeting",
+        "oab-assembly-attendance-corrections",
+        "oab-assembly-agenda",
+        "oab-agenda-item-removal",
+        "oab-agenda-item-result",
+        "oab-agenda-item-election-form",
+        "oab-agenda-item-discharge",
+        "oab-agenda-item-attachments",
+        "oab-agenda-item-audit-board-attachment",
+        "oab-assembly-minutes-complete",
+        "oab-assembly-document-catalog",
+        "oab-assembly-documents",
+        "oab-term-annual-calendar",
+        "oab-document-e14",
+        "oab-document-book-list",
+        "oab-document-record-list",
+        "oab-document-record-attachments",
+        "oab-document-outgoing-record",
+        "oab-attachment-download",
         "setup-complete",
         "setup-roadmap",
         "setup-school-config",
@@ -276,11 +328,34 @@ def test_parolasizken_kisi_yazan_her_uc_yazma_yontemiyle_409_doner(parolasiz: Pa
     # temsilci ve alım komisyonu (POST).
     # + F1c 10. adım: E01, E02, E03 üretimi (POST).
     # + F1c 11. adım: geçişte devralınan kayıt ve seçilme sayısı beyanı (POST).
+    # + F2 11. adım: katılım işareti, aday, seçim ve iptali, divan ve iptali, tutanak bilgisi (PATCH),
+    # dönem geçişinin onayı, evrak üretimi, Denetleme Kurulunun E05'i ve veli adlı çıktı (POST).
     # Aile iskeletinin kütüphane uçları (üyelik, kart basımı, dolaşım masası,
     # teslim, saklama tetiği) F1a-2'de, öğrenci uçları F1b 5. adımda söküldü.
     assert (
         denenen
-        == 1 + 1 * 3 + 2 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 2 + 2 + 1 + 1 + 1 + 2 + 3 + 2
+        == 1
+        + 1 * 3
+        + 2
+        + 1
+        + 1
+        + 1
+        + 1
+        + 2
+        + 1
+        + 1
+        + 2
+        + 1
+        + 1
+        + 2
+        + 2
+        + 1
+        + 1
+        + 1
+        + 2
+        + 3
+        + 2
+        + 11
     )
     assert not Personnel.all_objects.exists()
     assert not ParentRoster.objects.exists()

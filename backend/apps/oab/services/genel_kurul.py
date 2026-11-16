@@ -1710,6 +1710,69 @@ def ilan_kanitina_ek_ekle(duyuru: Announcement, icerik: bytes, *, dosya_adi: str
 
 
 # ---------------------------------------------------------------------------
+# Genel kurulun dosya ekleri (plan F2 §1.2, §7 U22, U23; kullanıcı kararı S13 (a); 11. adım)
+# ---------------------------------------------------------------------------
+#: Dosya eki alan gündem maddeleri ve ekin belgesi: yönetim kurulu faaliyet raporu ve kesin hesap (E34)
+#: ve tahmini bütçe (E28) yönetim kurulu rollerinin ve program yöneticisinin, Denetleme Kurulunun nihai
+#: raporu (E33; md. 14/4) Denetleme Kurulunun ekidir. Üretimleri F4'tedir; F2'de genel kurula sunulan
+#: belge dosya olarak eklenir. Ekin sahibi gündem maddesidir (kayıt türü başına ayrı bağ; şema
+#: değişmez).
+DOSYA_EKI_BELGELERI: Final[Mapping[str, str]] = {
+    AgendaItemKind.YK_FAALIYET_RAPORU: "E34",
+    AgendaItemKind.TAHMINI_BUTCE: "E28",
+    AgendaItemKind.DK_RAPORU: "E33",
+}
+#: Denetleme Kurulunun eki (M8 ⁵, `Eylem.DK_GENEL_KURUL_YAZMA`).
+DK_DOSYA_EKI_MADDESI: Final = AgendaItemKind.DK_RAPORU
+#: Dosya ekinin yazıldığı durumlar: planlamadan toplantının sonuna dek (tutanak tamamlanınca kapanır).
+_EK_YAZILABILIR: Final = frozenset(
+    {
+        AssemblyStatus.PLANLANDI,
+        AssemblyStatus.CAGRILDI,
+        AssemblyStatus.ILAN_EDILDI,
+        AssemblyStatus.YETER_SAYI_YOK,
+        AssemblyStatus.YAPILDI,
+    }
+)
+DOSYA_EKI_MADDESI_DEGIL = (
+    "Dosya eki yalnız yönetim kurulu faaliyet raporu, Denetleme Kurulu raporu ve tahmini bütçe "
+    "maddelerine eklenir."
+)
+
+
+def dosya_eki_ekle(madde: AgendaItem, icerik: bytes, *, dosya_adi: str) -> Attachment:
+    """Genel kurula sunulan belgeyi gündem maddesinin dosya eki olarak yazar (U23; kullanıcı eki kümesi
+    PDF, JPEG, PNG). Faaliyet raporu ve tahmini bütçe: genel kurul yazma kapısı (program yöneticisi ve
+    yönetim kurulu rolleri; md. 13/4 gelir-gider işlemlerini muhasibe verir); Denetleme Kurulunun
+    raporu: yalnız Denetleme Kurulu (⁵). Planlamadan toplantının sonuna dek; çıkarılan maddeye eklenmez.
+    Ek silinmez (altın kural 4)."""
+    app_password.require_password_set()
+    guncel_madde = AgendaItem.objects.get(pk=madde.pk)
+    if guncel_madde.kind not in DOSYA_EKI_BELGELERI:
+        raise ValueError(DOSYA_EKI_MADDESI_DEGIL)
+    kurul = GeneralAssembly.objects.select_related(
+        "term__rule_package", "opens_term__rule_package"
+    ).get(pk=guncel_madde.assembly_id)
+    if guncel_madde.kind == DK_DOSYA_EKI_MADDESI:
+        rol_izinleri.yetki_oturum(rol_izinleri.Eylem.DK_GENEL_KURUL_YAZMA, kural_donemi(kurul))
+    else:
+        _kapi()
+    guncel = _guncel(kurul)
+    if guncel.status not in _EK_YAZILABILIR:
+        raise ValueError(DURUM_GECERSIZ)
+    if guncel_madde.removed_by_vote:
+        raise ValueError(MADDE_CIKARILMIS)
+    return dosya_deposu.yaz(
+        icerik,
+        original_name=dosya_adi,
+        sensitivity=AttachmentSensitivity.NORMAL,
+        owner=guncel_madde,
+        yazar=yazar(),
+        kisi_listesi=False,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Toplantılar (ILAN_EDILDI → YAPILDI | YETER_SAYI_YOK; YETER_SAYI_YOK → YAPILDI)
 # ---------------------------------------------------------------------------
 def _katilim_dogrula(katilim: Katilim) -> dict[str, int]:
@@ -2386,7 +2449,7 @@ def _ibrayi_yeniden_yaz(tur: _Tur, kurul: GeneralAssembly, ibralar: Mapping[str,
                 ComplianceObligation.IBRA_EDILMEDI_BILDIRIMI,
                 donem=tur.donem,
                 due_date=genel_kurul_gunu(kurul),
-                mesaj=IBRA_BILDIRIMI_MESAJI,
+                mesaj=ibra_bildirimi_mesaji(kurul),
                 responsible_role=_YONETICI,
                 konu=kurul,
                 hazirlik_yazimi=True,
@@ -3067,6 +3130,28 @@ def secim_bicimini_yaz(
     return SecimSonucu(madde=guncel_madde, uyarilar=tuple(tur.uyarilar))
 
 
+GENEL_KURUL_ADAYI_IPTALI: Final = (
+    "Seçimin sonucu girildikten sonra genel kurulun aday kaydı iptal edilmez; yanlış girilen sonuç "
+    "Genel Kurul'da seçimin iptaliyle düzeltilir (tek kaynak; hesap bütünlüğü)."
+)
+
+
+def aday_iptali_denetimi(uyelik: OrganMembership) -> None:
+    """F1c'nin genel üyelik iptalinde genel kurulun aday kaydı (plan F2 §10.2, en dar seçenek;
+    `uyelik_gecisleri.uyeligi_iptal_et` çağırır, işlemi odur): adayı kaydeden roller (§7.1 "Kim",
+    `SECIM_ROLLERI`), aday kaydının açık olduğu durumlarda (`_ADAY_KAYDI_ACIK`) ve o kurulun seçim
+    sonucu girilmeden iptal eder. Sonuç girildiyse seçilmeyen adayın oyu da sonucun parçasıdır: önce
+    seçimin iptali (`secimi_iptal_et`). Yazmaz."""
+    if uyelik.assembly_id is None:
+        return  # genel kurula bağlı olmayan kayıt bu denetimin konusu değildir
+    _daralt(SECIM_ROLLERI)
+    kurul = GeneralAssembly.objects.get(pk=uyelik.assembly_id)
+    _durum(kurul, *_ADAY_KAYDI_ACIK)
+    turler = [tur for tur, organ in SECIM_ORGANLARI.items() if organ == uyelik.organ]
+    if AgendaItem.objects.filter(assembly=kurul, kind__in=turler).exclude(result="").exists():
+        raise ValueError(GENEL_KURUL_ADAYI_IPTALI)
+
+
 @transaction.atomic
 def secimi_iptal_et(madde: AgendaItem, *, cancel_reason: str) -> list[OrganMembership]:
     """Yanlış girilen seçim sonucunu düzeltir (divanın düzeltilmesi emsali, `divani_iptal_et`; en dar
@@ -3092,7 +3177,8 @@ def secimi_iptal_et(madde: AgendaItem, *, cancel_reason: str) -> list[OrganMembe
         assembly=kurul, organ=organ, status=MembershipStatus.SECILDI
     ).order_by("pk")
     iptaller = [
-        uyelik_gecisleri.uyeligi_iptal_et(uyelik, cancel_reason=metin) for uyelik in secilenler
+        uyelik_gecisleri.uyeligi_iptal_et(uyelik, cancel_reason=metin, genel_kurul_yolu=True)
+        for uyelik in secilenler
     ]
     if iptaller:
         uyum.iptalde_eksikleri_kapat(secim_donemi(kurul), iptaller, hazirlik_yazimi=True)
@@ -3124,10 +3210,49 @@ IBRA_EDILMEDI_BILGISI: Final = (
     "evrakını tutanak altına alarak yönetim kuruluna ve Denetleme Kuruluna teslim eder "
     "(md. 11/1-ç). Tutanak tamamlanınca il/ilçe millî eğitim müdürlüğüne bildirim takvime girer."
 )
-IBRA_BILDIRIMI_MESAJI: Final = (
-    "Hesaplar ibra edilmedi: yeni yönetim kurulu ve okul yönetimi il/ilçe millî eğitim müdürlüğüne "
-    "resmî yazıyla bildirir (md. 11/1-ç)."
-)
+#: İl/ilçe millî eğitim müdürlüğüne bildirimin takvim satırı (md. 11/1-ç: "yeni yönetim kurulu ve okul
+#: yönetimi tarafından"). Yönetim kurulunu seçmeyen (seçimsiz) olağanüstü genel kurulda yeni yönetim
+#: kurulu yoktur: bildirimi görevdeki yönetim kurulu yapar (`secilen_kurullar`; teslim alan kurullarla
+#: aynı kaynak, `genel_kurul_evraki.TESLIM_ALANLAR`; 10. adımın 11. adıma bıraktığı düzeltme).
+IBRA_BILDIRIMI_MESAJLARI: Final[Mapping[bool, str]] = {
+    True: (
+        "Hesaplar ibra edilmedi: yeni yönetim kurulu ve okul yönetimi il/ilçe millî eğitim "
+        "müdürlüğüne resmî yazıyla bildirir (md. 11/1-ç)."
+    ),
+    False: (
+        "Hesaplar ibra edilmedi: görevdeki yönetim kurulu ve okul yönetimi il/ilçe millî eğitim "
+        "müdürlüğüne resmî yazıyla bildirir (md. 11/1-ç)."
+    ),
+}
+#: Yönetim kurulunu seçen genel kurulun bildirimi (geriye dönük ad).
+IBRA_BILDIRIMI_MESAJI: Final = IBRA_BILDIRIMI_MESAJLARI[True]
+
+
+def gundem_turleri(kurul: GeneralAssembly) -> set[str]:
+    """Gündemde kalan maddelerin türleri (oylamayla çıkarılan madde sayılmaz; md. 9/4)."""
+    return {
+        str(tur)
+        for tur in AgendaItem.objects.filter(assembly=kurul, removed_by_vote=False).values_list(
+            "kind", flat=True
+        )
+    }
+
+
+def secilen_kurullar(kurul: GeneralAssembly, turler: set[str] | None = None) -> tuple[bool, bool]:
+    """Bu genel kurul yönetim kurulunu ve Denetleme Kurulunu (veli koltuğu) seçer mi: gündemde kalan
+    seçim maddesi; olağanüstü genel kurul Denetleme Kuruluna seçim yapmaz (kullanıcı kararı S10 (a)).
+    Teslim alan kurulların (md. 11/1-ç; E10, E11, E12) ve il/ilçe millî eğitim müdürlüğüne bildirimin
+    (E13, takvim satırı) tek kaynağıdır."""
+    kalan = gundem_turleri(kurul) if turler is None else turler
+    return (
+        AgendaItemKind.SECIM_YK in kalan,
+        AgendaItemKind.SECIM_DK in kalan and kurul.kind == AssemblyKind.OLAGAN,
+    )
+
+
+def ibra_bildirimi_mesaji(kurul: GeneralAssembly) -> str:
+    """İbra edilmedi bildiriminin takvim satırı, yönetim kurulunun seçilip seçilmediğine göre."""
+    return IBRA_BILDIRIMI_MESAJLARI[secilen_kurullar(kurul)[0]]
 
 
 def _tutanak(kurul: GeneralAssembly) -> AssemblyMinutes:
@@ -3345,7 +3470,10 @@ def divani_iptal_et(kurul: GeneralAssembly, *, cancel_reason: str) -> list[Organ
     if not divan:
         raise ValueError(DIVAN_YOK)
     return [
-        uyelik_gecisleri.uyeligi_iptal_et(uyelik, cancel_reason=cancel_reason) for uyelik in divan
+        uyelik_gecisleri.uyeligi_iptal_et(
+            uyelik, cancel_reason=cancel_reason, genel_kurul_yolu=True
+        )
+        for uyelik in divan
     ]
 
 
@@ -3421,7 +3549,7 @@ def tutanagi_tamamla(
             ComplianceObligation.IBRA_EDILMEDI_BILDIRIMI,
             donem=donem,
             due_date=yapildigi_gun,
-            mesaj=IBRA_BILDIRIMI_MESAJI,
+            mesaj=ibra_bildirimi_mesaji(guncel),
             responsible_role=_YONETICI,
             konu=guncel,
             hazirlik_yazimi=True,

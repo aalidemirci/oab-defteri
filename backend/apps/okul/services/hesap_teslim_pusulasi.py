@@ -388,14 +388,60 @@ ADSIZ_UCLAR: Final[Mapping[str, str]] = {
         "Kural sürümü güncellemesi; ekranı henüz yoktur, bugün programda yapılabilen iş diye "
         "yazılmaz."
     ),
+    # F2 11a: uçlar var, ekranları 11b'dedir (plan F2 §8 11. adım); ekran gelince satırlarının parçası
+    # olurlar ve buradan çıkarlar. Genel Kurul ve Gelen-Giden Evrak satırlarının bütünü
+    # `EKRANSIZ_SATIRLAR`'dadır.
+    "oab-assembly-term-transition": (
+        "Genel kuruldan sonra yeni birlik döneminin onayı; ekranı henüz yoktur, bugün programda "
+        "yapılabilen iş diye yazılmaz."
+    ),
+    "oab-assembly-audit-board-call": (
+        "Denetleme Kurulunun olağanüstü genel kurul çağrısı; ekranı henüz yoktur, bugün programda "
+        "yapılabilen iş diye yazılmaz."
+    ),
+    "oab-assembly-document-e05-audit-board": (
+        "Denetleme Kurulunun çağrı yazısı; ekranı henüz yoktur, bugün programda yapılabilen iş diye "
+        "yazılmaz."
+    ),
+    "oab-agenda-item-audit-board-attachment": (
+        "Denetleme Kurulu raporunun genel kurul dosya eki; ekranı henüz yoktur, bugün programda "
+        "yapılabilen iş diye yazılmaz."
+    ),
+    "oab-document-e14": (
+        "Yıllık iş takviminin basımı; ekranı henüz yoktur, bugün programda yapılabilen iş diye "
+        "yazılmaz."
+    ),
+    "oab-assembly-attendance-marks": (
+        "Genel kurulun veli adlı katılım işaretleri; ekranı henüz yoktur, bugün programda "
+        "yapılabilen iş diye yazılmaz."
+    ),
+    "oab-assembly-document-named": (
+        "Veli adlı teslim çizelgesi ve katılım cetveli; ekranı henüz yoktur, bugün programda "
+        "yapılabilen iş diye yazılmaz."
+    ),
+}
+
+#: Uçları bağlı (bekleyen hücresi kalmamış) ama EKRANI HENÜZ OLMAYAN satırlar ve gerekçesi: pusula bu
+#: satırları basmaz, satırın yazma uçları adlanmaz (orkestratör maddesi F-4: yalnız bugün ekranı ya
+#: da düğmesi olan işler yazılır; sözlük "Hesap teslim pusulası (F1b)"). F2 11a: Genel Kurul ve
+#: Gelen-Giden Evrak uçları arka yüzde, ekranları 11b'de; ekran gelince satır `BUGUNKU_ISLER`'e geçer
+#: ve buradan çıkar (F1c 11b emsali). Liste yalnız gerekçeyle büyür.
+EKRANSIZ_SATIRLAR: Final[Mapping[Satir, str]] = {
+    Satir.M3: "Genel Kurul ekranı henüz yoktur (F2 11. adımın ön yüz parçası).",
+    Satir.M10: "Gelen-Giden Evrak ekranı henüz yoktur (F2 11. adımın ön yüz parçası).",
 }
 
 
 def isler(rol: str) -> tuple[str, ...]:
     """Rolün "bu programda sizin işiniz" satırları: `etkin_hucreler` sırasıyla, bugünkü adlarıyla
-    (`BUGUNKU_ISLER`; yalnız rolün parçaları). Etkin satırın adı yoksa `KeyError` (test her etkin
-    satırın adını sınar)."""
-    return tuple(BUGUNKU_ISLER[satir].rol_adi(rol) for satir in etkin_hucreler(rol))
+    (`BUGUNKU_ISLER`; yalnız rolün parçaları). Ekranı henüz olmayan satır basılmaz
+    (`EKRANSIZ_SATIRLAR`). Öteki etkin satırın adı yoksa `KeyError` (test her etkin satırın adını
+    sınar)."""
+    return tuple(
+        BUGUNKU_ISLER[satir].rol_adi(rol)
+        for satir in etkin_hucreler(rol)
+        if satir not in EKRANSIZ_SATIRLAR
+    )
 
 
 def _gun(an: datetime) -> str:

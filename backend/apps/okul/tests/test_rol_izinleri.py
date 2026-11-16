@@ -61,6 +61,11 @@ Y_DK = frozenset({"yonetici", "denetleme_kurulu"})
 DK = frozenset({"denetleme_kurulu"})
 SEK = frozenset({"sekreter"})
 Y_SEK = frozenset({"yonetici", "sekreter"})
+#: F2 11. adım: genel kurulun daraltmaları (tasarım §7.1 "Kim").
+Y_SEK_MUD = frozenset({"yonetici", "sekreter", "mudur"})
+Y_SEK_BSK = frozenset({"yonetici", "sekreter", "baskan"})
+Y_SEK_BSK_MUD = frozenset({"yonetici", "sekreter", "baskan", "mudur"})
+MUD = frozenset({"mudur"})
 _KISALTMA = {
     "H": HER,
     "Y": Y,
@@ -69,6 +74,10 @@ _KISALTMA = {
     "DK": DK,
     "SEK": SEK,
     "Y+SEK": Y_SEK,
+    "Y+SEK+MUD": Y_SEK_MUD,
+    "Y+SEK+BSK": Y_SEK_BSK,
+    "Y+SEK+BSK+MUD": Y_SEK_BSK_MUD,
+    "MUD": MUD,
 }
 
 
@@ -452,6 +461,58 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     # F2 2. adım: kural sürümü güncellemesi (Ayarlar satırının kural sürümü seçimi; okuma da yalnız
     # program yöneticisine daraltıldı, tasarım §6.2-5, plan F2 §6.1).
     "oab-term-rule-revision": {"GET": "Y", "HEAD": "Y", "POST": "Y"},
+    # F2 11. adım (plan F2 §6.1, §6.2): genel kurul (M3) her role okunur; yazma tasarım §7.1'in "Kim"iyle
+    # daraltılır (planlama, ilan, toplantılar, gündem, divan, aday, seçim, ibra, tutanak: program
+    # yöneticisi ve sekreter; çağrı sekreter, başkan ve program yöneticisi; iptal ve başvuru yazısının
+    # bağı program yöneticisi); müdür yalnız kendi yazısı (¹: çağrısı, çağrısının zamanı ve gündem
+    # sırası, evrakı); dosya ekleri yönetim kurulu rolleri ve program yöneticisi (U23); Denetleme
+    # Kurulunun genel kurul işi M8 ⁵; katılım işareti ve adlı çıktı kişisel veri satırı (¹⁰); dönem
+    # geçişinin onayı M1 (U32).
+    "oab-assembly-list": {"GET": "H", "HEAD": "H", "POST": "Y+SEK"},
+    "oab-assembly-detail": {"GET": "H", "HEAD": "H", "PATCH": "Y+SEK+MUD"},
+    "oab-assembly-agenda-order": {"PUT": "Y+SEK+MUD"},
+    "oab-assembly-call": {"POST": "Y+SEK+BSK"},
+    "oab-assembly-principal-call": {"POST": "MUD"},
+    "oab-assembly-audit-board-call": {"POST": "DK"},
+    "oab-assembly-call-document": {"POST": "Y"},
+    "oab-assembly-cancel": {"POST": "Y"},
+    "oab-assembly-announcement": {"POST": "Y+SEK"},
+    "oab-assembly-second-announcement": {"POST": "Y+SEK"},
+    "oab-announcement-evidence": {"PUT": "Y+SEK"},
+    "oab-announcement-attachments": {"POST": "Y+SEK"},
+    "oab-assembly-first-meeting": {"POST": "Y+SEK"},
+    "oab-assembly-second-meeting": {"POST": "Y+SEK"},
+    "oab-assembly-attendance-corrections": {"POST": "Y+SEK"},
+    "oab-assembly-attendance-marks": {"GET": "Y", "HEAD": "Y", "POST": "Y"},
+    "oab-assembly-agenda": {"POST": "Y+SEK"},
+    "oab-agenda-item-removal": {"POST": "Y+SEK"},
+    "oab-agenda-item-result": {"POST": "Y+SEK"},
+    "oab-agenda-item-election": {"POST": "Y+SEK"},
+    "oab-agenda-item-election-form": {"PUT": "Y+SEK"},
+    "oab-agenda-item-election-cancel": {"POST": "Y+SEK"},
+    "oab-agenda-item-discharge": {"POST": "Y+SEK"},
+    "oab-agenda-item-attachments": {"POST": "Y+YK"},
+    "oab-agenda-item-audit-board-attachment": {"POST": "DK"},
+    "oab-assembly-presiding-board": {"POST": "Y+SEK"},
+    "oab-assembly-presiding-board-cancel": {"POST": "Y+SEK"},
+    "oab-assembly-candidates": {"POST": "Y+SEK"},
+    "oab-assembly-minutes": {"PATCH": "Y+SEK"},
+    "oab-assembly-minutes-complete": {"POST": "Y+SEK"},
+    "oab-assembly-term-transition": {"GET": "H", "HEAD": "H", "POST": "Y"},
+    "oab-attachment-download": {"GET": "H", "HEAD": "H"},
+    "oab-assembly-document-catalog": {"GET": "H", "HEAD": "H"},
+    "oab-assembly-documents": {"GET": "H", "HEAD": "H"},
+    "oab-assembly-document": {"POST": "Y+SEK+BSK+MUD"},
+    "oab-assembly-document-e05-audit-board": {"POST": "DK"},
+    "oab-assembly-document-named": {"POST": "Y"},
+    # Yıllık iş takvimi (M9: her rol okur; E14'ü program yöneticisi üretir, tasarım §9.6).
+    "oab-term-annual-calendar": {"GET": "H", "HEAD": "H"},
+    "oab-document-e14": {"POST": "Y"},
+    # Gelen-giden evrak (M10; ⁷: müdür ve Denetleme Kurulu okur).
+    "oab-document-book-list": {"GET": "H", "HEAD": "H", "POST": "Y+YK"},
+    "oab-document-record-list": {"GET": "H", "HEAD": "H", "POST": "Y+YK"},
+    "oab-document-record-attachments": {"POST": "Y+YK"},
+    "oab-document-outgoing-record": {"GET": "H", "HEAD": "H", "POST": "Y+YK"},
     # Gerekçe kutusunun yarım metni: her rol kendi kaydını yazar (KENDI satırı).
     "oab-draft-text": {"GET": "H", "HEAD": "H", "PUT": "H", "DELETE": "H"},
     # Genel Bakış'ın pano kalemleri (F1c 12. adım): her rol okur, kalemleri servis süzer (M9).
@@ -490,11 +551,8 @@ def test_rol_tablosu_anlik_goruntusu() -> None:
 #: KÜÇÜLEBİLİR; "F1b" fazlısı kalmadı (Kullanıcılar c1'de, DK'nin M8 hücresi c3'te "Gördüm"le
 #: bağlandı; `test_f1b_fazli_bekleyen_kalmadi`).
 BEKLEYEN_HUCRE_GORUNTUSU: dict[str, dict[str, set[str]]] = {
-    # "F1c": M2 × YK rolleri birlik kişilerinin uçlarıyla bağlandı (F1c 4. adım).
-    "F2": {
-        "M3": {*Y_YK, "mudur"},
-        "M10": set(Y_YK),
-    },
+    # "F1c": M2 × YK rolleri birlik kişilerinin uçlarıyla bağlandı (F1c 4. adım). "F2": M3 (müdürün ¹
+    # yazıları dahil) ve M10 F2'nin 11. adımında uçlarıyla bağlandı (`test_f2_fazli_bekleyen_kalmadi`).
     "F3": {"M4": set(Y_YK), "M5": {"muhasip"}},
     "F4": {
         "M6": {*Y_YK, "mudur"},
@@ -546,7 +604,9 @@ def test_etkin_hucreler_bekleyende_olmayan_y_hucreleridir() -> None:
     assert [s.value for s in etkin_hucreler("yonetici")] == [
         "M1",
         "M2",
+        "M3",
         "M9",
+        "M10",
         "KULLANICILAR",
         "GUVENLIK",
         "AYARLAR",
@@ -554,12 +614,14 @@ def test_etkin_hucreler_bekleyende_olmayan_y_hucreleridir() -> None:
         "GUNCELLEME",
         "KENDI",
     ]
-    # YK rollerinin M2 hücresi birlik kişilerinin uçlarıyla bağlandı (F1c 4. adım).
+    # YK rollerinin M2 hücresi birlik kişilerinin uçlarıyla bağlandı (F1c 4. adım); M3 ve M10 genel
+    # kurul ve gelen-giden evrak uçlarıyla (F2 11. adım).
     for rol in YK_ROLLERI:
-        assert [s.value for s in etkin_hucreler(rol)] == ["M2", "M9", "KENDI"]
+        assert [s.value for s in etkin_hucreler(rol)] == ["M2", "M3", "M9", "M10", "KENDI"]
     # DK'nin M8 hücresi geri yükleme kartının "Gördüm"üyle bağlandı (F1b-2 (c)).
     assert [s.value for s in etkin_hucreler("denetleme_kurulu")] == ["M8", "KENDI"]
-    assert [s.value for s in etkin_hucreler("mudur")] == ["KENDI"]
+    # Müdürün M3 ¹ hücresi kendi yazısının (yeni okul daveti, olağanüstü çağrı) ucuyla (F2 11. adım).
+    assert [s.value for s in etkin_hucreler("mudur")] == ["M3", "KENDI"]
     for rol in ROLLER:
         assert set(etkin_hucreler(rol)) == {
             satir for satir, rol_ in _karsilanan_hucreler() if rol_ == rol
@@ -635,17 +697,44 @@ def test_f2_yedinci_adimin_eylemleri_baglandi() -> None:
         True,
     )
     assert "25/2" in EYLEM_KURALLARI[Eylem.OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR].dayanak
-    assert BEKLEYEN_HUCRELER[(Satir.M3, "mudur")] == "F2"
-    assert BEKLEYEN_HUCRELER[(Satir.M10, "yonetici")] == "F2"
+    # M3 ve M10 hücreleri 11. adımda uçlarıyla bağlandı (`test_f2_fazli_bekleyen_kalmadi`).
+    assert (Satir.M3, "mudur") not in BEKLEYEN_HUCRELER
+    assert (Satir.M10, "yonetici") not in BEKLEYEN_HUCRELER
+
+
+def test_f2_fazli_bekleyen_kalmadi() -> None:
+    """Plan F2 §2 madde (4) ve 11. adım: üç bekleyen listesinde faz değeri "F2" olan kalem kalmaz —
+    `BEKLEYEN_HUCRELER`'de M3 (program yöneticisi, yönetim kurulu rolleri, müdür) ve M10 (program
+    yöneticisi, yönetim kurulu rolleri), `BEKLEYEN_DIPNOTLAR`'da ¹, ⁷, ¹⁰, `BAGLANMAMIS_EYLEMLER`'de F2
+    değerli eylem (plan F2 §6.2)."""
+    for liste in (BEKLEYEN_HUCRELER, BEKLEYEN_DIPNOTLAR, BAGLANMAMIS_EYLEMLER):
+        assert "F2" not in set(liste.values()), liste
+    for rol in (*Y_YK, "mudur"):
+        assert (Satir.M3, rol) not in BEKLEYEN_HUCRELER, rol
+    for rol in Y_YK:
+        assert (Satir.M10, rol) not in BEKLEYEN_HUCRELER, rol
+    assert not {1, 7, 10} & set(BEKLEYEN_DIPNOTLAR)
+    # Bağlanan hücrelerin her biri gerçek bir yazma kuralıyla karşılanır (müdürün ¹ hücresi kendi
+    # yazısının ucuyla, başkan yardımcısı ve muhasibinki dosya ekiyle; plan F2 §6.2).
+    karsilanan = _karsilanan_hucreler()
+    assert (Satir.M3, "mudur") in karsilanan
+    assert (Satir.M3, "baskan_yardimcisi") in karsilanan
+    assert (Satir.M3, "muhasip") in karsilanan
+    assert (Satir.M10, "sekreter") in karsilanan
 
 
 def test_m8_yazma_uclari_gordum_ve_dk_gorev_bolumudur_ve_yalniz_dk_ya_aciktir() -> None:
-    """M8'in bugünkü yazma kuralları "Gördüm", DK görev bölümü (F1c 6. adım) ve görev bölümü
-    tutanağıyla denetim planının belgesidir (E02, F1c 10. adım); hepsi ⁵ dipnotunu adıyla anar, yalnız
+    """M8'in bugünkü yazma kuralları "Gördüm", DK görev bölümü (F1c 6. adım), görev bölümü
+    tutanağıyla denetim planının belgesi (E02, F1c 10. adım) ve genel kurul işidir (md. 14/5 çağrısı,
+    E05, E33'ün dosya eki; F2 11. adım); hepsi ⁵ dipnotunu adıyla anar, yalnız
     Denetleme Kuruluna açılır (YK rolleri DK modülüne yazamaz, program yöneticisi de; tasarım §4.4.2
     ⁵)."""
     kurallar = [k for k in KURALLAR if k.satir is Satir.M8 and k.tur is KuralTuru.YAZMA]
+    # F2 11. adım: md. 14/5 çağrısı, çağrı yazısı (E05) ve nihai raporun genel kurul dosya eki (E33).
     assert sorted((k.uc, tuple(sorted(k.yontemler)), k.dipnot) for k in kurallar) == [
+        ("oab-agenda-item-audit-board-attachment", ("POST",), 5),
+        ("oab-assembly-audit-board-call", ("POST",), 5),
+        ("oab-assembly-document-e05-audit-board", ("POST",), 5),
         ("oab-dk-duty-assignment", ("POST",), 5),
         ("oab-document-e02", ("POST",), 5),
         ("security-integrity-restore-seen", ("POST",), 5),
@@ -806,10 +895,18 @@ def test_yetenek_adlari_ve_rollerin_yetenekleri_anlik_goruntusu() -> None:
         "bosta_sure_yazma",
         "butunluk_denetim",
         "ders_yili_yazma",
+        "dk_genel_kurul_yazma",
         "dk_gorev_bolumu_yazma",
         "dk_yedek_cagirma",
+        "donem_gecisi_onayi",
         "eokul_aktarimi",
         "erisim_gunlugu",
+        "evrak_kaydi",
+        "genel_kurul_cagri",
+        "genel_kurul_dosya_eki",
+        "genel_kurul_evraki",
+        "genel_kurul_iptal",
+        "genel_kurul_yazma",
         "geri_yukleme_gordum",
         "gorev_alma_engeli",
         "gorev_bolumu_yazma",
@@ -819,8 +916,11 @@ def test_yetenek_adlari_ve_rollerin_yetenekleri_anlik_goruntusu() -> None:
         "kapali_gun_yazma",
         "karar_taslagi_uretme",
         "kisi_yazma",
+        "kisisel_veri_ciktisi",
         "kullanicilar",
+        "kural_surumu_guncelleme",
         "kurulum_tamamlama",
+        "mudur_genel_kurul_yazisi",
         "okul_karti_yazma",
         "organ_yazma",
         "son_oturum_onay",
@@ -828,26 +928,43 @@ def test_yetenek_adlari_ve_rollerin_yetenekleri_anlik_goruntusu() -> None:
         "toplanti_gunu_yazma",
         "uyelik_dusurme",
         "veli_listesi",
+        "yillik_is_takvimi_uretme",
         "yol_haritasi",
     ]
-    # "Gördüm" ve Denetleme Kurulunun görev bölümü yalnız Denetleme Kurulunundur; yönetim kurulunun
-    # görev bölümünü ve yedek çağrısını yalnız sekreter yazar (tasarım §7.2 "Kim").
-    yalniz_baskalari = {"geri_yukleme_gordum", "dk_gorev_bolumu_yazma", "gorev_bolumu_yazma"}
+    # "Gördüm" ve Denetleme Kurulunun görev bölümü ve genel kurul işi yalnız Denetleme Kurulunundur;
+    # yönetim kurulunun görev bölümünü ve yedek çağrısını yalnız sekreter yazar (tasarım §7.2 "Kim");
+    # müdürün yazısı yalnız müdürün (¹).
+    yalniz_baskalari = {
+        "geri_yukleme_gordum",
+        "dk_gorev_bolumu_yazma",
+        "dk_genel_kurul_yazma",
+        "gorev_bolumu_yazma",
+        "mudur_genel_kurul_yazisi",
+    }
     assert yetenekler("yonetici") == [ad for ad in tum if ad not in yalniz_baskalari]
     # Görev alma engelini yönetim kurulu rolleri de yazar ve dayanağını okur (tasarım §4.4.2 ¹¹); düşme,
     # görev bölümü evrakı ve aylık toplantı günü sekreterle program yöneticisinindir (F1c 11. adım).
+    # F2 11. adım: yönetim kurulu rolleri genel kurulun dosya eklerini yazar ve gelen-giden evrakı
+    # kaydeder; çağrıyı ve evrakı başkan ve sekreter (servis belgeye ve çağırana göre daraltır),
+    # sihirbazın öteki adımlarını sekreter yazar (tasarım §7.1 "Kim", §9.6 "Üreten").
     yk_ortak = [
         "birlik_kisi_yazma",
+        "evrak_kaydi",
+        "genel_kurul_dosya_eki",
         "gorev_alma_engeli",
         "organ_yazma",
         "son_oturum_onay",
         "temsilci_yazma",
     ]
-    for rol in YK_ROLLERI - {"sekreter"}:
+    for rol in YK_ROLLERI - {"sekreter", "baskan"}:
         assert yetenekler(rol) == yk_ortak
+    assert yetenekler("baskan") == sorted([*yk_ortak, "genel_kurul_cagri", "genel_kurul_evraki"])
     assert yetenekler("sekreter") == sorted(
         [
             *yk_ortak,
+            "genel_kurul_cagri",
+            "genel_kurul_evraki",
+            "genel_kurul_yazma",
             "gorev_bolumu_yazma",
             "karar_taslagi_uretme",
             "toplanti_gunu_yazma",
@@ -856,11 +973,12 @@ def test_yetenek_adlari_ve_rollerin_yetenekleri_anlik_goruntusu() -> None:
     )
     assert yetenekler("denetleme_kurulu") == [
         "butunluk_denetim",
+        "dk_genel_kurul_yazma",
         "dk_gorev_bolumu_yazma",
         "erisim_gunlugu",
         "geri_yukleme_gordum",
     ]
-    assert yetenekler("mudur") == []
+    assert yetenekler("mudur") == ["genel_kurul_evraki", "mudur_genel_kurul_yazisi"]
 
 
 def test_kullanicilar_yetenegi_satirin_butun_uclarini_kapsar() -> None:
