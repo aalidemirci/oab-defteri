@@ -12,8 +12,10 @@
 // * `karar_taslagi_uretme` — yönetim kurulu görev bölümü karar taslağı (program yöneticisi ve sekreter);
 //   `toplanti_gunu_yazma` — aylık toplantı günü (aynı roller).
 //
-// Yönetim kurulu ve Denetleme Kurulunun veli üyesi genel kurulda seçilir (genel kurul akışı sonraki
-// fazdadır); programdan önce seçilmiş görevdeki kurul geçiş kurulumundadır. Kadro geniş tablo değildir:
+// Yönetim kurulu ve Denetleme Kurulunun veli üyesi genel kurulda seçilir (Genel Kurul ekranı, F2);
+// programdan önce seçilmiş görevdeki kurul geçiş kurulumundadır. Denetleme Kurulu sekmesinde yalnız
+// Denetleme Kuruluna açık genel kurul bölümü durur (`dk_genel_kurul_yazma`: md. 14/5 çağrısı ve
+// raporun dosya eki; `DkGenelKurulBolumu`). Kadro geniş tablo değildir:
 // satır, ayrıntısını ve eylemlerini pencerede açar (1366×768'de yatay kaydırma olmasın). Kadro uyarıları
 // kaydedilmez, gerekçe istemez; sert engeller bantla, öteki uyarılar ortak "uyarı + gerekçe" bileşeniyle.
 // Birlik dönemi yoksa boş durum; yazılamayan dönemde (kapanmış, D7) yazma denetimi çizilmez.
@@ -50,6 +52,7 @@ import { SaltOkurNotu } from "../oturum/RolKapisi";
 import { useYetki } from "../oturum/yetki";
 import { organlarApi } from "./api";
 import type { Kadro, KadroOrgani, Uyelik } from "./api";
+import DkGenelKurulBolumu from "./DkGenelKurulBolumu";
 import { DonemBasligi, donemYazilir, gecisAcik, useDonemSecimi } from "./donem";
 import { DkGorevBolumuPenceresi, YkGorevBolumuPenceresi } from "./GorevBolumuPenceresi";
 import {
@@ -135,6 +138,7 @@ export default function OrganlarPage() {
             "dk_yedek_cagirma",
             "uyelik_dusurme",
             "gorev_alma_engeli",
+            "dk_genel_kurul_yazma",
           ));
 
   return (
@@ -190,6 +194,8 @@ export default function OrganlarPage() {
                 onDonemGuncellendi={secim.guncelle}
               />
             )}
+            {/* Denetleme Kurulunun genel kurul işi (M8 ⁵; F2 11b): md. 14/5 çağrısı ve raporun eki. */}
+            {tab === "dk" && yetki.acik("dk_genel_kurul_yazma") && <DkGenelKurulBolumu />}
           </div>
         </>
       )}

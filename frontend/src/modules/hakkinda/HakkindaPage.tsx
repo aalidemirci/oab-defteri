@@ -64,8 +64,8 @@ export default function HakkindaPage() {
                 girmez. Okulun kayıtlarına ilişkin başvuru okul müdürlüğüne yönelir; veri
                 sorumlusunun kim olduğu okul müdürlüğünün değerlendirmesidir (tasarım §3.4,
                 §15 KE-20); bilgisi okul kartındadır (`data_controller_text`). Aydınlatma
-                metinleri personel ve veli listesi aktarım ekranlarındadır (F1b 5. adım),
-                belgesi E04 F2'de gelir. */}
+                metinleri personel ve veli listesi aktarım ekranlarındadır (F1b 5. adım);
+                E04 belgesi dört alt metninin onayını bekliyor (F2), bu metne o zaman eklenir. */}
             <p className="mt-2 text-body-small text-on-surface-variant">
               İletinize öğrenci, veli ya da personel bilgisi, gerçek veri içeren ekran görüntüsü,
               yedek ya da veritabanı dosyası eklemeyin. Programdaki kişisel verilere ilişkin

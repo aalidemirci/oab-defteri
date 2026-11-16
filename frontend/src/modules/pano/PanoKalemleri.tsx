@@ -2,8 +2,8 @@
 //
 // Açılış ekranının listesi: rolün "Bu Hafta Yapılacaklar"ı — son günü yedi gün içinde olan ya da
 // geçmiş kalemler önde (sunucu son güne göre sıralar), süresi olmayan işler ardından; son günü
-// pencerenin ötesindeki kalem listeye girmez (takvim görünümü ve E14 sonraki fazdadır). Veli
-// rollerinde (sunucunun `gorunum: "ay"`ı; ön yüz rol adıyla dallanmaz) varsayılan görünüm "Bu Ay
+// pencerenin ötesindeki kalem listeye girmez (takvim görünümü ve E14 Genel Bakış → Yıllık İş Takvimi
+// sekmesindedir; F2 11b). Veli rollerinde (sunucunun `gorunum: "ay"`ı; ön yüz rol adıyla dallanmaz) varsayılan görünüm "Bu Ay
 // Sizden Beklenenler"dir ve büyük yazıyla açılır (§7.10 "Teslim yolu"; R5): başlık, açıklama, son gün,
 // dayanak, götürdüğü ekran, rozet ve bilgi bandı birlikte bir basamak büyür; pencere ayın son
 // günüdür, en az yedi gün. Ailenin yoğunluk ayarı yazı boyutunu değiştirmez (yalnız denetim yüksekliği), bu

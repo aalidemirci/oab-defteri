@@ -39,11 +39,12 @@ export const ASIL_YOK = "Görevdeki asıl üye yok.";
 export const YEDEK_YOK = "Çağrılmamış yedek üye yok.";
 export const KOMISYON_UYESI_YOK = "Komisyon üyesi girilmedi.";
 export const YK_SECIM_NOTU =
-  "Yönetim kurulunu genel kurul seçer. Programdan önce seçilmiş görevdeki kurul Birlik Dönemi → " +
-  "Geçiş Kurulumu'nda girilir.";
+  "Yönetim kurulunu genel kurul seçer; seçim Genel Kurul ekranında girilir. Programdan önce " +
+  "seçilmiş görevdeki kurul Birlik Dönemi → Geçiş Kurulumu'nda girilir.";
 export const DK_SECIM_NOTU =
-  "Denetleme Kurulunun veli üyesini genel kurul, öğretmen üyelerini öğretmenler kurulu seçer. " +
-  "Programdan önce seçilmiş görevdeki kurul Birlik Dönemi → Geçiş Kurulumu'nda girilir.";
+  "Denetleme Kurulunun veli üyesini genel kurul, öğretmen üyelerini öğretmenler kurulu seçer; " +
+  "genel kurulun seçimi Genel Kurul ekranında girilir. Programdan önce seçilmiş görevdeki kurul " +
+  "Birlik Dönemi → Geçiş Kurulumu'nda girilir.";
 export const ALIM_ACIKLAMASI =
   "Mal ve hizmet alımları yönetim kurulu üyelerinden ya da uzmanlık gerektiren işlerde birlik " +
   "üyelerinden oluşan en az üç kişilik komisyonla yapılır (md. 18/1).";

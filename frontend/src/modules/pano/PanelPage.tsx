@@ -36,11 +36,18 @@
 //
 // Durum `GET /setup/status/`'tan tek kez okunur (kişisel veri yok). Okunamazsa
 // yol haritası gösterilmez; sayfanın geri kalanı çalışır.
+//
+// Sekmeler (F2 11b; `?tab=`): **Özet** (yukarıdaki kartlar; varsayılan) ve **Yıllık İş Takvimi** (M9: her
+// rol okur; E14'ün basımı program yöneticisinde — `YillikIsTakvimi`). Takvim sekmesi seçilmedikçe
+// okunmaz.
 
 import { useCallback, useEffect, useState } from "react";
 
+import { useTabParam } from "../../hooks/useTabParam";
 import { ApiError } from "../../lib/api";
 import HubFeatureCard from "../../ui/HubFeatureCard";
+import Tabs, { tabPanelProps } from "../../ui/Tabs";
+import type { TabItem } from "../../ui/Tabs";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import ButunlukKartlari, { OkunamayanButunlukKarti } from "../butunluk/ButunlukKartlari";
 import SonGirislerKarti from "../butunluk/SonGirislerKarti";
@@ -56,6 +63,16 @@ import BaslangicYolHaritasi from "./BaslangicYolHaritasi";
 import OkunamayanAlanlarKarti from "./OkunamayanAlanlarKarti";
 import PanoKalemleri from "./PanoKalemleri";
 import SonOturumKarti from "./SonOturumKarti";
+import YillikIsTakvimi from "./YillikIsTakvimi";
+import { GENEL_BAKIS_SEKMELERI, SEKME_OZET, SEKME_TAKVIM } from "./metinler";
+
+// TABS[0] varsayılan sekmedir (useTabParam fallback). Yıllık İş Takvimi F2 11b'de geldi (M9: her rol okur).
+const TABS = ["ozet", "takvim"] as const;
+type Sekme = (typeof TABS)[number];
+const TAB_ITEMS: TabItem[] = [
+  { key: "ozet", label: SEKME_OZET, icon: "space_dashboard" },
+  { key: "takvim", label: SEKME_TAKVIM, icon: "calendar_month" },
+];
 
 /** Gezinme kartlarının açıklamaları: rolün o sayfada göreceğini söyler (sözlük §4.5). */
 export const KISILER_KARTI_ACIKLAMASI =
@@ -69,6 +86,7 @@ export default function PanelPage() {
   const snackbar = useSnackbar();
   const yetki = useYetki();
   const [durum, setDurum] = useState<SetupStatus | null>(null);
+  const [tab, setTab] = useTabParam<Sekme>("tab", TABS, "ozet");
   const { yetenekler, hata: yetenekHatasi } = useYetenekler();
   const butunluk = useButunlukDurumu(
     yetenekler === null ? null : butunlukYetkisi(yetenekler),
@@ -120,70 +138,87 @@ export default function PanelPage() {
           Okul-aile birliğinin işlerini yürüttüğü yerel araç. Veriler yalnız bu bilgisayarda durur.
         </p>
       </header>
-      {/* Pano kalemleri (§7.10): rolün listesi; kişisiz, sunucuda her okumada hesaplanır. */}
-      <PanoKalemleri />
-      {yetki.acik("yol_haritasi") && durum && !durum.roadmap.hidden && (
-        <BaslangicYolHaritasi
-          durum={durum}
-          onIsaretle={(madde, yapildi) => void isaretle(madde, yapildi)}
-          onGizle={() => void gizle()}
-        />
-      )}
-      {/* T15 (§13 D4): beklenmedik kapanıştan sonra "Son Oturumu Kontrol Edin". */}
-      <SonOturumKarti kontrolEdebilir={yetki.acik("son_oturum_onay")} />
-      {/* Denetim izinin uyarı kartları (tasarım §4.6.3, §4.6.1): söyleyecek bir şeyi
-          olmayan kart çizilmez; kişisiz (hesap rol etiketi ve tanıtıcıyla). */}
-      {/* Kartlar okunamayanı zaten söylüyorsa (`okunamayan` dolu) ikinci kart çizilmez. */}
-      {butunluk.okunamadi && !butunluk.durum?.okunamayan.length && <OkunamayanButunlukKarti />}
-      {butunluk.durum && (
-        <ButunlukKartlari
-          durum={butunluk.durum}
-          onIkiDepo={butunluk.ikiDepoyuYaz}
-          gordum={
-            yetki.acik("geri_yukleme_gordum")
-              ? { onDenetim: butunluk.denetimiYaz, onYenile: butunluk.yenile }
-              : null
-          }
-          kullanicilarAcik={yetki.acik("kullanicilar")}
-        />
-      )}
-      {/* D48: çözülemeyen şifreli alan yoksa görünmez; kişisiz, yalnız sayı. */}
-      <OkunamayanAlanlarKarti />
-      {/* Havuz boşsa görünmez; yalnız sayı okunur. Ucu yalnız `ayrilis_havuzu`'nda açık. */}
-      {yetki.acik("ayrilis_havuzu") && <AyrilisHavuzuKarti />}
-      {/* Dış yedek hatırlatması — son şifreli yedek kaydından (yoksa ilk hesabın
-          kurulumundan) süre dolunca; yalnız tarih ve gün sayısı. Ucu yalnız `guvenlik`'te. */}
-      {yetki.acik("guvenlik") && <DisYedekKarti />}
-      {/* Oturumdaki hesabın son girişleri ve denetim izinin son kaydı (kâğıt çapası). */}
-      {butunluk.durum && (
-        <SonGirislerKarti
-          girisler={butunluk.durum.son_girisler}
-          capa={butunluk.durum.kagit_capasi}
-          girislerOkunamadi={butunluk.durum.okunamayan.includes("son_girisler")}
-          capaOkunamadi={butunluk.durum.okunamayan.includes("kagit_capasi")}
-        />
-      )}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <HubFeatureCard
-          to="/kisiler"
-          icon="group"
-          title="Kişiler"
-          description={
-            yetki.acik("eokul_aktarimi")
-              ? KISILER_KARTI_ACIKLAMASI
-              : KISILER_KARTI_SALT_OKUR_ACIKLAMASI
-          }
-        />
-        <HubFeatureCard
-          to="/ayarlar"
-          icon="settings"
-          title="Ayarlar"
-          description={
-            yetki.acik("guvenlik") && yetki.acik("guncelleme")
-              ? AYARLAR_KARTI_ACIKLAMASI
-              : AYARLAR_KARTI_SALT_OKUR_ACIKLAMASI
-          }
-        />
+      <Tabs
+        items={TAB_ITEMS}
+        active={tab}
+        onChange={(key) => setTab(key as Sekme)}
+        ariaLabel={GENEL_BAKIS_SEKMELERI}
+        idBase="genel-bakis"
+      />
+      <div {...tabPanelProps("genel-bakis", tab)} className="space-y-5">
+        {tab === "takvim" ? (
+          <YillikIsTakvimi />
+        ) : (
+          <>
+            {/* Pano kalemleri (§7.10): rolün listesi; kişisiz, sunucuda her okumada hesaplanır. */}
+            <PanoKalemleri />
+            {yetki.acik("yol_haritasi") && durum && !durum.roadmap.hidden && (
+              <BaslangicYolHaritasi
+                durum={durum}
+                onIsaretle={(madde, yapildi) => void isaretle(madde, yapildi)}
+                onGizle={() => void gizle()}
+              />
+            )}
+            {/* T15 (§13 D4): beklenmedik kapanıştan sonra "Son Oturumu Kontrol Edin". */}
+            <SonOturumKarti kontrolEdebilir={yetki.acik("son_oturum_onay")} />
+            {/* Denetim izinin uyarı kartları (tasarım §4.6.3, §4.6.1): söyleyecek bir şeyi
+              olmayan kart çizilmez; kişisiz (hesap rol etiketi ve tanıtıcıyla). */}
+            {/* Kartlar okunamayanı zaten söylüyorsa (`okunamayan` dolu) ikinci kart çizilmez. */}
+            {butunluk.okunamadi && !butunluk.durum?.okunamayan.length && (
+              <OkunamayanButunlukKarti />
+            )}
+            {butunluk.durum && (
+              <ButunlukKartlari
+                durum={butunluk.durum}
+                onIkiDepo={butunluk.ikiDepoyuYaz}
+                gordum={
+                  yetki.acik("geri_yukleme_gordum")
+                    ? { onDenetim: butunluk.denetimiYaz, onYenile: butunluk.yenile }
+                    : null
+                }
+                kullanicilarAcik={yetki.acik("kullanicilar")}
+              />
+            )}
+            {/* D48: çözülemeyen şifreli alan yoksa görünmez; kişisiz, yalnız sayı. */}
+            <OkunamayanAlanlarKarti />
+            {/* Havuz boşsa görünmez; yalnız sayı okunur. Ucu yalnız `ayrilis_havuzu`'nda açık. */}
+            {yetki.acik("ayrilis_havuzu") && <AyrilisHavuzuKarti />}
+            {/* Dış yedek hatırlatması — son şifreli yedek kaydından (yoksa ilk hesabın
+              kurulumundan) süre dolunca; yalnız tarih ve gün sayısı. Ucu yalnız `guvenlik`'te. */}
+            {yetki.acik("guvenlik") && <DisYedekKarti />}
+            {/* Oturumdaki hesabın son girişleri ve denetim izinin son kaydı (kâğıt çapası). */}
+            {butunluk.durum && (
+              <SonGirislerKarti
+                girisler={butunluk.durum.son_girisler}
+                capa={butunluk.durum.kagit_capasi}
+                girislerOkunamadi={butunluk.durum.okunamayan.includes("son_girisler")}
+                capaOkunamadi={butunluk.durum.okunamayan.includes("kagit_capasi")}
+              />
+            )}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <HubFeatureCard
+                to="/kisiler"
+                icon="group"
+                title="Kişiler"
+                description={
+                  yetki.acik("eokul_aktarimi")
+                    ? KISILER_KARTI_ACIKLAMASI
+                    : KISILER_KARTI_SALT_OKUR_ACIKLAMASI
+                }
+              />
+              <HubFeatureCard
+                to="/ayarlar"
+                icon="settings"
+                title="Ayarlar"
+                description={
+                  yetki.acik("guvenlik") && yetki.acik("guncelleme")
+                    ? AYARLAR_KARTI_ACIKLAMASI
+                    : AYARLAR_KARTI_SALT_OKUR_ACIKLAMASI
+                }
+              />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

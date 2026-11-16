@@ -53,6 +53,9 @@ vi.mock("./api", async (importOriginal) => ({
   panelApi: papi,
 }));
 
+// Yıllık İş Takvimi kendi bileşeninde sınanır (`YillikIsTakvimi.test.tsx`); burada sekmenin yeri.
+vi.mock("./YillikIsTakvimi", () => ({ default: () => <p>Takvimin içeriği (taklit)</p> }));
+
 import PanelPage from "./PanelPage";
 
 /** Bütün maddeler tamam: aktarımlar yapılmış, kapalı gün girilmiş, zarf işareti konmuş. */
@@ -649,5 +652,18 @@ describe("Genel Bakış — rol süzmesi (kaynak oturum özetinin yetenekleri)",
     bas();
     expect(await screen.findByRole("button", { name: "Gördüm" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Kullanıcılar'ı aç" })).toBeNull();
+  });
+});
+
+describe("PanelPage — sekmeler (F2 11b)", () => {
+  it("Özet varsayılan; Yıllık İş Takvimi sekmesi takvimi açar", async () => {
+    const user = userEvent.setup();
+    bas();
+    const ozet = await screen.findByRole("tab", { name: /Özet/ });
+    expect(ozet).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByText("Takvimin içeriği (taklit)")).toBeNull();
+    await user.click(screen.getByRole("tab", { name: /Yıllık İş Takvimi/ }));
+    expect(screen.getByText("Takvimin içeriği (taklit)")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Başlangıç Yol Haritası" })).toBeNull();
   });
 });

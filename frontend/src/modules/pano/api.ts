@@ -66,9 +66,20 @@ export interface PanoYaniti {
   tamamlanacaklar: PanoKalemi[];
 }
 
+/** Yıllık iş takvimi (`GET terms/<pk>/annual-calendar/`; E14'ün kaynağı, kişisiz; F2 11b). */
+export interface YillikTakvim {
+  donem: number;
+  bolumler: string[];
+  kural_satirlari: { tarih: string; is: string; kural: string; atif: string }[];
+  plan_satirlari: { tarih: string; is: string; kaynak: string }[];
+  uyarilar: string[];
+}
+
 export const panelApi = {
   sonOturum: (): Promise<SonOturumOzeti> =>
     api.get<SonOturumOzeti>(SON_OTURUM_YOLU, { etkinlik: false }),
   kontrolEttim: (): Promise<SonOturumOzeti> => api.post<SonOturumOzeti>(SON_OTURUM_YOLU, {}),
   kalemler: (): Promise<PanoYaniti> => api.get<PanoYaniti>(PANO_YOLU, { etkinlik: false }),
+  yillikTakvim: (donem: number): Promise<YillikTakvim> =>
+    api.get<YillikTakvim>(`/oab/terms/${donem}/annual-calendar/`),
 };

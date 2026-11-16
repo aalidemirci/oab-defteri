@@ -2921,6 +2921,19 @@ def _uretim_yetkisi(kod: str, konu: models.Model) -> None:
     _rol_daraltmasi(URETEN_ROLLER[kod])
 
 
+def uretebilir_mi(kod: str, kurul: GeneralAssembly) -> bool:
+    """Oturumdaki rol bu genel kurulun bu belgesini üretebilir mi (ekranın belge kartları; plan F2 11b)?
+    Yazmaz; kapı yine üretimdedir (`_uretim_yetkisi`). Kurucusu olmayan (E04) ya da konusu genel kurul
+    olmayan kod hayır; E05'te çağrılmamış genel kurul hayır (`CAGRI_YOK`)."""
+    if kod not in KURUCULAR or kod not in GENEL_KURUL_KODLARI:
+        return False
+    try:
+        _uretim_yetkisi(kod, kurul)
+    except (RolYetkisiz, ValueError):
+        return False
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Üretim (kişisiz)
 # ---------------------------------------------------------------------------

@@ -22,6 +22,7 @@ from rest_framework.test import APIClient
 
 from apps.oab.models import (
     AgendaItem,
+    AssemblyKind,
     AuditReport,
     ComplianceItem,
     ComplianceObligation,
@@ -251,6 +252,26 @@ def test_olagan_genel_kurul_sihirbazi_ikinci_toplantida_secim_ve_donem_gecisi() 
         201,
     )["genel_kurul"]["divan"]
     assert {u["person"] for u in divan} == {baskan.pk, katip.pk}
+    # Divanın düzeltilmesi: kayıtlar silinmez, iptal olur; ayrıntı iptal edilmiş divanı göstermez ve
+    # doğru divan yeniden seçilir.
+    duzeltilen = _yanit(
+        _iste(
+            "POST",
+            f"{API}/assemblies/{pk}/presiding-board-cancel/",
+            {"cancel_reason": GEREKCE},
+        )
+    )["genel_kurul"]["divan"]
+    assert duzeltilen == []
+    baskan, katip = o.kisi(), o.kisi()
+    divan = _yanit(
+        _iste(
+            "POST",
+            f"{API}/assemblies/{pk}/presiding-board/",
+            {"baskan": baskan.pk, "katip": katip.pk},
+        ),
+        201,
+    )["genel_kurul"]["divan"]
+    assert [(u["person"], u["role"]) for u in divan] == [(baskan.pk, "BASKAN"), (katip.pk, "KATIP")]
 
     adaylar = []
     for organ, adet in (("YK", 5), ("DK", 1)):
@@ -891,3 +912,65 @@ def test_genel_uyelik_iptali_genel_kurul_kaydini_genel_kurulun_kapilarina_biraki
     # Genel kurulun kendi yolu açıktır: seçimin iptali seçilenleri iptal eder, sonucu boşaltır.
     iptaller = gk.secimi_iptal_et(g.madde(kurul, "SECIM_YK"), cancel_reason="Uydurma yanlış sonuç.")
     assert len(iptaller) == 5 and not g.madde(kurul, "SECIM_YK").result
+
+
+# ============================================================ oturumun eylemleri (ekranın süzmesi; 11b)
+
+
+def _oturum(pk: int) -> dict[str, Any]:
+    return cast(dict[str, Any], _yanit(_iste("GET", f"{API}/assemblies/{pk}/"))["oturum"])
+
+
+def test_oturumun_cagiranlari_ve_uretilebilir_belgeleri_rolun_kapisindan_gelir() -> None:
+    """Ayrıntının `oturum` alanı (plan F2 11b): ön yüz rol adıyla dallanmaz, çağrı penceresinin
+    seçeneklerini ve belge kartlarının "Belgeyi oluştur"unu buradan okur. Değerler yazmanın kendi
+    kapısından (`_cagri_kapisi`, `_uretim_yetkisi`) gelir; okuma yazmaz."""
+    g.acik_donem()
+    olagan = g.planla()
+    olaganustu = g.planla(AssemblyKind.OLAGANUSTU, g.an(date(2026, 12, 10)))
+    beklenen_olagan = {
+        AccountRole.YONETICI: [],
+        AccountRole.SEKRETER: [{"called_by": "YONETIM_KURULU", "yol": "genel"}],
+        AccountRole.BASKAN: [],
+        AccountRole.MUDUR: [],
+        AccountRole.DENETLEME_KURULU: [],
+    }
+    beklenen_olaganustu = {
+        AccountRole.YONETICI: [{"called_by": "UYE_BASVURUSU", "yol": "genel"}],
+        AccountRole.SEKRETER: [{"called_by": "YONETIM_KURULU", "yol": "genel"}],
+        AccountRole.BASKAN: [{"called_by": "BASKAN_VEYA_MUDUR_13_8", "yol": "genel"}],
+        AccountRole.MUDUR: [
+            {"called_by": "OKUL_MUDURU", "yol": "mudur"},
+            {"called_by": "BASKAN_VEYA_MUDUR_13_8", "yol": "mudur"},
+            {"called_by": "MUDUR_25_2", "yol": "mudur"},
+        ],
+        AccountRole.DENETLEME_KURULU: [{"called_by": "DENETLEME_KURULU", "yol": "dk"}],
+    }
+    for rol, cagiranlar in beklenen_olagan.items():
+        with o.rol_olarak(rol):
+            izler = AuditTrail.objects.count()
+            assert _oturum(olagan.pk)["cagiranlar"] == cagiranlar, rol
+            # Çağrılmamış genel kurulda E05'in kolu yoktur (`CAGRI_YOK`).
+            assert "E05" not in _oturum(olagan.pk)["uretilebilir_belgeler"], rol
+            assert {(c["called_by"], c["yol"]) for c in _oturum(olaganustu.pk)["cagiranlar"]} == {
+                (c["called_by"], c["yol"]) for c in beklenen_olaganustu[rol]
+            }, rol
+            assert AuditTrail.objects.count() == izler, rol  # okuma yazmaz
+
+    # Çağrıdan sonra çağıran listesi boşalır; belgeler rolün "Üreten"inden (tasarım §9.6).
+    g.olagan_cagir(olagan)
+    for rol, belgeler in (
+        (
+            AccountRole.YONETICI,
+            {"E05", "E06", "E07", "E08", "E09", "E10", "E11", "E12", "E13", "E64"},
+        ),
+        (AccountRole.SEKRETER, {"E05", "E06", "E07", "E08", "E09", "E10", "E11", "E13", "E64"}),
+        (AccountRole.BASKAN, set()),
+        (AccountRole.MUDUR, set()),
+        (AccountRole.DENETLEME_KURULU, set()),
+    ):
+        with o.rol_olarak(rol):
+            oturum = _oturum(olagan.pk)
+        assert oturum["cagiranlar"] == [], rol
+        assert set(oturum["uretilebilir_belgeler"]) == belgeler, rol
+        assert "E04" not in oturum["uretilebilir_belgeler"]

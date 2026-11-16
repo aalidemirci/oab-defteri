@@ -352,7 +352,9 @@ def _kabul_e63(yakalanan: list[evrak.Belge]) -> None:
     # Antet okulun (birlik satırı yok); başlık belgenin adı; altlık kodlu.
     assert belge.antet.unit_line == letterhead_unit(OKUL_ADI) and belge.antet.alt_birim == ""
     assert belge.bloklar[0] == evrak.Baslik(e63.BELGE_ADI)
-    assert "HESAPTESLİMPUSULASI" in duz and "OABDefteri·E63·Sayfa1/1" in duz
+    # Sayfa sınırı her rolde ikidir (tasarım §9.1-5, §9.6 E63); F2 11b'de Genel Kurul ve Gelen-Giden
+    # Evrak satırlarıyla muhasibin pusulası iki sayfaya çıktı.
+    assert "HESAPTESLİMPUSULASI" in duz and "OABDefteri·E63·Sayfa1/2" in duz
     # Tanıtıcı, rol (sıra no'suz) ve açılış tarihi; ad-soyad yok.
     kunye = _tablo(belge, "Tanıtıcı")
     assert kunye.satirlar == (
@@ -367,7 +369,10 @@ def _kabul_e63(yakalanan: list[evrak.Belge]) -> None:
     ]
     assert [s[0] for s in isler.satirlar] == [
         "Kişiler, Organlar, Temsilciler: birlik kişileri, üyelik ve temsilci kaydı",
+        "Genel Kurul: dosya ekleri",
         "Genel Bakış: son oturumun kontrolü (“Kontrol ettim”)",
+        "Gelen-Giden Evrak: defter, gelen ve giden kayıt, ek, programın hazırladığı resmî yazının "
+        "kaydı",
         "Kendi parolanızı değiştirme, Kilitle, Çık",
     ]
     # İlk giriş: geçici parolayla giriş → parolayı yenileme (kilit ekranının metinleri).
@@ -924,50 +929,92 @@ def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
     üç ekranın adıdır); yönetim kurulu rolleri birlik kişileri, üyelik ve temsilci kaydı (sekreter
     ayrıca görev bölümü, yedek çağrısı, düşme ve görev bölümü evrakı), Genel Bakış'ta son oturumun
     kontrolü ve kendi parolası; Denetleme Kurulu geri yükleme kartının "Gördüm"ü, Organlar'da kendi
-    görev bölümü ve tutanağı ve kendi parolası; okul müdürü yalnız kendi parolası (müdür yazıları
-    F2/F4'tedir). Sonraki fazların işleri hiçbir pusulada yoktur."""
+    görev bölümü ve tutanağı ve kendi parolası. F2 11b: Genel Kurul (rolün parçalarıyla: sihirbaz
+    program yöneticisi ve sekreterin, çağrı başkanın da, dosya ekleri yönetim kurulu rollerinin,
+    müdürün yazıları okul müdürünün, belgelerin üretimi üreten rollerin), Gelen-Giden Evrak (program
+    yöneticisi ve yönetim kurulu rolleri), dönem geçişinin onayı, yıllık iş takviminin basımı, kural
+    sürümü güncellemesi ve veli adlı çıktılar (program yöneticisi), Denetleme Kurulunun olağanüstü
+    çağrısı. Sonraki fazların işleri hiçbir pusulada yoktur."""
     kendi = "Kendi parolanızı değiştirme, Kilitle, Çık"
     son_oturum = "Genel Bakış: son oturumun kontrolü (“Kontrol ettim”)"
     birlik_kisileri = "Kişiler, Organlar, Temsilciler: birlik kişileri, üyelik ve temsilci kaydı"
+    sihirbaz = (
+        "planlama, ilan ve davet, toplantılar, gündem, divan, adaylar, seçim, ibra ve tutanak"
+    )
+    gelen_giden = (
+        "Gelen-Giden Evrak: defter, gelen ve giden kayıt, ek, programın hazırladığı resmî yazının "
+        "kaydı"
+    )
     beklenen = {
         AccountRole.YONETICI: (
-            "Okul bilgileri, ders yılı ve dönemler, kapalı günler, birlik dönemi ve geçiş kurulumu",
+            "Okul bilgileri, ders yılı ve dönemler, kapalı günler, birlik dönemi ve geçiş kurulumu, "
+            "genel kuruldan sonra yeni birlik döneminin onayı",
             "Kişiler, Organlar, Temsilciler: öğretmen ve diğer personel kaydı, e-Okul aktarımı, "
             "ayrılış havuzu, birlik kişileri, veli listesinden birlik kişisi ekleme, üyelik ve "
             "temsilci kaydı, Denetleme Kurulu yedeğinin çağrısı, üyeliğin düşmesi, görev bölümü "
             "evrakı ve temsilci çizelgesi",
-            son_oturum,
+            f"Genel Kurul: {sihirbaz}, çağrı, iptal ve üyelerin başvuru yazısının bağı, dosya "
+            "ekleri, belgelerin üretimi",
+            f"{son_oturum}, yıllık iş takviminin basımı",
+            gelen_giden,
             "Kullanıcılar: hesap açma, kapama, askıdan çıkarma, parola sıfırlama, hesap teslim "
             "pusulası",
             "Güvenlik: kurtarma anahtarı, şifreli yedek, yedekten geri yükleme, yedek raporu, "
             "Genel Bakış'ta güvenlik dosyasında kalan eski parola kayıtlarının silinmesi",
-            "Ayarlar: boşta kilit süresi",
-            "Kişiler: veli listesinin aktarımı ve silinmesi",
+            "Ayarlar: boşta kilit süresi, kural sürümü güncellemesi (Birlik Dönemi)",
+            "Kişiler: veli listesinin aktarımı ve silinmesi, Genel Kurul'da veli adlı katılım "
+            "işaretleri, teslim çizelgesi ve katılım cetveli",
             "Güncelleme denetimi",
             kendi,
         ),
-        AccountRole.BASKAN: (birlik_kisileri, son_oturum, kendi),
-        AccountRole.BASKAN_YARDIMCISI: (birlik_kisileri, son_oturum, kendi),
-        AccountRole.MUHASIP: (birlik_kisileri, son_oturum, kendi),
+        AccountRole.BASKAN: (
+            birlik_kisileri,
+            "Genel Kurul: çağrı, dosya ekleri, belgelerin üretimi",
+            son_oturum,
+            gelen_giden,
+            kendi,
+        ),
+        AccountRole.BASKAN_YARDIMCISI: (
+            birlik_kisileri,
+            "Genel Kurul: dosya ekleri",
+            son_oturum,
+            gelen_giden,
+            kendi,
+        ),
+        AccountRole.MUHASIP: (
+            birlik_kisileri,
+            "Genel Kurul: dosya ekleri",
+            son_oturum,
+            gelen_giden,
+            kendi,
+        ),
         AccountRole.SEKRETER: (
             "Kişiler, Organlar, Temsilciler: birlik kişileri, üyelik ve temsilci kaydı, görev "
             "bölümü ve yedek çağrısı, üyeliğin düşmesi, görev bölümü evrakı ve temsilci çizelgesi",
+            f"Genel Kurul: {sihirbaz}, çağrı, dosya ekleri, belgelerin üretimi",
             son_oturum,
+            gelen_giden,
             kendi,
         ),
         AccountRole.DENETLEME_KURULU: (
             "Genel Bakış: yedekten geri yükleme kartını görüldü olarak işaretleme (“Gördüm”), "
-            "Organlar: Denetleme Kurulunun görev bölümü ve tutanağı",
+            "Organlar: Denetleme Kurulunun görev bölümü ve tutanağı, Genel Kurul: Denetleme "
+            "Kurulunun olağanüstü çağrısı, çağrı yazısı ve raporunun eki",
             kendi,
         ),
-        AccountRole.MUDUR: (kendi,),
+        AccountRole.MUDUR: (
+            "Genel Kurul: okul müdürünün yazıları (yeni açılan okulda davet, olağanüstü çağrı), "
+            "belgelerin üretimi",
+            kendi,
+        ),
     }
     assert set(beklenen) == set(ROLLER)
     # Organlar ve temsilciler F1c 11. adımın ikinci parçasında ekranlarıyla geldi: "organ" ve
-    # "temsilci" gelecek işler arasından çıktı.
+    # "temsilci" gelecek işler arasından çıktı. F2 11b: genel kurul, kural sürümü güncellemesi ve
+    # yıllık iş takvimi ekranlarıyla geldi; "genel kurul", "kural sürümü" ve "takvim" çıktı.
     gelecek = re.compile(
-        r"(?i)hesap geçişi|anahtarının yenilenmesi|küçük alım|kural sürümü|"
-        r"bağışçı|takvim|uyum kaydı|genel kurul|karar|gelir-gider|harcama|bütçe|kantin|servis|"
+        r"(?i)hesap geçişi|anahtarının yenilenmesi|küçük alım|"
+        r"bağışçı|uyum kaydı|karar|gelir-gider|harcama|bütçe|kantin|servis|"
         r"denetim planı|müdür yazısı|devir-teslim|öğrenci"
     )
     for rol, isler in beklenen.items():

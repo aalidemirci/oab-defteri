@@ -197,3 +197,50 @@ export function vadeCumlesi(kalem: Pick<PanoKalemi, "vade" | "gecikti">): string
   const gun = formatDate(kalem.vade);
   return kalem.gecikti ? `${SURESI_DOLDU} · ${gun}` : `${SON_GUN_ETIKETI} ${gun}`;
 }
+
+// ---------------------------------------------------------------------------
+// Genel Bakış'ın sekmeleri ve Yıllık İş Takvimi (F2 11b; plan F2 §6.1 M9: her rol okur, E14'ü
+// program yöneticisi basar). Takvimin satırları E14'ün kaynağındandır (`genel_kurul_evraki.
+// yillik_is_takvimi`): süre kuralları (madde atfıyla) ve okul planı. Kural kimliği yüzeye çıkmaz.
+// ---------------------------------------------------------------------------
+
+export const SEKME_OZET = "Özet";
+export const SEKME_TAKVIM = "Yıllık İş Takvimi";
+export const GENEL_BAKIS_SEKMELERI = "Genel Bakış bölümleri";
+export const TAKVIM_ACIKLAMASI =
+  "Birlik döneminin süreye bağlı işleri ve okulun planı. Süre kurallarının günü birlik döneminin " +
+  "kural sürümünden ve kayıtlardan hesaplanır; günü kesinleşmemiş işler ayrıca listelenir.";
+export const TAKVIM_DONEM_YOK =
+  "Birlik dönemi açılmadı; yıllık iş takvimi birlik dönemine göre kurulur.";
+export const TAKVIM_OKUNAMADI = "Yıllık iş takvimi okunamadı.";
+export const ALAN_TAKVIM_DONEMI = "Birlik dönemi";
+export const ALAN_GORUNUM = "Görünüm";
+export const GORUNUM_YIL = "Yıl";
+export const GORUNUM_AY = "Ay";
+export const ALAN_AY = "Ay";
+export const TAKVIM_AY_BOS = "Bu ayda iş yok.";
+export const TAKVIM_BOS = "Takvimde iş yok.";
+export const TARIHSIZ_ISLER = "Günü göreli ya da kesinleşmemiş işler";
+export const TAKVIM_UYARILARI = "Takvimdeki boş yerler";
+export const TAKVIM_KAYNAK = "Kaynak";
+
+/** Ayların adları (ocak = 0). */
+export const AY_ADLARI = [
+  "Ocak",
+  "Şubat",
+  "Mart",
+  "Nisan",
+  "Mayıs",
+  "Haziran",
+  "Temmuz",
+  "Ağustos",
+  "Eylül",
+  "Ekim",
+  "Kasım",
+  "Aralık",
+] as const;
+
+/** "Ekim 2026" */
+export function ayBasligi(ay: number, yil: number): string {
+  return `${AY_ADLARI[ay]} ${yil}`;
+}

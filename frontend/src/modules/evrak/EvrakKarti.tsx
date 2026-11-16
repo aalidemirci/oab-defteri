@@ -1,5 +1,6 @@
 // Görev bölümü ve temsilci evrakının kartı (E01 Organlar → Yönetim Kurulu, E02 Organlar → Denetleme
-// Kurulu, E03 Temsilciler; plan F1c 10. adım notları, 11. adım). Her rol dönemin geçerli kaydını görür ve
+// Kurulu, E03 Temsilciler; plan F1c 10. adım notları, 11. adım) ve yıllık iş takvimi (E14 Genel Bakış →
+// Yıllık İş Takvimi; F2 11b, PDF ve Excel). Her rol dönemin geçerli kaydını görür ve
 // PDF ya da Word olarak kaydeder (basım okumadır; `BASIM` satırı backend'de okuma rolünde de yazılır).
 // "Belgeyi oluştur" yalnız üretebilen rolde (`uretebilir`: E01 ve E03 `karar_taslagi_uretme`, E02
 // `dk_gorev_bolumu_yazma`) ve birlik dönemi yazılabilirken çizilir; yeniden oluşturma yeni sürümdür.
@@ -26,6 +27,7 @@ import type { UyumHatasi } from "../uyum/hatalar";
 import { evrakApi, evrakYedekDosyaAdi } from "./api";
 import type { EvrakBicimi, EvrakKaydi, EvrakKodu } from "./api";
 import {
+  DUGME_EXCEL,
   DUGME_OLUSTUR,
   DUGME_PDF,
   DUGME_WORD,
@@ -35,6 +37,7 @@ import {
   EVRAK_OLUSTURULAMADI,
   EVRAK_OLUSTURULDU,
   EVRAK_YOK,
+  EXCEL_KAYDEDILDI,
   HAZIRLANIYOR,
   OLUSTURULUYOR,
   PDF_KAYDEDILDI,
@@ -111,7 +114,9 @@ export default function EvrakKarti({
       if (sonuc === "hata")
         setHata({ tur: "sayfa", hata: hataOku(null, DOSYA_YAZILAMADI_ILETISI) });
       else if (sonuc !== "iptal")
-        snackbar.success(bicim === "pdf" ? PDF_KAYDEDILDI : WORD_KAYDEDILDI);
+        snackbar.success(
+          bicim === "pdf" ? PDF_KAYDEDILDI : bicim === "xlsx" ? EXCEL_KAYDEDILDI : WORD_KAYDEDILDI,
+        );
     } catch (e) {
       setHata(hataSinifla(e, EVRAK_KAYDEDILEMEDI));
     } finally {
@@ -179,6 +184,16 @@ export default function EvrakKarti({
             onClick={() => void kaydet("docx")}
           >
             {calisan === "docx" ? HAZIRLANIYOR : DUGME_WORD}
+          </Button>
+        )}
+        {kayit != null && bicimVar("XLSX") && (
+          <Button
+            variant="tonal"
+            icon="table_view"
+            disabled={calisan !== null}
+            onClick={() => void kaydet("xlsx")}
+          >
+            {calisan === "xlsx" ? HAZIRLANIYOR : DUGME_EXCEL}
           </Button>
         )}
         {uretebilir && kayit !== undefined && !okunamadi && (

@@ -1286,6 +1286,41 @@ def _cagiran(kurul: GeneralAssembly, called_by: str) -> str:
     return called_by
 
 
+#: Çağrının ucu (ekranın çağrı penceresi; plan F2 11b): müdürün yazısı, Denetleme Kurulunun çağrısı,
+#: öteki çağıranlar.
+CAGRI_YOLU_MUDUR: Final = "mudur"
+CAGRI_YOLU_DK: Final = "dk"
+CAGRI_YOLU_GENEL: Final = "genel"
+
+
+def oturumun_cagiranlari(kurul: GeneralAssembly) -> list[dict[str, str]]:
+    """Oturumdaki rolün bu genel kurul için yazabileceği çağıranlar ve uçları (ekranın çağrı penceresi;
+    plan F2 11b). Yazmaz; kapı yine çağrının kendisindedir (`_cagri_kapisi`). Yalnız `PLANLANDI`'da
+    doludur. Olağanda çağıran kayıttan belirlidir; olağanüstüde yeni açılan okulun davetçisi listeye
+    girmez (listede olmayan çağıran; en dar seçim). Ön yüz rol adıyla dallanmaz: seçenekleri buradan
+    okur (plan F1b-2 "Ön yüz")."""
+    if kurul.status != AssemblyStatus.PLANLANDI:
+        return []
+    if kurul.kind == AssemblyKind.OLAGAN:
+        adaylar = [_cagiran(kurul, "")]
+    else:
+        adaylar = [str(c) for c in AssemblyCaller.values if c != AssemblyCaller.MUDUR_YENI_OKUL]
+    sonuc: list[dict[str, str]] = []
+    for cagiran in adaylar:
+        try:
+            eylem = _cagri_kapisi(kurul, cagiran)
+        except RolYetkisiz:
+            continue
+        if eylem is rol_izinleri.Eylem.DK_GENEL_KURUL_YAZMA:
+            yol = CAGRI_YOLU_DK
+        elif eylem in _MUDUR_EYLEMLERI:
+            yol = CAGRI_YOLU_MUDUR
+        else:
+            yol = CAGRI_YOLU_GENEL
+        sonuc.append({"called_by": cagiran, "yol": yol})
+    return sonuc
+
+
 #: Çağrı yazısının evrak bağı girilen çağıranlar (modül başlığı "Çağrı", "Evrak defteri"): üyelerin
 #: başvurusu (U12) ve Denetleme Kurulunun yazısı (tasarım §5.2.3, plan F2 §1.1-11). Müdürün yazısını
 #: program işler (⁷).

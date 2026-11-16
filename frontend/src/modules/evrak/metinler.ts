@@ -3,10 +3,11 @@
 // yerine geçmez: karar taslağı defterine el ile yazılır (CLAUDE.md §1). Evrak kodları (E01…) yüzeye
 // çıkmaz (sözlük §2).
 
-/** Belgelerin adları (kartın başlığı). */
+/** Belgelerin adları (kartın başlığı). E14 genel kurul evrakının kataloğundandır (F2). */
 export const E01_ADI = "Yönetim kurulu görev bölümü, imza yetkisi ve temsilci karar taslağı";
 export const E02_ADI = "Denetleme Kurulu görev bölümü tutanağı ve denetim planı";
 export const E03_ADI = "Birlik temsilcilerinin kurul ve komisyonlara görevlendirme çizelgesi";
+export const E14_ADI = "Yıllık iş takvimi";
 
 /** Kartın açıklamaları. */
 export const TASLAK_ACIKLAMASI =
@@ -26,11 +27,13 @@ export const DUGME_YENIDEN_OLUSTUR = "Belgeyi yeniden oluştur";
 export const OLUSTURULUYOR = "Oluşturuluyor…";
 export const DUGME_PDF = "PDF olarak kaydet";
 export const DUGME_WORD = "Word olarak kaydet";
+export const DUGME_EXCEL = "Excel olarak kaydet";
 export const HAZIRLANIYOR = "Hazırlanıyor…";
 export const EVRAK_OLUSTURULDU = "Belge oluşturuldu.";
 export const EVRAK_OLUSTURULAMADI = "Belge oluşturulamadı.";
 export const PDF_KAYDEDILDI = "Belge PDF olarak kaydedildi.";
 export const WORD_KAYDEDILDI = "Belge Word olarak kaydedildi.";
+export const EXCEL_KAYDEDILDI = "Belge Excel olarak kaydedildi.";
 export const EVRAK_KAYDEDILEMEDI = "Belge kaydedilemedi.";
 
 /** Basım uyarılarının listesi (üretimin yanıtı; belgeye basılmaz). */

@@ -143,7 +143,8 @@ export const VELI_LISTESI_SEKMESI = "Veli Listesi";
 export const VELI_LISTESI_ACIKLAMASI =
   "Genel kurul daveti, katılım cetveli ve yeter sayının sayımı için velilerin listesi. Bir satır " +
   "bir öğrencidir; iki çocuklu veli iki satırdır. Ekranda adlar listelenmez, yalnız sınıf başına " +
-  "satır sayısı görünür.";
+  "satır sayısı görünür. Veli adlı teslim çizelgesi ve katılım cetveli Genel Kurul ekranından " +
+  "basılır; program onları saklamaz.";
 
 export const VELI_LISTESI_BOS = "Veli listesinde satır yok.";
 

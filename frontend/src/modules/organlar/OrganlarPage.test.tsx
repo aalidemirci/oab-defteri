@@ -62,6 +62,13 @@ vi.mock("../kisiler/birlikKisileriApi", async (importOriginal) => ({
   birlikKisileriApi: kisiApiMock,
 }));
 
+// Denetleme Kurulunun genel kurul bölümü (F2 11b) kendi testinde sınanır (`GenelKurulPage.test.tsx`).
+const genelKurulMock = vi.hoisted(() => ({ liste: vi.fn(), ayrinti: vi.fn() }));
+vi.mock("../genel-kurul/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../genel-kurul/api")>()),
+  genelKurulApi: genelKurulMock,
+}));
+
 const yarimMetinMock = vi.hoisted(() => ({ oku: vi.fn(), kaydet: vi.fn(), temizle: vi.fn() }));
 vi.mock("../uyum/api", () => ({ yarimMetinApi: yarimMetinMock }));
 
@@ -266,7 +273,14 @@ const KISI: BirlikKisisi = {
 
 /** Program yöneticisinin yetenekleri (sekreterin ve Denetleme Kurulunun yetenekleri hariç). */
 const YONETICI: YetenekAdi[] = YETENEK_ADLARI.filter(
-  (ad) => !["gorev_bolumu_yazma", "dk_gorev_bolumu_yazma", "geri_yukleme_gordum"].includes(ad),
+  (ad) =>
+    ![
+      "gorev_bolumu_yazma",
+      "dk_gorev_bolumu_yazma",
+      "geri_yukleme_gordum",
+      "dk_genel_kurul_yazma",
+      "mudur_genel_kurul_yazisi",
+    ].includes(ad),
 );
 const SEKRETER: YetenekAdi[] = [
   "birlik_kisi_yazma",
@@ -278,7 +292,7 @@ const SEKRETER: YetenekAdi[] = [
   "toplanti_gunu_yazma",
   "uyelik_dusurme",
 ];
-const DENETLEME: YetenekAdi[] = ["dk_gorev_bolumu_yazma", "erisim_gunlugu"];
+const DENETLEME: YetenekAdi[] = ["dk_gorev_bolumu_yazma", "erisim_gunlugu", "dk_genel_kurul_yazma"];
 /** Başkanın (ve başkan yardımcısı ile muhasibin) yetenekleri: backend `rol_izinleri` yk_ortak listesi. */
 const BASKAN_ROLU: YetenekAdi[] = [
   "birlik_kisi_yazma",
@@ -303,6 +317,12 @@ function bas(yetenekler: readonly string[] = YONETICI, yol = "/organlar") {
 }
 
 beforeEach(() => {
+  genelKurulMock.liste.mockResolvedValue({
+    kayitlar: [],
+    acik_donem: 3,
+    kural_surumu_guncellenmeli: false,
+    planlama_bilgileri: [],
+  });
   donemApiMock.donemler.mockResolvedValue([DONEM]);
   organlarApiMock.kadro.mockImplementation(async (_d: number, organ: string) =>
     organ === "YK" ? YK_KADRO : organ === "DK" ? DK_KADRO : ALIM_KADRO,
@@ -682,6 +702,16 @@ describe("Organlar — yönetim kurulu", () => {
 });
 
 describe("Organlar — Denetleme Kurulu", () => {
+  it("genel kurul bölümü (olağanüstü çağrı, raporun eki) yalnız Denetleme Kurulunda", async () => {
+    const { unmount } = bas(DENETLEME, "/organlar?tab=dk");
+    expect(await screen.findByText("Olağanüstü Genel Kurul Çağrısı")).toBeInTheDocument();
+    expect(screen.getByText("Denetleme Kurulu Raporunun Eki")).toBeInTheDocument();
+    unmount();
+    bas(YONETICI, "/organlar?tab=dk");
+    expect(await screen.findByText(kadroOzeti(2, 0))).toBeInTheDocument();
+    expect(screen.queryByText("Olağanüstü Genel Kurul Çağrısı")).toBeNull();
+  });
+
   it("Denetleme Kurulu rolü: görev bölümü ve denetim planı; engel dayanağı yok", async () => {
     const user = userEvent.setup();
     organlarApiMock.dkGorevBolumu.mockResolvedValue({

@@ -357,9 +357,9 @@ def _kurul_ayrintisi(kurul: GeneralAssembly) -> dict[str, Any]:
             _gundem_maddesi(m) for m in AgendaItem.objects.filter(assembly=kurul).order_by("order")
         ],
         "ilanlar": [_duyuru(d) for d in genel_kurul.kurulun_duyurulari(kurul)],
-        "divan": OrganMembershipSerializer(
-            uyelikler.filter(organ=OrganType.DIVAN).order_by("pk"), many=True
-        ).data,
+        # Yalnız iptal edilmemiş divan (`kurulun_divani`): düzeltilen divanın kayıtları silinmez,
+        # `IPTAL` olur; ekran divanın yeniden seçilmesini bu listeden anlar.
+        "divan": OrganMembershipSerializer(genel_kurul.kurulun_divani(kurul), many=True).data,
         "adaylar": OrganMembershipSerializer(
             uyelikler.filter(
                 organ__in=(OrganType.YONETIM_KURULU, OrganType.DENETLEME_KURULU)
@@ -373,6 +373,19 @@ def _kurul_ayrintisi(kurul: GeneralAssembly) -> dict[str, Any]:
             for toplanti in AssemblyMeeting.values
         },
         "bilgiler": _kurul_bilgileri(kurul),
+        "oturum": _oturumun_eylemleri(kurul),
+    }
+
+
+def _oturumun_eylemleri(kurul: GeneralAssembly) -> dict[str, Any]:
+    """Oturumdaki rolün bu kayıtta yazabildikleri (ekranın çağrı penceresi ve belge kartları; plan F2
+    11b): çağıranlar ve uçları, üretebileceği belgeler. Ön yüz rol adıyla dallanmaz, bunu okur; kapı
+    yine yazmanın kendisindedir. Kişisizdir, yazmaz."""
+    return {
+        "cagiranlar": genel_kurul.oturumun_cagiranlari(kurul),
+        "uretilebilir_belgeler": [
+            kod for kod in genel_kurul_evraki.KODLAR if genel_kurul_evraki.uretebilir_mi(kod, kurul)
+        ],
     }
 
 
