@@ -592,3 +592,9 @@ class KararDefteriSerializer(serializers.ModelSerializer[OfficialBook]):
             "last_page_before_program",
         ]
         read_only_fields = fields
+
+
+class TakvimYapildiSerializer(serializers.Serializer[dict[str, Any]]):
+    """Takvim satırının yapıldığı gün (pano kaleminin "Yapıldı" işareti; F2 12. adım)."""
+
+    done_on = serializers.DateField(required=True)

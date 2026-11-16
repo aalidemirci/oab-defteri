@@ -472,6 +472,14 @@ _DAYANAK_E14 = (
     "Tasarım §9.6 E14 'Üreten: yonetici' (matrisi daraltır); yıllık iş takvimi Genel Bakış'ın sekmesidir "
     "(M9; plan F2 §6.1), basımı her rol okur (`genel_kurul_evraki.OKUMA_SATIRLARI`)."
 )
+_DAYANAK_TAKVIM_YAPILDI = (
+    "Tasarım §7.10 'Kalemin kapanması' (`ComplianceItem` satırı `done_on` alınca) ve plan F2 §6.3 "
+    "'Roller': pano kaleminden takvim satırının yapıldığı günü satırın işini yapan rol yazar. TEFBİS "
+    "girişleri okul idaresinindir (md. 23/5): program yöneticisi; ibra edilmedi bildirimini yeni "
+    "yönetim kurulu ve okul yönetimi yapar (md. 11/1-ç): program yöneticisi ve yazışmayı yürüten "
+    "sekreter (md. 13/4). Uç M9'u bu iki role daraltır, servis satırın yükümlülüğüne göre yeniden "
+    "daraltır (`uyum.takvim_isaretleyenleri`)."
+)
 _DAYANAK_VELI = (
     "Tasarım §8.4 (4) ve §4.4.2: veli listesini aktarmak kişisel veri içeren dışa aktarım "
     "yetkisidir (¹⁰, yalnız program yöneticisi); §5.4: program yöneticisi listeyi onayla elle "
@@ -880,6 +888,15 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     # Pano kalemleri (F1c 12. adım; tasarım §7.10 "pano her role kendi kalemlerini gösterir"): her rol
     # okur; hangi kalemi gördüğünü servis süzer (`apps.oab.services.pano.KALEM_ROLLERI`).
     _oku("oab-dashboard", Satir.M9),
+    # Pano kaleminden takvim satırının "Yapıldı" işareti (F2 12. adım; M9'u satırın işini yapan
+    # rollere daraltır: TEFBİS program yöneticisinin, ibra bildirimi program yöneticisi ve sekreterin).
+    _yaz(
+        "oab-compliance-item-done",
+        "POST",
+        Satir.M9,
+        yalniz=_YONETICI_VE_SEKRETER,
+        dayanak=_DAYANAK_TAKVIM_YAPILDI,
+    ),
     # ------------------------------------------------ Ayarlar (boşta süre)
     _oku("security-idle-lock", Satir.AYARLAR),
     _yaz("security-idle-lock", "PUT", Satir.AYARLAR),
@@ -1270,6 +1287,8 @@ YETENEKLER: Final[Mapping[str, frozenset[tuple[str, str]]]] = {
         ("oab-document-record-attachments", "POST"),
         ("oab-document-outgoing-record", "POST"),
     ),
+    # Pano kaleminden takvim satırının "Yapıldı" işareti (F2 12. adım; program yöneticisi ve sekreter).
+    "takvim_isareti": _ciftler(("oab-compliance-item-done", "POST")),
     # Yıllık iş takviminin basımı (E14; program yöneticisi).
     "yillik_is_takvimi_uretme": _ciftler(("oab-document-e14", "POST")),
     # Kişisel veri aydınlatma metninin üretimi (E04; Hakkında; program yöneticisi).

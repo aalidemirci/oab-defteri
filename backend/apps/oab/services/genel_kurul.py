@@ -2460,11 +2460,25 @@ def _karar_sonucunu_yeniden_yaz(madde: AgendaItem, sonuc: str, satir: int) -> st
     )
 
 
+def _acik_ibra_bildirimi_var(kurul: GeneralAssembly) -> bool:
+    """Genel kurulun yapılmamış (`done_on` boş) ibra edilmedi bildirimi satırı var mı."""
+    return ComplianceItem.objects.filter(
+        kind=ComplianceKind.TAKVIM,
+        obligation=ComplianceObligation.IBRA_EDILMEDI_BILDIRIMI,
+        subject_type=denetim_izi.model_etiketi(GeneralAssembly),
+        subject_id=denetim_izi.kimlik_metni(GeneralAssembly, kurul.pk),
+        done_on__isnull=True,
+    ).exists()
+
+
 def _ibrayi_yeniden_yaz(tur: _Tur, kurul: GeneralAssembly, ibralar: Mapping[str, str]) -> list[str]:
     """Düzeltmenin değiştirdiği ibra sonuçlarını kurula işler (kayıt düzeltmenin yazımıyla, izli) ve
     bilgi satırlarını döner. Yönetim kurulunun ibrası değişirse yan akış gözden geçirilir (md. 11/1-ç);
     tutanak tamamlanmışsa ve yeni sonuç "ibra edilmedi"yse il/ilçe MEM bildirimi takvime girer (tutanağın
-    tamamlanmasındaki satır, S4 (a))."""
+    tamamlanmasındaki satır, S4 (a)). Aynı genel kurulun yapılmamış bildirim satırı zaten varsa yenisi
+    yazılmaz ("edilmedi → edildi → edilmedi" tek satırdır). Sonuç "ibra edildi"ye dönerse satır silinmez
+    ve yapıldı diye işaretlenmez (altın kural 4; uydurma `done_on` yazılmaz): pano satırı yalnız genel
+    kurulun güncel sonucu "ibra edilmedi" iken gösterir (`pano._takvim_kalemleri`)."""
     bilgiler: list[str] = []
     for alan, yeni in ibralar.items():
         kurul_adi = alan.removeprefix("discharge_")
@@ -2479,6 +2493,7 @@ def _ibrayi_yeniden_yaz(tur: _Tur, kurul: GeneralAssembly, ibralar: Mapping[str,
         if (
             kurul.status == AssemblyStatus.TUTANAK_TAMAM
             and ibralar["discharge_yk"] == Discharge.EDILMEDI
+            and not _acik_ibra_bildirimi_var(kurul)
         ):
             uyum.takvim_satiri_yaz(
                 ComplianceObligation.IBRA_EDILMEDI_BILDIRIMI,

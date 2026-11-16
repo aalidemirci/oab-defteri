@@ -177,6 +177,12 @@ export interface SetupStatus {
   roadmap: RoadmapState;
   /** Geçiş kurulumunun durumu; sağlayıcı kayıtlı değilse null. */
   transition_setup: TransitionSetupStatus | null;
+  /**
+   * Yeni açılan okul mu (okul kartında açılış günü var; md. 9/1)? Yol haritasında geçiş kurulumu
+   * maddesinin yerine "Genel kurulu planlayın" durur (plan F2 §9 S5 (iii)); tamamlığı aynı ölçüttür
+   * (`transition_setup`). Eski sunucu göndermezse yanlış sayılır.
+   */
+  new_school?: boolean;
 }
 
 /** Okulun kademesi — backend `SchoolLevel` ile birebir (değer adları ve sıra). */

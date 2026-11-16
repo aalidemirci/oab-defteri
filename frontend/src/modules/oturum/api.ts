@@ -70,6 +70,7 @@ export const YETENEK_ADLARI = [
   "okul_karti_yazma",
   "organ_yazma",
   "son_oturum_onay",
+  "takvim_isareti",
   "temsilci_yazma",
   "toplanti_gunu_yazma",
   "uyelik_dusurme",

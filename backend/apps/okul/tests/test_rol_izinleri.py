@@ -510,6 +510,9 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     # Yıllık iş takvimi (M9: her rol okur; E14'ü program yöneticisi üretir, tasarım §9.6).
     "oab-term-annual-calendar": {"GET": "H", "HEAD": "H"},
     "oab-document-e14": {"POST": "Y"},
+    # Pano kaleminden takvim satırının "Yapıldı" işareti (F2 12. adım; satırın işini yapan rol: TEFBİS
+    # program yöneticisinin, md. 23/5; ibra bildirimi program yöneticisi ve sekreterin, md. 11/1-ç).
+    "oab-compliance-item-done": {"POST": "Y+SEK"},
     # Gelen-giden evrak (M10; ⁷: müdür ve Denetleme Kurulu okur).
     "oab-document-book-list": {"GET": "H", "HEAD": "H", "POST": "Y+YK"},
     "oab-document-record-list": {"GET": "H", "HEAD": "H", "POST": "Y+YK"},
@@ -927,6 +930,7 @@ def test_yetenek_adlari_ve_rollerin_yetenekleri_anlik_goruntusu() -> None:
         "okul_karti_yazma",
         "organ_yazma",
         "son_oturum_onay",
+        "takvim_isareti",
         "temsilci_yazma",
         "toplanti_gunu_yazma",
         "uyelik_dusurme",
@@ -970,6 +974,7 @@ def test_yetenek_adlari_ve_rollerin_yetenekleri_anlik_goruntusu() -> None:
             "genel_kurul_yazma",
             "gorev_bolumu_yazma",
             "karar_taslagi_uretme",
+            "takvim_isareti",
             "toplanti_gunu_yazma",
             "uyelik_dusurme",
         ]

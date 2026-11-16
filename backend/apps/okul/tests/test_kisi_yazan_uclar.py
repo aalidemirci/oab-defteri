@@ -223,6 +223,7 @@ DIGER_UCLAR = frozenset(
         "oab-assembly-documents",
         "oab-term-annual-calendar",
         "oab-document-e14",
+        "oab-compliance-item-done",
         "oab-document-e04",
         "oab-document-book-list",
         "oab-document-record-list",

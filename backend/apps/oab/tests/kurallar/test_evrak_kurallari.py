@@ -947,7 +947,8 @@ def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
     müdürün yazıları okul müdürünün, belgelerin üretimi üreten rollerin), Gelen-Giden Evrak (program
     yöneticisi ve yönetim kurulu rolleri), dönem geçişinin onayı, yıllık iş takviminin basımı, kural
     sürümü güncellemesi ve veli adlı çıktılar (program yöneticisi), Denetleme Kurulunun olağanüstü
-    çağrısı. Sonraki fazların işleri hiçbir pusulada yoktur."""
+    çağrısı. F2 12. adım: Genel Bakış'ta takvim işinin "Yapıldı" işareti (program yöneticisi ve
+    sekreter). Sonraki fazların işleri hiçbir pusulada yoktur."""
     kendi = "Kendi parolanızı değiştirme, Kilitle, Çık"
     son_oturum = "Genel Bakış: son oturumun kontrolü (“Kontrol ettim”)"
     birlik_kisileri = "Kişiler, Organlar, Temsilciler: birlik kişileri, üyelik ve temsilci kaydı"
@@ -968,7 +969,7 @@ def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
             "evrakı ve temsilci çizelgesi",
             f"Genel Kurul: {sihirbaz}, çağrı, iptal ve üyelerin başvuru yazısının bağı, dosya "
             "ekleri, belgelerin üretimi",
-            f"{son_oturum}, yıllık iş takviminin basımı",
+            f"{son_oturum}, yıllık iş takviminin basımı, takvim işinin “Yapıldı” işareti",
             gelen_giden,
             "Kullanıcılar: hesap açma, kapama, askıdan çıkarma, parola sıfırlama, hesap teslim "
             "pusulası",
@@ -1005,7 +1006,7 @@ def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
             "Kişiler, Organlar, Temsilciler: birlik kişileri, üyelik ve temsilci kaydı, görev "
             "bölümü ve yedek çağrısı, üyeliğin düşmesi, görev bölümü evrakı ve temsilci çizelgesi",
             f"Genel Kurul: {sihirbaz}, çağrı, dosya ekleri, belgelerin üretimi",
-            son_oturum,
+            f"{son_oturum}, takvim işinin “Yapıldı” işareti",
             gelen_giden,
             kendi,
         ),

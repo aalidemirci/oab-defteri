@@ -62,6 +62,12 @@ urlpatterns: list[URLPattern | URLResolver] = [
     ),
     # Genel Bakış'ın pano kalemleri (F1c 12. adım; hesaplanır, saklanmaz, yazmaz).
     path("dashboard/", views.DashboardView.as_view(), name="oab-dashboard"),
+    # Pano kaleminden takvim satırının "Yapıldı" işareti (F2 12. adım; tasarım §7.10).
+    path(
+        "compliance-items/<int:pk>/done/",
+        views.ComplianceItemDoneView.as_view(),
+        name="oab-compliance-item-done",
+    ),
     # Gerekçe kutusunun yarım metni (F1c 11. adım; ortak "uyarı + gerekçe" bileşeni).
     path("drafts/", views.DraftTextView.as_view(), name="oab-draft-text"),
     path(

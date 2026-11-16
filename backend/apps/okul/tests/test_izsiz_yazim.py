@@ -102,6 +102,7 @@ from apps.oab.models import (
     BoardMeetingAttendance,
     ComplianceItem,
     ComplianceJustification,
+    ComplianceObligation,
     DecisionKind,
     DocumentRecord,
     GeneralAssembly,
@@ -1241,6 +1242,24 @@ def _aydinlatma_metni(_: pytest.MonkeyPatch) -> Istek:
     return Istek("/api/v1/oab/documents/e04/", None, _turler("OLUSTUR"))
 
 
+def _takvim_yapildi(_: pytest.MonkeyPatch) -> Istek:
+    """Pano kaleminden takvim satırının "Yapıldı" işareti (F2 12. adım): açık dönemin uydurma TEFBİS
+    satırı; sorumlu rol program yöneticisi."""
+    donem = g.acik_donem()
+    satir = uyum.takvim_satiri_yaz(
+        ComplianceObligation.TEFBIS_BANKA_BILGISI,
+        donem=donem,
+        due_date=date(2026, 10, 20),
+        mesaj="Uydurma takvim iletisi.",
+        responsible_role=AccountRole.YONETICI.value,
+    )
+    return Istek(
+        f"/api/v1/oab/compliance-items/{satir.pk}/done/",
+        {"done_on": timezone.localdate().isoformat()},
+        _turler("GUNCELLE"),
+    )
+
+
 def _evrak_defteri(_: pytest.MonkeyPatch) -> Istek:
     return Istek("/api/v1/oab/document-books/", {"last_no_before_program": 12}, _turler("OLUSTUR"))
 
@@ -1450,6 +1469,7 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     ("oab-assembly-document-e05-audit-board", "POST"): Senaryo(_gk_dk_e05),
     ("oab-assembly-document-named", "POST"): Senaryo(_gk_adli_evrak),
     ("oab-document-e14", "POST"): Senaryo(_yillik_is_takvimi),
+    ("oab-compliance-item-done", "POST"): Senaryo(_takvim_yapildi),
     ("oab-document-e04", "POST"): Senaryo(_aydinlatma_metni),
     ("oab-document-book-list", "POST"): Senaryo(_evrak_defteri),
     ("oab-document-record-list", "POST"): Senaryo(_evrak_kaydi),

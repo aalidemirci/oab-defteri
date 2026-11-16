@@ -58,11 +58,15 @@ from apps.oab.models import (
     ComplianceJustification,
     ComplianceKind,
     ComplianceObligation,
+    GeneralAssembly,
     OabTerm,
     RulePackage,
 )
 from apps.oab.services import donem_kilidi, iz, kural_bagi
 from apps.okul import denetim_izi, rol_izinleri
+from apps.okul.models import AccountRole
+from apps.okul.oturum import yazar
+from shared.exceptions import RolYetkisiz
 
 _ACIK_TURLER = (ComplianceKind.SAPMA, ComplianceKind.EKSIK)
 #: Akış satırı kimliklerinin öneki (kural paketinin kimlikleri bu önekle başlamaz).
@@ -611,7 +615,8 @@ def takvim_satiri_yaz(
 ) -> ComplianceItem:
     """Takvim satırı (`TAKVIM`; tasarım §5.2.7 "modelde karşılığı olmayan yükümlülükler"): yükümlülük,
     son gün, sorumlu rol ve atıflı kişisiz ileti. Kural kimliği yoktur (kural paketinde süre ya da değer
-    taşımaz); gerekçe istemez. Yapıldığı gün ve kanıt sonra işlenir (pano, F2 12. adım). İzlidir."""
+    taşımaz); gerekçe istemez. Yapıldığı gün panonun kaleminden işlenir (`takvim_satiri_yapildi`, F2
+    12. adım); kanıt eki henüz yoktur. İzlidir."""
     if obligation not in ComplianceObligation.values:
         raise ValueError("Takvim satırının yükümlülüğü tanımlı yükümlülüklerden biri olmalıdır.")
     guncel = OabTerm.objects.select_related("rule_package").get(pk=donem.pk)
@@ -631,6 +636,85 @@ def takvim_satiri_yaz(
     )
     denetim_izi.degisiklik(satir, onceki=None, compliance_item=satir.pk)
     return satir
+
+
+#: Takvim satırının "yapıldı" işaretinin iletileri.
+TAKVIM_SATIRI_DEGIL: Final = "Yalnız takvim satırı yapıldı olarak işaretlenir."
+TAKVIM_ZATEN_YAPILDI: Final = "Bu iş daha önce yapıldı olarak işaretlendi."
+TAKVIM_GUNU_GELECEKTE: Final = "Yapıldığı gün bugünden sonra olamaz."
+#: Genel kuruldan doğan (konusu genel kurul olan) takvim satırında yapıldığı gün `due_date`'ten önce
+#: olamaz: `due_date` bu satırlarda genel kurulun yapıldığı gündür (ibra edilmedi bildirimi ve TEFBİS
+#: girişleri; `genel_kurul.tutanagi_tamamla`, `TEFBIS_TAKVIMI`). Öteki fazların satırları (ör. defter
+#: tasdiki, TÜFE bildirimi) gerçek son gün taşır; onlarda son günden önce yapmak olağandır, sınır yoktur.
+TAKVIM_GUNU_GENEL_KURULDAN_ONCE: Final = (
+    "Yapıldığı gün genel kurulun yapıldığı günden ({gun:%d.%m.%Y}) önce olamaz."
+)
+
+#: Takvim satırının "yapıldı" işaretini yazan roller, yükümlülüğü yapan role göre (plan F2 §6.3
+#: "Roller"). İbra edilmedi bildirimini yeni yönetim kurulu ve okul yönetimi yapar (md. 11/1-ç "yeni
+#: yönetim kurulu ve okul yönetimi tarafından … resmî yazıyla bildirilir"): program yöneticisi ve
+#: birliğin yazışmalarını yürüten sekreter (md. 13/4). TEFBİS'e kaydı okul idaresi yapar (md. 23/5):
+#: yalnız program yöneticisi. Burada olmayan yükümlülükte yazan satırın sorumlu rolüdür
+#: (`responsible_role`; öteki fazların satırları kendi fazlarında eklenir).
+TAKVIM_ISARETLEYENLERI: Final[Mapping[str, frozenset[str]]] = {
+    ComplianceObligation.IBRA_EDILMEDI_BILDIRIMI: frozenset(
+        {rol_izinleri.YONETICI, AccountRole.SEKRETER.value}
+    ),
+    ComplianceObligation.TEFBIS_YONETIM_BILGISI: frozenset({rol_izinleri.YONETICI}),
+    ComplianceObligation.TEFBIS_BANKA_BILGISI: frozenset({rol_izinleri.YONETICI}),
+    ComplianceObligation.TEFBIS_BUTCE_GIRISI: frozenset({rol_izinleri.YONETICI}),
+}
+
+
+def takvim_isaretleyenleri(satir: ComplianceItem) -> frozenset[str]:
+    """Takvim satırını "yapıldı" diye işaretleyebilen roller (`TAKVIM_ISARETLEYENLERI`; yoksa satırın
+    sorumlu rolü)."""
+    roller = TAKVIM_ISARETLEYENLERI.get(satir.obligation)
+    if roller is not None:
+        return roller
+    return frozenset({satir.responsible_role}) if satir.responsible_role else frozenset()
+
+
+@transaction.atomic
+def takvim_satiri_yapildi(satir: ComplianceItem, *, done_on: date) -> ComplianceItem:
+    """Takvim satırının yapıldığı gün (tasarım §5.2.7 `done_on`; §7.10 "kalemin kapanması: …
+    `ComplianceItem` satırı `done_on` … alınca"): satır silinmez, yapıldığı gün yazılır, pano kalemi
+    düşer. İzlidir.
+
+    Yazan, satırın işini yapan roldür (`takvim_isaretleyenleri`): TEFBİS girişlerinde program
+    yöneticisi (md. 23/5), ibra edilmedi bildiriminde program yöneticisi ve sekreter (md. 11/1-ç,
+    13/4); uç kapısı M9'u bu iki role daraltır, servis satıra göre yeniden daraltır. Kanıt eki bu
+    adımda yoktur (`evidence` boş kalır). Yapıldığı gün bugünden sonra olamaz; konusu genel kurul olan
+    satırda genel kurulun yapıldığı günden (`due_date`) önce de olamaz: iş, yükümlülük doğmadan yapılmış
+    olamaz (öteki satırların `due_date`'i son gündür, sınır yalnız genel kuruldan doğan satırdadır).
+    Bu tutarlılık sınırı uyarı + gerekçe değil, sert rettir (altın kural 3'ün "kullanıcının girdiği
+    değer" hâli mevzuattan sapmayı düzenler; burada sapma değil imkânsız gün vardır), çünkü işaret bir
+    kez konur ve düzeltme yolu yoktur (en dar seçim): yanlış gün kalıcı olurdu. Dönem kilidi denetlenir
+    (kapanıştaki dönem yazılır, kapanmış dönem yazılmaz).
+    """
+    guncel = ComplianceItem.objects.select_related("term__rule_package").get(pk=satir.pk)
+    kim = yazar()
+    if kim is None or kim.sistem_mi or kim.rol not in takvim_isaretleyenleri(guncel):
+        raise RolYetkisiz
+    if guncel.kind != ComplianceKind.TAKVIM:
+        raise ValueError(TAKVIM_SATIRI_DEGIL)
+    if guncel.done_on is not None:
+        raise ValueError(TAKVIM_ZATEN_YAPILDI)
+    if done_on > timezone.localdate():
+        raise ValueError(TAKVIM_GUNU_GELECEKTE)
+    if (
+        guncel.subject_type == denetim_izi.model_etiketi(GeneralAssembly)
+        and guncel.due_date is not None
+        and done_on < guncel.due_date
+    ):
+        raise ValueError(TAKVIM_GUNU_GENEL_KURULDAN_ONCE.format(gun=guncel.due_date))
+    label = donem_kilidi.yazma_denetimi(guncel.term)
+    onceki = denetim_izi.anlik(guncel)
+    guncel.done_on = done_on
+    guncel.updated_by_id = iz.yazar_hesabi()
+    guncel.save(update_fields=["done_on", "updated_at", "updated_by"])
+    denetim_izi.degisiklik(guncel, onceki=onceki, label=label, compliance_item=guncel.pk)
+    return guncel
 
 
 @transaction.atomic

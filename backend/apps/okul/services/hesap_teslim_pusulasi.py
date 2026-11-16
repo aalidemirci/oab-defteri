@@ -369,6 +369,8 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
             _parca("son oturumun kontrolü (“Kontrol ettim”)", "dashboard-last-session"),
             # Genel Bakış → Yıllık İş Takvimi (F2 11b).
             _parca("yıllık iş takviminin basımı", "oab-document-e14"),
+            # Pano kaleminden takvim işinin "Yapıldı" işareti (F2 12. adım).
+            _parca("takvim işinin “Yapıldı” işareti", "oab-compliance-item-done"),
         ),
         baslik="Genel Bakış",
     ),

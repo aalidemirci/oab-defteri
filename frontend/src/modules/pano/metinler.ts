@@ -69,7 +69,7 @@ export const ROL_ADI: Record<string, string> = {
 };
 
 /** Aynı önerilerin tek kaleme toplandığı sayı (`ek.sayi`; yoksa 1). */
-export function kalemSayisi(ek: Record<string, string | number>): number {
+export function kalemSayisi(ek: PanoKalemi["ek"]): number {
   const sayi = Number(ek.sayi ?? 1);
   return Number.isInteger(sayi) && sayi > 1 ? sayi : 1;
 }
@@ -77,7 +77,7 @@ export function kalemSayisi(ek: Record<string, string | number>): number {
 /** "Başkan hesabı askıda: …" (backend `hesap_baglari.hesap_onerileri`; kişisiz). Aynı tür, rol ve
  * nedenli öneriler tek kalemdir; sayı birden çoksa cümle sayıyı söyler (aynı adlı bağlantı
  * yinelenmez). */
-export function hesapOnerisiCumlesi(ek: Record<string, string | number>): string {
+export function hesapOnerisiCumlesi(ek: PanoKalemi["ek"]): string {
   const rol = ROL_ADI[String(ek.rol)] ?? String(ek.rol);
   const sayi = kalemSayisi(ek);
   const askida = sayi > 1 ? `${rol} hesabı askıda (${sayi} hesap)` : `${rol} hesabı askıda`;
@@ -123,6 +123,127 @@ export function taslakCumlesi(baglam: string): string {
   return `${TASLAK_KUTUSU[baglam] ?? baglam}: gerekçe kutusunda kaydedilmemiş metin var.`;
 }
 
+// ---------------------------------------------------------------------------
+// F2: genel kurul süreleri (plan F2 §6.3, 12. adım; backend `pano` "F2 kalemleri"). Süreler ve sınır
+// günleri sunucunun kural paketinden okuduğu değerlerdir (`ek.son_gun`, `ek.ilan_gun`, `ek.sure_gun`);
+// metinde sabit gün sayısı yoktur. Kişi adı yoktur; kalem genel kurulun ekranına götürür.
+// ---------------------------------------------------------------------------
+export const GK_OLAGAN_BASLIGI = "Olağan genel kurul";
+export const GK_YENI_OKUL_BASLIGI = "Yeni açılan okulun ilk genel kurulu";
+export const GK_ILAN_BASLIGI = "Genel kurulun ilanı";
+export const GK_IKINCI_TOPLANTI_BASLIGI = "Genel kurulun ikinci toplantısı";
+export const MUDUR_YAZISI_BASLIGI = "Okul müdürünün yazısı";
+export const IBRA_BILDIRIMI_BASLIGI = "İbra edilmedi bildirimi";
+export const DONEM_ONAYI_BASLIGI = "Yeni birlik döneminin açılışı";
+/** TEFBİS takvim satırlarının başlıkları (yükümlülüğe göre; md. 23/5). */
+export const TEFBIS_BASLIKLARI: Record<string, string> = {
+  TEFBIS_YONETIM_BILGISI: "TEFBİS: yeni yönetimin bilgisi",
+  TEFBIS_BANKA_BILGISI: "TEFBİS: banka hesap bilgileri",
+  TEFBIS_BUTCE_GIRISI: "TEFBİS: tahmini bütçe",
+};
+export const TEFBIS_GIRISI_BASLIGI = "TEFBİS girişi";
+/** Konum cümlesi (CLAUDE.md §1; sözlük §1 "TEFBİS"): TEFBİS kaleminin açıklamasının sonunda. */
+export const TEFBIS_KONUMU = "Program TEFBİS'in yerine geçmez.";
+/** Olağanüstü genel kurulda ikinci toplantı süresinin kaynağı (plan F2 §7 U10; atıf sunucudan). */
+export const IKINCI_TOPLANTI_A1 =
+  "md. 9/2 olağan genel kurulu düzenler; süre olağanüstü genel kurulda kullanıcı kararı A-1 ile uygulanır.";
+
+/** İbra edilmedi bildirimi ve TEFBİS kalemleri süresizdir (mevzuatta süre yok): satırın işini yapan rol
+ * (TEFBİS program yöneticisi, md. 23/5; ibra bildirimi program yöneticisi ve sekreter, md. 11/1-ç, 13/4;
+ * yetenek `takvim_isareti`) işin yapıldığı günü kalemden girer, kalem düşer
+ * (tasarım §7.10 "kalemin kapanması"; backend `uyum.takvim_satiri_yapildi`). */
+export const YAPILDI_DUGMESI = "Yapıldı";
+export const YAPILDI_PENCERESI_BASLIGI = "İşin yapıldığı gün";
+export const YAPILDI_ACIKLAMASI =
+  "İşin yapıldığı günü girin. Kayıt silinmez; işaretlenen iş listeden düşer ve bir daha değiştirilmez.";
+export const ALAN_YAPILDIGI_GUN = "Yapıldığı gün";
+export const YAPILDIGI_GUN_GEREKLI = "Yapıldığı günü girin.";
+export const YAPILDI_KAYDEDILDI = "İş yapıldı olarak işaretlendi.";
+export const YAPILDI_KAYDEDILEMEDI = "İş yapıldı olarak işaretlenemedi.";
+export const YAPILDI_KAYDET = "Kaydet";
+export const YAPILDI_VAZGEC = "Vazgeç";
+export const YAPILDI_KAYDEDILIYOR = "Kaydediliyor…";
+
+/** "Yapıldı" düğmesinin erişilebilir adı: "TEFBİS: tahmini bütçe — yapıldı olarak işaretle". */
+export function yapildiDugmesiAdi(baslik: string): string {
+  return `${baslik} — yapıldı olarak işaretle`;
+}
+/** İlan kanallarının adları (md. 9/3; `genel_kurul.ilan_kanallari` belirteçleri). */
+export const ILAN_KANALI_ADI: Record<string, string> = {
+  ELDEN_YAZILI: "elden yazılı bildirim",
+  ILAN_PANOSU: "ilan panosu",
+  INTERNET_SAYFASI: "internet sayfası",
+};
+/** Okul kartının tamamlanacağı: veri sorumlusu girilmedi (tasarım §9.6 E04; yalnız program yöneticisi). */
+export const VERI_SORUMLUSU_TAMAMLANACAK =
+  "Okul Bilgileri'nde veri sorumlusu girilmedi; kişisel veri aydınlatma metni bu bilgi olmadan oluşturulmaz.";
+
+function gun(deger: PanoKalemi["ek"][string] | undefined): string {
+  return deger ? formatDate(String(deger)) : "—";
+}
+
+/** Cümle içindeki sürenin dayanağı: " (md. 9/3)"; atıf yoksa boş (sunucunun `ek.ilan_atif`'i). */
+function atifEki(atif: PanoKalemi["ek"][string] | undefined): string {
+  return atif ? ` (${String(atif)})` : "";
+}
+
+/** Olağan genel kurul ve yeni açılan okulun ilk genel kurulu (md. 9/1): planlanmadı ya da birinci
+ * toplantı sınırı aşıyor. Planlanmadıysa kalemin son günü sınırdaki toplantının ilanının son günüdür. */
+export function genelKurulZamaniCumlesi(ek: PanoKalemi["ek"], yeniOkul: boolean): string {
+  const son = gun(ek.son_gun);
+  if (ek.durum === "SINIRI_ASIYOR") {
+    return yeniOkul
+      ? `Birinci toplantının günü, okulun açılışından sayılan son günü (${son}) aşıyor.`
+      : `Birinci toplantının günü olağan genel kurulun son gününü (${son}) aşıyor.`;
+  }
+  const bas = yeniOkul
+    ? "İlk genel kurul henüz planlanmadı. Okulun açılışından sayılan son toplantı günü:"
+    : "Olağan genel kurul henüz planlanmadı. Toplantının son günü:";
+  return `${bas} ${son}. Toplantı en az ${ek.ilan_gun} gün önce ilan edilir${atifEki(ek.ilan_atif)}; kalemin son günü ilanın son günüdür.`;
+}
+
+/** İlan (md. 9/3): ilan bekliyor ya da kanıt günü girilmemiş kanal. */
+export function ilanCumlesi(ek: PanoKalemi["ek"]): string {
+  const toplanti = ek.toplanti === "IKINCI" ? "İkinci toplantı" : "Birinci toplantı";
+  if (ek.durum === "KANIT_EKSIK") {
+    const kanallar = String(ek.eksik ?? "")
+      .split(",")
+      .filter(Boolean)
+      .map((k) => ILAN_KANALI_ADI[k] ?? k)
+      .join(", ");
+    return `${toplanti}nın ilanında kanıt günü girilmemiş kanal: ${kanallar}.`;
+  }
+  return `${toplanti} henüz ilan edilmedi; ilan toplantıdan en az ${ek.ilan_gun} gün önce yapılır.`;
+}
+
+/** Yeter sayı sağlanamadı: ikinci toplantı (md. 9/2; ilan süresi md. 9/3). Olağanüstü genel kurulda
+ * sürenin kullanıcı kararı A-1 ile uygulandığı söylenir (U10; `ek.olaganustu`). */
+export function ikinciToplantiCumlesi(ek: PanoKalemi["ek"]): string {
+  const bas = `Birinci toplantıda yeter sayı sağlanamadı. İkinci toplantı birinci toplantıdan en geç ${ek.sure_gun} gün içinde yapılır`;
+  const cumle =
+    Number(ek.tarihli) === 1
+      ? `${bas}.`
+      : `${bas}; tarihi ilk ilanda yoksa en az ${ek.ilan_gun} gün önce ilan edilir${atifEki(ek.ilan_atif)}.`;
+  return Number(ek.olaganustu) === 1 ? `${cumle} ${IKINCI_TOPLANTI_A1}` : cumle;
+}
+
+/** Müdürün bekleyen yazısı (yalnız müdür): yeni okulun daveti ya da çağrı yazısı. Kalemin son günü
+ * ilanın son günüdür (birinci toplantı − ilan süresi, md. 9/3; sunucunun `ek.ilan_gun`, `ek.ilan_atif`'i):
+ * cümle bunu söyler; süre gelmediyse yalnız ilk cümle. */
+export function mudurYazisiCumlesi(ek: PanoKalemi["ek"]): string {
+  const bas =
+    ek.tur === "YENI_OKUL_DAVETI"
+      ? "Yeni açılan okulda genel kurulu okul müdürü davet eder; çağrı henüz kaydedilmedi."
+      : "Çağrı kaydedildi; “Genel kurul toplantı çağrısı ve gündemi” belgesi henüz oluşturulmadı.";
+  if (ek.ilan_gun === undefined || ek.ilan_gun === "") return bas;
+  return `${bas} Toplantı en az ${ek.ilan_gun} gün önce ilan edilir${atifEki(ek.ilan_atif)}; kalemin son günü ilanın son günüdür.`;
+}
+
+/** Dönem onayı (U32): süresiz, yalnız program yöneticisi. */
+export function donemOnayiCumlesi(ek: PanoKalemi["ek"]): string {
+  return `Genel kurulun tutanağı tamamlandı; yeni birlik döneminin açılması onay bekliyor. Dönemin başlangıcı genel kurulun yapıldığı gün: ${gun(ek.baslangic)}.`;
+}
+
 /** Bilgi bantları. Kural kopyasının bandı Birlik Dönemi ekranınınkiyle aynı sözdür; bandın bağlantısı
  * Organlar ekranıyla ortak metindir (`organlar/metinler.ts` `DUGME_BIRLIK_DONEMINE_GIT`, "Birlik
  * Dönemi ekranını aç"): gidilen ekranı her rol okur, "aç" yazma eylemi diye okunmaz. */
@@ -139,12 +260,15 @@ const EKRAN_ADI: Record<string, string> = {
   "/birlik-donemi": "Birlik Dönemi",
   "/birlik-donemi/gecis-kurulumu": "Geçiş Kurulumu",
   "/kullanicilar": "Kullanıcılar",
+  "/genel-kurul": "Genel Kurul",
+  "/ayarlar": "Ayarlar",
 };
 const SEKME_ADI: Record<string, string> = {
   yk: "Yönetim Kurulu",
   dk: "Denetleme Kurulu",
   alim: "Alım Komisyonu",
   birlik: "Birlik Kişileri",
+  okul: "Okul Bilgileri",
 };
 
 export function ekranAdi(kalem: Pick<PanoKalemi, "rota" | "sekme">): string {
@@ -165,6 +289,14 @@ export function kalemBasligi(kalem: PanoKalemi): string {
     KADRO: dk ? DK_KADRO_BASLIGI : YK_KADRO_BASLIGI,
     HESAP_ONERISI: HESAP_ONERISI_BASLIGI,
     YARIM_TASLAK: YARIM_TASLAK_BASLIGI,
+    GK_OLAGAN: GK_OLAGAN_BASLIGI,
+    GK_YENI_OKUL: GK_YENI_OKUL_BASLIGI,
+    GK_ILAN: GK_ILAN_BASLIGI,
+    GK_IKINCI_TOPLANTI: GK_IKINCI_TOPLANTI_BASLIGI,
+    MUDUR_YAZISI: MUDUR_YAZISI_BASLIGI,
+    IBRA_BILDIRIMI: IBRA_BILDIRIMI_BASLIGI,
+    TEFBIS_GIRISI: TEFBIS_BASLIKLARI[String(kalem.ek.yukumluluk)] ?? TEFBIS_GIRISI_BASLIGI,
+    DONEM_ONAYI: DONEM_ONAYI_BASLIGI,
   };
   return basliklar[kalem.kod as IsKodu] ?? "";
 }
@@ -186,9 +318,28 @@ export function kalemAciklamasi(kalem: PanoKalemi): string {
       return taslakCumlesi(String(kalem.ek.baglam));
     case "YEDEK_CAGRISI":
       return yedekCagrisiCumlesi(kalem);
+    case "GK_OLAGAN":
+      return genelKurulZamaniCumlesi(kalem.ek, false);
+    case "GK_YENI_OKUL":
+      return genelKurulZamaniCumlesi(kalem.ek, true);
+    case "GK_ILAN":
+      return ilanCumlesi(kalem.ek);
+    case "GK_IKINCI_TOPLANTI":
+      return ikinciToplantiCumlesi(kalem.ek);
+    case "MUDUR_YAZISI":
+      return mudurYazisiCumlesi(kalem.ek);
+    case "DONEM_ONAYI":
+      return donemOnayiCumlesi(kalem.ek);
+    case "TEFBIS_GIRISI":
+      return `${kalem.metin} ${TEFBIS_KONUMU}`;
     default:
       return kalem.metin;
   }
+}
+
+/** "Tamamlanacaklar" satırının metni: uyum satırının iletisi ya da okul kartının satırı. */
+export function tamamlanacakMetni(kalem: Pick<PanoKalemi, "kod" | "metin">): string {
+  return kalem.kod === "VERI_SORUMLUSU" ? VERI_SORUMLUSU_TAMAMLANACAK : kalem.metin;
 }
 
 /** "Son gün 22.10.2026" ya da "Süresi doldu · 17.10.2026". */

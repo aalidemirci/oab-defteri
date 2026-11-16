@@ -30,6 +30,7 @@ from apps.oab.models import (
     BookKind,
     BookStatus,
     ComplianceItem,
+    ComplianceKind,
     MembershipRole,
     OfficialBook,
     OrganMembership,
@@ -61,6 +62,7 @@ from apps.oab.serializers import (
     OrganMembershipSerializer,
     OrganMembershipUpdateSerializer,
     SayacBeyaniSerializer,
+    TakvimYapildiSerializer,
     TemsilciCreateSerializer,
     ToplantiGunuSerializer,
     YarimMetinSerializer,
@@ -1137,4 +1139,23 @@ class DashboardView(APIView):
                 None if kim is None else kim.rol,
                 None if kim is None else kim.hesap_id,
             )
+        )
+
+
+class ComplianceItemDoneView(APIView):
+    """Takvim satırının "Yapıldı" işareti (tasarım §7.10 "kalemin kapanması: … `done_on` … alınca";
+    F2 12. adım): yapıldığı gün yazılır, pano kalemi düşer. Yalnız satırın işini yapan rol yazar
+    (`uyum.takvim_satiri_yapildi`); uç yalnız takvim satırını bulur."""
+
+    def post(self, request: Request, pk: int) -> Response:
+        satir = get_object_or_404(ComplianceItem, pk=pk, kind=ComplianceKind.TAKVIM)
+        seri = TakvimYapildiSerializer(data=request.data)
+        seri.is_valid(raise_exception=True)
+        with _hizmet_hatalari():
+            guncel = uyum.takvim_satiri_yapildi(satir, done_on=seri.validated_data["done_on"])
+        return Response(
+            {
+                "id": guncel.pk,
+                "done_on": None if guncel.done_on is None else guncel.done_on.isoformat(),
+            }
         )

@@ -418,7 +418,9 @@ def roadmap_auto_items(status: dict[str, Any]) -> dict[str, bool]:
         "personel_aktarimi": int(status["personnel_count"]) > 0,
         "kapali_gunler": int(status["school_break_count"]) > 0,
         # Geçiş kurulumu (4. adım, atlanabilir; tasarım §7.9, §7.10): işaret konmuşsa ya da dönem
-        # genel kurulla açılmışsa tamam; atlanmışsa ya da sürüyorsa açık madde olarak kalır.
+        # genel kurulla açılmışsa tamam; atlanmışsa ya da sürüyorsa açık madde olarak kalır. Yeni
+        # açılan okulda ön yüz bu maddeyi "Genel kurulu planlayın" diye gösterir (S5 (iii)): ilk genel
+        # kurul planlanınca hazırlık dönemi genel kurulla açılır ve durum `GEREKMIYOR` olur.
         "gecis_kurulumu": isinstance(gecis, dict) and gecis.get("state") in TRANSITION_DONE_STATES,
     }
 
@@ -565,6 +567,11 @@ def setup_status() -> dict[str, Any]:
         ),
         # Geçiş kurulumunun durumu ve açık adımları (kişisiz; 4. adım ve yol haritası maddesi).
         "transition_setup": transition_status(),
+        # Yeni açılan okul (okul kartında açılış günü var; md. 9/1): yol haritasında geçiş kurulumu
+        # maddesinin yerine "Genel kurulu planlayın" durur (plan F2 §9 S5 (iii)); maddenin tamamlığı
+        # aynı ölçüttür (`roadmap_auto_items` "gecis_kurulumu": ilk genel kurul planlanınca hazırlık
+        # dönemi genel kurulla açılır, geçiş durumu `GEREKMIYOR` olur). Kişisiz bir işarettir.
+        "new_school": config.opened_on is not None,
     }
 
 
