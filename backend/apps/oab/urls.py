@@ -170,6 +170,12 @@ urlpatterns: list[URLPattern | URLResolver] = [
         gk.E14DocumentView.as_view(),
         name="oab-document-e14",
     ),
+    # Kişisel veri aydınlatma metni (E04; Hakkında → Kişisel veri; konusu okul kartı; plan F2 10. adım).
+    path(
+        "documents/e04/",
+        gk.E04DocumentView.as_view(),
+        name="oab-document-e04",
+    ),
     # E12'nin gelen-giden evrak kaydı (öneri ve onay; plan F2 §7 U20). İndirme deseninden önce durur.
     path(
         "documents/<int:pk>/outgoing-record/",

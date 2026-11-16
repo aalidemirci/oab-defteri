@@ -1,5 +1,5 @@
 // Genel kurulun belge kartları (tasarım §9.5, §9.6; plan F2 §4, §6.1; F1c'nin `evrak/EvrakKarti` kalıbı).
-// Kartlar katalogdan çizilir: E05-E13 ve E64 (E04 onay bekliyor, E14 Genel Bakış'tadır). Her rol geçerli
+// Kartlar katalogdan çizilir: E05-E13 ve E64 (E04 Hakkında'da, E14 Genel Bakış'tadır). Her rol geçerli
 // kaydı görür ve kayıtlı biçimleriyle kaydeder (basım okumadır; `BASIM` satırı sunucuda). "Belgeyi
 // oluştur" yalnız oturumdaki rolün üretebildiği belgede çizilir (`oturum.uretilebilir_belgeler`; sunucu
 // tasarım §9.6'nın "Üreten"ine ve E05'te çağırana göre söyler); Denetleme Kurulunun çağrısında çağrı

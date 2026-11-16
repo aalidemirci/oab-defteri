@@ -181,7 +181,9 @@ export default function GenelKurulPage() {
             <EmptyState
               icon="how_to_vote"
               title={GENEL_KURUL_YOK}
-              description={planlayabilir ? GENEL_KURUL_YOK_ACIKLAMASI : undefined}
+              // U1: kural sürümü güncellenmeden genel kurul planlanmaz; "planlayarak başlayın"
+              // öğüdü bantla çelişmesin diye o durumda verilmez (11b'nin notu).
+              description={planlayabilir && !guncellenmeli ? GENEL_KURUL_YOK_ACIKLAMASI : undefined}
             />
           ) : (
             <section aria-labelledby="gk-listesi" className="space-y-3">

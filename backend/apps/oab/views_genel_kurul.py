@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, cast
 
 from django.db import transaction
 from django.db.models import QuerySet
@@ -96,7 +96,7 @@ from apps.oab.services import (
 )
 from apps.oab.views import _donemler, _hizmet_hatalari
 from apps.okul import denetim_izi, rol_izinleri
-from apps.okul.models import Attachment
+from apps.okul.models import Attachment, SchoolConfig
 from apps.okul.oturum import yazar
 from apps.okul.permissions import RequiresAdminPassword
 from apps.okul.services import dosya_deposu
@@ -1017,7 +1017,7 @@ class AssemblyTermTransitionView(APIView):
 
 
 # ---------------------------------------------------------------------------
-# Genel kurul evrakı (E05-E13, E64; E04 üretilmez): katalog, liste, üretim, adlı çıktı
+# Genel kurul evrakı (E05-E13, E64; E04 Hakkında'da): katalog, liste, üretim, adlı çıktı
 # ---------------------------------------------------------------------------
 _BELGE_ADLARI = genel_kurul_evraki.BELGE_ADLARI
 
@@ -1041,7 +1041,8 @@ def evrak_satiri(kayit: GeneratedDocument) -> dict[str, Any]:
 
 class AssemblyDocumentCatalogView(APIView):
     """Genel kurul evrakının kataloğu ve E12'nin muhatap önerileri (il ve ilçe millî eğitim müdürlüğü;
-    varsayılan ilçe). E04 katalogda durur, üretilmez (nedeni yanında)."""
+    varsayılan ilçe). E04 katalogda durur; konusu okul kartıdır, üretimi Hakkında'nın ucundadır
+    (`E04DocumentView`)."""
 
     def get(self, request: Request) -> Response:
         return Response(
@@ -1080,8 +1081,8 @@ def _uretim_yaniti(uretim: genel_kurul_evraki.Uretim) -> Response:
 
 class AssemblyDocumentView(APIView):
     """Genel kurul belgesinin üretimi (yeni sürüm, PDF ve Word saklanır). Üreten rol belgeye göre
-    serviste daraltılır (tasarım §9.6 "Üreten"; E05 çağırana göre). E04 ve konusu genel kurul olmayan
-    kod bu yoldan üretilmez (400)."""
+    serviste daraltılır (tasarım §9.6 "Üreten"; E05 çağırana göre). Konusu genel kurul olmayan kod
+    (E04, E14) bu yoldan üretilmez (400)."""
 
     permission_classes = [RequiresAdminPassword]
 
@@ -1156,6 +1157,29 @@ class E14DocumentView(APIView):
         donem = get_object_or_404(_donemler(), pk=pk)
         with _hizmet_hatalari(), _evrak_yazma_hatalari():
             uretim = genel_kurul_evraki.uret(genel_kurul_evraki.E14, donem)
+        return _uretim_yaniti(uretim)
+
+
+class E04DocumentView(APIView):
+    """Kişisel veri aydınlatma metni (E04; Hakkında → Kişisel veri; konusu okul kartı). GET her role
+    açıktır (M1, yazmaz): geçerli kayıt, veri sorumlusunun girilip girilmediği ve basım uyarıları.
+    POST yeni sürümü üretir (yalnız program yöneticisi, tasarım §9.6 E04 "Üreten"); veri sorumlusu
+    boşken 400 (sert; plan F2 §9 S6 (iv), KE-20). Basım genel indirme ucundadır."""
+
+    def get(self, request: Request) -> Response:
+        durum = genel_kurul_evraki.e04_durumu()
+        kayit = durum["kayit"]
+        return Response(
+            {
+                "evrak": None if kayit is None else evrak_satiri(cast(GeneratedDocument, kayit)),
+                "veri_sorumlusu_girildi": durum["veri_sorumlusu_girildi"],
+                "basim_uyarilari": durum["basim_uyarilari"],
+            }
+        )
+
+    def post(self, request: Request) -> Response:
+        with _hizmet_hatalari(), _evrak_yazma_hatalari():
+            uretim = genel_kurul_evraki.uret(genel_kurul_evraki.E04, SchoolConfig.load())
         return _uretim_yaniti(uretim)
 
 
@@ -1404,6 +1428,7 @@ __all__ = [
     "DocumentOutgoingRecordView",
     "DocumentRecordAttachmentsView",
     "DocumentRecordListView",
+    "E04DocumentView",
     "E14DocumentView",
     "TermAnnualCalendarView",
     "evrak_satiri",

@@ -2,8 +2,8 @@
 
 `gorev_evraki`'nin kalıbıdır (`KODLAR`, `BELGE_ADLARI`, `URETEN_ROLLER`, kurucular, `uret`, `bas`).
 İskelet 8. adımdadır; içerik kurucuları 9. adımda E05, E06, E07, E08 ve E64 için ("Genel kurul evrakı
-I"), 10. adımda E09-E14 için yazıldı ("Genel kurul evrakı II"). E04'ün kurucusu dört alt metnin
-kullanıcı onayından sonra yazılır (plan F2 §9 S8 (i), §10.1 "E04 10. adımın son işi"). Kurucusu
+I"), 10. adımda E09-E14 için ("Genel kurul evrakı II") ve dört alt metnin kullanıcı onayından
+(16.11.2026) sonra E04 için yazıldı (plan F2 §9 S8 (i), §10.1 "E04 10. adımın son işi"). Kurucusu
 olmayan kod üretilmez (`KOD_GECERSIZ`).
 
 GENEL KURUL EVRAKI I (plan F2 §4.1, §7 U14-U18, U34; tasarım §9.3, §9.6):
@@ -75,6 +75,21 @@ GENEL KURUL EVRAKI II (plan F2 §4.1, §7 U20-U22; tasarım §9.1-§9.3, §9.6):
 - E14 — yıllık iş takvimi (konusu birlik dönemi; kişisiz, imzasız): süre kuralı satırları kural
   kimliği ve atıf taşır (sözlük §2 istisna 3), okul planı satırları (ders yılı, dönemin yönetim
   kurulu toplantı günü ve denetim planı) ayrı bölümdedir.
+
+KİŞİSEL VERİ AYDINLATMA METNİ (E04; plan F2 §4.1, §9 S6 (iv), S8 (i); tasarım §3.4, §9.6 E04):
+
+- Konusu okul kartıdır (dönemsiz). Dört alt metin (veli ve üye · personel · istekli, kiracı ve
+  çalışan · bağışçı ve tedarikçi) kullanıcının 16.11.2026'da onayladığı taslaktan HARFİ HARFİNE
+  kurulur (`aydinlatma_metni`; 08.11.2026 onaylı cümleler ön yüzle birebir). Her bölüm yeni sayfada
+  başlar. Veri sorumlusu Okul Bilgileri'ndeki `data_controller_text`'tir; alan boşken belge ÜRETİLMEZ
+  ve kaydedilmiş belge BASILMAZ (sert; hukuken geçersiz işlem — KVKK md. 10/1-a veri sorumlusunun
+  kimliğini ister; S6 (iv), KE-20; `E04_VERI_SORUMLUSU_YOK`). Kişisiz, imzasız; konum cümlesi ve müdür
+  bloğu yoktur; Word ve PDF saklanır. Üreten program yöneticisi, her rol okur ve basar (M1).
+- Bağışçının T.C. kimlik no'su (K9; `k9_acik`): ayar kapalıyken "T.C. kimlik no tutulmaz." satırı,
+  açıkken açık biçimin satırları ve hukuki sebebin yerinde "………" ile basım uyarısı. Ayarın alanı
+  (`SchoolConfig.donor_tckn_enabled`, tasarım §5.1) F3'te gelir; o güne dek ayar kapalıdır.
+- Basım uyarıları (onaylı ekran notu, md. 6/3'ün bendi, K9 açıkken hukuki sebep) belgeye basılmaz:
+  üretimin yanıtında ve Hakkında'daki kartta (`e04_durumu`) gösterilir.
 
 Kişisel veri dipnotu (tasarım §9.1-5) yalnız kişi adı taşıyan iç belgelerdedir (E05, adlı E07 ve E08,
 E09, E10, E13); E12 okul dışına giden resmî yazıdır, dipnot taşımaz; E11 E12'nin ekidir (il/ilçe millî
@@ -168,8 +183,8 @@ from apps.oab.models import (
     SeatGroup,
     SeatType,
 )
+from apps.oab.services import aydinlatma_metni, gelen_giden_evrak, genel_kurul, uyelikler, uyum
 from apps.oab.services import evrak as evrak_servisi
-from apps.oab.services import gelen_giden_evrak, genel_kurul, uyelikler, uyum
 from apps.oab.services.gorev_evraki import (
     BOS,
     KONU_BILGI,
@@ -512,21 +527,14 @@ KANIT_ILAN_GUNU: Final = "İlan günü (en geç kanalın günü)"
 SAYIN_VELI: Final = "Sayın Veli,"
 E07_AYDINLATMA_BASLIGI: Final = "Kişisel verileriniz hakkında kısa bilgi"
 #: Kullanıcının 08.11.2026'da onayladığı veli listesi aydınlatma metninin cümleleri, BİREBİR (tek harf
-#: değiştirilmez; ön yüzdeki karşılığı `kisiler/metinler.ts`, birebirliği testte sınanır).
-VELI_AYDINLATMA_AMACI: Final = (
-    "Amaç: Genel kurul toplantısının daveti, katılım cetveli ve toplantı yeter sayısının sayımı "
-    "(OAB Yönetmeliği md. 9/2, 9/3, 10/1-a); birlik organlarına aday olan velinin kaydı. Yalnız "
-    "veli adı-soyadı ve öğrencinin sınıfı tutulur; telefon, adres, T.C. kimlik no ve öğrencinin "
-    "adı tutulmaz."
-)
-AYDINLATMA_VERI_SORUMLUSU_ETIKETI: Final = "Veri sorumlusu:"
-AYDINLATMA_HAKLARINIZ: Final = (
-    "Haklarınız: KVKK md. 11'deki haklarınızı (verinizin işlenip işlenmediğini öğrenme, bilgi "
-    "isteme, düzeltilmesini ya da silinmesini isteme ve ötekiler) veri sorumlusuna başvurarak "
-    "kullanabilirsiniz."
-)
+#: değiştirilmez; ön yüzdeki karşılığı `kisiler/metinler.ts`, birebirliği testte sınanır). Tek kaynak
+#: `aydinlatma_metni`dir (E04 de bu cümleleri basar).
+VELI_AYDINLATMA_AMACI: Final = aydinlatma_metni.VELI_AYDINLATMA_AMACI
+AYDINLATMA_VERI_SORUMLUSU_ETIKETI: Final = aydinlatma_metni.AYDINLATMA_VERI_SORUMLUSU_ETIKETI
+AYDINLATMA_HAKLARINIZ: Final = aydinlatma_metni.AYDINLATMA_HAKLARINIZ
 #: Tam metnin (E04) yeri: onaylı veli metninin girişi "genel kurul davetinde kısa paragrafı ve tam
-#: metnin okunacağı yer (okul panosu, okul sitesi) yer alır" der. Bu cümle yenidir (kullanıcıya sorulacak).
+#: metnin okunacağı yer (okul panosu, okul sitesi) yer alır" der. Cümle kullanıcı onaylıdır (E04
+#: taslağının sorusu 15, 16.11.2026).
 E07_TAM_METIN_YERI: Final = (
     "Aydınlatma metninin tamamı (Kişisel veri aydınlatma metni) okul ilan panosunda ve okulun "
     "internet sayfasındadır."
@@ -2788,9 +2796,65 @@ def e14_belgesi(konu: models.Model, secim: Secim) -> tuple[evrak.Belge, tuple[st
     return belge, tuple(uyarilar.liste)
 
 
-#: Kodun kişisiz içerik kurucusu (E05-E08, E64 9. adımda; E09-E14 10. adımda; E04 metinlerin
-#: onayından sonra, plan F2 §9 S8 (i)).
+# ---------------------------------------------------------------------------
+# E04 — kişisel veri aydınlatma metni (dört alt metin; plan F2 §4.1, §9 S6 (iv), S8 (i))
+# ---------------------------------------------------------------------------
+#: Veri sorumlusu boşken (sert; S6 (iv), KE-20): belge üretilmez, kaydedilmiş belge basılmaz.
+E04_VERI_SORUMLUSU_YOK: Final = (
+    "Okul Bilgileri'nde veri sorumlusu girilmemiş: kişisel veri aydınlatma metni veri sorumlusu "
+    "olmadan üretilmez ve basılmaz (KVKK md. 10/1-a)."
+)
+
+
+def k9_acik() -> bool:
+    """K9: bağışçının T.C. kimlik no'su ayarı açık mı (tasarım §5.1 `donor_tckn_enabled`)? Alan bağış
+    kaydıyla F3'te gelir; o güne dek ayar kapalıdır (varsayılan kapalı, K9)."""
+    return bool(getattr(SchoolConfig.load(), "donor_tckn_enabled", False))
+
+
+def veri_sorumlusu() -> str:
+    """Okul Bilgileri'ndeki veri sorumlusu, boşlukları tek boşluğa indirilmiş; boşsa boş dize."""
+    return " ".join(str(SchoolConfig.load().data_controller_text or "").split())
+
+
+def e04_belgesi(konu: models.Model, secim: Secim) -> tuple[evrak.Belge, tuple[str, ...]]:
+    """E04'ün içerik modeli (tasarım §9.6 E04; modül başlığı "Kişisel veri aydınlatma metni"): birlik
+    antedi, başlık ve dört alt metin (`aydinlatma_metni.govde`). Kişisiz, imzasız; konum cümlesi ve
+    müdür bloğu yok. Veri sorumlusu boşken `E04_VERI_SORUMLUSU_YOK` (sert)."""
+    if not isinstance(konu, SchoolConfig):
+        raise ValueError(KONU_GECERSIZ)
+    sorumlu = veri_sorumlusu()
+    if not sorumlu:
+        raise ValueError(E04_VERI_SORUMLUSU_YOK)
+    acik = k9_acik()
+    belge = evrak.Belge(
+        kod=E04,
+        antet=_antet(),
+        bloklar=(
+            evrak.Baslik(BELGE_ADLARI[E04], alt=aydinlatma_metni.ALT_BASLIK),
+            *aydinlatma_metni.govde(sorumlu, k9_acik=acik),
+        ),
+    )
+    return belge, aydinlatma_metni.basim_uyarilari(k9_acik=acik)
+
+
+def e04_durumu() -> dict[str, object]:
+    """Hakkında → Kişisel veri kartının durumu (her rol okur, yazmaz): geçerli kayıt, veri sorumlusunun
+    girilip girilmediği ve her basımda geçerli basım uyarıları (belgeye basılmaz)."""
+    okul = SchoolConfig.load()
+    kayitlar = [] if okul.pk is None else evrak_listesi(okul)
+    kayit = next((k for k in kayitlar if str(k.doc_type) == E04), None)
+    return {
+        "kayit": kayit,
+        "veri_sorumlusu_girildi": bool(veri_sorumlusu()),
+        "basim_uyarilari": list(aydinlatma_metni.basim_uyarilari(k9_acik=k9_acik())),
+    }
+
+
+#: Kodun kişisiz içerik kurucusu (E05-E08, E64 9. adımda; E09-E14 10. adımda; E04 dört alt metnin
+#: 16.11.2026'daki onayından sonra, plan F2 §9 S8 (i)).
 KURUCULAR: dict[str, Kurucu] = {
+    E04: e04_belgesi,
     E05: e05_belgesi,
     E06: e06_belgesi,
     E07: e07_belgesi,
@@ -2822,8 +2886,11 @@ def _konu_turu(kod: str) -> type[models.Model]:
 
 
 def _konu_ve_donem(kod: str, konu: models.Model) -> tuple[models.Model, OabTerm | None]:
-    """Konunun güncel kaydı ve evrakın dönemi (modül başlığı "Konu ve dönem")."""
+    """Konunun güncel kaydı ve evrakın dönemi (modül başlığı "Konu ve dönem"). Okul kartı tekildir:
+    satırı henüz yoksa da güncel hâli verilir (E04 veri sorumlusu boş diye üretilmez)."""
     tur = _konu_turu(kod)
+    if tur is SchoolConfig and isinstance(konu, SchoolConfig):
+        return SchoolConfig.load(), None
     if not isinstance(konu, tur) or konu.pk is None:
         raise ValueError(KONU_GECERSIZ)
     if tur is GeneralAssembly:
@@ -2834,7 +2901,7 @@ def _konu_ve_donem(kod: str, konu: models.Model) -> tuple[models.Model, OabTerm 
     if tur is OabTerm:
         donem = OabTerm.objects.select_related("rule_package").get(pk=konu.pk)
         return donem, donem
-    return SchoolConfig.load(), None
+    raise ValueError(KONU_GECERSIZ)
 
 
 def _secim_denetimi(kod: str, secim: Secim, *, adli: bool = False) -> None:
@@ -2923,8 +2990,8 @@ def _uretim_yetkisi(kod: str, konu: models.Model) -> None:
 
 def uretebilir_mi(kod: str, kurul: GeneralAssembly) -> bool:
     """Oturumdaki rol bu genel kurulun bu belgesini üretebilir mi (ekranın belge kartları; plan F2 11b)?
-    Yazmaz; kapı yine üretimdedir (`_uretim_yetkisi`). Kurucusu olmayan (E04) ya da konusu genel kurul
-    olmayan kod hayır; E05'te çağrılmamış genel kurul hayır (`CAGRI_YOK`)."""
+    Yazmaz; kapı yine üretimdedir (`_uretim_yetkisi`). Kurucusu olmayan ya da konusu genel kurul
+    olmayan kod (E04, E14) hayır; E05'te çağrılmamış genel kurul hayır (`CAGRI_YOK`)."""
     if kod not in KURUCULAR or kod not in GENEL_KURUL_KODLARI:
         return False
     try:
@@ -3090,12 +3157,15 @@ def bas(kayit: GeneratedDocument, bicim: str) -> FileResponse:
 
     Kod bu belgelerden biri değilse, biçim kayıtta yoksa, kayıt veli adı taşıyorsa ya da saklanan
     dosya eklenmemişse 404. Kayıtlı içerik tutmuyorsa (`EvrakIcerigiTutmuyor`) ya da dosya
-    okunamazsa bayt verilmez, iz yazılmaz.
+    okunamazsa bayt verilmez, iz yazılmaz. E04 Okul Bilgileri'nde veri sorumlusu boşken basılmaz
+    (`E04_VERI_SORUMLUSU_YOK`, `ValueError`; S6 (iv)).
     """
     kod = str(kayit.doc_type)
     if kod not in KODLAR or bicim not in kayit.formats or kayit.personal_list:
         raise Http404
     _okuma_yetkisi(kod)
+    if kod == E04 and not veri_sorumlusu():
+        raise ValueError(E04_VERI_SORUMLUSU_YOK)
     ad = dosya_adi(kod, timezone.localdate(kayit.generated_at), bicim, toplanti=str(kayit.meeting))
     if bicim in SAKLANAN_BICIMLER:
         ek = kayit.ekler().filter(mime=evrak_servisi.BICIM_TURLERI[bicim]).last()
@@ -3125,10 +3195,9 @@ def bicim_coz(metin: str, bicimler: Mapping[str, str] = UZANTILAR) -> str:
 # ---------------------------------------------------------------------------
 # Uçların okumaları (plan F2 11. adım: katalog, muhatap önerisi, yıllık iş takvimi, E12'nin evrak kaydı)
 # ---------------------------------------------------------------------------
-#: E04 üretilmez: dört alt metnin kullanıcı onayı beklenir (plan F2 §9 S8 (i), 10. adımın notu).
-URETILEMEZ_NEDENLERI: Final[dict[str, str]] = {
-    E04: "Kişisel veri aydınlatma metninin dört alt metni onay bekliyor; belge bu sürümde üretilmez.",
-}
+#: Katalogda durup üretilemeyen kodun nedeni (E04 dört alt metnin 16.11.2026'daki onayıyla üretilir
+#: oldu; liste boştur, kurucusu olmayan kod `KOD_GECERSIZ` gösterir).
+URETILEMEZ_NEDENLERI: Final[dict[str, str]] = {}
 #: Belgenin konusu (katalog; modül başlığı "Konu ve dönem").
 KONU_GENEL_KURUL: Final = "genel_kurul"
 KONU_DONEM: Final = "donem"
@@ -3141,8 +3210,8 @@ MUHATAP_SECIMI_GECERSIZ: Final = "Muhatap il ya da ilçe millî eğitim müdürl
 
 def katalog() -> list[dict[str, object]]:
     """Genel kurul evrakının kataloğu (tasarım §9.5): kod, ad, konu, biçimler, kip ve toplantı
-    seçenekleri, üreten roller ve üretilebilirlik. Kurucusu olmayan kod (E04) katalogda durur ama
-    üretilmez; nedeni yanındadır. Kişisizdir, yazmaz."""
+    seçenekleri, üreten roller ve üretilebilirlik. Kurucusu olmayan kod katalogda durur ama üretilmez;
+    nedeni yanındadır. E04'ün konusu okul kartıdır, üretimi Hakkında'dadır. Kişisizdir, yazmaz."""
     satirlar: list[dict[str, object]] = []
     for kod in KODLAR:
         tur = _konu_turu(kod)

@@ -238,6 +238,7 @@ describe("yetenekler (ön yüz süzmesinin tek kaynağı; plan F1b-2)", () => {
 
   it("ön yüzün yetenek adı listesi (anlık görüntü; arka yüzle eşitliğini backend `test_yetenek_adlari_on_yuzle_birebir` sınar)", () => {
     expect([...YETENEK_ADLARI]).toEqual([
+      "aydinlatma_metni_uretme",
       "ayrilis_havuzu",
       "birlik_donemi_yazma",
       "birlik_kisi_yazma",

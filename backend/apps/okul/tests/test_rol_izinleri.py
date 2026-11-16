@@ -444,6 +444,8 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     "oab-document-e03": {"POST": "Y+SEK"},
     "oab-term-documents": {"GET": "H", "HEAD": "H"},
     "oab-document-download": {"GET": "H", "HEAD": "H"},
+    # F2 10. adım: kişisel veri aydınlatma metni (E04; M1: her rol okur, program yöneticisi üretir).
+    "oab-document-e04": {"GET": "H", "HEAD": "H", "POST": "Y"},
     "oab-okul-karti-bilgileri": {"GET": "H", "HEAD": "H"},
     "oab-organ-roster": {"GET": "H", "HEAD": "H"},
     "oab-person-detail": {"GET": "H", "HEAD": "H", "PATCH": "Y+YK"},
@@ -889,6 +891,7 @@ def test_yetenek_adlari_ve_rollerin_yetenekleri_anlik_goruntusu() -> None:
     `test_yetenek_adlari_on_yuzle_birebir` sınar)."""
     tum = sorted(YETENEKLER)
     assert tum == [
+        "aydinlatma_metni_uretme",
         "ayrilis_havuzu",
         "birlik_donemi_yazma",
         "birlik_kisi_yazma",

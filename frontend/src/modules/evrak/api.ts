@@ -9,7 +9,7 @@ import { api } from "../../lib/api";
 import { dosyaAdi } from "../../lib/download";
 import { formatDateTime } from "../../lib/format";
 
-export type EvrakKodu = "E01" | "E02" | "E03" | "E14";
+export type EvrakKodu = "E01" | "E02" | "E03" | "E04" | "E14";
 export type EvrakBicimi = "pdf" | "docx" | "xlsx";
 
 /** `GET terms/<pk>/documents/` satırı: dönemin geçerli kaydı (kişisiz). */
@@ -37,6 +37,7 @@ const DOSYA_KOKLERI: Record<EvrakKodu, string> = {
   E01: "Yönetim-Kurulu-Görev-Bölümü-Karar-Taslağı",
   E02: "Denetleme-Kurulu-Görev-Bölümü-Tutanağı",
   E03: "Temsilci-Görevlendirme-Çizelgesi",
+  E04: "Kişisel-Veri-Aydınlatma-Metni",
   E14: "Yıllık-İş-Takvimi",
 };
 

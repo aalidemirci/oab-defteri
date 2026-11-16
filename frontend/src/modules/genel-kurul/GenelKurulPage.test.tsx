@@ -482,9 +482,12 @@ describe("Genel Kurul — liste ve planlama", () => {
   });
 
   it("kural sürümü genel kurul kurallarını taşımıyorsa planlama yerine Birlik Dönemi'ne götürür (U1)", async () => {
-    gkMock.liste.mockResolvedValue({ ...LISTE, kural_surumu_guncellenmeli: true });
+    gkMock.liste.mockResolvedValue({ ...LISTE, kayitlar: [], kural_surumu_guncellenmeli: true });
     bas("yonetici", "/genel-kurul");
     expect(await screen.findByText(KURAL_SURUMU_GUNCELLENMELI)).toBeInTheDocument();
+    // Boş listede "Genel kurulu planlayarak başlayın." öğüdü bantla çelişmesin: verilmez.
+    expect(screen.getByText(GENEL_KURUL_YOK)).toBeInTheDocument();
+    expect(screen.queryByText(GENEL_KURUL_YOK_ACIKLAMASI)).toBeNull();
     expect(screen.getByRole("link", { name: KURAL_SURUMU_AC })).toHaveAttribute(
       "href",
       "/birlik-donemi",
@@ -493,9 +496,10 @@ describe("Genel Kurul — liste ve planlama", () => {
   });
 
   it("kural sürümünü güncelleyemeyen planlayıcı (sekreter) bölümü olmayan sayfaya yönlendirilmez (U1)", async () => {
-    gkMock.liste.mockResolvedValue({ ...LISTE, kural_surumu_guncellenmeli: true });
+    gkMock.liste.mockResolvedValue({ ...LISTE, kayitlar: [], kural_surumu_guncellenmeli: true });
     bas("sekreter", "/genel-kurul");
     expect(await screen.findByText(KURAL_SURUMU_GUNCELLENMELI_BASVURUN)).toBeInTheDocument();
+    expect(screen.queryByText(GENEL_KURUL_YOK_ACIKLAMASI)).toBeNull();
     expect(screen.queryByText(KURAL_SURUMU_GUNCELLENMELI)).toBeNull();
     expect(screen.queryByRole("link", { name: KURAL_SURUMU_AC })).toBeNull();
     expect(screen.queryByRole("button", { name: DUGME_PLANLA })).toBeNull();

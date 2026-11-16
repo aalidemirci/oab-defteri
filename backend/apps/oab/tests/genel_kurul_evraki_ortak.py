@@ -8,7 +8,8 @@ toplantı, veli adlı çıktı, basım) deneme kurucularıyla sınanır; kurucul
 (`kurulum`; görev bölümlü yönetim kurulu ve Denetleme Kurulu, okul kartı, veli listesi), ilan ve
 toplantılar. 10. adım (E09-E14): tutanağı yazılmış genel kurul (`tutanakli`; gündem değişikliği,
 kararlar, ibra, seçim, tutanak bilgileri), yeni yönetim kurulunun görev bölümü (`gorev_bolumlu`) ve
-dönemin okul planı (`takvimli_donem`). Adlar UYDURMADIR; veli adları aranacak belirgin dizgilerdir.
+dönemin okul planı (`takvimli_donem`); E04'ün okul kartı (`aydinlatma_okulu`). Adlar UYDURMADIR; veli
+adları aranacak belirgin dizgilerdir.
 """
 
 from __future__ import annotations
@@ -112,6 +113,12 @@ def okul_ve_mevcut(ogrenci: int | None = 120, *, uzun: bool = False) -> None:
     """Okul kartı (müdür adı, veri sorumlusu) ve öğrenci mevcudu (yeter sayının girdisi)."""
     ge_ortak.okul_karti(uzun=uzun, data_controller_text=VERI_SORUMLUSU)
     gko.mevcut(ogrenci)
+
+
+def aydinlatma_okulu(*, uzun: bool = False, veri_sorumlusu: str = VERI_SORUMLUSU) -> SchoolConfig:
+    """E04'ün konusu: okul kartı (uydurma; veri sorumlusu verilen metin, boş da olabilir)."""
+    ge_ortak.okul_karti(uzun=uzun, data_controller_text=veri_sorumlusu)
+    return SchoolConfig.load()
 
 
 def personel_ekle() -> None:

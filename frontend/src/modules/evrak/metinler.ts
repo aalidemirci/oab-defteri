@@ -8,6 +8,8 @@ export const E01_ADI = "Yönetim kurulu görev bölümü, imza yetkisi ve temsil
 export const E02_ADI = "Denetleme Kurulu görev bölümü tutanağı ve denetim planı";
 export const E03_ADI = "Birlik temsilcilerinin kurul ve komisyonlara görevlendirme çizelgesi";
 export const E14_ADI = "Yıllık iş takvimi";
+/** Kişisel veri aydınlatma metni (E04; Hakkında → Kişisel Veri; F2 10. adım). */
+export const E04_ADI = "Kişisel veri aydınlatma metni";
 
 /** Kartın açıklamaları. */
 export const TASLAK_ACIKLAMASI =

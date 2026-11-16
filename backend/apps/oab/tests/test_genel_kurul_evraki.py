@@ -25,6 +25,7 @@ from pathlib import Path
 import pytest
 from django.db.models import Model
 from django.http import Http404
+from rest_framework.test import APIClient
 
 from apps.oab import selectors
 from apps.oab.hatalar import DonemYazilamaz, EvrakIcerigiSaklanmaz
@@ -52,7 +53,7 @@ from apps.oab.tests import uyelik_ortak as o
 from apps.okul import erisim_gunlugu
 from apps.okul.erisim_gunlugu import ErisimGunluguYazilamadi
 from apps.okul.models import AccessLog, AccountRole, AuditAction, AuditTrail, SchoolConfig
-from apps.okul.services import app_password
+from apps.okul.services import app_password, dosya_deposu
 from shared import evrak
 from shared.exceptions import RolYetkisiz
 from shared.text import tr_upper
@@ -129,16 +130,21 @@ def test_kodlar_bicimler_ve_adlar_katalogla_ayni() -> None:
     assert set(gke.ADLI_BICIMLER["E08"]) == set(gke.BICIMLER["E08"])
 
 
-def test_icerik_kurucusu_yokken_uretilmez() -> None:
+def test_icerik_kurucusu_yokken_uretilmez(monkeypatch: pytest.MonkeyPatch) -> None:
     """İçerikler 9. ve 10. adımlardadır: 9. adımda E05-E08 ve E64'ün kurucuları (adlı kipte E07 ve
-    E08), 10. adımda E09-E14'ünkiler yazıldı; E04'ün kurucusu dört alt metnin onayını bekler (plan
-    F2 §9 S8 (i)): kurucusu olmayan kod üretilmez; F1c'nin kodları bu yoldan üretilmez."""
+    E08), 10. adımda E09-E14'ünkiler ve dört alt metnin onayından (16.11.2026) sonra E04'ünkü yazıldı
+    (plan F2 §9 S8 (i)): her kodun kurucusu var. Kurucusu olmayan kod (burada kurucusu kaldırılan E04)
+    üretilmez ve katalogda üretilemez görünür; F1c'nin kodları bu yoldan üretilmez."""
     gko.acik_donem()
     kurul_ = gko.planla()
-    assert set(gke.KURUCULAR) == set(gke.KODLAR) - {"E04"}
+    assert set(gke.KURUCULAR) == set(gke.KODLAR)
     assert set(gke.ADLI_KURUCULAR) == {"E07", "E08"}
+    assert gke.URETILEMEZ_NEDENLERI == {}
+    monkeypatch.delitem(gke.KURUCULAR, "E04")
     with pytest.raises(ValueError, match=gke.KOD_GECERSIZ):
         gke.uret("E04", SchoolConfig.load())
+    satir = next(s for s in gke.katalog() if s["kod"] == "E04")
+    assert (satir["uretilebilir"], satir["uretilemez_nedeni"]) == (False, gke.KOD_GECERSIZ)
     with pytest.raises(ValueError, match=gke.KOD_GECERSIZ):
         gke.uret("E01", kurul_)
     assert not GeneratedDocument.objects.exists()
@@ -221,6 +227,8 @@ def test_uret_konu_turu_koda_uymali(kurul: GeneralAssembly) -> None:
         donem.pk,
         ["PDF", "XLSX"],
     )
+    with pytest.raises(ValueError, match=gke.KONU_GECERSIZ):
+        gke.uret("E04", kurul)
     e04 = gke.uret("E04", SchoolConfig.load()).kayit
     assert (e04.subject_type, e04.term_id) == ("okul.SchoolConfig", None)
 
@@ -382,6 +390,32 @@ def test_bas_yazar_bagi_yoksa_403(kurul: GeneralAssembly) -> None:
     kayit = gke.uret("E64", kurul, toplanti=_BIRINCI).kayit
     with yazar_olarak(None), pytest.raises(RolYetkisiz):
         gke.bas(kayit, DocumentFormat.PDF)
+    assert _basimlar() == []
+
+
+@pytest.mark.parametrize("kod", ["E04", "E06"])
+def test_dosyasi_okunamayan_genel_kurul_evraki_409_iz_yazilmaz(
+    kurul: GeneralAssembly, kod: str
+) -> None:
+    """Basım ucunun sözleşmesi görev bölümü evrakıyla aynıdır (`test_gorev_evraki.py::
+    test_dosyasi_okunamayan_evrak_basilmaz_iz_yazilmaz`): dosya deposundan silinmiş ek 409
+    `evrak_dosyasi_acilamadi` (deponun iletisi), bayt ve `BASIM` satırı yok. Deponun hataları
+    `ValueError`'dan türediği için E04'ün 400'lük reddine (veri sorumlusu boş) düşmemelidir."""
+    ortak.aydinlatma_okulu()
+    with o.rol_olarak(AccountRole.YONETICI):
+        if kod == "E04":
+            kayit = gke.uret(kod, SchoolConfig.load()).kayit
+        else:
+            kayit = gke.uret(kod, kurul, toplanti=_BIRINCI).kayit
+    bicimler = [b for b in (DocumentFormat.PDF, DocumentFormat.DOCX) if b in kayit.formats]
+    assert DocumentFormat.PDF in bicimler
+    for bicim in bicimler:
+        ek = next(e for e in kayit.ekler() if e.mime == evrak_servisi.BICIM_TURLERI[bicim])
+        (dosya_deposu.depo_dizini() / ek.stored_name).unlink()
+        yanit = APIClient().get(f"/api/v1/oab/documents/{kayit.pk}/{gke.UZANTILAR[bicim]}/")
+        assert yanit.status_code == 409, (bicim, yanit.content[:300])
+        assert yanit.json()["code"] == "evrak_dosyasi_acilamadi"
+        assert yanit.json()["message"] == str(dosya_deposu.EkDosyasiYok())
     assert _basimlar() == []
 
 

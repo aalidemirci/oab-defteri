@@ -238,6 +238,8 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
             _parca(
                 "genel kuruldan sonra yeni birlik döneminin onayı", "oab-assembly-term-transition"
             ),
+            # Hakkında → Kişisel veri: aydınlatma metninin (E04) üretimi (F2 10. adım).
+            _parca("kişisel veri aydınlatma metni (Hakkında)", "oab-document-e04"),
         )
     ),
     # Genel Kurul ekranı (F2 11b; plan F2 §6.1). Parçalar uç kurallarının rol kümelerine göre ayrılır:

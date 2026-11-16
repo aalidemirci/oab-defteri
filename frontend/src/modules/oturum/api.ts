@@ -34,6 +34,7 @@ export type RolKodu =
  * typecheck'i kırar (adı değişen yetenek sessizce "yok" sayılmasın).
  */
 export const YETENEK_ADLARI = [
+  "aydinlatma_metni_uretme",
   "ayrilis_havuzu",
   "birlik_donemi_yazma",
   "birlik_kisi_yazma",

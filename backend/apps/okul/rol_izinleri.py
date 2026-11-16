@@ -587,6 +587,10 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     _yaz("holiday-list", "POST", Satir.M1),
     _yaz("holiday-seed", "POST", Satir.M1),
     _yaz("holiday-detail", "DELETE", Satir.M1),
+    # Kişisel veri aydınlatma metni (E04; Hakkında → Kişisel veri; konusu okul kartı; plan F2 10.
+    # adım): her rol okur ve basar, program yöneticisi üretir (tasarım §9.6 E04 "Üreten"; M1).
+    _oku("oab-document-e04", Satir.M1),
+    _yaz("oab-document-e04", "POST", Satir.M1),
     # ------------------------------------------------ M2: personel (her rol okur)
     _oku("personnel-list", Satir.M2),
     _yaz("personnel-list", "POST", Satir.M2, yalniz=_YALNIZ_YONETICI, dayanak=_DAYANAK_PERSONEL),
@@ -795,8 +799,8 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
     # Genel kurulun dosya ekleri, ilan kanıtları ve gelen-giden evrak kaydının ekleri: okuyan her rol
     # indirir; servis ekin sahibinin satırını sorar (M3, M10: her rol okur).
     _oku("oab-attachment-download", Satir.M3),
-    # Genel kurul evrakı: katalog, liste ve üretim (E05-E13, E64; E04'ün kurucusu yok). Basım genel
-    # indirme ucundadır (`oab-document-download`; servis belgenin okuma satırını sorar).
+    # Genel kurul evrakı: katalog, liste ve üretim (E05-E13, E64; E04 M1'de, Hakkında'nın ucunda).
+    # Basım genel indirme ucundadır (`oab-document-download`; servis belgenin okuma satırını sorar).
     _oku("oab-assembly-document-catalog", Satir.M3),
     _oku("oab-assembly-documents", Satir.M3),
     _yaz(
@@ -1268,6 +1272,8 @@ YETENEKLER: Final[Mapping[str, frozenset[tuple[str, str]]]] = {
     ),
     # Yıllık iş takviminin basımı (E14; program yöneticisi).
     "yillik_is_takvimi_uretme": _ciftler(("oab-document-e14", "POST")),
+    # Kişisel veri aydınlatma metninin üretimi (E04; Hakkında; program yöneticisi).
+    "aydinlatma_metni_uretme": _ciftler(("oab-document-e04", "POST")),
     # Birlik Dönemi → Kural sürümü güncellemesi (Ayarlar satırı; program yöneticisi; F2 2. adım).
     "kural_surumu_guncelleme": _ciftler(("oab-term-rule-revision", ("GET", "POST"))),
 }

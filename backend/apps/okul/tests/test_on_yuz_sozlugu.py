@@ -83,6 +83,8 @@ DOSYALAR = (
     # F2 11b: Genel Kurul ve Gelen-Giden Evrak ekranları.
     "frontend/src/modules/genel-kurul/metinler.ts",
     "frontend/src/modules/gelen-giden-evrak/metinler.ts",
+    # F2 10. adım: Hakkında → Kişisel Veri (kişisel veri aydınlatma metninin kartı).
+    "frontend/src/modules/hakkinda/metinler.ts",
 )
 
 #: Kullanıcıya görünmeyen düz dize sabitleri (dosya, ad) → gerekçe.

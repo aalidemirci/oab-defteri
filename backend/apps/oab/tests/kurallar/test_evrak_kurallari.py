@@ -76,6 +76,7 @@ from apps.oab.models import (
     OrganMembership,
     Representation,
 )
+from apps.oab.services import aydinlatma_metni as am
 from apps.oab.services import evrak as evrak_servisi
 from apps.oab.services import genel_kurul as gk
 from apps.oab.services import genel_kurul_evraki as gke
@@ -303,6 +304,7 @@ KATALOG_KABUL_KODLARI = (
     "E01",
     "E02",
     "E03",
+    "E04",
     "E05",
     "E06",
     "E07",
@@ -321,7 +323,7 @@ KATALOG_KABUL_KODLARI = (
 @pytest.mark.parametrize("kod", KATALOG_KABUL_KODLARI)
 def test_katalog_kabul(kod: str, yakalanan: list[evrak.Belge]) -> None:
     """Tasarım §9.6 "Kabul örneği" sütunu, kod başına (E01-E03: F1c 10. adım; E63: F1b; E05-E08 ve
-    E64: F2 9. adım; E09-E14: F2 10. adım)."""
+    E64: F2 9. adım; E09-E14 ve E04: F2 10. adım)."""
     if kod == e63.KOD:
         _kabul_e63(yakalanan)
     elif kod in GENEL_KURUL_EVRAKI_KABULLERI:
@@ -506,16 +508,27 @@ def test_e63_aydinlatma_bolumu(kart: str, beklenen: str, yakalanan: list[evrak.B
 
 @pytest.mark.parametrize(
     "belge_adi",
-    [*KATALOG_KABUL_KODLARI, "kurtarma_anahtari_belgesi"],
+    [
+        *(kod for kod in KATALOG_KABUL_KODLARI if kod != "E04"),
+        "E04_k9_kapali",
+        "E04_k9_acik",
+        "kurtarma_anahtari_belgesi",
+    ],
 )
-def test_tckn_hicbir_belgede_yok(belge_adi: str, yakalanan: list[evrak.Belge]) -> None:
+def test_tckn_hicbir_belgede_yok(
+    belge_adi: str, yakalanan: list[evrak.Belge], monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Programın bugün ürettiği belgelerde 11 haneli kimlik deseni yok: kişi alanlarına sağlaması
     tutan uydurma T.C. kimlik numarası yazılır (hesap sahibinin ve okul müdürünün adı), çıktıda
-    aranır. K9 ayarının kolları (`k9_kapali`, `k9_acik`) bağış kaydıyla F3'te eklenir. E01-E03
+    aranır. K9 ayarının kolları (`k9_kapali`, `k9_acik`) F2'de aydınlatma metninde (E04) koşar
+    (`_e04_tckn`); bağış kaydıyla F3'te öteki belgelere eklenir. E01-E03
     (F1c 10. adım): numara belgenin basmadığı serbest metinlere yazılır (görev bölümü toplantısının
     gündemi, kararın metni, devralınan üyeliğin dayanak notu, dönemin programdan önceki kanıtı);
     Word ve PDF çıktısı, içerik JSON'u ve `BASIM` satırı aranır."""
     tckn = _saglamali_uydurma_numara("100000001")
+    if belge_adi.startswith("E04_"):
+        _e04_tckn(tckn, k9_acik=belge_adi == "E04_k9_acik", monkeypatch=monkeypatch)
+        return
     if belge_adi in gke.KODLAR:
         _genel_kurul_evraki_tckn(belge_adi, tckn)
         return
@@ -948,7 +961,7 @@ def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
     beklenen = {
         AccountRole.YONETICI: (
             "Okul bilgileri, ders yılı ve dönemler, kapalı günler, birlik dönemi ve geçiş kurulumu, "
-            "genel kuruldan sonra yeni birlik döneminin onayı",
+            "genel kuruldan sonra yeni birlik döneminin onayı, kişisel veri aydınlatma metni (Hakkında)",
             "Kişiler, Organlar, Temsilciler: öğretmen ve diğer personel kaydı, e-Okul aktarımı, "
             "ayrılış havuzu, birlik kişileri, veli listesinden birlik kişisi ekleme, üyelik ve "
             "temsilci kaydı, Denetleme Kurulu yedeğinin çağrısı, üyeliğin düşmesi, görev bölümü "
@@ -1258,6 +1271,10 @@ KATALOG_ADLARI = {
     "E01": "YK görev bölümü, imza yetkisi ve temsilci karar taslağı",
     "E02": "Denetleme Kurulu görev bölümü tutanağı ve denetim planı",
     "E03": "Birlik temsilcilerinin kurul ve komisyonlara görevlendirme çizelgesi",
+    "E04": (
+        "Kişisel veri aydınlatma metni (veli ve üye · personel · istekli, kiracı ve çalışan · bağışçı "
+        "ve tedarikçi)"
+    ),
     "E05": "Genel kurul toplantı çağrısı ve gündemi (dosya nüshası; duyuru kanıtıyla)",
     "E06": "Genel kurul duyurusu — ilan panosu ve internet sayfası (kişisiz)",
     "E07": "Üyelere elden yazılı davet ve sınıf teslim çizelgesi",
@@ -1743,6 +1760,7 @@ def test_konum_kdt_e02_de_yok() -> None:
         "E01",
         "E02",
         "E03",
+        "E04",
         *(f"E05_{kol}" for kol in gke.KOLLAR),
         "E06",
         "E07",
@@ -1765,7 +1783,11 @@ def test_mudur_bloklari_yalniz_93_tablosunda(kod: str) -> None:
     E01 (yönetim kurulu belgesi) ve E02'de (Denetleme Kurulu, denetleyenin bağımsızlığı) yok; F1c
     belgelerinin hiçbirinde "Görüldü" bloğu yok. Genel kurul belgeleri (F2 9. adım; E05'in çağırana göre
     kolları, E64'ün sağlandı / sağlanamadı kolları): `_gk_mudur_bloklari`; 10. adımın belgeleri (E09-E14;
-    E10'un müdürün çağırdığı genel kurul kolu): `_gk_ii_mudur_bloklari`."""
+    E10'un müdürün çağırdığı genel kurul kolu): `_gk_ii_mudur_bloklari`; E04 imzasızdır, müdür bloğu
+    yoktur (`_e04_mudur_bloklari`)."""
+    if kod == "E04":
+        _e04_mudur_bloklari()
+        return
     if kod[:3] in GENEL_KURUL_EVRAKI_II:
         _gk_ii_mudur_bloklari(kod)
         return
@@ -2102,8 +2124,8 @@ def _gk_secim(kod: str) -> gke.Secim:
 
 
 def _gk_ureten(kod: str) -> AccountRole:
-    """Kodun üreten rolü (tasarım §9.6 "Üreten"): E12 ve E14 yalnız program yöneticisinin."""
-    return AccountRole.YONETICI if kod in ("E12", "E14") else AccountRole.SEKRETER
+    """Kodun üreten rolü (tasarım §9.6 "Üreten"): E04, E12 ve E14 yalnız program yöneticisinin."""
+    return AccountRole.YONETICI if kod in ("E04", "E12", "E14") else AccountRole.SEKRETER
 
 
 def _ureten_rol(kol: str) -> AccountRole:
@@ -2386,7 +2408,12 @@ def _gk_kurulu(kod: str, *, uzun: bool = False) -> Any:
     """Kodun eşdeğerlik ve sayfa bütçesi kurulumu (konusu): yönetim kurulunun çağrısıyla ilan edilmiş
     olağan genel kurul ve uydurma personel; E64'te birinci toplantıda yeter sayı sağlanamamış. 10.
     adımın belgelerinde (E09-E13) birinci toplantıda yapılmış ve tutanağı yazılmış genel kurul (E11 ve
-    E12'de yönetim kurulu ibra edilmemiş; S4 (a)); E14'te okul planı girilmiş açık dönem."""
+    E12'de yönetim kurulu ibra edilmemiş; S4 (a)); E14'te okul planı girilmiş açık dönem; E04'te veri
+    sorumlusu girilmiş okul kartı (uzun kurulumda alanın üst sınırında)."""
+    if kod == "E04":
+        return gke_ortak.aydinlatma_okulu(
+            uzun=uzun, veri_sorumlusu=EN_UZUN_VERI_SORUMLUSU if uzun else gke_ortak.VERI_SORUMLUSU
+        )
     if kod == "E14":
         return gke_ortak.takvimli_donem(uzun=uzun)
     if kod in GENEL_KURUL_EVRAKI_II:
@@ -2469,6 +2496,9 @@ _KALABALIK_SINIF = 34
 
 def _gk_sayfa_butcesi(kod: str) -> None:
     kurul = _gk_kurulu(kod, uzun=True)
+    if kod == "E04":
+        _e04_sayfa_butcesi(kurul)
+        return
     gko.veli_aktar(
         [
             (f"Ayşegül Nurhayat {sira:02d} Varsayımcıgil Örnekçioğlu", sinif)
@@ -2826,9 +2856,8 @@ def test_genel_kurul_evraki_i_punto_ve_ad_soyad() -> None:
 # ============================================================ Genel kurul evrakı II (F2 10. adım)
 #
 # E09, E10, E11, E12, E13 ve E14 (plan F2 §8 10. adım; §4.1, §7 U20-U22, KE-19, S4, S11; tasarım §9.1,
-# §9.3, §9.5, §9.6). E04 dört alt metnin kullanıcı onayından sonra yazılır (plan F2 §9 S8 (i)); onun
-# testleri (`test_e04_dort_alt_metin_veri_sorumlusu_bossa_basilmaz` ve kodun öteki parametreleri) o
-# işle eklenir. Kurulum `genel_kurul_evraki_ortak.yapilmis_tutanakli` (birinci toplantıda yapılmış,
+# §9.3, §9.5, §9.6). E04 dört alt metnin kullanıcı onayından (16.11.2026) sonra yazıldı (plan F2 §9 S8
+# (i)); testleri dosyanın sonundaki "Kişisel veri aydınlatma metni (E04)" bölümündedir. Kurulum `genel_kurul_evraki_ortak.yapilmis_tutanakli` (birinci toplantıda yapılmış,
 # tutanağı yazılmış olağan genel kurul) ve `takvimli_donem`. Adlar UYDURMADIR.
 
 #: 10. adımın belgeleri (E04 hariç).
@@ -3123,7 +3152,7 @@ def test_konum_tfb(kod: str) -> None:
 
 
 def test_genel_kurul_evraki_ii_konum_cumlesi_dipnot_ve_taslak_ibaresi() -> None:
-    """Plan F2 §4.1: konum cümlesi F2'de yalnız E13'tedir (TFB), öteki belgelerde (E05-E12, E14, E64)
+    """Plan F2 §4.1: konum cümlesi F2'de yalnız E13'tedir (TFB), öteki belgelerde (E04-E12, E14, E64)
     yoktur; KDT ve taslak ibaresi hiçbir F2 belgesinde yoktur. Kişisel veri dipnotu kişi adı taşıyan iç
     belgelerdedir (E09, E10, E13); E12 okul dışına giden resmî yazıdır, E11 onun ekidir ve onunla okul
     dışına gider ("okul dışına verilmez" basılmaz; 10. adımın kararı), E14 kişisizdir."""
@@ -3134,6 +3163,7 @@ def test_genel_kurul_evraki_ii_konum_cumlesi_dipnot_ve_taslak_ibaresi() -> None:
         for kod in ("E05", "E06", "E07", "E08", "E09", "E10", "E11", "E12", "E13", "E64")
     }
     belgeler["E14"] = gke.e14_belgesi(kurul.term, gke.Secim())[0]
+    belgeler["E04"] = gke.e04_belgesi(SchoolConfig.load(), gke.Secim())[0]
     assert set(belgeler) == set(gke.KURUCULAR)
     for kod, belge in belgeler.items():
         akis = _akis(belge)
@@ -3434,3 +3464,495 @@ def test_genel_kurul_evraki_pilot_esdegerligi() -> None:
         imzacilar = {gorev for _ad_, gorev in _imza_sahipleri(belge)}
         for unvan in PILOT_GK_ALINMAYAN_IMZALAR.get(kod, ()):
             assert unvan not in imzacilar, (kod, unvan)
+
+
+# ============================================================ Kişisel veri aydınlatma metni (E04)
+#
+# Plan F2 §8 10. adımın son işi; §4.1 E04, §9 S6 (iv), S8 (i); tasarım §3.4, §9.6 E04. Dört alt metin
+# kullanıcının 16.11.2026'da onayladığı taslaktandır (soruların varsayılanlarıyla; taslak
+# `docs/kesif/2026-11-16-e04-aydinlatma-taslaklari.md`). Adlar ve kurum bilgisi UYDURMADIR.
+
+E04_TASLAGI = "docs/kesif/2026-11-16-e04-aydinlatma-taslaklari.md"
+#: Ölçülen (en uzun okul kartı ve veri sorumlusu alanının üst sınırıyla): baş bir sayfa, 1. bölüm
+#: dört, 2. bölüm iki, 3. ve 4. bölüm üçer sayfa; K9 açıkken de aynı. Her bölüm yeni sayfada başlar.
+E04_SAYFA_SINIRI = 13
+E04_BOLUM_SAYFA_SINIRI = 4
+
+
+def _e04_belgesi(monkeypatch: pytest.MonkeyPatch, *, k9_acik: bool = False) -> evrak.Belge:
+    """Veri sorumlusu girilmiş okul kartının E04'ü (kaydetmeden), K9 ayarının verilen koluyla."""
+    gke_ortak.aydinlatma_okulu()
+    monkeypatch.setattr(gke, "k9_acik", lambda: k9_acik)
+    return gke.e04_belgesi(SchoolConfig.load(), gke.Secim())[0]
+
+
+def _e04_bolumleri(belge: evrak.Belge) -> list[list[evrak.Blok]]:
+    """Gövde sayfa sonlarıyla ayrılır: [baş (başlık dahil), 1., 2., 3., 4. bölüm]."""
+    parcalar: list[list[evrak.Blok]] = [[]]
+    for blok in belge.bloklar:
+        if isinstance(blok, evrak.SayfaSonu):
+            parcalar.append([])
+        else:
+            parcalar[-1].append(blok)
+    return parcalar
+
+
+def _e04_satirlari(bloklar: list[evrak.Blok]) -> list[tuple[int, str]]:
+    """Blokların (düzey, metin) satırları: düz paragraf ve başlık 0, "•" madde 1, "–" alt madde 2."""
+    satirlar: list[tuple[int, str]] = []
+    for blok in bloklar:
+        if isinstance(blok, evrak.Baslik):
+            satirlar += [(0, blok.metin), (0, blok.alt)]
+        elif isinstance(blok, evrak.AltBaslik):
+            satirlar.append((0, blok.metin))
+        else:
+            assert isinstance(blok, evrak.Paragraf), blok
+            for duzey, im in ((1, am.MADDE_IMI), (2, am.ALT_MADDE_IMI)):
+                if blok.metin.startswith(f"{im} "):
+                    satirlar.append((duzey, blok.metin[len(im) + 1 :]))
+                    break
+            else:
+                satirlar.append((0, blok.metin))
+    return satirlar
+
+
+_TASLAK_MADDESI = re.compile(r"^( *)- (.*)$")
+_TASLAK_NUMARASI = re.compile(r"^\d+\. ")
+
+
+def _taslak_satirlari(bolum: str) -> list[tuple[int, str]]:
+    """Taslağın "Basılacak tam metin" bölümünün (düzey, metin) satırları: boş satır paragrafı kapatır;
+    "- " madde (girintiye göre düzey), "1. " numaralı satır yeni paragraftır; sarılmış satırlar
+    birleşir; kalın işaret (**) düşer."""
+    satirlar: list[tuple[int, str]] = []
+    acik = False
+    for satir in bolum.splitlines():
+        if not satir.strip():
+            acik = False
+            continue
+        madde = _TASLAK_MADDESI.match(satir)
+        if madde is not None:
+            satirlar.append((len(madde.group(1)) // 2 + 1, madde.group(2)))
+            acik = True
+        elif acik and not _TASLAK_NUMARASI.match(satir):
+            duzey, metin = satirlar[-1]
+            satirlar[-1] = (duzey, f"{metin} {satir.strip()}")
+        else:
+            satirlar.append((0, satir.strip()))
+            acik = True
+    return [(duzey, metin.replace("**", "")) for duzey, metin in satirlar]
+
+
+#: K9 açık biçimin hukuki sebep satırı: taslaktaki hâli (‹…› düşmüş) ve basılan hâli. Taslak "KVKK
+#: md. 5/2-ç" der; soru 11'in varsayılanı ("teyit gelene kadar açık biçim onaylanmış sayılmaz") bu sebebi
+#: belgeye koymaz, yeri "………" ve basım uyarısıdır. Harfi harfine kuralın TEK istisnasıdır ve kullanıcı
+#: kararı beklemektedir (plan F2 §8 10. adımın E04 notu). İki değer de burada YAZILIDIR, sınanan
+#: modülden okunmaz: taslak ya da kod değişirse test kırılır.
+_TASLAK_TCKN_HUKUKI_SEBEP = (
+    "okulun ayarı açıkken, T.C. kimlik no'da: veri sorumlusunun hukuki yükümlülüğünü yerine getirmesi "
+    "(KVKK md. 5/2-ç);"
+)
+_BASILAN_TCKN_HUKUKI_SEBEP = "T.C. kimlik no'da: ………;"
+
+
+def _taslak_cozumu(
+    satirlar: list[tuple[int, str]], *, veri_sorumlusu: str, k9_acik: bool
+) -> list[tuple[int, str]]:
+    """Taslağın ‹…› işaretlerinin onaylı varsayılanlarla çözülüşü (modül `aydinlatma_metni` başlığı):
+    işaret düşer; K9 kapalıyken açık biçimin satırları düşer, açıkken kapalı biçimin satırı düşer ve
+    "Okulun ayarı açıkken:" öneki kalkar (cümle büyük harfle başlar); açık biçimin hukuki sebep satırı
+    teyit gelene kadar "………"dır (soru 11; `_BASILAN_TCKN_HUKUKI_SEBEP`, harfi harfine kuralın tek
+    istisnası)."""
+    sonuc: list[tuple[int, str]] = []
+    for duzey, metin in satirlar:
+        metin = metin.replace("{data_controller_text}", veri_sorumlusu)
+        acikken = "ayarı açıkken" in metin
+        kapaliyken = "ayarı kapalıyken" in metin
+        metin = metin.replace("‹", "").replace("›", "")
+        if (acikken and not k9_acik) or (kapaliyken and k9_acik):
+            continue
+        if metin.startswith("okulun ayarı açıkken, T.C. kimlik no'da:"):
+            assert metin == _TASLAK_TCKN_HUKUKI_SEBEP, metin
+            metin = _BASILAN_TCKN_HUKUKI_SEBEP
+        for onek in ("Okulun ayarı açıkken: ", "Okulun ayarı kapalıyken: "):
+            if metin.startswith(onek):
+                metin = metin[len(onek) :]
+                metin = tr_upper(metin[:1]) + metin[1:]
+        sonuc.append((duzey, metin))
+    return sonuc
+
+
+@pytest.mark.parametrize("k9_acik", [False, True], ids=["k9_kapali", "k9_acik"])
+def test_e04_metni_onayli_taslakla_harfi_harfine(
+    k9_acik: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Basılan metin, kullanıcının 16.11.2026'da onayladığı taslağın beş "Basılacak tam metin"
+    bölümüyle (ortak baş ve dört alt metin) satır satır, harfi harfine aynıdır; yalnız ‹…› işaretleri
+    onaylı varsayılanlarla çözülür (`_taslak_cozumu`). Madde ve alt madde düzeyleri de aynıdır. Tek
+    istisna K9 açıkken hukuki sebep satırıdır (taslakta KVKK md. 5/2-ç, basılan "………"; soru 11,
+    kullanıcı kararı bekleniyor)."""
+    taslak = _depo_dosyasi(E04_TASLAGI)
+    bolumler = re.findall(r"### Basılacak tam metin\n(.*?)\n### Dayanaklar", taslak, re.DOTALL)
+    assert len(bolumler) == 5
+    beklenen = [
+        _taslak_cozumu(
+            _taslak_satirlari(bolum), veri_sorumlusu=gke_ortak.VERI_SORUMLUSU, k9_acik=k9_acik
+        )
+        for bolum in bolumler
+    ]
+    belge = _e04_belgesi(monkeypatch, k9_acik=k9_acik)
+    gercek = [_e04_satirlari(bloklar) for bloklar in _e04_bolumleri(belge)]
+    assert len(gercek) == len(beklenen)
+    for no, (bas, tas) in enumerate(zip(gercek, beklenen, strict=True)):
+        assert bas == tas, no
+
+
+def _kabul_e04() -> None:
+    """Tasarım §9.6 E04 "Kabul örneği": dört alt metin (veli ve üye · personel · istekli, kiracı ve
+    çalışan · bağışçı ve tedarikçi), her birinde KVKK md. 10/1 unsurları ayrı başlıkta ve veri
+    sorumlusu okul kartından; "T.C. kimlik no tutulmaz" (K9 kapalıyken); veli listesinin dönem
+    kapanışında silindiği yazılı. Kişisiz, imzasız; konum cümlesi, müdür bloğu ve kişisel veri dipnotu
+    yok; konusu okul kartı (dönemsiz); Word ve PDF saklanır; üreten program yöneticisi; basım
+    uyarıları belgeye basılmaz."""
+    okul = gke_ortak.aydinlatma_okulu()
+    kayit, uyarilar = _gk_uret("E04", okul, rol=AccountRole.YONETICI)
+    assert (kayit.subject_type, kayit.term_id, kayit.personal_list) == (
+        "okul.SchoolConfig",
+        None,
+        False,
+    )
+    assert kayit.formats == ["DOCX", "PDF"] and len(list(kayit.ekler())) == 2
+    assert uyarilar == am.basim_uyarilari(k9_acik=False)
+    belge = evrak_servisi.yeniden_ciz(kayit)
+    okul = SchoolConfig.load()
+    assert belge.antet == evrak.birlik_anteti(okul_adi=okul.school_name, ilce=okul.district)
+    assert belge.bloklar[0] == evrak.Baslik(gke.BELGE_ADLARI["E04"], alt=am.ALT_BASLIK)
+    bas, *bolumler = _e04_bolumleri(belge)
+    assert [bolum[0] for bolum in bolumler] == [
+        evrak.AltBaslik("1. VELİ VE ÜYE"),
+        evrak.AltBaslik("2. PERSONEL"),
+        evrak.AltBaslik("3. İSTEKLİ, KİRACI VE ÇALIŞAN"),
+        evrak.AltBaslik("4. BAĞIŞÇI VE TEDARİKÇİ"),
+    ]
+    sorumlu = evrak.Paragraf(f"Veri sorumlusu: {gke_ortak.VERI_SORUMLUSU}")
+    for bolum in bolumler:
+        assert bolum.count(sorumlu) == 1
+    assert evrak.Paragraf(f"{am.MADDE_IMI} T.C. kimlik no tutulmaz.") in bolumler[3]
+    assert any(
+        isinstance(b, evrak.Paragraf)
+        and b.metin.startswith("Saklama: Liste birlik döneminin kapanışında silinir")
+        for b in bolumler[0]
+    )
+    assert not any(
+        isinstance(b, evrak.Imza | evrak.ResmiImza | evrak.KonumCumlesi | evrak.Dipnot)
+        for b in belge.bloklar
+    )
+    akis = _akis(belge)
+    for uyari in uyarilar:
+        assert uyari not in akis
+    assert "Görüldü —" not in akis and ge_ortak.MUDUR not in akis
+    pdf = _metin(_dosya(kayit, "PDF"))
+    assert _duz("KİŞİSEL VERİ AYDINLATMA METNİ") in _duz(pdf)
+    assert re.search(r"OAB Defteri · E04 · Sayfa 1\s*/\s*\d+", pdf)
+
+
+GENEL_KURUL_EVRAKI_KABULLERI["E04"] = _kabul_e04
+GENEL_KURUL_EVRAKI_SAYFA_SINIRI["E04"] = E04_SAYFA_SINIRI
+
+
+def _e04_sayfa_butcesi(okul: Any) -> None:
+    """`test_sayfa_butcesi[E04]`: en uzun okul kartı ve veri sorumlusuyla, K9'un iki kolunda toplam
+    sayfa ve bölüm başına sayfa (her bölüm yeni sayfada başlar)."""
+    assert len(str(okul.data_controller_text)) == DATA_CONTROLLER_TEXT_MAX
+    for acik in (False, True):
+        with pytest.MonkeyPatch.context() as yama:
+            yama.setattr(gke, "k9_acik", lambda acik=acik: acik)
+            belge = gke.e04_belgesi(SchoolConfig.load(), gke.Secim())[0]
+        sayfalar = PdfReader(io.BytesIO(evrak.pdf_ciz(belge))).pages
+        assert 1 <= len(sayfalar) <= E04_SAYFA_SINIRI, (acik, len(sayfalar))
+        basliklar = [
+            next(
+                i
+                for i, sayfa in enumerate(sayfalar)
+                if (sayfa.extract_text() or "").lstrip().startswith(am.bolum_basligi(no))
+                or f"\n{am.bolum_basligi(no)}" in (sayfa.extract_text() or "")
+            )
+            for no in range(1, 5)
+        ]
+        sinirlar = [*basliklar, len(sayfalar)]
+        for no in range(4):
+            assert 1 <= sinirlar[no + 1] - sinirlar[no] <= E04_BOLUM_SAYFA_SINIRI, (acik, no + 1)
+
+
+def _e04_mudur_bloklari() -> None:
+    """E04 imzasız bilgi metnidir (tasarım §9.6 E04 "imzasız"; §9.3 tablosunda yok): imza bloğu,
+    müdür bloğu, "Görüldü" ve konum cümlesi yoktur."""
+    okul = gke_ortak.aydinlatma_okulu()
+    kayit, _ = _gk_uret("E04", okul, rol=AccountRole.YONETICI)
+    belge = evrak_servisi.yeniden_ciz(kayit)
+    assert _imza_sahipleri(belge) == [] and _mudur_bloklari(belge) == []
+    assert "Görüldü —" not in _akis(belge) and "Teslim alan" not in _akis(belge)
+    assert not any(isinstance(b, evrak.KonumCumlesi) for b in belge.bloklar)
+
+
+def _e04_tckn(tckn: str, *, k9_acik: bool, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`test_tckn_hicbir_belgede_yok[E04_k9_kapali, E04_k9_acik]`: numara E04'ün okuduğu ama basmadığı
+    okul kartı alanına (müdürün adı) yazılır; K9'un iki kolunda Word, PDF, içerik JSON'u ve `BASIM`
+    satırında 11 haneli desen yok (K9 açıkken de numara belgeye girmez, yalnız satırın varlığı)."""
+    ge_ortak.okul_karti(
+        principal_name=f"Uydurma Müdür {tckn}", data_controller_text=gke_ortak.VERI_SORUMLUSU
+    )
+    monkeypatch.setattr(gke, "k9_acik", lambda: k9_acik)
+    kayit, uyarilar = _gk_uret("E04", SchoolConfig.load(), rol=AccountRole.YONETICI)
+    assert (am.UYARI_TCKN_HUKUKI_SEBEP in uyarilar) is k9_acik
+    yanit = APIClient().get(f"/api/v1/oab/documents/{kayit.pk}/pdf/")
+    assert yanit.status_code == 200
+    satir = AuditTrail.objects.filter(action=AuditAction.BASIM).get()
+    assert set(satir.values) == {"kod", "sha256"}
+    metinler = [
+        _metin(_dosya(kayit, "PDF")),
+        " ".join(cizici_.govde_metin_akisi(cizici_.ac(_dosya(kayit, "DOCX")))),
+        kayit.content_json,
+        str(satir.values["kod"]),
+    ]
+    for parca in metinler:
+        assert not _ONBIR_HANE.search(parca)
+        assert tckn not in _duz(parca)
+
+
+@pytest.mark.parametrize("bos", ["", "   \n  "], ids=["bos", "yalniz_bosluk"])
+def test_e04_dort_alt_metin_veri_sorumlusu_bossa_basilmaz(bos: str) -> None:
+    """Plan F2 §8 10. adım, §9 S6 (iv), tasarım KE-20: E04 dört alt metindir (her birinin başlığı ve
+    veri sorumlusu satırı); Okul Bilgileri'nde veri sorumlusu boşken (yalnız boşluk da boştur) belge
+    ÜRETİLMEZ (sert; kayıt yazılmaz) ve kaydedilmiş belge BASILMAZ (400, `BASIM` satırı yazılmaz).
+    Alan doldurulunca basılır. Ret iletisi sunucunundur; kart Okul Bilgileri'ne götürür."""
+    okul = gke_ortak.aydinlatma_okulu()
+    kayit, _ = _gk_uret("E04", okul, rol=AccountRole.YONETICI)
+    bolumler = _e04_bolumleri(evrak_servisi.yeniden_ciz(kayit))[1:]
+    assert [b[0] for b in bolumler] == [evrak.AltBaslik(am.bolum_basligi(n)) for n in range(1, 5)]
+    assert len(am.BOLUM_ADLARI) == 4
+
+    gke_ortak.aydinlatma_okulu(veri_sorumlusu=bos)
+    once = GeneratedDocument.objects.count()
+    with o.rol_olarak(AccountRole.YONETICI), pytest.raises(ValueError) as hata:
+        gke.uret("E04", SchoolConfig.load())
+    assert str(hata.value) == gke.E04_VERI_SORUMLUSU_YOK
+    assert GeneratedDocument.objects.count() == once
+    for rol in (AccountRole.YONETICI, AccountRole.SEKRETER, AccountRole.MUDUR):
+        for bicim in ("pdf", "docx"):
+            with o.rol_olarak(rol):
+                yanit = APIClient().get(f"/api/v1/oab/documents/{kayit.pk}/{bicim}/")
+            assert yanit.status_code == 400, (rol, bicim)
+            assert gke.E04_VERI_SORUMLUSU_YOK in str(yanit.json()), (rol, bicim)
+    assert not AuditTrail.objects.filter(action=AuditAction.BASIM).exists()
+    with o.rol_olarak(AccountRole.YONETICI):
+        yanit = APIClient().post("/api/v1/oab/documents/e04/")
+    assert yanit.status_code == 400 and gke.E04_VERI_SORUMLUSU_YOK in str(yanit.json())
+    assert GeneratedDocument.objects.count() == once
+
+    gke_ortak.aydinlatma_okulu()
+    for bicim in ("pdf", "docx"):
+        assert APIClient().get(f"/api/v1/oab/documents/{kayit.pk}/{bicim}/").status_code == 200
+
+
+def test_e04_onayli_cumleler_on_yuzle_birebir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """08.11.2026'da onaylanan cümleler (veli ve personel aktarım ekranlarının aydınlatma metni) ön
+    yüzdeki `kisiler/metinler.ts` ile BİREBİR (kaynaktan okunur) ve E04'te tek harf değişmeden
+    durur: amaç cümleleri tam paragraf, toplama ve saklama cümleleri paragrafın başı (ardından yeni
+    cümleler gelir), personel saklama cümlesi "Saklama:" listesinin ilk maddesi, haklar cümlesi her
+    bölümde. E07'nin kısa paragrafı aynı kaynaktan basar. Ekran notu birebirdir ve basım uyarısıdır."""
+    from apps.okul.tests.test_on_yuz_sozlugu import _depo_dosyasi as on_yuz_dosyasi
+    from apps.okul.tests.test_on_yuz_sozlugu import _sabitler
+
+    on_yuz = _sabitler(on_yuz_dosyasi("frontend/src/modules/kisiler/metinler.ts"))
+    for ad in (
+        "VELI_AYDINLATMA_AMACI",
+        "VELI_AYDINLATMA_TOPLAMA",
+        "VELI_AYDINLATMA_SAKLAMA",
+        "PERSONEL_AYDINLATMA_AMACI",
+        "PERSONEL_AYDINLATMA_TOPLAMA",
+        "PERSONEL_AYDINLATMA_SAKLAMA",
+        "AYDINLATMA_VERI_SORUMLUSU_ETIKETI",
+        "AYDINLATMA_HAKLARINIZ",
+        "AYDINLATMA_EKRAN_NOTU",
+    ):
+        assert on_yuz[ad] == getattr(am, ad), ad
+    assert gke.VELI_AYDINLATMA_AMACI is am.VELI_AYDINLATMA_AMACI
+    assert gke.AYDINLATMA_HAKLARINIZ is am.AYDINLATMA_HAKLARINIZ
+    assert am.UYARI_HUKUKI_SEBEP_ONERI == on_yuz["AYDINLATMA_EKRAN_NOTU"]
+
+    _bas, veli, personel, *digerleri = _e04_bolumleri(_e04_belgesi(monkeypatch))
+    veli_metni = [b.metin for b in veli if isinstance(b, evrak.Paragraf)]
+    personel_metni = [b.metin for b in personel if isinstance(b, evrak.Paragraf)]
+    assert on_yuz["VELI_AYDINLATMA_AMACI"] in veli_metni
+    assert on_yuz["PERSONEL_AYDINLATMA_AMACI"] in personel_metni
+    for metinler, adlar in (
+        (veli_metni, ("VELI_AYDINLATMA_TOPLAMA", "VELI_AYDINLATMA_SAKLAMA")),
+        (personel_metni, ("PERSONEL_AYDINLATMA_TOPLAMA",)),
+    ):
+        for ad in adlar:
+            assert sum(m.startswith(f"{on_yuz[ad]} ") for m in metinler) == 1, ad
+    saklama = on_yuz["PERSONEL_AYDINLATMA_SAKLAMA"].removeprefix("Saklama: ")
+    ilk = personel_metni.index(am.ETIKET_SAKLAMA) + 1
+    assert personel_metni[ilk] == f"{am.MADDE_IMI} {saklama}"
+    for bolum in (veli, personel, *digerleri):
+        metinler = [b.metin for b in bolum if isinstance(b, evrak.Paragraf)]
+        assert f"{on_yuz['AYDINLATMA_HAKLARINIZ']} Haklarınızın tamamı şunlardır:" in metinler
+
+
+def test_e04_kvkk_10_1_unsurlari_her_bolumde(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tasarım §9.6 E04: her alt metinde KVKK md. 10/1 unsurları ayrı başlıkta — (a) veri sorumlusu,
+    (b) amaç, (c) aktarım, (ç) toplama yöntemi ve hukuki sebep, (d) md. 11'deki haklar (kanonik
+    metinde md. 10/1'in bentleri a-d'dir: a, b, c, ç, d). Hakların listesi md. 11/1'in dokuz bendidir;
+    başvuru ve şikâyet süreleri md. 13/2 ve 14/1'in lafzıyla aynıdır."""
+    kvkk = _depo_dosyasi("docs/mevzuat/6698-kvkk.md")
+    md10 = re.search(r"MADDE 10- \(1\)(.*)", kvkk)
+    assert md10 is not None
+    for bent in (
+        "a) Veri sorumlusunun",
+        "b) Kişisel verilerin hangi amaçla",
+        "c) İşlenen kişisel",
+        "ç) Kişisel veri toplamanın yöntemi ve hukuki sebebi",
+        "d) 11 inci maddede",
+    ):
+        assert bent in md10.group(1), bent
+    assert set(am.UNSUR_ETIKETLERI) == {"a", "b", "c", "ç", "d"}
+    _bas, *bolumler = _e04_bolumleri(_e04_belgesi(monkeypatch))
+    for no, bolum in enumerate(bolumler, start=1):
+        paragraflar = [b.metin for b in bolum if isinstance(b, evrak.Paragraf)]
+        for harf, etiket in am.UNSUR_ETIKETLERI.items():
+            assert any(m.startswith(etiket) for m in paragraflar), (no, harf)
+        haklar = [m for m in paragraflar if m[2:] in am.HAKLAR]
+        assert [h[2:] for h in haklar] == list(am.HAKLAR), no
+        assert am.BASVURU in paragraflar, no
+    md11 = re.search(r"MADDE 11- \(1\)(.*)", kvkk)
+    assert md11 is not None
+    assert re.findall(r"(?:^|[,;] )([a-zçğ])\) ", md11.group(1)) == list("abcçdefgğ")
+    assert len(am.HAKLAR) == 9
+    md13 = re.search(r"MADDE 13- (.*)", kvkk)
+    md14 = re.search(r"MADDE 14- (.*)", kvkk)
+    assert md13 is not None and md14 is not None
+    assert "en geç otuz gün içinde ücretsiz" in md13.group(1)
+    assert "Kurulca belirlenen tarifedeki ücret" in md13.group(1)
+    assert "otuz ve her hâlde başvuru tarihinden itibaren altmış gün içinde" in md14.group(1)
+    assert "en geç otuz gün içinde ücretsiz" in am.BASVURU
+    assert "otuz gün içinde, her durumda başvuru gününden başlayarak altmış gün" in am.BASVURU
+
+
+def test_e04_kosullu_bolumler_ve_basim_uyarilari(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Onaylı varsayılanlar (taslağın "Kullanıcıya sorulacak" maddeleri): 3. ve 4. bölüm "kullanılmaya
+    başlandığında geçerlidir" koşuluyla, başlığın hemen altında (soru 1); KVKK md. 6/3'ün bendi
+    "………" yalnız 1. ve 3. bölümde, basım uyarısıyla (soru 4); ekran notu belgeye basılmaz, basım
+    uyarısıdır (soru 5); yeni yönetim kurulunun TEFBİS cümlesi md. 23/5 çapasız (soru 6); aylık
+    bildirim cümlesi basılır (soru 12); "Haklarınızın tamamı şunlardır:" (soru 17); ‹…› işareti ve
+    taslağın yer tutucusu basılmaz. Uyarılar belgeye basılmaz."""
+    belge = _e04_belgesi(monkeypatch)
+    _bas, *bolumler = _e04_bolumleri(belge)
+    assert bolumler[2][1] == evrak.Paragraf(am.BOLUM_3_KOSULU)
+    assert bolumler[3][1] == evrak.Paragraf(am.BOLUM_4_KOSULU)
+    for bolum in bolumler[:2]:
+        assert not any("kullanılmaya başlandığında" in _akis_parca(b) for b in bolum)
+    bendler = [
+        no
+        for no, bolum in enumerate(bolumler, start=1)
+        if any(am.OZEL_NITELIKLI_SARTI in _akis_parca(b) for b in bolum)
+    ]
+    assert bendler == [1, 3]
+    akis = _akis(belge)
+    for yok in (
+        "‹",
+        "›",
+        "{data_controller_text}",
+        am.VERI_SORUMLUSU_YERI,
+        am.AYDINLATMA_EKRAN_NOTU,
+    ):
+        assert yok not in akis, yok
+    assert f"{am.MADDE_IMI} {am.TEFBIS_YONETIM_CUMLESI}" in evrak.metin_akisi(belge)
+    assert "md. 23/5" not in am.TEFBIS_YONETIM_CUMLESI
+    assert f"{am.MADDE_IMI} {am.AYLIK_BILDIRIM_CUMLESI}" in evrak.metin_akisi(belge)
+    assert akis.count("Haklarınızın tamamı şunlardır:") == 4
+    assert am.basim_uyarilari(k9_acik=False) == (
+        am.UYARI_HUKUKI_SEBEP_ONERI,
+        am.UYARI_OZEL_NITELIKLI_BENT,
+    )
+    assert am.basim_uyarilari(k9_acik=True) == (
+        am.UYARI_HUKUKI_SEBEP_ONERI,
+        am.UYARI_OZEL_NITELIKLI_BENT,
+        am.UYARI_TCKN_HUKUKI_SEBEP,
+    )
+    for uyari in am.basim_uyarilari(k9_acik=True):
+        assert uyari not in akis
+
+
+def _akis_parca(blok: evrak.Blok) -> str:
+    return blok.metin if isinstance(blok, evrak.Paragraf | evrak.AltBaslik) else ""
+
+
+@pytest.mark.parametrize("k9_acik", [False, True], ids=["k9_kapali", "k9_acik"])
+def test_e04_bagisci_tckn_k9_ayarina_gore(k9_acik: bool, monkeypatch: pytest.MonkeyPatch) -> None:
+    """K9 (soru 11): ayar kapalıyken 4. bölümde yalnız "T.C. kimlik no tutulmaz." satırı; açıkken
+    amaç, veri, aktarım ve saklama satırları ve hukuki sebebin yerinde "………" (basım uyarısıyla).
+    Ayarın alanı (`donor_tckn_enabled`) F3'te gelir: bugün ayar kapalıdır."""
+    assert not hasattr(SchoolConfig, "donor_tckn_enabled") and gke.k9_acik() is False
+    belge = _e04_belgesi(monkeypatch, k9_acik=k9_acik)
+    dorduncu = [b.metin for b in _e04_bolumleri(belge)[4] if isinstance(b, evrak.Paragraf)]
+    acik_satirlari = [
+        f"{am.MADDE_IMI} {am.TCKN_AMAC}",
+        f"{am.MADDE_IMI} {am.TCKN_VERI}",
+        f"{am.ALT_MADDE_IMI} {am.TCKN_HUKUKI_SEBEP}",
+        f"{am.MADDE_IMI} {am.TCKN_AKTARIM}",
+        f"{am.MADDE_IMI} {am.TCKN_SAKLAMA}",
+    ]
+    for satir in acik_satirlari:
+        assert (satir in dorduncu) is k9_acik, satir
+    assert (f"{am.MADDE_IMI} {am.TCKN_TUTULMAZ}" in dorduncu) is not k9_acik
+    # Hukuki sebebin yeri kesin değerle: doğrulanamayan sebep (taslağın "KVKK md. 5/2-ç"si) basılmaz.
+    assert am.TCKN_HUKUKI_SEBEP == _BASILAN_TCKN_HUKUKI_SEBEP
+    sebep_satirlari = [s for s in dorduncu if "kimlik no'da" in s]
+    assert sebep_satirlari == ([f"{am.ALT_MADDE_IMI} T.C. kimlik no'da: ………;"] if k9_acik else [])
+    assert "Okulun ayarı" not in _akis(belge) and "okulun ayarı" not in _akis(belge)
+    uyarilar = gke.e04_belgesi(SchoolConfig.load(), gke.Secim())[1]
+    assert (am.UYARI_TCKN_HUKUKI_SEBEP in uyarilar) is k9_acik
+
+
+def test_e04_sayilari_kaynaklariyla_ayni() -> None:
+    """Metindeki sayılar programın kendi ayarlarıdır, mevzuat kuralı değildir (kural paketine
+    girmez): günlük yedeklerin en çok 14 günü ve güncelleme öncesi yedeklerin son beşi
+    (`desktop/backup.py`), erişim günlüğünün iki yılı (`erisim_gunlugu.SAKLAMA_SURESI_YIL`)."""
+    from apps.okul import erisim_gunlugu
+
+    yedek = _depo_dosyasi("desktop/backup.py")
+    assert re.search(r"^DEFAULT_KEEP_DAYS = 14$", yedek, re.MULTILINE)
+    assert re.search(r"^DEFAULT_KEEP_PRE_MIGRATE = 5$", yedek, re.MULTILINE)
+    for cumle in (am.YEDEK_CUMLESI, am.YEDEK_CUMLESI_ACILIMLI):
+        assert "en çok 14 gün" in cumle and "son beş güncelleme" in cumle
+    assert erisim_gunlugu.SAKLAMA_SURESI_YIL == 2
+    assert "günlük iki yıl sonra silinir" in " ".join(am._B1_B_SAKLAMA)
+
+
+def test_e04_metinleri_sozlukte_yazilidir() -> None:
+    """E04'ün başlıkları, bölüm ve kısım başlıkları, unsur etiketleri, ret iletisi ve basım uyarıları
+    sözlükte (sözlük §1 "Genel kurul evrakı (F2)", 10. adımın E04 satırı)."""
+    sozluk = _depo_dosyasi("docs/sozluk.md")
+    metinler = [
+        tr_upper(gke.BELGE_ADLARI["E04"]),
+        am.ALT_BASLIK,
+        *(am.bolum_basligi(no) for no in range(1, 5)),
+        *am.BOLUM_1_KISIMLARI,
+        am.ETIKET_AMAC,
+        am.ETIKET_ISLENEN,
+        am.ETIKET_TOPLAMA,
+        am.ETIKET_AKTARIM,
+        am.ETIKET_SAKLAMA,
+        am.ETIKET_HAKLAR,
+        am.ETIKET_BASVURU,
+        am.YEDEKLER_ETIKETI,
+        am.YAZILAR_ETIKETI,
+        am.BOLUM_3_KOSULU,
+        am.BOLUM_4_KOSULU,
+        gke.E04_VERI_SORUMLUSU_YOK,
+        am.UYARI_HUKUKI_SEBEP_ONERI,
+        am.UYARI_OZEL_NITELIKLI_BENT,
+        am.UYARI_TCKN_HUKUKI_SEBEP,
+    ]
+    assert [m for m in dict.fromkeys(metinler) if f'**"{m}"**' not in sozluk] == []

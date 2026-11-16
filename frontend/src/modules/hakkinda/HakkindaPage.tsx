@@ -1,6 +1,8 @@
 import Card from "../../ui/Card";
 import Icon from "../../ui/Icon";
 import { DURUST_SINIRLAR } from "../guvenlik/metinler";
+import KisiselVeriKarti from "./KisiselVeriKarti";
+import { KISISEL_VERI_ACIKLAMASI, KISISEL_VERI_BASLIGI } from "./metinler";
 
 export default function HakkindaPage() {
   return (
@@ -64,14 +66,32 @@ export default function HakkindaPage() {
                 girmez. Okulun kayıtlarına ilişkin başvuru okul müdürlüğüne yönelir; veri
                 sorumlusunun kim olduğu okul müdürlüğünün değerlendirmesidir (tasarım §3.4,
                 §15 KE-20); bilgisi okul kartındadır (`data_controller_text`). Aydınlatma
-                metinleri personel ve veli listesi aktarım ekranlarındadır (F1b 5. adım);
-                E04 belgesi dört alt metninin onayını bekliyor (F2), bu metne o zaman eklenir. */}
+                metninin tamamı (E04, dört alt metin; kullanıcı onayı 16.11.2026) bu sayfanın
+                Kişisel Veri kartındadır; aktarım ekranlarında personel ve veli metni durur. */}
             <p className="mt-2 text-body-small text-on-surface-variant">
               İletinize öğrenci, veli ya da personel bilgisi, gerçek veri içeren ekran görüntüsü,
               yedek ya da veritabanı dosyası eklemeyin. Programdaki kişisel verilere ilişkin
               başvurular okul müdürlüğüne yapılır; veri sorumlusu bilgisi Ayarlar → Okul
-              Bilgileri'nde, aydınlatma metinleri personel ve veli listesi aktarım ekranlarındadır.
+              Bilgileri'nde, aydınlatma metni bu sayfanın Kişisel Veri kartındadır.
             </p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Hakkında → Kişisel Veri (plan F2 §6.1; F2 10. adım): kişisel veri aydınlatma metninin
+          (E04) belge kartı. Her rol okur ve basar, program yöneticisi oluşturur; Okul
+          Bilgileri'nde veri sorumlusu boşken belge oluşturulmaz ve kaydedilmez (KE-20). */}
+      <Card className="p-5 sm:p-6">
+        <div className="flex items-start gap-4">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-shape-md bg-primary-container text-on-primary-container">
+            <Icon name="privacy_tip" size="xl" />
+          </span>
+          <div className="min-w-0 flex-1 space-y-3">
+            <h2 className="text-title-large font-semibold text-on-surface">
+              {KISISEL_VERI_BASLIGI}
+            </h2>
+            <p className="text-body-medium text-on-surface-variant">{KISISEL_VERI_ACIKLAMASI}</p>
+            <KisiselVeriKarti />
           </div>
         </div>
       </Card>

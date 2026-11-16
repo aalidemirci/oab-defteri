@@ -878,16 +878,26 @@ class DocumentDownloadView(APIView):
     """Kaydedilmiş evrakın dosyası (`pdf`, `docx`; genel kurul evrakında `xlsx`, `html` de) ve `BASIM`
     satırı (okuma rolünde de).
 
-    HEAD dosya vermez, basım izi de yazmaz: 405 (basım yalnız GET'tir).
+    HEAD dosya vermez, basım izi de yazmaz: 405 (basım yalnız GET'tir). Kişisel veri aydınlatma metni
+    (E04) Okul Bilgileri'nde veri sorumlusu boşken basılmaz: 400 (plan F2 §9 S6 (iv)). Saklanan dosya
+    açılamazsa (yok, bozuk, özeti tutmuyor) her evrakta 409 `evrak_dosyasi_acilamadi`.
     """
 
     def get(self, request: Request, pk: int, bicim: str) -> Any:
         kayit = get_object_or_404(oab_modelleri.GeneratedDocument.objects.all(), pk=pk)
         try:
-            # Genel kurul evrakı ve yıllık iş takvimi kendi basım yolundadır (F2 11. adım; Excel ve web
-            # sayfası kayıtlı içerikten çizilir, veli adlı kayıt basılmaz).
+            # Genel kurul evrakı, yıllık iş takvimi ve aydınlatma metni kendi basım yolundadır (F2 11.
+            # adım; Excel ve web sayfası kayıtlı içerikten çizilir, veli adlı kayıt basılmaz).
             if str(kayit.doc_type) in genel_kurul_evraki.KODLAR:
-                return genel_kurul_evraki.bas(kayit, genel_kurul_evraki.bicim_coz(bicim))
+                try:
+                    return genel_kurul_evraki.bas(kayit, genel_kurul_evraki.bicim_coz(bicim))
+                except (dosya_deposu.DosyaDeposuHatasi, dosya_sifreleme.DosyaSifrelemeHatasi):
+                    # Dosya hataları da `ValueError`'dan türer: aşağıdaki 400'e düşmeden dıştaki
+                    # 409 koluna gider (görev bölümü evrakıyla aynı sözleşme).
+                    raise
+                except ValueError as exc:
+                    # Servisin reddi (E04'te veri sorumlusu boş): sözleşmeli 400.
+                    raise serializers.ValidationError(str(exc)) from exc
             return gorev_evraki.bas(kayit, gorev_evraki.bicim_coz(bicim))
         except (dosya_deposu.DosyaDeposuHatasi, dosya_sifreleme.DosyaSifrelemeHatasi) as exc:
             raise EvrakDosyasiAcilamadi(str(exc)) from exc

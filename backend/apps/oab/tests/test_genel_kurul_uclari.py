@@ -5,7 +5,7 @@ Uç başına rol × izin tablosu (izinli/izinsiz; tablo elle yazılır, `rol_izi
 türetilmez), sihirbazın uçtan uca uç testleri (olağan genel kurul — pilot akışı: birinci toplantıda
 yeter sayı yok, ikinci toplantı —, yeni açılan okulun ilk genel kurulu ve olağanüstü genel kurul:
 Denetleme Kurulunun md. 14/5 çağrısı), veli adlı çıktının saklanmadığı ve erişim günlüğüne yazıldığı,
-E04'ün katalogda üretilemediği, E12'nin evrak kaydının önerilip onayla kaydedildiği, dosya eklerinin
+E04'ün katalogda üretilebildiği ve Hakkında'daki ucu, E12'nin evrak kaydının önerilip onayla kaydedildiği, dosya eklerinin
 rolleri ve 10. adımın 11. adıma bıraktığı il/ilçe millî eğitim müdürlüğü bildiriminin metni. Kişi
 adları ve tarihler UYDURMADIR.
 """
@@ -32,6 +32,7 @@ from apps.oab.models import (
     OabTerm,
     TermStatus,
 )
+from apps.oab.services import aydinlatma_metni as am
 from apps.oab.services import gelen_giden_evrak, uyelik_gecisleri
 from apps.oab.services import genel_kurul as gk
 from apps.oab.services import genel_kurul_evraki as gke
@@ -126,6 +127,8 @@ TABLO: tuple[tuple[str, str, frozenset[str]], ...] = (
     ("POST", f"{API}/assemblies/{YOK}/documents/e07/named/", Y),
     ("GET", f"{API}/terms/{YOK}/annual-calendar/", HER),
     ("POST", f"{API}/terms/{YOK}/documents/e14/", Y),
+    ("GET", f"{API}/documents/e04/", HER),
+    ("POST", f"{API}/documents/e04/", Y),
     ("GET", f"{API}/document-books/", HER),
     ("POST", f"{API}/document-books/", Y_YK),
     ("GET", f"{API}/document-records/", HER),
@@ -555,17 +558,17 @@ def test_katilim_isaretleri_penceresi_yalniz_yonetici_ve_erisim_gunlugu() -> Non
 # ============================================================ katalog, E04, E12, takvim, ekler
 
 
-def test_e04_katalogda_durur_ama_uretilmez() -> None:
-    """E04'ün kurucusu yoktur (dört alt metin onay bekler, plan F2 §9 S8): katalogda üretilemez ve
-    nedeni yanında; üretim ucu 400 (kayıt yazılmaz)."""
+def test_e04_katalogda_uretilebilir_konusu_okul_karti() -> None:
+    """E04'ün kurucusu dört alt metnin onayıyla (16.11.2026) yazıldı: katalogda üretilebilir, konusu
+    okul kartıdır; genel kurulun evrak ucundan üretilmez (400, kayıt yazılmaz), Hakkında'nın ucundan
+    üretilir (`test_e04_hakkinda_ucu_her_rol_okur_basar_yalniz_yonetici_uretir`)."""
     katalog = _yanit(_iste("GET", f"{API}/assembly-documents/catalog/"))
     belgeler = {b["kod"]: b for b in katalog["belgeler"]}
     assert set(belgeler) == set(gke.KODLAR)
-    assert (
-        belgeler["E04"]["uretilebilir"] is False
-        and "onay bekliyor" in belgeler["E04"]["uretilemez_nedeni"]
-    )
-    assert all(b["uretilebilir"] for kod, b in belgeler.items() if kod != "E04")
+    assert belgeler["E04"]["uretilebilir"] is True and belgeler["E04"]["uretilemez_nedeni"] == ""
+    assert (belgeler["E04"]["konu"], belgeler["E04"]["ureten_roller"]) == ("okul", ["yonetici"])
+    assert belgeler["E04"]["okuma_satiri"] == "M1"
+    assert all(b["uretilebilir"] for b in belgeler.values())
     assert belgeler["E07"]["kipler"] == ["KISISIZ", "ADLI"] and belgeler["E05"]["toplantili"]
     assert belgeler["E12"]["muhatapli"] and katalog["varsayilan_muhatap"] == "ILCE"
     assert set(katalog["muhatap_onerileri"]) == {"ILCE", "IL"}
@@ -575,6 +578,81 @@ def test_e04_katalogda_durur_ama_uretilmez() -> None:
     ret = _iste("POST", f"{API}/assemblies/{kurul.pk}/documents/e14/", {})
     assert ret.status_code == 400
     assert not GeneratedDocument.objects.exists()
+
+
+VERI_SORUMLUSU = "Uydurma Ortaokulu Müdürlüğü, Uydurma Mah. Deneme Sok. No: 1, Uydurma İlçe"
+
+
+def _veri_sorumlusu(metin: str) -> None:
+    from apps.oab.tests.kurallar import gorev_evraki_ortak as ge_ortak
+
+    ge_ortak.okul_karti(data_controller_text=metin)
+
+
+def test_e04_hakkinda_ucu_her_rol_okur_basar_yalniz_yonetici_uretir() -> None:
+    """Hakkında → Kişisel veri (plan F2 §6.1; M1): GET her role açık ve yazmaz (kayıt, veri
+    sorumlusunun girilip girilmediği, basım uyarıları); veri sorumlusu boşken üretim 400 (sert, S6
+    (iv)); program yöneticisi üretir (201, yeni sürüm; uyarılar yanıtta), öteki roller 403; her rol
+    PDF ve Word basar (`BASIM` satırı); veri sorumlusu boşaltılınca basım 400."""
+    for rol in rol_izinleri.ROLLER:
+        with o.rol_olarak(AccountRole(rol)):
+            durum = _yanit(_iste("GET", f"{API}/documents/e04/"))
+        assert durum["evrak"] is None and durum["veri_sorumlusu_girildi"] is False, rol
+        assert durum["basim_uyarilari"] == list(am.basim_uyarilari(k9_acik=False)), rol
+        assert am.UYARI_TCKN_HUKUKI_SEBEP not in durum["basim_uyarilari"], rol
+    ret = _iste("POST", f"{API}/documents/e04/")
+    assert ret.status_code == 400 and gke.E04_VERI_SORUMLUSU_YOK in str(ret.json())
+    assert not GeneratedDocument.objects.exists()
+    _veri_sorumlusu(VERI_SORUMLUSU)
+    for rol in set(rol_izinleri.ROLLER) - {"yonetici"}:
+        with o.rol_olarak(AccountRole(rol)):
+            assert _rol_yetkisiz(_iste("POST", f"{API}/documents/e04/")), rol
+    uretim = _yanit(_iste("POST", f"{API}/documents/e04/"), 201)
+    evrak_ = uretim["evrak"]
+    assert (evrak_["kod"], evrak_["ad"], evrak_["surum"]) == ("E04", gke.BELGE_ADLARI["E04"], 1)
+    assert evrak_["bicimler"] == ["DOCX", "PDF"] and evrak_["kisi_listesi"] is False
+    assert uretim["uyarilar"] == list(am.basim_uyarilari(k9_acik=False))
+    ikinci = _yanit(_iste("POST", f"{API}/documents/e04/"), 201)["evrak"]
+    assert ikinci["surum"] == 2
+    for rol in rol_izinleri.ROLLER:
+        with o.rol_olarak(AccountRole(rol)):
+            durum = _yanit(_iste("GET", f"{API}/documents/e04/"))
+            assert durum["evrak"]["id"] == ikinci["id"] and durum["veri_sorumlusu_girildi"], rol
+            for bicim in ("pdf", "docx"):
+                yanit = APIClient().get(f"{API}/documents/{ikinci['id']}/{bicim}/")
+                assert yanit.status_code == 200, (rol, bicim)
+    basimlar = AuditTrail.objects.filter(action=AuditAction.BASIM).count()
+    assert basimlar == 2 * len(rol_izinleri.ROLLER)
+    _veri_sorumlusu("")
+    for rol in rol_izinleri.ROLLER:
+        for bicim in ("pdf", "docx"):
+            with o.rol_olarak(AccountRole(rol)):
+                ret = APIClient().get(f"{API}/documents/{ikinci['id']}/{bicim}/")
+            assert ret.status_code == 400, (rol, bicim)
+            assert gke.E04_VERI_SORUMLUSU_YOK in str(ret.json()), (rol, bicim)
+    assert AuditTrail.objects.filter(action=AuditAction.BASIM).count() == basimlar
+    durum = _yanit(_iste("GET", f"{API}/documents/e04/"))
+    assert durum["evrak"]["id"] == ikinci["id"] and durum["veri_sorumlusu_girildi"] is False
+
+
+def test_e04_hakkinda_ucu_k9_acikken_hukuki_sebep_uyarisi(monkeypatch: pytest.MonkeyPatch) -> None:
+    """K9 (soru 11): ayar açıkken kartın (GET) ve üretimin (POST) basım uyarıları açık biçiminkidir;
+    hukuki sebebin "………" basıldığı uyarısı (`UYARI_TCKN_HUKUKI_SEBEP`) her rolün kartında görünür.
+    Ayarın alanı F3'te gelir; bugün yalnız bu yamayla açılır."""
+    monkeypatch.setattr(gke, "k9_acik", lambda: True)
+    acik = list(am.basim_uyarilari(k9_acik=True))
+    assert am.UYARI_TCKN_HUKUKI_SEBEP in acik
+    for rol in rol_izinleri.ROLLER:
+        with o.rol_olarak(AccountRole(rol)):
+            durum = _yanit(_iste("GET", f"{API}/documents/e04/"))
+        assert durum["basim_uyarilari"] == acik, rol
+    _veri_sorumlusu(VERI_SORUMLUSU)
+    uretim = _yanit(_iste("POST", f"{API}/documents/e04/"), 201)
+    assert uretim["uyarilar"] == acik
+    for rol in rol_izinleri.ROLLER:
+        with o.rol_olarak(AccountRole(rol)):
+            durum = _yanit(_iste("GET", f"{API}/documents/e04/"))
+        assert durum["evrak"]["id"] == uretim["evrak"]["id"] and durum["basim_uyarilari"] == acik
 
 
 def _ibra_edilmemis_kurul() -> GeneralAssembly:

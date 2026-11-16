@@ -1232,6 +1232,15 @@ def _yillik_is_takvimi(_: pytest.MonkeyPatch) -> Istek:
     return Istek(f"/api/v1/oab/terms/{donem.pk}/documents/e14/", None, _turler("OLUSTUR"))
 
 
+def _aydinlatma_metni(_: pytest.MonkeyPatch) -> Istek:
+    """E04 (Hakkında → Kişisel veri): okul kartında veri sorumlusu uydurma; konu okul kartı."""
+    guncellenen = SchoolConfig.objects.filter(pk=SchoolConfig.SINGLETON_PK).update(
+        data_controller_text="Uydurma Ortaokulu Müdürlüğü, Uydurma Mah. No: 1"
+    )
+    assert guncellenen == 1
+    return Istek("/api/v1/oab/documents/e04/", None, _turler("OLUSTUR"))
+
+
 def _evrak_defteri(_: pytest.MonkeyPatch) -> Istek:
     return Istek("/api/v1/oab/document-books/", {"last_no_before_program": 12}, _turler("OLUSTUR"))
 
@@ -1441,6 +1450,7 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     ("oab-assembly-document-e05-audit-board", "POST"): Senaryo(_gk_dk_e05),
     ("oab-assembly-document-named", "POST"): Senaryo(_gk_adli_evrak),
     ("oab-document-e14", "POST"): Senaryo(_yillik_is_takvimi),
+    ("oab-document-e04", "POST"): Senaryo(_aydinlatma_metni),
     ("oab-document-book-list", "POST"): Senaryo(_evrak_defteri),
     ("oab-document-record-list", "POST"): Senaryo(_evrak_kaydi),
     ("oab-document-record-attachments", "POST"): Senaryo(_evrak_kaydi_eki),

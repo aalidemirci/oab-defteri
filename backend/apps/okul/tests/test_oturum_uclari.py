@@ -103,6 +103,7 @@ def test_oturum_ozetinin_anahtarlari_sabittir(client: APIClient) -> None:
         "rol_etiketi": "Program yöneticisi",
         # Ön yüz süzmesinin tek kaynağı (plan F1b-2; `rol_izinleri.YETENEKLER`).
         "yetenekler": [
+            "aydinlatma_metni_uretme",
             "ayrilis_havuzu",
             "birlik_donemi_yazma",
             "birlik_kisi_yazma",
