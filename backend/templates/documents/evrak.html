@@ -28,6 +28,9 @@ sağa yaslı tarih, md. 12/1. Sütun yüzdeleri modelden (`RYUE_SUTUNLARI`; konu
 geçmez, md. 13/1); konudan ve metinden iki satır boşlukla ortalı muhatap (md. 14/1, 16/2). Ek bölümü
 (`Ekler`, md. 18/1) imza bölümünden sonra solda. Sayfa sonu (`SayfaSonu`) sonraki bloğu yeni sayfaya
 iter.
+Resmî yazının metin paragrafı (`MetinParagrafi`, md. 16/4) ilk satırında 1,25 cm içeriden, iki yana
+yaslı ve aralıksız; imza bölümü (`ResmiImza`, md. 17/1, 17/11) yazı alanını ikiye bölen iki hücrede,
+tek imza sağ yarıda ortalı, iki imzada üst unvan sağda.
 {% endcomment %}
 {% block extra_style %}<style>
   @page {
@@ -64,6 +67,11 @@ iter.
   .ekler { margin-top: 14pt; }
   .ekler p { margin: 0; font-size: 12pt; }
   .sayfa-sonu { break-after: page; page-break-after: always; height: 0; }
+  .para-girintili { font-size: 12pt; line-height: 1.25; margin: 0; text-align: justify;
+                    text-indent: 1.25cm; }
+  .resmi-imza { table-layout: fixed; margin-top: 28pt; }
+  .resmi-imza td { width: 50%; font-size: 12pt; }
+  .resmi-imza .role { font-size: 12pt; }
 </style>{% endblock %}
 {% block content %}
   {% for oge in bloklar %}
@@ -84,6 +92,14 @@ iter.
       <p class="alt-baslik">{{ oge.blok.metin }}</p>
     {% elif oge.tur == "paragraf" %}
       <p class="para">{{ oge.blok.metin }}</p>
+    {% elif oge.tur == "metin_paragrafi" %}
+      <p class="para-girintili">{{ oge.blok.metin }}</p>
+    {% elif oge.tur == "resmi_imza" %}
+      <div class="imza-blok">
+      <table class="sig-grid resmi-imza"><tr>
+        {% for sahip in oge.hucreler %}<td>{% if sahip %}<div class="space"></div><div class="line"></div><div class="name">{{ sahip.ad }}</div><div class="role">{{ sahip.gorev }}</div>{% endif %}</td>{% endfor %}
+      </tr></table>
+      </div>
     {% elif oge.tur == "konum" %}
       <p class="konum keep-with-next">{{ oge.blok.metin }}</p>
     {% elif oge.tur == "tablo" %}

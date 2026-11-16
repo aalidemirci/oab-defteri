@@ -26,20 +26,25 @@ import pytest
 from django.db.models import Model
 from django.http import Http404
 
+from apps.oab import selectors
 from apps.oab.hatalar import DonemYazilamaz, EvrakIcerigiSaklanmaz
 from apps.oab.kurallar import kural, yukleyici
 from apps.oab.kurallar.hatalar import KuralPaketiKullanilamaz
 from apps.oab.models import (
     AssemblyCaller,
     AssemblyMeeting,
+    Discharge,
     DocumentFormat,
     DocumentStatus,
     DocumentVariant,
     GeneralAssembly,
     GeneratedDocument,
+    OabPerson,
+    OrganMembership,
     TermStatus,
 )
 from apps.oab.services import evrak as evrak_servisi
+from apps.oab.services import genel_kurul as gk
 from apps.oab.services import genel_kurul_evraki as gke
 from apps.oab.tests import genel_kurul_evraki_ortak as ortak
 from apps.oab.tests import genel_kurul_ortak as gko
@@ -50,6 +55,7 @@ from apps.okul.models import AccessLog, AccountRole, AuditAction, AuditTrail, Sc
 from apps.okul.services import app_password
 from shared import evrak
 from shared.exceptions import RolYetkisiz
+from shared.text import tr_upper
 
 pytestmark = pytest.mark.django_db
 
@@ -125,18 +131,12 @@ def test_kodlar_bicimler_ve_adlar_katalogla_ayni() -> None:
 
 def test_icerik_kurucusu_yokken_uretilmez() -> None:
     """İçerikler 9. ve 10. adımlardadır: 9. adımda E05-E08 ve E64'ün kurucuları (adlı kipte E07 ve
-    E08) yazıldı; E04 ve E09-E14 10. adımdadır, kurucusu olmayan kod üretilmez; F1c'nin kodları bu
-    yoldan üretilmez."""
+    E08), 10. adımda E09-E14'ünkiler yazıldı; E04'ün kurucusu dört alt metnin onayını bekler (plan
+    F2 §9 S8 (i)): kurucusu olmayan kod üretilmez; F1c'nin kodları bu yoldan üretilmez."""
     gko.acik_donem()
     kurul_ = gko.planla()
-    assert set(gke.KURUCULAR) == {"E05", "E06", "E07", "E08", "E64"}
+    assert set(gke.KURUCULAR) == set(gke.KODLAR) - {"E04"}
     assert set(gke.ADLI_KURUCULAR) == {"E07", "E08"}
-    for kod in ("E09", "E10", "E11", "E13"):
-        with pytest.raises(ValueError, match=gke.KOD_GECERSIZ):
-            gke.uret(kod, kurul_)
-    assert kurul_.term is not None
-    with pytest.raises(ValueError, match=gke.KOD_GECERSIZ):
-        gke.uret("E14", kurul_.term)
     with pytest.raises(ValueError, match=gke.KOD_GECERSIZ):
         gke.uret("E04", SchoolConfig.load())
     with pytest.raises(ValueError, match=gke.KOD_GECERSIZ):
@@ -684,7 +684,13 @@ def test_e05_olaganustu_cagri_nedeni_basvuru_ve_gundeme_baglilik() -> None:
 
 
 def _imzalar(belge: evrak.Belge) -> list[tuple[str, str]]:
-    return [(s.ad, s.gorev) for b in belge.bloklar if isinstance(b, evrak.Imza) for s in b.sahipler]
+    """İmza bloklarının sahipleri (resmî yazının imza bölümü dahil)."""
+    return [
+        (s.ad, s.gorev)
+        for b in belge.bloklar
+        if isinstance(b, evrak.Imza | evrak.ResmiImza)
+        for s in b.sahipler
+    ]
 
 
 def _bilgi_satirlari(belge: evrak.Belge) -> dict[str, str]:
@@ -709,8 +715,6 @@ def test_e05_imzacisi_cagri_gunundeki_gorevlidir() -> None:
     olandır (`selectors.gundeki_asillar`; en geç birinci toplantıdan bir gün önce). Olağanüstü genel
     kurulun seçimi eski yönetim kurulunu toplantı günü düşürür (U27); seçimden sonra yeniden üretilen
     E05 çağrıyı imzalayan eski başkanı basar, "görev boş" uyarısı yoktur."""
-    from apps.oab import selectors
-
     kurul = ortak.ilanli(ortak.kurulum(gke.KOL_BASKAN_13_8))
     donem = kurul.term
     assert donem is not None
@@ -1155,3 +1159,607 @@ def test_genel_kurul_evraki_metinleri_sozlukte_yazilidir() -> None:
         assert f"`{kok}_gg.aa.yyyy.pdf`" in sozluk, kok
     ornek = gke.dosya_adi("E06", date(2026, 11, 20), DocumentFormat.HTML, toplanti=_IKINCI)
     assert f"`{ornek}`" in sozluk
+
+
+# ============================================================ Genel kurul evrakı II (10. adım)
+
+
+def _akis(belge: evrak.Belge) -> str:
+    return " ".join(evrak.metin_akisi(belge))
+
+
+def _bolum(belge: evrak.Belge, bolum: str) -> list[tuple[str, ...]]:
+    """Bölüm başlığından sonraki (bir sonraki bölüme dek) tabloların satırları."""
+    satirlar: list[tuple[str, ...]] = []
+    icinde = False
+    for blok in belge.bloklar:
+        if isinstance(blok, evrak.AltBaslik):
+            icinde = blok.metin == bolum
+        elif icinde and isinstance(blok, evrak.Tablo):
+            satirlar += list(blok.satirlar)
+    return satirlar
+
+
+@pytest.mark.parametrize("kod", ["E10", "E11", "E12", "E13"])
+def test_genel_kurul_yapilmadan_tutanak_ve_sonrasi_uretilmez(kod: str) -> None:
+    """Tutanak, teslim tutanağı, resmî yazı ve sonuç bildirimi yapılmış genel kurulun belgeleridir
+    (veri yokluğu; 9. adımın "toplantısız belge üretilmez" emsali): ilan edilmiş, yeter sayı sağlanamamış
+    genel kurulda üretilmez, kayıt yazılmaz."""
+    kurul = ortak.birinci_toplantida_yetersiz(ortak.ilanli(ortak.kurulum(gke.KOL_YK)))
+    with o.rol_olarak(AccountRole.YONETICI), pytest.raises(ValueError) as hata:
+        gke.uret(kod, kurul)
+    assert str(hata.value) == gke.GENEL_KURUL_YAPILMADI
+    assert not GeneratedDocument.objects.exists()
+
+
+def test_ibra_edilmedi_yan_akisi_yalniz_yonetim_kurulunda() -> None:
+    """Kullanıcı kararı S4 (a): E11 ve E12 yalnız yönetim kurulunun hesapları ibra edilmediğinde
+    üretilir; Denetleme Kurulunun ibra edilmemesi yalnız tutanağa (E10) yazılır."""
+    kurul = ortak.tutanakli(
+        ortak.birinci_toplantida_yapilmis(ortak.ilanli(ortak.kurulum(gke.KOL_YK)))
+    )
+    gk.ibra_yaz(gko.madde(kurul, "IBRA"), yk=gko.IBRA_EDILDI, dk=gko.IBRA_EDILMEDI)
+    for kod in ("E11", "E12"):
+        with o.rol_olarak(AccountRole.YONETICI), pytest.raises(ValueError) as hata:
+            gke.uret(kod, kurul)
+        assert str(hata.value) == gke.IBRA_EDILMEDIKCE_URETILMEZ
+    belge, _ = gke.e10_belgesi(GeneralAssembly.objects.get(pk=kurul.pk), gke.Secim())
+    assert _bolum(belge, gke.E10_BOLUMLER[3]) == [
+        (gke.KURUL_YK, "İbra edildi", "12", "3", "18"),
+        (gke.KURUL_DK, "İbra edilmedi", "4", "12", "18"),
+    ]
+    assert "hesapları ibra edilmedi;" not in _akis(belge)
+
+
+def test_e12_muhatap_basimda_duzenlenir_bos_birakilirsa_yer_tutucu() -> None:
+    """Plan F2 §7 U20, kullanıcı kararı S11 (a): muhatap verilmezse okul kartından öneri (ilçe millî
+    eğitim müdürlüğüne kaymakamlık üzerinden); basımda düzenlenen muhatap (il millî eğitim
+    müdürlüğüne valilik üzerinden) büyük harfle basılır; boşaltılırsa "……………" yer tutucusu ve basım
+    uyarısı (8. adımın notu: ValueError değil — sert engel değildir, altın kural 3)."""
+    kurul = ortak.yapilmis_tutanakli(ibra_edilmedi=True)
+    il = gke.Muhatap(idare="örnek il valiliğine", birim="İl Millî Eğitim Müdürlüğü")
+    with o.rol_olarak(AccountRole.YONETICI):
+        duzenli = gke.uret("E12", kurul, muhatap=il)
+        bos = gke.uret("E12", kurul, muhatap=gke.Muhatap(idare="  ", birim=""))
+    bas = evrak_servisi.yeniden_ciz(duzenli.kayit).bloklar[0]
+    assert isinstance(bas, evrak.ResmiYazi)
+    assert (bas.muhatap, bas.birim) == ("ÖRNEK İL VALİLİĞİNE", "İl Millî Eğitim Müdürlüğü")
+    bas = evrak_servisi.yeniden_ciz(bos.kayit).bloklar[0]
+    assert isinstance(bas, evrak.ResmiYazi)
+    assert (bas.muhatap, bas.birim) == (gke.MUHATAP_YERI, "")
+    assert gke.UYARI_MUHATAP_BOS in bos.uyarilar
+    assert gke.UYARI_MUHATAP_BOS not in duzenli.uyarilar
+    # Okul kartında ilçe yoksa önerinin yeri yer tutucudur, uyarıyla.
+    SchoolConfig.objects.filter(pk=SchoolConfig.SINGLETON_PK).update(district="")
+    belge, uyarilar = gke.e12_belgesi(kurul, gke.Secim())
+    bas = belge.bloklar[0]
+    assert isinstance(bas, evrak.ResmiYazi) and bas.muhatap == "…………… KAYMAKAMLIĞINA"
+    assert gke.UYARI_MUHATAP_ILCE_YOK in uyarilar
+
+
+@pytest.mark.parametrize("kod", ["E05", "E10", "E14"])
+def test_muhatap_yalniz_resmi_yazida(kod: str) -> None:
+    """Muhatap yalnız resmî yazının (E12) seçimidir; başka belgede verilirse üretilmez."""
+    gko.acik_donem()
+    kurul_ = gko.planla()
+    konu: Model = kurul_.term if kod == "E14" and kurul_.term is not None else kurul_
+    toplanti = _BIRINCI if kod in gke.TOPLANTILI_KODLAR else ""
+    with o.rol_olarak(AccountRole.YONETICI), pytest.raises(ValueError) as hata:
+        gke.uret(kod, konu, toplanti=toplanti, muhatap=gke.Muhatap(idare="Uydurma"))
+    assert str(hata.value) == gke.MUHATAP_GECERSIZ
+
+
+def test_e12_ve_e13_yeni_baskan_gorev_bolumunden_once_bos_sonra_yeni_surum() -> None:
+    """Plan F2 §7 U21: E12 ve E13 yeni başkanı (E13 ayrıca yeni sekreteri) ister; görev bölümünden önce
+    adın yeri "………" ve basım uyarısıdır; görev bölümünden sonraki üretim yeni sürümdür, adlar basılır."""
+    kurul = ortak.yapilmis_tutanakli(ibra_edilmedi=True)
+    with o.rol_olarak(AccountRole.YONETICI):
+        e12 = gke.uret("E12", kurul)
+        e13 = gke.uret("E13", kurul)
+    assert gke.UYARI_YENI_BASKAN_YOK in e12.uyarilar
+    assert {gke.UYARI_YENI_BASKAN_YOK, gke.UYARI_YENI_SEKRETER_YOK} <= set(e13.uyarilar)
+    imzalar = _imzalar(evrak_servisi.yeniden_ciz(e12.kayit))
+    assert imzalar[0] == (gke.BOS_YER, gke.UNVAN_YK_ADINA_BASKAN)
+    kurul = ortak.gorev_bolumlu(kurul)
+    with o.rol_olarak(AccountRole.YONETICI):
+        yeni = gke.uret("E13", kurul)
+    assert yeni.kayit.version == 2 and gke.UYARI_YENI_BASKAN_YOK not in yeni.uyarilar
+    baskan = gke._yeni_gorevli(kurul, "BASKAN")
+    assert baskan is not None
+    adlar = [ad for ad, _gorev in _imzalar(evrak_servisi.yeniden_ciz(yeni.kayit))]
+    assert evrak.ad_soyad(baskan.person.first_name, baskan.person.last_name) in adlar
+
+
+def test_e09_olaganustu_genel_kurulda_denetleme_kurulu_bolumu_yok() -> None:
+    """Kullanıcı kararı S10 (a): olağanüstü genel kurul Denetleme Kuruluna seçim yapmaz; aday listesinde
+    Denetleme Kurulunun bölümü ve öğretmen koltukları bilgi satırı basılmaz. E10 ve E13'te de
+    Denetleme Kurulunun seçim satırı yoktur."""
+    kurul = ortak.tutanakli(
+        ortak.birinci_toplantida_yapilmis(ortak.ilanli(ortak.kurulum(gke.KOL_MUDUR_9_6)))
+    )
+    e09, _ = gke.e09_belgesi(kurul, gke.Secim())
+    alt = [b.metin for b in e09.bloklar if isinstance(b, evrak.AltBaslik)]
+    assert alt == [gke.YK_ADAY_BOLUMU]
+    assert "öğretmenler kurulunca" not in _akis(e09)
+    e13, _ = gke.e13_belgesi(kurul, gke.Secim())
+    assert gke.E13_BOLUMLER[2] not in _akis(e13)
+    assert gke.IS_DK_GOREV_BOLUMU not in _akis(e13)
+
+
+def _iki_sutun(belge: evrak.Belge, bolum: str) -> dict[str, str]:
+    """Bölümün iki sütunlu (satır, değer) tablolarının sözlüğü."""
+    return {s[0]: s[1] for s in _bolum(belge, bolum) if len(s) == 2}
+
+
+def _secilmeyen_aday(kurul: GeneralAssembly) -> OrganMembership:
+    """Genel kurulun yönetim kurulunda seçilmeyen (aday kalan) kaydı (`ortak.tutanakli`)."""
+    (aday,) = OrganMembership.objects.filter(assembly=kurul, organ="YK", status="ADAY")
+    return aday
+
+
+def _sayac_hucresi(belge: evrak.Belge, uyelik: OrganMembership) -> str:
+    """E09'un yönetim kurulu adayları tablosunda kişinin md. 12/4 sayacı."""
+    ad = evrak.ad_soyad(uyelik.person.first_name, uyelik.person.last_name)
+    (satir,) = [s for s in _bolum(belge, gke.YK_ADAY_BOLUMU) if s[1] == ad]
+    return satir[4]
+
+
+def test_e09_onceki_secilme_sayisi_bu_genel_kurulu_saymaz() -> None:
+    """Md. 12/4 sayacı (`uyelikler.yk_secilme_sayaci_once`): programdan önceki beyan ve programdaki
+    seçilmeler; bu genel kurulun seçilmesi sayılmaz (seçimden sonra üretilen liste de seçimden önceki
+    sayıyı basar), seçilmeyen adayın sayısından da bir şey düşülmez. Beyan bilinmiyorsa "………" ve
+    uyarı."""
+    kurul = ortak.yapilmis_tutanakli()
+    secilen = gke._kurul_secilenleri(kurul, "YK")[0]
+    secilmeyen = _secilmeyen_aday(kurul)
+    OabPerson.objects.filter(pk__in=(secilen.person_id, secilmeyen.person_id)).update(
+        external_yk_terms=2
+    )
+    belge, uyarilar = gke.e09_belgesi(kurul, gke.Secim())
+    assert _sayac_hucresi(belge, secilen) == "2"
+    assert _sayac_hucresi(belge, secilmeyen) == "2"
+    assert gke.UYARI_SAYAC_BILINMIYOR in uyarilar
+    adlar = {evrak.ad_soyad(u.person.first_name, u.person.last_name) for u in (secilen, secilmeyen)}
+    satirlar = _bolum(belge, gke.YK_ADAY_BOLUMU)
+    assert {s[4] for s in satirlar if s[1] not in adlar} == {gke.BOS_YER}
+
+
+def test_e09_sonraki_genel_kurulun_secilmesi_eski_listeye_girmez() -> None:
+    """Md. 12/4 sayacı genel kurulun gününe kadardır: bu genel kurulda aday kalan kişi sonraki (yeni
+    dönemin olağanüstü) genel kurulunda seçilirse eski genel kurulun yeniden üretilen aday listesi
+    aynı sayıyı basar; sonraki genel kurulun listesi de kendi seçilmesini saymaz."""
+    kurul = ortak.gorev_bolumlu(ortak.yapilmis_tutanakli())
+    aday = _secilmeyen_aday(kurul)
+    OabPerson.objects.filter(pk=aday.person_id).update(external_yk_terms=2)
+    once, _ = gke.e09_belgesi(kurul, gke.Secim())
+    assert _sayac_hucresi(once, aday) == "2"
+    sonraki = gk.planla(
+        kind="OLAGANUSTU", first_meeting_at=gko.an(date(2026, 11, 12)), venue=ortak.YER
+    ).kurul
+    sonraki = gko.olaganustu_cagir(sonraki)
+    gk.ilan_et(sonraki, kanallar=gko.kanallar(date(2026, 10, 27)))
+    sonraki = ortak.birinci_toplantida_yapilmis(GeneralAssembly.objects.get(pk=sonraki.pk))
+    yeni_aday = gko.aday(sonraki, kisi=aday.person)
+    gko.secim(sonraki, "SECIM_YK", [yeni_aday], gerekce=gko.GEREKCE)
+    assert OrganMembership.objects.get(pk=yeni_aday.pk).status == "SECILDI"
+    sonra, _ = gke.e09_belgesi(GeneralAssembly.objects.get(pk=kurul.pk), gke.Secim())
+    assert _sayac_hucresi(sonra, aday) == "2"
+    yeni, _ = gke.e09_belgesi(GeneralAssembly.objects.get(pk=sonraki.pk), gke.Secim())
+    assert _sayac_hucresi(yeni, yeni_aday) == "2"
+
+
+def test_e10_ikinci_toplantida_yapilan_genel_kurul() -> None:
+    """Saha 8 (pilot akışı): ikinci toplantıda yapılan genel kurulun tutanağı birinci toplantının
+    sonucunu (yeter sayı sağlanamadı ve katılanı) ve "çoğunluk aranmaz" satırını basar; gün ve tarih
+    ikinci toplantınındır (U6)."""
+    kurul = ortak.ikinci_toplantida_yapilmis(
+        ortak.birinci_toplantida_yetersiz(ortak.ilanli(ortak.kurulum(gke.KOL_YK)))
+    )
+    kurul = ortak.tutanakli(kurul)
+    belge, _ = gke.e10_belgesi(kurul, gke.Secim())
+    bilgi = {s[0]: s[1] for s in _bolum(belge, gke.E10_BOLUMLER[0])}
+    assert bilgi[gke.SATIR_TOPLANTI] == "İkinci toplantı"
+    assert bilgi[gke.SATIR_BIRINCI_SONUCU] == gke.BIRINCI_SONUCU_DEGERI.format(
+        an="20.10.2026 10:00", katilan=10
+    )
+    assert bilgi[gke.SATIR_YETER_SAYI] == gke.COGUNLUK_ARANMAZ_DEGERI
+    assert bilgi[gke.SATIR_KATILAN] == "20"
+    imza = next(b for b in belge.bloklar if isinstance(b, evrak.Imza))
+    assert imza.tarih == "05.11.2026"
+
+
+def test_e10_gundemden_cikarilan_madde_ve_sonucu_girilmemis_madde() -> None:
+    """Md. 9/4: oylamayla çıkarılan madde tutanakta "gündemden çıkarıldı" sonucuyla durur, oylaması
+    gündem değişikliği tablosundadır; sonucu girilmemiş madde "………" ve basım uyarısıdır."""
+    kurul = ortak.birinci_toplantida_yapilmis(ortak.ilanli(ortak.kurulum(gke.KOL_YK)))
+    gk.gundemden_madde_cikar(
+        gko.madde(kurul, "ONERILER"), change_votes_for=40, change_votes_against=5
+    )
+    belge, uyarilar = gke.e10_belgesi(GeneralAssembly.objects.get(pk=kurul.pk), gke.Secim())
+    sonuclar = {s[1]: s[2] for s in _bolum(belge, gke.E10_BOLUMLER[2]) if len(s) == 3}
+    oneriler = gko.madde(kurul, "ONERILER").title
+    assert sonuclar[oneriler] == gke.SONUC_CIKARILDI
+    assert sonuclar["Kapanış"] == gke.BOS_YER and gke.UYARI_SONUC_YOK in uyarilar
+    assert _bolum(belge, gke.GUNDEM_DEGISIKLIGI_BOLUMU) == [
+        (oneriler, gke.DEGISIKLIK_CIKARILDI, "kabul 40, ret 5")
+    ]
+
+
+@pytest.mark.parametrize("oylar", [(60, 5), (5, 60)])
+def test_oylanan_tahmini_butce_e10_ve_e13_te_ayni_gorusuldu(oylar: tuple[int, int]) -> None:
+    """Plan F2 §7 U22 (md. 11/1-d "görüşmek"): tahmini bütçe yalnız "görüşüldü" ve ekin adıdır; oyla
+    sonuç girilmiş (kabul ya da ret) bütçe de E10'da ve E13'te aynı biçimde basılır, E13 "sonuç
+    girilmemiş" uyarısı vermez (tek kaynak, tasarım §9.1-3)."""
+    kurul = ortak.birinci_toplantida_yapilmis(ortak.ilanli(ortak.kurulum(gke.KOL_YK)))
+    butce = gko.madde(kurul, "TAHMINI_BUTCE")
+    gk.karar_sonucu_yaz(butce, votes_for=oylar[0], votes_against=oylar[1])
+    assert gko.madde(kurul, "TAHMINI_BUTCE").result in ("KABUL", "RET")
+    kurul = GeneralAssembly.objects.get(pk=kurul.pk)
+    e10, _ = gke.e10_belgesi(kurul, gke.Secim())
+    sonuclar = {s[1]: s[2] for s in _bolum(e10, gke.E10_BOLUMLER[2]) if len(s) == 3}
+    assert sonuclar[butce.title] == gke.SONUC_BUTCE
+    e13, uyarilar = gke.e13_belgesi(kurul, gke.Secim())
+    assert _iki_sutun(e13, gke.E13_BOLUMLER[0])[gke.SATIR_BUTCE] == gke.SONUC_BUTCE
+    assert gke.UYARI_SONUC_YOK not in uyarilar
+
+
+def test_e10_iki_kurulun_ibrasi_gorusulmedi() -> None:
+    """İki kurulun ibrası da "görüşülmedi" kaydedilince (`ibra_yaz`, maddenin sonucu boş kalır) ibra
+    maddesinin sonucu kurulun ibra alanlarındandır: C bölümünde "görüşülmedi", D bölümünde iki satır
+    "Görüşülmedi"; "sonuç girilmemiş" ya da "ibra sonucu girilmemiş" uyarısı yok."""
+    kurul = ortak.birinci_toplantida_yapilmis(ortak.ilanli(ortak.kurulum(gke.KOL_YK)))
+    ibra = gko.madde(kurul, "IBRA")
+    gk.ibra_yaz(ibra, yk=None, dk=None)
+    belge, uyarilar = gke.e10_belgesi(GeneralAssembly.objects.get(pk=kurul.pk), gke.Secim())
+    sonuclar = {s[1]: s[2] for s in _bolum(belge, gke.E10_BOLUMLER[2]) if len(s) == 3}
+    assert sonuclar[ibra.title] == gke.SONUC_IBRA_GORUSULMEDI
+    gorusulmedi = str(Discharge.GORUSULMEDI.label)
+    assert _bolum(belge, gke.E10_BOLUMLER[3]) == [
+        (gke.KURUL_YK, gorusulmedi, "", "", ""),
+        (gke.KURUL_DK, gorusulmedi, "", "", ""),
+    ]
+    assert gke.UYARI_IBRA_YOK not in uyarilar
+
+
+def test_e10_gundemden_cikarilan_raporun_okuyani_basilmaz() -> None:
+    """Md. 9/4: oylamayla gündemden çıkarılan raporun (ve bütçenin) "okuyan/sunan" satırı basılmaz,
+    tutanak bilgisi uyarısı da onun için çıkmaz; gündemde kalan raporun satırı basılır."""
+    kurul = ortak.birinci_toplantida_yapilmis(ortak.ilanli(ortak.kurulum(gke.KOL_YK)))
+    for tur in ("DK_RAPORU", "TAHMINI_BUTCE"):
+        gk.gundemden_madde_cikar(gko.madde(kurul, tur), change_votes_for=40, change_votes_against=5)
+    gk.tutanak_bilgilerini_yaz(kurul, yk_report_reader=o.kisi())
+    belge, uyarilar = gke.e10_belgesi(GeneralAssembly.objects.get(pk=kurul.pk), gke.Secim())
+    okuyanlar = {s[0] for s in _bolum(belge, gke.E10_BOLUMLER[2]) if len(s) == 2}
+    assert okuyanlar == {gke.SATIR_YK_RAPORU}
+    assert gke.SATIR_DK_RAPORU_OKUYAN not in _akis(belge)
+    assert gke.SATIR_BUTCEYI_SUNAN not in _akis(belge)
+
+
+def test_e09_e10_e13_eksik_veri_bos_ve_basim_uyarisi() -> None:
+    """Altın kural 3 (henüz girilmemiş veri eksiktir): adayı, ibrası, seçimi ve tutanak bilgisi
+    girilmemiş yapılmış genel kurulda E09'un aday satırı, E10'un ibra, seçim, okuyan ve teslim günü
+    yerleri, E13'ün ibra ve seçilen yerleri "………" ve basım uyarısıdır. Reddedilen karar oylarıyla
+    basılır (md. 9/2); gündem değişmediyse "değişiklik yapılmadı" paragrafı."""
+    kurul = ortak.birinci_toplantida_yapilmis(ortak.ilanli(ortak.kurulum(gke.KOL_YK)))
+    yetki = gko.madde(kurul, "YETKILENDIRME")
+    gk.karar_sonucu_yaz(yetki, votes_for=5, votes_against=60)
+    kurul = GeneralAssembly.objects.get(pk=kurul.pk)
+    e09, uyarilar = gke.e09_belgesi(kurul, gke.Secim())
+    assert _bolum(e09, gke.YK_ADAY_BOLUMU) == [(gke.BOS_YER,) * 5]
+    assert gke.UYARI_ADAY_YOK in uyarilar
+    e10, uyarilar = gke.e10_belgesi(kurul, gke.Secim())
+    assert {gke.UYARI_IBRA_YOK, gke.UYARI_SECIM_YOK, gke.UYARI_TUTANAK_BILGISI_YOK} <= set(uyarilar)
+    sonuclar = {s[1]: s[2] for s in _bolum(e10, gke.E10_BOLUMLER[2]) if len(s) == 3}
+    assert sonuclar[yetki.title] == gke.SONUC_RET.format(oylar="kabul 5, ret 60")
+    assert sonuclar[gko.madde(kurul, "IBRA").title] == gke.BOS_YER
+    okuyanlar = {s[0]: s[1] for s in _bolum(e10, gke.E10_BOLUMLER[2]) if len(s) == 2}
+    assert okuyanlar == {
+        gke.SATIR_YK_RAPORU: gke.BOS_YER,
+        gke.SATIR_DK_RAPORU_OKUYAN: gke.BOS_YER,
+        gke.SATIR_BUTCEYI_SUNAN: gke.BOS_YER,
+    }
+    assert evrak.Paragraf(gke.GUNDEM_DEGISMEDI) in e10.bloklar
+    assert _bolum(e10, gke.E10_BOLUMLER[3]) == [
+        (gke.KURUL_YK, gke.BOS_YER, "", "", ""),
+        (gke.KURUL_DK, gke.BOS_YER, "", "", ""),
+    ]
+    assert (gke.BOS_YER, gke.BOS_YER, gke.BOS_YER, "", "") in _bolum(e10, gke.E10_BOLUMLER[4])
+    assert _iki_sutun(e10, gke.E10_BOLUMLER[5]) == {gke.SATIR_TESLIM: gke.BOS_YER}
+    e13, uyarilar = gke.e13_belgesi(kurul, gke.Secim())
+    assert {gke.UYARI_IBRA_YOK, gke.UYARI_SECIM_YOK} <= set(uyarilar)
+    sonuc = _iki_sutun(e13, gke.E13_BOLUMLER[0])
+    assert sonuc[gke.SATIR_YK_IBRASI] == sonuc[gke.SATIR_DK_IBRASI] == gke.BOS_YER
+    assert _bolum(e13, gke.E13_BOLUMLER[1]) == [(gke.BOS_YER, gke.BOS_YER, gke.BOS_YER, "")]
+
+
+def test_bozuk_sonuc_metni_ve_evrak_listesi_ham_basilmaz() -> None:
+    """Gündem maddesinin sonuç metni ve ibra edilmeyen muhasebe evrakının listesi program dışından
+    bozulmuşsa (çözülemeyen şifreli değer) ham değer basılmaz: E10'da sonuç metinsiz, E11'de liste
+    "………"; ikisi de basım uyarısıyla."""
+    from django.db import connection
+
+    kurul = ortak.yapilmis_tutanakli(ibra_edilmedi=True)
+    yetki = gko.madde(kurul, "YETKILENDIRME")
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "UPDATE oab_agendaitem SET result_text = %s WHERE id = %s", ["UYDURMA HAM", yetki.pk]
+        )
+        cursor.execute(
+            "UPDATE oab_assemblyminutes SET unaudited_documents_note = %s WHERE assembly_id = %s",
+            ["UYDURMA HAM", kurul.pk],
+        )
+    kurul = GeneralAssembly.objects.get(pk=kurul.pk)
+    e10, uyarilar = gke.e10_belgesi(kurul, gke.Secim())
+    sonuclar = {s[1]: s[2] for s in _bolum(e10, gke.E10_BOLUMLER[2]) if len(s) == 3}
+    assert sonuclar[yetki.title] == gke.SONUC_KABUL.format(oylar="kabul 60, ret 5")
+    assert gke.UYARI_SONUC_METNI_OKUNAMADI in uyarilar
+    assert "UYDURMA HAM" not in _akis(e10)
+    e11, uyarilar = gke.e11_belgesi(kurul, gke.Secim())
+    assert _bolum(e11, gke.E11_LISTE_BOLUMU) == [(gke.BOS_YER, gke.BOS_YER)]
+    assert gke.UYARI_EVRAK_LISTESI_OKUNAMADI in uyarilar
+    assert "UYDURMA HAM" not in _akis(e11)
+
+
+#: Olağanüstü genel kurulun ibralı gündemi (md. 14/5 çağrısı ya da müdürün md. 9/6 çağrısı; seçimli ve
+#: seçimsiz).
+_IBRA_MADDESI = gk.GundemMaddesi(title="Yönetim kurulunun ibrası", kind="IBRA")
+_SECIM_MADDESI = gk.GundemMaddesi(title="Yönetim kurulu asıl ve yedek üye seçimi", kind="SECIM_YK")
+
+
+@pytest.mark.parametrize("secimli", [True, False])
+def test_olaganustu_genel_kurulda_ibra_edilmeyen_evrak_teslimi(secimli: bool) -> None:
+    """Kullanıcı kararı S10 (a): olağanüstü genel kurul Denetleme Kuruluna seçim yapmaz; md. 11/1-ç
+    teslimi görevdeki Denetleme Kuruluna yapılır, yönetim kurulu seçilmediyse görevdeki yönetim
+    kuruluna. E10'un paragrafı, E11'in giriş cümlesi ve unvanları, E12'nin metni aynı kaynaktandır
+    (`TESLIM_ALANLAR`). Seçimsiz genel kurulda E12 ve E13 genel kurul günü görevdeki başkanı ve
+    sekreteri basar, "görev bölümü yapılmadı" uyarısı vermez (U21 yalnız seçimde)."""
+    gundem = (
+        gk.GundemMaddesi(title="Açılış ve yoklama", kind="ACILIS"),
+        _IBRA_MADDESI,
+        *((_SECIM_MADDESI,) if secimli else ()),
+    )
+    kurul = ortak.birinci_toplantida_yapilmis(
+        ortak.ilanli(ortak.kurulum(gke.KOL_MUDUR_9_6, gundem=gundem))
+    )
+    gk.ibra_yaz(
+        gko.madde(kurul, "IBRA"),
+        yk=gko.IBRA_EDILMEDI,
+        dk=gko.IBRA_EDILDI,
+        unaudited_documents_note=ortak.IBRA_EDILMEYEN_EVRAK,
+    )
+    if secimli:
+        gko.secim(kurul, "SECIM_YK", [gko.aday(kurul) for _ in range(5)], gerekce=gko.GEREKCE)
+    kurul = GeneralAssembly.objects.get(pk=kurul.pk)
+    teslim_alan = gke.TESLIM_ALANLAR[(secimli, False)]
+    e10, _ = gke.e10_belgesi(kurul, gke.Secim())
+    assert (
+        evrak.Paragraf(gke.IBRA_EDILMEDI_PARAGRAFI.format(teslim_alan=teslim_alan)) in e10.bloklar
+    )
+    e11, _ = gke.e11_belgesi(kurul, gke.Secim())
+    assert teslim_alan in _akis(e11) and "yeni Denetleme" not in _akis(e11)
+    assert _imzalar(e11)[2:] == [
+        ("", gke.UNVAN_TESLIM_ALAN_YK if secimli else gke.UNVAN_TESLIM_ALAN_GOREVDEKI_YK),
+        ("", gke.UNVAN_TESLIM_ALAN_DK),
+    ]
+    e12, e12_uyarilari = gke.e12_belgesi(kurul, gke.Secim())
+    assert teslim_alan in _akis(e12)
+    e13, e13_uyarilari = gke.e13_belgesi(kurul, gke.Secim())
+    if secimli:
+        assert gke.UYARI_YENI_BASKAN_YOK in e12_uyarilari
+        assert {gke.UYARI_YENI_BASKAN_YOK, gke.UYARI_YENI_SEKRETER_YOK} <= set(e13_uyarilari)
+        return
+    assert kurul.term is not None
+    gorevliler = {
+        u.role: evrak.ad_soyad(u.person.first_name, u.person.last_name)
+        for u in selectors.gorevdeki_asillar(kurul.term, "YK")
+        if u.role in ("BASKAN", "SEKRETER")
+    }
+    assert _imzalar(e12)[0] == (gorevliler["BASKAN"], gke.UNVAN_YK_ADINA_BASKAN)
+    assert _imzalar(e13)[:2] == [
+        (gorevliler["BASKAN"], gke.UNVAN_BIRLIK_BASKANI),
+        (gorevliler["SEKRETER"], gke.UNVAN_SEKRETER),
+    ]
+    for uyari in (gke.UYARI_YENI_BASKAN_YOK, gke.UYARI_YENI_SEKRETER_YOK):
+        assert uyari not in e12_uyarilari and uyari not in e13_uyarilari
+
+
+def test_e11_evrak_listesi_girilmemisse_bos_ve_uyari() -> None:
+    """İbra edilmeyen muhasebe evrakının listesi tutanağa girilmemişse liste "………" ve basım uyarısı
+    (eksik; gerekçe istemez)."""
+    kurul = ortak.tutanakli(
+        ortak.birinci_toplantida_yapilmis(ortak.ilanli(ortak.kurulum(gke.KOL_YK)))
+    )
+    gk.ibra_yaz(gko.madde(kurul, "IBRA"), yk=gko.IBRA_EDILMEDI, dk=gko.IBRA_EDILDI)
+    belge, uyarilar = gke.e11_belgesi(GeneralAssembly.objects.get(pk=kurul.pk), gke.Secim())
+    assert _bolum(belge, gke.E11_LISTE_BOLUMU) == [(gke.BOS_YER, gke.BOS_YER)]
+    assert gke.UYARI_EVRAK_LISTESI_YOK in uyarilar
+
+
+def test_e14_genel_kurul_planlanmadan_goreli_kantin_yoksa_arz_satiri_yok() -> None:
+    """E14: dönemi kapatacak genel kurul planlanmadıysa ilan ve ikinci toplantı satırları göreli metindir
+    (gün sayısı kural paketinden); kantin kiraya verilmiyorsa arz bedeli satırı yok, işletme biçimi
+    girilmemişse uyarı; okul planı girilmemişse yerleri "………" ve uyarı."""
+    donem = ortak.takvimli_donem(kantin="KANTIN_YOK")
+    belge, uyarilar = gke.e14_belgesi(donem, gke.Secim())
+    kurallar = {s[2]: s for s in _bolum(belge, gke.E14_BOLUMLER[0])}
+    assert kurallar["genel_kurul.ilan_en_az_gun"][0] == gke.ILAN_GORELI.format(
+        gun=kural("genel_kurul.ilan_en_az_gun")
+    )
+    assert kurallar["genel_kurul.ikinci_toplanti_en_gec_gun"][0] == gke.IKINCI_GORELI.format(
+        gun=kural("genel_kurul.ikinci_toplanti_en_gec_gun")
+    )
+    assert "arz_bedeli.sozlesme_vade_gunu" not in kurallar and uyarilar == ()
+    SchoolConfig.objects.filter(pk=SchoolConfig.SINGLETON_PK).update(canteen_mode="")
+    from apps.oab.models import OabTerm
+
+    OabTerm.objects.filter(pk=donem.pk).update(yk_meeting_day_rule="", dk_audit_plan_dates=[])
+    belge, uyarilar = gke.e14_belgesi(OabTerm.objects.get(pk=donem.pk), gke.Secim())
+    assert set(uyarilar) == {
+        gke.UYARI_KANTIN_BICIMI_YOK,
+        gke.UYARI_YK_TOPLANTISI_YOK,
+        gke.UYARI_DENETIM_PLANI_YOK,
+    }
+    plan = _bolum(belge, gke.E14_BOLUMLER[1])
+    assert (gke.BOS_YER, gke.IS_YK_TOPLANTISI, gke.KAYNAK_DONEM) in plan
+
+
+def test_e14_birlikce_isletmede_yalniz_yonetmelikteki_arz_son_gunu() -> None:
+    """Md. 17/1-b-1: birlikçe işletilen kantinde arz bedelini birlik üçer aylık dönemlerle izleyen
+    ayın son gününe kadar öder; E14 Yönetmelikteki son günü basar, sözleşmedeki son gün (EK-2 md. 7)
+    yalnız kiraya vermededir. Hangisinin basılacağı kuralın `kosul` alanındandır (D8)."""
+    donem = ortak.takvimli_donem(kantin="BIRLIKCE_ISLETILIYOR")
+    belge, uyarilar = gke.e14_belgesi(donem, gke.Secim())
+    kurallar = {s[2]: s for s in _bolum(belge, gke.E14_BOLUMLER[0])}
+    assert "arz_bedeli.sozlesme_vade_gunu" not in kurallar
+    assert kurallar["arz_bedeli.yonetmelik_vade_gunu"][:2] == (
+        gke.ARZ_GUNU.format(gun=kural("arz_bedeli.yonetmelik_vade_gunu")),
+        gke.IS_ARZ_YONETMELIK,
+    )
+    assert uyarilar == ()
+
+
+def test_e14_kural_kimlikleri_pakette_ve_kodda_sayi_yok() -> None:
+    """Plan F2 §4.1 E14 (D8): her süre kuralı satırının kimliği kural paketindedir; tarih ve gün sayıları
+    paketten okunur (paketteki değer değişirse satır değişir)."""
+    from apps.oab.kurallar.erisim import _paket
+
+    paket = _paket(None)
+    assert set(gke.E14_KURALLARI) <= set(paket.kayitlar)
+    donem = ortak.takvimli_donem()
+    belge, _ = gke.e14_belgesi(donem, gke.Secim())
+    satirlar = _bolum(belge, gke.E14_BOLUMLER[0])
+    assert {s[2] for s in satirlar} == set(gke.E14_KURALLARI)
+    assert all(s[3] for s in satirlar)
+
+
+def _genel_kurul_evraki_ii_metinleri() -> list[str]:
+    """10. adımın kullanıcıya görünen sabit metinleri (yer tutucular sözlükteki biçimiyle). E14'ün
+    satırlarındaki kural kimlikleri sözlük §2'nin istisnasıdır, sözlüğe ayrıca yazılmaz."""
+    g = gke
+    return [
+        *(tr_upper(g.BELGE_ADLARI[kod]) for kod in ("E09", "E10", "E11", "E13", "E14")),
+        g.GENEL_KURUL_YAPILMADI,
+        g.IBRA_EDILMEDIKCE_URETILMEZ,
+        g.MUHATAP_GECERSIZ,
+        g.E09_GIRIS,
+        g.YK_ADAY_BOLUMU,
+        g.DK_ADAY_BOLUMU,
+        *g.YK_ADAY_BASLIKLARI,
+        g.DK_OGRETMEN_BILGISI.format(asil="N", yedek="N"),
+        g.ASIL,
+        g.YEDEK,
+        g.E10_GIRIS.format(tur="<tür>"),
+        *g.E10_BOLUMLER,
+        g.SATIR_ILAN,
+        g.SATIR_BIRINCI_SONUCU,
+        g.BIRINCI_SONUCU_DEGERI.format(an="gg.aa.yyyy SS:dd", katilan="N"),
+        g.COGUNLUK_ARANMAZ_DEGERI,
+        g.SATIR_ACILIS,
+        g.ACILIS_DEGERI,
+        *g.SONUC_BASLIKLARI,
+        g.SONUC_KABUL.format(oylar="kabul N, ret N"),
+        g.SONUC_RET.format(oylar="kabul N, ret N"),
+        g.SONUC_GORUSULDU,
+        g.SONUC_CIKARILDI,
+        g.SONUC_IBRA,
+        g.SONUC_IBRA_GORUSULMEDI,
+        g.SONUC_SECIM,
+        g.SONUC_BUTCE,
+        g.SONUC_METNI.format(sonuc="<sonuç>", metin="<sonuç metni>"),
+        g.OYLAR_DEGERI.format(kabul="N", ret="N"),
+        g.SALONDAKI_DEGERI.format(salon="N"),
+        g.GUNDEM_DEGISIKLIGI_BOLUMU,
+        *g.DEGISIKLIK_BASLIKLARI,
+        g.DEGISIKLIK_EKLENDI,
+        g.DEGISIKLIK_CIKARILDI,
+        g.GUNDEM_DEGISMEDI,
+        g.SATIR_YK_RAPORU,
+        g.SATIR_DK_RAPORU_OKUYAN,
+        g.SATIR_BUTCEYI_SUNAN,
+        *g.IBRA_BASLIKLARI,
+        g.KURUL_YK,
+        g.KURUL_DK,
+        g.IBRA_EDILMEDI_PARAGRAFI.format(teslim_alan="<teslim alan>"),
+        *g.TESLIM_ALANLAR.values(),
+        g.SECIM_YK_ALT,
+        g.SECIM_DK_ALT,
+        *g.SECIM_BASLIKLARI,
+        g.SATIR_TESLIM,
+        g.E11_GIRIS.format(gun="gg.aa.yyyy", tur="<tür>", teslim_alan="<teslim alan>"),
+        g.SATIR_YK_IBRA_OYLARI,
+        g.E11_LISTE_BOLUMU,
+        *g.E11_LISTE_BASLIKLARI,
+        g.UNVAN_TESLIM_ALAN_YK,
+        g.UNVAN_TESLIM_ALAN_GOREVDEKI_YK,
+        g.UNVAN_TESLIM_ALAN_YENI_DK,
+        g.UNVAN_TESLIM_ALAN_DK,
+        g.E12_KONU,
+        *(
+            metin.format(gun="gg.aa.yyyy", tur="<tür>", teslim_alan="<teslim alan>")
+            for metin in g.E12_METIN
+        ),
+        g.MUHATAP_YERI,
+        g.E13_GIRIS.format(gun="gg.aa.yyyy", tur="<tür>"),
+        *g.E13_BOLUMLER,
+        g.SATIR_YK_IBRASI,
+        g.SATIR_DK_IBRASI,
+        g.SATIR_BUTCE,
+        *g.UYE_BASLIKLARI,
+        *g.SONRAKI_BASLIKLARI,
+        g.IS_YK_GOREV_BOLUMU,
+        g.IS_DK_GOREV_BOLUMU,
+        g.IS_BANKA,
+        g.IS_TEFBIS,
+        g.IS_MEM_YAZISI,
+        g.SON_GUN_DEGERI.format(gun="gg.aa.yyyy"),
+        g.GOREV_BOLUMUNDEN_SONRA,
+        g.GENEL_KURULDAN_SONRA,
+        g.E14_GIRIS,
+        *g.E14_BOLUMLER,
+        *g.KURAL_BASLIKLARI,
+        *g.PLAN_BASLIKLARI,
+        g.IS_ILAN,
+        g.IS_OLAGAN_GK,
+        g.IS_IKINCI_TOPLANTI,
+        g.IS_ARZ_SOZLESME,
+        g.IS_ARZ_YONETMELIK,
+        g.ILAN_GORELI.format(gun="N"),
+        g.IKINCI_GORELI.format(gun="N"),
+        g.ARZ_GUNU.format(gun="N"),
+        g.IS_DERS_YILI_BASI,
+        g.IS_DERS_YILI_SONU,
+        g.IS_DERS_DONEMI.format(sira="N"),
+        g.DONEM_ARALIGI.format(bas="gg.aa.yyyy", son="gg.aa.yyyy"),
+        g.IS_YK_TOPLANTISI,
+        g.IS_DK_DENETIMI.format(sira="N"),
+        g.KAYNAK_DERS_YILI,
+        g.KAYNAK_DONEM,
+        evrak.TFB,
+        g.UYARI_ADAY_YOK,
+        g.UYARI_SAYAC_BILINMIYOR,
+        g.UYARI_SONUC_YOK,
+        g.UYARI_SONUC_METNI_OKUNAMADI,
+        g.UYARI_IBRA_YOK,
+        g.UYARI_SECIM_YOK,
+        g.UYARI_TUTANAK_BILGISI_YOK,
+        g.UYARI_EVRAK_LISTESI_YOK,
+        g.UYARI_EVRAK_LISTESI_OKUNAMADI,
+        g.UYARI_SAYI,
+        g.UYARI_MUHATAP_BOS,
+        g.UYARI_MUHATAP_ILCE_YOK,
+        g.UYARI_YENI_BASKAN_YOK,
+        g.UYARI_YENI_SEKRETER_YOK,
+        g.UYARI_DONEM_BASLANGICI_YOK,
+        g.UYARI_KURAL_DEGERI_YOK,
+        g.UYARI_YK_TOPLANTISI_YOK,
+        g.UYARI_DENETIM_PLANI_YOK,
+        g.UYARI_KANTIN_BICIMI_YOK,
+    ]
+
+
+def test_genel_kurul_evraki_ii_metinleri_sozlukte_yazilidir() -> None:
+    """10. adımın belge başlıkları, bölümleri, satırları, unvanları, iletileri ve basım uyarıları
+    sözlükte (sözlük §1 "Genel kurul evrakı (F2)"); TFB konum cümlesi tasarım §9.2'deki gibi."""
+    sozluk = _depo_dosyasi("docs/sozluk.md")
+    metinler = _genel_kurul_evraki_ii_metinleri()
+    assert [m for m in dict.fromkeys(metinler) if f'**"{m}"**' not in sozluk] == []

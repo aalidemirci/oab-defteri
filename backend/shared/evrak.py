@@ -62,6 +62,15 @@ F2 EKLERİ (plan F2 §4.2, 8. adım):
 - **Çiziciler:** Word ve PDF'in yanında Excel (`xlsx_ciz`; openpyxl'e yalnız `shared.xlsx`
   kapısından) ve tek dosyalık, dış kaynaksız web sayfası (`web_html_ciz`; E06'nın internet sayfası).
   Web sayfası WeasyPrint baskı şablonunun yerine kullanılmaz; ikisi de aynı içerik modelinden çizilir.
+- **Resmî yazının metni ve imzası** (plan F2 10. adım; E12): F1c'nin `Paragraf` ve `Imza` blokları
+  değişmez (kayıtlı içerikleri aynı özeti vermeli), resmî yazı iki yeni blok kullanır. Metin paragrafı
+  (`MetinParagrafi`, RYUE md. 16/4) ilk satırında 1,25 cm içeriden başlar, iki yana yaslıdır,
+  paragraflar arasında boşluk yoktur. İmza bölümü (`ResmiImza`, md. 17/1, 17/11) metinden iki satır
+  boşlukla, yazı alanını ikiye bölen iki hücrede çizilir: tek imza yazı alanının en sağında (sağ
+  yarıda) ortalanır (md. 17/1); iki imzada üst unvan sağdadır (md. 17/11, birinci cümle; kurucu
+  sahipleri soldan sağa verir, üst unvan sonda). İkiden çok imza bu blokta yoktur (md. 17/11'in
+  ikinci cümlesi sıralamayı tersine çevirir; onu gerektiren belgenin fazında eklenir).
+- **Konum cümlesi TFB** (tasarım §9.2; md. 23/5): `TFB` sabiti BİREBİR (F2'de E13).
 """
 
 from __future__ import annotations
@@ -95,6 +104,11 @@ KDT = (
 #: KDT taşıyan belgenin başlığındaki ibare (tasarım §9.2); "deftere işlendi" işaretinden sonra da
 #: kalkmaz.
 TASLAK_IBARESI = "TASLAK — karar defterine geçirilecek metin"
+#: TEFBİS konum cümlesi (tasarım §9.2 TFB; Yönetmelik md. 23/5). BİREBİR.
+TFB = (
+    "Birliğin gelir ve gider kayıtları ile diğer mali işlemleri TEFBİS'e okul idaresince "
+    "kaydedilir; bu belge TEFBİS kaydının yerine geçmez."
+)
 
 
 @dataclass(frozen=True)
@@ -323,6 +337,43 @@ class SayfaSonu:
     """Sonraki blok yeni sayfada başlar (E08'in sınıf sayfaları). Metin taşımaz."""
 
 
+#: Resmî yazının metin paragrafının ilk satır girintisi (cm; RYUE md. 16/4 "1,25 cm içeriden").
+METIN_GIRINTISI_CM = 1.25
+#: Resmî yazının imza bölümünün en çok imza sayısı (md. 17/1 tek, 17/11 birinci cümle iki imza).
+RESMI_IMZA_EN_COK = 2
+
+
+@dataclass(frozen=True)
+class MetinParagrafi:
+    """Resmî yazının metin paragrafı (modül başlığı "F2 ekleri"; RYUE md. 16/4): ilk satırı 1,25 cm
+    içeriden başlar, iki yana yaslıdır; paragraflar arasında satır boşluğu yoktur."""
+
+    metin: str
+
+
+@dataclass(frozen=True)
+class ResmiImza:
+    """Resmî yazının imza bölümü (RYUE md. 17/1, 17/11; modül başlığı "F2 ekleri"). Sahipler soldan
+    sağa verilir: iki imzada üst unvan sondadır (sağda, md. 17/11). Tarih satırı yoktur (tarih yazının
+    başındadır, md. 12). En az bir, en çok iki imza."""
+
+    sahipler: tuple[ImzaSahibi, ...]
+
+    def __post_init__(self) -> None:
+        if not 1 <= len(self.sahipler) <= RESMI_IMZA_EN_COK:
+            raise ValueError(
+                "Resmî yazının imza bölümü bir ya da iki imza taşır (RYUE md. 17/1, 17/11)."
+            )
+
+
+def resmi_imza_hucreleri(blok: ResmiImza) -> tuple[ImzaSahibi | None, ImzaSahibi | None]:
+    """İmza bölümünün iki hücresi (yazı alanının sol ve sağ yarısı): tek imza sağ yarıdadır (md.
+    17/1 "yazı alanının en sağında ortalanarak"), iki imzada üst unvan sağdadır (md. 17/11)."""
+    if len(blok.sahipler) == 1:
+        return None, blok.sahipler[0]
+    return blok.sahipler[0], blok.sahipler[1]
+
+
 Blok = (
     Baslik
     | AltBaslik
@@ -334,6 +385,8 @@ Blok = (
     | ResmiYazi
     | Ekler
     | SayfaSonu
+    | MetinParagrafi
+    | ResmiImza
 )
 
 _BLOK_TURLERI: dict[str, type[Any]] = {
@@ -347,6 +400,8 @@ _BLOK_TURLERI: dict[str, type[Any]] = {
     "resmi_yazi": ResmiYazi,
     "ekler": Ekler,
     "sayfa_sonu": SayfaSonu,
+    "metin_paragrafi": MetinParagrafi,
+    "resmi_imza": ResmiImza,
 }
 _TUR_ADI = {tur: ad for ad, tur in _BLOK_TURLERI.items()}
 
@@ -381,7 +436,7 @@ class Belge:
                     "Resmî yazının başı (sayı, tarih, konu, muhatap) belgenin ilk bloğudur "
                     "(RYUE md. 11/2)."
                 )
-            if isinstance(blok, Ekler) and not isinstance(onceki, Imza):
+            if isinstance(blok, Ekler) and not isinstance(onceki, Imza | ResmiImza):
                 raise ValueError(
                     "Ek bölümü imza bölümünden sonra gelir (RYUE md. 18/1); programda imza "
                     "bloğunun hemen ardındadır."
@@ -499,6 +554,13 @@ def _blok_coz(veri: Any) -> Blok:
         )
     if tur is Ekler:
         return Ekler(ekler=_metinler(alanlar["ekler"]))
+    if tur is ResmiImza:
+        sahipler = alanlar["sahipler"]
+        if not isinstance(sahipler, list):
+            raise BelgeCozulemedi()
+        return ResmiImza(
+            sahipler=tuple(ImzaSahibi(**_metin_alanlari(ImzaSahibi, sahip)) for sahip in sahipler)
+        )
     blok: Blok = tur(**_metin_alanlari(tur, alanlar))
     return blok
 
@@ -547,7 +609,7 @@ def metin_akisi(belge: Belge) -> list[str]:
             akis += list(ek_satirlari(blok))
         elif isinstance(blok, Baslik):
             akis += [blok.metin, blok.alt]
-        elif isinstance(blok, AltBaslik | Paragraf | KonumCumlesi | Dipnot):
+        elif isinstance(blok, AltBaslik | Paragraf | KonumCumlesi | Dipnot | MetinParagrafi):
             akis.append(blok.metin)
         elif isinstance(blok, Tablo):
             akis += list(blok.basliklar)
@@ -555,6 +617,9 @@ def metin_akisi(belge: Belge) -> list[str]:
                 akis += list(satir)
         elif isinstance(blok, Imza):
             akis.append(blok.tarih)
+            for sahip in blok.sahipler:
+                akis += [sahip.ad, sahip.gorev]
+        elif isinstance(blok, ResmiImza):
             for sahip in blok.sahipler:
                 akis += [sahip.ad, sahip.gorev]
     return [parca for parca in akis if parca]
@@ -606,6 +671,8 @@ def _html_ogesi(blok: Blok, *, ilk: bool) -> dict[str, Any]:
         oge["muhatap"] = muhatap_satirlari(blok)
     elif isinstance(blok, Ekler):
         oge["satirlar"] = ek_satirlari(blok)
+    elif isinstance(blok, ResmiImza):
+        oge["hucreler"] = resmi_imza_hucreleri(blok)
     return oge
 
 
@@ -639,6 +706,13 @@ def docx_ciz(belge: Belge) -> bytes:
             cizici.ekler(d, ek_satirlari(blok))
         elif isinstance(blok, SayfaSonu):
             cizici.sayfa_sonu(d)
+        elif isinstance(blok, MetinParagrafi):
+            cizici.metin_paragrafi(d, blok.metin, girinti_cm=METIN_GIRINTISI_CM)
+        elif isinstance(blok, ResmiImza):
+            cizici.resmi_imza(
+                d,
+                [None if s is None else (s.ad, s.gorev) for s in resmi_imza_hucreleri(blok)],
+            )
         elif isinstance(blok, Baslik):
             cizici.ortali_satir(d, blok.metin, kalin=True)
             if blok.alt:
@@ -706,8 +780,10 @@ def xlsx_ciz(belge: Belge) -> bytes:
                 k.ortali_satir(blok.alt, punto=10)
         elif isinstance(blok, AltBaslik):
             k.sola_satir(blok.metin, kalin=True)
-        elif isinstance(blok, Paragraf):
+        elif isinstance(blok, Paragraf | MetinParagrafi):
             k.paragraf(blok.metin)
+        elif isinstance(blok, ResmiImza):
+            k.imza("", [(sahip.ad, sahip.gorev) for sahip in blok.sahipler])
         elif isinstance(blok, KonumCumlesi):
             k.paragraf(blok.metin, punto=cizici.KONUM_PUNTO)
         elif isinstance(blok, Tablo):
@@ -737,6 +813,8 @@ WEB_BICEMI = (
     ".alt{text-align:center;margin:0 0 .75rem}"
     "h2{font-size:1rem;margin:1rem 0 .25rem}"
     "p{margin:.5rem 0}.govde{text-align:justify}"
+    ".girintili{text-indent:1.25cm;margin:0}"
+    ".resmi-imza{display:grid;grid-template-columns:1fr 1fr;margin-top:2rem}"
     ".tablo{overflow-x:auto}"
     "table{border-collapse:collapse;width:100%;table-layout:fixed;margin:.5rem 0}"
     "th,td{border:1px solid #9ca3af;padding:.25rem .4rem;text-align:left;vertical-align:top;"
@@ -802,6 +880,16 @@ def web_html_ciz(belge: Belge) -> str:
             parcalar.append(f"<h2>{e(blok.metin)}</h2>")
         elif isinstance(blok, Paragraf):
             parcalar.append(p(blok.metin, "govde"))
+        elif isinstance(blok, MetinParagrafi):
+            parcalar.append(p(blok.metin, "govde girintili"))
+        elif isinstance(blok, ResmiImza):
+            hucreler = "".join(
+                '<div class="sahip"></div>'
+                if sahip is None
+                else f'<div class="sahip">{p(sahip.ad, "ad")}{p(sahip.gorev, "gorev")}</div>'
+                for sahip in resmi_imza_hucreleri(blok)
+            )
+            parcalar.append(f'<div class="imza resmi-imza">{hucreler}</div>')
         elif isinstance(blok, KonumCumlesi):
             parcalar.append(p(blok.metin, "konum"))
         elif isinstance(blok, Tablo):
@@ -889,8 +977,8 @@ def ornek_resmi_yazi() -> Belge:
     """Resmî yazı bloğunun ve ek bölümünün örneği (çizici testleri). Adlar UYDURMADIR.
 
     Okul antedi (RYUE md. 10/3), "Sayı:" ve tarih aynı satırda, konu, iki satırlı muhatap (kullanıcı
-    kararı S11 (a): ilçe millî eğitim müdürlüğüne kaymakamlık üzerinden), metin, "Ad SOYAD" imza ve
-    iki ek.
+    kararı S11 (a): ilçe millî eğitim müdürlüğüne kaymakamlık üzerinden), girintili metin paragrafları
+    (md. 16/4), "Ad SOYAD" imzalı iki imzalı imza bölümü (üst unvan sağda, md. 17/11) ve iki ek.
     """
     from shared.letterhead import MEM_ILCE, mem_muhatabi
 
@@ -906,11 +994,11 @@ def ornek_resmi_yazi() -> Belge:
                 muhatap=muhatap,
                 birim=birim,
             ),
-            Paragraf(
+            MetinParagrafi(
                 f"Türkçe örnek: {TURKCE_ORNEK}. Bu yazı evrak hattının resmî yazı bloğunu sınar."
             ),
-            Paragraf("Bilgilerinizi ve gereğini arz ederim."),
-            Imza(
+            MetinParagrafi("Bilgilerinizi ve gereğini arz ederim."),
+            ResmiImza(
                 sahipler=(
                     ImzaSahibi(ad_soyad("ayşe", "örnek"), "Birlik Başkanı"),
                     ImzaSahibi(ad_soyad("İsmail", "Deneme"), "Okul Müdürü"),

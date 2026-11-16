@@ -26,6 +26,9 @@ Sabitlenen biçim kararları (tasarım §9.1-4, §9.1-8; iskelet envanteri §7.2
 - **Resmî yazı başı ve ek bölümü** (plan F2 §4.2; RYUE md. 11-14, 18): girintisiz, hücre iç
   boşluğu sıfır çerçevesiz ızgara ve boş satırlar (`resmi_yazi_basi`, `ekler`); sayfa sonu Word'ün
   sayfa sonu karakteridir (`sayfa_sonu`).
+- **Resmî yazının metni ve imzası** (plan F2 10. adım; RYUE md. 16/4, 17/1, 17/11): metin
+  paragrafı ilk satırında 1,25 cm içeriden, boşluksuz (`metin_paragrafi`); imza bölümü yazı alanını
+  ikiye bölen çerçevesiz iki hücre, tek imza sağ yarıda (`resmi_imza`).
 
 python-docx tembel içe aktarılır: modül içe aktarılınca lxml yüklenmesin.
 """
@@ -365,6 +368,49 @@ def ekler(belge: DocxDocument, satirlar: Sequence[str]) -> None:
         p = belge.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.LEFT
         _calistir(p, metin)
+
+
+def metin_paragrafi(belge: DocxDocument, metin: str, *, girinti_cm: float) -> None:
+    """Resmî yazının metin paragrafı (`shared.evrak.MetinParagrafi`; RYUE md. 16/4): ilk satır
+    `girinti_cm` içeriden, iki yana yaslı; paragraftan önce ve sonra boşluk yok."""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Cm, Pt
+
+    p = belge.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p.paragraph_format.first_line_indent = Cm(girinti_cm)
+    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.space_after = Pt(0)
+    _calistir(p, metin)
+
+
+def resmi_imza(belge: DocxDocument, hucreler: Sequence[tuple[str, str] | None]) -> None:
+    """Resmî yazının imza bölümü (`shared.evrak.ResmiImza`; RYUE md. 17/1, 17/11): metinden iki satır
+    boşluk, sonra yazı alanını ikiye bölen çerçevesiz hücreler; her hücrede ad (kalın) ve altında
+    unvan, ortalı. Boş hücre (tek imzada sol yarı) metin taşımaz."""
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Cm
+
+    _bos_satirlar(belge, 2)
+    t = belge.add_table(rows=1, cols=len(hucreler))
+    t.alignment = WD_TABLE_ALIGNMENT.LEFT
+    t.autofit = False
+    _izgara_kenarsiz(t)
+    genislik = Cm(YAZI_ALANI_CM / len(hucreler))
+    for sutun in t.columns:
+        sutun.width = genislik
+    for hucre, sahip in zip(t.rows[0].cells, hucreler, strict=True):
+        hucre.width = genislik
+        if sahip is None:
+            continue
+        ad, gorev = sahip
+        ad_p = hucre.paragraphs[0]
+        ad_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        _calistir(ad_p, ad, kalin=True)
+        gorev_p = hucre.add_paragraph()
+        gorev_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        _calistir(gorev_p, gorev)
 
 
 def sayfa_sonu(belge: DocxDocument) -> None:

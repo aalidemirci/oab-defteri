@@ -1,9 +1,10 @@
-"""Genel kurul evrakı: E04-E14 ve E64 — üretim, veli adlı çıktı ve basım (plan F2 §4, 8.-9. adım).
+"""Genel kurul evrakı: E04-E14 ve E64 — üretim, veli adlı çıktı ve basım (plan F2 §4, 8.-10. adım).
 
 `gorev_evraki`'nin kalıbıdır (`KODLAR`, `BELGE_ADLARI`, `URETEN_ROLLER`, kurucular, `uret`, `bas`).
-İskelet 8. adımdadır; içerik kurucuları 9. adımda E05, E06, E07, E08 ve E64 için yazıldı ("Genel
-kurul evrakı I", aşağıda), E09-E14 ve E04 10. adımda `KURUCULAR`'a girer. Kurucusu olmayan kod
-üretilmez (`KOD_GECERSIZ`).
+İskelet 8. adımdadır; içerik kurucuları 9. adımda E05, E06, E07, E08 ve E64 için ("Genel kurul evrakı
+I"), 10. adımda E09-E14 için yazıldı ("Genel kurul evrakı II"). E04'ün kurucusu dört alt metnin
+kullanıcı onayından sonra yazılır (plan F2 §9 S8 (i), §10.1 "E04 10. adımın son işi"). Kurucusu
+olmayan kod üretilmez (`KOD_GECERSIZ`).
 
 GENEL KURUL EVRAKI I (plan F2 §4.1, §7 U14-U18, U34; tasarım §9.3, §9.6):
 
@@ -47,9 +48,41 @@ GENEL KURUL EVRAKI I (plan F2 §4.1, §7 U14-U18, U34; tasarım §9.3, §9.6):
   üretilirse bu satırlar "………" ve basım uyarısıdır (sayı `first_attendee_count`'tan basılır; yeni
   model alanı açılmadı).
 
-Kişisel veri dipnotu (tasarım §9.1-5) yalnız kişi adı taşıyan belgelerdedir (E05, adlı E07 ve E08);
-konum cümlesi, karar taslağı cümlesi (KDT) ve taslak ibaresi bu beş belgede yoktur. Belgede
-üretim günü yoktur: aynı veriden yeniden üretim aynı içerik özetini verir. Boş alan "………"dır, basım
+GENEL KURUL EVRAKI II (plan F2 §4.1, §7 U20-U22; tasarım §9.1-§9.3, §9.6):
+
+- E09 — yönetim kurulu ve Denetleme Kurulu (veli koltuğu) aday listeleri: bu genel kurulun aday
+  kayıtları (aday kalan, seçilen, sonradan düşen; iptal edilen yanlış giriş hariç), kişi türü ve
+  yönetim kurulunda md. 12/4 sayacı (bu genel kurulun seçilmesi hariç). Öğretmen koltukları bilgi
+  satırıdır, sayılar kural paketinden. Olağanüstü genel kurul Denetleme Kuruluna seçim yapmaz (S10):
+  B bölümü basılmaz. İmza Divan Başkanı + Kâtip.
+- E10 — toplantı tutanağı, yalnız yapılmış genel kurulda: toplantı, açılış ve divan, gündemin
+  sonuçları (oylarla; çıkarılan madde de), gündem değişikliğinin oylaması ayrı tabloda, ibra kurul
+  başına ayrı oylama satırı, seçilenler (E09 ve E13 ile aynı kayıtlar), teslim günü. Tahmini bütçe
+  yalnız "görüşüldü" ve ekin adı (U22). İmza divan + "Görüldü — Okul Müdürü (md. 27/1)"; müdürün
+  çağırdığı genel kurulda "Görüldü" yok (tasarım §9.3; E64 ile aynı). Tarih yapıldığı gün.
+- E11 — ibra edilmeyen muhasebe evrakının teslim tutanağı; E12 — il/ilçe millî eğitim müdürlüğüne
+  resmî yazı: yalnız yönetim kurulunun hesapları ibra edilmediğinde (S4 (a)). E11 evrakı tutanağın
+  notundan tek tek listeler; divan teslim eder, teslim alan kurullar adına birer üye teslim alır
+  (adları elle; seçilen yeni kurul ya da görevdeki kurul — olağanüstü genel kurul Denetleme Kuruluna
+  seçim yapmaz, S10 (a); `TESLIM_ALANLAR`). E12 RYUE biçimindedir (okul antedi, "Sayı:" yer tutucu, tarih üretim günü, konu, muhatap
+  S11 (a) önerisi ya da basımda düzenlenen muhatap — boşsa yer tutucu ve uyarı, girintili metin
+  md. 16/4, imza bölümü md. 17/1, 17/11, ek E11 md. 18); taslağı program yöneticisi hazırlar
+  (KE-19), müdür rolü üretmez; okul dışına gittiği için kişisel veri dipnotu basılmaz.
+- E13 — sonuç bildirimi (okul müdürlüğüne): sonuç, seçilenler, tarihli sonraki işler (görev
+  bölümlerinin son günü kural paketinden); konum cümlesi TFB imzanın hemen üstünde; "Yönetmelik
+  gereği" denmez (MB-11). İmza yeni başkan + yeni sekreter (görev bölümünden önce "………", U21) ve
+  "Teslim alan: Okul Müdürü".
+- E14 — yıllık iş takvimi (konusu birlik dönemi; kişisiz, imzasız): süre kuralı satırları kural
+  kimliği ve atıf taşır (sözlük §2 istisna 3), okul planı satırları (ders yılı, dönemin yönetim
+  kurulu toplantı günü ve denetim planı) ayrı bölümdedir.
+
+Kişisel veri dipnotu (tasarım §9.1-5) yalnız kişi adı taşıyan iç belgelerdedir (E05, adlı E07 ve E08,
+E09, E10, E13); E12 okul dışına giden resmî yazıdır, dipnot taşımaz; E11 E12'nin ekidir (il/ilçe millî
+eğitim müdürlüğüne gider), "okul dışına verilmez" dipnotu onda da basılmaz (10. adımın kararı, kullanıcı
+onayına sunuldu). Konum cümlesi F2'de yalnız
+E13'tedir (TFB); karar taslağı cümlesi (KDT) ve taslak ibaresi hiçbir F2 belgesinde yoktur. Belgede
+üretim günü yoktur (resmî yazının tarihi hariç): aynı veriden yeniden üretim aynı içerik özetini
+verir. Boş alan "………"dır, basım
 uyarısı üretimin yanıtındadır, belgeye basılmaz (F1c kalıbı, `gorev_evraki`).
 
 KONU VE DÖNEM (plan F2 §4.2). Genel kurul belgelerinin (E05-E13, E64) konusu genel kuruldur
@@ -94,6 +127,7 @@ Bütün sabit metinler sözlüğe girer (sözlük §1 "Genel kurul evrakı (F2)"
 
 from __future__ import annotations
 
+import calendar
 import hashlib
 import logging
 from collections.abc import Callable, Mapping
@@ -106,46 +140,59 @@ from django.http import FileResponse, Http404
 from django.utils import timezone
 
 from apps.oab import selectors
-from apps.oab.kurallar import YururlukteDegerYok, kural, yazma_kapisi
+from apps.oab.kurallar import YururlukteDegerYok, kural, kural_kaydi, yazma_kapisi
+from apps.oab.kurallar.erisim import atif_metni
 from apps.oab.models import (
     AgendaItem,
+    AgendaItemKind,
+    AgendaResult,
     Announcement,
     AssemblyCaller,
     AssemblyKind,
     AssemblyMeeting,
+    AssemblyMinutes,
     AssemblyStatus,
     AttendanceKind,
+    Discharge,
     DocumentFormat,
     DocumentStatus,
     DocumentVariant,
     GeneralAssembly,
     GeneratedDocument,
     MembershipRole,
+    MembershipStatus,
     OabTerm,
     OrganMembership,
     OrganType,
+    PersonKind,
+    SeatGroup,
+    SeatType,
 )
 from apps.oab.services import evrak as evrak_servisi
-from apps.oab.services import genel_kurul
+from apps.oab.services import genel_kurul, uyelikler
 from apps.oab.services.gorev_evraki import (
     BOS,
     KONU_BILGI,
+    UNVAN_TESLIM_ALAN,
     UYARI_AD_OKUNAMADI,
     UYARI_GOREV_BOS,
     _ad,
     _an,
     _gun,
     _mudur_adi,
+    _olay_gunu,
     _Uyarilar,
 )
 from apps.okul import denetim_izi, erisim_gunlugu, excel_veli, normalize, rol_izinleri
 from apps.okul.models import (
     AccessKind,
     AccountRole,
+    CanteenMode,
     MemberKind,
     ParentRoster,
     Personnel,
     SchoolConfig,
+    SchoolTerm,
 )
 from apps.okul.oturum import yazar
 from apps.okul.selectors import personnel_sorted
@@ -153,6 +200,7 @@ from apps.okul.services import app_password, dosya_deposu
 from shared import evrak
 from shared.crypto import is_corrupt
 from shared.exceptions import RolYetkisiz
+from shared.letterhead import MEM_ILCE, mem_muhatabi
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +222,8 @@ GENEL_KURUL_KODLARI: Final = frozenset({E05, E06, E07, E08, E09, E10, E11, E12, 
 #: İki kipli belgeler (U14) ve toplantı başına belgeler (U34).
 KIPLI_KODLAR: Final = frozenset({E07, E08})
 TOPLANTILI_KODLAR: Final = frozenset({E05, E06, E64})
+#: Basımda düzenlenen muhatabı olan resmî yazılar (plan F2 §7 U20).
+MUHATAPLI_KODLAR: Final = frozenset({E12})
 #: Veli adlı kipin belgeleri (R9).
 ADLI_KODLAR: Final = (E07, E08)
 
@@ -287,11 +337,23 @@ BICIM_GECERSIZ: Final = "Bu evrak bu biçimde verilmez."
 # Kurucular (9. ve 10. adımlarda dolar)
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
+class Muhatap:
+    """Resmî yazının (E12) basımda düzenlenen muhatabı (plan F2 §7 U20, kullanıcı kararı S11 (a)):
+    idarenin adı (büyük harfe çizici çevirir, RYUE md. 14/2) ve parantez içindeki birim (md. 14/5).
+    Verilmezse muhatap okul kartından önerilir (`letterhead.mem_muhatabi`)."""
+
+    idare: str
+    birim: str = ""
+
+
+@dataclass(frozen=True)
 class Secim:
-    """Üretimin kipi ve toplantısı (modül başlığı "Kip ve toplantı")."""
+    """Üretimin kipi ve toplantısı (modül başlığı "Kip ve toplantı"); resmî yazıda (E12) basımda
+    düzenlenen muhatap."""
 
     kip: str = ""
     toplanti: str = ""
+    muhatap: Muhatap | None = None
 
 
 @dataclass(frozen=True)
@@ -1432,12 +1494,1309 @@ def e64_belgesi(konu: models.Model, secim: Secim) -> tuple[evrak.Belge, tuple[st
     return belge, tuple(uyarilar.liste)
 
 
-#: Kodun kişisiz içerik kurucusu (E05-E08, E64 9. adımda; E04, E09-E14 10. adımda).
+# ---------------------------------------------------------------------------
+# Genel kurul evrakı II — sabitler (sözlük §1 "Genel kurul evrakı (F2)")
+# ---------------------------------------------------------------------------
+#: Genel kurulun yapıldığı durumlar (tutanak, teslim tutanağı, resmî yazı ve sonuç bildirimi).
+_YAPILMIS: Final = (AssemblyStatus.YAPILDI, AssemblyStatus.TUTANAK_TAMAM)
+GENEL_KURUL_YAPILMADI: Final = "Genel kurul yapılmadan bu evrak üretilmez."
+IBRA_EDILMEDIKCE_URETILMEZ: Final = (
+    "Yönetim kurulunun hesapları ibra edilmedikçe bu evrak üretilmez (md. 11/1-ç)."
+)
+MUHATAP_GECERSIZ: Final = "Bu evrakın muhatabı yoktur."
+
+#: Koltuk ve organ adları (gorev_evraki ile aynı).
+ASIL: Final = "Asıl"
+YEDEK: Final = "Yedek"
+KOLTUK_ADLARI: Final[dict[str, str]] = {SeatType.ASIL: ASIL, SeatType.YEDEK: YEDEK}
+
+#: E09: aday listeleri (md. 10/1-d, 11/1-a, b, 12/1, 12/4; tasarım §9.3 "Aday listeleri").
+E09_GIRIS: Final = (
+    "Yönetim kurulunun üyeleri ile Denetleme Kurulunun veli koltuğundaki üyesi genel kurulca asıl ve "
+    "yedek olarak liste hâlinde, açık oyla seçilir (Millî Eğitim Bakanlığı Okul-Aile Birliği "
+    "Yönetmeliği (Yönetmelik) md. 10/1-d, 11/1-a, b)."
+)
+YK_ADAY_BOLUMU: Final = "A. Yönetim kurulu adayları (md. 11/1-a, 12/1)"
+DK_ADAY_BOLUMU: Final = "B. Denetleme Kurulu veli koltuğu adayları (md. 11/1-b, 14/1)"
+YK_ADAY_BASLIKLARI: Final = (
+    "Sıra",
+    "Adı ve soyadı",
+    "Asıl ya da yedek",
+    "Kişi türü",
+    "Önceki seçilme sayısı (md. 12/4)",
+)
+DK_ADAY_BASLIKLARI: Final = ("Sıra", "Adı ve soyadı", "Asıl ya da yedek", "Kişi türü")
+#: Denetleme Kurulunun öğretmen koltukları genel kurulun oylamasına girmez (tasarım §9.3; md. 11/1-b,
+#: 14/1); sayılar kural paketinden (`denetleme_kurulu.koltuklar`).
+DK_OGRETMEN_BILGISI: Final = (
+    "Denetleme Kurulunun {asil} asıl ve {yedek} yedek öğretmen üyesi öğretmenler kurulunca seçilir; "
+    "genel kurulun oylamasına girmez (md. 11/1-b, 14/1)."
+)
+
+#: E10: genel kurul toplantı tutanağı (md. 9/2-6, 10/1, 11/1; GNL-OAB-FR-004; OYS `tutanak.html`).
+E10_GIRIS: Final = (
+    "Okul-Aile Birliğinin {tur} genel kurulu aşağıdaki bilgilerle toplanmış ve gündem maddelerini "
+    "görüşmüştür (Millî Eğitim Bakanlığı Okul-Aile Birliği Yönetmeliği (Yönetmelik) md. 10/1, 11/1)."
+)
+E10_BOLUMLER: Final = (
+    "A. Toplantı",
+    "B. Açılış ve divan (md. 10/1-b, c)",
+    "C. Gündem maddeleri ve sonuçları (md. 9/4, 11/1)",
+    "D. İbra (md. 11/1-c, ç)",
+    "E. Seçim sonuçları (md. 10/1-d, 11/1-a, b)",
+    "F. Kapanış (md. 10/1-ç)",
+)
+SATIR_ILAN: Final = "İlan günü (md. 9/3)"
+SATIR_BIRINCI_SONUCU: Final = "Birinci toplantı"
+BIRINCI_SONUCU_DEGERI: Final = "{an} · toplantı yeter sayısı sağlanamadı ({katilan} katılan)"
+COGUNLUK_ARANMAZ_DEGERI: Final = "İkinci toplantıda çoğunluk aranmaz (md. 9/2)"
+SATIR_ACILIS: Final = "Açılış"
+ACILIS_DEGERI: Final = "Toplantının açılışını okul müdürü yaptı (md. 10/1-b)."
+SONUC_BASLIKLARI: Final = ("Sıra", "Gündem maddesi", "Sonuç")
+SONUC_KABUL: Final = "Kabul edildi ({oylar})"
+SONUC_RET: Final = "Reddedildi ({oylar})"
+SONUC_GORUSULDU: Final = "Görüşüldü"
+SONUC_CIKARILDI: Final = "Gündemden çıkarıldı (md. 9/4)"
+SONUC_IBRA: Final = "Görüşüldü; ibra oylaması D bölümündedir"
+#: İki kurulun ibrası da "görüşülmedi" (`genel_kurul.ibra_yaz` maddenin sonucunu boş bırakır; sonuç
+#: kurulun `discharge_yk` ve `discharge_dk` alanlarındadır).
+SONUC_IBRA_GORUSULMEDI: Final = "Görüşülmedi; ibra satırları D bölümündedir"
+SONUC_SECIM: Final = "Görüşüldü; seçim sonuçları E bölümündedir"
+#: Tahmini bütçe F2'de yalnız "görüşüldü" ve ekin adıdır, tutar basılmaz (plan F2 §7 U22; md. 11/1-d
+#: "görüşmek"). Oyla girilmiş sonuç da (kabul ya da ret) E10'da ve E13'te böyle basılır: iki belge aynı
+#: kayıttan aynı sonucu verir (tasarım §9.1-3).
+SONUC_BUTCE: Final = "Görüşüldü; ek: Tahmini bütçe"
+SONUC_METNI: Final = "{sonuc} · {metin}"
+OYLAR_DEGERI: Final = "kabul {kabul}, ret {ret}"
+SALONDAKI_DEGERI: Final = "; oylamada salonda bulunan {salon}"
+GUNDEM_DEGISIKLIGI_BOLUMU: Final = "Gündem değişikliği (md. 9/4)"
+DEGISIKLIK_BASLIKLARI: Final = ("Gündem maddesi", "Değişiklik", "Oylama")
+DEGISIKLIK_EKLENDI: Final = "Gündeme eklendi"
+DEGISIKLIK_CIKARILDI: Final = "Gündemden çıkarıldı"
+GUNDEM_DEGISMEDI: Final = "Duyurulan gündemde değişiklik yapılmadı (md. 9/4)."
+SATIR_YK_RAPORU: Final = "Yönetim kurulu faaliyet raporunu okuyan"
+SATIR_DK_RAPORU_OKUYAN: Final = "Denetleme Kurulu raporunu okuyan"
+SATIR_BUTCEYI_SUNAN: Final = "Tahmini bütçeyi sunan"
+IBRA_BASLIKLARI: Final = ("Kurul", "Sonuç", "Kabul", "Ret", "Oylamada salonda bulunan")
+KURUL_YK: Final = "Yönetim kurulu"
+KURUL_DK: Final = "Denetleme Kurulu"
+#: Md. 11/1-ç'nin teslim aldığı kurullar, genel kurulun türüne ve gündemde (çıkarılmamış) seçim maddesi
+#: olup olmadığına göre (yönetim kurulu seçildi mi, Denetleme Kurulu seçildi mi): olağanüstü genel kurul
+#: Denetleme Kuruluna seçim yapmaz (kullanıcı kararı S10 (a)), teslim görevdeki kurula yapılır;
+#: yönetim kurulu seçilmediyse görevdeki yönetim kuruluna.
+TESLIM_ALANLAR: Final[Mapping[tuple[bool, bool], str]] = {
+    (True, True): "seçilen yeni yönetim kuruluna ve yeni Denetleme Kuruluna",
+    (True, False): "seçilen yeni yönetim kuruluna ve görevdeki Denetleme Kuruluna",
+    (False, True): "görevdeki yönetim kuruluna ve seçilen yeni Denetleme Kuruluna",
+    (False, False): "görevdeki yönetim kuruluna ve Denetleme Kuruluna",
+}
+IBRA_EDILMEDI_PARAGRAFI: Final = (
+    "Yönetim kurulunun hesapları ibra edilmedi; diğer gündem maddeleri görüşüldü. Divan ibra "
+    "edilmeyen muhasebe evrakını tutanak altına alarak {teslim_alan} teslim etti (md. 11/1-ç; ibra "
+    "edilmeyen muhasebe evrakının teslim tutanağı ektedir)."
+)
+SECIM_YK_ALT: Final = "Yönetim kurulu (md. 11/1-a)"
+SECIM_DK_ALT: Final = "Denetleme Kurulu veli koltuğu (md. 11/1-b)"
+SECIM_BASLIKLARI: Final = ("Sıra", "Adı ve soyadı", "Asıl ya da yedek", "Aldığı oy", "Yedek sırası")
+SATIR_TESLIM: Final = "Tutanak ve belgelerin yeni yönetim kuruluna teslim günü (md. 10/1-ç)"
+
+#: E11: ibra edilmeyen muhasebe evrakının teslim tutanağı (md. 11/1-ç; GNL-OAB-FR-005 B satır 9).
+E11_GIRIS: Final = (
+    "Okul-Aile Birliğinin {gun} günü yapılan {tur} genel kurul toplantısında yönetim kurulunun "
+    "hesapları ibra edilmemiştir. Divan, ibra edilmeyen muhasebe evrakını aşağıda tutanak altına "
+    "almış ve {teslim_alan} teslim etmiştir (Millî Eğitim Bakanlığı Okul-Aile Birliği Yönetmeliği "
+    "(Yönetmelik) md. 11/1-ç)."
+)
+SATIR_YK_IBRA_OYLARI: Final = "Yönetim kurulunun ibra oylaması (md. 11/1-c)"
+E11_LISTE_BOLUMU: Final = "İbra edilmeyen muhasebe evrakı"
+E11_LISTE_BASLIKLARI: Final = ("Sıra", "Evrak")
+UNVAN_TESLIM_ALAN_YK: Final = "Teslim alan: Yeni Yönetim Kurulu adına üye"
+UNVAN_TESLIM_ALAN_GOREVDEKI_YK: Final = "Teslim alan: Yönetim Kurulu adına üye"
+UNVAN_TESLIM_ALAN_YENI_DK: Final = "Teslim alan: Yeni Denetleme Kurulu adına üye"
+UNVAN_TESLIM_ALAN_DK: Final = "Teslim alan: Denetleme Kurulu adına üye"
+
+#: E12: il/ilçe millî eğitim müdürlüğüne resmî yazı (md. 11/1-ç; RYUE md. 11-18; plan F2 §7 U20, U21).
+E12_KONU: Final = "Genel Kurulda Hesapların İbra Edilmemesi"
+E12_METIN: Final = (
+    "Okulumuz Okul-Aile Birliğinin {gun} tarihinde yapılan {tur} genel kurul toplantısında yönetim "
+    "kurulunun hesapları ibra edilmemiştir.",
+    "Millî Eğitim Bakanlığı Okul-Aile Birliği Yönetmeliğinin 11 inci maddesinin birinci fıkrasının "
+    "(ç) bendi uyarınca divan, ibra edilmeyen muhasebe evrakını tutanak altına alarak {teslim_alan} "
+    "teslim etmiş olup teslim tutanağı ekte sunulmuştur.",
+    "Bilgilerinizi arz ederim.",
+)
+#: Basımda boşaltılan muhatabın yeri (8. adımın notu; `letterhead.mem_muhatabi`'nin yer tutucusu).
+MUHATAP_YERI: Final = "……………"
+
+#: E13: genel kurul sonuç bildirimi (okul müdürlüğüne; GNL-OAB-FR-005 A, C). Bildirim okul
+#: uygulamasıdır: belgede "Yönetmelik gereği" denmez, giriş atıf taşımaz (MB-11; tasarım §9.5 E13).
+E13_GIRIS: Final = (
+    "Okul-Aile Birliğinin {gun} günü yapılan {tur} genel kurul toplantısının sonucu ve sonraki işler "
+    "aşağıda bilgilerinize sunulmuştur."
+)
+E13_BOLUMLER: Final = (
+    "A. Genel kurulun sonucu",
+    "B. Seçilen yönetim kurulu (md. 11/1-a)",
+    "C. Seçilen Denetleme Kurulu veli üyesi (md. 11/1-b)",
+    "D. Sonraki işler",
+)
+SATIR_YK_IBRASI: Final = "Yönetim kurulunun ibrası (md. 11/1-c)"
+SATIR_DK_IBRASI: Final = "Denetleme Kurulunun ibrası (md. 11/1-c)"
+SATIR_BUTCE: Final = "Tahmini bütçe (md. 11/1-d)"
+UYE_BASLIKLARI: Final = ("Sıra", "Adı ve soyadı", "Asıl ya da yedek", "Görevi")
+SONRAKI_BASLIKLARI: Final = ("İş", "Son gün", "Dayanak")
+IS_YK_GOREV_BOLUMU: Final = "Yönetim kurulunun görev bölümü"
+IS_DK_GOREV_BOLUMU: Final = "Denetleme Kurulunun görev bölümü"
+IS_BANKA: Final = "Bankaya müşterek imza yetkililerinin (başkan ve muhasip) bildirimi"
+IS_TEFBIS: Final = (
+    "TEFBİS'e yeni yönetimin, banka hesap bilgilerinin ve tahmini bütçenin girişi (okul idaresi)"
+)
+IS_MEM_YAZISI: Final = (
+    "Hesaplar ibra edilmediği için il/ilçe millî eğitim müdürlüğüne resmî yazı (yeni yönetim kurulu "
+    "ve okul yönetimi)"
+)
+SON_GUN_DEGERI: Final = "en geç {gun}"
+GOREV_BOLUMUNDEN_SONRA: Final = "Yönetim kurulunun görev bölümünden sonra"
+GENEL_KURULDAN_SONRA: Final = "Genel kuruldan sonra"
+DAYANAK_BANKA: Final = "md. 18/2"
+DAYANAK_TEFBIS: Final = "md. 23/5"
+DAYANAK_MEM_YAZISI: Final = "md. 11/1-ç"
+
+#: E14: yıllık iş takvimi (kural paketinin süre kuralları, ders yılı, birlik döneminin ayarları;
+#: GNL-OAB-RH-001 Bölüm 6). Satırlar kural kimliği ve atıf taşır (sözlük §2 istisna 3).
+E14_GIRIS: Final = (
+    "Bu takvim kural paketinin süre kurallarından, ders yılından ve birlik döneminin ayarlarından "
+    "hazırlanmıştır. Süre kuralı satırları kuralın kimliğini ve dayanağını taşır; okul planı satırları "
+    "birlik döneminin ve ders yılının ayarlarındandır, kural değildir."
+)
+E14_BOLUMLER: Final = ("A. Süre kuralları", "B. Okul planı")
+KURAL_BASLIKLARI: Final = ("Tarih", "İş", "Kural", "Dayanak")
+PLAN_BASLIKLARI: Final = ("Tarih", "İş", "Kaynak")
+IS_ILAN: Final = "Olağan genel kurulun yeri, zamanı ve gündeminin bildirilmesi ve duyurulması"
+IS_OLAGAN_GK: Final = "Olağan genel kurulun birinci toplantısı"
+IS_IKINCI_TOPLANTI: Final = (
+    "Birinci toplantıda yeter sayı sağlanamazsa ikinci toplantı (çoğunluk aranmaz)"
+)
+IS_ARZ_SOZLESME: Final = "Kantin arz bedelinin ödenmesi (kiracı; sözleşmedeki son gün)"
+IS_ARZ_YONETMELIK: Final = "Kantin arz bedelinin ödenmesinin Yönetmelikteki son günü"
+ILAN_GORELI: Final = "toplantı gününden en az {gun} gün önce"
+IKINCI_GORELI: Final = "birinci toplantıdan sonra en geç {gun} gün içinde"
+ARZ_GUNU: Final = "üçer aylık dönemlerde, dönemi takip eden ayın {gun}. günü"
+IS_DERS_YILI_BASI: Final = "Ders yılının başlangıcı"
+IS_DERS_YILI_SONU: Final = "Ders yılının sonu"
+IS_DERS_DONEMI: Final = "{sira}. ders dönemi"
+DONEM_ARALIGI: Final = "{bas} – {son}"
+IS_YK_TOPLANTISI: Final = "Yönetim kurulunun aylık toplantısı (md. 13/3)"
+IS_DK_DENETIMI: Final = "Denetleme Kurulunun {sira}. ara denetimi (md. 14/4)"
+KAYNAK_DERS_YILI: Final = "Ders yılı (Ayarlar)"
+KAYNAK_DONEM: Final = "Birlik döneminin ayarı"
+#: E14'ün süre kuralları ve satırın işi (kural kimliği basılır; sözlük §2 istisna 3).
+_GK_ILAN: Final = "genel_kurul.ilan_en_az_gun"
+_GK_SON_AY: Final = "genel_kurul.olagan_son_ay"
+_GK_IKINCI: Final = "genel_kurul.ikinci_toplanti_en_gec_gun"
+_YK_GOREV_BOLUMU: Final = "yonetim_kurulu.gorev_bolumu_gun"
+_DK_GOREV_BOLUMU: Final = "denetleme_kurulu.gorev_bolumu_gun"
+_ARZ_SOZLESME: Final = "arz_bedeli.sozlesme_vade_gunu"
+_ARZ_YONETMELIK: Final = "arz_bedeli.yonetmelik_vade_gunu"
+E14_KURALLARI: Final = (
+    _YK_GOREV_BOLUMU,
+    _DK_GOREV_BOLUMU,
+    _GK_ILAN,
+    _GK_SON_AY,
+    _GK_IKINCI,
+    _ARZ_SOZLESME,
+    _ARZ_YONETMELIK,
+)
+
+#: Basım uyarıları (belgeye basılmaz).
+UYARI_ADAY_YOK: Final = "Aday kaydı yok; aday satırı ……… basıldı."
+UYARI_SAYAC_BILINMIYOR: Final = (
+    "Bir adayın programdan önceki seçilme sayısı bilinmiyor; yeri ……… basıldı."
+)
+UYARI_SONUC_YOK: Final = "Sonucu girilmemiş gündem maddesi var; sonucun yeri ……… basıldı."
+UYARI_SONUC_METNI_OKUNAMADI: Final = "Bir gündem maddesinin sonuç metni okunamadı; basılmadı."
+UYARI_IBRA_YOK: Final = "İbra sonucu girilmemiş; yeri ……… basıldı."
+UYARI_SECIM_YOK: Final = "Seçim sonucu girilmemiş; seçilenlerin satırı ……… basıldı."
+UYARI_TUTANAK_BILGISI_YOK: Final = "Tutanak bilgisi girilmemiş; yeri ……… basıldı."
+UYARI_EVRAK_LISTESI_YOK: Final = (
+    "İbra edilmeyen muhasebe evrakının listesi girilmemiş; listenin yeri ……… basıldı."
+)
+UYARI_EVRAK_LISTESI_OKUNAMADI: Final = (
+    "İbra edilmeyen muhasebe evrakının listesi okunamadı; listenin yeri ……… basıldı."
+)
+UYARI_SAYI: Final = "Yazının sayısı okulun resmî yazışma sisteminde verilir; yeri ……… basıldı."
+UYARI_MUHATAP_BOS: Final = "Muhatap boş bırakıldı; muhatabın yeri …………… basıldı."
+UYARI_MUHATAP_ILCE_YOK: Final = (
+    "Okul bilgilerinde ilçe girilmemiş; muhatapta ilçenin yeri …………… basıldı."
+)
+UYARI_YENI_BASKAN_YOK: Final = (
+    "Yeni yönetim kurulunun görev bölümü yapılmadı; başkanın adının yeri ……… basıldı. Görev "
+    "bölümünden sonra belgeyi yeniden üretin."
+)
+UYARI_YENI_SEKRETER_YOK: Final = (
+    "Yeni yönetim kurulunun görev bölümü yapılmadı; sekreterin adının yeri ……… basıldı. Görev "
+    "bölümünden sonra belgeyi yeniden üretin."
+)
+UYARI_DONEM_BASLANGICI_YOK: Final = (
+    "Birlik döneminin başlangıcı yok; görev bölümü satırlarının tarihi ……… basıldı."
+)
+UYARI_KURAL_DEGERI_YOK: Final = "Bir kuralın bu güne değeri yok; satırın tarihi ……… basıldı."
+UYARI_YK_TOPLANTISI_YOK: Final = (
+    "Birlik döneminde yönetim kurulunun toplantı günü girilmemiş; yeri ……… basıldı."
+)
+UYARI_DENETIM_PLANI_YOK: Final = (
+    "Birlik döneminde Denetleme Kurulunun denetim planı girilmemiş; yeri ……… basıldı."
+)
+UYARI_KANTIN_BICIMI_YOK: Final = (
+    "Okul bilgilerinde kantin işletme biçimi girilmemiş; arz bedeli satırları basılmadı."
+)
+
+
+# ---------------------------------------------------------------------------
+# Genel kurul evrakı II — ortak yardımcılar
+# ---------------------------------------------------------------------------
+def _yapilmis_kurul(konu: models.Model) -> GeneralAssembly:
+    """Yapılmış genel kurul (tutanağın ve sonrasının belgeleri); yapılmadıysa üretilmez."""
+    kurul = _genel_kurul(konu)
+    if kurul.status not in _YAPILMIS or not kurul.held_at_meeting:
+        raise ValueError(GENEL_KURUL_YAPILMADI)
+    return kurul
+
+
+def _ibra_edilmemis_kurul(konu: models.Model) -> GeneralAssembly:
+    """E11 ve E12'nin açılma koşulu (kullanıcı kararı S4 (a)): yönetim kurulunun hesapları ibra
+    edilmedi. Denetleme Kurulunun ibra edilmemesi yalnız tutanağa yazılır (E10)."""
+    kurul = _yapilmis_kurul(konu)
+    if kurul.discharge_yk != Discharge.EDILMEDI:
+        raise ValueError(IBRA_EDILMEDIKCE_URETILMEZ)
+    return kurul
+
+
+def _yapildigi_an(kurul: GeneralAssembly) -> datetime | None:
+    return _toplanti_ani(kurul, str(kurul.held_at_meeting))
+
+
+def _yapildigi_gun(kurul: GeneralAssembly) -> date | None:
+    """Genel kurulun yapıldığı toplantının yerel günü (plan F2 §7 U6; `selectors.genel_kurul_gunu`)."""
+    return selectors.genel_kurul_gunu(kurul)
+
+
+def _katilan(kurul: GeneralAssembly) -> int | None:
+    """Yapıldığı toplantının katılımı (son düzeltmeyle; kararlar bu sayıyla denetlenir)."""
+    if kurul.held_at_meeting == AssemblyMeeting.IKINCI:
+        return kurul.second_attendee_count
+    return kurul.first_attendee_count
+
+
+def _gun_yer(kurul: GeneralAssembly, uyarilar: _Uyarilar) -> str:
+    return GUN_YER_DEGERI.format(an=_an(_yapildigi_an(kurul)), yer=_yer(kurul, uyarilar))
+
+
+def _oylar(kabul: int | None, ret: int | None, salon: int | None = None) -> str:
+    """Oylamanın sayıları ("kabul N, ret N; oylamada salonda bulunan N")."""
+    metin = OYLAR_DEGERI.format(kabul=_sayi(kabul), ret=_sayi(ret))
+    if salon is not None:
+        metin += SALONDAKI_DEGERI.format(salon=salon)
+    return metin
+
+
+def _kurul_secilenleri(kurul: GeneralAssembly, organ: str) -> list[OrganMembership]:
+    """Genel kurulun seçtikleri (tek kaynak, O6; tasarım §9.1-3): bu genel kurulun bu kuruldaki
+    seçilmiş kayıtları — sonradan düşen de seçilmiştir; iptal edilen (yanlış giriş) ve seçilmeyen aday
+    girmez. Asıl önce, yedek sırasıyla (`selectors.memberships_sorted`)."""
+    return selectors.memberships_sorted(
+        OrganMembership.objects.filter(
+            assembly=kurul,
+            organ=organ,
+            status__in=(MembershipStatus.SECILDI, MembershipStatus.DUSTU),
+        ).select_related("person")
+    )
+
+
+def _kurul_adaylari(kurul: GeneralAssembly, organ: str) -> list[OrganMembership]:
+    """Genel kurulun aday kayıtları (E09): aday kalan, seçilen ve sonradan düşen; iptal edilen (yanlış
+    giriş) girmez. Aday listesi ile seçim sonucu aynı kayıtlardır (tasarım §9.6 E09)."""
+    return selectors.memberships_sorted(
+        OrganMembership.objects.filter(assembly=kurul, organ=organ)
+        .exclude(status=MembershipStatus.IPTAL)
+        .select_related("person")
+    )
+
+
+def _yeni_gorevli(kurul: GeneralAssembly, role: str) -> OrganMembership | None:
+    """Genel kurulun seçtiği yönetim kurulunda görev bölümüyle görev alan (yeni başkan, yeni sekreter;
+    plan F2 §7 U21). Görev bölümünden önce `None`."""
+    return next(
+        (
+            u
+            for u in _kurul_secilenleri(kurul, OrganType.YONETIM_KURULU)
+            if u.status == MembershipStatus.SECILDI and u.role == role
+        ),
+        None,
+    )
+
+
+def _gundem_turleri(kurul: GeneralAssembly) -> set[str]:
+    """Gündemde kalan maddelerin türleri (oylamayla çıkarılan madde sayılmaz; md. 9/4)."""
+    return {
+        str(tur)
+        for tur in AgendaItem.objects.filter(assembly=kurul, removed_by_vote=False).values_list(
+            "kind", flat=True
+        )
+    }
+
+
+def _secilen_kurullar(kurul: GeneralAssembly, turler: set[str]) -> tuple[bool, bool]:
+    """Bu genel kurul yönetim kurulunu ve Denetleme Kurulunu (veli koltuğu) seçer mi: gündemde kalan
+    seçim maddesi; olağanüstü genel kurul Denetleme Kuruluna seçim yapmaz (kullanıcı kararı S10 (a))."""
+    return (
+        AgendaItemKind.SECIM_YK in turler,
+        AgendaItemKind.SECIM_DK in turler and kurul.kind == AssemblyKind.OLAGAN,
+    )
+
+
+def _teslim_alan(kurul: GeneralAssembly) -> str:
+    """Md. 11/1-ç'de evrakı teslim alan kurullar (`TESLIM_ALANLAR`; seçilen yeni ya da görevdeki)."""
+    return TESLIM_ALANLAR[_secilen_kurullar(kurul, _gundem_turleri(kurul))]
+
+
+def _yeni_gorevli_adi(kurul: GeneralAssembly, role: str, uyari: str, uyarilar: _Uyarilar) -> str:
+    uyelik = _yeni_gorevli(kurul, role)
+    if uyelik is None:
+        uyarilar.ekle(uyari)
+        return BOS
+    return _ad(uyelik.person, uyarilar)
+
+
+def _imzaci_gorevli_adi(
+    kurul: GeneralAssembly, role: str, unvan: str, uyari: str, uyarilar: _Uyarilar
+) -> str:
+    """E12 ve E13'ün başkanı ve sekreteri. Bu genel kurul yönetim kurulunu seçtiyse yeni kurulun
+    görevlisi (plan F2 §7 U21; görev bölümünden önce "………" ve `uyari`); seçmediyse (seçim maddesi
+    olmayan olağanüstü genel kurul ya da gündemden çıkarılan seçim) genel kurulun günü görevde olan
+    yönetim kurulunun görevlisi (`selectors.gundeki_asillar`; yoksa "………" ve görev boş uyarısı)."""
+    if _secilen_kurullar(kurul, _gundem_turleri(kurul))[0]:
+        return _yeni_gorevli_adi(kurul, role, uyari, uyarilar)
+    gun = _yapildigi_gun(kurul)
+    asillar = (
+        []
+        if kurul.term is None or gun is None
+        else selectors.gundeki_asillar(kurul.term, OrganType.YONETIM_KURULU, gun)
+    )
+    uyelik = next((u for u in asillar if u.role == role), None)
+    if uyelik is None:
+        uyarilar.ekle(UYARI_GOREV_BOS.format(gorev=unvan))
+        return BOS
+    return _ad(uyelik.person, uyarilar)
+
+
+def _dk_ogretmen_bilgisi(kurul: GeneralAssembly) -> evrak.Paragraf:
+    """Denetleme Kurulunun öğretmen koltukları bilgi satırı; sayılar kural paketinden."""
+    yer = _kural_yeri(kurul)
+    asil, yedek = BOS, BOS
+    if yer is not None:
+        try:
+            koltuklar = kural("denetleme_kurulu.koltuklar", *yer)
+            ogretmen = koltuklar[SeatGroup.OGRETMEN]
+            asil, yedek = str(ogretmen[SeatType.ASIL]), str(ogretmen[SeatType.YEDEK])
+        except YururlukteDegerYok:
+            pass
+    return evrak.Paragraf(DK_OGRETMEN_BILGISI.format(asil=asil, yedek=yedek))
+
+
+def _sure_son_gunu(kural_id: str, baslangic: date, donem: OabTerm) -> tuple[date, str] | None:
+    """Süre kuralının son günü ve atfı: başlangıç + kural değeri (gün; pano ile aynı hesap, plan
+    F1c görev bölümü süresi). Yürürlükte değer yoksa `None`."""
+    try:
+        kayit = kural_kaydi(kural_id, tarih=baslangic, donem=donem)
+    except YururlukteDegerYok:
+        return None
+    return baslangic + timedelta(days=int(kayit["deger"])), atif_metni(kayit)
+
+
+# ---------------------------------------------------------------------------
+# E09 — yönetim kurulu ve Denetleme Kurulu (veli koltuğu) aday listeleri
+# ---------------------------------------------------------------------------
+def _onceki_secilme(kurul: GeneralAssembly, uyelik: OrganMembership, uyarilar: _Uyarilar) -> str:
+    """Adayın programdan önceki ve programdaki yönetim kurulu seçilmeleri (md. 12/4): bu genel
+    kuruldan önceki seçilmeler; bu genel kurulun ve sonraki genel kurulların seçilmeleri sayılmaz
+    (`uyelikler.yk_secilme_sayaci_once`; eski genel kurulun yeniden üretilen listesi aynı sayıyı
+    basar). Beyan bilinmiyorsa "………" ve uyarı."""
+    sayi = uyelikler.yk_secilme_sayaci_once(
+        uyelik.person, selectors.genel_kurul_gunu(kurul), haric_kurul=kurul
+    )
+    if sayi is None:
+        uyarilar.ekle(UYARI_SAYAC_BILINMIYOR)
+        return BOS
+    return str(sayi)
+
+
+def _aday_satirlari(
+    kurul: GeneralAssembly, organ: str, uyarilar: _Uyarilar, *, sayacli: bool
+) -> tuple[tuple[str, ...], ...]:
+    satirlar: list[tuple[str, ...]] = []
+    for sira, uyelik in enumerate(_kurul_adaylari(kurul, organ), start=1):
+        hucreler = [
+            str(sira),
+            _ad(uyelik.person, uyarilar),
+            KOLTUK_ADLARI.get(str(uyelik.seat_type), BOS),
+            str(PersonKind(uyelik.person.kind).label),
+        ]
+        if sayacli:
+            hucreler.append(_onceki_secilme(kurul, uyelik, uyarilar))
+        satirlar.append(tuple(hucreler))
+    if not satirlar:
+        uyarilar.ekle(UYARI_ADAY_YOK)
+        satirlar.append((BOS,) * (5 if sayacli else 4))
+    return tuple(satirlar)
+
+
+def e09_belgesi(konu: models.Model, secim: Secim) -> tuple[evrak.Belge, tuple[str, ...]]:
+    """E09'un içerik modeli (tasarım §9.3, §9.6 E09; OYS `aday_listeleri.html` UYARLA): yönetim kurulu
+    adayları (kişi türü ve md. 12/4 sayacıyla) ve Denetleme Kurulunun veli koltuğu adayları; öğretmen
+    koltukları yalnız bilgi satırıdır (genel kurulun oylamasına girmez). Olağanüstü genel kurul
+    Denetleme Kuruluna seçim yapmaz (kullanıcı kararı S10 (a)): B bölümü basılmaz. İmza Divan Başkanı
+    + Kâtip; aday adları kişisel veridir (dipnot)."""
+    kurul = _genel_kurul(konu)
+    uyarilar = _Uyarilar()
+    if kurul.status == AssemblyStatus.IPTAL:
+        uyarilar.ekle(UYARI_IPTAL)
+    toplanti = str(kurul.held_at_meeting or AssemblyMeeting.BIRINCI)
+    bilgi = [
+        (SATIR_TUR, TUR_BASLIKLARI[str(kurul.kind)]),
+        (
+            SATIR_GUN_YER,
+            GUN_YER_DEGERI.format(
+                an=_an(_toplanti_ani(kurul, toplanti)), yer=_yer(kurul, uyarilar)
+            ),
+        ),
+    ]
+    bloklar: list[evrak.Blok] = [
+        _baslik(E09, kurul),
+        evrak.Paragraf(E09_GIRIS),
+        evrak.Tablo(basliklar=KONU_BILGI, satirlar=tuple(bilgi), oranlar=(2, 3)),
+        evrak.AltBaslik(YK_ADAY_BOLUMU),
+        evrak.Tablo(
+            basliklar=YK_ADAY_BASLIKLARI,
+            satirlar=_aday_satirlari(kurul, OrganType.YONETIM_KURULU, uyarilar, sayacli=True),
+            oranlar=(1, 6, 3, 3, 3),
+        ),
+    ]
+    if kurul.kind == AssemblyKind.OLAGAN:
+        bloklar += [
+            evrak.AltBaslik(DK_ADAY_BOLUMU),
+            evrak.Tablo(
+                basliklar=DK_ADAY_BASLIKLARI,
+                satirlar=_aday_satirlari(
+                    kurul, OrganType.DENETLEME_KURULU, uyarilar, sayacli=False
+                ),
+                oranlar=(1, 6, 3, 3),
+            ),
+            _dk_ogretmen_bilgisi(kurul),
+        ]
+    bloklar += [
+        evrak.Imza(sahipler=tuple(_divan_imzalari(kurul, uyarilar))),
+        evrak.Dipnot(evrak.KISISEL_VERI_DIPNOTU),
+    ]
+    belge = evrak.Belge(kod=E09, antet=_antet(), bloklar=tuple(bloklar))
+    return belge, tuple(uyarilar.liste)
+
+
+# ---------------------------------------------------------------------------
+# E10 — genel kurul toplantı tutanağı
+# ---------------------------------------------------------------------------
+def _toplanti_bilgisi(
+    kurul: GeneralAssembly, kol: str, uyarilar: _Uyarilar
+) -> list[tuple[str, str]]:
+    """A bölümü: tür, çağıran (olağanüstüde neden), yapıldığı toplantı, gün ve yer, ilan, yeter sayı
+    (ikinci toplantıda "çoğunluk aranmaz"), katılan ve gözlemci."""
+    ikinci = kurul.held_at_meeting == AssemblyMeeting.IKINCI
+    bilgi: list[tuple[str, str]] = [
+        (SATIR_TUR, TUR_BASLIKLARI[str(kurul.kind)]),
+        (SATIR_CAGIRAN, _cagiran_metni(kurul, kol)),
+    ]
+    if kurul.kind == AssemblyKind.OLAGANUSTU:
+        bilgi.append((SATIR_CAGRI_NEDENI, _cagri_nedeni(kurul, uyarilar)))
+    bilgi += [
+        (SATIR_TOPLANTI, TOPLANTI_ADLARI[str(kurul.held_at_meeting)]),
+        (SATIR_GUN_YER, _gun_yer(kurul, uyarilar)),
+        (SATIR_ILAN, _gun(kurul.announced_on)),
+    ]
+    if ikinci:
+        ilk = genel_kurul.ilk_girilen_deger(kurul, "first_attendee_count")
+        ilk = kurul.first_attendee_count if ilk is None else ilk
+        bilgi.append(
+            (
+                SATIR_BIRINCI_SONUCU,
+                BIRINCI_SONUCU_DEGERI.format(an=_an(kurul.first_meeting_at), katilan=_sayi(ilk)),
+            )
+        )
+        bilgi.append((SATIR_YETER_SAYI, COGUNLUK_ARANMAZ_DEGERI))
+    else:
+        bilgi.append((SATIR_YETER_SAYI, _yeter_sayi(kurul, uyarilar)))
+    if kurul.observer_count is None:
+        uyarilar.ekle(UYARI_GOZLEMCI_YOK)
+    bilgi += [
+        (SATIR_KATILAN, _sayi(_katilan(kurul))),
+        (SATIR_GOZLEMCI, _sayi(kurul.observer_count)),
+    ]
+    return bilgi
+
+
+def _divan_bilgisi(kurul: GeneralAssembly, uyarilar: _Uyarilar) -> list[tuple[str, str]]:
+    """B bölümü: açılış (md. 10/1-b) ve divan (md. 10/1-c); adlar divan kayıtlarından."""
+    satirlar = [(SATIR_ACILIS, ACILIS_DEGERI)]
+    satirlar += [(sahip.gorev, sahip.ad) for sahip in _divan_imzalari(kurul, uyarilar)]
+    return satirlar
+
+
+def _ibra_sonucu(kurul: GeneralAssembly) -> str | None:
+    """İbra maddesinin sonucu kurulun ibra alanlarından (`discharge_yk`, `discharge_dk`; maddenin
+    `result`'u iki kurul da "görüşülmedi" olunca boştur, `genel_kurul.ibra_yaz`). Girilmemişse `None`."""
+    sonuclar = {str(kurul.discharge_yk), str(kurul.discharge_dk)}
+    if "" in sonuclar:
+        return None
+    return SONUC_IBRA_GORUSULMEDI if sonuclar == {Discharge.GORUSULMEDI} else SONUC_IBRA
+
+
+def _sonuc_metni(madde: AgendaItem, kurul: GeneralAssembly, uyarilar: _Uyarilar) -> str:
+    """Gündem maddesinin sonucu (md. 9/2, 9/4, 11/1): kabul ve ret oylarıyla; ibra ve seçim kendi
+    bölümlerinde (ibra kurulun ibra alanlarından); tahmini bütçe yalnız "görüşüldü" ve ekin adı (U22;
+    oyla girilmiş sonuç da — E13 ile aynı). Sonuç metni (serbest, şifreli) sonuna eklenir."""
+    if madde.removed_by_vote:
+        return SONUC_CIKARILDI
+    tur = str(madde.kind)
+    if tur == AgendaItemKind.IBRA:
+        ibra = _ibra_sonucu(kurul)
+        if ibra is None:
+            uyarilar.ekle(UYARI_IBRA_YOK)
+            return BOS
+        sonuc = ibra
+    elif not madde.result:
+        uyarilar.ekle(UYARI_SONUC_YOK)
+        return BOS
+    elif tur in (AgendaItemKind.SECIM_YK, AgendaItemKind.SECIM_DK):
+        sonuc = SONUC_SECIM
+    elif tur == AgendaItemKind.TAHMINI_BUTCE:
+        sonuc = SONUC_BUTCE
+    elif madde.result == AgendaResult.KABUL:
+        sonuc = SONUC_KABUL.format(
+            oylar=_oylar(madde.votes_for, madde.votes_against, madde.present_count)
+        )
+    elif madde.result == AgendaResult.RET:
+        sonuc = SONUC_RET.format(
+            oylar=_oylar(madde.votes_for, madde.votes_against, madde.present_count)
+        )
+    else:
+        sonuc = SONUC_GORUSULDU
+    if is_corrupt(madde.result_text):
+        uyarilar.ekle(UYARI_SONUC_METNI_OKUNAMADI)
+        return sonuc
+    metin = " ".join(str(madde.result_text).split())
+    return SONUC_METNI.format(sonuc=sonuc, metin=metin) if metin else sonuc
+
+
+def _gundem_sonuclari(kurul: GeneralAssembly, uyarilar: _Uyarilar) -> list[evrak.Blok]:
+    """C bölümü: gündem maddeleri (oylamayla eklenen ve çıkarılan dahil) ve sonuçları, raporları
+    okuyanlar ve bütçeyi sunan; gündem değişikliğinin oylaması ayrı tablodadır (md. 9/4; tasarım §9.6
+    E10)."""
+    maddeler = list(AgendaItem.objects.filter(assembly=kurul).order_by("order", "pk"))
+    satirlar = tuple(
+        (str(m.order), str(m.title), _sonuc_metni(m, kurul, uyarilar)) for m in maddeler
+    ) or ((BOS, BOS, BOS),)
+    if not maddeler:
+        uyarilar.ekle(UYARI_GUNDEM_YOK)
+    bloklar: list[evrak.Blok] = [
+        evrak.Tablo(basliklar=SONUC_BASLIKLARI, satirlar=satirlar, oranlar=(1, 5, 6))
+    ]
+    okuyanlar = _okuyan_satirlari(
+        kurul, {str(m.kind) for m in maddeler if not m.removed_by_vote}, uyarilar
+    )
+    if okuyanlar:
+        bloklar.append(evrak.Tablo(basliklar=KONU_BILGI, satirlar=tuple(okuyanlar), oranlar=(2, 3)))
+    degisiklikler = tuple(
+        (
+            str(m.title),
+            DEGISIKLIK_EKLENDI if m.added_by_vote else DEGISIKLIK_CIKARILDI,
+            _oylar(m.change_votes_for, m.change_votes_against),
+        )
+        for m in maddeler
+        if m.added_by_vote or m.removed_by_vote
+    )
+    bloklar.append(evrak.AltBaslik(GUNDEM_DEGISIKLIGI_BOLUMU))
+    if degisiklikler:
+        bloklar.append(
+            evrak.Tablo(basliklar=DEGISIKLIK_BASLIKLARI, satirlar=degisiklikler, oranlar=(5, 3, 4))
+        )
+    else:
+        bloklar.append(evrak.Paragraf(GUNDEM_DEGISMEDI))
+    return bloklar
+
+
+def _okuyan_satirlari(
+    kurul: GeneralAssembly, turler: set[str], uyarilar: _Uyarilar
+) -> list[tuple[str, str]]:
+    """Raporları okuyanlar ve tahmini bütçeyi sunan (tutanak kaydı; gündemde kalan maddesi olanlar,
+    oylamayla çıkarılan sayılmaz)."""
+    tutanak = AssemblyMinutes.objects.filter(assembly=kurul).first()
+    satirlar: list[tuple[str, str]] = []
+    for tur, satir, alan in (
+        (AgendaItemKind.YK_FAALIYET_RAPORU, SATIR_YK_RAPORU, "yk_report_reader"),
+        (AgendaItemKind.DK_RAPORU, SATIR_DK_RAPORU_OKUYAN, "dk_report_reader"),
+        (AgendaItemKind.TAHMINI_BUTCE, SATIR_BUTCEYI_SUNAN, "budget_presenter"),
+    ):
+        if tur not in turler:
+            continue
+        kisi = None if tutanak is None else getattr(tutanak, alan)
+        if kisi is None:
+            uyarilar.ekle(UYARI_TUTANAK_BILGISI_YOK)
+        satirlar.append((satir, _ad(kisi, uyarilar)))
+    return satirlar
+
+
+def _ibra_bolumu(kurul: GeneralAssembly, uyarilar: _Uyarilar) -> list[evrak.Blok]:
+    """D bölümü (md. 11/1-c, ç; tasarım §9.6 E10 "YK ve DK ibrası ayrı oylama satırı"): sonuç ve
+    oylar kurul başına; yönetim kurulunun hesapları ibra edilmediyse yan akışın paragrafı (S4 (a))."""
+    satirlar: list[tuple[str, str, str, str, str]] = []
+    for ad, onek in ((KURUL_YK, "discharge_yk"), (KURUL_DK, "discharge_dk")):
+        sonuc = str(getattr(kurul, onek))
+        if not sonuc:
+            uyarilar.ekle(UYARI_IBRA_YOK)
+            satirlar.append((ad, BOS, "", "", ""))
+            continue
+        kabul = getattr(kurul, f"{onek}_votes_for")
+        ret = getattr(kurul, f"{onek}_votes_against")
+        salon = getattr(kurul, f"{onek}_present_count")
+        satirlar.append(
+            (
+                ad,
+                str(Discharge(sonuc).label),
+                "" if kabul is None else str(kabul),
+                "" if ret is None else str(ret),
+                "" if salon is None else str(salon),
+            )
+        )
+    bloklar: list[evrak.Blok] = [
+        evrak.Tablo(basliklar=IBRA_BASLIKLARI, satirlar=tuple(satirlar), oranlar=(3, 3, 2, 2, 3))
+    ]
+    if kurul.discharge_yk == Discharge.EDILMEDI:
+        bloklar.append(
+            evrak.Paragraf(IBRA_EDILMEDI_PARAGRAFI.format(teslim_alan=_teslim_alan(kurul)))
+        )
+    return bloklar
+
+
+def _secilen_satirlari(
+    kurul: GeneralAssembly, organ: str, uyarilar: _Uyarilar
+) -> tuple[tuple[str, ...], ...]:
+    satirlar = tuple(
+        (
+            str(sira),
+            _ad(u.person, uyarilar),
+            KOLTUK_ADLARI.get(str(u.seat_type), BOS),
+            "" if u.votes is None else str(u.votes),
+            "" if u.seat_order is None else str(u.seat_order),
+        )
+        for sira, u in enumerate(_kurul_secilenleri(kurul, organ), start=1)
+    )
+    if not satirlar:
+        uyarilar.ekle(UYARI_SECIM_YOK)
+        return ((BOS, BOS, BOS, "", ""),)
+    return satirlar
+
+
+def _secim_bolumu(
+    kurul: GeneralAssembly, turler: set[str], uyarilar: _Uyarilar
+) -> list[evrak.Blok]:
+    """E bölümü: seçim maddesi olan kurulların seçilenleri (asıl ve yedek, oy, yedek sırası; md.
+    10/1-d, 13/6); Denetleme Kurulunda öğretmen koltukları bilgi satırıdır."""
+    bloklar: list[evrak.Blok] = []
+    if AgendaItemKind.SECIM_YK in turler:
+        bloklar += [
+            evrak.Paragraf(SECIM_YK_ALT),
+            evrak.Tablo(
+                basliklar=SECIM_BASLIKLARI,
+                satirlar=_secilen_satirlari(kurul, OrganType.YONETIM_KURULU, uyarilar),
+                oranlar=(1, 6, 3, 2, 2),
+            ),
+        ]
+    if AgendaItemKind.SECIM_DK in turler and kurul.kind == AssemblyKind.OLAGAN:
+        bloklar += [
+            evrak.Paragraf(SECIM_DK_ALT),
+            evrak.Tablo(
+                basliklar=SECIM_BASLIKLARI,
+                satirlar=_secilen_satirlari(kurul, OrganType.DENETLEME_KURULU, uyarilar),
+                oranlar=(1, 6, 3, 2, 2),
+            ),
+            _dk_ogretmen_bilgisi(kurul),
+        ]
+    return bloklar
+
+
+def e10_belgesi(konu: models.Model, secim: Secim) -> tuple[evrak.Belge, tuple[str, ...]]:
+    """E10'un içerik modeli (tasarım §9.6 E10; GNL-OAB-FR-004; OYS `tutanak.html` UYARLA): toplantı,
+    açılış ve divan, gündem maddelerinin sonuçları ve gündem değişikliğinin oylaması (md. 9/4), ibra
+    (kurul başına ayrı oylama satırı), seçim sonuçları, kapanış (teslim günü). Seçilenler üyelik
+    kayıtlarından (tek kaynak; E09 ve E13 ile aynı kayıtlar). İmza Divan Başkanı + Kâtip ve "Görüldü —
+    Okul Müdürü (md. 27/1)"; müdürün çağırdığı genel kurulda "Görüldü" yoktur (tasarım §9.3 "Görüldü
+    (müdür çağırmadıysa)"; E64 ile aynı). Tarih genel kurulun yapıldığı gündür."""
+    kurul = _yapilmis_kurul(konu)
+    kol = cagri_kolu(kurul)
+    uyarilar = _Uyarilar()
+    turler = _gundem_turleri(kurul)
+    bloklar: list[evrak.Blok] = [
+        _baslik(E10, kurul),
+        evrak.Paragraf(E10_GIRIS.format(tur=TUR_ADLARI[str(kurul.kind)])),
+        evrak.AltBaslik(E10_BOLUMLER[0]),
+        evrak.Tablo(
+            basliklar=KONU_BILGI,
+            satirlar=tuple(_toplanti_bilgisi(kurul, kol, uyarilar)),
+            oranlar=(2, 3),
+        ),
+        evrak.AltBaslik(E10_BOLUMLER[1]),
+        evrak.Tablo(
+            basliklar=KONU_BILGI, satirlar=tuple(_divan_bilgisi(kurul, uyarilar)), oranlar=(2, 3)
+        ),
+        evrak.AltBaslik(E10_BOLUMLER[2]),
+        *_gundem_sonuclari(kurul, uyarilar),
+    ]
+    if AgendaItemKind.IBRA in turler:
+        bloklar += [evrak.AltBaslik(E10_BOLUMLER[3]), *_ibra_bolumu(kurul, uyarilar)]
+    secimler = _secim_bolumu(kurul, turler, uyarilar)
+    if secimler:
+        bloklar += [evrak.AltBaslik(E10_BOLUMLER[4]), *secimler]
+    tutanak = AssemblyMinutes.objects.filter(assembly=kurul).first()
+    teslim = None if tutanak is None else tutanak.handed_to_new_yk_on
+    if teslim is None:
+        uyarilar.ekle(UYARI_TUTANAK_BILGISI_YOK)
+    bloklar += [
+        evrak.AltBaslik(E10_BOLUMLER[5]),
+        evrak.Tablo(basliklar=KONU_BILGI, satirlar=((SATIR_TESLIM, _gun(teslim)),), oranlar=(2, 3)),
+    ]
+    sahipler = _divan_imzalari(kurul, uyarilar)
+    if kol not in MUDUR_KOLLARI:
+        sahipler.append(evrak.ImzaSahibi(_mudur_adi(uyarilar), UNVAN_GORULDU_E05))
+    bloklar += [
+        evrak.Imza(sahipler=tuple(sahipler), tarih=_gun(_yapildigi_gun(kurul))),
+        evrak.Dipnot(evrak.KISISEL_VERI_DIPNOTU),
+    ]
+    belge = evrak.Belge(kod=E10, antet=_antet(), bloklar=tuple(bloklar))
+    return belge, tuple(uyarilar.liste)
+
+
+# ---------------------------------------------------------------------------
+# E11 — ibra edilmeyen muhasebe evrakının teslim tutanağı (divan)
+# ---------------------------------------------------------------------------
+def _evrak_listesi_satirlari(
+    kurul: GeneralAssembly, uyarilar: _Uyarilar
+) -> tuple[tuple[str, str], ...]:
+    """İbra edilmeyen muhasebe evrakı tek tek (tasarım §9.6 E11): tutanağın şifreli notunun her dolu
+    satırı bir evraktır (`AssemblyMinutes.unaudited_documents_note`)."""
+    tutanak = AssemblyMinutes.objects.filter(assembly=kurul).first()
+    if tutanak is not None and is_corrupt(tutanak.unaudited_documents_note):
+        uyarilar.ekle(UYARI_EVRAK_LISTESI_OKUNAMADI)
+        return ((BOS, BOS),)
+    metin = "" if tutanak is None else str(tutanak.unaudited_documents_note)
+    kalemler = [" ".join(satir.split()) for satir in metin.splitlines() if satir.strip()]
+    if not kalemler:
+        uyarilar.ekle(UYARI_EVRAK_LISTESI_YOK)
+        return ((BOS, BOS),)
+    return tuple((str(sira), kalem) for sira, kalem in enumerate(kalemler, start=1))
+
+
+def e11_belgesi(konu: models.Model, secim: Secim) -> tuple[evrak.Belge, tuple[str, ...]]:
+    """E11'in içerik modeli (tasarım §9.6 E11; md. 11/1-ç): yalnız yönetim kurulunun hesapları ibra
+    edilmediğinde üretilir (kullanıcı kararı S4 (a)). Evrak tek tek listelenir, tarih genel kurulun
+    yapıldığı gündür. Divan (Divan Başkanı + Kâtip) teslim eder; teslim alan yönetim kurulu ve
+    Denetleme Kurulu adına birer üyedir (adları elle yazılır). Kurul bu genel kurulda seçildiyse yeni
+    kurul, seçilmediyse görevdeki kuruldur: olağanüstü genel kurul Denetleme Kuruluna seçim yapmaz
+    (S10 (a)); seçim maddesi gündemde yoksa yönetim kurulu da görevdekidir (`TESLIM_ALANLAR`; giriş
+    cümlesi ve unvanlar aynı kaynaktan). E12'nin ekidir, okul dışına gider: kişisel veri dipnotu
+    ("okul dışına verilmez") basılmaz."""
+    kurul = _ibra_edilmemis_kurul(konu)
+    uyarilar = _Uyarilar()
+    bilgi = [
+        (SATIR_TUR, TUR_BASLIKLARI[str(kurul.kind)]),
+        (SATIR_GUN_YER, _gun_yer(kurul, uyarilar)),
+        (
+            SATIR_YK_IBRA_OYLARI,
+            _oylar(
+                kurul.discharge_yk_votes_for,
+                kurul.discharge_yk_votes_against,
+                kurul.discharge_yk_present_count,
+            ),
+        ),
+    ]
+    yeni_yk, yeni_dk = _secilen_kurullar(kurul, _gundem_turleri(kurul))
+    sahipler = [
+        *_divan_imzalari(kurul, uyarilar),
+        evrak.ImzaSahibi("", UNVAN_TESLIM_ALAN_YK if yeni_yk else UNVAN_TESLIM_ALAN_GOREVDEKI_YK),
+        evrak.ImzaSahibi("", UNVAN_TESLIM_ALAN_YENI_DK if yeni_dk else UNVAN_TESLIM_ALAN_DK),
+    ]
+    belge = evrak.Belge(
+        kod=E11,
+        antet=_antet(),
+        bloklar=(
+            _baslik(E11, kurul),
+            evrak.Paragraf(
+                E11_GIRIS.format(
+                    gun=_gun(_yapildigi_gun(kurul)),
+                    tur=TUR_ADLARI[str(kurul.kind)],
+                    teslim_alan=TESLIM_ALANLAR[(yeni_yk, yeni_dk)],
+                )
+            ),
+            evrak.Tablo(basliklar=KONU_BILGI, satirlar=tuple(bilgi), oranlar=(2, 3)),
+            evrak.AltBaslik(E11_LISTE_BOLUMU),
+            evrak.Tablo(
+                basliklar=E11_LISTE_BASLIKLARI,
+                satirlar=_evrak_listesi_satirlari(kurul, uyarilar),
+                oranlar=(1, 9),
+            ),
+            evrak.Imza(sahipler=tuple(sahipler), tarih=_gun(_yapildigi_gun(kurul))),
+        ),
+    )
+    return belge, tuple(uyarilar.liste)
+
+
+# ---------------------------------------------------------------------------
+# E12 — ibra edilmediğine dair il/ilçe millî eğitim müdürlüğüne resmî yazı (RYUE)
+# ---------------------------------------------------------------------------
+def _muhatap(secim: Secim, uyarilar: _Uyarilar) -> tuple[str, str]:
+    """Muhatap (plan F2 §7 U20; kullanıcı kararı S11 (a)): verilmediyse okul kartından ilçe millî
+    eğitim müdürlüğüne kaymakamlık üzerinden öneri (`letterhead.mem_muhatabi`); basımda düzenlenen
+    muhatap boşaltıldıysa yer tutucu ve uyarı (altın kural 3: sert engel değil)."""
+    if secim.muhatap is None:
+        okul = SchoolConfig.load()
+        if not str(okul.district or "").strip():
+            uyarilar.ekle(UYARI_MUHATAP_ILCE_YOK)
+        return mem_muhatabi(MEM_ILCE, il=okul.province, ilce=okul.district)
+    idare = " ".join(secim.muhatap.idare.split())
+    if not idare:
+        uyarilar.ekle(UYARI_MUHATAP_BOS)
+        idare = MUHATAP_YERI
+    return idare, " ".join(secim.muhatap.birim.split())
+
+
+def e12_belgesi(konu: models.Model, secim: Secim) -> tuple[evrak.Belge, tuple[str, ...]]:
+    """E12'nin içerik modeli (tasarım §9.3 "Okul idaresinin resmî yazıları", §9.6 E12; RYUE md. 10-18):
+    okul antedi (md. 10/3), "Sayı:" yer tutucu ve tarih aynı satırda (md. 11, 12; U20: sayı okulun
+    yazışma sisteminde verilir), konu (md. 13/1), muhatap (md. 14; S11 (a), basımda düzenlenir),
+    girintili metin paragrafları (md. 16/4; üst makama "arz ederim", md. 16/12), imza bölümü (md. 17):
+    Yönetim Kurulu adına Birlik Başkanı (yeni; görev bölümünden önce "………", U21) solda, Okul Müdürü
+    (üst unvan) sağda (md. 17/11); ek E11 (md. 18). Taslağı program yöneticisi hazırlar, kâğıdı müdür
+    imzalar (KE-19). Tarih üretim günüdür. Yazı okul dışına gider: kişisel veri dipnotu basılmaz."""
+    kurul = _ibra_edilmemis_kurul(konu)
+    uyarilar = _Uyarilar()
+    uyarilar.ekle(UYARI_SAYI)
+    muhatap, birim = _muhatap(secim, uyarilar)
+    tur = TUR_ADLARI[str(kurul.kind)]
+    gun = _gun(_yapildigi_gun(kurul))
+    baskan = _imzaci_gorevli_adi(
+        kurul, MembershipRole.BASKAN, UNVAN_BIRLIK_BASKANI, UYARI_YENI_BASKAN_YOK, uyarilar
+    )
+    teslim_alan = _teslim_alan(kurul)
+    okul = SchoolConfig.load()
+    belge = evrak.Belge(
+        kod=E12,
+        antet=evrak.okul_anteti(okul_adi=okul.school_name, ilce=okul.district),
+        bloklar=(
+            evrak.ResmiYazi(
+                sayi=BOS,
+                tarih=_gun(timezone.localdate()),
+                konu=E12_KONU,
+                muhatap=muhatap,
+                birim=birim,
+            ),
+            *(
+                evrak.MetinParagrafi(metin.format(gun=gun, tur=tur, teslim_alan=teslim_alan))
+                for metin in E12_METIN
+            ),
+            evrak.ResmiImza(
+                sahipler=(
+                    evrak.ImzaSahibi(baskan, UNVAN_YK_ADINA_BASKAN),
+                    evrak.ImzaSahibi(_mudur_adi(uyarilar), UNVAN_OKUL_MUDURU),
+                )
+            ),
+            evrak.Ekler((BELGE_ADLARI[E11],)),
+        ),
+    )
+    return belge, tuple(uyarilar.liste)
+
+
+# ---------------------------------------------------------------------------
+# E13 — genel kurul sonuç bildirimi (okul müdürlüğüne)
+# ---------------------------------------------------------------------------
+def _sonuc_bilgisi(
+    kurul: GeneralAssembly, turler: set[str], uyarilar: _Uyarilar
+) -> list[tuple[str, str]]:
+    bilgi = [
+        (SATIR_TUR, TUR_BASLIKLARI[str(kurul.kind)]),
+        (SATIR_GUN_YER, _gun_yer(kurul, uyarilar)),
+        (SATIR_KATILAN, _sayi(_katilan(kurul))),
+    ]
+    if AgendaItemKind.IBRA in turler:
+        for satir, sonuc in (
+            (SATIR_YK_IBRASI, kurul.discharge_yk),
+            (SATIR_DK_IBRASI, kurul.discharge_dk),
+        ):
+            if not sonuc:
+                uyarilar.ekle(UYARI_IBRA_YOK)
+            bilgi.append((satir, str(Discharge(sonuc).label) if sonuc else BOS))
+    if AgendaItemKind.TAHMINI_BUTCE in turler:
+        butce = (
+            AgendaItem.objects.filter(
+                assembly=kurul, kind=AgendaItemKind.TAHMINI_BUTCE, removed_by_vote=False
+            )
+            .order_by("order")
+            .first()
+        )
+        # Oyla girilmiş sonuç da "görüşüldü"dür (U22; E10'un `_sonuc_metni` ile aynı).
+        gorusuldu = butce is not None and bool(butce.result)
+        if not gorusuldu:
+            uyarilar.ekle(UYARI_SONUC_YOK)
+        bilgi.append((SATIR_BUTCE, SONUC_BUTCE if gorusuldu else BOS))
+    return bilgi
+
+
+def _uye_satirlari(
+    kurul: GeneralAssembly, organ: str, uyarilar: _Uyarilar
+) -> tuple[tuple[str, ...], ...]:
+    satirlar = tuple(
+        (
+            str(sira),
+            _ad(u.person, uyarilar),
+            KOLTUK_ADLARI.get(str(u.seat_type), BOS),
+            str(MembershipRole(u.role).label) if u.role else "",
+        )
+        for sira, u in enumerate(_kurul_secilenleri(kurul, organ), start=1)
+    )
+    if not satirlar:
+        uyarilar.ekle(UYARI_SECIM_YOK)
+        return ((BOS, BOS, BOS, ""),)
+    return satirlar
+
+
+def _sonraki_isler(
+    kurul: GeneralAssembly, turler: set[str], uyarilar: _Uyarilar
+) -> tuple[tuple[str, str, str], ...]:
+    """D bölümü (tasarım §9.6 E13 "sonraki adımlar tarihli"): görev bölümlerinin son günü kural
+    paketinden (başlangıç genel kurulun yapıldığı gün; md. 12/3, 14/1), banka imza yetkisi (md. 18/2),
+    TEFBİS girişi (md. 23/5; süre kural değildir), ibra edilmediyse il/ilçe millî eğitim müdürlüğüne
+    yazı (md. 11/1-ç)."""
+    gun = _yapildigi_gun(kurul)
+    donem = genel_kurul.secim_donemi(kurul)
+    satirlar: list[tuple[str, str, str]] = []
+    gorev_bolumleri = []
+    if AgendaItemKind.SECIM_YK in turler:
+        gorev_bolumleri.append((IS_YK_GOREV_BOLUMU, _YK_GOREV_BOLUMU))
+    if AgendaItemKind.SECIM_DK in turler and kurul.kind == AssemblyKind.OLAGAN:
+        gorev_bolumleri.append((IS_DK_GOREV_BOLUMU, _DK_GOREV_BOLUMU))
+    for is_, kural_id in gorev_bolumleri:
+        sure = None if gun is None else _sure_son_gunu(kural_id, gun, donem)
+        if sure is None:
+            uyarilar.ekle(UYARI_KURAL_DEGERI_YOK)
+            satirlar.append((is_, BOS, BOS))
+        else:
+            satirlar.append((is_, SON_GUN_DEGERI.format(gun=_gun(sure[0])), sure[1]))
+    if AgendaItemKind.SECIM_YK in turler:
+        satirlar.append((IS_BANKA, GOREV_BOLUMUNDEN_SONRA, DAYANAK_BANKA))
+    satirlar.append((IS_TEFBIS, GENEL_KURULDAN_SONRA, DAYANAK_TEFBIS))
+    if kurul.discharge_yk == Discharge.EDILMEDI:
+        satirlar.append((IS_MEM_YAZISI, GENEL_KURULDAN_SONRA, DAYANAK_MEM_YAZISI))
+    return tuple(satirlar)
+
+
+def e13_belgesi(konu: models.Model, secim: Secim) -> tuple[evrak.Belge, tuple[str, ...]]:
+    """E13'ün içerik modeli (tasarım §9.6 E13; GNL-OAB-FR-005 A, C): genel kurulun sonucu (ibra,
+    tahmini bütçe yalnız "görüşüldü", U22), seçilenler (E10 ile aynı kayıtlar), tarihli sonraki işler;
+    konum cümlesi TFB imzanın hemen üstünde (tasarım §9.2). İmza Birlik Başkanı (yeni) + Sekreter (yeni;
+    görev bölümünden önce "………", U21) ve "Teslim alan: Okul Müdürü" (tasarım §9.3). Bildirim okul
+    uygulamasıdır: "Yönetmelik gereği" denmez (MB-11)."""
+    kurul = _yapilmis_kurul(konu)
+    uyarilar = _Uyarilar()
+    turler = _gundem_turleri(kurul)
+    bloklar: list[evrak.Blok] = [
+        _baslik(E13, kurul),
+        evrak.Paragraf(
+            E13_GIRIS.format(gun=_gun(_yapildigi_gun(kurul)), tur=TUR_ADLARI[str(kurul.kind)])
+        ),
+        evrak.AltBaslik(E13_BOLUMLER[0]),
+        evrak.Tablo(
+            basliklar=KONU_BILGI,
+            satirlar=tuple(_sonuc_bilgisi(kurul, turler, uyarilar)),
+            oranlar=(2, 3),
+        ),
+    ]
+    if AgendaItemKind.SECIM_YK in turler:
+        bloklar += [
+            evrak.AltBaslik(E13_BOLUMLER[1]),
+            evrak.Tablo(
+                basliklar=UYE_BASLIKLARI,
+                satirlar=_uye_satirlari(kurul, OrganType.YONETIM_KURULU, uyarilar),
+                oranlar=(1, 6, 3, 3),
+            ),
+        ]
+    if AgendaItemKind.SECIM_DK in turler and kurul.kind == AssemblyKind.OLAGAN:
+        bloklar += [
+            evrak.AltBaslik(E13_BOLUMLER[2]),
+            evrak.Tablo(
+                basliklar=UYE_BASLIKLARI,
+                satirlar=_uye_satirlari(kurul, OrganType.DENETLEME_KURULU, uyarilar),
+                oranlar=(1, 6, 3, 3),
+            ),
+        ]
+    baskan = _imzaci_gorevli_adi(
+        kurul, MembershipRole.BASKAN, UNVAN_BIRLIK_BASKANI, UYARI_YENI_BASKAN_YOK, uyarilar
+    )
+    sekreter = _imzaci_gorevli_adi(
+        kurul, MembershipRole.SEKRETER, UNVAN_SEKRETER, UYARI_YENI_SEKRETER_YOK, uyarilar
+    )
+    bloklar += [
+        evrak.AltBaslik(E13_BOLUMLER[3]),
+        evrak.Tablo(
+            basliklar=SONRAKI_BASLIKLARI,
+            satirlar=_sonraki_isler(kurul, turler, uyarilar),
+            oranlar=(6, 3, 2),
+        ),
+        evrak.KonumCumlesi(evrak.TFB),
+        evrak.Imza(
+            sahipler=(
+                evrak.ImzaSahibi(baskan, UNVAN_BIRLIK_BASKANI),
+                evrak.ImzaSahibi(sekreter, UNVAN_SEKRETER),
+                evrak.ImzaSahibi(_mudur_adi(uyarilar), UNVAN_TESLIM_ALAN),
+            )
+        ),
+        evrak.Dipnot(evrak.KISISEL_VERI_DIPNOTU),
+    ]
+    belge = evrak.Belge(kod=E13, antet=_antet(), bloklar=tuple(bloklar))
+    return belge, tuple(uyarilar.liste)
+
+
+# ---------------------------------------------------------------------------
+# E14 — yıllık iş takvimi (kişisiz)
+# ---------------------------------------------------------------------------
+def _donem(konu: models.Model) -> OabTerm:
+    if not isinstance(konu, OabTerm):
+        raise ValueError(KONU_GECERSIZ)
+    return konu
+
+
+def _sonraki_olagan(donem: OabTerm) -> GeneralAssembly | None:
+    """Dönemi kapatacak olağan genel kurul (`term` kapanacak dönemdir; iptal edilen sayılmaz)."""
+    kurul: GeneralAssembly | None = (
+        GeneralAssembly.objects.filter(term=donem, kind=AssemblyKind.OLAGAN)
+        .exclude(status=AssemblyStatus.IPTAL)
+        .order_by("-pk")
+        .first()
+    )
+    return kurul
+
+
+def _kural_satiri(
+    kural_id: str,
+    is_: str,
+    gun: date,
+    donem: OabTerm,
+    tarih: Callable[[int], str],
+    uyarilar: _Uyarilar,
+) -> tuple[str, str, str, str]:
+    """Süre kuralının satırı: tarih (kural değerinden), iş, kural kimliği ve atıf (sözlük §2 istisna
+    3). Olay gününde değer yoksa tarih "………" ve uyarı; kimlik yine basılır."""
+    try:
+        kayit = kural_kaydi(kural_id, tarih=gun, donem=donem)
+    except YururlukteDegerYok:
+        uyarilar.ekle(UYARI_KURAL_DEGERI_YOK)
+        return BOS, is_, kural_id, BOS
+    return tarih(int(kayit["deger"])), is_, kural_id, atif_metni(kayit)
+
+
+def _son_gun(gun: date) -> str:
+    return SON_GUN_DEGERI.format(gun=_gun(gun))
+
+
+def _sonrasi(baslangic: date) -> Callable[[int], str]:
+    """Başlangıçtan kural değeri kadar gün sonrasının son günü ("en geç gg.aa.yyyy")."""
+
+    def tarih(gun: int) -> str:
+        return _son_gun(baslangic + timedelta(days=gun))
+
+    return tarih
+
+
+def _oncesi(bitis: date) -> Callable[[int], str]:
+    """Bitişten kural değeri kadar gün öncesinin son günü ("en geç gg.aa.yyyy")."""
+
+    def tarih(gun: int) -> str:
+        return _son_gun(bitis - timedelta(days=gun))
+
+    return tarih
+
+
+def _kalip(metin: str) -> Callable[[int], str]:
+    """Tarihsiz satırın göreli metni; kural değeri `{gun}` yerine yazılır."""
+
+    def tarih(gun: int) -> str:
+        return metin.format(gun=gun)
+
+    return tarih
+
+
+def _ay_sonu(yil: int) -> Callable[[int], str]:
+    """`yil` yılında kural değerindeki ayın son günü ("en geç gg.aa.yyyy")."""
+
+    def tarih(ay: int) -> str:
+        return _son_gun(date(yil, ay, calendar.monthrange(yil, ay)[1]))
+
+    return tarih
+
+
+def _bos_tarih(_deger: int) -> str:
+    return BOS
+
+
+def _kural_satirlari(donem: OabTerm, uyarilar: _Uyarilar) -> tuple[tuple[str, str, str, str], ...]:
+    """A bölümü: görev bölümleri (dönemin başlangıcından), dönemi kapatacak olağan genel kurulun son
+    ayı (ders yılının bitiş yılında; md. 9/1), ilanı ve ikinci toplantısı (planlanmışsa birinci
+    toplantının gününden tarihli, değilse göreli), kantin varsa arz bedelinin son günleri: kiraya
+    vermede sözleşmedeki (EK-2 md. 7) ve Yönetmelikteki (md. 17/1-a-1), birlikçe işletmede yalnız
+    Yönetmelikteki (md. 17/1-b-1; hangisinin basılacağı kuralın `kosul`'undan). Değerler kural
+    paketindendir (D8)."""
+    bugun = _olay_gunu(donem)
+    satirlar: list[tuple[str, str, str, str]] = []
+    baslangic = donem.start_date
+    if baslangic is None:
+        uyarilar.ekle(UYARI_DONEM_BASLANGICI_YOK)
+    for kural_id, is_ in (
+        (_YK_GOREV_BOLUMU, IS_YK_GOREV_BOLUMU),
+        (_DK_GOREV_BOLUMU, IS_DK_GOREV_BOLUMU),
+    ):
+        if baslangic is None:
+            satirlar.append(_kural_satiri(kural_id, is_, bugun, donem, _bos_tarih, uyarilar))
+        else:
+            satirlar.append(
+                _kural_satiri(kural_id, is_, baslangic, donem, _sonrasi(baslangic), uyarilar)
+            )
+    kurul = _sonraki_olagan(donem)
+    birinci = (
+        None
+        if kurul is None or kurul.first_meeting_at is None
+        else genel_kurul.yerel_gun(kurul.first_meeting_at)
+    )
+    ilan = _kalip(ILAN_GORELI) if birinci is None else _oncesi(birinci)
+    ikinci = _kalip(IKINCI_GORELI) if birinci is None else _sonrasi(birinci)
+    bitis_yili = donem.school_year.end_date.year
+    satirlar += [
+        _kural_satiri(_GK_ILAN, IS_ILAN, bugun, donem, ilan, uyarilar),
+        _kural_satiri(_GK_SON_AY, IS_OLAGAN_GK, bugun, donem, _ay_sonu(bitis_yili), uyarilar),
+        _kural_satiri(_GK_IKINCI, IS_IKINCI_TOPLANTI, bugun, donem, ikinci, uyarilar),
+    ]
+    kantin = str(SchoolConfig.load().canteen_mode or "")
+    if not kantin:
+        uyarilar.ekle(UYARI_KANTIN_BICIMI_YOK)
+    elif kantin != CanteenMode.KANTIN_YOK:
+        for kural_id, is_ in (
+            (_ARZ_SOZLESME, IS_ARZ_SOZLESME),
+            (_ARZ_YONETMELIK, IS_ARZ_YONETMELIK),
+        ):
+            if _kantin_kosulu_tutar(kural_id, kantin, bugun, donem):
+                satirlar.append(
+                    _kural_satiri(kural_id, is_, bugun, donem, _kalip(ARZ_GUNU), uyarilar)
+                )
+    return tuple(satirlar)
+
+
+def _kantin_kosulu_tutar(kural_id: str, kantin: str, gun: date, donem: OabTerm) -> bool:
+    """Arz bedeli kuralının okulun kantin işletme biçimine uygulanıp uygulanmadığı kural paketinin
+    `kosul` alanından okunur (D8; tasarım §6.1): sözleşmedeki son gün (EK-2 md. 7) yalnız kiraya
+    vermededir; Yönetmelikteki son gün (md. 17/1-a-1, b-1) koşulsuzdur, birlikçe işletmede arz
+    bedelini birlik öder. Olay gününde değeri olmayan kuralın satırı `_kural_satiri`'nin uyarısıyla
+    basılır."""
+    try:
+        kayit = kural_kaydi(kural_id, tarih=gun, donem=donem)
+    except YururlukteDegerYok:
+        return True
+    izinli = kayit.get("kosul", {}).get("okul.kantin")
+    return izinli is None or kantin in izinli
+
+
+def _plan_satirlari(donem: OabTerm, uyarilar: _Uyarilar) -> tuple[tuple[str, str, str], ...]:
+    """B bölümü (okul planı; kural değildir): ders yılı ve ders dönemleri, yönetim kurulunun aylık
+    toplantı günü (dönem ayarı; md. 13/3) ve Denetleme Kurulunun denetim planı (dönem ayarı; md.
+    14/4)."""
+    yil = donem.school_year
+    satirlar: list[tuple[str, str, str]] = [
+        (_gun(yil.start_date), IS_DERS_YILI_BASI, KAYNAK_DERS_YILI)
+    ]
+    for ders_donemi in SchoolTerm.objects.filter(school_year=yil).order_by("sequence"):
+        satirlar.append(
+            (
+                DONEM_ARALIGI.format(
+                    bas=_gun(ders_donemi.start_date), son=_gun(ders_donemi.end_date)
+                ),
+                IS_DERS_DONEMI.format(sira=ders_donemi.sequence),
+                KAYNAK_DERS_YILI,
+            )
+        )
+    toplanti = " ".join(str(donem.yk_meeting_day_rule or "").split())
+    if not toplanti:
+        uyarilar.ekle(UYARI_YK_TOPLANTISI_YOK)
+    satirlar.append((toplanti or BOS, IS_YK_TOPLANTISI, KAYNAK_DONEM))
+    plan = sorted(date.fromisoformat(str(gun_)) for gun_ in donem.dk_audit_plan_dates or [])
+    if not plan:
+        uyarilar.ekle(UYARI_DENETIM_PLANI_YOK)
+        satirlar.append((BOS, IS_DK_DENETIMI.format(sira=1), KAYNAK_DONEM))
+    satirlar += [
+        (_gun(gun_), IS_DK_DENETIMI.format(sira=sira), KAYNAK_DONEM)
+        for sira, gun_ in enumerate(plan, start=1)
+    ]
+    satirlar.append((_gun(yil.end_date), IS_DERS_YILI_SONU, KAYNAK_DERS_YILI))
+    return tuple(satirlar)
+
+
+def e14_belgesi(konu: models.Model, secim: Secim) -> tuple[evrak.Belge, tuple[str, ...]]:
+    """E14'ün içerik modeli (tasarım §7.10, §9.6 E14; GNL-OAB-RH-001 Bölüm 6): kişisiz, imzasız. Süre
+    kuralı satırları kural kimliği ve atıf taşır; okul planı satırları ayrı bölümdedir ve kural
+    değildir. Rehberin "öneri" satırları (kural paketinde ve programın kayıtlarında karşılığı olmayan
+    takvim önerileri) basılmaz. PDF saklanır, Excel kayıtlı içerikten çizilir (U18). Hazırlıktaki
+    dönemin takvimi yazılmaz (`DonemYazilamaz`; 8. adımın kararı)."""
+    donem = _donem(konu)
+    uyarilar = _Uyarilar()
+    belge = evrak.Belge(
+        kod=E14,
+        antet=_antet(),
+        bloklar=(
+            evrak.Baslik(BELGE_ADLARI[E14], alt=str(donem.name)),
+            evrak.Paragraf(E14_GIRIS),
+            evrak.AltBaslik(E14_BOLUMLER[0]),
+            evrak.Tablo(
+                basliklar=KURAL_BASLIKLARI,
+                satirlar=_kural_satirlari(donem, uyarilar),
+                oranlar=(4, 6, 5, 2),
+            ),
+            evrak.AltBaslik(E14_BOLUMLER[1]),
+            evrak.Tablo(
+                basliklar=PLAN_BASLIKLARI,
+                satirlar=_plan_satirlari(donem, uyarilar),
+                oranlar=(4, 7, 4),
+            ),
+        ),
+    )
+    return belge, tuple(uyarilar.liste)
+
+
+#: Kodun kişisiz içerik kurucusu (E05-E08, E64 9. adımda; E09-E14 10. adımda; E04 metinlerin
+#: onayından sonra, plan F2 §9 S8 (i)).
 KURUCULAR: dict[str, Kurucu] = {
     E05: e05_belgesi,
     E06: e06_belgesi,
     E07: e07_belgesi,
     E08: e08_belgesi,
+    E09: e09_belgesi,
+    E10: e10_belgesi,
+    E11: e11_belgesi,
+    E12: e12_belgesi,
+    E13: e13_belgesi,
+    E14: e14_belgesi,
     E64: e64_belgesi,
 }
 #: Veli adlı kipin içerik kurucusu (E07 ve E08).
@@ -1475,7 +2834,7 @@ def _konu_ve_donem(kod: str, konu: models.Model) -> tuple[models.Model, OabTerm 
 
 
 def _secim_denetimi(kod: str, secim: Secim, *, adli: bool = False) -> None:
-    """Kip ve toplantı koda uymalı (modül başlığı "Kip ve toplantı")."""
+    """Kip ve toplantı koda uymalı (modül başlığı "Kip ve toplantı"); muhatap yalnız resmî yazıda."""
     if kod in KIPLI_KODLAR:
         beklenen = DocumentVariant.ADLI if adli else DocumentVariant.KISISIZ
         if secim.kip != beklenen:
@@ -1487,6 +2846,8 @@ def _secim_denetimi(kod: str, secim: Secim, *, adli: bool = False) -> None:
             raise ValueError(TOPLANTI_GECERSIZ)
     elif secim.toplanti:
         raise ValueError(TOPLANTI_GECERSIZ)
+    if secim.muhatap is not None and kod not in MUHATAPLI_KODLAR:
+        raise ValueError(MUHATAP_GECERSIZ)
 
 
 def _cizim(belge: evrak.Belge, bicim: str) -> bytes:
@@ -1567,11 +2928,19 @@ class Uretim:
     uyarilar: tuple[str, ...]
 
 
-def uret(kod: str, konu: models.Model, *, kip: str = "", toplanti: str = "") -> Uretim:
-    """Evrakı üretir ve kaydeder (modül başlığı "Üretim"); yeni sürümün kaydını döner."""
+def uret(
+    kod: str,
+    konu: models.Model,
+    *,
+    kip: str = "",
+    toplanti: str = "",
+    muhatap: Muhatap | None = None,
+) -> Uretim:
+    """Evrakı üretir ve kaydeder (modül başlığı "Üretim"); yeni sürümün kaydını döner. `muhatap`
+    yalnız resmî yazının (E12) basımda düzenlenen muhatabıdır (plan F2 §7 U20)."""
     if kod not in KURUCULAR:
         raise ValueError(KOD_GECERSIZ)
-    secim = Secim(kip=kip, toplanti=toplanti)
+    secim = Secim(kip=kip, toplanti=toplanti, muhatap=muhatap)
     _secim_denetimi(kod, secim)
     yazma_kapisi()
     app_password.require_password_set()

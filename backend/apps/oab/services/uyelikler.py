@@ -328,6 +328,26 @@ def secilme_sayaci(kisi: OabPerson, organ: str) -> int | None:
     return None if beyan is None else program + beyan
 
 
+def yk_secilme_sayaci_once(
+    kisi: OabPerson, gun: date | None, *, haric_kurul: GeneralAssembly
+) -> int | None:
+    """Bir genel kuruldan önceki yönetim kurulu seçilmeleri (md. 12/4; genel kurulun aday listesi,
+    `genel_kurul_evraki` E09): programdan önceki beyan + `gun`den önce başlamış program kayıtları;
+    `haric_kurul`un kendi seçilmesi ve sonraki genel kurulların seçilmeleri sayılmaz (eski genel
+    kurulun yeniden üretilen listesi aynı sayıyı basar). Başlangıç günü olmayan program kaydı
+    sayılır. Genel kurulun günü bilinmiyorsa (`gun` `None`) yalnız kendi seçilmesi düşülür. Beyan
+    "bilinmiyor"sa `None` (eksik)."""
+    beyan = kisi.external_yk_terms
+    if beyan is None:
+        return None
+    kayitlar = (
+        _sayilan(kisi).filter(organ=OrganType.YONETIM_KURULU).exclude(assembly_id=haric_kurul.pk)
+    )
+    if gun is not None:
+        kayitlar = kayitlar.filter(Q(start_date__isnull=True) | Q(start_date__lt=gun))
+    return kayitlar.count() + beyan
+
+
 def _sayac_gozlenen(kural_sonucu: DenetimSonucu, program: int, beyan: int | None) -> Any:
     """Sayaç gözlenen değeri: beyan bilinmiyorsa eksik, ama bilinen kayıtlar sınırı aşıyorsa sayı."""
     if beyan is not None:

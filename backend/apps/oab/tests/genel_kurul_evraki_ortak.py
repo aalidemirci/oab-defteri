@@ -6,7 +6,9 @@ toplantı, veli adlı çıktı, basım) deneme kurucularıyla sınanır; kurucul
 
 9. adım (E05, E06, E07, E08, E64'ün gerçek kurucuları): çağıranın kolu başına çağrılmış genel kurul
 (`kurulum`; görev bölümlü yönetim kurulu ve Denetleme Kurulu, okul kartı, veli listesi), ilan ve
-toplantılar. Adlar UYDURMADIR; veli adları aranacak belirgin dizgilerdir.
+toplantılar. 10. adım (E09-E14): tutanağı yazılmış genel kurul (`tutanakli`; gündem değişikliği,
+kararlar, ibra, seçim, tutanak bilgileri), yeni yönetim kurulunun görev bölümü (`gorev_bolumlu`) ve
+dönemin okul planı (`takvimli_donem`). Adlar UYDURMADIR; veli adları aranacak belirgin dizgilerdir.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ import pytest
 from django.db import models
 
 from apps.oab.models import (
+    AgendaItem,
     AssemblyCaller,
     AssemblyKind,
     GeneralAssembly,
@@ -145,10 +148,17 @@ def kurullar(donem: OabTerm, *, uzun: bool = False) -> None:
     )
 
 
-def kurulum(kol: str, *, ogrenci: int | None = 120, uzun: bool = False) -> GeneralAssembly:
+def kurulum(
+    kol: str,
+    *,
+    ogrenci: int | None = 120,
+    uzun: bool = False,
+    gundem: tuple[gk.GundemMaddesi, ...] | None = None,
+) -> GeneralAssembly:
     """Kolun çağrılmış genel kurulu (`gke.KOLLAR`). Yeni okul dışında: açık dönem, görev bölümlü
     yönetim kurulu ve Denetleme Kurulu (`kurullar`), uydurma veli listesi; birinci toplantı
-    `genel_kurul_ortak.BIRINCI_GUN`, yer `YER`."""
+    `genel_kurul_ortak.BIRINCI_GUN`, yer `YER`. Olağanüstü kollarda çağrının gündemi `gundem`
+    (verilmezse `genel_kurul_ortak.OLAGANUSTU_GUNDEM`)."""
 
     birinci = gko.an(gko.BIRINCI_GUN)
     if kol == gke.KOL_MUDUR_9_1:
@@ -167,7 +177,7 @@ def kurulum(kol: str, *, ogrenci: int | None = 120, uzun: bool = False) -> Gener
         kurul = gk.planla(kind=AssemblyKind.OLAGAN, first_meeting_at=birinci, venue=YER).kurul
         return gko.olagan_cagir(kurul)
     kurul = gk.planla(kind=AssemblyKind.OLAGANUSTU, first_meeting_at=birinci, venue=YER).kurul
-    neden, gundem = gko.OLAGANUSTU_NEDEN, gko.OLAGANUSTU_GUNDEM
+    neden, gundem = gko.OLAGANUSTU_NEDEN, gundem or gko.OLAGANUSTU_GUNDEM
     if kol == gke.KOL_DK_14_5:
         with o.rol_olarak(AccountRole.DENETLEME_KURULU):
             rapor = denetim.denetim_raporu_yaz(
@@ -237,3 +247,141 @@ def ikinci_toplantida_yapilmis(kurul: GeneralAssembly) -> GeneralAssembly:
     gk.ikinci_toplanti(kurul, katilim=gko.katilim(20, dagilim=DAGILIM_IKINCI, gozlemci=2))
     gk.divan_sec(kurul, baskan=o.kisi(), katip=o.kisi())
     return GeneralAssembly.objects.get(pk=kurul.pk)
+
+
+# ---------------------------------------------------------------------------
+# 10. adım: tutanağı yazılmış genel kurul (E09-E13) ve dönemin takvimi (E14)
+# ---------------------------------------------------------------------------
+#: Gündeme oylamayla eklenen uydurma madde ve oyları (md. 9/4).
+EKLENEN_MADDE = "Uydurma ek madde: okul bahçesinin düzenlenmesi"
+EKLEME_OYLARI = (50, 10)
+
+
+def oranli(oylar: tuple[int, int], katilan: int) -> tuple[int, int]:
+    """Birinci toplantının 70 katılanına göre yazılmış oyların `katilan`a oranlanmışı (ikinci
+    toplantının 20 katılanında da oylar katılımı aşmaz, kabul yine çoğunluktadır)."""
+    return oylar[0] * katilan // gko.KATILAN, oylar[1] * katilan // gko.KATILAN
+
+
+#: Yetkilendirme kararının oyları (salonda 70; 60 > 35: kabul) ve uydurma sonuç metni.
+YETKILENDIRME_OYLARI = (60, 5)
+YETKILENDIRME_METNI = "Uydurma sınır: tahmini bütçe çerçevesinde."
+#: İbra edilmeyen muhasebe evrakının uydurma listesi (tutanağın şifreli notu; satır başına bir evrak).
+IBRA_EDILMEYEN_EVRAK = (
+    "Uydurma gider belgeleri dosyası (Ocak-Mart)\nUydurma banka dekontları (12 adet)\n"
+)
+#: Yönetim kurulunun seçilen asıl ve yedek sayısı, Denetleme Kurulu veli koltuğu (asıl ve yedek).
+YK_ASIL = 5
+YK_YEDEK = 1
+
+
+def tutanakli(kurul: GeneralAssembly, *, ibra_edilmedi: bool = False) -> GeneralAssembly:
+    """Yapılmış genel kurulun (`YAPILDI`) tutanağı: oylamayla eklenen madde, yetkilendirme kabul
+    (oylu, sonuç metniyle), öteki maddeler "görüşüldü", ibra (yönetim kurulu edildi ya da edilmedi —
+    evrak notuyla; Denetleme Kurulu edildi), seçim (yönetim kurulu beş asıl bir yedek; olağanda
+    Denetleme Kurulunun veli koltuğu bir asıl bir yedek; adayların biri seçilmez), tutanak bilgileri
+    (okuyanlar ve bütçeyi sunan). Oylar yapıldığı toplantının katılımına oranlanır."""
+    katilan = (
+        kurul.second_attendee_count
+        if kurul.held_at_meeting == "IKINCI"
+        else kurul.first_attendee_count
+    )
+    assert katilan is not None
+    gk.gundeme_madde_ekle(
+        kurul,
+        title=EKLENEN_MADDE,
+        change_votes_for=oranli(EKLEME_OYLARI, katilan)[0],
+        change_votes_against=oranli(EKLEME_OYLARI, katilan)[1],
+        gerekce=gko.GEREKCE,
+    )
+    for madde in AgendaItem.objects.filter(assembly=kurul).order_by("order"):
+        if madde.kind in ("IBRA", "SECIM_YK", "SECIM_DK"):
+            continue
+        if madde.kind == "YETKILENDIRME":
+            gk.karar_sonucu_yaz(
+                madde,
+                votes_for=oranli(YETKILENDIRME_OYLARI, katilan)[0],
+                votes_against=oranli(YETKILENDIRME_OYLARI, katilan)[1],
+                result_text=YETKILENDIRME_METNI,
+            )
+        else:
+            gk.karar_sonucu_yaz(madde, result="GORUSULDU")
+    if AgendaItem.objects.filter(assembly=kurul, kind="IBRA").exists():
+        gk.ibra_yaz(
+            gko.madde(kurul, "IBRA"),
+            yk=gko.IBRA_EDILMEDI if ibra_edilmedi else gko.IBRA_EDILDI,
+            dk=gko.IBRA_EDILDI,
+            unaudited_documents_note=IBRA_EDILMEYEN_EVRAK if ibra_edilmedi else "",
+        )
+    yk = [gko.aday(kurul) for _ in range(YK_ASIL)]
+    yk += [gko.aday(kurul, seat_type="YEDEK") for _ in range(YK_YEDEK)]
+    secilmeyen = gko.aday(kurul, seat_type="YEDEK")
+    gk.secim_sonucu_yaz(
+        gko.madde(kurul, "SECIM_YK"),
+        adaylar=[
+            *(
+                gk.AdayOyu(uyelik=u, votes=katilan - 10 - sira, secildi=True)
+                for sira, u in enumerate(yk)
+            ),
+            gk.AdayOyu(uyelik=secilmeyen, votes=3, secildi=False),
+        ],
+        liste=True,
+        acik_oy=True,
+    )
+    if kurul.kind == AssemblyKind.OLAGAN:
+        dk = [gko.aday(kurul, organ="DK"), gko.aday(kurul, organ="DK", seat_type="YEDEK")]
+        gko.secim(kurul, "SECIM_DK", dk, oylar=list(oranli((55, 40), katilan)))
+    gk.tutanak_bilgilerini_yaz(
+        kurul,
+        yk_report_reader=o.kisi(),
+        dk_report_reader=o.kisi(),
+        budget_presenter=o.kisi(),
+    )
+    return GeneralAssembly.objects.get(pk=kurul.pk)
+
+
+def yapilmis_tutanakli(*, ibra_edilmedi: bool = False, uzun: bool = False) -> GeneralAssembly:
+    """Yönetim kurulunun çağrısıyla birinci toplantıda yapılmış olağan genel kurul ve tutanağı."""
+    kurul = birinci_toplantida_yapilmis(ilanli(kurulum(gke.KOL_YK, uzun=uzun)))
+    return tutanakli(kurul, ibra_edilmedi=ibra_edilmedi)
+
+
+#: Yeni yönetim kurulunun görev bölümü günü (genel kuruldan iki gün sonra) ve gerekçesi.
+YENI_GOREV_BOLUMU_GUNU = date(2026, 10, 22)
+
+
+def gorev_bolumlu(kurul: GeneralAssembly) -> GeneralAssembly:
+    """Tutanak tamamlanır, dönem geçişi onaylanır (U32), yeni yönetim kurulu görev bölümü yapar:
+    başkan ve sekreter seçilenlerin ilk ikisidir (U21: E12 ve E13 yeni başkanı ister)."""
+    gk.tutanagi_tamamla(kurul, gerekce=gko.GEREKCE)
+    yeni = gk.donem_gecisini_onayla(kurul).yeni_donem
+    secilenler = [
+        u
+        for u in gke._kurul_secilenleri(kurul, "YK")
+        if u.seat_type == "ASIL" and u.status == "SECILDI"
+    ]
+    o.yk_gorev_bolumu(
+        yeni,
+        {MembershipRole.BASKAN: secilenler[0], MembershipRole.SEKRETER: secilenler[1]},
+        gun=YENI_GOREV_BOLUMU_GUNU,
+        gerekce=GOREV_BOLUMU_GEREKCESI,
+    )
+    return GeneralAssembly.objects.get(pk=kurul.pk)
+
+
+#: Dönemin okul planı (E14): yönetim kurulunun aylık toplantı günü ve denetim planı (uydurma).
+YK_TOPLANTI_GUNU = "Her ayın ilk salı günü"
+DENETIM_PLANI = (date(2026, 1, 15), date(2026, 4, 15))
+
+
+def takvimli_donem(*, kantin: str = "KIRAYA_VERILIYOR", uzun: bool = False) -> OabTerm:
+    """Açık dönem (başlangıcı `genel_kurul_ortak.DONEM_BASI`), okul kartı, dönemin okul planı ve
+    kantin işletme biçimi; dönemi kapatacak olağan genel kurul henüz planlanmadı."""
+    donem = gko.acik_donem()
+    okul_ve_mevcut(uzun=uzun)
+    SchoolConfig.objects.filter(pk=SchoolConfig.SINGLETON_PK).update(canteen_mode=kantin)
+    OabTerm.objects.filter(pk=donem.pk).update(
+        yk_meeting_day_rule=YK_TOPLANTI_GUNU,
+        dk_audit_plan_dates=[gun.isoformat() for gun in DENETIM_PLANI],
+    )
+    return OabTerm.objects.get(pk=donem.pk)

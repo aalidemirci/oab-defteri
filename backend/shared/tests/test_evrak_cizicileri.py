@@ -12,7 +12,9 @@ verir, punto alt sınırı (9) korunur, kayıtlı JSON'dan aynı modele döner; 
 akışını verir (resmî yazıyı reddeder), A4 ve altlık ayarlıdır, yazı tipi Times New Roman ve 9
 puntodan küçük değildir, değerler metindir; (6) web sayfası tek dosyadır,
 hiçbir dış kaynak (bağlantı, betik, görsel, `url(...)`, `@import`) taşımaz, metni kaçışlıdır ve
-gövdesinin metni modelinkine eşittir.
+gövdesinin metni modelinkine eşittir; (7) resmî yazının metin paragrafı 1,25 cm içeriden, iki yana
+yaslı ve aralıksızdır (md. 16/4), imza bölümünde tek imza sağ yarıda, iki imzada üst unvan sağdadır
+(md. 17/1, 17/11; plan F2 10. adım), TFB konum cümlesi tasarım §9.2'nin metnidir.
 
 Adlar UYDURMADIR.
 """
@@ -546,3 +548,80 @@ def test_web_sayfasi_metni_kacislidir() -> None:
     assert "script" not in a.etiketler
     assert "&lt;script&gt;" in sayfa and "&amp;" in sayfa
     assert "<title>GENEL KURUL DUYURUSU</title>" in sayfa
+
+
+# ============================================================ resmî yazının metni ve imzası (10. adım)
+
+
+def test_metin_paragrafi_word_de_ilk_satir_girintili_ve_araliksiz(resmi_docx: bytes) -> None:
+    """RYUE md. 16/4: paragrafa 1,25 cm içeriden başlanır, metin iki yana hizalanır, paragraflar
+    arasında satır boşluğu bırakılmaz."""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    belge = cizici.ac(resmi_docx)
+    paragraflar = [
+        p for p in belge.paragraphs if p.text.startswith(("Türkçe örnek", "Bilgileriniz"))
+    ]
+    assert len(paragraflar) == 2
+    for p in paragraflar:
+        bicim = p.paragraph_format
+        assert bicim.first_line_indent is not None
+        assert round(bicim.first_line_indent.cm, 2) == evrak.METIN_GIRINTISI_CM
+        assert bicim.space_before == 0 and bicim.space_after == 0
+        assert p.alignment == WD_ALIGN_PARAGRAPH.JUSTIFY
+
+
+def test_metin_paragrafi_pdf_ve_web_sayfasinda_girintili(resmi: evrak.Belge) -> None:
+    """PDF şablonu ve web sayfası aynı girintiyi çizer (1,25 cm, aralıksız)."""
+    html = evrak.html_ciz(resmi)
+    assert html.count('class="para-girintili"') == 2
+    sayfa = evrak.web_html_ciz(resmi)
+    assert sayfa.count('class="govde girintili"') == 2
+    assert ".girintili{text-indent:1.25cm;margin:0}" in sayfa
+
+
+@pytest.mark.parametrize("sayi", [1, 2])
+def test_resmi_imza_tek_imza_sagda_iki_imzada_ust_unvan_sagda(sayi: int) -> None:
+    """RYUE md. 17/1: tek imza yazı alanının en sağında ortalanır (sağ yarı hücre); md. 17/11: iki
+    imzada üst unvan sağdadır (kurucu sahipleri soldan sağa verir). Word'de sol hücre tek imzada boştur;
+    metin akışı iki çizicide aynıdır."""
+    sahipler = (
+        evrak.ImzaSahibi("Ayşe ÖRNEK", "Yönetim Kurulu adına Birlik Başkanı"),
+        evrak.ImzaSahibi("İsmail DENEME", "Okul Müdürü"),
+    )[-sayi:]
+    imza = evrak.ResmiImza(sahipler=sahipler)
+    sol, sag = evrak.resmi_imza_hucreleri(imza)
+    assert sag == sahipler[-1] and (sol is None) is (sayi == 1)
+    belge = evrak.Belge(
+        kod="E12",
+        antet=_antet(),
+        bloklar=(_resmi(), evrak.MetinParagrafi("Arz ederim."), imza, evrak.Ekler(("Ek",))),
+    )
+    veri = evrak.docx_ciz(belge)
+    tablo = cizici.ac(veri).tables[-1]
+    hucreler = tablo.rows[0].cells
+    assert len(hucreler) == 2 and "Okul Müdürü" in hucreler[1].text
+    assert (hucreler[0].text.strip() == "") is (sayi == 1)
+    assert cizici.govde_metin_akisi(cizici.ac(veri)) == evrak.metin_akisi(belge)
+    pdf_metni = _pdf_metni(evrak.pdf_ciz(belge))
+    assert _bosluksuz(_ALTLIK.sub("", pdf_metni)) == _bosluksuz(evrak.metin_akisi(belge))
+    assert evrak.belge_coz(evrak.kanonik_json(belge)) == belge
+
+
+@pytest.mark.parametrize("sayi", [0, 3])
+def test_resmi_imza_bir_ya_da_iki_imza_tasir(sayi: int) -> None:
+    """İkiden çok imza md. 17/11'in ikinci cümlesinin sıralamasıdır (onu gerektiren belgenin fazında);
+    imzasız imza bölümü olmaz."""
+    with pytest.raises(ValueError, match="bir ya da iki imza"):
+        evrak.ResmiImza(sahipler=tuple(evrak.ImzaSahibi("A B", "Unvan") for _ in range(sayi)))
+
+
+def test_tfb_tasarimdaki_metindir() -> None:
+    """Tasarım §9.2 TFB (md. 23/5) BİREBİR; konum cümlesi kalıbıyla imzanın hemen üstünde durur."""
+    belge = evrak.Belge(
+        kod="E13",
+        antet=_antet(),
+        bloklar=(evrak.KonumCumlesi(evrak.TFB), _imza()),
+    )
+    assert evrak.metin_akisi(belge)[3:4] == [evrak.TFB]
+    assert evrak.TFB.endswith("TEFBİS kaydının yerine geçmez.")

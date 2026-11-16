@@ -3121,8 +3121,8 @@ EVRAK_NOTU_YALNIZ_IBRA_EDILMEDIGINDE = (
 )
 IBRA_EDILMEDI_BILGISI: Final = (
     "Hesaplar ibra edilmedi: diğer gündem maddeleri görüşülür; divan ibra edilmeyen muhasebe "
-    "evrakını tutanak altına alarak yeni yönetim ve denetleme kuruluna teslim eder (md. 11/1-ç). "
-    "Tutanak tamamlanınca il/ilçe millî eğitim müdürlüğüne bildirim takvime girer."
+    "evrakını tutanak altına alarak yönetim kuruluna ve Denetleme Kuruluna teslim eder "
+    "(md. 11/1-ç). Tutanak tamamlanınca il/ilçe millî eğitim müdürlüğüne bildirim takvime girer."
 )
 IBRA_BILDIRIMI_MESAJI: Final = (
     "Hesaplar ibra edilmedi: yeni yönetim kurulu ve okul yönetimi il/ilçe millî eğitim müdürlüğüne "
