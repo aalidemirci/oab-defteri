@@ -1206,6 +1206,19 @@ def _cagri_eylemi(kurul: GeneralAssembly, cagiran: str, rol: str | None) -> rol_
     return rol_izinleri.Eylem.GENEL_KURUL_YAZMA
 
 
+def cagri_yetki_kaydi(kurul: GeneralAssembly) -> CagriKaydi:
+    """Çağrı yazısının yetki kaydı (dönem kilidi ve sahip rol): çağrı yazısını, yani E05'i çağıranın
+    eylemiyle üreten evrak servisi okur (`genel_kurul_evraki`; plan F2 9. adım)."""
+    return _cagri_kaydi(kurul)
+
+
+def cagri_yazisi_eylemi(kurul: GeneralAssembly) -> rol_izinleri.Eylem:
+    """Kaydedilmiş çağrının eylemi (`called_by`, `called_by_role`; modül başlığı "Müdür ve
+    Denetleme Kurulu"): müdürün yazısı müdürün eylemi, Denetleme Kurulunun çağrısı denetim modülünün
+    eylemi, ötekiler genel kurul yazma kapısı. Evrak servisi E05'in üretim kapısında okur."""
+    return _cagri_eylemi(kurul, str(kurul.called_by), str(kurul.called_by_role) or None)
+
+
 def _cagri_kapisi(kurul: GeneralAssembly, cagiran: str) -> rol_izinleri.Eylem:
     """Çağrının rol kapısı: eylem ve (genel kurul yazma kapısında) çağrının "Kim"i; sahiplikli eylemde
     kayıt da sorulur. Geçen eylem döner."""
@@ -2569,6 +2582,12 @@ def _veli_satirlari(kurul: GeneralAssembly) -> QuerySet[ParentRoster]:
     if kurul.term_id is None:
         return ParentRoster.objects.filter(term__isnull=True)
     return ParentRoster.objects.filter(term_id=kurul.term_id)
+
+
+def kurulun_veli_satirlari(kurul: GeneralAssembly) -> QuerySet[ParentRoster]:
+    """Genel kurulun veli listesi (`_veli_satirlari`): elden yazılı davetin sınıf adetleri ve veli
+    adlı çıktılar (E07, E08; `genel_kurul_evraki`) buradan okur. Okuma yazmaz."""
+    return _veli_satirlari(kurul)
 
 
 def katilim_isareti_sayisi(kurul: GeneralAssembly, toplanti: str) -> int:

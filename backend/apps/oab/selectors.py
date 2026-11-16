@@ -160,6 +160,26 @@ def gorevdeki_asillar(term: OabTerm, organ: str) -> list[OrganMembership]:
     )
 
 
+def gundeki_asillar(term: OabTerm, organ: str, gun: date) -> list[OrganMembership]:
+    """`gorevdeki_asillar`'ın güne göre karşılığı: `gun`de görevde olan asıllar — o güne dek seçilmiş
+    asıl ve o güne dek yedekten çağrılan yedek; seçilmiş ya da sonradan düşmüş (düşme günü `gun`den
+    sonra). Geçmiş bir olayın belgesi (genel kurul çağrısı; `genel_kurul_evraki`) imzacıyı bugünkü
+    görevliden değil olayın gününden okur: olağanüstü genel kurulun seçimi eski yönetim kurulunu
+    düşürse de çağrıyı imzalayan eski görevli kalır."""
+    return memberships_sorted(
+        _uyelikler(term, organ)
+        .filter(Q(seat_type=SeatType.ASIL) | Q(promoted_on__lte=gun))
+        .filter(Q(start_date__isnull=True) | Q(start_date__lte=gun))
+        .filter(
+            Q(status=MembershipStatus.SECILDI, end_date__isnull=True)
+            | Q(
+                status__in=(MembershipStatus.SECILDI, MembershipStatus.DUSTU),
+                end_date__gt=gun,
+            )
+        )
+    )
+
+
 def bekleyen_yedekler(term: OabTerm, organ: str) -> list[OrganMembership]:
     """Çağrılmamış seçilmiş yedekler; yedek sırasıyla."""
     return memberships_sorted(
