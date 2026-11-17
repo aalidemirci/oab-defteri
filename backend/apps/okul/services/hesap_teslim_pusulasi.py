@@ -313,9 +313,11 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
             _parca("veli listesinden birlik kişisi ekleme", "oab-person-from-parent"),
             # Organlar ve Temsilciler ekranları (F1c 11. adım). Parçalar uç kurallarının rol
             # kümelerine göre ayrılır: program yöneticisi ve yönetim kurulu rolleri üyelik, görev alma
-            # engeli, alım komisyonu ve temsilci kaydını yazar; görev bölümü ve yönetim kurulu yedeğinin
-            # çağrısı yalnız sekreterindir; Denetleme Kurulu yedeğinin çağrısı program yöneticisinin;
-            # düşme, görev bölümü evrakı, temsilci çizelgesi ve aylık toplantı günü ikisinindir.
+            # engeli, alım komisyonu ve temsilci kaydını yazar; yeni birlik döneminin ilk görev bölümü
+            # program yöneticisi ve sekreterin (kullanıcı kararı S7 (a); servis yöneticiyi ilkine
+            # daraltır), sonraki görev bölümleri ve yönetim kurulu yedeğinin çağrısı yalnız
+            # sekreterindir; Denetleme Kurulu yedeğinin çağrısı program yöneticisinin; düşme, görev
+            # bölümü evrakı, temsilci çizelgesi ve aylık toplantı günü ikisinindir.
             _parca(
                 "üyelik ve temsilci kaydı",
                 "oab-membership-list",
@@ -326,7 +328,10 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
                 "oab-representative-list",
             ),
             _parca(
-                "görev bölümü ve yedek çağrısı",
+                "yeni birlik döneminde yönetim kurulunun ilk görev bölümü", "oab-yk-duty-assignment"
+            ),
+            _parca(
+                "sonraki görev bölümleri ve yedek çağrısı",
                 "oab-yk-duty-assignment",
                 "oab-membership-substitute-call-yk",
             ),

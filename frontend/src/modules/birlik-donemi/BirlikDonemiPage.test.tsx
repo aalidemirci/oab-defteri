@@ -43,7 +43,7 @@ import {
   ACILIS_HAZIRLIK,
   DONEM_YOK_YENI_OKUL_ACIKLAMASI,
   DUGME_GENEL_KURULU_AC,
-  DUGME_GENEL_KURULU_PLANLA,
+  BAG_GENEL_KURUL_EKRANI,
   DUGME_GERI_AL,
   DUGME_SURUMU_GUNCELLE,
   ETKILENEN_ONAYI,
@@ -275,7 +275,7 @@ describe("BirlikDonemiPage", () => {
     apiMock.gecis.mockResolvedValue({ ...GECIS, state: "GEREKMIYOR", donem: null, open_steps: [] });
     okulApiMock.getSchoolConfig.mockResolvedValue({ opened_on: "2026-09-07" });
     bas();
-    const baglanti = await screen.findByRole("link", { name: DUGME_GENEL_KURULU_PLANLA });
+    const baglanti = await screen.findByRole("link", { name: BAG_GENEL_KURUL_EKRANI });
     expect(baglanti).toHaveAttribute("href", "/genel-kurul");
     expect(screen.getByText(DONEM_YOK_YENI_OKUL_ACIKLAMASI)).toBeInTheDocument();
     expect(screen.queryByText(DONEM_YOK_ACIKLAMASI)).toBeNull();

@@ -5,6 +5,9 @@
 // * `organ_yazma` — Denetleme Kurulunun öğretmen koltuğuna seçilmiş üye, üyeliğin kişisiz bilgileri,
 //   kaydın iptali, alım komisyonu üyesi (program yöneticisi ve yönetim kurulu rolleri);
 // * `gorev_bolumu_yazma` — yönetim kurulunun görev bölümü ve yedek çağrısı (yalnız sekreter);
+//   `ilk_gorev_bolumu_yazma` — yeni birlik döneminin ilk görev bölümü (sekreter ve program yöneticisi;
+//   kullanıcı kararı S7 (a)): düğme yalnız kadro okuması `ilk_gorev_bolumu` derken çizilir, "ilk"i
+//   sunucu söyler;
 // * `dk_gorev_bolumu_yazma` — Denetleme Kurulunun görev bölümü, denetim planı ve tutanağı (yalnız
 //   Denetleme Kurulu; M8 ⁵); `dk_yedek_cagirma` — Denetleme Kurulu yedeğinin çağrısı (program yöneticisi);
 // * `uyelik_dusurme` — düşme (program yöneticisi ve sekreter); `gorev_alma_engeli` — engelin yazımı ve
@@ -127,6 +130,7 @@ export default function OrganlarPage() {
         ? acik(
             "organ_yazma",
             "gorev_bolumu_yazma",
+            "ilk_gorev_bolumu_yazma",
             "uyelik_dusurme",
             "gorev_alma_engeli",
             "toplanti_gunu_yazma",
@@ -390,7 +394,14 @@ function KurulSekmesi({
     engel: yazilir && yetki.acik("gorev_alma_engeli"),
     gecis: gecisAcik(donem) && yetki.acik("birlik_donemi_yazma"),
   };
-  const gorevYazar = yazilir && yetki.acik(yk ? "gorev_bolumu_yazma" : "dk_gorev_bolumu_yazma");
+  // Yönetim kurulunda sekreter her görev bölümünü, program yöneticisi yalnız yeni dönemin ilkini yazar
+  // (S7 (a); servis aynı daraltmayı yapar).
+  const gorevYazar =
+    yazilir &&
+    (yk
+      ? yetki.acik("gorev_bolumu_yazma") ||
+        (yetki.acik("ilk_gorev_bolumu_yazma") && kadro?.ilk_gorev_bolumu === true)
+      : yetki.acik("dk_gorev_bolumu_yazma"));
   const uretir = yazilir && yetki.acik(yk ? "karar_taslagi_uretme" : "dk_gorev_bolumu_yazma");
 
   const uyariSayilari = useMemo(() => {

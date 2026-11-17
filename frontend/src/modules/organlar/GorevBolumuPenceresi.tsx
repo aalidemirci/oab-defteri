@@ -1,6 +1,7 @@
 // Görev bölümü pencereleri (tasarım §7.2; plan F1c 6. adım notları; ekranı 11. adımda).
 //
-// * Yönetim kurulu (yalnız sekreter, `gorev_bolumu_yazma`): verilen görevler dört görevin alt kümesidir
+// * Yönetim kurulu (sekreter, `gorev_bolumu_yazma`; yeni dönemin ilk görev bölümünde program yöneticisi
+//   de, `ilk_gorev_bolumu_yazma`, S7 (a)): verilen görevler dört görevin alt kümesidir
 //   (dönem içi görev değişimi; verilen görevin önceki sahibi üye olur), en az biri; bir üyeye tek görev.
 //   Görevdeki her asılın katılım satırı zorunludur (katıldı · özürlü · özürsüz; özrün nedeni tutulmaz).
 // * Denetleme Kurulu (yalnız Denetleme Kurulu, `dk_gorev_bolumu_yazma`): başkan zorunlu, denetim planı

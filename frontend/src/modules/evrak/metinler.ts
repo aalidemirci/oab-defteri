@@ -10,6 +10,18 @@ export const E03_ADI = "Birlik temsilcilerinin kurul ve komisyonlara görevlendi
 export const E14_ADI = "Yıllık iş takvimi";
 /** Kişisel veri aydınlatma metni (E04; Hakkında → Kişisel Veri; F2 10. adım). */
 export const E04_ADI = "Kişisel veri aydınlatma metni";
+/** Genel kurul evrakının adları (E05-E13, E64): kartlar katalogdan çizilir, kılavuz bu sabitlerle anar
+ * (backend `genel_kurul_evraki.BELGE_ADLARI` ile birebir; sözlük §1 "Genel kurul evrakı (F2)"). */
+export const E05_ADI = "Genel kurul toplantı çağrısı ve gündemi";
+export const E06_ADI = "Genel kurul duyurusu";
+export const E07_ADI = "Üyelere elden yazılı davet ve sınıf teslim çizelgesi";
+export const E08_ADI = "Genel kurul katılım cetveli";
+export const E09_ADI = "Yönetim kurulu ve Denetleme Kurulu (veli koltuğu) aday listeleri";
+export const E10_ADI = "Genel kurul toplantı tutanağı";
+export const E11_ADI = "İbra edilmeyen muhasebe evrakının teslim tutanağı";
+export const E12_ADI = "İbra edilmediğine dair il/ilçe millî eğitim müdürlüğüne resmî yazı";
+export const E13_ADI = "Genel kurul sonuç bildirimi";
+export const E64_ADI = "Genel kurul yeter sayı tespit tutanağı";
 
 /** Kartın açıklamaları. */
 export const TASLAK_ACIKLAMASI =

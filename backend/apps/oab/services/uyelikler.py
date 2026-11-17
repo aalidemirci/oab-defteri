@@ -5,7 +5,7 @@
 F1c'nin 5. adımı yönetim kurulu ve Denetleme Kurulu üyeliğini yazar. Görev bölümü (`gorev_bolumu`),
 yedek çağrısı, düşme, iptal ve görev alma engeli (`uyelik_gecisleri`), temsilciler ve alım komisyonu
 (`temsilciler`) 6. adımdadır ve buradaki denetimleri ortak yardımcılarla kullanır; divan ve genel
-kurul akışı F2'de gelir.
+kurul akışı F2'de geldi (`services.genel_kurul`).
 
 YAZMA YOLLARI (hepsi `yazma_kapisi()` ile başlar, kural denetimini `uyum.denetle` ile yapar):
 

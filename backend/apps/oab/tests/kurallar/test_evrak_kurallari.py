@@ -861,9 +861,9 @@ def test_e63_bugunku_isler_yalniz_etkin_satirlardadir() -> None:
     işlerin anahtarları TAM OLARAK bir rolün etkin satırlarıdır (`etkin_hucreler`, tek yüklem):
     etkin satırın adı eksik olamaz, bekleyen satıra (sonraki fazın işine) ad yazılamaz. Adlarda iç
     kod ve kullanılmaz kısaltma (YK, DK, M1…) yoktur; her rolün işleri `etkin_hucreler`
-    sırasıyladır. Uçları bağlı ama ekranı henüz olmayan satır (`EKRANSIZ_SATIRLAR`; F2 11a: Genel
-    Kurul ve Gelen-Giden Evrak) basılmaz, adı yazılmaz; liste bayatlamaz (her biri etkin bir satırdır,
-    gerekçesi vardır)."""
+    sırasıyladır. Uçları bağlı ama ekranı henüz olmayan satır (`EKRANSIZ_SATIRLAR`) basılmaz, adı
+    yazılmaz; liste bayatlamaz (her biri etkin bir satırdır, gerekçesi vardır). F2 11a'da Genel Kurul
+    ve Gelen-Giden Evrak buradaydı, 11b'de ekranlarıyla çıktı; bugün liste boştur."""
     etkin = {satir for rol in ROLLER for satir in etkin_hucreler(rol)}
     ekransiz = set(e63.EKRANSIZ_SATIRLAR)
     assert ekransiz <= etkin
@@ -948,7 +948,9 @@ def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
     yöneticisi ve yönetim kurulu rolleri), dönem geçişinin onayı, yıllık iş takviminin basımı, kural
     sürümü güncellemesi ve veli adlı çıktılar (program yöneticisi), Denetleme Kurulunun olağanüstü
     çağrısı. F2 12. adım: Genel Bakış'ta takvim işinin "Yapıldı" işareti (program yöneticisi ve
-    sekreter). Sonraki fazların işleri hiçbir pusulada yoktur."""
+    sekreter). F2 kapısı (kullanıcı kararı S7 (a)): yeni birlik döneminde yönetim kurulunun ilk görev
+    bölümü program yöneticisi ve sekreterin, sonraki görev bölümleri ve yedek çağrısı yalnız
+    sekreterin. Sonraki fazların işleri hiçbir pusulada yoktur."""
     kendi = "Kendi parolanızı değiştirme, Kilitle, Çık"
     son_oturum = "Genel Bakış: son oturumun kontrolü (“Kontrol ettim”)"
     birlik_kisileri = "Kişiler, Organlar, Temsilciler: birlik kişileri, üyelik ve temsilci kaydı"
@@ -965,8 +967,8 @@ def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
             "genel kuruldan sonra yeni birlik döneminin onayı, kişisel veri aydınlatma metni (Hakkında)",
             "Kişiler, Organlar, Temsilciler: öğretmen ve diğer personel kaydı, e-Okul aktarımı, "
             "ayrılış havuzu, birlik kişileri, veli listesinden birlik kişisi ekleme, üyelik ve "
-            "temsilci kaydı, Denetleme Kurulu yedeğinin çağrısı, üyeliğin düşmesi, görev bölümü "
-            "evrakı ve temsilci çizelgesi",
+            "temsilci kaydı, yeni birlik döneminde yönetim kurulunun ilk görev bölümü, Denetleme "
+            "Kurulu yedeğinin çağrısı, üyeliğin düşmesi, görev bölümü evrakı ve temsilci çizelgesi",
             f"Genel Kurul: {sihirbaz}, çağrı, iptal ve üyelerin başvuru yazısının bağı, dosya "
             "ekleri, belgelerin üretimi",
             f"{son_oturum}, yıllık iş takviminin basımı, takvim işinin “Yapıldı” işareti",
@@ -1003,8 +1005,9 @@ def test_e63_her_rolun_pusulasi_bugunku_islerdir() -> None:
             kendi,
         ),
         AccountRole.SEKRETER: (
-            "Kişiler, Organlar, Temsilciler: birlik kişileri, üyelik ve temsilci kaydı, görev "
-            "bölümü ve yedek çağrısı, üyeliğin düşmesi, görev bölümü evrakı ve temsilci çizelgesi",
+            "Kişiler, Organlar, Temsilciler: birlik kişileri, üyelik ve temsilci kaydı, yeni birlik "
+            "döneminde yönetim kurulunun ilk görev bölümü, sonraki görev bölümleri ve yedek "
+            "çağrısı, üyeliğin düşmesi, görev bölümü evrakı ve temsilci çizelgesi",
             f"Genel Kurul: {sihirbaz}, çağrı, dosya ekleri, belgelerin üretimi",
             f"{son_oturum}, takvim işinin “Yapıldı” işareti",
             gelen_giden,
@@ -1342,13 +1345,25 @@ def test_katalogdaki_her_kodun_testi_var() -> None:
 
 @pytest.mark.parametrize(
     ("gecerli", "beklenen"),
-    [("F1b", {"E63"}), ("F1c", {"E01", "E02", "E03", "E63"})],
+    [
+        ("F1b", {"E63"}),
+        ("F1c", {"E01", "E02", "E03", "E63"}),
+        ("F2", {f"E{no:02d}" for no in range(1, 15)} | {"E63", "E64"}),
+    ],
 )
 def test_katalog_faz_suzmesi(gecerli: str, beklenen: set[str]) -> None:
     """Süzme gerçek katalogda: "F2 (metni F1b içe aktarma ekranında)" gibi notlu satır da okunur."""
     fazlar = {kod: faz for kod, _, faz in _katalog_95()}
     assert faz_ortak.fazi_gelenler(fazlar, gecerli=gecerli) == beklenen
     assert fazlar["E04"] == "F2"
+
+
+def test_gecerli_fazin_evraklari_f2_kapisidir() -> None:
+    """F2 kapısı (plan F2 §2, 13. adım): varsayılan süzme (`GECERLI_FAZ`) E01-E14, E63 ve E64'ü
+    ister. Geçerli faz yanlışlıkla F1c'ye dönerse bu test düşer."""
+    assert faz_ortak.GECERLI_FAZ == "F2"
+    fazlar = {kod: faz for kod, _, faz in _katalog_95()}
+    assert faz_ortak.fazi_gelenler(fazlar) == {f"E{no:02d}" for no in range(1, 15)} | {"E63", "E64"}
 
 
 # ============================================================ karar taslağı (F1c 6. adım)
@@ -2039,15 +2054,18 @@ def test_veli_adli_belge_saklanmaz(kod: str) -> None:
     saklanmaz (dosya deposunda eki yok), içerik JSON'u saklanmaz (yalnız özet, satır sayısı ve tarih),
     yeniden basılmaz; aynı işlemde `BASIM` satırı (kod ve dosyanın sha256'sı) ve erişim günlüğünün
     `VELI_LISTESI_CIKTISI` satırı (dosyanın sha256'sı ve satır sayısı) yazılır; iz ve günlük veli adı
-    taşımaz. Her biçimde (E07: Word, PDF; E08: ayrıca Excel). Arşiv paketine girmemesi F4'te
-    (arşiv paketiyle) sınanır."""
+    taşımaz. Her biçimde (E07: Word, PDF; E08: ayrıca Excel). Dosyanın diske de yazılmadığı programın
+    yazabildiği dizinlerin (veri, güvenlik, yedek) her biçimden önceki ve sonraki anlık görüntüsüyle
+    sınanır (E63 emsali `_dosyalar`). Arşiv paketine girmemesi F4'te (arşiv paketiyle) sınanır."""
     from apps.oab.hatalar import EvrakIcerigiSaklanmaz
     from apps.okul.models import AccessKind, Attachment
 
     kurul = gke_ortak.ilanli(gke_ortak.kurulum(gke.KOL_YK))
     for bicim in gke.ADLI_BICIMLER[kod]:
         son = _son_seq()
+        dosyalar = _dosyalar()
         cikti = gke.adli_uret_ve_ver(kod, kurul, bicim=bicim)
+        assert _dosyalar() == dosyalar, f"{kod} {bicim}: veli adlı dosya diske yazılmamalı"
         ozet = hashlib.sha256(cikti.icerik).hexdigest()
         metin = "".join(_adli_metin(cikti.icerik, bicim).split())
         assert all("".join(veli.split()) in metin for veli, _ in gke_ortak.VELILER), bicim
@@ -3427,8 +3445,8 @@ PILOT_GK_ALINMAYANLAR: dict[str, tuple[str, ...]] = {
     "E13": ("Yönetmelik gereği", " TL", "OAB-FR"),
     "E14": ("son iş günü", "5-15", "OAB-FR"),
 }
-#: Genel setin imzacısı olup belgede imzacı olmayan unvanlar (§4.3: OYS davetiyesinde "Okul Müdürü";
-#: FR-003 D'de sağlansa da Birlik Başkanı ve açılışı yapan müdür).
+#: Genel setin imzacısı olup belgede imzacı olmayan unvanlar (§4.3: kaynak modülün davetiyesinde
+#: "Okul Müdürü"; FR-003 D'de sağlansa da Birlik Başkanı ve açılışı yapan müdür).
 PILOT_GK_ALINMAYAN_IMZALAR: dict[str, tuple[str, ...]] = {
     "E05": ("Okul Müdürü",),
     "E64": ("Birlik Başkanı", "Okul Müdürü (açılışı yapan)"),

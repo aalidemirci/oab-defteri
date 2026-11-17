@@ -46,7 +46,8 @@ export const DUGME_GENEL_KURULU_AC = "Genel kurulu aç";
 export const DONEM_YOK_YENI_OKUL_ACIKLAMASI =
   "Okul yeni açıldı: ilk birlik dönemi ilk genel kurulla açılır. Genel kurulu planlayın; okul " +
   "müdürü daveti kendi hesabından yazar.";
-export const DUGME_GENEL_KURULU_PLANLA = "Genel kurulu planlayın";
+/** Boş durumdaki bağlantı (sözlük §3: bağlantı metni gittiği yeri adıyla söyler; yol haritasınınkiyle aynı). */
+export const BAG_GENEL_KURUL_EKRANI = "Genel Kurul'u aç";
 
 /** Kural sürümü güncellemesi (tasarım §6.2-5; yalnız program yöneticisi). */
 export const KURAL_GUNCELLEME_BASLIGI = "Kural Sürümü Güncellemesi";

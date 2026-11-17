@@ -584,9 +584,9 @@ def test_dk_yedek_cagrisindan_sonraki_gorev_bolumu_sureye_bagli_degil() -> None:
 def test_olaganustu_genel_kurulla_yenilenen_dk_suresi_o_genel_kuruldan(
     gun: date, uyari: bool
 ) -> None:
-    """Süre kurulu seçen genel kuruldan sayılır (md. 14/1; kullanıcı kararı 10.11.2026): olağanüstü
-    genel kurul (01.03.2027) Denetleme Kurulunun veli koltuğunu yenilediyse ilk görev bölümünün
-    süresi o günden başlar; dönem içindeki önceki görev bölümü süreyi kapatmaz. 7. gün uyarısız,
+    """Süre kurulu seçen genel kuruldan sayılır (md. 14/1; plan F1c 6. adım notları; teyit AS-86):
+    olağanüstü genel kurul (01.03.2027) Denetleme Kurulunun veli koltuğunu yenilediyse ilk görev
+    bölümünün süresi o günden başlar; dönem içindeki önceki görev bölümü süreyi kapatmaz. 7. gün uyarısız,
     8. gün uyarı + gerekçe (ayrı kurulumlar). Kullanıcı kararı S10 (a) (15.11.2026) sonrası
     olağanüstü genel kurul Denetleme Kuruluna seçim yapmaz, programın seçim akışı bu kaydı üretmez
     (`gk::test_olaganustu_genel_kurul_dk_secimi_yapmaz`); burada alt düzey üyelik yolunun yazdığı

@@ -60,8 +60,9 @@ günlüğe girmez: kurtarma belgesi anahtar taşır. İçerik pencereden önce �
 açılmaz. Yazım atomiktir (`_atomik_yaz`): yarım dosya seçilen adda görünmez.
 
 Tür süzgeci uzantıya göredir (`TUR_SUZGECLERI`): ön yüzün `saveBlob` ile kaydettiği her uzantının
-süzgeci vardır (PDF, Word, Excel, kurulum dosyası; saha bulgusu K-yeni-3, Pardus 25, 13.11.2026: Word
-evrakı "Tüm dosyalar | *" ile kaydediliyordu). Eşitlik `desktop/tests/test_kayit_suzgecleri.py`'de ön
+süzgeci vardır (PDF, Word, Excel, kurulum dosyası; F2'de genel kurul evrakının web sayfası ve
+kullanıcı eklerinin JPEG ve PNG'si; saha bulgusu K-yeni-3, Pardus 25, 13.11.2026: Word evrakı
+"Tüm dosyalar | *" ile kaydediliyordu). Eşitlik `desktop/tests/test_kayit_suzgecleri.py`'de ön
 yüz kaynağı taranarak bağlıdır: yeni bir uzantı süzgeçsiz kalırsa test düşer. Süzgeç Windows'ta da
 gelir. Windows'ta süzgecin uzantısını ve üzerine yazma sorusunu pencere kendi yapar. Qt kolu
 kaydetmede süzgeç uygulamaz, uzantı eklemez: ad uzantısız kaldıysa önerilen addaki
@@ -204,6 +205,10 @@ TUR_SUZGECLERI: Final = {
     ".docx": ("Word belgesi (*.docx)",),
     ".xlsx": ("Excel dosyası (*.xlsx)",),
     ".exe": ("Kurulum dosyası (*.exe)",),
+    # Genel kurul evrakının web sayfası biçimi ve kullanıcı ekleri (PDF, JPEG, PNG; F2).
+    ".html": ("Web sayfası (*.html)",),
+    ".jpg": ("JPEG resmi (*.jpg)",),
+    ".png": ("PNG resmi (*.png)",),
 }
 #: Öteki uzantıların süzgeci: süzgeç hiç verilmezse pywebview İngilizce "All files" yazardı.
 GENEL_SUZGEC: Final = ("Tüm dosyalar (*.*)",)

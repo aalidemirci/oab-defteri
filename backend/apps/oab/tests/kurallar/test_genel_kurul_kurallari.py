@@ -247,8 +247,9 @@ def test_ilan_15_gun_uyarisiz() -> None:
 @pytest.mark.django_db
 @pytest.mark.kural_davranis("genel_kurul.ilan_en_az_gun")
 def test_ilan_13_gun_gerekcesiz_reddedilir() -> None:
-    """OYS AYNEN (uyarı + gerekçeli geçiş): 13 gün gerekçesiz geçmez; işlem bütünüyle geri alınır
-    (ilan kaydı yazılmaz, yeter sayı donmaz, durum değişmez)."""
+    """Tasarım §12.A UYARLA (U31; uyarı + gerekçeli geçiş): 13 gün gerekçesiz geçmez; işlem
+    bütünüyle geri alınır (ilan kaydı yazılmaz, yeter sayı donmaz, durum değişmez). Kaynak modülden
+    farkı: ilan ayrı kayıttır, yeter sayı ilanda donar, uyarı `rule_warnings`'tedir."""
     kurul = gko.cagrilmis_olagan()
     with pytest.raises(GerekceGerekli):
         genel_kurul_servisi.ilan_et(kurul, kanallar=gko.kanallar(date(2026, 10, 7)))
@@ -319,8 +320,8 @@ def test_uc_kanal_kaniti_eksikse_tamamlanacak() -> None:
 @pytest.mark.django_db
 @pytest.mark.kural_davranis("genel_kurul.ikinci_toplanti_en_gec_gun")
 def test_ikinci_toplanti_baglantisi() -> None:
-    """OYS UYARLA (U8, U31): iki toplantı tek kayıttadır. Birinci toplantıda 40 < 64: durum `IPTAL`
-    değil `YETER_SAYI_YOK`; ikinci toplantı ayrı ilanla aynı kayda yazılır, yeter sayı aynı kalır."""
+    """Tasarım §12.A UYARLA (U8, U31): iki toplantı tek kayıttadır. Birinci toplantıda 40 < 64:
+    durum `IPTAL` değil `YETER_SAYI_YOK`; ikinci toplantı ayrı ilanla aynı kayda yazılır, yeter sayı aynı kalır."""
     kurul = gko.ilanli_olagan()
     sonuc = genel_kurul_servisi.birinci_toplanti(kurul, katilim=gko.katilim(40))
     assert sonuc.kurul.status == AssemblyStatus.YETER_SAYI_YOK
@@ -630,8 +631,11 @@ def test_dk_14_5_cagrisi_yalniz_md6_aykirilik_isaretiyle() -> None:
     with o.rol_olarak(AccountRole.DENETLEME_KURULU):
         once = AuditTrail.objects.count()
         for rapor in (None, usulsuzluk):
-            with pytest.raises(ValueError, match="md. 14/5"):
+            with pytest.raises(ValueError, match="md. 14/5") as hata:
                 _dk_cagrisi(kurul, rapor)
+            # Ret servisin kendi denetimindendir (düz `ValueError`), modelin aynı iletili ikinci
+            # katmanından (`GenelKurulKaydiGecersiz`) değil: iki katman ayrı ayrı kilitlidir.
+            assert type(hata.value) is ValueError
         assert AuditTrail.objects.count() == once
     for rol in (AccountRole.YONETICI, AccountRole.SEKRETER, AccountRole.MUDUR):
         with o.rol_olarak(rol), pytest.raises(RolYetkisiz):
@@ -980,9 +984,10 @@ def test_basvuru_yazisi_eksigi_tutanak_tamamlanirken_gerekceyle_sapmaya_doner() 
 
 @pytest.mark.django_db
 def test_olagan_planlamada_tohum_gundem_yazilir() -> None:
-    """U19, U24: olağan genel kurulun gündemi planlamayla aynı işlemde OYS şablonundan yazılır (md.
-    11/1-e yetkilendirme ve 11/1-f öneriler dâhil; saygı duruşu `DIGER`); her madde izlidir.
-    Olağanüstüde tohum yoktur; planlama geri alınırsa tohum da yazılmaz."""
+    """U19, U24: olağan genel kurulun gündemi planlamayla aynı işlemde kaynak modülün (tasarım
+    §12.A) şablonundan yazılır (md. 11/1-e yetkilendirme ve 11/1-f öneriler dâhil; saygı duruşu
+    `DIGER`); her madde izlidir. Olağanüstüde tohum yoktur; planlama geri alınırsa tohum da
+    yazılmaz."""
     gko.acik_donem()
     kurul = gko.planla()
     maddeler = list(AgendaItem.objects.filter(assembly=kurul).order_by("order"))

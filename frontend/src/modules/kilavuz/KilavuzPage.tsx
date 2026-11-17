@@ -2,7 +2,10 @@
 // bölüm `bolumler/` altında kendi dosyasındadır. Aile iskeletinin kütüphane kılavuzu F1a-2'de
 // silindi; OAB'nin bölümleri her fazın özellikleriyle birlikte yazılır (tasarım §14). F1c'nin
 // bölümleri (13. adım): Programı Kurmak, Birlik Kişileri, Birlik Dönemi, Geçiş Kurulumu, Organlar,
-// Temsilciler; İlk Kurulum, Genel Bakış, Hesaplar ve Oturum, Kullanıcılar ve Kişiler güncellendi.
+// Temsilciler; İlk Kurulum, Genel Bakış, Hesaplar ve Oturum, Kullanıcılar ve Kişiler güncellendi. F2'nin
+// bölümleri: Genel Kurul ve Gelen-Giden Evrak; Genel Bakış (sekmeler, genel kurul süreleri, Yıllık İş
+// Takvimi), İlk Kurulum, Okul Bilgileri, Veli Listesi, Birlik Dönemi, Geçiş Kurulumu, Organlar ve Güvenlik
+// ve Kişisel Veriler güncellendi.
 //
 // Bölüm eklemek: `bolumler/` altına dosyayı koy, `BOLUMLER`'e satırını ekle. Çapa, başlık, ikon
 // ve sıra YALNIZ buradadır; bölüm dosyası bunları `BolumProps` olarak alır.
@@ -10,6 +13,8 @@
 import Card from "../../ui/Card";
 import { BIRLIK_DONEMI_BASLIGI } from "../birlik-donemi/metinler";
 import { GECIS_BASLIGI } from "../gecis-kurulumu/metinler";
+import { GELEN_GIDEN_BASLIGI } from "../gelen-giden-evrak/metinler";
+import { GENEL_KURUL_BASLIGI } from "../genel-kurul/metinler";
 import { BIRLIK_KISILERI_SEKMESI, VELI_LISTESI_SEKMESI } from "../kisiler/metinler";
 import { KULLANICILAR_BASLIGI } from "../kullanicilar/metinler";
 import { ORGANLAR_BASLIGI } from "../organlar/metinler";
@@ -19,6 +24,8 @@ import BirlikKisileri from "./bolumler/BirlikKisileri";
 import CikisVeKapanis from "./bolumler/CikisVeKapanis";
 import DersYiliKapaliGunler from "./bolumler/DersYiliKapaliGunler";
 import GecisKurulumu from "./bolumler/GecisKurulumu";
+import GelenGidenEvrak from "./bolumler/GelenGidenEvrak";
+import GenelKurul from "./bolumler/GenelKurul";
 import GenelBakis from "./bolumler/GenelBakis";
 import Guncelleme from "./bolumler/Guncelleme";
 import GuvenlikVeKisiselVeriler from "./bolumler/GuvenlikVeKisiselVeriler";
@@ -61,8 +68,14 @@ const BOLUMLER = {
   },
   "birlik-donemi": { baslik: BIRLIK_DONEMI_BASLIGI, ikon: "event_note", Bolum: BirlikDonemi },
   "gecis-kurulumu": { baslik: GECIS_BASLIGI, ikon: "move_down", Bolum: GecisKurulumu },
+  "genel-kurul": { baslik: GENEL_KURUL_BASLIGI, ikon: "how_to_vote", Bolum: GenelKurul },
   organlar: { baslik: ORGANLAR_BASLIGI, ikon: "account_tree", Bolum: Organlar },
   temsilciler: { baslik: TEMSILCILER_BASLIGI, ikon: "groups", Bolum: Temsilciler },
+  "gelen-giden-evrak": {
+    baslik: GELEN_GIDEN_BASLIGI,
+    ikon: "move_to_inbox",
+    Bolum: GelenGidenEvrak,
+  },
   "yedek-ve-geri-yukleme": {
     baslik: "Yedek ve Geri Yükleme",
     ikon: "backup",

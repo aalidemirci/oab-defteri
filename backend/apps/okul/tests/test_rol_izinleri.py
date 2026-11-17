@@ -428,8 +428,10 @@ ROL_TABLOSU: dict[str, dict[str, str]] = {
     "oab-membership-eligibility-basis": {"GET": "Y+YK", "HEAD": "Y+YK", "PUT": "Y+YK"},
     "oab-membership-list": {"GET": "H", "HEAD": "H", "POST": "Y+YK"},
     # F1c 6. adım: tasarım §7.2'nin "Kim" sütunu (görev bölümü ve YK yedeği sekreter, DK yedeği
-    # program yöneticisi, düşme ikisi); DK görev bölümü M8 ⁵.
-    "oab-yk-duty-assignment": {"POST": "SEK"},
+    # program yöneticisi, düşme ikisi); DK görev bölümü M8 ⁵. F2 kapısı (kullanıcı kararı S7 (a)): YK
+    # görev bölümünün ucu program yöneticisine de açılır, servis onu yeni dönemin ilk görev bölümüne
+    # daraltır (`gorev_bolumu.yk_gorev_bolumu_kapisi`).
+    "oab-yk-duty-assignment": {"POST": "Y+SEK"},
     "oab-dk-duty-assignment": {"POST": "DK"},
     "oab-membership-substitute-call-yk": {"POST": "SEK"},
     "oab-membership-substitute-call-dk": {"POST": "Y"},
@@ -684,7 +686,7 @@ def test_f1c_fazli_bekleyen_kalmadi() -> None:
 def test_f2_yedinci_adimin_eylemleri_baglandi() -> None:
     """Plan F2 §6.2 ve 7. adım: müdürün yeni okul daveti ve olağanüstü çağrısı (¹; ilk sahiplikli
     eylemler), gelen-giden evrak (⁷) ve Denetleme Kurulunun genel kurul işi (⁵; md. 14/5) servise bağlı;
-    bağlanmamış listede F2 değerli eylem kalmadı. M3 ve M10 hücreleri uçlarıyla (11. adım) bağlanır."""
+    bağlanmamış listede F2 değerli eylem kalmadı. M3 ve M10 hücreleri uçlarıyla (11. adım) bağlandı."""
     for eylem in (
         Eylem.GENEL_KURUL_YENI_OKUL_DAVETI,
         Eylem.OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR,
@@ -708,12 +710,16 @@ def test_f2_yedinci_adimin_eylemleri_baglandi() -> None:
 
 
 def test_f2_fazli_bekleyen_kalmadi() -> None:
-    """Plan F2 §2 madde (4) ve 11. adım: üç bekleyen listesinde faz değeri "F2" olan kalem kalmaz —
-    `BEKLEYEN_HUCRELER`'de M3 (program yöneticisi, yönetim kurulu rolleri, müdür) ve M10 (program
-    yöneticisi, yönetim kurulu rolleri), `BEKLEYEN_DIPNOTLAR`'da ¹, ⁷, ¹⁰, `BAGLANMAMIS_EYLEMLER`'de F2
-    değerli eylem (plan F2 §6.2)."""
+    """F2 kapısı (plan F2 §2 madde (4) ve 11. adım; F1c'nin `test_f1c_fazli_bekleyen_kalmadi`
+    kalıbı): üç bekleyen listesinde faz değeri "F1" ya da "F2" ile başlayan kalem yoktur; listelerde
+    yalnız sonraki fazlar (F3 ve sonrası) kalır — `BEKLEYEN_HUCRELER`'de M3 (program yöneticisi,
+    yönetim kurulu rolleri, müdür) ve M10 (program yöneticisi, yönetim kurulu rolleri),
+    `BEKLEYEN_DIPNOTLAR`'da ¹, ⁷, ¹⁰, `BAGLANMAMIS_EYLEMLER`'de F2 değerli eylem kalmadı (plan F2
+    §6.2)."""
     for liste in (BEKLEYEN_HUCRELER, BEKLEYEN_DIPNOTLAR, BAGLANMAMIS_EYLEMLER):
-        assert "F2" not in set(liste.values()), liste
+        fazlar = set(liste.values())
+        assert not {faz for faz in fazlar if faz.startswith(("F1", "F2"))}, fazlar
+        assert fazlar <= {"F3", "F4", "F5", "F6", "F7", "F8+"}, fazlar
     for rol in (*Y_YK, "mudur"):
         assert (Satir.M3, rol) not in BEKLEYEN_HUCRELER, rol
     for rol in Y_YK:
@@ -919,6 +925,7 @@ def test_yetenek_adlari_ve_rollerin_yetenekleri_anlik_goruntusu() -> None:
         "guncelleme",
         "guvenlik",
         "iki_depo",
+        "ilk_gorev_bolumu_yazma",
         "kapali_gun_yazma",
         "karar_taslagi_uretme",
         "kisi_yazma",
@@ -940,6 +947,7 @@ def test_yetenek_adlari_ve_rollerin_yetenekleri_anlik_goruntusu() -> None:
     ]
     # "Gördüm" ve Denetleme Kurulunun görev bölümü ve genel kurul işi yalnız Denetleme Kurulunundur;
     # yönetim kurulunun görev bölümünü ve yedek çağrısını yalnız sekreter yazar (tasarım §7.2 "Kim");
+    # yeni dönemin ilk görev bölümünü program yöneticisi de yazar (`ilk_gorev_bolumu_yazma`, S7 (a));
     # müdürün yazısı yalnız müdürün (¹).
     yalniz_baskalari = {
         "geri_yukleme_gordum",
@@ -973,6 +981,7 @@ def test_yetenek_adlari_ve_rollerin_yetenekleri_anlik_goruntusu() -> None:
             "genel_kurul_evraki",
             "genel_kurul_yazma",
             "gorev_bolumu_yazma",
+            "ilk_gorev_bolumu_yazma",
             "karar_taslagi_uretme",
             "takvim_isareti",
             "toplanti_gunu_yazma",

@@ -290,7 +290,8 @@ class GeneratedDocument(OabBaseModel):
 
 
 class DocumentRecord(SilinmezOabModel):
-    """Gelen-giden evrak kaydı (tasarım §5.2.8; ADR-0028'in `OabDocumentRecord`'u, OYS'de yazılmamıştı).
+    """Gelen-giden evrak kaydı (tasarım §5.2.8; ADR-0028'in `OabDocumentRecord`'u, kaynak modülde
+    yazılmamıştı).
 
     Defteri gelen-giden evrak defteridir (`OfficialBook(GELEN_GIDEN_EVRAK_DEFTERI)`; tür denetimi ve
     müdür yazısının programca işlenmesi `services.gelen_giden_evrak`'tadır, dipnot 7). (defter, yıl,

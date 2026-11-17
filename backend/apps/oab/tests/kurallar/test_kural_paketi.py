@@ -1005,6 +1005,7 @@ def test_davranis_fazi_gelen_kuralin_davranis_testi_var() -> None:
     [
         ("F1b", {"F1b_kurali"}),
         ("F1c", {"F1b_kurali", "F1c_kurali"}),
+        ("F2", {"F1b_kurali", "F1c_kurali", "F2_kurali"}),
         ("F8+", {"F1b_kurali", "F1c_kurali", "F2_kurali", "F8+_kurali"}),
     ],
 )
@@ -1035,6 +1036,18 @@ def test_f1c_kurallarinin_davranis_testi_tamam() -> None:
     fazlar = {k["id"]: k["davranis_fazi"] for k in EN_YENI["kurallar"]}
     gelenler = faz_ortak.fazi_gelenler(fazlar, gecerli="F1c")
     assert len(gelenler) == 37
+    assert gelenler - _kural_isaretleri()["kural_davranis"] == set()
+
+
+def test_f2_kurallarinin_davranis_testi_tamam() -> None:
+    """F2 kapısı (plan F2 §2, 13. adım): geçerli faz F2'dir ve varsayılan süzme F1c'nin 37 kuralına
+    `r2`'nin davranış fazı F2 olan 13 kuralını katar (50); hepsinin davranış testi vardır. Değer
+    yanlışlıkla F1c'ye dönerse küme küçülür ve bu test düşer (alt küme denetimi bunu yakalamaz)."""
+    assert faz_ortak.GECERLI_FAZ == "F2"
+    fazlar = {k["id"]: k["davranis_fazi"] for k in EN_YENI["kurallar"]}
+    gelenler = faz_ortak.fazi_gelenler(fazlar)
+    assert gelenler == faz_ortak.fazi_gelenler(fazlar, gecerli="F2")
+    assert len(gelenler) == 50
     assert gelenler - _kural_isaretleri()["kural_davranis"] == set()
 
 

@@ -22,6 +22,7 @@ import DemirbasAlanlari from "./DemirbasAlanlari";
 import { CANTEEN_MODE_TR, SCHOOL_LEVEL_TR, SETTLEMENT_TYPE_TR, STAFFING_MODE_TR } from "./api";
 import type { CanteenMode, SchoolConfig, SchoolLevel, SettlementType, StaffingMode } from "./api";
 import {
+  ACILIS_ETIKETI,
   ACILIS_YARDIMI,
   KADEME_YARDIMI,
   KAMPUS_ETIKETI,
@@ -360,7 +361,7 @@ export default function OkulKartiAlanlari({
       </div>
 
       <TextField
-        label="Okulun açılış tarihi"
+        label={ACILIS_ETIKETI}
         type="date"
         disabled={disabled}
         value={form.acilis}
@@ -426,7 +427,7 @@ export function OkulKartiListesi({ kayit }: { kayit: SchoolConfig }) {
       kayit.staffing_mode ? STAFFING_MODE_TR[kayit.staffing_mode] : "",
     ],
     [KAMPUS_ETIKETI, kayit.in_campus ? "Evet" : "Hayır"],
-    ["Okulun açılış tarihi", kayit.opened_on ? formatDate(kayit.opened_on) : ""],
+    [ACILIS_ETIKETI, kayit.opened_on ? formatDate(kayit.opened_on) : ""],
     ["Bilgisayarın demirbaş no'su", kayit.demirbas_no],
     [VERI_SORUMLUSU_ETIKETI, kayit.data_controller_text],
   ];

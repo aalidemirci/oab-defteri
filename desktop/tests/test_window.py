@@ -418,10 +418,25 @@ def test_var_olan_dosyanin_uzerine_yazilir(tmp_path: Path) -> None:
         # K-yeni-3 (Pardus 25, 13.11.2026): Word evrakı ve kurulum dosyası da süzgeçlidir; Windows'ta da.
         ("Yönetim-Kurulu-Görev-Bölümü-Karar-Taslağı_13.11.2026.docx", "Word belgesi (*.docx)"),
         ("oab-defteri-1.2.0-win64-setup.exe", "Kurulum dosyası (*.exe)"),
-        ("fotograf.png", "Tüm dosyalar (*.*)"),
+        # F2: genel kurul evrakının web sayfası biçimi ve kullanıcı ekleri (PDF, JPEG, PNG).
+        ("Genel-Kurul-Toplantı-Tutanağı_05.10.2026.html", "Web sayfası (*.html)"),
+        ("İlan-Kanıtı_05.10.2026.jpg", "JPEG resmi (*.jpg)"),
+        ("fotograf.png", "PNG resmi (*.png)"),
+        ("notlar.txt", "Tüm dosyalar (*.*)"),
         ("uzantisiz", "Tüm dosyalar (*.*)"),
     ],
-    ids=["pdf", "buyuk_harf", "xlsx", "docx", "kurulum", "bilinmeyen", "uzantisiz"],
+    ids=[
+        "pdf",
+        "buyuk_harf",
+        "xlsx",
+        "docx",
+        "kurulum",
+        "html",
+        "jpg",
+        "png",
+        "bilinmeyen",
+        "uzantisiz",
+    ],
 )
 def test_tur_suzgeci_uzantiya_gore_turkcedir(ad: str, beklenen: str) -> None:
     pencere = _KaydetmePenceresi(None)

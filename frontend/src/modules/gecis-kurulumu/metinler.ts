@@ -24,8 +24,10 @@ export const GECIS_DURUMU_TR: Record<GecisDurumu, string> = {
   TAMAMLANDI: "Tamamlandı",
   GEREKMIYOR: "Gerekmiyor",
 };
+/** Durum `GEREKMIYOR`: dönem genel kurulla açıldı ya da planlanan olağan genel kurulun hazırlık dönemi var
+ * (backend `gecis.yol_haritasi_durumu`; yeni açılan okulda ilk genel kurul planlanınca). */
 export const GEREKMIYOR_NOTU =
-  "Birlik dönemi genel kurulla açıldığı için geçiş kurulumu gerekmiyor.";
+  "Birlik dönemi genel kurulla açıldığı ya da açılacağı için geçiş kurulumu gerekmiyor.";
 export const ACIK_ADIMLAR_ETIKETI = "Açık adımlar";
 export const GECIS_ADIMI_TR: Record<GecisAdimi, string> = {
   donem: "ilk birlik dönemi",
@@ -192,8 +194,9 @@ export function acikAdimlarCumlesi(adimlar: readonly GecisAdimi[]): string {
 export const SIHIRBAZ_ADIM_ADI = "Birlik Dönemi";
 export const SIHIRBAZ_ADIM_ACIKLAMASI =
   "Program okula birlik döneminin ortasında giriyorsa birlik dönemini burada açın. Bu adım " +
-  "atlanabilir: okulda daha önce genel kurul yapılmadıysa adımı atlayın. Eksik kalan adım Genel " +
-  "Bakış'taki yol haritasında görünür.";
+  "atlanabilir: okulda daha önce genel kurul yapılmadıysa adımı atlayın. Eksik kalan iş Genel " +
+  "Bakış'taki yol haritasında görünür; yeni açılan okulda orada geçiş kurulumunun yerine genel " +
+  "kurulun planlanması durur.";
 export const SIHIRBAZ_DEVAM_NOTU =
   "Geçiş kurulumunun öteki adımları (görevdeki kurul, seçilme sayıları, karar defteri) kurulumdan " +
   "sonra Birlik Dönemi → Geçiş Kurulumu'ndadır.";

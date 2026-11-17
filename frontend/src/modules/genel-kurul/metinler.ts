@@ -74,7 +74,11 @@ export const BILGILER_BASLIGI = "Bilgi";
 export const KURAL_UYARILARI_BASLIGI = "Genel kurulun açık uyarıları";
 export const GECIS_UYARILARI_BASLIGI = "Bu kaydın uyarıları";
 export const IPTAL_EDILDI_NOTU = "Bu genel kurul iptal edildi; kayıtları salt okunurdur.";
-export const TUTANAK_TAMAM_NOTU = "Tutanak tamamlandı; genel kurulun kayıtları salt okunurdur.";
+/** Tutanaktan sonra yalnız katılım düzeltmesi ve teslim günü yazılır (`genel_kurul._DUZELTILEBILIR_DURUMLAR`,
+ * `tutanak_bilgilerini_yaz`). */
+export const TUTANAK_TAMAM_NOTU =
+  "Tutanak tamamlandı; gündem, divan ve seçim kayıtları değişmez. Katılım sayısı yalnız gerekçeli " +
+  "düzeltmeyle değişir, oya bağlı sonuçlar yeniden hesaplanır; tutanağın teslim günü sonradan da girilir.";
 
 /** Planla. */
 export const PLANLA_BASLIGI = "Genel kurulu planla";
@@ -372,7 +376,8 @@ export const TUTANAK_BILGILERI_KAYDEDILEMEDI = "Tutanağın bilgileri kaydedilem
 export const DUGME_TUTANAK_TAMAMLA = "Tutanağı tamamla";
 export const TUTANAK_TAMAMLA_BASLIGI = "Tutanak tamamlansın mı?";
 export const TUTANAK_TAMAMLA_METNI =
-  "Tutanak tamamlanınca genel kurulun kayıtları değişmez. Açık eksikler gerekçesiyle kayda geçer. " +
+  "Tutanak tamamlanınca gündem, divan ve seçim kayıtları değişmez; katılım sayısı yalnız gerekçeli " +
+  "düzeltmeyle değişir. Açık eksikler gerekçesiyle kayda geçer. " +
   "Olağan genel kurulda yeni birlik dönemi program yöneticisinin onayıyla açılır.";
 export const TUTANAK_TAMAMLANDI = "Tutanak tamamlandı.";
 export const TUTANAK_TAMAMLANAMADI = "Tutanak tamamlanamadı.";
@@ -413,8 +418,7 @@ export const TEFBIS_ACIKLAMASI =
 export const DOSYA_EKLERI_BASLIGI = "Dosya Ekleri";
 export const DOSYA_EKLERI_ACIKLAMASI =
   "Yönetim kurulunun faaliyet raporu ve kesin hesabı, tahmini bütçe ve Denetleme Kurulunun raporu " +
-  "gündemdeki maddelerine dosya olarak eklenir (PDF, JPEG, PNG). Bu belgeler bu sürümde programda " +
-  "üretilmez.";
+  "gündemdeki maddelerine dosya olarak eklenir (PDF, JPEG, PNG). Bu belgeler programda üretilmez.";
 export const EK_YOK = "Ek yok.";
 export const DUGME_DOSYA_EKLE = "Dosya ekle";
 export const DUGME_EKI_KAYDET = "Kaydet";

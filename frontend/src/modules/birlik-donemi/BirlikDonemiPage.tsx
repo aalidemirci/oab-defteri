@@ -68,7 +68,7 @@ import {
   DUGME_DONEMI_IPTAL,
   DUGME_GECISI_AC,
   DUGME_GENEL_KURULU_AC,
-  DUGME_GENEL_KURULU_PLANLA,
+  BAG_GENEL_KURUL_EKRANI,
   GECIS_KARTI_ACIKLAMASI,
   GECIS_KARTI_BASLIGI,
   GOREV_SURESI_BASLIGI,
@@ -260,7 +260,7 @@ export default function BirlikDonemiPage() {
                     to={GENEL_KURUL_ADRESI}
                     className="inline-flex text-label-large text-primary underline underline-offset-2"
                   >
-                    {DUGME_GENEL_KURULU_PLANLA}
+                    {BAG_GENEL_KURUL_EKRANI}
                   </Link>
                 ) : undefined
               ) : yazabilir ? (

@@ -13,6 +13,11 @@ Adın çözümü: çağrıdaki ikinci argümanın metni; içindeki uzantılı me
 birleşimi; `etiketler.template` gibi bir özelliğin dosyadaki `template: AD` değerleri). Sunucunun
 verdiği ad (`Content-Disposition`, `installer_name`) aynı uzantıyı taşır: ön yüzün yedek adı onunla
 aynı kalıptadır (`docs/sozluk.md` §3 "Dosya adları"; kurulum dosyası `INSTALLER_PATTERN` `.exe`).
+
+Sarmalayıcı (F2, 17.11.2026): `saveBlob`'a adı kendi parametresinden veren işlev (genel kurulun
+`dosyayiKaydet`'i, `frontend/src/modules/genel-kurul/ortak.tsx`) kaydetme yeri sayılmaz; onun her
+çağrısı kaydetme yeridir ve ad o çağrının aynı sıradaki argümanından çözülür. Yoksa sarmalayıcının
+içindeki `saveBlob(blob, ad)` hiç çözülemezdi, çağıranın getirdiği yeni uzantı da görünmezdi.
 """
 
 from __future__ import annotations
@@ -110,20 +115,61 @@ def _uzantilar(
     return bulunan
 
 
-def _kaydetme_yerleri() -> dict[str, set[str]]:
-    """`saveBlob` çağrısı → önerdiği adların uzantıları (`dosya:satır` anahtarıyla)."""
-    kaynaklar = _kaynaklar()
-    yerler: dict[str, set[str]] = {}
+def _sarici(metin: str, konum: int, ad: str) -> tuple[str, int] | None:
+    """`konum`'daki çağrının adı, içinde bulunduğu işlevin parametresiyse (işlev adı, sırası).
+
+    İçinde bulunulan işlev, çağrıdan önceki son `function ad(` tanımıdır; tanımın gövdesi çağrıdan
+    önce kapanmışsa (satır başında `}`) çağrı onun içinde değildir.
+    """
+    if not re.fullmatch(r"[A-Za-z_]\w*", ad):
+        return None
+    tanimlar = list(re.finditer(r"function\s+(\w+)\s*\(", metin[:konum]))
+    if not tanimlar:
+        return None
+    tanim = tanimlar[-1]
+    if re.search(r"\n\}", metin[tanim.end() : konum]):
+        return None
+    parametreler = [
+        re.match(r"\s*(?:\.\.\.)?(\w*)", parametre).group(1)  # type: ignore[union-attr]
+        for parametre in _argumanlar(metin, tanim.end() - 1)
+    ]
+    if ad not in parametreler:
+        return None
+    return tanim.group(1), parametreler.index(ad)
+
+
+def _cagrilar(islev: str, sira: int, kaynaklar: dict[Path, str]) -> list[tuple[str, int, str, str]]:
+    """`islev`'in her çağrısı → (`dosya:satır`, çağrının konumu, `sira`'daki argüman, dosyanın
+    metni); tanımın kendisi atlanır."""
+    cagrilar: list[tuple[str, int, str, str]] = []
     for yol, metin in kaynaklar.items():
-        for eslesme in re.finditer(r"\bsaveBlob\(", metin):
+        for eslesme in re.finditer(rf"\b{islev}\(", metin):
             if re.search(r"function\s+$", metin[: eslesme.start()]):
                 continue  # tanımın kendisi
             argumanlar = _argumanlar(metin, eslesme.end() - 1)
-            assert len(argumanlar) >= 2, f"{yol.name}: saveBlob adsız çağrılmış"
+            assert len(argumanlar) > sira, f"{yol.name}: {islev} adsız çağrılmış"
             satir = metin.count("\n", 0, eslesme.start()) + 1
-            yerler[f"{yol.relative_to(DEPO).as_posix()}:{satir}"] = _uzantilar(
-                argumanlar[1], kaynaklar, metin
-            )
+            konum = f"{yol.relative_to(DEPO).as_posix()}:{satir}"
+            cagrilar.append((konum, eslesme.start(), argumanlar[sira], metin))
+    return cagrilar
+
+
+def _kaydetme_yerleri() -> dict[str, set[str]]:
+    """`saveBlob` çağrısı → önerdiği adların uzantıları (`dosya:satır` anahtarıyla).
+
+    Sarmalayıcının içindeki çağrı yerine sarmalayıcının çağrıları sayılır (modül başlığı).
+    """
+    kaynaklar = _kaynaklar()
+    yerler: dict[str, set[str]] = {}
+    for konum, baslangic, ad, metin in _cagrilar("saveBlob", 1, kaynaklar):
+        sarici = _sarici(metin, baslangic, ad.strip())
+        if sarici is None:
+            yerler[konum] = _uzantilar(ad, kaynaklar, metin)
+            continue
+        cagrilar = _cagrilar(*sarici, kaynaklar)
+        assert cagrilar, f"{konum}: sarmalayıcı {sarici[0]} hiç çağrılmıyor"
+        for cagri, _, cagri_adi, cagri_metni in cagrilar:
+            yerler[cagri] = _uzantilar(cagri_adi, kaynaklar, cagri_metni)
     return yerler
 
 
@@ -138,14 +184,26 @@ def test_on_yuzun_kaydettigi_her_uzantinin_suzgeci_var() -> None:
 
 
 def test_tarama_bilinen_kaydetme_yerlerini_gorur() -> None:
-    """Yanlış yeşile karşı: bilinen yerler ve uzantılar taramada görünür (13.11.2026 durumu)."""
+    """Yanlış yeşile karşı: bilinen yerler ve uzantılar taramada görünür (17.11.2026 durumu)."""
     yerler = _kaydetme_yerleri()
     butun = set().union(*yerler.values())
 
-    assert len(yerler) >= 8
-    assert {".pdf", ".docx", ".xlsx", ".exe"} <= butun
+    assert len(yerler) >= 10
+    assert {".pdf", ".docx", ".xlsx", ".exe", ".html", ".jpg", ".png"} <= butun
+    # Ortak evrak kartı: PDF, Word ve Excel düğmesi (`EvrakBicimi`; Excel F2 11b'de geldi).
     evrak = [u for yer, u in yerler.items() if yer.startswith("frontend/src/modules/evrak/")]
-    assert evrak == [{".pdf", ".docx"}]
+    assert evrak == [{".pdf", ".docx", ".xlsx"}]
+    # Genel kurul: sarmalayıcının içi yer değildir; çağrıları (evrak, adlı çıktı, ek) yerdir.
+    genel_kurul = [
+        sorted(u)
+        for yer, u in yerler.items()
+        if yer.startswith("frontend/src/modules/genel-kurul/")
+    ]
+    assert sorted(genel_kurul) == [
+        [".docx", ".html", ".pdf", ".xlsx"],
+        [".docx", ".html", ".pdf", ".xlsx"],
+        [".jpg", ".pdf", ".png"],
+    ]
 
 
 def test_suzgec_uzantisi_anahtarla_aynidir_aciklama_turkcedir() -> None:
@@ -173,3 +231,18 @@ def test_sifreli_yedek_ayri_suzgecle_kaydedilir() -> None:
 )
 def test_tarayici_ad_bicimlerini_cozer(ifade: str, beklenen: set[str]) -> None:
     assert _uzantilar(ifade, {}, "", derinlik=0) == beklenen
+
+
+def test_sarmalayici_adi_parametresinden_verir() -> None:
+    """Adı parametresinden veren işlev sarmalayıcıdır; ad içinde değil çağrısında çözülür."""
+    metin = (
+        "export async function kaydet(\n  blob: Blob,\n  ad: string,\n): Promise<void> {\n"
+        "  await saveBlob(blob, ad);\n}\n"
+    )
+    konum = metin.index("saveBlob(")
+    assert _sarici(metin, konum, "ad") == ("kaydet", 1)
+    # Sabit ad ya da tanımı kapanmış işlevden sonraki çağrı sarmalayıcıda değildir.
+    assert _sarici(metin, konum, "AD") is None
+    assert _sarici(metin, konum, '"ad.pdf"') is None
+    sonra = metin + "const x = () => saveBlob(blob, ad);\n"
+    assert _sarici(sonra, sonra.rindex("saveBlob("), "ad") is None

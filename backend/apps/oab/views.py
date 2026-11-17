@@ -583,6 +583,11 @@ class OrganRosterView(APIView):
                 "oneriler": _oneriler(asillar),
                 "uyum_satirlari": _uyelik_uyum_satirlari(donem, organ),
                 "secilme_sayaclari": _secilme_sayaclari(organ, [*asillar, *yedekler]),
+                # Yeni dönemin ilk yönetim kurulu görev bölümü mü (kullanıcı kararı S7 (a)): program
+                # yöneticisinin görev bölümü düğmesi yalnız bunda çizilir (yetenek
+                # `ilk_gorev_bolumu_yazma`; tek tanım `gorev_bolumu.yk_ilk_gorev_bolumu_mu`).
+                "ilk_gorev_bolumu": organ == OrganType.YONETIM_KURULU
+                and gorev_bolumu.yk_ilk_gorev_bolumu_mu(donem),
             }
         )
 

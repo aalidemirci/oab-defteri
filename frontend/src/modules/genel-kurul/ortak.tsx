@@ -22,7 +22,7 @@ import TextField from "../../ui/TextField";
 import { Dayanak, UyariGerekceAlani, useUyariGerekce } from "../uyum/UyariGerekce";
 import { atifAyir } from "../uyum/hatalar";
 import { GEREKCEYLE_KAYDET } from "../uyum/metinler";
-import { genelKurulApi } from "./api";
+import { ekYedekDosyaAdi, genelKurulApi } from "./api";
 import type { Ek, GerekceEki, KuralOzeti } from "./api";
 import {
   BILGILER_BASLIGI,
@@ -233,7 +233,11 @@ export function YazmaPenceresi({
   );
 }
 
-/** Kaydetme sonucu: dosya yazılamadıysa hata, iptalde sessiz, kaydedilince bildirim. */
+/**
+ * Kaydetme sonucu: dosya yazılamadıysa hata, iptalde sessiz, kaydedilince bildirim. `saveBlob`'un
+ * sarmalayıcısıdır: önerilen ad (uzantısıyla) çağıranda kurulur, süzgeç taraması
+ * (`desktop/tests/test_kayit_suzgecleri.py`) adı çağrı yerinden çözer.
+ */
 export async function dosyayiKaydet(
   blob: Blob,
   ad: string,
@@ -269,7 +273,7 @@ export function EkListesi({
   const indir = async (ek: Ek) => {
     try {
       const { blob, ad } = await genelKurulApi.ekIndir(ek.id);
-      await dosyayiKaydet(blob, ad ?? `Ek_${ek.id}`, EK_KAYDEDILDI, snackbar);
+      await dosyayiKaydet(blob, ad ?? ekYedekDosyaAdi(ek), EK_KAYDEDILDI, snackbar);
     } catch (e) {
       snackbar.error(hataOku(e, EK_KAYDEDILEMEDI).message);
     }

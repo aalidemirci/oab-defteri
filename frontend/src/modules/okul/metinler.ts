@@ -44,13 +44,19 @@ export const KAMPUS_YARDIMI =
 
 /**
  * Veri sorumlusu alanı (F1b 5. adım; KVKK md. 10/1-a, E04). Örnek uydurmadır; aydınlatma metni
- * personel ve veli listesi aktarım ekranlarındadır (`kisiler/metinler.ts`).
+ * personel ve veli listesi aktarım ekranlarında (`kisiler/metinler.ts`), hesap teslim pusulasında ve
+ * Hakkında → Kişisel Veri'deki kişisel veri aydınlatma metnindedir (F2 10. adım; boşken o metin
+ * oluşturulmaz).
  */
 export const VERI_SORUMLUSU_ETIKETI = "Veri sorumlusu";
 export const VERI_SORUMLUSU_YARDIMI =
   "Okul müdürlüğünce belirlenir; personel ve veli listesi aktarım ekranlarındaki ve hesap " +
-  "teslim pusulasındaki aydınlatma metninde görünür. Örnek: Örnek Anadolu Lisesi Müdürlüğü, Örnek Mah. Örnek Sok. No: 1, " +
+  "teslim pusulasındaki aydınlatma metninde ve Hakkında → Kişisel Veri'deki kişisel veri " +
+  "aydınlatma metninde görünür. Örnek: Örnek Anadolu Lisesi Müdürlüğü, Örnek Mah. Örnek Sok. No: 1, " +
   "Örnek İlçe.";
+
+/** Yeni açılan okulun açılış tarihi alanı (md. 9/1); ekran ve kılavuz bu sabiti okur. */
+export const ACILIS_ETIKETI = "Okulun açılış tarihi";
 
 /** md. 9/1: yeni açılan okulda ilk genel kurulun süresi açılış tarihinden sayılır. */
 export const ACILIS_YARDIMI =

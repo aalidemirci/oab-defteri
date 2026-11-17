@@ -1,20 +1,22 @@
 """Genel kurul, gündem, tutanak ve katılım düzeltmesi (tasarım §5.2.3; plan F2 §5.1, §7).
 
 F1c genel kurulun asgari kaydını kurdu (dönem bağı ve yeter sayının anlık görüntüsü); F2 3. adım
-tasarımın alanlarını tamamlar. Durum geçişlerinin servisleri, kural denetimleri, uçlar ve ekran F2'nin
-4.-6. adımlarındadır; burada yalnız alanlar ve veritabanı düzeyindeki kısıtlar vardır. Göç yalnız şema
-değiştirir: var olan kayıtlarda yeni alanlar boş ya da varsayılandır.
+tasarımın alanlarını tamamladı. Durum geçişlerinin servisleri ve kural denetimleri F2'nin 4.-7.
+adımlarında (`services.genel_kurul`), uçlar ve ekran 11. adımında yazıldı; burada yalnız alanlar ve
+veritabanı düzeyindeki kısıtlar vardır. Göç yalnız şema değiştirir: var olan kayıtlarda yeni alanlar
+boş ya da varsayılandır.
 
 ALAN ANLAMI (plan F2 §5.1 "tuzak"): `term` kapanacak dönemdir (çağrıyı o dönemin YK'si yapar, raporlar
-o döneme aittir); olağanda açılacak `HAZIRLIK` dönemi `opens_term`'dür. OYS'nin `term`'ü başlattığı
-dönemdi; anlamı burada değişir. Yeni açılan okulun ilk genel kurulunda kapanacak dönem yoktur: `term`
-YALNIZ `called_by = MUDUR_YENI_OKUL`'da boş olabilir ve o zaman `opens_term` doludur (kullanıcı kararı
-S5 (i), 15.11.2026). Olağanüstü genel kurul dönem açmaz (md. 13/8): `opens_term` boştur. Bir hazırlık
-dönemini tek genel kurul açar (kısmi tekil kısıt).
+o döneme aittir); olağanda açılacak `HAZIRLIK` dönemi `opens_term`'dür. Kaynak modülün (tasarım
+§12.A) `term`'ü başlattığı dönemdi; anlamı burada değişir. Yeni açılan okulun ilk genel kurulunda
+kapanacak dönem yoktur: `term` YALNIZ `called_by = MUDUR_YENI_OKUL`'da boş olabilir ve o zaman
+`opens_term` doludur (kullanıcı kararı S5 (i), 15.11.2026). Olağanüstü genel kurul dönem açmaz
+(md. 13/8): `opens_term` boştur. Bir hazırlık dönemini tek genel kurul açar (kısmi tekil kısıt).
 
-İKİ TOPLANTI TEK KAYITTA (U8): OYS'nin `follows_failed_assembly`'si alınmaz. Birinci toplantının zamanı
-ve katılımı `first_*`, çoğunluk aranmayan ikinci toplantınınki (md. 9/2; olağanüstüde de, A-1)
-`second_*` alanlarındadır; genel kurulun yapıldığı toplantı `held_at_meeting`'dir.
+İKİ TOPLANTI TEK KAYITTA (U8): kaynak modülün `follows_failed_assembly`'si alınmaz. Birinci
+toplantının zamanı ve katılımı `first_*`, çoğunluk aranmayan ikinci toplantınınki (md. 9/2;
+olağanüstüde de, A-1) `second_*` alanlarındadır; genel kurulun yapıldığı toplantı
+`held_at_meeting`'dir.
 
 YETER SAYI (U7, O7): `student_count_snapshot`, `quorum_base`, `quorum_multiplier`, `quorum_required`
 ilanda (`CAGRILDI → ILAN_EDILDI`) birlikte dondurulur; dondurulduktan sonra değişmez (sert — yeter sayı
@@ -658,7 +660,7 @@ class GeneralAssembly(SilinmezOabModel):
 
 
 class AgendaItem(SilinmezOabModel):
-    """Genel kurul gündem maddesi (tasarım §5.2.3; OYS AYNEN → UYARLA).
+    """Genel kurul gündem maddesi (tasarım §5.2.3; §12.A AYNEN → UYARLA).
 
     (genel kurul, sıra) tekildir; SQLite tekil kısıtı ertelemediği için sıra değişikliği servis
     katmanında geçici değerle iki adımda yapılır. Çıkarılan madde silinmez: `removed_by_vote` (md. 9/4);
@@ -782,11 +784,11 @@ class AgendaItem(SilinmezOabModel):
 
 
 class AssemblyMinutes(SilinmezOabModel):
-    """Genel kurul tutanağının yapısal alanları (tasarım §5.2.3; OYS UYARLA).
+    """Genel kurul tutanağının yapısal alanları (tasarım §5.2.3; §12.A UYARLA).
 
     Bire bir genel kurula bağlıdır. Divan `OrganMembership(DIVAN)`'dan, seçilenler
-    `OrganMembership(SECILDI)`'den okunur (tek kaynak, O6). OYS'nin serbest metin adları kişi kaydına
-    bağlanır; `authorization_note` (md. 11/1-e) `AgendaItem(YETKILENDIRME).result_text`'e taşındı.
+    `OrganMembership(SECILDI)`'den okunur (tek kaynak, O6). Kaynak modülün serbest metin adları kişi
+    kaydına bağlanır; `authorization_note` (md. 11/1-e) `AgendaItem(YETKILENDIRME).result_text`'e taşındı.
     """
 
     IZ_DEGER_ALANLARI: ClassVar[tuple[str, ...]] = ("assembly", "handed_to_new_yk_on")

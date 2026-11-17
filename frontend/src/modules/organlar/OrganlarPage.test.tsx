@@ -211,6 +211,7 @@ const YK_KADRO: Kadro = {
     { uyelik: 11, program: 1, beyan: 2 },
     { uyelik: 12, program: 0, beyan: null },
   ],
+  ilk_gorev_bolumu: false,
 };
 
 const DK_KADRO: Kadro = {
@@ -230,6 +231,7 @@ const DK_KADRO: Kadro = {
   oneriler: [],
   uyum_satirlari: [],
   secilme_sayaclari: [{ uyelik: 21, program: 1, beyan: 1 }],
+  ilk_gorev_bolumu: false,
 };
 
 const ALIM_KADRO: Kadro = {
@@ -254,6 +256,7 @@ const ALIM_KADRO: Kadro = {
   oneriler: [],
   uyum_satirlari: [],
   secilme_sayaclari: [],
+  ilk_gorev_bolumu: false,
 };
 
 const KISI: BirlikKisisi = {
@@ -286,6 +289,7 @@ const SEKRETER: YetenekAdi[] = [
   "birlik_kisi_yazma",
   "gorev_alma_engeli",
   "gorev_bolumu_yazma",
+  "ilk_gorev_bolumu_yazma",
   "karar_taslagi_uretme",
   "organ_yazma",
   "temsilci_yazma",
@@ -413,10 +417,23 @@ describe("Organlar — yönetim kurulu", () => {
       "Yedek (1. sıra)",
     );
     expect(screen.getByRole("button", { name: /Uydurcan Eskikaya/ })).toHaveTextContent("Düştü");
-    // Program yöneticisi görev bölümünü yazmaz (yalnız sekreter); belgeyi üretir.
+    // Program yöneticisi sonraki görev bölümünü yazmaz (yalnız sekreter; S7 (a)); belgeyi üretir.
     expect(screen.queryByRole("button", { name: DUGME_GOREV_BOLUMU })).toBeNull();
     expect(await screen.findByRole("button", { name: "Belgeyi oluştur" })).toBeInTheDocument();
     expect(screen.getByLabelText("Toplantı günü")).toBeInTheDocument();
+  });
+
+  it("S7 (a): program yöneticisi görev bölümü düğmesini yalnız yeni dönemin ilk görev bölümünde görür", async () => {
+    organlarApiMock.kadro.mockImplementation(async (_d: number, organ: string) =>
+      organ === "YK" ? { ...YK_KADRO, ilk_gorev_bolumu: true } : DK_KADRO,
+    );
+    const ilk = bas();
+    expect(await screen.findByRole("button", { name: DUGME_GOREV_BOLUMU })).toBeInTheDocument();
+    ilk.unmount();
+    // Yeteneği olmayan rol (başkan) ilk görev bölümünde de düğmeyi görmez.
+    bas(BASKAN_ROLU);
+    expect(await screen.findByText(kadroOzeti(2, 1))).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: DUGME_GOREV_BOLUMU })).toBeNull();
   });
 
   it("üyelik penceresi: sayaç, engel hükmü, uyum satırı; dayanak yalnız düğmeyle okunur", async () => {

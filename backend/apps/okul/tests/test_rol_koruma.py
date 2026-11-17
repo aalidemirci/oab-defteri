@@ -352,7 +352,8 @@ def test_kisitli_roller_yalniz_kendi_satirlarina_yazar(rol: str) -> None:
 
 #: Kısıtlı rollerin servis katmanında bağlı eylemleri (F2 7. adım): müdürün yazıları M3 ¹ (yeni okul
 #: daveti, olağanüstü çağrı; sahiplikli), Denetleme Kurulununkiler M8 ⁵ ("Gördüm", görev bölümü, md.
-#: 14/5 çağrısı ve asgari rapor). Uçları 11. adımda gelir; o güne dek olumlu yarı servis katmanındadır.
+#: 14/5 çağrısı ve asgari rapor). Uçları F2 11a'da geldi; uç katmanını
+#: `test_kisitli_roller_yalniz_kendi_satirlarina_yazar` sınar.
 _KISITLI_ROLUN_BAGLI_EYLEMLERI = {
     AccountRole.DENETLEME_KURULU.value: {
         rol_izinleri.Eylem.GERI_YUKLEME_GORDUM,

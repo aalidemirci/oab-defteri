@@ -53,7 +53,7 @@ import {
 import { UyumHataBandi } from "../uyum/UyariGerekce";
 import { uyumHatasiOku } from "../uyum/hatalar";
 import type { UyumHatasi } from "../uyum/hatalar";
-import { genelKurulApi } from "./api";
+import { genelKurulApi, gkYedekDosyaAdi } from "./api";
 import type { GenelKurul, GkBicim, GkEvrakKaydi, Katalog, KatalogSatiri, Toplanti } from "./api";
 import {
   ADLI_CIKTI_ACIKLAMASI,
@@ -305,7 +305,7 @@ function BelgeKarti({
     setHata(null);
     try {
       const { blob, ad } = await genelKurulApi.evrakDosyasi(kayit.id, d.bicim);
-      await dosyayiKaydet(blob, ad ?? `${satir.ad}.${d.bicim}`, d.basari, snackbar);
+      await dosyayiKaydet(blob, ad ?? gkYedekDosyaAdi(satir.ad, d.bicim), d.basari, snackbar);
     } catch (e) {
       setHata(hataSinifla(e, EVRAK_KAYDEDILEMEDI));
     } finally {
@@ -318,7 +318,12 @@ function BelgeKarti({
     setHata(null);
     try {
       const { blob, ad } = await genelKurulApi.adliEvrak(kurul.id, satir.kod, bicim, "");
-      await dosyayiKaydet(blob, ad ?? `${satir.ad}.${bicim}`, ADLI_CIKTI_KAYDEDILDI, snackbar);
+      await dosyayiKaydet(
+        blob,
+        ad ?? gkYedekDosyaAdi(satir.ad, bicim),
+        ADLI_CIKTI_KAYDEDILDI,
+        snackbar,
+      );
       onUretildi();
     } catch (e) {
       setHata(hataSinifla(e, ADLI_CIKTI_YAZILAMADI));

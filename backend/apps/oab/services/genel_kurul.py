@@ -62,11 +62,12 @@ HAZIRLIK DÖNEMİ (U2-U5; tasarım §5.2.1, §7.8). Olağan genel kurul planlan�
 yazılsaydı hazırlık dönemi geçiş dönemi sanılırdı). Ders yılı birinci toplantı gününü içeren ders
 yılıdır; tanımlı değilse planlama yapılmaz (Ayarlar → Ders Yılları). Olağanüstü genel kurul dönem açmaz
 (md. 13/8). Genel kurul iptal edilirse hazırlık dönemi de iptal olur. Hiç birlik dönemi olmayan okulda
-olağan genel kurul yeni açılan okulun ilk genel kuruludur (kullanıcı kararı S5): okul kartında açılış
-tarihi girilmiş olmalıdır, kapanacak dönem yoktur (`term` boş), çağıran okul müdürüdür (md. 9/1; çağrısı
-7. adımda).
+olağan genel kurul yeni açılan okulun ilk genel kuruludur: kapanacak dönem yoktur (`term` boş; kullanıcı
+kararı S5 (i)), çağıran okul müdürüdür (md. 9/1; çağrısı 7. adımda). Okul kartında açılış tarihi
+girilmiş olmalıdır: bu şart S5'in kapsamadığı en dar seçimdir (S5 (iii) açılış tarihini yalnız yol
+haritası maddesi için kullanır; teyit AS-80).
 
-GÜNDEM TOHUMU (U19, U24). Olağan genel kurulun gündemi planlamayla aynı işlemde OYS'nin standart
+GÜNDEM TOHUMU (U19, U24). Olağan genel kurulun gündemi planlamayla aynı işlemde kaynak modülün standart
 şablonundan (`create_default_agenda` AYNEN) yazılır; md. 11/1-e (yetkilendirme) ve 11/1-f (öneriler)
 maddeleriyle tazelenir. "Saygı duruşu ve İstiklal Marşı" teamüldür: `DIGER` türüyle durur, kural
 denetimine girmez. Olağanüstü genel kurulda tohum yoktur; gündem çağrı nedeninden çağrıda girilir
@@ -502,9 +503,9 @@ GENEL_KURUL_KURALLARI: Final = (
     "genel_kurul.olaganustu_basvuru_oran",
 )
 
-#: Olağan genel kurulun tohum gündemi (U19: OYS `STANDARD_AGENDA_TEMPLATE` AYNEN, md. 11/1-e ve f ile
-#: tazelenmiş; U24: saygı duruşu `DIGER`). Başlıklar sözlüğün yazımıyladır ("yönetim kurulu",
-#: "Denetleme Kurulu").
+#: Olağan genel kurulun tohum gündemi (kaynak modülün, tasarım §12.A, `STANDARD_AGENDA_TEMPLATE`'i;
+#: plan F2 U19 AYNEN, md. 11/1-e ve f ile tazelenmiş; U24: saygı duruşu `DIGER`). Başlıklar
+#: sözlüğün yazımıyladır ("yönetim kurulu", "Denetleme Kurulu").
 TOHUM_GUNDEM: Final[tuple[tuple[str, str], ...]] = (
     (AgendaItemKind.ACILIS, "Açılış ve yoklama"),
     (AgendaItemKind.DIVAN_SECIMI, "Divan başkanı ve kâtip seçimi"),

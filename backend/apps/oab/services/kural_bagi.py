@@ -7,9 +7,10 @@ Geçiş `KAPANDI` olmayan dönemde yapılır ve dönem kapanana kadar geri alın
 dönemin önceki bağlarıdır (geçiş olaylarının eski sürümleri); dönem açılış bağından eskiye, hiç
 bağlanmadığı revizyona indirilmez (§6.2-4, 5; `hedefler`).
 
-Ekranı F1c'de yoktur (plan F1c kararları): kural sürümü Ayarlar'da salt okunur satırdır, fark ekranı
-ilk `r2` ile gelir. F2'nin 2. adımında servis uca bağlandı (`oab-term-rule-revision`; okuma ve yazma
-yalnız program yöneticisinin, `Eylem.KURAL_SURUMU_SECIMI`, Ayarlar satırı); ekranı F2'nin 11. adımındadır.
+F1c'de ekranı yoktu (plan F1c kararları: kural sürümü Ayarlar'da salt okunur satırdı, fark ekranı
+ilk `r2` ile gelir). F2'nin 2. adımında servis uca bağlandı (`oab-term-rule-revision`; okuma ve yazma
+yalnız program yöneticisinin, `Eylem.KURAL_SURUMU_SECIMI`, Ayarlar satırı); ekranı F2'nin 11b'sinde
+geldi (Birlik Dönemi → Kural Sürümü Güncellemesi).
 
 AÇILIŞ BAĞI (plan F2 §7 U2; tasarım §6.2-4 "açılışta"): ilk dönem de, genel kurulun planlanmasıyla açılan
 `HAZIRLIK` dönemi de açılırken programla gelen en yeni revizyona bağlanır (`acilis_bagi`). Bağ `ACIK`'a

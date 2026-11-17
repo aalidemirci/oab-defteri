@@ -29,9 +29,14 @@ from apps.oab.models import (
     ComplianceItem,
     ComplianceJustification,
     ComplianceKind,
+    Discharge,
+    DocumentFormat,
+    DocumentVariant,
     DropKind,
     ElectedBy,
     GeneralAssembly,
+    GeneratedDocument,
+    MembershipRole,
     MembershipSource,
     MembershipStatus,
     OabTerm,
@@ -40,7 +45,18 @@ from apps.oab.models import (
     SeatGroup,
     TermStatus,
 )
-from apps.oab.services import donem_kilidi, gecis, genel_kurul, kisiler, uyelikler
+from apps.oab.services import (
+    donem_kilidi,
+    gecis,
+    genel_kurul,
+    genel_kurul_evraki,
+    gorev_bolumu,
+    gorev_evraki,
+    kisiler,
+    uyelikler,
+)
+from apps.oab.services import evrak as evrak_servisi
+from apps.oab.tests import genel_kurul_evraki_ortak as ge_ortak
 from apps.oab.tests import genel_kurul_ortak as gko
 from apps.oab.tests import uyelik_ortak as o
 from apps.oab.tests.kurallar import paket_ortak
@@ -48,6 +64,7 @@ from apps.okul.models import (
     AccessKind,
     AccessLog,
     AccountRole,
+    Attachment,
     AuditAction,
     AuditTrail,
     ParentRoster,
@@ -55,6 +72,7 @@ from apps.okul.models import (
     SchoolYear,
 )
 from apps.okul.services import imports as import_service
+from shared import evrak
 from shared.exceptions import RolYetkisiz
 
 pytestmark = pytest.mark.django_db
@@ -814,7 +832,7 @@ def test_yeni_okulun_ilk_genel_kurulunda_donem_acilir_veli_listesi_baglanir() ->
     dönemsiz veli satırları yeni döneme bağlanır (kişisiz tek `DURUM` olayı); okul idaresinin TEFBİS
     girişleri yeni dönemin takvimine girer. Uçtan uca (F2 7. adım): program yöneticisi planlar, okul
     müdürü kendi hesabından davet eder (md. 9/1; K2), ilan, toplantı ve tutanak program yöneticisinindir;
-    gelen-giden evrak defteri henüz yoktur, müdürün yazısı deftere işlenmez (bilgi satırı)."""
+    gelen-giden evrak defteri kayda geçmemiştir, müdürün yazısı deftere işlenmez (bilgi satırı)."""
     gko.ders_yillari()
     gko.mevcut()
     SchoolConfig.objects.filter(pk=SchoolConfig.SINGLETON_PK).update(opened_on=date(2026, 9, 7))
@@ -859,3 +877,216 @@ def test_yeni_okulun_ilk_genel_kurulunda_donem_acilir_veli_listesi_baglanir() ->
             "TEFBIS_BUTCE_GIRISI",
         )
     ]
+
+
+# ---------------------------------------------------------------------------
+# F2 kapısı: pilot okulun genel kurul akışı (tasarım §14 F2; plan F2 §2 birinci madde; saha 8)
+# ---------------------------------------------------------------------------
+def _pilot_dosya_sayisi(kayit: GeneratedDocument) -> int:
+    """Kaydın dosya deposundaki ekleri."""
+    return Attachment.objects.filter(
+        owner_type="oab.GeneratedDocument", owner_id=str(kayit.pk)
+    ).count()
+
+
+def _pilot_uret(
+    kod: str, konu: Any, *, rol: AccountRole = AccountRole.YONETICI, **secim: Any
+) -> genel_kurul_evraki.Uretim:
+    """Genel kurul evrakını verilen rolle üretir; kayıt saklanan biçimlerinin (Word ve PDF; U18)
+    dosyalarıyla döner."""
+    with o.rol_olarak(rol):
+        sonuc = genel_kurul_evraki.uret(kod, konu, **secim)
+    saklanan = set(genel_kurul_evraki.BICIMLER[kod]) & genel_kurul_evraki.SAKLANAN_BICIMLER
+    assert sonuc.kayit.doc_type == kod
+    assert _pilot_dosya_sayisi(sonuc.kayit) == len(saklanan) >= 1, kod
+    return sonuc
+
+
+def _pilot_bilgi(sonuc: genel_kurul_evraki.Uretim) -> dict[str, str]:
+    """Kaydın kayıtlı içeriğinden iki sütunlu bilgi satırları (E64'ün toplantı ve sonuç satırları)."""
+    belge = evrak_servisi.yeniden_ciz(sonuc.kayit)
+    return {
+        satir[0]: satir[1]
+        for blok in belge.bloklar
+        if isinstance(blok, evrak.Tablo)
+        for satir in blok.satirlar
+        if len(satir) == 2
+    }
+
+
+def test_f2_pilot_akisi_ikinci_toplantida_secim() -> None:
+    """F2 kapısının birinci maddesi (tasarım §14 F2; plan F2 §2; saha 8): pilot okulun olağan genel
+    kurulu uydurma adlarla programdan baştan sona üretilir. Program yöneticisi planlar (hazırlık dönemi
+    açılır), yönetim kurulu adına sekreter çağırır, üç kanalda 15 gün önce ilan edilir (md. 9/3);
+    birinci toplantıda yeter sayı sağlanamaz (`YETER_SAYI_YOK`, 10 < 64), ikinci toplantıda çoğunluk
+    aranmaz (md. 9/2); divan, gündem sonuçları, ibra (yönetim kurulunun hesapları ibra edilmedi: E11 ve
+    E12 açılır, S4 (a)) ve seçim; sekreterin `TUTANAK_TAMAM`'ı dönemi açmaz, onayı yalnız program
+    yöneticisi verir (U32, M1); yeni yönetim kurulu ve Denetleme Kurulu görev bölümünü ikinci toplantının
+    gününden sayılan ilk haftanın son gününde (12.11.2026) uyarısız yapar (md. 12/3, 14/1; U6). Her
+    durumda o adımın evrakı üretilir: E04; ilanla E05 ve E06 (birinci toplantı), E07 ve E08 (iki kip);
+    birinci toplantıdan sonra E64 "sağlanamadı", E05 ve E06 (ikinci toplantı); ikinci toplantıda E64
+    "çoğunluk aranmaz"; tutanakla E09, E10, E11, E12, E13; görev bölümünden sonra E12 ve E13'ün yeni
+    sürümü (yeni başkan, U21), yeni dönemin E14'ü ve F1c'nin E01, E02, E03'ü. Veli adlı kip saklanmaz
+    (R9)."""
+    # Kurulum: kapanacak dönem, görev bölümlü kurullar, okul kartı, veli listesi ve personel; program
+    # yöneticisi planlar, yönetim kurulu adına sekreter çağırır.
+    kurul = ge_ortak.kurulum(genel_kurul_evraki.KOL_YK)
+    ge_ortak.personel_ekle()
+    hazirlik = OabTerm.objects.get(opened_by_assembly=kurul)
+    eski = OabTerm.objects.get(assemblies=kurul)
+    assert (kurul.status, kurul.called_by) == (
+        AssemblyStatus.CAGRILDI,
+        AssemblyCaller.YONETIM_KURULU,
+    )
+    assert (hazirlik.status, eski.status) == (TermStatus.HAZIRLIK, TermStatus.ACIK)
+    _pilot_uret("E04", SchoolConfig.load())
+
+    # İlan: üç kanal, 15 gün; ikinci toplantının günü ilk ilanda.
+    kurul = ge_ortak.ilanli(kurul)
+    assert (kurul.status, kurul.quorum_required) == (AssemblyStatus.ILAN_EDILDI, 64)
+    _pilot_uret("E05", kurul, rol=AccountRole.SEKRETER, toplanti=AssemblyMeeting.BIRINCI)
+    _pilot_uret("E06", kurul, toplanti=AssemblyMeeting.BIRINCI)
+    for kod in ("E07", "E08"):
+        _pilot_uret(kod, kurul, kip=DocumentVariant.KISISIZ)
+        with o.rol_olarak(AccountRole.YONETICI):
+            adli = genel_kurul_evraki.adli_uret_ve_ver(kod, kurul, bicim=DocumentFormat.PDF)
+        assert adli.icerik and adli.kayit.personal_list and adli.kayit.content_json == ""
+        assert _pilot_dosya_sayisi(adli.kayit) == 0
+
+    # Birinci toplantı: yeter sayı sağlanamadı; ikinci toplantının çağrısı ve duyurusu.
+    kurul = ge_ortak.birinci_toplantida_yetersiz(kurul)
+    assert (kurul.status, kurul.held_at_meeting) == (AssemblyStatus.YETER_SAYI_YOK, "")
+    bilgi = _pilot_bilgi(
+        _pilot_uret("E64", kurul, rol=AccountRole.SEKRETER, toplanti=AssemblyMeeting.BIRINCI)
+    )
+    assert (bilgi[genel_kurul_evraki.SATIR_KATILAN], bilgi[genel_kurul_evraki.SATIR_SONUC]) == (
+        "10",
+        genel_kurul_evraki.SONUC_SAGLANAMADI,
+    )
+    _pilot_uret("E05", kurul, rol=AccountRole.SEKRETER, toplanti=AssemblyMeeting.IKINCI)
+    _pilot_uret("E06", kurul, toplanti=AssemblyMeeting.IKINCI)
+
+    # İkinci toplantı ve divan: çoğunluk aranmaz.
+    kurul = ge_ortak.ikinci_toplantida_yapilmis(kurul)
+    assert (kurul.status, kurul.held_at_meeting) == (
+        AssemblyStatus.YAPILDI,
+        AssemblyMeeting.IKINCI,
+    )
+    bilgi = _pilot_bilgi(
+        _pilot_uret("E64", kurul, rol=AccountRole.SEKRETER, toplanti=AssemblyMeeting.IKINCI)
+    )
+    assert (bilgi[genel_kurul_evraki.SATIR_KATILAN], bilgi[genel_kurul_evraki.SATIR_SONUC]) == (
+        "20",
+        genel_kurul_evraki.SONUC_COGUNLUK_ARANMAZ,
+    )
+
+    # Tutanak: gündem sonuçları, ibra (yönetim kurulu ibra edilmedi), seçim, tutanak bilgileri.
+    kurul = ge_ortak.tutanakli(kurul, ibra_edilmedi=True)
+    assert kurul.discharge_yk == Discharge.EDILMEDI
+    secilenler = {
+        organ: [
+            u
+            for u in genel_kurul_evraki._kurul_secilenleri(kurul, organ)
+            if u.seat_type == "ASIL" and u.status == MembershipStatus.SECILDI
+        ]
+        for organ in ("YK", "DK")
+    }
+    assert (len(secilenler["YK"]), len(secilenler["DK"])) == (ge_ortak.YK_ASIL, 1)
+    assert {(u.term_id, u.start_date) for u in [*secilenler["YK"], *secilenler["DK"]]} == {
+        (hazirlik.pk, gko.IKINCI_GUN)
+    }
+    for kod in ("E09", "E10", "E11", "E13"):
+        _pilot_uret(kod, kurul, rol=AccountRole.SEKRETER)
+    assert genel_kurul_evraki.UYARI_YENI_BASKAN_YOK in _pilot_uret("E12", kurul).uyarilar
+
+    # Tutanağı sekreter tamamlar: dönem açılmaz; onayı yalnız program yöneticisi verir (U32).
+    with o.rol_olarak(AccountRole.SEKRETER):
+        tamam = genel_kurul.tutanagi_tamamla(kurul)
+    assert tamam.kurul.status == AssemblyStatus.TUTANAK_TAMAM
+    assert "05.11.2026" in tamam.bilgiler[0]
+    assert OabTerm.objects.get(pk=hazirlik.pk).status == TermStatus.HAZIRLIK
+    for rol in (
+        AccountRole.SEKRETER,
+        AccountRole.BASKAN,
+        AccountRole.MUHASIP,
+        AccountRole.DENETLEME_KURULU,
+        AccountRole.MUDUR,
+    ):
+        with o.rol_olarak(rol), pytest.raises(RolYetkisiz):
+            genel_kurul.donem_gecisini_onayla(kurul)
+    assert OabTerm.objects.get(pk=hazirlik.pk).status == TermStatus.HAZIRLIK
+    with o.rol_olarak(AccountRole.YONETICI):
+        yeni = genel_kurul.donem_gecisini_onayla(kurul).yeni_donem
+    assert (yeni.pk, yeni.status, yeni.start_date) == (
+        hazirlik.pk,
+        TermStatus.ACIK,
+        gko.IKINCI_GUN,
+    )
+    eski = OabTerm.objects.get(pk=eski.pk)
+    assert (eski.status, eski.end_date) == (TermStatus.KAPANISTA, date(2026, 11, 4))
+
+    # Görev bölümü: süre ikinci toplantının gününden sayılır; 7. gün (12.11.2026) uyarısızdır.
+    # Yeni dönemin ilk YK görev bölümünü program yöneticisi yazar (kullanıcı kararı S7 (a)): eski
+    # dönemin sekreteri yeniden seçilmemiş olsa da zincir tıkanmaz. Sonraki görev bölümü yalnız
+    # sekreterindir.
+    gorev_gunu = date(2026, 11, 12)
+    assert gorev_bolumu.dk_secen_genel_kurul_gunu(yeni) == gko.IKINCI_GUN
+    assert gorev_bolumu.yk_ilk_gorev_bolumu_mu(yeni)
+    yk = secilenler["YK"]
+    o.yk_gorev_bolumu(
+        yeni,
+        {
+            MembershipRole.BASKAN: yk[0],
+            MembershipRole.BASKAN_YARDIMCISI: yk[1],
+            MembershipRole.MUHASIP: yk[2],
+            MembershipRole.SEKRETER: yk[3],
+        },
+        gun=gorev_gunu,
+        rol=AccountRole.YONETICI,
+    )
+    assert not gorev_bolumu.yk_ilk_gorev_bolumu_mu(yeni)
+    for _ in range(2):
+        o.dk_ogretmeni(yeni, o.ogretmen())
+    o.dk_gorev_bolumu(yeni, secilenler["DK"][0], gun=gorev_gunu)
+    # Kapanacak dönemin sapma satırı kurulumundandır (görev bölümü gerekçeyle); yeni dönemde yoktur.
+    assert not ComplianceItem.objects.filter(
+        term=yeni,
+        rule_id__in=("yonetim_kurulu.gorev_bolumu_gun", "denetleme_kurulu.gorev_bolumu_gun"),
+    ).exists()
+
+    # Görev bölümünden sonra: E12 ve E13'ün yeni sürümü (yeni başkan), yeni dönemin evrakı.
+    for kod in ("E12", "E13"):
+        sonuc = _pilot_uret(kod, kurul)
+        assert sonuc.kayit.version == 2
+        assert genel_kurul_evraki.UYARI_YENI_BASKAN_YOK not in sonuc.uyarilar
+    yeni = OabTerm.objects.get(pk=yeni.pk)
+    assert _pilot_uret("E14", yeni).kayit.term_id == yeni.pk
+    with o.rol_olarak(AccountRole.SEKRETER):
+        gorev_kayitlari = [gorev_evraki.uret(kod, yeni).kayit for kod in ("E01", "E03")]
+    with o.rol_olarak(AccountRole.DENETLEME_KURULU):
+        gorev_kayitlari.append(gorev_evraki.uret("E02", yeni).kayit)
+    assert all(_pilot_dosya_sayisi(k) == 2 for k in gorev_kayitlari)
+
+    # Her durumun evrakı: genel kurulun geçerli kayıtları (kod, kip, toplantı) ve yeni dönemin evrakı.
+    assert {
+        (k.doc_type, k.variant, k.meeting, k.personal_list)
+        for k in genel_kurul_evraki.evrak_listesi(kurul)
+    } == {
+        ("E05", "", AssemblyMeeting.BIRINCI, False),
+        ("E05", "", AssemblyMeeting.IKINCI, False),
+        ("E06", "", AssemblyMeeting.BIRINCI, False),
+        ("E06", "", AssemblyMeeting.IKINCI, False),
+        ("E07", DocumentVariant.KISISIZ, "", False),
+        ("E07", DocumentVariant.ADLI, "", True),
+        ("E08", DocumentVariant.KISISIZ, "", False),
+        ("E08", DocumentVariant.ADLI, "", True),
+        ("E64", "", AssemblyMeeting.BIRINCI, False),
+        ("E64", "", AssemblyMeeting.IKINCI, False),
+        ("E09", "", "", False),
+        ("E10", "", "", False),
+        ("E11", "", "", False),
+        ("E12", "", "", False),
+        ("E13", "", "", False),
+    }
+    assert [k.doc_type for k in genel_kurul_evraki.evrak_listesi(yeni)] == ["E14"]
+    assert [k.doc_type for k in gorev_evraki.evrak_listesi(yeni)] == ["E01", "E02", "E03"]

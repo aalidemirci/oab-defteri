@@ -51,10 +51,12 @@ işlenmesi; programın verisinin çıktısı değildir), boş şablonlar ve kurt
 satırındadır, izi denetim izinde `YEDEK` satırıdır — erişim günlüğü türlerinde yoktur), veli
 listesi (F1b 5. adım: aktarımı ve silinmesi yalnız denetim izine kişisiz parti satırıdır; ekranı
 yalnız sayıları gösterir, adı okuyan yol yoktur — plan "F1b-5 uygulama kararları").
-T.C. kimlik no (K9, F3), veli adı taşıyan E07/E08 çıktıları (F2), kişi dökümü ve ihlal dökümü,
-kantin isteklisinin katılım engeli dayanağı (F5) henüz yoktur; o okumaları getiren adımlar bu
-yazıcıya bağlar. Özel nitelikli ekin tek okuma yolu `services.dosya_deposu.oku` F1b-3'ten beri bu
-yazıcıyı çağırır; ona bağlı uç F1c'dedir. İlk bağlı uç (F1c 5. adım, 10.11.2026): organ
+T.C. kimlik no (K9, F3), kişi dökümü ve ihlal dökümü, kantin isteklisinin katılım engeli dayanağı
+(F5) henüz yoktur; o okumaları getiren adımlar bu yazıcıya bağlar. Veli adı taşıyan E07/E08
+çıktıları ve genel kurulun katılım işaretleri F2'de bağlandı (`VELI_LISTESI_CIKTISI`;
+`apps.oab.services.genel_kurul_evraki.adli_uret_ve_ver`, `genel_kurul.katilim_isaretleri`).
+Özel nitelikli ekin tek okuma yolu `services.dosya_deposu.oku` F1b-3'ten beri bu yazıcıyı
+çağırır; ona bağlı uç F1c'dedir. İlk bağlı uç (F1c 5. adım, 10.11.2026): organ
 üyeliğindeki görev alma engelinin dayanağı (`OZEL_NITELIKLI_ALAN`, `oab.OrganMembership`,
 `eligibility_bar_basis`; `apps.oab.services.uyelikler.engel_dayanagini_oku`, uç
 `oab-membership-eligibility-basis`); dolu dayanak satır yazıldıktan sonra verilir.

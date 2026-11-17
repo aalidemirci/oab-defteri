@@ -263,6 +263,7 @@ describe("yetenekler (ön yüz süzmesinin tek kaynağı; plan F1b-2)", () => {
       "guncelleme",
       "guvenlik",
       "iki_depo",
+      "ilk_gorev_bolumu_yazma",
       "kapali_gun_yazma",
       "karar_taslagi_uretme",
       "kisi_yazma",

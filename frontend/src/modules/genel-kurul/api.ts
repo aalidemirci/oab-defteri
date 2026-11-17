@@ -13,6 +13,7 @@
 
 import { api } from "../../lib/api";
 import type { IndirilenDosya } from "../../lib/api";
+import { dosyaAdi } from "../../lib/download";
 import type { BirlikDonemi } from "../birlik-donemi/api";
 import type { OrganUyeligi } from "../gecis-kurulumu/api";
 
@@ -413,6 +414,23 @@ export interface GkEvrakUretimi {
 }
 
 export type GkBicim = "pdf" | "docx" | "xlsx" | "html";
+
+/**
+ * Sunucunun adı yoksa genel kurul evrakının adı: belge adı + biçimin uzantısı. Uzantı adda kalır:
+ * masaüstünün kaydetme penceresi süzgecini ondan seçer (`desktop/window.py` `TUR_SUZGECLERI`).
+ */
+export function gkYedekDosyaAdi(ad: string, bicim: GkBicim): string {
+  return dosyaAdi([ad], bicim);
+}
+
+/**
+ * Sunucunun adı yoksa ekin adı: `Ek_<no>` + türünün uzantısı (sunucunun `_EK_UZANTILARI`'yla aynı;
+ * ek yalnız PDF, JPEG ya da PNG olur).
+ */
+export function ekYedekDosyaAdi(ek: Ek): string {
+  const uzanti = ek.tur === "image/jpeg" ? ".jpg" : ek.tur === "image/png" ? ".png" : ".pdf";
+  return dosyaAdi(["Ek", String(ek.id)], uzanti);
+}
 
 const G = "/oab/assemblies";
 

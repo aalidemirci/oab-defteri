@@ -1,6 +1,8 @@
 // Kılavuz bölümü: Veli Listesi (çapa `veli-listesi`). Başlık, ikon ve sıra `KilavuzPage`'dedir.
 // Sekme kişisel veri taşıdığı için yalnız `veli_listesi` yeteneğinde görünür: adımlar o hesaba
-// yazılır, öteki hesap listenin ne olduğunu ve ne tutulduğunu okur.
+// yazılır, öteki hesap listenin ne olduğunu ve ne tutulduğunu okur. F2: listenin genel kurulda kullanımı
+// (veli adlı çıktı ve katılım işaretleri; yalnız `kisisel_veri_ciktisi`, erişim günlüğüne yazılır,
+// saklanmaz; md. 9/3, 10/1-a).
 
 import type { ReactNode } from "react";
 
@@ -24,6 +26,17 @@ import {
   VELI_SILME_ONAY_METNI,
   VELI_YERINE_KOYMA_ONIZLEME,
 } from "../../kisiler/metinler";
+import {
+  ADIM_TOPLANTI,
+  ADLI_CIKTI_ACIKLAMASI,
+  ADLI_CIKTI_BASLIGI,
+  DUGME_ADLI_EXCEL,
+  DUGME_ADLI_PDF,
+  DUGME_ADLI_WORD,
+  DUGME_KATILIM_ISARETLERI,
+  KATILIM_ISARETLERI_ACIKLAMASI,
+  KIP_ADLI,
+} from "../../genel-kurul/metinler";
 import { PARENT_TEMPLATE_FILENAME } from "../../okul/api";
 import { useYetki } from "../../oturum/yetki";
 import { AltBaslik, Ekran, Ipucu, KapiliEkran, KilavuzBolumu, Kod } from "../KilavuzKabugu";
@@ -35,7 +48,8 @@ function Ad({ children }: { children: ReactNode }) {
 }
 
 export default function VeliListesi(bolum: BolumProps) {
-  const yetkili = useYetki().acik("veli_listesi");
+  const yetki = useYetki();
+  const yetkili = yetki.acik("veli_listesi");
   return (
     <KilavuzBolumu {...bolum}>
       <p>{VELI_LISTESI_ACIKLAMASI}</p>
@@ -44,6 +58,28 @@ export default function VeliListesi(bolum: BolumProps) {
         numarası, öğrencinin adı ve numarası alınmaz. e-Okul veli adı veren rapor sunmadığı için
         liste okulun doldurduğu şablondan gelir.
       </p>
+
+      <AltBaslik>Liste genel kurulda nasıl kullanılır</AltBaslik>
+      <p>
+        Genel kurulun toplantı yeri, zamanı ve gündemi üyelere elden yazılı olarak bildirilir (md.
+        9/3); toplantıya katılan üyeler katılım cetvelini imzalar (md. 10/1-a). Davetin sınıf teslim
+        çizelgesi ve katılım cetveli bu listeden Genel Kurul ekranında üretilir (
+        <Ekran to="/kilavuz#genel-kurul">Genel Kurul</Ekran>). Kişisiz biçimleri her hesap kaydeder;
+        veli adlı biçim yalnız program yöneticisinin hesabında üretilir.
+      </p>
+      {yetki.acik("kisisel_veri_ciktisi") && (
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <Ad>{ADLI_CIKTI_BASLIGI}</Ad>: belge kartında {KIP_ADLI} biçimi “{DUGME_ADLI_PDF}”, “
+            {DUGME_ADLI_WORD}” ya da “{DUGME_ADLI_EXCEL}” düğmesiyle üretilir.{" "}
+            {ADLI_CIKTI_ACIKLAMASI}
+          </li>
+          <li>
+            {ADIM_TOPLANTI} adımındaki “{DUGME_KATILIM_ISARETLERI}” penceresi:{" "}
+            {KATILIM_ISARETLERI_ACIKLAMASI}
+          </li>
+        </ul>
+      )}
 
       {yetkili ? (
         <>

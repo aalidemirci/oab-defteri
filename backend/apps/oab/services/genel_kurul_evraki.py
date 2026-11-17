@@ -1541,7 +1541,7 @@ DK_OGRETMEN_BILGISI: Final = (
     "genel kurulun oylamasına girmez (md. 11/1-b, 14/1)."
 )
 
-#: E10: genel kurul toplantı tutanağı (md. 9/2-6, 10/1, 11/1; GNL-OAB-FR-004; OYS `tutanak.html`).
+#: E10: genel kurul toplantı tutanağı (md. 9/2-6, 10/1, 11/1; GNL-OAB-FR-004; §12.A `tutanak.html`).
 E10_GIRIS: Final = (
     "Okul-Aile Birliğinin {tur} genel kurulu aşağıdaki bilgilerle toplanmış ve gündem maddelerini "
     "görüşmüştür (Millî Eğitim Bakanlığı Okul-Aile Birliği Yönetmeliği (Yönetmelik) md. 10/1, 11/1)."
@@ -1963,7 +1963,7 @@ def _aday_satirlari(
 
 
 def e09_belgesi(konu: models.Model, secim: Secim) -> tuple[evrak.Belge, tuple[str, ...]]:
-    """E09'un içerik modeli (tasarım §9.3, §9.6 E09; OYS `aday_listeleri.html` UYARLA): yönetim kurulu
+    """E09'un içerik modeli (tasarım §9.3, §9.6 E09; §12.A `aday_listeleri.html` UYARLA): yönetim kurulu
     adayları (kişi türü ve md. 12/4 sayacıyla) ve Denetleme Kurulunun veli koltuğu adayları; öğretmen
     koltukları yalnız bilgi satırıdır (genel kurulun oylamasına girmez). Olağanüstü genel kurul
     Denetleme Kuruluna seçim yapmaz (kullanıcı kararı S10 (a)): B bölümü basılmaz. İmza Divan Başkanı
@@ -2245,7 +2245,7 @@ def _secim_bolumu(
 
 
 def e10_belgesi(konu: models.Model, secim: Secim) -> tuple[evrak.Belge, tuple[str, ...]]:
-    """E10'un içerik modeli (tasarım §9.6 E10; GNL-OAB-FR-004; OYS `tutanak.html` UYARLA): toplantı,
+    """E10'un içerik modeli (tasarım §9.6 E10; GNL-OAB-FR-004; §12.A `tutanak.html` UYARLA): toplantı,
     açılış ve divan, gündem maddelerinin sonuçları ve gündem değişikliğinin oylaması (md. 9/4), ibra
     (kurul başına ayrı oylama satırı), seçim sonuçları, kapanış (teslim günü). Seçilenler üyelik
     kayıtlarından (tek kaynak; E09 ve E13 ile aynı kayıtlar). İmza Divan Başkanı + Kâtip ve "Görüldü —
@@ -2799,7 +2799,8 @@ def e14_belgesi(konu: models.Model, secim: Secim) -> tuple[evrak.Belge, tuple[st
 # ---------------------------------------------------------------------------
 # E04 — kişisel veri aydınlatma metni (dört alt metin; plan F2 §4.1, §9 S6 (iv), S8 (i))
 # ---------------------------------------------------------------------------
-#: Veri sorumlusu boşken (sert; S6 (iv), KE-20): belge üretilmez, kaydedilmiş belge basılmaz.
+#: Veri sorumlusu boşken (sert; S6 (iv), KE-20): belge üretilmez; kaydedilmiş belge de basılmaz (bu kol
+#: kararın lafzından genişletmedir, ajan seçimi; açık sorular AS-71).
 E04_VERI_SORUMLUSU_YOK: Final = (
     "Okul Bilgileri'nde veri sorumlusu girilmemiş: kişisel veri aydınlatma metni veri sorumlusu "
     "olmadan üretilmez ve basılmaz (KVKK md. 10/1-a)."
@@ -3158,7 +3159,8 @@ def bas(kayit: GeneratedDocument, bicim: str) -> FileResponse:
     Kod bu belgelerden biri değilse, biçim kayıtta yoksa, kayıt veli adı taşıyorsa ya da saklanan
     dosya eklenmemişse 404. Kayıtlı içerik tutmuyorsa (`EvrakIcerigiTutmuyor`) ya da dosya
     okunamazsa bayt verilmez, iz yazılmaz. E04 Okul Bilgileri'nde veri sorumlusu boşken basılmaz
-    (`E04_VERI_SORUMLUSU_YOK`, `ValueError`; S6 (iv)).
+    (`E04_VERI_SORUMLUSU_YOK`, `ValueError`; S6 (iv)'ün kaydedilmiş belgeye genişletilmesi, ajan
+    seçimi, açık sorular AS-71).
     """
     kod = str(kayit.doc_type)
     if kod not in KODLAR or bicim not in kayit.formats or kayit.personal_list:

@@ -15,9 +15,9 @@ görev verilmez. Bir görev bölümü kaydı:
     md. 12/3). Süre kurulun bugünkü bileşiminin oluştuğu günden sayılır: görevdeki asılların en geç
     seçilme ya da yedekten çağrı günü (`start_date`, `promoted_on`);
   - Denetleme Kurulu: genel kuruldan sonraki ilk hafta (`denetleme_kurulu.gorev_bolumu_gun`, md. 14/1).
-    Süre kurulu seçen genel kurulun gününden sayılır (kullanıcı kararı 10.11.2026). Olağanüstü genel
-    kurul Denetleme Kuruluna seçim yapmaz (kullanıcı kararı S10 (a), 15.11.2026; md. 13/8 yalnız
-    yönetim kurulunu sayar): kurulu seçen genel kurul dönemi açan genel kuruldur, süre onun yapıldığı
+    Süre kurulu seçen genel kurulun gününden sayılır (plan F1c 6. adım notları; teyit AS-86).
+    Olağanüstü genel kurul Denetleme Kuruluna seçim yapmaz (kullanıcı kararı S10 (a), 15.11.2026;
+    md. 13/8 yalnız yönetim kurulunu sayar): kurulu seçen genel kurul dönemi açan genel kuruldur, süre onun yapıldığı
     günden (`OabTerm.start_date`; birinci ya da ikinci toplantı, plan F2 §7 U6) sayılır
     (`dk_secen_genel_kurul_gunu`).
     Süre yalnız o genel kuruldan sonraki ilk görev bölümünde denetlenir: yedek çağrısı (md. 14/6)
@@ -28,7 +28,15 @@ görev verilmez. Bir görev bölümü kaydı:
   Görev bölümü, görevdeki asılların seçilme ya da yedekten çağrı gününden önce olamaz (sert, tarih
   sırası; iki kurulda da).
 
-YÖNETİM KURULU: kaydı ve karar taslağını sekreter yazar (uç kuralı; tasarım §7.2). Başkan atanınca
+YÖNETİM KURULU: kaydı ve karar taslağını sekreter yazar (uç kuralı; tasarım §7.2). Yeni dönemin İLK
+görev bölümünü program yöneticisi de yazar (kullanıcı kararı S7 (a), 15.11.2026; plan F2 §9): yeni
+yönetim kurulunun üyeleri görev bölümünden önce hesap alamaz, önceki dönemin sekreteri yeniden
+seçilmemiş olabilir. "İlk"in tek tanımı `yk_ilk_gorev_bolumu_mu`dur: dönem genel kurulla açılmış ve
+açıktır (`opened_by_assembly`, `ACIK`; U28'in "yeni dönem"i) ve dönemde yönetim kurulunun yapılmış
+(`YAPILDI`) görev bölümü toplantısı yoktur. Sonraki görev bölümleri yalnız sekreterdedir; kapı servis
+katmanında da koşar (`yk_gorev_bolumu_kapisi`; uç kuralı iki rolü açar, servis yöneticiyi ilk görev
+bölümüne daraltır). Geçiş kurulumunun dönemi genel kurulla açılmadığı için orada yalnız sekreter
+yazar (F1c davranışı). Başkan atanınca
 başkanın kendiliğinden üye olduğu üç komisyonun temsilci satırları açılır; başkanlığı bırakan önceki
 başkanın satırları düşer, başka bir göreve geçmiş olsa da (`temsilciler.baskan_temsilciliklerini_esitle`;
 E03). Başkanlığı düşmeyle ya da iptalle biten kişinin satırları o geçişte düşer
@@ -80,6 +88,7 @@ from apps.oab.models import (
     OrganMembership,
     OrganType,
     SeatGroup,
+    TermStatus,
 )
 from apps.oab.services import (
     donem_kilidi,
@@ -91,7 +100,10 @@ from apps.oab.services import (
     uyum,
 )
 from apps.okul import denetim_izi, rol_izinleri
+from apps.okul.models import AccountRole
+from apps.okul.oturum import yazar
 from apps.okul.services import app_password
+from shared.exceptions import RolYetkisiz
 
 #: Yönetim kurulunun görev bölümünde seçilen dört görev (md. 12/3).
 YK_GOREVLERI: Final = frozenset(
@@ -172,7 +184,7 @@ def kurulun_olustugu_gun(donem: OabTerm, organ: str) -> date | None:
 
 def dk_secen_genel_kurul_gunu(donem: OabTerm) -> date | None:
     """Denetleme Kurulunu seçen genel kurulun günü (md. 14/1 "genel kuruldan sonraki ilk hafta";
-    kullanıcı kararı 10.11.2026; modül başlığı).
+    plan F1c 6. adım notları; teyit AS-86; modül başlığı).
 
     Olağanüstü genel kurul Denetleme Kuruluna seçim yapmaz (kullanıcı kararı S10 (a), 15.11.2026: md.
     13/8 olağanüstü genel kurulun seçtiği kurul olarak yalnız yönetim kurulunu sayar; genel kurulun
@@ -374,6 +386,37 @@ def _atamalari_dogrula(
 # ---------------------------------------------------------------------------
 # Yönetim kurulu (md. 12/3)
 # ---------------------------------------------------------------------------
+def yk_ilk_gorev_bolumu_mu(donem: OabTerm) -> bool:
+    """Yönetim kurulunun bu dönemdeki görev bölümü yeni dönemin İLK görev bölümü mü (kullanıcı kararı
+    S7 (a), 15.11.2026; modül başlığı "YÖNETİM KURULU")? Tek tanımdır: dönem genel kurulla açılmış ve
+    açıktır (U28'in "yeni dönem"i, `hesap_baglari.onceki_donem_hesaplarini_askiya_al` ile aynı ölçüt)
+    ve dönemde yönetim kurulunun yapılmış (`YAPILDI`) görev bölümü toplantısı yoktur. Okumadır,
+    yazmaz."""
+    if donem.status != TermStatus.ACIK or donem.opened_by_assembly_id is None:
+        return False
+    return not BoardMeeting.objects.filter(
+        term=donem,
+        organ=OrganType.YONETIM_KURULU,
+        kind=MeetingKind.GOREV_BOLUMU,
+        status=MeetingStatus.YAPILDI,
+    ).exists()
+
+
+def yk_gorev_bolumu_kapisi(donem: OabTerm) -> None:
+    """Yönetim kurulu görev bölümünün servis kapısı (tasarım §7.2 "Kim"; kullanıcı kararı S7 (a)):
+    sekreter her görev bölümünü, program yöneticisi yalnız yeni dönemin ilk görev bölümünü yazar
+    (`yk_ilk_gorev_bolumu_mu`). Öteki roller, yazarsız ve `SISTEM` bağlamı reddedilir (403
+    `rol_yetkisiz`; fail-closed). Uç kuralı iki rolü açar; daraltma buradadır."""
+    kim = yazar()
+    if kim is None or kim.sistem_mi:
+        raise RolYetkisiz
+    if kim.rol == AccountRole.SEKRETER.value:
+        return
+    if kim.rol == AccountRole.YONETICI.value and yk_ilk_gorev_bolumu_mu(donem):
+        return
+    raise RolYetkisiz
+
+
 @transaction.atomic
 def yk_gorev_bolumu(
     *,
@@ -385,9 +428,11 @@ def yk_gorev_bolumu(
     text: str = "",
     gerekce: uyum.Gerekce | None = None,
 ) -> GorevBolumu:
-    """Yönetim kurulunun görev bölümü (modül başlığı). Gerekçesiz süre uyarısı işlemi geri alır."""
+    """Yönetim kurulunun görev bölümü (modül başlığı; rol kapısı `yk_gorev_bolumu_kapisi`). Gerekçesiz
+    süre uyarısı işlemi geri alır."""
     yazma_kapisi()
     donem = _baslangic(term)
+    yk_gorev_bolumu_kapisi(donem)
     atamalar = _atamalari_dogrula(donem, OrganType.YONETIM_KURULU, gorevler, YK_GOREVLERI)
     gun = _gun(held_at)
     gozlenen = _sure_gozlenen(donem, OrganType.YONETIM_KURULU, gun)

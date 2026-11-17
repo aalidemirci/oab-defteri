@@ -362,8 +362,10 @@ _DAYANAK_ENGEL_DAYANAGI = (
     "adım notları, kullanıcı kararı 10.11.2026)."
 )
 _DAYANAK_YK_GOREV_BOLUMU = (
-    "Tasarım §7.2 'YK görev bölümü' satırı: kaydı ve karar taslağını sekreter yazar (program "
-    "yöneticisinin payı hesap işlemidir, Kullanıcılar satırı); plan F1c 6. adım."
+    "Tasarım §7.2 'YK görev bölümü' satırı: kaydı ve karar taslağını sekreter yazar; yeni dönemin "
+    "ilk görev bölümünü program yöneticisi de yazar (kullanıcı kararı S7 (a), 15.11.2026; plan F2 "
+    "§9). Servis program yöneticisini ilk görev bölümüne daraltır "
+    "(`gorev_bolumu.yk_gorev_bolumu_kapisi`); plan F1c 6. adım."
 )
 _DAYANAK_YK_YEDEK = (
     "Tasarım §7.2 'YK yedeğinin çağrılması' satırı: sekreter (YK kararıyla); md. 13/6; plan F1c 6. "
@@ -663,7 +665,7 @@ KURALLAR: Final[tuple[RolKurali, ...]] = (
         "oab-yk-duty-assignment",
         "POST",
         Satir.M2,
-        yalniz=_YALNIZ_SEKRETER,
+        yalniz=_YONETICI_VE_SEKRETER,
         dayanak=_DAYANAK_YK_GOREV_BOLUMU,
     ),
     _yaz(
@@ -1042,7 +1044,8 @@ BEKLEYEN_HUCRELER: Final[Mapping[tuple[Satir, str], str]] = {
     # Personel modülü (doğrudan işveren okullar; K3) sürüm 2.
     **_bekleyen(Satir.M15, (YONETICI, *sorted(YK_ROLLERI)), "F8+"),
     # Kişisel veri: program yöneticisinin hücresi veli listesinin uçlarıyla bağlandı (F1b 5.
-    # adım); adlı E07/E08 çıktısının kapısı ¹⁰ dipnotunun eylemidir (`BEKLEYEN_DIPNOTLAR`, F2).
+    # adım); adlı E07/E08 çıktısının kapısı ¹⁰ dipnotunun eylemidir (`Eylem.KISISEL_VERI_CIKTISI`;
+    # F2'nin 5. adımında bağlandı, `BEKLEYEN_DIPNOTLAR`'dan çıktı).
     # F1b'de bekleyen kalmadı: Kullanıcılar (program yöneticisi) uçlarıyla, Denetleme Kurulunun
     # M8 hücresi geri yükleme kartının "Gördüm"üyle bağlandı (F1b-2 (c)). M8 hücresi satır
     # düzeyindedir; DK görev bölümü ve denetim planı F1c'nin 6. adımında (`Eylem.DK_GOREV_BOLUMU_YAZMA`),
@@ -1209,6 +1212,10 @@ YETENEKLER: Final[Mapping[str, frozenset[tuple[str, str]]]] = {
     "gorev_bolumu_yazma": _ciftler(
         ("oab-yk-duty-assignment", "POST"), ("oab-membership-substitute-call-yk", "POST")
     ),
+    # Yeni dönemin ilk yönetim kurulu görev bölümü (kullanıcı kararı S7 (a); sekreter ve program
+    # yöneticisi). Yetenek rolü söyler, "ilk"i sunucu söyler (kadro okumasının `ilk_gorev_bolumu`'u,
+    # `gorev_bolumu.yk_ilk_gorev_bolumu_mu`); servis program yöneticisini ilk görev bölümüne daraltır.
+    "ilk_gorev_bolumu_yazma": _ciftler(("oab-yk-duty-assignment", "POST")),
     # E01 ve E03 karar taslağı ve çizelgesinin üretimi (tasarım §9.6 "Üreten": sekreter, program
     # yöneticisi).
     "karar_taslagi_uretme": _ciftler(("oab-document-e01", "POST"), ("oab-document-e03", "POST")),

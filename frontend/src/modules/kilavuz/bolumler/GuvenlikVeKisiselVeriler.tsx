@@ -4,10 +4,20 @@
 // TK7; KVKK ve Yönerge atıfları docs/mevzuat'tan doğrulandı.
 //
 // Dürüst sınırların metni Hakkında'yla tek kaynaktır (`DURUST_SINIRLAR`). Denetim izi maddesindeki
-// satır adı ("Zincir") kılavuzda geçmez (sözlük §1): aynı satır kartın başlığıyla anılır.
+// satır adı ("Zincir") kılavuzda geçmez (sözlük §1): aynı satır kartın başlığıyla anılır. F2: erişim
+// günlüğüne yazan okumalar (görev alma engelinin dayanağı, katılım işaretleri, veli adlı çıktılar;
+// `erisim/metinler.MODEL_ADLARI`) ve Hakkında → Kişisel Veri'deki kişisel veri aydınlatma metni.
 
 import { ERISIM_GUNLUGU_BASLIGI } from "../../erisim/metinler";
+import { E04_ADI } from "../../evrak/metinler";
 import { DURUST_SINIRLAR, KAPSAM_DISI_METNI, KAPSAM_METNI } from "../../guvenlik/metinler";
+import {
+  E04_VERI_SORUMLUSU_GIRILMEDI,
+  KISISEL_VERI_ACIKLAMASI,
+  KISISEL_VERI_BASLIGI,
+  TEYIT_BASLIGI,
+  TEYIT_NOTU,
+} from "../../hakkinda/metinler";
 import { useYetki } from "../../oturum/yetki";
 import { AltBaslik, Ekran, Ipucu, KilavuzBolumu } from "../KilavuzKabugu";
 import type { BolumProps } from "../KilavuzKabugu";
@@ -152,8 +162,10 @@ export default function GuvenlikVeKisiselVeriler(bolum: BolumProps) {
       <p>
         Günlük, kişisel veriye dokunan hassas okumaları ve kişisel veri içeren çıktıları gösterir:
         hangi hesapla, ne zaman ve hangi kayıt okundu. Okunan değer günlükte yoktur; günlüğü okumak
-        iz bırakmaz. Kayıtlar iki yıl saklanır, sonra silinir. Programın bugünkü ekranlarında
-        günlüğe yazan bir okuma olmadığı için liste boştur.
+        iz bırakmaz. Kayıtlar iki yıl saklanır, sonra silinir. Günlüğe şunlar yazılır: organ
+        üyeliğindeki görev alma engelinin dayanağının okunması, genel kurulun katılım işaretleri
+        penceresinin açılması ve veli adı taşıyan çıktıların (davetin sınıf teslim çizelgesi,
+        katılım cetveli) basımı.
       </p>
 
       <AltBaslik>Programı kullananların verileri</AltBaslik>
@@ -163,9 +175,23 @@ export default function GuvenlikVeKisiselVeriler(bolum: BolumProps) {
         aydınlatma metni, ilk program yöneticisi için Kurulum Sihirbazı&apos;nın ilk adımında (
         <Ekran to="/kilavuz#ilk-kurulum">İlk Kurulum</Ekran>), öteki hesaplar için hesap teslim
         pusulasındadır (<Ekran to="/kilavuz#kullanicilar">Kullanıcılar</Ekran>). Personel ve veliler
-        için aydınlatma ayrı bir iştir (KVKK md. 10/1); metni aktarım ekranlarındadır (
-        <Ekran to="/kilavuz#kisiler">Kişiler</Ekran>,{" "}
+        için aydınlatma ayrı bir iştir (KVKK md. 10/1); listelerin aktarımındaki metin aktarım
+        ekranlarındadır (<Ekran to="/kilavuz#kisiler">Kişiler</Ekran>,{" "}
         <Ekran to="/kilavuz#veli-listesi">Veli Listesi</Ekran>).
+      </p>
+
+      <AltBaslik>Kişisel veri aydınlatma metni</AltBaslik>
+      <p>
+        Birliğin bütün işlerini kapsayan {E04_ADI.toLocaleLowerCase("tr")}{" "}
+        <Ekran to="/hakkinda">Hakkında</Ekran> ekranının <strong>{KISISEL_VERI_BASLIGI}</strong>{" "}
+        kartındadır. {KISISEL_VERI_ACIKLAMASI}
+      </p>
+      <p>
+        Belgeyi program yöneticisi oluşturur; her hesap PDF ya da Word olarak kaydedebilir. Okul
+        Bilgileri&apos;nde veri sorumlusu girilmemişse kartta şu yazar: “
+        {E04_VERI_SORUMLUSU_GIRILMEDI}” (<Ekran to="/kilavuz#okul-karti">Okul Bilgileri</Ekran>).
+        Kartta <strong>{TEYIT_BASLIGI}</strong> başlığıyla okul müdürlüğünün teyit edeceği noktalar
+        yazar. {TEYIT_NOTU}
       </p>
 
       <AltBaslik>Okul müdürlüğünün değerlendireceği sorular</AltBaslik>
@@ -191,6 +217,7 @@ export default function GuvenlikVeKisiselVeriler(bolum: BolumProps) {
         <li>
           <strong className="text-on-surface">Hukuki sebep doğru mu?</strong> Aydınlatma metnindeki
           hukuki sebep öneridir; veri sorumlusu ve hukuki sebep okul müdürlüğünce teyit edilir.
+          Teyit edilecek noktalar Kişisel Veri kartında “{TEYIT_BASLIGI}” başlığıyla yazar.
         </li>
         <li>
           <strong className="text-on-surface">Birlik “3. şahıs” sayılır mı?</strong> Yönerge,

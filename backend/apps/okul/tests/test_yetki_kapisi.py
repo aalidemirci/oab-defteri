@@ -2,8 +2,8 @@
 
 `yetki(rol, eylem, kayıt)`: kapanmış dönem, maskesiz okuma, kişisel veri içeren çıktı,
 rol-özel işaretler ve kayıt sahipliği tek kapıdan geçer; ret `RolYetkisiz` → 403
-`rol_yetkisiz`. Dipnotların servisleri sonraki fazlardadır (müdür yazıları F2/F4, mali kayıtlar
-F3, DK modülü F4): F1b'de her dipnot KAPININ KENDİSİYLE sahte kayıtla sınanır
+`rol_yetkisiz`. Dipnotların servisleri F1b'de sonraki fazlardaydı (müdür yazıları F2/F4, mali
+kayıtlar F3, DK modülü F4): F1b'de her dipnot KAPININ KENDİSİYLE sahte kayıtla sınanır
 (`test_rol_matrisi_dipnot_servis_testi`; plan F1b-2 kullanıcı kararı). Bağlı servisler
 (hesap yönetimi, kurtarma anahtarı, boşta süre, şifreli yedeğin kaydedilmesi, uygulama içi geri
 yükleme) ayrıca gerçek çağrıyla sınanır: rol kapısının ardından servis de reddeder (derin

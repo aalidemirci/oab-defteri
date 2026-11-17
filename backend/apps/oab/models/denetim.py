@@ -3,7 +3,8 @@
 F2 yalnız Denetleme Kurulunun md. 14/5 olağanüstü genel kurul çağrısını açan kısmı kurar: dönem, tür,
 rapor günü, iki işaret, çağrılan genel kurul ve durum. Ekran yoktur; rapor içeriği (kontrol listesi,
 bulgular), ara raporun yönetim kuruluna, nihai raporun genel kurula sunuluşu ve E32, E33 üretimi F4'te
-gelir (OYS `AuditReport` UYARLA'sı orada tamamlanır; F1c'nin asgari `GeneralAssembly` kalıbı).
+gelir (kaynak modülün `AuditReport` UYARLA'sı orada tamamlanır, tasarım §12.A; F1c'nin asgari
+`GeneralAssembly` kalıbı).
 
 İKİ İŞARET (denetim MB-10): `irregularity_found` raporun usulsüzlük bayrağıdır; md. 14/5'in yolunu
 açmaz ("usulsüzlük veya uygunsuzluk" müdürün md. 27/3 yoludur). Olağanüstü genel kurul çağrısı ve
