@@ -67,7 +67,10 @@ describe("okunan kayıt", () => {
   });
 
   it("ad eşlemleri günlüğe yazan okumalarla gelir: organ üyeliğindeki engel dayanağı (F1c)", () => {
-    expect(MODEL_ADLARI).toEqual({ "oab.OrganMembership": "Organ üyeliği" });
+    expect(MODEL_ADLARI).toEqual({
+      "oab.OrganMembership": "Organ üyeliği",
+      "oab.GeneralAssembly": "Genel kurul",
+    });
     expect(ALAN_ADLARI).toEqual({ eligibility_bar_basis: "görev alma engelinin dayanağı" });
     expect(
       okunanKayit({ model: "oab.OrganMembership", kayit: "7", alan: "eligibility_bar_basis" }),

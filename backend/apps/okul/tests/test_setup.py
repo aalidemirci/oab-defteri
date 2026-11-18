@@ -81,6 +81,7 @@ DURUM_ALANLARI = {
     "school_break_count",
     "roadmap",
     "transition_setup",
+    "new_school",
 }
 
 URL = "/api/v1/setup/school-config/"
@@ -898,3 +899,34 @@ def test_update_school_config_whitelist_disi_alan_yazmaz() -> None:
 @pytest.mark.django_db
 def test_letterhead_identity_bos_okul_adi_yer_tutucuya_duser() -> None:
     assert setup_service.get_letterhead_identity()["school_name"] == "Okul"
+
+
+@pytest.mark.django_db
+@pytest.mark.usefixtures("yonetici_hesabi")
+def test_yeni_okul_isareti_ve_ilk_genel_kurulla_gecis_gerekmiyor() -> None:
+    """Yeni açılan okul işareti (`new_school`; F2 12. adım, plan F2 §9 S5 (iii)): okul kartında açılış
+    günü yokken False, varken True. Yeni okulda geçiş kurulumu başlamadan ilk olağan genel kurul
+    planlanınca hazırlık dönemi genel kurulla açılır: geçiş durumu `GEREKMIYOR`, yol haritasının
+    "gecis_kurulumu" maddesi (ön yüzde "Genel kurulu planlayın") tamam sayılır. Genel kurul iptal
+    edilince madde yeniden açılır. Tarihler UYDURMADIR."""
+    from apps.oab.services import genel_kurul as gk
+    from apps.oab.tests import genel_kurul_ortak as gko
+
+    gko.ders_yillari()
+    gko.mevcut()
+    durum = setup_service.setup_status()
+    assert durum["new_school"] is False
+    SchoolConfig.objects.filter(pk=SchoolConfig.SINGLETON_PK).update(opened_on=date(2026, 9, 15))
+    durum = setup_service.setup_status()
+    assert durum["new_school"] is True
+    assert durum["transition_setup"]["state"] == "BASLAMADI"
+    assert setup_service.roadmap_auto_items(durum)["gecis_kurulumu"] is False
+    kurul = gko.planla(birinci=gko.an(date(2026, 11, 10)))
+    durum = setup_service.setup_status()
+    assert durum["new_school"] is True
+    assert durum["transition_setup"] == {"state": "GEREKMIYOR", "open_steps": []}
+    assert setup_service.roadmap_auto_items(durum)["gecis_kurulumu"] is True
+    gk.iptal_et(kurul, cancel_reason="Uydurma gerekçe: toplantı yeniden planlanacak.")
+    durum = setup_service.setup_status()
+    assert durum["transition_setup"]["state"] == "BASLAMADI"
+    assert setup_service.roadmap_auto_items(durum)["gecis_kurulumu"] is False

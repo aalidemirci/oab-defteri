@@ -42,15 +42,20 @@ from apps.oab.models import (
     EligibilityBar,
     GeneralAssembly,
     MeetingKind,
+    MembershipRole,
     MembershipSource,
     MembershipStatus,
+    OabTerm,
     OfficialBook,
     OrganMembership,
     PersonKind,
     SeatType,
+    TermStatus,
 )
+from apps.oab.services import genel_kurul as gk_servisi
 from apps.oab.services import (
     gorev_bolumu,
+    hesap_baglari,
     kisiler,
     kurullar,
     temsilciler,
@@ -58,8 +63,15 @@ from apps.oab.services import (
     uyelikler,
     uyum,
 )
+from apps.oab.tests import genel_kurul_ortak as gko
 from apps.oab.tests import uyelik_ortak as o
-from apps.okul.models import AccountRole, AuditTrail
+from apps.oab.tests.kurallar import paket_ortak
+from apps.okul.models import Account, AccountRole, AccountStatus, AuditTrail
+from apps.okul.oturum import Yazar, yazar_olarak
+from apps.okul.services import hesaplar
+from apps.okul.tests.hesap_ortak import GECICI_PAROLA
+from conftest import TEST_HESAP_ID
+from shared.exceptions import RolYetkisiz
 
 pytestmark = pytest.mark.django_db
 
@@ -332,10 +344,10 @@ def test_baskan_besinci_secim_gerekceyle_gecer() -> None:
     assert uyelik.status == MembershipStatus.SECILDI
     (satir,) = _satirlar(uyelik, f"{YK}.secilme_siniri")
     assert satir.kind == ComplianceKind.SAPMA and satir.justification_group is not None
-    assert (satir.rule_package, satir.rev) == ("OAB-2023.12", 1)
+    assert (satir.rule_package, satir.rev) == ("OAB-2023.12", paket_ortak.EN_YENI_REV)
     iz = AuditTrail.objects.filter(model="oab.ComplianceItem", object_id=str(satir.pk)).first()
     assert iz is not None and iz.values["rule_id"][1] == f"{YK}.secilme_siniri"
-    assert iz.values["rev"][1] == 1
+    assert iz.values["rev"][1] == paket_ortak.EN_YENI_REV
     ozet = {u["kural"]: u for u in OrganMembership.objects.get(pk=uyelik.pk).rule_warnings}
     assert ozet[f"{YK}.secilme_siniri"]["durum"] == "uyari"
     assert ozet[f"{YK}.secilme_siniri"]["atif"] == "md. 12/4"
@@ -472,9 +484,10 @@ def test_devralinan_kaydin_sinir_ustu_beyani_ilk_giriste_uyari_gerekce() -> None
 @pytest.mark.kural_davranis("denetleme_kurulu.baskan_secilme_siniri")
 def test_donem_siniri_ucu_gerekce() -> None:
     """Seçilme sınırının (dönem sınırı sayacı) gerekçesi uçtan da aynı akıştır: gerekçesiz istek 400
-    `gerekce_gerekli` (kayıt yok), gerekçeyle 201 ve `SAPMA` satırı. Yönetim kurulu seçiminin ucu genel
-    kurul sihirbazıyla gelir (F2): bugün sayacı uçtan koşturan yol Denetleme Kurulunun görev bölümüdür
-    (md. 14/3; aynı sayaç hattı). Yönetim kurulu sayacının servis akışı yukarıdaki testlerdedir."""
+    `gerekce_gerekli` (kayıt yok), gerekçeyle 201 ve `SAPMA` satırı. Yönetim kurulu seçiminin ucu F2'de
+    genel kurul sihirbazıyla geldi (`oab-agenda-item-election`); bu test sayacı Denetleme Kurulunun
+    görev bölümü ucundan koşturur (md. 14/3; aynı sayaç hattı). Yönetim kurulu sayacının servis akışı
+    yukarıdaki testlerdedir."""
     donem = o.donem()
     kisi = o.ogretmen(external_dk_chair_terms=3)
     uye = o.dk_ogretmeni(donem, kisi)
@@ -704,8 +717,9 @@ def test_gorev_bolumu_ucu_gerekce_akisi() -> None:
     assert (toplanti.kind, toplanti.status) == (MeetingKind.GOREV_BOLUMU, "YAPILDI")
     assert toplanti.attendances.count() == 5
     assert _toplanti_satirlari(toplanti, f"{YK}.gorev_bolumu_gun")[0].kind == ComplianceKind.SAPMA
-    # Uç yalnız sekreterindir (program yöneticisi ve başkan yazmaz; tasarım §7.2 "Kim").
-    for rol in (AccountRole.BASKAN,):
+    # Uç bu dönemde yalnız sekreterindir (tasarım §7.2 "Kim"): dönem genel kurulla açılmadığı için
+    # program yöneticisinin ilk görev bölümü payı (S7 (a)) yoktur; başkan hiç yazmaz.
+    for rol in (AccountRole.YONETICI, AccountRole.BASKAN):
         with o.rol_olarak(rol):
             assert APIClient().post(yol, govde, format="json").status_code == 403
 
@@ -743,7 +757,7 @@ def test_gorev_bolumu_dort_gorev_tekil_ve_gorev_degisimi() -> None:
     with pytest.raises(ValueError, match="görev bölümünde verilmez"):
         o.yk_gorev_bolumu(donem, {"KATIP": uyeler[1]}, gun=gun)
     # Katılım görevdeki her asıl için zorunludur (tasarım §7.2 `YAPILDI` [S]).
-    with pytest.raises(ValueError, match="katılım satırı"):
+    with o.rol_olarak(AccountRole.SEKRETER), pytest.raises(ValueError, match="katılım satırı"):
         gorev_bolumu.yk_gorev_bolumu(
             term=donem, held_at=o.saat(gun), gorevler={"MUHASIP": uyeler[1]}, katilim=[]
         )
@@ -1319,13 +1333,14 @@ def test_noter_tasdiki_sapmasi_gerekceyle_kaydedilir_defter_basina_bir_gerekce()
     assert (satir.kind, satir.rule_package, satir.rev, satir.message) == (
         ComplianceKind.SAPMA,
         "OAB-2023.12",
-        1,
+        paket_ortak.EN_YENI_REV,
         TASDIK_METNI,
     )
     assert satir.justification_group is not None
     assert satir.justification_group.root_cause == kurullar.tasdik_kok_nedeni(defter)
     iz = AuditTrail.objects.filter(model="oab.ComplianceItem", object_id=str(satir.pk)).first()
-    assert iz is not None and iz.values["rule_id"][1] == TASDIK and iz.values["rev"][1] == 1
+    assert iz is not None and iz.values["rule_id"][1] == TASDIK
+    assert iz.values["rev"][1] == paket_ortak.EN_YENI_REV
     tekrar = kurullar.tasdik_denetimi(defter, donem=donem)
     assert tekrar.satir is not None and tekrar.satir.pk == satir.pk
     assert ComplianceJustification.objects.filter(rule_id=TASDIK).count() == 1
@@ -1347,3 +1362,242 @@ def test_noter_tasdiki_kural_paketindedir_akis_satiri_degil() -> None:
             TASDIK_METNI,
             "md. 23/2",
         )
+
+
+# ============================================================ F2 6. adım: genel kurul seçimi ve yeni dönem
+# Genel kurul ikinci toplantıda (05.11.2026) yapılır; birinci toplantı 20.10.2026'dır (plan F2 §7 U6,
+# U26, U28; `genel_kurul_ortak`). Adlar UYDURMADIR.
+
+
+def test_aday_ve_secilen_ayni_kayit_genel_kurul_kanalinda() -> None:
+    """Tek kaynak (§12.A ilkesi AYNEN; S6 (i)) genel kurulun seçim yolunda: aday kaydı genel kurulun
+    adayıdır, seçilen aynı kaydın `ADAY` → `SECILDI` geçişidir; seçilme günü genel kurulun yapıldığı
+    gündür (ikinci toplantı, U6), kayıt hazırlık dönemindedir. Seçimin sonucu bir kez girilir."""
+    kurul = gko.ikinci_toplantida_yapilmis_olagan()
+    aday = gko.aday(kurul)
+    assert (aday.status, aday.assembly_id, aday.term_id) == (
+        MembershipStatus.ADAY,
+        kurul.pk,
+        kurul.opens_term_id,
+    )
+    sonuc = gko.secim(kurul, "SECIM_YK", [aday], oylar=[17])
+    (secilen,) = sonuc.secilenler
+    assert secilen.pk == aday.pk
+    assert (secilen.status, secilen.start_date, secilen.votes) == (
+        MembershipStatus.SECILDI,
+        gko.IKINCI_GUN,
+        17,
+    )
+    assert OrganMembership.objects.filter(organ="YK").count() == 1
+    with pytest.raises(ValueError, match="sonucu girildi"):
+        gko.secim(kurul, "SECIM_YK", [gko.aday(kurul)])
+
+
+@pytest.mark.kural_davranis(f"{YK}.gorev_bolumu_gun")
+@pytest.mark.parametrize(
+    ("gun", "uyari"), [(date(2026, 11, 12), False), (date(2026, 11, 13), True)]
+)
+def test_gorev_bolumu_suresi_ikinci_toplanti_gunundan(gun: date, uyari: bool) -> None:
+    """md. 12/3 "seçimden sonraki ilk hafta" (saha 8): genel kurul ikinci toplantıda yapıldıysa süre
+    ikinci toplantının gününden (05.11.2026) sayılır, birinci toplantının gününden (20.10.2026) değil
+    (U6). Yeni dönemin ilk görev bölümünde 7. gün uyarısız, 8. gün uyarı + gerekçe."""
+    kurul = gko.ikinci_toplantida_yapilmis_olagan()
+    yk, _ = gko.kurullari_sec(kurul)
+    yeni = gko.tamamla_ve_onayla(kurul).yeni_donem
+    if not uyari:
+        o.yk_gorev_bolumu(yeni, {MembershipRole.BASKAN: yk[0]}, gun=gun)
+        assert not ComplianceItem.objects.filter(rule_id=f"{YK}.gorev_bolumu_gun").exists()
+        return
+    with pytest.raises(GerekceGerekli) as hata:
+        o.yk_gorev_bolumu(yeni, {MembershipRole.BASKAN: yk[0]}, gun=gun)
+    assert "8 gün" in str(hata.value.detail)
+    o.yk_gorev_bolumu(yeni, {MembershipRole.BASKAN: yk[0]}, gun=gun, gerekce="Uydurma gerekçe.")
+    (satir,) = ComplianceItem.objects.filter(rule_id=f"{YK}.gorev_bolumu_gun")
+    assert (satir.kind, satir.term_id) == (ComplianceKind.SAPMA, yeni.pk)
+
+
+def test_yeni_donem_gorev_bolumu_eski_donem_yk_hesabini_askiya_alir() -> None:
+    """U28 (tasarım §4.4.5, §7.8 "Yeni görev bölümü kaydı eski organ hesaplarını askıya alır"): dönem
+    geçişinden sonra eski dönemin yönetim kurulu hesabı açık kalır (eski kurul devir-teslime dek
+    görevdedir); yeni dönemin görev bölümü yazılınca aynı işlemde `ASKIDA (GOREV_BOLUMU)` olur. Hesap
+    önerileri eski hesabı kapanışa, yeni görevliyi hesap açmaya önerir. Denetleme Kurulu hesabı yönetim
+    kurulunun görev bölümüyle askıya alınmaz."""
+    kurul = gko.ikinci_toplantida_yapilmis_olagan()
+    eski_muhasip = o.devralinan(OabTerm.objects.get(assemblies=kurul), o.kisi(), role="MUHASIP")
+    eski_dk = o.secilmis(OabTerm.objects.get(assemblies=kurul), organ="DK", seat_group="VELI")
+    muhasip_hesabi = _hesap_ac(AccountRole.MUHASIP, eski_muhasip)
+    dk_hesabi = _hesap_ac(AccountRole.DENETLEME_KURULU, eski_dk)
+    yk, _ = gko.kurullari_sec(kurul)
+    yeni = gko.tamamla_ve_onayla(kurul).yeni_donem
+    assert Account.objects.get(pk=muhasip_hesabi.pk).status == AccountStatus.PAROLA_YENILENMELI
+    assert hesap_baglari.gecersizlik_nedeni(Account.objects.get(pk=muhasip_hesabi.pk)) is None
+    o.yk_gorev_bolumu(
+        yeni,
+        {MembershipRole.BASKAN: yk[0], MembershipRole.MUHASIP: yk[1]},
+        gun=date(2026, 11, 8),
+    )
+    askida = Account.objects.get(pk=muhasip_hesabi.pk)
+    assert (askida.status, askida.suspend_reason) == (AccountStatus.ASKIDA, "GOREV_BOLUMU")
+    assert Account.objects.get(pk=dk_hesabi.pk).status == AccountStatus.PAROLA_YENILENMELI
+    oneriler = hesap_baglari.hesap_onerileri()
+    assert {
+        "tur": "HESAP_KAPAT",
+        "hesap": str(muhasip_hesabi.pk),
+        "rol": "muhasip",
+        "neden": "GOREV_BOLUMU",
+    } in oneriler
+    assert any(
+        o_["tur"] == "HESAP_AC" and o_["uyelik"] == yk[1].pk and o_["rol"] == "muhasip"
+        for o_ in oneriler
+    )
+
+
+def _yk_gorev_govdesi(
+    donem: OabTerm, gorevler: dict[str, OrganMembership], gun: str
+) -> dict[str, Any]:
+    """Yönetim kurulu görev bölümü ucunun gövdesi: görevdeki her asıl katıldı."""
+    return {
+        "held_at": f"{gun}T15:00:00+03:00",
+        **{alan: uyelik.pk for alan, uyelik in gorevler.items()},
+        "katilim": [
+            {"membership": u.pk, "present": True, "excused": False}
+            for u in selectors.gorevdeki_asillar(donem, "YK")
+        ],
+    }
+
+
+def _kadro_ilk_mi(donem: OabTerm) -> bool:
+    veri = APIClient().get(f"/api/v1/oab/terms/{donem.pk}/roster/YK/").json()
+    return bool(veri["ilk_gorev_bolumu"])
+
+
+@pytest.mark.parametrize("ilk_yazan", [AccountRole.YONETICI, AccountRole.SEKRETER])
+def test_s7_yeni_donemin_ilk_gorev_bolumunu_yonetici_de_yazar(ilk_yazan: AccountRole) -> None:
+    """Kullanıcı kararı S7 (a) (15.11.2026; plan F2 §9): genel kurulla açılan yeni dönemin İLK yönetim
+    kurulu görev bölümünü program yöneticisi de yazar (yeni kurulun üyeleri görev bölümünden önce
+    hesap alamaz, önceki dönemin sekreteri yeniden seçilmemiş olabilir); sonraki görev bölümleri yalnız
+    sekreterdedir. Uçta: ilkinde program yöneticisi ve sekreter 201, ikincisinde program yöneticisi
+    403, sekreter 201; öteki roller her zaman 403 (ilkinde servis kapısı da `RolYetkisiz` verir).
+    Kadro okuması "ilk"i söyler (Organlar'ın düğmesi)."""
+    kurul = gko.ikinci_toplantida_yapilmis_olagan()
+    yk, _ = gko.kurullari_sec(kurul)
+    yeni = gko.tamamla_ve_onayla(kurul).yeni_donem
+    yol = f"/api/v1/oab/terms/{yeni.pk}/duty-assignment/yk/"
+    ilk = _yk_gorev_govdesi(yeni, {"baskan": yk[0], "sekreter": yk[1]}, "2026-11-08")
+    ikinci = _yk_gorev_govdesi(yeni, {"muhasip": yk[2]}, "2026-11-20")
+    digerleri = (
+        AccountRole.BASKAN,
+        AccountRole.BASKAN_YARDIMCISI,
+        AccountRole.MUHASIP,
+        AccountRole.DENETLEME_KURULU,
+        AccountRole.MUDUR,
+    )
+    assert gorev_bolumu.yk_ilk_gorev_bolumu_mu(yeni) and _kadro_ilk_mi(yeni)
+    for rol in digerleri:
+        with o.rol_olarak(rol):
+            yanit = APIClient().post(yol, ilk, format="json")
+        assert yanit.status_code == 403, (rol, yanit.content)
+        # Servis kapısı uç kuralından bağımsızdır: "ilk" açıkken (program yöneticisi kolu ret sebebini
+        # örtmez) öteki roller servisten de geçemez (`gorev_bolumu.yk_gorev_bolumu_kapisi`).
+        with pytest.raises(RolYetkisiz):
+            o.yk_gorev_bolumu(
+                yeni, {"BASKAN": yk[0], "SEKRETER": yk[1]}, gun=date(2026, 11, 8), rol=rol
+            )
+    assert not BoardMeeting.objects.filter(term=yeni).exists()
+    with o.rol_olarak(ilk_yazan):
+        yanit = APIClient().post(yol, ilk, format="json")
+    assert yanit.status_code == 201, yanit.content
+    assert not gorev_bolumu.yk_ilk_gorev_bolumu_mu(yeni) and not _kadro_ilk_mi(yeni)
+    for rol in (AccountRole.YONETICI, *digerleri):
+        with o.rol_olarak(rol):
+            yanit = APIClient().post(yol, ikinci, format="json")
+        assert yanit.status_code == 403, (rol, yanit.content)
+    assert BoardMeeting.objects.filter(term=yeni).count() == 1
+    with o.rol_olarak(AccountRole.SEKRETER):
+        yanit = APIClient().post(yol, ikinci, format="json")
+    assert yanit.status_code == 201, yanit.content
+    assert BoardMeeting.objects.filter(term=yeni).count() == 2
+
+
+def test_s7_ilk_olcutu_yalniz_genel_kurulla_acilan_donemde() -> None:
+    """S7 (a)'nın "ilk"i dardır (`gorev_bolumu.yk_ilk_gorev_bolumu_mu`): genel kurulla açılmamış dönemde
+    (geçiş kurulumunun dönemi) görev bölümü hiç yapılmamış olsa da program yöneticisi yazmaz, yalnız
+    sekreter yazar (F1c davranışı). Servis kapısı uçtan bağımsızdır: yazarsız ya da `SISTEM` bağlamı
+    da reddedilir (fail-closed)."""
+    donem = o.donem()
+    uyeler = o.yk_kurulu(donem)
+    assert not gorev_bolumu.yk_ilk_gorev_bolumu_mu(donem) and not _kadro_ilk_mi(donem)
+    yol = f"/api/v1/oab/terms/{donem.pk}/duty-assignment/yk/"
+    govde = _yk_gorev_govdesi(donem, {"baskan": uyeler[0]}, "2026-10-16")
+    yanit = APIClient().post(yol, govde, format="json")
+    assert yanit.status_code == 403, yanit.content
+    for kim in (None, Yazar(hesap_id=None, rol=None)):
+        with yazar_olarak(kim), pytest.raises(RolYetkisiz):
+            gorev_bolumu.yk_gorev_bolumu(
+                term=donem,
+                held_at=o.saat(date(2026, 10, 16)),
+                gorevler={"BASKAN": uyeler[0]},
+                katilim=[
+                    gorev_bolumu.KatilimSatiri(uyelik=u, present=True)
+                    for u in selectors.gorevdeki_asillar(donem, "YK")
+                ],
+            )
+    assert not BoardMeeting.objects.exists()
+    with o.rol_olarak(AccountRole.SEKRETER):
+        assert APIClient().post(yol, govde, format="json").status_code == 201
+
+
+def test_s7_olaganustu_genel_kurulun_sectigi_yk_gorev_bolumu_bugun_girilemez() -> None:
+    """Bugünkü davranışın kaydı, kullanıcı kararı değil (açık soru AS-108): olağanüstü genel kurul
+    yönetim kurulunu seçince (U27, md. 13/8) dönem değişmez, eski üyelikler sekreterinki dahil düşer,
+    yeni üyeler görevsiz (`UYE`) seçilir. Dönemde ilk görev bölümü yapılmış olduğundan S7 (a)'nın
+    "ilk"i kapanmıştır: program yöneticisi yeni kurulun görev bölümünü yazamaz (servis
+    `RolYetkisiz`, uç 403) ve görevi sekreter olan seçilmiş üye kalmadığından sekreter hesabı da
+    açılamaz (M-7). AS-108 cevaplanınca bu test cevaba göre değişir."""
+    kurul = gko.ikinci_toplantida_yapilmis_olagan()
+    yk, _ = gko.kurullari_sec(kurul)
+    yeni = gko.tamamla_ve_onayla(kurul).yeni_donem
+    o.yk_gorev_bolumu(
+        yeni,
+        {"BASKAN": yk[0], "SEKRETER": yk[1]},
+        gun=date(2026, 11, 8),
+        rol=AccountRole.YONETICI,
+    )
+    olaganustu = gko.olaganustu_cagir(
+        gko.planla(kind="OLAGANUSTU", birinci=gko.an(date(2026, 12, 10)))
+    )
+    gk_servisi.ilan_et(olaganustu, kanallar=gko.kanallar(date(2026, 11, 20)))
+    gk_servisi.birinci_toplanti(olaganustu, katilim=gko.katilim(gko.KATILAN))
+    secilen = gko.secim(olaganustu, "SECIM_YK", [gko.aday(olaganustu) for _ in range(5)]).secilenler
+    assert OabTerm.objects.get(pk=yeni.pk).status == TermStatus.ACIK
+    assert OrganMembership.objects.get(pk=yk[1].pk).status == MembershipStatus.DUSTU
+    assert not OrganMembership.objects.filter(
+        term=yeni, organ="YK", status=MembershipStatus.SECILDI, role=MembershipRole.SEKRETER
+    ).exists()
+    assert {u.role for u in secilen} == {MembershipRole.UYE}
+    assert not gorev_bolumu.yk_ilk_gorev_bolumu_mu(yeni) and not _kadro_ilk_mi(yeni)
+    with pytest.raises(RolYetkisiz):
+        o.yk_gorev_bolumu(
+            yeni,
+            {"BASKAN": secilen[0], "SEKRETER": secilen[1]},
+            gun=date(2026, 12, 12),
+            rol=AccountRole.YONETICI,
+        )
+    govde = _yk_gorev_govdesi(yeni, {"baskan": secilen[0], "sekreter": secilen[1]}, "2026-12-12")
+    with o.rol_olarak(AccountRole.YONETICI):
+        yanit = APIClient().post(
+            f"/api/v1/oab/terms/{yeni.pk}/duty-assignment/yk/", govde, format="json"
+        )
+    assert yanit.status_code == 403, yanit.content
+    assert BoardMeeting.objects.filter(term=yeni, kind=MeetingKind.GOREV_BOLUMU).count() == 1
+
+
+def _hesap_ac(rol: str, uyelik: OrganMembership) -> Account:
+    return hesaplar.open_account(
+        by_hesap_id=TEST_HESAP_ID,
+        role=rol,
+        tanitici=hesaplar.default_login_name(rol),
+        display_name="Uydurma Hesap Sahibi",
+        temp_password=GECICI_PAROLA,
+        uyelik=uyelik.pk,
+    )

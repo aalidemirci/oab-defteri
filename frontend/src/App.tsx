@@ -11,7 +11,8 @@
 // durur — gezinme, güncelleme bandı ve sayfalar aynı yetenekleri okur. Matriste "—" olan ekran
 // gezinmede yoktur ve rotası `RolKapisi` ile bağlanır ("Bu ekran hesabınızın rolüne açık
 // değil."); "O" olan ekran açılır, yazma denetimlerini kendisi gizler. Bugün Genel Bakış, Birlik
-// Dönemi ve Geçiş Kurulumu (F1c 11. adım), Kişiler, Ayarlar, Kılavuz ve Hakkında her role en az
+// Dönemi ve Geçiş Kurulumu (F1c 11. adım), Genel Kurul ve Gelen-Giden Evrak (F2 11b), Kişiler, Ayarlar,
+// Kılavuz ve Hakkında her role en az
 // okumaya açıktır (sözlük §4); Organlar ve Temsilciler de (F1c 11. adımın ikinci parçası; M2 satırı her
 // rolde en az "O"), yazma denetimlerini yeteneklerle kendileri gizler. Kurulum Sihirbazı'nın her denetimi bir yazmadır: rotası `kurulum_tamamlama`'ya
 // bağlıdır ve öteki rollerde kendi iletisini verir (kullanıcı kararı 04.11.2026: matristeki "O"ya istisna; kurulum durumunda süzme yoktur). Kullanıcılar (`/kullanicilar`)
@@ -31,6 +32,8 @@ import ErisimGunluguPage from "./modules/erisim/ErisimGunluguPage";
 import { ERISIM_GUNLUGU_BASLIGI } from "./modules/erisim/metinler";
 import ParolaYenilenmeBildirimi from "./modules/butunluk/ParolaYenilenmeBildirimi";
 import GecisKurulumuPage from "./modules/gecis-kurulumu/GecisKurulumuPage";
+import GelenGidenEvrakPage from "./modules/gelen-giden-evrak/GelenGidenEvrakPage";
+import GenelKurulPage from "./modules/genel-kurul/GenelKurulPage";
 import GuvenlikKapisi from "./modules/guvenlik/GuvenlikKapisi";
 import YenidenBaslatEkrani from "./modules/guvenlik/YenidenBaslatEkrani";
 import HakkindaPage from "./modules/hakkinda/HakkindaPage";
@@ -84,6 +87,11 @@ export default function App() {
                   denetimleri `birlik_donemi_yazma`'ya bağlıdır. Geçiş Kurulumu gezinmede yoktur. */}
               <Route path="/birlik-donemi" element={<BirlikDonemiPage />} />
               <Route path="/birlik-donemi/gecis-kurulumu" element={<GecisKurulumuPage />} />
+              {/* Genel Kurul ve Gelen-Giden Evrak (F2 11b): her role okumaya açık (M3, M10); yazma
+                  denetimleri yeteneklere bağlıdır (genel kurul yazma, çağrı, evrak, dosya eki, müdürün
+                  ve Denetleme Kurulunun yazıları, evrak kaydı). */}
+              <Route path="/genel-kurul" element={<GenelKurulPage />} />
+              <Route path="/gelen-giden-evrak" element={<GelenGidenEvrakPage />} />
               {/* Öğretmen ve diğer personel sicili, e-Okul içe aktarma, birlik kişileri. */}
               <Route path="/kisiler" element={<KisilerPage />} />
               {/* Organlar ve Temsilciler (F1c 11. adım): her role okumaya açık (M2; Denetleme Kurulunun

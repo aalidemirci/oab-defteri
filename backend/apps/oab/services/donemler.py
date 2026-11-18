@@ -53,7 +53,7 @@ def create_term(
             school_year=school_year,
             start_date=start_date,
             program_start_date=program_start_date,
-            rule_package=kural_bagi.en_yeni_kopya(),
+            rule_package=kural_bagi.acilis_bagi(),
             status=TermStatus.ACIK,
             created_by_id=hesap,
             updated_by_id=hesap,
@@ -96,6 +96,13 @@ def acik_donem_kimligi() -> int | None:
         OabTerm.objects.filter(status=TermStatus.ACIK).values_list("pk", flat=True).first()
     )
     return kimlik
+
+
+def ilk_donemin_veli_listesini_bagla(donem: OabTerm) -> int:
+    """Yeni açılan okulun ilk genel kuruluyla açılan dönem `ACIK` olunca dönemsiz veli satırları ona
+    bağlanır (genel kurul servisinin dönem geçişi onayı; plan F2 §5.2 "Yeni okulun ilk genel kurulu").
+    Biçim ilk dönemin açılışıyla aynıdır (`_veli_listesini_bagla`)."""
+    return _veli_listesini_bagla(donem)
 
 
 def _veli_listesini_bagla(donem: OabTerm) -> int:

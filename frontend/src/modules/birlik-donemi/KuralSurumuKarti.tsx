@@ -1,7 +1,7 @@
 // Ayarlar'daki kural sürümü satırı (plan F1c kararları "kural sürümü F1c'de Ayarlar'da salt okunur";
 // tasarım §4.4.2 Ayarlar satırı "kural sürümü seçimi"). Her rol görür (Ayarlar her rolde okunur). Sürüm
 // SALT OKUNURDUR: her birlik dönemi açıldığı günkü kural sürümüyle hesaplanır; seçim ve fark ekranı bu
-// karta eklenmez. Gösterilen dönem Birlik Dönemi ekranının varsayılanıdır (açık olan; yoksa iptal
+// karta eklenmez (Birlik Dönemi → Kural Sürümü Güncellemesi, F2 11b). Gösterilen dönem Birlik Dönemi ekranının varsayılanıdır (açık olan; yoksa iptal
 // edilmemiş en yenisi). Dönemin kural kopyası doğrulanamıyorsa (D7) Birlik Dönemi'nin bandı yazılır.
 
 import { useEffect, useState } from "react";

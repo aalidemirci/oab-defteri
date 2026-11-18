@@ -3,7 +3,8 @@
 //
 // EKRANDA AD YOKTUR: özet sınıf başına satır sayısıdır, önizleme ve sonuç yalnız sayıları ve
 // aktarılamayan satırların numarasını ve nedenini gösterir (§8.4 (2)); veli adı taşıyan çıktılar
-// (davet teslim çizelgesi, katılım cetveli) F2'dedir. Bir satır bir öğrencidir.
+// (davet teslim çizelgesi, katılım cetveli) ve katılım işaretleri penceresi Genel Kurul ekranındadır
+// (F2; yalnız program yöneticisi, saklanmaz, erişim günlüğüne yazılır). Bir satır bir öğrencidir.
 //
 // Aktarım yalnız dosyayla yapılır (okulun doldurduğu iki sütunlu şablon; .xlsx, .xls, .csv —
 // makro içeren dosyayı sunucu reddeder; pano yolu yoktur). Dosyadaki sınıflar listedeki aynı

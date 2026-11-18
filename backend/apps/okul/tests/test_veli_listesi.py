@@ -105,7 +105,8 @@ def _kosu() -> ImportRun:
 
 def test_veli_listesi_tablosu_yalniz_ad_ve_sinif_tasir() -> None:
     """Tasarım §14 F1b kapısı "veli listesi yalnız iki alan taşır": ad (ve kör indeksi) ile sınıf;
-    birlik dönemi bağı F1c 4. adımda geldi (`term`), katılım işaretleri F2'de gelir."""
+    birlik dönemi bağı F1c 4. adımda geldi (`term`), katılım işaretleri F2 3. adımda (`okul.0005`;
+    plan F2 §7 U33): genel kurul bağı ve toplantı."""
     assert {alan.column for alan in ParentRoster._meta.fields} == {
         "id",
         "import_run_id",
@@ -113,6 +114,8 @@ def test_veli_listesi_tablosu_yalniz_ad_ve_sinif_tasir() -> None:
         "name_index",
         "student_class",
         "term_id",
+        "attended_assembly_id",
+        "attended_meeting",
         "created_at",
     }
 
@@ -511,6 +514,8 @@ class TestIzVeGunluk:
             "name_index",
             "student_class",
             "term",
+            "attended_assembly",
+            "attended_meeting",
             "created_at",
         }
         assert (

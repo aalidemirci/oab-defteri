@@ -2,13 +2,16 @@
 
 `yetki(rol, eylem, kayıt)`: kapanmış dönem, maskesiz okuma, kişisel veri içeren çıktı,
 rol-özel işaretler ve kayıt sahipliği tek kapıdan geçer; ret `RolYetkisiz` → 403
-`rol_yetkisiz`. Dipnotların servisleri sonraki fazlardadır (müdür yazıları F2/F4, mali kayıtlar
-F3, DK modülü F4): F1b'de her dipnot KAPININ KENDİSİYLE sahte kayıtla sınanır
+`rol_yetkisiz`. Dipnotların servisleri F1b'de sonraki fazlardaydı (müdür yazıları F2/F4, mali
+kayıtlar F3, DK modülü F4): F1b'de her dipnot KAPININ KENDİSİYLE sahte kayıtla sınanır
 (`test_rol_matrisi_dipnot_servis_testi`; plan F1b-2 kullanıcı kararı). Bağlı servisler
 (hesap yönetimi, kurtarma anahtarı, boşta süre, şifreli yedeğin kaydedilmesi, uygulama içi geri
 yükleme) ayrıca gerçek çağrıyla sınanır: rol kapısının ardından servis de reddeder (derin
 savunma). ⁵ gerçek serviste de sınanır: Denetleme Kurulunun geri yükleme kartındaki "Gördüm"ü
-(`test_dipnot_bes_gercek_serviste_yalniz_denetleme_kurulu`; plan F1b-2 kullanıcı kararı).
+(`test_dipnot_bes_gercek_serviste_yalniz_denetleme_kurulu`; plan F1b-2 kullanıcı kararı). F2 7. adımdan
+beri ¹ (müdürün kendi yazıları, sahiplik) ve ⁷ (gelen-giden evrak; müdür yazısının programca kaydı)
+de gerçek serviste sınanır (dosyanın sonu; uydurma veriyle). F2 8. adımdan beri ¹⁰ de gerçek
+serviste sınanır: veli adlı E07 ve E08 çıktısı (`genel_kurul_evraki.adli_uret_ve_ver`).
 """
 
 from __future__ import annotations
@@ -18,8 +21,23 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 
 import pytest
+from django.utils import timezone
 from rest_framework import serializers
 
+from apps.oab.models import (
+    AgendaItem,
+    AssemblyCaller,
+    AssemblyKind,
+    AssemblyStatus,
+    DocumentDirection,
+    DocumentRecord,
+    GeneralAssembly,
+    OabTerm,
+    TermStatus,
+)
+from apps.oab.services import denetim, gelen_giden_evrak, genel_kurul
+from apps.oab.tests import genel_kurul_ortak as gko
+from apps.oab.tests import uyelik_ortak as o
 from apps.okul import rol_izinleri
 from apps.okul.models import Account, AccountRole, AccountStatus, AuditTrail, SchoolConfig
 from apps.okul.oturum import OTURUM, SISTEM, Yazar, yazar_olarak
@@ -94,6 +112,7 @@ _DIPNOT_EYLEMLERI: dict[int, dict[Eylem, frozenset[str]]] = {
     5: {
         Eylem.DENETIM_YAZMA: frozenset({"denetleme_kurulu"}),
         Eylem.DK_GOREV_BOLUMU_YAZMA: frozenset({"denetleme_kurulu"}),
+        Eylem.DK_GENEL_KURUL_YAZMA: frozenset({"denetleme_kurulu"}),
         Eylem.GERI_YUKLEME_GORDUM: frozenset({"denetleme_kurulu"}),
     },
     6: {Eylem.MUDUR_UYARISI: frozenset({"mudur"})},
@@ -138,13 +157,14 @@ def test_rol_matrisi_dipnot_servis_testi(dipnot: int) -> None:
         assert _gecen_roller(Eylem.ISARET_KARAR_DEFTERE_ISLENDI, kapali) == {"sekreter"}
         assert _gecen_roller(Eylem.MALI_KAYIT, kapali) == frozenset()
         assert _gecen_roller(Eylem.KARAR_DEFTERDE_SAKAT, kapali) == frozenset()
-    if dipnot in (4, 5, 6):
-        # Kayıt sahipliği rol düzeyindedir: sahibi olan rolün hesapları düzenler.
-        eylem = next(e for e, k in EYLEM_KURALLARI.items() if k.dipnot == dipnot and k.sahiplik)
-        (sahip,) = eylemler[eylem]
-        assert _gecer(sahip, eylem, SahteKayit(sahip_rol=sahip))
-        assert not _gecer(sahip, eylem, SahteKayit(sahip_rol="yonetici"))
-        assert not _gecer(sahip, eylem, kapali)
+    if dipnot in (1, 4, 5, 6):
+        # Kayıt sahipliği rol düzeyindedir: sahibi olan rolün hesapları düzenler (¹: müdürün yazıları,
+        # F2 7. adımın ilk sahiplikli eylemleri; ⁵: Denetleme Kurulunun kendi raporu ve çağrısı).
+        for eylem in (e for e, k in EYLEM_KURALLARI.items() if k.dipnot == dipnot and k.sahiplik):
+            (sahip,) = eylemler[eylem]
+            assert _gecer(sahip, eylem, SahteKayit(sahip_rol=sahip))
+            assert not _gecer(sahip, eylem, SahteKayit(sahip_rol="yonetici"))
+            assert not _gecer(sahip, eylem, kapali)
 
 
 def test_her_dipnotun_eylemi_var_ve_kume_kapali() -> None:
@@ -163,11 +183,19 @@ def test_her_dipnotun_eylemi_var_ve_kume_kapali() -> None:
     }
     for eylem in dipnotsuz:
         assert _gecen_roller(eylem) == {"yonetici"}, eylem
-    # Dipnotlu eylemlerden bugün DK'nin "Gördüm"ü (⁵, F1b-2 (c)) ve görev bölümü (⁵, F1c 6. adım)
-    # servise bağlıdır.
+    # Dipnotlu eylemlerden bugün DK'nin "Gördüm"ü (⁵, F1b-2 (c)), görev bölümü (⁵, F1c 6. adım),
+    # genel kurul yazma kapısı (¹, F2 4. adım), kişisel veri içeren çıktı (¹⁰, F2 5. adım: genel
+    # kurulun katılım işaretleri), müdürün yazıları (¹), DK'nin md. 14/5 çağrısı (⁵) ve gelen-giden
+    # evrak (⁷) (F2 7. adım) servise bağlıdır.
     assert set(BAGLANMAMIS_EYLEMLER) == set(Eylem) - dipnotsuz - {
         Eylem.GERI_YUKLEME_GORDUM,
         Eylem.DK_GOREV_BOLUMU_YAZMA,
+        Eylem.GENEL_KURUL_YAZMA,
+        Eylem.KISISEL_VERI_CIKTISI,
+        Eylem.GENEL_KURUL_YENI_OKUL_DAVETI,
+        Eylem.OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR,
+        Eylem.DK_GENEL_KURUL_YAZMA,
+        Eylem.EVRAK_KAYDI,
     }
 
 
@@ -424,3 +452,210 @@ def test_dipnot_bes_gercek_serviste_yalniz_denetleme_kurulu() -> None:
     assert isaret is not None and isaret.action == "ISARET"
     assert (str(isaret.account_id), isaret.role) == (str(dk.id), "denetleme_kurulu")
     assert AuditTrail.objects.count() == once + 1
+
+
+# ============================================================ ¹ ve ⁷ gerçek serviste (F2 7. adım)
+
+
+def _olaganustu_mudur_cagrisi(kurul: GeneralAssembly) -> genel_kurul.GenelKurulSonucu:
+    return genel_kurul.cagir(
+        kurul,
+        called_by=AssemblyCaller.OKUL_MUDURU,
+        call_reason=gko.OLAGANUSTU_NEDEN,
+        gundem=gko.OLAGANUSTU_GUNDEM,
+    )
+
+
+@pytest.mark.django_db
+def test_dipnot_bir_gercek_serviste_mudurun_kendi_yazisi_ve_sahiplik() -> None:
+    """Tasarım §4.4.2 ¹ ve K2: müdürün olağanüstü genel kurul çağrısı (md. 9/6) yalnız müdürün hesabından
+    yazılır (`OLAGANUSTU_GENEL_KURUL_CAGRISI_MUDUR`); öteki her rol `RolYetkisiz` alır, hiçbir şey
+    yazılmaz (program yöneticisi taslak da hazırlamaz, M-11). Müdür genel kurulun öteki işlerinde okurdur
+    (ilan). Sahiplik: müdürün çağrısındaki toplantı zamanı, yeri ve gündem sırası ilandan önce yalnız
+    müdürce düzenlenir, başka rolce değiştirilmez (tasarım §4.4.2 "müdür yalnız kendi yazısını
+    düzenler"); yönetim kurulunun çağırdığı genel kurulda aynı işler sekreterindir."""
+    gko.acik_donem()
+    kurul = gko.planla(kind=AssemblyKind.OLAGANUSTU)
+    once = AuditTrail.objects.exclude(action="HESAP").count()
+    for rol in set(ROLLER) - {"mudur"}:
+        with o.rol_olarak(AccountRole(rol)), pytest.raises(RolYetkisiz):
+            _olaganustu_mudur_cagrisi(kurul)
+    # Rolün oturumu için açılan hesabın `HESAP` satırı dışında iz yazılmaz.
+    assert AuditTrail.objects.exclude(action="HESAP").count() == once
+    with o.rol_olarak(AccountRole.MUDUR):
+        sonuc = _olaganustu_mudur_cagrisi(kurul)
+        with pytest.raises(RolYetkisiz):
+            genel_kurul.ilan_et(kurul, kanallar=gko.kanallar())
+    cagrilan = sonuc.kurul
+    assert cagrilan.status == AssemblyStatus.CAGRILDI
+    assert genel_kurul.cagri_sahibi(cagrilan) == "mudur"
+    _yalniz_sahip_duzenler(cagrilan, AccountRole.MUDUR)
+    # Yönetim kurulunun çağrısında sıra ve tarih ilandan önce sekreterce değişir (sahip yok).
+    yk_kurulu = gko.olaganustu_cagir(gko.planla(kind=AssemblyKind.OLAGANUSTU))
+    assert genel_kurul.cagri_sahibi(yk_kurulu) is None
+    yk_sira = list(
+        AgendaItem.objects.filter(assembly=yk_kurulu)
+        .order_by("-order")
+        .values_list("pk", flat=True)
+    )
+    with o.rol_olarak(AccountRole.SEKRETER):
+        genel_kurul.gundem_sirasini_degistir(yk_kurulu, sira=yk_sira)
+
+
+def _gundem_sirasi(kurul: GeneralAssembly) -> list[int]:
+    return list(
+        AgendaItem.objects.filter(assembly=kurul).order_by("order").values_list("pk", flat=True)
+    )
+
+
+def _yalniz_sahip_duzenler(kurul: GeneralAssembly, sahip: AccountRole) -> None:
+    """Çağrılmış genel kurulda yazının sahibi toplantı zamanını, yerini ve gündem sırasını düzenler;
+    öteki her rol `RolYetkisiz` alır, ret hiçbir şey yazmaz (modül başlığı "Sahiplik")."""
+    eski_sira = _gundem_sirasi(kurul)
+    yeni_sira = list(reversed(eski_sira))
+    eski_zaman = GeneralAssembly.objects.get(pk=kurul.pk).first_meeting_at
+    yeni_zaman = gko.an(gko.BIRINCI_GUN, saat=11)
+    once = AuditTrail.objects.exclude(action="HESAP").count()
+    for rol in sorted(set(ROLLER) - {sahip.value}):
+        with o.rol_olarak(AccountRole(rol)):
+            with pytest.raises(RolYetkisiz):
+                genel_kurul.gundem_sirasini_degistir(kurul, sira=yeni_sira)
+            with pytest.raises(RolYetkisiz):
+                genel_kurul.toplanti_bilgisini_degistir(kurul, first_meeting_at=yeni_zaman)
+    assert AuditTrail.objects.exclude(action="HESAP").count() == once
+    assert GeneralAssembly.objects.get(pk=kurul.pk).first_meeting_at == eski_zaman
+    assert _gundem_sirasi(kurul) == eski_sira
+    with o.rol_olarak(sahip):
+        genel_kurul.toplanti_bilgisini_degistir(
+            kurul, first_meeting_at=yeni_zaman, venue="Uydurma konferans salonu"
+        )
+        genel_kurul.gundem_sirasini_degistir(kurul, sira=yeni_sira)
+    guncel = GeneralAssembly.objects.get(pk=kurul.pk)
+    assert (guncel.status, guncel.first_meeting_at, guncel.venue) == (
+        AssemblyStatus.CAGRILDI,
+        yeni_zaman,
+        "Uydurma konferans salonu",
+    )
+    assert _gundem_sirasi(kurul) == yeni_sira
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("sahip", [AccountRole.MUDUR, AccountRole.DENETLEME_KURULU])
+def test_sahiplik_13_8_mudur_kolu_ve_denetleme_kurulu_cagrisi(sahip: AccountRole) -> None:
+    """Sahiplik (modül başlığı; tasarım §4.4.2): md. 13/8'in "başkan ya da müdür" çağrısını müdür
+    yazdıysa yazı müdüründür (`called_by_role`), Denetleme Kurulunun md. 14/5 çağrısı Denetleme
+    Kurulunundur. İlandan önce zaman, yer ve gündem sırasını yalnız sahip düzenler; sekreter ve program
+    yöneticisi dahil başka rol değiştiremez."""
+    gko.acik_donem()
+    kurul = gko.planla(kind=AssemblyKind.OLAGANUSTU)
+    if sahip is AccountRole.MUDUR:
+        with o.rol_olarak(AccountRole.MUDUR):
+            genel_kurul.cagir(
+                kurul,
+                called_by=AssemblyCaller.BASKAN_VEYA_MUDUR_13_8,
+                call_reason=gko.OLAGANUSTU_NEDEN,
+                gundem=gko.OLAGANUSTU_GUNDEM,
+            )
+    else:
+        with o.rol_olarak(AccountRole.DENETLEME_KURULU):
+            rapor = denetim.denetim_raporu_yaz(
+                kind="ARA", report_date=gko.ILAN_GUNU, md6_violation_found=True
+            )
+            genel_kurul.cagir(
+                kurul,
+                called_by=AssemblyCaller.DENETLEME_KURULU,
+                call_reason=gko.OLAGANUSTU_NEDEN,
+                gundem=gko.OLAGANUSTU_GUNDEM,
+                call_audit_report=rapor,
+            )
+    cagrilan = GeneralAssembly.objects.get(pk=kurul.pk)
+    assert (cagrilan.called_by_role, genel_kurul.cagri_sahibi(cagrilan)) == (sahip, sahip.value)
+    _yalniz_sahip_duzenler(cagrilan, sahip)
+
+
+@pytest.mark.django_db
+def test_dipnot_yedi_gercek_serviste_mudur_yazmaz_yazisi_programca_islenir() -> None:
+    """Tasarım §4.4.2 ⁷ ve M10: gelen-giden evrakı program yöneticisi ve yönetim kurulu rolleri yazar
+    (`EVRAK_KAYDI`); müdür ve Denetleme Kurulu `RolYetkisiz` alır, hiçbir şey yazılmaz. Müdürün kendi
+    yazısı evrak defterine program tarafından giden evrak olarak işlenir: müdürün çağrısının yan
+    etkisidir, kaydın kendi iz satırı müdürün hesabıyladır (F0-F1 planı F1b-2 "ayrı izi"). Müdür kaydın
+    ekini de yazamaz."""
+    gko.acik_donem()
+    gelen_giden_evrak.evrak_defteri_olustur()
+    once = AuditTrail.objects.exclude(action="HESAP").count()
+    for rol in (AccountRole.MUDUR, AccountRole.DENETLEME_KURULU):
+        with o.rol_olarak(rol):
+            with pytest.raises(RolYetkisiz):
+                gelen_giden_evrak.evrak_defteri_olustur()
+            with pytest.raises(RolYetkisiz):
+                gelen_giden_evrak.evrak_kaydet(
+                    direction=DocumentDirection.GELEN, tarih=gko.ILAN_GUNU
+                )
+            # Yazı işleme yolu yalnız müdürün yazısının içinden: yazar müdür değilse ret.
+            if rol is AccountRole.DENETLEME_KURULU:
+                with pytest.raises(RolYetkisiz):
+                    gelen_giden_evrak.mudur_yazisini_isle(
+                        donem=OabTerm.objects.get(status=TermStatus.ACIK), subject="Uydurma konu"
+                    )
+    assert AuditTrail.objects.exclude(action="HESAP").count() == once
+    gecenler: set[str] = set()
+    for yazan in ("yonetici", *sorted(YK)):
+        with o.rol_olarak(AccountRole(yazan)):
+            # Müdürün yazısı bugünün tarihiyle işlenir: numaralar aynı yılda sıralansın.
+            gelen_giden_evrak.evrak_kaydet(
+                direction=DocumentDirection.GELEN, tarih=timezone.localdate()
+            )
+            gecenler.add(yazan)
+    assert gecenler == {"yonetici", *YK}
+
+    kurul = gko.planla(kind=AssemblyKind.OLAGANUSTU)
+    with o.rol_olarak(AccountRole.MUDUR) as mudur:
+        sonuc = _olaganustu_mudur_cagrisi(kurul)
+        assert sonuc.kurul.call_document_id is not None
+        yazi = DocumentRecord.objects.get(pk=sonuc.kurul.call_document_id)
+        with pytest.raises(RolYetkisiz):
+            gelen_giden_evrak.evrak_kaydina_ek_ekle(yazi, b"%PDF-1.7 uydurma", dosya_adi="yazi.pdf")
+    assert (yazi.direction, yazi.record_no) == (DocumentDirection.GIDEN, 1 + len(gecenler))
+    izi = AuditTrail.objects.get(model="oab.DocumentRecord", object_id=str(yazi.pk))
+    assert (izi.action, str(izi.account_id), izi.role) == ("OLUSTUR", str(mudur.id), "mudur")
+    # Program yöneticisi kayda taranmış nüshayı ekler (M10).
+    ek = gelen_giden_evrak.evrak_kaydina_ek_ekle(
+        yazi, b"%PDF-1.7 uydurma", dosya_adi="mudur-yazisi.pdf"
+    )
+    assert list(yazi.ekler()) == [ek]
+
+
+# ============================================================ ¹⁰ gerçek serviste (F2 8. adım)
+
+
+@pytest.mark.django_db
+def test_dipnot_on_gercek_serviste_adli_cikti_yalniz_program_yoneticisi(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tasarım §4.4.2 ¹⁰ (R9; plan F2 §6.2, §7 U14-U15): veli adı taşıyan çıktı — adlı E07 teslim
+    çizelgesi ve adlı E08 katılım cetveli — yalnız program yöneticisinin hesabından verilir
+    (`Eylem.KISISEL_VERI_CIKTISI`; `genel_kurul_evraki.adli_uret_ve_ver`). Öteki her rol, kişisiz
+    kipi üretebilen sekreter dahil, `RolYetkisiz` alır; ne evrak kaydı ne iz satırı ne erişim günlüğü
+    satırı yazılır. İçerik 9. adımda; burada deneme kurucusuyla (`genel_kurul_evraki_ortak`)."""
+    from apps.oab.models import DocumentFormat, GeneratedDocument
+    from apps.oab.services import genel_kurul_evraki
+    from apps.oab.tests import genel_kurul_evraki_ortak
+    from apps.okul.models import AccessLog
+
+    genel_kurul_evraki_ortak.kuruculari_kur(monkeypatch)
+    kurul = gko.ilanli_olagan()
+    once = (AuditTrail.objects.exclude(action="HESAP").count(), AccessLog.objects.count())
+    for rol in sorted(set(ROLLER) - {"yonetici"}):
+        with o.rol_olarak(AccountRole(rol)):
+            for kod in genel_kurul_evraki.ADLI_KODLAR:
+                with pytest.raises(RolYetkisiz):
+                    genel_kurul_evraki.adli_uret_ve_ver(kod, kurul, bicim=DocumentFormat.PDF)
+    assert not GeneratedDocument.objects.exists()
+    assert (AuditTrail.objects.exclude(action="HESAP").count(), AccessLog.objects.count()) == once
+
+    with o.rol_olarak(AccountRole.YONETICI):
+        for kod in genel_kurul_evraki.ADLI_KODLAR:
+            cikti = genel_kurul_evraki.adli_uret_ve_ver(kod, kurul, bicim=DocumentFormat.PDF)
+            assert cikti.kayit.personal_list and cikti.icerik.startswith(b"%PDF")
+    assert AccessLog.objects.count() == once[1] + len(genel_kurul_evraki.ADLI_KODLAR)
+    assert {a.role for a in AccessLog.objects.all()} == {"yonetici"}

@@ -178,7 +178,8 @@ export default function AyarlarPage() {
         </>
       )}
 
-      {/* Kural sürümü: salt okunur satır, her rolde (plan F1c kararları; seçimi bu sürümde yok). */}
+      {/* Kural sürümü: salt okunur satır, her rolde (plan F1c kararları); güncellemesi Birlik Dönemi'nde
+          (F2 11b; yalnız program yöneticisi). */}
       {yetki.durum !== "yukleniyor" && <KuralSurumuKarti />}
 
       {yetki.acik("kurulum_tamamlama") && (

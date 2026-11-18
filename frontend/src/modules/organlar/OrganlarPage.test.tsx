@@ -62,6 +62,13 @@ vi.mock("../kisiler/birlikKisileriApi", async (importOriginal) => ({
   birlikKisileriApi: kisiApiMock,
 }));
 
+// Denetleme Kurulunun genel kurul bölümü (F2 11b) kendi testinde sınanır (`GenelKurulPage.test.tsx`).
+const genelKurulMock = vi.hoisted(() => ({ liste: vi.fn(), ayrinti: vi.fn() }));
+vi.mock("../genel-kurul/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../genel-kurul/api")>()),
+  genelKurulApi: genelKurulMock,
+}));
+
 const yarimMetinMock = vi.hoisted(() => ({ oku: vi.fn(), kaydet: vi.fn(), temizle: vi.fn() }));
 vi.mock("../uyum/api", () => ({ yarimMetinApi: yarimMetinMock }));
 
@@ -204,6 +211,7 @@ const YK_KADRO: Kadro = {
     { uyelik: 11, program: 1, beyan: 2 },
     { uyelik: 12, program: 0, beyan: null },
   ],
+  ilk_gorev_bolumu: false,
 };
 
 const DK_KADRO: Kadro = {
@@ -223,6 +231,7 @@ const DK_KADRO: Kadro = {
   oneriler: [],
   uyum_satirlari: [],
   secilme_sayaclari: [{ uyelik: 21, program: 1, beyan: 1 }],
+  ilk_gorev_bolumu: false,
 };
 
 const ALIM_KADRO: Kadro = {
@@ -247,6 +256,7 @@ const ALIM_KADRO: Kadro = {
   oneriler: [],
   uyum_satirlari: [],
   secilme_sayaclari: [],
+  ilk_gorev_bolumu: false,
 };
 
 const KISI: BirlikKisisi = {
@@ -266,19 +276,27 @@ const KISI: BirlikKisisi = {
 
 /** Program yöneticisinin yetenekleri (sekreterin ve Denetleme Kurulunun yetenekleri hariç). */
 const YONETICI: YetenekAdi[] = YETENEK_ADLARI.filter(
-  (ad) => !["gorev_bolumu_yazma", "dk_gorev_bolumu_yazma", "geri_yukleme_gordum"].includes(ad),
+  (ad) =>
+    ![
+      "gorev_bolumu_yazma",
+      "dk_gorev_bolumu_yazma",
+      "geri_yukleme_gordum",
+      "dk_genel_kurul_yazma",
+      "mudur_genel_kurul_yazisi",
+    ].includes(ad),
 );
 const SEKRETER: YetenekAdi[] = [
   "birlik_kisi_yazma",
   "gorev_alma_engeli",
   "gorev_bolumu_yazma",
+  "ilk_gorev_bolumu_yazma",
   "karar_taslagi_uretme",
   "organ_yazma",
   "temsilci_yazma",
   "toplanti_gunu_yazma",
   "uyelik_dusurme",
 ];
-const DENETLEME: YetenekAdi[] = ["dk_gorev_bolumu_yazma", "erisim_gunlugu"];
+const DENETLEME: YetenekAdi[] = ["dk_gorev_bolumu_yazma", "erisim_gunlugu", "dk_genel_kurul_yazma"];
 /** Başkanın (ve başkan yardımcısı ile muhasibin) yetenekleri: backend `rol_izinleri` yk_ortak listesi. */
 const BASKAN_ROLU: YetenekAdi[] = [
   "birlik_kisi_yazma",
@@ -303,6 +321,12 @@ function bas(yetenekler: readonly string[] = YONETICI, yol = "/organlar") {
 }
 
 beforeEach(() => {
+  genelKurulMock.liste.mockResolvedValue({
+    kayitlar: [],
+    acik_donem: 3,
+    kural_surumu_guncellenmeli: false,
+    planlama_bilgileri: [],
+  });
   donemApiMock.donemler.mockResolvedValue([DONEM]);
   organlarApiMock.kadro.mockImplementation(async (_d: number, organ: string) =>
     organ === "YK" ? YK_KADRO : organ === "DK" ? DK_KADRO : ALIM_KADRO,
@@ -393,10 +417,23 @@ describe("Organlar — yönetim kurulu", () => {
       "Yedek (1. sıra)",
     );
     expect(screen.getByRole("button", { name: /Uydurcan Eskikaya/ })).toHaveTextContent("Düştü");
-    // Program yöneticisi görev bölümünü yazmaz (yalnız sekreter); belgeyi üretir.
+    // Program yöneticisi sonraki görev bölümünü yazmaz (yalnız sekreter; S7 (a)); belgeyi üretir.
     expect(screen.queryByRole("button", { name: DUGME_GOREV_BOLUMU })).toBeNull();
     expect(await screen.findByRole("button", { name: "Belgeyi oluştur" })).toBeInTheDocument();
     expect(screen.getByLabelText("Toplantı günü")).toBeInTheDocument();
+  });
+
+  it("S7 (a): program yöneticisi görev bölümü düğmesini yalnız yeni dönemin ilk görev bölümünde görür", async () => {
+    organlarApiMock.kadro.mockImplementation(async (_d: number, organ: string) =>
+      organ === "YK" ? { ...YK_KADRO, ilk_gorev_bolumu: true } : DK_KADRO,
+    );
+    const ilk = bas();
+    expect(await screen.findByRole("button", { name: DUGME_GOREV_BOLUMU })).toBeInTheDocument();
+    ilk.unmount();
+    // Yeteneği olmayan rol (başkan) ilk görev bölümünde de düğmeyi görmez.
+    bas(BASKAN_ROLU);
+    expect(await screen.findByText(kadroOzeti(2, 1))).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: DUGME_GOREV_BOLUMU })).toBeNull();
   });
 
   it("üyelik penceresi: sayaç, engel hükmü, uyum satırı; dayanak yalnız düğmeyle okunur", async () => {
@@ -682,6 +719,16 @@ describe("Organlar — yönetim kurulu", () => {
 });
 
 describe("Organlar — Denetleme Kurulu", () => {
+  it("genel kurul bölümü (olağanüstü çağrı, raporun eki) yalnız Denetleme Kurulunda", async () => {
+    const { unmount } = bas(DENETLEME, "/organlar?tab=dk");
+    expect(await screen.findByText("Olağanüstü Genel Kurul Çağrısı")).toBeInTheDocument();
+    expect(screen.getByText("Denetleme Kurulu Raporunun Eki")).toBeInTheDocument();
+    unmount();
+    bas(YONETICI, "/organlar?tab=dk");
+    expect(await screen.findByText(kadroOzeti(2, 0))).toBeInTheDocument();
+    expect(screen.queryByText("Olağanüstü Genel Kurul Çağrısı")).toBeNull();
+  });
+
   it("Denetleme Kurulu rolü: görev bölümü ve denetim planı; engel dayanağı yok", async () => {
     const user = userEvent.setup();
     organlarApiMock.dkGorevBolumu.mockResolvedValue({

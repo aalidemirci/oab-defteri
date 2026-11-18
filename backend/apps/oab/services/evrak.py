@@ -12,9 +12,9 @@ izi TEK işlemdedir (`transaction_mode = "IMMEDIATE"`). Sıra:
    belge beyaz listede değildir (O2 "veli adı taşıyan belge hariç", §5.2.8): kapanmış döneme
    yazılmaz (`DonemKapali`). Kural kopyası tutmayan dönem salt okurdur, iptal edilmiş dönem yazılmaz; hazırlıktaki döneme
    yalnız genel kurul hazırlığının evrakı yazılır (`hazirlik_yazimi`).
-3. Aynı konunun aynı evrakının geçerli satırı `YERINI_ALDI` olur (`DURUM` satırı; silinmez), yeni
-   satır bir sonraki sürümdür (`OLUSTUR`). Kural paketi dönemin bağlı kopyasıdır; dönemsiz evrakta
-   (E63) boştur.
+3. Aynı konunun aynı evrakının (aynı kip ve toplantı; plan F2 §7 U34) geçerli satırı `YERINI_ALDI`
+   olur (`DURUM` satırı; silinmez), yeni satır bir sonraki sürümdür (`OLUSTUR`; sürüm kod ve konu
+   başınadır). Kural paketi dönemin bağlı kopyasıdır; dönemsiz evrakta (E63) boştur.
 4. İçerik: kanonik JSON (`kanonik_json`, şifreli sütun) ve özeti (`content_sha256`). Veli adı taşıyan
    belgede (R9, `kisi_listesi`) içerik saklanmaz, yalnız özeti ve satır sayısı kalır.
 
@@ -84,8 +84,15 @@ def kaydet(
     kisi_listesi: bool = False,
     satir_sayisi: int | None = None,
     hazirlik_yazimi: bool = False,
+    kip: str = "",
+    toplanti: str = "",
 ) -> GeneratedDocument:
-    """Üretimin kaydı (modül başlığı "KAYIT"); yeni sürüm satırını döner."""
+    """Üretimin kaydı (modül başlığı "KAYIT"); yeni sürüm satırını döner.
+
+    `kip` (`DocumentVariant`) ve `toplanti` (`AssemblyMeeting`) aynı konunun aynı kodlu belgelerini
+    ayırır (plan F2 §7 U34): yeniden üretim yalnız aynı kip ve toplantının geçerli satırının yerini
+    alır. F1c belgeleri ikisini boş verir.
+    """
     if not EVRAK_KODU.fullmatch(belge.kod):
         raise EvrakKaydiGecersiz(KOD_GECERSIZ)
     if konu.pk is None or konu._state.adding:
@@ -100,9 +107,11 @@ def kaydet(
         )
     konu_turu = denetim_izi.model_etiketi(type(konu))
     konu_kimligi = denetim_izi.kimlik_metni(type(konu), konu.pk)
-    oncekiler = GeneratedDocument.objects.filter(
+    surumler = GeneratedDocument.objects.filter(
         doc_type=belge.kod, subject_type=konu_turu, subject_id=konu_kimligi
     )
+    # Yerini alacağı satırlar yalnız aynı kip ve toplantıdadır; sürüm numarası kod ve konu başınadır.
+    oncekiler = surumler.filter(variant=kip, meeting=toplanti)
     json_metni = evrak.kanonik_json(belge)
     ozet = evrak.metin_ozeti(json_metni)
     if etiket == AuditLabel.KAPALI_DONEM:
@@ -117,7 +126,7 @@ def kaydet(
             raise DonemKapali
     hesap = iz.yazar_hesabi()
     simdi = timezone.now()
-    son = oncekiler.order_by("-version").values_list("version", flat=True).first()
+    son = surumler.order_by("-version").values_list("version", flat=True).first()
     for gecerli in oncekiler.filter(status=DocumentStatus.GECERLI):
         onceki = denetim_izi.anlik(gecerli)
         gecerli.status = DocumentStatus.YERINI_ALDI
@@ -128,6 +137,8 @@ def kaydet(
         doc_type=belge.kod,
         subject_type=konu_turu,
         subject_id=konu_kimligi,
+        variant=kip,
+        meeting=toplanti,
         term=donem,
         version=(son or 0) + 1,
         formats=liste,

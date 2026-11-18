@@ -32,10 +32,60 @@ export const ALAN_BASLANGIC = "Başlangıç (genel kurul günü)";
 export const ALAN_PROGRAM_BASLAMA = "Programa başlama günü";
 export const ALAN_KURAL_SURUMU = "Kural sürümü";
 export const KURAL_SURUMU_YARDIMI =
-  "Birlik dönemi açıldığı günkü kural sürümüyle hesaplanır; sürüm bu ekranda değiştirilmez.";
+  "Birlik dönemi açıldığı günkü kural sürümüyle hesaplanır; sürüm yalnız program yöneticisinin " +
+  "onayıyla, Birlik Dönemi → Kural Sürümü Güncellemesi'nde farkı görülerek değişir.";
 export const ALAN_ACILIS = "Açılış";
 export const ACILIS_GECIS = "Geçiş kurulumuyla açıldı";
 export const ACILIS_GENEL_KURUL = "Genel kurulla açıldı";
+/** Hazırlık dönemi: genel kurul planlandı, dönem genel kuruldan sonra açılır (U3, U32). */
+export const ACILIS_HAZIRLIK = "Genel kuruldan sonra program yöneticisinin onayıyla açılır";
+/** Dönemi açacak genel kurul iptal edildi (hazırlık dönemi de iptal). */
+export const ACILIS_IPTAL = "Dönemi açacak genel kurul iptal edildi";
+export const DUGME_GENEL_KURULU_AC = "Genel kurulu aç";
+/** Yeni açılan okul (S5 (iii)): ilk birlik dönemi ilk genel kurulla açılır. */
+export const DONEM_YOK_YENI_OKUL_ACIKLAMASI =
+  "Okul yeni açıldı: ilk birlik dönemi ilk genel kurulla açılır. Genel kurulu planlayın; okul " +
+  "müdürü daveti kendi hesabından yazar.";
+/** Boş durumdaki bağlantı (sözlük §3: bağlantı metni gittiği yeri adıyla söyler; yol haritasınınkiyle aynı). */
+export const BAG_GENEL_KURUL_EKRANI = "Genel Kurul'u aç";
+
+/** Kural sürümü güncellemesi (tasarım §6.2-5; yalnız program yöneticisi). */
+export const KURAL_GUNCELLEME_BASLIGI = "Kural Sürümü Güncellemesi";
+export const KURAL_GUNCELLEME_ACIKLAMASI =
+  "Programla yeni kural sürümü gelince birlik dönemi kendiliğinden geçmez: farkı görüp onaylayın. " +
+  "Hesabı ya da uyarısı değişecek kayıt varsa listesi gösterilir ve geçiş ayrıca onay ister. " +
+  "Önceki sürüme geri dönülebilir; kapanmış birlik döneminin sürümü değişmez.";
+export const KURAL_GUNCELLEME_OKUNAMADI = "Kural sürümünün durumu okunamadı.";
+export const ALAN_BAGLI_SURUM = "Bağlı sürüm";
+export const ALAN_EN_YENI_SURUM = "Programla gelen en yeni sürüm";
+export const ALAN_HEDEF_SURUM = "Geçilecek sürüm";
+export const KURAL_GUNCEL = "Birlik dönemi programla gelen en yeni kural sürümünde.";
+export const KURAL_GECILEMEZ = "Bu birlik döneminin kural sürümü değiştirilemez.";
+export const FARK_EKLENEN = "Eklenen kurallar";
+export const FARK_CIKARILAN = "Çıkarılan kurallar";
+export const FARK_BITEN = "Yürürlüğü biten kurallar";
+export const FARK_DEGER = "Değeri değişen kurallar";
+export const FARK_DUZELTILEN = "Düzeltilen kurallar";
+export const FARK_BOS = "İki sürüm arasında kural farkı yok.";
+export const ETKILENEN_KAYITLAR = "Hesabı ya da uyarısı değişecek kayıtlar";
+export const ETKILENEN_ONAYI =
+  "Bu kayıtların hesabının ya da uyarısının değişeceğini gördüm; geçişi onaylıyorum.";
+export const ETKILENEN_ONAYI_GEREKLI = "Etkilenen kayıtların listesini onaylayın.";
+export const DUGME_SURUMU_GUNCELLE = "Kural sürümünü güncelle";
+export const DUGME_GERI_AL = "Önceki sürüme geri al";
+export const SURUM_GUNCELLENDI = "Kural sürümü güncellendi.";
+export const SURUM_GUNCELLENEMEDI = "Kural sürümü güncellenemedi.";
+export const BILINMEYEN_KAYIT = "Kayıt";
+/** Etkilenen kaydın türü (model kodu yüzeye çıkmaz; sözlük §2). */
+export const KAYIT_TURU_TR: Readonly<Record<string, string>> = {
+  "oab.GeneralAssembly": "Genel kurul",
+  "oab.ComplianceItem": "Uyum satırı",
+};
+
+/** "Genel kurul · kayıt 12" */
+export function etkilenenKayitMetni(tur: string, kimlik: string): string {
+  return `${tur} · kayıt ${kimlik}`;
+}
 export const BITIS_YOK = "Sonraki olağan genel kurul";
 /** Ayarlar'daki salt okunur kural sürümü satırının bölüm başlığı (plan F1c kararları). */
 export const KURAL_SURUMU_AYARLAR_BASLIGI = "Kural Sürümü";

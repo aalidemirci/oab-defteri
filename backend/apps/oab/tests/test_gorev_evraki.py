@@ -34,6 +34,7 @@ from apps.oab.models import (
     GeneratedDocument,
     MembershipRole,
     OabTerm,
+    OrganType,
     SeatGroup,
     TermStatus,
 )
@@ -47,6 +48,7 @@ from apps.oab.services import (
     uyelikler,
     uyum,
 )
+from apps.oab.tests import genel_kurul_ortak as gko
 from apps.oab.tests import uyelik_ortak as o
 from apps.oab.tests.kurallar import gorev_evraki_ortak as ge_ortak
 from apps.okul.models import AccessLog, AccountRole, AuditAction, AuditTrail
@@ -544,3 +546,21 @@ def test_kapanmis_donemde_kurallar_donemin_son_gunuyle_okunur() -> None:
         belge, _ = gorev_evraki.KURUCULAR["E01"](donem)
         toplanti = {s[0]: s[1] for s in _tablolar(belge)[0].satirlar}
         assert toplanti[gorev_evraki.KATILAN] == beklenen, durum
+
+
+def test_olaganustu_ikinci_toplantida_yenilenen_kurulda_ikinci_toplanti_gunu() -> None:
+    """Plan F2 §7 U6 (md. 13/8; A-1): olağanüstü genel kurul yönetim kurulunu ikinci toplantıda
+    yenilediyse kurulu seçen genel kurulun günü ikinci toplantının günüdür (birinci toplantının değil):
+    seçilenlerin başlangıcı ve görev bölümünden sonra E01'in "Genel kurul (seçim) tarihi"
+    05.11.2026'dır."""
+    donem = gko.acik_donem()
+    o.yk_kurulu(donem, asil=5)
+    kurul = gko.ikinci_toplantida_yapilmis_olaganustu()
+    assert genel_kurul_servisi.birinci_toplanti_gunu(kurul) == gko.BIRINCI_GUN
+    sonuc = gko.secim(kurul, "SECIM_YK", [gko.aday(kurul) for _ in range(5)])
+    assert {u.start_date for u in sonuc.secilenler} == {gko.IKINCI_GUN}
+    assert gorev_evraki._secen_genel_kurul_gunu(donem, OrganType.YONETIM_KURULU) == gko.IKINCI_GUN
+    o.yk_gorev_bolumu(donem, {MembershipRole.BASKAN: sonuc.secilenler[0]}, gun=date(2026, 11, 6))
+    belge, _ = gorev_evraki.e01_belgesi(donem)
+    toplanti = {s[0]: s[1] for s in _tablolar(belge)[0].satirlar}
+    assert toplanti[gorev_evraki.GENEL_KURUL_SECIM_TARIHI] == "05.11.2026"

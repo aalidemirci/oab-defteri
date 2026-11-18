@@ -2,8 +2,8 @@
 //
 // Açılış ekranının listesi: rolün "Bu Hafta Yapılacaklar"ı — son günü yedi gün içinde olan ya da
 // geçmiş kalemler önde (sunucu son güne göre sıralar), süresi olmayan işler ardından; son günü
-// pencerenin ötesindeki kalem listeye girmez (takvim görünümü ve E14 sonraki fazdadır). Veli
-// rollerinde (sunucunun `gorunum: "ay"`ı; ön yüz rol adıyla dallanmaz) varsayılan görünüm "Bu Ay
+// pencerenin ötesindeki kalem listeye girmez (takvim görünümü ve E14 Genel Bakış → Yıllık İş Takvimi
+// sekmesindedir; F2 11b). Veli rollerinde (sunucunun `gorunum: "ay"`ı; ön yüz rol adıyla dallanmaz) varsayılan görünüm "Bu Ay
 // Sizden Beklenenler"dir ve büyük yazıyla açılır (§7.10 "Teslim yolu"; R5): başlık, açıklama, son gün,
 // dayanak, götürdüğü ekran, rozet ve bilgi bandı birlikte bir basamak büyür; pencere ayın son
 // günüdür, en az yedi gün. Ailenin yoğunluk ayarı yazı boyutunu değiştirmez (yalnız denetim yüksekliği), bu
@@ -15,24 +15,40 @@
 // yüzden ilgili kayıt başka ekranda yazılınca Genel Bakış'a dönüş yeni okumadır. Kalem kişisizdir, gerekçe istemez ve tek tıkla
 // götürdüğü ekrana (rota + sekme) açılır; kişi ancak orada, rolün okuma yetkisi içinde görünür.
 // Bilgi bantları (kural kopyası doğrulanamayan dönem, açık birlik dönemi yok) listenin başındadır.
+// F2 (12. adım): genel kurul süreleri, müdürün bekleyen yazısı, ibra edilmedi bildirimi, TEFBİS
+// girişleri ve dönem onayı genel kurulun ekranına (`?kurul=`), veri sorumlusunun tamamlanacağı Ayarlar →
+// Okul Bilgileri'ne götürür. İbra edilmedi bildirimi ve TEFBİS kalemleri süresizdir (mevzuatta süre yok);
+// satırın işini yapan rol (yetenek `takvim_isareti`: program yöneticisi ve sekreter; sekreter yalnız ibra
+// bildirimini görür, servis satıra göre yeniden daraltır) kalemin yanındaki "Yapıldı" ile işin yapıldığı
+// günü girer, kalem düşer (tasarım §7.10 "kalemin kapanması"). Satırın kendi döneminin kural kopyası
+// doğrulanamıyorsa (D7) dönem salt okurdur: düğme çizilmez (sunucu da 409 verir). Karar bant yerine
+// kalemin `ek.salt_okur` bayrağındadır: takvim kalemi kapanıştaki dönemden de gelir, bant yalnız açık
+// dönemi söyler; bayrağı sunucu, ucun 409'unu veren işlevle satırın dönemine göre koyar.
 // Kilitliyken (423) ya da anahtar düşmüşken (409) hata söylenmez: kilit ekranı gelir.
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { todayIso } from "../../lib/format";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
+import Dialog from "../../ui/Dialog";
+import ErrorBand, { hataOku } from "../../ui/ErrorBand";
+import type { SayfaHatasi } from "../../ui/ErrorBand";
 import Icon from "../../ui/Icon";
 import Skeleton from "../../ui/Skeleton";
+import { useSnackbar } from "../../ui/SnackbarProvider";
+import TextField from "../../ui/TextField";
 import { KURAL_KOPYASI_BOZUK } from "../birlik-donemi/metinler";
 import { okunamadiSayilir } from "../butunluk/useButunlukDurumu";
 import { DUGME_BIRLIK_DONEMINE_GIT } from "../organlar/metinler";
+import { useYetki } from "../oturum/yetki";
 import { Dayanak } from "../uyum/UyariGerekce";
 import { panelApi } from "./api";
 import type { PanoKalemi, PanoYaniti } from "./api";
 import {
+  ALAN_YAPILDIGI_GUN,
   AY_ACIKLAMASI,
   AY_BASLIGI,
   AY_BOS,
@@ -46,11 +62,22 @@ import {
   PANO_YUKLENIYOR,
   TAMAMLANACAKLAR_ACIKLAMASI,
   TAMAMLANACAKLAR_BASLIGI,
+  YAPILDIGI_GUN_GEREKLI,
+  YAPILDI_ACIKLAMASI,
+  YAPILDI_DUGMESI,
+  YAPILDI_KAYDEDILDI,
+  YAPILDI_KAYDEDILEMEDI,
+  YAPILDI_KAYDEDILIYOR,
+  YAPILDI_KAYDET,
+  YAPILDI_PENCERESI_BASLIGI,
+  YAPILDI_VAZGEC,
   YENIDEN_DENE,
   ekranAdi,
   kalemAciklamasi,
   kalemBasligi,
+  tamamlanacakMetni,
   vadeCumlesi,
+  yapildiDugmesiAdi,
 } from "./metinler";
 
 export const PANO_SORGU_ANAHTARI = "pano";
@@ -91,8 +118,14 @@ export function gorunenIsler(yanit: PanoYaniti): PanoKalemi[] {
   return yanit.isler.filter((kalem) => kalem.vade === null || kalem.vade <= son);
 }
 
-function hedef(kalem: PanoKalemi): string {
-  return kalem.sekme ? `${kalem.rota}?tab=${kalem.sekme}` : kalem.rota;
+/** Kalemin götürdüğü adres: rota, sekme (`?tab=`) ve genel kurul kalemlerinde ayrıntı (`?kurul=`). */
+export function hedef(kalem: Pick<PanoKalemi, "rota" | "sekme" | "ek">): string {
+  const sorgu = new URLSearchParams();
+  if (kalem.sekme) sorgu.set("tab", kalem.sekme);
+  if (kalem.ek.kurul !== undefined && kalem.ek.kurul !== "")
+    sorgu.set("kurul", String(kalem.ek.kurul));
+  const metin = sorgu.toString();
+  return metin ? `${kalem.rota}?${metin}` : kalem.rota;
 }
 
 function bilgiMetni(kalem: PanoKalemi): string {
@@ -132,14 +165,106 @@ function Bilgiler({ bilgiler, buyuk }: { bilgiler: PanoKalemi[]; buyuk: boolean 
   );
 }
 
-function IsSatiri({ kalem, buyuk }: { kalem: PanoKalemi; buyuk: boolean }) {
+/** Takvim satırının kalemi (ibra edilmedi bildirimi, TEFBİS): "Yapıldı" işaretinin satırı (`ek.satir`). */
+const TAKVIM_KODLARI = new Set(["IBRA_BILDIRIMI", "TEFBIS_GIRISI"]);
+
+/** Kalemin işaretlenebilir takvim satırı (yalnız takvim kalemlerinde; satırın dönemi salt okursa —
+ * `ek.salt_okur`, D7 — ya da satır yoksa null). */
+export function takvimSatiri(kalem: Pick<PanoKalemi, "kod" | "ek">): number | null {
+  if (!TAKVIM_KODLARI.has(kalem.kod) || kalem.ek.salt_okur === true) return null;
+  const satir = Number(kalem.ek.satir);
+  return Number.isInteger(satir) && satir > 0 ? satir : null;
+}
+
+/** İşin yapıldığı günün penceresi (tasarım §7.10 "kalemin kapanması"): gün bugünden sonra olamaz
+ * (sunucu da reddeder); kaydedilince pano yeniden okunur ve kalem düşer. */
+function YapildiPenceresi({
+  satir,
+  baslik,
+  onKapat,
+}: {
+  satir: number;
+  baslik: string;
+  onKapat: () => void;
+}) {
+  const snackbar = useSnackbar();
+  const queryClient = useQueryClient();
+  const [gun, setGun] = useState(todayIso);
+  const [alanHatasi, setAlanHatasi] = useState("");
+  const [hata, setHata] = useState<SayfaHatasi | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const kaydet = async () => {
+    if (!gun) {
+      setAlanHatasi(YAPILDIGI_GUN_GEREKLI);
+      return;
+    }
+    setAlanHatasi("");
+    setBusy(true);
+    setHata(null);
+    try {
+      await panelApi.takvimYapildi(satir, gun);
+      snackbar.success(YAPILDI_KAYDEDILDI);
+      await queryClient.invalidateQueries({ queryKey: [PANO_SORGU_ANAHTARI] });
+      onKapat();
+    } catch (e) {
+      setHata(hataOku(e, YAPILDI_KAYDEDILEMEDI));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open
+      onClose={onKapat}
+      title={YAPILDI_PENCERESI_BASLIGI}
+      actions={
+        <>
+          <Button variant="text" onClick={onKapat} disabled={busy}>
+            {YAPILDI_VAZGEC}
+          </Button>
+          <Button icon="check" onClick={() => void kaydet()} disabled={busy}>
+            {busy ? YAPILDI_KAYDEDILIYOR : YAPILDI_KAYDET}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <p className="text-body-large font-medium text-on-surface">{baslik}</p>
+        <p className="text-body-medium text-on-surface-variant">{YAPILDI_ACIKLAMASI}</p>
+        <TextField
+          label={ALAN_YAPILDIGI_GUN}
+          type="date"
+          required
+          max={todayIso()}
+          value={gun}
+          onChange={(e) => setGun(e.target.value)}
+          error={alanHatasi || undefined}
+        />
+        {hata && <ErrorBand hata={hata} />}
+      </div>
+    </Dialog>
+  );
+}
+
+function IsSatiri({
+  kalem,
+  buyuk,
+  isaretlenebilir,
+}: {
+  kalem: PanoKalemi;
+  buyuk: boolean;
+  isaretlenebilir: boolean;
+}) {
   const vade = vadeCumlesi(kalem);
   const meta = metaBoyutu(buyuk);
+  const satir = isaretlenebilir ? takvimSatiri(kalem) : null;
+  const [pencere, setPencere] = useState(false);
   return (
-    <li>
+    <li className="flex items-start gap-2">
       <Link
         to={hedef(kalem)}
-        className="group flex items-start gap-3 rounded-shape-md px-2 py-3 hover:bg-on-surface/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        className="group flex min-w-0 flex-1 items-start gap-3 rounded-shape-md px-2 py-3 hover:bg-on-surface/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
         <Icon
           name={kalem.gecikti ? "schedule" : kalem.vade ? "event" : "radio_button_unchecked"}
@@ -172,6 +297,25 @@ function IsSatiri({ kalem, buyuk }: { kalem: PanoKalemi; buyuk: boolean }) {
         </span>
         <Icon name="arrow_forward" className="mt-0.5 shrink-0 text-primary" />
       </Link>
+      {satir !== null && (
+        <div className="shrink-0 py-2">
+          <Button
+            variant="outlined"
+            icon="check"
+            aria-label={yapildiDugmesiAdi(kalemBasligi(kalem))}
+            onClick={() => setPencere(true)}
+          >
+            {YAPILDI_DUGMESI}
+          </Button>
+        </div>
+      )}
+      {pencere && satir !== null && (
+        <YapildiPenceresi
+          satir={satir}
+          baslik={kalemBasligi(kalem)}
+          onKapat={() => setPencere(false)}
+        />
+      )}
     </li>
   );
 }
@@ -193,7 +337,7 @@ function TamamlanacakSatiri({ kalem, buyuk }: { kalem: PanoKalemi; buyuk: boolea
           <span
             className={`block break-words text-on-surface ${buyuk ? "text-body-large" : "text-body-medium"}`}
           >
-            {kalem.metin}
+            {tamamlanacakMetni(kalem)}
           </span>
           <span className={`flex flex-wrap gap-x-3 text-on-surface-variant ${meta}`}>
             <Dayanak atif={kalem.atif} className={meta} />
@@ -208,6 +352,7 @@ function TamamlanacakSatiri({ kalem, buyuk }: { kalem: PanoKalemi; buyuk: boolea
 
 export default function PanoKalemleri() {
   const gun = useGunAnahtari();
+  const isaretlenebilir = useYetki().acik("takvim_isareti");
   const sorgu = useQuery({
     queryKey: [PANO_SORGU_ANAHTARI, gun],
     queryFn: panelApi.kalemler,
@@ -284,7 +429,12 @@ export default function PanoKalemleri() {
         ) : (
           <ul className="mt-3 divide-y divide-outline-variant/50">
             {isler.map((kalem, i) => (
-              <IsSatiri key={`${kalem.kod}-${i}`} kalem={kalem} buyuk={buyuk} />
+              <IsSatiri
+                key={`${kalem.kod}-${i}`}
+                kalem={kalem}
+                buyuk={buyuk}
+                isaretlenebilir={isaretlenebilir}
+              />
             ))}
           </ul>
         )}

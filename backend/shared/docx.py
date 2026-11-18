@@ -23,6 +23,12 @@ Sabitlenen biçim kararları (tasarım §9.1-4, §9.1-8; iskelet envanteri §7.2
   altlık içerik eşdeğerliği karşılaştırmasına girmez (UY-18). Altlık 12 punto (`ALTLIK_PUNTO`).
 - **Punto alt sınırı** (RYUE md. 7/1; kullanıcı kararı 11.11.2026): yazı alanında 9 puntodan
   küçük metin yoktur (`EN_KUCUK_PUNTO`); dipnot ve konum cümlesi 9 punto.
+- **Resmî yazı başı ve ek bölümü** (plan F2 §4.2; RYUE md. 11-14, 18): girintisiz, hücre iç
+  boşluğu sıfır çerçevesiz ızgara ve boş satırlar (`resmi_yazi_basi`, `ekler`); sayfa sonu Word'ün
+  sayfa sonu karakteridir (`sayfa_sonu`).
+- **Resmî yazının metni ve imzası** (plan F2 10. adım; RYUE md. 16/4, 17/1, 17/11): metin
+  paragrafı ilk satırında 1,25 cm içeriden, boşluksuz (`metin_paragrafi`); imza bölümü yazı alanını
+  ikiye bölen çerçevesiz iki hücre, tek imza sağ yarıda (`resmi_imza`).
 
 python-docx tembel içe aktarılır: modül içe aktarılınca lxml yüklenmesin.
 """
@@ -250,6 +256,169 @@ def dipnot(belge: DocxDocument, metin: str) -> None:
     p = belge.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     _calistir(p, metin, Pt(DIPNOT_PUNTO))
+
+
+def _bos_satirlar(belge: DocxDocument, adet: int) -> None:
+    """Gövde puntosunda boş satırlar (RYUE'nün "iki satır boşluk"u; metin akışına girmez)."""
+    for _ in range(adet):
+        belge.add_paragraph()
+
+
+def _izgara_kenarsiz(tablo: Any) -> None:
+    """Tablonun yazı alanının sol kenarından başlaması: girinti (`w:tblInd`) sıfır, hücrelerin sol ve
+    sağ iç boşluğu (`w:tblCellMar`) sıfır. Böylece ilk sütunun metni yazı alanının solundan, son
+    sütunun sağa yaslı metni yazı alanının en sağında durur."""
+    from docx.oxml.ns import qn
+    from docx.oxml.parser import OxmlElement
+
+    tblpr = tablo._tbl.tblPr
+    for ad in ("w:tblInd", "w:tblCellMar"):
+        eski = tblpr.find(qn(ad))
+        if eski is not None:
+            tblpr.remove(eski)
+    girinti = OxmlElement("w:tblInd")
+    girinti.set(qn("w:w"), "0")
+    girinti.set(qn("w:type"), "dxa")
+    bosluk = OxmlElement("w:tblCellMar")
+    for kenar in ("w:left", "w:right"):
+        oge = OxmlElement(kenar)
+        oge.set(qn("w:w"), "0")
+        oge.set(qn("w:type"), "dxa")
+        bosluk.append(oge)
+    # Şemanın sırası (CT_TblPr): ... jc, tblCellSpacing, tblInd, tblBorders, shd, tblLayout,
+    # tblCellMar, tblLook, tblCaption, tblDescription. Word sırası bozuk öğeyi onarmaya kalkar.
+    _araya_koy(
+        tblpr, girinti, ("w:tblBorders", "w:shd", "w:tblLayout", "w:tblCellMar", *_TBLPR_SONU)
+    )
+    _araya_koy(tblpr, bosluk, _TBLPR_SONU)
+
+
+#: `w:tblPr` içinde `w:tblCellMar`'dan sonra gelen öğeler.
+_TBLPR_SONU = ("w:tblLook", "w:tblCaption", "w:tblDescription")
+
+
+def _araya_koy(ust: Any, oge: Any, sonrakiler: Sequence[str]) -> None:
+    """`oge`yi `ust`ün içinde, `sonrakiler`den ilk bulunanın önüne (yoksa sona) koyar."""
+    from docx.oxml.ns import qn
+
+    for ad in sonrakiler:
+        sonraki = ust.find(qn(ad))
+        if sonraki is not None:
+            sonraki.addprevious(oge)
+            return
+    ust.append(oge)
+
+
+def resmi_yazi_basi(
+    belge: DocxDocument,
+    *,
+    satirlar: Sequence[Sequence[str]],
+    muhatap: Sequence[str],
+    yuzdeler: Sequence[float],
+) -> None:
+    """Resmî yazının başı (`shared.evrak.ResmiYazi`; RYUE md. 11-14).
+
+    Antetten iki satır boşluk (md. 11/2), sonra çerçevesiz dört sütunlu ızgara
+    (`shared.evrak.resmi_yazi_izgarasi`): sola yaslı yan başlık adı — tablo girintisiz, hücre iç
+    boşluğu sıfır, yani yazı alanının solundan başlar (md. 11/2) —, kendi sütununda iki nokta (iki
+    satırda aynı sütun: aynı hiza, md. 15/3), değer ve sağa yaslı tarih (md. 12/1: sayı ile aynı
+    satırda, yazı alanının en sağında); ikinci satırda "Konu" (md. 13/1: bir alt satırda, değer
+    sütunu yazı alanının yarısında biter; uzun konu kendi sütununda alt satıra kayar, yan başlığın
+    altı boş kalır). Konudan iki satır boşlukla ortalanmış muhatap (md. 14/1), muhatapla metin
+    arasında iki satır boşluk (md. 16/2). Izgara hücreleri metin akışına satır satır girer (boş hücre
+    girmez).
+    """
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Cm
+
+    if len(yuzdeler) != 4 or any(len(satir) != 4 for satir in satirlar):
+        raise ValueError("Resmî yazı başının ızgarası dört sütunludur.")
+    genislikler = [Cm(YAZI_ALANI_CM * yuzde / 100) for yuzde in yuzdeler]
+    sol = WD_ALIGN_PARAGRAPH.LEFT
+    hizalar = (sol, sol, sol, WD_ALIGN_PARAGRAPH.RIGHT)
+    _bos_satirlar(belge, 2)
+    t = belge.add_table(rows=len(satirlar), cols=4)
+    t.alignment = WD_TABLE_ALIGNMENT.LEFT
+    t.autofit = False
+    _izgara_kenarsiz(t)
+    for sutun, genislik in zip(t.columns, genislikler, strict=True):
+        sutun.width = genislik
+    for satir, degerler in zip(t.rows, satirlar, strict=True):
+        for hucre, metin, genislik, hiza in zip(
+            satir.cells, degerler, genislikler, hizalar, strict=True
+        ):
+            hucre.width = genislik
+            hucre.paragraphs[0].alignment = hiza
+            if metin:
+                _calistir(hucre.paragraphs[0], metin)
+    _bos_satirlar(belge, 2)
+    for metin in muhatap:
+        ortali_satir(belge, metin)
+    _bos_satirlar(belge, 2)
+
+
+def ekler(belge: DocxDocument, satirlar: Sequence[str]) -> None:
+    """Ek bölümü (`shared.evrak.Ekler`; RYUE md. 18/1): imza bölümünden sonra uygun satır boşluğuyla
+    (burada bir satır), yazı alanının solundan."""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    _bos_satirlar(belge, 1)
+    for metin in satirlar:
+        p = belge.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        _calistir(p, metin)
+
+
+def metin_paragrafi(belge: DocxDocument, metin: str, *, girinti_cm: float) -> None:
+    """Resmî yazının metin paragrafı (`shared.evrak.MetinParagrafi`; RYUE md. 16/4): ilk satır
+    `girinti_cm` içeriden, iki yana yaslı; paragraftan önce ve sonra boşluk yok."""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Cm, Pt
+
+    p = belge.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p.paragraph_format.first_line_indent = Cm(girinti_cm)
+    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.space_after = Pt(0)
+    _calistir(p, metin)
+
+
+def resmi_imza(belge: DocxDocument, hucreler: Sequence[tuple[str, str] | None]) -> None:
+    """Resmî yazının imza bölümü (`shared.evrak.ResmiImza`; RYUE md. 17/1, 17/11): metinden iki satır
+    boşluk, sonra yazı alanını ikiye bölen çerçevesiz hücreler; her hücrede ad (kalın) ve altında
+    unvan, ortalı. Boş hücre (tek imzada sol yarı) metin taşımaz."""
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Cm
+
+    _bos_satirlar(belge, 2)
+    t = belge.add_table(rows=1, cols=len(hucreler))
+    t.alignment = WD_TABLE_ALIGNMENT.LEFT
+    t.autofit = False
+    _izgara_kenarsiz(t)
+    genislik = Cm(YAZI_ALANI_CM / len(hucreler))
+    for sutun in t.columns:
+        sutun.width = genislik
+    for hucre, sahip in zip(t.rows[0].cells, hucreler, strict=True):
+        hucre.width = genislik
+        if sahip is None:
+            continue
+        ad, gorev = sahip
+        ad_p = hucre.paragraphs[0]
+        ad_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        _calistir(ad_p, ad, kalin=True)
+        gorev_p = hucre.add_paragraph()
+        gorev_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        _calistir(gorev_p, gorev)
+
+
+def sayfa_sonu(belge: DocxDocument) -> None:
+    """Sayfa sonu (`shared.evrak.SayfaSonu`): sonraki blok yeni sayfada başlar (Word'ün sayfa sonu
+    karakteri; paragrafta metin yoktur, akışa girmez)."""
+    from docx.enum.text import WD_BREAK
+
+    belge.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
 
 
 def _alan(paragraf: Any, komut: str, boyut: Any) -> None:

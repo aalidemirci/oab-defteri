@@ -96,6 +96,45 @@ export interface GecisOzeti {
   uyum_satirlari: GecisUyumSatiri[];
 }
 
+/** Kural sürümü (paket ve revizyon). */
+export interface KuralSurumu {
+  paket: string;
+  rev: number;
+}
+
+/** Fark ekranının kural satırı (kimlik ekranda gösterilmez; sözlük §2). */
+export interface FarkKurali {
+  id: string;
+  aciklama: string;
+  atif: string;
+}
+
+/** Revizyon farkı (tasarım §6.2-5; `kural_bagi.fark_sozlugu`). */
+export interface RevizyonFarki {
+  eski: KuralSurumu;
+  yeni: KuralSurumu;
+  eklenen: FarkKurali[];
+  cikarilan: FarkKurali[];
+  biten: FarkKurali[];
+  deger_degisen: FarkKurali[];
+  duzeltilen: FarkKurali[];
+  /** Hesabı ya da uyarısı değişecek kayıtlar (model, kimlik, kural). */
+  kayitlar: { model: string; kayit_id: string; kural_id: string }[];
+  onay_gerekli: boolean;
+}
+
+/** `GET terms/<pk>/rule-revision/` (yalnız program yöneticisi; Ayarlar satırı). */
+export interface KuralSurumuDurumu {
+  donem: number;
+  bagli: KuralSurumu;
+  en_yeni: KuralSurumu | null;
+  /** Geçilebilecek sürümler: programla gelen daha yeni revizyonlar ve dönemin önceki bağları. */
+  hedefler: KuralSurumu[];
+  gecilebilir: boolean;
+  hedef: KuralSurumu | null;
+  fark: RevizyonFarki | null;
+}
+
 export const birlikDonemiApi = {
   donemler: (): Promise<BirlikDonemi[]> => api.get<BirlikDonemi[]>("/oab/terms/"),
 
@@ -109,4 +148,20 @@ export const birlikDonemiApi = {
     api.post<BirlikDonemi>(`/oab/terms/${id}/cancel/`, { cancel_reason: cancelReason }),
 
   gecis: (): Promise<GecisOzeti> => api.get<GecisOzeti>("/oab/transition/"),
+
+  /** Kural sürümünün durumu ve (hedef verilirse o sürüme) farkı; yazmaz. */
+  kuralSurumu: (id: number, hedef?: KuralSurumu): Promise<KuralSurumuDurumu> =>
+    api.get<KuralSurumuDurumu>(
+      `/oab/terms/${id}/rule-revision/${
+        hedef ? `?paket=${encodeURIComponent(hedef.paket)}&rev=${hedef.rev}` : ""
+      }`,
+    ),
+
+  /** Revizyon geçişi (etkilenen kayıt varsa `onay` ister: 409 `revizyon_onayi_gerekli`). */
+  kuralSurumunuGecir: (
+    id: number,
+    hedef: KuralSurumu,
+    onay: boolean,
+  ): Promise<BirlikDonemi & { fark: RevizyonFarki }> =>
+    api.post(`/oab/terms/${id}/rule-revision/`, { paket: hedef.paket, rev: hedef.rev, onay }),
 };

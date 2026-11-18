@@ -30,7 +30,7 @@ geçici madde `gecici-madde-N`, ekler `ek-1`, `ek-2`. **Çapalar değişmez** �
 alanı `<dosya>#<çapa>` biçiminde buraya bağlanır ve F1 kural testleri çapanın varlığını denetler (atıf kilidi).
 Fıkra ve bent, çapadan ayrı alanda tutulur (ör. `meb-okul-aile-birligi-yonetmeligi.md#madde-9`, fıkra 2).
 
-Kaynak korpusun alanlarına ek olarak her dosyada iki alan vardır:
+Kaynak korpusun alanlarına ek olarak her dosyada (Aydınlatma Tebliği hariç; bkz. §5) iki alan vardır:
 
 | Alan | Anlamı |
 |---|---|
@@ -72,6 +72,7 @@ Kaynak korpusun alanlarına ek olarak her dosyada iki alan vardır:
 | `devlet-arsiv-hizmetleri-hakkinda-yonetmelik.md` | tam + EK-1…5 | MG (ek formlar karşılaştırılmadı) | saklama; OAB Yön. md. 16/7 ve 23/6'daki 1988 atfı — 1988 yönetmeliği bu yönetmeliğin md. 32'siyle yürürlükten kalktı |
 | `resmi-yazismalarda-uygulanacak-usul-ve-esaslar-hakkinda-yonetmelik.md` | tam | MG | yazı biçimi, evrak düzeni |
 | `6698-kvkk.md` | tam | MG | KVKK: veri en aza, saklama, aydınlatma |
+| `kvkk-aydinlatma-yukumlulugu-tebligi.md` | tam | `kaynak` satırındaki mevzuat.gov.tr teyidi 23.08.2026 (Kütüphane Defteri korpusundan 16.11.2026'da değiştirilmeden kopyalandı; `oab-kaynak` ve `oab-teyit` alanları yoktur, bkz. §5) | kişisel veri aydınlatma metni (E04): aydınlatmanın usulü (md. 4), içeriği (md. 5/1), veri sorumlusu temsilcisi (md. 3/1-ğ) |
 | `meb-bilgi-ve-sistem-guvenligi-yonergesi.md` | tam | 18.08.2026 | güvenlik çekirdeği, parola, yedek |
 | `5510-sosyal-sigortalar-ve-genel-saglik-sigortasi-kanunu.md` | kısmi: md. 11, 12, 86 | MG | birlik işveren sayılır; SGK belgeleri on yıl saklanır (personel, sürüm 2) |
 | `4857-is-kanunu.md` | kısmi: md. 2, 17, 53-60, 120 | MG | yıllık izin kaydı, ihbar ve kıdem karşılığı (personel, sürüm 2) |
@@ -97,6 +98,8 @@ Mevzuat metinlerine dokunulmadan yalnız şu korpus notları değiştirildi:
 | Genelge 2011/40 | "korpustaki" → "kaynak korpustaki" (atıf yapılan denetim rehberleri bu korpusta yok) |
 
 Kısmi dosyalar kaynak tam metinden betikle kesildi; frontmatter'ları yeniden yazıldı, madde gövdeleri birebirdir.
+
+`kvkk-aydinlatma-yukumlulugu-tebligi.md` (Aydınlatma Tebliği) bu kaynak korpustan değil, Kütüphane Defteri'nin mevzuat korpusundan alındı (F2 10. adım, kullanıcı onayı 16.11.2026, E04 taslağının sorusu 7): dosya içeriği değiştirilmeden kopyalandı, frontmatter'ı o korpusun biçimindedir (`kaynak` satırı teyidi taşır); `oab-kaynak` ve `oab-teyit` alanları eklenmedi.
 
 ## 6. Alınmayanlar ve bekleyenler
 

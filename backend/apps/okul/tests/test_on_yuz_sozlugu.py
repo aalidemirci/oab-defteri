@@ -78,8 +78,13 @@ DOSYALAR = (
     "frontend/src/modules/organlar/metinler.ts",
     "frontend/src/modules/temsilciler/metinler.ts",
     "frontend/src/modules/evrak/metinler.ts",
-    # F1c 12. adım: Genel Bakış'ın pano kalemleri.
+    # F1c 12. adım: Genel Bakış'ın pano kalemleri (F2 11b: Genel Bakış'ın sekmeleri ve Yıllık İş Takvimi).
     "frontend/src/modules/pano/metinler.ts",
+    # F2 11b: Genel Kurul ve Gelen-Giden Evrak ekranları.
+    "frontend/src/modules/genel-kurul/metinler.ts",
+    "frontend/src/modules/gelen-giden-evrak/metinler.ts",
+    # F2 10. adım: Hakkında → Kişisel Veri (kişisel veri aydınlatma metninin kartı).
+    "frontend/src/modules/hakkinda/metinler.ts",
 )
 
 #: Kullanıcıya görünmeyen düz dize sabitleri (dosya, ad) → gerekçe.

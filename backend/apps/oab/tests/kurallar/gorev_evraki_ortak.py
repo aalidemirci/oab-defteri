@@ -195,19 +195,21 @@ def tam_kurulum(*, uzun: bool = False, okul: bool = True) -> Kurulum:
             denetim_plani=DENETIM_PLANI,
             place=TOPLANTI_YERI,
         )
-    gorev_bolumu.yk_gorev_bolumu(
-        term=donem,
-        held_at=o.saat(YK_GOREV_BOLUMU_GUNU),
-        gorevler={
-            MembershipRole.BASKAN: yk_asillar[0],
-            MembershipRole.BASKAN_YARDIMCISI: yk_asillar[1],
-            MembershipRole.MUHASIP: yk_asillar[2],
-            MembershipRole.SEKRETER: yk_asillar[3],
-        },
-        katilim=[gorev_bolumu.KatilimSatiri(uyelik=u, present=True) for u in yk_asillar[:4]]
-        + [gorev_bolumu.KatilimSatiri(uyelik=yk_asillar[4], present=False, excused=True)],
-        place=TOPLANTI_YERI,
-    )
+    # Yönetim kurulunun görev bölümünü sekreter yazar (tasarım §7.2 "Kim").
+    with o.rol_olarak(AccountRole.SEKRETER):
+        gorev_bolumu.yk_gorev_bolumu(
+            term=donem,
+            held_at=o.saat(YK_GOREV_BOLUMU_GUNU),
+            gorevler={
+                MembershipRole.BASKAN: yk_asillar[0],
+                MembershipRole.BASKAN_YARDIMCISI: yk_asillar[1],
+                MembershipRole.MUHASIP: yk_asillar[2],
+                MembershipRole.SEKRETER: yk_asillar[3],
+            },
+            katilim=[gorev_bolumu.KatilimSatiri(uyelik=u, present=True) for u in yk_asillar[:4]]
+            + [gorev_bolumu.KatilimSatiri(uyelik=yk_asillar[4], present=False, excused=True)],
+            place=TOPLANTI_YERI,
+        )
     # Temsilci kararı: kabul edilmiş yönetim kurulu kararı. F1c'de yazılan karar türleri görev bölümü
     # ve yedek çağırmadır, kabul F3'ün akışındadır: `tm::test_temsilci_kaydi_ve_karar_bagi` gibi ORM'le.
     toplanti = kurullar.toplanti_olustur(donem=donem, organ="YK", kind=MeetingKind.GOREV_BOLUMU)

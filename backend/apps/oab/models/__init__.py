@@ -3,8 +3,17 @@
 from __future__ import annotations
 
 from apps.oab.models._base import (
+    AgendaItemKind,
+    AgendaResult,
+    AnnouncementKind,
+    AnnouncementStatus,
+    AssemblyCaller,
     AssemblyKind,
+    AssemblyMeeting,
     AssemblyStatus,
+    AttendanceKind,
+    AuditReportKind,
+    AuditReportStatus,
     BookCertifier,
     BookKind,
     BookStatus,
@@ -12,8 +21,11 @@ from apps.oab.models._base import (
     ComplianceObligation,
     DecisionKind,
     DecisionStatus,
+    Discharge,
+    DocumentDirection,
     DocumentFormat,
     DocumentStatus,
+    DocumentVariant,
     DropKind,
     ElectedBy,
     EligibilityBar,
@@ -32,9 +44,17 @@ from apps.oab.models._base import (
     SeatType,
     TermStatus,
 )
+from apps.oab.models.denetim import AuditReport, DenetimRaporuKaydiGecersiz
 from apps.oab.models.donem import OabTerm, RulePackage
-from apps.oab.models.evrak import EvrakKaydiGecersiz, GeneratedDocument
-from apps.oab.models.genel_kurul import GeneralAssembly
+from apps.oab.models.duyuru import Announcement, DuyuruKaydiGecersiz
+from apps.oab.models.evrak import DocumentRecord, EvrakKaydiGecersiz, GeneratedDocument
+from apps.oab.models.genel_kurul import (
+    AgendaItem,
+    AssemblyMinutes,
+    AttendanceCorrection,
+    GenelKurulKaydiGecersiz,
+    GeneralAssembly,
+)
 from apps.oab.models.kisi import OabPerson, kisi_adi_kor_indeksi
 from apps.oab.models.kurul import (
     BoardDecision,
@@ -47,8 +67,22 @@ from apps.oab.models.uyelik import OrganMembership, UyelikDurumuGecersiz
 from apps.oab.models.uyum import ComplianceItem, ComplianceJustification, DraftText
 
 __all__ = [
+    "AgendaItem",
+    "AgendaItemKind",
+    "AgendaResult",
+    "Announcement",
+    "AnnouncementKind",
+    "AnnouncementStatus",
+    "AssemblyCaller",
     "AssemblyKind",
+    "AssemblyMeeting",
+    "AssemblyMinutes",
     "AssemblyStatus",
+    "AttendanceCorrection",
+    "AttendanceKind",
+    "AuditReport",
+    "AuditReportKind",
+    "AuditReportStatus",
     "BoardDecision",
     "BoardMeeting",
     "BoardMeetingAttendance",
@@ -61,14 +95,21 @@ __all__ = [
     "ComplianceObligation",
     "DecisionKind",
     "DecisionStatus",
+    "DenetimRaporuKaydiGecersiz",
+    "Discharge",
+    "DocumentDirection",
     "DocumentFormat",
+    "DocumentRecord",
     "DocumentStatus",
+    "DocumentVariant",
     "DraftText",
     "DropKind",
+    "DuyuruKaydiGecersiz",
     "ElectedBy",
     "EligibilityBar",
     "EligibilityBarBasis",
     "EvrakKaydiGecersiz",
+    "GenelKurulKaydiGecersiz",
     "GeneralAssembly",
     "GeneratedDocument",
     "KararDurumuGecersiz",

@@ -28,7 +28,16 @@ servisler — düşme ve iptal (`uyelik_gecisleri`), görev bölümü (`gorev_bo
 kaydı yazdıktan sonra AYNI işlemde `hesaplari_esitle`'yi çağırır; geçersizleşen her açık hesap
 `ASKIDA` olur (`hesaplar.uyelik_askisi`; iz satırının yazarı kaydı yazan hesaptır). md. 7/2'de
 olağanüstü genel kurula ertelenen üyelik seçilmiş kalır: hesap askıya alınmaz. Dönemin kapanışı askı
-nedeni değildir (yeni dönemin görev bölümü ve hesap geçişi F4).
+nedeni değildir; yeni dönemin görev bölümündeki askı F2, hesap geçişi F4.
+
+YENİ DÖNEMİN GÖREV BÖLÜMÜ (tasarım §4.4.5, §7.8; plan F2 §7 U28): genel kurulla açılan dönem `ACIK`
+olunca önceki dönemin organ hesapları açık kalır (eski yönetim kurulu devir-teslime ve görev bölümüne
+dek görevdedir, md. 10/1-ç). Açık dönemde bir kurulun görev bölümü yapılınca (`BoardMeeting(GOREV_
+BOLUMU)` `YAPILDI`) o kurulun açık olmayan (önceki) dönemdeki üyeliğine bağlı hesabın bağı geçersizdir,
+neden `GOREV_BOLUMU`'dur (`gecersizlik_nedeni`; tasarım §5.1'in iki askı nedeninden anlamca uyan, yeni
+neden yok). Görev bölümü yazan servis aynı işlemde `onceki_donem_hesaplarini_askiya_al`'ı çağırır;
+`hesap_onerileri` bu hesaplar için kapanış önerir, yeni görevliler için hesap açma önerisi F1c'deki
+gibi çıkar.
 
 HESAP ÖNERİLERİ (`hesap_onerileri`; tasarım §4.4.5, §8 Genel Bakış "hesap önerileri"): program
 yöneticisinin listesi, kişisiz kodlar ve kimlikler. Kalemler saklanmaz, her okumada kayıtlardan
@@ -45,6 +54,9 @@ from typing import Any, Final
 
 from apps.oab import selectors
 from apps.oab.models import (
+    BoardMeeting,
+    MeetingKind,
+    MeetingStatus,
     MembershipRole,
     MembershipStatus,
     OabTerm,
@@ -131,6 +143,19 @@ def bagla(rol: str, uyelik_kimligi: object) -> HesapBagi:
     return HesapBagi(person_id=uyelik.person_id, membership_id=uyelik.pk, term_id=uyelik.term_id)
 
 
+def _yeni_donemde_gorev_bolumu_var(uyelik: OrganMembership) -> bool:
+    """Üyeliğin dönemi açık değilken açık dönemde aynı kurulun görev bölümü yapıldı mı? (modül başlığı
+    "Yeni dönemin görev bölümü"; plan F2 §7 U28)."""
+    if uyelik.term.status == TermStatus.ACIK:
+        return False
+    return BoardMeeting.objects.filter(
+        term__status=TermStatus.ACIK,
+        organ=uyelik.organ,
+        kind=MeetingKind.GOREV_BOLUMU,
+        status=MeetingStatus.YAPILDI,
+    ).exists()
+
+
 def gecersizlik_nedeni(hesap: Account) -> str | None:
     """Organ rolündeki hesabın bağı bugün geçersizse askı nedeni, geçerliyse None (modül başlığı)."""
     uyelik = _uyelik(hesap.membership_id) if hesap.membership_id is not None else None
@@ -143,6 +168,8 @@ def gecersizlik_nedeni(hesap: Account) -> str | None:
         or not selectors.gorevdeki_asil_mi(uyelik)
     ):
         return SuspendReason.UYELIK_DUSTU.value
+    if _yeni_donemde_gorev_bolumu_var(uyelik):
+        return SuspendReason.GOREV_BOLUMU.value
     gorev = ROL_GOREVLERI.get(hesap.role)
     if gorev is not None and uyelik.role != gorev:
         return SuspendReason.GOREV_BOLUMU.value
@@ -163,6 +190,31 @@ def hesaplari_esitle(uyelik: OrganMembership) -> list[Account]:
     askiya_alinan: list[Account] = []
     bagli = app_password.hesap_satirlari(
         Account.objects.filter(membership_id=uyelik.pk).order_by("opened_at", "pk")
+    )
+    for hesap in bagli:
+        askida = hesaplar.uyelik_askisi(hesap)
+        if askida is not None:
+            askiya_alinan.append(askida)
+    return askiya_alinan
+
+
+def onceki_donem_hesaplarini_askiya_al(yeni_donem: OabTerm, organ: str) -> list[Account]:
+    """Yeni dönemin görev bölümü önceki dönemin aynı kuruldaki hesaplarını AYNI işlemde askıya alır
+    (modül başlığı "Yeni dönemin görev bölümü"; plan F2 §7 U28).
+
+    Görev bölümünü yazan servis (`gorev_bolumu.yk_gorev_bolumu`, `dk_gorev_bolumu`) toplantıyı
+    `YAPILDI` yazdıktan sonra çağırır. Kurulun bu dönem dışındaki üyeliklerine bağlı BÜTÜN satırlar
+    (kapalı dahil; `hesaplari_esitle` ile aynı sıra: önce mühür ve iz, durum en son) askıya verilir;
+    neden doğrulanmış satırın bağından hesaplanır (`GOREV_BOLUMU`). Dönem açık değilse ya da genel
+    kurulla açılmamışsa (geçiş kurulumunun dönemi: önceki dönem yoktur) bir şey yapmaz. Askıya alınan
+    hesapları döndürür."""
+    if yeni_donem.status != TermStatus.ACIK or yeni_donem.opened_by_assembly_id is None:
+        return []
+    askiya_alinan: list[Account] = []
+    bagli = app_password.hesap_satirlari(
+        Account.objects.filter(membership__organ=organ)
+        .exclude(membership__term=yeni_donem)
+        .order_by("opened_at", "pk")
     )
     for hesap in bagli:
         askida = hesaplar.uyelik_askisi(hesap)

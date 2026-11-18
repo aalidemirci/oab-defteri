@@ -234,7 +234,61 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
                 "oab-transition-decision-book-cancel",
                 "oab-transition-complete",
             ),
+            # Genel Kurul → Sonrası: genel kuruldan sonra yeni birlik döneminin onayı (U32; F2 11b).
+            _parca(
+                "genel kuruldan sonra yeni birlik döneminin onayı", "oab-assembly-term-transition"
+            ),
+            # Hakkında → Kişisel veri: aydınlatma metninin (E04) üretimi (F2 10. adım).
+            _parca("kişisel veri aydınlatma metni (Hakkında)", "oab-document-e04"),
         )
+    ),
+    # Genel Kurul ekranı (F2 11b; plan F2 §6.1). Parçalar uç kurallarının rol kümelerine göre ayrılır:
+    # sihirbazın yazmaları program yöneticisi ve sekreterin; çağrı (yönetim kurulu, başkanın md. 13/8
+    # çağrısı, üyelerin başvurusu) ayrıca başkanın; iptal ve başvuru yazısının bağı program yöneticisinin;
+    # dosya ekleri yönetim kurulu rollerinin; müdürün yazıları (toplantı bilgisi ve gündem sırası dahil)
+    # okul müdürünün; belgelerin üretimi üreten rollerin.
+    Satir.M3: BugunkuIs(
+        (
+            _parca(
+                "planlama, ilan ve davet, toplantılar, gündem, divan, adaylar, seçim, ibra ve tutanak",
+                "oab-assembly-list",
+                "oab-assembly-detail",
+                "oab-assembly-agenda-order",
+                "oab-assembly-announcement",
+                "oab-assembly-second-announcement",
+                "oab-announcement-evidence",
+                "oab-announcement-attachments",
+                "oab-assembly-first-meeting",
+                "oab-assembly-second-meeting",
+                "oab-assembly-attendance-corrections",
+                "oab-assembly-agenda",
+                "oab-agenda-item-removal",
+                "oab-agenda-item-result",
+                "oab-assembly-presiding-board",
+                "oab-assembly-presiding-board-cancel",
+                "oab-assembly-candidates",
+                "oab-agenda-item-election",
+                "oab-agenda-item-election-cancel",
+                "oab-agenda-item-discharge",
+                "oab-assembly-minutes",
+                "oab-assembly-minutes-complete",
+            ),
+            _parca("çağrı", "oab-assembly-call"),
+            _parca(
+                "iptal ve üyelerin başvuru yazısının bağı",
+                "oab-assembly-cancel",
+                "oab-assembly-call-document",
+            ),
+            _parca("dosya ekleri", "oab-agenda-item-attachments"),
+            _parca(
+                "okul müdürünün yazıları (yeni açılan okulda davet, olağanüstü çağrı)",
+                "oab-assembly-principal-call",
+                "oab-assembly-detail",
+                "oab-assembly-agenda-order",
+            ),
+            _parca("belgelerin üretimi", "oab-assembly-document"),
+        ),
+        baslik="Genel Kurul",
     ),
     Satir.M2: BugunkuIs(
         (
@@ -259,9 +313,11 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
             _parca("veli listesinden birlik kişisi ekleme", "oab-person-from-parent"),
             # Organlar ve Temsilciler ekranları (F1c 11. adım). Parçalar uç kurallarının rol
             # kümelerine göre ayrılır: program yöneticisi ve yönetim kurulu rolleri üyelik, görev alma
-            # engeli, alım komisyonu ve temsilci kaydını yazar; görev bölümü ve yönetim kurulu yedeğinin
-            # çağrısı yalnız sekreterindir; Denetleme Kurulu yedeğinin çağrısı program yöneticisinin;
-            # düşme, görev bölümü evrakı, temsilci çizelgesi ve aylık toplantı günü ikisinindir.
+            # engeli, alım komisyonu ve temsilci kaydını yazar; yeni birlik döneminin ilk görev bölümü
+            # program yöneticisi ve sekreterin (kullanıcı kararı S7 (a); servis yöneticiyi ilkine
+            # daraltır), sonraki görev bölümleri ve yönetim kurulu yedeğinin çağrısı yalnız
+            # sekreterindir; Denetleme Kurulu yedeğinin çağrısı program yöneticisinin; düşme, görev
+            # bölümü evrakı, temsilci çizelgesi ve aylık toplantı günü ikisinindir.
             _parca(
                 "üyelik ve temsilci kaydı",
                 "oab-membership-list",
@@ -272,7 +328,10 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
                 "oab-representative-list",
             ),
             _parca(
-                "görev bölümü ve yedek çağrısı",
+                "yeni birlik döneminde yönetim kurulunun ilk görev bölümü", "oab-yk-duty-assignment"
+            ),
+            _parca(
+                "sonraki görev bölümleri ve yedek çağrısı",
                 "oab-yk-duty-assignment",
                 "oab-membership-substitute-call-yk",
             ),
@@ -300,11 +359,35 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
                 "oab-dk-duty-assignment",
                 "oab-document-e02",
             ),
+            # F2 11b: çağrı Organlar → Denetleme Kurulu'nda ve Genel Kurul'da, çağrı yazısı ve raporun
+            # eki Genel Kurul'da (ek Organlar'da da).
+            _parca(
+                "Genel Kurul: Denetleme Kurulunun olağanüstü çağrısı, çağrı yazısı ve raporunun eki",
+                "oab-assembly-audit-board-call",
+                "oab-assembly-document-e05-audit-board",
+                "oab-agenda-item-audit-board-attachment",
+            ),
         ),
     ),
     Satir.M9: BugunkuIs(
-        (_parca("son oturumun kontrolü (“Kontrol ettim”)", "dashboard-last-session"),),
+        (
+            _parca("son oturumun kontrolü (“Kontrol ettim”)", "dashboard-last-session"),
+            # Genel Bakış → Yıllık İş Takvimi (F2 11b).
+            _parca("yıllık iş takviminin basımı", "oab-document-e14"),
+            # Pano kaleminden takvim işinin "Yapıldı" işareti (F2 12. adım).
+            _parca("takvim işinin “Yapıldı” işareti", "oab-compliance-item-done"),
+        ),
         baslik="Genel Bakış",
+    ),
+    # Gelen-Giden Evrak ekranı (F2 11b; M10: program yöneticisi ve yönetim kurulu rolleri).
+    Satir.M10: BugunkuIs(
+        (
+            _parca("defter", "oab-document-book-list"),
+            _parca("gelen ve giden kayıt", "oab-document-record-list"),
+            _parca("ek", "oab-document-record-attachments"),
+            _parca("programın hazırladığı resmî yazının kaydı", "oab-document-outgoing-record"),
+        ),
+        baslik="Gelen-Giden Evrak",
     ),
     Satir.KULLANICILAR: BugunkuIs(
         (
@@ -337,7 +420,12 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
         baslik="Güvenlik",
     ),
     Satir.AYARLAR: BugunkuIs(
-        (_parca("boşta kilit süresi", "security-idle-lock"),), baslik="Ayarlar"
+        (
+            _parca("boşta kilit süresi", "security-idle-lock"),
+            # Birlik Dönemi → Kural Sürümü Güncellemesi (F2 11b; Ayarlar satırı, tasarım §6.2-5).
+            _parca("kural sürümü güncellemesi (Birlik Dönemi)", "oab-term-rule-revision"),
+        ),
+        baslik="Ayarlar",
     ),
     Satir.KISISEL_VERI: BugunkuIs(
         (
@@ -346,6 +434,12 @@ BUGUNKU_ISLER: Final[Mapping[Satir, BugunkuIs]] = {
                 "import-parents-preview",
                 "import-parents-commit",
                 "parent-roster",
+            ),
+            # F2 11b: Genel Kurul'un katılım işaretleri penceresi ve veli adlı çıktıları (R9, ¹⁰).
+            _parca(
+                "Genel Kurul'da veli adlı katılım işaretleri, teslim çizelgesi ve katılım cetveli",
+                "oab-assembly-attendance-marks",
+                "oab-assembly-document-named",
             ),
         ),
         baslik="Kişiler",
@@ -382,14 +476,32 @@ ADSIZ_UCLAR: Final[Mapping[str, str]] = {
         "Kendi parola yenilenme bildiriminin “Gördüm”ü; bildirim kendiliğinden açılır, ayrı iş "
         "değildir."
     ),
+    # F2 11b: uç var, ekranı yoktur (seçimin biçimi seçim sonucu penceresinde gider; sonradan girilmesi
+    # ya da düzeltilmesi için düğme yok). Ekran gelince Genel Kurul satırının parçası olur, buradan çıkar.
+    "oab-agenda-item-election-form": (
+        "Seçimin biçiminin sonradan girilmesi ya da düzeltilmesi; ekranı henüz yoktur, bugün programda "
+        "yapılabilen iş diye yazılmaz."
+    ),
 }
+
+#: Uçları bağlı (bekleyen hücresi kalmamış) ama EKRANI HENÜZ OLMAYAN satırlar ve gerekçesi: pusula bu
+#: satırları basmaz, satırın yazma uçları adlanmaz (orkestratör maddesi F-4: yalnız bugün ekranı ya
+#: da düğmesi olan işler yazılır; sözlük "Hesap teslim pusulası (F1b)"). F2 11a'da Genel Kurul ve
+#: Gelen-Giden Evrak buradaydı; 11b'de ekranlarıyla `BUGUNKU_ISLER`'e geçtiler (F1c 11b emsali). Liste
+#: yalnız gerekçeyle büyür.
+EKRANSIZ_SATIRLAR: Final[Mapping[Satir, str]] = {}
 
 
 def isler(rol: str) -> tuple[str, ...]:
     """Rolün "bu programda sizin işiniz" satırları: `etkin_hucreler` sırasıyla, bugünkü adlarıyla
-    (`BUGUNKU_ISLER`; yalnız rolün parçaları). Etkin satırın adı yoksa `KeyError` (test her etkin
-    satırın adını sınar)."""
-    return tuple(BUGUNKU_ISLER[satir].rol_adi(rol) for satir in etkin_hucreler(rol))
+    (`BUGUNKU_ISLER`; yalnız rolün parçaları). Ekranı henüz olmayan satır basılmaz
+    (`EKRANSIZ_SATIRLAR`). Öteki etkin satırın adı yoksa `KeyError` (test her etkin satırın adını
+    sınar)."""
+    return tuple(
+        BUGUNKU_ISLER[satir].rol_adi(rol)
+        for satir in etkin_hucreler(rol)
+        if satir not in EKRANSIZ_SATIRLAR
+    )
 
 
 def _gun(an: datetime) -> str:

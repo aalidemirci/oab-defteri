@@ -56,11 +56,13 @@ export const HESAP_KAYDI_BULUNAMADI = "hesap kaydı bulunamadı";
 
 /**
  * Model ve alan kodlarının ekrandaki adları (sözlük §1 "Erişim günlüğü (F1b)": o okumaları getiren
- * fazda eklenir). F1c: organ üyeliğindeki görev alma engelinin dayanağı (özel nitelikli alan).
- * Eşlemde olmayan kod yazılmaz.
+ * fazda eklenir). F1c: organ üyeliğindeki görev alma engelinin dayanağı (özel nitelikli alan). F2:
+ * genel kurulun katılım işaretleri penceresi ve veli adlı çıktısı (davet teslim çizelgesi, katılım
+ * cetveli; U15, U33). Eşlemde olmayan kod yazılmaz.
  */
 export const MODEL_ADLARI: Readonly<Record<string, string>> = {
   "oab.OrganMembership": "Organ üyeliği",
+  "oab.GeneralAssembly": "Genel kurul",
 };
 export const ALAN_ADLARI: Readonly<Record<string, string>> = {
   eligibility_bar_basis: "görev alma engelinin dayanağı",

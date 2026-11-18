@@ -21,6 +21,16 @@ yazı tipiyle yeniden sınandı ve gerekmediği için kaldırıldı (önceki de�
 Hesap teslim pusulasının sayfa bütçesi her rolde en çok 2 sayfadır (kullanıcı kararı 11.11.2026;
 `test_evrak_kurallari.test_sayfa_butcesi`). İmza bloğu (tarih ve imza satırı) sayfalara bölünmez
 (`.imza-blok`; F1c 10. adım: tarih bir sayfada, imzalar ötekinde kalmasın).
+Resmî yazı başı (`ResmiYazi`; plan F2 §4.2, RYUE md. 11-14): antetten iki satır boşlukla çerçevesiz
+dört sütunlu ızgara (`resmi_yazi_izgarasi`): sola yaslı "Sayı"/"Konu" — hücre iç boşluğu sıfır, yazı
+alanının solundan başlar, md. 11/2 —; kendi sütununda iki nokta — aynı hizada, md. 15/3 —; değer;
+sağa yaslı tarih, md. 12/1. Sütun yüzdeleri modelden (`RYUE_SUTUNLARI`; konu yazı alanının yarısını
+geçmez, md. 13/1); konudan ve metinden iki satır boşlukla ortalı muhatap (md. 14/1, 16/2). Ek bölümü
+(`Ekler`, md. 18/1) imza bölümünden sonra solda. Sayfa sonu (`SayfaSonu`) sonraki bloğu yeni sayfaya
+iter.
+Resmî yazının metin paragrafı (`MetinParagrafi`, md. 16/4) ilk satırında 1,25 cm içeriden, iki yana
+yaslı ve aralıksız; imza bölümü (`ResmiImza`, md. 17/1, 17/11) yazı alanını ikiye bölen iki hücrede,
+tek imza sağ yarıda ortalı, iki imzada üst unvan sağda.
 {% endcomment %}
 {% block extra_style %}<style>
   @page {
@@ -50,16 +60,46 @@ Hesap teslim pusulasının sayfa bütçesi her rolde en çok 2 sayfadır (kullan
   .sig-grid .role { font-size: 12pt; }
   .dipnot { margin: 2pt 0 0; font-size: 9pt; line-height: 1.3; color: var(--pr-secondary); }
   .dipnot-ilk { margin-top: 12pt; padding-top: 3pt; border-top: 0.5pt solid var(--pr-faint); }
+  .ryue-bas { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 28pt; }
+  .ryue-bas td { font-size: 12pt; padding: 0; text-align: left; vertical-align: top; border: none; }
+  .ryue-bas td.ryue-tarih { text-align: right; }
+  .ryue-muhatap { text-align: center; font-size: 12pt; margin: 28pt 0; }
+  .ekler { margin-top: 14pt; }
+  .ekler p { margin: 0; font-size: 12pt; }
+  .sayfa-sonu { break-after: page; page-break-after: always; height: 0; }
+  .para-girintili { font-size: 12pt; line-height: 1.25; margin: 0; text-align: justify;
+                    text-indent: 1.25cm; }
+  .resmi-imza { table-layout: fixed; margin-top: 28pt; }
+  .resmi-imza td { width: 50%; font-size: 12pt; }
+  .resmi-imza .role { font-size: 12pt; }
 </style>{% endblock %}
 {% block content %}
   {% for oge in bloklar %}
-    {% if oge.tur == "baslik" %}
+    {% if oge.tur == "resmi_yazi" %}
+      <table class="ryue-bas">
+        <colgroup>{% for genislik in oge.genislikler %}<col style="width: {{ genislik }}">{% endfor %}</colgroup>
+        {% for ad, iki_nokta, deger, tarih in oge.satirlar %}<tr><td>{{ ad }}</td><td>{{ iki_nokta }}</td><td>{{ deger }}</td><td class="ryue-tarih">{{ tarih }}</td></tr>{% endfor %}
+      </table>
+      <div class="ryue-muhatap">{% for satir in oge.muhatap %}<div>{{ satir }}</div>{% endfor %}</div>
+    {% elif oge.tur == "ekler" %}
+      <div class="ekler">{% for satir in oge.satirlar %}<p>{{ satir }}</p>{% endfor %}</div>
+    {% elif oge.tur == "sayfa_sonu" %}
+      <div class="sayfa-sonu"></div>
+    {% elif oge.tur == "baslik" %}
       <div class="doc-title">{{ oge.blok.metin }}</div>
       {% if oge.blok.alt %}<div class="doc-subtitle">{{ oge.blok.alt }}</div>{% endif %}
     {% elif oge.tur == "alt_baslik" %}
       <p class="alt-baslik">{{ oge.blok.metin }}</p>
     {% elif oge.tur == "paragraf" %}
       <p class="para">{{ oge.blok.metin }}</p>
+    {% elif oge.tur == "metin_paragrafi" %}
+      <p class="para-girintili">{{ oge.blok.metin }}</p>
+    {% elif oge.tur == "resmi_imza" %}
+      <div class="imza-blok">
+      <table class="sig-grid resmi-imza"><tr>
+        {% for sahip in oge.hucreler %}<td>{% if sahip %}<div class="space"></div><div class="line"></div><div class="name">{{ sahip.ad }}</div><div class="role">{{ sahip.gorev }}</div>{% endif %}</td>{% endfor %}
+      </tr></table>
+      </div>
     {% elif oge.tur == "konum" %}
       <p class="konum keep-with-next">{{ oge.blok.metin }}</p>
     {% elif oge.tur == "tablo" %}

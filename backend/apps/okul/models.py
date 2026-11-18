@@ -789,6 +789,18 @@ PARENT_NAME_MAX = 200
 STUDENT_CLASS_MAX = 16
 
 
+class AssemblyMeeting(models.TextChoices):
+    """Genel kurulun toplantısı: birinci ya da çoğunluk aranmayan ikinci toplantı (md. 9/2).
+
+    Seçenek burada, okul çekirdeğindedir: veli listesinin katılım işareti (`ParentRoster.
+    attended_meeting`) bunu kullanır ve `okul` `oab`'yi içe aktarmaz; `oab` genel kurul kaydında,
+    katılım düzeltmesinde ve üretilen evrakta aynı seçeneği buradan alır (tek kaynak; plan F2 §5.1).
+    """
+
+    BIRINCI = "BIRINCI", "Birinci toplantı"
+    IKINCI = "IKINCI", "İkinci toplantı"
+
+
 def parent_name_blind_index(full_name: object) -> str:
     """Velinin adının kör indeksi (tasarım §5.1 `name_index`, §5.3); boş ad → ''.
 
@@ -815,9 +827,15 @@ class ParentRoster(models.Model):
     bağlanır (`apps.oab.services.donemler`). "Dönem içindeki önceki parti" kuralı (tasarım §8.4
     (1)) satırın dönemiyle çalışır (`services.imports`). Yabancı anahtar dizeyle verilir: `okul`
     `oab`'yi içe aktarmaz; açık dönemi `oab` kayıt defterinden bildirir
-    (`services.imports.register_roster_term_provider`). Katılım işaretleri (`attended_assembly` →
-    `GeneralAssembly`, `attended_meeting`) F2'de göçle eklenir. Başka hiçbir model buna yabancı
-    anahtar vermez (silinebilirlik).
+    (`services.imports.register_roster_term_provider`). Başka hiçbir model buna yabancı anahtar
+    vermez (silinebilirlik).
+
+    KATILIM İŞARETİ (`attended_assembly` → `oab.GeneralAssembly`, `attended_meeting`; F2 göçü
+    `okul.0005`; tasarım §5.2.2, plan F2 §7 U33): isteğe bağlı sayım yardımıdır; velinin hangi genel
+    kurulun hangi toplantısına katıldığını işaretler. İkisi birlikte doludur ya da birlikte boştur
+    (veritabanı kısıtı). İşaret satırla birlikte düşer (liste silinince ya da yeniden aktarımda);
+    genel kuruldaki katılım sayısı elle girilen alandır, işaretten hesaplanmaz. Yabancı anahtar
+    dizeyle verilir (`okul` `oab`'yi içe aktarmaz); yazma yolu ve rolü F2 5. adımdadır.
 
     KÖR İNDEKS (`name_index`) YALNIZ `save()` İLE YAZILIR: `QuerySet.update(full_name=…)`,
     `bulk_update` ve `bulk_create` `save()`'i atlar, indeks boş ya da eski adda kalır. Veli
@@ -861,6 +879,21 @@ class ParentRoster(models.Model):
         related_name="+",
         verbose_name="birlik dönemi",
     )
+    attended_assembly = models.ForeignKey(
+        "oab.GeneralAssembly",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="katıldığı genel kurul",
+    )
+    attended_meeting = models.CharField(
+        "katıldığı toplantı",
+        max_length=8,
+        choices=AssemblyMeeting.choices,
+        blank=True,
+        default="",
+    )
     created_at = models.DateTimeField("oluşturulma", auto_now_add=True)
 
     class Meta:
@@ -876,6 +909,15 @@ class ParentRoster(models.Model):
             models.CheckConstraint(
                 condition=~models.Q(student_class=""),
                 name="ck_parentroster_student_class",
+            ),
+            # Katılım işareti: genel kurul ve toplantı birlikte dolu ya da birlikte boş.
+            models.CheckConstraint(
+                condition=models.Q(attended_assembly__isnull=True, attended_meeting="")
+                | models.Q(
+                    attended_assembly__isnull=False,
+                    attended_meeting__in=AssemblyMeeting.values,
+                ),
+                name="ck_parentroster_katilim_isareti",
             ),
         ]
 

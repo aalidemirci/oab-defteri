@@ -46,6 +46,30 @@ def letterhead_unit(school_name: str) -> str:
     return name if name.endswith("Müdürlüğü") else f"{name} Müdürlüğü"
 
 
+#: Resmî yazının muhatabı olan millî eğitim müdürlükleri (RYUE md. 14/5'in birim satırı; ilk harfleri
+#: büyük, md. 14/2).
+MEM_ILCE = "İlçe Millî Eğitim Müdürlüğü"
+MEM_IL = "İl Millî Eğitim Müdürlüğü"
+
+
+def mem_muhatabi(birim: str, *, il: str | None, ilce: str | None) -> tuple[str, str]:
+    """Okulun il ya da ilçe millî eğitim müdürlüğüne yazısının muhatabı: (idare, birim).
+
+    Kullanıcı kararı S11 (a) (plan F2 §9, 15.11.2026): RYUE md. 14/5'in ana kuralı iki hâlde de
+    uygulanır — ilk satır bağlı olunan mülki idare büyük harfle ve yönelme ekiyle ("<İLÇE>
+    KAYMAKAMLIĞINA", "<İL> VALİLİĞİNE"; md. 14/2), ikinci satır parantez içinde birim (çizici
+    parantezi ekler). Ad boşsa yer tutucu basılır. Muhatap basımda düzenlenebilir alandır: bu işlev
+    yalnız önerisidir (plan F2 §7 U20).
+    """
+    if birim == MEM_ILCE:
+        ad = (ilce or "").strip()
+        return (f"{tr_upper(ad)} KAYMAKAMLIĞINA" if ad else "…………… KAYMAKAMLIĞINA", MEM_ILCE)
+    if birim == MEM_IL:
+        ad = (il or "").strip()
+        return (f"{tr_upper(ad)} VALİLİĞİNE" if ad else "…………… VALİLİĞİNE", MEM_IL)
+    raise ValueError("Muhatap birimi il ya da ilçe millî eğitim müdürlüğü olmalı.")
+
+
 def letterhead_context(
     *,
     school_name: str,

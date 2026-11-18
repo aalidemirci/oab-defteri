@@ -81,6 +81,8 @@ export interface Kadro {
   oneriler: UyelikOnerisi[];
   uyum_satirlari: UyelikUyumSatiri[];
   secilme_sayaclari: SecilmeSayaci[];
+  /** Yeni birlik döneminin ilk yönetim kurulu görev bölümü mü (S7 (a); öteki kurullarda `false`). */
+  ilk_gorev_bolumu: boolean;
 }
 
 /** Gerekçe isteyen yazmaların ortak alanı (ortak "uyarı + gerekçe" bileşeni ekler). */

@@ -34,6 +34,7 @@ from apps.oab.models import (
 from apps.oab.services import donem_kilidi, donemler, uyum, yarim_metin
 from apps.oab.services import genel_kurul as genel_kurul_servisi
 from apps.oab.services import iz as iz_yazari
+from apps.oab.tests.kurallar import paket_ortak
 from apps.okul import denetim_izi
 from apps.okul.models import (
     AccountRole,
@@ -84,7 +85,10 @@ def test_donem_acilisi_ilk_donemi_en_yeni_revizyona_baglar() -> None:
     donem = _donem()
     assert donem.status == TermStatus.ACIK
     assert donem.opened_by_assembly is None
-    assert (donem.rule_package.package, donem.rule_package.rev) == ("OAB-2023.12", 1)
+    assert (donem.rule_package.package, donem.rule_package.rev) == (
+        "OAB-2023.12",
+        paket_ortak.EN_YENI_REV,
+    )
     assert donem_kilidi.kural_kopyasi_tutuyor(donem)
 
 
@@ -600,7 +604,7 @@ def test_birlik_donemi_ucu_acilis_liste_ve_ayrinti() -> None:
     assert yanit.status_code == 201, yanit.content
     veri = yanit.json()
     assert veri["status"] == "ACIK"
-    assert veri["kural_paketi"] == {"paket": "OAB-2023.12", "rev": 1}
+    assert veri["kural_paketi"] == {"paket": "OAB-2023.12", "rev": paket_ortak.EN_YENI_REV}
     assert veri["kural_kopyasi_tutuyor"] is True
 
     liste = _istemci().get(UC).json()
@@ -664,6 +668,33 @@ YAZMA_SERVISLERI = frozenset(
         "uyum.bilinmeyen_beyan_sapmasi",
         "uyum.duzeltme_kaydi",
         "uyelikler.sayaci_yeniden_denetle",
+        # F2 4. adım: genel kurulun durum makinesi (tasarım §7.1).
+        "genel_kurul.planla",
+        "genel_kurul.toplanti_bilgisini_degistir",
+        "genel_kurul.cagir",
+        "genel_kurul.ilan_et",
+        "genel_kurul.ikinci_toplanti_ilani",
+        "genel_kurul.ilan_kanitlarini_yaz",
+        "genel_kurul.birinci_toplanti",
+        "genel_kurul.ikinci_toplanti",
+        "genel_kurul.iptal_et",
+        # F2 5. adım: gündem, karar, divan ve katılım düzeltmesi (tasarım §5.2.3, §7.1).
+        "genel_kurul.gundeme_madde_ekle",
+        "genel_kurul.gundemden_madde_cikar",
+        "genel_kurul.karar_sonucu_yaz",
+        "genel_kurul.divan_sec",
+        "genel_kurul.katilim_duzelt",
+        "genel_kurul.aday_kaydet",
+        "genel_kurul.secim_sonucu_yaz",
+        "genel_kurul.secim_bicimini_yaz",
+        "genel_kurul.secimi_iptal_et",
+        "genel_kurul.ibra_yaz",
+        "genel_kurul.tutanak_bilgilerini_yaz",
+        "genel_kurul.divani_iptal_et",
+        "genel_kurul.tutanagi_tamamla",
+        "genel_kurul.donem_gecisini_onayla",
+        # F2 7. adım: üyelerin başvurusunun gelen evrak bağının akış eksiği (U12).
+        "uyum.akis_eksigi",
     }
 )
 #: `@transaction.atomic` taşıyıp kural okumayan servisler ve gerekçesi.
@@ -681,6 +712,11 @@ _GECIS_KURALSIZ = (
 )
 KURALSIZ = {
     "uyum.eksik_kapat": "Yalnız satırı kapatır: kural okumaz; dönem kilidi yine denetlenir.",
+    "uyum.takvim_satiri_yaz": (
+        "Takvim satırı kural kimliği taşımaz (süre ya da değer kural paketinde değildir; tasarım "
+        "§5.2.7), kural okumaz; dönem kilidi yine denetlenir. Çağıranlar (genel kurulun tutanağı ve "
+        "dönem geçişi, F2 6. adım) yazma kapısıyla başlar."
+    ),
     "kurullar.karar_defteri_olustur": (
         "Karar defteri dönemsizdir, kural okumaz; tasdik uyarısı geçiş kurulumundadır (8. adım)."
     ),
@@ -711,9 +747,44 @@ KURALSIZ = {
     "gecis.karar_defterini_iptal_et": _GECIS_KURALSIZ,
     "gecis.gecisi_tamamla": _GECIS_KURALSIZ,
     "uyum.acik_satiri_kapat": "Yalnız açık satırı kapatır: kural okumaz; dönem kilidi yine denetlenir.",
+    # F2 12. adım: takvim satırının "Yapıldı" işareti (tasarım §7.10 "kalemin kapanması").
+    "uyum.takvim_satiri_yapildi": (
+        "Takvim satırının yapıldığı günü yazar: kural okumaz (satır kural kimliği taşımaz, tasarım "
+        "§5.2.7); dönem kilidi yine denetlenir."
+    ),
+    # F2 4. adım: iptal edilen genel kurulun açık eksikleri kapanır (O3; kural okumaz).
+    "uyum.iptalde_eksikleri_kapat": (
+        "Yalnız iptal edilen kaydın açık eksiklerini kapatır: kural okumaz; dönem kilidi yine "
+        "denetlenir."
+    ),
+    # F2 5. adım: gündemin sırası ve veli listesinin katılım işareti kural okumaz.
+    "genel_kurul.gundem_sirasini_degistir": (
+        "Gündemin sıra değişikliği kural okumaz: md. 9/4'ün ekleme ve çıkarması değildir, uyarı "
+        "üretmez (MA-16); dönem kilidi yine denetlenir."
+    ),
+    "genel_kurul.katilim_isaretle": (
+        "Veli listesinin katılım işareti sayım yardımıdır, kural okumaz (plan F2 §7 U33); dönem "
+        "kilidi yine denetlenir."
+    ),
     "donemler.toplanti_gunu_yaz": (
         "Yönetim kurulunun aylık toplantı günü serbest metindir, kural okumaz (md. 13/3 yalnız 'ayda "
         "bir' der; F1c 11. adım); dönem kilidi yine denetlenir."
+    ),
+    # F2 7. adım: gelen-giden evrak, asgari denetim raporu ve çağrı yazısının bağı kural okumaz.
+    "gelen_giden_evrak.evrak_defteri_olustur": (
+        "Gelen-giden evrak defteri dönemsizdir, kural okumaz (tasdikine ilişkin kural paketinde kural "
+        "yoktur; md. 23/2)."
+    ),
+    "gelen_giden_evrak.evrak_kaydet": (
+        "Evrak kaydı kural okumaz: numara tekilliği hesap bütünlüğüdür, sıra atlama akış satırıdır "
+        "(`uyum.akis_sapmasi` kendi yazma kapısından geçer); dönem kilidi yine denetlenir."
+    ),
+    "denetim.denetim_raporu_yaz": (
+        "Asgari denetim raporu kural okumaz (plan F2 §7 U13; md. 14/4'ün yılda iki incelemesi F4'te); "
+        "dönem kilidi yine denetlenir."
+    ),
+    "genel_kurul.cagri_yazisini_bagla": (
+        "Çağrı yazısının bağı kural okumaz: akış eksiğini kapatır (U12); dönem kilidi yine denetlenir."
     ),
     "evrak.kaydet": (
         "Evrak kaydı kural okumaz: içerik çizilmiş modeldir, kural paketi dönemin bağlı kopyasından "

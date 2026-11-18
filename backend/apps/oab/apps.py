@@ -24,10 +24,13 @@ class OabConfig(AppConfig):
         kurallarla bağlanır (`services.hesaplar`, plan F1c 7. adım); kurulum durumu ve yol haritası geçiş
         kurulumunun durumunu buradan okur (`services.setup`, plan F1c 8. adım); üretilen evrak dosya
         deposunun sahibidir (PDF ve DOCX) ve okul çekirdeğinin evrakı (E63) buradan kaydedilir
-        (`services.dosya_deposu`, `services.evrak_kaydi`; plan F1c 9. adım). Kayıtlar idempotenttir.
+        (`services.dosya_deposu`, `services.evrak_kaydi`; plan F1c 9. adım); ilan kaydı (kanal kanıtı) ve
+        gelen-giden evrak kaydı kullanıcı eki sahibidir (PDF, JPEG, PNG; plan F2 7. adım); genel kurulun
+        dosya ekleri (faaliyet raporu ve kesin hesap, Denetleme Kurulu raporu, tahmini bütçe) gündem
+        maddesinin ekidir (plan F2 §7 U23; 11. adım). Kayıtlar idempotenttir.
         """
         from apps.oab.kurallar import yukleyici
-        from apps.oab.models import GeneratedDocument
+        from apps.oab.models import AgendaItem, Announcement, DocumentRecord, GeneratedDocument
         from apps.oab.services import donemler, evrak, gecis, hesap_baglari, kisiler
         from apps.okul.services import (
             dosya_deposu,
@@ -45,4 +48,7 @@ class OabConfig(AppConfig):
         hesaplar.register_account_bond_rules(hesap_baglari.KURALLAR)
         setup.register_transition_status(gecis.yol_haritasi_durumu)
         dosya_deposu.sahip_kaydet(GeneratedDocument, uretilen_evrak=True)
+        dosya_deposu.sahip_kaydet(Announcement)
+        dosya_deposu.sahip_kaydet(DocumentRecord)
+        dosya_deposu.sahip_kaydet(AgendaItem)
         evrak_kaydi.register_document_recorder(evrak.okul_evraki_kaydet)

@@ -75,6 +75,19 @@ class RevizyonOnayiGerekli(APIException):
     )
 
 
+class KuralSurumuGuncellenmeli(APIException):
+    """Genel kurulun kuralları kapanacak dönemin kopyasından okunur; kopya genel kurul kurallarını
+    taşımıyorsa planlama yapılmaz (hesap bütünlüğü: kural bulunmadan hesap yapılamaz; plan F2 §7 U1)."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "kural_surumu_guncellenmeli"
+    default_detail = (
+        "Açık birlik dönemi genel kurulun kurallarını taşımayan bir kural sürümüne bağlı. Genel "
+        "kurulu planlamadan önce program yöneticisi Birlik Dönemi'nden kural sürümü güncellemesini "
+        "onaylamalıdır."
+    )
+
+
 class YeterSayiDonduruldu(APIException):
     """Yeter sayı ilan anında dondurulur, elle değiştirilemez (sert; tasarım §5.2.3)."""
 

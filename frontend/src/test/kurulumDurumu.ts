@@ -26,6 +26,8 @@ export const KURULU_DURUM: SetupStatus = {
   roadmap: { marks: {}, hidden: false },
   // Geçiş kurulumu başlamadı (yol haritasında açık madde; atlanabilir adım, kurulum kapısını açık tutmaz).
   transition_setup: { state: "BASLAMADI", open_steps: ["donem"] },
+  // Yeni açılan okul değil (okul kartında açılış günü yok; F2 12. adım).
+  new_school: false,
 };
 
 /** İlk açılış: parola yok, okul bilgisi yok, ders yılı yok. */

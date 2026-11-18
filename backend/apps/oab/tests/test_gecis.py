@@ -50,6 +50,7 @@ from apps.oab.services import (
     uyum,
 )
 from apps.oab.tests import uyelik_ortak as o
+from apps.oab.tests.kurallar import paket_ortak
 from apps.okul.models import (
     Account,
     AccountRole,
@@ -291,7 +292,11 @@ def test_tasdik_yoksa_defter_basina_bir_gerekce() -> None:
         str(defter.pk),
     )
     # Kural satırıdır (akış satırı değil): paket ve revizyon taşır, ileti kuralın ekran metnidir.
-    assert (satir.rule_package, satir.rev, satir.message) == ("OAB-2023.12", 1, TASDIK_METNI)
+    assert (satir.rule_package, satir.rev, satir.message) == (
+        "OAB-2023.12",
+        paket_ortak.EN_YENI_REV,
+        TASDIK_METNI,
+    )
     assert satir.justification_group is not None
     assert satir.justification_group.root_cause == kurullar.tasdik_kok_nedeni(defter)
     assert {s.label for s in _satirlar_sonra(once)} == {AuditLabel.GECIS}
@@ -929,7 +934,7 @@ def test_devralinan_yk_uyesi_bes_beyani_uyari_gerekce_ve_duzeltmeyle_kapanir(
     assert (satir.kind, satir.resolved_at) == (ComplianceKind.SAPMA, None)
     assert satir.justification_group is not None
     assert not satir.justification_group.root_cause  # kişiye özgü
-    assert (satir.rule_package, satir.rev) == ("OAB-2023.12", 1)
+    assert (satir.rule_package, satir.rev) == ("OAB-2023.12", paket_ortak.EN_YENI_REV)
     (ozet,) = _ozet(uye, YK_SAYAC)
     assert (ozet["durum"], ozet["atif"]) == ("uyari", "md. 12/4")
     assert "5 defa" in str(ozet["mesaj"])

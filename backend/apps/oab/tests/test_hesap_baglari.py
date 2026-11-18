@@ -155,7 +155,8 @@ def test_yonetim_kurulunda_secilmis_ve_gorevli_uye_gerekir() -> None:
     _ret(AccountRole.MUHASIP, 999_999, hesap_baglari.UYELIK_YOK)
     _ret(AccountRole.MUHASIP, "abc", hesap_baglari.UYELIK_YOK)
     # Görev bölümünde görevi alan program kaydı da açar.
-    o.yk_gorev_bolumu(donem, {MembershipRole.MUHASIP: gorevsiz}, gun=GOREV_GUNU)
+    with _sekreter_yazar():
+        o.yk_gorev_bolumu(donem, {MembershipRole.MUHASIP: gorevsiz}, gun=GOREV_GUNU, rol=None)
     assert _ac(AccountRole.MUHASIP, gorevsiz).membership_id == gorevsiz.pk
     # Devralınan görevli kayıt yeter (§7.9).
     assert sekreter.source == "DEVRALINAN"
@@ -483,23 +484,27 @@ def test_yk_gorev_degisince_hesap_askida_dk_gorev_degisimi_askiya_almaz() -> Non
     (başkan) hesabın koşulu değildir."""
     donem = o.donem()
     uyeler = o.yk_kurulu(donem)
-    o.yk_gorev_bolumu(
-        donem,
-        {
-            MembershipRole.MUHASIP: uyeler[0],
-            MembershipRole.SEKRETER: uyeler[1],
-            MembershipRole.BASKAN: uyeler[3],
-        },
-        gun=GOREV_GUNU,
-    )
+    with _sekreter_yazar():
+        o.yk_gorev_bolumu(
+            donem,
+            {
+                MembershipRole.MUHASIP: uyeler[0],
+                MembershipRole.SEKRETER: uyeler[1],
+                MembershipRole.BASKAN: uyeler[3],
+            },
+            gun=GOREV_GUNU,
+            rol=None,
+        )
     muhasip = _ac(AccountRole.MUHASIP, uyeler[0])
     sekreter = _ac(AccountRole.SEKRETER, uyeler[1])
     baskan = _ac(AccountRole.BASKAN, uyeler[3])
-    o.yk_gorev_bolumu(
-        donem,
-        {MembershipRole.MUHASIP: uyeler[1], MembershipRole.SEKRETER: uyeler[2]},
-        gun=date(2026, 10, 25),
-    )
+    with _sekreter_yazar():
+        o.yk_gorev_bolumu(
+            donem,
+            {MembershipRole.MUHASIP: uyeler[1], MembershipRole.SEKRETER: uyeler[2]},
+            gun=date(2026, 10, 25),
+            rol=None,
+        )
     _askida(muhasip, "GOREV_BOLUMU")
     _askida(sekreter, "GOREV_BOLUMU")
     assert _hesap(baskan.id).status == AccountStatus.PAROLA_YENILENMELI
@@ -619,6 +624,16 @@ def test_mesru_kapali_hesaba_aski_ve_iz_yazilmaz() -> None:
 
 
 @contextmanager
+def _sekreter_yazar() -> Iterator[None]:
+    """Yönetim kurulunun görev bölümünü sekreter rolüyle yazar (tasarım §7.2 "Kim"; servis kapısı
+    `gorev_bolumu.yk_gorev_bolumu_kapisi`). Hesap varsayılan test hesabıdır: bağsız bir sekreter
+    hesabı (`o.rol_olarak`) rolün tek hesap sınırını tutar ve bu dosyanın sınadığı sekreter hesabının
+    açılışını engellerdi."""
+    with yazar_olarak(Yazar(hesap_id=TEST_HESAP_ID, rol=AccountRole.SEKRETER.value)):
+        yield
+
+
+@contextmanager
 def _oturumda(hesap: Account) -> Iterator[None]:
     """Hesabın oturumu ve yazar bağlamı (kaydı yazan organ hesabı); çıkışta varsayılan oturum."""
     oturumu_ac_test(str(hesap.id), tanitici=hesap.login_name, rol=str(hesap.role))
@@ -646,11 +661,13 @@ def test_oturumdaki_hesap_kendi_askisini_yazinca_oturum_kilitlenir(
         ]
     else:
         uyeler = o.yk_kurulu(donem)
-    o.yk_gorev_bolumu(
-        donem,
-        {MembershipRole.SEKRETER: uyeler[0], MembershipRole.BASKAN: uyeler[1]},
-        gun=GOREV_GUNU,
-    )
+    with _sekreter_yazar():
+        o.yk_gorev_bolumu(
+            donem,
+            {MembershipRole.SEKRETER: uyeler[0], MembershipRole.BASKAN: uyeler[1]},
+            gun=GOREV_GUNU,
+            rol=None,
+        )
     sekreter = _ac(AccountRole.SEKRETER, uyeler[0])
     baskan = _ac(AccountRole.BASKAN, uyeler[1])
     yazan, uyelik = (baskan, uyeler[1]) if gecis == "iptal" else (sekreter, uyeler[0])
@@ -658,14 +675,18 @@ def test_oturumdaki_hesap_kendi_askisini_yazinca_oturum_kilitlenir(
         with django_capture_on_commit_callbacks(execute=True):
             if gecis == "gorev_bolumu":
                 o.yk_gorev_bolumu(
-                    donem, {MembershipRole.SEKRETER: uyeler[2]}, gun=date(2026, 10, 25)
+                    donem, {MembershipRole.SEKRETER: uyeler[2]}, gun=date(2026, 10, 25), rol=None
                 )
             elif gecis == "dusme":
                 uyelik_gecisleri.uyeligi_dusur(
                     uyelik, drop_kind="ISTIFA", end_date=date(2026, 11, 2)
                 )
             else:
-                uyelik_gecisleri.uyeligi_iptal_et(uyelik, cancel_reason="Uydurma yanlış kayıt.")
+                # F2 11a (plan F2 §10.2 madde 26): genel kurulun seçtiği kayıt genel yoldan iptal
+                # edilmez; askı ve kilit aynı servisin genel kurul yolunda sınanır (seçimin iptali).
+                uyelik_gecisleri.uyeligi_iptal_et(
+                    uyelik, cancel_reason="Uydurma yanlış kayıt.", genel_kurul_yolu=True
+                )
         assert _hesap(yazan.id).status == AccountStatus.ASKIDA
         assert OTURUM.kilit_bekliyor() is True
         son = _son()

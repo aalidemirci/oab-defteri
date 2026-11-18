@@ -1,9 +1,13 @@
 // Kılavuz bölümü: Okul Bilgileri (çapa `okul-karti`). Başlık, ikon ve sıra `KilavuzPage`'dedir.
 // Alanların yardım metinleri ve seçenek adları ekranın sabitlerinden gelir: ekrandaki söz
-// değişirse kılavuz da değişir. Oran ve eşik yazılmaz (altın kural 2); yalnız madde atfı durur.
+// değişirse kılavuz da değişir. Oran ve eşik yazılmaz (altın kural 2); yalnız madde atfı durur. F2:
+// yeter sayı ilanla sabitlenir (md. 9/2), açılış tarihi yeni okulun ilk genel kurulunu belirler (md. 9/1),
+// veri sorumlusu boşken kişisel veri aydınlatma metni oluşturulmaz (Hakkında → Kişisel Veri).
 
 import type { ReactNode } from "react";
 
+import { E04_ADI } from "../../evrak/metinler";
+import { KISISEL_VERI_BASLIGI } from "../../hakkinda/metinler";
 import {
   CANTEEN_MODE_TR,
   SCHOOL_LEVEL_TR,
@@ -11,6 +15,7 @@ import {
   STAFFING_MODE_TR,
 } from "../../okul/api";
 import {
+  ACILIS_ETIKETI,
   ACILIS_YARDIMI,
   KADEME_YARDIMI,
   KAMPUS_ETIKETI,
@@ -65,7 +70,7 @@ export default function OkulKarti(bolum: BolumProps) {
           </ol>
           <p>
             Zorunlu olmayan alanlar <strong className="font-medium">Okul müdürü</strong>, eğitim
-            kampüsü işareti, <strong className="font-medium">Okulun açılış tarihi</strong>,{" "}
+            kampüsü işareti, <strong className="font-medium">{ACILIS_ETIKETI}</strong>,{" "}
             <strong className="font-medium">{VERI_SORUMLUSU_ETIKETI}</strong> ve bilgisayarın
             demirbaş no&apos;sudur.
           </p>
@@ -92,7 +97,8 @@ export default function OkulKarti(bolum: BolumProps) {
       <ul className="list-disc space-y-1 pl-5">
         <Alan ad="Öğrenci mevcudu ve Mevcudun tarihi">
           {MEVCUT_YARDIMI} Tarih, sayının alındığı gündür ve bugünden sonra olamaz. Mevcut değişince
-          ikisini birlikte güncelleyin.
+          ikisini birlikte güncelleyin. Genel kurulun yeter sayısı ilan günü bu mevcuttan hesaplanır
+          ve ilandan sonra değişmez; mevcudu ilandan önce güncelleyin.
         </Alan>
         <Alan ad="Yerleşim türü">
           {secenekler(SETTLEMENT_TYPE_TR)}. {YERLESIM_YARDIMI}
@@ -104,7 +110,12 @@ export default function OkulKarti(bolum: BolumProps) {
           {secenekler(STAFFING_MODE_TR)}. {PERSONEL_YARDIMI}
         </Alan>
         <Alan ad={KAMPUS_ETIKETI.replace(/\.$/, "")}>Onay kutusudur. {KAMPUS_YARDIMI}</Alan>
-        <Alan ad="Okulun açılış tarihi">{ACILIS_YARDIMI}</Alan>
+        <Alan ad={ACILIS_ETIKETI}>
+          {ACILIS_YARDIMI} Tarih girilmiş ve okulda henüz birlik dönemi açılmamışsa okul yeni
+          açılmış sayılır: geçiş kurulumu gerekmez, birlik dönemi okul müdürünün davetiyle toplanan
+          ilk genel kurulla açılır (<Ekran to="/kilavuz#genel-kurul">Genel Kurul</Ekran>). Geçiş
+          kurulumuyla birlik dönemi açan okul bu alanı doldurmaz.
+        </Alan>
       </ul>
       <Ipucu>
         Kantin işletme biçiminde “{CANTEEN_MODE_TR.BIRLIKCE_ISLETILIYOR}” seçilince alanın altında
@@ -114,8 +125,11 @@ export default function OkulKarti(bolum: BolumProps) {
       <AltBaslik>Veri sorumlusu</AltBaslik>
       <p>
         {VERI_SORUMLUSU_YARDIMI} Alan isteğe bağlıdır ve en çok 250 karakter alır. Boş bırakılırsa
-        aydınlatma metninin “Veri sorumlusu:” satırında uyarı çıkar; aktarım yine de yapılabilir.
-        Metni duyurmadan önce bu alanı doldurun.
+        aktarım ekranlarındaki aydınlatma metninin “Veri sorumlusu:” satırında uyarı çıkar; aktarım
+        yine de yapılabilir. <Ekran to="/hakkinda">Hakkında</Ekran> ekranının {KISISEL_VERI_BASLIGI}{" "}
+        kartındaki {E04_ADI.toLocaleLowerCase("tr")} ise bu bilgi olmadan oluşturulmaz ve
+        kaydedilmez; program yöneticisinin Genel Bakış&apos;ında Tamamlanacaklar listesinde satır
+        çıkar. Metinleri duyurmadan önce bu alanı doldurun.
       </p>
       <p>
         Bu alana kimin yazılacağına program karar vermez, okul müdürlüğü belirler. Sorunun neden

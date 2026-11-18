@@ -76,6 +76,20 @@ class ToplantiGunuSerializer(serializers.Serializer[dict[str, Any]]):
     )
 
 
+class KuralSurumuSerializer(serializers.Serializer[dict[str, Any]]):
+    """Hedef kural sürümü: paket kimliği ve revizyon (fark okumasının sorgusu ve geçişin gövdesi;
+    tasarım §6.2-5)."""
+
+    paket = serializers.CharField(max_length=16)
+    rev = serializers.IntegerField(min_value=1)
+
+
+class KuralSurumuGecisiSerializer(KuralSurumuSerializer):
+    """Revizyon geçişi: hesabı ya da uyarısı değişecek kayıt varsa `onay` istenir (§6.2-3a)."""
+
+    onay = serializers.BooleanField(default=False)
+
+
 class BaglanabilirKararSerializer(serializers.ModelSerializer[BoardDecision]):
     """Bağlanabilecek yönetim kurulu kararı (kabul edilmiş ya da deftere işlenmiş): kişisiz, karar
     metni ve şerh dönmez (şifreli). Temsilci ve yedek çağrısı kararının seçimi için."""
@@ -578,3 +592,9 @@ class KararDefteriSerializer(serializers.ModelSerializer[OfficialBook]):
             "last_page_before_program",
         ]
         read_only_fields = fields
+
+
+class TakvimYapildiSerializer(serializers.Serializer[dict[str, Any]]):
+    """Takvim satırının yapıldığı gün (pano kaleminin "Yapıldı" işareti; F2 12. adım)."""
+
+    done_on = serializers.DateField(required=True)

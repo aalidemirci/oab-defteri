@@ -416,7 +416,7 @@ describe("App — kurulum kapısı", () => {
 });
 
 describe("App — kabuk gezinmesi", () => {
-  it("program yöneticisinin gezinmesi Genel Bakış, Birlik Dönemi, Kişiler, Organlar, Temsilciler, Kullanıcılar, Erişim Günlüğü, Ayarlar ve Kılavuz'dur (bu sırayla)", async () => {
+  it("program yöneticisinin gezinmesi Genel Bakış, Birlik Dönemi, Genel Kurul, Kişiler, Organlar, Temsilciler, Gelen-Giden Evrak, Kullanıcılar, Erişim Günlüğü, Ayarlar ve Kılavuz'dur (bu sırayla)", async () => {
     ekranaBas("/");
     await screen.findByRole("heading", { name: "Genel Bakış" });
     // Kullanıcılar yeteneğe bağlıdır: özet okunduktan sonra bakılır.
@@ -426,9 +426,11 @@ describe("App — kabuk gezinmesi", () => {
     const beklenen: Array<[ad: string, yol: string]> = [
       ["Genel Bakış", "/"],
       ["Birlik Dönemi", "/birlik-donemi"],
+      ["Genel Kurul", "/genel-kurul"],
       ["Kişiler", "/kisiler"],
       ["Organlar", "/organlar"],
       ["Temsilciler", "/temsilciler"],
+      ["Gelen-Giden Evrak", "/gelen-giden-evrak"],
       ["Kullanıcılar", "/kullanicilar"],
       ["Erişim Günlüğü", "/erisim-gunlugu"],
       ["Ayarlar", "/ayarlar"],
@@ -716,7 +718,7 @@ describe("App — rol süzmesi", () => {
     installer_size: 1,
   };
 
-  it("bugünkü yedi ekran her rolün gezinmesinde durur", async () => {
+  it("bugünkü dokuz ekran her rolün gezinmesinde durur (Genel Kurul ve Gelen-Giden Evrak F2 11b)", async () => {
     oturumApiMock.ozet.mockResolvedValue(BASKAN_OTURUMU);
     ekranaBas("/");
     await screen.findByRole("heading", { name: "Genel Bakış" });
@@ -730,9 +732,11 @@ describe("App — rol süzmesi", () => {
     ).toEqual([
       "Genel Bakış",
       "Birlik Dönemi",
+      "Genel Kurul",
       "Kişiler",
       "Organlar",
       "Temsilciler",
+      "Gelen-Giden Evrak",
       "Ayarlar",
       "Kılavuz",
     ]);
@@ -775,9 +779,11 @@ describe("App — rol süzmesi", () => {
     ).toEqual([
       "Genel Bakış",
       "Birlik Dönemi",
+      "Genel Kurul",
       "Kişiler",
       "Organlar",
       "Temsilciler",
+      "Gelen-Giden Evrak",
       "Erişim Günlüğü",
       "Ayarlar",
       "Kılavuz",

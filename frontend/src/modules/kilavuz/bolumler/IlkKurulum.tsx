@@ -4,7 +4,9 @@
 // açılmaz (`KurulumKapisi`), bölüm bu yüzden sihirbazı yarıda bırakanı ve yeniden açanı da düşünür.
 // Programın bilgisayara kurulması `ProgramiKurmak` bölümündedir. 4. adım (Birlik Dönemi) atlanabilir
 // (plan F1c kararları "Geçiş adımı atlanabilir"; metinler `gecis-kurulumu/metinler`'den, adım adı ekranın
-// sabitinden); adımın formu Geçiş Kurulumu'nun İlk Birlik Dönemi formudur.
+// sabitinden); adımın formu Geçiş Kurulumu'nun İlk Birlik Dönemi formudur. F2: okulda genel kurul
+// yapılmadıysa birlik dönemi genel kurulla açılır; yeni açılan okulda (açılış tarihi dolu) yol
+// haritasında geçiş kurulumu maddesinin yerinde `GENEL_KURUL_MADDESI` durur (md. 9/1).
 
 import {
   ALAN_DONEM_ADI,
@@ -22,8 +24,10 @@ import {
   UCUNCU_DURUMUN_CARESI,
   ZARFIN_UCUNCU_DURUMU,
 } from "../../guvenlik/metinler";
+import { ACILIS_ETIKETI, ACILIS_YARDIMI } from "../../okul/metinler";
 import { PAROLA_KURALI_METNI } from "../../oturum/parolaPolitikasi";
 import { useYetki } from "../../oturum/yetki";
+import { GENEL_KURUL_MADDESI } from "../../pano/BaslangicYolHaritasi";
 import { AltBaslik, Ekran, Ipucu, KapiliEkran, KilavuzBolumu } from "../KilavuzKabugu";
 import type { BolumProps } from "../KilavuzKabugu";
 
@@ -123,7 +127,8 @@ export default function IlkKurulum(bolum: BolumProps) {
         kantin işletme biçimi, personel çalıştırma biçimi ve “Bu bilgisayar okul demirbaşıdır.”
         onayı zorunludur. Alanlar <Ekran to="/ayarlar?tab=okul">Ayarlar → Okul Bilgileri</Ekran> ile
         aynıdır; ne işe yaradıkları <Ekran to="/kilavuz#okul-karti">Okul Bilgileri</Ekran>{" "}
-        bölümündedir. “Kaydet ve devam et” düğmesiyle geçin.
+        bölümündedir. İsteğe bağlı <strong>{ACILIS_ETIKETI}</strong> alanının yardımı şudur: “
+        {ACILIS_YARDIMI}” “Kaydet ve devam et” düğmesiyle geçin.
       </p>
 
       <AltBaslik>3. adım: ders yılı ve kapalı günler</AltBaslik>
@@ -146,7 +151,8 @@ export default function IlkKurulum(bolum: BolumProps) {
       <p>
         Program okula bir birlik döneminin ortasında giriyorsa, yani okulda genel kurul yapılmış ve
         kurullar görevdeyse, birlik dönemini bu adımda açın. Okulda daha önce genel kurul
-        yapılmadıysa adımı atlayın; o zamana dek Organlar ve Temsilciler ekranları boş görünür.
+        yapılmadıysa adımı atlayın: birlik dönemi genel kurulla açılır (
+        <Ekran to="/kilavuz#genel-kurul">Genel Kurul</Ekran>).
       </p>
       <ul className="list-disc space-y-1 pl-5">
         <li>
@@ -174,8 +180,9 @@ export default function IlkKurulum(bolum: BolumProps) {
       <p>
         Kurulum bitince Genel Bakış açılır ve menüdeki bölümler kullanılabilir. Personel aktarımı
         sihirbazda değildir; sıradaki işler <Ekran to="/kilavuz#genel-bakis">Genel Bakış</Ekran>{" "}
-        bölümünde anlatılan Başlangıç Yol Haritası&apos;ndadır. Atladığınız birlik dönemi adımı da
-        orada açık madde olarak kalır.
+        bölümünde anlatılan Başlangıç Yol Haritası&apos;ndadır. Birlik dönemi adımını atladıysanız
+        orada geçiş kurulumu maddesi açık kalır; okulun açılış tarihi girildiyse maddenin yerinde “
+        {GENEL_KURUL_MADDESI.baslik}” durur.
       </p>
 
       <AltBaslik>Sihirbazı yarıda bıraktıysanız</AltBaslik>

@@ -13,7 +13,12 @@ import {
   OKUL_KARTI_YOL_HARITASI_ACIKLAMASI,
   OKUL_KARTI_YOL_HARITASI_BASLIGI,
 } from "../okul/metinler";
-import BaslangicYolHaritasi, { YOL_HARITASI_MADDELERI, maddeTamamMi } from "./BaslangicYolHaritasi";
+import BaslangicYolHaritasi, {
+  GENEL_KURUL_MADDESI,
+  YOL_HARITASI_MADDELERI,
+  maddeTamamMi,
+  yolHaritasiMaddeleri,
+} from "./BaslangicYolHaritasi";
 
 function bas(durum: SetupStatus = KURULU_DURUM) {
   return render(
@@ -158,6 +163,52 @@ describe("BaslangicYolHaritasi", () => {
     ).toBeInTheDocument();
     // Personel aktarımı + okul kartı (KURULU_DURUM'da tamam).
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "2");
+  });
+
+  it("yeni açılan okulda geçiş maddesinin yerinde “Genel kurulu planlayın” durur (S5 (iii))", () => {
+    const yeni: SetupStatus = { ...KURULU_DURUM, new_school: true };
+    expect(yolHaritasiMaddeleri(yeni).map((m) => m.anahtar)).toEqual([
+      "okul_karti",
+      "personel_aktarimi",
+      "kapali_gunler",
+      "genel_kurul_planlama",
+      "kurtarma_zarfi",
+    ]);
+    expect(yolHaritasiMaddeleri(KURULU_DURUM)).toBe(YOL_HARITASI_MADDELERI);
+    bas(yeni);
+    expect(screen.queryByText(/Geçiş kurulumunu tamamlayın/)).toBeNull();
+    const gk = madde(/Genel kurulu planlayın/);
+    expect(gk).toHaveTextContent(GENEL_KURUL_MADDESI.aciklama);
+    expect(gk).toHaveTextContent("(yapılacak)");
+    expect(within(gk).getByRole("link", { name: "Genel Kurul'u aç" })).toHaveAttribute(
+      "href",
+      "/genel-kurul",
+    );
+    expect(within(gk).queryByRole("checkbox")).toBeNull();
+    // Beş madde; geçiş kurulumu sayılmaz.
+    expect(screen.getAllByRole("listitem")).toHaveLength(5);
+  });
+
+  it("genel kurul maddesi ilk olağan genel kurul planlanınca (hazırlık dönemi genel kurulla açılır) tamamdır", () => {
+    for (const [state, tamam] of [
+      ["BASLAMADI", false],
+      ["SURUYOR", false],
+      ["TAMAMLANDI", true],
+      ["GEREKMIYOR", true],
+    ] as const) {
+      const durum: SetupStatus = {
+        ...KURULU_DURUM,
+        new_school: true,
+        transition_setup: { state, open_steps: [] },
+      };
+      expect(maddeTamamMi("genel_kurul_planlama", durum)).toBe(tamam);
+    }
+    bas({
+      ...KURULU_DURUM,
+      new_school: true,
+      transition_setup: { state: "GEREKMIYOR", open_steps: [] },
+    });
+    expect(madde(/Genel kurulu planlayın/)).toHaveTextContent("(tamamlandı)");
   });
 
   it("iç kodlar kullanıcı metnine girmez; yerel araç dili korunur", () => {

@@ -2,12 +2,17 @@
 // (matrisin M1 satırı); yazma yalnız `birlik_donemi_yazma` yeteneğindedir (program yöneticisi).
 //
 // Gösterilen: birlik dönemleri (birden çoksa liste; satır seçilince ayrıntı), seçili dönemin bilgileri,
-// kural sürümü (SALT OKUNUR; dönem açıldığı günkü sürümle hesaplanır, plan F1c kararları), dönem
+// kural sürümü (dönem açıldığı günkü sürümle hesaplanır, plan F1c kararları; değişikliği yalnız aşağıdaki
+// kural sürümü güncellemesinde), dönem
 // kilidi (kapanmış dönem salt okur, O2) ve kural kopyası doğrulanamadıysa D7 bandı (dönem salt okur
 // açılır), görev süresi uyarıları (kaydedilmez, gerekçe istemez) ve geçiş kurulumunun durumu.
 // Yazma: yanlış girilmiş geçiş döneminin iptali (gerekçe şifreli; "Geçiş kurulumu tamamlandı"
-// işaretinden önce). Dönem açılışı geçiş kurulumunda ya da sihirbazdadır; F2'nin genel kurul yolu bu
-// ekranda yoktur. Birlik dönemi yoksa organ ekranları da boş durum gösterir (plan F1c kararları).
+// işaretinden önce). Dönem açılışı geçiş kurulumunda ya da genel kuruldadır (Genel Kurul ekranı, F2):
+// olağan genel kurul planlanınca hazırlık dönemi açılır, tutanaktan sonra program yöneticisinin onayıyla
+// açık olur (U3, U32); açılış satırı bunu `opened_by_assembly` ve durumla söyler. Yeni açılan okulda
+// (okul bilgilerinde açılış günü dolu) boş durum genel kurula götürür (S5 (iii)). Kural sürümü
+// güncellemesi (tasarım §6.2-5) yalnız `kural_surumu_guncelleme`'de, açık ya da hazırlıktaki dönemde
+// çizilir. Birlik dönemi yoksa organ ekranları da boş durum gösterir (plan F1c kararları).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
@@ -32,11 +37,14 @@ import { SaltOkurNotu } from "../oturum/RolKapisi";
 import { useYetki } from "../oturum/yetki";
 import { Dayanak } from "../uyum/UyariGerekce";
 import { atifAyir } from "../uyum/hatalar";
+import KuralSurumuGuncellemesi from "./KuralSurumuGuncellemesi";
 import { birlikDonemiApi } from "./api";
 import type { AtifliUyari, BirlikDonemi, GecisOzeti } from "./api";
 import {
   ACILIS_GECIS,
   ACILIS_GENEL_KURUL,
+  ACILIS_HAZIRLIK,
+  ACILIS_IPTAL,
   ALAN_ACILIS,
   ALAN_BASLANGIC,
   ALAN_DERS_YILI,
@@ -54,10 +62,13 @@ import {
   DONEM_KAPANDI_NOTU,
   DONEM_YOK_ACIKLAMASI,
   DONEM_YOK_BASLIGI,
+  DONEM_YOK_YENI_OKUL_ACIKLAMASI,
   DONEMLER_BASLIGI,
   DONEMLER_OKUNAMADI,
   DUGME_DONEMI_IPTAL,
   DUGME_GECISI_AC,
+  DUGME_GENEL_KURULU_AC,
+  BAG_GENEL_KURUL_EKRANI,
   GECIS_KARTI_ACIKLAMASI,
   GECIS_KARTI_BASLIGI,
   GOREV_SURESI_BASLIGI,
@@ -72,6 +83,22 @@ import {
 
 /** Geçiş Kurulumu ekranının adresi. */
 export const GECIS_ADRESI = "/birlik-donemi/gecis-kurulumu";
+
+/** Genel Kurul ekranının adresi (ve bir genel kurulun ayrıntısı). */
+const GENEL_KURUL_ADRESI = "/genel-kurul";
+
+/**
+ * Dönemin açılış satırı (U3): hazırlık döneminde dönemi açan genel kurul bağlıdır ama dönem henüz
+ * açılmadı; iptal edilmiş hazırlık döneminde genel kurul iptal edildi. Öteki dönemlerde genel kurulla
+ * ya da geçiş kurulumuyla açıldı.
+ */
+export function acilisMetni(donem: BirlikDonemi): string {
+  if (donem.status === "HAZIRLIK") return ACILIS_HAZIRLIK;
+  if (donem.opened_by_assembly !== null) {
+    return donem.status === "IPTAL" ? ACILIS_IPTAL : ACILIS_GENEL_KURUL;
+  }
+  return ACILIS_GECIS;
+}
 
 /** Varsayılan dönem: açık olan; yoksa iptal edilmemiş en yenisi; yoksa ilki. */
 function varsayilanDonem(donemler: readonly BirlikDonemi[]): BirlikDonemi | undefined {
@@ -124,10 +151,13 @@ function Bilgi({ etiket, children }: { etiket: string; children: ReactNode }) {
 export default function BirlikDonemiPage() {
   const yetki = useYetki();
   const yazabilir = yetki.acik("birlik_donemi_yazma");
+  const genelKurulYazar = yetki.acik("genel_kurul_yazma");
   const snackbar = useSnackbar();
   const [donemler, setDonemler] = useState<BirlikDonemi[]>([]);
   const [gecis, setGecis] = useState<GecisOzeti | null>(null);
   const [yillar, setYillar] = useState<SchoolYear[]>([]);
+  // Yeni açılan okul (S5 (iii)): okul bilgilerinde açılış günü doluysa ilk dönem genel kurulla açılır.
+  const [yeniOkul, setYeniOkul] = useState(false);
   const [seciliId, setSeciliId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [hata, setHata] = useState<SayfaHatasi | null>(null);
@@ -153,6 +183,12 @@ export default function BirlikDonemiPage() {
         if (!iptal) setLoading(false);
       });
     // Ders yılının adı ayrı okunur; okunamazsa no'suyla değil "—" ile gösterilir.
+    okulApi
+      .getSchoolConfig()
+      .then((okul) => {
+        if (!iptal) setYeniOkul(Boolean(okul.opened_on));
+      })
+      .catch(() => undefined);
     okulApi
       .listSchoolYears()
       .then((liste) => {
@@ -206,10 +242,28 @@ export default function BirlikDonemiPage() {
           <EmptyState
             icon="event_note"
             title={DONEM_YOK_BASLIGI}
-            // Salt okur rolde yazmayı öğütleyen cümle düşer (sözlük §1 "Rol süzmesi").
-            description={yazabilir ? DONEM_YOK_ACIKLAMASI : undefined}
+            // Salt okur rolde yazmayı öğütleyen cümle düşer (sözlük §1 "Rol süzmesi"). Yeni açılan okulda
+            // geçiş kurulumu gerekmez: ilk dönem ilk genel kurulla açılır (S5 (iii)).
+            description={
+              yeniOkul
+                ? genelKurulYazar
+                  ? DONEM_YOK_YENI_OKUL_ACIKLAMASI
+                  : undefined
+                : yazabilir
+                  ? DONEM_YOK_ACIKLAMASI
+                  : undefined
+            }
             action={
-              yazabilir ? (
+              yeniOkul ? (
+                genelKurulYazar ? (
+                  <Link
+                    to={GENEL_KURUL_ADRESI}
+                    className="inline-flex text-label-large text-primary underline underline-offset-2"
+                  >
+                    {BAG_GENEL_KURUL_EKRANI}
+                  </Link>
+                ) : undefined
+              ) : yazabilir ? (
                 <Link
                   to={GECIS_ADRESI}
                   className="inline-flex text-label-large text-primary underline underline-offset-2"
@@ -275,7 +329,15 @@ export default function BirlikDonemiPage() {
               </Bilgi>
               <Bilgi etiket={ALAN_PROGRAM_BASLAMA}>{formatDate(secili.program_start_date)}</Bilgi>
               <Bilgi etiket={ALAN_ACILIS}>
-                {secili.opened_by_assembly === null ? ACILIS_GECIS : ACILIS_GENEL_KURUL}
+                {acilisMetni(secili)}
+                {secili.opened_by_assembly !== null && (
+                  <Link
+                    to={`${GENEL_KURUL_ADRESI}?kurul=${secili.opened_by_assembly}`}
+                    className="mt-0.5 block text-label-large text-primary underline underline-offset-2"
+                  >
+                    {DUGME_GENEL_KURULU_AC}
+                  </Link>
+                )}
               </Bilgi>
               <Bilgi etiket={ALAN_KURAL_SURUMU}>
                 {kuralSurumuMetni(secili.kural_paketi)}
@@ -292,6 +354,15 @@ export default function BirlikDonemiPage() {
               />
             )}
           </Card>
+
+          {yetki.acik("kural_surumu_guncelleme") &&
+            (secili.status === "ACIK" || secili.status === "HAZIRLIK") && (
+              <KuralSurumuGuncellemesi
+                key={`kural-${secili.id}`}
+                donem={secili}
+                onGuncellendi={tazele}
+              />
+            )}
 
           {gecis !== null && (gecisDonemi !== null || gecis.state === "BASLAMADI") && (
             <Card elevation={0} className="space-y-3 p-[var(--od-panel-padding)]">

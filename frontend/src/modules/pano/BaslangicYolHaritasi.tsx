@@ -11,6 +11,10 @@
 //   öğrenciye kapalı gün (> 0), geçiş kurulumu (F1c 11. adım: "Geçiş kurulumu tamamlandı" işareti ya da
 //   genel kurulla açılmış birlik dönemi; `transition_setup`). Öğrenci aktarımı maddesi F1b 5. adımda öğrenci sicili ile
 //   kalktı; veli listesi dönemlik olduğu için madde olmaz (plan "F1b-5 uygulama kararları").
+//   Yeni açılan okulda (`new_school`: okul kartında açılış günü) geçiş kurulumu gerekmez; maddenin
+//   yerinde "Genel kurulu planlayın" durur (plan F2 §9 S5 (iii), 12. adım). Tamamlığı aynı ölçüttür:
+//   ilk olağan genel kurul planlanınca hazırlık dönemi genel kurulla açılır, geçiş durumu
+//   `GEREKMIYOR` olur (iptal edilirse madde yeniden açılır).
 // * KULLANICININ İŞARETLEDİKLERİ — program bunların yapıldığını bilemez (kurtarma
 //   anahtarı zarfının kapatılması). Parola paylaşımı maddesi yoktur: parola
 //   paylaşılmaz (BSG Yönergesi md. 7/2); kişisel hesaplar T1 ile F1b 1. adımda gelir.
@@ -36,7 +40,8 @@ import {
   OKUL_KARTI_YOL_HARITASI_BASLIGI,
 } from "../okul/metinler";
 
-type OtomatikMadde = "okul_karti" | "personel_aktarimi" | "kapali_gunler" | "gecis_kurulumu";
+type OtomatikMadde =
+  "okul_karti" | "personel_aktarimi" | "kapali_gunler" | "gecis_kurulumu" | "genel_kurul_planlama";
 
 interface MaddeTanimi {
   anahtar: OtomatikMadde | RoadmapManualItem;
@@ -83,19 +88,38 @@ export const YOL_HARITASI_MADDELERI: readonly MaddeTanimi[] = [
   },
 ];
 
+/** Yeni açılan okulda geçiş kurulumu maddesinin yerindeki madde (S5 (iii)). */
+export const GENEL_KURUL_MADDESI: MaddeTanimi = {
+  anahtar: "genel_kurul_planlama",
+  baslik: "Genel kurulu planlayın",
+  aciklama:
+    "Yeni açılan okulda geçiş kurulumu gerekmez: ilk birlik dönemi, okul müdürünün davetiyle toplanan ilk genel kurulla açılır (md. 9/1). Genel kurulu Genel Kurul ekranından planlayın.",
+  bag: { to: "/genel-kurul", etiket: "Genel Kurul'u aç" },
+};
+
+/** Durumun maddeleri: yeni açılan okulda geçiş kurulumu maddesinin yerinde genel kurul maddesi. */
+export function yolHaritasiMaddeleri(durum: SetupStatus): readonly MaddeTanimi[] {
+  if (!durum.new_school) return YOL_HARITASI_MADDELERI;
+  return YOL_HARITASI_MADDELERI.map((m) =>
+    m.anahtar === "gecis_kurulumu" ? GENEL_KURUL_MADDESI : m,
+  );
+}
+
 const OTOMATIK: ReadonlySet<string> = new Set<OtomatikMadde>([
   "okul_karti",
   "personel_aktarimi",
   "kapali_gunler",
   "gecis_kurulumu",
+  "genel_kurul_planlama",
 ]);
 
 function otomatikTamam(anahtar: OtomatikMadde, durum: SetupStatus): boolean {
   if (anahtar === "okul_karti") return durum.school_info_complete;
   if (anahtar === "personel_aktarimi") return durum.personnel_count > 0;
   // Geçiş kurulumu (backend `roadmap_auto_items`): işaret konmuşsa ya da birlik dönemi genel kurulla
-  // açılmışsa tamam; atlanmışsa ya da sürüyorsa açık kalır (tasarım §7.9, §7.10).
-  if (anahtar === "gecis_kurulumu") {
+  // açılmışsa tamam; atlanmışsa ya da sürüyorsa açık kalır (tasarım §7.9, §7.10). Yeni okulun genel
+  // kurul maddesi aynı ölçüttür (planlanan olağan genel kurul hazırlık dönemini açar).
+  if (anahtar === "gecis_kurulumu" || anahtar === "genel_kurul_planlama") {
     const gecis = durum.transition_setup?.state;
     return gecis === "TAMAMLANDI" || gecis === "GEREKMIYOR";
   }
@@ -121,8 +145,9 @@ export default function BaslangicYolHaritasi({
   onIsaretle,
   onGizle,
 }: BaslangicYolHaritasiProps) {
-  const tamamSayisi = YOL_HARITASI_MADDELERI.filter((m) => maddeTamamMi(m.anahtar, durum)).length;
-  const toplam = YOL_HARITASI_MADDELERI.length;
+  const maddeler = yolHaritasiMaddeleri(durum);
+  const tamamSayisi = maddeler.filter((m) => maddeTamamMi(m.anahtar, durum)).length;
+  const toplam = maddeler.length;
   const hepsiTamam = tamamSayisi === toplam;
 
   return (
@@ -183,7 +208,7 @@ export default function BaslangicYolHaritasi({
         )}
 
         <ol className="mt-4 divide-y divide-outline-variant/50">
-          {YOL_HARITASI_MADDELERI.map((madde) => {
+          {maddeler.map((madde) => {
             const tamam = maddeTamamMi(madde.anahtar, durum);
             const otomatik = OTOMATIK.has(madde.anahtar);
             const isaretTarihi = otomatik

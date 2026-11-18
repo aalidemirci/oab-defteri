@@ -235,6 +235,12 @@ class OabTerm(OabBaseModel):
                 | Q(opened_by_assembly__isnull=True),
                 name="ck_oabterm_gecis_isareti",
             ),
+            # Bir genel kurul tek dönem açar (plan F2 §7 U3; `GeneralAssembly.opens_term`'ün eşi).
+            models.UniqueConstraint(
+                fields=["opened_by_assembly"],
+                condition=Q(opened_by_assembly__isnull=False),
+                name="uq_oabterm_opened_by_assembly",
+            ),
             models.CheckConstraint(
                 condition=Q(status__in=_BITMIS_DURUMLAR, end_date__isnull=False)
                 | (~Q(status__in=_BITMIS_DURUMLAR) & Q(end_date__isnull=True)),

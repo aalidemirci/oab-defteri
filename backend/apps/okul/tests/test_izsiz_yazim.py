@@ -20,7 +20,10 @@ az biri düşer:
    (`_kvkk_silme_karsiligi`); fazla ya da eksik adet ucu düşürür. Veli listesi (`ParentRoster`)
    satır başına iz yazmaz: eklenen satırını, partisinin (`import_run`) bu istekte yazılmış iz
    satırı karşılar (`_parti_karsiligi`; plan "F1b-5 uygulama kararları": aktarım kişisiz parti
-   satırıdır); satırın içerik MAC'i yoktur, kayıt bütünlüğü denetimi ona uygulanmaz.
+   satırıdır); satırın içerik MAC'i yoktur, kayıt bütünlüğü denetimi ona uygulanmaz. Genel kurulun
+   katılım işareti (plan F2 §7 U33) de satır başına iz yazmaz: DEĞİŞEN veli satırını, yalnız işaret
+   sütunları değiştiyse, bu istekte yazılmış kişisiz `ISARET` satırı (model `okul.ParentRoster`)
+   karşılar (`_isaret_karsiligi`).
 2. **Kaynak taraması** — `apps/` altındaki bütün uygulamalar, `shared` ve masaüstü kabuğu
    (testler ve göçler hariç; modeller DAHİL) AST ile taranır: ORM yazma çağrısı (kural
    `_orm_yazimi_mi`'de: `update`, `create`, `delete`, modelin adlı yazım ilkeleri… HER
@@ -86,14 +89,22 @@ from django.utils import timezone
 from openpyxl import Workbook
 from rest_framework.test import APIClient
 
+from apps.oab.kurallar import yukleyici
 from apps.oab.models import (
+    AgendaItem,
+    Announcement,
     AssemblyKind,
+    AssemblyMinutes,
+    AttendanceCorrection,
+    AuditReport,
     BoardDecision,
     BoardMeeting,
     BoardMeetingAttendance,
     ComplianceItem,
     ComplianceJustification,
+    ComplianceObligation,
     DecisionKind,
+    DocumentRecord,
     GeneralAssembly,
     GeneratedDocument,
     MeetingKind,
@@ -104,9 +115,22 @@ from apps.oab.models import (
     PersonStatus,
     RulePackage,
 )
-from apps.oab.services import donemler, gecis, kisiler, kurullar, uyelikler, uyum
+from apps.oab.services import (
+    denetim,
+    donemler,
+    gecis,
+    gelen_giden_evrak,
+    genel_kurul_evraki,
+    kisiler,
+    kural_bagi,
+    kurullar,
+    uyelikler,
+    uyum,
+)
 from apps.oab.services import evrak as evrak_servisi
 from apps.oab.services import genel_kurul as genel_kurul_servisi
+from apps.oab.tests import genel_kurul_ortak as g
+from apps.oab.tests import uyelik_ortak
 from apps.okul import denetim_izi, erisim_gunlugu, iz_durumu
 from apps.okul.excel_ortak import ParserError
 from apps.okul.models import (
@@ -404,6 +428,25 @@ def _toplanti_gunu(_: pytest.MonkeyPatch) -> Istek:
     return Istek(
         f"/api/v1/oab/terms/{donem.pk}/meeting-day/",
         {"yk_meeting_day_rule": "Her ayın ilk salısı"},
+        _turler("GUNCELLE"),
+    )
+
+
+def _kural_surumu_gecisi(monkeypatch: pytest.MonkeyPatch) -> Istek:
+    """Kural sürümü güncellemesi (F2 2. adım; tasarım §6.2-5): `r1`'e bağlı açık dönem `r2`'ye geçer.
+    Dönem satırının `GUNCELLE`'si ve paket-revizyon çiftini taşıyan olay satırı (`GUNCELLE`); hedefin
+    kopyası önceden vardır, yeni kopya yazılmaz. Dönem yalnız `r1` dağıtılmışken açılır (F1 kurulumunun
+    hâli; hiç bağlanmadığı eski revizyona inilemez, `kural_bagi.hedefler`)."""
+    gercek = yukleyici.durum()
+    assert gercek.en_yeni is not None
+    r1 = next(p for p in gercek.paketler if p.rev == 1)
+    monkeypatch.setattr(yukleyici._Onbellek, "durum", yukleyici.PaketDurumu(paketler=(r1,)))
+    donem = _f1c6_donemi()
+    monkeypatch.setattr(yukleyici._Onbellek, "durum", gercek)
+    kural_bagi.kopya_dondur(gercek.en_yeni)
+    return Istek(
+        f"/api/v1/oab/terms/{donem.pk}/rule-revision/",
+        {"paket": "OAB-2023.12", "rev": 2},
         _turler("GUNCELLE"),
     )
 
@@ -748,6 +791,527 @@ def _geri_yuklemeyi_gordum(_: pytest.MonkeyPatch) -> Istek:
     )
 
 
+# ---------------------------------------------------------------- F2 11. adım: genel kurul uçları
+#: Ek olarak yüklenen uydurma PDF (dosya deposu türü imza baytından tanır).
+_PDF = b"%PDF-1.7 uydurma"
+_GK = "/api/v1/oab/assemblies"
+_GEREKCE = "Uydurma gerekçe: okul idaresinin yazısıyla kayda geçti."
+
+
+def _gk_planli(kind: str = AssemblyKind.OLAGAN) -> GeneralAssembly:
+    """Açık dönem ve planlanmış genel kurul (program yöneticisi; `genel_kurul_ortak`)."""
+    g.acik_donem()
+    return g.planla(kind=kind)
+
+
+def _gk_planla(_: pytest.MonkeyPatch) -> Istek:
+    """Planlama: hazırlık dönemi (`OLUSTUR` ve bağın `GUNCELLE`'si), genel kurul ve tohum gündem."""
+    g.acik_donem()
+    return Istek(
+        f"{_GK}/",
+        {"kind": "OLAGAN", "first_meeting_at": "2026-10-20T10:00:00+03:00"},
+        _turler("OLUSTUR", "GUNCELLE"),
+    )
+
+
+def _gk_toplanti_bilgisi(_: pytest.MonkeyPatch) -> Istek:
+    kurul = _gk_planli()
+    return Istek(
+        f"{_GK}/{kurul.pk}/",
+        {"first_meeting_at": "2026-10-21T10:00:00+03:00", "venue": "Uydurma toplantı salonu"},
+        _turler("GUNCELLE"),
+    )
+
+
+def _gk_gundem_sirasi(_: pytest.MonkeyPatch) -> Istek:
+    kurul = _gk_planli()
+    sira = list(
+        AgendaItem.objects.filter(assembly=kurul).order_by("-order").values_list("pk", flat=True)
+    )
+    return Istek(f"{_GK}/{kurul.pk}/agenda-order/", {"sira": sira}, _turler("GUNCELLE"))
+
+
+def _gk_cagri(_: pytest.MonkeyPatch) -> Istek:
+    """Yönetim kurulunun çağrısı (sekreter): karar bağı yok, uyarı + gerekçe (S1)."""
+    kurul = _gk_planli()
+    hesap = _rol_oturumu(AccountRole.SEKRETER)
+    return Istek(
+        f"{_GK}/{kurul.pk}/call/",
+        {"gerekce": _GEREKCE},
+        _turler("OLUSTUR", "DURUM", "GUNCELLE"),
+        hesap=hesap,
+    )
+
+
+def _gk_mudur_cagrisi(_: pytest.MonkeyPatch) -> Istek:
+    """Müdürün olağanüstü çağrısı (md. 9/6; ¹): evrak defteri kayıtlı değil, programca kayıt yok."""
+    kurul = _gk_planli(AssemblyKind.OLAGANUSTU)
+    hesap = _rol_oturumu(AccountRole.MUDUR)
+    return Istek(
+        f"{_GK}/{kurul.pk}/principal-call/",
+        {
+            "called_by": "OKUL_MUDURU",
+            "call_reason": g.OLAGANUSTU_NEDEN,
+            "gundem": [{"title": "Açılış ve yoklama", "kind": "ACILIS"}],
+        },
+        _turler("OLUSTUR", "DURUM", "GUNCELLE"),
+        hesap=hesap,
+    )
+
+
+def _gk_dk_cagrisi(_: pytest.MonkeyPatch) -> Istek:
+    """Denetleme Kurulunun md. 14/5 çağrısı: rapor aynı istekte yazılır, iki bağ aynı işlemde."""
+    kurul = _gk_planli(AssemblyKind.OLAGANUSTU)
+    hesap = _rol_oturumu(AccountRole.DENETLEME_KURULU)
+    return Istek(
+        f"{_GK}/{kurul.pk}/audit-board-call/",
+        {
+            "call_reason": g.OLAGANUSTU_NEDEN,
+            "gundem": [{"title": "Açılış ve yoklama", "kind": "ACILIS"}],
+            "rapor": {"kind": "ARA", "report_date": "2026-10-01", "md6_violation_found": True},
+        },
+        _turler("OLUSTUR", "DURUM", "GUNCELLE"),
+        hesap=hesap,
+    )
+
+
+def _evrak_defteri_ve_gelen() -> DocumentRecord:
+    """Kullanımdaki gelen-giden evrak defteri ve bir gelen evrak (açık dönemde)."""
+    gelen_giden_evrak.evrak_defteri_olustur()
+    return gelen_giden_evrak.evrak_kaydet(
+        direction="GELEN",
+        tarih=date(2026, 10, 1),
+        counterparty="Uydurma veliler",
+        subject="Uydurma başvuru",
+    ).kayit
+
+
+def _gk_cagri_yazisi(_: pytest.MonkeyPatch) -> Istek:
+    """Üyelerin başvurusunun gelen evrak bağı (program yöneticisi): akış eksiği kapanır."""
+    kurul = _gk_planli(AssemblyKind.OLAGANUSTU)
+    yazi = _evrak_defteri_ve_gelen()
+    genel_kurul_servisi.cagir(
+        kurul,
+        called_by="UYE_BASVURUSU",
+        call_reason=g.OLAGANUSTU_NEDEN,
+        gundem=g.OLAGANUSTU_GUNDEM,
+        member_application_count=30,
+        member_count_declared=200,
+    )
+    return Istek(
+        f"{_GK}/{kurul.pk}/call-document/", {"kayit": yazi.pk}, _turler("GUNCELLE", "DURUM")
+    )
+
+
+def _gk_ilan(_: pytest.MonkeyPatch) -> Istek:
+    kurul = g.cagrilmis_olagan()
+    gun = g.ILAN_GUNU.isoformat()
+    return Istek(
+        f"{_GK}/{kurul.pk}/announcement/",
+        {
+            "kanallar": {
+                "distributed_written_on": gun,
+                "posted_board_on": gun,
+                "published_web_on": gun,
+            }
+        },
+        _turler("OLUSTUR", "DURUM", "GUNCELLE"),
+    )
+
+
+def _gk_ikinci_ilan(_: pytest.MonkeyPatch) -> Istek:
+    kurul = g.ilanli_olagan()
+    genel_kurul_servisi.birinci_toplanti(kurul, katilim=g.katilim(g.BIRINCIDE_KATILAN))
+    gun = "2026-10-21"
+    return Istek(
+        f"{_GK}/{kurul.pk}/second-announcement/",
+        {
+            "second_meeting_at": "2026-11-05T10:00:00+03:00",
+            "kanallar": {"distributed_written_on": gun, "posted_board_on": gun},
+            "gerekce": _GEREKCE,
+        },
+        _turler("OLUSTUR", "DURUM", "GUNCELLE"),
+    )
+
+
+def _gk_ilan_kaniti(_: pytest.MonkeyPatch) -> Istek:
+    """Kanalları girilmemiş ilanın kanıt günleri sonradan: eksikler kapanır."""
+    kurul = g.cagrilmis_olagan()
+    genel_kurul_servisi.ilan_et(kurul)
+    duyuru = genel_kurul_servisi.kurulun_duyurulari(kurul)[0]
+    gun = g.ILAN_GUNU.isoformat()
+    return Istek(
+        f"/api/v1/oab/announcements/{duyuru.pk}/evidence/",
+        {"distributed_written_on": gun, "posted_board_on": gun, "published_web_on": gun},
+        _turler("GUNCELLE", "DURUM"),
+    )
+
+
+def _gk_ilan_eki(_: pytest.MonkeyPatch) -> Istek:
+    kurul = g.ilanli_olagan()
+    duyuru = genel_kurul_servisi.kurulun_duyurulari(kurul)[0]
+    return Istek(
+        f"/api/v1/oab/announcements/{duyuru.pk}/attachments/",
+        None,
+        _turler("OLUSTUR"),
+        dosya=("pano.pdf", _PDF),
+    )
+
+
+def _gk_birinci_toplanti(_: pytest.MonkeyPatch) -> Istek:
+    kurul = g.ilanli_olagan()
+    return Istek(
+        f"{_GK}/{kurul.pk}/first-meeting/",
+        {"attendee_count": g.KATILAN},
+        _turler("DURUM", "GUNCELLE"),
+    )
+
+
+def _gk_ikinci_toplanti(_: pytest.MonkeyPatch) -> Istek:
+    kurul = g.ilanli_olagan(second_meeting_at=g.an(g.IKINCI_GUN))
+    genel_kurul_servisi.birinci_toplanti(kurul, katilim=g.katilim(g.BIRINCIDE_KATILAN))
+    return Istek(
+        f"{_GK}/{kurul.pk}/second-meeting/",
+        {"attendee_count": g.IKINCIDE_KATILAN},
+        _turler("DURUM", "GUNCELLE"),
+    )
+
+
+def _gk_iptal(_: pytest.MonkeyPatch) -> Istek:
+    """İptal: genel kurul ve hazırlık dönemi `IPTAL` (gerekçe şifreli)."""
+    kurul = _gk_planli()
+    return Istek(
+        f"{_GK}/{kurul.pk}/cancel/",
+        {"cancel_reason": "Uydurma: toplantı salonu kullanılamadı."},
+        _turler("DURUM", "GUNCELLE"),
+    )
+
+
+def _gk_katilim_duzeltmesi(_: pytest.MonkeyPatch) -> Istek:
+    kurul = g.yapilmis_olagan()
+    return Istek(
+        f"{_GK}/{kurul.pk}/attendance-corrections/",
+        {
+            "toplanti": "BIRINCI",
+            "degerler": {"first_attendee_count": g.KATILAN + 1},
+            "justification": "Uydurma: sayım yinelendi.",
+        },
+        _turler("OLUSTUR", "GUNCELLE"),
+    )
+
+
+def _gk_katilim_isareti(_: pytest.MonkeyPatch) -> Istek:
+    """Katılım işareti (program yöneticisi; veli satırı işaretlenir, kişisiz iz)."""
+    g.veli_aktar([("UYDURMA VELİ", "9-A"), ("DENEME VELİ", "10/B")])
+    kurul = g.ilanli_olagan()
+    satirlar = list(ParentRoster.objects.values_list("pk", flat=True))
+    return Istek(
+        f"{_GK}/{kurul.pk}/attendance-marks/",
+        {"toplanti": "BIRINCI", "isaretle": satirlar},
+        _turler("ISARET"),
+    )
+
+
+def _gk_gundem_ekle(_: pytest.MonkeyPatch) -> Istek:
+    kurul = g.yapilmis_olagan()
+    return Istek(
+        f"{_GK}/{kurul.pk}/agenda/",
+        {
+            "title": "Uydurma ek gündem maddesi",
+            "change_votes_for": 40,
+            "change_votes_against": 10,
+        },
+        _turler("OLUSTUR"),
+    )
+
+
+def _gk_gundemden_cikar(_: pytest.MonkeyPatch) -> Istek:
+    kurul = g.yapilmis_olagan()
+    madde = g.madde(kurul, "DILEK")
+    return Istek(
+        f"/api/v1/oab/agenda-items/{madde.pk}/removal/",
+        {"change_votes_for": 40, "change_votes_against": 10},
+        _turler("DURUM", "GUNCELLE"),
+    )
+
+
+def _gk_karar_sonucu(_: pytest.MonkeyPatch) -> Istek:
+    kurul = g.yapilmis_olagan()
+    madde = g.madde(kurul, "YETKILENDIRME")
+    return Istek(
+        f"/api/v1/oab/agenda-items/{madde.pk}/result/",
+        {"votes_for": 40, "votes_against": 10},
+        _turler("DURUM", "GUNCELLE"),
+    )
+
+
+def _gk_adaylar(kurul: GeneralAssembly) -> list[OrganMembership]:
+    return [g.aday(kurul) for _ in range(5)]
+
+
+def _gk_secim(_: pytest.MonkeyPatch) -> Istek:
+    kurul = g.yapilmis_olagan()
+    adaylar = _gk_adaylar(kurul)
+    madde = g.madde(kurul, "SECIM_YK")
+    return Istek(
+        f"/api/v1/oab/agenda-items/{madde.pk}/election/",
+        {
+            "adaylar": [
+                {"uyelik": u.pk, "votes": g.KATILAN - i, "secildi": True}
+                for i, u in enumerate(adaylar)
+            ],
+            "liste": True,
+            "acik_oy": True,
+        },
+        _turler("OLUSTUR", "DURUM", "GUNCELLE"),
+    )
+
+
+def _gk_secim_bicimi(_: pytest.MonkeyPatch) -> Istek:
+    kurul = g.yapilmis_olagan()
+    g.secim(kurul, "SECIM_YK", _gk_adaylar(kurul), liste=None, acik_oy=None)
+    madde = g.madde(kurul, "SECIM_YK")
+    return Istek(
+        f"/api/v1/oab/agenda-items/{madde.pk}/election-form/",
+        {"liste": True, "acik_oy": True},
+        _turler("DURUM"),
+    )
+
+
+def _gk_secim_iptali(_: pytest.MonkeyPatch) -> Istek:
+    kurul = g.yapilmis_olagan()
+    g.secim(kurul, "SECIM_YK", _gk_adaylar(kurul))
+    madde = g.madde(kurul, "SECIM_YK")
+    return Istek(
+        f"/api/v1/oab/agenda-items/{madde.pk}/election-cancel/",
+        {"cancel_reason": "Uydurma: oylar yanlış girildi."},
+        _turler("DURUM", "GUNCELLE"),
+    )
+
+
+def _gk_ibra(_: pytest.MonkeyPatch) -> Istek:
+    kurul = g.yapilmis_olagan()
+    madde = g.madde(kurul, "IBRA")
+    oylama = {"votes_for": 40, "votes_against": 10}
+    return Istek(
+        f"/api/v1/oab/agenda-items/{madde.pk}/discharge/",
+        {"yk": oylama, "dk": oylama},
+        _turler("DURUM", "GUNCELLE"),
+    )
+
+
+def _gk_dosya_eki(_: pytest.MonkeyPatch) -> Istek:
+    """Yönetim kurulu faaliyet raporu ve kesin hesabın (E34) dosya eki (muhasip; U23)."""
+    kurul = _gk_planli()
+    madde = g.madde(kurul, "YK_FAALIYET_RAPORU")
+    hesap = _rol_oturumu(AccountRole.MUHASIP)
+    return Istek(
+        f"/api/v1/oab/agenda-items/{madde.pk}/attachments/",
+        None,
+        _turler("OLUSTUR"),
+        hesap=hesap,
+        dosya=("faaliyet-raporu.pdf", _PDF),
+    )
+
+
+def _gk_dk_dosya_eki(_: pytest.MonkeyPatch) -> Istek:
+    """Denetleme Kurulunun nihai raporunun (E33) dosya eki (yalnız Denetleme Kurulu; ⁵)."""
+    kurul = _gk_planli()
+    madde = g.madde(kurul, "DK_RAPORU")
+    hesap = _rol_oturumu(AccountRole.DENETLEME_KURULU)
+    return Istek(
+        f"/api/v1/oab/agenda-items/{madde.pk}/audit-board-attachment/",
+        None,
+        _turler("OLUSTUR"),
+        hesap=hesap,
+        dosya=("denetim-raporu.pdf", _PDF),
+    )
+
+
+def _gk_divan(_: pytest.MonkeyPatch) -> Istek:
+    kurul = g.yapilmis_olagan()
+    baskan, katip = (
+        _birlik_kisisi(),
+        kisiler.create_person(kind="VELI", first_name="Deneme", last_name="Kâtipoğlu"),
+    )
+    return Istek(
+        f"{_GK}/{kurul.pk}/presiding-board/",
+        {"baskan": baskan.pk, "katip": katip.pk},
+        _turler("OLUSTUR"),
+    )
+
+
+def _gk_divan_iptali(_: pytest.MonkeyPatch) -> Istek:
+    kurul = g.yapilmis_olagan()
+    katip = kisiler.create_person(kind="VELI", first_name="Deneme", last_name="Kâtipoğlu")
+    genel_kurul_servisi.divan_sec(kurul, baskan=_birlik_kisisi(), katip=katip)
+    return Istek(
+        f"{_GK}/{kurul.pk}/presiding-board-cancel/",
+        {"cancel_reason": "Uydurma: kâtip yanlış seçildi."},
+        _turler("DURUM", "GUNCELLE"),
+    )
+
+
+def _gk_aday(_: pytest.MonkeyPatch) -> Istek:
+    kurul = _gk_planli()
+    return Istek(
+        f"{_GK}/{kurul.pk}/candidates/",
+        {"person": _birlik_kisisi().pk, "organ": "YK", "seat_type": "ASIL"},
+        _turler("OLUSTUR"),
+    )
+
+
+def _gk_tutanak_bilgisi(_: pytest.MonkeyPatch) -> Istek:
+    kurul = g.yapilmis_olagan()
+    return Istek(
+        f"{_GK}/{kurul.pk}/minutes/",
+        {"handed_to_new_yk_on": "2026-10-25"},
+        _turler("OLUSTUR", "GUNCELLE"),
+    )
+
+
+def _gk_tutanak_tamam(_: pytest.MonkeyPatch) -> Istek:
+    """Tutanağın tamamlanması: açık eksikler gerekçeyle sapmaya döner (O3), durum `TUTANAK_TAMAM`."""
+    kurul = g.yapilmis_olagan()
+    return Istek(
+        f"{_GK}/{kurul.pk}/minutes-complete/",
+        {"gerekce": _GEREKCE},
+        _turler("DURUM"),
+    )
+
+
+def _gk_donem_gecisi(_: pytest.MonkeyPatch) -> Istek:
+    """Dönem geçişinin onayı (U32; program yöneticisi): hazırlık dönemi açılır, kapanacak dönem
+    kapanışa geçer, TEFBİS takvim satırları yazılır."""
+    kurul = g.yapilmis_olagan()
+    genel_kurul_servisi.tutanagi_tamamla(kurul, gerekce=g.GEREKCE)
+    return Istek(
+        f"{_GK}/{kurul.pk}/term-transition/", None, _turler("OLUSTUR", "DURUM", "GUNCELLE")
+    )
+
+
+def _gk_evraki(_: pytest.MonkeyPatch) -> Istek:
+    """Genel kurul duyurusu (E06, birinci toplantı): evrak kaydı ve PDF eki (web sayfası saklanmaz)."""
+    kurul = g.ilanli_olagan()
+    return Istek(f"{_GK}/{kurul.pk}/documents/e06/", {"toplanti": "BIRINCI"}, _turler("OLUSTUR"))
+
+
+def _gk_dk_e05(_: pytest.MonkeyPatch) -> Istek:
+    """Denetleme Kurulunun çağrı yazısı (E05, md. 14/5 kolu; ⁵)."""
+    kurul = _gk_planli(AssemblyKind.OLAGANUSTU)
+    with uyelik_ortak.rol_olarak(AccountRole.DENETLEME_KURULU) as hesap, transaction.atomic():
+        rapor = denetim.denetim_raporu_yaz(
+            kind="ARA", report_date=date(2026, 10, 1), md6_violation_found=True
+        )
+        genel_kurul_servisi.cagir(
+            kurul,
+            called_by="DENETLEME_KURULU",
+            call_reason=g.OLAGANUSTU_NEDEN,
+            gundem=g.OLAGANUSTU_GUNDEM,
+            call_audit_report=rapor,
+        )
+    oturumu_ac_test(str(hesap.id), tanitici=hesap.login_name, rol=hesap.role)
+    return Istek(
+        f"{_GK}/{kurul.pk}/documents/e05/audit-board/",
+        {"toplanti": "BIRINCI"},
+        _turler("OLUSTUR"),
+        hesap=str(hesap.id),
+    )
+
+
+def _gk_adli_evrak(_: pytest.MonkeyPatch) -> Istek:
+    """Veli adlı davet teslim çizelgesi (E07): evrak kaydı (dosyasız) ve `BASIM`; erişim günlüğü."""
+    g.veli_aktar([("UYDURMA VELİ", "9-A"), ("DENEME VELİ", "10/B")])
+    kurul = g.ilanli_olagan()
+    return Istek(
+        f"{_GK}/{kurul.pk}/documents/e07/named/", {"bicim": "pdf"}, _turler("OLUSTUR", "BASIM")
+    )
+
+
+def _yillik_is_takvimi(_: pytest.MonkeyPatch) -> Istek:
+    donem = g.acik_donem()
+    return Istek(f"/api/v1/oab/terms/{donem.pk}/documents/e14/", None, _turler("OLUSTUR"))
+
+
+def _aydinlatma_metni(_: pytest.MonkeyPatch) -> Istek:
+    """E04 (Hakkında → Kişisel veri): okul kartında veri sorumlusu uydurma; konu okul kartı."""
+    guncellenen = SchoolConfig.objects.filter(pk=SchoolConfig.SINGLETON_PK).update(
+        data_controller_text="Uydurma Ortaokulu Müdürlüğü, Uydurma Mah. No: 1"
+    )
+    assert guncellenen == 1
+    return Istek("/api/v1/oab/documents/e04/", None, _turler("OLUSTUR"))
+
+
+def _takvim_yapildi(_: pytest.MonkeyPatch) -> Istek:
+    """Pano kaleminden takvim satırının "Yapıldı" işareti (F2 12. adım): açık dönemin uydurma TEFBİS
+    satırı; sorumlu rol program yöneticisi."""
+    donem = g.acik_donem()
+    satir = uyum.takvim_satiri_yaz(
+        ComplianceObligation.TEFBIS_BANKA_BILGISI,
+        donem=donem,
+        due_date=date(2026, 10, 20),
+        mesaj="Uydurma takvim iletisi.",
+        responsible_role=AccountRole.YONETICI.value,
+    )
+    return Istek(
+        f"/api/v1/oab/compliance-items/{satir.pk}/done/",
+        {"done_on": timezone.localdate().isoformat()},
+        _turler("GUNCELLE"),
+    )
+
+
+def _evrak_defteri(_: pytest.MonkeyPatch) -> Istek:
+    return Istek("/api/v1/oab/document-books/", {"last_no_before_program": 12}, _turler("OLUSTUR"))
+
+
+def _evrak_kaydi(_: pytest.MonkeyPatch) -> Istek:
+    g.acik_donem()
+    gelen_giden_evrak.evrak_defteri_olustur()
+    return Istek(
+        "/api/v1/oab/document-records/",
+        {
+            "direction": "GELEN",
+            "tarih": "2026-10-01",
+            "counterparty": "Uydurma Kurum",
+            "subject": "Uydurma konu",
+        },
+        _turler("OLUSTUR"),
+    )
+
+
+def _evrak_kaydi_eki(_: pytest.MonkeyPatch) -> Istek:
+    g.acik_donem()
+    kayit = _evrak_defteri_ve_gelen()
+    return Istek(
+        f"/api/v1/oab/document-records/{kayit.pk}/attachments/",
+        None,
+        _turler("OLUSTUR"),
+        dosya=("gelen-yazi.pdf", _PDF),
+    )
+
+
+def _giden_evrak_kaydi(_: pytest.MonkeyPatch) -> Istek:
+    """E12'nin önerilen evrak kaydının onayı: giden kayıt, üretilen evrak bağıyla."""
+    kurul = g.yapilmis_olagan()
+    genel_kurul_servisi.ibra_yaz(
+        g.madde(kurul, "IBRA"),
+        yk=g.IBRA_EDILMEDI,
+        dk=g.IBRA_EDILDI,
+        unaudited_documents_note="Uydurma: 2026 yılı kasa defteri.",
+    )
+    e12 = genel_kurul_evraki.uret("E12", kurul).kayit
+    gelen_giden_evrak.evrak_defteri_olustur()
+    return Istek(
+        f"/api/v1/oab/documents/{e12.pk}/outgoing-record/",
+        {
+            "tarih": "2026-10-21",
+            "counterparty": "ÖRNEK KAYMAKAMLIĞINA",
+            "subject": "Genel Kurulda Hesapların İbra Edilmemesi",
+        },
+        _turler("OLUSTUR"),
+    )
+
+
 def _sabit(yol: str, govde: dict[str, Any] | None, *turler: str) -> Senaryo:
     return Senaryo(lambda _m: Istek(yol, govde, _turler(*turler)))
 
@@ -863,11 +1427,54 @@ IZLI_UCLAR: dict[tuple[str, str], Senaryo] = {
     # F1c 11. adım: geçiş kurulumunun uçları (etiket `GECIS`; §7.9).
     ("oab-term-cancel", "POST"): Senaryo(_gecis_iptali),
     ("oab-term-meeting-day", "PUT"): Senaryo(_toplanti_gunu),
+    ("oab-term-rule-revision", "POST"): Senaryo(_kural_surumu_gecisi),
     ("oab-transition-inherited", "POST"): Senaryo(_gecis_devralinan),
     ("oab-transition-election-counts", "POST"): Senaryo(_gecis_sayac_beyani),
     ("oab-transition-decision-book", "POST"): Senaryo(_gecis_karar_defteri),
     ("oab-transition-decision-book-cancel", "POST"): Senaryo(_gecis_karar_defteri_iptali),
     ("oab-transition-complete", "POST"): Senaryo(_gecis_tamamla),
+    # F2 11. adım: genel kurul, genel kurul evrakı, yıllık iş takvimi ve gelen-giden evrak uçları.
+    ("oab-assembly-list", "POST"): Senaryo(_gk_planla),
+    ("oab-assembly-detail", "PATCH"): Senaryo(_gk_toplanti_bilgisi),
+    ("oab-assembly-agenda-order", "PUT"): Senaryo(_gk_gundem_sirasi),
+    ("oab-assembly-call", "POST"): Senaryo(_gk_cagri),
+    ("oab-assembly-principal-call", "POST"): Senaryo(_gk_mudur_cagrisi),
+    ("oab-assembly-audit-board-call", "POST"): Senaryo(_gk_dk_cagrisi),
+    ("oab-assembly-call-document", "POST"): Senaryo(_gk_cagri_yazisi),
+    ("oab-assembly-announcement", "POST"): Senaryo(_gk_ilan),
+    ("oab-assembly-second-announcement", "POST"): Senaryo(_gk_ikinci_ilan),
+    ("oab-announcement-evidence", "PUT"): Senaryo(_gk_ilan_kaniti),
+    ("oab-announcement-attachments", "POST"): Senaryo(_gk_ilan_eki),
+    ("oab-assembly-first-meeting", "POST"): Senaryo(_gk_birinci_toplanti),
+    ("oab-assembly-second-meeting", "POST"): Senaryo(_gk_ikinci_toplanti),
+    ("oab-assembly-cancel", "POST"): Senaryo(_gk_iptal),
+    ("oab-assembly-attendance-corrections", "POST"): Senaryo(_gk_katilim_duzeltmesi),
+    ("oab-assembly-attendance-marks", "POST"): Senaryo(_gk_katilim_isareti),
+    ("oab-assembly-agenda", "POST"): Senaryo(_gk_gundem_ekle),
+    ("oab-agenda-item-removal", "POST"): Senaryo(_gk_gundemden_cikar),
+    ("oab-agenda-item-result", "POST"): Senaryo(_gk_karar_sonucu),
+    ("oab-agenda-item-election", "POST"): Senaryo(_gk_secim),
+    ("oab-agenda-item-election-form", "PUT"): Senaryo(_gk_secim_bicimi),
+    ("oab-agenda-item-election-cancel", "POST"): Senaryo(_gk_secim_iptali),
+    ("oab-agenda-item-discharge", "POST"): Senaryo(_gk_ibra),
+    ("oab-agenda-item-attachments", "POST"): Senaryo(_gk_dosya_eki),
+    ("oab-agenda-item-audit-board-attachment", "POST"): Senaryo(_gk_dk_dosya_eki),
+    ("oab-assembly-presiding-board", "POST"): Senaryo(_gk_divan),
+    ("oab-assembly-presiding-board-cancel", "POST"): Senaryo(_gk_divan_iptali),
+    ("oab-assembly-candidates", "POST"): Senaryo(_gk_aday),
+    ("oab-assembly-minutes", "PATCH"): Senaryo(_gk_tutanak_bilgisi),
+    ("oab-assembly-minutes-complete", "POST"): Senaryo(_gk_tutanak_tamam),
+    ("oab-assembly-term-transition", "POST"): Senaryo(_gk_donem_gecisi),
+    ("oab-assembly-document", "POST"): Senaryo(_gk_evraki),
+    ("oab-assembly-document-e05-audit-board", "POST"): Senaryo(_gk_dk_e05),
+    ("oab-assembly-document-named", "POST"): Senaryo(_gk_adli_evrak),
+    ("oab-document-e14", "POST"): Senaryo(_yillik_is_takvimi),
+    ("oab-compliance-item-done", "POST"): Senaryo(_takvim_yapildi),
+    ("oab-document-e04", "POST"): Senaryo(_aydinlatma_metni),
+    ("oab-document-book-list", "POST"): Senaryo(_evrak_defteri),
+    ("oab-document-record-list", "POST"): Senaryo(_evrak_kaydi),
+    ("oab-document-record-attachments", "POST"): Senaryo(_evrak_kaydi_eki),
+    ("oab-document-outgoing-record", "POST"): Senaryo(_giden_evrak_kaydi),
     # İlk hesap: satırlar yeni hesabındır (plan F1b-1); okul kartı parmak iziyle oluşur.
     ("security-enable", "POST"): _istek(
         lambda: Istek(
@@ -1103,6 +1710,37 @@ def _parti_karsiligi(
     return {("okul.ParentRoster", str(pk)) for pk, kosu in bagli if str(kosu) in kosular}
 
 
+#: Katılım işaretinin sütunları (plan F2 §7 U33; `genel_kurul.katilim_isaretle`).
+_ISARET_SUTUNLARI = frozenset({"attended_assembly_id", "attended_meeting"})
+
+
+def _isaret_karsiligi(
+    once: dict[str, dict[str, tuple[Any, ...]]],
+    sonra: dict[str, dict[str, tuple[Any, ...]]],
+    satirlar: Iterable[AuditTrail],
+) -> set[tuple[str, str]]:
+    """Kişisiz `ISARET` satırının karşıladığı DEĞİŞEN veli satırları: yalnız işaret sütunları değişmiş
+    olmalı (modül başlığı, madde 1). Eklenen ve silinen satır karşılanmaz."""
+    if not any(
+        satir.action == "ISARET" and satir.model == "okul.ParentRoster" for satir in satirlar
+    ):
+        return set()
+    with connection.cursor() as cursor:
+        cursor.execute(f'SELECT * FROM "{ParentRoster._meta.db_table}" LIMIT 0')  # noqa: S608
+        sutunlar = [kolon[0] for kolon in cursor.description]
+    eski, yeni = once.get("okul.ParentRoster", {}), sonra.get("okul.ParentRoster", {})
+    karsilanan: set[tuple[str, str]] = set()
+    for kimlik in eski.keys() & yeni.keys():
+        farkli = {
+            sutunlar[i]
+            for i, (a, b) in enumerate(zip(eski[kimlik], yeni[kimlik], strict=True))
+            if a != b
+        }
+        if farkli and farkli <= _ISARET_SUTUNLARI:
+            karsilanan.add(("okul.ParentRoster", kimlik))
+    return karsilanan
+
+
 def _izsiz_degisiklikler(
     once: dict[str, dict[str, tuple[Any, ...]]],
     sonra: dict[str, dict[str, tuple[Any, ...]]],
@@ -1169,6 +1807,7 @@ def test_izli_yazma_ucu_iz_satiri_yazar(
     izlenen = {(satir.model, satir.object_id) for satir in yeni}
     izlenen |= _kvkk_silme_karsiligi(once, sonra, yeni)
     izlenen |= _parti_karsiligi(once, sonra, yeni)
+    izlenen |= _isaret_karsiligi(once, sonra, yeni)
     izsiz = _izsiz_degisiklikler(once, sonra, izlenen)
     assert not izsiz, (uc, sorted(izsiz))
     if crypto.is_unlocked():
@@ -1241,6 +1880,17 @@ ILKELLER: dict[tuple[str, str], str] = {
     ("shared/models.py", "BaseModel.restore"): _MODEL_ILKELI,
     ("shared/models.py", "SoftDeleteQuerySet.delete"): _MODEL_ILKELI,
     ("shared/models.py", "SoftDeleteQuerySet.hard_delete"): _MODEL_ILKELI,
+    ("apps/oab/models/genel_kurul.py", "_GenelKurulQuerySet.update"): (
+        "Genel kurulun toplu güncelleme ilkesi (plan F2 3. adım, U7): dondurulmuş yeter sayıyı "
+        "değiştiren toplu güncellemeyi reddeder, ötekini modelin ilkeline bırakır; kendisi iz "
+        "yazmaz, izi onu çağıran servis düşer (servislerin çağrısı bu taramanın kapsamındadır)."
+    ),
+    ("apps/oab/models/denetim.py", "_DenetimRaporuQuerySet.update"): (
+        "Denetleme Kurulu raporunun toplu güncelleme ilkesi (plan F2 3. adım, S6 (ii)): md. 14/5 "
+        "bağını bozan toplu güncellemeyi (çağrıya bağlı raporun md. 6 işaretini kaldırma, başka "
+        "raporla çağrılmış genel kurula bağlama) reddeder, ötekini modelin ilkeline bırakır; kendisi "
+        "iz yazmaz, izi onu çağıran servis düşer (servislerin çağrısı bu taramanın kapsamındadır)."
+    ),
     ("apps/okul/models.py", "_AccessLogQuerySet._saklama_disini_sil"): (
         "Erişim günlüğünün tek silme ilkesi (saklama süresi dolan satırlar): kendisi siler, "
         "izini (`KVKK_SILME`) çağıranı düşer. Bu tarama ilkelin çağrısını yazım sayar "
@@ -2114,7 +2764,8 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
 
     `okul` ve `oab`'nin her izli modeli (bugün `Account`, `SchoolConfig`, `SchoolYear`, `SchoolTerm`,
     `Holiday`, `Personnel`, `ImportRun`, `Attachment`, birlik dönemi ve kural kopyası, genel kurul,
-    uyum satırı ve gerekçesi, birlik kişisi) uydurma kişi verisiyle yazılır, güncellenir ve
+    uyum satırı ve gerekçesi, birlik kişisi; F2'nin gündem, tutanak, katılım düzeltmesi, denetim raporu,
+    duyuru ve gelen-giden evrak kaydı) uydurma kişi verisiyle yazılır, güncellenir ve
     durumu değişir; iz satırlarının hiçbir sütununda bu değerler, parçaları, büyük-küçük harf
     biçimleri ve şifreli token'ları geçmez. Senaryosu yazılmamış izli model testi düşürür. Arşiv
     dökümü henüz yoktur. Veli listesi (T5)
@@ -2295,6 +2946,77 @@ def test_denetim_izinde_uydurma_kisisel_veri_yok(monkeypatch: pytest.MonkeyPatch
         tarih=date(2026, 10, 1),
         gerekce=uyum.Gerekce(metin=f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_METIN}"),
     )
+    # Genel kurulun F2 modelleri (F2 3. adım; servisleri 4.-7. adımlarda): model ve yazıcıyla yazılır.
+    # Çağrı nedeni, iptal gerekçesi, gündemin notu ve sonuç metni, tutanağın evrak listesi, düzeltme
+    # gerekçesi, evrak kaydının karşı tarafı ve konusu şifreli serbest metindir; toplantı yeri ve
+    # gündem başlığı açık serbest metindir. Hiçbiri izde değer olarak görünmez.
+    kurul.refresh_from_db()  # yeter sayı dondurulmuş: bellekteki eski hâl yazılamaz
+    onceki = denetim_izi.anlik(kurul)
+    kurul.call_reason = f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_METIN}"
+    kurul.venue = UYDURMA_ADRES
+    kurul.save()
+    denetim_izi.degisiklik(kurul, onceki=onceki)
+    madde = AgendaItem.objects.create(
+        assembly=kurul,
+        order=1,
+        kind="DIGER",
+        title=f"{UYDURMA_AD} {UYDURMA_SOYAD}",
+        notes=f"{UYDURMA_AD} {UYDURMA_TELEFON}",
+        result_text=UYDURMA_UZUN,
+    )
+    denetim_izi.degisiklik(madde, onceki=None)
+    onceki = denetim_izi.anlik(madde)
+    madde.removed_by_vote, madde.change_votes_for, madde.change_votes_against = True, 30, 2
+    madde.save()
+    denetim_izi.degisiklik(madde, onceki=onceki)
+    tutanak = AssemblyMinutes.objects.create(
+        assembly=kurul,
+        yk_report_reader=kisi,
+        unaudited_documents_note=f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_TCKN}",
+        handed_to_new_yk_on=date(2026, 10, 25),
+    )
+    denetim_izi.degisiklik(tutanak, onceki=None)
+    duzeltme = AttendanceCorrection.objects.create(
+        assembly=kurul,
+        meeting="BIRINCI",
+        field="observer_count",
+        old_value=3,
+        new_value=4,
+        justification=f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_ADRES}",
+        corrected_at=timezone.now(),
+    )
+    denetim_izi.degisiklik(duzeltme, onceki=None)
+    rapor = AuditReport.objects.create(term=donem, kind="ARA", report_date=date(2026, 10, 2))
+    denetim_izi.degisiklik(rapor, onceki=None)
+    onceki = denetim_izi.anlik(rapor)
+    rapor.status = "DK_IMZALADI"
+    rapor.save()
+    denetim_izi.degisiklik(rapor, onceki=onceki)
+    duyuru = Announcement.objects.create(
+        term=donem,
+        kind="GK_CAGRISI",
+        subject_type=denetim_izi.model_etiketi(GeneralAssembly),
+        subject_id=str(kurul.pk),
+    )
+    denetim_izi.degisiklik(duyuru, onceki=None)
+    onceki = denetim_izi.anlik(duyuru)
+    duyuru.status, duyuru.posted_board_on = "YAYIMLANDI", date(2026, 10, 3)
+    duyuru.save()
+    denetim_izi.degisiklik(duyuru, onceki=onceki)
+    evrak_defteri = OfficialBook.objects.create(kind="GELEN_GIDEN_EVRAK_DEFTERI")
+    denetim_izi.degisiklik(evrak_defteri, onceki=None)
+    evrak_kaydi = DocumentRecord.objects.create(
+        book=evrak_defteri,
+        direction="GELEN",
+        year=2026,
+        record_no=1,
+        date=date(2026, 10, 2),
+        counterparty=f"{UYDURMA_AD} {UYDURMA_SOYAD} {UYDURMA_ADRES}",
+        subject=f"{UYDURMA_METIN} {UYDURMA_TELEFON_ARALIKLI}",
+        external_ref="E-2026-15",
+        term=donem,
+    )
+    denetim_izi.degisiklik(evrak_kaydi, onceki=None)
 
     metin = _iz_metni()
     modeller = set(AuditTrail.objects.values_list("model", flat=True))
@@ -2421,6 +3143,12 @@ IZLI_MODELLER = (
     BoardMeetingAttendance,
     BoardDecision,
     GeneratedDocument,
+    AgendaItem,
+    AssemblyMinutes,
+    AttendanceCorrection,
+    AuditReport,
+    Announcement,
+    DocumentRecord,
 )
 
 

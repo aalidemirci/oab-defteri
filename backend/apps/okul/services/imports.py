@@ -63,6 +63,10 @@ VELİ LİSTESİ (T5; tasarım §8.4, plan "F1b-5 uygulama kararları"): okulun d
 - **Önizleme yalnız SAYI gösterir** (§8.4 (2)): satır ve sınıf sayısı, yerine geçecek her sınıfın
   yeni ve eski satır sayısı, dokunulmayan sınıflar, aktarılamayan satırların numarası ve nedeni.
   Raporda ad YOKTUR (API yanıtında da); hücre değeri de yoktur.
+- **Katılım işareti satırıyla düşer** (F2; kullanıcı kararı S12 (a), plan F2 §7 U33): yerine geçen
+  eski satırların genel kurul katılım işaretleri satırlarla birlikte düşer; önizleme her sınıfın
+  düşecek işaret SAYISINI gösterir (`dropped_marks`; ad yok). Genel kuruldaki katılım sayıları
+  dondurulmuş alanlardır, düşen işaret onları değiştirmez.
 - **Kaynak sıra tutulmaz** (§5.1 `ParentRoster`): satırlar sınıf ve çözülmüş ad sırasıyla yazılır.
 - **Denetim izi kişisiz parti satırıdır**: koşunun `OLUSTUR` ve `DURUM` satırları (tür `VELI`,
   içerik özeti, durum); veli satırı başına iz yazılmaz (`models.ParentRoster`). Yerine geçen eski
@@ -651,11 +655,13 @@ def roster_term_rows(term_id: int | None) -> QuerySet[ParentRoster]:
 
 @dataclass
 class ParentClassImpact:
-    """Dosyadaki bir sınıfın etkisi: yeni satır sayısı ve yerine geçen eski satır sayısı."""
+    """Dosyadaki bir sınıfın etkisi: yeni satır sayısı, yerine geçen eski satır sayısı ve eski
+    satırlarla düşen genel kurul katılım işareti sayısı (S12 (a))."""
 
     student_class: str
     rows: int
     replaced_rows: int
+    dropped_marks: int = 0
 
 
 @dataclass
@@ -676,6 +682,8 @@ class ParentImportReport:
     class_count: int = 0
     #: Dosyadaki sınıfların listeden silinen (silinecek) eski satırları.
     replaced_rows: int = 0
+    #: Silinen (silinecek) eski satırlarla düşen genel kurul katılım işaretleri (S12 (a)).
+    dropped_marks: int = 0
     #: Dosyada olmayan, dokunulmayan sınıflar ve satırları.
     kept_class_count: int = 0
     kept_rows: int = 0
@@ -733,9 +741,9 @@ def delete_parent_roster() -> int:
 
 def _siniflari_yerine_koy(
     run: ImportRun, sinifa_gore: dict[str, list[ParsedParentRow]], *, term_id: int | None
-) -> dict[str, int]:
+) -> tuple[dict[str, int], dict[str, int]]:
     """Dosyadaki sınıfların dönem içindeki eski satırlarını siler, yenilerini o döneme yazar →
-    sınıf → eski satır sayısı.
+    (sınıf → eski satır sayısı, sınıf → eski satırlarla düşen katılım işareti sayısı).
 
     Silme "Veli listesini sil"le aynı yoldan geçer (`_veli_satirlarini_sil`, tetik `AKTARIM`).
 
@@ -744,13 +752,16 @@ def _siniflari_yerine_koy(
     """
     eski = roster_term_rows(term_id).filter(student_class__in=list(sinifa_gore))
     eski_sayilari = Counter(eski.values_list("student_class", flat=True))
+    dusen_isaretler = Counter(
+        eski.filter(attended_assembly__isnull=False).values_list("student_class", flat=True)
+    )
     _veli_satirlarini_sil(eski, tetik=denetim_izi.KVKK_TETIK_AKTARIM)
     for sinif in sorted(sinifa_gore, key=excel_veli.sinif_sira_anahtari):
         for row in sorted(sinifa_gore[sinif], key=lambda r: normalize.tr_sort_key(r.full_name)):
             ParentRoster.objects.create(
                 import_run=run, full_name=row.full_name, student_class=sinif, term_id=term_id
             )
-    return dict(eski_sayilari)
+    return dict(eski_sayilari), dict(dusen_isaretler)
 
 
 @transaction.atomic
@@ -781,13 +792,19 @@ def _ingest_parents(
     for row in rows:
         sinifa_gore.setdefault(row.student_class, []).append(row)
     term_id = current_roster_term_id()
-    eski_sayilari = _siniflari_yerine_koy(run, sinifa_gore, term_id=term_id)
+    eski_sayilari, dusen_isaretler = _siniflari_yerine_koy(run, sinifa_gore, term_id=term_id)
     report.classes = [
-        ParentClassImpact(sinif, len(sinifa_gore[sinif]), eski_sayilari.get(sinif, 0))
+        ParentClassImpact(
+            sinif,
+            len(sinifa_gore[sinif]),
+            eski_sayilari.get(sinif, 0),
+            dusen_isaretler.get(sinif, 0),
+        )
         for sinif in sorted(sinifa_gore, key=excel_veli.sinif_sira_anahtari)
     ]
     report.class_count = len(report.classes)
     report.replaced_rows = sum(eski_sayilari.values())
+    report.dropped_marks = sum(dusen_isaretler.values())
     kalan = roster_term_rows(term_id).exclude(student_class__in=list(sinifa_gore))
     report.kept_rows = kalan.count()
     report.kept_class_count = kalan.values("student_class").distinct().count()

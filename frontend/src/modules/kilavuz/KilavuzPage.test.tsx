@@ -1,6 +1,7 @@
 // Kullanım Kılavuzu — kabuk, bölüm dizilişi ve sözlük kilitleri (aile kalıbı). Aile iskeletinin
 // kütüphane içeriği ve onu ekran metinleriyle eşleyen testler F1a-2'de silindi. F1c'nin bölümleri
 // (13. adım) aynı kilitlere bağlandı: ekran, sekme, düğme ve belge adları ekran sabitlerinden okunur.
+// F2'nin bölümleri (Genel Kurul, Gelen-Giden Evrak) ve güncellenen bölümler de aynı kilitlerdedir.
 //
 // Üç tür kilit var:
 // 1. Ekran adları DEPODAN gelir: sekme, başlık ve düğme adları ekran sabitlerinden okunur;
@@ -23,8 +24,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { TAB_ITEMS as AYAR_SEKMELERI } from "../ayarlar/AyarlarPage";
 import {
+  ACILIS_HAZIRLIK,
   BIRLIK_DONEMI_BASLIGI,
+  DONEM_YOK_YENI_OKUL_ACIKLAMASI,
   DUGME_DONEMI_IPTAL,
+  DUGME_SURUMU_GUNCELLE,
+  KURAL_GUNCELLEME_BASLIGI,
   KURAL_KOPYASI_BOZUK,
   KURAL_SURUMU_AYARLAR_BASLIGI,
 } from "../birlik-donemi/metinler";
@@ -42,6 +47,18 @@ import {
   E01_ADI,
   E02_ADI,
   E03_ADI,
+  E04_ADI,
+  E05_ADI,
+  E06_ADI,
+  E07_ADI,
+  E08_ADI,
+  E09_ADI,
+  E10_ADI,
+  E11_ADI,
+  E12_ADI,
+  E13_ADI,
+  E14_ADI,
+  E64_ADI,
   TASLAK_ACIKLAMASI,
   URETIM_UYARILARI_BASLIGI,
 } from "../evrak/metinler";
@@ -53,9 +70,45 @@ import {
   ILK_DONEM_BASLIGI,
   KURUL_BASLIGI,
   SAYAC_BASLIGI,
+  GEREKMIYOR_NOTU,
   SIHIRBAZ_ADIM_ADI,
   TAMAMLA_BASLIGI,
 } from "../gecis-kurulumu/metinler";
+import {
+  DEFTER_YOK,
+  DUGME_DEFTER,
+  DUGME_YENI_KAYIT,
+  GELEN_GIDEN_BASLIGI,
+  KAYIT_ACIKLAMASI,
+  SIRADAKI_NO,
+} from "../gelen-giden-evrak/metinler";
+import {
+  ADIM_CAGRI,
+  ADIM_ILAN,
+  ADIM_PLANLA,
+  ADIM_SONRASI,
+  ADIM_TOPLANTI,
+  ADIM_TUTANAK,
+  BELGELER_BASLIGI,
+  DK_CAGRI_BOLUM_BASLIGI,
+  DK_RAPORU_EKI_BASLIGI,
+  DONEM_GECISI_BASLIGI,
+  DOSYA_EKLERI_BASLIGI,
+  DUGME_ADLI_PDF,
+  DUGME_CAGRI,
+  DUGME_DIVAN,
+  DUGME_DONEM_GECISI,
+  DUGME_EVRAK_KAYDI,
+  DUGME_IBRA,
+  DUGME_ILAN,
+  DUGME_IPTAL,
+  DUGME_KATILIM_ISARETLERI,
+  DUGME_PLANLA,
+  DUGME_SECIM,
+  DUGME_TUTANAK_TAMAMLA,
+  GENEL_KURUL_BASLIGI,
+  LISTE_BASLIGI,
+} from "../genel-kurul/metinler";
 import {
   KILIT_EKRANI_BASLIGI,
   KURTARMA_ILE_AC_ETIKETI,
@@ -69,6 +122,7 @@ import {
   SIFRELI_YEDEK_KARTI_BASLIGI,
   YEDEK_RAPORU_ADI,
 } from "../guvenlik/metinler";
+import { KISISEL_VERI_BASLIGI, TEYIT_BASLIGI } from "../hakkinda/metinler";
 import {
   BIRLIK_KISILERI_SEKMESI,
   DUGME_BIRLIK_KISISI_EKLE,
@@ -104,12 +158,25 @@ import { YETENEK_ADLARI } from "../oturum/api";
 import type { YetenekAdi } from "../oturum/api";
 import { YetkiDegeri, hazirYetki } from "../oturum/yetki";
 import type { Yetki } from "../oturum/yetki";
-import { YOL_HARITASI_MADDELERI } from "../pano/BaslangicYolHaritasi";
+import { GENEL_KURUL_MADDESI, YOL_HARITASI_MADDELERI } from "../pano/BaslangicYolHaritasi";
 import {
   AY_BASLIGI,
+  DONEM_ONAYI_BASLIGI,
+  GK_IKINCI_TOPLANTI_BASLIGI,
+  GK_ILAN_BASLIGI,
+  GK_OLAGAN_BASLIGI,
+  GK_YENI_OKUL_BASLIGI,
   HAFTA_BASLIGI,
   HESAP_ONERISI_BASLIGI,
+  IBRA_BILDIRIMI_BASLIGI,
+  KURAL_SURUMU_BASLIGI,
+  MUDUR_YAZISI_BASLIGI,
+  SEKME_OZET,
+  SEKME_TAKVIM,
   TAMAMLANACAKLAR_BASLIGI,
+  TEFBIS_BASLIKLARI,
+  VERI_SORUMLUSU_TAMAMLANACAK,
+  YAPILDI_PENCERESI_BASLIGI,
   YARIM_TASLAK_BASLIGI,
   YK_GOREV_BOLUMU_BASLIGI,
 } from "../pano/metinler";
@@ -171,8 +238,11 @@ const BEKLENEN_BOLUMLER: ReadonlyArray<readonly [id: string, baslik: string]> = 
   ["birlik-kisileri", sekmeAdi(KISI_SEKMELERI, "birlik")],
   ["birlik-donemi", BIRLIK_DONEMI_BASLIGI],
   ["gecis-kurulumu", GECIS_BASLIGI],
+  // F2: genel kurul (birlik dönemini açar, organları seçer) ve gelen-giden evrak.
+  ["genel-kurul", GENEL_KURUL_BASLIGI],
   ["organlar", ORGANLAR_BASLIGI],
   ["temsilciler", TEMSILCILER_BASLIGI],
+  ["gelen-giden-evrak", GELEN_GIDEN_BASLIGI],
   ["yedek-ve-geri-yukleme", "Yedek ve Geri Yükleme"],
   ["guvenlik-ve-kvkk", "Güvenlik ve Kişisel Veriler"],
   ["guncelleme", sekmeAdi(AYAR_SEKMELERI, "guncelleme")],
@@ -183,9 +253,19 @@ const BEKLENEN_BOLUMLER: ReadonlyArray<readonly [id: string, baslik: string]> = 
 const MEVZUAT_ALINTILARI: Readonly<Record<string, string>> = {
   "Yönetmelik md. 12/3":
     "Yönetim kurulu, seçimden sonraki ilk hafta içinde okulda toplanarak üyeleri arasından bir başkan, bir başkan yardımcısı, bir muhasip ve bir sekreter seçerek görev ve iş bölümü yapar. Yönetim kurulu üyelerinden üyeliği sona erenlerin yerine yedeklerin çağrılmasıyla oluşan yeni yönetim kurulu bir hafta içinde toplanarak aralarında görev dağılımı yaparlar.",
+  "Yönetmelik md. 9/1":
+    "Genel kurul, birliğin üyelerinden meydana gelir. Genel kurul, birlik yönetim kurulunun davetiyle her yıl en geç Ekim ayının sonuna kadar; yeni açılan okullarda ise okul müdürünün daveti üzerine okulun açıldığı tarihten itibaren en geç iki ay içinde okulda toplanır.",
+  "Yönetmelik md. 9/2":
+    "Genel kurul, katılan üyelerle toplanır ve bunların çoğunluğu ile karar alır. Ancak toplantı yeter sayısı, yönetim ve denetleme kurullarının asıl ve yedek üye sayısının dört katından, öğrenci mevcudu yüzün altında olan okullarda ise yönetim ve denetleme kurullarının asıl ve yedek üye sayısının iki katından az olamaz. Genel kurulun toplanamaması durumunda, en geç otuz gün içinde çoğunluk aranmaksızın toplantı yapılır ve kararlar katılanların çoğunluğu ile alınır.",
+  "Yönetmelik md. 9/3":
+    "Genel kurul toplantılarının yeri, zamanı ve gündemi en az onbeş gün önceden üyelere elden yazılı olarak bildirilir, okul ilan panosu ile okulun internet sayfasında duyurulur.",
+  "Yönetmelik md. 11/1-ç":
+    "Genel kurulda hesaplar ibra edilmediğinde diğer gündem maddelerinin görüşülmesine devam edilir. Divan, ibra edilmeyen muhasebe evraklarını tutanak altına alarak seçilen yeni yönetim ve denetleme kuruluna teslim eder. Bu durum, yeni yönetim kurulu ve okul yönetimi tarafından il/ilçe millî eğitim müdürlüğüne resmî yazıyla bildirilir.",
   "Yönetmelik md. 13/5": "Yönetim kurulu kararları, karar defterine el ile yazılarak imzalanır.",
   "Yönetmelik md. 13/6":
     "Özürsüz olarak üst üste üç toplantıya katılmayan yönetim kurulu üyesinin görevi sona erer. Bu şekilde görevi sona erenler ile öğrencisinin okuldan ayrılması veya öğrenciliğin sona ermesi nedenleriyle yönetim kurulu üyeliği sona eren velinin yerine yedek üyeler, aldıkları oy sırasına göre asıl üye olarak göreve çağırılır.",
+  "Yönetmelik md. 14/5":
+    "Denetleme kurulu, yaptığı denetimler sonucu, yönetim kurulunun 6 ncı maddede sayılan birliğin görev ve yetkilerine aykırı faaliyetlerini tespit etmesi hâlinde genel kurulu olağanüstü toplantıya çağırır.",
   "Yönetmelik md. 23/2":
     "Yönetim kurulunca, yönetim kurulu karar defterinin noterce tasdik edilmesi zorunlu olup diğer defter ve belgeler ise birliğin bağlı bulunduğu il/ilçe millî eğitim müdürlüğünce tasdik edilir.",
   "Yönetmelik md. 23/5":
@@ -207,6 +287,8 @@ const SAYFA_ADRESLERI = [
   "/",
   "/birlik-donemi",
   "/birlik-donemi/gecis-kurulumu",
+  "/genel-kurul",
+  "/gelen-giden-evrak",
   "/kisiler",
   "/organlar",
   "/temsilciler",
@@ -525,6 +607,9 @@ describe("KilavuzPage — ekran bağlantıları", () => {
 
   it("bağlantılar var olan sayfaya, sekmeye ve bölüme gider", () => {
     const sekmeler: Record<string, readonly string[]> = {
+      // Genel Bakış'ın sekmeleri (`pano/PanelPage` `TAB_ITEMS`, dışa açık değil; sözlük §1 "Yıllık İş
+      // Takvimi (F2)").
+      "/": ["ozet", "takvim"],
       "/ayarlar": AYAR_SEKMELERI.map((s) => s.key),
       "/kisiler": KISI_SEKMELERI.map((s) => s.key),
       "/organlar": ORGAN_SEKMELERI.map((s) => s.key),
@@ -566,6 +651,22 @@ describe("KilavuzPage — bölüm içerikleri", () => {
       DEGISTIRILMIS_HESAP_KARTI_BASLIGI,
       GERI_YUKLEME_KARTI_BASLIGI,
       EKSIK_EKLER_KARTI_BASLIGI,
+      // F2: sekmeler, genel kurul süreleri, takvim işaretleri ve yeni açılan okulun maddesi.
+      SEKME_OZET,
+      SEKME_TAKVIM,
+      KURAL_SURUMU_BASLIGI,
+      GK_OLAGAN_BASLIGI,
+      GK_YENI_OKUL_BASLIGI,
+      GK_ILAN_BASLIGI,
+      GK_IKINCI_TOPLANTI_BASLIGI,
+      MUDUR_YAZISI_BASLIGI,
+      IBRA_BILDIRIMI_BASLIGI,
+      DONEM_ONAYI_BASLIGI,
+      ...Object.values(TEFBIS_BASLIKLARI),
+      YAPILDI_PENCERESI_BASLIGI,
+      VERI_SORUMLUSU_TAMAMLANACAK,
+      E14_ADI,
+      GENEL_KURUL_MADDESI.baslik,
     ],
     "hesaplar-ve-oturum": [
       KILIT_EKRANI_BASLIGI,
@@ -600,9 +701,66 @@ describe("KilavuzPage — bölüm içerikleri", () => {
       DUGME_DONEMI_IPTAL,
       KURAL_SURUMU_AYARLAR_BASLIGI,
       KURAL_KOPYASI_BOZUK,
+      ACILIS_HAZIRLIK,
+      DONEM_YOK_YENI_OKUL_ACIKLAMASI,
+      KURAL_GUNCELLEME_BASLIGI,
+      DUGME_SURUMU_GUNCELLE,
+    ],
+    "genel-kurul": [
+      GENEL_KURUL_BASLIGI,
+      LISTE_BASLIGI,
+      ADIM_PLANLA,
+      ADIM_CAGRI,
+      ADIM_ILAN,
+      ADIM_TOPLANTI,
+      ADIM_TUTANAK,
+      ADIM_SONRASI,
+      DUGME_PLANLA,
+      DUGME_CAGRI,
+      DUGME_ILAN,
+      DUGME_KATILIM_ISARETLERI,
+      DUGME_DIVAN,
+      DUGME_IBRA,
+      DUGME_SECIM,
+      DUGME_TUTANAK_TAMAMLA,
+      DONEM_GECISI_BASLIGI,
+      DUGME_DONEM_GECISI,
+      DOSYA_EKLERI_BASLIGI,
+      BELGELER_BASLIGI,
+      DUGME_ADLI_PDF,
+      DUGME_EVRAK_KAYDI,
+      DUGME_IPTAL,
+      E05_ADI,
+      E06_ADI,
+      E07_ADI,
+      E08_ADI,
+      E09_ADI,
+      E10_ADI,
+      E11_ADI,
+      E12_ADI,
+      E13_ADI,
+      E64_ADI,
+      GK_OLAGAN_BASLIGI,
+      IBRA_BILDIRIMI_BASLIGI,
+      DONEM_ONAYI_BASLIGI,
+      DUGME_OLUSTUR,
+      DUGME_PDF,
+      DUGME_WORD,
+      URETIM_UYARILARI_BASLIGI,
+    ],
+    "gelen-giden-evrak": [
+      GELEN_GIDEN_BASLIGI,
+      DEFTER_YOK,
+      DUGME_DEFTER,
+      DUGME_YENI_KAYIT,
+      KAYIT_ACIKLAMASI,
+      SIRADAKI_NO,
+      DUGME_EVRAK_KAYDI,
     ],
     "gecis-kurulumu": [
       GECIS_BASLIGI,
+      GEREKMIYOR_NOTU,
+      GENEL_KURUL_MADDESI.baslik,
       ILK_DONEM_BASLIGI,
       KURUL_BASLIGI,
       SAYAC_BASLIGI,
@@ -627,6 +785,9 @@ describe("KilavuzPage — bölüm içerikleri", () => {
       DUGME_PDF,
       DUGME_WORD,
       URETIM_UYARILARI_BASLIGI,
+      // F2: Denetleme Kurulunun genel kurul işi.
+      DK_CAGRI_BOLUM_BASLIGI,
+      DK_RAPORU_EKI_BASLIGI,
     ],
     temsilciler: [TEMSILCILER_BASLIGI, CIZELGE_BASLIGI, DUGME_TEMSILCI_EKLE, E03_ADI],
     "yedek-ve-geri-yukleme": [
@@ -637,18 +798,50 @@ describe("KilavuzPage — bölüm içerikleri", () => {
       KURTARMA_BELGESI_ADI,
       "Kurtarma Anahtarını Yenile",
     ],
-    "guvenlik-ve-kvkk": [ERISIM_GUNLUGU_BASLIGI, ...DURUST_SINIRLAR.map((s) => s.baslik)],
+    "guvenlik-ve-kvkk": [
+      ERISIM_GUNLUGU_BASLIGI,
+      ...DURUST_SINIRLAR.map((s) => s.baslik),
+      E04_ADI.toLocaleLowerCase("tr"),
+      KISISEL_VERI_BASLIGI,
+      TEYIT_BASLIGI,
+    ],
     guncelleme: [sekmeAdi(AYAR_SEKMELERI, "guncelleme")],
   };
 
   /** Bölüm → metinde madde numarasıyla geçmesi gereken dayanaklar (tasarım ve plan istekleri). */
   const MADDE_ATIFLARI: Readonly<Record<string, readonly string[]>> = {
     "programin-konumu": ["13/5", "23/2", "23/5"],
-    "okul-karti": ["9/2", "17/1", "23/3"],
-    "genel-bakis": ["12/3", "14/1"],
+    "ilk-kurulum": ["9/1"],
+    "okul-karti": ["9/1", "9/2", "17/1", "23/3"],
+    "genel-bakis": ["9/1", "9/2", "9/3", "11/1-ç", "12/3", "14/1", "23/5"],
+    "veli-listesi": ["9/3", "10/1-a"],
     "birlik-kisileri": ["12/1", "14/1"],
-    "birlik-donemi": ["12/2", "14/2"],
+    "birlik-donemi": ["9/1", "12/2", "14/2"],
     "gecis-kurulumu": ["12/4", "14/3", "23/2"],
+    "genel-kurul": [
+      "9/1",
+      "9/2",
+      "9/3",
+      "9/4",
+      "9/5",
+      "9/6",
+      "10/1-a",
+      "10/1-b",
+      "10/1-c",
+      "10/1-ç",
+      "10/1-d",
+      "11/1-a",
+      "11/1-c",
+      "11/1-ç",
+      "12/3",
+      "13/8",
+      "14/1",
+      "14/5",
+      "23/1-a",
+      "23/5",
+      "25/2",
+      "27/1",
+    ],
     organlar: [
       "7/2",
       "12/1",
@@ -658,12 +851,16 @@ describe("KilavuzPage — bölüm içerikleri", () => {
       "13/3",
       "13/5",
       "13/6",
+      "13/8",
       "14/1",
       "14/4",
+      "14/5",
       "14/6",
       "14/7",
       "18/1",
     ],
+    "gelen-giden-evrak": ["13/4", "23/1-c", "23/2"],
+    "guvenlik-ve-kvkk": ["10/1", "12/1", "12/5"],
   };
 
   function bolumMetni(id: string): string {
@@ -707,6 +904,60 @@ describe("KilavuzPage — bölüm içerikleri", () => {
     for (const id of ["organlar", "gecis-kurulumu"]) {
       expect(bolumMetni(id), id).toContain("karar defterinin yerine geçmez");
     }
+  });
+
+  it("F2 bölümlerinin konumu: karar defteri, TEFBİS ve gelen-giden evrak defteri (CLAUDE.md §1)", () => {
+    expect(bolumMetni("genel-kurul")).toContain("karar defterinin ve TEFBİS'in yerine geçmez");
+    expect(bolumMetni("gelen-giden-evrak")).toContain("gelen-giden evrak defterinin yerine geçmez");
+    expect(bolumMetni("genel-bakis")).toContain("Program TEFBİS'in yerine geçmez.");
+  });
+
+  it("okul müdürü yönetim kurulu üyesi gösterilmez; genel kurulu divan yönetir", () => {
+    const metin = bolumMetni("genel-kurul");
+    expect(metin).toContain("Okul müdürü yönetim kurulu üyesi değildir");
+    expect(metin).not.toMatch(/müdür(?:ü)? (?:yönetim kurulu üyesidir|kurula başkanlık eder)/);
+  });
+
+  it("F2 kod kapısının kılavuz bölümleri yazılıdır: genel kurul ve gelen-giden evrak", () => {
+    for (const id of ["genel-kurul", "gelen-giden-evrak"]) {
+      expect(bolumMetni(id).length, id).toBeGreaterThan(1200);
+    }
+  });
+
+  it("F2 bölümlerinin yazma adımları yalnız o yeteneği olan hesaba anlatılır", () => {
+    const yazmayan: YetenekAdi[] = [
+      "genel_kurul_yazma",
+      "kisisel_veri_ciktisi",
+      "donem_gecisi_onayi",
+      "genel_kurul_iptal",
+      "evrak_kaydi",
+      "kural_surumu_guncelleme",
+      "dk_genel_kurul_yazma",
+      "takvim_isareti",
+    ];
+    const { container } = bas(
+      "/kilavuz",
+      hazirYetki(YETENEK_ADLARI.filter((ad) => !yazmayan.includes(ad))),
+    );
+    const metin = (id: string) => container.querySelector(`[id="${id}"]`)?.textContent ?? "";
+    const genelKurul = metin("genel-kurul");
+    for (const ad of [
+      DUGME_PLANLA,
+      DUGME_TUTANAK_TAMAMLA,
+      DUGME_KATILIM_ISARETLERI,
+      DUGME_ADLI_PDF,
+      DUGME_DONEM_GECISI,
+      DUGME_IPTAL,
+    ]) {
+      expect(genelKurul, ad).not.toContain(ad);
+    }
+    expect(genelKurul).toMatch(/program yöneticisine başvurun/);
+    expect(metin("veli-listesi")).not.toContain(DUGME_ADLI_PDF);
+    expect(metin("gelen-giden-evrak")).not.toContain(DUGME_YENI_KAYIT);
+    expect(metin("gelen-giden-evrak")).toMatch(/program yöneticisine başvurun/);
+    expect(metin("birlik-donemi")).not.toContain(DUGME_SURUMU_GUNCELLE);
+    expect(metin("organlar")).not.toContain(DK_CAGRI_BOLUM_BASLIGI);
+    expect(metin("genel-bakis")).not.toContain(YAPILDI_PENCERESI_BASLIGI);
   });
 
   it("sihirbazın adımları ekrandaki sırayla sayılır; birlik dönemi adımı atlanabilir", () => {

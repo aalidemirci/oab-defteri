@@ -43,8 +43,12 @@ from apps.oab.models import (
 )
 from apps.oab.services import genel_kurul as genel_kurul_servisi
 from apps.oab.services import gorev_bolumu, kurullar, uyelik_gecisleri, uyelikler
+from apps.oab.tests import genel_kurul_ortak as gko
 from apps.oab.tests import uyelik_ortak as o
-from apps.okul.models import AccountRole, AuditTrail
+from apps.okul.models import Account, AccountRole, AccountStatus, AuditTrail
+from apps.okul.services import hesaplar
+from apps.okul.tests.hesap_ortak import GECICI_PAROLA
+from conftest import TEST_HESAP_ID
 from shared.exceptions import RolYetkisiz
 
 pytestmark = pytest.mark.django_db
@@ -580,10 +584,13 @@ def test_dk_yedek_cagrisindan_sonraki_gorev_bolumu_sureye_bagli_degil() -> None:
 def test_olaganustu_genel_kurulla_yenilenen_dk_suresi_o_genel_kuruldan(
     gun: date, uyari: bool
 ) -> None:
-    """Süre kurulu seçen genel kuruldan sayılır (md. 14/1; kullanıcı kararı 10.11.2026): olağanüstü
-    genel kurul (01.03.2027) Denetleme Kurulunun veli koltuğunu yenilediyse ilk görev bölümünün
-    süresi o günden başlar; dönem içindeki önceki görev bölümü süreyi kapatmaz. 7. gün uyarısız,
-    8. gün uyarı + gerekçe (ayrı kurulumlar)."""
+    """Süre kurulu seçen genel kuruldan sayılır (md. 14/1; plan F1c 6. adım notları; teyit AS-86):
+    olağanüstü genel kurul (01.03.2027) Denetleme Kurulunun veli koltuğunu yenilediyse ilk görev
+    bölümünün süresi o günden başlar; dönem içindeki önceki görev bölümü süreyi kapatmaz. 7. gün uyarısız,
+    8. gün uyarı + gerekçe (ayrı kurulumlar). Kullanıcı kararı S10 (a) (15.11.2026) sonrası
+    olağanüstü genel kurul Denetleme Kuruluna seçim yapmaz, programın seçim akışı bu kaydı üretmez
+    (`gk::test_olaganustu_genel_kurul_dk_secimi_yapmaz`); burada alt düzey üyelik yolunun yazdığı
+    kaydın gün hesabı sınanır."""
     donem = o.donem()
     veli, *_ = o.dk_kurulu(donem)
     o.dk_gorev_bolumu(donem, veli, gun=date(2026, 10, 16))
@@ -784,3 +791,102 @@ def test_dk_yedegi_cagrisi_yk_karari_istemez() -> None:
     )
     assert not ComplianceItem.objects.filter(rule_id="yonetim_kurulu.yedek_cagirma").exists()
     assert yedek.pk in {u.pk for u in selectors.gorevdeki_asillar(donem, "DK")}
+
+
+# ============================================================ F2 6. adım: genel kurul seçimi ve yeni dönem
+# Genel kurul ikinci toplantıda (05.11.2026) yapılır; birinci toplantı 20.10.2026'dır (plan F2 §7 U6,
+# U28; `genel_kurul_ortak`). Öğretmen koltukları öğretmenler kurulunun seçimidir (md. 14/1). Adlar
+# UYDURMADIR.
+
+
+def _yeni_donemin_dk_kurulu() -> tuple[OabTerm, OrganMembership]:
+    """İkinci toplantıda seçilen veli üyesi ve öğretmenler kurulunun seçtiği iki öğretmenle yeni dönemin
+    Denetleme Kurulu; dönem geçişi onaylanmış. Yeni dönem ve veli üyesi döner."""
+    kurul = gko.ikinci_toplantida_yapilmis_olagan()
+    _, dk = gko.kurullari_sec(kurul)
+    yeni = gko.tamamla_ve_onayla(kurul).yeni_donem
+    for _ in range(2):
+        o.dk_ogretmeni(yeni, o.ogretmen())
+    return yeni, dk[0]
+
+
+@pytest.mark.kural_davranis(f"{DK}.gorev_bolumu_gun")
+@pytest.mark.parametrize(
+    ("gun", "uyari"), [(date(2026, 11, 12), False), (date(2026, 11, 13), True)]
+)
+def test_dk_gorev_bolumu_suresi_ikinci_toplanti_gunundan(gun: date, uyari: bool) -> None:
+    """md. 14/1 "genel kuruldan sonraki ilk hafta" (saha 8): genel kurul ikinci toplantıda yapıldıysa
+    süre ikinci toplantının gününden (05.11.2026; yeni dönemin başı) sayılır, birinci toplantının
+    gününden değil (U6). 7. gün uyarısız, 8. gün uyarı + gerekçe."""
+    yeni, veli = _yeni_donemin_dk_kurulu()
+    assert gorev_bolumu.dk_secen_genel_kurul_gunu(yeni) == gko.IKINCI_GUN
+    if not uyari:
+        o.dk_gorev_bolumu(yeni, veli, gun=gun)
+        assert not ComplianceItem.objects.filter(rule_id=f"{DK}.gorev_bolumu_gun").exists()
+        return
+    with pytest.raises(GerekceGerekli) as hata:
+        o.dk_gorev_bolumu(yeni, veli, gun=gun)
+    assert "8 gün" in str(hata.value.detail) and "md. 14/1" in str(hata.value.detail)
+    o.dk_gorev_bolumu(yeni, veli, gun=gun, gerekce="Uydurma gerekçe.")
+    (satir,) = ComplianceItem.objects.filter(rule_id=f"{DK}.gorev_bolumu_gun")
+    assert (satir.kind, satir.term_id) == (ComplianceKind.SAPMA, yeni.pk)
+
+
+def test_yeni_donem_gorev_bolumu_eski_donem_dk_hesabini_askiya_alir() -> None:
+    """U28 (tasarım §4.4.5, §7.8): yeni dönemin Denetleme Kurulu görev bölümü eski dönemin Denetleme
+    Kurulu hesabını aynı işlemde `ASKIDA (GOREV_BOLUMU)` yapar; görev bölümünden önce hesap açıktır.
+    Yönetim kurulu hesabı Denetleme Kurulunun görev bölümüyle askıya alınmaz. Aynı dönemdeki görev
+    değişimi askıya almaz (F1c davranışı, `test_hesap_baglari`)."""
+    eski_donem = gko.acik_donem()
+    eski_veli = o.secilmis(eski_donem, organ="DK", seat_group="VELI")
+    eski_muhasip = o.devralinan(eski_donem, o.kisi(), role="MUHASIP")
+    dk_hesabi = hesaplar.open_account(
+        by_hesap_id=TEST_HESAP_ID,
+        role=AccountRole.DENETLEME_KURULU,
+        tanitici="denetleme-eski",
+        display_name="Uydurma Hesap Sahibi",
+        temp_password=GECICI_PAROLA,
+        uyelik=eski_veli.pk,
+    )
+    muhasip_hesabi = hesaplar.open_account(
+        by_hesap_id=TEST_HESAP_ID,
+        role=AccountRole.MUHASIP,
+        tanitici="muhasip-eski",
+        display_name="Uydurma Hesap Sahibi",
+        temp_password=GECICI_PAROLA,
+        uyelik=eski_muhasip.pk,
+    )
+    kurul = gko.olagan_cagir(gko.planla(birinci=gko.an(gko.BIRINCI_GUN)))
+    genel_kurul_servisi.ilan_et(kurul, kanallar=gko.kanallar())
+    genel_kurul_servisi.birinci_toplanti(kurul, katilim=gko.katilim(gko.KATILAN))
+    _, dk = gko.kurullari_sec(kurul)
+    yeni = gko.tamamla_ve_onayla(kurul).yeni_donem
+    for _ in range(2):
+        o.dk_ogretmeni(yeni, o.ogretmen())
+    assert Account.objects.get(pk=dk_hesabi.pk).status == AccountStatus.PAROLA_YENILENMELI
+    o.dk_gorev_bolumu(yeni, dk[0], gun=date(2026, 10, 22))
+    askida = Account.objects.get(pk=dk_hesabi.pk)
+    assert (askida.status, askida.suspend_reason) == (AccountStatus.ASKIDA, "GOREV_BOLUMU")
+    assert Account.objects.get(pk=muhasip_hesabi.pk).status == AccountStatus.PAROLA_YENILENMELI
+
+
+def test_olaganustu_ikinci_toplantiya_bagli_veli_koltugunda_secen_gun() -> None:
+    """Plan F2 §7 U6; S10 (a) sonrası kalan dal: olağanüstü genel kurul Denetleme Kuruluna seçim
+    yapmaz, ama alt düzey üyelik yolu (`uyelikler.assign_membership`) veli koltuğunu olağanüstü genel
+    kurula bağlayabilir. Bu genel kurul ikinci toplantıda yapıldıysa kurulu seçen günü ikinci
+    toplantının günüdür (dönemin başı da birinci toplantının günü de değil)."""
+    donem = gko.acik_donem()
+    kurul = gko.ikinci_toplantida_yapilmis_olaganustu()
+    aday = uyelikler.assign_membership(
+        term=donem,
+        person=o.kisi(),
+        organ="DK",
+        seat_type=SeatType.ASIL,
+        seat_group=SeatGroup.VELI,
+        elected_by=ElectedBy.GENEL_KURUL,
+        assembly=kurul,
+    )
+    veli = uyelikler.elect_membership(aday)
+    assert veli.start_date == gko.IKINCI_GUN
+    assert OabTerm.objects.get(pk=donem.pk).start_date == gko.DONEM_BASI
+    assert gorev_bolumu.dk_secen_genel_kurul_gunu(donem) == gko.IKINCI_GUN

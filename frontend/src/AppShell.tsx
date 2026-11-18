@@ -36,9 +36,11 @@ export interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Genel Bakış", icon: "space_dashboard" },
   { to: "/birlik-donemi", label: "Birlik Dönemi", icon: "event_note" },
+  { to: "/genel-kurul", label: "Genel Kurul", icon: "how_to_vote" },
   { to: "/kisiler", label: "Kişiler", icon: "group" },
   { to: "/organlar", label: "Organlar", icon: "groups" },
   { to: "/temsilciler", label: "Temsilciler", icon: "diversity_3" },
+  { to: "/gelen-giden-evrak", label: "Gelen-Giden Evrak", icon: "move_to_inbox" },
   { to: "/kullanicilar", label: "Kullanıcılar", icon: "manage_accounts", yetenek: "kullanicilar" },
   { to: "/erisim-gunlugu", label: "Erişim Günlüğü", icon: "policy", yetenek: "erisim_gunlugu" },
   { to: "/ayarlar", label: "Ayarlar", icon: "settings" },
@@ -52,6 +54,8 @@ const PAGE_TITLES: Array<[prefix: string, title: string]> = [
   // Sıra anlamlıdır: alt sayfalar köke göre ÖNCE gelir.
   ["/birlik-donemi/gecis-kurulumu", "Geçiş Kurulumu"],
   ["/birlik-donemi", "Birlik Dönemi"],
+  ["/genel-kurul", "Genel Kurul"],
+  ["/gelen-giden-evrak", "Gelen-Giden Evrak"],
   ["/kisiler", "Kişiler"],
   ["/organlar", "Organlar"],
   ["/temsilciler", "Temsilciler"],

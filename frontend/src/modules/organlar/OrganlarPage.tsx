@@ -5,6 +5,9 @@
 // * `organ_yazma` — Denetleme Kurulunun öğretmen koltuğuna seçilmiş üye, üyeliğin kişisiz bilgileri,
 //   kaydın iptali, alım komisyonu üyesi (program yöneticisi ve yönetim kurulu rolleri);
 // * `gorev_bolumu_yazma` — yönetim kurulunun görev bölümü ve yedek çağrısı (yalnız sekreter);
+//   `ilk_gorev_bolumu_yazma` — yeni birlik döneminin ilk görev bölümü (sekreter ve program yöneticisi;
+//   kullanıcı kararı S7 (a)): düğme yalnız kadro okuması `ilk_gorev_bolumu` derken çizilir, "ilk"i
+//   sunucu söyler;
 // * `dk_gorev_bolumu_yazma` — Denetleme Kurulunun görev bölümü, denetim planı ve tutanağı (yalnız
 //   Denetleme Kurulu; M8 ⁵); `dk_yedek_cagirma` — Denetleme Kurulu yedeğinin çağrısı (program yöneticisi);
 // * `uyelik_dusurme` — düşme (program yöneticisi ve sekreter); `gorev_alma_engeli` — engelin yazımı ve
@@ -12,8 +15,10 @@
 // * `karar_taslagi_uretme` — yönetim kurulu görev bölümü karar taslağı (program yöneticisi ve sekreter);
 //   `toplanti_gunu_yazma` — aylık toplantı günü (aynı roller).
 //
-// Yönetim kurulu ve Denetleme Kurulunun veli üyesi genel kurulda seçilir (genel kurul akışı sonraki
-// fazdadır); programdan önce seçilmiş görevdeki kurul geçiş kurulumundadır. Kadro geniş tablo değildir:
+// Yönetim kurulu ve Denetleme Kurulunun veli üyesi genel kurulda seçilir (Genel Kurul ekranı, F2);
+// programdan önce seçilmiş görevdeki kurul geçiş kurulumundadır. Denetleme Kurulu sekmesinde yalnız
+// Denetleme Kuruluna açık genel kurul bölümü durur (`dk_genel_kurul_yazma`: md. 14/5 çağrısı ve
+// raporun dosya eki; `DkGenelKurulBolumu`). Kadro geniş tablo değildir:
 // satır, ayrıntısını ve eylemlerini pencerede açar (1366×768'de yatay kaydırma olmasın). Kadro uyarıları
 // kaydedilmez, gerekçe istemez; sert engeller bantla, öteki uyarılar ortak "uyarı + gerekçe" bileşeniyle.
 // Birlik dönemi yoksa boş durum; yazılamayan dönemde (kapanmış, D7) yazma denetimi çizilmez.
@@ -50,6 +55,7 @@ import { SaltOkurNotu } from "../oturum/RolKapisi";
 import { useYetki } from "../oturum/yetki";
 import { organlarApi } from "./api";
 import type { Kadro, KadroOrgani, Uyelik } from "./api";
+import DkGenelKurulBolumu from "./DkGenelKurulBolumu";
 import { DonemBasligi, donemYazilir, gecisAcik, useDonemSecimi } from "./donem";
 import { DkGorevBolumuPenceresi, YkGorevBolumuPenceresi } from "./GorevBolumuPenceresi";
 import {
@@ -124,6 +130,7 @@ export default function OrganlarPage() {
         ? acik(
             "organ_yazma",
             "gorev_bolumu_yazma",
+            "ilk_gorev_bolumu_yazma",
             "uyelik_dusurme",
             "gorev_alma_engeli",
             "toplanti_gunu_yazma",
@@ -135,6 +142,7 @@ export default function OrganlarPage() {
             "dk_yedek_cagirma",
             "uyelik_dusurme",
             "gorev_alma_engeli",
+            "dk_genel_kurul_yazma",
           ));
 
   return (
@@ -190,6 +198,8 @@ export default function OrganlarPage() {
                 onDonemGuncellendi={secim.guncelle}
               />
             )}
+            {/* Denetleme Kurulunun genel kurul işi (M8 ⁵; F2 11b): md. 14/5 çağrısı ve raporun eki. */}
+            {tab === "dk" && yetki.acik("dk_genel_kurul_yazma") && <DkGenelKurulBolumu />}
           </div>
         </>
       )}
@@ -384,7 +394,14 @@ function KurulSekmesi({
     engel: yazilir && yetki.acik("gorev_alma_engeli"),
     gecis: gecisAcik(donem) && yetki.acik("birlik_donemi_yazma"),
   };
-  const gorevYazar = yazilir && yetki.acik(yk ? "gorev_bolumu_yazma" : "dk_gorev_bolumu_yazma");
+  // Yönetim kurulunda sekreter her görev bölümünü, program yöneticisi yalnız yeni dönemin ilkini yazar
+  // (S7 (a); servis aynı daraltmayı yapar).
+  const gorevYazar =
+    yazilir &&
+    (yk
+      ? yetki.acik("gorev_bolumu_yazma") ||
+        (yetki.acik("ilk_gorev_bolumu_yazma") && kadro?.ilk_gorev_bolumu === true)
+      : yetki.acik("dk_gorev_bolumu_yazma"));
   const uretir = yazilir && yetki.acik(yk ? "karar_taslagi_uretme" : "dk_gorev_bolumu_yazma");
 
   const uyariSayilari = useMemo(() => {

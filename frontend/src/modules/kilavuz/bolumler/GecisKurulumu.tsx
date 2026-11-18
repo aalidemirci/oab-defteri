@@ -3,8 +3,9 @@
 // kararları "Geçiş adımı atlanabilir", 8. adımın kararı ve notları (her geçiş kaydının iptal yolu,
 // "Geçiş kurulumu tamamlandı" işaretinden sonra kilit, sayaç beyanının gerekçeli düzeltmesi, karar
 // defterinin tasdik uyarısı md. 23/2). Geçiş kaydını yalnız program yöneticisi yazar
-// (`birlik_donemi_yazma`); öteki hesaplara adımlar okuma için anlatılır. Mali kısım bu sürümde yoktur,
-// vaat edilmez.
+// (`birlik_donemi_yazma`); öteki hesaplara adımlar okuma için anlatılır. Mali kısım anlatılmaz (vaat
+// yasağı). F2: genel kurulla açılan ya da açılacak birlik döneminde durum "Gerekmiyor"dur (backend
+// `gecis.yol_haritasi_durumu`); yeni açılan okulda yol haritasının maddesi `GENEL_KURUL_MADDESI`dir.
 
 import {
   ALAN_DK_BASKANLIK_SAYISI,
@@ -24,6 +25,8 @@ import {
   DUGME_TAMAMLA,
   DUGME_UYE_EKLE,
   GECIS_BASLIGI,
+  GECIS_DURUMU_TR,
+  GEREKMIYOR_NOTU,
   ILK_DONEM_BASLIGI,
   KURUL_BASLIGI,
   SAYAC_BASLIGI,
@@ -32,6 +35,7 @@ import {
 } from "../../gecis-kurulumu/metinler";
 import { BIRLIK_KISILERI_SEKMESI } from "../../kisiler/metinler";
 import { useYetki } from "../../oturum/yetki";
+import { GENEL_KURUL_MADDESI } from "../../pano/BaslangicYolHaritasi";
 import { AltBaslik, Ekran, Ipucu, KilavuzBolumu } from "../KilavuzKabugu";
 import type { BolumProps } from "../KilavuzKabugu";
 
@@ -48,9 +52,15 @@ export default function GecisKurulumu(bolum: BolumProps) {
         program yöneticisi girer, öteki hesaplar okur.
       </p>
       <p>
-        Ekranın başında durum (Başlamadı, Sürüyor, Tamamlandı ya da Gerekmiyor) ve açık adımlar
-        yazar. Birlik dönemi genel kurulla açıldıysa geçiş kurulumu gerekmez. Her geçiş kaydı
-        denetim izinde geçiş kaydı olarak durur.
+        Ekranın başında durum ({Object.values(GECIS_DURUMU_TR).join(", ")}) ve açık adımlar yazar.
+        Her geçiş kaydı denetim izinde geçiş kaydı olarak durur.
+      </p>
+      <p>
+        Okulda daha önce genel kurul yapılmadıysa geçiş kurulumu gerekmez; birlik dönemi genel
+        kurulla açılır (<Ekran to="/kilavuz#genel-kurul">Genel Kurul</Ekran>). Olağan genel kurul
+        planlanınca durum {GECIS_DURUMU_TR.GEREKMIYOR} olur ve ekranda şu yazar: “{GEREKMIYOR_NOTU}”
+        Okul Bilgileri&apos;nde okulun açılış tarihi girilmişse Başlangıç Yol Haritası&apos;nda
+        geçiş kurulumu maddesinin yerinde “{GENEL_KURUL_MADDESI.baslik}” durur.
       </p>
 
       <AltBaslik>Adımlar</AltBaslik>

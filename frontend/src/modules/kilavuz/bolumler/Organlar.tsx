@@ -7,9 +7,14 @@
 // yedeğini program yöneticisi çağırır; görev alma engelinin dayanağını yalnız program yöneticisi ve
 // yönetim kurulu rolleri okur; aylık toplantı günü kural değildir; belge kartları). Sert engeller
 // CLAUDE.md altın kural 3'teki listedir. Alıntılar `docs/mevzuat/meb-okul-aile-birligi-yonetmeligi.md`
-// ile birebirdir (md. 12/3, 13/6). Genel kurul ve yönetim kurulu toplantılarının ekranı bu sürümde
-// yoktur, vaat edilmez. Düğmelerin hangi hesapta göründüğü ekranın yeteneklerine bağlıdır; bölüm her
-// adımı anlatır, kimin yaptığını ekranın kendi cümlesiyle söyler.
+// ile birebirdir (md. 12/3, 13/6, 14/5). Yönetim kurulu toplantılarının ekranı yoktur, vaat edilmez;
+// genel kurulun seçimi Genel Kurul ekranındadır (F2). Düğmelerin hangi hesapta göründüğü ekranın
+// yeteneklerine bağlıdır; bölüm her adımı anlatır, kimin yaptığını ekranın kendi cümlesiyle söyler.
+// F2: genel kurulun seçimi (`YK_SECIM_NOTU`, `DK_SECIM_NOTU`), görev bölümü süresinin genel kurulun
+// yapıldığı günden sayılması (plan F2 §7 U6), olağanüstü genel kurulun seçimiyle eski yönetim kurulu
+// üyeliklerinin kendiliğinden düşmesi (U27, md. 13/8), md. 7/2'nin ertelemesi ve Denetleme Kurulunun
+// genel kurul işi (md. 14/4, 14/5; yalnız `dk_genel_kurul_yazma`). Yeni dönemin ilk yönetim kurulu
+// görev bölümünü program yöneticisi de girer (kullanıcı kararı S7 (a); `ilk_gorev_bolumu_yazma`).
 
 import {
   DUGME_OLUSTUR,
@@ -23,12 +28,25 @@ import {
   URETIM_UYARILARI_NOTU,
 } from "../../evrak/metinler";
 import {
+  ADIM_TUTANAK,
+  ALAN_MD6_AYKIRILIK,
+  DK_CAGRI_ACIKLAMASI,
+  DK_CAGRI_BASLIGI,
+  DK_CAGRI_BOLUM_BASLIGI,
+  DK_CAGRI_GENEL_KURUL_YOK,
+  DK_RAPORU_EKI_ACIKLAMASI,
+  DK_RAPORU_EKI_BASLIGI,
+  MD6_ISARETI_ZORUNLU,
+  USULSUZLUK_YARDIMI,
+} from "../../genel-kurul/metinler";
+import {
   ALAN_YEDEK_KARARI,
   BOLUM_ASILLAR,
   BOLUM_OTEKI,
   BOLUM_YEDEKLER,
   CIP_DEVRALINAN,
   CIP_ENGEL,
+  CIP_ERTELENDI,
   DAYANAK_OKUMA_NOTU,
   DUGME_BILGILER,
   DUGME_DAYANAK,
@@ -115,10 +133,12 @@ export default function Organlar(bolum: BolumProps) {
       <AltBaslik>Üyeler nereden gelir</AltBaslik>
       <ul className="list-disc space-y-1 pl-5">
         <li>
-          Yönetim kurulunu ve Denetleme Kurulunun veli üyesini genel kurul seçer. Programdan önce
+          Yönetim kurulunu ve Denetleme Kurulunun veli üyesini genel kurul seçer; seçim Genel Kurul
+          ekranında {ADIM_TUTANAK} adımında girilir (
+          <Ekran to="/kilavuz#genel-kurul">Genel Kurul</Ekran>
+          ). Seçilenler oy sırasıyla asıl ve yedek üye olarak burada görünür. Programdan önce
           seçilmiş görevdeki kurul geçiş kurulumunda girilir (
-          <Ekran to="/kilavuz#gecis-kurulumu">Geçiş Kurulumu</Ekran>); bu sürümde genel kurulun
-          seçimi programda yapılmaz.
+          <Ekran to="/kilavuz#gecis-kurulumu">Geçiş Kurulumu</Ekran>).
         </li>
         <li>
           Denetleme Kurulunun öğretmen üyelerini öğretmenler kurulu seçer; okulda yeteri kadar
@@ -146,10 +166,20 @@ export default function Organlar(bolum: BolumProps) {
       <p>
         Yönetim kurulunun görev bölümünü sekreter “{DUGME_GOREV_BOLUMU}” düğmesiyle girer:
         toplantının günü, saati ve yeri, görevdeki her asıl üyenin katılımı ve verilen görevler.
-        Yalnız verilen görevler seçilir; görevin önceki sahibi üye olur. Kayıt bir görev bölümü
-        toplantısı ve karar taslağı açar. Görevi değişen üyenin hesabı askıya alınır; yeni görevin
-        hesabı Kullanıcılar ekranında açılır. Başkan seçilmeden de görev bölümü kaydedilir, kadro
-        uyarısı başkanı eksik gösterir.
+        Genel kurulla açılan yeni birlik döneminin ilk görev bölümünü program yöneticisi de girer:
+        yeni kurulun üyelerine görev bölümünden önce hesap açılmaz, önceki dönemin sekreteri yeniden
+        seçilmemiş olabilir. Düğme program yöneticisinin hesabında yalnız bu ilk görev bölümü
+        girilene dek görünür; sonraki görev bölümlerini sekreter girer. Yalnız verilen görevler
+        seçilir; görevin önceki sahibi üye olur. Kayıt bir görev bölümü toplantısı ve karar taslağı
+        açar. Görevi değişen üyenin hesabı askıya alınır; yeni görevin hesabı Kullanıcılar ekranında
+        açılır. Başkan seçilmeden de görev bölümü kaydedilir, kadro uyarısı başkanı eksik gösterir.
+      </p>
+      <p>
+        Bu sürümde olağanüstü genel kurulun seçtiği yönetim kurulunun görev bölümü programa
+        girilemez. Dönem değişmez; eski kurulun üyelikleri sekreterinki dahil düşer ve hesapları
+        askıya alınır, yeni üyelere görev bölümünden önce hesap açılmaz. Program yöneticisi yalnız
+        yeni dönemin ilk görev bölümünü girer. Program bu hâli henüz desteklemiyor; görev bölümü
+        kararı karar defterine her zamanki gibi el ile yazılır.
       </p>
       <p>
         Denetleme Kurulunun asıl üyeleri genel kuruldan sonraki ilk hafta içinde toplanıp
@@ -159,9 +189,10 @@ export default function Organlar(bolum: BolumProps) {
         (md. 14/4).
       </p>
       <p>
-        Görev bölümünün son günü Genel Bakış&apos;ta yapılacak iş olarak görünür. Yönetim kurulunda
-        bir haftalık süre kurulun bugünkü bileşiminin oluştuğu günden sayılır; bileşim değişmeden
-        yapılan görev değişimi süreye bağlı değildir.
+        Görev bölümünün son günü Genel Bakış&apos;ta yapılacak iş olarak görünür. Genel kurulun
+        seçtiği kurulda bir haftalık süre genel kurulun yapıldığı günden sayılır. Yönetim kurulunun
+        bileşimi sonradan (örneğin yedek çağrısıyla) değişirse süre yeni bileşimin oluştuğu günden
+        sayılır; bileşim değişmeden yapılan görev değişimi süreye bağlı değildir.
       </p>
 
       <AltBaslik>Yedek çağrısı</AltBaslik>
@@ -185,9 +216,16 @@ export default function Organlar(bolum: BolumProps) {
       <AltBaslik>Üyeliğin düşmesi ve kaydın iptali</AltBaslik>
       <p>
         Üyeliği sona eren üyenin penceresinde “{DUGME_DUSUR}” düğmesi kullanılır. Düşme türleri:{" "}
-        {ELLE_DUSME_TURLERI}. Olağanüstü genel kurulun seçimiyle düşme elle girilmez. Yönetim
-        kurulunda öğrencisi okuldan ayrılan velide ek bir kutu çıkar: {ERTELE_YARDIMI} Düşen üyelik
-        kurulun geçmişinde kalır; üyeliğe bağlı hesap aynı anda askıya alınır.
+        {ELLE_DUSME_TURLERI}. Yönetim kurulunda öğrencisi okuldan ayrılan velide ek bir kutu çıkar:{" "}
+        {ERTELE_YARDIMI} Böyle üyeliğin satırında “{CIP_ERTELENDI}” yazar. Düşen üyelik kurulun
+        geçmişinde kalır; üyeliğe bağlı hesap aynı anda askıya alınır.
+      </p>
+      <p>
+        “{DUSME_TURU_TR.OLAGANUSTU_GK_SECIMI}” türü elle seçilmez. Yönetim kurulunun üye sayısı
+        yedeklerle birlikte karar yeter sayısının altına düşerse başkan ya da okul müdürü bir ay
+        içinde genel kurulu olağanüstü toplantıya çağırır (md. 13/8). Olağanüstü genel kurulun
+        seçtiği yönetim kurulu Genel Kurul ekranında girilince görevdeki eski yönetim kurulu
+        üyelikleri bu türle kendiliğinden düşer; yeni kurul olağan genel kurula kadar görev yapar.
       </p>
       <p>
         Yanlış girilmiş kayıt “{DUGME_KAYDI_IPTAL}” düğmesiyle gerekçe yazılarak iptal edilir; kayıt
@@ -205,6 +243,36 @@ export default function Organlar(bolum: BolumProps) {
           ? `Dayanak önceden gösterilmez; “${DUGME_DAYANAK}” düğmesine basınca açılır. ${DAYANAK_OKUMA_NOTU}`
           : "Hesabınızda satırda yalnız engelin var olduğu görünür."}
       </p>
+
+      <AltBaslik>Denetleme Kurulu ve genel kurul</AltBaslik>
+      <Mevzuat kaynak="Yönetmelik md. 14/5">
+        Denetleme kurulu, yaptığı denetimler sonucu, yönetim kurulunun 6 ncı maddede sayılan
+        birliğin görev ve yetkilerine aykırı faaliyetlerini tespit etmesi hâlinde genel kurulu
+        olağanüstü toplantıya çağırır.
+      </Mevzuat>
+      {yetki.acik("dk_genel_kurul_yazma") ? (
+        <>
+          <p>
+            {SEKME_DK} sekmesinde Denetleme Kurulunun hesabına iki bölüm daha görünür.{" "}
+            <strong>{DK_CAGRI_BOLUM_BASLIGI}</strong>: {DK_CAGRI_ACIKLAMASI} Planlanmış olağanüstü
+            genel kurulun satırındaki “{DK_CAGRI_BASLIGI}” düğmesiyle pencere açılır; raporun türü
+            ve günü girilir, “{ALAN_MD6_AYKIRILIK}” kutusu işaretlenir. {MD6_ISARETI_ZORUNLU}{" "}
+            {USULSUZLUK_YARDIMI}
+          </p>
+          <p>
+            Planlanmış olağanüstü genel kurul yoksa bölümde şu yazar: “{DK_CAGRI_GENEL_KURUL_YOK}”
+          </p>
+          <p>
+            <strong>{DK_RAPORU_EKI_BASLIGI}</strong>: {DK_RAPORU_EKI_ACIKLAMASI}
+          </p>
+        </>
+      ) : (
+        <p>
+          Denetleme Kurulunun olağanüstü genel kurul çağrısını (md. 14/5) ve genel kurula sunduğu
+          nihai raporun dosyasını (md. 14/4) Denetleme Kurulu kendi hesabıyla {SEKME_DK} sekmesinden
+          yazar. Toplantının günü ve yeri Genel Kurul ekranında planlanır.
+        </p>
+      )}
 
       <AltBaslik>{TOPLANTI_GUNU_BASLIGI}</AltBaslik>
       <p>

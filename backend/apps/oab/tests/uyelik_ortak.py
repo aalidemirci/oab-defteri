@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import itertools
 from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -296,15 +296,19 @@ def yk_gorev_bolumu(
     *,
     gun: date,
     gerekce: str = "",
+    rol: AccountRole | None = AccountRole.SEKRETER,
 ) -> gorev_bolumu.GorevBolumu:
-    """Yönetim kurulunun görev bölümü: görevdeki her asıl katıldı."""
-    return gorev_bolumu.yk_gorev_bolumu(
-        term=donem_,
-        held_at=saat(gun),
-        gorevler=gorevler,
-        katilim=_katilim(donem_, "YK"),
-        gerekce=_gerekce(gerekce),
-    )
+    """Yönetim kurulunun görev bölümü: görevdeki her asıl katıldı. Varsayılan yazar sekreterdir
+    (tasarım §7.2 "Kim"); yeni dönemin ilk görev bölümünü program yöneticisi de yazar (S7 (a)).
+    `rol=None`: çağıranın kurduğu yazar bağlamı kullanılır (ör. organ hesabının kendi oturumu)."""
+    with rol_olarak(rol) if rol is not None else nullcontext():
+        return gorev_bolumu.yk_gorev_bolumu(
+            term=donem_,
+            held_at=saat(gun),
+            gorevler=gorevler,
+            katilim=_katilim(donem_, "YK"),
+            gerekce=_gerekce(gerekce),
+        )
 
 
 def dk_gorev_bolumu(

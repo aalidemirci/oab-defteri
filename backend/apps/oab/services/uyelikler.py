@@ -5,7 +5,7 @@
 F1c'nin 5. adımı yönetim kurulu ve Denetleme Kurulu üyeliğini yazar. Görev bölümü (`gorev_bolumu`),
 yedek çağrısı, düşme, iptal ve görev alma engeli (`uyelik_gecisleri`), temsilciler ve alım komisyonu
 (`temsilciler`) 6. adımdadır ve buradaki denetimleri ortak yardımcılarla kullanır; divan ve genel
-kurul akışı F2'de gelir.
+kurul akışı F2'de geldi (`services.genel_kurul`).
 
 YAZMA YOLLARI (hepsi `yazma_kapisi()` ile başlar, kural denetimini `uyum.denetle` ile yapar):
 
@@ -90,8 +90,10 @@ seçimi uyarı + gerekçedir: dayanak suçsa `uyelik.suc_engeli`, başka birlik 
 `yonetim_kurulu.tek_birlik` (yalnız yönetim kurulunda). Görevdeki üyede engel düşürme önerisidir
 (`uyelik_gecisleri.oneriler`). Okulun beyan uygulaması işaretlenmediyse mevzuat uyarısı yoktur.
 
-Olay günü (kuralın yürürlüğü) seçilme günüdür (`start_date`); adayda genel kurulun birinci
-toplantısının yerel günü, o da yoksa bugünün yerel günü (`timezone.localdate()`).
+Olay günü (kuralın yürürlüğü) seçilme günüdür (`start_date`); adayda genel kurulun günü
+(`selectors.genel_kurul_gunu`: yapıldığı toplantının, ikinci toplantıda yapıldıysa onun yerel günü;
+henüz yapılmadıysa birinci toplantının; plan F2 §7 U6), o da yoksa bugünün yerel günü
+(`timezone.localdate()`).
 """
 
 from __future__ import annotations
@@ -326,6 +328,26 @@ def secilme_sayaci(kisi: OabPerson, organ: str) -> int | None:
     return None if beyan is None else program + beyan
 
 
+def yk_secilme_sayaci_once(
+    kisi: OabPerson, gun: date | None, *, haric_kurul: GeneralAssembly
+) -> int | None:
+    """Bir genel kuruldan önceki yönetim kurulu seçilmeleri (md. 12/4; genel kurulun aday listesi,
+    `genel_kurul_evraki` E09): programdan önceki beyan + `gun`den önce başlamış program kayıtları;
+    `haric_kurul`un kendi seçilmesi ve sonraki genel kurulların seçilmeleri sayılmaz (eski genel
+    kurulun yeniden üretilen listesi aynı sayıyı basar). Başlangıç günü olmayan program kaydı
+    sayılır. Genel kurulun günü bilinmiyorsa (`gun` `None`) yalnız kendi seçilmesi düşülür. Beyan
+    "bilinmiyor"sa `None` (eksik)."""
+    beyan = kisi.external_yk_terms
+    if beyan is None:
+        return None
+    kayitlar = (
+        _sayilan(kisi).filter(organ=OrganType.YONETIM_KURULU).exclude(assembly_id=haric_kurul.pk)
+    )
+    if gun is not None:
+        kayitlar = kayitlar.filter(Q(start_date__isnull=True) | Q(start_date__lt=gun))
+    return kayitlar.count() + beyan
+
+
 def _sayac_gozlenen(kural_sonucu: DenetimSonucu, program: int, beyan: int | None) -> Any:
     """Sayaç gözlenen değeri: beyan bilinmiyorsa eksik, ama bilinen kayıtlar sınırı aşıyorsa sayı."""
     if beyan is not None:
@@ -339,8 +361,10 @@ def _sayac_gozlenen(kural_sonucu: DenetimSonucu, program: int, beyan: int | None
 def _olay_gunu(uyelik: OrganMembership) -> date:
     if uyelik.start_date is not None:
         return uyelik.start_date
-    if uyelik.assembly is not None and uyelik.assembly.first_meeting_at is not None:
-        return timezone.localdate(uyelik.assembly.first_meeting_at)
+    if uyelik.assembly is not None:
+        gun = selectors.genel_kurul_gunu(uyelik.assembly)
+        if gun is not None:
+            return gun
     return timezone.localdate()
 
 
